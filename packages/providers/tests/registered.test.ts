@@ -18,15 +18,16 @@ describe("registered providers", () => {
           .all()
           .map((adapter) => adapter.probe()),
       );
-      const byId = new Map(result.map((probe) => [probe.provider, probe]));
-      expect(byId.get("codex")?.available).toBe(true);
-      expect(byId.get("codex")?.version).toMatch(/^\d+\.\d+\.\d+$/);
-      expect(byId.get("pi")?.available).toBe(true);
-      expect(byId.get("pi")?.version).toMatch(/^\d+\.\d+\.\d+$/);
-      expect(byId.get("claude")?.available).toBe(false);
-      expect(byId.get("opencode")?.available).toBe(false);
-      expect(byId.get("claude")?.version).toBeUndefined();
-      expect(byId.get("opencode")?.version).toBeUndefined();
+      expect(result.map((probe) => probe.provider)).toEqual(["codex", "claude", "opencode", "pi"]);
+      for (const probe of result) {
+        expect(probe.capabilities.schemaVersion).toBe("1");
+        if (probe.available) {
+          expect(probe.version).toMatch(/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/);
+        } else {
+          expect(probe.version).toBeUndefined();
+          expect(probe.diagnostic).toBeTruthy();
+        }
+      }
     },
   );
 });
