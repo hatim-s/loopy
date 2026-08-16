@@ -3,6 +3,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { JsonObject, JsonValue } from "@loopy/contracts";
+import { extractImportedSession } from "@loopy/extractor";
 import { createDefaultProviderRegistry, type ProviderRegistry } from "@loopy/providers";
 import type { CanonicalSessionImportInput, ExtractionResultInput, Storage } from "@loopy/storage";
 import { doctorCommand } from "./doctor";
@@ -22,6 +23,7 @@ const COMMANDS = [
   "approve",
   "reject",
   "validate",
+  "validate-provider",
   "run",
   "pause",
   "resume",
@@ -49,13 +51,17 @@ Commands:
 Local persistence commands:
   loopy import <trace.jsonl> --provider <provider> [--project <dir>] [--json]
   loopy sessions list|show <id> [--project <dir>] [--json]
-  loopy extract --import <id>   (requires an injected extractor)
+  loopy extract --import <id>   (deterministic offline extractor by default)
   loopy review list|show <id> [--project <dir>] [--json]
   loopy approve|reject <proposal-or-job-id> [--project <dir>] [--json]`);
+  console.log(
+    "  loopy validate-provider --provider <provider> --opt-in [--json]  (read-only probe; no run/network)",
+  );
 }
 
 export interface ExtractionRequest {
   importId: string;
+  provider?: string;
   session: JsonValue;
   capabilities: JsonObject;
   lossiness: JsonObject;
@@ -68,6 +74,27 @@ export type CliDependencies = {
   storageFactory?: (projectDir: string, readOnly?: boolean) => Storage;
   extractor?: ExtractionRunner;
 };
+
+/** Offline default: segmentation, proposal, and repair never contact a provider. */
+async function defaultExtractionRunner(request: ExtractionRequest): Promise<ExtractionResultInput> {
+  const extraction = await extractImportedSession({
+    id: request.importId,
+    provider: request.provider ?? "codex",
+    session: request.session,
+    capabilities: request.capabilities,
+    lossiness: request.lossiness,
+  });
+  if (!extraction.result.ok) {
+    const detail = extraction.result.diagnostics.map((diagnostic) => diagnostic.code).join(", ");
+    throw new Error(
+      `Deterministic extraction was rejected after ${extraction.result.attempts} attempt(s): ${detail}`,
+    );
+  }
+  return {
+    proposal: extraction.result.proposal,
+    audit: extraction.audit as unknown as JsonValue,
+  };
+}
 
 function option(args: readonly string[], name: string): string | undefined {
   const index = args.indexOf(name);
@@ -202,10 +229,14 @@ async function importSession(args: readonly string[], deps: CliDependencies): Pr
   const source = option(args, "--source") ?? file;
   const capabilities = option(args, "--capabilities");
   const lossiness = option(args, "--lossiness");
+  const rawContent = readFileSync(resolve(file), "utf8");
+  const content = rawContent.trimStart().startsWith("[")
+    ? `${(JSON.parse(rawContent) as unknown[]).map((event) => JSON.stringify(event)).join("\n")}\n`
+    : rawContent;
   const input: CanonicalSessionImportInput = {
     provider,
     source,
-    content: readFileSync(resolve(file)),
+    content,
     ...(capabilities ? { capabilities: JSON.parse(capabilities) as JsonObject } : {}),
     ...(lossiness ? { lossiness: JSON.parse(lossiness) as JsonObject } : {}),
   };
@@ -222,7 +253,6 @@ async function importSession(args: readonly string[], deps: CliDependencies): Pr
 async function extractSession(args: readonly string[], deps: CliDependencies): Promise<number> {
   const importId = option(args, "--import") ?? positional(args);
   if (!importId) throw new Error("extract requires an import ID");
-  if (!deps.extractor) throw new Error("Extractor integration is not configured");
   const storage = await storageFor(args, deps);
   try {
     const imported = storage.runtime.getImportedSession(importId);
@@ -232,8 +262,10 @@ async function extractSession(args: readonly string[], deps: CliDependencies): P
       input: { source: imported.source },
     });
     try {
-      const result = await deps.extractor({
+      storage.runtime.updateExtractionJob(job.id, { status: "running" });
+      const result = await (deps.extractor ?? defaultExtractionRunner)({
         importId,
+        provider: imported.provider,
         session: imported.session,
         capabilities: imported.capabilities,
         lossiness: imported.lossiness,
@@ -274,6 +306,24 @@ async function approveOrReject(
   }
 }
 
+/** Explicit opt-in, read-only installation probe. It never starts a provider run. */
+async function validateProvider(args: readonly string[], deps: CliDependencies): Promise<number> {
+  if (!args.includes("--opt-in"))
+    throw new Error("validate-provider is opt-in; pass --opt-in to probe an installed CLI");
+  const id = option(args, "--provider");
+  if (!id) throw new Error("validate-provider requires --provider");
+  const adapter = (deps.registry ?? createDefaultProviderRegistry()).get(id);
+  if (!adapter) throw new Error(`Unknown provider '${id}'`);
+  const probe = await adapter.probe();
+  if (jsonOutput(args)) printJson(probe);
+  else {
+    console.log(`${probe.provider}: ${probe.available ? "available" : "unavailable"}`);
+    if (probe.version) console.log(`version: ${probe.version}`);
+    if (probe.diagnostic) console.log(`diagnostic: ${probe.diagnostic}`);
+  }
+  return probe.available ? 0 : 1;
+}
+
 async function dispatch(args: readonly string[], deps: CliDependencies): Promise<number> {
   const command = args[0];
   if (command === "import") return importSession(args, deps);
@@ -287,6 +337,8 @@ async function dispatch(args: readonly string[], deps: CliDependencies): Promise
   }
   if (command === "approve") return approveOrReject(args, deps, "approve");
   if (command === "reject") return approveOrReject(args, deps, "reject");
+  if (command === "validate-provider" || command === "validate")
+    return validateProvider(args, deps);
   return 2;
 }
 
@@ -346,7 +398,18 @@ export function main(
     return 0;
   }
 
-  if (["import", "sessions", "extract", "review", "approve", "reject"].includes(command)) {
+  if (
+    [
+      "import",
+      "sessions",
+      "extract",
+      "review",
+      "approve",
+      "reject",
+      "validate-provider",
+      "validate",
+    ].includes(command)
+  ) {
     void mainAsync(args, dependencies).then((code) => {
       process.exitCode = code;
     });

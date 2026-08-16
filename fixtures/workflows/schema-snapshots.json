@@ -2144,6 +2144,13 @@
             "description": {
               "$ref": "#/$defs/__schema6"
             },
+            "evidenceIds": {
+              "items": {
+                "$ref": "#/$defs/__schema1"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
             "example": {
               "$ref": "#/$defs/__schema11"
             },
@@ -2173,7 +2180,8 @@
             "required",
             "secret",
             "confidence",
-            "observedValues"
+            "observedValues",
+            "evidenceIds"
           ],
           "type": "object"
         },

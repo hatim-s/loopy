@@ -2,18 +2,34 @@
 
 Do the work once. Loopy extracts the reusable process, lets you edit it visually, and runs it again through your locally installed coding agents.
 
-Phase 0 is implemented: the Bun workspace, versioned Zod contracts, deterministic JSON Schema fixtures, graph validation, and a CLI shell are available. Runtime execution, traces, artifacts, extraction, provider adapters, scheduling, and the visual Studio are not implemented yet. All operational features remain local-first; hosted infrastructure is out of scope.
+Phase 3 is implemented locally: canonical trace import, deterministic segmentation/features/evidence, bounded proposal repair, persisted extraction review/audit, approval into editable workflow version 1, and offline runtime execution are available. Provider adapters remain local CLI integrations; hosted infrastructure and live-provider calls are out of scope by default.
 
 ## Current commands
 
 ```sh
 bun install
-bun run check       # format, lint, typecheck, contracts/runtime/CLI tests
+bun run check       # format, lint, typecheck, contracts/runtime/storage/extractor/CLI tests
 bun run build       # emit contracts declarations and run the root typecheck
 bun packages/cli/src/index.ts --help
 ```
 
-The `loopy validate` and `loopy run` command names are reserved in the CLI surface, but command handlers are not implemented in Phase 0. No scheduler or provider execution is included.
+The extraction path is usable without editing JSON by hand:
+
+```sh
+bun packages/cli/src/index.ts import fixtures/sessions/successful.json --provider codex --project .
+bun packages/cli/src/index.ts extract --import <import-id> --project .
+bun packages/cli/src/index.ts review list --project .
+bun packages/cli/src/index.ts review show <proposal-or-job-id> --project .
+bun packages/cli/src/index.ts approve <proposal-or-job-id> --project .
+```
+
+The deterministic extractor never contacts a provider. An explicit, read-only installed-provider probe is available only with opt-in:
+
+```sh
+bun packages/cli/src/index.ts validate-provider --provider codex --opt-in --json
+```
+
+This probes installation metadata/capabilities only; it does not start a run or make a live network call.
 
 ## Plan
 
