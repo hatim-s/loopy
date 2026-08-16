@@ -98,14 +98,21 @@ function sessionId(event: Record<string, unknown>, fallback?: string): string | 
   return fallback;
 }
 function parentId(event: Record<string, unknown>, fallback?: string): string | undefined {
-  for (const key of [
-    "parent_session_id",
-    "parentSessionId",
-    "parent_tool_use_id",
-    "parentToolUseId",
-  ])
+  for (const key of ["parent_session_id", "parentSessionId"])
     if (typeof event[key] === "string" && event[key]) return event[key] as string;
   return fallback;
+}
+function childId(event: Record<string, unknown>): string | undefined {
+  for (const key of [
+    "child_session_id",
+    "childSessionId",
+    "subagent_id",
+    "subagentId",
+    "agent_id",
+    "agentId",
+  ])
+    if (typeof event[key] === "string" && event[key]) return event[key] as string;
+  return undefined;
 }
 function usage(value: unknown): UsageRecordV1 | undefined {
   const object = record(value);
@@ -295,7 +302,17 @@ export function normalizeClaudeEvent(
   if (type === "result") {
     // Claude places total_cost_usd on the result envelope rather than under
     // result.usage in stream-json. Preserve that top-level accounting value.
-    const usageValue = usage(event.usage ?? event);
+    const nestedUsage = record(event.usage);
+    const usageValue = usage(
+      nestedUsage
+        ? {
+            ...nestedUsage,
+            ...(typeof event.total_cost_usd === "number"
+              ? { total_cost_usd: event.total_cost_usd }
+              : {}),
+          }
+        : event,
+    );
     const failed =
       event.is_error === true || event.subtype === "error" || event.subtype === "failure";
     const output: ClaudeEvent = {
@@ -314,12 +331,25 @@ export function normalizeClaudeEvent(
   }
   if (type.startsWith("subagent.") || typeof event.parent_tool_use_id === "string") {
     const content = visibleText(event.text ?? message?.content ?? event.content);
+    const child = childId(event);
+    // `parent_tool_use_id` identifies the parent call, not the child session.
+    // Keep the parent's session only as parent provenance and omit child
+    // identity when Claude did not provide a real child ID.
+    const subagentCommon = {
+      provider: "claude" as const,
+      ...(child ? { sessionId: child } : {}),
+      ...(parent
+        ? { parentSessionId: parent }
+        : child && sid !== child
+          ? { parentSessionId: sid }
+          : {}),
+    };
     return [
       {
         kind: /(?:end|complete|stop|exit)/i.test(type) ? "subagent_ended" : "subagent_started",
         type: "provider.subagent",
-        ...common,
-        ...(sid ? { parentId: sid } : {}),
+        ...subagentCommon,
+        ...(child ? { parentId: child } : {}),
         ...(content !== undefined ? { text: content } : {}),
       },
     ];

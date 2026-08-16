@@ -234,15 +234,15 @@ export async function runSubprocess(options: SubprocessOptions): Promise<Subproc
   };
   child.stdout?.on("data", (chunk: Buffer | string) => {
     const value = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    const before = stdoutState.bytes;
     appendBounded(stdoutChunks, stdoutState, value, maxStdoutBytes);
-    if (stdoutState.truncated && before < maxStdoutBytes) onLimit("stdout");
+    // A chunk that exactly fills the buffer is still valid. The next chunk
+    // must terminate the child, even though `before === maxStdoutBytes`.
+    if (stdoutState.truncated) onLimit("stdout");
   });
   child.stderr?.on("data", (chunk: Buffer | string) => {
     const value = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    const before = stderrState.bytes;
     appendBounded(stderrChunks, stderrState, value, maxStderrBytes);
-    if (stderrState.truncated && before < maxStderrBytes) onLimit("stderr");
+    if (stderrState.truncated) onLimit("stderr");
   });
   let timeout: ReturnType<typeof setTimeout> | undefined;
   if (options.timeoutMs !== undefined) timeout = setTimeout(() => abort(true), options.timeoutMs);
@@ -330,9 +330,8 @@ export function startJsonlSubprocess(options: JsonlSubprocessOptions): LiveJsonl
   };
   const emitLines = (chunk: Buffer | string) => {
     const value = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    const before = stdoutState.bytes;
     appendBounded(stdoutChunks, stdoutState, value, maxStdoutBytes);
-    if (stdoutState.truncated && before < maxStdoutBytes) {
+    if (stdoutState.truncated) {
       terminateFor("stdout");
       return;
     }
@@ -360,9 +359,8 @@ export function startJsonlSubprocess(options: JsonlSubprocessOptions): LiveJsonl
   child.stdout?.on("data", emitLines);
   child.stderr?.on("data", (chunk: Buffer | string) => {
     const value = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    const before = stderrState.bytes;
     appendBounded(stderrChunks, stderrState, value, maxStderrBytes);
-    if (stderrState.truncated && before < maxStderrBytes) terminateFor("stderr");
+    if (stderrState.truncated) terminateFor("stderr");
   });
   const abort = (timeout = false) => {
     aborted = true;

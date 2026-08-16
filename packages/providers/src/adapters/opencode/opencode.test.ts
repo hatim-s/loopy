@@ -89,6 +89,20 @@ describe("OpenCode adapter", () => {
     expect(buildOpenCodeExportCommand({ sessionId: "s1" }).args).toEqual(["export", "s1"]);
   });
 
+  test("version-gates exports and preserves import provenance", async () => {
+    const unsupported = await importOpenCodeSession(
+      { schemaVersion: "opencode.export.v2", events: [] },
+      { source: "fixture/export-v2.json", providerVersion: "0.1.2" },
+    );
+    expect(unsupported.events).toHaveLength(0);
+    expect(unsupported.diagnostics[0]?.code).toBe("unsupported_version");
+    expect(unsupported.provenance).toMatchObject({
+      source: "fixture/export-v2.json",
+      format: "opencode.export.v1",
+      version: "0.1.2",
+    });
+  });
+
   test("degrades cleanly when OpenCode is unavailable", async () => {
     const probe = await probeOpenCode();
     expect(probe.installed).toBe(false);

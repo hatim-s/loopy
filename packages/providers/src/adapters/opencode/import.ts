@@ -20,9 +20,31 @@ export async function importOpenCodeSession(
         parsed &&
         typeof parsed === "object" &&
         Array.isArray((parsed as Record<string, unknown>).events)
-      )
-        eventsInput.push(...((parsed as Record<string, unknown>).events as unknown[]));
-      else eventsInput.push(parsed);
+      ) {
+        const schemaVersion = (parsed as Record<string, unknown>).schemaVersion;
+        if (schemaVersion !== undefined && schemaVersion !== "opencode.export.v1") {
+          diagnostics.push(
+            diagnostic(
+              "unsupported_version",
+              `OpenCode export version ${String(schemaVersion)} is unsupported; expected opencode.export.v1.`,
+            ),
+          );
+        } else {
+          eventsInput.push(...((parsed as Record<string, unknown>).events as unknown[]));
+        }
+      } else if (
+        parsed &&
+        typeof parsed === "object" &&
+        typeof (parsed as Record<string, unknown>).schemaVersion === "string" &&
+        (parsed as Record<string, unknown>).schemaVersion !== "opencode.export.v1"
+      ) {
+        diagnostics.push(
+          diagnostic(
+            "unsupported_version",
+            `OpenCode export version ${String((parsed as Record<string, unknown>).schemaVersion)} is unsupported; expected opencode.export.v1.`,
+          ),
+        );
+      } else eventsInput.push(parsed);
     } catch {
       sourceFormat = "run-json";
       const lines = trimmed.split(/\r?\n/);
@@ -38,6 +60,12 @@ export async function importOpenCodeSession(
         sourceFormat,
         events: normalized.events,
         diagnostics: normalized.diagnostics,
+        provenance: {
+          ...(context.source ? { source: context.source } : {}),
+          format: "run-json",
+          ...(context.providerVersion ? { version: context.providerVersion } : {}),
+          diagnostics: normalized.diagnostics,
+        },
       };
     }
   } else if (Array.isArray(input)) eventsInput.push(...input);
@@ -45,9 +73,19 @@ export async function importOpenCodeSession(
     input &&
     typeof input === "object" &&
     Array.isArray((input as Record<string, unknown>).events)
-  )
-    eventsInput.push(...((input as Record<string, unknown>).events as unknown[]));
-  else eventsInput.push(input);
+  ) {
+    const schemaVersion = (input as Record<string, unknown>).schemaVersion;
+    if (schemaVersion !== undefined && schemaVersion !== "opencode.export.v1") {
+      diagnostics.push(
+        diagnostic(
+          "unsupported_version",
+          `OpenCode export version ${String(schemaVersion)} is unsupported; expected opencode.export.v1.`,
+        ),
+      );
+    } else {
+      eventsInput.push(...((input as Record<string, unknown>).events as unknown[]));
+    }
+  } else eventsInput.push(input);
   const events = [] as OpenCodeImportedSession["events"];
   let sequence = context.sequence ?? 0;
   for (const raw of eventsInput) {
@@ -69,6 +107,12 @@ export async function importOpenCodeSession(
     sourceFormat,
     events,
     diagnostics,
+    provenance: {
+      ...(context.source ? { source: context.source } : {}),
+      format: "opencode.export.v1",
+      ...(context.providerVersion ? { version: context.providerVersion } : {}),
+      diagnostics,
+    },
   };
 }
 

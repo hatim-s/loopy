@@ -397,17 +397,27 @@ export function normalizeCodexEvent(
     const child =
       typeof event.child_session_id === "string"
         ? event.child_session_id
-        : typeof item?.session_id === "string"
-          ? item.session_id
-          : sid;
+        : typeof event.childSessionId === "string"
+          ? event.childSessionId
+          : typeof event.child_id === "string"
+            ? event.child_id
+            : typeof item?.session_id === "string"
+              ? item.session_id
+              : typeof item?.sessionId === "string"
+                ? item.sessionId
+                : undefined;
+    const subagentCommon = {
+      provider: "codex" as const,
+      ...(child ? { sessionId: child } : {}),
+      ...(sid && sid !== child ? { parentSessionId: sid } : {}),
+      ...(parent ? { parentSessionId: parent } : {}),
+    };
     return [
       {
         kind: /(?:end|complete|stop|exit)/i.test(type) ? "subagent_ended" : "subagent_started",
         type: "provider.subagent",
-        ...common,
-        ...(child ? { sessionId: child } : {}),
+        ...subagentCommon,
         ...(child ? { parentId: child } : {}),
-        ...(parent ? { parentSessionId: parent } : {}),
         ...(visibleText(event.text ?? item?.text)
           ? { text: visibleText(event.text ?? item?.text) }
           : {}),

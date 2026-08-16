@@ -87,4 +87,31 @@ describe("provider subprocess core", () => {
     ).rejects.toMatchObject({ name: "SubprocessError", result: { limitExceeded: "lines" } });
     expect(Date.now() - started).toBeLessThan(2_000);
   });
+
+  it("terminates when output overflows after exactly filling the buffer", async () => {
+    await expect(
+      runSubprocess({
+        argv: [
+          bun,
+          "-e",
+          'process.stdout.write("1234"); setTimeout(() => process.stdout.write("5"), 20); setTimeout(() => {}, 10000)',
+        ],
+        cwd,
+        maxStdoutBytes: 4,
+        gracefulTerminationMs: 20,
+      }),
+    ).rejects.toMatchObject({ name: "SubprocessError", result: { limitExceeded: "stdout" } });
+
+    const live = startJsonlSubprocess({
+      argv: [
+        bun,
+        "-e",
+        'process.stdout.write("1234"); setTimeout(() => process.stdout.write("5\\n"), 20); setTimeout(() => {}, 10000)',
+      ],
+      cwd,
+      maxStdoutBytes: 4,
+      gracefulTerminationMs: 20,
+    });
+    await expect(live.done).resolves.toMatchObject({ limitExceeded: "stdout" });
+  });
 });

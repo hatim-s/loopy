@@ -122,34 +122,37 @@ function fromTraceEvent(
 ): ProviderEvent | undefined {
   const payload = event.payload as JsonObject;
   let type: ProviderEvent["type"];
-  switch (event.type) {
-    case "provider.session_started":
-      type = "session_started";
-      break;
-    case "provider.message":
-      type = "message";
-      break;
-    case "provider.usage":
-      type = "usage";
-      break;
-    case "provider.session_ended":
-      type = "session_ended";
-      break;
-    case "tool.requested":
-      type = "tool_call";
-      break;
-    case "tool.started":
-      type = "tool_call";
-      break;
-    case "tool.completed":
-      type = "tool_result";
-      break;
-    case "tool.denied":
-      type = "error";
-      break;
-    default:
-      return undefined;
-  }
+  if ((event.type as string) === "provider.diagnostic") {
+    type = "unknown";
+  } else
+    switch (event.type) {
+      case "provider.session_started":
+        type = "session_started";
+        break;
+      case "provider.message":
+        type = "message";
+        break;
+      case "provider.usage":
+        type = "usage";
+        break;
+      case "provider.session_ended":
+        type = "session_ended";
+        break;
+      case "tool.requested":
+        type = "tool_call";
+        break;
+      case "tool.started":
+        type = "tool_call";
+        break;
+      case "tool.completed":
+        type = "tool_result";
+        break;
+      case "tool.denied":
+        type = "error";
+        break;
+      default:
+        return undefined;
+    }
   return {
     type,
     provider,
@@ -164,6 +167,9 @@ function fromTraceEvent(
         : {}),
     },
     payload,
+    ...(type === "unknown" && typeof payload.rawType === "string"
+      ? { rawType: payload.rawType }
+      : {}),
     ...(type === "usage" && payload.usage && typeof payload.usage === "object"
       ? { usage: payload.usage as ProviderEvent["usage"] }
       : {}),
@@ -192,23 +198,25 @@ function fromLineEvent(
   request: ProviderRequest,
 ): ProviderEvent {
   const type: ProviderEvent["type"] =
-    event.kind === "assistant" || event.kind === "user"
-      ? "message"
-      : event.kind === "tool"
-        ? "tool_call"
-        : event.kind === "tool_result"
-          ? "tool_result"
-          : event.kind === "usage"
-            ? "usage"
-            : event.kind === "session"
-              ? "session_started"
-              : event.kind === "result"
-                ? "session_ended"
-                : event.kind === "subagent_started" || event.kind === "subagent_ended"
-                  ? event.kind === "subagent_ended"
-                    ? "subagent_ended"
-                    : "subagent_started"
-                  : "error";
+    event.kind === "diagnostic"
+      ? "unknown"
+      : event.kind === "assistant" || event.kind === "user"
+        ? "message"
+        : event.kind === "tool"
+          ? "tool_call"
+          : event.kind === "tool_result"
+            ? "tool_result"
+            : event.kind === "usage"
+              ? "usage"
+              : event.kind === "session"
+                ? "session_started"
+                : event.kind === "result"
+                  ? "session_ended"
+                  : event.kind === "subagent_started" || event.kind === "subagent_ended"
+                    ? event.kind === "subagent_ended"
+                      ? "subagent_ended"
+                      : "subagent_started"
+                    : "error";
   const payload = {
     ...(event.text ? { content: event.text } : {}),
     ...(event.role ? { role: event.role } : {}),
@@ -243,6 +251,7 @@ function fromLineEvent(
       ...(event.parentId ? { subagentId: event.parentId } : {}),
     },
     payload,
+    ...(event.diagnostic?.code ? { rawType: event.diagnostic.code } : {}),
     ...(event.usage ? { usage: event.usage } : {}),
   };
 }
@@ -283,6 +292,23 @@ function assertUnsupportedPolicy(provider: string, checks: Array<[boolean, strin
   }
 }
 
+function unsupportedBudgetChecks(
+  policy: ProviderPolicy | undefined,
+  supported: { maxTurns?: boolean; maxCostUsd?: boolean } = {},
+): Array<[boolean, string]> {
+  return [
+    [policy?.budget?.maxTurns !== undefined && supported.maxTurns !== true, "max-turn budget"],
+    [policy?.budget?.maxTokens !== undefined, "token budget"],
+    [policy?.budget?.maxCostUsd !== undefined && supported.maxCostUsd !== true, "cost budget"],
+    [policy?.budget?.maxOutputTokens !== undefined, "token output limit"],
+    [policy?.budget?.maxOutputChars !== undefined, "character output limit"],
+    [policy?.limits?.maxOutputTokens !== undefined, "token output limit"],
+    [policy?.limits?.maxOutputChars !== undefined, "character output limit"],
+    [policy?.output?.maxTokens !== undefined, "token output limit"],
+    [policy?.output?.maxChars !== undefined, "character output limit"],
+  ];
+}
+
 function errorEvent(
   provider: string,
   request: ProviderRequest,
@@ -301,6 +327,33 @@ function errorEvent(
       ...(sessionId ? { sessionId } : {}),
     },
     payload: { status, error: message },
+  };
+}
+
+function diagnosticEvent(
+  provider: string,
+  request: ProviderRequest,
+  diagnostic: LineDiagnostic,
+  sessionId?: string,
+): ProviderEvent {
+  return {
+    type: "unknown",
+    provider,
+    occurredAt: new Date().toISOString(),
+    provenance: {
+      runId: request.runId,
+      attemptId: request.attemptId,
+      nodeId: request.nodeId,
+      ...(sessionId ? { sessionId } : {}),
+    },
+    rawType: diagnostic.rawType ?? diagnostic.code ?? "diagnostic",
+    payload: {
+      diagnostic: {
+        code: diagnostic.code ?? "unknown",
+        message: diagnostic.message,
+        ...(diagnostic.rawType ? { rawType: diagnostic.rawType } : {}),
+      },
+    } as unknown as JsonObject,
   };
 }
 
@@ -396,7 +449,11 @@ function makeAdapter(input: {
         envAllowlist: options.envAllowlist ?? DEFAULT_ENV[input.id],
         signal: controller.signal,
         timeoutMs: request.policy?.timeoutMs ?? request.policy?.budget?.timeoutMs,
-        maxStdoutBytes: request.policy?.maxOutputBytes,
+        maxStdoutBytes:
+          request.policy?.maxOutputBytes ??
+          request.policy?.budget?.maxOutputBytes ??
+          request.policy?.limits?.maxOutputBytes ??
+          request.policy?.output?.maxBytes,
         maxLineBytes: request.policy?.maxLineBytes,
         maxLines: request.policy?.maxLines,
       });
@@ -441,7 +498,7 @@ function makeAdapter(input: {
               const normalized = await input.normalizeLine(line, request);
               for (const diagnostic of normalized.diagnostics ?? []) {
                 malformed ||= diagnostic.code === "malformed_event";
-                yield errorEvent(input.id, request, diagnostic.message, sessionId);
+                yield diagnosticEvent(input.id, request, diagnostic, sessionId);
               }
               for (const event of normalized.events) {
                 if ("kind" in event && event.kind === "diagnostic") {
@@ -523,7 +580,17 @@ export function createCodexProviderAdapter(
     build: (request, current) => {
       const policy = request.policy;
       const writableRoots = [...(policy?.workspace?.writableRoots ?? [])];
-      const workingDirectory = request.cwd ?? current.cwd;
+      const workingDirectory = policy?.workspace?.workingDirectory ?? request.cwd ?? current.cwd;
+      const requestedSandbox = policy?.sandbox;
+      const sandboxModes = ["read-only", "workspace-write", "danger-full-access"] as const;
+      const sandbox =
+        requestedSandbox !== undefined
+          ? sandboxModes.includes(requestedSandbox as (typeof sandboxModes)[number])
+            ? (requestedSandbox as (typeof sandboxModes)[number])
+            : undefined
+          : writableRoots.length
+            ? "workspace-write"
+            : undefined;
       assertUnsupportedPolicy("Codex", [
         [
           policyList(policy, "allow").length > 0 || policyList(policy, "deny").length > 0,
@@ -534,14 +601,18 @@ export function createCodexProviderAdapter(
           writableRoots.some((root) => root !== workingDirectory),
           "writable roots outside the working directory",
         ],
+        [requestedSandbox !== undefined && sandbox === undefined, "sandbox mode"],
         [(policy?.approval?.requiredBefore?.length ?? 0) > 0, "approval checkpoint policy"],
+        [(policy?.approval?.sideEffectLabels?.length ?? 0) > 0, "approval side-effect policy"],
+        [policy?.approval?.mode !== undefined, "approval mode policy"],
+        ...unsupportedBudgetChecks(policy),
       ]);
       return buildCodexCommand({
         executable: current.executable,
         prompt: request.prompt ?? JSON.stringify(request.input),
         model: request.model,
         cwd: workingDirectory,
-        sandbox: writableRoots.length ? "workspace-write" : undefined,
+        sandbox,
         resumeSessionId: request.metadata?.sessionId as string | undefined,
       });
     },
@@ -583,6 +654,10 @@ export function createClaudeProviderAdapter(
       assertUnsupportedPolicy("Claude Code", [
         [(policy?.tools?.network ?? undefined) !== undefined, "network policy"],
         [(policy?.workspace?.writableRoots?.length ?? 0) > 0, "writable-root policy"],
+        [policy?.workspace?.workingDirectory !== undefined, "working-directory policy"],
+        [policy?.sandbox !== undefined, "sandbox policy"],
+        [(policy?.approval?.sideEffectLabels?.length ?? 0) > 0, "approval side-effect policy"],
+        ...unsupportedBudgetChecks(policy, { maxTurns: true, maxCostUsd: true }),
       ]);
       const requiredApproval = (policy?.approval?.requiredBefore?.length ?? 0) > 0;
       return buildClaudeCommand({
@@ -645,7 +720,10 @@ export function createOpenCodeProviderAdapter(
         ],
         [policy?.tools?.network !== undefined, "network policy"],
         [(policy?.workspace?.writableRoots?.length ?? 0) > 0, "writable-root policy"],
+        [policy?.sandbox !== undefined, "sandbox policy"],
         [(policy?.approval?.requiredBefore?.length ?? 0) > 0, "approval policy"],
+        [(policy?.approval?.sideEffectLabels?.length ?? 0) > 0, "approval side-effect policy"],
+        ...unsupportedBudgetChecks(policy),
       ]);
       return {
         executable: current.executable ?? "opencode",
@@ -653,7 +731,7 @@ export function createOpenCodeProviderAdapter(
           prompt: request.prompt ?? JSON.stringify(request.input),
           model: request.model,
           sessionId: request.metadata?.sessionId as string | undefined,
-          dir: request.cwd ?? current.cwd,
+          dir: policy?.workspace?.workingDirectory ?? request.cwd ?? current.cwd,
           auto: policy?.approval?.mode === "approve",
           allowAuto: policy?.approval?.mode === "approve",
         }).args,
@@ -673,19 +751,41 @@ export function createOpenCodeProviderAdapter(
     },
     probeVersion: parseOpenCodeVersion,
     imports: [
-      importDescriptor("opencode-export-v1", ["opencode.export.v1", "run-json"], async (source) => {
-        const imported = await importOpenCodeSession(source);
-        return imported.events
-          .map((event) =>
-            fromTraceEvent(event, "opencode", {
-              runId: "import",
-              attemptId: "import",
-              nodeId: "import",
-              input: {},
-            }),
-          )
-          .filter((event): event is ProviderEvent => Boolean(event));
-      }),
+      importDescriptor(
+        "opencode-export-v1",
+        ["opencode.export.v1", "run-json"],
+        async (source, origin) => {
+          const imported = await importOpenCodeSession(source, {
+            source: origin,
+            providerVersion: options.version,
+          });
+          const request = { runId: "import", attemptId: "import", nodeId: "import", input: {} };
+          const provenance = {
+            source: origin,
+            format: imported.provenance.format,
+            ...(imported.provenance.version !== undefined
+              ? { version: imported.provenance.version }
+              : {}),
+            diagnostics: imported.diagnostics,
+          };
+          const events = imported.events
+            .map((event) => fromTraceEvent(event, "opencode", request))
+            .filter((event): event is ProviderEvent => Boolean(event))
+            .map((event) => ({
+              ...event,
+              provenance: { ...event.provenance, ...provenance },
+            }));
+          if (events.length || imported.diagnostics.length === 0) return events;
+          return imported.diagnostics.map((item) => ({
+            type: "unknown" as const,
+            provider: "opencode",
+            occurredAt: new Date().toISOString(),
+            provenance: { ...provenance },
+            rawType: item.rawType ?? item.code,
+            payload: { diagnostic: item } as unknown as JsonObject,
+          }));
+        },
+      ),
     ],
   });
 }
@@ -704,6 +804,11 @@ export function createPiProviderAdapter(options: RegisteredProviderOptions = {})
           "restricted network policy",
         ],
         [(policy?.workspace?.writableRoots?.length ?? 0) > 0, "writable-root policy"],
+        [policy?.workspace?.workingDirectory !== undefined, "working-directory policy"],
+        [policy?.sandbox !== undefined, "sandbox policy"],
+        [(policy?.approval?.requiredBefore?.length ?? 0) > 0, "approval checkpoint policy"],
+        [(policy?.approval?.sideEffectLabels?.length ?? 0) > 0, "approval side-effect policy"],
+        ...unsupportedBudgetChecks(policy),
       ]);
       return {
         executable: current.executable ?? "pi",
@@ -715,7 +820,7 @@ export function createPiProviderAdapter(options: RegisteredProviderOptions = {})
           approval: policy?.approval?.mode,
           offline: policy?.tools?.network === "disabled",
           sessionId: request.metadata?.sessionId as string | undefined,
-          sessionDir: request.cwd ?? current.cwd,
+          sessionDir: policy?.workspace?.workingDirectory ?? request.cwd ?? current.cwd,
         }).args,
       };
     },
@@ -738,16 +843,29 @@ export function createPiProviderAdapter(options: RegisteredProviderOptions = {})
           source: origin,
           providerVersion: options.version,
         });
-        return imported.events
-          .map((event) =>
-            fromTraceEvent(event, "pi", {
-              runId: "import",
-              attemptId: "import",
-              nodeId: "import",
-              input: {},
-            }),
-          )
-          .filter((event): event is ProviderEvent => Boolean(event));
+        const request = { runId: "import", attemptId: "import", nodeId: "import", input: {} };
+        const provenance = {
+          source: origin,
+          format: imported.provenance.format,
+          version: imported.provenance.version,
+          diagnostics: imported.diagnostics,
+        };
+        const events = imported.events
+          .map((event) => fromTraceEvent(event, "pi", request))
+          .filter((event): event is ProviderEvent => Boolean(event))
+          .map((event) => ({
+            ...event,
+            provenance: { ...event.provenance, ...provenance },
+          }));
+        if (events.length || imported.diagnostics.length === 0) return events;
+        return imported.diagnostics.map((item) => ({
+          type: "unknown" as const,
+          provider: "pi",
+          occurredAt: new Date().toISOString(),
+          provenance: { ...provenance },
+          rawType: item.rawType ?? item.code,
+          payload: { diagnostic: item } as unknown as JsonObject,
+        }));
       }),
     ],
   });

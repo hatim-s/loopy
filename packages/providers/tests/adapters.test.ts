@@ -81,6 +81,24 @@ describe("Codex adapter", () => {
     ).toBe(true);
   });
 
+  test("does not invent a child identity from the parent thread", () => {
+    const withoutChild = normalizeCodexStream(
+      JSON.stringify({ type: "subagent.started", thread_id: "parent-thread" }),
+    )[0];
+    expect(withoutChild?.sessionId).toBeUndefined();
+    const withChild = normalizeCodexStream(
+      JSON.stringify({
+        type: "subagent.started",
+        thread_id: "parent-thread",
+        child_session_id: "child-thread",
+      }),
+    )[0];
+    expect(withChild).toMatchObject({
+      sessionId: "child-thread",
+      parentSessionId: "parent-thread",
+    });
+  });
+
   test("parses version and reports unavailable installs without assuming live provider access", async () => {
     expect(parseCodexVersion("codex-cli 0.146.0")).toBe("0.146.0");
     const installation = await probeCodex(
@@ -206,6 +224,42 @@ describe("Claude adapter", () => {
         .filter((event) => event.kind === "diagnostic")
         .every((event) => (event.diagnostic?.raw?.length ?? 0) <= 40),
     ).toBe(true);
+  });
+
+  test("merges top-level result cost with nested usage and keeps child identity honest", () => {
+    const usage = normalizeClaudeStream(
+      JSON.stringify({
+        type: "result",
+        session_id: "parent-session",
+        usage: { input_tokens: 2, output_tokens: 3 },
+        total_cost_usd: 0.25,
+      }),
+    );
+    expect(usage.find((event) => event.kind === "usage")?.usage).toMatchObject({
+      inputTokens: 2,
+      outputTokens: 3,
+      costUsd: 0.25,
+    });
+    const withoutChild = normalizeClaudeStream(
+      JSON.stringify({
+        type: "subagent.start",
+        session_id: "parent-session",
+        parent_tool_use_id: "tool-1",
+      }),
+    )[0];
+    expect(withoutChild?.sessionId).toBeUndefined();
+    const withChild = normalizeClaudeStream(
+      JSON.stringify({
+        type: "subagent.start",
+        session_id: "parent-session",
+        agent_id: "child-session",
+        parent_tool_use_id: "tool-1",
+      }),
+    )[0];
+    expect(withChild).toMatchObject({
+      sessionId: "child-session",
+      parentSessionId: "parent-session",
+    });
   });
 
   test("reports the documented absent-local installation shape and capability degradation", async () => {

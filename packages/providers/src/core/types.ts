@@ -39,6 +39,11 @@ export type SessionProvenance = {
   sessionId?: string;
   parentSessionId?: string;
   subagentId?: string;
+  /** Historical import provenance is retained on imported provider events. */
+  source?: string;
+  format?: string;
+  version?: string | number;
+  diagnostics?: readonly JsonObject[];
 };
 
 export type ProviderModelMetadata = {
@@ -111,13 +116,24 @@ export type ProviderPolicy = {
   };
   budget?: {
     maxTurns?: number;
+    maxTokens?: number;
     maxCostUsd?: number;
     timeoutMs?: number;
+    maxOutputBytes?: number;
+    maxOutputTokens?: number;
+    maxOutputChars?: number;
   };
+  sandbox?: string;
   timeoutMs?: number;
   maxOutputBytes?: number;
   maxLineBytes?: number;
   maxLines?: number;
+  limits?: {
+    maxOutputBytes?: number;
+    maxOutputTokens?: number;
+    maxOutputChars?: number;
+  };
+  output?: { maxBytes?: number; maxTokens?: number; maxChars?: number };
 };
 
 export type ProviderResumeRequest = ProviderRequest & {

@@ -42,6 +42,8 @@ export type ProviderAdapterContext = {
   sequence?: number;
   occurredAt?: string;
   monotonicOffsetMs?: number;
+  source?: string;
+  providerVersion?: string;
 };
 
 export type AdapterDiagnostic = {
@@ -73,6 +75,12 @@ export type OpenCodeImportedSession = {
   sourceFormat: "official-export" | "run-json";
   events: TraceEvent[];
   diagnostics: AdapterDiagnostic[];
+  provenance: {
+    source?: string;
+    format: typeof OPENCODE_EXPORT_FORMAT_V1 | "run-json";
+    version?: string;
+    diagnostics: AdapterDiagnostic[];
+  };
 };
 
 export type OpenCodeProbeResult = ProviderInstallation & {
