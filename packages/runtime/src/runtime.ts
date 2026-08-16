@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type {
   ExecutionPlan,
   JsonObject,
@@ -72,6 +73,8 @@ export type RunRecord = {
   workflowId: string;
   workflowVersion: number;
   plan: RuntimePlan;
+  /** Stable hash of the normalized execution plan used by run events. */
+  executionPlanHash?: string;
   inputs: JsonObject;
   status: RunStatus;
   createdAt: string;
@@ -115,10 +118,26 @@ export type RuntimeEvent = {
 export type RuntimeStoreCommand =
   | { type: "create_run"; run: RunRecord }
   | { type: "set_run"; runId: string; patch: Partial<RunRecord> }
-  | { type: "create_attempt"; attempt: AttemptRecord }
-  | { type: "set_attempt"; attemptId: string; patch: Partial<AttemptRecord> }
+  | { type: "create_attempt"; attempt: AttemptRecord; expectedRunStatus?: RunStatus }
+  | {
+      type: "set_attempt";
+      attemptId: string;
+      patch: Partial<AttemptRecord>;
+      expectedStatus?: AttemptStatus;
+      expectedRunStatus?: RunStatus;
+    }
   | { type: "set_approval"; approval: ApprovalRecord }
-  | { type: "resolve_approval"; runId: string; nodeId: string; decision: "approved" | "rejected" }
+  | {
+      type: "resolve_approval";
+      runId: string;
+      nodeId: string;
+      attemptId?: string;
+      decision: "approved" | "rejected";
+      /** Compare-and-set guards; adapters must enforce these in the same transaction. */
+      expectedRunStatus?: RunStatus;
+      expectedAttemptStatus?: AttemptStatus;
+      expectedDecision?: "pending";
+    }
   | { type: "append_event"; event: RuntimeEvent };
 
 export interface RuntimeStore {
@@ -193,6 +212,22 @@ function idFallback(prefix: string): string {
   for (const char of seed) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
   const hex = (hash >>> 0).toString(16).padStart(8, "0");
   return `${hex}${hex.slice(0, 4)}-4000-8000-0000-${hex}${hex}${hex.slice(0, 4)}`.slice(0, 36);
+}
+function canonical(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, item]) => [key, canonical(item)]),
+    );
+  }
+  return value;
+}
+function executionPlanHash(plan: RuntimePlan): string {
+  return createHash("sha256")
+    .update(JSON.stringify(canonical(plan)))
+    .digest("hex");
 }
 function valueAt(value: unknown, path: readonly string[]): unknown {
   let current = value;
@@ -304,6 +339,8 @@ export class RuntimeScheduler {
   private readonly waiters = new Map<string, Array<() => void>>();
   private readonly sequences = new Map<string, number>();
   private readonly retrying = new Map<string, Promise<AttemptRecord>>();
+  private readonly cancelling = new Map<string, Promise<RunRecord>>();
+  private readonly cancellationRequested = new Set<string>();
 
   constructor(options: RuntimeOptions) {
     this.options = options;
@@ -349,17 +386,27 @@ export class RuntimeScheduler {
       workflowId: plan.workflowId,
       workflowVersion: plan.workflowVersion,
       plan,
+      executionPlanHash: executionPlanHash(plan),
       inputs,
       status: "created",
       createdAt: this.now(),
     };
     await this.options.store.commit([
       { type: "create_run", run },
-      await this.event(run.runId, "run.created"),
+      await this.event(run.runId, "run.created", undefined, undefined, {
+        workflowId: run.workflowId,
+        workflowVersion: run.workflowVersion,
+        executionPlanHash: run.executionPlanHash,
+      }),
     ]);
     await this.options.store.commit([
       { type: "set_run", runId: run.runId, patch: { status: "running", startedAt: this.now() } },
-      await this.event(run.runId, "run.started"),
+      await this.event(run.runId, "run.started", undefined, undefined, {
+        workflowId: run.workflowId,
+        workflowVersion: run.workflowVersion,
+        executionPlanHash: run.executionPlanHash,
+        planHash: run.executionPlanHash,
+      }),
     ]);
     void this.pump(run.runId);
     return (await this.options.store.getRun(run.runId)) as RunRecord;
@@ -376,9 +423,23 @@ export class RuntimeScheduler {
       const snapshot = await this.snapshot(runId);
       if (TERMINAL_RUNS.has(snapshot.run.status) || snapshot.run.status === "paused")
         return snapshot;
-      await new Promise<void>((resolve) =>
-        this.waiters.set(runId, [...(this.waiters.get(runId) ?? []), resolve]),
-      );
+      // Register before the second read. If completion races this registration,
+      // the recheck consumes it instead of leaving a lost wake-up waiter.
+      let resolveWaiter!: () => void;
+      const waiter = new Promise<void>((resolve) => {
+        resolveWaiter = resolve;
+        this.waiters.set(runId, [...(this.waiters.get(runId) ?? []), resolve]);
+      });
+      const rechecked = await this.snapshot(runId);
+      if (TERMINAL_RUNS.has(rechecked.run.status) || rechecked.run.status === "paused") {
+        const waiters = this.waiters.get(runId) ?? [];
+        this.waiters.set(
+          runId,
+          waiters.filter((item) => item !== resolveWaiter),
+        );
+        return rechecked;
+      }
+      await waiter;
     }
   }
   async snapshot(runId: string): Promise<RuntimeSnapshot> {
@@ -415,15 +476,68 @@ export class RuntimeScheduler {
     return (await this.options.store.getRun(runId)) as RunRecord;
   }
   async cancel(runId: string, reason = "cancelled by user"): Promise<RunRecord> {
+    const inFlight = this.cancelling.get(runId);
+    if (inFlight) return inFlight;
+    const promise = this.cancelInternal(runId, reason);
+    this.cancelling.set(runId, promise);
+    try {
+      return await promise;
+    } finally {
+      if (this.cancelling.get(runId) === promise) this.cancelling.delete(runId);
+    }
+  }
+  private async cancelInternal(runId: string, reason: string): Promise<RunRecord> {
     const run = await this.requireRun(runId);
     if (TERMINAL_RUNS.has(run.status)) return run;
+    this.cancellationRequested.add(runId);
     await this.options.store.commit([
       { type: "set_run", runId, patch: { status: "cancelling", error: reason } },
       await this.event(runId, "run.cancelling", undefined, undefined, { reason }),
     ]);
-    for (const attemptId of this.active.get(runId) ?? [])
+    const attemptIds = new Set(this.active.get(runId) ?? []);
+    for (const attemptId of attemptIds) {
+      this.controllers.get(attemptId)?.abort(reason);
       await this.options.provider.cancel?.(attemptId);
-    if (!(this.active.get(runId)?.size ?? 0)) await this.finishRun(runId, "cancelled", reason);
+    }
+    const attempts = await this.options.store.listAttempts(runId);
+    const commands: RuntimeStoreCommand[] = [];
+    for (const attempt of attempts) {
+      if (TERMINAL_ATTEMPTS.has(attempt.status)) continue;
+      const completion: Completion = {
+        status: "cancelled",
+        summary: reason,
+        outputs: {},
+      };
+      commands.push(
+        {
+          type: "set_attempt",
+          attemptId: attempt.attemptId,
+          patch: {
+            status: "cancelled",
+            completion,
+            output: {},
+            error: reason,
+            endedAt: this.now(),
+          },
+        },
+        await this.event(runId, "attempt.cancelled", attempt.nodeId, attempt.attemptId, { reason }),
+      );
+    }
+    commands.push(
+      {
+        type: "set_run",
+        runId,
+        patch: { status: "cancelled", endedAt: this.now(), error: reason },
+      },
+      await this.event(runId, "run.completed", undefined, undefined, {
+        status: "cancelled",
+        summary: reason,
+      }),
+    );
+    if (commands.length > 1) await this.options.store.commit(commands);
+    this.active.get(runId)?.clear();
+    this.activeNodes.get(runId)?.clear();
+    this.notify(runId);
     return (await this.options.store.getRun(runId)) as RunRecord;
   }
   async approve(
@@ -431,33 +545,43 @@ export class RuntimeScheduler {
     nodeId: string,
     decision: "approved" | "rejected",
   ): Promise<RunRecord> {
-    await this.options.store.commit([
-      { type: "resolve_approval", runId, nodeId, decision },
-      await this.event(runId, "approval.resolved", nodeId, undefined, { decision }),
-    ]);
+    const run = await this.requireRun(runId);
+    if (run.status !== "running") throw new Error("Approvals require an active running run");
+    const approval = await this.options.store.getApproval(runId, nodeId);
     const attempt = (await this.options.store.listAttempts(runId)).find(
       (item) => item.nodeId === nodeId && item.status === "blocked_approval",
     );
-    if (attempt) {
-      const completion: Completion =
-        decision === "approved"
-          ? { status: "succeeded", summary: "Approval granted", outputs: { approved: true } }
-          : { status: "failed", summary: "Approval rejected", outputs: {} };
-      await this.options.store.commit([
-        {
-          type: "set_attempt",
-          attemptId: attempt.attemptId,
-          patch: {
-            status: completion.status === "succeeded" ? "succeeded" : "failed",
-            completion,
-            output: completion.outputs,
-            endedAt: this.now(),
-            error: decision === "rejected" ? "Approval rejected" : undefined,
-          },
+    if (!approval || approval.decision) throw new Error("No pending approval");
+    if (!attempt) throw new Error("No pending approval attempt");
+    const completion: Completion =
+      decision === "approved"
+        ? { status: "succeeded", summary: "Approval granted", outputs: { approved: true } }
+        : { status: "failed", summary: "Approval rejected", outputs: {} };
+    await this.options.store.commit([
+      {
+        type: "resolve_approval",
+        runId,
+        nodeId,
+        attemptId: attempt.attemptId,
+        decision,
+        expectedRunStatus: "running",
+        expectedAttemptStatus: "blocked_approval",
+        expectedDecision: "pending",
+      },
+      {
+        type: "set_attempt",
+        attemptId: attempt.attemptId,
+        patch: {
+          status: completion.status === "succeeded" ? "succeeded" : "failed",
+          completion,
+          output: completion.outputs,
+          endedAt: this.now(),
+          error: decision === "rejected" ? "Approval rejected" : undefined,
         },
-        await this.event(runId, "node.completed", nodeId, attempt.attemptId, { completion }),
-      ]);
-    }
+      },
+      await this.event(runId, "approval.resolved", nodeId, attempt.attemptId, { decision }),
+      await this.event(runId, "node.completed", nodeId, attempt.attemptId, { completion }),
+    ]);
     setTimeout(() => void this.pump(runId), 0);
     return (await this.options.store.getRun(runId)) as RunRecord;
   }
@@ -479,6 +603,8 @@ export class RuntimeScheduler {
     inputs?: JsonObject,
   ): Promise<AttemptRecord> {
     const run = await this.requireRun(runId);
+    if (!["running", "failed", "cancelled", "paused"].includes(run.status))
+      throw new Error(`Run ${runId} is not retryable from ${run.status}`);
     const previous = (await this.options.store.listAttempts(runId))
       .filter((item) => item.nodeId === nodeId)
       .sort((a, b) => b.attempt - a.attempt)[0];
@@ -498,14 +624,26 @@ export class RuntimeScheduler {
       inputs ?? previous.input,
       "pending",
     );
-    await this.options.store.commit([
-      { type: "create_attempt", attempt },
+    const commands: RuntimeStoreCommand[] = [
+      { type: "create_attempt", attempt, expectedRunStatus: run.status },
       await this.event(runId, "attempt.created", nodeId, attempt.attemptId, {
         attempt: attempt.attempt,
       }),
-    ]);
-    if (run.status !== "running")
-      await this.options.store.commit([{ type: "set_run", runId, patch: { status: "running" } }]);
+    ];
+    if (run.status !== "running") {
+      commands.push(
+        {
+          type: "set_run",
+          runId,
+          patch: { status: "running", endedAt: undefined, error: undefined },
+        },
+        await this.event(runId, "run.resumed", undefined, undefined, { resumedBy: "retry" }),
+      );
+      this.cancellationRequested.delete(runId);
+    }
+    // The attempt and explicit terminal-run transition are one atomic commit.
+    // Adapters must reject the whole batch on a failed compare/transition check.
+    await this.options.store.commit(commands);
     setTimeout(() => void this.pump(runId), 0);
     return attempt;
   }
@@ -516,37 +654,91 @@ export class RuntimeScheduler {
       if (TERMINAL_RUNS.has(run.status)) continue;
       const attempts = await this.options.store.listAttempts(run.runId);
       const orphaned = attempts.filter((attempt) => attempt.status === "running");
-      if (!orphaned.length) continue;
       const commands: RuntimeStoreCommand[] = [];
-      for (const attempt of orphaned) {
-        commands.push({
-          type: "set_attempt",
-          attemptId: attempt.attemptId,
-          patch: {
-            status: "failed",
-            error: "interrupted during recovery",
-            endedAt: this.now(),
-            completion: { status: "failed", summary: "Interrupted during recovery", outputs: {} },
-          },
-        });
+      if (run.status === "cancelling") {
+        for (const attempt of attempts) {
+          if (TERMINAL_ATTEMPTS.has(attempt.status)) continue;
+          const completion: Completion = {
+            status: "cancelled",
+            summary: run.error ?? "cancelled during recovery",
+            outputs: {},
+          };
+          commands.push(
+            {
+              type: "set_attempt",
+              attemptId: attempt.attemptId,
+              patch: {
+                status: "cancelled",
+                error: completion.summary,
+                output: {},
+                endedAt: this.now(),
+                completion,
+              },
+            },
+            await this.event(run.runId, "attempt.cancelled", attempt.nodeId, attempt.attemptId, {
+              reason: completion.summary,
+            }),
+          );
+        }
         commands.push(
-          await this.event(run.runId, "attempt.failed", attempt.nodeId, attempt.attemptId, {
-            error: "interrupted during recovery",
+          {
+            type: "set_run",
+            runId: run.runId,
+            patch: { status: "cancelled", endedAt: this.now() },
+          },
+          await this.event(run.runId, "run.completed", undefined, undefined, {
+            status: "cancelled",
+            summary: run.error ?? "cancelled during recovery",
           }),
         );
+      } else {
+        for (const attempt of orphaned) {
+          commands.push({
+            type: "set_attempt",
+            attemptId: attempt.attemptId,
+            patch: {
+              status: "failed",
+              error: "interrupted during recovery",
+              endedAt: this.now(),
+              completion: { status: "failed", summary: "Interrupted during recovery", outputs: {} },
+            },
+          });
+          commands.push(
+            await this.event(run.runId, "attempt.failed", attempt.nodeId, attempt.attemptId, {
+              error: "interrupted during recovery",
+            }),
+          );
+        }
+        if (run.status === "created") {
+          // A process can stop after create_run and before the normal start
+          // transition. Recover that legal boundary by starting it once.
+          commands.push({
+            type: "set_run",
+            runId: run.runId,
+            patch: { status: "running", startedAt: run.startedAt ?? this.now() },
+          });
+        } else if (run.status !== "paused") {
+          commands.push({
+            type: "set_run",
+            runId: run.runId,
+            patch: {
+              status: "paused",
+              error: orphaned.length ? "interrupted during recovery" : run.error,
+            },
+          });
+        }
+        if (orphaned.length || run.status !== "paused")
+          commands.push(
+            await this.event(run.runId, "runtime.recovery", undefined, undefined, {
+              interruptedAttempts: orphaned.map((a) => a.attemptId),
+            }),
+          );
       }
-      commands.push({
-        type: "set_run",
-        runId: run.runId,
-        patch: { status: "paused", error: "interrupted during recovery" },
-      });
-      commands.push(
-        await this.event(run.runId, "runtime.recovery", undefined, undefined, {
-          interruptedAttempts: orphaned.map((a) => a.attemptId),
-        }),
-      );
+      if (!commands.length) continue;
       await this.options.store.commit(commands);
-      recovered.push((await this.options.store.getRun(run.runId)) as RunRecord);
+      const recoveredRun = (await this.options.store.getRun(run.runId)) as RunRecord;
+      recovered.push(recoveredRun);
+      if (recoveredRun.status === "running") setTimeout(() => void this.pump(run.runId), 0);
       this.notify(run.runId);
     }
     return recovered;
@@ -588,6 +780,13 @@ export class RuntimeScheduler {
     status: "succeeded" | "failed" | "cancelled",
     error?: string,
   ): Promise<void> {
+    const current = await this.requireRun(runId);
+    if (TERMINAL_RUNS.has(current.status)) return;
+    if (
+      (this.cancellationRequested.has(runId) || current.status === "cancelling") &&
+      status !== "cancelled"
+    )
+      return;
     await this.options.store.commit([
       { type: "set_run", runId, patch: { status, endedAt: this.now(), error } },
       await this.event(runId, "run.completed", undefined, undefined, {
@@ -602,7 +801,13 @@ export class RuntimeScheduler {
     this.pumping.add(runId);
     try {
       const run = await this.requireRun(runId);
-      if (TERMINAL_RUNS.has(run.status) || run.status === "paused") return;
+      if (
+        TERMINAL_RUNS.has(run.status) ||
+        run.status === "paused" ||
+        run.status === "cancelling" ||
+        this.cancellationRequested.has(runId)
+      )
+        return;
       const attempts = await this.options.store.listAttempts(runId);
       const maxParallel = Math.max(1, Number(run.plan.policies?.concurrency?.maxParallel ?? 1));
       const active = this.active.get(runId) ?? new Set<string>();
@@ -634,9 +839,24 @@ export class RuntimeScheduler {
           outputs: {},
         };
         commands.push(
-          { type: "create_attempt", attempt: skipped },
+          { type: "create_attempt", attempt: skipped, expectedRunStatus: "running" },
           await this.event(runId, "node.completed", node.id, skipped.attemptId, {
             completion: skipped.completion,
+          }),
+        );
+      }
+      for (const node of this.impossibleJoins(run, attempts)) {
+        const failed = this.makeAttempt(run, node, 1, {}, "failed");
+        failed.error = "Join cannot satisfy its policy";
+        failed.completion = {
+          status: "failed",
+          summary: failed.error,
+          outputs: {},
+        };
+        commands.push(
+          { type: "create_attempt", attempt: failed, expectedRunStatus: "running" },
+          await this.event(runId, "node.completed", node.id, failed.attemptId, {
+            completion: failed.completion,
           }),
         );
       }
@@ -658,7 +878,8 @@ export class RuntimeScheduler {
         const pending = attempts.find(
           (item) => item.nodeId === node.id && item.status === "pending",
         );
-        const attempt = pending ?? this.makeAttempt(run, node, 1, input, "ready");
+        const ready = attempts.find((item) => item.nodeId === node.id && item.status === "ready");
+        const attempt = ready ?? pending ?? this.makeAttempt(run, node, 1, input, "ready");
         // Reserve the node before awaiting event construction. Another pump
         // may wake in that gap (approval resolution and retry both do this).
         active.add(attempt.attemptId);
@@ -670,9 +891,13 @@ export class RuntimeScheduler {
             type: "set_attempt",
             attemptId: pending.attemptId,
             patch: { status: "ready" },
+            expectedStatus: "pending",
+            expectedRunStatus: "running",
           });
-        else commands.push({ type: "create_attempt", attempt });
-        commands.push(await this.event(runId, "node.ready", node.id, attempt.attemptId));
+        else if (!ready)
+          commands.push({ type: "create_attempt", attempt, expectedRunStatus: "running" });
+        if (!ready)
+          commands.push(await this.event(runId, "node.ready", node.id, attempt.attemptId));
         launches.push({ node, attempt });
       }
       if (commands.length) await this.options.store.commit(commands);
@@ -692,8 +917,7 @@ export class RuntimeScheduler {
             ? "failed"
             : "succeeded",
         );
-      } else if (!active.size && run.status === "cancelling")
-        await this.finishRun(runId, "cancelled", run.error);
+      }
     } finally {
       this.pumping.delete(runId);
     }
@@ -729,11 +953,7 @@ export class RuntimeScheduler {
         )
       )
         return false;
-      if (
-        nodeAttempts.some(
-          (a) => a.status === "ready" || a.status === "running" || a.status === "blocked_approval",
-        )
-      )
+      if (nodeAttempts.some((a) => a.status === "running" || a.status === "blocked_approval"))
         return false;
       const edges = incoming.get(node.id) ?? [];
       if (!edges.length)
@@ -743,22 +963,59 @@ export class RuntimeScheduler {
       );
       const kind = node.kind;
       if (kind === "join") {
-        const policy = String(config(node, "policy") ?? "all");
-        const sourceTerminal = edges.every((edge) => terminal.has(edge.source));
-        if (policy === "all" && !sourceTerminal) return false;
-        const required =
-          policy === "all"
-            ? eligible.length
-            : policy === "quorum"
-              ? Number(config(node, "quorum") ?? edges.length)
-              : 1;
-        return eligible.length >= required;
+        return this.joinReadiness(node, edges, done, terminal, run, attempts).state === "ready";
       }
       if (eligible.length) return true;
       return (
         edges.every((edge) => terminal.has(edge.source)) &&
         edges.every((edge) => !done.has(edge.source))
       );
+    });
+  }
+
+  private joinReadiness(
+    node: RuntimeNode,
+    edges: RuntimeEdge[],
+    done: Set<string>,
+    terminal: Set<string>,
+    run: RunRecord,
+    attempts: AttemptRecord[],
+  ): { state: "ready" | "waiting" | "impossible"; selected: string[] } {
+    const sources = [...new Set(edges.map((edge) => edge.source))];
+    const selected = sources.filter((source) =>
+      edges.some(
+        (edge) =>
+          edge.source === source && done.has(source) && this.edgeSelected(edge, run, attempts),
+      ),
+    );
+    const policy = String(config(node, "policy") ?? "all");
+    const required =
+      policy === "all"
+        ? selected.length
+        : policy === "quorum"
+          ? Number(config(node, "quorum") ?? sources.length)
+          : 1;
+    const successes = selected.length;
+    if (policy === "all") {
+      if (!sources.every((source) => terminal.has(source))) return { state: "waiting", selected };
+      // A failed/cancelled predecessor cannot become an eligible success.
+      return { state: successes === sources.length ? "ready" : "impossible", selected };
+    }
+    if (successes >= required) return { state: "ready", selected };
+    if (sources.every((source) => terminal.has(source))) return { state: "impossible", selected };
+    return { state: "waiting", selected };
+  }
+
+  private impossibleJoins(run: RunRecord, attempts: AttemptRecord[]): RuntimeNode[] {
+    const done = new Set(attempts.filter((a) => a.status === "succeeded").map((a) => a.nodeId));
+    const terminal = new Set(
+      attempts.filter((a) => TERMINAL_ATTEMPTS.has(a.status)).map((a) => a.nodeId),
+    );
+    return run.plan.nodes.filter((node) => {
+      if (node.kind !== "join" || attempts.some((attempt) => attempt.nodeId === node.id))
+        return false;
+      const edges = run.plan.edges.filter((edge) => edge.target === node.id);
+      return this.joinReadiness(node, edges, done, terminal, run, attempts).state === "impossible";
     });
   }
   private skippableNodes(run: RunRecord, attempts: AttemptRecord[]): RuntimeNode[] {
@@ -769,6 +1026,7 @@ export class RuntimeScheduler {
     return run.plan.nodes.filter((node) => {
       if (attempts.some((a) => a.nodeId === node.id)) return false;
       const incoming = run.plan.edges.filter((edge) => edge.target === node.id);
+      if (node.kind === "join") return false;
       if (!incoming.length || !incoming.every((edge) => terminal.has(edge.source))) return false;
       return !incoming.some(
         (edge) => done.has(edge.source) && this.edgeSelected(edge, run, attempts),
@@ -826,14 +1084,28 @@ export class RuntimeScheduler {
     const activeNodeMap = this.activeNodes.get(run.runId) ?? new Map<string, string>();
     const controller = new AbortController();
     this.controllers.set(attempt.attemptId, controller);
-    await this.options.store.commit([
-      {
-        type: "set_attempt",
-        attemptId: attempt.attemptId,
-        patch: { status: "running", startedAt: this.now() },
-      },
-      await this.event(run.runId, "node.started", node.id, attempt.attemptId),
-    ]);
+    try {
+      if (this.cancellationRequested.has(run.runId)) return;
+      await this.options.store.commit([
+        {
+          type: "set_attempt",
+          attemptId: attempt.attemptId,
+          patch: { status: "running", startedAt: this.now() },
+          expectedStatus: "ready",
+          expectedRunStatus: "running",
+        },
+        await this.event(run.runId, "node.started", node.id, attempt.attemptId),
+      ]);
+    } catch (error) {
+      // Cancellation may have terminalized this ready attempt before launch.
+      if (this.cancellationRequested.has(run.runId)) {
+        this.controllers.delete(attempt.attemptId);
+        active.delete(attempt.attemptId);
+        activeNodeMap.delete(attempt.attemptId);
+        return;
+      }
+      throw error;
+    }
     let result: ProviderResult;
     try {
       if (node.kind === "agent")
@@ -877,6 +1149,7 @@ export class RuntimeScheduler {
             type: "set_attempt",
             attemptId: attempt.attemptId,
             patch: { status: "blocked_approval" },
+            expectedStatus: "running",
           },
           { type: "set_approval", approval },
           await this.event(run.runId, "node.blocked", node.id, attempt.attemptId, {
@@ -916,14 +1189,33 @@ export class RuntimeScheduler {
           summary: `Selected route ${route}`,
         };
       } else if (node.kind === "join") {
-        const prior = (await this.options.store.listAttempts(run.runId)).filter(
-          (a) =>
-            a.status === "succeeded" &&
-            run.plan.edges.some((e) => e.target === node.id && e.source === a.nodeId),
-        );
+        const currentAttempts = await this.options.store.listAttempts(run.runId);
+        const incoming = run.plan.edges.filter((edge) => edge.target === node.id);
+        const sourceOrder = [...new Set(incoming.map((edge) => edge.source))];
+        const prior = sourceOrder
+          .map(
+            (source) =>
+              currentAttempts
+                .filter((a) => a.nodeId === source && a.status === "succeeded")
+                .sort((a, b) => b.attempt - a.attempt)[0],
+          )
+          .filter((a): a is AttemptRecord => a !== undefined)
+          .filter((a) =>
+            incoming.some(
+              (edge) => edge.source === a.nodeId && this.edgeSelected(edge, run, currentAttempts),
+            ),
+          );
+        const mode = String(config(node, "outputMode") ?? "array");
+        const branchOutputs = prior.map((a) => a.output ?? {});
+        const branches =
+          mode === "object"
+            ? Object.fromEntries(prior.map((a) => [a.nodeId, a.output ?? {}]))
+            : mode === "first_success"
+              ? (branchOutputs[0] ?? {})
+              : branchOutputs;
         result = {
           status: "succeeded",
-          outputs: { branches: prior.map((a) => a.output ?? {}) },
+          outputs: { branches: branches as JsonValue },
           summary: "Join completed",
         };
       } else result = { status: "failed", error: `Unsupported node kind ${node.kind}` };
@@ -933,9 +1225,23 @@ export class RuntimeScheduler {
         error: error instanceof Error ? error.message : String(error),
       };
     }
+    const currentRun = await this.requireRun(run.runId);
+    const currentAttempt = (await this.options.store.listAttempts(run.runId)).find(
+      (item) => item.attemptId === attempt.attemptId,
+    );
+    const cancelled =
+      this.cancellationRequested.has(run.runId) ||
+      currentRun.status === "cancelling" ||
+      currentRun.status === "cancelled" ||
+      currentAttempt?.status === "cancelled";
+    if (cancelled) result = { status: "cancelled", error: currentRun.error ?? "cancelled" };
     this.controllers.delete(attempt.attemptId);
     active.delete(attempt.attemptId);
     activeNodeMap.delete(attempt.attemptId);
+    if (currentAttempt && TERMINAL_ATTEMPTS.has(currentAttempt.status)) {
+      if (currentAttempt.status === "cancelled") this.notify(run.runId);
+      return;
+    }
     const completion: Completion = {
       status: result.status,
       summary: result.summary ?? result.error ?? result.status,
@@ -955,6 +1261,7 @@ export class RuntimeScheduler {
           error: result.error,
           endedAt: this.now(),
         },
+        expectedStatus: "running",
       },
       await this.event(run.runId, "node.completed", node.id, attempt.attemptId, { completion }),
     ];
@@ -965,7 +1272,12 @@ export class RuntimeScheduler {
           reason: result.error ?? "failed",
         }),
       );
-    await this.options.store.commit(commands);
+    try {
+      await this.options.store.commit(commands);
+    } catch (error) {
+      if (!cancelled) throw error;
+      return;
+    }
     if (shouldRetry) {
       await this.retry(run.runId, node.id, attempt.input);
     } else if (result.status === "failed" && !this.hasAlternativeJoin(run, node.id))
@@ -975,7 +1287,8 @@ export class RuntimeScheduler {
       (await this.requireRun(run.runId)).status === "cancelling"
     )
       await this.finishRun(run.runId, "cancelled", result.error);
-    else setTimeout(() => void this.pump(run.runId), 0);
+    else if (!cancelled && !this.cancellationRequested.has(run.runId))
+      setTimeout(() => void this.pump(run.runId), 0);
   }
   private retryAllowed(node: RuntimeNode, attempt: AttemptRecord, reason?: string): boolean {
     const policy = (config(node, "retry") ?? {}) as RetryPolicy;

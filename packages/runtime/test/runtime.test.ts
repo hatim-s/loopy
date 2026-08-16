@@ -186,4 +186,112 @@ describe("phase 1 runtime", () => {
     expect((await x.store.listAttempts(started.runId))[0]?.error).toContain("interrupted");
     expect(before).toBe(1);
   });
+
+  test("cancellation terminalizes blocked work and ignores a late provider success", async () => {
+    const x = scheduler();
+    x.provider.defer("a");
+    const workflow = plan(
+      [agent("a"), { id: "approval", kind: "approval", message: "Ship?" }],
+      [],
+      { topology: { startNodeIds: ["a", "approval"], terminalNodeIds: ["a", "approval"] } },
+    );
+    const started = await x.runtime.start(workflow);
+    await Bun.sleep(10);
+    await x.runtime.cancel(started.runId);
+    const cancelled = await x.runtime.wait(started.runId);
+    expect(cancelled.run.status).toBe("cancelled");
+    expect(cancelled.attempts.every((attempt) => attempt.status === "cancelled")).toBe(true);
+    const active = x.provider.calls[0];
+    if (!active) throw new Error("expected active provider call");
+    x.provider.release(active.attemptId, { status: "succeeded", outputs: { late: true } });
+    await Bun.sleep(5);
+    const after = await x.runtime.snapshot(started.runId);
+    expect(after.run.status).toBe("cancelled");
+    expect(after.attempts.find((attempt) => attempt.attemptId === active.attemptId)?.status).toBe(
+      "cancelled",
+    );
+  });
+
+  test("an impossible all join fails instead of succeeding", async () => {
+    const x = scheduler();
+    x.provider.fail("a", "branch failed");
+    const workflow = plan(
+      [agent("start"), agent("a"), agent("b"), { id: "join", kind: "join", policy: "all" }],
+      [
+        { id: "sa", source: "start", target: "a" },
+        { id: "sb", source: "start", target: "b" },
+        { id: "aj", source: "a", target: "join" },
+        { id: "bj", source: "b", target: "join" },
+      ],
+    );
+    const result = await x.runtime.run(workflow);
+    expect(result.run.status).toBe("failed");
+    expect(result.attempts.find((attempt) => attempt.nodeId === "join")?.status).toBe("failed");
+  });
+
+  test("join output modes retain graph predecessor order", async () => {
+    const x = scheduler();
+    x.provider.succeed("a", { branch: "a" });
+    x.provider.succeed("b", { branch: "b" });
+    const workflow = plan(
+      [
+        agent("start"),
+        agent("a"),
+        agent("b"),
+        { id: "join", kind: "join", policy: "all", outputMode: "object" },
+      ],
+      [
+        { id: "sa", source: "start", target: "a" },
+        { id: "sb", source: "start", target: "b" },
+        { id: "aj", source: "a", target: "join" },
+        { id: "bj", source: "b", target: "join" },
+      ],
+    );
+    const result = await x.runtime.run(workflow);
+    const join = result.attempts.find((attempt) => attempt.nodeId === "join");
+    expect(join?.output?.branches).toEqual({ a: { branch: "a" }, b: { branch: "b" } });
+  });
+
+  test("approval decisions are compare-and-set and only one concurrent decision wins", async () => {
+    const x = scheduler();
+    const workflow = plan([{ id: "approval", kind: "approval", message: "Ship?" }], []);
+    const started = await x.runtime.start(workflow);
+    await Bun.sleep(10);
+    const decisions = await Promise.allSettled([
+      x.runtime.approve(started.runId, "approval", "approved"),
+      x.runtime.approve(started.runId, "approval", "rejected"),
+    ]);
+    expect(decisions.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(decisions.filter((result) => result.status === "rejected")).toHaveLength(1);
+    const snapshot = await x.runtime.snapshot(started.runId);
+    expect(snapshot.attempts.find((attempt) => attempt.nodeId === "approval")?.status).toBe(
+      "succeeded",
+    );
+  });
+
+  test("retrying a terminal failed run atomically resumes it with one new attempt", async () => {
+    const x = scheduler();
+    x.provider.fail("a", "first failure");
+    const workflow = plan([agent("a")], []);
+    const started = await x.runtime.start(workflow);
+    const failed = await x.runtime.wait(started.runId);
+    expect(failed.run.status).toBe("failed");
+    x.provider.succeed("a", { recovered: true });
+    const retried = await x.runtime.retry(started.runId, "a");
+    expect(retried.attempt).toBe(2);
+    expect((await x.runtime.wait(started.runId)).run.status).toBe("succeeded");
+    expect(
+      (await x.store.listAttempts(started.runId)).filter((a) => a.nodeId === "a"),
+    ).toHaveLength(2);
+  });
+
+  test("run events carry the real workflow id and stable execution plan hash", async () => {
+    const x = scheduler();
+    const workflow = plan([agent("a")], []);
+    const started = await x.runtime.start(workflow);
+    const events = await x.store.listEvents(started.runId);
+    expect(events[0]?.payload?.workflowId).toBe(workflow.id);
+    expect(events[0]?.payload?.executionPlanHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(events[1]?.payload?.executionPlanHash).toBe(events[0]?.payload?.executionPlanHash);
+  });
 });
