@@ -21,7 +21,7 @@
     "test:runtime": "bun test packages/runtime/test",
     "test:storage": "bun test packages/storage/tests",
     "test:tracing": "bun test packages/tracing/tests",
-    "test:cli": "vitest run packages/cli/tests",
+    "test:cli": "bun test packages/cli/tests",
     "test:extractor": "bun test packages/extractor/tests",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
