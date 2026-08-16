@@ -5,6 +5,33 @@ import { compileWorkflow, validateWorkflow } from "../src/index.ts";
 const agent = (id: string, prompt = "Do the work") => ({ id, kind: "agent", prompt });
 const verify = (id: string) => ({ id, kind: "verify", commands: ["bun test"] });
 
+function routePredicate(reference: Record<string, unknown>) {
+  return {
+    kind: "comparison",
+    operator: "equals",
+    left: { kind: "reference", reference },
+    right: { kind: "literal", value: true },
+  };
+}
+
+function routeWorkflow(reference: Record<string, unknown>) {
+  return {
+    inputs: [{ name: "declared" }],
+    nodes: [
+      agent("start"),
+      { id: "route", kind: "route", predicate: routePredicate(reference) },
+      verify("sibling"),
+      verify("done"),
+    ],
+    edges: [
+      { id: "start-route", source: "start", target: "route" },
+      { id: "start-sibling", source: "start", target: "sibling" },
+      { id: "route-done", source: "route", target: "done", label: "success" },
+      { id: "sibling-done", source: "sibling", target: "done" },
+    ],
+  };
+}
+
 function codes(workflow: unknown): string[] {
   return validateWorkflow(workflow).diagnostics.map((item) => item.code);
 }
@@ -233,6 +260,31 @@ describe("workflow graph validation", () => {
       ]),
     );
   });
+
+  test("validates route predicates against declared workflow inputs", () => {
+    expect(codes(routeWorkflow({ kind: "workflow_input", name: "missing" }))).toContain(
+      "WORKFLOW_INPUT_REFERENCE_INVALID",
+    );
+  });
+
+  test("accepts an upstream node output in a route predicate", () => {
+    expect(codes(routeWorkflow({ kind: "node_output", nodeId: "start", path: [] }))).not.toContain(
+      "NODE_OUTPUT_REFERENCE_NOT_UPSTREAM",
+    );
+  });
+
+  for (const [label, nodeId, expectedCode] of [
+    ["missing", "missing", "NODE_OUTPUT_REFERENCE_TARGET_MISSING"],
+    ["self", "route", "NODE_OUTPUT_REFERENCE_SELF"],
+    ["sibling", "sibling", "NODE_OUTPUT_REFERENCE_NOT_UPSTREAM"],
+    ["downstream", "done", "NODE_OUTPUT_REFERENCE_NOT_UPSTREAM"],
+  ] as const) {
+    test(`rejects ${label} node outputs in route predicates`, () => {
+      expect(codes(routeWorkflow({ kind: "node_output", nodeId, path: [] }))).toContain(
+        expectedCode,
+      );
+    });
+  }
 
   test("validates a route node default against outgoing labels", () => {
     const workflow = {

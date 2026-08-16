@@ -450,6 +450,14 @@ function valueReferenceLocations(node: NormalizedWorkflowNode): ValueReferenceLo
 
   addRecord("inputBindings");
   addRecord("mapping");
+  if (ROUTE_NODE_POLICIES.has(node.kind)) {
+    predicateReferenceLocations(
+      field(node.value, "predicate"),
+      ["nodes", node.index, "predicate"],
+      { nodeId: node.id },
+      locations,
+    );
+  }
   return locations;
 }
 

@@ -3,9 +3,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   CommandResultSchema,
+  ContractWarningV1Schema,
   ExecutionPlanSchema,
   ExecutionPlanV1Schema,
   ExtractionProposalSchema,
+  ExtractionProposalV1Schema,
   emitJsonSchema,
   emitPublicJsonSchemas,
   LocalCommandSchema,
@@ -437,6 +439,10 @@ describe("public JSON Schema", () => {
     expect(WorkflowDefinitionSchema).toBe(WorkflowDefinitionV1Schema);
     expect(ExecutionPlanSchema).toBe(ExecutionPlanV1Schema);
     expect(TraceEventSchema).toBe(TraceEventV1Schema);
+    expect(ExtractionProposalSchema).toBe(ExtractionProposalV1Schema);
+    expect(ExtractionProposalV1Schema.shape.warnings.unwrap().element).toBe(
+      ContractWarningV1Schema,
+    );
   });
   test("only explicitly persisted contracts are emitted", () => {
     expect(Object.keys(emitPublicJsonSchemas())).toEqual([

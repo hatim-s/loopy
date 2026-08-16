@@ -885,7 +885,7 @@ export const ExtractionProposalV1Schema = z
         }),
       )
       .default([]),
-    warnings: z.array(ContractWarningSchema).default([]),
+    warnings: z.array(ContractWarningV1Schema).default([]),
     verifierRequirements: z.array(VerifierRequirementV1Schema).min(1),
     proposedPolicies: ProposedPoliciesV1Schema,
     expectedSideEffects: z.array(NonEmptyStringSchema).default([]),
