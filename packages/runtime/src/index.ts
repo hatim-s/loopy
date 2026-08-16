@@ -1,3 +1,4 @@
+export * from "./runtime.ts";
 export type {
   CompilationResult,
   DiagnosticCode,
