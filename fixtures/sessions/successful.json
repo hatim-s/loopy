@@ -1,0 +1,149 @@
+[
+  {
+    "schemaVersion": "1",
+    "id": "10000000-0000-4000-8000-000000000001",
+    "runId": "20000000-0000-4000-8000-000000000001",
+    "sequence": 0,
+    "occurredAt": "2026-08-17T00:00:00.000Z",
+    "monotonicOffsetMs": 0,
+    "type": "run.created",
+    "payload": { "workflowId": "30000000-0000-4000-8000-000000000001", "workflowVersion": 1 },
+    "redaction": { "status": "none", "removedFields": [] }
+  },
+  {
+    "schemaVersion": "1",
+    "id": "10000000-0000-4000-8000-000000000002",
+    "runId": "20000000-0000-4000-8000-000000000001",
+    "sequence": 1,
+    "occurredAt": "2026-08-17T00:00:00.010Z",
+    "monotonicOffsetMs": 10,
+    "type": "run.started",
+    "payload": { "planHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    "redaction": { "status": "none", "removedFields": [] }
+  },
+  {
+    "schemaVersion": "1",
+    "id": "10000000-0000-4000-8000-000000000003",
+    "runId": "20000000-0000-4000-8000-000000000001",
+    "nodeId": "30000000-0000-4000-8000-000000000002",
+    "attemptId": "40000000-0000-4000-8000-000000000001",
+    "sequence": 2,
+    "occurredAt": "2026-08-17T00:00:00.020Z",
+    "monotonicOffsetMs": 20,
+    "type": "node.started",
+    "payload": {},
+    "redaction": { "status": "none", "removedFields": [] }
+  },
+  {
+    "schemaVersion": "1",
+    "id": "10000000-0000-4000-8000-000000000004",
+    "runId": "20000000-0000-4000-8000-000000000001",
+    "nodeId": "30000000-0000-4000-8000-000000000002",
+    "attemptId": "40000000-0000-4000-8000-000000000001",
+    "provider": "codex",
+    "sessionId": "session-success",
+    "sequence": 3,
+    "occurredAt": "2026-08-17T00:00:00.030Z",
+    "monotonicOffsetMs": 30,
+    "type": "provider.session_started",
+    "payload": {},
+    "redaction": { "status": "none", "removedFields": [] }
+  },
+  {
+    "schemaVersion": "1",
+    "id": "10000000-0000-4000-8000-000000000005",
+    "runId": "20000000-0000-4000-8000-000000000001",
+    "nodeId": "30000000-0000-4000-8000-000000000002",
+    "attemptId": "40000000-0000-4000-8000-000000000001",
+    "provider": "codex",
+    "sessionId": "session-success",
+    "toolCallId": "50000000-0000-4000-8000-000000000001",
+    "sequence": 4,
+    "occurredAt": "2026-08-17T00:00:00.040Z",
+    "monotonicOffsetMs": 40,
+    "type": "tool.requested",
+    "payload": { "tool": "git status", "input": { "cwd": "/workspace/project", "branch": "main" } },
+    "redaction": { "status": "none", "removedFields": [] }
+  },
+  {
+    "schemaVersion": "1",
+    "id": "10000000-0000-4000-8000-000000000006",
+    "runId": "20000000-0000-4000-8000-000000000001",
+    "nodeId": "30000000-0000-4000-8000-000000000002",
+    "attemptId": "40000000-0000-4000-8000-000000000001",
+    "provider": "codex",
+    "sessionId": "session-success",
+    "toolCallId": "50000000-0000-4000-8000-000000000001",
+    "sequence": 5,
+    "occurredAt": "2026-08-17T00:00:00.050Z",
+    "monotonicOffsetMs": 50,
+    "type": "tool.completed",
+    "payload": { "output": { "status": "clean" }, "exitCode": 0 },
+    "redaction": { "status": "none", "removedFields": [] }
+  },
+  {
+    "schemaVersion": "1",
+    "id": "10000000-0000-4000-8000-000000000007",
+    "runId": "20000000-0000-4000-8000-000000000001",
+    "nodeId": "30000000-0000-4000-8000-000000000002",
+    "attemptId": "40000000-0000-4000-8000-000000000001",
+    "sequence": 6,
+    "occurredAt": "2026-08-17T00:00:00.060Z",
+    "monotonicOffsetMs": 60,
+    "type": "verification.started",
+    "payload": { "check": "tests" },
+    "redaction": { "status": "none", "removedFields": [] }
+  },
+  {
+    "schemaVersion": "1",
+    "id": "10000000-0000-4000-8000-000000000008",
+    "runId": "20000000-0000-4000-8000-000000000001",
+    "nodeId": "30000000-0000-4000-8000-000000000002",
+    "attemptId": "40000000-0000-4000-8000-000000000001",
+    "sequence": 7,
+    "occurredAt": "2026-08-17T00:00:00.070Z",
+    "monotonicOffsetMs": 70,
+    "type": "verification.result",
+    "payload": {
+      "check": "tests",
+      "status": "passed",
+      "summary": "all tests passed",
+      "durationMs": 10
+    },
+    "redaction": { "status": "none", "removedFields": [] }
+  },
+  {
+    "schemaVersion": "1",
+    "id": "10000000-0000-4000-8000-000000000009",
+    "runId": "20000000-0000-4000-8000-000000000001",
+    "nodeId": "30000000-0000-4000-8000-000000000002",
+    "attemptId": "40000000-0000-4000-8000-000000000001",
+    "sequence": 8,
+    "occurredAt": "2026-08-17T00:00:00.080Z",
+    "monotonicOffsetMs": 80,
+    "type": "node.completed",
+    "payload": {
+      "completion": {
+        "schemaVersion": "1",
+        "status": "succeeded",
+        "summary": "done",
+        "outputs": { "artifactPath": "/workspace/project/out.txt" },
+        "artifacts": [],
+        "verification": [],
+        "warnings": []
+      }
+    },
+    "redaction": { "status": "none", "removedFields": [] }
+  },
+  {
+    "schemaVersion": "1",
+    "id": "10000000-0000-4000-8000-000000000010",
+    "runId": "20000000-0000-4000-8000-000000000001",
+    "sequence": 9,
+    "occurredAt": "2026-08-17T00:00:00.090Z",
+    "monotonicOffsetMs": 90,
+    "type": "run.completed",
+    "payload": { "status": "succeeded", "summary": "done" },
+    "redaction": { "status": "none", "removedFields": [] }
+  }
+]

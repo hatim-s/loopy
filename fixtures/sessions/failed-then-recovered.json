@@ -1,0 +1,73 @@
+[
+  {
+    "schemaVersion": "1",
+    "id": "11000000-0000-4000-8000-000000000001",
+    "runId": "21000000-0000-4000-8000-000000000001",
+    "sequence": 0,
+    "occurredAt": "2026-08-17T00:01:00.000Z",
+    "monotonicOffsetMs": 0,
+    "type": "run.created",
+    "payload": { "workflowId": "31000000-0000-4000-8000-000000000001", "workflowVersion": 2 },
+    "redaction": { "status": "none", "removedFields": [] }
+  },
+  {
+    "schemaVersion": "1",
+    "id": "11000000-0000-4000-8000-000000000002",
+    "runId": "21000000-0000-4000-8000-000000000001",
+    "nodeId": "31000000-0000-4000-8000-000000000002",
+    "attemptId": "41000000-0000-4000-8000-000000000001",
+    "sequence": 1,
+    "occurredAt": "2026-08-17T00:01:00.010Z",
+    "monotonicOffsetMs": 10,
+    "type": "attempt.failed",
+    "payload": { "error": "command exited with code 1" },
+    "redaction": { "status": "none", "removedFields": [] }
+  },
+  {
+    "schemaVersion": "1",
+    "id": "11000000-0000-4000-8000-000000000003",
+    "runId": "21000000-0000-4000-8000-000000000001",
+    "nodeId": "31000000-0000-4000-8000-000000000002",
+    "attemptId": "41000000-0000-4000-8000-000000000002",
+    "sequence": 2,
+    "occurredAt": "2026-08-17T00:01:00.020Z",
+    "monotonicOffsetMs": 20,
+    "type": "attempt.retrying",
+    "payload": { "nextAttempt": 2, "reason": "transient command failure" },
+    "redaction": { "status": "none", "removedFields": [] }
+  },
+  {
+    "schemaVersion": "1",
+    "id": "11000000-0000-4000-8000-000000000004",
+    "runId": "21000000-0000-4000-8000-000000000001",
+    "nodeId": "31000000-0000-4000-8000-000000000002",
+    "attemptId": "41000000-0000-4000-8000-000000000002",
+    "sequence": 3,
+    "occurredAt": "2026-08-17T00:01:00.030Z",
+    "monotonicOffsetMs": 30,
+    "type": "node.completed",
+    "payload": {
+      "completion": {
+        "schemaVersion": "1",
+        "status": "succeeded",
+        "summary": "recovered",
+        "outputs": {},
+        "artifacts": [],
+        "verification": [],
+        "warnings": []
+      }
+    },
+    "redaction": { "status": "none", "removedFields": [] }
+  },
+  {
+    "schemaVersion": "1",
+    "id": "11000000-0000-4000-8000-000000000005",
+    "runId": "21000000-0000-4000-8000-000000000001",
+    "sequence": 4,
+    "occurredAt": "2026-08-17T00:01:00.040Z",
+    "monotonicOffsetMs": 40,
+    "type": "run.completed",
+    "payload": { "status": "succeeded", "summary": "recovered" },
+    "redaction": { "status": "none", "removedFields": [] }
+  }
+]
