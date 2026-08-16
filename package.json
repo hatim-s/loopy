@@ -12,13 +12,15 @@
   "scripts": {
     "build": "bun run build:contracts && bun run typecheck",
     "build:contracts": "tsc -p packages/contracts/tsconfig.json",
-    "check": "bun run fmt:check && bun run lint && bun run typecheck && bun run test:contracts && bun run test:runtime && bun run test:cli",
+    "check": "bun run fmt:check && bun run lint && bun run typecheck && bun run test:contracts && bun run test:runtime && bun run test:storage && bun run test:tracing && bun run test:cli",
     "fmt": "biome format --write .",
     "fmt:check": "biome format .",
     "lint": "biome check .",
     "test": "bun test",
     "test:contracts": "bun test packages/contracts/test",
     "test:runtime": "bun test packages/runtime/test",
+    "test:storage": "bun test packages/storage/tests",
+    "test:tracing": "bun test packages/tracing/tests",
     "test:cli": "vitest run packages/cli/tests",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
