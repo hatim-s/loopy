@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { WorkflowDefinitionSchema } from "@loopy/contracts";
 import { compileWorkflow, validateWorkflow } from "../src/index.ts";
-import type { WorkflowDefinition } from "../src/index.ts";
 
 const agent = (id: string, prompt = "Do the work") => ({ id, kind: "agent", prompt });
 const verify = (id: string) => ({ id, kind: "verify", commands: ["bun test"] });
@@ -11,7 +11,7 @@ function codes(workflow: unknown): string[] {
 
 describe("workflow graph validation", () => {
   test("accepts a linear workflow and prepares a normalized plan", () => {
-    const workflow: WorkflowDefinition = {
+    const workflow = {
       id: "linear",
       workflowVersion: 1,
       nodes: [agent("start"), verify("done")],
@@ -27,25 +27,89 @@ describe("workflow graph validation", () => {
     if (compiled.ok) expect(compiled.plan.kind).toBe("normalized-execution-plan");
   });
 
+  test("accepts a canonical contract workflow", async () => {
+    const fixture = await Bun.file(
+      new URL("../../../fixtures/workflows/valid-basic.json", import.meta.url),
+    ).json();
+    const workflow = WorkflowDefinitionSchema.parse(fixture);
+    const result = compileWorkflow(workflow);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.plan.workflowId).toBe(workflow.id);
+      expect(result.plan.topologicalOrder).toHaveLength(workflow.nodes.length);
+    }
+  });
+
   test("accepts the checked-in branch/join fixture", async () => {
-    const fixture = await Bun.file(new URL("../../../fixtures/workflows/validation/valid-branch-join.json", import.meta.url)).json();
+    const fixture = await Bun.file(
+      new URL("../../../fixtures/workflows/validation/valid-branch-join.json", import.meta.url),
+    ).json();
     const result = validateWorkflow(fixture);
     expect(result.valid).toBe(true);
     expect(result.graph.terminalNodeIds).toEqual(["approve"]);
   });
 
   test("reports the checked-in invalid fixture", async () => {
-    const fixture = await Bun.file(new URL("../../../fixtures/workflows/validation/invalid-route-cycle.json", import.meta.url)).json();
-    expect(codes(fixture)).toEqual(expect.arrayContaining(["ROUTE_LABEL_REQUIRED", "JOIN_INCOMING_REQUIRED", "CYCLE_UNSUPPORTED"]));
+    const fixture = await Bun.file(
+      new URL("../../../fixtures/workflows/validation/invalid-route-cycle.json", import.meta.url),
+    ).json();
+    expect(codes(fixture)).toEqual(
+      expect.arrayContaining([
+        "ROUTE_LABEL_REQUIRED",
+        "JOIN_INCOMING_REQUIRED",
+        "CYCLE_UNSUPPORTED",
+      ]),
+    );
   });
 
   test.each([
     ["duplicate node ids", { nodes: [agent("a"), agent("a")], edges: [] }, "DUPLICATE_NODE_ID"],
-    ["duplicate edge ids", { nodes: [agent("a"), verify("b")], edges: [{ id: "e", source: "a", target: "b" }, { id: "e", source: "a", target: "b" }] }, "DUPLICATE_EDGE_ID"],
-    ["missing endpoint", { nodes: [agent("a")], edges: [{ id: "e", source: "a", target: "missing" }] }, "EDGE_ENDPOINT_MISSING"],
-    ["cycle", { nodes: [agent("a"), verify("b")], edges: [{ id: "ab", source: "a", target: "b" }, { id: "ba", source: "b", target: "a" }] }, "CYCLE_UNSUPPORTED"],
-    ["unreachable subgraph", { nodes: [agent("a"), verify("b"), verify("orphan")], edges: [{ id: "ab", source: "a", target: "b" }] }, "DISCONNECTED_SUBGRAPH"],
-    ["missing terminal", { nodes: [agent("a"), verify("b")], edges: [{ id: "ab", source: "a", target: "b" }, { id: "ba", source: "b", target: "a" }] }, "NO_REACHABLE_TERMINAL"],
+    [
+      "duplicate edge ids",
+      {
+        nodes: [agent("a"), verify("b")],
+        edges: [
+          { id: "e", source: "a", target: "b" },
+          { id: "e", source: "a", target: "b" },
+        ],
+      },
+      "DUPLICATE_EDGE_ID",
+    ],
+    [
+      "missing endpoint",
+      { nodes: [agent("a")], edges: [{ id: "e", source: "a", target: "missing" }] },
+      "EDGE_ENDPOINT_MISSING",
+    ],
+    [
+      "cycle",
+      {
+        nodes: [agent("a"), verify("b")],
+        edges: [
+          { id: "ab", source: "a", target: "b" },
+          { id: "ba", source: "b", target: "a" },
+        ],
+      },
+      "CYCLE_UNSUPPORTED",
+    ],
+    [
+      "unreachable subgraph",
+      {
+        nodes: [agent("a"), verify("b"), verify("orphan")],
+        edges: [{ id: "ab", source: "a", target: "b" }],
+      },
+      "DISCONNECTED_SUBGRAPH",
+    ],
+    [
+      "missing terminal",
+      {
+        nodes: [agent("a"), verify("b")],
+        edges: [
+          { id: "ab", source: "a", target: "b" },
+          { id: "ba", source: "b", target: "a" },
+        ],
+      },
+      "NO_REACHABLE_TERMINAL",
+    ],
   ] as const)("reports %s", (_name, workflow, code) => {
     expect(codes(workflow)).toContain(code);
   });
@@ -55,10 +119,20 @@ describe("workflow graph validation", () => {
       nodes: [{ id: "start", kind: "agent" }],
       edges: [{ id: "e", source: "start", target: "missing" }],
     });
-    expect(result.diagnostics).toEqual(expect.arrayContaining([
-      expect.objectContaining({ code: "NODE_REQUIRED_FIELD", path: "/nodes/0/prompt", pathSegments: ["nodes", 0, "prompt"] }),
-      expect.objectContaining({ code: "EDGE_ENDPOINT_MISSING", path: "/edges/0/target", pathSegments: ["edges", 0, "target"] }),
-    ]));
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "NODE_REQUIRED_FIELD",
+          path: "/nodes/0/prompt",
+          pathSegments: ["nodes", 0, "prompt"],
+        }),
+        expect.objectContaining({
+          code: "EDGE_ENDPOINT_MISSING",
+          path: "/edges/0/target",
+          pathSegments: ["edges", 0, "target"],
+        }),
+      ]),
+    );
   });
 
   test("requires labelled, unique route edges", () => {
@@ -81,9 +155,14 @@ describe("workflow graph validation", () => {
   });
 
   test("enforces join incoming shape and policy", () => {
-    const workflow = { nodes: [agent("start"), { id: "join", kind: "join" }], edges: [{ id: "e", source: "start", target: "join" }] };
+    const workflow = {
+      nodes: [agent("start"), { id: "join", kind: "join" }],
+      edges: [{ id: "e", source: "start", target: "join" }],
+    };
     const result = validateWorkflow(workflow);
-    expect(codes(workflow)).toEqual(expect.arrayContaining(["JOIN_INCOMING_REQUIRED", "JOIN_POLICY_REQUIRED"]));
+    expect(codes(workflow)).toEqual(
+      expect.arrayContaining(["JOIN_INCOMING_REQUIRED", "JOIN_POLICY_REQUIRED"]),
+    );
     expect(result.valid).toBe(false);
   });
 });

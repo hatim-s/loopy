@@ -1,7 +1,15 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.2.2/schema.json",
   "files": {
-    "includes": ["**", "!.planloft", "!bun.lock", "!node_modules", "!dist", "!coverage"]
+    "includes": [
+      "**",
+      "!.planloft",
+      "!bun.lock",
+      "!**/node_modules",
+      "!**/dist",
+      "!coverage",
+      "!fixtures/workflows/schema-snapshots.json"
+    ]
   },
   "formatter": {
     "enabled": true,

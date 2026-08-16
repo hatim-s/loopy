@@ -6,7 +6,8 @@
     "sourceMap": true,
     "outDir": "dist",
     "rootDir": "src",
-    "noEmit": false
+    "noEmit": false,
+    "allowImportingTsExtensions": false
   },
   "include": ["src/**/*.ts"]
 }

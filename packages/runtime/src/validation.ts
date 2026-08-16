@@ -1,37 +1,18 @@
-/**
- * The runtime deliberately depends on the structural part of the contracts
- * package.  This keeps the compiler front-end usable while contracts are
- * developed in parallel, and means the public functions accept the concrete
- * `@loopy/contracts` WorkflowDefinition without a runtime dependency.
- */
+import type {
+  ExecutionPlan as ContractExecutionPlan,
+  WorkflowDefinition as ContractWorkflowDefinition,
+  WorkflowEdge as ContractWorkflowEdge,
+  WorkflowNode as ContractWorkflowNode,
+} from "@loopy/contracts";
 
-export type WorkflowNode = {
-  id?: unknown;
-  kind?: unknown;
-  type?: unknown;
-  name?: unknown;
-  config?: Record<string, unknown>;
-  [key: string]: unknown;
-};
+/** Public workflow types are owned by @loopy/contracts. */
+export type WorkflowDefinition = ContractWorkflowDefinition;
+export type WorkflowNode = ContractWorkflowNode;
+export type WorkflowEdge = ContractWorkflowEdge;
+/** The persisted execution-plan contract is completed in a later phase. */
+export type ExecutionPlan = ContractExecutionPlan;
 
-export type WorkflowEdge = {
-  id?: unknown;
-  source?: unknown;
-  target?: unknown;
-  route?: unknown;
-  condition?: unknown;
-  [key: string]: unknown;
-};
-
-export type WorkflowDefinition = {
-  id?: unknown;
-  name?: unknown;
-  nodes?: unknown;
-  edges?: unknown;
-  startNodeId?: unknown;
-  entryNodeId?: unknown;
-  [key: string]: unknown;
-};
+type RawRecord = Record<string, unknown>;
 
 export type DiagnosticSeverity = "error" | "warning";
 
@@ -88,7 +69,7 @@ export type NormalizedWorkflowNode = {
   id: string;
   kind: string;
   index: number;
-  value: WorkflowNode;
+  value: RawRecord;
 };
 
 export type NormalizedWorkflowEdge = {
@@ -98,7 +79,7 @@ export type NormalizedWorkflowEdge = {
   index: number;
   route?: string;
   condition?: unknown;
-  value: WorkflowEdge;
+  value: RawRecord;
 };
 
 export type NormalizedWorkflowGraph = {
@@ -110,7 +91,7 @@ export type NormalizedWorkflowGraph = {
   topologicalOrder: string[];
 };
 
-export type ExecutionPlan = {
+export type NormalizedExecutionPlan = {
   kind: "normalized-execution-plan";
   workflowId?: string;
   workflowVersion?: unknown;
@@ -122,10 +103,9 @@ export type ExecutionPlan = {
 };
 
 export type CompilationResult =
-  | { ok: true; plan: ExecutionPlan; diagnostics: WorkflowDiagnostic[] }
+  | { ok: true; plan: NormalizedExecutionPlan; diagnostics: WorkflowDiagnostic[] }
   | { ok: false; plan?: undefined; diagnostics: WorkflowDiagnostic[] };
 
-const NODE_KINDS = new Set(["agent", "verify", "approval", "route", "join", "transform"]);
 const JOIN_POLICIES = new Set(["all", "any", "quorum"]);
 const ROUTE_NODE_POLICIES = new Set(["route", "router"]);
 
@@ -157,12 +137,16 @@ function diagnostic(
   };
 }
 
-function field(node: WorkflowNode, name: string): unknown {
-  if (node[name] !== undefined) return node[name];
-  return node.config?.[name];
+function configOf(node: RawRecord): RawRecord | undefined {
+  return isRecord(node.config) ? node.config : undefined;
 }
 
-function kindOf(node: WorkflowNode): string | undefined {
+function field(node: RawRecord, name: string): unknown {
+  if (node[name] !== undefined) return node[name];
+  return configOf(node)?.[name];
+}
+
+function kindOf(node: RawRecord): string | undefined {
   const value = node.kind ?? node.type;
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
@@ -171,16 +155,18 @@ function stringField(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value : undefined;
 }
 
-function edgeRoute(edge: WorkflowEdge): string | undefined {
-  return stringField(edge.route) ?? stringField(edge.condition);
+function edgeRoute(edge: RawRecord): string | undefined {
+  // `label` is the canonical contract field; `route` remains accepted for
+  // the validator's deliberately loose input boundary and older fixtures.
+  return stringField(edge.label) ?? stringField(edge.route) ?? stringField(edge.condition);
 }
 
-function hasOwn(node: WorkflowNode, name: string): boolean {
-  return node[name] !== undefined || node.config?.[name] !== undefined;
+function hasOwn(node: RawRecord, name: string): boolean {
+  return node[name] !== undefined || configOf(node)?.[name] !== undefined;
 }
 
 function requiredField(
-  node: WorkflowNode,
+  node: RawRecord,
   nodeIndex: number,
   name: string,
   diagnostics: WorkflowDiagnostic[],
@@ -192,14 +178,23 @@ function requiredField(
       diagnostic(
         "NODE_REQUIRED_FIELD",
         `Node kind requires a non-empty ${name} field.`,
-        ["nodes", nodeIndex, node[name] !== undefined || node.config === undefined ? name : "config", ...(node[name] !== undefined || node.config === undefined ? [] : [name])],
+        [
+          "nodes",
+          nodeIndex,
+          node[name] !== undefined || node.config === undefined ? name : "config",
+          ...(node[name] !== undefined || node.config === undefined ? [] : [name]),
+        ],
         { nodeId: stringField(node.id) },
       ),
     );
   }
 }
 
-function validateKindFields(node: WorkflowNode, index: number, diagnostics: WorkflowDiagnostic[]): void {
+function validateKindFields(
+  node: RawRecord,
+  index: number,
+  diagnostics: WorkflowDiagnostic[],
+): void {
   const kind = kindOf(node);
   if (!kind) return;
   const nonEmptyString = (value: unknown) => typeof value === "string" && value.trim().length > 0;
@@ -212,11 +207,29 @@ function validateKindFields(node: WorkflowNode, index: number, diagnostics: Work
       if (!hasOwn(node, "commands") && !hasOwn(node, "command")) {
         requiredField(node, index, "commands", diagnostics, nonEmptyArray);
       } else if (hasOwn(node, "commands") && !nonEmptyArray(field(node, "commands"))) {
-        diagnostics.push(diagnostic("NODE_FIELD_INVALID", "Verify commands must be a non-empty array.", ["nodes", index, "commands"], { nodeId: stringField(node.id) }));
+        diagnostics.push(
+          diagnostic(
+            "NODE_FIELD_INVALID",
+            "Verify commands must be a non-empty array.",
+            ["nodes", index, "commands"],
+            { nodeId: stringField(node.id) },
+          ),
+        );
       }
       break;
     case "approval":
-      requiredField(node, index, "prompt", diagnostics, nonEmptyString);
+      if (!hasOwn(node, "message") && !hasOwn(node, "prompt")) {
+        requiredField(node, index, "message", diagnostics, nonEmptyString);
+      } else if (!nonEmptyString(field(node, "message") ?? field(node, "prompt"))) {
+        diagnostics.push(
+          diagnostic(
+            "NODE_FIELD_INVALID",
+            "Approval message must be a non-empty string.",
+            ["nodes", index, "message"],
+            { nodeId: stringField(node.id) },
+          ),
+        );
+      }
       break;
     case "join":
       if (!hasOwn(node, "policy") && !hasOwn(node, "joinPolicy")) {
@@ -230,32 +243,71 @@ function validateKindFields(node: WorkflowNode, index: number, diagnostics: Work
       // A route node's outgoing labels are validated against its edges below.
       break;
     default:
-      diagnostics.push(diagnostic("UNSUPPORTED_NODE_KIND", `Unsupported node kind '${kind}'.`, ["nodes", index, "kind"], { nodeId: stringField(node.id) }));
+      diagnostics.push(
+        diagnostic(
+          "UNSUPPORTED_NODE_KIND",
+          `Unsupported node kind '${kind}'.`,
+          ["nodes", index, "kind"],
+          { nodeId: stringField(node.id) },
+        ),
+      );
   }
 }
 
 function validateJoin(
-  node: WorkflowNode,
+  node: RawRecord,
   index: number,
   incoming: NormalizedWorkflowEdge[],
   diagnostics: WorkflowDiagnostic[],
 ): void {
   if (incoming.length < 2) {
-    diagnostics.push(diagnostic("JOIN_INCOMING_REQUIRED", "A join node must have at least two incoming edges.", ["nodes", index], { nodeId: stringField(node.id) }));
+    diagnostics.push(
+      diagnostic(
+        "JOIN_INCOMING_REQUIRED",
+        "A join node must have at least two incoming edges.",
+        ["nodes", index],
+        { nodeId: stringField(node.id) },
+      ),
+    );
   }
   const policy = field(node, "policy") ?? field(node, "joinPolicy");
   if (policy === undefined || policy === null || policy === "") {
-    diagnostics.push(diagnostic("JOIN_POLICY_REQUIRED", "A join node must declare a join policy.", ["nodes", index, "policy"], { nodeId: stringField(node.id) }));
+    diagnostics.push(
+      diagnostic(
+        "JOIN_POLICY_REQUIRED",
+        "A join node must declare a join policy.",
+        ["nodes", index, "policy"],
+        { nodeId: stringField(node.id) },
+      ),
+    );
     return;
   }
   if (typeof policy !== "string" || !JOIN_POLICIES.has(policy)) {
-    diagnostics.push(diagnostic("JOIN_POLICY_INVALID", "Join policy must be one of: all, any, quorum.", ["nodes", index, node.policy !== undefined ? "policy" : "config"], { nodeId: stringField(node.id) }));
+    diagnostics.push(
+      diagnostic(
+        "JOIN_POLICY_INVALID",
+        "Join policy must be one of: all, any, quorum.",
+        ["nodes", index, node.policy !== undefined ? "policy" : "config"],
+        { nodeId: stringField(node.id) },
+      ),
+    );
     return;
   }
   if (policy === "quorum") {
     const quorum = field(node, "quorum");
-    if (!Number.isInteger(quorum) || (quorum as number) < 1 || (quorum as number) > incoming.length) {
-      diagnostics.push(diagnostic("JOIN_POLICY_SHAPE_INVALID", "A quorum join requires an integer quorum between 1 and its incoming edge count.", ["nodes", index, "quorum"], { nodeId: stringField(node.id) }));
+    if (
+      !Number.isInteger(quorum) ||
+      (quorum as number) < 1 ||
+      (quorum as number) > incoming.length
+    ) {
+      diagnostics.push(
+        diagnostic(
+          "JOIN_POLICY_SHAPE_INVALID",
+          "A quorum join requires an integer quorum between 1 and its incoming edge count.",
+          ["nodes", index, "quorum"],
+          { nodeId: stringField(node.id) },
+        ),
+      );
     }
   }
 }
@@ -269,34 +321,80 @@ function validateRoutes(
   const seen = new Map<string, NormalizedWorkflowEdge>();
   for (const edge of outgoing) {
     if (routeNode && !edge.route) {
-      diagnostics.push(diagnostic("ROUTE_LABEL_REQUIRED", "Every outgoing edge from a route node needs a non-empty route label.", ["edges", edge.index, "route"], { nodeId: node.id, edgeId: edge.id }));
+      diagnostics.push(
+        diagnostic(
+          "ROUTE_LABEL_REQUIRED",
+          "Every outgoing edge from a route node needs a non-empty route label.",
+          ["edges", edge.index, "route"],
+          { nodeId: node.id, edgeId: edge.id },
+        ),
+      );
     }
     if (!routeNode && edge.route) {
-      diagnostics.push(diagnostic("ROUTE_LABEL_UNEXPECTED", "Only route nodes may label outgoing edges with a route.", ["edges", edge.index, "route"], { nodeId: node.id, edgeId: edge.id }));
+      diagnostics.push(
+        diagnostic(
+          "ROUTE_LABEL_UNEXPECTED",
+          "Only route nodes may label outgoing edges with a route.",
+          ["edges", edge.index, "route"],
+          { nodeId: node.id, edgeId: edge.id },
+        ),
+      );
     }
     if (edge.route) {
       const previous = seen.get(edge.route);
       if (previous) {
-        diagnostics.push(diagnostic("ROUTE_LABEL_DUPLICATE", `Route label '${edge.route}' is used more than once for this route node.`, ["edges", edge.index, "route"], { nodeId: node.id, edgeId: edge.id }));
+        diagnostics.push(
+          diagnostic(
+            "ROUTE_LABEL_DUPLICATE",
+            `Route label '${edge.route}' is used more than once for this route node.`,
+            ["edges", edge.index, "route"],
+            { nodeId: node.id, edgeId: edge.id },
+          ),
+        );
       } else {
         seen.set(edge.route, edge);
       }
     }
   }
   if (routeNode && outgoing.length === 0) {
-    diagnostics.push(diagnostic("ROUTE_OUTGOING_INCONSISTENT", "A route node must have at least one outgoing edge.", ["nodes", node.index, "edges"], { nodeId: node.id }));
+    diagnostics.push(
+      diagnostic(
+        "ROUTE_OUTGOING_INCONSISTENT",
+        "A route node must have at least one outgoing edge.",
+        ["nodes", node.index, "edges"],
+        { nodeId: node.id },
+      ),
+    );
   }
   const declared = field(node.value, "routes");
   if (Array.isArray(declared)) {
-    const declaredLabels = new Set(declared.filter((value): value is string => typeof value === "string" && value.trim().length > 0));
+    const declaredLabels = new Set(
+      declared.filter(
+        (value): value is string => typeof value === "string" && value.trim().length > 0,
+      ),
+    );
     for (const edge of outgoing) {
       if (edge.route && !declaredLabels.has(edge.route)) {
-        diagnostics.push(diagnostic("ROUTE_OUTGOING_INCONSISTENT", `Route label '${edge.route}' is not declared by the route node.`, ["edges", edge.index, "route"], { nodeId: node.id, edgeId: edge.id }));
+        diagnostics.push(
+          diagnostic(
+            "ROUTE_OUTGOING_INCONSISTENT",
+            `Route label '${edge.route}' is not declared by the route node.`,
+            ["edges", edge.index, "route"],
+            { nodeId: node.id, edgeId: edge.id },
+          ),
+        );
       }
     }
     for (const label of declaredLabels) {
       if (!outgoing.some((edge) => edge.route === label)) {
-        diagnostics.push(diagnostic("ROUTE_OUTGOING_INCONSISTENT", `Declared route label '${label}' has no outgoing edge.`, ["nodes", node.index, "routes"], { nodeId: node.id }));
+        diagnostics.push(
+          diagnostic(
+            "ROUTE_OUTGOING_INCONSISTENT",
+            `Declared route label '${label}' has no outgoing edge.`,
+            ["nodes", node.index, "routes"],
+            { nodeId: node.id },
+          ),
+        );
       }
     }
   }
@@ -304,37 +402,72 @@ function validateRoutes(
 
 export function validateWorkflow(workflow: unknown): WorkflowValidationResult {
   const diagnostics: WorkflowDiagnostic[] = [];
-  const emptyGraph: NormalizedWorkflowGraph = { nodes: [], edges: [], startNodeIds: [], terminalNodeIds: [], reachableNodeIds: [], topologicalOrder: [] };
+  const emptyGraph: NormalizedWorkflowGraph = {
+    nodes: [],
+    edges: [],
+    startNodeIds: [],
+    terminalNodeIds: [],
+    reachableNodeIds: [],
+    topologicalOrder: [],
+  };
   if (!isRecord(workflow)) {
-    diagnostics.push(diagnostic("WORKFLOW_NOT_OBJECT", "Workflow definition must be an object.", []));
+    diagnostics.push(
+      diagnostic("WORKFLOW_NOT_OBJECT", "Workflow definition must be an object.", []),
+    );
     return { valid: false, diagnostics, graph: emptyGraph };
   }
 
   const rawNodes = workflow.nodes;
   const rawEdges = workflow.edges;
-  if (!Array.isArray(rawNodes)) diagnostics.push(diagnostic("NODES_NOT_ARRAY", "Workflow nodes must be an array.", ["nodes"]));
-  if (!Array.isArray(rawEdges)) diagnostics.push(diagnostic("EDGES_NOT_ARRAY", "Workflow edges must be an array.", ["edges"]));
-  if (!Array.isArray(rawNodes) || !Array.isArray(rawEdges)) return { valid: false, diagnostics, graph: emptyGraph };
+  if (!Array.isArray(rawNodes))
+    diagnostics.push(diagnostic("NODES_NOT_ARRAY", "Workflow nodes must be an array.", ["nodes"]));
+  if (!Array.isArray(rawEdges))
+    diagnostics.push(diagnostic("EDGES_NOT_ARRAY", "Workflow edges must be an array.", ["edges"]));
+  if (!Array.isArray(rawNodes) || !Array.isArray(rawEdges))
+    return { valid: false, diagnostics, graph: emptyGraph };
 
   const nodes: NormalizedWorkflowNode[] = [];
   const nodeById = new Map<string, NormalizedWorkflowNode>();
   const nodeIdPaths = new Map<string, number>();
   rawNodes.forEach((raw, index) => {
     if (!isRecord(raw)) {
-      diagnostics.push(diagnostic("NODE_ID_INVALID", "Node must be an object with a non-empty id.", ["nodes", index]));
+      diagnostics.push(
+        diagnostic("NODE_ID_INVALID", "Node must be an object with a non-empty id.", [
+          "nodes",
+          index,
+        ]),
+      );
       return;
     }
     const id = stringField(raw.id);
     if (!id) {
-      diagnostics.push(diagnostic("NODE_ID_INVALID", "Node id must be a non-empty string.", ["nodes", index, "id"]));
+      diagnostics.push(
+        diagnostic("NODE_ID_INVALID", "Node id must be a non-empty string.", [
+          "nodes",
+          index,
+          "id",
+        ]),
+      );
       return;
     }
     if (nodeIdPaths.has(id)) {
-      diagnostics.push(diagnostic("DUPLICATE_NODE_ID", `Node id '${id}' is duplicated.`, ["nodes", index, "id"], { nodeId: id }));
+      diagnostics.push(
+        diagnostic("DUPLICATE_NODE_ID", `Node id '${id}' is duplicated.`, ["nodes", index, "id"], {
+          nodeId: id,
+        }),
+      );
       return;
     }
     const kind = kindOf(raw);
-    if (!kind) diagnostics.push(diagnostic("NODE_KIND_INVALID", "Node kind must be a non-empty string.", ["nodes", index, "kind"], { nodeId: id }));
+    if (!kind)
+      diagnostics.push(
+        diagnostic(
+          "NODE_KIND_INVALID",
+          "Node kind must be a non-empty string.",
+          ["nodes", index, "kind"],
+          { nodeId: id },
+        ),
+      );
     const node: NormalizedWorkflowNode = { id, kind: kind ?? "", index, value: raw };
     nodes.push(node);
     nodeById.set(id, node);
@@ -346,20 +479,69 @@ export function validateWorkflow(workflow: unknown): WorkflowValidationResult {
   const edgeIds = new Set<string>();
   rawEdges.forEach((raw, index) => {
     if (!isRecord(raw)) {
-      diagnostics.push(diagnostic("EDGE_ID_INVALID", "Edge must be an object with an id, source, and target.", ["edges", index]));
+      diagnostics.push(
+        diagnostic("EDGE_ID_INVALID", "Edge must be an object with an id, source, and target.", [
+          "edges",
+          index,
+        ]),
+      );
       return;
     }
     const id = stringField(raw.id);
-    if (!id) diagnostics.push(diagnostic("EDGE_ID_INVALID", "Edge id must be a non-empty string.", ["edges", index, "id"]));
-    else if (edgeIds.has(id)) diagnostics.push(diagnostic("DUPLICATE_EDGE_ID", `Edge id '${id}' is duplicated.`, ["edges", index, "id"], { edgeId: id }));
+    if (!id)
+      diagnostics.push(
+        diagnostic("EDGE_ID_INVALID", "Edge id must be a non-empty string.", [
+          "edges",
+          index,
+          "id",
+        ]),
+      );
+    else if (edgeIds.has(id))
+      diagnostics.push(
+        diagnostic("DUPLICATE_EDGE_ID", `Edge id '${id}' is duplicated.`, ["edges", index, "id"], {
+          edgeId: id,
+        }),
+      );
     else edgeIds.add(id);
     const source = stringField(raw.source);
     const target = stringField(raw.target);
-    if (!source) diagnostics.push(diagnostic("EDGE_SOURCE_INVALID", "Edge source must be a non-empty string.", ["edges", index, "source"], { edgeId: id }));
-    if (!target) diagnostics.push(diagnostic("EDGE_TARGET_INVALID", "Edge target must be a non-empty string.", ["edges", index, "target"], { edgeId: id }));
+    if (!source)
+      diagnostics.push(
+        diagnostic(
+          "EDGE_SOURCE_INVALID",
+          "Edge source must be a non-empty string.",
+          ["edges", index, "source"],
+          { edgeId: id },
+        ),
+      );
+    if (!target)
+      diagnostics.push(
+        diagnostic(
+          "EDGE_TARGET_INVALID",
+          "Edge target must be a non-empty string.",
+          ["edges", index, "target"],
+          { edgeId: id },
+        ),
+      );
     if (!id || !source || !target) return;
-    if (!nodeById.has(source)) diagnostics.push(diagnostic("EDGE_ENDPOINT_MISSING", `Edge source '${source}' does not identify a node.`, ["edges", index, "source"], { edgeId: id }));
-    if (!nodeById.has(target)) diagnostics.push(diagnostic("EDGE_ENDPOINT_MISSING", `Edge target '${target}' does not identify a node.`, ["edges", index, "target"], { edgeId: id }));
+    if (!nodeById.has(source))
+      diagnostics.push(
+        diagnostic(
+          "EDGE_ENDPOINT_MISSING",
+          `Edge source '${source}' does not identify a node.`,
+          ["edges", index, "source"],
+          { edgeId: id },
+        ),
+      );
+    if (!nodeById.has(target))
+      diagnostics.push(
+        diagnostic(
+          "EDGE_ENDPOINT_MISSING",
+          `Edge target '${target}' does not identify a node.`,
+          ["edges", index, "target"],
+          { edgeId: id },
+        ),
+      );
     const route = edgeRoute(raw);
     edges.push({ id, source, target, index, route, condition: raw.condition, value: raw });
   });
@@ -372,49 +554,93 @@ export function validateWorkflow(workflow: unknown): WorkflowValidationResult {
   }
   for (const edge of edges) {
     if (nodeById.has(edge.source) && nodeById.has(edge.target)) {
-      outgoing.get(edge.source)!.push(edge);
-      incoming.get(edge.target)!.push(edge);
+      outgoing.get(edge.source)?.push(edge);
+      incoming.get(edge.target)?.push(edge);
     }
   }
 
   for (const node of nodes) {
-    const inEdges = incoming.get(node.id)!;
-    const outEdges = outgoing.get(node.id)!;
+    const inEdges = incoming.get(node.id) ?? [];
+    const outEdges = outgoing.get(node.id) ?? [];
     validateRoutes(node, outEdges, diagnostics);
     if (node.kind === "join") validateJoin(node.value, node.index, inEdges, diagnostics);
   }
 
   const explicitStart = stringField(workflow.startNodeId) ?? stringField(workflow.entryNodeId);
-  const roots = nodes.filter((node) => incoming.get(node.id)!.length === 0).map((node) => node.id);
+  const roots = nodes
+    .filter((node) => (incoming.get(node.id)?.length ?? 0) === 0)
+    .map((node) => node.id);
   // A graph without an explicit entry has one implicit entry: the first root.
   // Additional roots are retained as an error and treated as disconnected so
   // callers get useful per-node paths instead of an apparently reachable
   // forest.
   let startNodeIds = explicitStart ? [explicitStart] : roots.slice(0, 1);
   if (explicitStart && !nodeById.has(explicitStart)) {
-    diagnostics.push(diagnostic("START_NODE_INVALID", `Start node '${explicitStart}' does not identify a node.`, [workflow.startNodeId !== undefined ? "startNodeId" : "entryNodeId"]));
+    diagnostics.push(
+      diagnostic("START_NODE_INVALID", `Start node '${explicitStart}' does not identify a node.`, [
+        workflow.startNodeId !== undefined ? "startNodeId" : "entryNodeId",
+      ]),
+    );
     startNodeIds = [];
   }
-  if (!explicitStart && roots.length === 0 && nodes.length > 0) diagnostics.push(diagnostic("START_NODE_MISSING", "The workflow has no start node; every node has an incoming edge.", ["nodes"]));
-  if (!explicitStart && roots.length > 1) diagnostics.push(diagnostic("MULTIPLE_START_NODES", "The workflow has multiple start nodes; provide an explicit startNodeId for a single entry point.", ["nodes"]));
+  if (!explicitStart && roots.length === 0 && nodes.length > 0)
+    diagnostics.push(
+      diagnostic(
+        "START_NODE_MISSING",
+        "The workflow has no start node; every node has an incoming edge.",
+        ["nodes"],
+      ),
+    );
+  if (!explicitStart && roots.length > 1)
+    diagnostics.push(
+      diagnostic(
+        "MULTIPLE_START_NODES",
+        "The workflow has multiple start nodes; provide an explicit startNodeId for a single entry point.",
+        ["nodes"],
+      ),
+    );
 
   const reachable = new Set<string>();
   const stack = [...startNodeIds];
   while (stack.length > 0) {
-    const id = stack.pop()!;
+    const id = stack.pop();
+    if (id === undefined) continue;
     if (reachable.has(id) || !nodeById.has(id)) continue;
     reachable.add(id);
     for (const edge of outgoing.get(id) ?? []) stack.push(edge.target);
   }
   for (const node of nodes) {
     if (!reachable.has(node.id)) {
-      diagnostics.push(diagnostic("NODE_UNREACHABLE", `Node '${node.id}' is not reachable from a workflow start node.`, ["nodes", node.index], { nodeId: node.id }));
-      diagnostics.push(diagnostic("DISCONNECTED_SUBGRAPH", `Node '${node.id}' belongs to a disconnected subgraph.`, ["nodes", node.index], { nodeId: node.id }));
+      diagnostics.push(
+        diagnostic(
+          "NODE_UNREACHABLE",
+          `Node '${node.id}' is not reachable from a workflow start node.`,
+          ["nodes", node.index],
+          { nodeId: node.id },
+        ),
+      );
+      diagnostics.push(
+        diagnostic(
+          "DISCONNECTED_SUBGRAPH",
+          `Node '${node.id}' belongs to a disconnected subgraph.`,
+          ["nodes", node.index],
+          { nodeId: node.id },
+        ),
+      );
     }
   }
 
-  const terminalNodeIds = nodes.filter((node) => reachable.has(node.id) && (outgoing.get(node.id)?.length ?? 0) === 0).map((node) => node.id);
-  if (nodes.length > 0 && terminalNodeIds.length === 0) diagnostics.push(diagnostic("NO_REACHABLE_TERMINAL", "The workflow must have at least one reachable terminal node.", ["nodes"]));
+  const terminalNodeIds = nodes
+    .filter((node) => reachable.has(node.id) && (outgoing.get(node.id)?.length ?? 0) === 0)
+    .map((node) => node.id);
+  if (nodes.length > 0 && terminalNodeIds.length === 0)
+    diagnostics.push(
+      diagnostic(
+        "NO_REACHABLE_TERMINAL",
+        "The workflow must have at least one reachable terminal node.",
+        ["nodes"],
+      ),
+    );
 
   const color = new Map<string, 0 | 1 | 2>();
   const topo: string[] = [];
@@ -436,7 +662,14 @@ export function validateWorkflow(workflow: unknown): WorkflowValidationResult {
   const detectCycle = (id: string): void => {
     const state = cycleColor.get(id) ?? 0;
     if (state === 1) {
-      diagnostics.push(diagnostic("CYCLE_UNSUPPORTED", `Cycle detected at node '${id}'; MVP workflows must be acyclic.`, ["nodes", nodeById.get(id)!.index], { nodeId: id }));
+      diagnostics.push(
+        diagnostic(
+          "CYCLE_UNSUPPORTED",
+          `Cycle detected at node '${id}'; MVP workflows must be acyclic.`,
+          ["nodes", nodeById.get(id)?.index ?? -1],
+          { nodeId: id },
+        ),
+      );
       return;
     }
     if (state === 2) return;
@@ -463,16 +696,20 @@ export function validateWorkflow(workflow: unknown): WorkflowValidationResult {
  * provider binding, policy compilation, and execution intentionally belong to
  * later runtime phases.
  */
-export function prepareExecutionPlan(workflow: WorkflowDefinition): CompilationResult {
+export function prepareExecutionPlan(workflow: WorkflowDefinition): CompilationResult;
+/** The validator also intentionally accepts unparsed input for diagnostics. */
+export function prepareExecutionPlan(workflow: unknown): CompilationResult;
+export function prepareExecutionPlan(workflow: unknown): CompilationResult {
   const result = validateWorkflow(workflow);
   if (!result.valid) return { ok: false, diagnostics: result.diagnostics };
+  const definition = isRecord(workflow) ? workflow : {};
   return {
     ok: true,
     diagnostics: result.diagnostics,
     plan: {
       kind: "normalized-execution-plan",
-      workflowId: stringField(workflow.id),
-      workflowVersion: workflow.workflowVersion,
+      workflowId: stringField(definition.id),
+      workflowVersion: definition.workflowVersion,
       nodes: result.graph.nodes,
       edges: result.graph.edges,
       startNodeIds: result.graph.startNodeIds,

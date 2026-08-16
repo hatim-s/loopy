@@ -1,9 +1,19 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { CommandResultSchema, LocalCommandSchema, NodeCompletionSchema, SCHEMA_VERSION, TraceEventSchema, WorkflowDefinitionSchema, emitJsonSchema, emitPublicJsonSchemas } from "../src/index.js";
+import {
+  CommandResultSchema,
+  emitJsonSchema,
+  emitPublicJsonSchemas,
+  LocalCommandSchema,
+  NodeCompletionSchema,
+  SCHEMA_VERSION,
+  TraceEventSchema,
+  WorkflowDefinitionSchema,
+} from "../src/index.js";
 
-const fixture = (name: string): unknown => JSON.parse(readFileSync(join(import.meta.dir, "../../../fixtures/workflows", name), "utf8"));
+const fixture = (name: string): unknown =>
+  JSON.parse(readFileSync(join(import.meta.dir, "../../../fixtures/workflows", name), "utf8"));
 
 test("valid workflow fixture parses and defaults are applied", () => {
   const result = WorkflowDefinitionSchema.safeParse(fixture("valid-basic.json"));
@@ -28,18 +38,49 @@ test("invalid workflow fixture reports stable paths", () => {
 });
 
 test("node completion and canonical trace event validate", () => {
-  const completion = NodeCompletionSchema.parse({ schemaVersion: "1", status: "succeeded", summary: "verified", outputs: { changed: true }, artifacts: [], verification: [{ check: "tests", status: "passed", summary: "pass", details: {} }], warnings: [] });
+  const completion = NodeCompletionSchema.parse({
+    schemaVersion: "1",
+    status: "succeeded",
+    summary: "verified",
+    outputs: { changed: true },
+    artifacts: [],
+    verification: [{ check: "tests", status: "passed", summary: "pass", details: {} }],
+    warnings: [],
+  });
   expect(completion.outputs.changed).toBe(true);
-  const event = TraceEventSchema.parse({ schemaVersion: "1", id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", runId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", sequence: 0, occurredAt: "2026-08-17T00:00:00.000Z", monotonicOffsetMs: 0, type: "node.completed", payload: { nodeId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", completion } });
+  const event = TraceEventSchema.parse({
+    schemaVersion: "1",
+    id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    runId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    sequence: 0,
+    occurredAt: "2026-08-17T00:00:00.000Z",
+    monotonicOffsetMs: 0,
+    type: "node.completed",
+    payload: { nodeId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", completion },
+  });
   expect(event.type).toBe("node.completed");
-  expect(TraceEventSchema.safeParse({ type: "provider.hidden_chain_of_thought", payload: {} }).success).toBe(false);
+  expect(
+    TraceEventSchema.safeParse({ type: "provider.hidden_chain_of_thought", payload: {} }).success,
+  ).toBe(false);
 });
 
 test("local commands validate and require stable versioned IDs", () => {
-  const command = LocalCommandSchema.parse({ schemaVersion: "1", commandId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", type: "run.pause", runId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" });
+  const command = LocalCommandSchema.parse({
+    schemaVersion: "1",
+    commandId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    type: "run.pause",
+    runId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  });
   expect(command.type).toBe("run.pause");
   expect(LocalCommandSchema.safeParse({ type: "run.pause", runId: "x" }).success).toBe(false);
-  expect(CommandResultSchema.parse({ schemaVersion: "1", commandId: command.commandId, accepted: true, message: "queued" }).errors).toEqual([]);
+  expect(
+    CommandResultSchema.parse({
+      schemaVersion: "1",
+      commandId: command.commandId,
+      accepted: true,
+      message: "queued",
+    }).errors,
+  ).toEqual([]);
 });
 
 describe("public JSON Schema", () => {
@@ -49,10 +90,25 @@ describe("public JSON Schema", () => {
     expect(first).not.toContain("~standard");
   });
   test("only explicitly persisted contracts are emitted", () => {
-    expect(Object.keys(emitPublicJsonSchemas())).toEqual(["CommandResult", "ExecutionPlan", "ExtractionProposal", "LocalCommand", "NodeCompletion", "ProviderCapabilities", "ProviderInstallation", "TraceEvent", "WorkflowDefinition"]);
+    expect(Object.keys(emitPublicJsonSchemas())).toEqual([
+      "CommandResult",
+      "ExecutionPlan",
+      "ExtractionProposal",
+      "LocalCommand",
+      "NodeCompletion",
+      "ProviderCapabilities",
+      "ProviderInstallation",
+      "TraceEvent",
+      "WorkflowDefinition",
+    ]);
   });
   test("matches the committed deterministic schema snapshot", () => {
-    const snapshot = JSON.parse(readFileSync(join(import.meta.dir, "../../../fixtures/workflows/schema-snapshots.json"), "utf8"));
+    const snapshot = JSON.parse(
+      readFileSync(
+        join(import.meta.dir, "../../../fixtures/workflows/schema-snapshots.json"),
+        "utf8",
+      ),
+    );
     expect(emitPublicJsonSchemas()).toEqual(snapshot);
   });
 });

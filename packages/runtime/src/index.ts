@@ -1,14 +1,9 @@
-export {
-  compileWorkflow,
-  prepareExecutionPlan,
-  validateWorkflow,
-  validateWorkflowDefinition,
-} from "./validation.ts";
 export type {
   CompilationResult,
   DiagnosticCode,
   DiagnosticSeverity,
   ExecutionPlan,
+  NormalizedExecutionPlan,
   NormalizedWorkflowEdge,
   NormalizedWorkflowGraph,
   NormalizedWorkflowNode,
@@ -17,4 +12,10 @@ export type {
   WorkflowEdge,
   WorkflowNode,
   WorkflowValidationResult,
+} from "./validation.ts";
+export {
+  compileWorkflow,
+  prepareExecutionPlan,
+  validateWorkflow,
+  validateWorkflowDefinition,
 } from "./validation.ts";
