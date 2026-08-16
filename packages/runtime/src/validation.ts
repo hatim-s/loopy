@@ -429,15 +429,9 @@ function validateRoutes(
 type ValueReferenceLocation = {
   reference: RawRecord;
   pathSegments: Array<string | number>;
+  owner: Pick<WorkflowDiagnostic, "nodeId" | "edgeId">;
 };
 
-/**
- * Return the structured reference locations currently persisted by
- * WorkflowDefinitionV1. Route expressions and edge conditions are strings in
- * the contract, not predicate ASTs, so they intentionally have no reference
- * traversal seam here. If that contract grows structured predicate values,
- * add their paths to this list without changing the graph checks below.
- */
 function valueReferenceLocations(node: NormalizedWorkflowNode): ValueReferenceLocation[] {
   const locations: ValueReferenceLocation[] = [];
   const addRecord = (name: "inputBindings" | "mapping"): void => {
@@ -448,6 +442,7 @@ function valueReferenceLocations(node: NormalizedWorkflowNode): ValueReferenceLo
         locations.push({
           reference,
           pathSegments: ["nodes", node.index, name, key],
+          owner: { nodeId: node.id },
         });
       }
     }
@@ -458,9 +453,41 @@ function valueReferenceLocations(node: NormalizedWorkflowNode): ValueReferenceLo
   return locations;
 }
 
+function predicateReferenceLocations(
+  value: unknown,
+  pathSegments: Array<string | number>,
+  owner: Pick<WorkflowDiagnostic, "nodeId" | "edgeId">,
+  locations: ValueReferenceLocation[],
+): void {
+  if (!isRecord(value)) return;
+  if (value.kind === "reference" && isRecord(value.reference)) {
+    locations.push({
+      reference: value.reference,
+      pathSegments: [...pathSegments, "reference"],
+      owner,
+    });
+    return;
+  }
+  if (value.kind === "comparison") {
+    predicateReferenceLocations(value.left, [...pathSegments, "left"], owner, locations);
+    predicateReferenceLocations(value.right, [...pathSegments, "right"], owner, locations);
+    return;
+  }
+  if (value.kind === "boolean" && Array.isArray(value.operands)) {
+    value.operands.forEach((operand, index) => {
+      predicateReferenceLocations(operand, [...pathSegments, "operands", index], owner, locations);
+    });
+    return;
+  }
+  if (value.kind === "not") {
+    predicateReferenceLocations(value.operand, [...pathSegments, "operand"], owner, locations);
+  }
+}
+
 function validateValueReferences(
   workflow: RawRecord,
   nodes: NormalizedWorkflowNode[],
+  edges: NormalizedWorkflowEdge[],
   outgoing: Map<string, NormalizedWorkflowEdge[]>,
   diagnostics: WorkflowDiagnostic[],
 ): void {
@@ -489,7 +516,7 @@ function validateValueReferences(
   };
 
   for (const node of nodes) {
-    for (const { reference, pathSegments } of valueReferenceLocations(node)) {
+    for (const { reference, pathSegments, owner } of valueReferenceLocations(node)) {
       if (reference.kind === "workflow_input") {
         const name = stringField(reference.name);
         if (name && !inputNames.has(name)) {
@@ -498,7 +525,7 @@ function validateValueReferences(
               "WORKFLOW_INPUT_REFERENCE_INVALID",
               `Workflow input reference '${name}' does not identify a declared workflow input.`,
               [...pathSegments, "name"],
-              { nodeId: node.id },
+              owner,
             ),
           );
         }
@@ -513,7 +540,7 @@ function validateValueReferences(
             "NODE_OUTPUT_REFERENCE_TARGET_MISSING",
             `Node output reference '${targetId ?? ""}' does not identify an existing node.`,
             [...pathSegments, "nodeId"],
-            { nodeId: node.id },
+            owner,
           ),
         );
         continue;
@@ -524,7 +551,7 @@ function validateValueReferences(
             "NODE_OUTPUT_REFERENCE_SELF",
             "A node output reference may not target the node that contains the reference.",
             [...pathSegments, "nodeId"],
-            { nodeId: node.id },
+            owner,
           ),
         );
         continue;
@@ -535,7 +562,57 @@ function validateValueReferences(
             "NODE_OUTPUT_REFERENCE_NOT_UPSTREAM",
             `Node output reference '${targetId}' must target a strict upstream dependency.`,
             [...pathSegments, "nodeId"],
-            { nodeId: node.id },
+            owner,
+          ),
+        );
+      }
+    }
+  }
+
+  for (const edge of edges) {
+    const locations: ValueReferenceLocation[] = [];
+    predicateReferenceLocations(
+      edge.value.condition,
+      ["edges", edge.index, "condition"],
+      { edgeId: edge.id },
+      locations,
+    );
+    for (const { reference, pathSegments, owner } of locations) {
+      if (reference.kind === "workflow_input") {
+        const name = stringField(reference.name);
+        if (name && !inputNames.has(name)) {
+          diagnostics.push(
+            diagnostic(
+              "WORKFLOW_INPUT_REFERENCE_INVALID",
+              `Workflow input reference '${name}' does not identify a declared workflow input.`,
+              [...pathSegments, "name"],
+              owner,
+            ),
+          );
+        }
+        continue;
+      }
+      if (reference.kind !== "node_output") continue;
+
+      const targetId = stringField(reference.nodeId);
+      if (!targetId || !nodeById.has(targetId)) {
+        diagnostics.push(
+          diagnostic(
+            "NODE_OUTPUT_REFERENCE_TARGET_MISSING",
+            `Node output reference '${targetId ?? ""}' does not identify an existing node.`,
+            [...pathSegments, "nodeId"],
+            owner,
+          ),
+        );
+        continue;
+      }
+      if (targetId === edge.source || !hasPath(targetId, edge.source)) {
+        diagnostics.push(
+          diagnostic(
+            "NODE_OUTPUT_REFERENCE_NOT_UPSTREAM",
+            `Node output reference '${targetId}' must target a strict upstream dependency.`,
+            [...pathSegments, "nodeId"],
+            owner,
           ),
         );
       }
@@ -831,7 +908,7 @@ export function validateWorkflow(workflow: unknown): WorkflowValidationResult {
     reachableNodeIds: nodes.filter((node) => reachable.has(node.id)).map((node) => node.id),
     topologicalOrder: topo,
   };
-  validateValueReferences(workflow, nodes, outgoing, diagnostics);
+  validateValueReferences(workflow, nodes, edges, outgoing, diagnostics);
   return { valid: diagnostics.every((item) => item.severity !== "error"), diagnostics, graph };
 }
 

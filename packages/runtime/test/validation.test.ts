@@ -176,12 +176,62 @@ describe("workflow graph validation", () => {
   test("does not treat edge conditions as route labels", () => {
     const workflow = {
       nodes: [{ id: "route", kind: "route" }, verify("done")],
-      edges: [{ id: "e", source: "route", target: "done", condition: "success" }],
+      edges: [
+        {
+          id: "e",
+          source: "route",
+          target: "done",
+          condition: {
+            kind: "comparison",
+            operator: "equals",
+            left: { kind: "literal", value: "result" },
+            right: { kind: "literal", value: "success" },
+          },
+        },
+      ],
     };
     const result = validateWorkflow(workflow);
     expect(codes(workflow)).toContain("ROUTE_LABEL_REQUIRED");
     expect(result.graph.edges[0]?.route).toBeUndefined();
-    expect(result.graph.edges[0]?.condition).toBe("success");
+    expect(result.graph.edges[0]?.condition).toEqual(workflow.edges[0]?.condition);
+  });
+
+  test("validates references nested in edge predicates", () => {
+    const workflow = {
+      inputs: [{ name: "result" }],
+      nodes: [agent("start"), verify("done")],
+      edges: [
+        {
+          id: "e",
+          source: "start",
+          target: "done",
+          condition: {
+            kind: "boolean",
+            operator: "and",
+            operands: [
+              {
+                kind: "comparison",
+                operator: "equals",
+                left: {
+                  kind: "reference",
+                  reference: { kind: "workflow_input", name: "missing" },
+                },
+                right: { kind: "literal", value: "success" },
+              },
+            ],
+          },
+        },
+      ],
+    };
+    expect(validateWorkflow(workflow).diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "WORKFLOW_INPUT_REFERENCE_INVALID",
+          path: "/edges/0/condition/operands/0/left/reference/name",
+          edgeId: "e",
+        }),
+      ]),
+    );
   });
 
   test("validates a route node default against outgoing labels", () => {

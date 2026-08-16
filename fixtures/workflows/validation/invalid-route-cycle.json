@@ -4,7 +4,12 @@
     {
       "id": "start",
       "kind": "route",
-      "expression": "choose a route",
+      "predicate": {
+        "kind": "comparison",
+        "operator": "equals",
+        "left": { "kind": "literal", "value": "parallel" },
+        "right": { "kind": "literal", "value": "parallel" }
+      },
       "defaultRoute": "parallel"
     },
     { "id": "work", "kind": "agent", "prompt": "Do work" },
