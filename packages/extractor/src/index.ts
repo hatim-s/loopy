@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { ExtractionProposal, JsonObject, TraceEvent } from "@loopy/contracts";
+import type { ExtractionProposal, JsonObject, ProviderId, TraceEvent } from "@loopy/contracts";
 import { TraceEventSchema } from "@loopy/contracts";
 import { stableEvidenceId } from "./evidence.ts";
 import type { DeterministicExtractionInput } from "./prompt.ts";
@@ -163,8 +163,155 @@ function firstEvidence(segmentation: SegmentationResult) {
   };
 }
 
-function providerId(provider: string): "codex" | "claude" | "opencode" | "pi" {
-  return provider === "claude" || provider === "opencode" || provider === "pi" ? provider : "codex";
+const SUPPORTED_PROVIDERS = new Set<ProviderId>(["codex", "claude", "opencode", "pi"]);
+
+/** Reject invalid provider selection; never silently substitute a different provider. */
+function providerId(provider: string): ProviderId {
+  if (SUPPORTED_PROVIDERS.has(provider as ProviderId)) return provider as ProviderId;
+  throw new RangeError(
+    `Unsupported extraction provider '${provider}'. Expected codex, claude, opencode, or pi.`,
+  );
+}
+
+function eventPayload(event: TraceEvent): Record<string, unknown> {
+  return event.payload as unknown as Record<string, unknown>;
+}
+
+function text(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+// Trace-derived steps are intentionally limited to read-only, known tool
+// vocabulary. Unknown tools remain evidence and require human clarification;
+// they are never copied into a runnable workflow.
+const SUPPORTED_READONLY_TOOLS = new Set(["cat", "find", "ls", "pwd", "git status", "git diff"]);
+const CANONICAL_VERIFIERS = new Map([
+  ["test", { check: "tests", command: "bun", args: ["test"] }],
+  ["tests", { check: "tests", command: "bun", args: ["test"] }],
+  ["lint", { check: "lint", command: "bun", args: ["run", "lint"] }],
+  ["typecheck", { check: "typecheck", command: "bun", args: ["run", "typecheck"] }],
+]);
+
+interface TraceIntent {
+  event: TraceEvent;
+  evidenceId: string;
+  eventIds: string[];
+  prompt: string;
+}
+
+interface CanonicalVerifier {
+  check: string;
+  command: string;
+  args: string[];
+  evidenceId: string;
+  eventIds: string[];
+}
+
+function evidenceForEvent(
+  segmentation: SegmentationResult,
+  eventId: string,
+  kind?: string,
+): (typeof segmentation.evidence)[number] | undefined {
+  return segmentation.evidence.find(
+    (evidence) =>
+      (!kind || evidence.kind === kind) &&
+      evidence.eventIds.length === 1 &&
+      evidence.eventIds[0] === eventId,
+  );
+}
+
+function readOnlyIntents(segmentation: SegmentationResult): TraceIntent[] {
+  return segmentation.events.flatMap((event) => {
+    if (event.type !== "tool.requested") return [];
+    const payload = eventPayload(event);
+    const tool = text(payload.tool)?.toLowerCase();
+    if (!tool || !SUPPORTED_READONLY_TOOLS.has(tool)) return [];
+    const evidence = evidenceForEvent(segmentation, event.id, "feature");
+    if (!evidence) return [];
+    return [
+      {
+        event,
+        evidenceId: evidence.evidenceId,
+        eventIds: evidence.eventIds,
+        prompt: [
+          `Perform only the observed read-only intent from source event ${event.id}.`,
+          `Observed tool: ${tool}.`,
+          `Observed input: ${JSON.stringify(payload.input ?? null)}.`,
+          "Do not write files, contact external systems, or perform any other operation.",
+        ].join(" "),
+      },
+    ];
+  });
+}
+
+function canonicalVerifiers(segmentation: SegmentationResult): {
+  verifiers: CanonicalVerifier[];
+  unsupportedChecks: string[];
+} {
+  const unsupportedChecks: string[] = [];
+  const verifiers: CanonicalVerifier[] = [];
+  for (const verification of segmentation.verification) {
+    const check = text(verification.check)?.toLowerCase();
+    const canonical = check ? CANONICAL_VERIFIERS.get(check) : undefined;
+    const evidence = segmentation.evidence.find(
+      (item) =>
+        item.kind === "verification" &&
+        item.eventIds.join("\0") === verification.eventIds.join("\0"),
+    );
+    if (!canonical || !evidence) {
+      unsupportedChecks.push(check ?? "opaque verification");
+      continue;
+    }
+    const observedCommands = segmentation.events
+      .filter((event) => verification.eventIds.includes(event.id))
+      .flatMap((event) => {
+        const command = text(eventPayload(event).command);
+        return command ? [command.toLowerCase()] : [];
+      });
+    const canonicalLine = [canonical.command, ...canonical.args].join(" ");
+    if (observedCommands.some((command) => command !== canonicalLine)) {
+      unsupportedChecks.push(`${check} (non-canonical command)`);
+      continue;
+    }
+    verifiers.push({ ...canonical, evidenceId: evidence.evidenceId, eventIds: evidence.eventIds });
+  }
+  return { verifiers, unsupportedChecks };
+}
+
+function traceBlockers(
+  segmentation: SegmentationResult,
+  intents: readonly TraceIntent[],
+  unsupportedChecks: readonly string[],
+): string[] {
+  const blockers: string[] = [];
+  const requestedToolCalls = new Set(
+    segmentation.events
+      .filter((event) => event.type === "tool.requested")
+      .map((event) => event.toolCallId)
+      .filter((id): id is string => Boolean(id)),
+  );
+  for (const event of segmentation.events) {
+    const payload = eventPayload(event);
+    if (event.redaction.status !== "none") blockers.push(`redacted event ${event.id}`);
+    if (event.type === "tool.requested") {
+      const tool = text(payload.tool)?.toLowerCase();
+      if (!tool || !SUPPORTED_READONLY_TOOLS.has(tool))
+        blockers.push(`unsupported tool '${tool ?? "opaque"}'`);
+    }
+    if (event.type === "tool.started" && !requestedToolCalls.has(event.toolCallId))
+      blockers.push(`opaque tool start ${event.id}`);
+    if (event.type === "tool.denied")
+      blockers.push(`denied tool ${text(payload.tool) ?? "opaque"}`);
+    if (event.type === "provider.message" && payload.role === "user")
+      blockers.push(`opaque provider instruction ${event.id}`);
+  }
+  for (const feature of segmentation.features)
+    if (feature.class === "side_effect") blockers.push(feature.rationale);
+  for (const check of unsupportedChecks) blockers.push(`unsupported verification '${check}'`);
+  if (intents.length === 0) blockers.push("no supported read-only source intent was observed");
+  if (segmentation.verification.length === 0)
+    blockers.push("no supported canonical verification event was observed");
+  return [...new Set(blockers)];
 }
 
 function proposalFromEvidence(
@@ -173,12 +320,72 @@ function proposalFromEvidence(
   provider: string,
 ): ExtractionProposal {
   const primary = firstEvidence(segmentation);
-  const verification =
-    segmentation.evidence.find((item) => item.kind === "verification") ?? primary;
-  const agentId = stableId("workflow-node", `${request.importId}:agent`);
-  const verifyId = stableId("workflow-node", `${request.importId}:verify`);
+  const intents = readOnlyIntents(segmentation);
+  const verifierResult = canonicalVerifiers(segmentation);
+  const blockers = traceBlockers(segmentation, intents, verifierResult.unsupportedChecks);
   const workflowId = stableId("workflow", request.importId);
   const createdAt = segmentation.events[0]?.occurredAt ?? "2026-01-01T00:00:00.000Z";
+  const agentNodes = intents.map((intent, index) => ({
+    id: stableId("workflow-node", `${request.importId}:agent:${index}:${intent.event.id}`),
+    name: `Read observed ${text(eventPayload(intent.event).tool) ?? "repository"}`,
+    kind: "agent" as const,
+    prompt: intent.prompt,
+    provider: providerId(provider),
+    skills: [],
+    inputBindings: {},
+    requiredCapabilities: [],
+    completionContract: "node_completion" as const,
+    tags: ["extracted", "read-only", "trace-derived"],
+  }));
+  const verifyNodes = verifierResult.verifiers.length
+    ? [
+        {
+          id: stableId("workflow-node", `${request.importId}:verify`),
+          name: "Verify extracted workflow",
+          kind: "verify" as const,
+          description: `Run only canonical checks observed in the trace: ${verifierResult.verifiers
+            .map((item) => item.check)
+            .join(", ")}.`,
+          commands: verifierResult.verifiers.map(({ command, args }) => ({
+            command,
+            args,
+            timeoutMs: 120_000,
+          })),
+          success: "all" as const,
+          expectedExitCode: 0,
+          tags: ["extracted", "verification", "trace-derived"],
+        },
+      ]
+    : [];
+  const intentEvidenceIds = new Set(intents.map((intent) => intent.evidenceId));
+  const verifierEvidenceIds = new Set(
+    verifierResult.verifiers.map((verifier) => verifier.evidenceId),
+  );
+  const canGroundApproval = segmentation.evidence.some(
+    (evidence) =>
+      !intentEvidenceIds.has(evidence.evidenceId) && !verifierEvidenceIds.has(evidence.evidenceId),
+  );
+  const approvalNodes =
+    blockers.length && canGroundApproval
+      ? [
+          {
+            id: stableId("workflow-node", `${request.importId}:approval`),
+            name: "Review unsupported trace work",
+            kind: "approval" as const,
+            message: `Review before execution: ${blockers.join("; ")}.`,
+            approvalKey: stableId("approval", request.importId),
+            tags: ["extracted", "approval", "trace-boundary"],
+          },
+        ]
+      : [];
+  const nodes = [...approvalNodes, ...agentNodes, ...verifyNodes];
+  const workflowNodeIds = nodes.map((node) => node.id);
+  const edges = workflowNodeIds.slice(1).map((target, index) => ({
+    id: stableId("workflow-edge", `${workflowNodeIds[index]}:${target}`),
+    source: workflowNodeIds[index] as string,
+    target,
+    metadata: {},
+  }));
   const variables = segmentation.candidateVariables
     .map((variable) => {
       const evidence = segmentation.evidence.find((item) =>
@@ -193,13 +400,44 @@ function proposalFromEvidence(
         example: variable.observedValues[0],
         observedValues: variable.observedValues,
         confidence: variable.confidence,
-        // The proposal contract requires every inferred input to point to a
-        // proposal evidence record; the agent evidence record is the stable
-        // source-backed anchor for all inferred variables.
-        evidenceIds: [primary.evidenceId],
+        evidenceIds: [
+          intents[0]?.evidenceId ?? verifierResult.verifiers[0]?.evidenceId ?? primary.evidenceId,
+        ],
       };
     })
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
+  const agentEvidence = intents.map((intent, index) => ({
+    evidenceId: intent.evidenceId,
+    nodeId: agentNodes[index]?.id as string,
+    eventIds: intent.eventIds,
+    rationale: `The read-only agent prompt is grounded in source event ${intent.event.id}.`,
+  }));
+  const verifyEvidence = verifierResult.verifiers.map((verifier) => ({
+    evidenceId: verifier.evidenceId,
+    nodeId: verifyNodes[0]?.id as string,
+    eventIds: verifier.eventIds,
+    rationale: `The ${verifier.check} verifier is grounded in canonical verification events.`,
+  }));
+  const usedEvidenceIds = new Set(
+    [...agentEvidence, ...verifyEvidence].map((item) => item.evidenceId),
+  );
+  const approvalSource = segmentation.evidence.find(
+    (evidence) => !usedEvidenceIds.has(evidence.evidenceId),
+  );
+  const approvalEvidence =
+    blockers.length && approvalNodes[0] && approvalSource
+      ? [
+          {
+            evidenceId: approvalSource.evidenceId,
+            nodeId: approvalNodes[0].id,
+            eventIds: approvalSource.eventIds,
+            rationale: "The review barrier is grounded in imported trace evidence.",
+          },
+        ]
+      : [];
+  const nodeEvidence = [...approvalEvidence, ...agentEvidence, ...verifyEvidence];
+  const evidenceAnchor = nodeEvidence[0]?.evidenceId ?? primary.evidenceId;
+  const verifierEvidenceId = verifierResult.verifiers[0]?.evidenceId ?? evidenceAnchor;
   const workflow = {
     schemaVersion: "1" as const,
     workflowVersion: 1,
@@ -217,37 +455,8 @@ function proposalFromEvidence(
         secret: false,
       }),
     ),
-    nodes: [
-      {
-        id: agentId,
-        name: "Replay observed reusable work",
-        kind: "agent" as const,
-        prompt: "Replay only the reusable work observed in this imported session.",
-        provider: providerId(provider),
-        skills: [],
-        inputBindings: {},
-        requiredCapabilities: [],
-        completionContract: "node_completion" as const,
-        tags: ["extracted"],
-      },
-      {
-        id: verifyId,
-        name: "Verify extracted workflow",
-        kind: "verify" as const,
-        commands: [{ command: "bun", args: ["--version"], timeoutMs: 120_000 }],
-        success: "all" as const,
-        expectedExitCode: 0,
-        tags: ["extracted", "verification"],
-      },
-    ],
-    edges: [
-      {
-        id: stableId("workflow-edge", `${agentId}:${verifyId}`),
-        source: agentId,
-        target: verifyId,
-        metadata: {},
-      },
-    ],
+    nodes,
+    edges,
     defaults: {
       provider: providerId(provider),
       timeoutMs: 3_600_000,
@@ -256,7 +465,12 @@ function proposalFromEvidence(
     policies: {
       tools: { allow: [], deny: [], network: "disabled" as const },
       workspace: { writableRoots: [], useGitWorktree: true, allowDirtyWorkspace: false },
-      approval: { requiredBefore: [], sideEffectLabels: [] },
+      approval: {
+        requiredBefore: blockers.length ? (["agent", "verify"] as const) : [],
+        sideEffectLabels: segmentation.features
+          .filter((feature) => feature.class === "side_effect")
+          .map((feature) => feature.rationale),
+      },
       budget: { timeoutMs: 3_600_000 },
       concurrency: { maxParallel: 1 },
     },
@@ -268,24 +482,6 @@ function proposalFromEvidence(
       tags: ["deterministic", "phase3"],
     },
   };
-  const nodeEvidence = [
-    {
-      evidenceId: primary.evidenceId,
-      nodeId: agentId,
-      eventIds: primary.eventIds,
-      rationale: "The agent step is grounded in observed imported events.",
-    },
-    {
-      evidenceId:
-        verification.evidenceId === primary.evidenceId
-          ? stableEvidenceId("verification", verification.eventIds)
-          : verification.evidenceId,
-      nodeId: verifyId,
-      eventIds: verification.eventIds,
-      rationale: "The verifier is grounded in observed completion or verification events.",
-    },
-  ];
-  const verifierEvidenceId = nodeEvidence[1]?.evidenceId ?? primary.evidenceId;
   return {
     schemaVersion: "1",
     id: stableId("proposal", request.importId),
@@ -308,27 +504,42 @@ function proposalFromEvidence(
         warning.code === "invalid_causal_reference" ? ("error" as const) : ("warning" as const),
       source: "deterministic-segmentation",
     })),
-    verifierRequirements: [
-      {
-        check: segmentation.verification[0]?.check ?? "runtime",
-        command: "bun --version",
-        rationale: "The accepted workflow must pass a local deterministic runtime check.",
-        evidenceIds: [verifierEvidenceId],
-        required: true,
-      },
-    ],
+    verifierRequirements: verifierResult.verifiers.length
+      ? verifierResult.verifiers.map((verifier) => ({
+          check: verifier.check,
+          command: [verifier.command, ...verifier.args].join(" "),
+          rationale: `The ${verifier.check} check was observed as a canonical verification event.`,
+          evidenceIds: [verifier.evidenceId],
+          required: true,
+        }))
+      : [
+          {
+            check: "verification unavailable",
+            rationale: "No allowlisted canonical verification event was observed in the trace.",
+            evidenceIds: [verifierEvidenceId],
+            required: true,
+          },
+        ],
     proposedPolicies: {
       tools: { allow: [], deny: [], network: "disabled" as const },
       workspace: { writableRoots: [], useGitWorktree: true, allowDirtyWorkspace: false },
-      approval: { requiredBefore: [], sideEffectLabels: [] },
+      approval: {
+        requiredBefore: blockers.length ? (["agent", "verify"] as const) : [],
+        sideEffectLabels: segmentation.features
+          .filter((feature) => feature.class === "side_effect")
+          .map((feature) => feature.rationale),
+      },
       budget: { timeoutMs: 3_600_000 },
       concurrency: { maxParallel: 1 },
-      evidenceIds: [primary.evidenceId],
+      evidenceIds: [evidenceAnchor],
     },
     expectedSideEffects: segmentation.features
       .filter((feature) => feature.class === "side_effect")
       .map((feature) => feature.rationale),
-    unresolvedQuestions: [],
+    unresolvedQuestions: blockers.map((blocker) => ({
+      question: `How should this trace boundary be handled safely: ${blocker}?`,
+      blocksExecution: true,
+    })),
     status: "draft",
   } as unknown as ExtractionProposal;
 }

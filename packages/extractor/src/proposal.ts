@@ -85,6 +85,78 @@ function addUnknownEventDiagnostics(
   return diagnostics;
 }
 
+function sameEventSet(left: readonly string[], right: readonly string[]): boolean {
+  const a = [...new Set(left)].sort();
+  const b = [...new Set(right)].sort();
+  return a.length === b.length && a.every((eventId, index) => eventId === b[index]);
+}
+
+/**
+ * Prepared evidence is the only authority for proposal evidence identities.
+ * In particular, an extractor may not mint a new evidence id for a familiar
+ * kind (for example `verification`) while changing the event membership.
+ */
+function validatePreparedEvidence(
+  proposal: ExtractionProposal,
+  input: DeterministicExtractionInput,
+): ProposalDiagnostic[] {
+  const prepared = new Map(
+    input.evidence.map((evidence) => [String(evidence.id), [...(evidence.eventIds ?? [])]]),
+  );
+  const diagnostics: ProposalDiagnostic[] = [];
+  const evidenceIds = new Set(proposal.nodeEvidence.map((evidence) => evidence.evidenceId));
+
+  proposal.nodeEvidence.forEach((evidence, index) => {
+    const eventIds = prepared.get(evidence.evidenceId);
+    if (!eventIds) {
+      diagnostics.push({
+        kind: "evidence",
+        code: "INVENTED_PROPOSAL_EVIDENCE",
+        message: `Proposal evidence '${evidence.evidenceId}' is not present in prepared deterministic evidence.`,
+        path: `/nodeEvidence/${index}/evidenceId`,
+      });
+      return;
+    }
+    if (!sameEventSet(eventIds, evidence.eventIds)) {
+      diagnostics.push({
+        kind: "evidence",
+        code: "PROPOSAL_EVIDENCE_MEMBERSHIP_MISMATCH",
+        message: `Proposal evidence '${evidence.evidenceId}' must preserve the prepared source event membership exactly.`,
+        path: `/nodeEvidence/${index}/eventIds`,
+      });
+    }
+  });
+
+  const checkReferences = (ids: readonly string[], path: string): void => {
+    ids.forEach((evidenceId, index) => {
+      if (!prepared.has(evidenceId)) {
+        diagnostics.push({
+          kind: "evidence",
+          code: "INVENTED_PROPOSAL_EVIDENCE",
+          message: `Proposal evidence '${evidenceId}' is not present in prepared deterministic evidence.`,
+          path: `${path}/${index}`,
+        });
+      }
+      if (!evidenceIds.has(evidenceId)) {
+        diagnostics.push({
+          kind: "evidence",
+          code: "UNKNOWN_PROPOSAL_EVIDENCE",
+          message: `Proposal reference '${evidenceId}' does not identify a node evidence record.`,
+          path: `${path}/${index}`,
+        });
+      }
+    });
+  };
+  proposal.inferredInputs.forEach((inputValue, index) => {
+    checkReferences(inputValue.evidenceIds, `/inferredInputs/${index}/evidenceIds`);
+  });
+  proposal.verifierRequirements.forEach((requirement, index) => {
+    checkReferences(requirement.evidenceIds, `/verifierRequirements/${index}/evidenceIds`);
+  });
+  checkReferences(proposal.proposedPolicies.evidenceIds, "/proposedPolicies/evidenceIds");
+  return diagnostics;
+}
+
 function validateInferredInputs(raw: unknown, proposal: ExtractionProposal): ProposalDiagnostic[] {
   if (
     !raw ||
@@ -132,6 +204,7 @@ export function parseExtractionProposal(
   const diagnostics = [
     ...(input ? addUnknownEventDiagnostics(parsed.data, eventIdsFromInput(input)) : []),
     ...validateInferredInputs(output, parsed.data),
+    ...(input ? validatePreparedEvidence(parsed.data, input) : []),
   ];
   if (diagnostics.length > 0) return { ok: false, diagnostics };
   return { ok: true, proposal: parsed.data, diagnostics: [] };

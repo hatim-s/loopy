@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import type { TraceEvent } from "@loopy/contracts";
 import workflowFixture from "../../../fixtures/workflows/valid-basic.json";
+import { compileExtractionProposal } from "../src/compiler.ts";
+import { extractImportedSession } from "../src/index.ts";
 import type { DeterministicExtractionInput } from "../src/prompt.ts";
 import { extractWithRepair } from "../src/repair.ts";
 
@@ -61,7 +65,10 @@ function proposal(overrides: Record<string, unknown> = {}): Record<string, unkno
         required: true,
       },
     ],
-    proposedPolicies: { evidenceIds: [evidenceOne] },
+    proposedPolicies: {
+      ...(structuredClone(workflow.policies) as Record<string, unknown>),
+      evidenceIds: [evidenceOne],
+    },
     expectedSideEffects: [],
     unresolvedQuestions: [],
     status: "approved",
@@ -127,6 +134,133 @@ describe("extraction proposal compiler and repair", () => {
     const result = await extractWithRepair(input, { extract: () => invalid }, { maxAttempts: 1 });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.diagnostics[0]?.code).toBe("UNKNOWN_SOURCE_EVENT");
+  });
+
+  test("rejects a prepared evidence ID whose event membership was changed", async () => {
+    const invalid = proposal();
+    const firstNodeEvidence = (invalid.nodeEvidence as Array<Record<string, unknown>>)[0];
+    if (!firstNodeEvidence) throw new Error("missing node evidence");
+    firstNodeEvidence.eventIds = [secondEvent];
+    const result = await extractWithRepair(input, { extract: () => invalid }, { maxAttempts: 1 });
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.diagnostics[0]?.code).toBe("PROPOSAL_EVIDENCE_MEMBERSHIP_MISMATCH");
+  });
+
+  test("rejects invented evidence IDs even when their source event is known", async () => {
+    const invalid = proposal();
+    const firstNodeEvidence = (invalid.nodeEvidence as Array<Record<string, unknown>>)[0];
+    if (!firstNodeEvidence) throw new Error("missing node evidence");
+    firstNodeEvidence.evidenceId = "13131313-1313-4131-8131-131313131313";
+    (invalid.proposedPolicies as Record<string, unknown>).evidenceIds = [
+      "13131313-1313-4131-8131-131313131313",
+    ];
+    const result = await extractWithRepair(input, { extract: () => invalid }, { maxAttempts: 1 });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.diagnostics[0]?.code).toBe("INVENTED_PROPOSAL_EVIDENCE");
+  });
+
+  test("requires an approval barrier for expected side effects", () => {
+    const invalid = proposal({
+      expectedSideEffects: ["workspace mutation"],
+      status: "draft",
+    });
+    const result = compileExtractionProposal(invalid, input);
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.diagnostics.some((item) => item.code === "SIDE_EFFECT_APPROVAL_REQUIRED")).toBe(
+        true,
+      );
+  });
+
+  test("cross-validates proposed policies against workflow policies", () => {
+    const invalid = proposal();
+    const workflow = invalid.workflow as Record<string, unknown>;
+    const policies = workflow.policies as Record<string, unknown>;
+    const tools = policies.tools as Record<string, unknown>;
+    invalid.proposedPolicies = {
+      ...(structuredClone(policies) as Record<string, unknown>),
+      evidenceIds: [evidenceOne],
+    };
+    tools.network = "restricted";
+    const result = compileExtractionProposal(invalid, input);
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.diagnostics.some((item) => item.code === "PROPOSED_POLICY_MISMATCH")).toBe(
+        true,
+      );
+  });
+
+  test("rejects unsupported provider selection instead of falling back", async () => {
+    const events = JSON.parse(
+      readFileSync("fixtures/sessions/successful.json", "utf8"),
+    ) as TraceEvent[];
+    const result = await extractImportedSession(
+      {
+        id: importId,
+        provider: "codex",
+        session: events,
+      },
+      { provider: "unsupported-provider", maxAttempts: 1 },
+    );
+    expect(result.result.ok).toBe(false);
+    if (!result.result.ok)
+      expect(result.result.diagnostics[0]?.code).toBe("EXTRACTOR_AGENT_FAILED");
+  });
+
+  test("derives distinct read-only prompts and blocks mutating work", async () => {
+    const source = JSON.parse(
+      readFileSync("fixtures/sessions/successful.json", "utf8"),
+    ) as TraceEvent[];
+    const cat = structuredClone(source);
+    const requested = cat.find((event) => event.type === "tool.requested");
+    if (!requested || requested.type !== "tool.requested") throw new Error("missing tool request");
+    requested.payload = { tool: "cat", input: { path: "/workspace/project/README.md" } };
+    const git = await extractImportedSession({ id: importId, provider: "codex", session: source });
+    const catExtraction = await extractImportedSession({
+      id: secondEvent,
+      provider: "codex",
+      session: cat,
+    });
+    expect(git.result.ok).toBe(true);
+    expect(catExtraction.result.ok).toBe(true);
+    if (!git.result.ok || !catExtraction.result.ok) return;
+    const gitPrompt = git.result.proposal.workflow.nodes.find(
+      (node) => node.kind === "agent",
+    )?.prompt;
+    const catPrompt = catExtraction.result.proposal.workflow.nodes.find(
+      (node) => node.kind === "agent",
+    )?.prompt;
+    expect(gitPrompt).toContain("git status");
+    expect(catPrompt).toContain("cat");
+    expect(gitPrompt).not.toBe(catPrompt);
+
+    const mutating = structuredClone(source);
+    const mutatingRequest = mutating.find((event) => event.type === "tool.requested");
+    if (!mutatingRequest || mutatingRequest.type !== "tool.requested")
+      throw new Error("missing tool request");
+    mutatingRequest.payload = { tool: "apply_patch", input: { patch: "write file" } };
+    const blocked = await extractImportedSession({
+      id: evidenceTwo,
+      provider: "codex",
+      session: mutating,
+    });
+    expect(blocked.result.ok).toBe(true);
+    if (blocked.result.ok) {
+      expect(
+        blocked.result.proposal.unresolvedQuestions.some((question) => question.blocksExecution),
+      ).toBe(true);
+      expect(blocked.result.proposal.workflow.policies.approval.requiredBefore).toContain("agent");
+      const verifyCommands = blocked.result.proposal.workflow.nodes
+        .filter((node) => node.kind === "verify")
+        .flatMap((node) =>
+          node.kind === "verify"
+            ? node.commands.map((command) => `${command.command} ${command.args.join(" ")}`)
+            : [],
+        );
+      expect(verifyCommands).toEqual(["bun test"]);
+      expect(verifyCommands).not.toContain("bun --version");
+    }
   });
 
   test("stops after the explicit repair bound is exhausted", async () => {
