@@ -403,6 +403,7 @@ function normalizeSync(
   const limits = limitsFor(options);
   const collected: Array<{ event: TraceEvent; sourceIndex: number }> = [];
   const redactions: RedactionRecord[] = [];
+  const diagnostics: TraceDiagnostic[] = [];
   let inputIndex = 0;
   for (const value of events) {
     if (inputIndex >= limits.maxEvents) {
@@ -419,25 +420,39 @@ function normalizeSync(
       event = parseEvent(value, { inputIndex });
     } catch (error) {
       if (options.rejectDiagnostics === false && error instanceof TraceCodecError) {
+        // Tolerant validation drops the invalid event, but never drops the
+        // evidence that it was dropped.
+        diagnostics.push(...error.diagnostics);
         inputIndex += 1;
         continue;
       }
       throw error;
     }
     if (options.redaction) {
-      const redacted = redactTraceEvent(event, options.redaction);
-      event = redacted.event;
-      redactions.push(...redacted.records);
+      try {
+        const redacted = redactTraceEvent(event, options.redaction);
+        event = redacted.event;
+        redactions.push(...redacted.records);
+      } catch (error) {
+        if (options.rejectDiagnostics === false && error instanceof TraceCodecError) {
+          diagnostics.push(...error.diagnostics);
+          inputIndex += 1;
+          continue;
+        }
+        throw error;
+      }
     }
     collected.push({ event, sourceIndex: inputIndex });
     inputIndex += 1;
   }
   const sorted = [...collected].sort((left, right) => left.event.sequence - right.event.sequence);
-  const diagnostics = orderingDiagnostics(
-    sorted.map((entry) => entry.event),
-    sorted.map((entry) => entry.sourceIndex),
-    collected.map((entry) => entry.event),
-    collected.map((entry) => entry.sourceIndex),
+  diagnostics.push(
+    ...orderingDiagnostics(
+      sorted.map((entry) => entry.event),
+      sorted.map((entry) => entry.sourceIndex),
+      collected.map((entry) => entry.event),
+      collected.map((entry) => entry.sourceIndex),
+    ),
   );
   failIfRequested(diagnostics, options);
   return { events: sorted.map((entry) => entry.event), diagnostics, redactions };

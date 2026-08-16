@@ -15,7 +15,7 @@ import type {
 export const STORAGE_DIR = ".loopy";
 export const DATABASE_FILENAME = "loopy.db";
 export const LOCK_FILENAME = "loopy.lock";
-export const CURRENT_MIGRATION = 1;
+export const CURRENT_MIGRATION = 2;
 
 export type RunStatus =
   | "created"
@@ -168,6 +168,10 @@ CREATE TABLE IF NOT EXISTS provider_installations (provider TEXT PRIMARY KEY, in
 CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
 `,
   ],
+  [
+    2,
+    "ALTER TABLE approvals ADD COLUMN attempt_id TEXT REFERENCES node_attempts(id) ON DELETE SET NULL;",
+  ],
 ];
 
 function applyMigrations(db: Database): void {
@@ -266,6 +270,7 @@ export interface ApprovalRecord {
   id: string;
   runId: string;
   nodeId?: string;
+  attemptId?: string;
   approvalKey: string;
   message: string;
   status: ApprovalStatus;
@@ -360,6 +365,7 @@ const approval = (r: Row): ApprovalRecord => ({
   id: r.id as string,
   runId: r.run_id as string,
   nodeId: r.node_id as string | undefined,
+  attemptId: r.attempt_id as string | undefined,
   approvalKey: r.approval_key as string,
   message: r.message as string,
   status: r.status as ApprovalStatus,
@@ -665,6 +671,41 @@ export class RuntimeRepository {
     );
   }
 
+  /** Attempts that can be cancelled safely while recovering a cancelling run. */
+  listCancellableAttempts(runId: string): AttemptRecord[] {
+    return (
+      this.db
+        .query<Row, [string]>(
+          "SELECT * FROM node_attempts WHERE run_id=? AND status IN ('pending','ready','running') ORDER BY node_id,attempt",
+        )
+        .all(runId) as Row[]
+    ).map(asAttempt);
+  }
+
+  /** Atomically finish a cancelling run using only legal terminal cancellation. */
+  recoverCancellingRun(runId: string, reason = "cancelled during recovery"): RunRecord {
+    return this.db.transaction(() => {
+      const run = this.getRun(runId);
+      if (!run) throw new Error(`Unknown run ${runId}`);
+      if (run.status !== "cancelling")
+        throw new Error(`Run ${runId} is ${run.status}, not cancelling`);
+      const at = timestamp();
+      this.run(
+        "UPDATE node_attempts SET status='cancelled',error=?,finished_at=?,updated_at=? WHERE run_id=? AND status IN ('pending','ready','running')",
+        reason,
+        at,
+        at,
+        runId,
+      );
+      this.run(
+        "UPDATE runs SET status='cancelled',updated_at=? WHERE id=? AND status='cancelling'",
+        at,
+        runId,
+      );
+      return must(this.getRun(runId), "run");
+    })();
+  }
+
   appendEvent(runId: string, input: AppendEventInput | TraceEvent): EventRecord {
     return this.db.transaction(() => this.appendEventInternal(runId, input))();
   }
@@ -735,16 +776,18 @@ export class RuntimeRepository {
     id?: string;
     runId: string;
     nodeId?: string;
+    attemptId?: string;
     approvalKey: string;
     message: string;
     status?: ApprovalStatus;
   }): ApprovalRecord {
     const id = input.id ?? randomUUID();
     this.run(
-      "INSERT INTO approvals(id,run_id,node_id,approval_key,message,status,requested_at) VALUES (?,?,?,?,?,?,?)",
+      "INSERT INTO approvals(id,run_id,node_id,attempt_id,approval_key,message,status,requested_at) VALUES (?,?,?,?,?,?,?,?)",
       id,
       input.runId,
       input.nodeId ?? null,
+      input.attemptId ?? null,
       input.approvalKey,
       input.message,
       input.status ?? "pending",
@@ -867,18 +910,31 @@ export class Storage {
     this.databasePath = join(dir, DATABASE_FILENAME);
     this.lockPath = join(dir, LOCK_FILENAME);
     mkdirSync(dir, { recursive: true });
-    if (!config.readOnly && config.acquireLock !== false)
-      this.lock = ProjectLock.acquire(this.lockPath, config.staleLockAfterMs);
-    this.db = new Database(this.databasePath, {
-      readonly: config.readOnly ?? false,
-      create: !(config.readOnly ?? false),
-    });
-    this.db.run(`PRAGMA busy_timeout = ${Math.max(0, Math.floor(config.busyTimeoutMs ?? 5000))}`);
-    if (!config.readOnly) {
-      this.db.run("PRAGMA journal_mode = WAL");
-      applyMigrations(this.db);
+    let lock: ProjectLock | undefined;
+    let db: Database | undefined;
+    try {
+      if (!config.readOnly && config.acquireLock !== false)
+        lock = ProjectLock.acquire(this.lockPath, config.staleLockAfterMs);
+      db = new Database(this.databasePath, {
+        readonly: config.readOnly ?? false,
+        create: !(config.readOnly ?? false),
+      });
+      db.run(`PRAGMA busy_timeout = ${Math.max(0, Math.floor(config.busyTimeoutMs ?? 5000))}`);
+      if (!config.readOnly) {
+        db.run("PRAGMA journal_mode = WAL");
+        applyMigrations(db);
+      }
+      db.run("PRAGMA foreign_keys = ON");
+    } catch (error) {
+      try {
+        db?.close();
+      } finally {
+        lock?.release();
+      }
+      throw error;
     }
-    this.db.run("PRAGMA foreign_keys = ON");
+    this.db = db as Database;
+    this.lock = lock;
     this.runtime = new RuntimeRepository(this.db);
     this.repository = this.runtime;
   }

@@ -10,7 +10,12 @@ import type {
   RuntimeStoreCommand,
 } from "@loopy/runtime";
 import type { TraceEventSink, TraceEventSource } from "@loopy/tracing";
-import type { Storage } from "./storage.js";
+import type {
+  AttemptStatus,
+  RunStatus,
+  Storage,
+  ApprovalRecord as StoredApproval,
+} from "./storage.js";
 
 type Row = Record<string, unknown>;
 
@@ -29,6 +34,12 @@ function stableId(value: string): string {
 
 function nonEmpty(value: unknown, fallback: string): string {
   return typeof value === "string" && value.trim() ? value : fallback;
+}
+
+function requiredString(value: unknown, label: string): string {
+  if (typeof value !== "string" || value.trim().length === 0)
+    throw new Error(`Runtime event is missing ${label}`);
+  return value;
 }
 
 function completion(value: unknown, status: "succeeded" | "failed" | "cancelled" | "skipped") {
@@ -69,7 +80,7 @@ function toTraceEvent(event: RuntimeEvent, sequence: number, approvalKey?: strin
         ...base,
         type: event.type,
         payload: {
-          workflowId: stableId(String(source.workflowId ?? event.runId)),
+          workflowId: stableId(requiredString(source.workflowId, "workflowId")),
           workflowVersion: Number(source.workflowVersion ?? 1),
         },
       };
@@ -78,7 +89,7 @@ function toTraceEvent(event: RuntimeEvent, sequence: number, approvalKey?: strin
       canonical = {
         ...base,
         type: event.type,
-        payload: { planHash: nonEmpty(source.planHash, "0".repeat(64)) },
+        payload: { planHash: requiredString(source.planHash, "planHash") },
       };
       break;
     case "run.pause_requested":
@@ -256,6 +267,46 @@ const ATTEMPT_TRANSITIONS: Record<string, readonly string[]> = {
 const legal = (table: Record<string, readonly string[]>, from: string, to: string) =>
   from === to || table[from]?.includes(to) === true;
 
+export class RuntimeStoreConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RuntimeStoreConflictError";
+  }
+}
+
+export interface CompareAndSetRunStatusInput {
+  runId: string;
+  expectedStatus: RunStatus;
+  nextStatus: RunStatus;
+  error?: string;
+  /** Terminal recovery is an explicit seam; ordinary transitions remain strict. */
+  allowTerminalRecovery?: boolean;
+}
+
+export interface CompareAndSetAttemptStatusInput {
+  attemptId: string;
+  expectedStatus: AttemptStatus;
+  nextStatus: AttemptStatus;
+  error?: string;
+}
+
+export interface ResolveApprovalAtomicallyInput {
+  runId: string;
+  nodeId: string;
+  decision: "approved" | "rejected";
+  expectedApprovalStatus?: "pending";
+  attemptStatus?: "succeeded" | "failed" | "cancelled";
+  runStatus?: RunStatus;
+  expectedRunStatus?: RunStatus;
+  resolvedBy?: string;
+}
+
+export interface ResolveApprovalAtomicallyResult {
+  approval: StoredApproval;
+  attempt?: RuntimeAttempt;
+  run?: RuntimeRun;
+}
+
 function runFromRow(row: Row): RuntimeRun {
   const runtime = decode<RuntimeRun>(row.runtime_json as string | null);
   if (runtime) return runtime;
@@ -421,11 +472,12 @@ export class SqliteRuntimeStore implements RuntimeStore {
       case "set_approval": {
         const approval = command.approval;
         this.db.run(
-          "INSERT INTO approvals(id,run_id,node_id,approval_key,message,status,requested_at) VALUES (?,?,?,?,?,?,?) ON CONFLICT(run_id,approval_key) DO UPDATE SET node_id=excluded.node_id,status=excluded.status,message=excluded.message",
+          "INSERT INTO approvals(id,run_id,node_id,attempt_id,approval_key,message,status,requested_at) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(run_id,approval_key) DO UPDATE SET node_id=excluded.node_id,attempt_id=excluded.attempt_id,status=excluded.status,message=excluded.message,resolved_at=NULL,resolved_by=NULL",
           [
             stableId(`${approval.runId}:${approval.nodeId}:approval`),
             approval.runId,
             approval.nodeId,
+            approval.attemptId,
             approval.key,
             approval.message,
             approval.decision
@@ -439,10 +491,16 @@ export class SqliteRuntimeStore implements RuntimeStore {
         return;
       }
       case "resolve_approval":
-        this.db.run(
-          "UPDATE approvals SET status=?,resolved_at=?,resolved_by=? WHERE run_id=? AND node_id=?",
-          [command.decision, new Date().toISOString(), "runtime", command.runId, command.nodeId],
-        );
+        {
+          const result = this.db.run(
+            "UPDATE approvals SET status=?,resolved_at=?,resolved_by=? WHERE run_id=? AND node_id=? AND status='pending'",
+            [command.decision, new Date().toISOString(), "runtime", command.runId, command.nodeId],
+          );
+          if (result.changes === 0)
+            throw new RuntimeStoreConflictError(
+              `Approval ${command.runId}/${command.nodeId} is missing or already resolved`,
+            );
+        }
         return;
       case "append_event": {
         const raw = command.event;
@@ -489,6 +547,199 @@ export class SqliteRuntimeStore implements RuntimeStore {
     }
   }
 
+  /**
+   * Compare-and-set repository primitives for the runtime's next intent shape.
+   * These deliberately do not alter RuntimeStoreCommand: approval resolution and
+   * terminal retry/recovery can use them as one-transaction seams while the
+   * scheduler command contract evolves.
+   */
+  compareAndSetRunStatus(input: CompareAndSetRunStatusInput): RuntimeRun {
+    return this.db.transaction(() => {
+      const row = this.db.query<Row, [string]>("SELECT * FROM runs WHERE id=?").get(input.runId);
+      if (!row) throw new Error(`Unknown run ${input.runId}`);
+      const current = row.status as RunStatus;
+      if (current !== input.expectedStatus)
+        throw new RuntimeStoreConflictError(
+          `Run ${input.runId} changed from ${input.expectedStatus} to ${current}`,
+        );
+      const terminalRecovery =
+        input.allowTerminalRecovery === true &&
+        (current === "failed" || current === "cancelled") &&
+        input.nextStatus === "running";
+      if (!legal(RUN_TRANSITIONS, current, input.nextStatus) && !terminalRecovery)
+        throw new Error(`Illegal run transition ${current} -> ${input.nextStatus}`);
+      this.db.run("UPDATE runs SET status=?,updated_at=? WHERE id=? AND status=?", [
+        input.nextStatus,
+        new Date().toISOString(),
+        input.runId,
+        input.expectedStatus,
+      ]);
+      return runFromRow(
+        this.db.query<Row, [string]>("SELECT * FROM runs WHERE id=?").get(input.runId) as Row,
+      );
+    })();
+  }
+
+  compareAndSetAttemptStatus(input: CompareAndSetAttemptStatusInput): RuntimeAttempt {
+    return this.db.transaction(() => {
+      const row = this.db
+        .query<Row, [string]>("SELECT * FROM node_attempts WHERE id=?")
+        .get(input.attemptId);
+      if (!row) throw new Error(`Unknown attempt ${input.attemptId}`);
+      const current = row.status as AttemptStatus;
+      if (current !== input.expectedStatus)
+        throw new RuntimeStoreConflictError(
+          `Attempt ${input.attemptId} changed from ${input.expectedStatus} to ${current}`,
+        );
+      if (!legal(ATTEMPT_TRANSITIONS, current, input.nextStatus))
+        throw new Error(`Illegal attempt transition ${current} -> ${input.nextStatus}`);
+      const ended = ["succeeded", "failed", "cancelled", "skipped"].includes(input.nextStatus)
+        ? new Date().toISOString()
+        : null;
+      this.db.run(
+        "UPDATE node_attempts SET status=?,error=?,finished_at=?,updated_at=? WHERE id=? AND status=?",
+        [
+          input.nextStatus,
+          input.error ?? null,
+          ended,
+          new Date().toISOString(),
+          input.attemptId,
+          input.expectedStatus,
+        ],
+      );
+      return attemptFromRow(
+        this.db
+          .query<Row, [string]>("SELECT * FROM node_attempts WHERE id=?")
+          .get(input.attemptId) as Row,
+      );
+    })();
+  }
+
+  /** Resolve an approval and optional attempt/run transitions in one SQLite transaction. */
+  resolveApprovalAtomically(
+    input: ResolveApprovalAtomicallyInput,
+  ): ResolveApprovalAtomicallyResult {
+    return this.db.transaction(() => {
+      const row = this.db
+        .query<Row, [string, string]>(
+          "SELECT * FROM approvals WHERE run_id=? AND node_id=? ORDER BY requested_at DESC LIMIT 1",
+        )
+        .get(input.runId, input.nodeId);
+      if (!row) throw new Error(`Unknown approval ${input.runId}/${input.nodeId}`);
+      if ((input.expectedApprovalStatus ?? "pending") !== row.status)
+        throw new RuntimeStoreConflictError(
+          `Approval ${input.runId}/${input.nodeId} is already ${String(row.status)}`,
+        );
+      const run = this.db.query<Row, [string]>("SELECT * FROM runs WHERE id=?").get(input.runId);
+      if (!run) throw new Error(`Unknown run ${input.runId}`);
+      if (input.expectedRunStatus && run.status !== input.expectedRunStatus)
+        throw new RuntimeStoreConflictError(
+          `Run ${input.runId} changed from ${input.expectedRunStatus} to ${String(run.status)}`,
+        );
+      const now = new Date().toISOString();
+      const updated = this.db.run(
+        "UPDATE approvals SET status=?,resolved_at=?,resolved_by=? WHERE id=? AND status='pending'",
+        [input.decision, now, input.resolvedBy ?? "runtime", row.id as string],
+      );
+      if (updated.changes !== 1)
+        throw new RuntimeStoreConflictError(`Approval ${String(row.id)} was resolved concurrently`);
+
+      let attempt: RuntimeAttempt | undefined;
+      const attemptId = row.attempt_id as string | undefined;
+      if (input.attemptStatus) {
+        if (!attemptId) throw new Error(`Approval ${String(row.id)} has no attemptId`);
+        const attemptRow = this.db
+          .query<Row, [string]>("SELECT * FROM node_attempts WHERE id=?")
+          .get(attemptId);
+        if (!attemptRow) throw new Error(`Unknown approval attempt ${attemptId}`);
+        if (!legal(ATTEMPT_TRANSITIONS, attemptRow.status as string, input.attemptStatus))
+          throw new Error(
+            `Illegal attempt transition ${String(attemptRow.status)} -> ${input.attemptStatus}`,
+          );
+        this.db.run(
+          "UPDATE node_attempts SET status=?,error=?,finished_at=?,updated_at=? WHERE id=?",
+          [
+            input.attemptStatus,
+            input.decision === "rejected" ? "Approval rejected" : null,
+            now,
+            now,
+            attemptId,
+          ],
+        );
+        attempt = attemptFromRow(
+          this.db
+            .query<Row, [string]>("SELECT * FROM node_attempts WHERE id=?")
+            .get(attemptId) as Row,
+        );
+      }
+      let nextRun: RuntimeRun | undefined;
+      if (input.runStatus) {
+        const current = run.status as RunStatus;
+        if (!legal(RUN_TRANSITIONS, current, input.runStatus))
+          throw new Error(`Illegal run transition ${current} -> ${input.runStatus}`);
+        this.db.run("UPDATE runs SET status=?,updated_at=? WHERE id=?", [
+          input.runStatus,
+          now,
+          input.runId,
+        ]);
+        nextRun = runFromRow(
+          this.db.query<Row, [string]>("SELECT * FROM runs WHERE id=?").get(input.runId) as Row,
+        );
+      }
+      return {
+        approval: {
+          id: row.id as string,
+          runId: row.run_id as string,
+          nodeId: row.node_id as string | undefined,
+          attemptId,
+          approvalKey: row.approval_key as string,
+          message: row.message as string,
+          status: input.decision,
+          requestedAt: row.requested_at as string,
+          resolvedAt: now,
+          resolvedBy: input.resolvedBy ?? "runtime",
+        },
+        attempt,
+        run: nextRun,
+      };
+    })();
+  }
+
+  /** Return the statuses that can be safely cancelled during recovery. */
+  async listCancellableAttempts(runId: string): Promise<RuntimeAttempt[]> {
+    return (
+      this.db
+        .query<Row, [string]>(
+          "SELECT * FROM node_attempts WHERE run_id=? AND status IN ('pending','ready','running') ORDER BY node_id,attempt",
+        )
+        .all(runId) as Row[]
+    ).map(attemptFromRow);
+  }
+
+  /** Complete a cancelling run and cancel only legal pending/ready/running attempts atomically. */
+  recoverCancellingRun(runId: string, reason = "cancelled during recovery"): RuntimeRun {
+    return this.db.transaction(() => {
+      const run = this.db.query<Row, [string]>("SELECT * FROM runs WHERE id=?").get(runId);
+      if (!run) throw new Error(`Unknown run ${runId}`);
+      if (run.status !== "cancelling")
+        throw new RuntimeStoreConflictError(
+          `Run ${runId} is ${String(run.status)}, not cancelling`,
+        );
+      const now = new Date().toISOString();
+      this.db.run(
+        "UPDATE node_attempts SET status='cancelled',error=?,finished_at=?,updated_at=? WHERE run_id=? AND status IN ('pending','ready','running')",
+        [reason, now, now, runId],
+      );
+      this.db.run(
+        "UPDATE runs SET status='cancelled',updated_at=? WHERE id=? AND status='cancelling'",
+        [now, runId],
+      );
+      return runFromRow(
+        this.db.query<Row, [string]>("SELECT * FROM runs WHERE id=?").get(runId) as Row,
+      );
+    })();
+  }
+
   async getRun(runId: string): Promise<RuntimeRun | undefined> {
     const row = this.db.query<Row, [string]>("SELECT * FROM runs WHERE id=?").get(runId);
     return row ? runFromRow(row) : undefined;
@@ -530,7 +781,9 @@ export class SqliteRuntimeStore implements RuntimeStore {
       ? {
           runId,
           nodeId,
-          attemptId: "",
+          // v1 approvals legitimately have no attemptId; new records round-trip
+          // the persisted FK and keep the runtime contract explicit for them.
+          attemptId: (row.attempt_id as string | undefined) ?? "",
           key: row.approval_key as string,
           message: row.message as string,
           decision: row.status === "pending" ? undefined : (row.status as "approved" | "rejected"),
@@ -560,12 +813,12 @@ export class SqliteRuntimeStore implements RuntimeStore {
     this.db.transaction(() => {
       const existingRun = this.db.query("SELECT 1 FROM runs WHERE id=?").get(runId);
       if (!existingRun) {
-        const workflowId =
-          event.type === "run.created"
-            ? String(event.payload.workflowId)
-            : stableId(`${runId}:workflow`);
-        const workflowVersion =
-          event.type === "run.created" ? Number(event.payload.workflowVersion) : 1;
+        if (event.type !== "run.created")
+          throw new Error(
+            `Cannot import ${event.type} for unknown run ${runId}; a run.created event with workflowId is required`,
+          );
+        const workflowId = requiredString(event.payload.workflowId, "workflowId");
+        const workflowVersion = Number(event.payload.workflowVersion);
         this.db.run(
           "INSERT OR IGNORE INTO workflow_versions(workflow_id,version,definition_json,created_at) VALUES (?,?,?,?)",
           [

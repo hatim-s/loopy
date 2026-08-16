@@ -60,6 +60,29 @@ describe("trace JSONL codec", () => {
     );
   });
 
+  test("reports every dropped invalid or safety event in tolerant normalization", () => {
+    const invalid = { ...events[0], payload: { workflowVersion: 1 } } as TraceEvent;
+    const unsupported = { ...events[0], schemaVersion: "99" } as unknown as TraceEvent;
+    const hidden = {
+      ...events[0],
+      payload: {
+        workflowId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+        hidden_chain_of_thought: "secret",
+      },
+    } as unknown as TraceEvent;
+    const report = normalizeTraceEvents([invalid, unsupported, hidden], {
+      rejectDiagnostics: false,
+    });
+    expect(report.events).toHaveLength(0);
+    expect(report.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(
+      expect.arrayContaining([
+        "invalid_event",
+        "unsupported_schema_version",
+        "hidden_chain_of_thought",
+      ]),
+    );
+  });
+
   test("rejects unsupported versions and truncated JSON by default", () => {
     const unsupported = fixtureText.replace('"schemaVersion":"1"', '"schemaVersion":"99"');
     expectCodecError(() => decodeTraceJsonl(unsupported), "unsupported_schema_version");
