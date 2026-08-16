@@ -1,0 +1,6 @@
+{"type":"step_start","sessionID":"oc-session-001","part":{"type":"step-start","parentSessionID":"oc-parent-001"}}
+{"type":"text","sessionID":"oc-session-001","part":{"type":"text","text":"Visible answer from OpenCode."}}
+{"type":"tool_use","sessionID":"oc-session-001","part":{"type":"tool","callID":"oc-call-001","tool":"bash","state":{"status":"completed","input":{"command":"git status"},"output":"clean","exitCode":0}}}
+{"type":"step_finish","sessionID":"oc-session-001","part":{"type":"step-finish","cost":0.0012,"tokens":{"input":21,"output":13}}}
+{"type":"session_end","sessionID":"oc-session-001"}
+
