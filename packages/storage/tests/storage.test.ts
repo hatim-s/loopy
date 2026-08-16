@@ -64,8 +64,6 @@ describe("storage", () => {
       provider: "codex",
       source: "fixture",
       content,
-      capabilities: { historicalSessionImport: true },
-      lossiness: { lossy: false },
     });
     const second = s.runtime.importCanonicalSession({
       provider: "codex",
@@ -74,7 +72,38 @@ describe("storage", () => {
     });
     expect(second.id).toBe(first.id);
     expect(second.contentHash).toBe(first.contentHash);
-    expect(second.capabilityMetadata).toEqual({ historicalSessionImport: true });
+    expect(second.capabilityMetadata).toEqual({});
+    const enriched = s.runtime.importCanonicalSession({
+      provider: "codex",
+      source: "enriched",
+      content,
+      capabilityMetadata: { historicalSessionImport: true, provider: "codex" },
+      lossinessMetadata: { lossy: false },
+    });
+    expect(enriched.id).toBe(first.id);
+    expect(enriched.capabilities).toEqual({ historicalSessionImport: true, provider: "codex" });
+    expect(enriched.lossiness).toEqual({ lossy: false });
+    expect(() =>
+      s.runtime.importCanonicalSession({
+        provider: "codex",
+        source: "conflicting",
+        content,
+        capabilities: { historicalSessionImport: false },
+      }),
+    ).toThrow(/Conflicting capabilities metadata/);
+    expect(() =>
+      s.runtime.importCanonicalSession({
+        provider: "codex",
+        source: "conflicting-lossiness",
+        content,
+        lossiness: { lossy: true },
+      }),
+    ).toThrow(/Conflicting lossiness metadata/);
+    expect(s.runtime.getImportedSession(first.id)?.capabilities).toEqual({
+      historicalSessionImport: true,
+      provider: "codex",
+    });
+    expect(s.runtime.getImportedSession(first.id)?.lossiness).toEqual({ lossy: false });
     expect(() =>
       s.runtime.importCanonicalSession({ provider: "codex", source: "bad", content: "not-json\n" }),
     ).toThrow();

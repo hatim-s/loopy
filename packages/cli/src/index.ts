@@ -5,7 +5,14 @@ import { resolve } from "node:path";
 import type { JsonObject, JsonValue } from "@loopy/contracts";
 import { extractImportedSession } from "@loopy/extractor";
 import { createDefaultProviderRegistry, type ProviderRegistry } from "@loopy/providers";
-import type { CanonicalSessionImportInput, ExtractionResultInput, Storage } from "@loopy/storage";
+import { type ProviderExecutor, RuntimeScheduler, type RuntimeStore } from "@loopy/runtime";
+import {
+  type CanonicalSessionImportInput,
+  type ExtractionResultInput,
+  SqliteRuntimeStore,
+  type Storage,
+} from "@loopy/storage";
+import { DeterministicFakeProvider } from "@loopy/testing";
 import { doctorCommand } from "./doctor";
 
 export { doctorCommand, formatDoctor, runDoctor } from "./doctor";
@@ -53,7 +60,8 @@ Local persistence commands:
   loopy sessions list|show <id> [--project <dir>] [--json]
   loopy extract --import <id>   (deterministic offline extractor by default)
   loopy review list|show <id> [--project <dir>] [--json]
-  loopy approve|reject <proposal-or-job-id> [--project <dir>] [--json]`);
+  loopy approve|reject <proposal-or-job-id> [--project <dir>] [--json]
+  loopy run <workflow-id> [--local] [--input <json>] [--project <dir>] [--json]`);
   console.log(
     "  loopy validate-provider --provider <provider> --opt-in [--json]  (read-only probe; no run/network)",
   );
@@ -73,6 +81,9 @@ export type CliDependencies = {
   registry?: ProviderRegistry;
   storageFactory?: (projectDir: string, readOnly?: boolean) => Storage;
   extractor?: ExtractionRunner;
+  /** Test and local integrations may provide a deterministic runtime executor. */
+  providerExecutor?: ProviderExecutor;
+  runtimeFactory?: (store: RuntimeStore, provider: ProviderExecutor) => RuntimeScheduler;
 };
 
 /** Offline default: segmentation, proposal, and repair never contact a provider. */
@@ -108,6 +119,9 @@ function positional(args: readonly string[], start = 1): string | undefined {
     "--capabilities",
     "--lossiness",
     "--import",
+    "--workflow",
+    "--input",
+    "--version",
   ]);
   for (let index = start; index < args.length; index += 1) {
     const arg = args[index];
@@ -306,6 +320,60 @@ async function approveOrReject(
   }
 }
 
+function parseRunInput(args: readonly string[]): JsonObject {
+  const raw = option(args, "--input");
+  if (!raw) return {};
+  const parsed = JSON.parse(raw) as unknown;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+    throw new Error("run --input must be a JSON object");
+  return parsed as JsonObject;
+}
+
+/** Execute only through the local deterministic provider path in this phase. */
+async function runWorkflow(args: readonly string[], deps: CliDependencies): Promise<number> {
+  const reference = option(args, "--workflow") ?? positional(args);
+  if (!reference) throw new Error("run requires a workflow ID");
+  const requestedProvider = option(args, "--provider");
+  const local =
+    args.includes("--local") ||
+    args.includes("--fake") ||
+    requestedProvider === undefined ||
+    requestedProvider === "fake" ||
+    requestedProvider === "deterministic-fake";
+  if (!local || (requestedProvider && !["fake", "deterministic-fake"].includes(requestedProvider)))
+    throw new Error(
+      "live provider execution is not implemented; use the explicit local fake provider (--local)",
+    );
+  const versionValue = option(args, "--version");
+  const version = versionValue === undefined ? 1 : Number(versionValue);
+  if (!Number.isInteger(version) || version < 1) throw new Error("run --version must be positive");
+  const storage = await storageFor(args, deps);
+  try {
+    let workflow = storage.runtime.getWorkflowVersion(reference, version);
+    if (!workflow) {
+      const review = storage.runtime.getExtractionReview(reference);
+      if (!review) throw new Error(`Unknown approved workflow ${reference}`);
+      if (review.proposal.status !== "approved")
+        throw new Error(`Workflow proposal ${review.proposal.id} must be approved before running`);
+      workflow = storage.runtime.getWorkflowVersion(review.proposal.workflow.id, version);
+    }
+    if (!workflow) throw new Error(`Unknown approved workflow ${reference}`);
+    const provider = deps.providerExecutor ?? new DeterministicFakeProvider();
+    const store = new SqliteRuntimeStore(storage);
+    const runtime =
+      deps.runtimeFactory?.(store, provider) ?? new RuntimeScheduler({ store, provider });
+    const snapshot = await runtime.run(
+      workflow.definition as Parameters<RuntimeScheduler["run"]>[0],
+      parseRunInput(args),
+    );
+    if (jsonOutput(args)) printJson(snapshot);
+    else console.log(`run ${snapshot.run.runId} ${snapshot.run.status}`);
+    return snapshot.run.status === "succeeded" ? 0 : 1;
+  } finally {
+    storage.close();
+  }
+}
+
 /** Explicit opt-in, read-only installation probe. It never starts a provider run. */
 async function validateProvider(args: readonly string[], deps: CliDependencies): Promise<number> {
   if (!args.includes("--opt-in"))
@@ -337,6 +405,7 @@ async function dispatch(args: readonly string[], deps: CliDependencies): Promise
   }
   if (command === "approve") return approveOrReject(args, deps, "approve");
   if (command === "reject") return approveOrReject(args, deps, "reject");
+  if (command === "run") return runWorkflow(args, deps);
   if (command === "validate-provider" || command === "validate")
     return validateProvider(args, deps);
   return 2;
@@ -408,6 +477,7 @@ export function main(
       "reject",
       "validate-provider",
       "validate",
+      "run",
     ].includes(command)
   ) {
     void mainAsync(args, dependencies).then((code) => {

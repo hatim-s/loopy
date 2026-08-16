@@ -16,6 +16,8 @@
     "@loopy/contracts": "workspace:*",
     "@loopy/extractor": "workspace:*",
     "@loopy/providers": "workspace:*",
-    "@loopy/storage": "workspace:*"
+    "@loopy/runtime": "workspace:*",
+    "@loopy/storage": "workspace:*",
+    "@loopy/testing": "workspace:*"
   }
 }

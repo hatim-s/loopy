@@ -220,6 +220,75 @@ const must = <T>(value: T | undefined, label: string): T => {
 };
 type Row = Record<string, unknown>;
 
+/**
+ * Metadata is evidence about an imported session, so a repeated import may
+ * enrich an existing row but must never replace an earlier claim with a
+ * conflicting one. Objects are merged recursively and arrays are treated as
+ * deterministic sets. Scalar conflicts are rejected explicitly; callers can
+ * retry with the complete metadata and the transaction leaves the row intact.
+ */
+function mergeImportMetadata(
+  existing: JsonObject,
+  incoming: JsonObject,
+  label: "capabilities" | "lossiness",
+): JsonObject {
+  const canonical = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(canonical);
+    if (value && typeof value === "object")
+      return Object.fromEntries(
+        Object.entries(value as Record<string, unknown>)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([key, item]) => [key, canonical(item)]),
+      );
+    return value;
+  };
+  const merge = (left: unknown, right: unknown, path: string): unknown => {
+    if (right === undefined) return left;
+    if (left === undefined) return canonical(right);
+    if (JSON.stringify(canonical(left)) === JSON.stringify(canonical(right))) return left;
+    if (Array.isArray(left) && Array.isArray(right)) {
+      const values = new Map<string, unknown>();
+      for (const item of [...left, ...right]) values.set(JSON.stringify(canonical(item)), item);
+      return [...values.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([, item]) => canonical(item));
+    }
+    if (
+      left !== null &&
+      right !== null &&
+      typeof left === "object" &&
+      !Array.isArray(left) &&
+      typeof right === "object" &&
+      !Array.isArray(right)
+    ) {
+      const result: Record<string, unknown> = {};
+      const keys = new Set([
+        ...Object.keys(left as Record<string, unknown>),
+        ...Object.keys(right as Record<string, unknown>),
+      ]);
+      for (const key of [...keys].sort((a, b) => a.localeCompare(b)))
+        result[key] = merge(
+          (left as Record<string, unknown>)[key],
+          (right as Record<string, unknown>)[key],
+          path ? `${path}.${key}` : key,
+        );
+      return result;
+    }
+    throw new Error(
+      `Conflicting ${label} metadata at ${path || "<root>"}; repeated imports cannot downgrade existing evidence`,
+    );
+  };
+  return merge(existing, incoming, "") as JsonObject;
+}
+
+function importMetadata(
+  primary: JsonObject | undefined,
+  alias: JsonObject | undefined,
+  label: "capabilities" | "lossiness",
+): JsonObject {
+  return mergeImportMetadata(primary ?? {}, alias ?? {}, label);
+}
+
 export interface WorkflowVersionRecord {
   workflowId: string;
   version: number;
@@ -518,14 +587,20 @@ export class RuntimeRepository {
     importedAt?: string;
   }): ImportedSessionRecord {
     const id = input.id ?? randomUUID();
+    const capabilities = importMetadata(
+      input.capabilities,
+      input.capabilityMetadata,
+      "capabilities",
+    );
+    const lossiness = importMetadata(input.lossiness, input.lossinessMetadata, "lossiness");
     this.run(
       "INSERT INTO imported_sessions(id,provider,source,session_json,capabilities_json,lossiness_json,content_hash,imported_at) VALUES (?,?,?,?,?,?,?,?)",
       id,
       input.provider,
       input.source,
       encode(input.session),
-      encode(input.capabilities ?? input.capabilityMetadata),
-      encode(input.lossiness ?? input.lossinessMetadata),
+      encode(capabilities),
+      encode(lossiness),
       input.contentHash ?? null,
       input.importedAt ?? timestamp(),
     );
@@ -539,32 +614,71 @@ export class RuntimeRepository {
     if (!input.provider.trim()) throw new Error("Import provider is required");
     if (!input.source.trim()) throw new Error("Import source is required");
     const hash = sha256(input.content);
-    const existing = this.db
-      .query<Row, [string]>("SELECT * FROM imported_sessions WHERE content_hash=?")
-      .get(hash);
-    if (existing) return asImportedSession(existing);
-
-    const decoded = decodeTraceJsonl(input.content, { rejectDiagnostics: true });
-    if (decoded.events.length === 0) throw new Error("Canonical session must contain events");
-    const runIds = new Set(decoded.events.map((event) => event.runId));
-    if (runIds.size !== 1) throw new Error("Canonical session contains multiple run IDs");
-    for (const [index, event] of decoded.events.entries()) {
-      if (event.sequence !== index)
-        throw new Error(
-          `Canonical session sequence must be contiguous from zero (expected ${index}, got ${event.sequence})`,
+    const capabilities = importMetadata(
+      input.capabilities,
+      input.capabilityMetadata,
+      "capabilities",
+    );
+    const lossiness = importMetadata(input.lossiness, input.lossinessMetadata, "lossiness");
+    return this.db.transaction(() => {
+      const existing = this.db
+        .query<Row, [string]>("SELECT * FROM imported_sessions WHERE content_hash=?")
+        .get(hash);
+      if (existing) {
+        const currentCapabilities = (decode<JsonObject>(
+          existing.capabilities_json as string | null,
+        ) ?? {}) as JsonObject;
+        const currentLossiness = (decode<JsonObject>(existing.lossiness_json as string | null) ??
+          {}) as JsonObject;
+        const mergedCapabilities = mergeImportMetadata(
+          currentCapabilities,
+          capabilities,
+          "capabilities",
         );
-    }
-    const session = decoded.events as unknown as JsonValue;
-    return this.createImportedSession({
-      id: input.id ?? hashId(hash),
-      provider: input.provider,
-      source: input.source,
-      session,
-      capabilities: input.capabilities ?? input.capabilityMetadata,
-      lossiness: input.lossiness ?? input.lossinessMetadata,
-      contentHash: hash,
-      importedAt: input.importedAt,
-    });
+        const mergedLossiness = mergeImportMetadata(currentLossiness, lossiness, "lossiness");
+        if (
+          JSON.stringify(currentCapabilities) !== JSON.stringify(mergedCapabilities) ||
+          JSON.stringify(currentLossiness) !== JSON.stringify(mergedLossiness)
+        ) {
+          const updated = this.db.run(
+            "UPDATE imported_sessions SET capabilities_json=?,lossiness_json=? WHERE id=? AND content_hash=?",
+            [encode(mergedCapabilities), encode(mergedLossiness), existing.id, hash] as never,
+          );
+          if (updated.changes !== 1)
+            throw new Error(
+              `Concurrent metadata update for imported session ${String(existing.id)}`,
+            );
+          return asImportedSession(
+            this.db
+              .query<Row, [string]>("SELECT * FROM imported_sessions WHERE id=?")
+              .get(existing.id as string) as Row,
+          );
+        }
+        return asImportedSession(existing);
+      }
+
+      const decoded = decodeTraceJsonl(input.content, { rejectDiagnostics: true });
+      if (decoded.events.length === 0) throw new Error("Canonical session must contain events");
+      const runIds = new Set(decoded.events.map((event) => event.runId));
+      if (runIds.size !== 1) throw new Error("Canonical session contains multiple run IDs");
+      for (const [index, event] of decoded.events.entries()) {
+        if (event.sequence !== index)
+          throw new Error(
+            `Canonical session sequence must be contiguous from zero (expected ${index}, got ${event.sequence})`,
+          );
+      }
+      const session = decoded.events as unknown as JsonValue;
+      return this.createImportedSession({
+        id: input.id ?? hashId(hash),
+        provider: input.provider,
+        source: input.source,
+        session,
+        capabilities,
+        lossiness,
+        contentHash: hash,
+        importedAt: input.importedAt,
+      });
+    })();
   }
   getImportedSession(id: string): ImportedSessionRecord | undefined {
     const r = this.db.query<Row, [string]>("SELECT * FROM imported_sessions WHERE id=?").get(id);
