@@ -1,0 +1,23 @@
+{
+  "name": "@loopy/studio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@loopy/contracts": "workspace:*",
+    "@tanstack/react-query": "5.85.5",
+    "@tanstack/react-router": "1.130.2",
+    "@xyflow/react": "12.8.1",
+    "immer": "10.1.1",
+    "react": "19.1.1",
+    "react-dom": "19.1.1",
+    "zustand": "5.0.8"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "5.0.2",
+    "vite": "7.1.2"
+  }
+}

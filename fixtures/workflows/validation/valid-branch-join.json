@@ -1,0 +1,18 @@
+{
+  "id": "branch-join",
+  "workflowVersion": 1,
+  "nodes": [
+    { "id": "start", "kind": "agent", "prompt": "Prepare the change" },
+    { "id": "verify-a", "kind": "verify", "commands": ["bun test"] },
+    { "id": "verify-b", "kind": "verify", "commands": ["bun lint"] },
+    { "id": "join", "kind": "join", "policy": "all" },
+    { "id": "approve", "kind": "approval", "prompt": "Ship this change?" }
+  ],
+  "edges": [
+    { "id": "e-start-a", "source": "start", "target": "verify-a" },
+    { "id": "e-start-b", "source": "start", "target": "verify-b" },
+    { "id": "e-a-join", "source": "verify-a", "target": "join" },
+    { "id": "e-b-join", "source": "verify-b", "target": "join" },
+    { "id": "e-join-approve", "source": "join", "target": "approve" }
+  ]
+}

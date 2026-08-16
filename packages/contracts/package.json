@@ -1,0 +1,23 @@
+{
+  "name": "@loopy/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./json-schema": "./src/json-schema.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "bun test",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "emit-schema-fixtures": "bun run src/emit-fixtures.ts"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.9",
+    "typescript": "5.9.2"
+  }
+}

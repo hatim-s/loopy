@@ -1,0 +1,23 @@
+{
+  "id": "invalid-route-cycle",
+  "nodes": [
+    {
+      "id": "start",
+      "kind": "route",
+      "predicate": {
+        "kind": "comparison",
+        "operator": "equals",
+        "left": { "kind": "literal", "value": "parallel" },
+        "right": { "kind": "literal", "value": "parallel" }
+      },
+      "defaultRoute": "parallel"
+    },
+    { "id": "work", "kind": "agent", "prompt": "Do work" },
+    { "id": "join", "kind": "join", "policy": "all" }
+  ],
+  "edges": [
+    { "id": "to-work", "source": "start", "target": "work" },
+    { "id": "to-join", "source": "start", "target": "join", "label": "parallel" },
+    { "id": "back", "source": "join", "target": "start" }
+  ]
+}
