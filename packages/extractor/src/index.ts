@@ -314,6 +314,36 @@ function traceBlockers(
   return [...new Set(blockers)];
 }
 
+interface VariableEvidenceMatch {
+  evidenceIds: string[];
+  missingEventIds: string[];
+}
+
+/**
+ * Match inferred variables only to deterministic variable evidence. Evidence
+ * with events outside the candidate set cannot ground that candidate, even if
+ * it happens to contain one of its source events (for example, a goal episode
+ * or the first intent evidence).
+ */
+function variableEvidenceMatch(
+  segmentation: SegmentationResult,
+  eventIds: readonly string[],
+): VariableEvidenceMatch {
+  const sourceEventIds = [...new Set(eventIds)];
+  const sourceEventSet = new Set(sourceEventIds);
+  const matches = segmentation.evidence.filter(
+    (evidence) =>
+      evidence.kind === "variable" &&
+      evidence.eventIds.length > 0 &&
+      evidence.eventIds.every((eventId) => sourceEventSet.has(eventId)),
+  );
+  const coveredEventIds = new Set(matches.flatMap((evidence) => evidence.eventIds));
+  return {
+    evidenceIds: matches.map((evidence) => evidence.evidenceId),
+    missingEventIds: sourceEventIds.filter((eventId) => !coveredEventIds.has(eventId)),
+  };
+}
+
 function proposalFromEvidence(
   request: ExtractorAgentRequest,
   segmentation: SegmentationResult,
@@ -322,7 +352,20 @@ function proposalFromEvidence(
   const primary = firstEvidence(segmentation);
   const intents = readOnlyIntents(segmentation);
   const verifierResult = canonicalVerifiers(segmentation);
-  const blockers = traceBlockers(segmentation, intents, verifierResult.unsupportedChecks);
+  const variableGroundings = segmentation.candidateVariables.map((variable) => ({
+    variable,
+    match: variableEvidenceMatch(segmentation, variable.eventIds),
+  }));
+  const variableBlockers = variableGroundings
+    .filter(({ match }) => match.missingEventIds.length > 0)
+    .map(
+      ({ variable, match }) =>
+        `candidate variable '${variable.name}' has no prepared evidence covering source event(s): ${match.missingEventIds.join(", ")}`,
+    );
+  const blockers = [
+    ...traceBlockers(segmentation, intents, verifierResult.unsupportedChecks),
+    ...variableBlockers,
+  ];
   const workflowId = stableId("workflow", request.importId);
   const createdAt = segmentation.events[0]?.occurredAt ?? "2026-01-01T00:00:00.000Z";
   const agentNodes = intents.map((intent, index) => ({
@@ -386,12 +429,9 @@ function proposalFromEvidence(
     target,
     metadata: {},
   }));
-  const variables = segmentation.candidateVariables
-    .map((variable) => {
-      const evidence = segmentation.evidence.find((item) =>
-        variable.eventIds.every((eventId) => item.eventIds.includes(eventId)),
-      );
-      if (!evidence) return undefined;
+  const variables = variableGroundings
+    .map(({ variable, match }) => {
+      if (match.missingEventIds.length > 0 || match.evidenceIds.length === 0) return undefined;
       return {
         name: variable.name,
         type: variable.type,
@@ -400,9 +440,7 @@ function proposalFromEvidence(
         example: variable.observedValues[0],
         observedValues: variable.observedValues,
         confidence: variable.confidence,
-        evidenceIds: [
-          intents[0]?.evidenceId ?? verifierResult.verifiers[0]?.evidenceId ?? primary.evidenceId,
-        ],
+        evidenceIds: match.evidenceIds,
       };
     })
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
@@ -418,8 +456,29 @@ function proposalFromEvidence(
     eventIds: verifier.eventIds,
     rationale: `The ${verifier.check} verifier is grounded in canonical verification events.`,
   }));
+  const variableEvidenceNodeId = agentNodes[0]?.id ?? verifyNodes[0]?.id ?? approvalNodes[0]?.id;
+  const variableNodeEvidence = variableEvidenceNodeId
+    ? variables
+        .flatMap((variable) =>
+          variable.evidenceIds.map((evidenceId) => {
+            const evidence = segmentation.evidence.find((item) => item.evidenceId === evidenceId);
+            if (!evidence) return undefined;
+            return {
+              evidenceId,
+              nodeId: variableEvidenceNodeId,
+              eventIds: evidence.eventIds,
+              rationale: `The inferred input '${variable.name}' is grounded in deterministic variable evidence.`,
+            };
+          }),
+        )
+        .filter((item): item is NonNullable<typeof item> => Boolean(item))
+        .filter(
+          (item, index, all) =>
+            all.findIndex((candidate) => candidate.evidenceId === item.evidenceId) === index,
+        )
+    : [];
   const usedEvidenceIds = new Set(
-    [...agentEvidence, ...verifyEvidence].map((item) => item.evidenceId),
+    [...agentEvidence, ...verifyEvidence, ...variableNodeEvidence].map((item) => item.evidenceId),
   );
   const approvalSource = segmentation.evidence.find(
     (evidence) => !usedEvidenceIds.has(evidence.evidenceId),
@@ -435,7 +494,12 @@ function proposalFromEvidence(
           },
         ]
       : [];
-  const nodeEvidence = [...approvalEvidence, ...agentEvidence, ...verifyEvidence];
+  const nodeEvidence = [
+    ...approvalEvidence,
+    ...agentEvidence,
+    ...verifyEvidence,
+    ...variableNodeEvidence,
+  ];
   const evidenceAnchor = nodeEvidence[0]?.evidenceId ?? primary.evidenceId;
   const verifierEvidenceId = verifierResult.verifiers[0]?.evidenceId ?? evidenceAnchor;
   const workflow = {

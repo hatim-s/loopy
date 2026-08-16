@@ -3,7 +3,11 @@ import { readFileSync } from "node:fs";
 import type { TraceEvent } from "@loopy/contracts";
 import workflowFixture from "../../../fixtures/workflows/valid-basic.json";
 import { compileExtractionProposal } from "../src/compiler.ts";
-import { extractImportedSession } from "../src/index.ts";
+import {
+  createDeterministicExtractorAgent,
+  extractImportedSession,
+  prepareDeterministicExtractionInput,
+} from "../src/index.ts";
 import type { DeterministicExtractionInput } from "../src/prompt.ts";
 import { extractWithRepair } from "../src/repair.ts";
 
@@ -261,6 +265,84 @@ describe("extraction proposal compiler and repair", () => {
       expect(verifyCommands).toEqual(["bun test"]);
       expect(verifyCommands).not.toContain("bun --version");
     }
+  });
+
+  test("grounds inferred inputs in their matched non-primary variable evidence", async () => {
+    const source = JSON.parse(
+      readFileSync("fixtures/sessions/successful.json", "utf8"),
+    ) as TraceEvent[];
+    const extracted = await extractImportedSession({
+      id: importId,
+      provider: "codex",
+      session: source,
+    });
+    expect(extracted.result.ok).toBe(true);
+    if (!extracted.result.ok) return;
+
+    const inferred = extracted.result.proposal.inferredInputs.find(
+      (inputValue) => inputValue.name === "artifactPath",
+    );
+    const candidate = extracted.segmentation.candidateVariables.find(
+      (variable) => variable.name === "artifactPath",
+    );
+    if (!inferred || !candidate) throw new Error("artifactPath candidate variable is missing");
+    const variableEvidence = extracted.segmentation.evidence.filter(
+      (evidence) =>
+        evidence.kind === "variable" &&
+        evidence.eventIds.every((eventId) => candidate.eventIds.includes(eventId)),
+    );
+    expect(variableEvidence.length).toBeGreaterThan(0);
+    expect(inferred.evidenceIds).toEqual(variableEvidence.map((evidence) => evidence.evidenceId));
+    expect(inferred.evidenceIds).not.toContain(
+      extracted.segmentation.evidence.find((evidence) => evidence.kind === "feature")?.evidenceId,
+    );
+  });
+
+  test("blocks an inferred input when prepared evidence does not cover its source events", async () => {
+    const source = JSON.parse(
+      readFileSync("fixtures/sessions/successful.json", "utf8"),
+    ) as TraceEvent[];
+    const prepared = prepareDeterministicExtractionInput({
+      id: importId,
+      provider: "codex",
+      session: source,
+    });
+    const candidate = prepared.segmentation.candidateVariables.find(
+      (variable) => variable.name === "artifactPath",
+    );
+    if (!candidate) throw new Error("artifactPath candidate variable is missing");
+    const missingEvidenceIds = new Set(
+      prepared.segmentation.evidence
+        .filter(
+          (evidence) =>
+            evidence.kind === "variable" &&
+            evidence.eventIds.every((eventId) => candidate.eventIds.includes(eventId)),
+        )
+        .map((evidence) => evidence.evidenceId),
+    );
+    const segmentation = {
+      ...prepared.segmentation,
+      evidence: prepared.segmentation.evidence.filter(
+        (evidence) => !missingEvidenceIds.has(evidence.evidenceId),
+      ),
+    };
+    const result = await extractWithRepair(
+      prepared.input,
+      createDeterministicExtractorAgent(segmentation),
+      { maxAttempts: 1 },
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(
+      result.proposal.inferredInputs.some((inputValue) => inputValue.name === "artifactPath"),
+    ).toBe(false);
+    expect(
+      result.proposal.unresolvedQuestions.some(
+        (question) =>
+          question.blocksExecution &&
+          question.question.includes("candidate variable 'artifactPath'"),
+      ),
+    ).toBe(true);
   });
 
   test("stops after the explicit repair bound is exhausted", async () => {
