@@ -117,7 +117,14 @@ export type RuntimeEvent = {
 /** Commands are intents, not a persistence implementation. A SQLite adapter can commit a batch atomically. */
 export type RuntimeStoreCommand =
   | { type: "create_run"; run: RunRecord }
-  | { type: "set_run"; runId: string; patch: Partial<RunRecord> }
+  | {
+      type: "set_run";
+      runId: string;
+      patch: Partial<RunRecord>;
+      expectedStatus?: RunStatus;
+      /** Explicit seam for retrying a terminal run; ordinary transitions remain strict. */
+      allowTerminalRecovery?: boolean;
+    }
   | { type: "create_attempt"; attempt: AttemptRecord; expectedRunStatus?: RunStatus }
   | {
       type: "set_attempt";
@@ -636,6 +643,8 @@ export class RuntimeScheduler {
           type: "set_run",
           runId,
           patch: { status: "running", endedAt: undefined, error: undefined },
+          expectedStatus: run.status,
+          allowTerminalRecovery: run.status === "failed" || run.status === "cancelled",
         },
         await this.event(runId, "run.resumed", undefined, undefined, { resumedBy: "retry" }),
       );
@@ -657,7 +666,14 @@ export class RuntimeScheduler {
       const commands: RuntimeStoreCommand[] = [];
       if (run.status === "cancelling") {
         for (const attempt of attempts) {
-          if (TERMINAL_ATTEMPTS.has(attempt.status)) continue;
+          if (
+            !(
+              attempt.status === "pending" ||
+              attempt.status === "ready" ||
+              attempt.status === "running"
+            )
+          )
+            continue;
           const completion: Completion = {
             status: "cancelled",
             summary: run.error ?? "cancelled during recovery",
@@ -674,6 +690,7 @@ export class RuntimeScheduler {
                 endedAt: this.now(),
                 completion,
               },
+              expectedStatus: attempt.status,
             },
             await this.event(run.runId, "attempt.cancelled", attempt.nodeId, attempt.attemptId, {
               reason: completion.summary,
@@ -685,6 +702,7 @@ export class RuntimeScheduler {
             type: "set_run",
             runId: run.runId,
             patch: { status: "cancelled", endedAt: this.now() },
+            expectedStatus: "cancelling",
           },
           await this.event(run.runId, "run.completed", undefined, undefined, {
             status: "cancelled",
@@ -702,6 +720,7 @@ export class RuntimeScheduler {
               endedAt: this.now(),
               completion: { status: "failed", summary: "Interrupted during recovery", outputs: {} },
             },
+            expectedStatus: "running",
           });
           commands.push(
             await this.event(run.runId, "attempt.failed", attempt.nodeId, attempt.attemptId, {
@@ -716,6 +735,7 @@ export class RuntimeScheduler {
             type: "set_run",
             runId: run.runId,
             patch: { status: "running", startedAt: run.startedAt ?? this.now() },
+            expectedStatus: "created",
           });
         } else if (run.status !== "paused") {
           commands.push({
@@ -725,6 +745,7 @@ export class RuntimeScheduler {
               status: "paused",
               error: orphaned.length ? "interrupted during recovery" : run.error,
             },
+            expectedStatus: run.status,
           });
         }
         if (orphaned.length || run.status !== "paused")

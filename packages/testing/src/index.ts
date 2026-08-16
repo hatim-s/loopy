@@ -42,8 +42,19 @@ export class InMemoryRuntimeStore implements RuntimeStore {
         throw new Error(`Attempt run precondition failed for ${command.attempt.runId}`);
       if (command.type === "set_run" && command.patch.status) {
         const current = this.runs.get(command.runId)?.status;
-        if (current && !legalRunTransition(current, command.patch.status))
+        if (current && command.expectedStatus && current !== command.expectedStatus)
+          throw new Error(`Run status precondition failed for ${command.runId}`);
+        const terminalRecovery =
+          command.allowTerminalRecovery === true &&
+          (current === "failed" || current === "cancelled") &&
+          command.patch.status === "running";
+        if (current && !legalRunTransition(current, command.patch.status) && !terminalRecovery)
           throw new Error(`Illegal run transition ${current} -> ${command.patch.status}`);
+      }
+      if (command.type === "set_run" && command.expectedStatus) {
+        const current = this.runs.get(command.runId)?.status;
+        if (current !== command.expectedStatus)
+          throw new Error(`Run status precondition failed for ${command.runId}`);
       }
       if (command.type === "set_attempt" && command.patch.status) {
         const current = this.attempts.get(command.attemptId)?.status;
@@ -69,6 +80,10 @@ export class InMemoryRuntimeStore implements RuntimeStore {
         if (!approval || (command.expectedDecision === "pending" && approval.decision))
           throw new Error(
             `Approval decision precondition failed for ${command.runId}/${command.nodeId}`,
+          );
+        if (command.attemptId && approval.attemptId !== command.attemptId)
+          throw new Error(
+            `Approval attempt precondition failed for ${command.runId}/${command.nodeId}`,
           );
         if (
           command.expectedAttemptStatus &&

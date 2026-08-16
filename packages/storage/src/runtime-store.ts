@@ -315,6 +315,7 @@ function runFromRow(row: Row): RuntimeRun {
     workflowId: row.workflow_id as string,
     workflowVersion: row.workflow_version as number,
     plan: (decode<JsonObject>(row.plan_json as string) ?? {}) as RuntimeRun["plan"],
+    executionPlanHash: row.plan_hash as string | undefined,
     inputs: (decode<JsonObject>(row.input_json as string) ?? {}) as JsonObject,
     status: row.status as RuntimeRun["status"],
     createdAt: row.created_at as string,
@@ -346,32 +347,133 @@ export class SqliteRuntimeStore implements RuntimeStore {
 
   async commit(commands: readonly RuntimeStoreCommand[]): Promise<void> {
     this.db.transaction(() => {
-      for (const command of commands) {
-        if (command.type === "set_run") {
-          const row = this.db
-            .query<Row, [string]>("SELECT * FROM runs WHERE id=?")
-            .get(command.runId);
-          if (!row) throw new Error(`Unknown run ${command.runId}`);
-          if (
-            command.patch.status &&
-            !legal(RUN_TRANSITIONS, row.status as string, command.patch.status)
-          )
-            throw new Error(`Illegal run transition ${row.status} -> ${command.patch.status}`);
-        }
-        if (command.type === "set_attempt") {
-          const row = this.db
-            .query<Row, [string]>("SELECT * FROM node_attempts WHERE id=?")
-            .get(command.attemptId);
-          if (!row) throw new Error(`Unknown attempt ${command.attemptId}`);
-          if (
-            command.patch.status &&
-            !legal(ATTEMPT_TRANSITIONS, row.status as string, command.patch.status)
-          )
-            throw new Error(`Illegal attempt transition ${row.status} -> ${command.patch.status}`);
-        }
-      }
+      this.validate(commands);
       for (const command of commands) this.apply(command);
     })();
+  }
+
+  private validate(commands: readonly RuntimeStoreCommand[]): void {
+    const createdRunIds = new Set(
+      commands
+        .filter(
+          (command): command is Extract<RuntimeStoreCommand, { type: "create_run" }> =>
+            command.type === "create_run",
+        )
+        .map((command) => command.run.runId),
+    );
+    for (const command of commands) {
+      if (command.type === "create_run") {
+        if (this.db.query("SELECT 1 FROM runs WHERE id=?").get(command.run.runId))
+          throw new Error(`Duplicate run ${command.run.runId}`);
+        continue;
+      }
+      if (command.type === "set_run") {
+        const row = this.db
+          .query<Row, [string]>("SELECT * FROM runs WHERE id=?")
+          .get(command.runId);
+        if (!row) throw new Error(`Unknown run ${command.runId}`);
+        const current = row.status as RunStatus;
+        if (command.expectedStatus && current !== command.expectedStatus)
+          throw new RuntimeStoreConflictError(
+            `Run ${command.runId} changed from ${command.expectedStatus} to ${current}`,
+          );
+        if (command.patch.status) {
+          const terminalRecovery =
+            command.allowTerminalRecovery === true &&
+            (current === "failed" || current === "cancelled") &&
+            command.patch.status === "running";
+          if (!legal(RUN_TRANSITIONS, current, command.patch.status) && !terminalRecovery)
+            throw new Error(`Illegal run transition ${current} -> ${command.patch.status}`);
+        }
+        continue;
+      }
+      if (command.type === "create_attempt") {
+        const attempt = command.attempt;
+        if (this.db.query("SELECT 1 FROM node_attempts WHERE id=?").get(attempt.attemptId))
+          throw new Error(`Duplicate attempt ${attempt.attemptId}`);
+        const run = this.db
+          .query<Row, [string]>("SELECT * FROM runs WHERE id=?")
+          .get(attempt.runId);
+        if (!run) throw new Error(`Unknown run ${attempt.runId}`);
+        if (command.expectedRunStatus && run.status !== command.expectedRunStatus)
+          throw new RuntimeStoreConflictError(
+            `Attempt run precondition failed for ${attempt.runId}: expected ${command.expectedRunStatus}, got ${String(run.status)}`,
+          );
+        continue;
+      }
+      if (command.type === "set_attempt") {
+        const row = this.db
+          .query<Row, [string]>("SELECT * FROM node_attempts WHERE id=?")
+          .get(command.attemptId);
+        if (!row) throw new Error(`Unknown attempt ${command.attemptId}`);
+        const current = row.status as AttemptStatus;
+        if (command.expectedStatus && current !== command.expectedStatus)
+          throw new RuntimeStoreConflictError(
+            `Attempt ${command.attemptId} changed from ${command.expectedStatus} to ${current}`,
+          );
+        const run = this.db
+          .query<Row, [string]>("SELECT * FROM runs WHERE id=?")
+          .get(row.run_id as string);
+        if (command.expectedRunStatus && (!run || run.status !== command.expectedRunStatus))
+          throw new RuntimeStoreConflictError(
+            `Attempt run precondition failed for ${command.attemptId}`,
+          );
+        if (command.patch.status && !legal(ATTEMPT_TRANSITIONS, current, command.patch.status))
+          throw new Error(`Illegal attempt transition ${current} -> ${command.patch.status}`);
+        continue;
+      }
+      if (command.type === "resolve_approval") {
+        const row = this.db
+          .query<Row, [string, string]>(
+            "SELECT * FROM approvals WHERE run_id=? AND node_id=? ORDER BY requested_at DESC LIMIT 1",
+          )
+          .get(command.runId, command.nodeId);
+        if (!row) throw new Error(`Unknown approval ${command.runId}/${command.nodeId}`);
+        if (command.expectedDecision === "pending" && row.status !== "pending")
+          throw new RuntimeStoreConflictError(
+            `Approval ${command.runId}/${command.nodeId} is already ${String(row.status)}`,
+          );
+        const run = this.db
+          .query<Row, [string]>("SELECT * FROM runs WHERE id=?")
+          .get(command.runId);
+        if (!run) throw new Error(`Unknown run ${command.runId}`);
+        if (command.expectedRunStatus && run.status !== command.expectedRunStatus)
+          throw new RuntimeStoreConflictError(
+            `Approval run precondition failed for ${command.runId}`,
+          );
+        const persistedAttemptId = row.attempt_id as string | undefined;
+        if (command.attemptId && command.attemptId !== persistedAttemptId)
+          throw new RuntimeStoreConflictError(
+            `Approval attempt precondition failed for ${command.runId}/${command.nodeId}`,
+          );
+        if (command.expectedAttemptStatus) {
+          const attemptId = command.attemptId ?? persistedAttemptId;
+          const attempt = attemptId
+            ? this.db.query<Row, [string]>("SELECT * FROM node_attempts WHERE id=?").get(attemptId)
+            : undefined;
+          if (!attempt || attempt.status !== command.expectedAttemptStatus)
+            throw new RuntimeStoreConflictError(
+              `Approval attempt precondition failed for ${command.runId}/${command.nodeId}`,
+            );
+        }
+        continue;
+      }
+      if (command.type === "append_event") {
+        if (
+          !createdRunIds.has(command.event.runId) &&
+          !this.db.query("SELECT 1 FROM runs WHERE id=?").get(command.event.runId)
+        )
+          throw new Error(`Unknown run ${command.event.runId}`);
+        // Validate metadata before any sibling command can be persisted.
+        const max =
+          this.db
+            .query<{ maxSequence: number | null }, [string]>(
+              "SELECT MAX(sequence) maxSequence FROM events WHERE run_id=?",
+            )
+            .get(command.event.runId)?.maxSequence ?? -1;
+        toTraceEvent(command.event, max + 1);
+      }
+    }
   }
 
   private apply(command: RuntimeStoreCommand): void {
@@ -390,7 +492,7 @@ export class SqliteRuntimeStore implements RuntimeStore {
             run.workflowVersion,
             run.status,
             encode(run.inputs),
-            null,
+            run.executionPlanHash ?? null,
             run.createdAt,
             run.createdAt,
             encode(run.plan),
@@ -407,10 +509,11 @@ export class SqliteRuntimeStore implements RuntimeStore {
         const current = runFromRow(row);
         const next = { ...current, ...command.patch };
         this.db.run(
-          "UPDATE runs SET status=?,input_json=?,created_at=?,updated_at=?,plan_json=?,runtime_json=? WHERE id=?",
+          "UPDATE runs SET status=?,input_json=?,plan_hash=?,created_at=?,updated_at=?,plan_json=?,runtime_json=? WHERE id=?",
           [
             next.status,
             encode(next.inputs),
+            next.executionPlanHash ?? null,
             next.createdAt,
             next.endedAt ?? new Date().toISOString(),
             encode(next.plan),
@@ -492,9 +595,27 @@ export class SqliteRuntimeStore implements RuntimeStore {
       }
       case "resolve_approval":
         {
+          const approval = this.db
+            .query<Row, [string, string]>(
+              "SELECT * FROM approvals WHERE run_id=? AND node_id=? ORDER BY requested_at DESC LIMIT 1",
+            )
+            .get(command.runId, command.nodeId);
+          if (!approval) throw new Error(`Unknown approval ${command.runId}/${command.nodeId}`);
+          if (command.attemptId && approval.attempt_id !== command.attemptId)
+            throw new RuntimeStoreConflictError(
+              `Approval attempt precondition failed for ${command.runId}/${command.nodeId}`,
+            );
           const result = this.db.run(
-            "UPDATE approvals SET status=?,resolved_at=?,resolved_by=? WHERE run_id=? AND node_id=? AND status='pending'",
-            [command.decision, new Date().toISOString(), "runtime", command.runId, command.nodeId],
+            "UPDATE approvals SET status=?,resolved_at=?,resolved_by=? WHERE run_id=? AND node_id=? AND status='pending' AND (? IS NULL OR attempt_id=?)",
+            [
+              command.decision,
+              new Date().toISOString(),
+              "runtime",
+              command.runId,
+              command.nodeId,
+              command.attemptId ?? null,
+              command.attemptId ?? null,
+            ],
           );
           if (result.changes === 0)
             throw new RuntimeStoreConflictError(
