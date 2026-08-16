@@ -3,6 +3,7 @@ import type { TraceEvent } from "@loopy/contracts";
 import { describe, expect, test } from "vitest";
 import { createEvidenceReferences, stableEvidenceId } from "../src/evidence.js";
 import { classifyFeature, inferCandidateVariables } from "../src/features.js";
+import { buildExtractionPrompt, normalizeExtractionInput } from "../src/prompt.js";
 import { segmentTrace, validateAndSortTraceEvents } from "../src/segmentation.js";
 
 function fixture(name: string): TraceEvent[] {
@@ -147,5 +148,65 @@ describe("deterministic extraction segmentation", () => {
           warning.code === "missing_event" && warning.referencedEventId === "missing-event",
       ),
     ).toBe(true);
+  });
+
+  test("uses terminal provider status and structured execution arguments for classifications", () => {
+    const events = fixture("phase3-segmentation-boundaries");
+    const result = segmentTrace(events);
+    expect(result.failures.map((failure) => failure.kind)).toEqual(["provider_failed"]);
+    expect(result.failures[0]?.eventIds).toEqual([events[5]?.id]);
+    expect(result.features.find((feature) => feature.eventId === events[2]?.id)?.class).toBe(
+      "side_effect",
+    );
+    expect(result.features.find((feature) => feature.eventId === events[3]?.id)?.class).toBe(
+      "environment_discovery",
+    );
+  });
+
+  test("pairs interleaved verification events by causal identity and warns on extra results", () => {
+    const events = fixture("phase3-segmentation-boundaries");
+    const result = segmentTrace(events);
+    expect(result.verification).toHaveLength(2);
+    expect(result.verification[0]?.eventIds).toEqual([events[6]?.id, events[9]?.id]);
+    expect(result.verification[0]?.result).toBe("failed");
+    expect(result.verification[1]?.eventIds).toEqual([events[7]?.id, events[8]?.id]);
+    expect(result.verification[1]?.result).toBe("passed");
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "duplicate_verification_result",
+          eventId: events[10]?.id,
+        }),
+        expect.objectContaining({
+          code: "unmatched_verification_result",
+          eventId: events[11]?.id,
+        }),
+      ]),
+    );
+  });
+
+  test("keeps raw prompt events in sequence order and labels projections as derived", () => {
+    const input = {
+      importId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      sourceEvents: [
+        { id: "ffffffff-ffff-4fff-8fff-ffffffffffff", sequence: 2, monotonicOffsetMs: 20 },
+        { id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", sequence: 1, monotonicOffsetMs: 10 },
+      ],
+      segments: [{ id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", eventIds: [] }],
+      features: [{ id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", eventIds: [] }],
+      evidence: [{ id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", eventIds: [] }],
+    };
+    const normalized = normalizeExtractionInput(input);
+    expect(normalized.sourceEvents?.map((event) => event.id)).toEqual([
+      "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+      "ffffffff-ffff-4fff-8fff-ffffffffffff",
+    ]);
+    expect(normalized.sourceEventIds).toEqual(normalized.sourceEvents?.map((event) => event.id));
+    const prompt = buildExtractionPrompt(input);
+    expect(prompt).toContain("RAW CANONICAL OBSERVED EVENTS");
+    expect(prompt).toContain("DETERMINISTIC DERIVED CLASSIFICATIONS (NOT RAW OBSERVATIONS)");
+    expect(prompt.indexOf("RAW CANONICAL OBSERVED EVENTS")).toBeLessThan(
+      prompt.indexOf("DETERMINISTIC DERIVED CLASSIFICATIONS"),
+    );
   });
 });

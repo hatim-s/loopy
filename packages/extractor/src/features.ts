@@ -57,6 +57,65 @@ function eventTool(event: TraceEvent): string | undefined {
   return textOf(payload.tool) || undefined;
 }
 
+function executionCommand(event: TraceEvent, tool: string | undefined): string | undefined {
+  if (
+    !tool ||
+    !/^(?:exec(?:_command| command)?|shell|bash|sh|zsh|terminal|run(?:_command| command)?|command|execute)$/i.test(
+      tool,
+    )
+  )
+    return undefined;
+  const input = payloadOf(event).input ?? payloadOf(event).args;
+  if (typeof input === "string") return input;
+  if (!input || typeof input !== "object") return undefined;
+  const commandKeys = /^(cmd|command|script|arguments?|args)$/i;
+  const values: string[] = [];
+  const collect = (value: unknown, key?: string): void => {
+    if (typeof value === "string") {
+      if (key && commandKeys.test(key)) values.push(value);
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) collect(item, key);
+      return;
+    }
+    if (value && typeof value === "object") {
+      for (const [childKey, child] of Object.entries(value)) collect(child, childKey);
+    }
+  };
+  collect(input);
+  return values.length > 0 ? values.join(" ") : undefined;
+}
+
+function commandClass(command: string): "environment_discovery" | "side_effect" | undefined {
+  const normalized = command.trim().toLowerCase();
+  if (!normalized) return undefined;
+  // These are bounded, high-signal mutations. An opaque execution tool is not
+  // itself a mutation; the structured command must provide the evidence.
+  if (
+    /\bgit\s+(?:push|commit|reset|checkout|switch|merge|rebase|cherry-pick|clean)\b/.test(
+      normalized,
+    ) ||
+    /(?:^|[;&|]\s*)(?:rm|rmdir|mv|cp|mkdir|touch|install|npm\s+install|pnpm\s+(?:add|install)|yarn\s+add|bun\s+add|terraform\s+apply|kubectl\s+apply)\b/.test(
+      normalized,
+    ) ||
+    /\b(?:sed|perl)\s+[^\n]*\s-i(?:\b|\s)/.test(normalized) ||
+    /(?:^|\s)(?:>|>>|tee)\s*/.test(normalized) ||
+    /\bcurl\b[^\n]*(?:-X\s*(?:post|put|patch|delete)|--request\s+(?:post|put|patch|delete))\b/.test(
+      normalized,
+    )
+  )
+    return "side_effect";
+  if (
+    /\b(?:pwd|which|where|stat|file|uname)\b/.test(normalized) ||
+    /\b(?:ls|find|head|tail|cat)\b/.test(normalized) ||
+    /\bgit\s+(?:status|branch|log|diff|show|rev-parse)\b/.test(normalized) ||
+    /\b(?:env|printenv|node|npm|bun|python)\s+--version\b/.test(normalized)
+  )
+    return "environment_discovery";
+  return undefined;
+}
+
 /** Classify visible, canonical events using only stable event fields and bounded lexical rules. */
 export function classifyFeature(event: TraceEvent): FeatureObservation {
   const tool = eventTool(event);
@@ -90,6 +149,24 @@ export function classifyFeature(event: TraceEvent): FeatureObservation {
         class: "side_effect",
         confidence: 0.86,
         rationale: `Tool '${tool}' may mutate state or contact an external system.`,
+        evidenceOnly: true,
+      };
+    const command = executionCommand(event, tool);
+    const commandClassification = command ? commandClass(command) : undefined;
+    if (command && commandClassification === "side_effect")
+      return {
+        eventId: event.id,
+        class: "side_effect",
+        confidence: 0.92,
+        rationale: `Execution tool '${tool}' carries a structured command with a state-changing operation: '${command}'.`,
+        evidenceOnly: true,
+      };
+    if (command && commandClassification === "environment_discovery")
+      return {
+        eventId: event.id,
+        class: "environment_discovery",
+        confidence: 0.9,
+        rationale: `Execution tool '${tool}' carries a structured read-only discovery command: '${command}'.`,
         evidenceOnly: true,
       };
     if (tool && DISCOVERY_TOOL.test(tool))

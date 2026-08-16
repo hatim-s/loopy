@@ -41,7 +41,9 @@ export interface ExtractionWarning {
     | "sequence_gap"
     | "invalid_causal_reference"
     | "degraded_capability"
-    | "lossy_event";
+    | "lossy_event"
+    | "unmatched_verification_result"
+    | "duplicate_verification_result";
   message: string;
   inputIndex?: number;
   eventId?: string;
@@ -407,16 +409,26 @@ const FAILURE_TYPES = new Map<string, FailureSegment["kind"]>([
   ["tool.denied", "tool_denied"],
   ["node.blocked", "node_blocked"],
   ["run.completed", "run_failed"],
-  ["provider.session_ended", "provider_failed"],
 ]);
 const RECOVERY_TYPES = new Set(["attempt.retrying", "runtime.recovery", "run.resumed"]);
+
+function failureKind(event: TraceEvent): FailureSegment["kind"] | undefined {
+  const direct = FAILURE_TYPES.get(event.type);
+  if (direct) return direct;
+  if (event.type !== "provider.session_ended") return undefined;
+  const status = stringField(event, "status");
+  if (status === "failed") return "provider_failed";
+  if (status === "cancelled") return "attempt_cancelled";
+  return undefined;
+}
+
 function buildFailures(events: readonly TraceEvent[]): {
   failures: FailureSegment[];
   recoveries: FailureSegment[];
 } {
   const failures: FailureSegment[] = [];
   for (const [index, event] of events.entries()) {
-    const kind = FAILURE_TYPES.get(event.type);
+    const kind = failureKind(event);
     const runFailed = event.type === "run.completed" && stringField(event, "status") === "failed";
     if (!kind || (event.type === "run.completed" && !runFailed)) continue;
     const recoveryEventIds = events
@@ -448,25 +460,57 @@ function buildFailures(events: readonly TraceEvent[]): {
   return { failures, recoveries };
 }
 
-function buildVerification(events: readonly TraceEvent[]): VerificationSegment[] {
-  const result: VerificationSegment[] = [];
-  let current: VerificationSegment | undefined;
+function verificationKey(event: TraceEvent): string {
+  return [
+    event.nodeId ?? "",
+    event.attemptId ?? "",
+    event.sessionId ?? "",
+    event.parentEventId ?? "",
+    stringField(event, "check") ?? "",
+  ].join("\0");
+}
+
+function buildVerification(events: readonly TraceEvent[]): {
+  segments: VerificationSegment[];
+  warnings: ExtractionWarning[];
+} {
+  const segments: VerificationSegment[] = [];
+  const open = new Map<string, VerificationSegment[]>();
+  const closed = new Set<string>();
+  const warnings: ExtractionWarning[] = [];
   for (const event of events) {
     if (event.type === "verification.started") {
-      current = {
+      const segment = {
         verificationId: stableId("verification", [event.id]),
         check: stringField(event, "check"),
         eventIds: [event.id],
       };
-      result.push(current);
-    } else if (event.type === "verification.result" && current) {
+      segments.push(segment);
+      const key = verificationKey(event);
+      open.set(key, [...(open.get(key) ?? []), segment]);
+    } else if (event.type === "verification.result") {
+      const key = verificationKey(event);
+      const pending = open.get(key);
+      const current = pending?.shift();
+      if (pending && pending.length === 0) open.delete(key);
+      if (!current) {
+        warnings.push({
+          code: closed.has(key) ? "duplicate_verification_result" : "unmatched_verification_result",
+          message: closed.has(key)
+            ? `Verification result '${event.id}' duplicates a result for check '${stringField(event, "check") ?? "unknown"}'.`
+            : `Verification result '${event.id}' has no matching verification start for check '${stringField(event, "check") ?? "unknown"}'.`,
+          eventId: event.id,
+        });
+        continue;
+      }
       current.eventIds.push(event.id);
       const status = stringField(event, "status");
       if (status === "passed" || status === "failed" || status === "skipped")
         current.result = status;
+      closed.add(key);
     }
   }
-  return result;
+  return { segments, warnings };
 }
 
 function capabilityWarnings(capabilities: CapabilityMetadata | undefined): ExtractionWarning[] {
@@ -504,10 +548,12 @@ export function segmentTrace(
     referencedEventId: warning.referencedEventId,
   }));
   const causalityWarnings = [...causalityResult.warnings, ...causalWarnings];
+  const verificationResult = buildVerification(normalized.events);
   const warnings = [
     ...normalized.warnings,
     ...capabilityWarnings(configured.capabilities),
     ...causalityWarnings,
+    ...verificationResult.warnings,
   ];
   for (const eventId of configured.lossiness?.redactedEventIds ?? [])
     warnings.push({
@@ -526,7 +572,7 @@ export function segmentTrace(
   const goalEpisodes = buildGoalEpisodes(normalized.events, causalityResult.groups);
   const toolClusters = buildToolClusters(normalized.events);
   const failuresResult = buildFailures(normalized.events);
-  const verification = buildVerification(normalized.events);
+  const verification = verificationResult.segments;
   const groups: Array<{ kind: EvidenceKind; eventIds: readonly string[]; summary?: string }> = [
     ...goalEpisodes.map((episode) => ({
       kind: "goal_episode" as const,
