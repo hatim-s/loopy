@@ -28,12 +28,15 @@ export type RunStatus =
   | "failed"
   | "cancelled";
 export type AttemptStatus =
+  | "pending"
   | "ready"
   | "running"
   | "blocked"
+  | "blocked_approval"
   | "succeeded"
   | "failed"
   | "cancelled"
+  | "skipped"
   | "interrupted";
 export type ApprovalStatus = "pending" | "approved" | "rejected";
 export type ExtractionJobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
@@ -153,11 +156,11 @@ const MIGRATIONS: readonly [number, string][] = [
 CREATE TABLE IF NOT EXISTS workflow_versions (workflow_id TEXT NOT NULL, version INTEGER NOT NULL CHECK(version > 0), definition_json TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(workflow_id, version));
 CREATE TABLE IF NOT EXISTS imported_sessions (id TEXT PRIMARY KEY, provider TEXT NOT NULL, source TEXT NOT NULL, session_json TEXT NOT NULL, imported_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS extraction_jobs (id TEXT PRIMARY KEY, import_id TEXT NOT NULL REFERENCES imported_sessions(id) ON DELETE CASCADE, status TEXT NOT NULL CHECK(status IN ('queued','running','succeeded','failed','cancelled')), input_json TEXT NOT NULL DEFAULT '{}', output_json TEXT, error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, workflow_id TEXT NOT NULL, workflow_version INTEGER NOT NULL, status TEXT NOT NULL CHECK(status IN ('created','running','pause_requested','paused','cancelling','blocked_approval','succeeded','failed','cancelled')), input_json TEXT NOT NULL DEFAULT '{}', plan_hash TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, FOREIGN KEY(workflow_id, workflow_version) REFERENCES workflow_versions(workflow_id, version));
+CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, workflow_id TEXT NOT NULL, workflow_version INTEGER NOT NULL, status TEXT NOT NULL CHECK(status IN ('created','running','pause_requested','paused','cancelling','blocked_approval','succeeded','failed','cancelled')), input_json TEXT NOT NULL DEFAULT '{}', plan_hash TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, plan_json TEXT NOT NULL DEFAULT '{}', runtime_json TEXT, FOREIGN KEY(workflow_id, workflow_version) REFERENCES workflow_versions(workflow_id, version));
 CREATE INDEX IF NOT EXISTS runs_status_idx ON runs(status, updated_at);
-CREATE TABLE IF NOT EXISTS node_attempts (id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE, node_id TEXT NOT NULL, attempt INTEGER NOT NULL CHECK(attempt > 0), status TEXT NOT NULL CHECK(status IN ('ready','running','blocked','succeeded','failed','cancelled','interrupted')), input_json TEXT, output_json TEXT, error TEXT, started_at TEXT, finished_at TEXT, updated_at TEXT NOT NULL, UNIQUE(run_id,node_id,attempt));
+CREATE TABLE IF NOT EXISTS node_attempts (id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE, node_id TEXT NOT NULL, attempt INTEGER NOT NULL CHECK(attempt > 0), status TEXT NOT NULL CHECK(status IN ('pending','ready','running','blocked','blocked_approval','succeeded','failed','cancelled','skipped','interrupted')), input_json TEXT, output_json TEXT, error TEXT, started_at TEXT, finished_at TEXT, updated_at TEXT NOT NULL, runtime_json TEXT, UNIQUE(run_id,node_id,attempt));
 CREATE INDEX IF NOT EXISTS attempts_recovery_idx ON node_attempts(status, updated_at);
-CREATE TABLE IF NOT EXISTS events (id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE, sequence INTEGER NOT NULL CHECK(sequence >= 0), type TEXT NOT NULL, payload_json TEXT NOT NULL, node_id TEXT, attempt_id TEXT REFERENCES node_attempts(id) ON DELETE SET NULL, provider TEXT, session_id TEXT, tool_call_id TEXT, occurred_at TEXT NOT NULL, monotonic_offset_ms REAL NOT NULL DEFAULT 0 CHECK(monotonic_offset_ms >= 0), UNIQUE(run_id,sequence));
+CREATE TABLE IF NOT EXISTS events (id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE, sequence INTEGER NOT NULL CHECK(sequence >= 0), type TEXT NOT NULL, payload_json TEXT NOT NULL, node_id TEXT, attempt_id TEXT REFERENCES node_attempts(id) ON DELETE SET NULL, provider TEXT, session_id TEXT, tool_call_id TEXT, occurred_at TEXT NOT NULL, monotonic_offset_ms REAL NOT NULL DEFAULT 0 CHECK(monotonic_offset_ms >= 0), trace_json TEXT, UNIQUE(run_id,sequence));
 CREATE INDEX IF NOT EXISTS events_run_sequence_idx ON events(run_id,sequence);
 CREATE TABLE IF NOT EXISTS approvals (id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE, node_id TEXT, approval_key TEXT NOT NULL, message TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected')), requested_at TEXT NOT NULL, resolved_at TEXT, resolved_by TEXT, UNIQUE(run_id,approval_key));
 CREATE TABLE IF NOT EXISTS artifacts (id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE, sha256 TEXT NOT NULL, media_type TEXT NOT NULL, size_bytes INTEGER NOT NULL CHECK(size_bytes >= 0), producer_node_id TEXT, source_path TEXT, redacted INTEGER NOT NULL DEFAULT 0 CHECK(redacted IN (0,1)), recorded_at TEXT NOT NULL, UNIQUE(run_id,sha256));

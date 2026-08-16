@@ -10,6 +10,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@loopy/contracts": "workspace:*"
+    "@loopy/contracts": "workspace:*",
+    "@loopy/runtime": "workspace:*",
+    "@loopy/tracing": "workspace:*"
   }
 }

@@ -298,10 +298,12 @@ function normalizePlan(
 export class RuntimeScheduler {
   private readonly options: RuntimeOptions;
   private readonly active = new Map<string, Set<string>>();
+  private readonly activeNodes = new Map<string, Map<string, string>>();
   private readonly controllers = new Map<string, AbortController>();
   private readonly pumping = new Set<string>();
   private readonly waiters = new Map<string, Array<() => void>>();
   private readonly sequences = new Map<string, number>();
+  private readonly retrying = new Map<string, Promise<AttemptRecord>>();
 
   constructor(options: RuntimeOptions) {
     this.options = options;
@@ -460,12 +462,35 @@ export class RuntimeScheduler {
     return (await this.options.store.getRun(runId)) as RunRecord;
   }
   async retry(runId: string, nodeId: string, inputs?: JsonObject): Promise<AttemptRecord> {
+    const key = `${runId}:${nodeId}`;
+    const inFlight = this.retrying.get(key);
+    if (inFlight) return inFlight;
+    const promise = this.retryInternal(runId, nodeId, inputs);
+    this.retrying.set(key, promise);
+    try {
+      return await promise;
+    } finally {
+      if (this.retrying.get(key) === promise) this.retrying.delete(key);
+    }
+  }
+  private async retryInternal(
+    runId: string,
+    nodeId: string,
+    inputs?: JsonObject,
+  ): Promise<AttemptRecord> {
     const run = await this.requireRun(runId);
     const previous = (await this.options.store.listAttempts(runId))
       .filter((item) => item.nodeId === nodeId)
       .sort((a, b) => b.attempt - a.attempt)[0];
     if (!previous || !["failed", "cancelled", "skipped"].includes(previous.status))
       throw new Error("Only a failed, cancelled, or skipped node can be retried");
+    // A completion callback and a scheduled pump can observe the same failed
+    // attempt concurrently. Reuse the already-created next attempt rather
+    // than issuing a second side-effecting create command.
+    const nextAttempt = (await this.options.store.listAttempts(runId)).find(
+      (item) => item.nodeId === nodeId && item.attempt === previous.attempt + 1,
+    );
+    if (nextAttempt) return nextAttempt;
     const attempt = this.makeAttempt(
       run,
       this.node(run.plan, nodeId),
@@ -594,6 +619,12 @@ export class RuntimeScheduler {
       }
       const commands: RuntimeStoreCommand[] = [];
       const launches: Array<{ node: RuntimeNode; attempt: AttemptRecord }> = [];
+      const activeNodeIds = new Set([
+        ...(this.activeNodes.get(runId)?.values() ?? []),
+        [...active]
+          .map((attemptId) => attempts.find((attempt) => attempt.attemptId === attemptId)?.nodeId)
+          .filter((nodeId): nodeId is string => nodeId !== undefined),
+      ]);
       const skips = this.skippableNodes(run, attempts);
       for (const node of skips) {
         const skipped = this.makeAttempt(run, node, 1, {}, "skipped");
@@ -612,6 +643,7 @@ export class RuntimeScheduler {
       const eligible = this.readyNodes(run, attempts);
       for (const node of eligible) {
         if (active.size >= maxParallel) break;
+        if (activeNodeIds.has(node.id)) continue;
         if (
           attempts.some(
             (item) =>
@@ -627,6 +659,12 @@ export class RuntimeScheduler {
           (item) => item.nodeId === node.id && item.status === "pending",
         );
         const attempt = pending ?? this.makeAttempt(run, node, 1, input, "ready");
+        // Reserve the node before awaiting event construction. Another pump
+        // may wake in that gap (approval resolution and retry both do this).
+        active.add(attempt.attemptId);
+        const nodeMap = this.activeNodes.get(runId) ?? new Map<string, string>();
+        nodeMap.set(attempt.attemptId, node.id);
+        this.activeNodes.set(runId, nodeMap);
         if (pending)
           commands.push({
             type: "set_attempt",
@@ -635,7 +673,6 @@ export class RuntimeScheduler {
           });
         else commands.push({ type: "create_attempt", attempt });
         commands.push(await this.event(runId, "node.ready", node.id, attempt.attemptId));
-        active.add(attempt.attemptId);
         launches.push({ node, attempt });
       }
       if (commands.length) await this.options.store.commit(commands);
@@ -786,6 +823,7 @@ export class RuntimeScheduler {
   }
   private async execute(run: RunRecord, node: RuntimeNode, attempt: AttemptRecord): Promise<void> {
     const active = this.active.get(run.runId) ?? new Set<string>();
+    const activeNodeMap = this.activeNodes.get(run.runId) ?? new Map<string, string>();
     const controller = new AbortController();
     this.controllers.set(attempt.attemptId, controller);
     await this.options.store.commit([
@@ -850,6 +888,7 @@ export class RuntimeScheduler {
           }),
         ]);
         active.delete(attempt.attemptId);
+        activeNodeMap.delete(attempt.attemptId);
         this.controllers.delete(attempt.attemptId);
         setTimeout(() => void this.pump(run.runId), 0);
         return;
@@ -896,6 +935,7 @@ export class RuntimeScheduler {
     }
     this.controllers.delete(attempt.attemptId);
     active.delete(attempt.attemptId);
+    activeNodeMap.delete(attempt.attemptId);
     const completion: Completion = {
       status: result.status,
       summary: result.summary ?? result.error ?? result.status,
