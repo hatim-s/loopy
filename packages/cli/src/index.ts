@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { createProviderRegistry, type ProviderRegistry } from "@loopy/providers";
+import { createDefaultProviderRegistry, type ProviderRegistry } from "@loopy/providers";
 import { doctorCommand } from "./doctor";
 
 export { doctorCommand, formatDoctor, runDoctor } from "./doctor";
@@ -50,7 +50,7 @@ export async function mainAsync(
   dependencies: CliDependencies = {},
 ): Promise<number> {
   if (args[0] === "doctor") {
-    return doctorCommand(dependencies.registry ?? createProviderRegistry(), {
+    return doctorCommand(dependencies.registry ?? createDefaultProviderRegistry(), {
       json: args.includes("--json"),
       log: (line) => console.log(line),
     });

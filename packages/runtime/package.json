@@ -11,6 +11,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@loopy/contracts": "workspace:*"
+    "@loopy/contracts": "workspace:*",
+    "@loopy/providers": "workspace:*"
   }
 }

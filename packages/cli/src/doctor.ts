@@ -1,7 +1,7 @@
 import {
   assertHonestCapabilityReport,
   type CapabilityReport,
-  createProviderRegistry,
+  createDefaultProviderRegistry,
   type ProviderAdapter,
   type ProviderProbe,
   type ProviderRegistry,
@@ -96,7 +96,7 @@ export function formatDoctor(result: DoctorResult, json = false): string {
 }
 
 export async function doctorCommand(
-  registry: ProviderRegistry = createProviderRegistry(),
+  registry: ProviderRegistry = createDefaultProviderRegistry(),
   options: { json?: boolean; log?: (line: string) => void } = {},
 ): Promise<number> {
   const result = await runDoctor(registry);
