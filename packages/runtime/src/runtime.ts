@@ -504,7 +504,7 @@ export class RuntimeScheduler {
     const attemptIds = new Set(this.active.get(runId) ?? []);
     for (const attemptId of attemptIds) {
       this.controllers.get(attemptId)?.abort(reason);
-      await this.options.provider.cancel?.(attemptId);
+      this.cancelProviderAttempt(attemptId);
     }
     const attempts = await this.options.store.listAttempts(runId);
     const commands: RuntimeStoreCommand[] = [];
@@ -796,6 +796,14 @@ export class RuntimeScheduler {
     this.waiters.delete(runId);
     for (const resolve of waiters) resolve();
   }
+  /** Provider cleanup is advisory and must never delay terminal cancellation. */
+  private cancelProviderAttempt(attemptId: string): void {
+    const cancel = this.options.provider.cancel;
+    if (!cancel) return;
+    void Promise.resolve()
+      .then(() => cancel.call(this.options.provider, attemptId))
+      .catch(() => undefined);
+  }
   private async finishRun(
     runId: string,
     status: "succeeded" | "failed" | "cancelled",
@@ -889,9 +897,7 @@ export class RuntimeScheduler {
           attempts.some(
             (item) =>
               item.nodeId === node.id &&
-              (item.status === "ready" ||
-                item.status === "running" ||
-                item.status === "blocked_approval"),
+              (item.status === "running" || item.status === "blocked_approval"),
           )
         )
           continue;

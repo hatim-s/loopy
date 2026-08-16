@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { RuntimeScheduler } from "../../runtime/src/index.js";
+import { RuntimeScheduler, type RuntimeStoreCommand } from "../../runtime/src/index.js";
 import { createTestIds, DeterministicFakeProvider } from "../../testing/src/index.js";
 import { encodeTraceJsonl, importTraceJsonl } from "../../tracing/src/index.js";
 import { SqliteRuntimeStore, Storage } from "../src/index.js";
@@ -24,6 +24,23 @@ function opened() {
   const store = new SqliteRuntimeStore(storage);
   const runtime = new RuntimeScheduler({ store, provider, id: ids });
   return { storage, provider, store, runtime };
+}
+
+class CrashAfterReadyStore extends SqliteRuntimeStore {
+  persistedReady = false;
+
+  override async commit(commands: readonly RuntimeStoreCommand[]): Promise<void> {
+    await super.commit(commands);
+    if (
+      !this.persistedReady &&
+      commands.some(
+        (command) => command.type === "create_attempt" && command.attempt.status === "ready",
+      )
+    ) {
+      this.persistedReady = true;
+      await new Promise<void>(() => {});
+    }
+  }
 }
 
 describe("SQLite Phase 1 runtime adapter", () => {
@@ -95,6 +112,38 @@ describe("SQLite Phase 1 runtime adapter", () => {
     x.storage.close();
     const reopened = new Storage({ projectDir: x.storage.projectDir });
     expect((await new SqliteRuntimeStore(reopened).getRun(runId))?.status).toBe("succeeded");
+    reopened.close();
+  });
+
+  test("reopens and executes a persisted ready attempt exactly once", async () => {
+    const storage = new Storage({ projectDir: project() });
+    const crashingStore = new CrashAfterReadyStore(storage);
+    const staleProvider = new DeterministicFakeProvider();
+    const staleRuntime = new RuntimeScheduler({
+      store: crashingStore,
+      provider: staleProvider,
+      id: ids,
+    });
+    const workflow = plan([agent("a")], []);
+    const started = await staleRuntime.start(workflow);
+    while (!crashingStore.persistedReady) await Bun.sleep(1);
+    expect(await crashingStore.listAttempts(started.runId)).toHaveLength(1);
+    expect((await crashingStore.listAttempts(started.runId))[0]?.status).toBe("ready");
+    expect(staleProvider.calls).toHaveLength(0);
+    storage.close();
+
+    const reopened = new Storage({ projectDir: storage.projectDir });
+    const provider = new DeterministicFakeProvider();
+    const store = new SqliteRuntimeStore(reopened);
+    const runtime = new RuntimeScheduler({ store, provider, id: ids });
+    expect((await runtime.recover())[0]?.status).toBe("paused");
+    await runtime.resume(started.runId);
+    const result = await runtime.wait(started.runId);
+    expect(result.run.status).toBe("succeeded");
+    expect(provider.calls).toHaveLength(1);
+    expect(result.attempts).toHaveLength(1);
+    expect(result.attempts[0]?.status).toBe("succeeded");
+    expect(result.events.filter((event) => event.type === "node.ready")).toHaveLength(1);
     reopened.close();
   });
 

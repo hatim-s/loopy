@@ -212,6 +212,57 @@ describe("phase 1 runtime", () => {
     );
   });
 
+  test("cancellation does not await a throwing provider cleanup hook", async () => {
+    const provider = new DeterministicFakeProvider();
+    provider.defer("a");
+    let cleanupCalls = 0;
+    provider.cancel = () => {
+      cleanupCalls += 1;
+      throw new Error("cleanup failed");
+    };
+    const x = scheduler(provider);
+    const started = await x.runtime.start(plan([agent("a")], []));
+    await Bun.sleep(10);
+    const active = provider.calls[0];
+    if (!active) throw new Error("expected active provider call");
+
+    const cancelled = await x.runtime.cancel(started.runId);
+    expect(cancelled.status).toBe("cancelled");
+    expect(cleanupCalls).toBe(1);
+    provider.release(active.attemptId, { status: "succeeded", outputs: { late: true } });
+    await Bun.sleep(5);
+    expect((await x.runtime.snapshot(started.runId)).run.status).toBe("cancelled");
+    expect((await x.runtime.snapshot(started.runId)).attempts[0]?.status).toBe("cancelled");
+  });
+
+  test("cancellation does not await a never-resolving provider cleanup hook", async () => {
+    const provider = new DeterministicFakeProvider();
+    provider.defer("a");
+    let cleanupCalls = 0;
+    provider.cancel = () => {
+      cleanupCalls += 1;
+      return new Promise<void>(() => {});
+    };
+    const x = scheduler(provider);
+    const started = await x.runtime.start(plan([agent("a")], []));
+    await Bun.sleep(10);
+    const active = provider.calls[0];
+    if (!active) throw new Error("expected active provider call");
+
+    const cancelled = await Promise.race([
+      x.runtime.cancel(started.runId),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("cancellation timed out")), 100),
+      ),
+    ]);
+    expect(cancelled.status).toBe("cancelled");
+    expect(cleanupCalls).toBe(1);
+    provider.release(active.attemptId, { status: "succeeded", outputs: { late: true } });
+    await Bun.sleep(5);
+    expect((await x.runtime.snapshot(started.runId)).run.status).toBe("cancelled");
+    expect((await x.runtime.snapshot(started.runId)).attempts[0]?.status).toBe("cancelled");
+  });
+
   test("an impossible all join fails instead of succeeding", async () => {
     const x = scheduler();
     x.provider.fail("a", "branch failed");
