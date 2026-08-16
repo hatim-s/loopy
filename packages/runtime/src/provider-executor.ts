@@ -285,6 +285,18 @@ function validatePolicy(policy: ProviderPolicy | undefined): string | undefined 
 /** Bridges the provider-neutral runtime contract to registered local CLI adapters. */
 export function createProviderExecutor(options: ProviderExecutorOptions): ProviderExecutor {
   const active = new Map<string, { cancel(): Promise<void> }>();
+  // A run can have several attempts in flight at once. Keep the allocator at
+  // executor scope so every attempt draws from the same run-level sequence.
+  // Map updates are synchronous, so interleaved async event streams cannot
+  // receive the same sequence number.
+  const nextSequenceByRun = new Map<string, number>();
+
+  const nextSequence = (runId: string): number => {
+    const sequence = nextSequenceByRun.get(runId) ?? 0;
+    nextSequenceByRun.set(runId, sequence + 1);
+    return sequence;
+  };
+
   return {
     async execute(context) {
       const providerId = providerFor(context.node);
@@ -323,9 +335,13 @@ export function createProviderExecutor(options: ProviderExecutorOptions): Provid
       active.set(context.attemptId, run);
       const events: TraceEvent[] = [];
       try {
-        let sequence = 0;
         for await (const event of run.events) {
-          const trace = canonicalProviderEvent(event, context, providerId, sequence++);
+          const trace = canonicalProviderEvent(
+            event,
+            context,
+            providerId,
+            nextSequence(context.runId),
+          );
           events.push(trace);
           await options.onEvent?.(trace);
         }

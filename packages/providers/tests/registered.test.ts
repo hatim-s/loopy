@@ -10,20 +10,23 @@ describe("registered providers", () => {
     ).toEqual(["codex", "claude", "opencode", "pi"]);
   });
 
-  test("read-only live probes record installed Codex/Pi versions and do not fake absent CLIs", async () => {
-    const result = await Promise.all(
-      createDefaultProviderRegistry()
-        .all()
-        .map((adapter) => adapter.probe()),
-    );
-    const byId = new Map(result.map((probe) => [probe.provider, probe]));
-    expect(byId.get("codex")?.available).toBe(true);
-    expect(byId.get("codex")?.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(byId.get("pi")?.available).toBe(true);
-    expect(byId.get("pi")?.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(byId.get("claude")?.available).toBe(false);
-    expect(byId.get("opencode")?.available).toBe(false);
-    expect(byId.get("claude")?.version).toBeUndefined();
-    expect(byId.get("opencode")?.version).toBeUndefined();
-  });
+  test.skipIf(process.env.LOOPY_LIVE_PROVIDER_PROBES !== "1")(
+    "opt-in live probes record the machine's installed provider versions",
+    async () => {
+      const result = await Promise.all(
+        createDefaultProviderRegistry()
+          .all()
+          .map((adapter) => adapter.probe()),
+      );
+      const byId = new Map(result.map((probe) => [probe.provider, probe]));
+      expect(byId.get("codex")?.available).toBe(true);
+      expect(byId.get("codex")?.version).toMatch(/^\d+\.\d+\.\d+$/);
+      expect(byId.get("pi")?.available).toBe(true);
+      expect(byId.get("pi")?.version).toMatch(/^\d+\.\d+\.\d+$/);
+      expect(byId.get("claude")?.available).toBe(false);
+      expect(byId.get("opencode")?.available).toBe(false);
+      expect(byId.get("claude")?.version).toBeUndefined();
+      expect(byId.get("opencode")?.version).toBeUndefined();
+    },
+  );
 });

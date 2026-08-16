@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { TraceEventSchema } from "@loopy/contracts";
+import { type TraceEvent, TraceEventSchema } from "@loopy/contracts";
 import {
   createProviderRegistry,
   type ProviderAdapter,
@@ -51,6 +51,70 @@ function adapter(
 const session: ProviderSession = { provider: "codex", sessionId: "session-1" };
 
 describe("provider executor", () => {
+  test("allocates unique monotonic sequences across sequential and parallel attempts", async () => {
+    const stored: TraceEvent[] = [];
+    let parallelAttemptsStarted = 0;
+    let releaseParallelAttempts!: () => void;
+    const bothParallelAttemptsStarted = new Promise<void>((resolve) => {
+      releaseParallelAttempts = resolve;
+    });
+    const executor = createProviderExecutor({
+      registry: createProviderRegistry([
+        adapter(async (request) => ({
+          session: Promise.resolve({
+            provider: "codex",
+            sessionId: `session-${request.attemptId}`,
+          }),
+          events: (async function* () {
+            if (request.attemptId.startsWith("attempt-parallel")) {
+              parallelAttemptsStarted += 1;
+              if (parallelAttemptsStarted === 2) releaseParallelAttempts();
+              await bothParallelAttemptsStarted;
+            }
+            yield {
+              type: "session_started",
+              provider: "fake",
+              occurredAt: "2026-01-01T00:00:00.000Z",
+              provenance: { sessionId: `session-${request.attemptId}` },
+              payload: {},
+            };
+            yield {
+              type: "message",
+              provider: "fake",
+              occurredAt: "2026-01-01T00:00:01.000Z",
+              provenance: { sessionId: `session-${request.attemptId}` },
+              payload: { role: "assistant", content: request.attemptId },
+            };
+            yield {
+              type: "session_ended",
+              provider: "fake",
+              occurredAt: "2026-01-01T00:00:02.000Z",
+              provenance: { sessionId: `session-${request.attemptId}` },
+              payload: { status: "succeeded" },
+            };
+          })() as ProviderRun["events"],
+          cancel: async () => {},
+        })),
+      ]),
+      onEvent: (event) => {
+        stored.push(event);
+      },
+    });
+
+    await executor.execute(context({ attemptId: "attempt-sequential-1" }));
+    await executor.execute(context({ attemptId: "attempt-sequential-2" }));
+    await Promise.all([
+      executor.execute(context({ attemptId: "attempt-parallel-1", nodeId: "agent-1" })),
+      executor.execute(context({ attemptId: "attempt-parallel-2", nodeId: "agent-2" })),
+    ]);
+
+    expect(stored.map((event) => event.sequence)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    expect(new Set(stored.map((event) => event.sequence)).size).toBe(stored.length);
+    expect(new Set(stored.map((event) => event.attemptId)).size).toBe(4);
+    expect(stored.every((event) => event.runId === stored[0]?.runId)).toBe(true);
+    expect(new Set(stored.map((event) => event.nodeId)).size).toBe(2);
+  });
+
   test("persists canonical TraceEvent envelopes and preserves provider attribution", async () => {
     const events = [
       {
