@@ -38,7 +38,8 @@ describe("workflow graph validation", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.plan.workflowId).toBe(workflow.id);
-      expect(result.plan.topologicalOrder).toHaveLength(workflow.nodes.length);
+      expect(result.plan.schemaVersion).toBe(workflow.schemaVersion);
+      expect(result.plan.topology.topologicalOrder).toHaveLength(workflow.nodes.length);
     }
   });
 
@@ -141,8 +142,8 @@ describe("workflow graph validation", () => {
     const workflow = {
       nodes: [{ id: "route", kind: "route" }, verify("done-a"), verify("done-b")],
       edges: [
-        { id: "a", source: "route", target: "done-a", route: "same" },
-        { id: "b", source: "route", target: "done-b", route: "same" },
+        { id: "a", source: "route", target: "done-a", label: "same" },
+        { id: "b", source: "route", target: "done-b", label: "same" },
       ],
     };
     expect(codes(workflow)).toContain("ROUTE_LABEL_DUPLICATE");
@@ -170,7 +171,7 @@ describe("workflow graph validation", () => {
   test("checks optional route declarations against outgoing labels", () => {
     const workflow = {
       nodes: [{ id: "route", kind: "route", routes: ["success", "failure"] }, verify("done")],
-      edges: [{ id: "e", source: "route", target: "done", route: "success" }],
+      edges: [{ id: "e", source: "route", target: "done", label: "success" }],
     };
     expect(codes(workflow)).toContain("ROUTE_OUTGOING_INCONSISTENT");
   });

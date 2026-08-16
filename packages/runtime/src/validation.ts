@@ -1,5 +1,6 @@
 import type {
   ExecutionPlan as ContractExecutionPlan,
+  ExecutionTopology as ContractExecutionTopology,
   WorkflowDefinition as ContractWorkflowDefinition,
   WorkflowEdge as ContractWorkflowEdge,
   WorkflowNode as ContractWorkflowNode,
@@ -10,7 +11,7 @@ import { WorkflowDefinitionSchema } from "@loopy/contracts";
 export type WorkflowDefinition = ContractWorkflowDefinition;
 export type WorkflowNode = ContractWorkflowNode;
 export type WorkflowEdge = ContractWorkflowEdge;
-/** The persisted execution-plan contract is completed in a later phase. */
+/** A fully materialized, provider-bound plan persisted by a later runtime phase. */
 export type ExecutionPlan = ContractExecutionPlan;
 
 type RawRecord = Record<string, unknown>;
@@ -93,15 +94,20 @@ export type NormalizedWorkflowGraph = {
   topologicalOrder: string[];
 };
 
+/**
+ * Phase 0's graph-only preparation result. It deliberately carries the
+ * persisted contract's identity/version/topology vocabulary, while leaving
+ * plan hashing, provider installations, bindings, policies, and warnings to
+ * the phase that materializes an ExecutionPlan.
+ */
 export type NormalizedExecutionPlan = {
   kind: "normalized-execution-plan";
-  workflowId?: string;
-  workflowVersion?: unknown;
+  schemaVersion: ContractExecutionPlan["schemaVersion"];
+  workflowId: ContractExecutionPlan["workflowId"];
+  workflowVersion: ContractExecutionPlan["workflowVersion"];
   nodes: NormalizedWorkflowNode[];
   edges: NormalizedWorkflowEdge[];
-  startNodeIds: string[];
-  terminalNodeIds: string[];
-  topologicalOrder: string[];
+  topology: ContractExecutionTopology;
 };
 
 export type CompilationResult =
@@ -735,13 +741,16 @@ export function prepareExecutionPlan(workflow: unknown): CompilationResult {
     diagnostics,
     plan: {
       kind: "normalized-execution-plan",
+      schemaVersion: definition.schemaVersion,
       workflowId: definition.id,
       workflowVersion: definition.workflowVersion,
       nodes: result.graph.nodes,
       edges: result.graph.edges,
-      startNodeIds: result.graph.startNodeIds,
-      terminalNodeIds: result.graph.terminalNodeIds,
-      topologicalOrder: result.graph.topologicalOrder,
+      topology: {
+        startNodeIds: result.graph.startNodeIds,
+        terminalNodeIds: result.graph.terminalNodeIds,
+        topologicalOrder: result.graph.topologicalOrder,
+      },
     },
   };
 }
