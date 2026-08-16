@@ -198,6 +198,9 @@ describe("Claude adapter", () => {
     expect(
       events.some((event) => event.kind === "result" && event.result?.status === "succeeded"),
     ).toBe(true);
+    expect(events.some((event) => event.kind === "usage" && event.usage?.costUsd === 0.01)).toBe(
+      true,
+    );
     expect(
       events
         .filter((event) => event.kind === "diagnostic")

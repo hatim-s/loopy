@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { parseCliVersion, runJsonlSubprocess, runSubprocess, SubprocessError } from "../src";
+import {
+  parseCliVersion,
+  runJsonlSubprocess,
+  runSubprocess,
+  SubprocessError,
+  startJsonlSubprocess,
+} from "../src";
 
 const cwd = process.cwd();
 const bun = process.execPath;
@@ -55,5 +61,30 @@ describe("provider subprocess core", () => {
       (value) => value,
     );
     expect(error).toBeInstanceOf(SubprocessError);
+  });
+
+  it("starts JSONL streaming before the child exits and cancels it", async () => {
+    const live = startJsonlSubprocess({
+      argv: [bun, "-e", 'console.log("first"); setTimeout(() => console.log("late"), 10000)'],
+      cwd,
+      gracefulTerminationMs: 50,
+    });
+    const iterator = live.lines[Symbol.asyncIterator]();
+    await expect(iterator.next()).resolves.toEqual({ value: "first", done: false });
+    await live.cancel();
+    await expect(live.done).resolves.toMatchObject({ aborted: true });
+  });
+
+  it("terminates immediately when a JSONL line limit is crossed", async () => {
+    const started = Date.now();
+    await expect(
+      runJsonlSubprocess({
+        argv: [bun, "-e", 'for (let i=0;i<1000;i++) console.log("x")'],
+        cwd,
+        maxLines: 2,
+        gracefulTerminationMs: 20,
+      }),
+    ).rejects.toMatchObject({ name: "SubprocessError", result: { limitExceeded: "lines" } });
+    expect(Date.now() - started).toBeLessThan(2_000);
   });
 });

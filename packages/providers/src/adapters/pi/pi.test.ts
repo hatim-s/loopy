@@ -101,11 +101,20 @@ describe("Pi adapter", () => {
     );
     expect(imported.schemaVersion).toBe("pi.session.v3");
     expect(imported.sessionFileVersion).toBe(3);
-    const future = await importPiSession(
-      '{"type":"session","version":99,"id":"pi-future"}',
-      context,
-    );
+    expect(imported.provenance).toMatchObject({ format: "pi.session.v3", version: 3 });
+    const future = await importPiSession('{"type":"session","version":99,"id":"pi-future"}', {
+      ...context,
+      source: "fixture/pi-v99.jsonl",
+      providerVersion: "0.80.6",
+    });
     expect(future.diagnostics[0]?.code).toBe("unsupported_version");
+    expect(future.events).toHaveLength(0);
+    expect(future.provenance).toEqual({
+      source: "fixture/pi-v99.jsonl",
+      format: "pi.session.v3",
+      version: 99,
+      providerVersion: "0.80.6",
+    });
   });
 
   test("degrades cleanly when Pi is unavailable", async () => {

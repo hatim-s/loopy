@@ -84,7 +84,16 @@ function jsonValue(value: unknown): JsonValue | undefined {
   return result;
 }
 function sessionId(event: Record<string, unknown>, fallback?: string): string | undefined {
-  for (const key of ["session_id", "sessionId", "conversation_id", "conversationId"])
+  for (const key of [
+    "session_id",
+    "sessionId",
+    "conversation_id",
+    "conversationId",
+    "agent_id",
+    "agentId",
+    "subagent_id",
+    "subagentId",
+  ])
     if (typeof event[key] === "string" && event[key]) return event[key] as string;
   return fallback;
 }
@@ -284,7 +293,9 @@ export function normalizeClaudeEvent(
     ];
   }
   if (type === "result") {
-    const usageValue = usage(event.usage);
+    // Claude places total_cost_usd on the result envelope rather than under
+    // result.usage in stream-json. Preserve that top-level accounting value.
+    const usageValue = usage(event.usage ?? event);
     const failed =
       event.is_error === true || event.subtype === "error" || event.subtype === "failure";
     const output: ClaudeEvent = {
@@ -305,10 +316,10 @@ export function normalizeClaudeEvent(
     const content = visibleText(event.text ?? message?.content ?? event.content);
     return [
       {
-        kind: "subagent",
+        kind: /(?:end|complete|stop|exit)/i.test(type) ? "subagent_ended" : "subagent_started",
         type: "provider.subagent",
         ...common,
-        ...(parent ? { parentId: parent } : {}),
+        ...(sid ? { parentId: sid } : {}),
         ...(content !== undefined ? { text: content } : {}),
       },
     ];

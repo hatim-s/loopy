@@ -25,7 +25,8 @@ export type ProviderEventKind =
   | "usage"
   | "result"
   | "session"
-  | "subagent"
+  | "subagent_started"
+  | "subagent_ended"
   | "diagnostic";
 
 /** Provider events intentionally contain visible content only; reasoning fields are never copied. */

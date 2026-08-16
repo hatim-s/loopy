@@ -24,6 +24,7 @@ export type SubprocessResult = {
   timedOut: boolean;
   truncated: { stdout: boolean; stderr: boolean };
   durationMs: number;
+  limitExceeded?: "stdout" | "stderr" | "line" | "lines";
   diagnostic?: string;
 };
 
@@ -35,6 +36,14 @@ export type JsonlSubprocessOptions = SubprocessOptions & {
 export type JsonlSubprocessResult<T = unknown> = SubprocessResult & {
   records: T[];
   malformedLines: Array<{ line: number; message: string }>;
+};
+
+export type LiveJsonlSubprocess = {
+  /** Lines are yielded as soon as a newline is received from stdout. */
+  lines: AsyncIterable<string>;
+  /** Resolves once the child has exited and all stream data has been drained. */
+  done: Promise<JsonlSubprocessResult<never>>;
+  cancel(): Promise<void>;
 };
 
 export class SubprocessError extends Error {
@@ -100,6 +109,62 @@ function appendBounded(
   }
 }
 
+type Queue<T> = {
+  push(value: T): void;
+  close(): void;
+  fail(error: unknown): void;
+  iterable: AsyncIterable<T>;
+};
+
+function queue<T>(): Queue<T> {
+  const values: T[] = [];
+  const waiters: Array<{
+    resolve: (result: IteratorResult<T>) => void;
+    reject: (error: unknown) => void;
+  }> = [];
+  let closed = false;
+  let failure: unknown;
+  const push = (value: T) => {
+    if (closed) return;
+    const waiter = waiters.shift();
+    if (waiter) waiter.resolve({ value, done: false });
+    else values.push(value);
+  };
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    while (waiters.length) {
+      const waiter = waiters.shift();
+      if (failure !== undefined) waiter?.reject(failure);
+      else waiter?.resolve({ value: undefined as never, done: true });
+    }
+  };
+  const fail = (error: unknown) => {
+    failure = error;
+    close();
+  };
+  return {
+    push,
+    close,
+    fail,
+    iterable: {
+      [Symbol.asyncIterator]() {
+        return {
+          next(): Promise<IteratorResult<T>> {
+            if (values.length) return Promise.resolve({ value: values.shift() as T, done: false });
+            if (closed) {
+              return failure !== undefined
+                ? Promise.reject(failure)
+                : Promise.resolve({ value: undefined as never, done: true });
+            }
+            return new Promise((resolve, reject) => waiters.push({ resolve, reject }));
+          },
+        };
+      },
+    },
+  };
+}
+
 function terminate(child: ChildProcess, gracefulMs: number): Promise<void> {
   return new Promise((resolve) => {
     if (child.exitCode !== null || child.signalCode !== null) {
@@ -151,25 +216,9 @@ export async function runSubprocess(options: SubprocessOptions): Promise<Subproc
   const stderrChunks: string[] = [];
   const stdoutState = { bytes: 0, truncated: false };
   const stderrState = { bytes: 0, truncated: false };
-  child.stdout?.on("data", (chunk: Buffer | string) =>
-    appendBounded(
-      stdoutChunks,
-      stdoutState,
-      Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk),
-      maxStdoutBytes,
-    ),
-  );
-  child.stderr?.on("data", (chunk: Buffer | string) =>
-    appendBounded(
-      stderrChunks,
-      stderrState,
-      Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk),
-      maxStderrBytes,
-    ),
-  );
-
   let aborted = false;
   let timedOut = false;
+  let limitExceeded: SubprocessResult["limitExceeded"];
   let termination: Promise<void> | undefined;
   const abort = (timeout = false) => {
     aborted = true;
@@ -177,6 +226,24 @@ export async function runSubprocess(options: SubprocessOptions): Promise<Subproc
     termination ??= terminate(child, gracefulMs);
   };
   const onAbort = () => abort();
+  const onLimit = (which: NonNullable<SubprocessResult["limitExceeded"]>) => {
+    limitExceeded ??= which;
+    stdoutState.truncated ||= which === "stdout";
+    stderrState.truncated ||= which === "stderr";
+    termination ??= terminate(child, gracefulMs);
+  };
+  child.stdout?.on("data", (chunk: Buffer | string) => {
+    const value = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    const before = stdoutState.bytes;
+    appendBounded(stdoutChunks, stdoutState, value, maxStdoutBytes);
+    if (stdoutState.truncated && before < maxStdoutBytes) onLimit("stdout");
+  });
+  child.stderr?.on("data", (chunk: Buffer | string) => {
+    const value = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    const before = stderrState.bytes;
+    appendBounded(stderrChunks, stderrState, value, maxStderrBytes);
+    if (stderrState.truncated && before < maxStderrBytes) onLimit("stderr");
+  });
   let timeout: ReturnType<typeof setTimeout> | undefined;
   if (options.timeoutMs !== undefined) timeout = setTimeout(() => abort(true), options.timeoutMs);
   if (options.signal?.aborted) abort();
@@ -203,40 +270,195 @@ export async function runSubprocess(options: SubprocessOptions): Promise<Subproc
     timedOut,
     truncated: { stdout: stdoutState.truncated, stderr: stderrState.truncated },
     durationMs: Date.now() - started,
+    ...(limitExceeded ? { limitExceeded } : {}),
     diagnostic: aborted
       ? timedOut
         ? "Subprocess timed out and was terminated."
         : "Subprocess was cancelled and terminated."
-      : exit.code !== 0
-        ? `Subprocess exited with ${exit.signal ? `signal ${exit.signal}` : `code ${String(exit.code)}`}.`
-        : undefined,
+      : limitExceeded
+        ? `Subprocess ${limitExceeded} limit was exceeded and the process was terminated.`
+        : exit.code !== 0
+          ? `Subprocess exited with ${exit.signal ? `signal ${exit.signal}` : `code ${String(exit.code)}`}.`
+          : undefined,
   };
   if (stdoutState.truncated || stderrState.truncated)
     throw new SubprocessError("Subprocess output exceeded configured limits.", result);
   return result;
 }
 
+/**
+ * Start a JSONL subprocess without waiting for its first or final record.
+ * The returned handle is deliberately synchronous so ProviderAdapter.start can
+ * hand the caller a live stream immediately.
+ */
+export function startJsonlSubprocess(options: JsonlSubprocessOptions): LiveJsonlSubprocess {
+  if (!options.argv[0]) throw new SubprocessError("Subprocess argv must not be empty.");
+  if (!options.cwd?.trim()) throw new SubprocessError("Subprocess cwd is required.");
+  const maxStdoutBytes = options.maxStdoutBytes ?? DEFAULT_OUTPUT_BYTES;
+  const maxStderrBytes = options.maxStderrBytes ?? DEFAULT_OUTPUT_BYTES;
+  const maxLineBytes = options.maxLineBytes ?? DEFAULT_LINE_BYTES;
+  const maxLines = options.maxLines ?? DEFAULT_LINES;
+  const gracefulMs = options.gracefulTerminationMs ?? DEFAULT_GRACE_MS;
+  const started = Date.now();
+  let child: ChildProcess;
+  try {
+    child = spawn(options.argv[0], options.argv.slice(1), {
+      cwd: options.cwd,
+      env: environment(options.envAllowlist, options.env),
+      shell: false,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  } catch (error) {
+    throw new SubprocessError(`Unable to start '${options.argv[0]}': ${String(error)}`);
+  }
+  const lines = queue<string>();
+  const stdoutChunks: string[] = [];
+  const stderrChunks: string[] = [];
+  const stdoutState = { bytes: 0, truncated: false };
+  const stderrState = { bytes: 0, truncated: false };
+  let lineBuffer = "";
+  let lineCount = 0;
+  let aborted = false;
+  let timedOut = false;
+  let limitExceeded: SubprocessResult["limitExceeded"];
+  let termination: Promise<void> | undefined;
+  const terminateFor = (reason: NonNullable<SubprocessResult["limitExceeded"]>) => {
+    limitExceeded ??= reason;
+    if (reason === "stdout") stdoutState.truncated = true;
+    if (reason === "stderr") stderrState.truncated = true;
+    termination ??= terminate(child, gracefulMs);
+  };
+  const emitLines = (chunk: Buffer | string) => {
+    const value = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    const before = stdoutState.bytes;
+    appendBounded(stdoutChunks, stdoutState, value, maxStdoutBytes);
+    if (stdoutState.truncated && before < maxStdoutBytes) {
+      terminateFor("stdout");
+      return;
+    }
+    lineBuffer += value.toString("utf8");
+    while (true) {
+      const newline = lineBuffer.search(/\r?\n/);
+      if (newline < 0) {
+        if (Buffer.byteLength(lineBuffer, "utf8") > maxLineBytes) terminateFor("line");
+        return;
+      }
+      const line = lineBuffer.slice(0, newline);
+      lineBuffer = lineBuffer.slice(lineBuffer[newline] === "\r" ? newline + 2 : newline + 1);
+      lineCount += 1;
+      if (lineCount > maxLines) {
+        terminateFor("lines");
+        return;
+      }
+      if (Buffer.byteLength(line, "utf8") > maxLineBytes) {
+        terminateFor("line");
+        return;
+      }
+      lines.push(line);
+    }
+  };
+  child.stdout?.on("data", emitLines);
+  child.stderr?.on("data", (chunk: Buffer | string) => {
+    const value = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    const before = stderrState.bytes;
+    appendBounded(stderrChunks, stderrState, value, maxStderrBytes);
+    if (stderrState.truncated && before < maxStderrBytes) terminateFor("stderr");
+  });
+  const abort = (timeout = false) => {
+    aborted = true;
+    timedOut ||= timeout;
+    termination ??= terminate(child, gracefulMs);
+  };
+  const onAbort = () => abort();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  if (options.timeoutMs !== undefined) timeout = setTimeout(() => abort(true), options.timeoutMs);
+  if (options.signal?.aborted) abort();
+  else options.signal?.addEventListener("abort", onAbort, { once: true });
+  const done = new Promise<JsonlSubprocessResult<never>>((resolve) => {
+    child.once("error", (error) => {
+      lines.fail(error);
+      if (timeout) clearTimeout(timeout);
+      options.signal?.removeEventListener("abort", onAbort);
+      resolve({
+        argv: options.argv.map(redact) as unknown as readonly [string, ...string[]],
+        stdout: redact(stdoutChunks.join("")),
+        stderr: redact(stderrChunks.join("")),
+        exitCode: null,
+        signal: null,
+        aborted: false,
+        timedOut: false,
+        truncated: { stdout: stdoutState.truncated, stderr: stderrState.truncated },
+        durationMs: Date.now() - started,
+        records: [],
+        malformedLines: [],
+        diagnostic: `Subprocess '${options.argv[0]}' failed: ${String(error)}`,
+      });
+    });
+    child.once("exit", async (code, signal) => {
+      if (lineBuffer && !limitExceeded) {
+        lineCount += 1;
+        if (lineCount > maxLines) terminateFor("lines");
+        else if (Buffer.byteLength(lineBuffer, "utf8") > maxLineBytes) terminateFor("line");
+        else lines.push(lineBuffer);
+      }
+      lines.close();
+      if (termination) await termination;
+      if (timeout) clearTimeout(timeout);
+      options.signal?.removeEventListener("abort", onAbort);
+      const result: JsonlSubprocessResult<never> = {
+        argv: options.argv.map(redact) as unknown as readonly [string, ...string[]],
+        stdout: redact(stdoutChunks.join("")),
+        stderr: redact(stderrChunks.join("")),
+        exitCode: code,
+        signal,
+        aborted,
+        timedOut,
+        truncated: { stdout: stdoutState.truncated, stderr: stderrState.truncated },
+        durationMs: Date.now() - started,
+        records: [],
+        malformedLines: [],
+        ...(limitExceeded ? { limitExceeded } : {}),
+        diagnostic: aborted
+          ? timedOut
+            ? "Subprocess timed out and was terminated."
+            : "Subprocess was cancelled and terminated."
+          : limitExceeded
+            ? `Subprocess ${limitExceeded} limit was exceeded and the process was terminated.`
+            : code !== 0
+              ? `Subprocess exited with ${signal ? `signal ${signal}` : `code ${String(code)}`}.`
+              : undefined,
+      };
+      resolve(result);
+    });
+  });
+  return { lines: lines.iterable, done, cancel: async () => abort() };
+}
+
 export async function runJsonlSubprocess<T = unknown>(
   options: JsonlSubprocessOptions,
 ): Promise<JsonlSubprocessResult<T>> {
-  const result = await runSubprocess(options);
-  const maxLineBytes = options.maxLineBytes ?? DEFAULT_LINE_BYTES;
-  const maxLines = options.maxLines ?? DEFAULT_LINES;
   const records: T[] = [];
   const malformedLines: Array<{ line: number; message: string }> = [];
-  const lines = result.stdout.split(/\r?\n/);
-  if (lines.at(-1) === "") lines.pop();
-  if (lines.length > maxLines)
-    throw new SubprocessError("JSONL output exceeded the configured line limit.", result);
-  for (const [index, line] of lines.entries()) {
-    if (Buffer.byteLength(line, "utf8") > maxLineBytes)
-      throw new SubprocessError(`JSONL line ${index + 1} exceeded the configured size.`, result);
+  const live = startJsonlSubprocess(options);
+  let lineNumber = 0;
+  for await (const line of live.lines) {
+    lineNumber += 1;
     if (!line.trim()) continue;
     try {
       records.push(JSON.parse(line) as T);
     } catch (error) {
-      malformedLines.push({ line: index + 1, message: String(error) });
+      malformedLines.push({ line: lineNumber, message: String(error) });
     }
   }
+  const result = await live.done;
+  if (result.limitExceeded || result.truncated.stdout || result.truncated.stderr)
+    throw new SubprocessError(
+      result.limitExceeded === "line"
+        ? `JSONL line ${lineNumber + 1} exceeded the configured size.`
+        : result.limitExceeded === "lines"
+          ? "JSONL output exceeded the configured line limit."
+          : "Subprocess output exceeded configured limits.",
+      result,
+    );
   return { ...result, records, malformedLines };
 }

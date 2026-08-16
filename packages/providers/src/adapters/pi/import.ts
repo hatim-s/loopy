@@ -29,9 +29,11 @@ export async function importPiSession(
           `Pi session file version ${version} is unsupported; expected ${PI_SESSION_FORMAT_V3}.`,
         ),
       );
-    const normalized = await normalizePiJsonLines(lines, context);
-    events.push(...normalized.events);
-    diagnostics.push(...normalized.diagnostics);
+    if (version === PI_SESSION_FORMAT_V3) {
+      const normalized = await normalizePiJsonLines(lines, context);
+      events.push(...normalized.events);
+      diagnostics.push(...normalized.diagnostics);
+    }
   } else if (Array.isArray(input)) {
     for (const raw of input) {
       const normalized = normalizePiEvent(raw, {
@@ -51,7 +53,12 @@ export async function importPiSession(
           `Pi session file version ${version} is unsupported; expected ${PI_SESSION_FORMAT_V3}.`,
         ),
       );
-    const rows = Array.isArray(value.messages) ? value.messages : [value];
+    const rows =
+      version === PI_SESSION_FORMAT_V3
+        ? Array.isArray(value.messages)
+          ? value.messages
+          : [value]
+        : [];
     for (const raw of rows) {
       const normalized = normalizePiEvent(raw, {
         ...context,
@@ -74,5 +81,11 @@ export async function importPiSession(
     sessionFileVersion: version,
     events,
     diagnostics,
+    provenance: {
+      ...(context.source ? { source: context.source } : {}),
+      format: "pi.session.v3",
+      version,
+      ...(context.providerVersion ? { providerVersion: context.providerVersion } : {}),
+    },
   };
 }

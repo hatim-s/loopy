@@ -75,6 +75,10 @@ function sessionId(event: Record<string, unknown>, fallback?: string): string | 
     "threadId",
     "conversation_id",
     "conversationId",
+    "agent_id",
+    "agentId",
+    "subagent_id",
+    "subagentId",
   ]) {
     if (typeof event[key] === "string" && event[key].length > 0) return event[key] as string;
   }
@@ -398,10 +402,11 @@ export function normalizeCodexEvent(
           : sid;
     return [
       {
-        kind: "subagent",
+        kind: /(?:end|complete|stop|exit)/i.test(type) ? "subagent_ended" : "subagent_started",
         type: "provider.subagent",
         ...common,
         ...(child ? { sessionId: child } : {}),
+        ...(child ? { parentId: child } : {}),
         ...(parent ? { parentSessionId: parent } : {}),
         ...(visibleText(event.text ?? item?.text)
           ? { text: visibleText(event.text ?? item?.text) }

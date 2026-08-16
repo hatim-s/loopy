@@ -89,7 +89,35 @@ export type ProviderRequest = {
   model?: string;
   reasoning?: string;
   metadata?: JsonObject;
+  /** Provider-neutral policy input. Adapters must map supported fields or fail honestly. */
+  policy?: ProviderPolicy;
   signal?: AbortSignal;
+};
+
+export type ProviderPolicy = {
+  tools?: {
+    allow?: readonly string[];
+    deny?: readonly string[];
+    network?: "disabled" | "restricted" | "unrestricted";
+  };
+  workspace?: {
+    workingDirectory?: string;
+    writableRoots?: readonly string[];
+  };
+  approval?: {
+    requiredBefore?: readonly string[];
+    sideEffectLabels?: readonly string[];
+    mode?: "approve" | "no-approve";
+  };
+  budget?: {
+    maxTurns?: number;
+    maxCostUsd?: number;
+    timeoutMs?: number;
+  };
+  timeoutMs?: number;
+  maxOutputBytes?: number;
+  maxLineBytes?: number;
+  maxLines?: number;
 };
 
 export type ProviderResumeRequest = ProviderRequest & {

@@ -26,7 +26,8 @@ export type ClaudeEvent = {
     | "usage"
     | "result"
     | "session"
-    | "subagent"
+    | "subagent_started"
+    | "subagent_ended"
     | "diagnostic";
   type: string;
   provider: "claude";

@@ -31,6 +31,8 @@ export type ProviderAdapterContext = {
   sequence?: number;
   occurredAt?: string;
   monotonicOffsetMs?: number;
+  source?: string;
+  providerVersion?: string;
 };
 
 export type AdapterDiagnostic = {
@@ -57,5 +59,11 @@ export type PiImportedSession = {
   sessionFileVersion: number;
   events: TraceEvent[];
   diagnostics: AdapterDiagnostic[];
+  provenance: {
+    source?: string;
+    format: typeof PI_IMPORT_FORMAT_V1;
+    version: number;
+    providerVersion?: string;
+  };
 };
 export type PiProbeResult = ProviderInstallation & { capabilities: ProviderCapabilities };

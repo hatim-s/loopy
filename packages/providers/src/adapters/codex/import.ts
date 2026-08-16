@@ -6,7 +6,7 @@ export function importCodexHistory(
   input: string | Iterable<string>,
   options: { source: string; providerVersion?: string; importedAt?: string },
 ): CodexHistoricalImport {
-  const providerVersion = options.providerVersion ?? "0.146.0";
+  const providerVersion = options.providerVersion ?? "unknown";
   const events = normalizeCodexStream(input);
   const session = events.find((event) => event.sessionId);
   const diagnostics = events
