@@ -1,0 +1,9 @@
+{"type":"fixture.metadata","provider":"codex","providerVersion":"0.146.0","sanitized":true}
+{"type":"thread.started","thread_id":"codex-session-001"}
+{"type":"turn.started","thread_id":"codex-session-001"}
+{"type":"item.started","thread_id":"codex-session-001","item":{"id":"tool-001","type":"command_execution","command":"printf 'safe fixture'"}}
+{"type":"item.completed","thread_id":"codex-session-001","item":{"id":"tool-001","type":"command_execution","command":"printf 'safe fixture'","aggregated_output":"safe fixture\n","exit_code":0}}
+{"type":"item.completed","thread_id":"codex-session-001","item":{"id":"msg-001","type":"agent_message","text":"The fixture command completed."}}
+{"type":"turn.completed","thread_id":"codex-session-001","usage":{"input_tokens":12,"output_tokens":8,"total_tokens":20}}
+{"type":"thread.completed","thread_id":"codex-session-001","status":"completed"}
+

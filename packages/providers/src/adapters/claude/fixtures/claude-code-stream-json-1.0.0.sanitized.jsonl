@@ -1,0 +1,6 @@
+{"type":"fixture.metadata","provider":"claude","providerVersion":"1.0.0","sanitized":true}
+{"type":"system","subtype":"init","session_id":"claude-session-001","model":"fixture-model","tools":["Bash"]}
+{"type":"assistant","session_id":"claude-session-001","message":{"role":"assistant","content":[{"type":"text","text":"I will inspect the fixture."},{"type":"tool_use","id":"tool-001","name":"Bash","input":{"command":"printf 'safe fixture'"}}],"usage":{"input_tokens":10,"output_tokens":6}}}
+{"type":"tool_result","session_id":"claude-session-001","tool_use_id":"tool-001","content":"safe fixture\n","is_error":false}
+{"type":"result","session_id":"claude-session-001","subtype":"success","result":"Fixture complete.","usage":{"input_tokens":10,"output_tokens":8},"total_cost_usd":0.001}
+

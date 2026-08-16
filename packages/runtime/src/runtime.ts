@@ -36,6 +36,28 @@ export type RuntimeNode = {
   kind: string;
   [key: string]: unknown;
 };
+export type ProviderPolicy = {
+  tools?: {
+    allow?: string[];
+    deny?: string[];
+    network?: "disabled" | "restricted" | "unrestricted";
+  };
+  workspace?: { workingDirectory?: string; writableRoots?: string[] };
+  approval?: { requiredBefore?: string[]; sideEffectLabels?: string[] };
+  sandbox?: string;
+  budget?: {
+    maxTurns?: number;
+    maxTokens?: number;
+    maxCostUsd?: number;
+    timeoutMs?: number;
+    maxOutputBytes?: number;
+    maxOutputTokens?: number;
+    maxOutputChars?: number;
+  };
+  limits?: { maxOutputBytes?: number; maxOutputTokens?: number; maxOutputChars?: number };
+  output?: { maxBytes?: number; maxTokens?: number; maxChars?: number };
+  [key: string]: unknown;
+};
 export type RuntimeEdge = WorkflowEdge & { [key: string]: unknown };
 export type RuntimePlan = {
   workflowId: string;
@@ -43,7 +65,7 @@ export type RuntimePlan = {
   nodes: RuntimeNode[];
   edges: RuntimeEdge[];
   topology?: { startNodeIds?: string[]; terminalNodeIds?: string[]; topologicalOrder?: string[] };
-  policies?: { concurrency?: { maxParallel?: number }; budget?: { timeoutMs?: number } };
+  policies?: ProviderPolicy & { concurrency?: { maxParallel?: number } };
   defaults?: { provider?: string; retry?: RetryPolicy };
   [key: string]: unknown;
 };
@@ -164,6 +186,8 @@ export type ProviderExecutionContext = {
   node: RuntimeNode;
   input: JsonObject;
   signal: AbortSignal;
+  /** Fully merged workflow/node policy forwarded to the provider adapter. */
+  policy?: ProviderPolicy;
 };
 export type ProviderResult =
   | { status: "succeeded"; outputs?: JsonObject; summary?: string; route?: string; error?: string }
@@ -250,6 +274,75 @@ function config(node: RuntimeNode, key: string): unknown {
   return typeof nested === "object" && nested !== null
     ? (nested as Record<string, unknown>)[key]
     : undefined;
+}
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function mergePolicy(target: ProviderPolicy, source: unknown): void {
+  if (!isRecord(source)) return;
+  for (const [key, value] of Object.entries(source)) {
+    if (key === "concurrency") continue;
+    if (isRecord(value) && isRecord(target[key])) {
+      (target as Record<string, unknown>)[key] = {
+        ...(target[key] as Record<string, unknown>),
+        ...value,
+      };
+    } else if (
+      key === "tools" ||
+      key === "workspace" ||
+      key === "approval" ||
+      key === "budget" ||
+      key === "limits" ||
+      key === "output"
+    ) {
+      (target as Record<string, unknown>)[key] = isRecord(value) ? { ...value } : value;
+    } else if (key === "sandbox" && typeof value === "string") {
+      target.sandbox = value;
+    }
+  }
+}
+function providerPolicy(run: RunRecord, node: RuntimeNode): ProviderPolicy | undefined {
+  const merged: ProviderPolicy = {};
+  mergePolicy(merged, run.plan.policies);
+  const nodeRecord = node as Record<string, unknown>;
+  mergePolicy(merged, nodeRecord.policy);
+  mergePolicy(merged, nodeRecord.policies);
+  const nested = nodeRecord.configuration;
+  if (isRecord(nested)) {
+    mergePolicy(merged, nested.policy);
+    mergePolicy(merged, nested.policies);
+    mergePolicy(merged, nested);
+  }
+  const tools = isRecord(merged.tools) ? { ...merged.tools } : {};
+  const workspace = isRecord(merged.workspace) ? { ...merged.workspace } : {};
+  const budget = isRecord(merged.budget) ? { ...merged.budget } : {};
+  const direct = (key: string): unknown => config(node, key);
+  const allow = direct("toolAllowlist") ?? direct("allowedTools");
+  const deny = direct("toolDenylist") ?? direct("disallowedTools");
+  const roots = direct("writableRoots");
+  const workingDirectory = direct("workingDirectory");
+  const sandbox = direct("sandbox") ?? direct("sandboxMode");
+  if (allow !== undefined) tools.allow = allow as string[];
+  if (deny !== undefined) tools.deny = deny as string[];
+  if (roots !== undefined) workspace.writableRoots = roots as string[];
+  if (typeof workingDirectory === "string") workspace.workingDirectory = workingDirectory;
+  if (typeof sandbox === "string") merged.sandbox = sandbox;
+  for (const key of [
+    "maxTurns",
+    "maxTokens",
+    "maxCostUsd",
+    "timeoutMs",
+    "maxOutputBytes",
+    "maxOutputTokens",
+    "maxOutputChars",
+  ]) {
+    const value = direct(key);
+    if (value !== undefined) (budget as Record<string, unknown>)[key] = value;
+  }
+  if (Object.keys(tools).length) merged.tools = tools;
+  if (Object.keys(workspace).length) merged.workspace = workspace;
+  if (Object.keys(budget).length) merged.budget = budget;
+  return Object.keys(merged).length ? merged : undefined;
 }
 function refValue(
   ref: ValueReference | Record<string, unknown>,
@@ -1143,6 +1236,7 @@ export class RuntimeScheduler {
           node,
           input: attempt.input,
           signal: controller.signal,
+          policy: providerPolicy(run, node),
         });
       else if (node.kind === "verify") {
         const verified = await (

@@ -1,0 +1,8 @@
+{"type":"session","version":3,"id":"pi-session-001","timestamp":"2026-08-17T00:00:00Z","cwd":"/workspace/example","provider":"test-provider","modelId":"test-model","thinkingLevel":"medium"}
+{"type":"message_start","sessionId":"pi-session-001","message":{"role":"user","content":"Inspect the repository."}}
+{"type":"message_update","sessionId":"pi-session-001","assistantMessageEvent":{"type":"text_delta","delta":"Visible Pi response."}}
+{"type":"tool_execution_start","sessionId":"pi-session-001","toolCallId":"pi-call-001","toolName":"bash","args":{"command":"git status"}}
+{"type":"tool_execution_end","sessionId":"pi-session-001","toolCallId":"pi-call-001","toolName":"bash","result":"clean","isError":false}
+{"type":"message_end","sessionId":"pi-session-001","message":{"role":"assistant","content":[{"type":"text","text":"Visible Pi response."}],"usage":{"input":17,"output":9,"cost":{"total":0.0004}}}}
+{"type":"agent_end","sessionId":"pi-session-001"}
+
