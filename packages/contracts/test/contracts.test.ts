@@ -15,8 +15,41 @@ import {
 const fixture = (name: string): unknown =>
   JSON.parse(readFileSync(join(import.meta.dir, "../../../fixtures/workflows", name), "utf8"));
 
+// The checked-in fixture predates the v1 structured value-reference shape;
+// keep this test useful while the shared fixture is migrated by normalizing
+// only those legacy fields at the test boundary.
+const validWorkflowFixture = (): unknown => {
+  const raw = fixture("valid-basic.json") as Record<string, unknown>;
+  const nodes = Array.isArray(raw.nodes)
+    ? raw.nodes.map((node) => {
+        if (!node || typeof node !== "object" || Array.isArray(node)) return node;
+        const record = node as Record<string, unknown>;
+        if (record.kind !== "agent") return node;
+        const bindings = record.inputBindings;
+        const inputBindings =
+          bindings && typeof bindings === "object" && !Array.isArray(bindings)
+            ? Object.fromEntries(
+                Object.entries(bindings as Record<string, unknown>).map(([name, value]) => [
+                  name,
+                  typeof value === "string"
+                    ? { kind: "workflow_input", name: value.replace(/^\{\{|\}\}$/g, "").trim() }
+                    : value,
+                ]),
+              )
+            : bindings;
+        const requiredCapabilities = Array.isArray(record.requiredCapabilities)
+          ? record.requiredCapabilities.map((capability) =>
+              typeof capability === "string" ? { capability, level: "required" } : capability,
+            )
+          : record.requiredCapabilities;
+        return { ...record, inputBindings, requiredCapabilities };
+      })
+    : raw.nodes;
+  return { ...raw, nodes };
+};
+
 test("valid workflow fixture parses and defaults are applied", () => {
-  const result = WorkflowDefinitionSchema.safeParse(fixture("valid-basic.json"));
+  const result = WorkflowDefinitionSchema.safeParse(validWorkflowFixture());
   expect(result.success).toBe(true);
   if (result.success) {
     expect(result.data.schemaVersion).toBe(SCHEMA_VERSION);
@@ -55,8 +88,9 @@ test("node completion and canonical trace event validate", () => {
     sequence: 0,
     occurredAt: "2026-08-17T00:00:00.000Z",
     monotonicOffsetMs: 0,
+    nodeId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
     type: "node.completed",
-    payload: { nodeId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", completion },
+    payload: { completion },
   });
   expect(event.type).toBe("node.completed");
   expect(

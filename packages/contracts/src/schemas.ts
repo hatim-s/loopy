@@ -1,9 +1,20 @@
 import { z } from "zod";
 
-/** The first persisted contract revision. Bump deliberately when breaking a shape. */
-export const SCHEMA_VERSION = "1" as const;
-export const SchemaVersionSchema = z.literal(SCHEMA_VERSION);
-export type SchemaVersion = z.infer<typeof SchemaVersionSchema>;
+/**
+ * Persisted contracts are versioned deliberately. Keep the current aliases
+ * below for ergonomics, but make the versioned schemas the source of truth so
+ * a future migration can add a second branch without rewriting every caller.
+ */
+export const SCHEMA_VERSION_V1 = "1" as const;
+export const CURRENT_SCHEMA_VERSION = SCHEMA_VERSION_V1;
+export const SCHEMA_VERSION = CURRENT_SCHEMA_VERSION;
+export const SUPPORTED_SCHEMA_VERSIONS = [SCHEMA_VERSION_V1] as const;
+export const SchemaVersionV1Schema = z.literal(SCHEMA_VERSION_V1);
+export const SupportedSchemaVersionSchema = z.enum(SUPPORTED_SCHEMA_VERSIONS);
+/** Current-version alias retained for existing callers. */
+export const SchemaVersionSchema = SupportedSchemaVersionSchema;
+export type SchemaVersionV1 = z.infer<typeof SchemaVersionV1Schema>;
+export type SchemaVersion = z.infer<typeof SupportedSchemaVersionSchema>;
 
 export const StableIdSchema = z.uuid();
 export type StableId = z.infer<typeof StableIdSchema>;
@@ -28,6 +39,50 @@ export const ProviderIdSchema = z.enum(["codex", "claude", "opencode", "pi"]);
 export type ProviderId = z.infer<typeof ProviderIdSchema>;
 export const ReasoningLevelSchema = z.enum(["low", "medium", "high", "xhigh"]);
 export type ReasoningLevel = z.infer<typeof ReasoningLevelSchema>;
+
+/** Capabilities are intentionally closed: runtimes can reason about these names. */
+export const CapabilitySchema = z.enum([
+  "structuredStreamingEvents",
+  "historicalSessionImport",
+  "sessionResume",
+  "sessionFork",
+  "explicitModelSelection",
+  "explicitReasoningLevel",
+  "toolAllowlist",
+  "writablePathPolicy",
+  "networkPolicy",
+  "maxTurns",
+  "tokenBudget",
+  "monetaryBudget",
+  "timeoutCancellation",
+  "usageReporting",
+  "nestedSubagentVisibility",
+  "nativeSandbox",
+]);
+export type Capability = z.infer<typeof CapabilitySchema>;
+export const CapabilityRequirementLevelSchema = z.enum(["required", "advisory"]);
+export type CapabilityRequirementLevel = z.infer<typeof CapabilityRequirementLevelSchema>;
+export const CapabilityRequirementSchema = z.object({
+  capability: CapabilitySchema,
+  level: CapabilityRequirementLevelSchema.default("required"),
+});
+export type CapabilityRequirement = z.infer<typeof CapabilityRequirementSchema>;
+
+/**
+ * Dataflow is deliberately a small value-reference algebra. Arbitrary
+ * expression strings are not persisted because their evaluation semantics
+ * cannot be made portable between providers and runtimes.
+ */
+export const ValueReferenceSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("literal"), value: JsonValueSchema }),
+  z.object({ kind: z.literal("workflow_input"), name: NonEmptyStringSchema }),
+  z.object({
+    kind: z.literal("node_output"),
+    nodeId: StableIdSchema,
+    path: z.array(NonEmptyStringSchema).default([]),
+  }),
+]);
+export type ValueReference = z.infer<typeof ValueReferenceSchema>;
 
 export const WorkflowInputTypeSchema = z.enum([
   "string",
@@ -117,8 +172,8 @@ export const AgentNodeSchema = NodeBaseSchema.extend({
   model: NonEmptyStringSchema.optional(),
   reasoning: ReasoningLevelSchema.optional(),
   skills: z.array(NonEmptyStringSchema).default([]),
-  inputBindings: z.record(z.string(), JsonValueSchema).default({}),
-  requiredCapabilities: z.array(NonEmptyStringSchema).default([]),
+  inputBindings: z.record(z.string(), ValueReferenceSchema).default({}),
+  requiredCapabilities: z.array(CapabilityRequirementSchema).default([]),
   completionContract: z.enum(["node_completion", "json"]).default("node_completion"),
 });
 export const VerifyCommandSchema = z.object({
@@ -153,7 +208,7 @@ export const JoinNodeSchema = NodeBaseSchema.extend({
 export const TransformNodeSchema = NodeBaseSchema.extend({
   kind: z.literal("transform"),
   operation: z.enum(["pick", "merge", "template"]),
-  mapping: z.record(z.string(), JsonValueSchema).default({}),
+  mapping: z.record(z.string(), ValueReferenceSchema).default({}),
 });
 
 export const NodeSchema = z.discriminatedUnion("kind", [
@@ -182,8 +237,8 @@ export const WorkflowEdgeSchema = z.object({
 });
 export type WorkflowEdge = z.infer<typeof WorkflowEdgeSchema>;
 
-export const WorkflowDefinitionSchema = z.object({
-  schemaVersion: SchemaVersionSchema,
+export const WorkflowDefinitionV1Schema = z.object({
+  schemaVersion: SchemaVersionV1Schema,
   workflowVersion: z.number().int().positive(),
   id: StableIdSchema,
   name: NonEmptyStringSchema,
@@ -199,8 +254,11 @@ export const WorkflowDefinitionSchema = z.object({
     budget: { timeoutMs: 3_600_000 },
     concurrency: { maxParallel: 1 },
   }),
+  // Scheduling semantics (timezone, missed runs, overlap) are intentionally
+  // deferred to Phase 6; v1 only persists an explicit manual trigger.
   triggers: z
-    .object({ manual: z.boolean().default(true), schedule: z.string().trim().optional() })
+    .object({ manual: z.boolean().default(true) })
+    .strict()
     .default({ manual: true }),
   metadata: z.object({
     createdAt: TimestampSchema,
@@ -210,10 +268,16 @@ export const WorkflowDefinitionSchema = z.object({
     tags: z.array(NonEmptyStringSchema).default([]),
   }),
 });
-export type WorkflowDefinition = z.infer<typeof WorkflowDefinitionSchema>;
+export const WorkflowDefinitionSchema = WorkflowDefinitionV1Schema;
+export const SupportedWorkflowDefinitionSchema = z.discriminatedUnion("schemaVersion", [
+  WorkflowDefinitionV1Schema,
+]);
+export const WorkflowDefinitionByVersionSchema = SupportedWorkflowDefinitionSchema;
+export type WorkflowDefinitionV1 = z.infer<typeof WorkflowDefinitionV1Schema>;
+export type WorkflowDefinition = z.infer<typeof WorkflowDefinitionV1Schema>;
 
-export const ProviderCapabilitiesSchema = z.object({
-  schemaVersion: SchemaVersionSchema,
+export const ProviderCapabilitiesV1Schema = z.object({
+  schemaVersion: SchemaVersionV1Schema,
   provider: ProviderIdSchema,
   structuredStreamingEvents: z.boolean(),
   historicalSessionImport: z.boolean(),
@@ -234,20 +298,42 @@ export const ProviderCapabilitiesSchema = z.object({
   maxContextTokens: z.number().int().positive().optional(),
   notes: z.array(NonEmptyStringSchema).default([]),
 });
-export type ProviderCapabilities = z.infer<typeof ProviderCapabilitiesSchema>;
+export const ProviderCapabilitiesSchema = ProviderCapabilitiesV1Schema;
+export const SupportedProviderCapabilitiesSchema = z.discriminatedUnion("schemaVersion", [
+  ProviderCapabilitiesV1Schema,
+]);
+export const ProviderCapabilitiesByVersionSchema = SupportedProviderCapabilitiesSchema;
+export type ProviderCapabilitiesV1 = z.infer<typeof ProviderCapabilitiesV1Schema>;
+export type ProviderCapabilities = z.infer<typeof ProviderCapabilitiesV1Schema>;
 
-export const ProviderInstallationSchema = z.object({
-  schemaVersion: SchemaVersionSchema,
-  provider: ProviderIdSchema,
-  installed: z.boolean(),
-  executable: z.string().trim().optional(),
-  version: z.string().trim().optional(),
-  path: z.string().trim().optional(),
-  detectedAt: TimestampSchema,
-  capabilities: ProviderCapabilitiesSchema,
-  diagnostic: z.string().trim().optional(),
-});
-export type ProviderInstallation = z.infer<typeof ProviderInstallationSchema>;
+export const ProviderInstallationV1Schema = z
+  .object({
+    schemaVersion: SchemaVersionV1Schema,
+    provider: ProviderIdSchema,
+    installed: z.boolean(),
+    executable: z.string().trim().optional(),
+    version: z.string().trim().optional(),
+    path: z.string().trim().optional(),
+    detectedAt: TimestampSchema,
+    capabilities: ProviderCapabilitiesSchema,
+    diagnostic: z.string().trim().optional(),
+  })
+  .superRefine((installation, ctx) => {
+    if (installation.capabilities.provider !== installation.provider) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["capabilities", "provider"],
+        message: "Provider capabilities must describe the installed provider.",
+      });
+    }
+  });
+export const ProviderInstallationSchema = ProviderInstallationV1Schema;
+export const SupportedProviderInstallationSchema = z.discriminatedUnion("schemaVersion", [
+  ProviderInstallationV1Schema,
+]);
+export const ProviderInstallationByVersionSchema = SupportedProviderInstallationSchema;
+export type ProviderInstallationV1 = z.infer<typeof ProviderInstallationV1Schema>;
+export type ProviderInstallation = z.infer<typeof ProviderInstallationV1Schema>;
 
 export const ProviderSessionRefSchema = z.object({
   provider: ProviderIdSchema,
@@ -288,8 +374,8 @@ export const ContractWarningSchema = z.object({
   source: z.string().trim().optional(),
 });
 export type ContractWarning = z.infer<typeof ContractWarningSchema>;
-export const NodeCompletionSchema = z.object({
-  schemaVersion: SchemaVersionSchema,
+export const NodeCompletionV1Schema = z.object({
+  schemaVersion: SchemaVersionV1Schema,
   status: z.enum(["succeeded", "failed", "cancelled", "skipped"]),
   route: NonEmptyStringSchema.optional(),
   summary: z.string(),
@@ -300,10 +386,16 @@ export const NodeCompletionSchema = z.object({
   usage: UsageRecordSchema.optional(),
   warnings: z.array(ContractWarningSchema).default([]),
 });
-export type NodeCompletion = z.infer<typeof NodeCompletionSchema>;
+export const NodeCompletionSchema = NodeCompletionV1Schema;
+export const SupportedNodeCompletionSchema = z.discriminatedUnion("schemaVersion", [
+  NodeCompletionV1Schema,
+]);
+export const NodeCompletionByVersionSchema = SupportedNodeCompletionSchema;
+export type NodeCompletionV1 = z.infer<typeof NodeCompletionV1Schema>;
+export type NodeCompletion = z.infer<typeof NodeCompletionV1Schema>;
 
 const TraceEventBaseSchema = z.object({
-  schemaVersion: SchemaVersionSchema,
+  schemaVersion: SchemaVersionV1Schema,
   id: StableIdSchema,
   runId: StableIdSchema,
   nodeId: StableIdSchema.optional(),
@@ -312,6 +404,9 @@ const TraceEventBaseSchema = z.object({
   occurredAt: TimestampSchema,
   monotonicOffsetMs: z.number().nonnegative(),
   provider: ProviderIdSchema.optional(),
+  /** Provider session and tool call attribution live in the envelope. */
+  sessionId: NonEmptyStringSchema.optional(),
+  callId: StableIdSchema.optional(),
   parentEventId: StableIdSchema.optional(),
   redaction: z
     .object({
@@ -322,6 +417,15 @@ const TraceEventBaseSchema = z.object({
 });
 const traceEvent = <T extends string, P extends z.ZodTypeAny>(type: T, payload: P) =>
   TraceEventBaseSchema.extend({ type: z.literal(type), payload });
+const traceEventWithAttribution = <
+  T extends string,
+  P extends z.ZodTypeAny,
+  A extends z.ZodRawShape,
+>(
+  type: T,
+  payload: P,
+  attribution: A,
+) => traceEvent(type, payload).extend(attribution);
 
 const RunCreatedEventSchema = traceEvent(
   "run.created",
@@ -351,92 +455,100 @@ const RunCompletedEventSchema = traceEvent(
   "run.completed",
   z.object({ status: z.enum(["succeeded", "failed", "cancelled"]), summary: z.string() }),
 );
-const NodeReadyEventSchema = traceEvent("node.ready", z.object({ nodeId: StableIdSchema }));
-const NodeStartedEventSchema = traceEvent(
-  "node.started",
-  z.object({ nodeId: StableIdSchema, attemptId: StableIdSchema }),
-);
-const NodeOutputEventSchema = traceEvent(
+const NodeReadyEventSchema = traceEventWithAttribution("node.ready", z.object({}).strict(), {
+  nodeId: StableIdSchema,
+});
+const NodeStartedEventSchema = traceEventWithAttribution("node.started", z.object({}).strict(), {
+  nodeId: StableIdSchema,
+  attemptId: StableIdSchema,
+});
+const NodeOutputEventSchema = traceEventWithAttribution(
   "node.output",
-  z.object({ nodeId: StableIdSchema, output: JsonObjectSchema }),
+  z.object({ output: JsonObjectSchema }).strict(),
+  { nodeId: StableIdSchema },
 );
-const NodeBlockedEventSchema = traceEvent(
+const NodeBlockedEventSchema = traceEventWithAttribution(
   "node.blocked",
-  z.object({ nodeId: StableIdSchema, reason: NonEmptyStringSchema }),
+  z.object({ reason: NonEmptyStringSchema }).strict(),
+  { nodeId: StableIdSchema },
 );
-const NodeCompletedEventSchema = traceEvent(
+const NodeCompletedEventSchema = traceEventWithAttribution(
   "node.completed",
-  z.object({ nodeId: StableIdSchema, completion: NodeCompletionSchema }),
+  z.object({ completion: NodeCompletionSchema }).strict(),
+  { nodeId: StableIdSchema },
 );
-const AttemptCreatedEventSchema = traceEvent(
+const AttemptCreatedEventSchema = traceEventWithAttribution(
   "attempt.created",
-  z.object({
-    nodeId: StableIdSchema,
-    attemptId: StableIdSchema,
-    attempt: z.number().int().positive(),
-  }),
+  z.object({ attempt: z.number().int().positive() }).strict(),
+  { nodeId: StableIdSchema, attemptId: StableIdSchema },
 );
-const AttemptRetryingEventSchema = traceEvent(
+const AttemptRetryingEventSchema = traceEventWithAttribution(
   "attempt.retrying",
-  z.object({
-    nodeId: StableIdSchema,
-    attemptId: StableIdSchema,
-    nextAttempt: z.number().int().positive(),
-    reason: NonEmptyStringSchema,
-  }),
+  z.object({ nextAttempt: z.number().int().positive(), reason: NonEmptyStringSchema }).strict(),
+  { nodeId: StableIdSchema, attemptId: StableIdSchema },
 );
-const AttemptFailedEventSchema = traceEvent(
+const AttemptFailedEventSchema = traceEventWithAttribution(
   "attempt.failed",
-  z.object({ nodeId: StableIdSchema, attemptId: StableIdSchema, error: NonEmptyStringSchema }),
+  z.object({ error: NonEmptyStringSchema }).strict(),
+  { nodeId: StableIdSchema, attemptId: StableIdSchema },
 );
-const AttemptCancelledEventSchema = traceEvent(
+const AttemptCancelledEventSchema = traceEventWithAttribution(
   "attempt.cancelled",
-  z.object({ nodeId: StableIdSchema, attemptId: StableIdSchema, reason: NonEmptyStringSchema }),
+  z.object({ reason: NonEmptyStringSchema }).strict(),
+  { nodeId: StableIdSchema, attemptId: StableIdSchema },
 );
-const ProviderProbedEventSchema = traceEvent(
+const ProviderProbedEventSchema = traceEventWithAttribution(
   "provider.probed",
-  z.object({ installation: ProviderInstallationSchema }),
-);
-const ProviderSessionStartedEventSchema = traceEvent(
+  z.object({ installation: ProviderInstallationSchema }).strict(),
+  { provider: ProviderIdSchema },
+).superRefine((event, ctx) => {
+  if (event.provider !== event.payload.installation.provider) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["payload", "installation", "provider"],
+      message: "Trace provider attribution must match the probed installation.",
+    });
+  }
+});
+const ProviderSessionStartedEventSchema = traceEventWithAttribution(
   "provider.session_started",
-  z.object({ session: ProviderSessionRefSchema }),
+  z.object({ parentSessionId: NonEmptyStringSchema.optional() }),
+  { provider: ProviderIdSchema, sessionId: NonEmptyStringSchema },
 );
-const ProviderMessageEventSchema = traceEvent(
+const ProviderMessageEventSchema = traceEventWithAttribution(
   "provider.message",
-  z.object({
-    sessionId: NonEmptyStringSchema,
-    role: z.enum(["user", "assistant", "system"]),
-    content: z.string(),
-  }),
+  z.object({ role: z.enum(["user", "assistant", "system"]), content: z.string() }),
+  { provider: ProviderIdSchema, sessionId: NonEmptyStringSchema },
 );
-const ProviderUsageEventSchema = traceEvent(
+const ProviderUsageEventSchema = traceEventWithAttribution(
   "provider.usage",
-  z.object({ sessionId: NonEmptyStringSchema, usage: UsageRecordSchema }),
+  z.object({ usage: UsageRecordSchema }),
+  { provider: ProviderIdSchema, sessionId: NonEmptyStringSchema },
 );
-const ProviderSessionEndedEventSchema = traceEvent(
+const ProviderSessionEndedEventSchema = traceEventWithAttribution(
   "provider.session_ended",
-  z.object({
-    sessionId: NonEmptyStringSchema,
-    status: z.enum(["succeeded", "failed", "cancelled"]),
-    error: z.string().optional(),
-  }),
+  z.object({ status: z.enum(["succeeded", "failed", "cancelled"]), error: z.string().optional() }),
+  { provider: ProviderIdSchema, sessionId: NonEmptyStringSchema },
 );
-const ToolRequestedEventSchema = traceEvent(
+const ToolRequestedEventSchema = traceEventWithAttribution(
   "tool.requested",
   z.object({ tool: NonEmptyStringSchema, input: JsonValueSchema }),
+  { sessionId: NonEmptyStringSchema, callId: StableIdSchema },
 );
-const ToolStartedEventSchema = traceEvent("tool.started", z.object({ tool: NonEmptyStringSchema }));
-const ToolCompletedEventSchema = traceEvent(
+const ToolStartedEventSchema = traceEventWithAttribution(
+  "tool.started",
+  z.object({ tool: NonEmptyStringSchema }),
+  { sessionId: NonEmptyStringSchema, callId: StableIdSchema },
+);
+const ToolCompletedEventSchema = traceEventWithAttribution(
   "tool.completed",
-  z.object({
-    tool: NonEmptyStringSchema,
-    output: JsonValueSchema,
-    exitCode: z.number().int().optional(),
-  }),
+  z.object({ output: JsonValueSchema, exitCode: z.number().int().optional() }),
+  { sessionId: NonEmptyStringSchema, callId: StableIdSchema },
 );
-const ToolDeniedEventSchema = traceEvent(
+const ToolDeniedEventSchema = traceEventWithAttribution(
   "tool.denied",
   z.object({ tool: NonEmptyStringSchema, reason: NonEmptyStringSchema }),
+  { sessionId: NonEmptyStringSchema, callId: StableIdSchema },
 );
 const WorkspaceSnapshotEventSchema = traceEvent(
   "workspace.snapshot_created",
@@ -507,21 +619,23 @@ const RuntimeWarningEventSchema = traceEvent("runtime.warning", ContractWarningS
 const RuntimeCapabilityDegradedEventSchema = traceEvent(
   "runtime.capability_degraded",
   z.object({
-    capability: NonEmptyStringSchema,
+    capability: CapabilitySchema,
     provider: ProviderIdSchema,
     reason: NonEmptyStringSchema,
   }),
 );
-const RuntimeRecoveryEventSchema = traceEvent(
+const RuntimeRecoveryEventSchema = traceEventWithAttribution(
   "runtime.recovery",
-  z.object({
-    attemptId: StableIdSchema,
-    action: z.enum(["marked_failed", "marked_cancelled", "paused_run"]),
-    reason: NonEmptyStringSchema,
-  }),
+  z
+    .object({
+      action: z.enum(["marked_failed", "marked_cancelled", "paused_run"]),
+      reason: NonEmptyStringSchema,
+    })
+    .strict(),
+  { attemptId: StableIdSchema },
 );
 
-export const TraceEventSchema = z.discriminatedUnion("type", [
+export const TraceEventV1Schema = z.discriminatedUnion("type", [
   RunCreatedEventSchema,
   RunStartedEventSchema,
   RunPauseRequestedEventSchema,
@@ -564,79 +678,312 @@ export const TraceEventSchema = z.discriminatedUnion("type", [
   RuntimeCapabilityDegradedEventSchema,
   RuntimeRecoveryEventSchema,
 ]);
-export type TraceEvent = z.infer<typeof TraceEventSchema>;
+export const TraceEventSchema = TraceEventV1Schema;
+export const SupportedTraceEventSchema = z.discriminatedUnion("schemaVersion", [
+  TraceEventV1Schema,
+]);
+export const TraceEventByVersionSchema = SupportedTraceEventSchema;
+export type TraceEventV1 = z.infer<typeof TraceEventV1Schema>;
+export type TraceEvent = z.infer<typeof TraceEventV1Schema>;
 
 export const NodeEvidenceSchema = z.object({
   nodeId: StableIdSchema,
   eventIds: z.array(StableIdSchema).min(1),
   rationale: NonEmptyStringSchema,
 });
+export type NodeEvidence = z.infer<typeof NodeEvidenceSchema>;
 export const InferredInputSchema = WorkflowInputSchema.extend({
   confidence: z.number().min(0).max(1),
   observedValues: z.array(JsonValueSchema).default([]),
 });
-export const ExtractionProposalSchema = z.object({
-  schemaVersion: SchemaVersionSchema,
-  id: StableIdSchema,
-  importId: StableIdSchema,
-  createdAt: TimestampSchema,
-  workflow: WorkflowDefinitionSchema,
-  inferredInputs: z.array(InferredInputSchema).default([]),
-  nodeEvidence: z.array(NodeEvidenceSchema).default([]),
-  removedDetours: z
-    .array(
-      z.object({
-        description: NonEmptyStringSchema,
-        reason: NonEmptyStringSchema,
-        eventIds: z.array(StableIdSchema).default([]),
-      }),
-    )
-    .default([]),
-  warnings: z.array(ContractWarningSchema).default([]),
-  verificationStrategy: z.array(VerificationResultSchema).default([]),
-  proposedPolicies: WorkflowPolicySchema,
-  expectedSideEffects: z.array(NonEmptyStringSchema).default([]),
-  unresolvedQuestions: z
-    .array(z.object({ question: NonEmptyStringSchema, blocksExecution: z.boolean() }))
-    .default([]),
-  status: z.enum(["draft", "approved", "rejected"]).default("draft"),
+export const VerifierRequirementSchema = z.object({
+  check: NonEmptyStringSchema,
+  command: NonEmptyStringSchema.optional(),
+  rationale: NonEmptyStringSchema,
+  required: z.boolean().default(true),
 });
-export type ExtractionProposal = z.infer<typeof ExtractionProposalSchema>;
+export type VerifierRequirement = z.infer<typeof VerifierRequirementSchema>;
+export const ExtractionProposalV1Schema = z
+  .object({
+    schemaVersion: SchemaVersionV1Schema,
+    id: StableIdSchema,
+    importId: StableIdSchema,
+    createdAt: TimestampSchema,
+    workflow: WorkflowDefinitionSchema,
+    inferredInputs: z.array(InferredInputSchema).default([]),
+    nodeEvidence: z.array(NodeEvidenceSchema).min(1),
+    removedDetours: z
+      .array(
+        z.object({
+          description: NonEmptyStringSchema,
+          reason: NonEmptyStringSchema,
+          eventIds: z.array(StableIdSchema).min(1),
+        }),
+      )
+      .default([]),
+    warnings: z.array(ContractWarningSchema).default([]),
+    verifierRequirements: z.array(VerifierRequirementSchema).min(1),
+    proposedPolicies: WorkflowPolicySchema,
+    expectedSideEffects: z.array(NonEmptyStringSchema).default([]),
+    unresolvedQuestions: z
+      .array(z.object({ question: NonEmptyStringSchema, blocksExecution: z.boolean() }))
+      .default([]),
+    status: z.enum(["draft", "approved", "rejected"]).default("draft"),
+  })
+  .superRefine((proposal, ctx) => {
+    const knownNodeIds = new Set(proposal.workflow.nodes.map((node) => node.id));
+    for (const [index, evidence] of proposal.nodeEvidence.entries()) {
+      if (!knownNodeIds.has(evidence.nodeId)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["nodeEvidence", index, "nodeId"],
+          message: "Evidence must reference a node present in the proposed workflow.",
+        });
+      }
+    }
+    if (
+      proposal.status === "approved" &&
+      proposal.unresolvedQuestions.some((question) => question.blocksExecution)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["status"],
+        message: "A proposal with blocking unresolved questions cannot be approved.",
+      });
+    }
+  });
+export const ExtractionProposalSchema = ExtractionProposalV1Schema;
+export const SupportedExtractionProposalSchema = z.discriminatedUnion("schemaVersion", [
+  ExtractionProposalV1Schema,
+]);
+export const ExtractionProposalByVersionSchema = SupportedExtractionProposalSchema;
+export type ExtractionProposalV1 = z.infer<typeof ExtractionProposalV1Schema>;
+export type ExtractionProposal = z.infer<typeof ExtractionProposalV1Schema>;
 
-export const ExecutionNodeSchema = z.object({
-  nodeId: StableIdSchema,
-  kind: z.enum(["agent", "verify", "approval", "route", "join", "transform"]),
-  provider: ProviderIdSchema.optional(),
-  model: NonEmptyStringSchema.optional(),
+export const ProviderBindingSchema = z.object({
+  provider: ProviderIdSchema,
+  model: NonEmptyStringSchema,
   reasoning: ReasoningLevelSchema.optional(),
+  capabilities: z.array(CapabilityRequirementSchema).default([]),
+});
+export type ProviderBinding = z.infer<typeof ProviderBindingSchema>;
+
+const ExecutionNodeBaseSchema = z.object({
+  nodeId: StableIdSchema,
+  name: NonEmptyStringSchema,
+  tags: z.array(NonEmptyStringSchema).default([]),
   timeoutMs: z.number().int().positive(),
   retry: RetryPolicySchema,
-  requiredCapabilities: z.array(NonEmptyStringSchema).default([]),
 });
-export const ExecutionPlanSchema = z.object({
-  schemaVersion: SchemaVersionSchema,
-  id: StableIdSchema,
-  workflowId: StableIdSchema,
-  workflowVersion: z.number().int().positive(),
-  compiledAt: TimestampSchema,
-  planHash: z.string().regex(/^[a-f0-9]{64}$/),
-  provider: ProviderInstallationSchema,
-  capabilities: ProviderCapabilitiesSchema,
-  nodes: z.array(ExecutionNodeSchema).min(1),
-  policies: WorkflowPolicySchema,
-  warnings: z.array(ContractWarningSchema).default([]),
+const ExecutionAgentNodeSchema = ExecutionNodeBaseSchema.extend({
+  kind: z.literal("agent"),
+  configuration: z.object({
+    prompt: NonEmptyStringSchema,
+    skills: z.array(NonEmptyStringSchema).default([]),
+    inputBindings: z.record(z.string(), ValueReferenceSchema).default({}),
+    completionContract: z.enum(["node_completion", "json"]).default("node_completion"),
+  }),
+  binding: ProviderBindingSchema,
 });
-export type ExecutionPlan = z.infer<typeof ExecutionPlanSchema>;
+const ExecutionVerifyNodeSchema = ExecutionNodeBaseSchema.extend({
+  kind: z.literal("verify"),
+  configuration: z.object({
+    commands: z.array(VerifyCommandSchema).min(1),
+    success: z.enum(["all", "any"]).default("all"),
+    expectedExitCode: z.number().int().default(0),
+  }),
+});
+const ExecutionApprovalNodeSchema = ExecutionNodeBaseSchema.extend({
+  kind: z.literal("approval"),
+  configuration: z.object({
+    message: NonEmptyStringSchema,
+    approvalKey: NonEmptyStringSchema,
+    expiresAfterMs: z.number().int().positive().optional(),
+  }),
+});
+const ExecutionRouteNodeSchema = ExecutionNodeBaseSchema.extend({
+  kind: z.literal("route"),
+  configuration: z.object({
+    expression: NonEmptyStringSchema,
+    defaultRoute: NonEmptyStringSchema.optional(),
+  }),
+});
+const ExecutionJoinNodeSchema = ExecutionNodeBaseSchema.extend({
+  kind: z.literal("join"),
+  configuration: z.object({
+    policy: z.enum(["all", "any", "quorum"]).default("all"),
+    quorum: z.number().int().positive().optional(),
+    outputMode: z.enum(["array", "object", "first_success"]).default("array"),
+  }),
+});
+const ExecutionTransformNodeSchema = ExecutionNodeBaseSchema.extend({
+  kind: z.literal("transform"),
+  configuration: z.object({
+    operation: z.enum(["pick", "merge", "template"]),
+    mapping: z.record(z.string(), ValueReferenceSchema).default({}),
+  }),
+});
+export const ExecutionNodeSchema = z.discriminatedUnion("kind", [
+  ExecutionAgentNodeSchema,
+  ExecutionVerifyNodeSchema,
+  ExecutionApprovalNodeSchema,
+  ExecutionRouteNodeSchema,
+  ExecutionJoinNodeSchema,
+  ExecutionTransformNodeSchema,
+]);
+export type ExecutionNode = z.infer<typeof ExecutionNodeSchema>;
+
+export const ExecutionTopologySchema = z.object({
+  startNodeIds: z.array(StableIdSchema).min(1),
+  terminalNodeIds: z.array(StableIdSchema).min(1),
+  topologicalOrder: z.array(StableIdSchema).min(1),
+});
+export type ExecutionTopology = z.infer<typeof ExecutionTopologySchema>;
+
+export const ExecutionPlanV1Schema = z
+  .object({
+    schemaVersion: SchemaVersionV1Schema,
+    id: StableIdSchema,
+    workflowId: StableIdSchema,
+    workflowVersion: z.number().int().positive(),
+    compiledAt: TimestampSchema,
+    planHash: z.string().regex(/^[a-f0-9]{64}$/),
+    providers: z.array(ProviderInstallationSchema).min(1),
+    nodes: z.array(ExecutionNodeSchema).min(1),
+    edges: z.array(WorkflowEdgeSchema),
+    topology: ExecutionTopologySchema,
+    policies: WorkflowPolicySchema,
+    warnings: z.array(ContractWarningSchema).default([]),
+  })
+  .superRefine((plan, ctx) => {
+    const providerIds = new Set<string>();
+    for (const [index, provider] of plan.providers.entries()) {
+      if (providerIds.has(provider.provider)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["providers", index, "provider"],
+          message: "An execution plan cannot install the same provider more than once.",
+        });
+      }
+      providerIds.add(provider.provider);
+    }
+    const nodeIds = new Set(plan.nodes.map((node) => node.nodeId));
+    const installed = new Map(plan.providers.map((provider) => [provider.provider, provider]));
+    for (const [index, node] of plan.nodes.entries()) {
+      if (node.kind !== "agent") continue;
+      const installation = installed.get(node.binding.provider);
+      if (!installation) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["nodes", index, "binding", "provider"],
+          message: "Every agent binding must reference an installed provider in this plan.",
+        });
+        continue;
+      }
+      if (!installation.installed) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["nodes", index, "binding", "provider"],
+          message: "An agent cannot bind to a provider that is not installed.",
+        });
+      }
+      for (const [capabilityIndex, requirement] of node.binding.capabilities.entries()) {
+        if (requirement.level !== "required") continue;
+        if (installation.capabilities[requirement.capability] !== true) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["nodes", index, "binding", "capabilities", capabilityIndex],
+            message: `Required capability '${requirement.capability}' is not available from the bound provider.`,
+          });
+        }
+      }
+    }
+    for (const [index, edge] of plan.edges.entries()) {
+      if (!nodeIds.has(edge.source)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["edges", index, "source"],
+          message: "Execution edges must reference nodes in the resolved graph.",
+        });
+      }
+      if (!nodeIds.has(edge.target)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["edges", index, "target"],
+          message: "Execution edges must reference nodes in the resolved graph.",
+        });
+      }
+    }
+    const topologyIds = [
+      ...plan.topology.startNodeIds,
+      ...plan.topology.terminalNodeIds,
+      ...plan.topology.topologicalOrder,
+    ];
+    for (const nodeId of topologyIds) {
+      if (!nodeIds.has(nodeId)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["topology"],
+          message: "Execution topology must reference nodes in the resolved graph.",
+        });
+        break;
+      }
+    }
+  });
+export const ExecutionPlanSchema = ExecutionPlanV1Schema;
+export const SupportedExecutionPlanSchema = z.discriminatedUnion("schemaVersion", [
+  ExecutionPlanV1Schema,
+]);
+export const ExecutionPlanByVersionSchema = SupportedExecutionPlanSchema;
+export type ExecutionPlanV1 = z.infer<typeof ExecutionPlanV1Schema>;
+export type ExecutionPlan = z.infer<typeof ExecutionPlanV1Schema>;
 
 const CommandBaseSchema = z.object({
-  schemaVersion: SchemaVersionSchema,
+  schemaVersion: SchemaVersionV1Schema,
   commandId: StableIdSchema,
 });
+export const WorkflowPatchOperationSchema = z.discriminatedUnion("op", [
+  z.object({ op: z.literal("add_node"), node: NodeSchema }).strict(),
+  z.object({ op: z.literal("remove_node"), nodeId: StableIdSchema }).strict(),
+  z.object({ op: z.literal("replace_node"), node: NodeSchema }).strict(),
+  z.object({ op: z.literal("add_edge"), edge: WorkflowEdgeSchema }).strict(),
+  z.object({ op: z.literal("remove_edge"), edgeId: StableIdSchema }).strict(),
+  z.object({ op: z.literal("set_workflow_name"), name: NonEmptyStringSchema }).strict(),
+  z
+    .object({
+      op: z.literal("set_node_prompt"),
+      nodeId: StableIdSchema,
+      prompt: NonEmptyStringSchema,
+    })
+    .strict(),
+  z
+    .object({
+      op: z.literal("set_route_default"),
+      nodeId: StableIdSchema,
+      defaultRoute: NonEmptyStringSchema,
+    })
+    .strict(),
+  z
+    .object({
+      op: z.literal("set_edge_label"),
+      edgeId: StableIdSchema,
+      label: NonEmptyStringSchema,
+    })
+    .strict(),
+  z
+    .object({
+      op: z.literal("set_edge_condition"),
+      edgeId: StableIdSchema,
+      condition: NonEmptyStringSchema,
+    })
+    .strict(),
+]);
+export type WorkflowPatchOperation = z.infer<typeof WorkflowPatchOperationSchema>;
 export const WorkflowPatchCommandSchema = CommandBaseSchema.extend({
   type: z.literal("workflow.patch"),
   workflowId: StableIdSchema,
   baseVersion: z.number().int().positive(),
-  patch: JsonValueSchema,
+  patch: z.array(WorkflowPatchOperationSchema).min(1),
 });
 export const WorkflowValidateCommandSchema = CommandBaseSchema.extend({
   type: z.literal("workflow.validate"),
@@ -687,7 +1034,7 @@ export const ImportTraceCommandSchema = CommandBaseSchema.extend({
   type: z.literal("trace.import"),
   path: NonEmptyStringSchema,
 });
-export const LocalCommandSchema = z.discriminatedUnion("type", [
+export const LocalCommandV1Schema = z.discriminatedUnion("type", [
   WorkflowPatchCommandSchema,
   WorkflowValidateCommandSchema,
   StartRunCommandSchema,
@@ -700,9 +1047,13 @@ export const LocalCommandSchema = z.discriminatedUnion("type", [
   ExportTraceCommandSchema,
   ImportTraceCommandSchema,
 ]);
-export type LocalCommand = z.infer<typeof LocalCommandSchema>;
-export const CommandResultSchema = z.object({
-  schemaVersion: SchemaVersionSchema,
+export const LocalCommandSchema = LocalCommandV1Schema;
+export const SupportedLocalCommandSchema = z.union([LocalCommandV1Schema]);
+export const LocalCommandByVersionSchema = SupportedLocalCommandSchema;
+export type LocalCommandV1 = z.infer<typeof LocalCommandV1Schema>;
+export type LocalCommand = z.infer<typeof LocalCommandV1Schema>;
+export const CommandResultV1Schema = z.object({
+  schemaVersion: SchemaVersionV1Schema,
   commandId: StableIdSchema,
   accepted: z.boolean(),
   message: z.string(),
@@ -710,7 +1061,13 @@ export const CommandResultSchema = z.object({
   workflowId: StableIdSchema.optional(),
   errors: z.array(ContractWarningSchema).default([]),
 });
-export type CommandResult = z.infer<typeof CommandResultSchema>;
+export const CommandResultSchema = CommandResultV1Schema;
+export const SupportedCommandResultSchema = z.discriminatedUnion("schemaVersion", [
+  CommandResultV1Schema,
+]);
+export const CommandResultByVersionSchema = SupportedCommandResultSchema;
+export type CommandResultV1 = z.infer<typeof CommandResultV1Schema>;
+export type CommandResult = z.infer<typeof CommandResultV1Schema>;
 
 export const PublicPersistedSchemas = {
   WorkflowDefinition: WorkflowDefinitionSchema,
@@ -722,4 +1079,17 @@ export const PublicPersistedSchemas = {
   ExecutionPlan: ExecutionPlanSchema,
   LocalCommand: LocalCommandSchema,
   CommandResult: CommandResultSchema,
+} as const;
+
+/** Version-dispatch map used by readers that accept any supported revision. */
+export const SupportedPersistedSchemas = {
+  WorkflowDefinition: SupportedWorkflowDefinitionSchema,
+  ProviderCapabilities: SupportedProviderCapabilitiesSchema,
+  ProviderInstallation: SupportedProviderInstallationSchema,
+  NodeCompletion: SupportedNodeCompletionSchema,
+  TraceEvent: SupportedTraceEventSchema,
+  ExtractionProposal: SupportedExtractionProposalSchema,
+  ExecutionPlan: SupportedExecutionPlanSchema,
+  LocalCommand: SupportedLocalCommandSchema,
+  CommandResult: SupportedCommandResultSchema,
 } as const;
