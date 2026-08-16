@@ -10,7 +10,7 @@ function codes(workflow: unknown): string[] {
 }
 
 describe("workflow graph validation", () => {
-  test("accepts a linear workflow and prepares a normalized plan", () => {
+  test("validates a linear workflow but rejects its non-contract shape for compilation", () => {
     const workflow = {
       id: "linear",
       workflowVersion: 1,
@@ -23,8 +23,10 @@ describe("workflow graph validation", () => {
     expect(result.graph.terminalNodeIds).toEqual(["done"]);
     expect(result.graph.topologicalOrder).toEqual(["start", "done"]);
     const compiled = compileWorkflow(workflow);
-    expect(compiled.ok).toBe(true);
-    if (compiled.ok) expect(compiled.plan.kind).toBe("normalized-execution-plan");
+    expect(compiled.ok).toBe(false);
+    expect(compiled.diagnostics.some((item) => item.code === "WORKFLOW_CONTRACT_INVALID")).toBe(
+      true,
+    );
   });
 
   test("accepts a canonical contract workflow", async () => {
@@ -146,6 +148,25 @@ describe("workflow graph validation", () => {
     expect(codes(workflow)).toContain("ROUTE_LABEL_DUPLICATE");
   });
 
+  test("does not treat edge conditions as route labels", () => {
+    const workflow = {
+      nodes: [{ id: "route", kind: "route" }, verify("done")],
+      edges: [{ id: "e", source: "route", target: "done", condition: "success" }],
+    };
+    const result = validateWorkflow(workflow);
+    expect(codes(workflow)).toContain("ROUTE_LABEL_REQUIRED");
+    expect(result.graph.edges[0]?.route).toBeUndefined();
+    expect(result.graph.edges[0]?.condition).toBe("success");
+  });
+
+  test("validates a route node default against outgoing labels", () => {
+    const workflow = {
+      nodes: [{ id: "route", kind: "route", defaultRoute: "fallback" }, verify("done")],
+      edges: [{ id: "e", source: "route", target: "done", label: "success" }],
+    };
+    expect(codes(workflow)).toContain("ROUTE_OUTGOING_INCONSISTENT");
+  });
+
   test("checks optional route declarations against outgoing labels", () => {
     const workflow = {
       nodes: [{ id: "route", kind: "route", routes: ["success", "failure"] }, verify("done")],
@@ -164,5 +185,38 @@ describe("workflow graph validation", () => {
       expect.arrayContaining(["JOIN_INCOMING_REQUIRED", "JOIN_POLICY_REQUIRED"]),
     );
     expect(result.valid).toBe(false);
+  });
+
+  test("counts distinct predecessor nodes for join quorum", () => {
+    const workflow = {
+      nodes: [
+        agent("start"),
+        verify("branch"),
+        { id: "join", kind: "join", policy: "quorum", quorum: 2 },
+        verify("done"),
+      ],
+      edges: [
+        { id: "start-branch", source: "start", target: "branch" },
+        { id: "branch-join-a", source: "branch", target: "join" },
+        { id: "branch-join-b", source: "branch", target: "join" },
+        { id: "start-join", source: "start", target: "join" },
+        { id: "join-done", source: "join", target: "done" },
+      ],
+    };
+    const result = validateWorkflow(workflow);
+    expect(result.valid).toBe(true);
+    expect(codes(workflow)).not.toContain("JOIN_POLICY_SHAPE_INVALID");
+  });
+
+  test("requires distinct predecessors rather than duplicate incoming edges", () => {
+    const workflow = {
+      nodes: [agent("start"), { id: "join", kind: "join", policy: "all" }, verify("done")],
+      edges: [
+        { id: "start-join-a", source: "start", target: "join" },
+        { id: "start-join-b", source: "start", target: "join" },
+        { id: "join-done", source: "join", target: "done" },
+      ],
+    };
+    expect(codes(workflow)).toContain("JOIN_INCOMING_REQUIRED");
   });
 });

@@ -4,6 +4,7 @@ import type {
   WorkflowEdge as ContractWorkflowEdge,
   WorkflowNode as ContractWorkflowNode,
 } from "@loopy/contracts";
+import { WorkflowDefinitionSchema } from "@loopy/contracts";
 
 /** Public workflow types are owned by @loopy/contracts. */
 export type WorkflowDefinition = ContractWorkflowDefinition;
@@ -45,7 +46,8 @@ export type DiagnosticCode =
   | "JOIN_POLICY_SHAPE_INVALID"
   | "NODE_REQUIRED_FIELD"
   | "NODE_FIELD_INVALID"
-  | "UNSUPPORTED_NODE_KIND";
+  | "UNSUPPORTED_NODE_KIND"
+  | "WORKFLOW_CONTRACT_INVALID";
 
 export type WorkflowDiagnostic = {
   code: DiagnosticCode;
@@ -158,7 +160,8 @@ function stringField(value: unknown): string | undefined {
 function edgeRoute(edge: RawRecord): string | undefined {
   // `label` is the canonical contract field; `route` remains accepted for
   // the validator's deliberately loose input boundary and older fixtures.
-  return stringField(edge.label) ?? stringField(edge.route) ?? stringField(edge.condition);
+  // Conditions are independent predicates and must never become route labels.
+  return stringField(edge.label) ?? stringField(edge.route);
 }
 
 function hasOwn(node: RawRecord, name: string): boolean {
@@ -260,7 +263,9 @@ function validateJoin(
   incoming: NormalizedWorkflowEdge[],
   diagnostics: WorkflowDiagnostic[],
 ): void {
-  if (incoming.length < 2) {
+  const predecessorIds = new Set(incoming.map((edge) => edge.source));
+  const predecessorCount = predecessorIds.size;
+  if (predecessorCount < 2) {
     diagnostics.push(
       diagnostic(
         "JOIN_INCOMING_REQUIRED",
@@ -298,12 +303,12 @@ function validateJoin(
     if (
       !Number.isInteger(quorum) ||
       (quorum as number) < 1 ||
-      (quorum as number) > incoming.length
+      (quorum as number) > predecessorCount
     ) {
       diagnostics.push(
         diagnostic(
           "JOIN_POLICY_SHAPE_INVALID",
-          "A quorum join requires an integer quorum between 1 and its incoming edge count.",
+          "A quorum join requires an integer quorum between 1 and its distinct predecessor-node count.",
           ["nodes", index, "quorum"],
           { nodeId: stringField(node.id) },
         ),
@@ -397,6 +402,17 @@ function validateRoutes(
         );
       }
     }
+  }
+  const defaultRoute = stringField(field(node.value, "defaultRoute"));
+  if (defaultRoute && !outgoing.some((edge) => edge.route === defaultRoute)) {
+    diagnostics.push(
+      diagnostic(
+        "ROUTE_OUTGOING_INCONSISTENT",
+        `Default route '${defaultRoute}' has no matching outgoing route label.`,
+        ["nodes", node.index, "defaultRoute"],
+        { nodeId: node.id },
+      ),
+    );
   }
 }
 
@@ -700,15 +716,26 @@ export function prepareExecutionPlan(workflow: WorkflowDefinition): CompilationR
 /** The validator also intentionally accepts unparsed input for diagnostics. */
 export function prepareExecutionPlan(workflow: unknown): CompilationResult;
 export function prepareExecutionPlan(workflow: unknown): CompilationResult {
-  const result = validateWorkflow(workflow);
-  if (!result.valid) return { ok: false, diagnostics: result.diagnostics };
-  const definition = isRecord(workflow) ? workflow : {};
+  const contractResult = WorkflowDefinitionSchema.safeParse(workflow);
+  const contractDiagnostics: WorkflowDiagnostic[] = contractResult.success
+    ? []
+    : contractResult.error.issues.map((issue) => {
+        const pathSegments = issue.path.filter(
+          (segment): segment is string | number =>
+            typeof segment === "string" || typeof segment === "number",
+        );
+        return diagnostic("WORKFLOW_CONTRACT_INVALID", issue.message, pathSegments);
+      });
+  const result = validateWorkflow(contractResult.success ? contractResult.data : workflow);
+  const diagnostics = [...contractDiagnostics, ...result.diagnostics];
+  if (!contractResult.success || !result.valid) return { ok: false, diagnostics };
+  const definition = contractResult.data;
   return {
     ok: true,
-    diagnostics: result.diagnostics,
+    diagnostics,
     plan: {
       kind: "normalized-execution-plan",
-      workflowId: stringField(definition.id),
+      workflowId: definition.id,
       workflowVersion: definition.workflowVersion,
       nodes: result.graph.nodes,
       edges: result.graph.edges,

@@ -1,3 +1,5 @@
+#!/usr/bin/env bun
+
 const VERSION = "0.1.0";
 
 const COMMANDS = [
