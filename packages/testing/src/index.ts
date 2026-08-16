@@ -14,6 +14,8 @@ import type {
   VerificationResult,
 } from "@loopy/runtime";
 
+export * from "./provider-conformance";
+
 function clone<T>(value: T): T {
   return structuredClone(value);
 }

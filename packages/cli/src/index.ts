@@ -1,5 +1,10 @@
 #!/usr/bin/env bun
 
+import { createProviderRegistry, type ProviderRegistry } from "@loopy/providers";
+import { doctorCommand } from "./doctor";
+
+export { doctorCommand, formatDoctor, runDoctor } from "./doctor";
+
 const VERSION = "0.1.0";
 
 const COMMANDS = [
@@ -38,7 +43,25 @@ Phase 0 status:
   The workspace and CLI shell are available. Product commands are not implemented yet.`);
 }
 
-export function main(args: readonly string[] = Bun.argv.slice(2)): number {
+export type CliDependencies = { registry?: ProviderRegistry };
+
+export async function mainAsync(
+  args: readonly string[] = Bun.argv.slice(2),
+  dependencies: CliDependencies = {},
+): Promise<number> {
+  if (args[0] === "doctor") {
+    return doctorCommand(dependencies.registry ?? createProviderRegistry(), {
+      json: args.includes("--json"),
+      log: (line) => console.log(line),
+    });
+  }
+  return main(args, dependencies);
+}
+
+export function main(
+  args: readonly string[] = Bun.argv.slice(2),
+  dependencies: CliDependencies = {},
+): number {
   const [command] = args;
 
   if (!command || command === "--help" || command === "-h") {
@@ -51,11 +74,20 @@ export function main(args: readonly string[] = Bun.argv.slice(2)): number {
     return 0;
   }
 
+  if (command === "doctor") {
+    // Keep the historical synchronous shell API while the executable awaits
+    // the real async probe through `mainAsync` below.
+    void mainAsync(args, dependencies).then((code) => {
+      process.exitCode = code;
+    });
+    return 0;
+  }
+
   console.error(`loopy: '${command}' is not implemented in this release.`);
   console.error("Run 'loopy --help' to see the planned command surface.");
   return 2;
 }
 
 if (import.meta.main) {
-  process.exitCode = main();
+  process.exitCode = await mainAsync();
 }
