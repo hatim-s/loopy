@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { ExtractionProposal, JsonObject } from "@loopy/contracts";
 import { describe, expect, test } from "vitest";
 import { ProjectLockError, SqliteRuntimeStore, Storage } from "../src/index.js";
 
@@ -16,7 +17,120 @@ function seeded(s: Storage): void {
   });
 }
 
+function extractionProposal(importId: string, status: "draft" | "approved" | "rejected" = "draft") {
+  const workflow = JSON.parse(readFileSync("fixtures/workflows/valid-basic.json", "utf8")) as {
+    nodes: Array<{ id: string }>;
+    policies: JsonObject;
+  };
+  const evidence = workflow.nodes.map((node, index) => ({
+    evidenceId: `0000000${index + 1}-0000-4000-8000-000000000000`,
+    nodeId: node.id,
+    eventIds: ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],
+    rationale: "Observed in the imported trace.",
+  }));
+  const firstEvidence = evidence.at(0);
+  if (!firstEvidence) throw new Error("Fixture must include an evidence record");
+  return {
+    schemaVersion: "1",
+    id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    importId,
+    createdAt: "2026-08-17T00:00:00.000Z",
+    workflow,
+    inferredInputs: [],
+    nodeEvidence: evidence,
+    removedDetours: [],
+    warnings: [],
+    verifierRequirements: [
+      {
+        check: "tests",
+        command: "bun test",
+        rationale: "The workflow must pass its tests.",
+        evidenceIds: [firstEvidence.evidenceId],
+        required: true,
+      },
+    ],
+    proposedPolicies: { ...workflow.policies, evidenceIds: [firstEvidence.evidenceId] },
+    expectedSideEffects: [],
+    unresolvedQuestions: [],
+    status,
+  } as unknown as ExtractionProposal;
+}
+
 describe("storage", () => {
+  test("imports canonical JSONL idempotently and rejects corrupt or mixed-run traces", () => {
+    const content = readFileSync("packages/tracing/fixtures/trace.jsonl");
+    const s = new Storage({ projectDir: project() });
+    const first = s.runtime.importCanonicalSession({
+      provider: "codex",
+      source: "fixture",
+      content,
+      capabilities: { historicalSessionImport: true },
+      lossiness: { lossy: false },
+    });
+    const second = s.runtime.importCanonicalSession({
+      provider: "codex",
+      source: "changed",
+      content,
+    });
+    expect(second.id).toBe(first.id);
+    expect(second.contentHash).toBe(first.contentHash);
+    expect(second.capabilityMetadata).toEqual({ historicalSessionImport: true });
+    expect(() =>
+      s.runtime.importCanonicalSession({ provider: "codex", source: "bad", content: "not-json\n" }),
+    ).toThrow();
+    const lines = `${content
+      .toString()
+      .trim()
+      .split("\n")
+      .map((line, index) => {
+        const event = JSON.parse(line) as Record<string, unknown>;
+        if (index === 1) event.runId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+        return JSON.stringify(event);
+      })
+      .join("\n")}
+`;
+    expect(() =>
+      s.runtime.importCanonicalSession({ provider: "codex", source: "mixed", content: lines }),
+    ).toThrow(/multiple run IDs/);
+    s.close();
+  });
+
+  test("stores review output, approves once into editable extraction version, and rejects safely", () => {
+    const s = new Storage({ projectDir: project() });
+    const imported = s.runtime.createImportedSession({
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      provider: "codex",
+      source: "fixture",
+      session: [],
+    });
+    const job = s.runtime.createExtractionJob({ importId: imported.id });
+    s.runtime.saveExtractionResult(job.id, {
+      proposal: extractionProposal(imported.id),
+      audit: { segments: 1 },
+    });
+    const review = s.runtime.getExtractionReview(job.id);
+    expect(review?.audit).toEqual({ segments: 1 });
+    const version = s.runtime.approveExtractionProposal(review?.proposal.id ?? "");
+    expect(version.version).toBe(1);
+    expect((version.definition as { metadata?: JsonObject }).metadata).toMatchObject({
+      createdFrom: "extraction",
+      extractionId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    });
+    expect(s.runtime.getExtractionReview(job.id)?.proposal.status).toBe("approved");
+    expect(() => s.runtime.approveExtractionProposal(job.id)).toThrow(/already approved/);
+
+    const rejectedJob = s.runtime.createExtractionJob({ importId: imported.id });
+    const rejected = {
+      ...extractionProposal(imported.id),
+      id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    };
+    s.runtime.saveExtractionResult(rejectedJob.id, { proposal: rejected });
+    s.runtime.rejectExtractionProposal(rejectedJob.id);
+    expect(s.runtime.getExtractionReview(rejectedJob.id)?.proposal.status).toBe("rejected");
+    expect(() => s.runtime.approveExtractionProposal(rejectedJob.id)).toThrow(/rejected/);
+    s.close();
+  });
+
   test("creates canonical database, applies idempotent migrations, and sets SQLite pragmas", () => {
     const dir = project();
     const first = new Storage({ projectDir: dir });
@@ -25,12 +139,12 @@ describe("storage", () => {
     expect(first.db.query("PRAGMA journal_mode").get()).toEqual({ journal_mode: "wal" });
     expect(first.db.query("PRAGMA foreign_keys").get()).toEqual({ foreign_keys: 1 });
     expect(first.db.query("SELECT COUNT(*) AS count FROM schema_migrations").get()).toEqual({
-      count: 2,
+      count: 3,
     });
     first.close();
     const second = new Storage({ projectDir: dir });
     expect(second.db.query("SELECT COUNT(*) AS count FROM schema_migrations").get()).toEqual({
-      count: 2,
+      count: 3,
     });
     second.close();
   });
@@ -126,7 +240,7 @@ describe("storage", () => {
     const upgraded = new Storage({ projectDir: dir });
     expect(
       upgraded.db.query("SELECT version FROM schema_migrations ORDER BY version").all(),
-    ).toEqual([{ version: 1 }, { version: 2 }]);
+    ).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }]);
     expect(
       upgraded.db
         .query("SELECT name FROM pragma_table_info('approvals') WHERE name='attempt_id'")
