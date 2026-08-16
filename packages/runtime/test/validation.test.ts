@@ -9,6 +9,30 @@ function codes(workflow: unknown): string[] {
   return validateWorkflow(workflow).diagnostics.map((item) => item.code);
 }
 
+type FixtureRecord = Record<string, unknown>;
+type FixtureWorkflow = FixtureRecord & {
+  nodes: FixtureRecord[];
+  edges: FixtureRecord[];
+};
+
+async function canonicalFixture(): Promise<FixtureWorkflow> {
+  return structuredClone(
+    await Bun.file(new URL("../../../fixtures/workflows/valid-basic.json", import.meta.url)).json(),
+  ) as FixtureWorkflow;
+}
+
+function fixtureNode(workflow: FixtureWorkflow, index: number): FixtureRecord {
+  const node = workflow.nodes[index];
+  if (!node) throw new Error(`Fixture node ${index} is missing.`);
+  return node;
+}
+
+function fixtureEdge(workflow: FixtureWorkflow, index: number): FixtureRecord {
+  const edge = workflow.edges[index];
+  if (!edge) throw new Error(`Fixture edge ${index} is missing.`);
+  return edge;
+}
+
 describe("workflow graph validation", () => {
   test("validates a linear workflow but rejects its non-contract shape for compilation", () => {
     const workflow = {
@@ -219,5 +243,154 @@ describe("workflow graph validation", () => {
       ],
     };
     expect(codes(workflow)).toContain("JOIN_INCOMING_REQUIRED");
+  });
+
+  test.each([
+    [
+      "missing workflow input",
+      (workflow: FixtureWorkflow) => {
+        const inputBindings = fixtureNode(workflow, 0).inputBindings as FixtureRecord;
+        (inputBindings.task as FixtureRecord).name = "missing";
+      },
+      "WORKFLOW_INPUT_REFERENCE_INVALID",
+    ],
+    [
+      "missing node output target",
+      (workflow: FixtureWorkflow) => {
+        const inputBindings = fixtureNode(workflow, 0).inputBindings as FixtureRecord;
+        inputBindings.task = {
+          kind: "node_output",
+          nodeId: "55555555-5555-4555-8555-555555555555",
+        };
+      },
+      "NODE_OUTPUT_REFERENCE_TARGET_MISSING",
+    ],
+    [
+      "self node output reference",
+      (workflow: FixtureWorkflow) => {
+        const inputBindings = fixtureNode(workflow, 0).inputBindings as FixtureRecord;
+        inputBindings.task = {
+          kind: "node_output",
+          nodeId: fixtureNode(workflow, 0).id,
+        };
+      },
+      "NODE_OUTPUT_REFERENCE_SELF",
+    ],
+    [
+      "downstream node output reference",
+      (workflow: FixtureWorkflow) => {
+        const inputBindings = fixtureNode(workflow, 0).inputBindings as FixtureRecord;
+        inputBindings.task = {
+          kind: "node_output",
+          nodeId: fixtureNode(workflow, 1).id,
+        };
+      },
+      "NODE_OUTPUT_REFERENCE_NOT_UPSTREAM",
+    ],
+  ] as const)("rejects %s", async (_name, mutate, code) => {
+    const workflow = await canonicalFixture();
+    mutate(workflow);
+    const result = compileWorkflow(workflow);
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.map((item) => item.code)).toContain(code);
+  });
+
+  test("rejects a sibling node output reference even when it appears earlier in the node array", async () => {
+    const workflow = await canonicalFixture();
+    const start = fixtureNode(workflow, 0);
+    const done = fixtureNode(workflow, 1);
+    const left = {
+      id: "55555555-5555-4555-8555-555555555555",
+      kind: "agent",
+      name: "Left",
+      prompt: "Left branch",
+      skills: [],
+      inputBindings: {
+        value: {
+          kind: "node_output",
+          nodeId: "66666666-6666-4666-8666-666666666666",
+        },
+      },
+      requiredCapabilities: [],
+      completionContract: "node_completion",
+      tags: [],
+    };
+    const right = {
+      ...left,
+      id: "66666666-6666-4666-8666-666666666666",
+      name: "Right",
+      prompt: "Right branch",
+      inputBindings: {},
+    };
+    workflow.nodes = [start, left, right, done];
+    workflow.edges = [
+      {
+        id: "77777777-7777-4777-8777-777777777777",
+        source: start.id,
+        target: left.id,
+        metadata: {},
+      },
+      {
+        id: "88888888-8888-4888-8888-888888888888",
+        source: start.id,
+        target: right.id,
+        metadata: {},
+      },
+      {
+        id: "99999999-9999-4999-8999-999999999999",
+        source: left.id,
+        target: done.id,
+        metadata: {},
+      },
+      {
+        id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        source: right.id,
+        target: done.id,
+        metadata: {},
+      },
+    ];
+
+    const result = compileWorkflow(workflow);
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.map((item) => item.code)).toContain(
+      "NODE_OUTPUT_REFERENCE_NOT_UPSTREAM",
+    );
+  });
+
+  test("accepts a transitive strict-upstream node output reference", async () => {
+    const workflow = await canonicalFixture();
+    const start = fixtureNode(workflow, 0);
+    const middle = fixtureNode(workflow, 1);
+    const terminal = {
+      id: "55555555-5555-4555-8555-555555555555",
+      kind: "transform",
+      name: "Collect result",
+      operation: "pick",
+      mapping: {
+        result: {
+          kind: "node_output",
+          nodeId: start.id,
+        },
+      },
+      tags: [],
+    };
+    workflow.nodes = [start, middle, terminal];
+    workflow.edges = [
+      { id: fixtureEdge(workflow, 0).id, source: start.id, target: middle.id, metadata: {} },
+      {
+        id: "66666666-6666-4666-8666-666666666666",
+        source: middle.id,
+        target: terminal.id,
+        metadata: {},
+      },
+    ];
+
+    const result = compileWorkflow(workflow);
+    expect(result.ok).toBe(true);
+    expect(result.diagnostics).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "NODE_OUTPUT_REFERENCE_NOT_UPSTREAM" }),
+      ]),
+    );
   });
 });
