@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { type TraceEvent, TraceEventSchema } from "@loopy/contracts";
 import { createDefaultProviderRegistry } from "@loopy/providers";
 import { createProviderExecutor, RuntimeScheduler } from "@loopy/runtime";
 import { InMemoryRuntimeStore } from "../src/index.ts";
@@ -19,17 +20,11 @@ describe("registered provider adapter conformance", () => {
           cwd: process.cwd(),
         },
       });
-      const stored: Array<{ sequence: number; provider: string; type: string; payload?: unknown }> =
-        [];
+      const stored: TraceEvent[] = [];
       const executor = createProviderExecutor({
         registry,
         onEvent: (event) => {
-          stored.push({
-            sequence: stored.length,
-            provider: event.provider,
-            type: event.type,
-            payload: event.payload,
-          });
+          stored.push(TraceEventSchema.parse(event));
         },
       });
       const runtime = new RuntimeScheduler({
@@ -59,17 +54,17 @@ describe("registered provider adapter conformance", () => {
         provider,
         provider,
       ]);
-      expect(stored.filter((event) => event.type === "message")).toHaveLength(2);
+      expect(stored.filter((event) => event.type === "provider.message")).toHaveLength(2);
       shapes.push(stored.map((event) => event.type));
     }
     expect(shapes.every((shape) => JSON.stringify(shape) === JSON.stringify(shapes[0]))).toBe(true);
     expect(shapes[0]).toEqual([
-      "session_started",
-      "message",
-      "session_ended",
-      "session_started",
-      "message",
-      "session_ended",
+      "provider.session_started",
+      "provider.message",
+      "provider.session_ended",
+      "provider.session_started",
+      "provider.message",
+      "provider.session_ended",
     ]);
   });
 });
