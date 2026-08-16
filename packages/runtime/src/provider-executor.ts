@@ -219,6 +219,46 @@ function canonicalProviderEvent(
         },
       };
       break;
+    case "unknown": {
+      const diagnostic = record(payload.diagnostic);
+      const code =
+        typeof diagnostic.code === "string" && diagnostic.code.trim()
+          ? diagnostic.code
+          : "provider_event_unknown";
+      const message =
+        typeof diagnostic.message === "string" && diagnostic.message.trim()
+          ? diagnostic.message
+          : typeof input.message === "string" && input.message.trim()
+            ? input.message
+            : `Provider emitted an unsupported event${
+                typeof input.rawType === "string" && input.rawType.trim()
+                  ? ` '${input.rawType}'`
+                  : ""
+              }.`;
+      const severity =
+        diagnostic.severity === "info" || diagnostic.severity === "error"
+          ? diagnostic.severity
+          : diagnostic.code === "malformed_event"
+            ? "error"
+            : "warning";
+      const source =
+        typeof diagnostic.source === "string" && diagnostic.source.trim()
+          ? diagnostic.source
+          : typeof diagnostic.rawType === "string" && diagnostic.rawType.trim()
+            ? diagnostic.rawType
+            : typeof input.rawType === "string" && input.rawType.trim()
+              ? input.rawType
+              : provider;
+      // Adapter diagnostics are evidence, not implicit terminal outcomes. A
+      // fatal adapter diagnostic is followed by an explicit failed terminal
+      // event, which remains the source of truth for the attempt status.
+      canonical = {
+        ...base,
+        type: "runtime.warning",
+        payload: { code, message, severity, source },
+      };
+      break;
+    }
     default:
       throw new Error(`Provider event type '${String(type)}' has no canonical trace mapping.`);
   }

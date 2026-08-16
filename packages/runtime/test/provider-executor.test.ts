@@ -21,9 +21,10 @@ const context = (extra: Record<string, unknown> = {}) => ({
 
 function adapter(
   start: (request: ProviderRequest) => ProviderRun | Promise<ProviderRun>,
+  provider: ProviderAdapter["id"] = "codex",
 ): ProviderAdapter {
   return {
-    id: "codex",
+    id: provider,
     version: "fake-1",
     probe: async () => ({
       provider: "codex",
@@ -165,6 +166,102 @@ describe("provider executor", () => {
       expect(parsed.success && parsed.data.nodeId).toBeTruthy();
     }
   });
+
+  test.each(["opencode", "pi"] as const)(
+    "persists nonfatal %s diagnostics as warning evidence without changing terminal success",
+    async (provider) => {
+      const stored: TraceEvent[] = [];
+      const sessionId = `${provider}-session`;
+      const events = [
+        {
+          type: "session_started",
+          provider,
+          occurredAt: "2026-01-01T00:00:00.000Z",
+          provenance: { sessionId },
+          payload: {},
+        },
+        {
+          type: "unknown",
+          provider,
+          occurredAt: "2026-01-01T00:00:01.000Z",
+          provenance: { sessionId },
+          rawType: "future_event",
+          payload: {
+            diagnostic: {
+              code: "unknown_event",
+              message: `Unsupported ${provider} event type: future_event.`,
+              rawType: "future_event",
+            },
+          },
+        },
+        {
+          type: "unknown",
+          provider,
+          occurredAt: "2026-01-01T00:00:02.000Z",
+          provenance: { sessionId },
+          rawType: "message_update",
+          payload: {
+            diagnostic: {
+              code: "lossy_event",
+              message: `${provider} hidden reasoning was omitted.`,
+              rawType: "message_update",
+            },
+          },
+        },
+        {
+          type: "session_ended",
+          provider,
+          occurredAt: "2026-01-01T00:00:03.000Z",
+          provenance: { sessionId },
+          payload: { status: "succeeded" },
+        },
+      ];
+      const executor = createProviderExecutor({
+        registry: createProviderRegistry([
+          adapter(
+            async () => ({
+              session: Promise.resolve({ provider, sessionId }),
+              events: (async function* () {
+                yield* events;
+              })() as ProviderRun["events"],
+              cancel: async () => {},
+            }),
+            provider,
+          ),
+        ]),
+        onEvent: (event) => {
+          stored.push(event);
+        },
+      });
+
+      const result = await executor.execute(
+        context({ node: { id: "agent-1", kind: "agent", provider } }),
+      );
+
+      expect(result.status).toBe("succeeded");
+      expect(stored.map(({ type, sequence }) => ({ type, sequence }))).toEqual([
+        { type: "provider.session_started", sequence: 0 },
+        { type: "runtime.warning", sequence: 1 },
+        { type: "runtime.warning", sequence: 2 },
+        { type: "provider.session_ended", sequence: 3 },
+      ]);
+      expect(stored.slice(1, 3).map((event) => event.payload)).toEqual([
+        {
+          code: "unknown_event",
+          message: `Unsupported ${provider} event type: future_event.`,
+          severity: "warning",
+          source: "future_event",
+        },
+        {
+          code: "lossy_event",
+          message: `${provider} hidden reasoning was omitted.`,
+          severity: "warning",
+          source: "message_update",
+        },
+      ]);
+      expect(stored.every((event) => TraceEventSchema.safeParse(event).success)).toBe(true);
+    },
+  );
 
   test("does not infer success when terminal provider evidence is absent", async () => {
     const executor = createProviderExecutor({
