@@ -245,7 +245,7 @@ function idFallback(prefix: string): string {
   let hash = 2166136261;
   for (const char of seed) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
   const hex = (hash >>> 0).toString(16).padStart(8, "0");
-  return `${hex}${hex.slice(0, 4)}-4000-8000-0000-${hex}${hex}${hex.slice(0, 4)}`.slice(0, 36);
+  return `${hex}-0000-4000-8000-${hex}${hex.slice(0, 4)}`;
 }
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical);
