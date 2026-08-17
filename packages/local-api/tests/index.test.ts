@@ -284,6 +284,97 @@ describe("local API", () => {
     }
   });
 
+  test("drains a queued manual fire once when the active run reaches terminal state", async () => {
+    const { dir, storage } = project();
+    try {
+      const workflow = {
+        id: "queued-manual-workflow",
+        workflowVersion: 1,
+        name: "queued manual",
+        nodes: [],
+        edges: [],
+      };
+      storage.runtime.createWorkflowVersion({
+        workflowId: workflow.id,
+        version: 1,
+        definition: workflow,
+      });
+      let nextRun = 0;
+      const waiters = new Map<string, (status: string) => void>();
+      const app = createLocalApi({
+        storage,
+        token,
+        scheduleEngine: {
+          async start(plan, input) {
+            const source = plan as { id: string; workflowVersion: number };
+            nextRun += 1;
+            const id = `queued-run-${nextRun}`;
+            storage.runtime.createRun({
+              id,
+              workflowId: source.id,
+              workflowVersion: source.workflowVersion,
+              input,
+              status: "running",
+            });
+            return { runId: id };
+          },
+          wait(runId) {
+            return new Promise((resolve) => {
+              waiters.set(runId, (status) => resolve({ run: { status } }));
+            });
+          },
+        },
+      });
+      const created = await app.request("/api/v1/schedules", {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "queued manual",
+          workflowId: workflow.id,
+          workflowVersion: 1,
+          expression: "manual",
+          overlapPolicy: "queue",
+        }),
+      });
+      const schedule = (await created.json()) as { id: string };
+      const fire = (fireKey: string) =>
+        app.request(`/api/v1/schedules/${schedule.id}/fire`, {
+          method: "POST",
+          headers: { ...headers, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fireKey,
+            scheduledAt: `2026-08-17T00:0${fireKey.at(-1)}:00.000Z`,
+          }),
+        });
+
+      expect((await (await fire("manual-1")).json()).fire.status).toBe("running");
+      expect((await (await fire("manual-2")).json()).queued).toBe(true);
+      expect(nextRun).toBe(1);
+
+      waiters.get("queued-run-1")?.("succeeded");
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(nextRun).toBe(2);
+      const activeAfterDrain = await app.request(`/api/v1/schedules/${schedule.id}/status`, {
+        headers,
+      });
+      expect((await activeAfterDrain.json()).activeRunIds).toEqual(["queued-run-2"]);
+
+      waiters.get("queued-run-2")?.("succeeded");
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const terminal = await app.request(`/api/v1/schedules/${schedule.id}/status`, { headers });
+      const status = await terminal.json();
+      expect(nextRun).toBe(2);
+      expect(status.activeRunIds).toEqual([]);
+      expect(status.fires.map((item: { status: string }) => item.status)).toEqual([
+        "succeeded",
+        "succeeded",
+      ]);
+    } finally {
+      storage.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("returns explicit capability errors for absent replay seam", async () => {
     const { dir, storage } = project();
     try {

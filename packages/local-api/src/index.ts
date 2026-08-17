@@ -934,6 +934,43 @@ export function createLocalApi(options: LocalApiOptions): Hono {
 
   const requireScheduleStore = (): ScheduleRepository =>
     scheduleStore ?? capability("Schedule persistence is not configured");
+  const drainingSchedules = new Set<string>();
+  const waitForScheduleRun = (scheduleId: string, runId: string) => {
+    if (!scheduleEngine?.wait) return;
+    void scheduleEngine
+      .wait(runId)
+      .then(async (snapshot) => {
+        const store = requireScheduleStore();
+        store.reconcileRun(runId, snapshot.run.status as RunRecord["status"]);
+        await drainQueuedScheduleFire(scheduleId);
+      })
+      .catch(() => undefined);
+  };
+  const drainQueuedScheduleFire = async (scheduleId: string): Promise<void> => {
+    if (drainingSchedules.has(scheduleId)) return;
+    drainingSchedules.add(scheduleId);
+    try {
+      const store = requireScheduleStore();
+      const queued = store
+        .listFires(scheduleId, 1000)
+        .filter((item) => item.status === "claimed" && !item.runId)
+        .sort((left, right) =>
+          `${left.scheduledAt}:${left.id}`.localeCompare(`${right.scheduledAt}:${right.id}`),
+        )[0];
+      if (!queued || !scheduleEngine) return;
+      const schedule = store.get(scheduleId) ?? notFound("Schedule");
+      const workflow =
+        repository.getWorkflowVersion(schedule.workflowId, schedule.workflowVersion) ??
+        notFound("Workflow version");
+      const run = await scheduleEngine.start(workflow.definition, schedule.input);
+      const runId = "runId" in run ? run.runId : run.id;
+      store.linkRun({ scheduleId, fireId: queued.id, runId, state: "active" });
+      store.updateFire(queued.id, { runId, status: "running" });
+      waitForScheduleRun(scheduleId, runId);
+    } finally {
+      drainingSchedules.delete(scheduleId);
+    }
+  };
   const fireSchedule = async (scheduleId: string, requestedKey?: string, requestedAt?: string) => {
     const store = requireScheduleStore();
     if (!scheduleEngine) capability("Runtime scheduler is not configured for schedule execution");
@@ -999,12 +1036,7 @@ export function createLocalApi(options: LocalApiOptions): Hono {
             },
             new Date(scheduledAt),
           ).toISOString();
-    if (scheduleEngine.wait) {
-      void scheduleEngine
-        .wait(runId)
-        .then((snapshot) => store.reconcileRun(runId, snapshot.run.status as RunRecord["status"]))
-        .catch(() => undefined);
-    }
+    waitForScheduleRun(scheduleId, runId);
     return {
       schedule: store.update(scheduleId, { lastFireAt: scheduledAt, nextFireAt: nextFire }),
       fire: store.updateFire(claimed.id, { runId, status: "running" }),
@@ -1157,6 +1189,7 @@ export function createLocalApi(options: LocalApiOptions): Hono {
                 store.reconcileRun(runId, snapshot.run.status as RunRecord["status"]);
                 queueMicrotask(() => {
                   void policy.complete(invocation.scheduleId, runId);
+                  void drainQueuedScheduleFire(invocation.scheduleId);
                 });
               })
               .catch(() => undefined);
