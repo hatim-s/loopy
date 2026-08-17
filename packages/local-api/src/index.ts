@@ -1,7 +1,14 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { JsonObject, WorkflowDefinition } from "@loopy/contracts";
 import type { ProviderRegistry } from "@loopy/providers";
-import type { RuntimeScheduler, RuntimeStore } from "@loopy/runtime";
+import type {
+  AttemptRecord as RuntimeAttemptRecord,
+  RuntimeEvent,
+  RunRecord as RuntimeRunRecord,
+  RuntimeScheduler,
+  RuntimeSnapshot,
+  RuntimeStore,
+} from "@loopy/runtime";
 import type {
   ArtifactRecord,
   AttemptRecord,
@@ -70,6 +77,55 @@ export type LocalServerConfig = {
   origins: readonly string[];
 };
 export type LocalApiServer = LocalServerConfig & { app: Hono; server: { stop(): void } };
+
+/**
+ * The public run shape deliberately uses the storage vocabulary (`id`, `input`,
+ * `updatedAt`) even when a run is owned by an in-memory/runtime scheduler.
+ * Runtime-specific fields remain optional metadata rather than changing the
+ * identity of the resource between list/create/get responses.
+ */
+export type LocalApiRun = {
+  id: string;
+  workflowId: string;
+  workflowVersion: number;
+  status: RunRecord["status"];
+  input: JsonObject;
+  planHash?: string;
+  createdAt: string;
+  updatedAt: string;
+  plan?: RuntimeRunRecord["plan"];
+  executionPlanHash?: string;
+  startedAt?: string;
+  endedAt?: string;
+  error?: string;
+};
+
+export type LocalApiAttempt = {
+  id: string;
+  attemptId: string;
+  runId: string;
+  nodeId: string;
+  attempt: number;
+  status: string;
+  input?: JsonObject;
+  output?: JsonObject;
+  completion?: Record<string, unknown>;
+  error?: string;
+  createdAt?: string;
+  startedAt?: string;
+  endedAt?: string;
+  updatedAt?: string;
+};
+
+export type LocalApiEvent = EventRecord & { source?: "storage" | "runtime" };
+
+export type LocalApiRunSnapshot = LocalApiRun & {
+  attempts: LocalApiAttempt[];
+  events: LocalApiEvent[];
+  artifacts: ArtifactRecord[];
+  approvals: unknown[];
+  workflow?: WorkflowVersionRecord;
+};
 
 const DEFAULT_ORIGINS = ["http://127.0.0.1:5173", "http://localhost:5173"] as const;
 const DEFAULT_MAX_BODY_BYTES = 1_048_576;
@@ -256,6 +312,185 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
+type RuntimeStoreWithTrace = RuntimeStore & {
+  listTraceEvents?: (runId: string) => readonly Record<string, unknown>[];
+};
+
+function isRuntimeRun(value: RunRecord | RuntimeRunRecord): value is RuntimeRunRecord {
+  return "runId" in value;
+}
+
+function normalizeRun(value: RunRecord | RuntimeRunRecord): LocalApiRun {
+  if (isRuntimeRun(value)) {
+    const updatedAt = value.endedAt ?? value.startedAt ?? value.createdAt;
+    return {
+      id: value.runId,
+      workflowId: value.workflowId,
+      workflowVersion: value.workflowVersion,
+      status: value.status,
+      input: value.inputs,
+      ...(value.executionPlanHash ? { planHash: value.executionPlanHash } : {}),
+      createdAt: value.createdAt,
+      updatedAt,
+      plan: value.plan,
+      ...(value.executionPlanHash ? { executionPlanHash: value.executionPlanHash } : {}),
+      ...(value.startedAt ? { startedAt: value.startedAt } : {}),
+      ...(value.endedAt ? { endedAt: value.endedAt } : {}),
+      ...(value.error ? { error: value.error } : {}),
+    };
+  }
+  return {
+    id: value.id,
+    workflowId: value.workflowId,
+    workflowVersion: value.workflowVersion,
+    status: value.status,
+    input: value.input,
+    ...(value.planHash ? { planHash: value.planHash } : {}),
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+  };
+}
+
+function normalizeAttempt(value: AttemptRecord | RuntimeAttemptRecord): LocalApiAttempt {
+  if ("attemptId" in value) {
+    return {
+      id: value.attemptId,
+      attemptId: value.attemptId,
+      runId: value.runId,
+      nodeId: value.nodeId,
+      attempt: value.attempt,
+      status: value.status,
+      input: value.input,
+      ...(value.output ? { output: value.output } : {}),
+      ...(value.completion ? { completion: value.completion } : {}),
+      ...(value.error ? { error: value.error } : {}),
+      ...(value.createdAt ? { createdAt: value.createdAt } : {}),
+      ...(value.startedAt ? { startedAt: value.startedAt } : {}),
+      ...(value.endedAt ? { endedAt: value.endedAt } : {}),
+    };
+  }
+  return {
+    id: value.id,
+    attemptId: value.id,
+    runId: value.runId,
+    nodeId: value.nodeId,
+    attempt: value.attempt,
+    status: value.status,
+    ...(value.input && typeof value.input === "object" && !Array.isArray(value.input)
+      ? { input: value.input as JsonObject }
+      : {}),
+    ...(value.output && typeof value.output === "object" && !Array.isArray(value.output)
+      ? { output: value.output as JsonObject }
+      : {}),
+    ...(value.error ? { error: value.error } : {}),
+    ...(value.startedAt ? { startedAt: value.startedAt } : {}),
+    ...(value.finishedAt ? { endedAt: value.finishedAt } : {}),
+    updatedAt: value.updatedAt,
+  };
+}
+
+function runtimeEventId(event: RuntimeEvent): string {
+  return [event.runId, event.sequence, event.type, event.nodeId ?? "", event.attemptId ?? ""].join(
+    ":",
+  );
+}
+
+function normalizeRuntimeEvent(event: RuntimeEvent): LocalApiEvent {
+  const source = event as RuntimeEvent & {
+    id?: string;
+    provider?: string;
+    sessionId?: string;
+    toolCallId?: string;
+    monotonicOffsetMs?: number;
+  };
+  return {
+    id: source.id ?? runtimeEventId(event),
+    runId: event.runId,
+    sequence: event.sequence,
+    type: event.type,
+    payload: jsonObject(event.payload),
+    ...(event.nodeId ? { nodeId: event.nodeId } : {}),
+    ...(event.attemptId ? { attemptId: event.attemptId } : {}),
+    ...(source.provider ? { provider: source.provider } : {}),
+    ...(source.sessionId ? { sessionId: source.sessionId } : {}),
+    ...(source.toolCallId ? { toolCallId: source.toolCallId } : {}),
+    occurredAt: event.occurredAt,
+    monotonicOffsetMs: source.monotonicOffsetMs ?? 0,
+    source: "runtime",
+  };
+}
+
+function normalizeCanonicalEvent(value: Record<string, unknown>): LocalApiEvent {
+  const event = value as Partial<EventRecord>;
+  return {
+    id: typeof event.id === "string" ? event.id : "",
+    runId: String(event.runId ?? ""),
+    sequence: Number(event.sequence ?? 0),
+    type: String(event.type ?? "runtime.event"),
+    payload: jsonObject(event.payload),
+    ...(typeof event.nodeId === "string" ? { nodeId: event.nodeId } : {}),
+    ...(typeof event.attemptId === "string" ? { attemptId: event.attemptId } : {}),
+    ...(typeof event.provider === "string" ? { provider: event.provider } : {}),
+    ...(typeof event.sessionId === "string" ? { sessionId: event.sessionId } : {}),
+    ...(typeof event.toolCallId === "string" ? { toolCallId: event.toolCallId } : {}),
+    occurredAt: String(event.occurredAt ?? new Date(0).toISOString()),
+    monotonicOffsetMs: Number(event.monotonicOffsetMs ?? 0),
+    source: "storage",
+  };
+}
+
+function topologyFromDefinition(definition: unknown): {
+  startNodeIds: string[];
+  terminalNodeIds: string[];
+  topologicalOrder: string[];
+} {
+  const source = jsonObject(definition);
+  const existing = jsonObject(source.topology);
+  const nodes = Array.isArray(source.nodes)
+    ? source.nodes
+        .map((node) =>
+          node && typeof node === "object" ? (node as Record<string, unknown>).id : undefined,
+        )
+        .filter((id): id is string => typeof id === "string")
+    : [];
+  const edges = Array.isArray(source.edges)
+    ? source.edges
+        .map((edge) => (edge && typeof edge === "object" ? (edge as Record<string, unknown>) : {}))
+        .filter((edge) => typeof edge.source === "string" && typeof edge.target === "string")
+        .map((edge) => ({ source: edge.source as string, target: edge.target as string }))
+    : [];
+  const indegree = new Map(nodes.map((node) => [node, 0]));
+  const outgoing = new Map(nodes.map((node) => [node, [] as string[]]));
+  for (const edge of edges) {
+    if (!indegree.has(edge.target) || !outgoing.has(edge.source)) continue;
+    indegree.set(edge.target, (indegree.get(edge.target) ?? 0) + 1);
+    outgoing.get(edge.source)?.push(edge.target);
+  }
+  const initialIndegree = new Map(indegree);
+  const queue = nodes.filter((node) => (indegree.get(node) ?? 0) === 0);
+  const order: string[] = [];
+  for (let index = 0; index < queue.length; index += 1) {
+    const node = queue[index] as string;
+    order.push(node);
+    for (const target of outgoing.get(node) ?? []) {
+      const next = (indegree.get(target) ?? 0) - 1;
+      indegree.set(target, next);
+      if (next === 0) queue.push(target);
+    }
+  }
+  return {
+    startNodeIds: Array.isArray(existing.startNodeIds)
+      ? existing.startNodeIds.filter((id): id is string => typeof id === "string")
+      : nodes.filter((node) => (initialIndegree.get(node) ?? 0) === 0),
+    terminalNodeIds: Array.isArray(existing.terminalNodeIds)
+      ? existing.terminalNodeIds.filter((id): id is string => typeof id === "string")
+      : nodes.filter((node) => (outgoing.get(node) ?? []).length === 0),
+    topologicalOrder: Array.isArray(existing.topologicalOrder)
+      ? existing.topologicalOrder.filter((id): id is string => typeof id === "string")
+      : order,
+  };
+}
+
 /** Construct the authenticated local API. It does not listen. */
 export function createLocalApi(options: LocalApiOptions): Hono {
   const repository = options.storage.runtime;
@@ -422,6 +657,18 @@ export function createLocalApi(options: LocalApiOptions): Hono {
       repository.getWorkflowVersion(c.req.param("id"), version) ?? notFound("Workflow version"),
     );
   });
+  api.get("/workflows/:id/:version/topology", (c) => {
+    const version = Number(c.req.param("version"));
+    if (!Number.isInteger(version) || version < 1)
+      throw new ApiError(400, "invalid_request", "Workflow version must be positive");
+    const workflow =
+      repository.getWorkflowVersion(c.req.param("id"), version) ?? notFound("Workflow version");
+    return c.json({
+      workflowId: workflow.workflowId,
+      version: workflow.version,
+      topology: topologyFromDefinition(workflow.definition),
+    });
+  });
   api.post("/workflows", async (c) => {
     const body = await jsonBody(c, maxBodyBytes);
     const definition = (body.definition ?? body.workflow) as
@@ -440,18 +687,82 @@ export function createLocalApi(options: LocalApiOptions): Hono {
     );
   });
 
-  const runRecord = (id: string): RunRecord => repository.getRun(id) ?? notFound("Run");
-  const listEvents = async (
-    runId: string,
-    after?: number,
-  ): Promise<Array<EventRecord | import("@loopy/runtime").RuntimeEvent>> =>
-    options.runtimeStore
-      ? (await options.runtimeStore.listEvents(runId)).filter(
-          (event) => after === undefined || event.sequence > after,
-        )
-      : repository.listEvents(runId, { afterSequence: after, limit: 1_000 });
-  api.get("/runs", (c) =>
-    c.json({ runs: repository.listRuns(c.req.query("status") as RunRecord["status"] | undefined) }),
+  const runtimeStore = options.runtimeStore as RuntimeStoreWithTrace | undefined;
+  const runtimeRun = async (id: string): Promise<RuntimeRunRecord | undefined> => {
+    try {
+      return (await runtimeStore?.getRun(id)) as RuntimeRunRecord | undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  const runRecord = async (id: string): Promise<LocalApiRun> => {
+    const stored = repository.getRun(id);
+    if (stored) return normalizeRun(stored);
+    const runtime = await runtimeRun(id);
+    if (runtime) return normalizeRun(runtime);
+    notFound("Run");
+  };
+  const listEvents = async (runId: string, after?: number): Promise<LocalApiEvent[]> => {
+    // Storage is the canonical API source because its EventRecord retains the
+    // durable event ID, monotonic offset, and provider/session/tool metadata.
+    if (repository.getRun(runId))
+      return repository
+        .listEvents(runId, { afterSequence: after, limit: 1_000 })
+        .map((event) => ({ ...event, source: "storage" as const }));
+    const canonical = runtimeStore?.listTraceEvents?.(runId);
+    if (canonical) {
+      return canonical
+        .map(normalizeCanonicalEvent)
+        .filter((event) => after === undefined || event.sequence > after)
+        .sort((left, right) => left.sequence - right.sequence);
+    }
+    if (runtimeStore)
+      return (await runtimeStore.listEvents(runId))
+        .filter((event) => after === undefined || event.sequence > after)
+        .map(normalizeRuntimeEvent)
+        .sort((left, right) => left.sequence - right.sequence);
+    if (scheduler) {
+      try {
+        return (await scheduler.snapshot(runId)).events
+          .filter((event) => after === undefined || event.sequence > after)
+          .map(normalizeRuntimeEvent)
+          .sort((left, right) => left.sequence - right.sequence);
+      } catch {
+        /* no runtime-backed events */
+      }
+    }
+    return [];
+  };
+  const listAttempts = async (runId: string): Promise<LocalApiAttempt[]> => {
+    if (runtimeStore) {
+      const attempts = await runtimeStore.listAttempts(runId);
+      if (attempts.length) return attempts.map(normalizeAttempt);
+    }
+    if (scheduler) {
+      try {
+        const snapshot = await scheduler.snapshot(runId);
+        if (snapshot.attempts.length) return snapshot.attempts.map(normalizeAttempt);
+      } catch {
+        /* persisted fallback */
+      }
+    }
+    return repository.listAttempts(runId).map(normalizeAttempt);
+  };
+  const listRuns = async (status?: RunRecord["status"]): Promise<LocalApiRun[]> => {
+    const byId = new Map<string, LocalApiRun>();
+    for (const run of repository.listRuns(status)) byId.set(run.id, normalizeRun(run));
+    if (runtimeStore) {
+      for (const run of await runtimeStore.listRuns()) {
+        const normalized = normalizeRun(run);
+        if (!status || normalized.status === status) byId.set(normalized.id, normalized);
+      }
+    }
+    return [...byId.values()].sort((left, right) =>
+      `${left.createdAt}:${left.id}`.localeCompare(`${right.createdAt}:${right.id}`),
+    );
+  };
+  api.get("/runs", async (c) =>
+    c.json({ runs: await listRuns(c.req.query("status") as RunRecord["status"] | undefined) }),
   );
   api.post("/runs", async (c) => {
     if (!scheduler) capability("Runtime scheduler is not configured");
@@ -467,31 +778,45 @@ export function createLocalApi(options: LocalApiOptions): Hono {
       jsonObject(body.input),
     );
     hub.notify(run.runId);
-    return c.json(run, 201);
+    return c.json(normalizeRun(run), 201);
   });
   api.get("/runs/:id", async (c) => {
     const id = c.req.param("id");
+    let runtimeSnapshot: RuntimeSnapshot | undefined;
     if (scheduler) {
       try {
-        return c.json(await scheduler.snapshot(id));
+        runtimeSnapshot = await scheduler.snapshot(id);
       } catch {
         /* persisted fallback */
       }
     }
-    return c.json(runRecord(id));
+    const run = runtimeSnapshot ? normalizeRun(runtimeSnapshot.run) : await runRecord(id);
+    const events = await listEvents(id);
+    const attempts = runtimeSnapshot?.attempts.length
+      ? runtimeSnapshot.attempts.map(normalizeAttempt)
+      : await listAttempts(id);
+    const workflow = repository.getWorkflowVersion(run.workflowId, run.workflowVersion);
+    return c.json({
+      ...run,
+      attempts,
+      events,
+      artifacts: repository.listArtifacts(id),
+      approvals: runtimeSnapshot?.approvals ?? [],
+      ...(workflow ? { workflow } : {}),
+    } satisfies LocalApiRunSnapshot);
   });
-  api.get("/runs/:id/attempts", (c) => {
-    runRecord(c.req.param("id"));
-    return c.json({ attempts: repository.listAttempts(c.req.param("id")) });
+  api.get("/runs/:id/attempts", async (c) => {
+    await runRecord(c.req.param("id"));
+    return c.json({ attempts: await listAttempts(c.req.param("id")) });
   });
   api.get("/runs/:id/events", async (c) => {
-    runRecord(c.req.param("id"));
+    await runRecord(c.req.param("id"));
     const after =
       c.req.query("after") === undefined ? undefined : readLastEventId(c.req.query("after"));
     return c.json({ events: await listEvents(c.req.param("id"), after) });
   });
-  api.get("/runs/:id/artifacts", (c) => {
-    runRecord(c.req.param("id"));
+  api.get("/runs/:id/artifacts", async (c) => {
+    await runRecord(c.req.param("id"));
     return c.json({ artifacts: repository.listArtifacts(c.req.param("id")) });
   });
   api.get("/attempts/:id", (c) =>
@@ -508,7 +833,7 @@ export function createLocalApi(options: LocalApiOptions): Hono {
   ) => {
     api.post(`/runs/:id/${name}`, async (c) => {
       const id = c.req.param("id");
-      runRecord(id);
+      await runRecord(id);
       if (!scheduler) capability(`Runtime scheduler does not implement ${name}`);
       const body = await jsonBody(c, maxBodyBytes);
       const result = await handler(c, body);
@@ -538,7 +863,7 @@ export function createLocalApi(options: LocalApiOptions): Hono {
   const commandNames = new Set(["pause", "resume", "cancel", "retry", "replay", "fork"]);
   const executeNamedCommand = async (name: string, c: Context, body: Record<string, unknown>) => {
     const id = c.req.param("id");
-    runRecord(id);
+    await runRecord(id);
     if (!commandNames.has(name)) throw new ApiError(404, "not_found", "Command not found");
     if (!scheduler) capability(`Runtime scheduler does not implement ${name}`);
     switch (name) {
@@ -574,10 +899,10 @@ export function createLocalApi(options: LocalApiOptions): Hono {
   });
   api.get("/runs/:id/events/stream", (c) => {
     const runId = c.req.param("id");
-    runRecord(runId);
     const signal = c.req.raw.signal;
     const initial = readLastEventId(c.req.header("Last-Event-ID") ?? c.req.query("after"));
     return streamSSE(c, async (stream) => {
+      await runRecord(runId);
       let cursor = initial;
       let lastHeartbeat = Date.now();
       let closed = false;

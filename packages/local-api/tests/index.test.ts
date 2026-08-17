@@ -160,6 +160,175 @@ describe("local API", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  test("uses one run shape and keeps canonical event identity and provenance", async () => {
+    const { dir, storage } = project();
+    try {
+      const workflow = {
+        id: "workflow-contract",
+        workflowVersion: 1,
+        name: "test",
+        nodes: [],
+        edges: [],
+      };
+      storage.runtime.createWorkflowVersion({
+        workflowId: workflow.id,
+        version: 1,
+        definition: workflow,
+      });
+      const run = storage.runtime.createRun({ workflowId: workflow.id, workflowVersion: 1 });
+      storage.runtime.appendEvent(run.id, {
+        id: "event-canonical-1",
+        type: "provider.message",
+        provider: "codex",
+        sessionId: "session-1",
+        toolCallId: "tool-1",
+        monotonicOffsetMs: 42,
+        payload: { text: "hello" },
+      });
+      const app = createLocalApi({ storage, token });
+      const listed = await app.request("/api/v1/runs", { headers });
+      const created = (await listed.json()).runs[0];
+      const snapshot = await app.request(`/api/v1/runs/${run.id}`, { headers });
+      const body = await snapshot.json();
+      expect(created).toMatchObject({
+        id: run.id,
+        workflowId: workflow.id,
+        workflowVersion: 1,
+        input: {},
+        createdAt: run.createdAt,
+        updatedAt: run.updatedAt,
+      });
+      expect(body).toMatchObject({
+        id: run.id,
+        workflowId: workflow.id,
+        workflowVersion: 1,
+        status: run.status,
+        attempts: [],
+      });
+      expect(
+        body.events.find((event: { id?: string }) => event.id === "event-canonical-1"),
+      ).toMatchObject({
+        id: "event-canonical-1",
+        sequence: 1,
+        provider: "codex",
+        sessionId: "session-1",
+        toolCallId: "tool-1",
+        monotonicOffsetMs: 42,
+      });
+    } finally {
+      storage.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("exposes workflow-version topology for the debugger graph", async () => {
+    const { dir, storage } = project();
+    try {
+      const workflow = {
+        id: "workflow-topology",
+        workflowVersion: 1,
+        name: "topology",
+        nodes: [{ id: "start" }, { id: "finish" }],
+        edges: [{ id: "edge", source: "start", target: "finish" }],
+      };
+      storage.runtime.createWorkflowVersion({
+        workflowId: workflow.id,
+        version: 1,
+        definition: workflow,
+      });
+      const app = createLocalApi({ storage, token });
+      const response = await app.request(`/api/v1/workflows/${workflow.id}/1/topology`, {
+        headers,
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        workflowId: workflow.id,
+        version: 1,
+        topology: {
+          startNodeIds: ["start"],
+          terminalNodeIds: ["finish"],
+          topologicalOrder: ["start", "finish"],
+        },
+      });
+    } finally {
+      storage.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("normalizes scheduler-backed create/get responses to the persisted run DTO", async () => {
+    const { dir, storage } = project();
+    try {
+      const workflow = {
+        id: "workflow-runtime",
+        workflowVersion: 1,
+        name: "runtime",
+        nodes: [],
+        edges: [],
+      };
+      storage.runtime.createWorkflowVersion({
+        workflowId: workflow.id,
+        version: 1,
+        definition: workflow,
+      });
+      const runtimeRun = {
+        runId: "runtime-run-1",
+        workflowId: workflow.id,
+        workflowVersion: 1,
+        plan: { workflowId: workflow.id, workflowVersion: 1, nodes: [], edges: [] },
+        executionPlanHash: "runtime-plan-hash",
+        inputs: { source: "scheduler" },
+        status: "running" as const,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        startedAt: "2026-01-01T00:00:01.000Z",
+      };
+      const runtimeEvent = {
+        sequence: 0,
+        type: "run.started",
+        runId: runtimeRun.runId,
+        payload: { planHash: runtimeRun.executionPlanHash },
+        occurredAt: runtimeRun.startedAt,
+      };
+      const scheduler = {
+        start: async () => runtimeRun,
+        snapshot: async () => ({
+          run: runtimeRun,
+          attempts: [],
+          events: [runtimeEvent],
+          approvals: [],
+        }),
+      } as unknown as import("@loopy/runtime").RuntimeScheduler;
+      const app = createLocalApi({ storage, scheduler, token });
+      const createdResponse = await app.request("/api/v1/runs", {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ workflowId: workflow.id, version: 1, input: runtimeRun.inputs }),
+      });
+      const created = await createdResponse.json();
+      const fetched = await app.request(`/api/v1/runs/${runtimeRun.runId}`, { headers });
+      const body = await fetched.json();
+      expect(createdResponse.status).toBe(201);
+      expect(created).toMatchObject({
+        id: runtimeRun.runId,
+        workflowId: workflow.id,
+        input: runtimeRun.inputs,
+        planHash: runtimeRun.executionPlanHash,
+        updatedAt: runtimeRun.startedAt,
+      });
+      expect(body).toMatchObject({
+        id: created.id,
+        workflowId: created.workflowId,
+        status: created.status,
+        input: created.input,
+        planHash: created.planHash,
+        events: [{ id: `${runtimeRun.runId}:0:run.started::`, sequence: 0 }],
+      });
+    } finally {
+      storage.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 test("server config is loopback-only, high-port, and tokenized", () => {
