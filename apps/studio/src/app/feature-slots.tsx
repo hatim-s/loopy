@@ -19,8 +19,8 @@ const labels: Record<FeatureKey, string> = {
   providers: "Provider connections",
   sessions: "Agent sessions",
   extractions: "Trace extractions",
-  runs: "Workflow runs",
-  workflows: "Workflow library",
+  runs: "Graph runs",
+  workflows: "Graph library",
   settings: "Studio settings",
 };
 

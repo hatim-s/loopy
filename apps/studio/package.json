@@ -1,6 +1,7 @@
 {
   "name": "@loopy/studio",
   "version": "0.1.0",
+  "description": "Visual graph engineering and debugging for the Loopy local graph harness.",
   "private": true,
   "type": "module",
   "scripts": {

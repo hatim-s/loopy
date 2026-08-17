@@ -254,17 +254,17 @@ export function WorkflowsPage({ api }: StudioPageProps) {
     workflows?: Array<{ workflowId?: string; version?: number; definition?: unknown }>;
   }>(api, "/workflows");
   return (
-    <PageFrame title="Workflow library" eyebrow="Build / workflows">
+    <PageFrame title="Graph library" eyebrow="Build / graphs">
       {result.loading ? <LoadingState label="Loading workflows" /> : null}
       {result.error ? <ErrorState message={result.error} /> : null}
       {!result.loading && !result.error && !result.value?.workflows?.length ? (
         <EmptyState
-          title="No workflows yet"
-          detail="Approved extractions become versioned local workflows."
+          title="No graphs yet"
+          detail="Approved extractions become versioned local execution graphs."
         />
       ) : null}
       {result.value?.workflows?.length ? (
-        <ul className="data-list" aria-label="Workflow versions">
+        <ul className="data-list" aria-label="Execution graph versions">
           {result.value.workflows.map((workflow, index) => (
             <li
               className="data-list__row"
@@ -275,7 +275,7 @@ export function WorkflowsPage({ api }: StudioPageProps) {
                 params={{ workflowId: workflow.workflowId ?? "" }}
                 className="workflow-library-link"
               >
-                <strong>{workflow.workflowId ?? "Unnamed workflow"}</strong>
+                <strong>{workflow.workflowId ?? "Unnamed graph"}</strong>
                 <span>version {workflow.version ?? index + 1} · Edit graph</span>
               </Link>
             </li>
@@ -496,13 +496,13 @@ export function RunsPage({ api }: StudioPageProps) {
   const result = useResource<{ runs?: Array<{ id: string; status?: string }> }>(api, "/runs");
   const run = result.value?.runs?.[0];
   return (
-    <PageFrame title="Workflow runs" eyebrow="Inspect / runs">
+    <PageFrame title="Graph runs" eyebrow="Inspect / runs">
       {result.loading ? <LoadingState label="Loading workflow runs" /> : null}
       {result.error ? <ErrorState message={result.error} /> : null}
       {!result.loading && !result.error && !run ? (
         <EmptyState
-          title="No workflow runs"
-          detail="Start a workflow from the local API to inspect its live trace."
+          title="No graph runs"
+          detail="Start an execution graph from the local API to inspect its live trace."
         />
       ) : null}
       {run ? <RunDebugger api={api} runId={run.id} /> : null}
@@ -514,7 +514,7 @@ export function SettingsPage() {
   return (
     <PageFrame title="Studio settings" eyebrow="System / settings">
       <div className="settings-card">
-        <strong>Local-only runtime</strong>
+        <strong>Local graph runtime</strong>
         <span>
           Credentials stay in memory and requests are restricted to the configured loopback origin.
         </span>

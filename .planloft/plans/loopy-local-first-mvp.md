@@ -1,20 +1,28 @@
 ---
-title: Loopy Local-First MVP Architecture and Roadmap
+title: Loopy Local-First Graph Harness Architecture and Roadmap
 slug: loopy-local-first-mvp
 kind: plan
 status: active
 theme: detailed
 ---
 
-# Loopy Local-First MVP Architecture and Roadmap
+# Loopy Local-First Graph Harness Architecture and Roadmap
 
-Build Loopy as a local recorder, extractor, workflow runtime, and visual debugger that turns completed coding-agent work into an editable loop and runs it again without a hosted service.
+Build Loopy as a local graph harness that turns completed coding-agent work into an editable execution graph, then validates, runs, records, and debugs that graph without a hosted service.
 
 ## Context
 
 Loopy starts from a simple product contract:
 
-> Do the work once with Codex, Claude Code, OpenCode, or Pi. Loopy captures what happened, extracts the reusable process, lets the user edit it visually, and runs it again locally.
+> Do the work once with Codex, Claude Code, OpenCode, or Pi. Loopy captures what happened, extracts the reusable execution graph, lets the user edit it visually, and runs it again locally.
+
+### Product terminology
+
+Loopy's product category is **local graph harness for coding agents**. The discipline it enables is **graph engineering**: making agent work an explicit topology of nodes, edges, state transitions, validation gates, approvals, and recovery paths.
+
+An agent still runs an internal reasoning and tool-use loop inside an agent node. The execution graph governs how those loops coordinate with deterministic verification, routing, joins, transforms, and human decisions. The graph is the versioned executable contract; the Studio canvas is one view of it. `WorkflowDefinition`, `/workflows`, and related CLI names remain compatibility terms until a deliberate contract version changes them.
+
+This use of graph engineering concerns task and execution topology. It does not mean knowledge graphs, GraphRAG, graph databases, or graph neural networks.
 
 The MVP is not a generic cloud workflow platform. It is a local developer tool with four responsibilities:
 
@@ -38,7 +46,7 @@ The MVP must support:
 - Graceful pause between nodes, cancellation of an active node, and explicit resume behavior.
 - Playback of stored events without executing tools.
 - Retry of one failed node and fork of a run from a checkpoint.
-- Trace-to-loop extraction with trace-event evidence for every inferred node.
+- Trace-to-graph extraction with trace-event evidence for every inferred node.
 
 The MVP does not include:
 
@@ -499,7 +507,7 @@ Mutations accept contract-validated commands such as `WorkflowPatch`, `PauseRun`
 
 - `/` — recent workflows, imports, and runs
 - `/sessions` — provider sessions and import fidelity
-- `/extract/:importId` — trace-to-loop review
+- `/extract/:importId` — trace-to-graph review
 - `/workflows/:workflowId` — workflow overview and versions
 - `/workflows/:workflowId/edit` — graph editor
 - `/runs/:runId` — live graph, timeline, logs, artifacts, and controls
@@ -629,7 +637,7 @@ When a provider cannot enforce a required filesystem or network restriction, com
 5. Implement CLI review output and save an approved proposal as workflow version 1.
 6. Create golden extraction fixtures from successful, failed-then-recovered, and subagent-heavy sessions.
 
-**Exit evidence:** an imported real session produces a valid editable workflow; every proposed node links back to evidence; the accepted loop can execute through the fake provider and one real provider.
+**Exit evidence:** an imported real session produces a valid editable execution graph; every proposed node links back to evidence; the accepted graph can execute through the fake provider and one real provider.
 
 ### Phase 4 — Local API and Studio debugger
 
@@ -728,7 +736,7 @@ The release candidate must demonstrate this end-to-end scenario:
 | Provider CLIs change output formats. | Prefer supported SDK/export/event interfaces, version adapters, retain sanitized fixtures, and fail probes clearly. |
 | Historical imports are lossy or unstable. | Show an import fidelity report and prioritize forward capture. |
 | Extraction reproduces accidental detours. | Segment first, require evidence, show removed steps, and require human approval. |
-| An extracted loop repeats a destructive action. | Infer side effects, require approval nodes, default retries off for side-effectful nodes, and use worktrees. |
+| An extracted graph repeats a destructive action. | Infer side effects, require approval nodes, default retries off for side-effectful nodes, and use worktrees. |
 | Pause semantics mislead users. | Define pause as boundary pause and expose cancellation separately. |
 | SQLite has multiple writers. | Use a project lock, one scheduler writer, WAL, busy timeout, and transactional commands. |
 | Artifacts or traces consume excessive disk. | Hash/deduplicate artifacts, set size/retention limits, and provide cleanup diagnostics. |
@@ -758,4 +766,3 @@ These decisions should be resolved with implementation evidence, not architectur
 - [Hono on Bun](https://hono.dev/docs/getting-started/bun)
 - [Vite](https://vite.dev/guide/)
 - [Playwright](https://playwright.dev/docs/intro)
-

@@ -1,6 +1,6 @@
 # Loopy CLI
 
-Local-first workflow runtime CLI. Install the packed artifact with Bun:
+Local-first graph harness CLI for coding agents. Install the packed artifact with Bun:
 
 ```sh
 bun add ./loopy-0.1.0.tgz
@@ -18,10 +18,11 @@ ephemeral bootstrap global and is never placed in a URL or persistent storage.
 Code, OpenCode, and Pi), their installed availability, and capability matrix.
 The command only probes version availability; it never starts an agent.
 
-Workflow execution remains deterministic/local by default. To explicitly run a
-workflow through an installed adapter, use `loopy run <workflow-id>
+Execution-graph orchestration remains deterministic and local by default. Agent
+work inside a node remains probabilistic. To explicitly run a graph through an
+installed adapter, use the compatibility command `loopy run <workflow-id>
 --provider <id> --live`. The selected provider must match every agent node in
-the workflow and must pass its availability probe; there is no live fallback.
+the graph and must pass its availability probe; there is no live fallback.
 
 From the repository, `bun run --cwd packages/cli smoke:package` packs the CLI,
 installs that tarball into a temporary project, and verifies the installed UI

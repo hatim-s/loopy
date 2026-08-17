@@ -29,7 +29,7 @@ async function readLaunchUrl(process: Bun.Subprocess): Promise<string> {
     const result = await Promise.race([pending, sleep(250).then(() => timeout)]);
     if (typeof result === "symbol") continue;
     if (result.value) output += decoder.decode(result.value, { stream: true });
-    const match = output.match(/Loopy Studio: (http:\/\/127\.0\.0\.1:\d+\/)/);
+    const match = output.match(/Loopy Graph Studio: (http:\/\/127\.0\.0\.1:\d+\/)/);
     if (match?.[1]) return match[1];
     if (result.done) break;
     pending = reader.read();

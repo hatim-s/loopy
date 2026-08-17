@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Local-first workflow runtime, recorder, extractor, and visual debugger for coding agents.",
+  "description": "Local-first graph harness, trace extractor, runtime, and visual debugger for coding agents.",
   "license": "Apache-2.0",
   "workspaces": [
     "apps/*",

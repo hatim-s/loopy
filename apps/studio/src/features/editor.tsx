@@ -1696,7 +1696,7 @@ function PageEditorLayout(props: {
       <header className="workflow-editor-header">
         <div>
           <div className="editor-breadcrumb">
-            <GitBranch /> Build / Workflows / {props.workflow.name}
+            <GitBranch /> Build / Graphs / {props.workflow.name}
           </div>
           <div className="workflow-editor-title-row">
             <input

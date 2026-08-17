@@ -23,6 +23,7 @@ describe("StudioShell", () => {
     await waitFor(() => {
       expect(screen.getByRole("navigation", { name: "Studio navigation" })).toBeTruthy();
       expect(screen.getByRole("link", { name: "Sessions" }).getAttribute("href")).toBe("/sessions");
+      expect(screen.getByText("Graph Harness")).toBeTruthy();
       expect(screen.getByText("Runtime idle")).toBeTruthy();
       expect(screen.getByText("Agent sessions")).toBeTruthy();
     });
@@ -40,14 +41,7 @@ describe("StudioShell", () => {
     renderShell();
 
     await waitFor(() => {
-      for (const label of [
-        "Sessions",
-        "Runs",
-        "Extractions",
-        "Workflows",
-        "Providers",
-        "Settings",
-      ]) {
+      for (const label of ["Sessions", "Runs", "Extractions", "Graphs", "Providers", "Settings"]) {
         const link = screen.getByRole("link", { name: label });
         expect(link.getAttribute("aria-label")).toBe(label);
         expect(link.tabIndex).toBeGreaterThanOrEqual(0);

@@ -1,5 +1,4 @@
 import {
-  BracketsCurly,
   CaretDoubleLeft,
   CaretDoubleRight,
   GearSix,
@@ -21,7 +20,7 @@ const navItems: NavItem[] = [
   { to: "/sessions", label: "Sessions", icon: <TerminalWindow />, section: "Inspect" },
   { to: "/runs", label: "Runs", icon: <PlayCircle />, section: "Inspect" },
   { to: "/extractions", label: "Extractions", icon: <Graph />, section: "Inspect" },
-  { to: "/workflows", label: "Workflows", icon: <GitBranch />, section: "Build" },
+  { to: "/workflows", label: "Graphs", icon: <GitBranch />, section: "Build" },
   { to: "/providers", label: "Providers", icon: <PlugsConnected />, section: "Build" },
   { to: "/settings", label: "Settings", icon: <GearSix />, section: "System" },
 ];
@@ -38,11 +37,11 @@ export function StudioShell({ children }: PropsWithChildren) {
       <aside className="sidebar" aria-label="Studio navigation">
         <div className="brand-lockup">
           <div className="brand-mark" aria-hidden="true">
-            <BracketsCurly weight="bold" />
+            <Graph weight="bold" />
           </div>
           <div className="brand-copy">
             <span className="brand-name">Loopy</span>
-            <span className="brand-product">Studio</span>
+            <span className="brand-product">Graph Harness</span>
           </div>
         </div>
         <nav aria-label="Studio navigation" className="primary-nav">
@@ -92,7 +91,7 @@ export function StudioShell({ children }: PropsWithChildren) {
           <div className="topbar__context">
             <span className="topbar__path">workspace</span>
             <span className="topbar__slash">/</span>
-            <span className="topbar__current">local debugger</span>
+            <span className="topbar__current">local graph harness</span>
           </div>
           <div className="topbar__actions">
             <span className="topbar__hint">⌘ K to search</span>
@@ -124,7 +123,7 @@ export function StudioShell({ children }: PropsWithChildren) {
         <div className="inspector-pane__empty">
           <Pulse size={18} aria-hidden="true" />
           <strong>No active trace</strong>
-          <span>Start a session to inspect events, providers, and workflow state.</span>
+          <span>Start a session to inspect events, providers, and execution graph state.</span>
         </div>
       </aside>
     </div>

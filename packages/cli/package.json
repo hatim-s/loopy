@@ -1,6 +1,7 @@
 {
   "name": "loopy",
   "version": "0.1.0",
+  "description": "The local graph harness for coding agents.",
   "private": false,
   "type": "module",
   "bin": {

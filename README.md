@@ -1,8 +1,27 @@
 # Loopy
 
-Do the work once. Loopy extracts the reusable process, lets you edit it visually, and runs it again through your locally installed coding agents.
+**The local graph harness for coding agents.**
 
-Phase 3 is implemented locally: canonical trace import, deterministic segmentation/features/evidence, bounded proposal repair, persisted extraction review/audit, approval into editable workflow version 1, and offline runtime execution are available. Provider adapters remain local CLI integrations; hosted infrastructure and live-provider calls are out of scope by default.
+Do the work once. Loopy captures the trace, extracts an editable execution graph, and runs it again through Codex, Claude Code, OpenCode, or Pi on your machine.
+
+Loopy is infrastructure for graph engineering: agent loops do open-ended work inside nodes, while explicit edges, deterministic control nodes, durable state, approvals, budgets, and recovery govern how the whole system runs. The graph is an executable, versioned contract—not merely a diagram.
+
+## What Loopy does
+
+- Captures or imports coding-agent sessions as canonical traces.
+- Extracts evidence-backed execution graphs from successful work.
+- Lets you inspect and edit nodes, edges, policies, and provider choices visually.
+- Runs graphs locally with branching, parallel joins, retries, approvals, pause, resume, cancellation, replay, and checkpoint forks.
+- Keeps operational state in local SQLite and exports portable canonical JSONL.
+- Integrates with locally installed Codex, Claude Code, OpenCode, and Pi CLIs through explicit capability contracts.
+
+Loopy does not provide hosted agent compute. Your source, credentials, subprocesses, traces, and graph state remain local by default.
+
+## Terminology
+
+Loopy uses **graph harness** as its product category and **graph engineering** for the discipline it enables. An **execution graph** is the user-facing artifact. `WorkflowDefinition`, `/workflows`, and related CLI terms remain compatibility names in the current contracts. A **loop** is the bounded reasoning-and-tool-use cycle that may run inside an agent node.
+
+Read the [graph engineering position and terminology](docs/graph-engineering.md).
 
 ## Current commands
 
@@ -13,7 +32,7 @@ bun run build       # emit contracts declarations and run the root typecheck
 bun packages/cli/src/index.ts --help
 ```
 
-The extraction path is usable without editing JSON by hand:
+The trace-to-graph path is usable without editing JSON by hand:
 
 ```sh
 bun packages/cli/src/index.ts import fixtures/sessions/successful.json --provider codex --project .
@@ -29,7 +48,7 @@ The deterministic extractor never contacts a provider. An explicit, read-only in
 bun packages/cli/src/index.ts validate-provider --provider codex --opt-in --json
 ```
 
-This probes installation metadata/capabilities only; it does not start a run or make a live network call.
+This probes installation metadata and capabilities only; it does not start a graph run or make a live network call.
 
 Local schedules and retention cleanup are available without a hosted service:
 
@@ -40,10 +59,8 @@ bun packages/cli/src/index.ts schedule install <schedule-id> --project . --dir /
 bun packages/cli/src/index.ts cleanup preview --project . --max-age-days 30 --json
 ```
 
-See [the Phase 6 local scheduling and packaging guide](docs/phase6-local-scheduling.md).
+See [the local scheduling and packaging guide](docs/phase6-local-scheduling.md).
 
-## Plan
+## Architecture and roadmap
 
-The canonical implementation plan is tracked at:
-
-- [Loopy Local-First MVP Architecture and Roadmap](.planloft/plans/loopy-local-first-mvp.md)
+- [Loopy Local-First Graph Harness Architecture and Roadmap](.planloft/plans/loopy-local-first-mvp.md)

@@ -63,7 +63,7 @@ const COMMANDS = [
 function printHelp(): void {
   console.log(`Loopy ${VERSION}
 
-Local-first workflow runtime for coding agents.
+The local graph harness for coding agents.
 
 Usage:
   loopy --version
@@ -505,7 +505,7 @@ async function launchUi(args: readonly string[], dependencies: CliDependencies):
     storage.close();
     throw error;
   }
-  console.log(`Loopy Studio: ${server.url}`);
+  console.log(`Loopy Graph Studio: ${server.url}`);
   if (!args.includes("--no-open")) await openStudio(server.url, dependencies.ui?.launcher);
   return 0;
 }
