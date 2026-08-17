@@ -207,6 +207,7 @@ describe("loopy CLI shell", () => {
 
   it("runs --live only through the selected available adapter and persists provider trace", async () => {
     const project = mkdtempSync(join(tmpdir(), "loopy-cli-live-"));
+    const traceOutput = resolve(project, "live-trace.jsonl");
     const setup = new Storage({ projectDir: project });
     setup.runtime.createWorkflowVersion({
       workflowId: "live-workflow",
@@ -244,12 +245,53 @@ describe("loopy CLI shell", () => {
       persistedWorkflow.close();
       const persisted = new Storage({ projectDir: project });
       const persistedRuntime = new SqliteRuntimeStore(persisted);
+      const runtimeId = run.run.runId as string;
+      expect(runtimeId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      );
+      const traceRows = persisted.db
+        .query<{ run_id: string; trace_json: string | null }, [string]>(
+          "SELECT run_id,trace_json FROM events WHERE run_id=? ORDER BY sequence",
+        )
+        .all(runtimeId);
+      expect(traceRows.length).toBeGreaterThan(0);
+      expect(traceRows.every((row) => row.run_id === runtimeId)).toBe(true);
+      expect(traceRows.every((row) => JSON.parse(row.trace_json ?? "{}").runId === runtimeId)).toBe(
+        true,
+      );
       expect(
-        persistedRuntime
-          .listTraceEvents(run.run.runId)
-          .some((event) => event.type === "provider.message"),
+        traceRows.some((row) => JSON.parse(row.trace_json ?? "{}").type === "provider.message"),
       ).toBe(true);
+      const persistedEvents = persistedRuntime.listTraceEvents(runtimeId);
+      expect(persistedEvents.every((event) => event.runId === runtimeId)).toBe(true);
       persisted.close();
+
+      expect(
+        await mainAsync([
+          "trace",
+          "export",
+          runtimeId,
+          "--output",
+          traceOutput,
+          "--project",
+          project,
+        ]),
+      ).toBe(0);
+      const exportedEvents = readFileSync(traceOutput, "utf8")
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line) as { runId: string; type: string });
+      expect(exportedEvents.every((event) => event.runId === runtimeId)).toBe(true);
+      expect(exportedEvents.some((event) => event.type === "provider.message")).toBe(true);
+
+      expect(await mainAsync(["replay", runtimeId, "--project", project, "--json"])).toBe(0);
+      const replay = JSON.parse(output.at(-1) ?? "{}") as {
+        run: { runId: string };
+        frames: Array<{ event: { runId: string } }>;
+      };
+      expect(replay.run.runId).toBe(runtimeId);
+      expect(replay.frames.length).toBeGreaterThan(0);
+      expect(replay.frames.every((frame) => frame.event.runId === runtimeId)).toBe(true);
     } finally {
       log.mockRestore();
       error.mockRestore();
