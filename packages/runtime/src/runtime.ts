@@ -519,11 +519,7 @@ export class RuntimeScheduler {
     return this.wait(started.runId);
   }
   /** Start a new run from an explicit persisted completed-node checkpoint. */
-  async fork(
-    sourceRunId: string,
-    fromNodeId: string,
-    inputs?: JsonObject,
-  ): Promise<RunRecord> {
+  async fork(sourceRunId: string, fromNodeId: string, inputs?: JsonObject): Promise<RunRecord> {
     const source = await this.requireRun(sourceRunId);
     if (!(TERMINAL_RUNS.has(source.status) || source.status === "paused"))
       throw new Error(`Run ${sourceRunId} has no stable checkpoint (${source.status})`);
@@ -558,8 +554,9 @@ export class RuntimeScheduler {
       plan: source.plan,
       executionPlanHash: source.executionPlanHash,
       inputs: inputs ?? source.inputs,
-      status: "created",
+      status: "running",
       createdAt: this.now(),
+      startedAt: this.now(),
     };
     const clones = [...latest.values()].map((attempt) => ({
       ...attempt,
@@ -581,7 +578,7 @@ export class RuntimeScheduler {
       }),
     ];
     for (const attempt of clones) {
-      commands.push({ type: "create_attempt", attempt, expectedRunStatus: "created" });
+      commands.push({ type: "create_attempt", attempt });
       commands.push(
         await this.event(run.runId, "node.completed", attempt.nodeId, attempt.attemptId, {
           completion: attempt.completion ?? {
@@ -594,7 +591,6 @@ export class RuntimeScheduler {
       );
     }
     commands.push(
-      { type: "set_run", runId: run.runId, patch: { status: "running", startedAt: this.now() } },
       await this.event(run.runId, "run.started", undefined, undefined, {
         planHash: run.executionPlanHash,
         forkedFromRunId: sourceRunId,

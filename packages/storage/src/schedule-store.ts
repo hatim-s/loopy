@@ -99,8 +99,7 @@ export class ScheduleRepository {
              FROM schedule_run_links l
              JOIN runs r ON r.id=l.run_id
             WHERE l.schedule_id=?
-              AND (l.state IN ('queued','active')
-                   OR r.status NOT IN ('succeeded','failed','cancelled'))
+              AND r.status NOT IN ('succeeded','failed','cancelled')
             LIMIT 1`,
         )
         .get(id);

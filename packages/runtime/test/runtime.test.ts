@@ -5,7 +5,7 @@ import {
   DeterministicVerifier,
   InMemoryRuntimeStore,
 } from "../../testing/src/index.ts";
-import { replayEvents, RuntimeScheduler } from "../src/index.ts";
+import { RuntimeScheduler, replayEvents } from "../src/index.ts";
 
 const ids = createTestIds();
 function scheduler(

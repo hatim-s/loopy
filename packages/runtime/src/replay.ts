@@ -16,12 +16,16 @@ export function replayEvents(events: readonly RuntimeEvent[], fromSequence = 0):
   const ordered = [...events].sort((a, b) => a.sequence - b.sequence);
   const seen = new Set<number>();
   for (const event of ordered) {
-    if (seen.has(event.sequence)) throw new Error(`Replay contains duplicate sequence ${event.sequence}`);
+    if (seen.has(event.sequence))
+      throw new Error(`Replay contains duplicate sequence ${event.sequence}`);
     seen.add(event.sequence);
   }
   return ordered
     .filter((event) => event.sequence >= fromSequence)
-    .map((event, index) => ({ index, event: { ...event, payload: event.payload ? { ...event.payload } : undefined } }));
+    .map((event, index) => ({
+      index,
+      event: { ...event, payload: event.payload ? { ...event.payload } : undefined },
+    }));
 }
 
 export async function replayRun(
@@ -31,7 +35,10 @@ export async function replayRun(
 ): Promise<{ snapshot: RuntimeSnapshot; frames: ReplayFrame[] }> {
   const run = await store.getRun(runId);
   if (!run) throw new Error(`Unknown run ${runId}`);
-  const [attempts, events] = await Promise.all([store.listAttempts(runId), store.listEvents(runId)]);
+  const [attempts, events] = await Promise.all([
+    store.listAttempts(runId),
+    store.listEvents(runId),
+  ]);
   const approvals = [];
   for (const attempt of attempts) {
     const approval = await store.getApproval(runId, attempt.nodeId);

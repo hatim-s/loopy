@@ -8,10 +8,10 @@ import { createLocalApi, createLocalServerConfig } from "@loopy/local-api";
 import { createDefaultProviderRegistry, type ProviderRegistry } from "@loopy/providers";
 import {
   createProviderExecutor,
-  replayRun,
   type ProviderExecutor,
   RuntimeScheduler,
   type RuntimeStore,
+  replayRun,
 } from "@loopy/runtime";
 import { SchedulerEngine, type SchedulerStore } from "@loopy/scheduler";
 import {
@@ -804,9 +804,7 @@ async function replayWorkflow(args: readonly string[], deps: CliDependencies): P
     const result = await replayRun(
       new SqliteRuntimeStore(storage),
       runId,
-      option(args, "--from-sequence") === undefined
-        ? 0
-        : Number(option(args, "--from-sequence")),
+      option(args, "--from-sequence") === undefined ? 0 : Number(option(args, "--from-sequence")),
     );
     const output = { run: result.snapshot.run, frames: result.frames };
     if (jsonOutput(args)) printJson(output);
