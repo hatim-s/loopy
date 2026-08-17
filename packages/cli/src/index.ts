@@ -6,7 +6,12 @@ import type { JsonObject, JsonValue } from "@loopy/contracts";
 import { extractImportedSession } from "@loopy/extractor";
 import { createLocalApi, createLocalServerConfig } from "@loopy/local-api";
 import { createDefaultProviderRegistry, type ProviderRegistry } from "@loopy/providers";
-import { type ProviderExecutor, RuntimeScheduler, type RuntimeStore } from "@loopy/runtime";
+import {
+  createProviderExecutor,
+  type ProviderExecutor,
+  RuntimeScheduler,
+  type RuntimeStore,
+} from "@loopy/runtime";
 import { SchedulerEngine, type SchedulerStore } from "@loopy/scheduler";
 import {
   type CanonicalSessionImportInput,
@@ -81,6 +86,12 @@ Commands:
   );
   console.log("  loopy trace export <run-id> [--output <file>] [--project <dir>] [--json]");
   console.log("  loopy trace import <file> [--project <dir>] [--json]");
+  console.log(
+    "  loopy providers [--json]  (catalogue registered providers; probes availability only)",
+  );
+  console.log(
+    "  loopy run <workflow-id> --provider <provider> --live [--input <json>] [--project <dir>] [--json]",
+  );
   console.log(
     "  loopy schedule create|list|show|enable|disable|remove|fire|tick|install|uninstall [options]",
   );
@@ -633,21 +644,89 @@ function parseRunInput(args: readonly string[]): JsonObject {
   return parsed as JsonObject;
 }
 
-/** Execute only through the local deterministic provider path in this phase. */
+function providerOnNode(node: Record<string, unknown>): string | undefined {
+  if (typeof node.provider === "string" && node.provider.trim()) return node.provider;
+  const configuration = node.configuration;
+  if (configuration && typeof configuration === "object") {
+    const value = (configuration as Record<string, unknown>).provider;
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return undefined;
+}
+
+function validateLiveWorkflow(workflow: { definition: unknown }, provider: string): void {
+  const definition = workflow.definition as Record<string, unknown>;
+  const defaults = definition.defaults;
+  const defaultProvider =
+    defaults &&
+    typeof defaults === "object" &&
+    typeof (defaults as Record<string, unknown>).provider === "string"
+      ? String((defaults as Record<string, unknown>).provider)
+      : undefined;
+  const nodes = Array.isArray(definition.nodes) ? definition.nodes : [];
+  for (const item of nodes) {
+    if (!item || typeof item !== "object") continue;
+    const node = item as Record<string, unknown>;
+    if (node.kind !== "agent") continue;
+    const declared = providerOnNode(node) ?? defaultProvider;
+    if (!declared)
+      throw new Error(
+        `Live workflow node '${String(node.id ?? "unknown")}' does not declare a provider.`,
+      );
+    if (declared !== provider)
+      throw new Error(
+        `Live provider '${provider}' does not match workflow node '${String(node.id ?? "unknown")}' provider '${declared}'.`,
+      );
+  }
+}
+
+async function printProviders(args: readonly string[], deps: CliDependencies): Promise<number> {
+  const registry = deps.registry ?? createDefaultProviderRegistry();
+  const providers = await Promise.all(
+    registry.all().map(async (adapter) => {
+      const probe = await adapter.probe();
+      return {
+        ...probe,
+        provider: adapter.id,
+        version: adapter.version === "unknown" ? probe.version : adapter.version,
+        capabilities: adapter.capabilities(),
+      };
+    }),
+  );
+  if (jsonOutput(args)) printJson({ providers });
+  else
+    for (const provider of providers) {
+      const capabilities = [
+        ...provider.capabilities.supported.map((name) => `${name}=supported`),
+        ...provider.capabilities.degraded.map((name) => `${name}=degraded`),
+        ...provider.capabilities.unavailable.map((name) => `${name}=unavailable`),
+      ].join(",");
+      console.log(
+        `${provider.provider}\t${provider.available ? "available" : "unavailable"}\t${provider.version ?? "-"}\t${capabilities}`,
+      );
+    }
+  return 0;
+}
+
+/** Local deterministic execution remains the default; live execution is explicit. */
 async function runWorkflow(args: readonly string[], deps: CliDependencies): Promise<number> {
   const reference = option(args, "--workflow") ?? positional(args);
   if (!reference) throw new Error("run requires a workflow ID");
   const requestedProvider = option(args, "--provider");
+  const live = args.includes("--live");
   const local =
-    args.includes("--local") ||
-    args.includes("--fake") ||
-    requestedProvider === undefined ||
-    requestedProvider === "fake" ||
-    requestedProvider === "deterministic-fake";
-  if (!local || (requestedProvider && !["fake", "deterministic-fake"].includes(requestedProvider)))
+    !live &&
+    (args.includes("--local") ||
+      args.includes("--fake") ||
+      requestedProvider === undefined ||
+      requestedProvider === "fake" ||
+      requestedProvider === "deterministic-fake");
+  if (!local && !live)
     throw new Error(
-      "live provider execution is not implemented; use the explicit local fake provider (--local)",
+      "live provider execution requires --live; local execution uses --local or --provider fake",
     );
+  if (live && (!requestedProvider || ["fake", "deterministic-fake"].includes(requestedProvider)))
+    throw new Error("live execution requires a registered provider via --provider <id>");
   const versionValue = option(args, "--version");
   const version = versionValue === undefined ? 1 : Number(versionValue);
   if (!Number.isInteger(version) || version < 1) throw new Error("run --version must be positive");
@@ -662,14 +741,48 @@ async function runWorkflow(args: readonly string[], deps: CliDependencies): Prom
       workflow = storage.runtime.getWorkflowVersion(review.proposal.workflow.id, version);
     }
     if (!workflow) throw new Error(`Unknown approved workflow ${reference}`);
-    const provider = deps.providerExecutor ?? new DeterministicFakeProvider();
     const store = new SqliteRuntimeStore(storage);
+    let provider: ProviderExecutor;
+    let liveRunId: string | undefined;
+    if (live) {
+      const registry = deps.registry ?? createDefaultProviderRegistry();
+      const adapter = registry.get(requestedProvider as string);
+      if (!adapter) throw new Error(`Unknown provider '${requestedProvider}'`);
+      const probe = await adapter.probe();
+      if (!probe.available)
+        throw new Error(
+          `Provider '${requestedProvider}' is unavailable${probe.diagnostic ? `: ${probe.diagnostic}` : "."}`,
+        );
+      validateLiveWorkflow(workflow, requestedProvider as string);
+      provider = createProviderExecutor({
+        registry,
+        onEvent: (event) => {
+          const runId = liveRunId ?? event.runId;
+          const sequence = store.listTraceEvents(runId).length;
+          store.appendTraceEvent(runId, { ...event, sequence });
+        },
+      });
+    } else {
+      if (requestedProvider && !["fake", "deterministic-fake"].includes(requestedProvider))
+        throw new Error("local execution only supports the deterministic fake provider");
+      provider = deps.providerExecutor ?? new DeterministicFakeProvider();
+    }
     const runtime =
       deps.runtimeFactory?.(store, provider) ?? new RuntimeScheduler({ store, provider });
-    const snapshot = await runtime.run(
-      workflow.definition as Parameters<RuntimeScheduler["run"]>[0],
-      parseRunInput(args),
-    );
+    let snapshot: Awaited<ReturnType<RuntimeScheduler["wait"]>>;
+    if (live) {
+      const started = await runtime.start(
+        workflow.definition as Parameters<RuntimeScheduler["start"]>[0],
+        parseRunInput(args),
+      );
+      liveRunId = started.runId;
+      snapshot = await runtime.wait(started.runId);
+    } else {
+      snapshot = await runtime.run(
+        workflow.definition as Parameters<RuntimeScheduler["run"]>[0],
+        parseRunInput(args),
+      );
+    }
     if (jsonOutput(args)) printJson(snapshot);
     else console.log(`run ${snapshot.run.runId} ${snapshot.run.status}`);
     return snapshot.run.status === "succeeded" ? 0 : 1;
@@ -710,6 +823,7 @@ async function dispatch(args: readonly string[], deps: CliDependencies): Promise
   }
   if (command === "approve") return approveOrReject(args, deps, "approve");
   if (command === "reject") return approveOrReject(args, deps, "reject");
+  if (command === "providers") return printProviders(args, deps);
   if (command === "run") return runWorkflow(args, deps);
   if (command === "pause" || command === "resume" || command === "cancel" || command === "retry")
     return runtimeMutation(args, deps, command);
@@ -899,6 +1013,7 @@ export function main(
       "ui",
       "schedule",
       "cleanup",
+      "providers",
     ].includes(command)
   ) {
     void mainAsync(args, dependencies).then((code) => {

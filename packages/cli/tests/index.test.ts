@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { RuntimeScheduler } from "@loopy/runtime";
-import { Storage } from "@loopy/storage";
+import { createProviderRegistry, type ProviderAdapter, type ProviderRun } from "@loopy/providers";
+import { SqliteRuntimeStore, Storage } from "@loopy/storage";
 import { describe, expect, it, vi } from "vitest";
 import { main, mainAsync } from "../src/index";
 
@@ -99,6 +100,133 @@ describe("loopy CLI shell", () => {
     }
   });
 
+  const fakeLiveAdapter = (available = true): ProviderAdapter => ({
+    id: "codex",
+    version: "test-1",
+    probe: async () => ({
+      provider: "codex",
+      available,
+      capabilities: {
+        schemaVersion: "1",
+        capabilities: { structuredStreamingEvents: { status: "supported" } },
+        supported: ["structuredStreamingEvents"],
+        degraded: [],
+        unavailable: [],
+      },
+      ...(available ? {} : { diagnostic: "test provider unavailable" }),
+    }),
+    capabilities: () => ({
+      schemaVersion: "1",
+      capabilities: { structuredStreamingEvents: { status: "supported" } },
+      supported: ["structuredStreamingEvents"],
+      degraded: [],
+      unavailable: [],
+    }),
+    start: async (request) =>
+      ({
+        session: Promise.resolve({ provider: "codex", sessionId: `${request.attemptId}-session` }),
+        events: (async function* () {
+          yield {
+            type: "session_started" as const,
+            provider: "codex",
+            occurredAt: "2026-08-17T00:00:00.000Z",
+            provenance: { sessionId: `${request.attemptId}-session` },
+            payload: {},
+          };
+          yield {
+            type: "message" as const,
+            provider: "codex",
+            occurredAt: "2026-08-17T00:00:01.000Z",
+            provenance: { sessionId: `${request.attemptId}-session` },
+            payload: { role: "assistant", content: "live result" },
+          };
+          yield {
+            type: "session_ended" as const,
+            provider: "codex",
+            occurredAt: "2026-08-17T00:00:02.000Z",
+            provenance: { sessionId: `${request.attemptId}-session` },
+            payload: { status: "succeeded" },
+          };
+        })(),
+        cancel: async () => undefined,
+      }) as ProviderRun,
+    historicalImports: [],
+  });
+
+  it("lists registered provider availability and capabilities without starting an agent", async () => {
+    const output: string[] = [];
+    const log = vi.spyOn(console, "log").mockImplementation((...values) => {
+      output.push(values.map(String).join(" "));
+    });
+    const error = vi.spyOn(console, "error").mockImplementation((...values) => {
+      output.push(values.map(String).join(" "));
+    });
+    const start = vi.fn();
+    const adapter = { ...fakeLiveAdapter(), start };
+    try {
+      expect(
+        await mainAsync(["providers", "--json"], {
+          registry: createProviderRegistry([adapter]),
+        }),
+      ).toBe(0);
+      const result = JSON.parse(output[0] ?? "{}");
+      expect(result.providers[0]).toMatchObject({
+        provider: "codex",
+        available: true,
+        capabilities: { supported: ["structuredStreamingEvents"] },
+      });
+      expect(start).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+      error.mockRestore();
+    }
+  });
+
+  it("runs --live only through the selected available adapter and persists provider trace", async () => {
+    const project = mkdtempSync(join(tmpdir(), "loopy-cli-live-"));
+    const setup = new Storage({ projectDir: project });
+    setup.runtime.createWorkflowVersion({
+      workflowId: "live-workflow",
+      version: 1,
+      definition: {
+        id: "live-workflow",
+        workflowVersion: 1,
+        nodes: [{ id: "agent", kind: "agent", provider: "codex", prompt: "hello" }],
+        edges: [],
+      },
+    });
+    setup.close();
+    const output: string[] = [];
+    const log = vi.spyOn(console, "log").mockImplementation((...values) => {
+      output.push(values.map(String).join(" "));
+    });
+    const error = vi.spyOn(console, "error").mockImplementation((...values) => {
+      output.push(values.map(String).join(" "));
+    });
+    try {
+      expect(
+        await mainAsync(
+          ["run", "live-workflow", "--provider", "codex", "--live", "--project", project, "--json"],
+          {
+            registry: createProviderRegistry([fakeLiveAdapter()]),
+          },
+        ),
+      ).toBe(0);
+      const run = JSON.parse(output.at(-1) ?? "{}");
+      expect(run.run.status).toBe("succeeded");
+      const persisted = new Storage({ projectDir: project });
+      const persistedRuntime = new SqliteRuntimeStore(persisted);
+      expect(
+        persistedRuntime
+          .listTraceEvents(run.run.runId)
+          .some((event) => event.type === "provider.message"),
+      ).toBe(true);
+      persisted.close();
+    } finally {
+      log.mockRestore();
+      error.mockRestore();
+    }
+  });
   it("prints a version without invoking an unimplemented command", () => {
     const output = vi.spyOn(console, "log").mockImplementation(() => undefined);
 

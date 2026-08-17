@@ -14,6 +14,15 @@ ship project state, fixtures, credentials, or `.loopy` databases.
 bundle is present. The bearer token is handed to the browser through an
 ephemeral bootstrap global and is never placed in a URL or persistent storage.
 
+`loopy providers --json` reports the four registered adapters (Codex, Claude
+Code, OpenCode, and Pi), their installed availability, and capability matrix.
+The command only probes version availability; it never starts an agent.
+
+Workflow execution remains deterministic/local by default. To explicitly run a
+workflow through an installed adapter, use `loopy run <workflow-id>
+--provider <id> --live`. The selected provider must match every agent node in
+the workflow and must pass its availability probe; there is no live fallback.
+
 From the repository, `bun run --cwd packages/cli smoke:package` packs the CLI,
 installs that tarball into a temporary project, and verifies the installed UI
 bundle and authenticated API boundary.
