@@ -208,6 +208,7 @@ export async function scheduleCommand(
     return 0;
   }
   if (action === "tick") {
+    const requestedScheduleId = value(args, "--schedule");
     if (dependencies.scheduler) {
       const result = await dependencies.scheduler.tick(now);
       const runs: RuntimeSnapshot[] = [];
@@ -222,7 +223,7 @@ export async function scheduleCommand(
       );
       return 0;
     }
-    const result = tickSchedules(store, now);
+    const result = tickSchedules(store, now, requestedScheduleId);
     const runs = [] as RuntimeSnapshot[];
     for (const request of result.due) {
       const run = await execute(request, dependencies);
@@ -238,7 +239,10 @@ export async function scheduleCommand(
   if (action === "install" || action === "uninstall") {
     const schedule = requireSchedule(store, requireId(args));
     const options = {
-      executable: resolve(value(args, "--executable") ?? process.execPath),
+      // The installed package exposes a bundled `loopy` entrypoint. Falling
+      // back to Bun itself would render the invalid command `bun schedule`;
+      // use argv[1] so source and packaged invocations both point at Loopy.
+      executable: resolve(value(args, "--executable") ?? process.argv[1] ?? process.execPath),
       ...(value(args, "--entrypoint")
         ? { entrypoint: resolve(value(args, "--entrypoint") as string) }
         : {}),

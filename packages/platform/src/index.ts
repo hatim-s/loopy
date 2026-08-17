@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { homedir } from "node:os";
+import { basename, dirname, join, resolve } from "node:path";
 import { nextOccurrence } from "@loopy/scheduler";
 
 export type ScheduleOverlapPolicy = "skip" | "queue" | "cancel_previous";
@@ -52,7 +52,10 @@ function readScheduleFile(path: string): ScheduleFile {
 
 function atomicWrite(path: string, content: string): void {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-  const temporary = join(tmpdir(), `loopy-schedules-${process.pid}-${Date.now()}.tmp`);
+  // Keep the temporary beside the destination. A rename across the system
+  // temp directory and a user project can fail with EXDEV (and would leave a
+  // partially installed scheduler artifact).
+  const temporary = join(dirname(path), `.${basename(path)}.${process.pid}-${randomUUID()}.tmp`);
   try {
     writeFileSync(temporary, content, { mode: 0o600 });
     renameSync(temporary, path);
@@ -264,10 +267,16 @@ export function fireSchedule(
 
 export type ScheduleTickResult = { due: ScheduleFireRequest[]; skipped: string[] };
 
-export function tickSchedules(store: ScheduleStore, now = new Date()): ScheduleTickResult {
+export function tickSchedules(
+  store: ScheduleStore,
+  now = new Date(),
+  scheduleId?: string,
+): ScheduleTickResult {
   const due: ScheduleFireRequest[] = [];
   const skipped: string[] = [];
+  if (scheduleId && !store.get(scheduleId)) throw new Error(`Unknown schedule '${scheduleId}'`);
   for (const schedule of store.list()) {
+    if (scheduleId && schedule.id !== scheduleId) continue;
     if (
       !schedule.enabled ||
       !schedule.nextFireAt ||
@@ -323,6 +332,11 @@ function commandArgs(
   scheduleId?: string,
   entrypoint?: string,
 ): string[] {
+  const runner = basename(executable).toLowerCase();
+  if (!entrypoint && ["bun", "node", "deno"].includes(runner))
+    throw new Error(
+      `Scheduler executable '${executable}' requires an explicit Loopy CLI entrypoint`,
+    );
   return [
     executable,
     ...(entrypoint ? [entrypoint] : []),
@@ -364,6 +378,7 @@ export function renderSchedulerArtifacts(
     const plist = [
       `<?xml version="1.0" encoding="UTF-8"?>`,
       `<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">`,
+      `<!-- ${marker} -->`,
       `<plist version="1.0"><dict>`,
       `<key>Label</key><string>${xml(label)}</string>`,
       `<key>ProgramArguments</key><array>${args.map((arg) => `<string>${xml(arg)}</string>`).join("")}</array>`,
@@ -425,7 +440,16 @@ export function renderSchedulerArtifacts(
 export function installSchedulerArtifacts(
   artifacts: readonly SchedulerArtifact[],
 ): SchedulerArtifact[] {
-  for (const artifact of artifacts) atomicWrite(artifact.path, artifact.content);
+  for (const artifact of artifacts) {
+    try {
+      const existing = readFileSync(artifact.path, "utf8");
+      if (!existing.includes(artifact.marker))
+        throw new Error(`Refusing to overwrite unmanaged scheduler artifact '${artifact.path}'`);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    atomicWrite(artifact.path, artifact.content);
+  }
   return [...artifacts];
 }
 
@@ -433,6 +457,8 @@ export function uninstallSchedulerArtifacts(artifacts: readonly SchedulerArtifac
   const removed: string[] = [];
   for (const artifact of artifacts) {
     try {
+      const existing = readFileSync(artifact.path, "utf8");
+      if (!existing.includes(artifact.marker)) continue;
       unlinkSync(artifact.path);
       removed.push(artifact.path);
     } catch (error) {

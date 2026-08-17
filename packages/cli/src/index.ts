@@ -7,7 +7,7 @@ import { extractImportedSession } from "@loopy/extractor";
 import { createLocalApi, createLocalServerConfig } from "@loopy/local-api";
 import { createDefaultProviderRegistry, type ProviderRegistry } from "@loopy/providers";
 import { type ProviderExecutor, RuntimeScheduler, type RuntimeStore } from "@loopy/runtime";
-import { SchedulerEngine } from "@loopy/scheduler";
+import { SchedulerEngine, type SchedulerStore } from "@loopy/scheduler";
 import {
   type CanonicalSessionImportInput,
   type ExtractionResultInput,
@@ -651,8 +651,24 @@ async function dispatch(args: readonly string[], deps: CliDependencies): Promise
           await runtime.cancel(execution.executionId, reason);
         },
       };
+      const schedulerStore = storage.schedules.schedulerStore();
+      const requestedScheduleId = args[1] === "tick" ? option(args, "--schedule") : undefined;
+      if (requestedScheduleId && !store.get(requestedScheduleId))
+        throw new Error(`Unknown schedule '${requestedScheduleId}'`);
+      const scopedSchedulerStore: SchedulerStore = requestedScheduleId
+        ? {
+            listSchedules: async () =>
+              (await schedulerStore.listSchedules()).filter(
+                (item) => item.schedule.scheduleId === requestedScheduleId,
+              ),
+            getState: (scheduleId) => schedulerStore.getState(scheduleId),
+            saveState: (state) => schedulerStore.saveState(state),
+            claimIdempotencyKey: (scheduleId, key) =>
+              schedulerStore.claimIdempotencyKey(scheduleId, key),
+          }
+        : schedulerStore;
       scheduler = new SchedulerEngine({
-        store: storage.schedules.schedulerStore(),
+        store: scopedSchedulerStore,
         executor,
       });
       return await scheduleCommand(args, {
