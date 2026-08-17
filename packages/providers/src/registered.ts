@@ -596,7 +596,10 @@ export function createCodexProviderAdapter(
           policyList(policy, "allow").length > 0 || policyList(policy, "deny").length > 0,
           "per-tool allow/deny policy",
         ],
-        [policy?.tools?.network !== undefined, "network policy"],
+        [
+          policy?.tools?.network !== undefined && policy?.tools?.network !== "unrestricted",
+          "network policy",
+        ],
         [
           writableRoots.some((root) => root !== workingDirectory),
           "writable roots outside the working directory",
