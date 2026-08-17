@@ -146,6 +146,37 @@ describe("schedule persistence", () => {
     storage.close();
   });
 
+  test("resets a persisted cursor when the schedule expression changes", async () => {
+    const storage = new Storage({ projectDir: project() });
+    storage.runtime.createWorkflowVersion({
+      workflowId: "wf",
+      version: 1,
+      definition: { id: "wf", workflowVersion: 1 },
+    });
+    const schedule = storage.schedules.create({
+      id: "recomputed-cursor",
+      name: "recomputed",
+      workflowId: "wf",
+      workflowVersion: 1,
+      expression: "0 0 * * *",
+      timezone: "UTC",
+      nextFireAt: "2026-08-17T00:00:00.000Z",
+    });
+    const schedulerStore = storage.schedules.schedulerStore();
+    const beforeUpdate = (await schedulerStore.getState(schedule.id)) as NonNullable<
+      Awaited<ReturnType<typeof schedulerStore.getState>>
+    >;
+    await schedulerStore.saveState(beforeUpdate);
+
+    const updated = storage.schedules.update(schedule.id, {
+      expression: "30 1 * * *",
+    });
+    expect(updated.nextFireAt).not.toBe("2026-08-17T00:00:00.000Z");
+    expect((await schedulerStore.getState(schedule.id))?.nextDueAt).toBe(updated.nextFireAt);
+    await expect(schedulerStore.saveState(beforeUpdate)).rejects.toThrow(/changed concurrently/);
+    storage.close();
+  });
+
   test("applies bounded retention with preview parity and removes only database records", () => {
     const dir = project();
     const sourcePath = join(dir, "artifact.txt");

@@ -197,20 +197,30 @@ export class ScheduleRepository {
           new Date(),
         ).toISOString();
     }
-    this.run(
-      "UPDATE schedules SET name=?,expression=?,timezone=?,overlap_policy=?,missed_policy=?,enabled=?,next_fire_at=?,last_fire_at=?,input_json=?,updated_at=? WHERE id=?",
-      next.name,
-      next.expression,
-      next.timezone,
-      next.overlapPolicy,
-      next.missedPolicy,
-      next.enabled ? 1 : 0,
-      next.nextFireAt ?? null,
-      next.lastFireAt ?? null,
-      encode(next.input),
-      now(),
-      id,
-    );
+    this.db.transaction(() => {
+      this.run(
+        "UPDATE schedules SET name=?,expression=?,timezone=?,overlap_policy=?,missed_policy=?,enabled=?,next_fire_at=?,last_fire_at=?,input_json=?,updated_at=? WHERE id=?",
+        next.name,
+        next.expression,
+        next.timezone,
+        next.overlapPolicy,
+        next.missedPolicy,
+        next.enabled ? 1 : 0,
+        next.nextFireAt ?? null,
+        next.lastFireAt ?? null,
+        encode(next.input),
+        now(),
+        id,
+      );
+      if (next.expression !== current.expression || next.timezone !== current.timezone) {
+        this.run(
+          "UPDATE scheduler_state SET revision=revision+1,cursor=?,updated_at=? WHERE schedule_id=?",
+          next.nextFireAt ?? null,
+          now(),
+          id,
+        );
+      }
+    })();
     return this.get(id) as ScheduleRecord;
   }
   claimFire(input: {
