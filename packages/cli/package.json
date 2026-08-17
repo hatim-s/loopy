@@ -15,6 +15,7 @@
   "dependencies": {
     "@loopy/contracts": "workspace:*",
     "@loopy/extractor": "workspace:*",
+    "@loopy/local-api": "workspace:*",
     "@loopy/providers": "workspace:*",
     "@loopy/runtime": "workspace:*",
     "@loopy/storage": "workspace:*",

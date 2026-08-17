@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { JsonObject, JsonValue } from "@loopy/contracts";
 import { extractImportedSession } from "@loopy/extractor";
+import { createLocalServerConfig } from "@loopy/local-api";
 import { createDefaultProviderRegistry, type ProviderRegistry } from "@loopy/providers";
 import { type ProviderExecutor, RuntimeScheduler, type RuntimeStore } from "@loopy/runtime";
 import {
@@ -65,6 +66,9 @@ Local persistence commands:
   console.log(
     "  loopy validate-provider --provider <provider> --opt-in [--json]  (read-only probe; no run/network)",
   );
+  console.log(
+    "  loopy ui [--port <port>] [--origin <origin[,origin]>] [--json]  (print local Studio launch config)",
+  );
 }
 
 export interface ExtractionRequest {
@@ -122,6 +126,8 @@ function positional(args: readonly string[], start = 1): string | undefined {
     "--workflow",
     "--input",
     "--version",
+    "--port",
+    "--origin",
   ]);
   for (let index = start; index < args.length; index += 1) {
     const arg = args[index];
@@ -156,6 +162,26 @@ function jsonOutput(args: readonly string[]): boolean {
 }
 function printJson(value: unknown): void {
   console.log(JSON.stringify(value));
+}
+
+function printUiConfig(args: readonly string[]): number {
+  const portValue = option(args, "--port");
+  const port = portValue === undefined ? undefined : Number(portValue);
+  const config = createLocalServerConfig({
+    port,
+    origins: option(args, "--origin")
+      ?.split(",")
+      .map((value) => value.trim()),
+  });
+  // This command only creates the launch contract. The Studio shell owns GUI
+  // startup, so CLI tests and headless environments never open an application.
+  if (jsonOutput(args)) printJson(config);
+  else {
+    console.log(`Local API: http://${config.host}:${config.port}`);
+    console.log(`Bearer token: ${config.token}`);
+    console.log(`Allowed origins: ${config.origins.join(", ")}`);
+  }
+  return 0;
 }
 
 async function printSessionList(args: readonly string[], deps: CliDependencies): Promise<number> {
@@ -408,6 +434,7 @@ async function dispatch(args: readonly string[], deps: CliDependencies): Promise
   if (command === "run") return runWorkflow(args, deps);
   if (command === "validate-provider" || command === "validate")
     return validateProvider(args, deps);
+  if (command === "ui") return printUiConfig(args);
   return 2;
 }
 
@@ -478,6 +505,7 @@ export function main(
       "validate-provider",
       "validate",
       "run",
+      "ui",
     ].includes(command)
   ) {
     void mainAsync(args, dependencies).then((code) => {

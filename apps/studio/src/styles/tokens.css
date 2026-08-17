@@ -1,0 +1,19 @@
+:root {
+  --studio-bg: #111214;
+  --studio-surface: #181a1e;
+  --studio-surface-hover: #25292f;
+  --studio-border: #2d3138;
+  --studio-border-strong: #40464f;
+  --studio-text: #f0f1f2;
+  --studio-text-muted: #9da3ad;
+  --studio-text-subtle: #737a85;
+  --studio-amber: #f3a946;
+  --studio-amber-strong: #ffbd63;
+  --studio-green: #56c897;
+  --studio-red: #ec7373;
+  --studio-radius: 6px;
+  --studio-focus: 0 0 0 2px var(--studio-bg), 0 0 0 4px var(--studio-amber);
+  font-family: "SFMono-Regular", "Cascadia Code", "Roboto Mono", ui-monospace, monospace;
+  color: var(--studio-text);
+  background: var(--studio-bg);
+}
