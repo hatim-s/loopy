@@ -10,7 +10,7 @@ import type {
   RuntimeSnapshot,
   RuntimeStore,
 } from "@loopy/runtime";
-import { nextOccurrence } from "@loopy/scheduler";
+import { nextOccurrence, SchedulerEngine } from "@loopy/scheduler";
 import type {
   ArtifactRecord,
   AttemptRecord,
@@ -72,6 +72,7 @@ export type LocalApiRepository = {
 export type LocalApiStorage = Pick<Storage, "runtime"> & { runtime: LocalApiRepository };
 export type ScheduleRuntimeEngine = {
   start(plan: unknown, input: JsonObject): Promise<{ runId: string } | { id: string }>;
+  wait?(runId: string): Promise<{ run: { status: string } }>;
 };
 export type ScheduleCoordinator = (input: {
   schedule: ScheduleRecord;
@@ -294,6 +295,30 @@ function requiredString(body: Record<string, unknown>, name: string): string {
   if (typeof value !== "string" || !value.trim())
     throw new ApiError(400, "invalid_request", `${name} is required`);
   return value;
+}
+function retentionFilterFromBody(body: Record<string, unknown>): RetentionFilter {
+  const filter: RetentionFilter = {};
+  if (body.before !== undefined) {
+    if (typeof body.before !== "string")
+      throw new ApiError(400, "invalid_request", "before must be an ISO timestamp");
+    filter.before = body.before;
+  }
+  if (body.maxAgeDays !== undefined) {
+    if (typeof body.maxAgeDays !== "number")
+      throw new ApiError(400, "invalid_request", "maxAgeDays must be a positive integer");
+    filter.maxAgeDays = body.maxAgeDays;
+  }
+  if (body.maxRuns !== undefined) {
+    if (typeof body.maxRuns !== "number")
+      throw new ApiError(400, "invalid_request", "maxRuns must be a positive integer");
+    filter.maxRuns = body.maxRuns;
+  }
+  if (body.batchSize !== undefined) {
+    if (typeof body.batchSize !== "number")
+      throw new ApiError(400, "invalid_request", "batchSize must be a positive integer");
+    filter.batchSize = body.batchSize;
+  }
+  return filter;
 }
 function jsonObject(value: unknown): JsonObject {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonObject) : {};
@@ -548,7 +573,7 @@ export function createLocalApi(options: LocalApiOptions): Hono {
         return c.json({ error: { code: "origin_denied", message: "Origin is not allowed" } }, 403);
       c.header("Access-Control-Allow-Origin", origin);
       c.header("Access-Control-Allow-Headers", "Authorization, Content-Type, Last-Event-ID");
-      c.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+      c.header("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS");
       c.header("Access-Control-Allow-Credentials", "true");
       c.header("Access-Control-Expose-Headers", "Content-Type");
     }
@@ -939,7 +964,7 @@ export function createLocalApi(options: LocalApiOptions): Hono {
       }
     }
     const claimed = store.claimFire({ scheduleId, fireKey, scheduledAt });
-    if (claimed.runId) return { schedule, fire: claimed, idempotent: true };
+    if (!claimed.claimed || claimed.runId) return { schedule, fire: claimed, idempotent: true };
     if (decision === "skip") {
       return {
         schedule,
@@ -974,6 +999,12 @@ export function createLocalApi(options: LocalApiOptions): Hono {
             },
             new Date(scheduledAt),
           ).toISOString();
+    if (scheduleEngine.wait) {
+      void scheduleEngine
+        .wait(runId)
+        .then((snapshot) => store.reconcileRun(runId, snapshot.run.status as RunRecord["status"]))
+        .catch(() => undefined);
+    }
     return {
       schedule: store.update(scheduleId, { lastFireAt: scheduledAt, nextFireAt: nextFire }),
       fire: store.updateFire(claimed.id, { runId, status: "running" }),
@@ -992,6 +1023,12 @@ export function createLocalApi(options: LocalApiOptions): Hono {
   });
   api.post("/schedules", async (c) => {
     const body = await jsonBody(c, maxBodyBytes);
+    const requestedExpression = typeof body.expression === "string" ? body.expression.trim() : "";
+    if (
+      (body.nextFireAt !== undefined && requestedExpression !== "manual") ||
+      body.lastFireAt !== undefined
+    )
+      throw new ApiError(400, "invalid_request", "Schedule cursors are server-managed");
     const workflowId = requiredString(body, "workflowId");
     const version = Number(body.workflowVersion ?? body.version ?? 1);
     if (!Number.isInteger(version) || version < 1)
@@ -1000,21 +1037,28 @@ export function createLocalApi(options: LocalApiOptions): Hono {
       repository.getWorkflowVersion(workflowId, version) ?? notFound("Workflow version");
     void workflow;
     const store = requireScheduleStore();
-    return c.json(
-      store.create({
-        name: requiredString(body, "name"),
-        workflowId,
-        workflowVersion: version,
-        input: jsonObject(body.input),
-        expression: requiredString(body, "expression"),
-        timezone: typeof body.timezone === "string" ? body.timezone : undefined,
-        overlapPolicy: body.overlapPolicy as ScheduleOverlapPolicy | undefined,
-        missedPolicy: body.missedPolicy as ScheduleMissedPolicy | undefined,
-        enabled: body.enabled !== false,
-        nextFireAt: typeof body.nextFireAt === "string" ? body.nextFireAt : undefined,
-      }),
-      201,
-    );
+    try {
+      return c.json(
+        store.create({
+          name: requiredString(body, "name"),
+          workflowId,
+          workflowVersion: version,
+          input: jsonObject(body.input),
+          expression: requiredString(body, "expression"),
+          timezone: typeof body.timezone === "string" ? body.timezone : undefined,
+          overlapPolicy: body.overlapPolicy as ScheduleOverlapPolicy | undefined,
+          missedPolicy: body.missedPolicy as ScheduleMissedPolicy | undefined,
+          enabled: body.enabled !== false,
+        }),
+        201,
+      );
+    } catch (error) {
+      throw new ApiError(
+        400,
+        "invalid_schedule",
+        error instanceof Error ? error.message : String(error),
+      );
+    }
   });
   api.get("/schedules/:id", (c) => {
     const store = requireScheduleStore();
@@ -1028,22 +1072,39 @@ export function createLocalApi(options: LocalApiOptions): Hono {
   api.patch("/schedules/:id", async (c) => {
     const store = requireScheduleStore();
     const body = await jsonBody(c, maxBodyBytes);
-    return c.json(
-      store.update(c.req.param("id"), {
-        ...(typeof body.name === "string" ? { name: body.name } : {}),
-        ...(typeof body.expression === "string" ? { expression: body.expression } : {}),
-        ...(typeof body.timezone === "string" ? { timezone: body.timezone } : {}),
-        ...(typeof body.overlapPolicy === "string"
-          ? { overlapPolicy: body.overlapPolicy as ScheduleOverlapPolicy }
-          : {}),
-        ...(typeof body.missedPolicy === "string"
-          ? { missedPolicy: body.missedPolicy as ScheduleMissedPolicy }
-          : {}),
-        ...(typeof body.enabled === "boolean" ? { enabled: body.enabled } : {}),
-        ...(typeof body.nextFireAt === "string" ? { nextFireAt: body.nextFireAt } : {}),
-        ...(body.input !== undefined ? { input: jsonObject(body.input) } : {}),
-      }),
-    );
+    if (
+      body.nextFireAt !== undefined ||
+      body.lastFireAt !== undefined ||
+      body.updatedAt !== undefined
+    )
+      throw new ApiError(
+        400,
+        "invalid_request",
+        "nextFireAt is server-managed and cannot be supplied",
+      );
+    try {
+      return c.json(
+        store.update(c.req.param("id"), {
+          ...(typeof body.name === "string" ? { name: body.name } : {}),
+          ...(typeof body.expression === "string" ? { expression: body.expression } : {}),
+          ...(typeof body.timezone === "string" ? { timezone: body.timezone } : {}),
+          ...(typeof body.overlapPolicy === "string"
+            ? { overlapPolicy: body.overlapPolicy as ScheduleOverlapPolicy }
+            : {}),
+          ...(typeof body.missedPolicy === "string"
+            ? { missedPolicy: body.missedPolicy as ScheduleMissedPolicy }
+            : {}),
+          ...(typeof body.enabled === "boolean" ? { enabled: body.enabled } : {}),
+          ...(body.input !== undefined ? { input: jsonObject(body.input) } : {}),
+        }),
+      );
+    } catch (error) {
+      throw new ApiError(
+        400,
+        "invalid_schedule",
+        error instanceof Error ? error.message : String(error),
+      );
+    }
   });
   api.post("/schedules/:id/enable", (c) =>
     c.json(requireScheduleStore().update(c.req.param("id"), { enabled: true })),
@@ -1065,10 +1126,64 @@ export function createLocalApi(options: LocalApiOptions): Hono {
     const body = await jsonBody(c, maxBodyBytes);
     const at = typeof body.now === "string" ? body.now : new Date().toISOString();
     const store = requireScheduleStore();
-    const results = [];
-    for (const schedule of store.list({ enabled: true, dueBefore: at }))
-      results.push(await fireSchedule(schedule.id, schedule.nextFireAt, schedule.nextFireAt));
-    return c.json({ now: at, results });
+    if (!scheduleEngine) capability("Runtime scheduler is not configured for schedule execution");
+    const policy = new SchedulerEngine({
+      store: store.schedulerStore(),
+      executor: {
+        start: async (invocation) => {
+          const schedule = store.get(invocation.scheduleId) ?? notFound("Schedule");
+          const claimed = store.claimFire({
+            scheduleId: invocation.scheduleId,
+            fireKey: invocation.idempotencyKey,
+            scheduledAt: invocation.scheduledFor,
+          });
+          const workflow =
+            repository.getWorkflowVersion(schedule.workflowId, schedule.workflowVersion) ??
+            notFound("Workflow version");
+          const started = await scheduleEngine.start(workflow.definition, invocation.input);
+          const runId = "runId" in started ? started.runId : started.id;
+          store.linkRun({
+            scheduleId: invocation.scheduleId,
+            fireId: claimed.id,
+            runId,
+            state: "active",
+          });
+          store.updateFire(claimed.id, { runId, status: "running" });
+          store.update(schedule.id, { lastFireAt: invocation.scheduledFor });
+          if (scheduleEngine.wait) {
+            void scheduleEngine
+              .wait(runId)
+              .then(async (snapshot) => {
+                store.reconcileRun(runId, snapshot.run.status as RunRecord["status"]);
+                queueMicrotask(() => {
+                  void policy.complete(invocation.scheduleId, runId);
+                });
+              })
+              .catch(() => undefined);
+          }
+          return { executionId: runId };
+        },
+        cancel: async (execution, reason) => {
+          if (!scheduler?.cancel)
+            capability("cancel_previous overlap requires a cancellable runtime");
+          await scheduler.cancel(execution.executionId, reason);
+          store.reconcileRun(execution.executionId, "cancelled");
+        },
+        skip: async (invocation, reason) => {
+          const fire = store
+            .listFires(invocation.scheduleId, 1000)
+            .find((item) => item.fireKey === invocation.idempotencyKey);
+          if (fire)
+            store.updateFire(fire.id, {
+              status: "skipped",
+              finishedAt: new Date().toISOString(),
+              error: reason,
+            });
+        },
+      },
+    });
+    const result = await policy.tick(new Date(at));
+    return c.json({ now: at, results: result.decisions });
   });
   api.get("/schedules/:id/status", (c) => {
     const store = requireScheduleStore();
@@ -1087,32 +1202,14 @@ export function createLocalApi(options: LocalApiOptions): Hono {
   api.post("/retention/preview", async (c) => {
     const store = requireScheduleStore();
     const body = await jsonBody(c, maxBodyBytes);
-    return c.json(
-      store.previewRetention({
-        before: typeof body.before === "string" ? body.before : undefined,
-        maxAgeDays: typeof body.maxAgeDays === "number" ? body.maxAgeDays : undefined,
-        maxRuns: typeof body.maxRuns === "number" ? body.maxRuns : undefined,
-        batchSize: typeof body.batchSize === "number" ? body.batchSize : undefined,
-      } satisfies RetentionFilter),
-    );
+    return c.json(store.previewRetention(retentionFilterFromBody(body)));
   });
   api.post("/retention/apply", async (c) => {
     const store = requireScheduleStore();
     const body = await jsonBody(c, maxBodyBytes);
     if (body.confirm !== true)
-      return c.json(
-        store.previewRetention({
-          maxAgeDays: typeof body.maxAgeDays === "number" ? body.maxAgeDays : undefined,
-          maxRuns: typeof body.maxRuns === "number" ? body.maxRuns : undefined,
-        }),
-        200,
-      );
-    return c.json(
-      store.applyRetention({
-        maxAgeDays: typeof body.maxAgeDays === "number" ? body.maxAgeDays : undefined,
-        maxRuns: typeof body.maxRuns === "number" ? body.maxRuns : undefined,
-      }),
-    );
+      return c.json(store.previewRetention(retentionFilterFromBody(body)), 200);
+    return c.json(store.applyRetention(retentionFilterFromBody(body)));
   });
 
   const runtimeStore = options.runtimeStore as RuntimeStoreWithTrace | undefined;

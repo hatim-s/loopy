@@ -34,11 +34,16 @@ export type ScheduleState = {
   nextDueAt?: string;
   active?: ScheduleExecution;
   pending?: ScheduleInvocation;
+  /** Monotonic durable revision used by stores for compare-and-swap writes. */
+  revision?: number;
+  /** Cursor value read with `revision`; saves compare it before advancing. */
+  cursor?: string;
 };
 
 export type SchedulerStore = {
   listSchedules(): Promise<ScheduleDefinition[]>;
   getState(scheduleId: string): Promise<ScheduleState | undefined>;
+  /** Persist a state transition with the revision/cursor observed by the caller. */
   saveState(state: ScheduleState): Promise<void>;
   /** Atomically claim a key. False means another tick already claimed it. */
   claimIdempotencyKey(scheduleId: string, key: string): Promise<boolean>;
@@ -47,6 +52,8 @@ export type SchedulerStore = {
 export type SchedulerExecutor = {
   start(invocation: ScheduleInvocation): Promise<{ executionId: string }>;
   cancel(execution: ScheduleExecution, reason: string): Promise<void>;
+  /** Record a policy skip without starting runtime work. */
+  skip?(invocation: ScheduleInvocation, reason: string): Promise<void>;
 };
 
 export type ScheduleDecision = {
@@ -83,7 +90,20 @@ export class MemorySchedulerStore implements SchedulerStore {
   }
 
   async saveState(state: ScheduleState): Promise<void> {
-    this.states.set(state.scheduleId, cloneState(state));
+    const current = this.states.get(state.scheduleId);
+    const expectedRevision = state.revision ?? 0;
+    const currentRevision = current?.revision ?? 0;
+    const expectedCursor = state.cursor;
+    if (current && (currentRevision !== expectedRevision || current.cursor !== expectedCursor))
+      throw new Error(`Schedule state changed concurrently for ${state.scheduleId}`);
+    const next = cloneState({
+      ...state,
+      revision: expectedRevision + 1,
+      cursor: state.nextDueAt,
+    });
+    this.states.set(state.scheduleId, next);
+    state.revision = next.revision;
+    state.cursor = next.cursor;
   }
 
   async claimIdempotencyKey(scheduleId: string, key: string): Promise<boolean> {
@@ -202,7 +222,7 @@ export class SchedulerEngine {
       at.getUTCSeconds() === 0 && at.getUTCMilliseconds() === 0
         ? nextOccurrence(schedule.schedule, new Date(at.getTime() - 1))
         : nextOccurrence(schedule.schedule, at);
-    return { scheduleId: schedule.schedule.scheduleId, nextDueAt: iso(next) };
+    return { scheduleId: schedule.schedule.scheduleId, nextDueAt: iso(next), revision: 0 };
   }
 
   private async startInvocation(
@@ -214,6 +234,7 @@ export class SchedulerEngine {
     if (state.active) {
       const overlap = schedule.schedule.overlap as OverlapPolicy;
       if (overlap === "skip") {
+        await this.options.executor.skip?.(invocation, "overlap policy skipped this fire");
         return { scheduleId: state.scheduleId, action: "skipped_overlap", invocation };
       }
       if (overlap === "queue") {
@@ -293,7 +314,6 @@ export class SchedulerEngine {
       if (
         !(await this.options.store.claimIdempotencyKey(state.scheduleId, invocation.idempotencyKey))
       ) {
-        await this.options.store.saveState(state);
         decisions.push({ scheduleId: state.scheduleId, action: "duplicate", invocation });
         continue;
       }

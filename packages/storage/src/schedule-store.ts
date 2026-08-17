@@ -1,7 +1,12 @@
 import type { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
-import type { JsonObject } from "@loopy/contracts";
-import type { ScheduleDefinition, SchedulerStore, ScheduleState } from "@loopy/scheduler";
+import { CronExpressionV1Schema, IanaTimeZoneV1Schema, type JsonObject } from "@loopy/contracts";
+import {
+  nextOccurrence,
+  type ScheduleDefinition,
+  type SchedulerStore,
+  type ScheduleState,
+} from "@loopy/scheduler";
 import type {
   RetentionApplyResult,
   RetentionCandidate,
@@ -61,6 +66,14 @@ const link = (r: Row): ScheduleRunLinkRecord => ({
   updatedAt: r.updated_at as string,
 });
 
+function validateScheduleDefinition(expression: string, timezone: string): void {
+  if (!IanaTimeZoneV1Schema.safeParse(timezone).success)
+    throw new Error("Schedule timezone must be a valid IANA timezone");
+  if (expression === "manual") return;
+  if (!CronExpressionV1Schema.safeParse(expression).success)
+    throw new Error("Schedule expression must be a valid five-field cron expression");
+}
+
 /** SQLite-only seam for the scheduler engine. It owns durable claims; engines own time math. */
 export class ScheduleRepository {
   constructor(private readonly db: Database) {}
@@ -104,8 +117,28 @@ export class ScheduleRepository {
   }): ScheduleRecord {
     if (!input.name.trim() || !input.expression.trim())
       throw new Error("Schedule name and expression are required");
+    const expression = input.expression.trim();
+    const timezone = (input.timezone ?? "UTC").trim();
+    validateScheduleDefinition(expression, timezone);
     const id = input.id ?? randomUUID();
     const at = now();
+    const derivedNextFireAt =
+      input.nextFireAt ??
+      (expression === "manual"
+        ? undefined
+        : nextOccurrence(
+            {
+              schemaVersion: "1",
+              scheduleId: id,
+              expression,
+              timezone,
+              enabled: input.enabled !== false,
+              overlap: input.overlapPolicy === "skip" || !input.overlapPolicy ? "skip" : "queue",
+              missed: input.missedPolicy === "skip" || !input.missedPolicy ? "skip" : "run_once",
+              input: input.input ?? {},
+            },
+            new Date(),
+          ).toISOString());
     this.run(
       "INSERT INTO schedules(id,name,workflow_id,workflow_version,input_json,expression,timezone,overlap_policy,missed_policy,enabled,next_fire_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
       id,
@@ -113,12 +146,12 @@ export class ScheduleRepository {
       input.workflowId,
       input.workflowVersion,
       encode(input.input),
-      input.expression.trim(),
-      input.timezone ?? "UTC",
+      expression,
+      timezone,
       input.overlapPolicy ?? "skip",
       input.missedPolicy ?? "skip",
       input.enabled === false ? 0 : 1,
-      input.nextFireAt ?? null,
+      derivedNextFireAt ?? null,
       at,
       at,
     );
@@ -144,6 +177,26 @@ export class ScheduleRepository {
     const current = this.get(id);
     if (!current) throw new Error(`Unknown schedule ${id}`);
     const next = { ...current, ...patch };
+    next.expression = next.expression.trim();
+    next.timezone = next.timezone.trim();
+    validateScheduleDefinition(next.expression, next.timezone);
+    if (next.expression !== current.expression || next.timezone !== current.timezone) {
+      if (next.expression === "manual") next.nextFireAt = undefined;
+      else
+        next.nextFireAt = nextOccurrence(
+          {
+            schemaVersion: "1",
+            scheduleId: next.id,
+            expression: next.expression,
+            timezone: next.timezone,
+            enabled: next.enabled,
+            overlap: next.overlapPolicy === "skip" ? "skip" : "queue",
+            missed: next.missedPolicy === "skip" ? "skip" : "run_once",
+            input: next.input,
+          },
+          new Date(),
+        ).toISOString();
+    }
     this.run(
       "UPDATE schedules SET name=?,expression=?,timezone=?,overlap_policy=?,missed_policy=?,enabled=?,next_fire_at=?,last_fire_at=?,input_json=?,updated_at=? WHERE id=?",
       next.name,
@@ -165,17 +218,18 @@ export class ScheduleRepository {
     fireKey: string;
     scheduledAt: string;
     id?: string;
-  }): ScheduleFireRecord {
+  }): ScheduleFireRecord & { claimed: boolean } {
     return this.db.transaction(() => {
+      const id = input.id ?? randomUUID();
       const existing = this.db
         .query<Row, [string, string]>(
           "SELECT * FROM schedule_fires WHERE schedule_id=? AND fire_key=?",
         )
         .get(input.scheduleId, input.fireKey);
-      if (existing) return fire(existing);
+      if (existing) return { ...fire(existing), claimed: false };
       this.run(
-        "INSERT INTO schedule_fires(id,schedule_id,fire_key,scheduled_at,status,created_at) VALUES (?,?,?,?,?,?)",
-        input.id ?? randomUUID(),
+        "INSERT OR IGNORE INTO schedule_fires(id,schedule_id,fire_key,scheduled_at,status,created_at) VALUES (?,?,?,?,?,?)",
+        id,
         input.scheduleId,
         input.fireKey,
         input.scheduledAt,
@@ -187,8 +241,8 @@ export class ScheduleRepository {
           "SELECT * FROM schedule_fires WHERE schedule_id=? AND fire_key=?",
         )
         .get(input.scheduleId, input.fireKey);
-      return fire(row as Row);
-    })() as ScheduleFireRecord;
+      return { ...fire(row as Row), claimed: (row as Row).id === id };
+    })() as ScheduleFireRecord & { claimed: boolean };
   }
   listFires(scheduleId?: string, limit = 100): ScheduleFireRecord[] {
     const n = Math.min(1000, Math.max(1, limit));
@@ -290,6 +344,33 @@ export class ScheduleRepository {
       runId,
     );
   }
+  /** Reconcile durable schedule bookkeeping after a runtime reaches a terminal state. */
+  reconcileRun(runId: string, status: RunStatus): ScheduleRunLinkRecord | undefined {
+    const current = this.db
+      .query<Row, [string]>("SELECT * FROM schedule_run_links WHERE run_id=?")
+      .get(runId);
+    if (!current) return undefined;
+    const at = now();
+    this.db.transaction(() => {
+      this.run(
+        "UPDATE schedule_run_links SET state='terminal',updated_at=? WHERE run_id=?",
+        at,
+        runId,
+      );
+      this.run(
+        "UPDATE schedule_fires SET status=?,finished_at=?,run_id=? WHERE id=?",
+        status === "succeeded" ? "succeeded" : "failed",
+        at,
+        runId,
+        current.fire_id,
+      );
+    })();
+    return link(
+      this.db
+        .query<Row, [string]>("SELECT * FROM schedule_run_links WHERE run_id=?")
+        .get(runId) as Row,
+    );
+  }
   /** Adapt the durable schedule tables to the scheduler engine's state port. */
   schedulerStore(): SchedulerStore {
     return {
@@ -312,6 +393,9 @@ export class ScheduleRepository {
       getState: async (scheduleId: string): Promise<ScheduleState | undefined> => {
         const record = this.get(scheduleId);
         if (!record) return undefined;
+        const persisted = this.db
+          .query<Row, [string]>("SELECT * FROM scheduler_state WHERE schedule_id=?")
+          .get(scheduleId);
         const active = this.listLinks(scheduleId, "active")[0];
         const activeFire = active ? this.getFire(active.fireId) : undefined;
         const toInvocation = (item: ScheduleFireRecord) => ({
@@ -324,29 +408,74 @@ export class ScheduleRepository {
           idempotencyKey: item.fireKey,
           source: "cron" as const,
         });
-        const pendingFire = this.listFires(scheduleId, 1000).find(
-          (item) => item.status === "claimed" && !item.runId,
-        );
-        return {
+        const state: ScheduleState = {
           scheduleId,
           ...(record.nextFireAt ? { nextDueAt: record.nextFireAt } : {}),
           ...(active && activeFire
             ? { active: { ...toInvocation(activeFire), executionId: active.runId } }
             : {}),
-          ...(pendingFire ? { pending: toInvocation(pendingFire) } : {}),
         };
+        if (persisted) {
+          state.revision = Number(persisted.revision);
+          if (typeof persisted.cursor === "string") state.cursor = persisted.cursor;
+          state.nextDueAt = typeof persisted.cursor === "string" ? persisted.cursor : undefined;
+          state.active =
+            decode<ScheduleState["active"]>(persisted.active_json as string) ?? state.active;
+          state.pending =
+            decode<ScheduleState["pending"]>(persisted.pending_json as string) ?? state.pending;
+        } else {
+          state.revision = 0;
+        }
+        return state;
       },
       saveState: async (state: ScheduleState): Promise<void> => {
         const record = this.get(state.scheduleId);
         if (!record) throw new Error(`Unknown schedule ${state.scheduleId}`);
-        this.update(record.id, { nextFireAt: state.nextDueAt });
-        if (state.pending) {
-          this.claimFire({
-            scheduleId: state.scheduleId,
-            fireKey: state.pending.idempotencyKey,
-            scheduledAt: state.pending.scheduledFor,
-          });
-        }
+        const expectedRevision = state.revision ?? 0;
+        const expectedCursor = state.cursor;
+        this.db.transaction(() => {
+          const current = this.db
+            .query<Row, [string]>("SELECT revision,cursor FROM scheduler_state WHERE schedule_id=?")
+            .get(state.scheduleId);
+          if (current) {
+            if (
+              Number(current.revision) !== expectedRevision ||
+              (current.cursor as string | null | undefined) !== (expectedCursor ?? null)
+            )
+              throw new Error(`Schedule state changed concurrently for ${state.scheduleId}`);
+            this.run(
+              "UPDATE scheduler_state SET revision=?,cursor=?,active_json=?,pending_json=?,updated_at=? WHERE schedule_id=? AND revision=? AND cursor IS ?",
+              expectedRevision + 1,
+              state.nextDueAt ?? null,
+              state.active ? JSON.stringify(state.active) : null,
+              state.pending ? JSON.stringify(state.pending) : null,
+              now(),
+              state.scheduleId,
+              expectedRevision,
+              expectedCursor ?? null,
+            );
+          } else {
+            if (expectedRevision !== 0 || expectedCursor !== undefined)
+              throw new Error(`Schedule state changed concurrently for ${state.scheduleId}`);
+            this.run(
+              "INSERT INTO scheduler_state(schedule_id,revision,cursor,active_json,pending_json,updated_at) VALUES (?,?,?,?,?,?)",
+              state.scheduleId,
+              1,
+              state.nextDueAt ?? null,
+              state.active ? JSON.stringify(state.active) : null,
+              state.pending ? JSON.stringify(state.pending) : null,
+              now(),
+            );
+          }
+          this.run(
+            "UPDATE schedules SET next_fire_at=?,updated_at=? WHERE id=?",
+            state.nextDueAt ?? null,
+            now(),
+            state.scheduleId,
+          );
+        })();
+        state.revision = expectedRevision + 1;
+        state.cursor = state.nextDueAt;
       },
       claimIdempotencyKey: async (scheduleId: string, key: string): Promise<boolean> => {
         return this.db.transaction(() => {
@@ -411,8 +540,16 @@ export class ScheduleRepository {
       throw new Error("maxAgeDays must be a positive integer");
     if (input.maxRuns !== undefined && (!Number.isSafeInteger(input.maxRuns) || input.maxRuns <= 0))
       throw new Error("maxRuns must be a positive integer");
+    const ageBefore =
+      input.maxAgeDays === undefined
+        ? undefined
+        : new Date(Date.now() - input.maxAgeDays * 86_400_000).toISOString();
+    const beforeValues = [input.before, ageBefore].filter(
+      (value): value is string => typeof value === "string",
+    );
     return {
       ...input,
+      ...(beforeValues.length ? { before: beforeValues.sort()[0] } : {}),
       batchSize: Math.min(
         1000,
         Math.max(1, input.batchSize ?? this.getRetentionPolicy()?.batchSize ?? 100),
@@ -420,11 +557,7 @@ export class ScheduleRepository {
     };
   }
   private retentionPreview(filter: NormalizedRetentionFilter): RetentionPreview {
-    const before = filter.before
-      ? filter.before
-      : filter.maxAgeDays
-        ? new Date(Date.now() - filter.maxAgeDays * 86_400_000).toISOString()
-        : undefined;
+    const before = filter.before;
     const protectedRunIds = this.db
       .query<{ id: string }, []>(
         "SELECT id FROM runs WHERE status IN ('created','running','pause_requested','paused','cancelling','blocked_approval') OR id IN (SELECT run_id FROM schedule_run_links WHERE state IN ('queued','active'))",

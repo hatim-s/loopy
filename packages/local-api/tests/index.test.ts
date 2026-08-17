@@ -39,6 +39,111 @@ describe("local API", () => {
     }
   });
 
+  test("advertises PATCH for CORS preflight and keeps schedule cursors server-owned", async () => {
+    const { dir, storage } = project();
+    try {
+      storage.runtime.createWorkflowVersion({
+        workflowId: "cron-workflow",
+        version: 1,
+        definition: { id: "cron-workflow", workflowVersion: 1, nodes: [], edges: [] },
+      });
+      const app = createLocalApi({ storage, token, origins: ["http://studio.local"] });
+      const preflight = await app.request("/api/v1/schedules", {
+        method: "OPTIONS",
+        headers: { Origin: "http://studio.local", "Access-Control-Request-Method": "PATCH" },
+      });
+      expect(preflight.status).toBe(204);
+      expect(preflight.headers.get("Access-Control-Allow-Methods")).toContain("PATCH");
+      const create = (body: Record<string, unknown>) =>
+        app.request("/api/v1/schedules", {
+          method: "POST",
+          headers: { ...headers, "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      expect(
+        (
+          await create({
+            name: "invalid",
+            workflowId: "cron-workflow",
+            workflowVersion: 1,
+            expression: "0 0 * * * *",
+            timezone: "UTC",
+          })
+        ).status,
+      ).toBe(400);
+      expect(
+        (
+          await create({
+            name: "cursor",
+            workflowId: "cron-workflow",
+            workflowVersion: 1,
+            expression: "0 0 * * *",
+            timezone: "UTC",
+            nextFireAt: "1999-01-01T00:00:00.000Z",
+          })
+        ).status,
+      ).toBe(400);
+    } finally {
+      storage.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("ticks through the scheduler policy once for an overdue schedule", async () => {
+    const { dir, storage } = project();
+    try {
+      storage.runtime.createWorkflowVersion({
+        workflowId: "tick-workflow",
+        version: 1,
+        definition: { id: "tick-workflow", workflowVersion: 1, nodes: [], edges: [] },
+      });
+      let starts = 0;
+      const app = createLocalApi({
+        storage,
+        token,
+        scheduleEngine: {
+          async start(plan, input) {
+            starts += 1;
+            const source = plan as { id: string; workflowVersion: number };
+            const run = storage.runtime.createRun({
+              id: `tick-run-${starts}`,
+              workflowId: source.id,
+              workflowVersion: source.workflowVersion,
+              input,
+              status: "running",
+            });
+            return { runId: run.id };
+          },
+        },
+      });
+      const create = await app.request("/api/v1/schedules", {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "tick",
+          workflowId: "tick-workflow",
+          workflowVersion: 1,
+          expression: "* * * * *",
+          timezone: "UTC",
+          missedPolicy: "run_once",
+        }),
+      });
+      expect(create.status).toBe(201);
+      const tick = () =>
+        app.request("/api/v1/schedules/tick", {
+          method: "POST",
+          headers: { ...headers, "Content-Type": "application/json" },
+          body: JSON.stringify({ now: "2099-01-01T00:01:00.000Z" }),
+        });
+      expect((await tick()).status).toBe(200);
+      expect((await tick()).status).toBe(200);
+      expect(starts).toBe(1);
+    } finally {
+      storage.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("rejects weak bearer tokens and hides unexpected server errors", async () => {
     const { dir, storage } = project();
     try {

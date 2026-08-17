@@ -42,6 +42,43 @@ describe("schedule persistence", () => {
     reopened.close();
   });
 
+  test("returns ownership for a fire claim and rejects stale scheduler state writes", async () => {
+    const storage = new Storage({ projectDir: project() });
+    storage.runtime.createWorkflowVersion({
+      workflowId: "wf",
+      version: 1,
+      definition: { id: "wf", workflowVersion: 1 },
+    });
+    const schedule = storage.schedules.create({
+      id: "cas-schedule",
+      name: "cas",
+      workflowId: "wf",
+      workflowVersion: 1,
+      expression: "0 0 * * *",
+      nextFireAt: "2026-08-17T00:00:00.000Z",
+    });
+    const first = storage.schedules.claimFire({
+      scheduleId: schedule.id,
+      fireKey: "same",
+      scheduledAt: "2026-08-17T00:00:00.000Z",
+    });
+    const second = storage.schedules.claimFire({
+      scheduleId: schedule.id,
+      fireKey: "same",
+      scheduledAt: "2026-08-17T00:00:00.000Z",
+    });
+    expect(first.claimed).toBe(true);
+    expect(second.claimed).toBe(false);
+    const store = storage.schedules.schedulerStore();
+    const state = (await store.getState(schedule.id)) as NonNullable<
+      Awaited<ReturnType<typeof store.getState>>
+    >;
+    const stale = { ...state, nextDueAt: "2026-08-18T00:00:00.000Z" };
+    await store.saveState(state);
+    await expect(store.saveState(stale)).rejects.toThrow(/changed concurrently/);
+    storage.close();
+  });
+
   test("records overlap bookkeeping and protects active runs from retention preview", () => {
     const storage = new Storage({ projectDir: project() });
     storage.runtime.createWorkflowVersion({

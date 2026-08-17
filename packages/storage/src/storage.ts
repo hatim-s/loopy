@@ -23,7 +23,7 @@ import { ScheduleRepository } from "./schedule-store.js";
 export const STORAGE_DIR = ".loopy";
 export const DATABASE_FILENAME = "loopy.db";
 export const LOCK_FILENAME = "loopy.lock";
-export const CURRENT_MIGRATION = 5;
+export const CURRENT_MIGRATION = 6;
 
 export type RunStatus =
   | "created"
@@ -267,6 +267,18 @@ INSERT INTO schedules_v5 SELECT id,name,workflow_id,workflow_version,input_json,
 DROP TABLE schedules;
 ALTER TABLE schedules_v5 RENAME TO schedules;
 CREATE INDEX IF NOT EXISTS schedules_due_idx ON schedules(enabled, next_fire_at);`,
+  ],
+  [
+    6,
+    `CREATE TABLE IF NOT EXISTS scheduler_state (
+  schedule_id TEXT PRIMARY KEY REFERENCES schedules(id) ON DELETE CASCADE,
+  revision INTEGER NOT NULL DEFAULT 0 CHECK(revision >= 0),
+  cursor TEXT,
+  active_json TEXT,
+  pending_json TEXT,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS scheduler_state_cursor_idx ON scheduler_state(cursor);`,
   ],
 ];
 
