@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { JsonObject, JsonValue } from "@loopy/contracts";
 import { extractImportedSession } from "@loopy/extractor";
@@ -15,6 +15,7 @@ import {
   type Storage,
 } from "@loopy/storage";
 import { DeterministicFakeProvider } from "@loopy/testing";
+import { encodeTraceJsonl, importTraceJsonl } from "@loopy/tracing";
 import { doctorCommand } from "./doctor";
 import {
   cleanupCommand,
@@ -66,13 +67,20 @@ Usage:
 Commands:
   ${COMMANDS.join(", ")}
 
-Local persistence commands:
+  Local persistence commands:
+  loopy init [--project <dir>] [--json]
   loopy import <trace.jsonl> --provider <provider> [--project <dir>] [--json]
   loopy sessions list|show <id> [--project <dir>] [--json]
   loopy extract --import <id>   (deterministic offline extractor by default)
   loopy review list|show <id> [--project <dir>] [--json]
   loopy approve|reject <proposal-or-job-id> [--project <dir>] [--json]
   loopy run <workflow-id> [--local] [--input <json>] [--project <dir>] [--json]`);
+  console.log("  loopy pause|resume|cancel <run-id> [--reason <text>] [--project <dir>] [--json]");
+  console.log(
+    "  loopy retry <run-id> --node <node-id> [--input <json>] [--project <dir>] [--json]",
+  );
+  console.log("  loopy trace export <run-id> [--output <file>] [--project <dir>] [--json]");
+  console.log("  loopy trace import <file> [--project <dir>] [--json]");
   console.log(
     "  loopy schedule create|list|show|enable|disable|remove|fire|tick|install|uninstall [options]",
   );
@@ -189,6 +197,9 @@ function positional(args: readonly string[], start = 1): string | undefined {
     "--version",
     "--port",
     "--origin",
+    "--output",
+    "--reason",
+    "--node",
   ]);
   for (let index = start; index < args.length; index += 1) {
     const arg = args[index];
@@ -200,6 +211,112 @@ function positional(args: readonly string[], start = 1): string | undefined {
     return arg;
   }
   return undefined;
+}
+
+const PROJECT_CONFIG = {
+  schemaVersion: 1,
+  stateDirectory: ".loopy",
+  database: ".loopy/loopy.db",
+} as const;
+
+async function initProject(args: readonly string[], deps: CliDependencies): Promise<number> {
+  const project = projectDir(args);
+  const stateDir = resolve(project, ".loopy");
+  mkdirSync(stateDir, { recursive: true });
+  const configPath = resolve(stateDir, "config.json");
+  let created = false;
+  if (!existsSync(configPath)) {
+    writeFileSync(configPath, `${JSON.stringify(PROJECT_CONFIG, null, 2)}\n`, { flag: "wx" });
+    created = true;
+  }
+  const storage = await storageFor(args, deps);
+  try {
+    const result = { project, stateDir, configPath, databasePath: storage.databasePath, created };
+    if (jsonOutput(args)) printJson(result);
+    else console.log(`${created ? "initialized" : "already initialized"} ${project}`);
+    return 0;
+  } finally {
+    storage.close();
+  }
+}
+
+function runtimeFor(storage: Storage, deps: CliDependencies): RuntimeScheduler {
+  const store = new SqliteRuntimeStore(storage);
+  const provider = deps.providerExecutor ?? new DeterministicFakeProvider();
+  return deps.runtimeFactory?.(store, provider) ?? new RuntimeScheduler({ store, provider });
+}
+
+async function runtimeMutation(
+  args: readonly string[],
+  deps: CliDependencies,
+  operation: "pause" | "resume" | "cancel" | "retry",
+): Promise<number> {
+  const runId = positional(args);
+  if (!runId) throw new Error(`${operation} requires a run ID`);
+  const storage = await storageFor(args, deps);
+  try {
+    const runtime = runtimeFor(storage, deps);
+    let result: unknown;
+    if (operation === "retry") {
+      const nodeId = option(args, "--node");
+      if (!nodeId) throw new Error("retry requires --node");
+      result = await runtime.retry(runId, nodeId, parseRunInput(args));
+    } else if (operation === "cancel") {
+      result = await runtime.cancel(runId, option(args, "--reason") ?? "cancelled by user");
+    } else {
+      result = await runtime[operation](runId);
+    }
+    if (jsonOutput(args)) printJson(result);
+    else if (operation === "retry") console.log(`retry ${runId}/${option(args, "--node")}`);
+    else console.log(`${operation} ${runId}`);
+    return 0;
+  } finally {
+    storage.close();
+  }
+}
+
+async function traceCommand(args: readonly string[], deps: CliDependencies): Promise<number> {
+  const action = args[1];
+  const fileOrRun = positional(args, 2);
+  if (action !== "export" && action !== "import")
+    throw new Error("trace requires export or import");
+  if (!fileOrRun)
+    throw new Error(
+      `trace ${action} requires ${action === "export" ? "a run ID" : "a JSONL file"}`,
+    );
+  const storage = await storageFor(args, deps);
+  try {
+    const runtimeStore = new SqliteRuntimeStore(storage);
+    if (action === "export") {
+      const text = encodeTraceJsonl(runtimeStore.listTraceEvents(fileOrRun), {
+        trailingNewline: "required",
+      });
+      const output = option(args, "--output");
+      if (output) writeFileSync(resolve(output), text, { encoding: "utf8" });
+      else if (!jsonOutput(args)) process.stdout.write(text);
+      if (jsonOutput(args))
+        printJson({
+          runId: fileOrRun,
+          output: output ?? "stdout",
+          lines: text ? text.trimEnd().split("\n").length : 0,
+          ...(output ? {} : { trace: text }),
+        });
+      return 0;
+    }
+    const content = readFileSync(resolve(fileOrRun), "utf8");
+    const result = await importTraceJsonl(
+      content,
+      { append: (event) => runtimeStore.appendTraceEvent(event.runId, event) },
+      {
+        rejectDiagnostics: true,
+      },
+    );
+    if (jsonOutput(args)) printJson({ events: result.events.length, lines: result.lines });
+    else console.log(`imported ${result.events.length} trace event(s)`);
+    return 0;
+  } finally {
+    storage.close();
+  }
 }
 function projectDir(args: readonly string[]): string {
   return resolve(option(args, "--project") ?? process.cwd());
@@ -581,6 +698,7 @@ async function validateProvider(args: readonly string[], deps: CliDependencies):
 
 async function dispatch(args: readonly string[], deps: CliDependencies): Promise<number> {
   const command = args[0];
+  if (command === "init") return initProject(args, deps);
   if (command === "import") return importSession(args, deps);
   if (command === "sessions")
     return args.includes("show") ? printSession(args, deps) : printSessionList(args, deps);
@@ -593,6 +711,9 @@ async function dispatch(args: readonly string[], deps: CliDependencies): Promise
   if (command === "approve") return approveOrReject(args, deps, "approve");
   if (command === "reject") return approveOrReject(args, deps, "reject");
   if (command === "run") return runWorkflow(args, deps);
+  if (command === "pause" || command === "resume" || command === "cancel" || command === "retry")
+    return runtimeMutation(args, deps, command);
+  if (command === "trace") return traceCommand(args, deps);
   if (command === "validate-provider" || command === "validate")
     return validateProvider(args, deps);
   if (command === "ui") return launchUi(args, deps);
@@ -769,6 +890,12 @@ export function main(
       "validate-provider",
       "validate",
       "run",
+      "init",
+      "pause",
+      "resume",
+      "cancel",
+      "retry",
+      "trace",
       "ui",
       "schedule",
       "cleanup",

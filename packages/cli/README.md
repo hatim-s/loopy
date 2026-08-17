@@ -17,3 +17,25 @@ ephemeral bootstrap global and is never placed in a URL or persistent storage.
 From the repository, `bun run --cwd packages/cli smoke:package` packs the CLI,
 installs that tarball into a temporary project, and verifies the installed UI
 bundle and authenticated API boundary.
+
+## Project lifecycle and traces
+
+`loopy init` creates `.loopy/config.json` (only when absent) and initializes the
+existing local SQLite state. It is safe to run repeatedly. Runtime controls
+operate on an existing run ID and use the runtime's legal transitions:
+
+```sh
+loopy pause <run-id>
+loopy resume <run-id>
+loopy cancel <run-id> [--reason "..." ]
+loopy retry <run-id> --node <node-id> [--input '{"key":"value"}']
+```
+
+Traces use the versioned canonical JSONL codec and SQLite trace sink. Export is
+deterministic and can write a file; import validates the complete input before
+persisting its events:
+
+```sh
+loopy trace export <run-id> --output trace.jsonl
+loopy trace import trace.jsonl
+```

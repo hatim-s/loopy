@@ -1,13 +1,104 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { RuntimeScheduler } from "@loopy/runtime";
 import { Storage } from "@loopy/storage";
 import { describe, expect, it, vi } from "vitest";
 import { main, mainAsync } from "../src/index";
 
 describe("loopy CLI shell", () => {
+  it("initializes idempotently without overwriting project-local config", async () => {
+    const project = mkdtempSync(join(tmpdir(), "loopy-cli-init-"));
+    const output = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      expect(await mainAsync(["init", "--project", project, "--json"])).toBe(0);
+      const configPath = resolve(project, ".loopy/config.json");
+      expect(existsSync(configPath)).toBe(true);
+      const initial = readFileSync(configPath, "utf8");
+      writeFileSync(configPath, '{"userSetting":true}\n');
+      expect(await mainAsync(["init", "--project", project, "--json"])).toBe(0);
+      expect(readFileSync(configPath, "utf8")).toBe('{"userSetting":true}\n');
+      expect(initial).not.toBe(readFileSync(configPath, "utf8"));
+    } finally {
+      output.mockRestore();
+    }
+  });
+
+  it("imports and deterministically exports a canonical trace through SQLite", async () => {
+    const project = mkdtempSync(join(tmpdir(), "loopy-cli-trace-"));
+    const outputFile = resolve(project, "roundtrip.jsonl");
+    const fixture = resolve("packages/tracing/fixtures/trace.jsonl");
+    const output = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      expect(await mainAsync(["trace", "import", fixture, "--project", project])).toBe(0);
+      expect(
+        await mainAsync([
+          "trace",
+          "export",
+          "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "--output",
+          outputFile,
+          "--project",
+          project,
+        ]),
+      ).toBe(0);
+      expect(readFileSync(outputFile, "utf8")).toBe(readFileSync(fixture, "utf8"));
+    } finally {
+      output.mockRestore();
+    }
+  });
+
+  it("routes lifecycle commands with their required run and node inputs", async () => {
+    const project = mkdtempSync(join(tmpdir(), "loopy-cli-controls-"));
+    const calls: unknown[][] = [];
+    const fake = {
+      pause: async (runId: string) => {
+        calls.push(["pause", runId]);
+        return { runId, status: "paused" };
+      },
+      resume: async (runId: string) => {
+        calls.push(["resume", runId]);
+        return { runId, status: "running" };
+      },
+      cancel: async (runId: string, reason: string) => {
+        calls.push(["cancel", runId, reason]);
+        return { runId, status: "cancelled" };
+      },
+      retry: async (runId: string, nodeId: string, input: Record<string, unknown>) => {
+        calls.push(["retry", runId, nodeId, input]);
+        return { runId, nodeId, status: "pending" };
+      },
+    } as unknown as RuntimeScheduler;
+    const output = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      const dependencies = { runtimeFactory: () => fake };
+      expect(await mainAsync(["pause", "run-1", "--project", project], dependencies)).toBe(0);
+      expect(await mainAsync(["resume", "run-1", "--project", project], dependencies)).toBe(0);
+      expect(
+        await mainAsync(
+          ["cancel", "run-1", "--reason", "operator request", "--project", project],
+          dependencies,
+        ),
+      ).toBe(0);
+      expect(
+        await mainAsync(
+          ["retry", "run-1", "--node", "node-1", "--input", '{"x":1}', "--project", project],
+          dependencies,
+        ),
+      ).toBe(0);
+      expect(calls).toEqual([
+        ["pause", "run-1"],
+        ["resume", "run-1"],
+        ["cancel", "run-1", "operator request"],
+        ["retry", "run-1", "node-1", { x: 1 }],
+      ]);
+    } finally {
+      output.mockRestore();
+    }
+  });
+
   it("prints a version without invoking an unimplemented command", () => {
     const output = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
