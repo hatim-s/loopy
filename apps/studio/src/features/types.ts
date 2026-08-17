@@ -130,6 +130,7 @@ export interface DebuggerEvent {
 export interface DebuggerSnapshot {
   runId: string;
   workflowId?: string;
+  workflowVersion?: number;
   status: StudioStatus | string;
   events: readonly DebuggerEvent[];
   attempts?: readonly NodeAttempt[];

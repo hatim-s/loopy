@@ -344,7 +344,7 @@ export function extractionApproveMutation(
     kind: "mutation",
     key: `extraction:approve:${proposalId}`,
     method: "POST",
-    endpoint: `/api/extractions/${encodeURIComponent(importId)}/approve`,
+    endpoint: `/api/extractions/${encodeURIComponent(proposalId || importId)}/approve`,
     body: { importId, proposalId },
   };
 }
@@ -357,7 +357,7 @@ export function extractionRejectMutation(
     kind: "mutation",
     key: `extraction:reject:${proposalId}`,
     method: "POST",
-    endpoint: `/api/extractions/${encodeURIComponent(importId)}/reject`,
+    endpoint: `/api/extractions/${encodeURIComponent(proposalId || importId)}/reject`,
     body: { importId, proposalId },
   };
 }
@@ -543,7 +543,9 @@ export function RunControls({
 }: RunControlsProps) {
   const selectedAttempt = state.selectedAttemptId
     ? state.attempts.find((attempt) => attempt.attemptId === state.selectedAttemptId)
-    : undefined;
+    : state.selectedNodeId
+      ? state.attempts.filter((attempt) => attempt.nodeId === state.selectedNodeId).at(-1)
+      : undefined;
   const controls = legalControls(state.status, selectedAttempt);
   controls.fork = controls.fork && forkSupported;
   const command = (name: "pause" | "resume" | "cancel" | "retry" | "fork") => {

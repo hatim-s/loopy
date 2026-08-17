@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { EmptyState, ErrorState, LoadingState } from "../components/primitives/states";
 import {
   AttemptDetails,
@@ -9,6 +9,7 @@ import {
   ProviderCapabilityList,
   RunControls,
 } from "../features";
+import type { GraphInputEdge, GraphInputNode } from "../features/debugger";
 import { createDebuggerState, debuggerReducer, replayEvents } from "../features/debugger";
 import type {
   DebuggerEvent,
@@ -21,12 +22,15 @@ import type { ApiClient } from "./api";
 
 export type StudioPageProps = { feature: string; api?: ApiClient };
 
-function useResource<T>(api: ApiClient | undefined, path: string) {
+function useResource<T>(api: ApiClient | undefined, path: string | undefined) {
   const [state, setState] = useState<{ value?: T; error?: string; loading: boolean }>({
-    loading: Boolean(api),
+    loading: Boolean(api && path),
   });
   useEffect(() => {
-    if (!api) return;
+    if (!api || !path) {
+      setState({ loading: false });
+      return;
+    }
     let active = true;
     setState({ loading: true });
     void api
@@ -114,12 +118,45 @@ export function ExtractionsPage({ api }: StudioPageProps) {
     api,
     "/extractions",
   );
-  const review = result.value?.reviews?.[0];
+  const [pendingAction, setPendingAction] = useState<"approve" | "reject">();
+  const [decision, setDecision] = useState<"approved" | "rejected">();
+  const [actionError, setActionError] = useState<string>();
+  const rawReview = result.value?.reviews?.[0];
+  const review = rawReview ? normalizeExtractionReview(rawReview) : undefined;
+  const submitDecision = async (action: "approve" | "reject") => {
+    if (!api || !review) return;
+    setPendingAction(action);
+    setActionError(undefined);
+    try {
+      await api.request(
+        `/extractions/${encodeURIComponent(review.proposalId ?? review.importId)}/${action}`,
+        {
+          method: "POST",
+          body: JSON.stringify(action === "reject" ? { reason: "Rejected in Studio" } : {}),
+        },
+      );
+      setDecision(action === "approve" ? "approved" : "rejected");
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setPendingAction(undefined);
+    }
+  };
   return (
     <PageFrame title="Trace extractions" eyebrow="Inspect / extractions">
       {result.loading ? <LoadingState label="Loading extraction reviews" /> : null}
       {result.error ? <ErrorState message={result.error} /> : null}
-      {!result.loading && !result.error && review ? <ExtractionReview model={review} /> : null}
+      {actionError ? (
+        <ErrorState message={`Unable to ${pendingAction ?? "update"} extraction: ${actionError}`} />
+      ) : null}
+      {!result.loading && !result.error && review ? (
+        <ExtractionReview
+          model={decision ? { ...review, status: decision } : review}
+          actionsDisabled={Boolean(pendingAction || decision)}
+          onApprove={() => void submitDecision("approve")}
+          onReject={() => void submitDecision("reject")}
+        />
+      ) : null}
       {!result.loading && !result.error && !review ? (
         <EmptyState
           title="No extraction proposals"
@@ -128,6 +165,87 @@ export function ExtractionsPage({ api }: StudioPageProps) {
       ) : null}
     </PageFrame>
   );
+}
+
+export function normalizeExtractionReview(value: unknown): ExtractionReviewModel {
+  const source = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  const proposal = (source.proposal ?? {}) as ExtractionReviewModel["proposal"];
+  const job =
+    source.job && typeof source.job === "object" ? (source.job as Record<string, unknown>) : {};
+  const imported =
+    source.import && typeof source.import === "object"
+      ? (source.import as Record<string, unknown>)
+      : {};
+  const rawProposal =
+    proposal && typeof proposal === "object" ? (proposal as Record<string, unknown>) : {};
+  const nodeEvidence = Array.isArray(rawProposal.nodeEvidence) ? rawProposal.nodeEvidence : [];
+  const evidence = nodeEvidence.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const record = item as Record<string, unknown>;
+    if (typeof record.evidenceId !== "string" || !Array.isArray(record.eventIds)) return [];
+    return [
+      {
+        evidenceId: record.evidenceId,
+        eventIds: record.eventIds.filter((id): id is string => typeof id === "string"),
+        rationale: typeof record.rationale === "string" ? record.rationale : undefined,
+        label: typeof record.nodeId === "string" ? `Node ${record.nodeId}` : undefined,
+      },
+    ];
+  });
+  const warnings = Array.isArray(rawProposal.warnings)
+    ? rawProposal.warnings.map((warning) =>
+        typeof warning === "string"
+          ? warning
+          : warning &&
+              typeof warning === "object" &&
+              typeof (warning as { message?: unknown }).message === "string"
+            ? (warning as { message: string }).message
+            : String(warning),
+      )
+    : [];
+  const hasBlockingQuestion =
+    Array.isArray(rawProposal.unresolvedQuestions) &&
+    rawProposal.unresolvedQuestions.some(
+      (question) =>
+        question &&
+        typeof question === "object" &&
+        (question as { blocksExecution?: unknown }).blocksExecution === true,
+    );
+  const status =
+    rawProposal.status === "approved" || rawProposal.status === "rejected"
+      ? rawProposal.status
+      : hasBlockingQuestion
+        ? "blocked"
+        : "draft";
+  return {
+    importId:
+      typeof job.importId === "string"
+        ? job.importId
+        : typeof rawProposal.importId === "string"
+          ? rawProposal.importId
+          : "unknown-import",
+    proposalId:
+      typeof rawProposal.id === "string"
+        ? rawProposal.id
+        : typeof job.id === "string"
+          ? job.id
+          : undefined,
+    sourceLabel:
+      [imported.provider, imported.source]
+        .filter((part): part is string => typeof part === "string")
+        .join(" · ") || "Imported session",
+    sourceEvents: Array.isArray(imported.session)
+      ? (imported.session as ExtractionReviewModel["sourceEvents"])
+      : [],
+    proposal,
+    evidence,
+    lossiness:
+      imported.lossiness && typeof imported.lossiness === "object"
+        ? (imported.lossiness as ExtractionReviewModel["lossiness"])
+        : undefined,
+    status,
+    warnings,
+  };
 }
 
 export function WorkflowsPage({ api }: StudioPageProps) {
@@ -161,27 +279,151 @@ export function WorkflowsPage({ api }: StudioPageProps) {
   );
 }
 
-function snapshotFrom(value: unknown, runId: string): DebuggerSnapshot {
+export type WorkflowTopology = { nodes: GraphInputNode[]; edges: GraphInputEdge[] };
+
+export function topologyFrom(value: unknown): WorkflowTopology | undefined {
   const source = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  const candidates = [source, source.topology, source.plan, source.definition, source.workflow];
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== "object") continue;
+    const graph = candidate as Record<string, unknown>;
+    const nodes = Array.isArray(graph.nodes)
+      ? graph.nodes.flatMap((node) => {
+          if (!node || typeof node !== "object") return [];
+          const item = node as Record<string, unknown>;
+          if (typeof item.id !== "string" && typeof item.nodeId !== "string") return [];
+          return [
+            {
+              id: String(item.id ?? item.nodeId),
+              ...(typeof item.name === "string" ? { name: item.name } : {}),
+              ...(typeof item.label === "string" ? { label: item.label } : {}),
+              ...(typeof item.kind === "string" ? { kind: item.kind } : {}),
+            },
+          ];
+        })
+      : [];
+    const edges = Array.isArray(graph.edges)
+      ? graph.edges.flatMap((edge) => {
+          if (!edge || typeof edge !== "object") return [];
+          const item = edge as Record<string, unknown>;
+          if (typeof item.source !== "string" || typeof item.target !== "string") return [];
+          return [
+            {
+              ...(typeof item.id === "string" ? { id: item.id } : {}),
+              source: item.source,
+              target: item.target,
+              ...(typeof item.label === "string" ? { label: item.label } : {}),
+              ...(typeof item.branch === "string" ? { branch: item.branch } : {}),
+            },
+          ];
+        })
+      : [];
+    if (nodes.length) return { nodes, edges };
+  }
+  return undefined;
+}
+
+function normalizeStudioStatus(value: unknown): DebuggerSnapshot["status"] {
+  if (value === "paused") return "paused";
+  if (value === "failed") return "failed";
+  if (value === "completed" || value === "cancelled") return "completed";
+  if (
+    value === "running" ||
+    value === "created" ||
+    value === "pause_requested" ||
+    value === "cancelling"
+  )
+    return "live";
+  return "loading";
+}
+
+export function snapshotFrom(
+  value: unknown,
+  runId: string,
+): DebuggerSnapshot & { topology?: WorkflowTopology } {
+  const source = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  const run =
+    source.run && typeof source.run === "object" ? (source.run as Record<string, unknown>) : source;
+  const plan = run.plan && typeof run.plan === "object" ? run.plan : undefined;
+  const topology = topologyFrom(plan) ?? topologyFrom(source);
   const events = Array.isArray(source.events) ? (source.events as DebuggerEvent[]) : [];
   return {
     runId,
-    status: typeof source.status === "string" ? source.status : "loading",
+    workflowId:
+      typeof source.workflowId === "string"
+        ? source.workflowId
+        : typeof run.workflowId === "string"
+          ? run.workflowId
+          : undefined,
+    workflowVersion:
+      typeof source.workflowVersion === "number"
+        ? source.workflowVersion
+        : typeof run.workflowVersion === "number"
+          ? run.workflowVersion
+          : undefined,
+    status: normalizeStudioStatus(source.status ?? run.status),
     events,
     attempts: Array.isArray(source.attempts) ? source.attempts : undefined,
     artifacts: Array.isArray(source.artifacts) ? source.artifacts : undefined,
+    ...(topology ? { topology } : {}),
   };
 }
 
 function RunDebugger({ api, runId }: { api?: ApiClient; runId: string }) {
   const result = useResource<unknown>(api, `/runs/${encodeURIComponent(runId)}`);
+  const baseSnapshot = useMemo(
+    () => (result.value ? snapshotFrom(result.value, runId) : undefined),
+    [result.value, runId],
+  );
+  const eventsFallback = useResource<{ events?: DebuggerEvent[] }>(
+    api,
+    baseSnapshot && !baseSnapshot.events.length
+      ? `/runs/${encodeURIComponent(runId)}/events`
+      : undefined,
+  );
+  const attemptsFallback = useResource<{ attempts?: DebuggerSnapshot["attempts"] }>(
+    api,
+    baseSnapshot && !baseSnapshot.attempts?.length
+      ? `/runs/${encodeURIComponent(runId)}/attempts`
+      : undefined,
+  );
+  const artifactsFallback = useResource<{ artifacts?: DebuggerSnapshot["artifacts"] }>(
+    api,
+    baseSnapshot && !baseSnapshot.artifacts?.length
+      ? `/runs/${encodeURIComponent(runId)}/artifacts`
+      : undefined,
+  );
+  const snapshot = useMemo(
+    () =>
+      result.value
+        ? snapshotFrom(
+            {
+              ...(result.value as Record<string, unknown>),
+              ...(eventsFallback.value?.events ? { events: eventsFallback.value.events } : {}),
+              ...(attemptsFallback.value?.attempts
+                ? { attempts: attemptsFallback.value.attempts }
+                : {}),
+              ...(artifactsFallback.value?.artifacts
+                ? { artifacts: artifactsFallback.value.artifacts }
+                : {}),
+            },
+            runId,
+          )
+        : undefined,
+    [result.value, eventsFallback.value, attemptsFallback.value, artifactsFallback.value, runId],
+  );
+  const workflowResult = useResource<unknown>(
+    api,
+    snapshot?.workflowId && !snapshot.topology
+      ? `/workflows/${encodeURIComponent(snapshot.workflowId)}/${snapshot.workflowVersion ?? 1}`
+      : undefined,
+  );
   const [state, dispatch] = useState(() => createDebuggerState(runId));
   const [message, setMessage] = useState<string>();
   useEffect(() => {
-    if (!result.value) return;
-    const snapshot = snapshotFrom(result.value, runId);
+    if (!snapshot) return;
     dispatch(debuggerReducer(createDebuggerState(runId), { type: "snapshot", snapshot }));
-  }, [result.value, runId]);
+  }, [runId, snapshot]);
   useEffect(() => {
     if (!api || result.error) return;
     return api.streamEvents(
@@ -191,11 +433,14 @@ function RunDebugger({ api, runId }: { api?: ApiClient; runId: string }) {
           debuggerReducer(current, { type: "event", event: event as DebuggerEvent }),
         ),
       {
-        afterSequence: -1,
+        afterSequence: snapshot?.events.reduce(
+          (max, event) => Math.max(max, event.sequence ?? max),
+          -1,
+        ),
         onError: (error) => setMessage(error.message),
       },
     );
-  }, [api, result.error, runId]);
+  }, [api, result.error, runId, snapshot?.events]);
   const dispatchEvent = (event: DebuggerEvent) =>
     dispatch((current) => debuggerReducer(current, { type: "event", event }));
   const command = async (descriptor: { endpoint: string; method: string; body?: unknown }) => {
@@ -220,8 +465,8 @@ function RunDebugger({ api, runId }: { api?: ApiClient; runId: string }) {
         onReplay={() => void replayEvents(state.events, dispatchEvent)}
       />
       <DebuggerGraph
-        nodes={[]}
-        edges={[]}
+        nodes={snapshot?.topology?.nodes ?? topologyFrom(workflowResult.value)?.nodes ?? []}
+        edges={snapshot?.topology?.edges ?? topologyFrom(workflowResult.value)?.edges ?? []}
         state={state}
         onNodeSelect={(nodeId) =>
           dispatch((current) => debuggerReducer(current, { type: "select_node", nodeId }))
