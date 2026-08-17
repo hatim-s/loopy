@@ -83,6 +83,14 @@ function randomHighPort(): number {
 function newToken(): string {
   return randomBytes(32).toString("base64url");
 }
+function validateToken(token: string): string {
+  if (typeof token !== "string" || token.length < 32 || token.trim() !== token) {
+    throw new Error(
+      "Local API bearer tokens must be at least 32 characters and contain no surrounding whitespace",
+    );
+  }
+  return token;
+}
 function exactOrigins(origins: readonly string[] | undefined): readonly string[] {
   const values = origins?.length ? [...origins] : [...DEFAULT_ORIGINS];
   if (values.some((origin) => origin === "*" || origin.includes("*")))
@@ -110,7 +118,12 @@ export function createLocalServerConfig(input: Partial<LocalServerConfig> = {}):
   const port = input.port ?? randomHighPort();
   if (!Number.isInteger(port) || port < 1 || port > 65_535)
     throw new Error("Invalid local API port");
-  return { host, port, token: input.token ?? newToken(), origins: exactOrigins(input.origins) };
+  return {
+    host,
+    port,
+    token: validateToken(input.token ?? newToken()),
+    origins: exactOrigins(input.origins),
+  };
 }
 function sameToken(expected: string, presented: string | undefined): boolean {
   const left = Buffer.from(expected);
@@ -120,11 +133,6 @@ function sameToken(expected: string, presented: string | undefined): boolean {
     return false;
   }
   return timingSafeEqual(left, right);
-}
-function errorMessage(error: unknown): string {
-  return (error instanceof Error ? error.message : "Request failed")
-    .replace(/[\r\n]/g, " ")
-    .slice(0, 500);
 }
 class ApiError extends Error {
   constructor(
@@ -156,9 +164,33 @@ async function jsonBody(c: Context, maxBytes: number): Promise<Record<string, un
   const declared = c.req.header("content-length");
   if (declared && Number(declared) > maxBytes)
     throw new ApiError(413, "body_too_large", "Request body exceeds the local API limit");
-  const text = await c.req.text();
-  if (new TextEncoder().encode(text).byteLength > maxBytes)
-    throw new ApiError(413, "body_too_large", "Request body exceeds the local API limit");
+  const body = c.req.raw.body;
+  if (!body) return {};
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      size += value.byteLength;
+      if (size > maxBytes) {
+        await reader.cancel();
+        throw new ApiError(413, "body_too_large", "Request body exceeds the local API limit");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  const text = new TextDecoder().decode(bytes);
   if (!text.trim()) return {};
   let parsed: unknown;
   try {
@@ -232,7 +264,7 @@ export function createLocalApi(options: LocalApiOptions): Hono {
   const maxBodyBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
   const heartbeatMs = Math.max(1_000, options.heartbeatMs ?? DEFAULT_HEARTBEAT_MS);
   const pollMs = Math.max(25, options.pollMs ?? DEFAULT_POLL_MS);
-  const token = options.token ?? newToken();
+  const token = validateToken(options.token ?? newToken());
   const origins = exactOrigins(options.origins);
   const hub = createEventHub();
   const api = new Hono();
@@ -245,6 +277,7 @@ export function createLocalApi(options: LocalApiOptions): Hono {
       c.header("Access-Control-Allow-Origin", origin);
       c.header("Access-Control-Allow-Headers", "Authorization, Content-Type, Last-Event-ID");
       c.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+      c.header("Access-Control-Allow-Credentials", "true");
       c.header("Access-Control-Expose-Headers", "Content-Type");
     }
     if (c.req.method === "OPTIONS") return c.body(null, 204);
@@ -258,7 +291,9 @@ export function createLocalApi(options: LocalApiOptions): Hono {
   });
   api.onError((error, c) => {
     const normalized =
-      error instanceof ApiError ? error : new ApiError(500, "internal_error", errorMessage(error));
+      error instanceof ApiError
+        ? error
+        : new ApiError(500, "internal_error", "Internal server error");
     return c.json(
       { error: { code: normalized.code, message: normalized.message } },
       normalized.status as 400,
@@ -566,7 +601,14 @@ export function createLocalApi(options: LocalApiOptions): Hono {
           await stream.writeSSE({ event: "heartbeat", data: "{}" });
           lastHeartbeat = Date.now();
         }
-        await Promise.race([hub.wait(runId, signal), sleep(pollMs, signal)]);
+        const waiterAbort = new AbortController();
+        try {
+          await Promise.race([hub.wait(runId, waiterAbort.signal), sleep(pollMs, signal)]);
+        } finally {
+          // A polling tick may win the race. Cancel its hub waiter so a closed
+          // connection never leaves a resolver registered until the next event.
+          waiterAbort.abort();
+        }
       }
     });
   });

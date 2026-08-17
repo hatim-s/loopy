@@ -32,7 +32,59 @@ describe("local API", () => {
       });
       expect(response.status).toBe(200);
       expect(response.headers.get("Access-Control-Allow-Origin")).toBe("http://studio.local");
-      expect(response.headers.get("Access-Control-Allow-Credentials")).toBeNull();
+      expect(response.headers.get("Access-Control-Allow-Credentials")).toBe("true");
+    } finally {
+      storage.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects weak bearer tokens and hides unexpected server errors", async () => {
+    const { dir, storage } = project();
+    try {
+      expect(() => createLocalApi({ storage, token: "too-short" })).toThrow(/32 characters/);
+      expect(() => createLocalServerConfig({ token: "too-short" })).toThrow(/32 characters/);
+
+      storage.runtime.listProviderInstallations = () => {
+        throw new Error("database password should not cross the API boundary");
+      };
+      const app = createLocalApi({ storage, token });
+      const response = await app.request("/api/v1/providers", { headers });
+      expect(response.status).toBe(500);
+      expect(await response.json()).toEqual({
+        error: { code: "internal_error", message: "Internal server error" },
+      });
+    } finally {
+      storage.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("enforces body limits while reading a streamed request", async () => {
+    const { dir, storage } = project();
+    try {
+      let cancelled = false;
+      let pulls = 0;
+      const stream = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          pulls += 1;
+          controller.enqueue(pulls === 1 ? new Uint8Array([123]) : new Uint8Array(64).fill(32));
+        },
+        cancel() {
+          cancelled = true;
+        },
+      });
+      const app = createLocalApi({ storage, token, maxBodyBytes: 8 });
+      const response = await app.request("/api/v1/workflows", {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: stream,
+        duplex: "half",
+      } as RequestInit);
+      expect(response.status).toBe(413);
+      expect((await response.json()).error.code).toBe("body_too_large");
+      expect(pulls).toBe(2);
+      expect(cancelled).toBe(true);
     } finally {
       storage.close();
       rmSync(dir, { recursive: true, force: true });
