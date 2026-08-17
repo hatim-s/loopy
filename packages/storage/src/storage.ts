@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { closeSync, mkdirSync, openSync, readFileSync, unlinkSync, writeSync } from "node:fs";
 import { hostname } from "node:os";
 import { join, resolve } from "node:path";
@@ -11,11 +11,18 @@ import type {
   TraceEvent,
   WorkflowDefinition,
 } from "@loopy/contracts";
+import {
+  type ExtractionProposal,
+  ExtractionProposalSchema,
+  type ExtractionProposalV1,
+} from "@loopy/contracts";
+import { validateWorkflow } from "@loopy/runtime";
+import { decodeTraceJsonl } from "@loopy/tracing";
 
 export const STORAGE_DIR = ".loopy";
 export const DATABASE_FILENAME = "loopy.db";
 export const LOCK_FILENAME = "loopy.lock";
-export const CURRENT_MIGRATION = 2;
+export const CURRENT_MIGRATION = 3;
 
 export type RunStatus =
   | "created"
@@ -172,6 +179,13 @@ CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, appli
     2,
     "ALTER TABLE approvals ADD COLUMN attempt_id TEXT REFERENCES node_attempts(id) ON DELETE SET NULL;",
   ],
+  [
+    3,
+    `ALTER TABLE imported_sessions ADD COLUMN capabilities_json TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE imported_sessions ADD COLUMN lossiness_json TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE imported_sessions ADD COLUMN content_hash TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS imported_sessions_content_hash_idx ON imported_sessions(content_hash) WHERE content_hash IS NOT NULL;`,
+  ],
 ];
 
 function applyMigrations(db: Database): void {
@@ -206,6 +220,75 @@ const must = <T>(value: T | undefined, label: string): T => {
 };
 type Row = Record<string, unknown>;
 
+/**
+ * Metadata is evidence about an imported session, so a repeated import may
+ * enrich an existing row but must never replace an earlier claim with a
+ * conflicting one. Objects are merged recursively and arrays are treated as
+ * deterministic sets. Scalar conflicts are rejected explicitly; callers can
+ * retry with the complete metadata and the transaction leaves the row intact.
+ */
+function mergeImportMetadata(
+  existing: JsonObject,
+  incoming: JsonObject,
+  label: "capabilities" | "lossiness",
+): JsonObject {
+  const canonical = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(canonical);
+    if (value && typeof value === "object")
+      return Object.fromEntries(
+        Object.entries(value as Record<string, unknown>)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([key, item]) => [key, canonical(item)]),
+      );
+    return value;
+  };
+  const merge = (left: unknown, right: unknown, path: string): unknown => {
+    if (right === undefined) return left;
+    if (left === undefined) return canonical(right);
+    if (JSON.stringify(canonical(left)) === JSON.stringify(canonical(right))) return left;
+    if (Array.isArray(left) && Array.isArray(right)) {
+      const values = new Map<string, unknown>();
+      for (const item of [...left, ...right]) values.set(JSON.stringify(canonical(item)), item);
+      return [...values.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([, item]) => canonical(item));
+    }
+    if (
+      left !== null &&
+      right !== null &&
+      typeof left === "object" &&
+      !Array.isArray(left) &&
+      typeof right === "object" &&
+      !Array.isArray(right)
+    ) {
+      const result: Record<string, unknown> = {};
+      const keys = new Set([
+        ...Object.keys(left as Record<string, unknown>),
+        ...Object.keys(right as Record<string, unknown>),
+      ]);
+      for (const key of [...keys].sort((a, b) => a.localeCompare(b)))
+        result[key] = merge(
+          (left as Record<string, unknown>)[key],
+          (right as Record<string, unknown>)[key],
+          path ? `${path}.${key}` : key,
+        );
+      return result;
+    }
+    throw new Error(
+      `Conflicting ${label} metadata at ${path || "<root>"}; repeated imports cannot downgrade existing evidence`,
+    );
+  };
+  return merge(existing, incoming, "") as JsonObject;
+}
+
+function importMetadata(
+  primary: JsonObject | undefined,
+  alias: JsonObject | undefined,
+  label: "capabilities" | "lossiness",
+): JsonObject {
+  return mergeImportMetadata(primary ?? {}, alias ?? {}, label);
+}
+
 export interface WorkflowVersionRecord {
   workflowId: string;
   version: number;
@@ -217,6 +300,11 @@ export interface ImportedSessionRecord {
   provider: string;
   source: string;
   session: JsonValue;
+  capabilities: JsonObject;
+  capabilityMetadata: JsonObject;
+  lossiness: JsonObject;
+  lossinessMetadata: JsonObject;
+  contentHash?: string;
   importedAt: string;
 }
 export interface ExtractionJobRecord {
@@ -228,6 +316,32 @@ export interface ExtractionJobRecord {
   error?: string;
   createdAt: string;
   updatedAt: string;
+}
+export interface ExtractionAudit {
+  [key: string]: JsonValue;
+}
+export interface ExtractionReviewRecord {
+  job: ExtractionJobRecord;
+  import: ImportedSessionRecord;
+  proposal: ExtractionProposal;
+  audit?: JsonValue;
+}
+
+export interface CanonicalSessionImportInput {
+  provider: string;
+  source: string;
+  content: string | Uint8Array;
+  capabilities?: JsonObject;
+  capabilityMetadata?: JsonObject;
+  lossiness?: JsonObject;
+  lossinessMetadata?: JsonObject;
+  id?: string;
+  importedAt?: string;
+}
+
+export interface ExtractionResultInput {
+  proposal: ExtractionProposal;
+  audit?: JsonValue;
 }
 export interface RunRecord {
   id: string;
@@ -324,6 +438,35 @@ const asWorkflow = (r: Row): WorkflowVersionRecord => ({
   definition: must(decode(r.definition_json as string), "workflow definition"),
   createdAt: r.created_at as string,
 });
+const asImportedSession = (r: Row): ImportedSessionRecord => ({
+  id: r.id as string,
+  provider: r.provider as string,
+  source: r.source as string,
+  session: must(decode(r.session_json as string), "imported session payload"),
+  capabilities: (decode<JsonObject>(r.capabilities_json as string | null) ?? {}) as JsonObject,
+  capabilityMetadata: (decode<JsonObject>(r.capabilities_json as string | null) ??
+    {}) as JsonObject,
+  lossiness: (decode<JsonObject>(r.lossiness_json as string | null) ?? {}) as JsonObject,
+  lossinessMetadata: (decode<JsonObject>(r.lossiness_json as string | null) ?? {}) as JsonObject,
+  ...(typeof r.content_hash === "string" ? { contentHash: r.content_hash } : {}),
+  importedAt: r.imported_at as string,
+});
+
+function contentBytes(content: string | Uint8Array): Uint8Array {
+  return typeof content === "string" ? new TextEncoder().encode(content) : content;
+}
+
+function sha256(content: string | Uint8Array): string {
+  return createHash("sha256").update(contentBytes(content)).digest("hex");
+}
+
+/** Turn a content hash into a stable UUID for contracts that require stable IDs. */
+function hashId(hash: string): string {
+  const hex = `${hash.slice(0, 32)}`.padEnd(32, "0").split("");
+  hex[12] = "5";
+  hex[16] = ((Number.parseInt(hex[16] ?? "8", 16) & 0x3) | 0x8).toString(16);
+  return `${hex.slice(0, 8).join("")}-${hex.slice(8, 12).join("")}-${hex.slice(12, 16).join("")}-${hex.slice(16, 20).join("")}-${hex.slice(20).join("")}`;
+}
 const asRun = (r: Row): RunRecord => ({
   id: r.id as string,
   workflowId: r.workflow_id as string,
@@ -436,30 +579,117 @@ export class RuntimeRepository {
     provider: string;
     source: string;
     session: JsonValue;
+    capabilities?: JsonObject;
+    capabilityMetadata?: JsonObject;
+    lossiness?: JsonObject;
+    lossinessMetadata?: JsonObject;
+    contentHash?: string;
     importedAt?: string;
   }): ImportedSessionRecord {
     const id = input.id ?? randomUUID();
+    const capabilities = importMetadata(
+      input.capabilities,
+      input.capabilityMetadata,
+      "capabilities",
+    );
+    const lossiness = importMetadata(input.lossiness, input.lossinessMetadata, "lossiness");
     this.run(
-      "INSERT INTO imported_sessions(id,provider,source,session_json,imported_at) VALUES (?,?,?,?,?)",
+      "INSERT INTO imported_sessions(id,provider,source,session_json,capabilities_json,lossiness_json,content_hash,imported_at) VALUES (?,?,?,?,?,?,?,?)",
       id,
       input.provider,
       input.source,
       encode(input.session),
+      encode(capabilities),
+      encode(lossiness),
+      input.contentHash ?? null,
       input.importedAt ?? timestamp(),
     );
     return must(this.getImportedSession(id), "imported session");
   }
+  /**
+   * Validate and persist one canonical trace session. The import is atomic:
+   * malformed, mixed-run, or non-contiguous traces never create a row.
+   */
+  importCanonicalSession(input: CanonicalSessionImportInput): ImportedSessionRecord {
+    if (!input.provider.trim()) throw new Error("Import provider is required");
+    if (!input.source.trim()) throw new Error("Import source is required");
+    const hash = sha256(input.content);
+    const capabilities = importMetadata(
+      input.capabilities,
+      input.capabilityMetadata,
+      "capabilities",
+    );
+    const lossiness = importMetadata(input.lossiness, input.lossinessMetadata, "lossiness");
+    return this.db.transaction(() => {
+      const existing = this.db
+        .query<Row, [string]>("SELECT * FROM imported_sessions WHERE content_hash=?")
+        .get(hash);
+      if (existing) {
+        const currentCapabilities = (decode<JsonObject>(
+          existing.capabilities_json as string | null,
+        ) ?? {}) as JsonObject;
+        const currentLossiness = (decode<JsonObject>(existing.lossiness_json as string | null) ??
+          {}) as JsonObject;
+        const mergedCapabilities = mergeImportMetadata(
+          currentCapabilities,
+          capabilities,
+          "capabilities",
+        );
+        const mergedLossiness = mergeImportMetadata(currentLossiness, lossiness, "lossiness");
+        if (
+          JSON.stringify(currentCapabilities) !== JSON.stringify(mergedCapabilities) ||
+          JSON.stringify(currentLossiness) !== JSON.stringify(mergedLossiness)
+        ) {
+          const updated = this.db.run(
+            "UPDATE imported_sessions SET capabilities_json=?,lossiness_json=? WHERE id=? AND content_hash=?",
+            [encode(mergedCapabilities), encode(mergedLossiness), existing.id, hash] as never,
+          );
+          if (updated.changes !== 1)
+            throw new Error(
+              `Concurrent metadata update for imported session ${String(existing.id)}`,
+            );
+          return asImportedSession(
+            this.db
+              .query<Row, [string]>("SELECT * FROM imported_sessions WHERE id=?")
+              .get(existing.id as string) as Row,
+          );
+        }
+        return asImportedSession(existing);
+      }
+
+      const decoded = decodeTraceJsonl(input.content, { rejectDiagnostics: true });
+      if (decoded.events.length === 0) throw new Error("Canonical session must contain events");
+      const runIds = new Set(decoded.events.map((event) => event.runId));
+      if (runIds.size !== 1) throw new Error("Canonical session contains multiple run IDs");
+      for (const [index, event] of decoded.events.entries()) {
+        if (event.sequence !== index)
+          throw new Error(
+            `Canonical session sequence must be contiguous from zero (expected ${index}, got ${event.sequence})`,
+          );
+      }
+      const session = decoded.events as unknown as JsonValue;
+      return this.createImportedSession({
+        id: input.id ?? hashId(hash),
+        provider: input.provider,
+        source: input.source,
+        session,
+        capabilities,
+        lossiness,
+        contentHash: hash,
+        importedAt: input.importedAt,
+      });
+    })();
+  }
   getImportedSession(id: string): ImportedSessionRecord | undefined {
     const r = this.db.query<Row, [string]>("SELECT * FROM imported_sessions WHERE id=?").get(id);
-    return r
-      ? {
-          id: r.id as string,
-          provider: r.provider as string,
-          source: r.source as string,
-          session: must(decode(r.session_json as string), "imported session payload"),
-          importedAt: r.imported_at as string,
-        }
-      : undefined;
+    return r ? asImportedSession(r) : undefined;
+  }
+  listImportedSessions(): ImportedSessionRecord[] {
+    return (
+      this.db
+        .query<Row, []>("SELECT * FROM imported_sessions ORDER BY imported_at,id")
+        .all() as Row[]
+    ).map(asImportedSession);
   }
   createExtractionJob(input: {
     id?: string;
@@ -495,6 +725,48 @@ export class RuntimeRepository {
         }
       : undefined;
   }
+  listExtractionJobs(importId?: string): ExtractionJobRecord[] {
+    const rows = importId
+      ? this.db
+          .query<Row, [string]>(
+            "SELECT * FROM extraction_jobs WHERE import_id=? ORDER BY created_at,id",
+          )
+          .all(importId)
+      : this.db.query<Row, []>("SELECT * FROM extraction_jobs ORDER BY created_at,id").all();
+    return (rows as Row[]).map((r) => this.getExtractionJob(r.id as string) as ExtractionJobRecord);
+  }
+  updateExtractionJob(
+    id: string,
+    input: {
+      status?: ExtractionJobStatus;
+      output?: JsonValue;
+      error?: string;
+    },
+  ): ExtractionJobRecord {
+    const current = this.getExtractionJob(id);
+    if (!current) throw new Error(`Unknown extraction job ${id}`);
+    this.run(
+      "UPDATE extraction_jobs SET status=?,output_json=?,error=?,updated_at=? WHERE id=?",
+      input.status ?? current.status,
+      input.output === undefined
+        ? current.output === undefined
+          ? null
+          : encode(current.output)
+        : encode(input.output),
+      input.error ?? null,
+      timestamp(),
+      id,
+    );
+    return must(this.getExtractionJob(id), "extraction job");
+  }
+  saveExtractionResult(id: string, result: ExtractionResultInput): ExtractionJobRecord {
+    const proposal = ExtractionProposalSchema.parse(result.proposal);
+    return this.updateExtractionJob(id, {
+      status: "succeeded",
+      output: { proposal, ...(result.audit === undefined ? {} : { audit: result.audit }) },
+      error: undefined,
+    });
+  }
   transitionExtractionJob(
     id: string,
     status: ExtractionJobStatus,
@@ -515,6 +787,108 @@ export class RuntimeRepository {
         throw new Error(`Unknown extraction job ${id}`);
       })()
     );
+  }
+
+  private reviewFromJob(job: ExtractionJobRecord): ExtractionReviewRecord | undefined {
+    if (!job.output || typeof job.output !== "object" || Array.isArray(job.output))
+      return undefined;
+    const output = job.output as Record<string, unknown>;
+    const proposalResult = ExtractionProposalSchema.safeParse(output.proposal ?? output);
+    if (!proposalResult.success) return undefined;
+    const imported = this.getImportedSession(job.importId);
+    if (!imported) return undefined;
+    return {
+      job,
+      import: imported,
+      proposal: proposalResult.data,
+      ...(output.audit === undefined ? {} : { audit: output.audit as JsonValue }),
+    };
+  }
+  listExtractionReviews(): ExtractionReviewRecord[] {
+    return this.listExtractionJobs().flatMap((job) => {
+      const review = this.reviewFromJob(job);
+      return review ? [review] : [];
+    });
+  }
+  getExtractionReview(reference: string): ExtractionReviewRecord | undefined {
+    const byJob = this.getExtractionJob(reference);
+    if (byJob) return this.reviewFromJob(byJob);
+    return this.listExtractionReviews().find((review) => review.proposal.id === reference);
+  }
+  private updateStoredProposal(
+    review: ExtractionReviewRecord,
+    proposal: ExtractionProposalV1,
+    status: ExtractionJobStatus = review.job.status,
+  ): ExtractionJobRecord {
+    return this.updateExtractionJob(review.job.id, {
+      status,
+      output: {
+        proposal,
+        ...(review.audit === undefined ? {} : { audit: review.audit }),
+      },
+    });
+  }
+  approveExtractionProposal(reference: string, resolvedBy = "local-user"): WorkflowVersionRecord {
+    return this.db.transaction(() => {
+      const review = this.getExtractionReview(reference);
+      if (!review) throw new Error(`Unknown extraction proposal or job ${reference}`);
+      if (review.proposal.status === "approved")
+        throw new Error(`Extraction proposal ${review.proposal.id} is already approved`);
+      if (review.proposal.status === "rejected")
+        throw new Error(`Extraction proposal ${review.proposal.id} was rejected`);
+      if (review.proposal.unresolvedQuestions.some((question) => question.blocksExecution))
+        throw new Error("Cannot approve an extraction proposal with blocking unresolved questions");
+      const workflowResult = ExtractionProposalSchema.safeParse(review.proposal);
+      if (!workflowResult.success)
+        throw new Error("Stored extraction proposal failed schema validation");
+      const graph = validateWorkflow(workflowResult.data.workflow);
+      if (!graph.valid)
+        throw new Error(
+          `Cannot approve an invalid workflow graph: ${graph.diagnostics.map((diagnostic) => diagnostic.message).join("; ")}`,
+        );
+      const existing = this.getWorkflowVersion(review.proposal.workflow.id, 1);
+      if (existing)
+        throw new Error(
+          `Workflow ${review.proposal.workflow.id} version 1 already exists; approval will not overwrite it`,
+        );
+      const now = timestamp();
+      const workflow: WorkflowDefinition = {
+        ...review.proposal.workflow,
+        workflowVersion: 1,
+        metadata: {
+          ...review.proposal.workflow.metadata,
+          createdAt: review.proposal.workflow.metadata.createdAt ?? now,
+          updatedAt: now,
+          createdFrom: "extraction",
+          extractionId: review.proposal.id,
+        },
+      };
+      const parsedWorkflow = workflow as WorkflowDefinition;
+      this.run(
+        "INSERT INTO workflow_versions(workflow_id,version,definition_json,created_at) VALUES (?,?,?,?)",
+        workflow.id,
+        1,
+        encode(parsedWorkflow),
+        now,
+      );
+      this.updateStoredProposal(review, { ...review.proposal, status: "approved" }, "succeeded");
+      void resolvedBy;
+      return must(this.getWorkflowVersion(workflow.id, 1), "workflow version");
+    })();
+  }
+  rejectExtractionProposal(reference: string, _reason?: string): ExtractionJobRecord {
+    return this.db.transaction(() => {
+      const review = this.getExtractionReview(reference);
+      if (!review) throw new Error(`Unknown extraction proposal or job ${reference}`);
+      if (review.proposal.status === "approved")
+        throw new Error(`Extraction proposal ${review.proposal.id} is already approved`);
+      if (review.proposal.status === "rejected") return review.job;
+      return this.updateStoredProposal(
+        review,
+        { ...review.proposal, status: "rejected" },
+        "cancelled",
+      );
+    })();
   }
 
   createRun(input: CreateRunInput): RunRecord {

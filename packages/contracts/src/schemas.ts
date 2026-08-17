@@ -849,6 +849,8 @@ export type NodeEvidence = z.infer<typeof NodeEvidenceV1Schema>;
 export const InferredInputV1Schema = WorkflowInputV1Schema.extend({
   confidence: z.number().min(0).max(1),
   observedValues: z.array(JsonValueSchema).default([]),
+  /** Source-trace provenance is mandatory for every inferred input. */
+  evidenceIds: z.array(StableIdSchema).min(1),
 });
 export const InferredInputSchema = InferredInputV1Schema;
 export type InferredInputV1 = z.infer<typeof InferredInputV1Schema>;

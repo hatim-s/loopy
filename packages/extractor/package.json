@@ -7,10 +7,12 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "bun test tests"
   },
   "dependencies": {
     "@loopy/contracts": "workspace:*",
+    "@loopy/runtime": "workspace:*",
     "@loopy/tracing": "workspace:*"
   }
 }

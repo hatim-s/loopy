@@ -1,10 +1,11 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Storage } from "@loopy/storage";
 import { describe, expect, it, vi } from "vitest";
-
-import { main } from "../src/index";
+import { main, mainAsync } from "../src/index";
 
 describe("loopy CLI shell", () => {
   it("prints a version without invoking an unimplemented command", () => {
@@ -16,11 +17,11 @@ describe("loopy CLI shell", () => {
     output.mockRestore();
   });
 
-  it("returns a non-zero status for planned but unimplemented commands", () => {
+  it("returns a non-zero status when run is missing its approved workflow", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
-    expect(main(["run"])).toBe(2);
-    expect(error).toHaveBeenCalledWith("loopy: 'run' is not implemented in this release.");
+    expect(await mainAsync(["run"])).toBe(1);
+    expect(error).toHaveBeenCalledWith("loopy: run requires a workflow ID");
 
     error.mockRestore();
   });
@@ -37,5 +38,64 @@ describe("loopy CLI shell", () => {
     expect(result.error).toBeUndefined();
     expect(result.status).toBe(0);
     expect(result.stdout.trim()).toBe("0.1.0");
+  });
+
+  it("runs an approved extracted workflow through the local fake runtime", async () => {
+    const project = mkdtempSync(join(tmpdir(), "loopy-cli-flow-"));
+    const output: string[] = [];
+    const log = vi.spyOn(console, "log").mockImplementation((...values) => {
+      output.push(values.map((value) => String(value)).join(" "));
+    });
+    const lastJson = <T>(): T => JSON.parse(output.at(-1) ?? "null") as T;
+    try {
+      const fixture = resolve("fixtures/sessions/successful.json");
+      expect(
+        await mainAsync(["import", fixture, "--provider", "codex", "--project", project, "--json"]),
+      ).toBe(0);
+      const imported = lastJson<{ id: string }>();
+
+      expect(
+        await mainAsync(["extract", "--import", imported.id, "--project", project, "--json"]),
+      ).toBe(0);
+      const extraction = lastJson<{ output: { proposal: { id: string } } }>();
+
+      expect(
+        await mainAsync([
+          "review",
+          "show",
+          extraction.output.proposal.id,
+          "--project",
+          project,
+          "--json",
+        ]),
+      ).toBe(0);
+      const review = lastJson<{ proposal: { id: string; workflow: { id: string } } }>();
+      expect(await mainAsync(["approve", review.proposal.id, "--project", project, "--json"])).toBe(
+        0,
+      );
+
+      expect(
+        await mainAsync([
+          "run",
+          review.proposal.workflow.id,
+          "--project",
+          project,
+          "--local",
+          "--input",
+          JSON.stringify({ task: "replay" }),
+          "--json",
+        ]),
+      ).toBe(0);
+      const run = lastJson<{ run: { status: string }; attempts: unknown[] }>();
+      expect(run.run.status).toBe("succeeded");
+      expect(run.attempts.length).toBeGreaterThan(0);
+
+      const persisted = new Storage({ projectDir: project });
+      expect(persisted.runtime.listWorkflowVersions()).toHaveLength(1);
+      expect(persisted.runtime.listRuns("succeeded")).toHaveLength(1);
+      persisted.close();
+    } finally {
+      log.mockRestore();
+    }
   });
 });
