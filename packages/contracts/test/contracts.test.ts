@@ -455,6 +455,8 @@ describe("public JSON Schema", () => {
       "ProviderInstallation",
       "TraceEvent",
       "WorkflowDefinition",
+      "WorkflowPatch",
+      "WorkflowVersionDiff",
     ]);
   });
   test("matches the committed deterministic schema snapshot", () => {

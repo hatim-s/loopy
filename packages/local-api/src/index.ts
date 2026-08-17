@@ -1,5 +1,6 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { JsonObject, WorkflowDefinition } from "@loopy/contracts";
+import { WorkflowPatchSchema } from "@loopy/contracts";
 import type { ProviderRegistry } from "@loopy/providers";
 import type {
   AttemptRecord as RuntimeAttemptRecord,
@@ -23,6 +24,12 @@ import type {
 import type { Context } from "hono";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
+import {
+  applyWorkflowPatch,
+  validateWorkflowForSave,
+  WorkflowEditError,
+  workflowVersionDiff,
+} from "./workflow-edit.ts";
 
 export type LocalApiRepository = {
   listProviderInstallations(): unknown[];
@@ -195,6 +202,7 @@ class ApiError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    readonly details?: Record<string, unknown>,
   ) {
     super(message);
   }
@@ -528,9 +536,13 @@ export function createLocalApi(options: LocalApiOptions): Hono {
     const normalized =
       error instanceof ApiError
         ? error
-        : new ApiError(500, "internal_error", "Internal server error");
+        : error instanceof WorkflowEditError
+          ? new ApiError(422, "workflow_patch_invalid", "Workflow patch could not be applied", {
+              diagnostics: [error.diagnostic],
+            })
+          : new ApiError(500, "internal_error", "Internal server error");
     return c.json(
-      { error: { code: normalized.code, message: normalized.message } },
+      { error: { code: normalized.code, message: normalized.message, ...normalized.details } },
       normalized.status as 400,
     );
   });
@@ -649,6 +661,26 @@ export function createLocalApi(options: LocalApiOptions): Hono {
     if (!versions.length) notFound("Workflow");
     return c.json({ workflowId: c.req.param("id"), versions });
   });
+  // Register the static diff route before the generic two-segment version route.
+  api.get("/workflows/:id/diff", (c) => {
+    const fromVersion = Number(c.req.query("from"));
+    const toVersion = Number(c.req.query("to"));
+    if (![fromVersion, toVersion].every((version) => Number.isInteger(version) && version > 0))
+      throw new ApiError(400, "invalid_request", "from and to versions must be positive integers");
+    const from =
+      repository.getWorkflowVersion(c.req.param("id"), fromVersion) ?? notFound("Workflow version");
+    const to =
+      repository.getWorkflowVersion(c.req.param("id"), toVersion) ?? notFound("Workflow version");
+    return c.json(
+      workflowVersionDiff(
+        c.req.param("id"),
+        fromVersion,
+        toVersion,
+        from.definition as WorkflowDefinition,
+        to.definition as WorkflowDefinition,
+      ),
+    );
+  });
   api.get("/workflows/:id/:version", (c) => {
     const version = Number(c.req.param("version"));
     if (!Number.isInteger(version) || version < 1)
@@ -669,6 +701,157 @@ export function createLocalApi(options: LocalApiOptions): Hono {
       topology: topologyFromDefinition(workflow.definition),
     });
   });
+  const saveDefinition = (
+    definitionInput: unknown,
+    workflowIdHint?: string,
+    requestedVersion?: number,
+    createdFrom?: WorkflowDefinition["metadata"]["createdFrom"],
+  ) => {
+    const checked = validateWorkflowForSave(definitionInput);
+    if (!checked.workflow || checked.diagnostics.some((item) => item.severity === "error"))
+      throw new ApiError(422, "workflow_invalid", "Workflow definition failed validation", {
+        diagnostics: checked.diagnostics,
+      });
+    const workflow = checked.workflow;
+    if (workflowIdHint && workflow.id !== workflowIdHint)
+      throw new ApiError(400, "workflow_id_mismatch", "Workflow id does not match the URL");
+    const existing = repository.listWorkflowVersions(workflow.id);
+    const nextVersion = requestedVersion ?? (existing.at(-1)?.version ?? 0) + 1;
+    if (!Number.isInteger(nextVersion) || nextVersion < 1)
+      throw new ApiError(400, "invalid_request", "Workflow version must be positive");
+    if (repository.getWorkflowVersion(workflow.id, nextVersion))
+      throw new ApiError(409, "workflow_version_conflict", "Workflow version already exists");
+    const now = new Date().toISOString();
+    const persisted: WorkflowDefinition = {
+      ...workflow,
+      workflowVersion: nextVersion,
+      metadata: {
+        ...workflow.metadata,
+        updatedAt: now,
+        ...(createdFrom ? { createdFrom } : {}),
+      },
+    };
+    return repository.createWorkflowVersion({
+      workflowId: workflow.id,
+      version: nextVersion,
+      definition: persisted,
+    });
+  };
+  const patchWorkflow = (workflowId: string, body: Record<string, unknown>) => {
+    const versions = repository.listWorkflowVersions(workflowId);
+    const base = versions.at(-1);
+    if (!base) notFound("Workflow");
+    const baseVersion = Number(body.baseVersion);
+    if (!Number.isInteger(baseVersion) || baseVersion < 1)
+      throw new ApiError(400, "invalid_request", "baseVersion must be a positive integer");
+    if (baseVersion !== base.version)
+      throw new ApiError(
+        409,
+        "workflow_version_conflict",
+        "Workflow changed since this edit began",
+        {
+          expectedBaseVersion: base.version,
+          requestedBaseVersion: baseVersion,
+        },
+      );
+    const operations = body.operations ?? body.patch;
+    const patch = {
+      schemaVersion: "1" as const,
+      workflowId,
+      baseVersion,
+      operations: Array.isArray(operations) ? operations : [],
+    };
+    const parsed = WorkflowPatchSchema.safeParse(patch);
+    if (!parsed.success) {
+      throw new ApiError(
+        422,
+        "workflow_patch_invalid",
+        "Workflow patch failed contract validation",
+        {
+          diagnostics: parsed.error.issues.map((issue) => ({
+            code: "PATCH_CONTRACT_INVALID",
+            severity: "error",
+            message: issue.message,
+            path: `/${issue.path.join("/")}`,
+          })),
+        },
+      );
+    }
+    let next: WorkflowDefinition;
+    try {
+      next = applyWorkflowPatch(base.definition as WorkflowDefinition, parsed.data);
+    } catch (error) {
+      if (error instanceof WorkflowEditError)
+        throw new ApiError(422, "workflow_patch_invalid", "Workflow patch could not be applied", {
+          diagnostics: [error.diagnostic],
+        });
+      throw error;
+    }
+    const nextVersion = base.version + 1;
+    next = {
+      ...next,
+      workflowVersion: nextVersion,
+      metadata: { ...next.metadata, updatedAt: new Date().toISOString() },
+    };
+    return saveDefinition(next, workflowId, nextVersion);
+  };
+  api.post("/workflows/:id/patch", async (c) => {
+    const body = await jsonBody(c, maxBodyBytes);
+    return c.json(patchWorkflow(c.req.param("id"), body), 201);
+  });
+  api.post("/workflows/:id/:version/patch", async (c) => {
+    const body = await jsonBody(c, maxBodyBytes);
+    const version = Number(c.req.param("version"));
+    if (!Number.isInteger(version) || version < 1)
+      throw new ApiError(400, "invalid_request", "Workflow version must be positive");
+    if (body.baseVersion === undefined) body.baseVersion = version;
+    return c.json(patchWorkflow(c.req.param("id"), body), 201);
+  });
+  api.post("/workflows/:id/validate", async (c) => {
+    const body = await jsonBody(c, maxBodyBytes);
+    const checked = validateWorkflowForSave(body.definition ?? body.workflow ?? body);
+    return c.json({
+      valid:
+        Boolean(checked.workflow) && checked.diagnostics.every((item) => item.severity !== "error"),
+      ...(checked.workflow ? { workflow: checked.workflow } : {}),
+      diagnostics: checked.diagnostics,
+    });
+  });
+  api.get("/workflows/:id/:from/:to/diff", (c) => {
+    const fromVersion = Number(c.req.param("from"));
+    const toVersion = Number(c.req.param("to"));
+    if (![fromVersion, toVersion].every((version) => Number.isInteger(version) && version > 0))
+      throw new ApiError(400, "invalid_request", "Workflow versions must be positive integers");
+    const from =
+      repository.getWorkflowVersion(c.req.param("id"), fromVersion) ?? notFound("Workflow version");
+    const to =
+      repository.getWorkflowVersion(c.req.param("id"), toVersion) ?? notFound("Workflow version");
+    return c.json(
+      workflowVersionDiff(
+        c.req.param("id"),
+        fromVersion,
+        toVersion,
+        from.definition as WorkflowDefinition,
+        to.definition as WorkflowDefinition,
+      ),
+    );
+  });
+  api.get("/workflows/:id/:version/export", (c) => {
+    const version = Number(c.req.param("version"));
+    if (!Number.isInteger(version) || version < 1)
+      throw new ApiError(400, "invalid_request", "Workflow version must be positive");
+    const record =
+      repository.getWorkflowVersion(c.req.param("id"), version) ?? notFound("Workflow version");
+    c.header("Content-Type", "application/json");
+    return c.body(JSON.stringify(record.definition));
+  });
+  api.post("/workflows/import", async (c) => {
+    const body = await jsonBody(c, maxBodyBytes);
+    const definition = body.definition ?? body.workflow;
+    if (!definition || typeof definition !== "object" || Array.isArray(definition))
+      throw new ApiError(400, "invalid_request", "definition is required");
+    return c.json(saveDefinition(definition, undefined, undefined, "import"), 201);
+  });
   api.post("/workflows", async (c) => {
     const body = await jsonBody(c, maxBodyBytes);
     const definition = (body.definition ?? body.workflow) as
@@ -678,11 +861,11 @@ export function createLocalApi(options: LocalApiOptions): Hono {
     if (!definition || typeof definition !== "object" || Array.isArray(definition))
       throw new ApiError(400, "invalid_request", "definition is required");
     return c.json(
-      repository.createWorkflowVersion({
-        workflowId: typeof body.workflowId === "string" ? body.workflowId : undefined,
-        version: typeof body.version === "number" ? body.version : undefined,
+      saveDefinition(
         definition,
-      }),
+        typeof body.workflowId === "string" ? body.workflowId : undefined,
+        typeof body.version === "number" ? body.version : undefined,
+      ),
       201,
     );
   });
@@ -768,7 +951,8 @@ export function createLocalApi(options: LocalApiOptions): Hono {
     if (!scheduler) capability("Runtime scheduler is not configured");
     const body = await jsonBody(c, maxBodyBytes);
     const workflowId = requiredString(body, "workflowId");
-    const version = body.version === undefined ? 1 : Number(body.version);
+    const version =
+      body.version === undefined ? Number(body.workflowVersion ?? 1) : Number(body.version);
     if (!Number.isInteger(version) || version < 1)
       throw new ApiError(400, "invalid_request", "version must be a positive integer");
     const workflow =
@@ -953,3 +1137,9 @@ export function startLocalApiServer(
   return { ...config, app, server };
 }
 export { ApiError };
+export {
+  applyWorkflowPatch,
+  validateWorkflowForSave,
+  WorkflowEditError,
+  workflowVersionDiff,
+} from "./workflow-edit.ts";

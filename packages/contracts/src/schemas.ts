@@ -1294,10 +1294,120 @@ export const WorkflowPatchOperationV1Schema = z.discriminatedUnion("op", [
       condition: PredicateV1Schema,
     })
     .strict(),
+  z
+    .object({
+      op: z.literal("set_workflow_description"),
+      description: z.string().trim().nullable(),
+    })
+    .strict(),
+  z
+    .object({
+      op: z.literal("set_provider_defaults"),
+      defaults: ProviderDefaultsV1Schema,
+    })
+    .strict(),
+  z
+    .object({
+      op: z.literal("set_policy"),
+      policies: WorkflowPolicyV1Schema,
+    })
+    .strict(),
+  z.object({ op: z.literal("set_input"), input: WorkflowInputV1Schema }).strict(),
+  z.object({ op: z.literal("remove_input"), name: NonEmptyStringSchema }).strict(),
+  z
+    .object({
+      op: z.literal("set_node_provider"),
+      nodeId: StableIdSchema,
+      provider: ProviderIdSchema.nullable(),
+    })
+    .strict(),
+  z
+    .object({
+      op: z.literal("set_node_model"),
+      nodeId: StableIdSchema,
+      model: NonEmptyStringSchema.nullable(),
+    })
+    .strict(),
+  z
+    .object({
+      op: z.literal("set_node_reasoning"),
+      nodeId: StableIdSchema,
+      reasoning: ReasoningLevelSchema.nullable(),
+    })
+    .strict(),
+  z
+    .object({
+      op: z.literal("set_verification"),
+      nodeId: StableIdSchema,
+      commands: z.array(VerifyCommandV1Schema).min(1),
+      success: z.enum(["all", "any"]).default("all"),
+      expectedExitCode: z.number().int().default(0),
+    })
+    .strict(),
+  z
+    .object({
+      op: z.literal("set_route"),
+      nodeId: StableIdSchema,
+      predicate: PredicateV1Schema,
+      defaultRoute: NonEmptyStringSchema.nullable().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      op: z.literal("set_join"),
+      nodeId: StableIdSchema,
+      policy: z.enum(["all", "any", "quorum"]).default("all"),
+      quorum: z.number().int().positive().nullable().optional(),
+      outputMode: z.enum(["array", "object", "first_success"]).default("array"),
+    })
+    .strict(),
 ]);
 export const WorkflowPatchOperationSchema = WorkflowPatchOperationV1Schema;
 export type WorkflowPatchOperationV1 = z.infer<typeof WorkflowPatchOperationV1Schema>;
 export type WorkflowPatchOperation = z.infer<typeof WorkflowPatchOperationV1Schema>;
+const WorkflowPatchEnvelopeV1Schema = z.object({
+  schemaVersion: SchemaVersionV1Schema,
+  workflowId: StableIdSchema,
+  baseVersion: z.number().int().positive(),
+});
+const WorkflowPatchOperationsV1Schema = z.array(WorkflowPatchOperationV1Schema).min(1).max(256);
+/** Both names are accepted at the contract boundary; `operations` is canonical. */
+export const WorkflowPatchV1Schema = z.union([
+  WorkflowPatchEnvelopeV1Schema.extend({ operations: WorkflowPatchOperationsV1Schema }),
+  WorkflowPatchEnvelopeV1Schema.extend({ patch: WorkflowPatchOperationsV1Schema }),
+]);
+export const WorkflowPatchSchema = WorkflowPatchV1Schema;
+export type WorkflowPatchV1 = z.infer<typeof WorkflowPatchV1Schema>;
+export type WorkflowPatch = z.infer<typeof WorkflowPatchV1Schema>;
+export const WorkflowPatchDiagnosticV1Schema = z.object({
+  code: NonEmptyStringSchema,
+  severity: z.enum(["error", "warning"]),
+  message: NonEmptyStringSchema,
+  path: z.string().regex(/^\//),
+  operationIndex: z.number().int().nonnegative().optional(),
+  nodeId: StableIdSchema.optional(),
+  edgeId: StableIdSchema.optional(),
+});
+export const WorkflowPatchDiagnosticSchema = WorkflowPatchDiagnosticV1Schema;
+export type WorkflowPatchDiagnosticV1 = z.infer<typeof WorkflowPatchDiagnosticV1Schema>;
+export type WorkflowPatchDiagnostic = z.infer<typeof WorkflowPatchDiagnosticV1Schema>;
+export const WorkflowVersionDiffV1Schema = z.object({
+  schemaVersion: SchemaVersionV1Schema,
+  workflowId: StableIdSchema,
+  fromVersion: z.number().int().positive(),
+  toVersion: z.number().int().positive(),
+  changed: z.boolean(),
+  changes: z.array(
+    z.object({
+      path: z.string().regex(/^\//),
+      before: JsonValueSchema.optional(),
+      after: JsonValueSchema.optional(),
+    }),
+  ),
+});
+export const WorkflowVersionDiffSchema = WorkflowVersionDiffV1Schema;
+export type WorkflowVersionDiffV1 = z.infer<typeof WorkflowVersionDiffV1Schema>;
+export type WorkflowVersionDiff = z.infer<typeof WorkflowVersionDiffV1Schema>;
 export const WorkflowPatchCommandV1Schema = CommandBaseV1Schema.extend({
   type: z.literal("workflow.patch"),
   workflowId: StableIdSchema,
@@ -1409,6 +1519,8 @@ export const PublicPersistedSchemas = {
   ExecutionPlan: ExecutionPlanSchema,
   LocalCommand: LocalCommandSchema,
   CommandResult: CommandResultSchema,
+  WorkflowPatch: WorkflowPatchSchema,
+  WorkflowVersionDiff: WorkflowVersionDiffSchema,
 } as const;
 
 /** Version-dispatch map used by readers that accept any supported revision. */
@@ -1422,4 +1534,6 @@ export const SupportedPersistedSchemas = {
   ExecutionPlan: SupportedExecutionPlanSchema,
   LocalCommand: SupportedLocalCommandSchema,
   CommandResult: SupportedCommandResultSchema,
+  WorkflowPatch: WorkflowPatchSchema,
+  WorkflowVersionDiff: WorkflowVersionDiffSchema,
 } as const;

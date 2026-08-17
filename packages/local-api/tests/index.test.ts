@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Storage } from "@loopy/storage";
@@ -337,4 +337,120 @@ test("server config is loopback-only, high-port, and tokenized", () => {
   expect(config.port).toBeGreaterThanOrEqual(49_152);
   expect(config.token.length).toBeGreaterThan(32);
   expect(() => createLocalServerConfig({ host: "0.0.0.0" as "127.0.0.1" })).toThrow(/loopback/);
+});
+
+describe("workflow editing API", () => {
+  const workflow = () =>
+    JSON.parse(
+      readFileSync(join(import.meta.dir, "../../../fixtures/workflows/valid-basic.json"), "utf8"),
+    ) as Record<string, unknown>;
+
+  test("patches provider/model, adds and removes nodes, edits verification, protects versions, diffs, and runs v2", async () => {
+    const { dir, storage } = project();
+    try {
+      const base = workflow();
+      const workflowId = base.id as string;
+      const agentId = (base.nodes as Array<{ id: string }>)[0]?.id as string;
+      const verifyId = (base.nodes as Array<{ id: string }>)[1]?.id as string;
+      storage.runtime.createWorkflowVersion({
+        workflowId,
+        version: 1,
+        definition: base as import("@loopy/contracts").JsonObject,
+      });
+      const started: Record<string, unknown>[] = [];
+      const scheduler = {
+        start: async (definition: Record<string, unknown>, input: Record<string, unknown>) => {
+          started.push(definition);
+          return {
+            runId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            workflowId: definition.id,
+            workflowVersion: definition.workflowVersion,
+            plan: definition,
+            inputs: input,
+            status: "running" as const,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            startedAt: "2026-01-01T00:00:01.000Z",
+          };
+        },
+      } as unknown as import("@loopy/runtime").RuntimeScheduler;
+      const app = createLocalApi({ storage, scheduler, token });
+      const patch = async (baseVersion: number, operations: unknown[]) =>
+        app.request(`/api/v1/workflows/${workflowId}/patch`, {
+          method: "POST",
+          headers: { ...headers, "Content-Type": "application/json" },
+          body: JSON.stringify({ baseVersion, operations }),
+        });
+
+      const v2Response = await patch(1, [
+        { op: "set_node_provider", nodeId: agentId, provider: "pi" },
+        { op: "set_node_model", nodeId: agentId, model: "test-model" },
+      ]);
+      expect(v2Response.status).toBe(201);
+      expect((await v2Response.json()).version).toBe(2);
+
+      const addedNode = "55555555-5555-4555-8555-555555555555";
+      const addedEdge = "66666666-6666-4666-8666-666666666666";
+      const v3Response = await patch(2, [
+        {
+          op: "add_node",
+          node: {
+            id: addedNode,
+            kind: "verify",
+            name: "Extra verification",
+            commands: [{ command: "true", args: [], timeoutMs: 120000 }],
+            success: "all",
+            expectedExitCode: 0,
+            tags: [],
+          },
+        },
+        {
+          op: "add_edge",
+          edge: { id: addedEdge, source: verifyId, target: addedNode, metadata: {} },
+        },
+      ]);
+      expect(v3Response.status).toBe(201);
+
+      const v4Response = await patch(3, [{ op: "remove_node", nodeId: addedNode }]);
+      expect(v4Response.status).toBe(201);
+      const v5Response = await patch(4, [
+        {
+          op: "set_verification",
+          nodeId: verifyId,
+          commands: [{ command: "true", args: [], timeoutMs: 120000 }],
+          success: "all",
+          expectedExitCode: 0,
+        },
+      ]);
+      expect(v5Response.status).toBe(201);
+
+      const invalid = await patch(5, [{ op: "set_node_prompt", nodeId: verifyId, prompt: "nope" }]);
+      expect(invalid.status).toBe(422);
+      expect(storage.runtime.listWorkflowVersions(workflowId)).toHaveLength(5);
+      const stale = await patch(1, [{ op: "set_workflow_name", name: "stale" }]);
+      expect(stale.status).toBe(409);
+
+      const diff = await app.request(`/api/v1/workflows/${workflowId}/diff?from=1&to=2`, {
+        headers,
+      });
+      expect(diff.status).toBe(200);
+      expect((await diff.json()).changes).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ path: `/nodes/0/provider`, after: "pi" }),
+          expect.objectContaining({ path: `/nodes/0/model`, after: "test-model" }),
+        ]),
+      );
+
+      const run = await app.request("/api/v1/runs", {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ workflowId, workflowVersion: 2, input: { task: "test" } }),
+      });
+      expect(run.status).toBe(201);
+      expect((await run.json()).workflowVersion).toBe(2);
+      expect(started[0]?.workflowVersion).toBe(2);
+    } finally {
+      storage.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
