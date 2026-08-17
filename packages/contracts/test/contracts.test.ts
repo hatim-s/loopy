@@ -71,6 +71,7 @@ const executionPlanInput = () => ({
       nodeId: executionIds.first,
       name: "First",
       tags: [],
+      sideEffect: true,
       timeoutMs: 120000,
       retry: { maxAttempts: 1, backoffMs: 0, retryOn: [] },
       kind: "verify",
@@ -119,6 +120,18 @@ test("valid workflow fixture parses and defaults are applied", () => {
     expect(result.data.nodes).toHaveLength(2);
     expect(result.data.policies.tools.network).toBe("disabled");
   }
+});
+
+test("workflow side-effect markers are persisted by the node contract", () => {
+  const workflow = fixture("valid-basic.json") as {
+    nodes: Array<Record<string, unknown>>;
+  };
+  const firstNode = workflow.nodes[0];
+  if (!firstNode) throw new Error("workflow fixture node missing");
+  firstNode.sideEffect = true;
+
+  const result = WorkflowDefinitionSchema.parse(workflow);
+  expect(result.nodes[0]?.sideEffect).toBe(true);
 });
 
 test("invalid workflow fixture reports stable paths", () => {
@@ -314,6 +327,7 @@ test("execution plans require the complete persisted shape", () => {
     warnings: [],
   });
   expect(plan.nodes[0]?.kind).toBe("agent");
+  expect(plan.nodes[0]?.sideEffect).toBe(true);
   expect(plan.topology.topologicalOrder).toEqual([nodeId]);
 });
 

@@ -568,13 +568,7 @@ export class RuntimeScheduler {
     const forkGraph = { ...source, inputs: forkInputs };
     const inputsChanged = JSON.stringify(forkInputs) !== JSON.stringify(source.inputs);
     const sideEffectNode = (node: RuntimeNode | undefined): boolean => {
-      if (!node) return false;
-      return (
-        node.sideEffect === true ||
-        node.sideEffectful === true ||
-        node.effect === "side_effect" ||
-        node.effect === "side-effect"
-      );
+      return node?.sideEffect === true;
     };
     const causalCarry = (nodeId: string, visiting = new Set<string>()): boolean => {
       if (carry.has(nodeId)) return true;

@@ -180,6 +180,8 @@ const NodeBaseSchema = z.object({
   name: NonEmptyStringSchema,
   description: z.string().trim().optional(),
   tags: z.array(NonEmptyStringSchema).default([]),
+  /** Marks a node whose completed result must not be replayed as new work. */
+  sideEffect: z.boolean().optional(),
 });
 
 export const AgentNodeV1Schema = NodeBaseSchema.extend({
@@ -1086,6 +1088,8 @@ const ExecutionNodeBaseSchema = z.object({
   nodeId: StableIdSchema,
   name: NonEmptyStringSchema,
   tags: z.array(NonEmptyStringSchema).default([]),
+  /** Carries the workflow side-effect contract into the executable plan. */
+  sideEffect: z.boolean().optional(),
   timeoutMs: z.number().int().positive(),
   retry: RetryPolicyV1Schema,
 });
