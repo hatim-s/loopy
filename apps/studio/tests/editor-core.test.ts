@@ -312,6 +312,8 @@ describe("editor core", () => {
     expect(keyboardIntent({ key: "z", metaKey: true })).toBe("undo");
     expect(keyboardIntent({ key: "z", ctrlKey: true, shiftKey: true })).toBe("redo");
     expect(keyboardIntent({ key: "l" })).toBe("auto_layout");
+    expect(keyboardIntent({ key: "d", metaKey: true })).toBeUndefined();
+    expect(keyboardIntent({ key: "d", ctrlKey: true })).toBeUndefined();
     expect(keyboardIntent({ key: "Delete" }, { editableTarget: true })).toBeUndefined();
 
     const edgeId = before.edges[0]?.id;

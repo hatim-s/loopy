@@ -82,4 +82,27 @@ describe("workflow editor model", () => {
       { command: "pnpm", args: ["run", "lint"], timeoutMs: 120000 },
     ]);
   });
+
+  domIt("adds a valid verification command without replacing siblings", () => {
+    const node: VerifyNode = {
+      id: "44444444-4444-4444-8444-444444444444",
+      kind: "verify",
+      name: "Verify",
+      commands: [{ command: "bun", args: ["test"], timeoutMs: 120000 }],
+      success: "all",
+      expectedExitCode: 0,
+      tags: [],
+    };
+    const updates: Array<Partial<VerifyNode>> = [];
+    render(<VerifyFields node={node} update={(patch) => updates.push(patch)} />);
+
+    const addButtons = screen.getAllByRole("button", { name: "Add" });
+    fireEvent.click(addButtons.at(-1) as HTMLElement);
+
+    expect(updates.at(-1)?.commands).toEqual([
+      { command: "bun", args: ["test"], timeoutMs: 120000 },
+      { command: "bun", args: ["test"], timeoutMs: 120000 },
+    ]);
+    expect(updates.at(-1)?.commands?.every((command) => command.command.length > 0)).toBe(true);
+  });
 });

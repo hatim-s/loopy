@@ -3,7 +3,6 @@ export type EditorCommandIntent =
   | "redo"
   | "save"
   | "delete"
-  | "duplicate"
   | "select_all"
   | "clear_selection"
   | "auto_layout";
@@ -33,7 +32,6 @@ export function keyboardIntent(
   if (primary && key === "y") return "redo";
   if (primary && key === "s") return "save";
   if (primary && key === "a") return "select_all";
-  if (primary && key === "d") return "duplicate";
   if (key === "delete" || key === "backspace") return "delete";
   if (key === "escape") return "clear_selection";
   if (key === "l" && !primary && !event.altKey) return "auto_layout";

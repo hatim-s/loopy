@@ -652,7 +652,10 @@ export function VerifyFields({
   };
   const addCommand = () => {
     update({
-      commands: [...node.commands, { command: "", args: [], timeoutMs: 120_000 }],
+      // Keep the draft contract valid immediately. An empty command cannot
+      // pass the node schema and would make the add action appear to do
+      // nothing while silently preserving the old commands.
+      commands: [...node.commands, { command: "bun", args: ["test"], timeoutMs: 120_000 }],
     });
     setSelectedIndex(node.commands.length);
   };
