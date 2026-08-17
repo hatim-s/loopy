@@ -39,6 +39,111 @@ describe("local API", () => {
     }
   });
 
+  test("advertises PATCH for CORS preflight and keeps schedule cursors server-owned", async () => {
+    const { dir, storage } = project();
+    try {
+      storage.runtime.createWorkflowVersion({
+        workflowId: "cron-workflow",
+        version: 1,
+        definition: { id: "cron-workflow", workflowVersion: 1, nodes: [], edges: [] },
+      });
+      const app = createLocalApi({ storage, token, origins: ["http://studio.local"] });
+      const preflight = await app.request("/api/v1/schedules", {
+        method: "OPTIONS",
+        headers: { Origin: "http://studio.local", "Access-Control-Request-Method": "PATCH" },
+      });
+      expect(preflight.status).toBe(204);
+      expect(preflight.headers.get("Access-Control-Allow-Methods")).toContain("PATCH");
+      const create = (body: Record<string, unknown>) =>
+        app.request("/api/v1/schedules", {
+          method: "POST",
+          headers: { ...headers, "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      expect(
+        (
+          await create({
+            name: "invalid",
+            workflowId: "cron-workflow",
+            workflowVersion: 1,
+            expression: "0 0 * * * *",
+            timezone: "UTC",
+          })
+        ).status,
+      ).toBe(400);
+      expect(
+        (
+          await create({
+            name: "cursor",
+            workflowId: "cron-workflow",
+            workflowVersion: 1,
+            expression: "0 0 * * *",
+            timezone: "UTC",
+            nextFireAt: "1999-01-01T00:00:00.000Z",
+          })
+        ).status,
+      ).toBe(400);
+    } finally {
+      storage.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("ticks through the scheduler policy once for an overdue schedule", async () => {
+    const { dir, storage } = project();
+    try {
+      storage.runtime.createWorkflowVersion({
+        workflowId: "tick-workflow",
+        version: 1,
+        definition: { id: "tick-workflow", workflowVersion: 1, nodes: [], edges: [] },
+      });
+      let starts = 0;
+      const app = createLocalApi({
+        storage,
+        token,
+        scheduleEngine: {
+          async start(plan, input) {
+            starts += 1;
+            const source = plan as { id: string; workflowVersion: number };
+            const run = storage.runtime.createRun({
+              id: `tick-run-${starts}`,
+              workflowId: source.id,
+              workflowVersion: source.workflowVersion,
+              input,
+              status: "running",
+            });
+            return { runId: run.id };
+          },
+        },
+      });
+      const create = await app.request("/api/v1/schedules", {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "tick",
+          workflowId: "tick-workflow",
+          workflowVersion: 1,
+          expression: "* * * * *",
+          timezone: "UTC",
+          missedPolicy: "run_once",
+        }),
+      });
+      expect(create.status).toBe(201);
+      const tick = () =>
+        app.request("/api/v1/schedules/tick", {
+          method: "POST",
+          headers: { ...headers, "Content-Type": "application/json" },
+          body: JSON.stringify({ now: "2099-01-01T00:01:00.000Z" }),
+        });
+      expect((await tick()).status).toBe(200);
+      expect((await tick()).status).toBe(200);
+      expect(starts).toBe(1);
+    } finally {
+      storage.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("rejects weak bearer tokens and hides unexpected server errors", async () => {
     const { dir, storage } = project();
     try {
@@ -101,6 +206,169 @@ describe("local API", () => {
       expect((await sessions.json()).sessions).toHaveLength(1);
       expect((await app.request("/v1/providers", { headers })).status).toBe(200);
       expect((await app.request("/api/v1/workflows", { headers })).status).toBe(200);
+    } finally {
+      storage.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("fires a persisted schedule idempotently and exposes the ordinary run trace", async () => {
+    const { dir, storage } = project();
+    try {
+      const workflow = {
+        id: "scheduled-workflow",
+        workflowVersion: 1,
+        name: "scheduled",
+        nodes: [],
+        edges: [],
+      };
+      storage.runtime.createWorkflowVersion({
+        workflowId: workflow.id,
+        version: 1,
+        definition: workflow,
+      });
+      const app = createLocalApi({
+        storage,
+        token,
+        scheduleEngine: {
+          async start(plan, input) {
+            const source = plan as { id: string; workflowVersion: number };
+            const run = storage.runtime.createRun({
+              id: "scheduled-run",
+              workflowId: source.id,
+              workflowVersion: source.workflowVersion,
+              input,
+              status: "running",
+            });
+            storage.runtime.appendEvent(run.id, {
+              type: "run.started",
+              payload: { planHash: "scheduled" },
+            });
+            return { runId: run.id };
+          },
+        },
+      });
+      const created = await app.request("/api/v1/schedules", {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "manual",
+          workflowId: workflow.id,
+          workflowVersion: 1,
+          expression: "manual",
+          nextFireAt: "2026-08-17T00:00:00.000Z",
+        }),
+      });
+      expect(created.status).toBe(201);
+      const schedule = (await created.json()) as { id: string };
+      const first = await app.request(`/api/v1/schedules/${schedule.id}/fire`, {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ fireKey: "fixed-fire", scheduledAt: "2026-08-17T00:00:00.000Z" }),
+      });
+      expect(first.status).toBe(200);
+      const second = await app.request(`/api/v1/schedules/${schedule.id}/fire`, {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ fireKey: "fixed-fire", scheduledAt: "2026-08-17T00:00:00.000Z" }),
+      });
+      expect((await second.json()).idempotent).toBe(true);
+      const run = await app.request("/api/v1/runs/scheduled-run", { headers });
+      expect(run.status).toBe(200);
+      expect((await run.json()).events.map((event: { type: string }) => event.type)).toContain(
+        "run.started",
+      );
+    } finally {
+      storage.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("drains a queued manual fire once when the active run reaches terminal state", async () => {
+    const { dir, storage } = project();
+    try {
+      const workflow = {
+        id: "queued-manual-workflow",
+        workflowVersion: 1,
+        name: "queued manual",
+        nodes: [],
+        edges: [],
+      };
+      storage.runtime.createWorkflowVersion({
+        workflowId: workflow.id,
+        version: 1,
+        definition: workflow,
+      });
+      let nextRun = 0;
+      const waiters = new Map<string, (status: string) => void>();
+      const app = createLocalApi({
+        storage,
+        token,
+        scheduleEngine: {
+          async start(plan, input) {
+            const source = plan as { id: string; workflowVersion: number };
+            nextRun += 1;
+            const id = `queued-run-${nextRun}`;
+            storage.runtime.createRun({
+              id,
+              workflowId: source.id,
+              workflowVersion: source.workflowVersion,
+              input,
+              status: "running",
+            });
+            return { runId: id };
+          },
+          wait(runId) {
+            return new Promise((resolve) => {
+              waiters.set(runId, (status) => resolve({ run: { status } }));
+            });
+          },
+        },
+      });
+      const created = await app.request("/api/v1/schedules", {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "queued manual",
+          workflowId: workflow.id,
+          workflowVersion: 1,
+          expression: "manual",
+          overlapPolicy: "queue",
+        }),
+      });
+      const schedule = (await created.json()) as { id: string };
+      const fire = (fireKey: string) =>
+        app.request(`/api/v1/schedules/${schedule.id}/fire`, {
+          method: "POST",
+          headers: { ...headers, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fireKey,
+            scheduledAt: `2026-08-17T00:0${fireKey.at(-1)}:00.000Z`,
+          }),
+        });
+
+      expect((await (await fire("manual-1")).json()).fire.status).toBe("running");
+      expect((await (await fire("manual-2")).json()).queued).toBe(true);
+      expect(nextRun).toBe(1);
+
+      waiters.get("queued-run-1")?.("succeeded");
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(nextRun).toBe(2);
+      const activeAfterDrain = await app.request(`/api/v1/schedules/${schedule.id}/status`, {
+        headers,
+      });
+      expect((await activeAfterDrain.json()).activeRunIds).toEqual(["queued-run-2"]);
+
+      waiters.get("queued-run-2")?.("succeeded");
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const terminal = await app.request(`/api/v1/schedules/${schedule.id}/status`, { headers });
+      const status = await terminal.json();
+      expect(nextRun).toBe(2);
+      expect(status.activeRunIds).toEqual([]);
+      expect(status.fires.map((item: { status: string }) => item.status)).toEqual([
+        "succeeded",
+        "succeeded",
+      ]);
     } finally {
       storage.close();
       rmSync(dir, { recursive: true, force: true });

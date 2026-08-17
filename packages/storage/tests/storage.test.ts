@@ -168,12 +168,12 @@ describe("storage", () => {
     expect(first.db.query("PRAGMA journal_mode").get()).toEqual({ journal_mode: "wal" });
     expect(first.db.query("PRAGMA foreign_keys").get()).toEqual({ foreign_keys: 1 });
     expect(first.db.query("SELECT COUNT(*) AS count FROM schema_migrations").get()).toEqual({
-      count: 3,
+      count: 6,
     });
     first.close();
     const second = new Storage({ projectDir: dir });
     expect(second.db.query("SELECT COUNT(*) AS count FROM schema_migrations").get()).toEqual({
-      count: 3,
+      count: 6,
     });
     second.close();
   });
@@ -269,7 +269,14 @@ describe("storage", () => {
     const upgraded = new Storage({ projectDir: dir });
     expect(
       upgraded.db.query("SELECT version FROM schema_migrations ORDER BY version").all(),
-    ).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }]);
+    ).toEqual([
+      { version: 1 },
+      { version: 2 },
+      { version: 3 },
+      { version: 4 },
+      { version: 5 },
+      { version: 6 },
+    ]);
     expect(
       upgraded.db
         .query("SELECT name FROM pragma_table_info('approvals') WHERE name='attempt_id'")

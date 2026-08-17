@@ -18,11 +18,12 @@ import {
 } from "@loopy/contracts";
 import { validateWorkflow } from "@loopy/runtime";
 import { decodeTraceJsonl } from "@loopy/tracing";
+import { ScheduleRepository } from "./schedule-store.js";
 
 export const STORAGE_DIR = ".loopy";
 export const DATABASE_FILENAME = "loopy.db";
 export const LOCK_FILENAME = "loopy.lock";
-export const CURRENT_MIGRATION = 3;
+export const CURRENT_MIGRATION = 6;
 
 export type RunStatus =
   | "created"
@@ -186,10 +187,102 @@ ALTER TABLE imported_sessions ADD COLUMN lossiness_json TEXT NOT NULL DEFAULT '{
 ALTER TABLE imported_sessions ADD COLUMN content_hash TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS imported_sessions_content_hash_idx ON imported_sessions(content_hash) WHERE content_hash IS NOT NULL;`,
   ],
+  [
+    4,
+    `CREATE TABLE IF NOT EXISTS schedules (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  workflow_id TEXT NOT NULL,
+  workflow_version INTEGER NOT NULL CHECK(workflow_version > 0),
+  input_json TEXT NOT NULL DEFAULT '{}',
+  expression TEXT NOT NULL,
+  timezone TEXT NOT NULL DEFAULT 'UTC',
+  overlap_policy TEXT NOT NULL CHECK(overlap_policy IN ('skip','queue','cancel_previous')),
+  missed_policy TEXT NOT NULL CHECK(missed_policy IN ('skip','run_once')),
+  enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
+  next_fire_at TEXT,
+  last_fire_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY(workflow_id, workflow_version) REFERENCES workflow_versions(workflow_id, version)
+);
+CREATE INDEX IF NOT EXISTS schedules_due_idx ON schedules(enabled, next_fire_at);
+CREATE TABLE IF NOT EXISTS schedule_fires (
+  id TEXT PRIMARY KEY,
+  schedule_id TEXT NOT NULL REFERENCES schedules(id) ON DELETE CASCADE,
+  fire_key TEXT NOT NULL,
+  scheduled_at TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('claimed','running','succeeded','failed','skipped')),
+  run_id TEXT REFERENCES runs(id) ON DELETE SET NULL,
+  started_at TEXT,
+  finished_at TEXT,
+  error TEXT,
+  created_at TEXT NOT NULL,
+  UNIQUE(schedule_id, fire_key)
+);
+CREATE INDEX IF NOT EXISTS schedule_fires_status_idx ON schedule_fires(schedule_id,status,scheduled_at);
+CREATE TABLE IF NOT EXISTS schedule_run_links (
+  id TEXT PRIMARY KEY,
+  schedule_id TEXT NOT NULL REFERENCES schedules(id) ON DELETE CASCADE,
+  fire_id TEXT NOT NULL REFERENCES schedule_fires(id) ON DELETE CASCADE,
+  run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+  state TEXT NOT NULL CHECK(state IN ('queued','active','terminal')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(fire_id),
+  UNIQUE(run_id)
+);
+CREATE INDEX IF NOT EXISTS schedule_run_links_active_idx ON schedule_run_links(schedule_id,state);
+CREATE TABLE IF NOT EXISTS retention_policies (
+  id TEXT PRIMARY KEY,
+  max_age_days INTEGER CHECK(max_age_days IS NULL OR max_age_days > 0),
+  max_runs INTEGER CHECK(max_runs IS NULL OR max_runs > 0),
+  batch_size INTEGER NOT NULL DEFAULT 100 CHECK(batch_size > 0),
+  updated_at TEXT NOT NULL
+);`,
+  ],
+  [
+    5,
+    `CREATE TABLE schedules_v5 (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  workflow_id TEXT NOT NULL,
+  workflow_version INTEGER NOT NULL CHECK(workflow_version > 0),
+  input_json TEXT NOT NULL DEFAULT '{}',
+  expression TEXT NOT NULL,
+  timezone TEXT NOT NULL DEFAULT 'UTC',
+  overlap_policy TEXT NOT NULL CHECK(overlap_policy IN ('skip','queue','cancel_previous')),
+  missed_policy TEXT NOT NULL CHECK(missed_policy IN ('skip','run_once')),
+  enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
+  next_fire_at TEXT,
+  last_fire_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY(workflow_id, workflow_version) REFERENCES workflow_versions(workflow_id, version)
+);
+INSERT INTO schedules_v5 SELECT id,name,workflow_id,workflow_version,input_json,expression,timezone,
+  CASE WHEN overlap_policy='allow' THEN 'skip' ELSE overlap_policy END,
+  CASE WHEN missed_policy IN ('fire_once','catch_up') THEN 'run_once' ELSE missed_policy END,
+  enabled,next_fire_at,last_fire_at,created_at,updated_at FROM schedules;
+DROP TABLE schedules;
+ALTER TABLE schedules_v5 RENAME TO schedules;
+CREATE INDEX IF NOT EXISTS schedules_due_idx ON schedules(enabled, next_fire_at);`,
+  ],
+  [
+    6,
+    `CREATE TABLE IF NOT EXISTS scheduler_state (
+  schedule_id TEXT PRIMARY KEY REFERENCES schedules(id) ON DELETE CASCADE,
+  revision INTEGER NOT NULL DEFAULT 0 CHECK(revision >= 0),
+  cursor TEXT,
+  active_json TEXT,
+  pending_json TEXT,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS scheduler_state_cursor_idx ON scheduler_state(cursor);`,
+  ],
 ];
 
 function applyMigrations(db: Database): void {
-  db.run("PRAGMA foreign_keys = ON");
   db.run(
     "CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)",
   );
@@ -409,6 +502,88 @@ export interface CreateRunInput {
   planHash?: string;
   status?: RunStatus;
   createdAt?: string;
+}
+
+export type ScheduleOverlapPolicy = "skip" | "queue" | "cancel_previous";
+export type ScheduleMissedPolicy = "skip" | "run_once";
+export type ScheduleFireStatus = "claimed" | "running" | "succeeded" | "failed" | "skipped";
+
+export interface ScheduleRecord {
+  id: string;
+  name: string;
+  workflowId: string;
+  workflowVersion: number;
+  input: JsonObject;
+  expression: string;
+  timezone: string;
+  overlapPolicy: ScheduleOverlapPolicy;
+  missedPolicy: ScheduleMissedPolicy;
+  enabled: boolean;
+  nextFireAt?: string;
+  lastFireAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface ScheduleFireRecord {
+  id: string;
+  scheduleId: string;
+  fireKey: string;
+  scheduledAt: string;
+  status: ScheduleFireStatus;
+  runId?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  error?: string;
+  createdAt: string;
+}
+export interface ScheduleRunLinkRecord {
+  id: string;
+  scheduleId: string;
+  fireId: string;
+  runId: string;
+  state: "queued" | "active" | "terminal";
+  createdAt: string;
+  updatedAt: string;
+}
+export interface RetentionPolicyRecord {
+  id: string;
+  maxAgeDays?: number;
+  maxRuns?: number;
+  batchSize: number;
+  updatedAt: string;
+}
+export interface RetentionFilter {
+  before?: string;
+  maxAgeDays?: number;
+  maxRuns?: number;
+  batchSize?: number;
+}
+export interface RetentionCandidate {
+  runId: string;
+  workflowId: string;
+  workflowVersion: number;
+  status: RunStatus;
+  createdAt: string;
+  eventCount: number;
+  artifactCount: number;
+}
+export interface RetentionPreview {
+  candidates: RetentionCandidate[];
+  protectedRunIds: string[];
+  hasMore: boolean;
+  filter: RetentionFilter;
+}
+export interface RetentionApplyResult extends RetentionPreview {
+  deletedRunIds: string[];
+  deletedCounts: {
+    runs: number;
+    events: number;
+    artifacts: number;
+    approvals: number;
+    nodeAttempts: number;
+    scheduleRunLinks: number;
+    scheduleFires: number;
+  };
 }
 export interface CreateAttemptInput {
   id?: string;
@@ -1275,6 +1450,7 @@ export class Storage {
   readonly db: Database;
   readonly runtime: RuntimeRepository;
   readonly repository: RuntimeRepository;
+  readonly schedules: ScheduleRepository;
   private readonly lock?: ProjectLock;
   private closed = false;
   constructor(options: StorageOptions | string) {
@@ -1311,6 +1487,7 @@ export class Storage {
     this.lock = lock;
     this.runtime = new RuntimeRepository(this.db);
     this.repository = this.runtime;
+    this.schedules = new ScheduleRepository(this.db);
   }
   close(): void {
     if (this.closed) return;

@@ -31,6 +31,17 @@ bun packages/cli/src/index.ts validate-provider --provider codex --opt-in --json
 
 This probes installation metadata/capabilities only; it does not start a run or make a live network call.
 
+Local schedules and retention cleanup are available without a hosted service:
+
+```sh
+bun packages/cli/src/index.ts schedule create --workflow <workflow-id> --cron '0 * * * *' --timezone UTC --project . --json
+bun packages/cli/src/index.ts schedule list --project .
+bun packages/cli/src/index.ts schedule install <schedule-id> --project . --dir /tmp/loopy-scheduler
+bun packages/cli/src/index.ts cleanup preview --project . --max-age-days 30 --json
+```
+
+See [the Phase 6 local scheduling and packaging guide](docs/phase6-local-scheduling.md).
+
 ## Plan
 
 The canonical implementation plan is tracked at:

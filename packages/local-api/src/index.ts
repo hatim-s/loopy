@@ -10,6 +10,7 @@ import type {
   RuntimeSnapshot,
   RuntimeStore,
 } from "@loopy/runtime";
+import { nextOccurrence, SchedulerEngine } from "@loopy/scheduler";
 import type {
   ArtifactRecord,
   AttemptRecord,
@@ -17,7 +18,12 @@ import type {
   ExtractionJobRecord,
   ExtractionReviewRecord,
   ImportedSessionRecord,
+  RetentionFilter,
   RunRecord,
+  ScheduleMissedPolicy,
+  ScheduleOverlapPolicy,
+  ScheduleRecord,
+  ScheduleRepository,
   Storage,
   WorkflowVersionRecord,
 } from "@loopy/storage";
@@ -64,6 +70,21 @@ export type LocalApiRepository = {
 };
 
 export type LocalApiStorage = Pick<Storage, "runtime"> & { runtime: LocalApiRepository };
+export type ScheduleRuntimeEngine = {
+  start(plan: unknown, input: JsonObject): Promise<{ runId: string } | { id: string }>;
+  wait?(runId: string): Promise<{ run: { status: string } }>;
+};
+export type ScheduleCoordinator = (input: {
+  schedule: ScheduleRecord;
+  now: string;
+  activeRunIds: string[];
+  scheduledAt: string;
+}) =>
+  | Promise<"allow" | "skip" | "queue" | "cancel_previous">
+  | "allow"
+  | "skip"
+  | "queue"
+  | "cancel_previous";
 export type LocalApiOptions = {
   storage: LocalApiStorage;
   runtime?: RuntimeScheduler;
@@ -76,6 +97,9 @@ export type LocalApiOptions = {
   heartbeatMs?: number;
   pollMs?: number;
   token?: string;
+  scheduleStore?: ScheduleRepository;
+  scheduleEngine?: ScheduleRuntimeEngine;
+  scheduleCoordinator?: ScheduleCoordinator;
 };
 export type LocalServerConfig = {
   host: "127.0.0.1" | "::1";
@@ -271,6 +295,30 @@ function requiredString(body: Record<string, unknown>, name: string): string {
   if (typeof value !== "string" || !value.trim())
     throw new ApiError(400, "invalid_request", `${name} is required`);
   return value;
+}
+function retentionFilterFromBody(body: Record<string, unknown>): RetentionFilter {
+  const filter: RetentionFilter = {};
+  if (body.before !== undefined) {
+    if (typeof body.before !== "string")
+      throw new ApiError(400, "invalid_request", "before must be an ISO timestamp");
+    filter.before = body.before;
+  }
+  if (body.maxAgeDays !== undefined) {
+    if (typeof body.maxAgeDays !== "number")
+      throw new ApiError(400, "invalid_request", "maxAgeDays must be a positive integer");
+    filter.maxAgeDays = body.maxAgeDays;
+  }
+  if (body.maxRuns !== undefined) {
+    if (typeof body.maxRuns !== "number")
+      throw new ApiError(400, "invalid_request", "maxRuns must be a positive integer");
+    filter.maxRuns = body.maxRuns;
+  }
+  if (body.batchSize !== undefined) {
+    if (typeof body.batchSize !== "number")
+      throw new ApiError(400, "invalid_request", "batchSize must be a positive integer");
+    filter.batchSize = body.batchSize;
+  }
+  return filter;
 }
 function jsonObject(value: unknown): JsonObject {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonObject) : {};
@@ -503,6 +551,12 @@ function topologyFromDefinition(definition: unknown): {
 export function createLocalApi(options: LocalApiOptions): Hono {
   const repository = options.storage.runtime;
   const scheduler = options.runtime ?? options.scheduler;
+  const scheduleStore =
+    options.scheduleStore ??
+    (options.storage as LocalApiStorage & { schedules?: ScheduleRepository }).schedules;
+  const scheduleEngine =
+    options.scheduleEngine ?? (scheduler as unknown as ScheduleRuntimeEngine | undefined);
+  const scheduleCoordinator = options.scheduleCoordinator;
   const registry = options.providerRegistry ?? options.registry;
   const maxBodyBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
   const heartbeatMs = Math.max(1_000, options.heartbeatMs ?? DEFAULT_HEARTBEAT_MS);
@@ -519,7 +573,7 @@ export function createLocalApi(options: LocalApiOptions): Hono {
         return c.json({ error: { code: "origin_denied", message: "Origin is not allowed" } }, 403);
       c.header("Access-Control-Allow-Origin", origin);
       c.header("Access-Control-Allow-Headers", "Authorization, Content-Type, Last-Event-ID");
-      c.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+      c.header("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS");
       c.header("Access-Control-Allow-Credentials", "true");
       c.header("Access-Control-Expose-Headers", "Content-Type");
     }
@@ -876,6 +930,319 @@ export function createLocalApi(options: LocalApiOptions): Hono {
       ),
       201,
     );
+  });
+
+  const requireScheduleStore = (): ScheduleRepository =>
+    scheduleStore ?? capability("Schedule persistence is not configured");
+  const drainingSchedules = new Set<string>();
+  const waitForScheduleRun = (scheduleId: string, runId: string) => {
+    if (!scheduleEngine?.wait) return;
+    void scheduleEngine
+      .wait(runId)
+      .then(async (snapshot) => {
+        const store = requireScheduleStore();
+        store.reconcileRun(runId, snapshot.run.status as RunRecord["status"]);
+        await drainQueuedScheduleFire(scheduleId);
+      })
+      .catch(() => undefined);
+  };
+  const drainQueuedScheduleFire = async (scheduleId: string): Promise<void> => {
+    if (drainingSchedules.has(scheduleId)) return;
+    drainingSchedules.add(scheduleId);
+    try {
+      const store = requireScheduleStore();
+      const queued = store
+        .listFires(scheduleId, 1000)
+        .filter((item) => item.status === "claimed" && !item.runId)
+        .sort((left, right) =>
+          `${left.scheduledAt}:${left.id}`.localeCompare(`${right.scheduledAt}:${right.id}`),
+        )[0];
+      if (!queued || !scheduleEngine) return;
+      const schedule = store.get(scheduleId) ?? notFound("Schedule");
+      const workflow =
+        repository.getWorkflowVersion(schedule.workflowId, schedule.workflowVersion) ??
+        notFound("Workflow version");
+      const run = await scheduleEngine.start(workflow.definition, schedule.input);
+      const runId = "runId" in run ? run.runId : run.id;
+      store.linkRun({ scheduleId, fireId: queued.id, runId, state: "active" });
+      store.updateFire(queued.id, { runId, status: "running" });
+      waitForScheduleRun(scheduleId, runId);
+    } finally {
+      drainingSchedules.delete(scheduleId);
+    }
+  };
+  const fireSchedule = async (scheduleId: string, requestedKey?: string, requestedAt?: string) => {
+    const store = requireScheduleStore();
+    if (!scheduleEngine) capability("Runtime scheduler is not configured for schedule execution");
+    const schedule = store.get(scheduleId) ?? notFound("Schedule");
+    const scheduledAt = requestedAt ?? schedule.nextFireAt ?? new Date().toISOString();
+    const fireKey = requestedKey ?? scheduledAt;
+    const active = store.listLinks(scheduleId, "active").map((item) => item.runId);
+    const decision = scheduleCoordinator
+      ? await scheduleCoordinator({
+          schedule,
+          now: new Date().toISOString(),
+          activeRunIds: active,
+          scheduledAt,
+        })
+      : active.length && schedule.overlapPolicy === "skip"
+        ? "skip"
+        : active.length && schedule.overlapPolicy === "queue"
+          ? "queue"
+          : active.length && schedule.overlapPolicy === "cancel_previous"
+            ? "cancel_previous"
+            : "allow";
+    if (decision === "cancel_previous") {
+      if (!scheduler || typeof scheduler.cancel !== "function")
+        capability("cancel_previous overlap requires a runtime scheduler with cancellation");
+      for (const runId of active) {
+        await scheduler.cancel(runId, "cancelled by a newer scheduled invocation");
+        store.updateLink(runId, "terminal");
+      }
+    }
+    const claimed = store.claimFire({ scheduleId, fireKey, scheduledAt });
+    if (!claimed.claimed || claimed.runId) return { schedule, fire: claimed, idempotent: true };
+    if (decision === "skip") {
+      return {
+        schedule,
+        fire: store.updateFire(claimed.id, {
+          status: "skipped",
+          finishedAt: new Date().toISOString(),
+          error: "overlap policy skipped this fire",
+        }),
+        idempotent: false,
+      };
+    }
+    if (decision === "queue") return { schedule, fire: claimed, queued: true, idempotent: false };
+    const workflow =
+      repository.getWorkflowVersion(schedule.workflowId, schedule.workflowVersion) ??
+      notFound("Workflow version");
+    const run = await scheduleEngine.start(workflow.definition, schedule.input);
+    const runId = "runId" in run ? run.runId : run.id;
+    const link = store.linkRun({ scheduleId, fireId: claimed.id, runId, state: "active" });
+    const nextFire =
+      schedule.expression === "manual"
+        ? undefined
+        : nextOccurrence(
+            {
+              schemaVersion: "1",
+              scheduleId: schedule.id,
+              expression: schedule.expression,
+              timezone: schedule.timezone,
+              enabled: schedule.enabled,
+              overlap: schedule.overlapPolicy === "skip" ? "skip" : "queue",
+              missed: schedule.missedPolicy === "skip" ? "skip" : "run_once",
+              input: schedule.input,
+            },
+            new Date(scheduledAt),
+          ).toISOString();
+    waitForScheduleRun(scheduleId, runId);
+    return {
+      schedule: store.update(scheduleId, { lastFireAt: scheduledAt, nextFireAt: nextFire }),
+      fire: store.updateFire(claimed.id, { runId, status: "running" }),
+      link,
+      idempotent: false,
+    };
+  };
+  api.get("/schedules", (c) => {
+    const store = requireScheduleStore();
+    return c.json({
+      schedules: store.list({
+        enabled:
+          c.req.query("enabled") === undefined ? undefined : c.req.query("enabled") === "true",
+      }),
+    });
+  });
+  api.post("/schedules", async (c) => {
+    const body = await jsonBody(c, maxBodyBytes);
+    const requestedExpression = typeof body.expression === "string" ? body.expression.trim() : "";
+    if (
+      (body.nextFireAt !== undefined && requestedExpression !== "manual") ||
+      body.lastFireAt !== undefined
+    )
+      throw new ApiError(400, "invalid_request", "Schedule cursors are server-managed");
+    const workflowId = requiredString(body, "workflowId");
+    const version = Number(body.workflowVersion ?? body.version ?? 1);
+    if (!Number.isInteger(version) || version < 1)
+      throw new ApiError(400, "invalid_request", "workflowVersion must be positive");
+    const workflow =
+      repository.getWorkflowVersion(workflowId, version) ?? notFound("Workflow version");
+    void workflow;
+    const store = requireScheduleStore();
+    try {
+      return c.json(
+        store.create({
+          name: requiredString(body, "name"),
+          workflowId,
+          workflowVersion: version,
+          input: jsonObject(body.input),
+          expression: requiredString(body, "expression"),
+          timezone: typeof body.timezone === "string" ? body.timezone : undefined,
+          overlapPolicy: body.overlapPolicy as ScheduleOverlapPolicy | undefined,
+          missedPolicy: body.missedPolicy as ScheduleMissedPolicy | undefined,
+          enabled: body.enabled !== false,
+        }),
+        201,
+      );
+    } catch (error) {
+      throw new ApiError(
+        400,
+        "invalid_schedule",
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  });
+  api.get("/schedules/:id", (c) => {
+    const store = requireScheduleStore();
+    const item = store.get(c.req.param("id")) ?? notFound("Schedule");
+    return c.json({
+      schedule: item,
+      fires: store.listFires(item.id),
+      links: store.listLinks(item.id),
+    });
+  });
+  api.patch("/schedules/:id", async (c) => {
+    const store = requireScheduleStore();
+    const body = await jsonBody(c, maxBodyBytes);
+    if (
+      body.nextFireAt !== undefined ||
+      body.lastFireAt !== undefined ||
+      body.updatedAt !== undefined
+    )
+      throw new ApiError(
+        400,
+        "invalid_request",
+        "nextFireAt is server-managed and cannot be supplied",
+      );
+    try {
+      return c.json(
+        store.update(c.req.param("id"), {
+          ...(typeof body.name === "string" ? { name: body.name } : {}),
+          ...(typeof body.expression === "string" ? { expression: body.expression } : {}),
+          ...(typeof body.timezone === "string" ? { timezone: body.timezone } : {}),
+          ...(typeof body.overlapPolicy === "string"
+            ? { overlapPolicy: body.overlapPolicy as ScheduleOverlapPolicy }
+            : {}),
+          ...(typeof body.missedPolicy === "string"
+            ? { missedPolicy: body.missedPolicy as ScheduleMissedPolicy }
+            : {}),
+          ...(typeof body.enabled === "boolean" ? { enabled: body.enabled } : {}),
+          ...(body.input !== undefined ? { input: jsonObject(body.input) } : {}),
+        }),
+      );
+    } catch (error) {
+      throw new ApiError(
+        400,
+        "invalid_schedule",
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  });
+  api.post("/schedules/:id/enable", (c) =>
+    c.json(requireScheduleStore().update(c.req.param("id"), { enabled: true })),
+  );
+  api.post("/schedules/:id/disable", (c) =>
+    c.json(requireScheduleStore().update(c.req.param("id"), { enabled: false })),
+  );
+  api.post("/schedules/:id/fire", async (c) => {
+    const body = await jsonBody(c, maxBodyBytes);
+    return c.json(
+      await fireSchedule(
+        c.req.param("id"),
+        typeof body.fireKey === "string" ? body.fireKey : undefined,
+        typeof body.scheduledAt === "string" ? body.scheduledAt : undefined,
+      ),
+    );
+  });
+  api.post("/schedules/tick", async (c) => {
+    const body = await jsonBody(c, maxBodyBytes);
+    const at = typeof body.now === "string" ? body.now : new Date().toISOString();
+    const store = requireScheduleStore();
+    if (!scheduleEngine) capability("Runtime scheduler is not configured for schedule execution");
+    const policy = new SchedulerEngine({
+      store: store.schedulerStore(),
+      executor: {
+        start: async (invocation) => {
+          const schedule = store.get(invocation.scheduleId) ?? notFound("Schedule");
+          const claimed = store.claimFire({
+            scheduleId: invocation.scheduleId,
+            fireKey: invocation.idempotencyKey,
+            scheduledAt: invocation.scheduledFor,
+          });
+          const workflow =
+            repository.getWorkflowVersion(schedule.workflowId, schedule.workflowVersion) ??
+            notFound("Workflow version");
+          const started = await scheduleEngine.start(workflow.definition, invocation.input);
+          const runId = "runId" in started ? started.runId : started.id;
+          store.linkRun({
+            scheduleId: invocation.scheduleId,
+            fireId: claimed.id,
+            runId,
+            state: "active",
+          });
+          store.updateFire(claimed.id, { runId, status: "running" });
+          store.update(schedule.id, { lastFireAt: invocation.scheduledFor });
+          if (scheduleEngine.wait) {
+            void scheduleEngine
+              .wait(runId)
+              .then(async (snapshot) => {
+                store.reconcileRun(runId, snapshot.run.status as RunRecord["status"]);
+                queueMicrotask(() => {
+                  void policy.complete(invocation.scheduleId, runId);
+                  void drainQueuedScheduleFire(invocation.scheduleId);
+                });
+              })
+              .catch(() => undefined);
+          }
+          return { executionId: runId };
+        },
+        cancel: async (execution, reason) => {
+          if (!scheduler?.cancel)
+            capability("cancel_previous overlap requires a cancellable runtime");
+          await scheduler.cancel(execution.executionId, reason);
+          store.reconcileRun(execution.executionId, "cancelled");
+        },
+        skip: async (invocation, reason) => {
+          const fire = store
+            .listFires(invocation.scheduleId, 1000)
+            .find((item) => item.fireKey === invocation.idempotencyKey);
+          if (fire)
+            store.updateFire(fire.id, {
+              status: "skipped",
+              finishedAt: new Date().toISOString(),
+              error: reason,
+            });
+        },
+      },
+    });
+    const result = await policy.tick(new Date(at));
+    return c.json({ now: at, results: result.decisions });
+  });
+  api.get("/schedules/:id/status", (c) => {
+    const store = requireScheduleStore();
+    const schedule = store.get(c.req.param("id")) ?? notFound("Schedule");
+    return c.json({
+      schedule,
+      activeRunIds: store.listLinks(schedule.id, "active").map((item) => item.runId),
+      fires: store.listFires(schedule.id),
+      links: store.listLinks(schedule.id),
+    });
+  });
+  api.get("/retention", (c) => {
+    const store = requireScheduleStore();
+    return c.json({ policy: store.getRetentionPolicy() });
+  });
+  api.post("/retention/preview", async (c) => {
+    const store = requireScheduleStore();
+    const body = await jsonBody(c, maxBodyBytes);
+    return c.json(store.previewRetention(retentionFilterFromBody(body)));
+  });
+  api.post("/retention/apply", async (c) => {
+    const store = requireScheduleStore();
+    const body = await jsonBody(c, maxBodyBytes);
+    if (body.confirm !== true)
+      return c.json(store.previewRetention(retentionFilterFromBody(body)), 200);
+    return c.json(store.applyRetention(retentionFilterFromBody(body)));
   });
 
   const runtimeStore = options.runtimeStore as RuntimeStoreWithTrace | undefined;

@@ -326,6 +326,114 @@ export const WorkflowEdgeSchema = WorkflowEdgeV1Schema;
 export type WorkflowEdgeV1 = z.infer<typeof WorkflowEdgeV1Schema>;
 export type WorkflowEdge = z.infer<typeof WorkflowEdgeV1Schema>;
 
+/** Validate the portable five-field cron grammar before a scheduler sees it. */
+function isValidCronField(field: string, minimum: number, maximum: number): boolean {
+  if (!field) return false;
+  return field.split(",").every((part) => {
+    const [range = "", stepText] = part.split("/");
+    if (part.split("/").length > 2) return false;
+    if (stepText !== undefined && (!/^\d+$/.test(stepText) || Number(stepText) < 1)) return false;
+    if (range === "*") return true;
+    const values = range.split("-");
+    if (values.length > 2 || !values.every((value) => /^\d+$/.test(value))) return false;
+    const start = Number(values[0]);
+    const end = Number(values[values.length - 1]);
+    return (
+      start >= minimum &&
+      start <= maximum &&
+      end >= minimum &&
+      end <= maximum &&
+      (values.length === 1 || start <= end)
+    );
+  });
+}
+
+export const CronExpressionV1Schema = z
+  .string()
+  .trim()
+  .refine(
+    (expression) => {
+      const fields = expression.split(/\s+/);
+      return (
+        fields.length === 5 &&
+        isValidCronField(fields[0] ?? "", 0, 59) &&
+        isValidCronField(fields[1] ?? "", 0, 23) &&
+        isValidCronField(fields[2] ?? "", 1, 31) &&
+        isValidCronField(fields[3] ?? "", 1, 12) &&
+        isValidCronField(fields[4] ?? "", 0, 7)
+      );
+    },
+    { message: "Expected a valid five-field cron expression" },
+  );
+export const CronExpressionSchema = CronExpressionV1Schema;
+export type CronExpressionV1 = z.infer<typeof CronExpressionV1Schema>;
+export type CronExpression = CronExpressionV1;
+
+function isIanaTimeZone(value: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value }).format();
+    return value === "UTC" || value.includes("/");
+  } catch {
+    return false;
+  }
+}
+
+export const IanaTimeZoneV1Schema = z
+  .string()
+  .trim()
+  .refine(isIanaTimeZone, { message: "Expected an IANA timezone such as America/New_York" });
+export const IanaTimeZoneSchema = IanaTimeZoneV1Schema;
+export type IanaTimeZoneV1 = z.infer<typeof IanaTimeZoneV1Schema>;
+export type IanaTimeZone = IanaTimeZoneV1;
+
+export const OverlapPolicyV1Schema = z.enum(["skip", "queue", "cancel_previous"]);
+export const OverlapPolicySchema = OverlapPolicyV1Schema;
+export type OverlapPolicyV1 = z.infer<typeof OverlapPolicyV1Schema>;
+export type OverlapPolicy = OverlapPolicyV1;
+export const MissedRunPolicyV1Schema = z.enum(["skip", "run_once"]);
+export const MissedRunPolicySchema = MissedRunPolicyV1Schema;
+export type MissedRunPolicyV1 = z.infer<typeof MissedRunPolicyV1Schema>;
+export type MissedRunPolicy = MissedRunPolicyV1;
+
+export const ManualTriggerV1Schema = z
+  .object({
+    enabled: z.boolean().default(true),
+    input: JsonObjectSchema.default({}),
+  })
+  .strict();
+export const ManualTriggerSchema = ManualTriggerV1Schema;
+export type ManualTriggerV1 = z.infer<typeof ManualTriggerV1Schema>;
+export type ManualTrigger = ManualTriggerV1;
+
+export const CronTriggerV1Schema = z
+  .object({
+    schemaVersion: SchemaVersionV1Schema,
+    scheduleId: StableIdSchema,
+    expression: CronExpressionV1Schema,
+    timezone: IanaTimeZoneV1Schema,
+    enabled: z.boolean().default(true),
+    overlap: OverlapPolicyV1Schema.default("skip"),
+    missed: MissedRunPolicyV1Schema.default("skip"),
+    input: JsonObjectSchema.default({}),
+  })
+  .strict();
+export const CronTriggerSchema = CronTriggerV1Schema;
+export type CronTriggerV1 = z.infer<typeof CronTriggerV1Schema>;
+export type CronTrigger = CronTriggerV1;
+
+/** Workflow trigger settings are versioned independently from the workflow graph. */
+export const WorkflowTriggersV1Schema = z
+  .object({
+    // `true` remains accepted for backwards-compatible hand-authored workflows.
+    manual: z.union([z.boolean(), ManualTriggerV1Schema]).default(true),
+    cron: CronTriggerV1Schema.optional(),
+  })
+  .strict()
+  .default({ manual: true });
+export const WorkflowTriggersSchema = WorkflowTriggersV1Schema;
+export type WorkflowTriggersV1 = z.infer<typeof WorkflowTriggersV1Schema>;
+export type WorkflowTriggers = WorkflowTriggersV1;
+
 export const WorkflowDefinitionV1Schema = z.object({
   schemaVersion: SchemaVersionV1Schema,
   workflowVersion: z.number().int().positive(),
@@ -343,12 +451,7 @@ export const WorkflowDefinitionV1Schema = z.object({
     budget: { timeoutMs: 3_600_000 },
     concurrency: { maxParallel: 1 },
   }),
-  // Scheduling semantics (timezone, missed runs, overlap) are intentionally
-  // deferred to Phase 6; v1 only persists an explicit manual trigger.
-  triggers: z
-    .object({ manual: z.boolean().default(true) })
-    .strict()
-    .default({ manual: true }),
+  triggers: WorkflowTriggersV1Schema,
   metadata: z.object({
     createdAt: TimestampSchema,
     updatedAt: TimestampSchema,

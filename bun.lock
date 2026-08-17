@@ -4,6 +4,9 @@
   "workspaces": {
     "": {
       "name": "loopy",
+      "dependencies": {
+        "cron-parser": "5.4.0",
+      },
       "devDependencies": {
         "@biomejs/biome": "2.2.2",
         "bun-types": "1.3.9",
@@ -37,14 +40,16 @@
       },
     },
     "packages/cli": {
-      "name": "@loopy/cli",
+      "name": "loopy",
       "version": "0.1.0",
       "bin": {
-        "loopy": "./src/index.ts",
+        "loopy": "./dist/index.js",
       },
-      "dependencies": {
+      "devDependencies": {
         "@loopy/contracts": "workspace:*",
         "@loopy/extractor": "workspace:*",
+        "@loopy/local-api": "workspace:*",
+        "@loopy/platform": "workspace:*",
         "@loopy/providers": "workspace:*",
         "@loopy/runtime": "workspace:*",
         "@loopy/storage": "workspace:*",
@@ -76,9 +81,18 @@
       "version": "0.1.0",
       "dependencies": {
         "@loopy/contracts": "workspace:*",
+        "@loopy/providers": "workspace:*",
         "@loopy/runtime": "workspace:*",
+        "@loopy/scheduler": "workspace:*",
         "@loopy/storage": "workspace:*",
         "hono": "4.9.6",
+      },
+    },
+    "packages/platform": {
+      "name": "@loopy/platform",
+      "version": "0.1.0",
+      "dependencies": {
+        "@loopy/scheduler": "workspace:*",
       },
     },
     "packages/providers": {
@@ -94,6 +108,14 @@
       "dependencies": {
         "@loopy/contracts": "workspace:*",
         "@loopy/providers": "workspace:*",
+      },
+    },
+    "packages/scheduler": {
+      "name": "@loopy/scheduler",
+      "version": "0.1.0",
+      "dependencies": {
+        "@loopy/contracts": "workspace:*",
+        "cron-parser": "5.4.0",
       },
     },
     "packages/storage": {
@@ -270,17 +292,19 @@
 
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
 
-    "@loopy/cli": ["@loopy/cli@workspace:packages/cli"],
-
     "@loopy/contracts": ["@loopy/contracts@workspace:packages/contracts"],
 
     "@loopy/extractor": ["@loopy/extractor@workspace:packages/extractor"],
 
     "@loopy/local-api": ["@loopy/local-api@workspace:packages/local-api"],
 
+    "@loopy/platform": ["@loopy/platform@workspace:packages/platform"],
+
     "@loopy/providers": ["@loopy/providers@workspace:packages/providers"],
 
     "@loopy/runtime": ["@loopy/runtime@workspace:packages/runtime"],
+
+    "@loopy/scheduler": ["@loopy/scheduler@workspace:packages/scheduler"],
 
     "@loopy/storage": ["@loopy/storage@workspace:packages/storage"],
 
@@ -580,6 +604,8 @@
 
     "cookie-es": ["cookie-es@1.2.3", "", {}, "sha512-lXVyvUvrNXblMqzIRrxHb57UUVmqsSWlxqt3XIjCkUP0wDAf6uicO6KMbEgYrMNtEvWgWHwe42CKxPu9MYAnWw=="],
 
+    "cron-parser": ["cron-parser@5.4.0", "", { "dependencies": { "luxon": "^3.7.1" } }, "sha512-HxYB8vTvnQFx4dLsZpGRa0uHp6X3qIzS3ZJgJ9v6l/5TJMgeWQbLkR5yiJ5hOxGbc9+jCADDnydIe15ReLZnJA=="],
+
     "cssstyle": ["cssstyle@4.6.0", "", { "dependencies": { "@asamuzakjp/css-color": "^3.2.0", "rrweb-cssom": "^0.8.0" } }, "sha512-2z+rWdzbbSZv6/rhtvzvqeZQHrBaqgogqt85sqFNbabZOuFbCVFb8kPeEtZjiKkbrm395irpNKiYeFeLiQnFPg=="],
 
     "csstype": ["csstype@3.2.3", "", {}, "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ=="],
@@ -662,9 +688,13 @@
 
     "json5": ["json5@2.2.3", "", { "bin": { "json5": "lib/cli.js" } }, "sha512-XmOWe7eyHYH14cLdVPoyg+GOH3rYX++KpzrylJwSW98t3Nk+U8XOl8FWKOgwtzdb8lXGf6zYwDUzeHMWfxasyg=="],
 
+    "loopy": ["loopy@workspace:packages/cli"],
+
     "loupe": ["loupe@3.2.1", "", {}, "sha512-CdzqowRJCeLU72bHvWqwRBBlLcMEtIvGrlvef74kMnV2AolS9Y8xUv1I0U/MNAWMhBlKIoyuEgoJ0t/bbwHbLQ=="],
 
     "lru-cache": ["lru-cache@5.1.1", "", { "dependencies": { "yallist": "^3.0.2" } }, "sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w=="],
+
+    "luxon": ["luxon@3.7.2", "", {}, "sha512-vtEhXh/gNjI9Yg1u4jX/0YVPMvxzHuGgCm6tC5kZyb08yjGWGnqAjGJvcXbqQR2P3MyMEFnRbpcdFS6PBcLqew=="],
 
     "lz-string": ["lz-string@1.5.0", "", { "bin": { "lz-string": "bin/bin.js" } }, "sha512-h5bgJWpxJNswbU7qCrV0tIKQCaS3blPDrqKWx+QxzuzL1zGUzij9XCWLrSLsJPu5t+eWA/ycetzYAO5IOMcWAQ=="],
 
