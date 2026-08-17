@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { useEffect, useId, useMemo, useState } from "react";
 import { EmptyState, ErrorState, LoadingState } from "../components/primitives/states";
 import {
@@ -269,8 +270,14 @@ export function WorkflowsPage({ api }: StudioPageProps) {
               className="data-list__row"
               key={`${workflow.workflowId ?? "workflow"}:${workflow.version ?? index}`}
             >
-              <strong>{workflow.workflowId ?? "Unnamed workflow"}</strong>
-              <span>version {workflow.version ?? index + 1}</span>
+              <Link
+                to="/workflows/$workflowId/edit"
+                params={{ workflowId: workflow.workflowId ?? "" }}
+                className="workflow-library-link"
+              >
+                <strong>{workflow.workflowId ?? "Unnamed workflow"}</strong>
+                <span>version {workflow.version ?? index + 1} · Edit graph</span>
+              </Link>
             </li>
           ))}
         </ul>

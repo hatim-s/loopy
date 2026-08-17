@@ -18,6 +18,7 @@ import {
   TraceEventV1Schema,
   WorkflowDefinitionSchema,
   WorkflowDefinitionV1Schema,
+  WorkflowPatchSchema,
 } from "../src/index.js";
 
 const fixture = (name: string): unknown =>
@@ -429,6 +430,32 @@ test("local commands validate and require stable versioned IDs", () => {
   ).toEqual([]);
 });
 
+test("workflow patch aliases are strict and local patch commands share the 256-operation bound", () => {
+  const envelope = {
+    schemaVersion: "1",
+    workflowId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    baseVersion: 1,
+  };
+  const operation = { op: "set_workflow_name", name: "Renamed" } as const;
+  expect(
+    WorkflowPatchSchema.safeParse({
+      ...envelope,
+      operations: [operation],
+      patch: [operation],
+    }).success,
+  ).toBe(false);
+  expect(
+    LocalCommandSchema.safeParse({
+      schemaVersion: "1",
+      commandId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      type: "workflow.patch",
+      workflowId: envelope.workflowId,
+      baseVersion: envelope.baseVersion,
+      patch: Array.from({ length: 257 }, () => operation),
+    }).success,
+  ).toBe(false);
+});
+
 describe("public JSON Schema", () => {
   test("native Zod 4 output is deterministic and excludes runtime metadata", () => {
     const first = JSON.stringify(emitJsonSchema(WorkflowDefinitionSchema));
@@ -455,6 +482,8 @@ describe("public JSON Schema", () => {
       "ProviderInstallation",
       "TraceEvent",
       "WorkflowDefinition",
+      "WorkflowPatch",
+      "WorkflowVersionDiff",
     ]);
   });
   test("matches the committed deterministic schema snapshot", () => {
