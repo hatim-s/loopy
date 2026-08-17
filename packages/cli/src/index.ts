@@ -262,6 +262,38 @@ function runtimeFor(storage: Storage, deps: CliDependencies): RuntimeScheduler {
   return deps.runtimeFactory?.(store, provider) ?? new RuntimeScheduler({ store, provider });
 }
 
+async function providerForMutation(
+  storage: Storage,
+  args: readonly string[],
+  deps: CliDependencies,
+): Promise<ProviderExecutor | undefined> {
+  const runId = positional(args);
+  if (!runId) return undefined;
+  const run = new SqliteRuntimeStore(storage).getRun(runId);
+  const persisted = await run;
+  const execution = persisted?.plan.execution;
+  if (!execution || execution.mode === "local") {
+    if (args.includes("--live")) throw new Error("local runs cannot be retried with --live");
+    return deps.providerExecutor ?? new DeterministicFakeProvider();
+  }
+  if (!args.includes("--live"))
+    throw new Error("retrying a live run requires explicit --live and the persisted provider");
+  const requested = option(args, "--provider");
+  if (!requested || requested !== execution.provider)
+    throw new Error(
+      `Live retry requires --provider ${execution.provider ?? "<persisted provider>"} matching the original run.`,
+    );
+  const registry = deps.registry ?? createDefaultProviderRegistry();
+  const adapter = registry.get(requested);
+  if (!adapter) throw new Error(`Unknown provider '${requested}'`);
+  const probe = await adapter.probe();
+  if (!probe.available)
+    throw new Error(
+      `Provider '${requested}' is unavailable${probe.diagnostic ? `: ${probe.diagnostic}` : "."}`,
+    );
+  return createProviderExecutor({ registry });
+}
+
 async function runtimeMutation(
   args: readonly string[],
   deps: CliDependencies,
@@ -271,7 +303,17 @@ async function runtimeMutation(
   if (!runId) throw new Error(`${operation} requires a run ID`);
   const storage = await storageFor(args, deps);
   try {
-    const runtime = runtimeFor(storage, deps);
+    const provider =
+      operation === "retry" ? await providerForMutation(storage, args, deps) : undefined;
+    const runtime =
+      deps.runtimeFactory?.(
+        new SqliteRuntimeStore(storage),
+        provider ?? new DeterministicFakeProvider(),
+      ) ??
+      new RuntimeScheduler({
+        store: new SqliteRuntimeStore(storage),
+        provider: provider ?? new DeterministicFakeProvider(),
+      });
     let result: unknown;
     if (operation === "retry") {
       const nodeId = option(args, "--node");
@@ -749,6 +791,7 @@ async function runWorkflow(args: readonly string[], deps: CliDependencies): Prom
     const store = new SqliteRuntimeStore(storage);
     let provider: ProviderExecutor;
     let liveRunId: string | undefined;
+    let definition: unknown = workflow.definition;
     if (live) {
       const registry = deps.registry ?? createDefaultProviderRegistry();
       const adapter = registry.get(requestedProvider as string);
@@ -759,6 +802,7 @@ async function runWorkflow(args: readonly string[], deps: CliDependencies): Prom
           `Provider '${requestedProvider}' is unavailable${probe.diagnostic ? `: ${probe.diagnostic}` : "."}`,
         );
       validateLiveWorkflow(workflow, requestedProvider as string);
+      definition = materializeLiveWorkflow(workflow.definition, requestedProvider as string);
       provider = createProviderExecutor({
         registry,
         onEvent: (event) => {
@@ -777,7 +821,7 @@ async function runWorkflow(args: readonly string[], deps: CliDependencies): Prom
     let snapshot: Awaited<ReturnType<RuntimeScheduler["wait"]>>;
     if (live) {
       const started = await runtime.start(
-        workflow.definition as Parameters<RuntimeScheduler["start"]>[0],
+        definition as Parameters<RuntimeScheduler["start"]>[0],
         parseRunInput(args),
       );
       liveRunId = started.runId;
@@ -794,6 +838,29 @@ async function runWorkflow(args: readonly string[], deps: CliDependencies): Prom
   } finally {
     storage.close();
   }
+}
+
+function materializeLiveWorkflow(definition: unknown, provider: string): Record<string, unknown> {
+  const source = definition as Record<string, unknown>;
+  const defaults = source.defaults && typeof source.defaults === "object" ? source.defaults : {};
+  const defaultProvider =
+    typeof (defaults as Record<string, unknown>).provider === "string"
+      ? String((defaults as Record<string, unknown>).provider)
+      : undefined;
+  const nodes = Array.isArray(source.nodes)
+    ? source.nodes.map((item) => {
+        if (!item || typeof item !== "object") return item;
+        const node = item as Record<string, unknown>;
+        return node.kind === "agent" && !providerOnNode(node)
+          ? { ...node, provider: defaultProvider ?? provider }
+          : node;
+      })
+    : [];
+  return {
+    ...source,
+    nodes,
+    execution: { mode: "live", provider },
+  };
 }
 
 async function replayWorkflow(args: readonly string[], deps: CliDependencies): Promise<number> {

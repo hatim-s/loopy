@@ -214,6 +214,11 @@ describe("loopy CLI shell", () => {
       ).toBe(0);
       const run = JSON.parse(output.at(-1) ?? "{}");
       expect(run.run.status).toBe("succeeded");
+      const persistedWorkflow = new Storage({ projectDir: project });
+      const persistedRun = new SqliteRuntimeStore(persistedWorkflow).getRun(run.run.runId);
+      expect((await persistedRun)?.plan.execution).toEqual({ mode: "live", provider: "codex" });
+      expect((await persistedRun)?.plan.nodes[0]?.provider).toBe("codex");
+      persistedWorkflow.close();
       const persisted = new Storage({ projectDir: project });
       const persistedRuntime = new SqliteRuntimeStore(persisted);
       expect(

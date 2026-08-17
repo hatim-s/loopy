@@ -67,6 +67,7 @@ export type RuntimePlan = {
   topology?: { startNodeIds?: string[]; terminalNodeIds?: string[]; topologicalOrder?: string[] };
   policies?: ProviderPolicy & { concurrency?: { maxParallel?: number } };
   defaults?: { provider?: string; retry?: RetryPolicy };
+  execution?: { mode: "local" | "live"; provider?: string };
   [key: string]: unknown;
 };
 export type RuntimePlanInput = Omit<RuntimePlan, "workflowId" | "nodes" | "edges"> & {
@@ -230,6 +231,8 @@ export type RuntimeOptions = {
   verifier?: VerificationExecutor;
   now?: () => string;
   id?: () => string;
+  /** Confirms that an external owner has observed and signalled cancellation. */
+  observeCancellation?: (runId: string, attemptIds: readonly string[]) => Promise<boolean>;
 };
 
 const TERMINAL_ATTEMPTS = new Set<AttemptStatus>(["succeeded", "failed", "cancelled", "skipped"]);
@@ -683,6 +686,22 @@ export class RuntimeScheduler {
       this.cancelProviderAttempt(attemptId);
     }
     const attempts = await this.options.store.listAttempts(runId);
+    const runningAttemptIds = attempts
+      .filter((attempt) => attempt.status === "running")
+      .map((attempt) => attempt.attemptId);
+    const locallyOwned = runningAttemptIds.some((attemptId) =>
+      this.active.get(runId)?.has(attemptId),
+    );
+    if (
+      runningAttemptIds.length > 0 &&
+      !locallyOwned &&
+      !(await this.options.observeCancellation?.(runId, runningAttemptIds))
+    ) {
+      // A different process may own the provider session. Without a durable
+      // owner observation, terminal cancellation would falsely promise that
+      // the provider has stopped while it can still produce side effects.
+      return (await this.options.store.getRun(runId)) as RunRecord;
+    }
     const commands: RuntimeStoreCommand[] = [];
     for (const attempt of attempts) {
       if (TERMINAL_ATTEMPTS.has(attempt.status)) continue;
@@ -976,9 +995,13 @@ export class RuntimeScheduler {
   private cancelProviderAttempt(attemptId: string): void {
     const cancel = this.options.provider.cancel;
     if (!cancel) return;
-    void Promise.resolve()
-      .then(() => cancel.call(this.options.provider, attemptId))
-      .catch(() => undefined);
+    // Invoke the owner hook synchronously before terminal state is persisted;
+    // awaiting provider cleanup is intentionally not required here.
+    try {
+      void Promise.resolve(cancel.call(this.options.provider, attemptId)).catch(() => undefined);
+    } catch {
+      // Cancellation remains conservative if the provider hook rejects or throws.
+    }
   }
   private async finishRun(
     runId: string,

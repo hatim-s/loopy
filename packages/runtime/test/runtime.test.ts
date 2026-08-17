@@ -281,6 +281,28 @@ describe("phase 1 runtime", () => {
     expect((await x.runtime.snapshot(started.runId)).attempts[0]?.status).toBe("cancelled");
   });
 
+  test("cross-process cancellation remains non-terminal without owner observation", async () => {
+    const owner = new DeterministicFakeProvider();
+    owner.defer("a");
+    const first = scheduler(owner);
+    const started = await first.runtime.start(plan([agent("a")], []));
+    await Bun.sleep(10);
+
+    const other = new RuntimeScheduler({
+      store: first.store,
+      provider: new DeterministicFakeProvider(),
+    });
+    const result = await other.cancel(started.runId, "operator request");
+
+    expect(result.status).toBe("cancelling");
+    expect(owner.cancelled).toEqual(new Set());
+    expect((await first.runtime.snapshot(started.runId)).run.status).toBe("cancelling");
+
+    const ownerResult = await first.runtime.cancel(started.runId, "operator request");
+    expect(owner.cancelled.size).toBe(1);
+    expect(ownerResult.status).toBe("cancelled");
+  });
+
   test("an impossible all join fails instead of succeeding", async () => {
     const x = scheduler();
     x.provider.fail("a", "branch failed");
