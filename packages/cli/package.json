@@ -31,6 +31,7 @@
     "@loopy/providers": "workspace:*",
     "@loopy/runtime": "workspace:*",
     "@loopy/scheduler": "workspace:*",
+    "@loopy/tracing": "workspace:*",
     "@loopy/storage": "workspace:*",
     "@loopy/testing": "workspace:*"
   }

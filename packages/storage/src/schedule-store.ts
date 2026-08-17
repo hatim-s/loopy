@@ -84,6 +84,48 @@ export class ScheduleRepository {
     const r = this.db.query<Row, [string]>("SELECT * FROM schedules WHERE id=?").get(id);
     return r ? schedule(r) : undefined;
   }
+  /**
+   * Remove a schedule and its bookkeeping atomically. A schedule owns only
+   * terminal fire history; an active/queued or otherwise non-terminal linked
+   * run is deliberately protected and makes removal fail closed.
+   */
+  remove(id: string): boolean {
+    return this.db.transaction(() => {
+      const existing = this.db.query<Row, [string]>("SELECT id FROM schedules WHERE id=?").get(id);
+      if (!existing) return false;
+      const protectedRun = this.db
+        .query<Row, [string]>(
+          `SELECT l.run_id
+             FROM schedule_run_links l
+             JOIN runs r ON r.id=l.run_id
+            WHERE l.schedule_id=?
+              AND r.status NOT IN ('succeeded','failed','cancelled')
+            LIMIT 1`,
+        )
+        .get(id);
+      const protectedFireRun = this.db
+        .query<Row, [string]>(
+          `SELECT f.run_id
+             FROM schedule_fires f
+             JOIN runs r ON r.id=f.run_id
+            WHERE f.schedule_id=?
+              AND r.status NOT IN ('succeeded','failed','cancelled')
+            LIMIT 1`,
+        )
+        .get(id);
+      if (protectedRun || protectedFireRun)
+        throw new Error(
+          `Cannot remove schedule ${id}: linked run ${String((protectedRun ?? protectedFireRun)?.run_id)} is active or non-terminal`,
+        );
+      // Foreign keys cascade fires, links, and scheduler cursor state. Keep
+      // this explicit for older databases whose foreign-key pragma was off.
+      this.run("DELETE FROM schedule_run_links WHERE schedule_id=?", id);
+      this.run("DELETE FROM schedule_fires WHERE schedule_id=?", id);
+      this.run("DELETE FROM scheduler_state WHERE schedule_id=?", id);
+      this.run("DELETE FROM schedules WHERE id=?", id);
+      return true;
+    })() as boolean;
+  }
   list(options: { enabled?: boolean; dueBefore?: string } = {}): ScheduleRecord[] {
     const where: string[] = [];
     const args: unknown[] = [];

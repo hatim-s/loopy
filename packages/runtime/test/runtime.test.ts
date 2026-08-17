@@ -5,7 +5,7 @@ import {
   DeterministicVerifier,
   InMemoryRuntimeStore,
 } from "../../testing/src/index.ts";
-import { RuntimeScheduler } from "../src/index.ts";
+import { RuntimeScheduler, replayEvents } from "../src/index.ts";
 
 const ids = createTestIds();
 function scheduler(
@@ -44,6 +44,98 @@ describe("phase 1 runtime", () => {
     const result = await x.runtime.run(workflow);
     expect(result.run.status).toBe("succeeded");
     expect(result.attempts.filter((a) => a.status === "succeeded")).toHaveLength(2);
+  });
+
+  test("replays persisted events in sequence without executing", () => {
+    const frames = replayEvents([
+      { sequence: 2, type: "later", runId: "r", occurredAt: "" },
+      { sequence: 0, type: "first", runId: "r", occurredAt: "" },
+    ]);
+    expect(frames.map((frame) => frame.event.type)).toEqual(["first", "later"]);
+  });
+
+  test("forks from a completed checkpoint without rerunning its prefix", async () => {
+    const x = scheduler();
+    const workflow = plan([agent("a"), agent("b")], [{ id: "ab", source: "a", target: "b" }]);
+    const source = await x.runtime.run(workflow);
+    const forked = await x.runtime.fork(source.run.runId, "a");
+    const result = await x.runtime.wait(forked.runId);
+    expect(result.run.status).toBe("succeeded");
+    expect(x.provider.calls.map((call) => call.nodeId)).toEqual(["a", "b", "b"]);
+  });
+
+  test("carries graph-safe completed side effects after a checkpoint", async () => {
+    const x = scheduler();
+    const workflow = plan(
+      [agent("start"), agent("effect"), agent("end")],
+      [
+        { id: "se", source: "start", target: "effect" },
+        { id: "ee", source: "effect", target: "end" },
+      ],
+    );
+    workflow.nodes[1] = { ...workflow.nodes[1], sideEffect: true };
+    const source = await x.runtime.run(workflow);
+    const forked = await x.runtime.fork(source.run.runId, "start");
+    const result = await x.runtime.wait(forked.runId);
+    expect(result.run.status).toBe("succeeded");
+    expect(x.provider.calls.map((call) => call.nodeId)).toEqual(["start", "effect", "end", "end"]);
+  });
+
+  test("fails closed for an unselected completed side-effect branch", async () => {
+    const x = scheduler();
+    const workflow = plan(
+      [
+        agent("start"),
+        {
+          id: "route",
+          kind: "route",
+          predicate: {
+            kind: "comparison",
+            operator: "equals",
+            left: { kind: "reference", reference: { kind: "workflow_input", name: "go" } },
+            right: { kind: "literal", value: true },
+          },
+        },
+        { ...agent("unsafe"), sideEffect: true },
+        agent("safe"),
+      ],
+      [
+        { id: "sr", source: "start", target: "route" },
+        { id: "ru", source: "route", target: "unsafe", label: "false" },
+        { id: "rs", source: "route", target: "safe", label: "true" },
+      ],
+    );
+    const source = await x.runtime.run(workflow, { go: false });
+    await expect(x.runtime.fork(source.run.runId, "start", { go: true })).rejects.toThrow(
+      /unsafe.*side effect/,
+    );
+  });
+
+  test("carries the resolved approval evidence with an approval checkpoint", async () => {
+    const x = scheduler();
+    const workflow = plan(
+      [{ id: "approval", kind: "approval", message: "Ship?", approvalKey: "ship" }, agent("end")],
+      [{ id: "ae", source: "approval", target: "end" }],
+    );
+    const source = await x.runtime.start(workflow);
+    await Bun.sleep(10);
+    await x.runtime.approve(source.runId, "approval", "approved");
+    const completed = await x.runtime.wait(source.runId);
+    const forked = await x.runtime.fork(source.runId, "approval");
+    const approval = (await x.runtime.snapshot(forked.runId)).approvals.find(
+      (item) => item.nodeId === "approval",
+    );
+    expect(approval).toMatchObject({
+      runId: forked.runId,
+      nodeId: "approval",
+      key: "ship",
+      decision: "approved",
+    });
+    expect(approval?.attemptId).toBe(
+      (await x.runtime.snapshot(forked.runId)).attempts.find((item) => item.nodeId === "approval")
+        ?.attemptId,
+    );
+    expect(completed.approvals[0]?.decision).toBe("approved");
   });
 
   test("routes only the safe predicate branch", async () => {
@@ -261,6 +353,28 @@ describe("phase 1 runtime", () => {
     await Bun.sleep(5);
     expect((await x.runtime.snapshot(started.runId)).run.status).toBe("cancelled");
     expect((await x.runtime.snapshot(started.runId)).attempts[0]?.status).toBe("cancelled");
+  });
+
+  test("cross-process cancellation remains non-terminal without owner observation", async () => {
+    const owner = new DeterministicFakeProvider();
+    owner.defer("a");
+    const first = scheduler(owner);
+    const started = await first.runtime.start(plan([agent("a")], []));
+    await Bun.sleep(10);
+
+    const other = new RuntimeScheduler({
+      store: first.store,
+      provider: new DeterministicFakeProvider(),
+    });
+    const result = await other.cancel(started.runId, "operator request");
+
+    expect(result.status).toBe("cancelling");
+    expect(owner.cancelled).toEqual(new Set());
+    expect((await first.runtime.snapshot(started.runId)).run.status).toBe("cancelling");
+
+    const ownerResult = await first.runtime.cancel(started.runId, "operator request");
+    expect(owner.cancelled.size).toBe(1);
+    expect(ownerResult.status).toBe("cancelled");
   });
 
   test("an impossible all join fails instead of succeeding", async () => {

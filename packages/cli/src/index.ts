@@ -1,12 +1,18 @@
 #!/usr/bin/env bun
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { JsonObject, JsonValue } from "@loopy/contracts";
 import { extractImportedSession } from "@loopy/extractor";
 import { createLocalApi, createLocalServerConfig } from "@loopy/local-api";
 import { createDefaultProviderRegistry, type ProviderRegistry } from "@loopy/providers";
-import { type ProviderExecutor, RuntimeScheduler, type RuntimeStore } from "@loopy/runtime";
+import {
+  createProviderExecutor,
+  type ProviderExecutor,
+  RuntimeScheduler,
+  type RuntimeStore,
+  replayRun,
+} from "@loopy/runtime";
 import { SchedulerEngine, type SchedulerStore } from "@loopy/scheduler";
 import {
   type CanonicalSessionImportInput,
@@ -15,6 +21,7 @@ import {
   type Storage,
 } from "@loopy/storage";
 import { DeterministicFakeProvider } from "@loopy/testing";
+import { decodeTraceJsonl, encodeTraceJsonl } from "@loopy/tracing";
 import { doctorCommand } from "./doctor";
 import {
   cleanupCommand,
@@ -66,19 +73,34 @@ Usage:
 Commands:
   ${COMMANDS.join(", ")}
 
-Local persistence commands:
+  Local persistence commands:
+  loopy init [--project <dir>] [--json]
   loopy import <trace.jsonl> --provider <provider> [--project <dir>] [--json]
   loopy sessions list|show <id> [--project <dir>] [--json]
   loopy extract --import <id>   (deterministic offline extractor by default)
   loopy review list|show <id> [--project <dir>] [--json]
   loopy approve|reject <proposal-or-job-id> [--project <dir>] [--json]
   loopy run <workflow-id> [--local] [--input <json>] [--project <dir>] [--json]`);
+  console.log("  loopy pause|resume|cancel <run-id> [--reason <text>] [--project <dir>] [--json]");
+  console.log(
+    "  loopy retry <run-id> --node <node-id> [--input <json>] [--project <dir>] [--json]",
+  );
+  console.log("  loopy trace export <run-id> [--output <file>] [--project <dir>] [--json]");
+  console.log("  loopy trace import <file> [--project <dir>] [--json]");
+  console.log(
+    "  loopy providers [--json]  (catalogue registered providers; probes availability only)",
+  );
+  console.log(
+    "  loopy run <workflow-id> --provider <provider> --live [--input <json>] [--project <dir>] [--json]",
+  );
   console.log(
     "  loopy schedule create|list|show|enable|disable|remove|fire|tick|install|uninstall [options]",
   );
   console.log(
     "  loopy cleanup preview|apply [--before <ISO>] [--max-age-days <n>] [--max-runs <n>] [--json]",
   );
+  console.log("  loopy replay <run-id> [--from-sequence <n>] [--project <dir>] [--json]");
+  console.log("  loopy fork <run-id> --from-node <completed-node> [--project <dir>] [--json]");
   console.log(
     "  loopy validate-provider --provider <provider> --opt-in [--json]  (read-only probe; no run/network)",
   );
@@ -189,6 +211,11 @@ function positional(args: readonly string[], start = 1): string | undefined {
     "--version",
     "--port",
     "--origin",
+    "--output",
+    "--reason",
+    "--from-sequence",
+    "--from-node",
+    "--node",
   ]);
   for (let index = start; index < args.length; index += 1) {
     const arg = args[index];
@@ -201,6 +228,149 @@ function positional(args: readonly string[], start = 1): string | undefined {
   }
   return undefined;
 }
+
+const PROJECT_CONFIG = {
+  schemaVersion: 1,
+  stateDirectory: ".loopy",
+  database: ".loopy/loopy.db",
+} as const;
+
+async function initProject(args: readonly string[], deps: CliDependencies): Promise<number> {
+  const project = projectDir(args);
+  const stateDir = resolve(project, ".loopy");
+  mkdirSync(stateDir, { recursive: true });
+  const configPath = resolve(stateDir, "config.json");
+  let created = false;
+  if (!existsSync(configPath)) {
+    writeFileSync(configPath, `${JSON.stringify(PROJECT_CONFIG, null, 2)}\n`, { flag: "wx" });
+    created = true;
+  }
+  const storage = await storageFor(args, deps);
+  try {
+    const result = { project, stateDir, configPath, databasePath: storage.databasePath, created };
+    if (jsonOutput(args)) printJson(result);
+    else console.log(`${created ? "initialized" : "already initialized"} ${project}`);
+    return 0;
+  } finally {
+    storage.close();
+  }
+}
+
+function runtimeFor(storage: Storage, deps: CliDependencies): RuntimeScheduler {
+  const store = new SqliteRuntimeStore(storage);
+  const provider = deps.providerExecutor ?? new DeterministicFakeProvider();
+  return deps.runtimeFactory?.(store, provider) ?? new RuntimeScheduler({ store, provider });
+}
+
+async function providerForMutation(
+  storage: Storage,
+  args: readonly string[],
+  deps: CliDependencies,
+): Promise<ProviderExecutor | undefined> {
+  const runId = positional(args);
+  if (!runId) return undefined;
+  const run = new SqliteRuntimeStore(storage).getRun(runId);
+  const persisted = await run;
+  const execution = persisted?.plan.execution;
+  if (!execution || execution.mode === "local") {
+    if (args.includes("--live")) throw new Error("local runs cannot be retried with --live");
+    return deps.providerExecutor ?? new DeterministicFakeProvider();
+  }
+  if (!args.includes("--live"))
+    throw new Error("retrying a live run requires explicit --live and the persisted provider");
+  const requested = option(args, "--provider");
+  if (!requested || requested !== execution.provider)
+    throw new Error(
+      `Live retry requires --provider ${execution.provider ?? "<persisted provider>"} matching the original run.`,
+    );
+  const registry = deps.registry ?? createDefaultProviderRegistry();
+  const adapter = registry.get(requested);
+  if (!adapter) throw new Error(`Unknown provider '${requested}'`);
+  const probe = await adapter.probe();
+  if (!probe.available)
+    throw new Error(
+      `Provider '${requested}' is unavailable${probe.diagnostic ? `: ${probe.diagnostic}` : "."}`,
+    );
+  return createProviderExecutor({ registry });
+}
+
+async function runtimeMutation(
+  args: readonly string[],
+  deps: CliDependencies,
+  operation: "pause" | "resume" | "cancel" | "retry",
+): Promise<number> {
+  const runId = positional(args);
+  if (!runId) throw new Error(`${operation} requires a run ID`);
+  const storage = await storageFor(args, deps);
+  try {
+    const provider =
+      operation === "retry" ? await providerForMutation(storage, args, deps) : undefined;
+    const runtime =
+      deps.runtimeFactory?.(
+        new SqliteRuntimeStore(storage),
+        provider ?? new DeterministicFakeProvider(),
+      ) ??
+      new RuntimeScheduler({
+        store: new SqliteRuntimeStore(storage),
+        provider: provider ?? new DeterministicFakeProvider(),
+      });
+    let result: unknown;
+    if (operation === "retry") {
+      const nodeId = option(args, "--node");
+      if (!nodeId) throw new Error("retry requires --node");
+      result = await runtime.retry(runId, nodeId, parseRunInput(args));
+    } else if (operation === "cancel") {
+      result = await runtime.cancel(runId, option(args, "--reason") ?? "cancelled by user");
+    } else {
+      result = await runtime[operation](runId);
+    }
+    if (jsonOutput(args)) printJson(result);
+    else if (operation === "retry") console.log(`retry ${runId}/${option(args, "--node")}`);
+    else console.log(`${operation} ${runId}`);
+    return 0;
+  } finally {
+    storage.close();
+  }
+}
+
+async function traceCommand(args: readonly string[], deps: CliDependencies): Promise<number> {
+  const action = args[1];
+  const fileOrRun = positional(args, 2);
+  if (action !== "export" && action !== "import")
+    throw new Error("trace requires export or import");
+  if (!fileOrRun)
+    throw new Error(
+      `trace ${action} requires ${action === "export" ? "a run ID" : "a JSONL file"}`,
+    );
+  const storage = await storageFor(args, deps);
+  try {
+    const runtimeStore = new SqliteRuntimeStore(storage);
+    if (action === "export") {
+      const text = encodeTraceJsonl(runtimeStore.listTraceEvents(fileOrRun), {
+        trailingNewline: "required",
+      });
+      const output = option(args, "--output");
+      if (output) writeFileSync(resolve(output), text, { encoding: "utf8" });
+      else if (!jsonOutput(args)) process.stdout.write(text);
+      if (jsonOutput(args))
+        printJson({
+          runId: fileOrRun,
+          output: output ?? "stdout",
+          lines: text ? text.trimEnd().split("\n").length : 0,
+          ...(output ? {} : { trace: text }),
+        });
+      return 0;
+    }
+    const content = readFileSync(resolve(fileOrRun), "utf8");
+    const result = decodeTraceJsonl(content, { rejectDiagnostics: true });
+    runtimeStore.appendTraceEvents(result.events);
+    if (jsonOutput(args)) printJson({ events: result.events.length, lines: result.lines });
+    else console.log(`imported ${result.events.length} trace event(s)`);
+    return 0;
+  } finally {
+    storage.close();
+  }
+}
 function projectDir(args: readonly string[]): string {
   return resolve(option(args, "--project") ?? process.cwd());
 }
@@ -212,11 +382,6 @@ async function storageFor(
   if (deps.storageFactory) return deps.storageFactory(projectDir(args), readOnly);
   const { openStorage } = await import("@loopy/storage");
   return openStorage({ projectDir: projectDir(args), readOnly });
-  /*
-  return (deps.storageFactory ?? ((dir, ro) => openStorage({ projectDir: dir, readOnly: ro })))(
-    projectDir(args),
-    readOnly,
-  );*/
 }
 function jsonOutput(args: readonly string[]): boolean {
   return args.includes("--json");
@@ -516,21 +681,99 @@ function parseRunInput(args: readonly string[]): JsonObject {
   return parsed as JsonObject;
 }
 
-/** Execute only through the local deterministic provider path in this phase. */
+function parseOptionalRunInput(args: readonly string[]): JsonObject | undefined {
+  const raw = option(args, "--input");
+  if (raw === undefined) return undefined;
+  if (!raw) return {};
+  const parsed = JSON.parse(raw) as unknown;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+    throw new Error("run --input must be a JSON object");
+  return parsed as JsonObject;
+}
+
+function providerOnNode(node: Record<string, unknown>): string | undefined {
+  if (typeof node.provider === "string" && node.provider.trim()) return node.provider;
+  const configuration = node.configuration;
+  if (configuration && typeof configuration === "object") {
+    const value = (configuration as Record<string, unknown>).provider;
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return undefined;
+}
+
+function validateLiveWorkflow(workflow: { definition: unknown }, provider: string): void {
+  const definition = workflow.definition as Record<string, unknown>;
+  const defaults = definition.defaults;
+  const defaultProvider =
+    defaults &&
+    typeof defaults === "object" &&
+    typeof (defaults as Record<string, unknown>).provider === "string"
+      ? String((defaults as Record<string, unknown>).provider)
+      : undefined;
+  const nodes = Array.isArray(definition.nodes) ? definition.nodes : [];
+  for (const item of nodes) {
+    if (!item || typeof item !== "object") continue;
+    const node = item as Record<string, unknown>;
+    if (node.kind !== "agent") continue;
+    const declared = providerOnNode(node) ?? defaultProvider;
+    if (!declared)
+      throw new Error(
+        `Live workflow node '${String(node.id ?? "unknown")}' does not declare a provider.`,
+      );
+    if (declared !== provider)
+      throw new Error(
+        `Live provider '${provider}' does not match workflow node '${String(node.id ?? "unknown")}' provider '${declared}'.`,
+      );
+  }
+}
+
+async function printProviders(args: readonly string[], deps: CliDependencies): Promise<number> {
+  const registry = deps.registry ?? createDefaultProviderRegistry();
+  const providers = await Promise.all(
+    registry.all().map(async (adapter) => {
+      const probe = await adapter.probe();
+      return {
+        ...probe,
+        provider: adapter.id,
+        version: adapter.version === "unknown" ? probe.version : adapter.version,
+        capabilities: adapter.capabilities(),
+      };
+    }),
+  );
+  if (jsonOutput(args)) printJson({ providers });
+  else
+    for (const provider of providers) {
+      const capabilities = [
+        ...provider.capabilities.supported.map((name) => `${name}=supported`),
+        ...provider.capabilities.degraded.map((name) => `${name}=degraded`),
+        ...provider.capabilities.unavailable.map((name) => `${name}=unavailable`),
+      ].join(",");
+      console.log(
+        `${provider.provider}\t${provider.available ? "available" : "unavailable"}\t${provider.version ?? "-"}\t${capabilities}`,
+      );
+    }
+  return 0;
+}
+
+/** Local deterministic execution remains the default; live execution is explicit. */
 async function runWorkflow(args: readonly string[], deps: CliDependencies): Promise<number> {
   const reference = option(args, "--workflow") ?? positional(args);
   if (!reference) throw new Error("run requires a workflow ID");
   const requestedProvider = option(args, "--provider");
+  const live = args.includes("--live");
   const local =
-    args.includes("--local") ||
-    args.includes("--fake") ||
-    requestedProvider === undefined ||
-    requestedProvider === "fake" ||
-    requestedProvider === "deterministic-fake";
-  if (!local || (requestedProvider && !["fake", "deterministic-fake"].includes(requestedProvider)))
+    !live &&
+    (args.includes("--local") ||
+      args.includes("--fake") ||
+      requestedProvider === undefined ||
+      requestedProvider === "fake" ||
+      requestedProvider === "deterministic-fake");
+  if (!local && !live)
     throw new Error(
-      "live provider execution is not implemented; use the explicit local fake provider (--local)",
+      "live provider execution requires --live; local execution uses --local or --provider fake",
     );
+  if (live && (!requestedProvider || ["fake", "deterministic-fake"].includes(requestedProvider)))
+    throw new Error("live execution requires a registered provider via --provider <id>");
   const versionValue = option(args, "--version");
   const version = versionValue === undefined ? 1 : Number(versionValue);
   if (!Number.isInteger(version) || version < 1) throw new Error("run --version must be positive");
@@ -545,16 +788,118 @@ async function runWorkflow(args: readonly string[], deps: CliDependencies): Prom
       workflow = storage.runtime.getWorkflowVersion(review.proposal.workflow.id, version);
     }
     if (!workflow) throw new Error(`Unknown approved workflow ${reference}`);
-    const provider = deps.providerExecutor ?? new DeterministicFakeProvider();
     const store = new SqliteRuntimeStore(storage);
+    let provider: ProviderExecutor;
+    let liveRunId: string | undefined;
+    let definition: unknown = workflow.definition;
+    if (live) {
+      const registry = deps.registry ?? createDefaultProviderRegistry();
+      const adapter = registry.get(requestedProvider as string);
+      if (!adapter) throw new Error(`Unknown provider '${requestedProvider}'`);
+      const probe = await adapter.probe();
+      if (!probe.available)
+        throw new Error(
+          `Provider '${requestedProvider}' is unavailable${probe.diagnostic ? `: ${probe.diagnostic}` : "."}`,
+        );
+      validateLiveWorkflow(workflow, requestedProvider as string);
+      definition = materializeLiveWorkflow(workflow.definition, requestedProvider as string);
+      provider = createProviderExecutor({
+        registry,
+        onEvent: (event) => {
+          const runId = liveRunId ?? event.runId;
+          const sequence = store.listTraceEvents(runId).length;
+          store.appendTraceEvent(runId, { ...event, sequence });
+        },
+      });
+    } else {
+      if (requestedProvider && !["fake", "deterministic-fake"].includes(requestedProvider))
+        throw new Error("local execution only supports the deterministic fake provider");
+      provider = deps.providerExecutor ?? new DeterministicFakeProvider();
+    }
     const runtime =
       deps.runtimeFactory?.(store, provider) ?? new RuntimeScheduler({ store, provider });
-    const snapshot = await runtime.run(
-      workflow.definition as Parameters<RuntimeScheduler["run"]>[0],
-      parseRunInput(args),
-    );
+    let snapshot: Awaited<ReturnType<RuntimeScheduler["wait"]>>;
+    if (live) {
+      const started = await runtime.start(
+        definition as Parameters<RuntimeScheduler["start"]>[0],
+        parseRunInput(args),
+      );
+      liveRunId = started.runId;
+      snapshot = await runtime.wait(started.runId);
+    } else {
+      snapshot = await runtime.run(
+        workflow.definition as Parameters<RuntimeScheduler["run"]>[0],
+        parseRunInput(args),
+      );
+    }
     if (jsonOutput(args)) printJson(snapshot);
     else console.log(`run ${snapshot.run.runId} ${snapshot.run.status}`);
+    return snapshot.run.status === "succeeded" ? 0 : 1;
+  } finally {
+    storage.close();
+  }
+}
+
+function materializeLiveWorkflow(definition: unknown, provider: string): Record<string, unknown> {
+  const source = definition as Record<string, unknown>;
+  const defaults = source.defaults && typeof source.defaults === "object" ? source.defaults : {};
+  const defaultProvider =
+    typeof (defaults as Record<string, unknown>).provider === "string"
+      ? String((defaults as Record<string, unknown>).provider)
+      : undefined;
+  const nodes = Array.isArray(source.nodes)
+    ? source.nodes.map((item) => {
+        if (!item || typeof item !== "object") return item;
+        const node = item as Record<string, unknown>;
+        return node.kind === "agent" && !providerOnNode(node)
+          ? { ...node, provider: defaultProvider ?? provider }
+          : node;
+      })
+    : [];
+  return {
+    ...source,
+    nodes,
+    execution: { mode: "live", provider },
+  };
+}
+
+async function replayWorkflow(args: readonly string[], deps: CliDependencies): Promise<number> {
+  const runId = positional(args);
+  if (!runId) throw new Error("replay requires a run ID");
+  const storage = await storageFor(args, deps, true);
+  try {
+    const result = await replayRun(
+      new SqliteRuntimeStore(storage),
+      runId,
+      option(args, "--from-sequence") === undefined ? 0 : Number(option(args, "--from-sequence")),
+    );
+    const output = { run: result.snapshot.run, frames: result.frames };
+    if (jsonOutput(args)) printJson(output);
+    else
+      for (const frame of result.frames)
+        console.log(`${frame.event.sequence}\t${frame.event.type}`);
+    return 0;
+  } finally {
+    storage.close();
+  }
+}
+
+async function forkWorkflow(args: readonly string[], deps: CliDependencies): Promise<number> {
+  const runId = positional(args);
+  const nodeId = option(args, "--from-node") ?? option(args, "--node");
+  if (!runId) throw new Error("fork requires a run ID");
+  if (!nodeId) throw new Error("fork requires --from-node <completed-node>");
+  const storage = await storageFor(args, deps);
+  try {
+    const runtimeStore = new SqliteRuntimeStore(storage);
+    const provider = deps.providerExecutor ?? new DeterministicFakeProvider();
+    const runtime =
+      deps.runtimeFactory?.(runtimeStore, provider) ??
+      new RuntimeScheduler({ store: runtimeStore, provider });
+    const started = await runtime.fork(runId, nodeId, parseOptionalRunInput(args));
+    const snapshot = await runtime.wait(started.runId);
+    if (jsonOutput(args)) printJson(snapshot);
+    else console.log(`fork ${runId} from ${nodeId}: ${snapshot.run.runId} ${snapshot.run.status}`);
     return snapshot.run.status === "succeeded" ? 0 : 1;
   } finally {
     storage.close();
@@ -581,6 +926,7 @@ async function validateProvider(args: readonly string[], deps: CliDependencies):
 
 async function dispatch(args: readonly string[], deps: CliDependencies): Promise<number> {
   const command = args[0];
+  if (command === "init") return initProject(args, deps);
   if (command === "import") return importSession(args, deps);
   if (command === "sessions")
     return args.includes("show") ? printSession(args, deps) : printSessionList(args, deps);
@@ -592,7 +938,13 @@ async function dispatch(args: readonly string[], deps: CliDependencies): Promise
   }
   if (command === "approve") return approveOrReject(args, deps, "approve");
   if (command === "reject") return approveOrReject(args, deps, "reject");
+  if (command === "providers") return printProviders(args, deps);
   if (command === "run") return runWorkflow(args, deps);
+  if (command === "pause" || command === "resume" || command === "cancel" || command === "retry")
+    return runtimeMutation(args, deps, command);
+  if (command === "trace") return traceCommand(args, deps);
+  if (command === "replay") return replayWorkflow(args, deps);
+  if (command === "fork") return forkWorkflow(args, deps);
   if (command === "validate-provider" || command === "validate")
     return validateProvider(args, deps);
   if (command === "ui") return launchUi(args, deps);
@@ -769,9 +1121,18 @@ export function main(
       "validate-provider",
       "validate",
       "run",
+      "init",
+      "pause",
+      "resume",
+      "cancel",
+      "retry",
+      "trace",
+      "replay",
+      "fork",
       "ui",
       "schedule",
       "cleanup",
+      "providers",
     ].includes(command)
   ) {
     void mainAsync(args, dependencies).then((code) => {

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { RuntimeScheduler, type RuntimeStoreCommand } from "../../runtime/src/index.js";
 import { createTestIds, DeterministicFakeProvider } from "../../testing/src/index.js";
-import { encodeTraceJsonl, importTraceJsonl } from "../../tracing/src/index.js";
+import { decodeTraceJsonl, encodeTraceJsonl, importTraceJsonl } from "../../tracing/src/index.js";
 import { SqliteRuntimeStore, Storage } from "../src/index.js";
 
 const ids = createTestIds();
@@ -76,6 +76,21 @@ describe("SQLite Phase 1 runtime adapter", () => {
     expect(
       x.store.listTraceEvents(result.run.runId).every((event) => event.schemaVersion === "1"),
     ).toBe(true);
+    x.storage.close();
+  });
+
+  test("forks atomically in SQLite when the batch creates its run and attempts", async () => {
+    const x = opened();
+    const workflow = plan(
+      [agent("checkpoint"), agent("after")],
+      [{ id: "ca", source: "checkpoint", target: "after" }],
+    );
+    const source = await x.runtime.run(workflow, { preserved: true });
+    const forked = await x.runtime.fork(source.run.runId, "checkpoint");
+    const result = await x.runtime.wait(forked.runId);
+    expect(result.run.status).toBe("succeeded");
+    expect(result.run.inputs).toEqual({ preserved: true });
+    expect(x.provider.calls.map((call) => call.nodeId)).toEqual(["checkpoint", "after", "after"]);
     x.storage.close();
   });
 
@@ -219,5 +234,46 @@ describe("SQLite Phase 1 runtime adapter", () => {
     );
     x.storage.close();
     fresh.storage.close();
+  });
+
+  test("trace batch conflicts roll back the newly-created run and every event", () => {
+    const source = decodeTraceJsonl(
+      encodeTraceJsonl([
+        {
+          schemaVersion: "1",
+          id: "11111111-1111-4111-8111-111111111111",
+          runId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          sequence: 0,
+          occurredAt: "2026-08-17T00:00:00.000Z",
+          monotonicOffsetMs: 0,
+          type: "run.created",
+          payload: { workflowId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", workflowVersion: 1 },
+          redaction: { status: "none", removedFields: [] },
+        },
+        {
+          schemaVersion: "1",
+          id: "22222222-2222-4222-8222-222222222222",
+          runId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          sequence: 1,
+          occurredAt: "2026-08-17T00:00:00.001Z",
+          monotonicOffsetMs: 1,
+          type: "run.started",
+          payload: { planHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+          redaction: { status: "none", removedFields: [] },
+        },
+      ]),
+    ).events;
+    const x = opened();
+    const first = source[0];
+    if (!first) throw new Error("missing first trace event");
+    x.store.appendTraceEvents([first]);
+    const conflictingRun = source.map((event) => ({
+      ...event,
+      runId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    }));
+    expect(() => x.store.appendTraceEvents(conflictingRun)).toThrow(/already exists/);
+    expect(x.store.getRun("dddddddd-dddd-4ddd-8ddd-dddddddddddd")).resolves.toBeUndefined();
+    expect(x.store.listTraceEvents("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")).toHaveLength(1);
+    x.storage.close();
   });
 });

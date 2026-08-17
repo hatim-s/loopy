@@ -394,10 +394,15 @@ export class SqliteRuntimeStore implements RuntimeStore {
         const run = this.db
           .query<Row, [string]>("SELECT * FROM runs WHERE id=?")
           .get(attempt.runId);
-        if (!run) throw new Error(`Unknown run ${attempt.runId}`);
-        if (command.expectedRunStatus && run.status !== command.expectedRunStatus)
+        const createdRun = commands.find(
+          (item): item is Extract<RuntimeStoreCommand, { type: "create_run" }> =>
+            item.type === "create_run" && item.run.runId === attempt.runId,
+        )?.run;
+        if (!run && !createdRun) throw new Error(`Unknown run ${attempt.runId}`);
+        const runStatus = run?.status ?? createdRun?.status;
+        if (command.expectedRunStatus && runStatus !== command.expectedRunStatus)
           throw new RuntimeStoreConflictError(
-            `Attempt run precondition failed for ${attempt.runId}: expected ${command.expectedRunStatus}, got ${String(run.status)}`,
+            `Attempt run precondition failed for ${attempt.runId}: expected ${command.expectedRunStatus}, got ${String(runStatus)}`,
           );
         continue;
       }
@@ -930,23 +935,43 @@ export class SqliteRuntimeStore implements RuntimeStore {
     return { append: (event) => this.appendTraceEvent(runId, event) };
   }
   appendTraceEvent(runId: string, event: TraceEvent): void {
-    TraceEventSchema.parse(event);
+    this.appendTraceEvents([event], runId);
+  }
+
+  /** Validate all identities and database conflicts before writing a canonical trace batch. */
+  appendTraceEvents(events: readonly TraceEvent[], expectedRunId?: string): void {
+    if (events.length === 0) throw new Error("Cannot import an empty trace");
+    const validated = events.map((event) => TraceEventSchema.parse(event));
+    const runIds = new Set(validated.map((event) => event.runId));
+    if (runIds.size !== 1) throw new Error("Trace contains multiple run IDs");
+    const runId = expectedRunId ?? validated[0]?.runId;
+    if (!runId) throw new Error("Trace is missing a run ID");
+    const eventIds = new Set<string>();
+    const sequences = new Set<number>();
+    for (const event of validated) {
+      if (!eventIds.add(event.id))
+        throw new Error(`Trace event ID ${event.id} appears more than once`);
+      if (!sequences.add(event.sequence))
+        throw new Error(`Trace sequence ${event.sequence} appears more than once`);
+    }
+
     this.db.transaction(() => {
       const existingRun = this.db.query("SELECT 1 FROM runs WHERE id=?").get(runId);
-      if (!existingRun) {
-        if (event.type !== "run.created")
-          throw new Error(
-            `Cannot import ${event.type} for unknown run ${runId}; a run.created event with workflowId is required`,
-          );
-        const workflowId = requiredString(event.payload.workflowId, "workflowId");
-        const workflowVersion = Number(event.payload.workflowVersion);
+      const created = validated.find((event) => event.type === "run.created");
+      if (!existingRun && !created)
+        throw new Error(
+          `Cannot import trace for unknown run ${runId}; a run.created event with workflowId is required`,
+        );
+      if (!existingRun && created) {
+        const workflowId = requiredString(created.payload.workflowId, "workflowId");
+        const workflowVersion = Number(created.payload.workflowVersion);
         this.db.run(
           "INSERT OR IGNORE INTO workflow_versions(workflow_id,version,definition_json,created_at) VALUES (?,?,?,?)",
           [
             workflowId,
             workflowVersion,
             encode({ id: workflowId, workflowVersion }),
-            event.occurredAt,
+            created.occurredAt,
           ],
         );
         this.db.run(
@@ -957,39 +982,48 @@ export class SqliteRuntimeStore implements RuntimeStore {
             workflowVersion,
             "created",
             "{}",
-            event.occurredAt,
-            event.occurredAt,
+            created.occurredAt,
+            created.occurredAt,
             "{}",
           ],
         );
       }
-      const collision = this.db
-        .query("SELECT 1 FROM events WHERE run_id=? AND sequence=?")
-        .get(runId, event.sequence);
-      if (collision)
-        throw new Error(`Trace sequence ${event.sequence} already exists for run ${runId}`);
-      const attemptExists =
-        event.attemptId &&
-        this.db.query("SELECT 1 FROM node_attempts WHERE id=?").get(event.attemptId) !== null;
-      this.db.run(
-        "INSERT INTO events(id,run_id,sequence,type,payload_json,node_id,attempt_id,provider,session_id,tool_call_id,occurred_at,monotonic_offset_ms,trace_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        [
-          event.id,
-          runId,
-          event.sequence,
-          event.type,
-          encode(event.payload),
-          event.nodeId ?? null,
-          attemptExists ? (event.attemptId ?? null) : null,
-          event.provider ?? null,
-          event.sessionId ?? null,
-          event.toolCallId ?? null,
-          event.occurredAt,
-          event.monotonicOffsetMs,
-          encode(event),
-        ],
-      );
+      for (const event of validated) {
+        if (this.db.query("SELECT 1 FROM events WHERE id=?").get(event.id))
+          throw new Error(`Trace event ${event.id} already exists`);
+        if (
+          this.db
+            .query("SELECT 1 FROM events WHERE run_id=? AND sequence=?")
+            .get(runId, event.sequence)
+        )
+          throw new Error(`Trace sequence ${event.sequence} already exists for run ${runId}`);
+      }
+      for (const event of validated) this.appendTraceEventInternal(runId, event);
     })();
+  }
+
+  private appendTraceEventInternal(runId: string, event: TraceEvent): void {
+    const attemptExists =
+      event.attemptId &&
+      this.db.query("SELECT 1 FROM node_attempts WHERE id=?").get(event.attemptId) !== null;
+    this.db.run(
+      "INSERT INTO events(id,run_id,sequence,type,payload_json,node_id,attempt_id,provider,session_id,tool_call_id,occurred_at,monotonic_offset_ms,trace_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      [
+        event.id,
+        runId,
+        event.sequence,
+        event.type,
+        encode(event.payload),
+        event.nodeId ?? null,
+        attemptExists ? (event.attemptId ?? null) : null,
+        event.provider ?? null,
+        event.sessionId ?? null,
+        event.toolCallId ?? null,
+        event.occurredAt,
+        event.monotonicOffsetMs,
+        encode(event),
+      ],
+    );
   }
 }
 

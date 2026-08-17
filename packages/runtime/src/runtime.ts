@@ -67,6 +67,7 @@ export type RuntimePlan = {
   topology?: { startNodeIds?: string[]; terminalNodeIds?: string[]; topologicalOrder?: string[] };
   policies?: ProviderPolicy & { concurrency?: { maxParallel?: number } };
   defaults?: { provider?: string; retry?: RetryPolicy };
+  execution?: { mode: "local" | "live"; provider?: string };
   [key: string]: unknown;
 };
 export type RuntimePlanInput = Omit<RuntimePlan, "workflowId" | "nodes" | "edges"> & {
@@ -230,6 +231,8 @@ export type RuntimeOptions = {
   verifier?: VerificationExecutor;
   now?: () => string;
   id?: () => string;
+  /** Confirms that an external owner has observed and signalled cancellation. */
+  observeCancellation?: (runId: string, attemptIds: readonly string[]) => Promise<boolean>;
 };
 
 const TERMINAL_ATTEMPTS = new Set<AttemptStatus>(["succeeded", "failed", "cancelled", "skipped"]);
@@ -505,7 +508,7 @@ export class RuntimeScheduler {
         workflowId: run.workflowId,
         workflowVersion: run.workflowVersion,
         executionPlanHash: run.executionPlanHash,
-        planHash: run.executionPlanHash,
+        planHash: run.executionPlanHash ?? "fork",
       }),
     ]);
     void this.pump(run.runId);
@@ -517,6 +520,147 @@ export class RuntimeScheduler {
   ): Promise<RuntimeSnapshot> {
     const started = await this.start(plan, inputs);
     return this.wait(started.runId);
+  }
+  /** Start a new run from an explicit persisted completed-node checkpoint. */
+  async fork(sourceRunId: string, fromNodeId: string, inputs?: JsonObject): Promise<RunRecord> {
+    const source = await this.requireRun(sourceRunId);
+    if (!(TERMINAL_RUNS.has(source.status) || source.status === "paused"))
+      throw new Error(`Run ${sourceRunId} has no stable checkpoint (${source.status})`);
+    const sourceAttempts = await this.options.store.listAttempts(sourceRunId);
+    const sourceEvents = await this.options.store.listEvents(sourceRunId);
+    const checkpoint = sourceEvents.find(
+      (event) =>
+        event.type === "node.completed" &&
+        event.nodeId === fromNodeId &&
+        (event.payload?.completion as Record<string, unknown> | undefined)?.status === "succeeded",
+    );
+    if (!checkpoint) throw new Error(`No safe completed-node checkpoint exists for ${fromNodeId}`);
+    const completed = sourceAttempts
+      .filter((attempt) => attempt.status === "succeeded" || attempt.status === "skipped")
+      .filter((attempt) =>
+        sourceEvents.some(
+          (event) =>
+            event.type === "node.completed" &&
+            event.attemptId === attempt.attemptId &&
+            event.sequence <= checkpoint.sequence,
+        ),
+      )
+      .sort((a, b) => a.nodeId.localeCompare(b.nodeId) || a.attempt - b.attempt);
+    const latest = new Map<string, AttemptRecord>();
+    for (const attempt of completed) latest.set(attempt.nodeId, attempt);
+    if (!latest.has(fromNodeId))
+      throw new Error(`Checkpoint ${fromNodeId} has no persisted completed attempt`);
+
+    // A fork must not replay a completed side effect merely because it was
+    // persisted after the selected checkpoint. Carry its causal closure only
+    // when the source graph proves that the same branch/join inputs were
+    // completed; otherwise fail closed before creating the new run.
+    const allCompleted = new Map<string, AttemptRecord>();
+    for (const attempt of sourceAttempts) {
+      if (attempt.status !== "succeeded" && attempt.status !== "skipped") continue;
+      const completionEvent = sourceEvents.find(
+        (event) => event.type === "node.completed" && event.attemptId === attempt.attemptId,
+      );
+      if (completionEvent) allCompleted.set(attempt.nodeId, attempt);
+    }
+    const carry = new Set(latest.keys());
+    const forkInputs = inputs ?? source.inputs;
+    const forkGraph = { ...source, inputs: forkInputs };
+    const inputsChanged = JSON.stringify(forkInputs) !== JSON.stringify(source.inputs);
+    const sideEffectNode = (node: RuntimeNode | undefined): boolean => {
+      return node?.sideEffect === true;
+    };
+    const causalCarry = (nodeId: string, visiting = new Set<string>()): boolean => {
+      if (carry.has(nodeId)) return true;
+      if (visiting.has(nodeId)) return false;
+      const attempt = allCompleted.get(nodeId);
+      if (!attempt) return false;
+      const incoming = source.plan.edges.filter((edge) => edge.target === nodeId);
+      if (
+        incoming.some(
+          (edge) =>
+            !this.edgeSelected(edge, forkGraph, sourceAttempts) ||
+            !causalCarry(edge.source, new Set([...visiting, nodeId])),
+        )
+      )
+        return false;
+      carry.add(nodeId);
+      latest.set(nodeId, attempt);
+      return true;
+    };
+    for (const attempt of allCompleted.values()) {
+      const completionEvent = sourceEvents.find(
+        (event) => event.type === "node.completed" && event.attemptId === attempt.attemptId,
+      );
+      if (!completionEvent || completionEvent.sequence <= checkpoint.sequence) continue;
+      const node = source.plan.nodes.find((item) => item.id === attempt.nodeId);
+      if (sideEffectNode(node) && (inputsChanged || !causalCarry(attempt.nodeId)))
+        throw new Error(
+          `Fork checkpoint ${fromNodeId} is unsafe for completed side effect ${attempt.nodeId}`,
+        );
+    }
+    const run: RunRecord = {
+      runId: this.makeId("fork"),
+      workflowId: source.workflowId,
+      workflowVersion: source.workflowVersion,
+      plan: source.plan,
+      executionPlanHash: source.executionPlanHash,
+      inputs: forkInputs,
+      status: "running",
+      createdAt: this.now(),
+      startedAt: this.now(),
+    };
+    const clones = [...latest.values()].map((attempt) => ({
+      ...attempt,
+      attemptId: this.makeId(`fork-attempt-${attempt.nodeId}`),
+      runId: run.runId,
+      attempt: 1,
+      createdAt: this.now(),
+      startedAt: undefined,
+      endedAt: this.now(),
+    }));
+    const commands: RuntimeStoreCommand[] = [
+      { type: "create_run", run },
+      await this.event(run.runId, "run.created", undefined, undefined, {
+        workflowId: run.workflowId,
+        workflowVersion: run.workflowVersion,
+        executionPlanHash: run.executionPlanHash,
+        forkedFromRunId: sourceRunId,
+        checkpointNodeId: fromNodeId,
+      }),
+    ];
+    for (const attempt of clones) {
+      commands.push({ type: "create_attempt", attempt });
+      if (source.plan.nodes.find((node) => node.id === attempt.nodeId)?.kind === "approval") {
+        const approval = await this.options.store.getApproval(sourceRunId, attempt.nodeId);
+        if (approval) {
+          commands.push({
+            type: "set_approval",
+            approval: { ...approval, runId: run.runId, attemptId: attempt.attemptId },
+          });
+        }
+      }
+      commands.push(
+        await this.event(run.runId, "node.completed", attempt.nodeId, attempt.attemptId, {
+          completion: attempt.completion ?? {
+            status: attempt.status === "skipped" ? "skipped" : "succeeded",
+            summary: "Carried from explicit fork checkpoint",
+            outputs: attempt.output ?? {},
+          },
+          carriedFromRunId: sourceRunId,
+        }),
+      );
+    }
+    commands.push(
+      await this.event(run.runId, "run.started", undefined, undefined, {
+        planHash: run.executionPlanHash,
+        forkedFromRunId: sourceRunId,
+        checkpointNodeId: fromNodeId,
+      }),
+    );
+    await this.options.store.commit(commands);
+    void this.pump(run.runId);
+    return (await this.options.store.getRun(run.runId)) as RunRecord;
   }
   async wait(runId: string): Promise<RuntimeSnapshot> {
     while (true) {
@@ -600,6 +744,22 @@ export class RuntimeScheduler {
       this.cancelProviderAttempt(attemptId);
     }
     const attempts = await this.options.store.listAttempts(runId);
+    const runningAttemptIds = attempts
+      .filter((attempt) => attempt.status === "running")
+      .map((attempt) => attempt.attemptId);
+    const locallyOwned = runningAttemptIds.some((attemptId) =>
+      this.active.get(runId)?.has(attemptId),
+    );
+    if (
+      runningAttemptIds.length > 0 &&
+      !locallyOwned &&
+      !(await this.options.observeCancellation?.(runId, runningAttemptIds))
+    ) {
+      // A different process may own the provider session. Without a durable
+      // owner observation, terminal cancellation would falsely promise that
+      // the provider has stopped while it can still produce side effects.
+      return (await this.options.store.getRun(runId)) as RunRecord;
+    }
     const commands: RuntimeStoreCommand[] = [];
     for (const attempt of attempts) {
       if (TERMINAL_ATTEMPTS.has(attempt.status)) continue;
@@ -893,9 +1053,13 @@ export class RuntimeScheduler {
   private cancelProviderAttempt(attemptId: string): void {
     const cancel = this.options.provider.cancel;
     if (!cancel) return;
-    void Promise.resolve()
-      .then(() => cancel.call(this.options.provider, attemptId))
-      .catch(() => undefined);
+    // Invoke the owner hook synchronously before terminal state is persisted;
+    // awaiting provider cleanup is intentionally not required here.
+    try {
+      void Promise.resolve(cancel.call(this.options.provider, attemptId)).catch(() => undefined);
+    } catch {
+      // Cancellation remains conservative if the provider hook rejects or throws.
+    }
   }
   private async finishRun(
     runId: string,

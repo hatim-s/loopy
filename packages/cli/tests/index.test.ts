@@ -1,13 +1,260 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Storage } from "@loopy/storage";
+import { createProviderRegistry, type ProviderAdapter, type ProviderRun } from "@loopy/providers";
+import type { RuntimeScheduler } from "@loopy/runtime";
+import { SqliteRuntimeStore, Storage } from "@loopy/storage";
 import { describe, expect, it, vi } from "vitest";
 import { main, mainAsync } from "../src/index";
 
 describe("loopy CLI shell", () => {
+  it("initializes idempotently without overwriting project-local config", async () => {
+    const project = mkdtempSync(join(tmpdir(), "loopy-cli-init-"));
+    const output = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      expect(await mainAsync(["init", "--project", project, "--json"])).toBe(0);
+      const configPath = resolve(project, ".loopy/config.json");
+      expect(existsSync(configPath)).toBe(true);
+      const initial = readFileSync(configPath, "utf8");
+      writeFileSync(configPath, '{"userSetting":true}\n');
+      expect(await mainAsync(["init", "--project", project, "--json"])).toBe(0);
+      expect(readFileSync(configPath, "utf8")).toBe('{"userSetting":true}\n');
+      expect(initial).not.toBe(readFileSync(configPath, "utf8"));
+    } finally {
+      output.mockRestore();
+    }
+  });
+
+  it("imports and deterministically exports a canonical trace through SQLite", async () => {
+    const project = mkdtempSync(join(tmpdir(), "loopy-cli-trace-"));
+    const outputFile = resolve(project, "roundtrip.jsonl");
+    const fixture = resolve("packages/tracing/fixtures/trace.jsonl");
+    const output = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      expect(await mainAsync(["trace", "import", fixture, "--project", project])).toBe(0);
+      expect(
+        await mainAsync([
+          "trace",
+          "export",
+          "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "--output",
+          outputFile,
+          "--project",
+          project,
+        ]),
+      ).toBe(0);
+      expect(readFileSync(outputFile, "utf8")).toBe(readFileSync(fixture, "utf8"));
+    } finally {
+      output.mockRestore();
+    }
+  });
+
+  it("routes lifecycle commands with their required run and node inputs", async () => {
+    const project = mkdtempSync(join(tmpdir(), "loopy-cli-controls-"));
+    const calls: unknown[][] = [];
+    const fake = {
+      pause: async (runId: string) => {
+        calls.push(["pause", runId]);
+        return { runId, status: "paused" };
+      },
+      resume: async (runId: string) => {
+        calls.push(["resume", runId]);
+        return { runId, status: "running" };
+      },
+      cancel: async (runId: string, reason: string) => {
+        calls.push(["cancel", runId, reason]);
+        return { runId, status: "cancelled" };
+      },
+      retry: async (runId: string, nodeId: string, input: Record<string, unknown>) => {
+        calls.push(["retry", runId, nodeId, input]);
+        return { runId, nodeId, status: "pending" };
+      },
+    } as unknown as RuntimeScheduler;
+    const output = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      const dependencies = { runtimeFactory: () => fake };
+      expect(await mainAsync(["pause", "run-1", "--project", project], dependencies)).toBe(0);
+      expect(await mainAsync(["resume", "run-1", "--project", project], dependencies)).toBe(0);
+      expect(
+        await mainAsync(
+          ["cancel", "run-1", "--reason", "operator request", "--project", project],
+          dependencies,
+        ),
+      ).toBe(0);
+      expect(
+        await mainAsync(
+          ["retry", "run-1", "--node", "node-1", "--input", '{"x":1}', "--project", project],
+          dependencies,
+        ),
+      ).toBe(0);
+      expect(calls).toEqual([
+        ["pause", "run-1"],
+        ["resume", "run-1"],
+        ["cancel", "run-1", "operator request"],
+        ["retry", "run-1", "node-1", { x: 1 }],
+      ]);
+    } finally {
+      output.mockRestore();
+    }
+  });
+
+  it("leaves fork inputs undefined when --input is omitted", async () => {
+    const project = mkdtempSync(join(tmpdir(), "loopy-cli-fork-input-"));
+    const calls: unknown[][] = [];
+    const fake = {
+      fork: async (runId: string, nodeId: string, input?: Record<string, unknown>) => {
+        calls.push([runId, nodeId, input]);
+        return { runId: "forked", status: "succeeded" };
+      },
+      wait: async () => ({ run: { runId: "forked", status: "succeeded" } }),
+    } as unknown as RuntimeScheduler;
+    const output = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      expect(
+        await mainAsync(["fork", "run-1", "--from-node", "checkpoint", "--project", project], {
+          runtimeFactory: () => fake,
+        }),
+      ).toBe(0);
+      expect(calls).toEqual([["run-1", "checkpoint", undefined]]);
+    } finally {
+      output.mockRestore();
+    }
+  });
+
+  const fakeLiveAdapter = (available = true): ProviderAdapter => ({
+    id: "codex",
+    version: "test-1",
+    probe: async () => ({
+      provider: "codex",
+      available,
+      capabilities: {
+        schemaVersion: "1",
+        capabilities: { structuredStreamingEvents: { status: "supported" } },
+        supported: ["structuredStreamingEvents"],
+        degraded: [],
+        unavailable: [],
+      },
+      ...(available ? {} : { diagnostic: "test provider unavailable" }),
+    }),
+    capabilities: () => ({
+      schemaVersion: "1",
+      capabilities: { structuredStreamingEvents: { status: "supported" } },
+      supported: ["structuredStreamingEvents"],
+      degraded: [],
+      unavailable: [],
+    }),
+    start: async (request) =>
+      ({
+        session: Promise.resolve({ provider: "codex", sessionId: `${request.attemptId}-session` }),
+        events: (async function* () {
+          yield {
+            type: "session_started" as const,
+            provider: "codex",
+            occurredAt: "2026-08-17T00:00:00.000Z",
+            provenance: { sessionId: `${request.attemptId}-session` },
+            payload: {},
+          };
+          yield {
+            type: "message" as const,
+            provider: "codex",
+            occurredAt: "2026-08-17T00:00:01.000Z",
+            provenance: { sessionId: `${request.attemptId}-session` },
+            payload: { role: "assistant", content: "live result" },
+          };
+          yield {
+            type: "session_ended" as const,
+            provider: "codex",
+            occurredAt: "2026-08-17T00:00:02.000Z",
+            provenance: { sessionId: `${request.attemptId}-session` },
+            payload: { status: "succeeded" },
+          };
+        })(),
+        cancel: async () => undefined,
+      }) as ProviderRun,
+    historicalImports: [],
+  });
+
+  it("lists registered provider availability and capabilities without starting an agent", async () => {
+    const output: string[] = [];
+    const log = vi.spyOn(console, "log").mockImplementation((...values) => {
+      output.push(values.map(String).join(" "));
+    });
+    const error = vi.spyOn(console, "error").mockImplementation((...values) => {
+      output.push(values.map(String).join(" "));
+    });
+    const start = vi.fn();
+    const adapter = { ...fakeLiveAdapter(), start };
+    try {
+      expect(
+        await mainAsync(["providers", "--json"], {
+          registry: createProviderRegistry([adapter]),
+        }),
+      ).toBe(0);
+      const result = JSON.parse(output[0] ?? "{}");
+      expect(result.providers[0]).toMatchObject({
+        provider: "codex",
+        available: true,
+        capabilities: { supported: ["structuredStreamingEvents"] },
+      });
+      expect(start).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+      error.mockRestore();
+    }
+  });
+
+  it("runs --live only through the selected available adapter and persists provider trace", async () => {
+    const project = mkdtempSync(join(tmpdir(), "loopy-cli-live-"));
+    const setup = new Storage({ projectDir: project });
+    setup.runtime.createWorkflowVersion({
+      workflowId: "live-workflow",
+      version: 1,
+      definition: {
+        id: "live-workflow",
+        workflowVersion: 1,
+        nodes: [{ id: "agent", kind: "agent", provider: "codex", prompt: "hello" }],
+        edges: [],
+      },
+    });
+    setup.close();
+    const output: string[] = [];
+    const log = vi.spyOn(console, "log").mockImplementation((...values) => {
+      output.push(values.map(String).join(" "));
+    });
+    const error = vi.spyOn(console, "error").mockImplementation((...values) => {
+      output.push(values.map(String).join(" "));
+    });
+    try {
+      expect(
+        await mainAsync(
+          ["run", "live-workflow", "--provider", "codex", "--live", "--project", project, "--json"],
+          {
+            registry: createProviderRegistry([fakeLiveAdapter()]),
+          },
+        ),
+      ).toBe(0);
+      const run = JSON.parse(output.at(-1) ?? "{}");
+      expect(run.run.status).toBe("succeeded");
+      const persistedWorkflow = new Storage({ projectDir: project });
+      const persistedRun = new SqliteRuntimeStore(persistedWorkflow).getRun(run.run.runId);
+      expect((await persistedRun)?.plan.execution).toEqual({ mode: "live", provider: "codex" });
+      expect((await persistedRun)?.plan.nodes[0]?.provider).toBe("codex");
+      persistedWorkflow.close();
+      const persisted = new Storage({ projectDir: project });
+      const persistedRuntime = new SqliteRuntimeStore(persisted);
+      expect(
+        persistedRuntime
+          .listTraceEvents(run.run.runId)
+          .some((event) => event.type === "provider.message"),
+      ).toBe(true);
+      persisted.close();
+    } finally {
+      log.mockRestore();
+      error.mockRestore();
+    }
+  });
   it("prints a version without invoking an unimplemented command", () => {
     const output = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
@@ -15,6 +262,20 @@ describe("loopy CLI shell", () => {
     expect(output).toHaveBeenCalledWith("0.1.0");
 
     output.mockRestore();
+  });
+
+  it("routes replay and fork through the exported synchronous shell API", async () => {
+    const project = mkdtempSync(join(tmpdir(), "loopy-cli-router-"));
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      expect(main(["replay", "missing-run", "--project", project])).toBe(0);
+      expect(main(["fork", "missing-run", "--from-node", "node", "--project", project])).toBe(0);
+      await Bun.sleep(10);
+      expect(error).not.toHaveBeenCalledWith(expect.stringContaining("not implemented"));
+    } finally {
+      process.exitCode = 0;
+      error.mockRestore();
+    }
   });
 
   it("returns a non-zero status when run is missing its approved workflow", async () => {
@@ -95,7 +356,11 @@ describe("loopy CLI shell", () => {
       const persisted = new Storage({ projectDir: project });
       expect(persisted.runtime.listWorkflowVersions()).toHaveLength(1);
       expect(persisted.runtime.listRuns("succeeded")).toHaveLength(1);
+      const runId = persisted.runtime.listRuns("succeeded")[0]?.id;
       persisted.close();
+      expect(runId).toBeDefined();
+      expect(await mainAsync(["replay", runId as string, "--project", project, "--json"])).toBe(0);
+      expect(lastJson<{ frames: unknown[] }>().frames.length).toBeGreaterThan(0);
     } finally {
       log.mockRestore();
     }

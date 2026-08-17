@@ -1,4 +1,5 @@
 export * from "./provider-executor.ts";
+export * from "./replay.ts";
 export * from "./runtime.ts";
 export type {
   CompilationResult,
