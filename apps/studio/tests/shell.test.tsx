@@ -2,8 +2,8 @@
 
 import { QueryClient } from "@tanstack/react-query";
 import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
-import { render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 import { createApiClient } from "../src/app/api";
 import { createStudioRouter } from "../src/app/router";
 
@@ -14,6 +14,8 @@ function renderShell() {
 }
 
 describe("StudioShell", () => {
+  afterEach(() => cleanup());
+
   it("renders the debugger frame with keyboard-accessible navigation", async () => {
     renderShell();
     await waitFor(() => {
@@ -29,5 +31,27 @@ describe("StudioShell", () => {
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Collapse sidebar" })).toBeTruthy(),
     );
+  });
+
+  it("keeps compact icon-only navigation links named and keyboard-focusable", async () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 800 });
+    renderShell();
+
+    await waitFor(() => {
+      for (const label of [
+        "Sessions",
+        "Runs",
+        "Extractions",
+        "Workflows",
+        "Providers",
+        "Settings",
+      ]) {
+        const link = screen.getByRole("link", { name: label });
+        expect(link.getAttribute("aria-label")).toBe(label);
+        expect(link.tabIndex).toBeGreaterThanOrEqual(0);
+        link.focus();
+        expect(document.activeElement).toBe(link);
+      }
+    });
   });
 });

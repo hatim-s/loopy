@@ -54,6 +54,7 @@ export function StudioShell({ children }: PropsWithChildren) {
                 .map((item) => (
                   <Link
                     activeProps={{ className: "nav-link nav-link--active" }}
+                    aria-label={item.label}
                     className="nav-link"
                     key={item.to}
                     to={item.to}
