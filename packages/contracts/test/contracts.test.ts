@@ -307,6 +307,7 @@ test("execution plans require the complete persisted shape", () => {
         nodeId,
         name: "Implement",
         tags: [],
+        sideEffect: true,
         timeoutMs: 120000,
         retry: { maxAttempts: 1, backoffMs: 0, retryOn: [] },
         kind: "agent",
