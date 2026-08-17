@@ -6,6 +6,7 @@ import {
   Outlet,
   redirect,
 } from "@tanstack/react-router";
+import { WorkflowEditorPage } from "../features/editor";
 import type { ApiClient } from "./api";
 import { createFeaturePages, type FeatureKey, type FeaturePageRegistry } from "./feature-slots";
 import { StudioShell } from "./shell";
@@ -59,6 +60,15 @@ export function createStudioRouter(
     slotRoute("extractions", pages, context),
     slotRoute("runs", pages, context),
     slotRoute("workflows", pages, context),
+    createRoute({
+      getParentRoute: () => rootRoute,
+      path: "/workflows/$workflowId/edit",
+      component: () => (
+        <div className="route-view">
+          <WorkflowEditorPage api={context.api} />
+        </div>
+      ),
+    }),
     slotRoute("settings", pages, context),
   ]);
   return createRouter({ routeTree, context });
