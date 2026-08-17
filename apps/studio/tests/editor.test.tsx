@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
-import { render, screen } from "@testing-library/react";
+import type { VerifyNode } from "@loopy/contracts";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { describe, expect, it } from "vitest";
 import {
@@ -8,6 +9,7 @@ import {
   fallbackWorkflow,
   toFlowEdges,
   toFlowNodes,
+  VerifyFields,
   WorkflowNodeCard,
 } from "../src/features/editor";
 
@@ -56,5 +58,28 @@ describe("workflow editor model", () => {
 
     expect(screen.getByRole("button", { name: "Agent step agent node" })).toBeTruthy();
     expect(screen.getByText("agent")).toBeTruthy();
+  });
+
+  domIt("edits the selected verification command while preserving sibling commands", () => {
+    const node: VerifyNode = {
+      id: "33333333-3333-4333-8333-333333333333",
+      kind: "verify",
+      name: "Verify",
+      commands: [
+        { command: "bun", args: ["test"], timeoutMs: 120000 },
+        { command: "bun", args: ["run", "lint"], timeoutMs: 120000 },
+      ],
+      success: "all",
+      expectedExitCode: 0,
+      tags: [],
+    };
+    const updates: Array<Partial<VerifyNode>> = [];
+    render(<VerifyFields node={node} update={(patch) => updates.push(patch)} />);
+    fireEvent.change(screen.getByLabelText("Command to edit"), { target: { value: "1" } });
+    fireEvent.change(screen.getByLabelText("Command"), { target: { value: "pnpm" } });
+    expect(updates.at(-1)?.commands).toEqual([
+      { command: "bun", args: ["test"], timeoutMs: 120000 },
+      { command: "pnpm", args: ["run", "lint"], timeoutMs: 120000 },
+    ]);
   });
 });

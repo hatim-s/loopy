@@ -45,7 +45,12 @@ import {
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ApiClient } from "../app/api";
 import { ErrorState, LoadingState } from "../components/primitives/states";
-import { createEditorStore, type EditorNodePatch } from "./editor-core/index.ts";
+import {
+  createEditorStore,
+  diffWorkflowVersions,
+  type EditorNodePatch,
+  keyboardIntent,
+} from "./editor-core/index.ts";
 
 export type EditorWorkflowRecord = {
   workflowId: string;
@@ -332,7 +337,9 @@ const nodeTypes = { workflow: WorkflowNodeCard };
 function toFlowNodes(
   workflow: WorkflowDefinition,
   positions?: Record<string, { x: number; y: number }>,
+  selectedNodeIds: readonly string[] = [],
 ): EditorNode[] {
+  const selected = new Set(selectedNodeIds);
   return workflow.nodes.map((workflowNode, index) => ({
     id: workflowNode.id,
     type: "workflow",
@@ -341,10 +348,15 @@ function toFlowNodes(
       y: 90 + Math.floor(index / 3) * 150,
     },
     data: { workflowNode },
+    selected: selected.has(workflowNode.id),
   }));
 }
 
-function toFlowEdges(workflow: WorkflowDefinition): Edge[] {
+function toFlowEdges(
+  workflow: WorkflowDefinition,
+  selectedEdgeIds: readonly string[] = [],
+): Edge[] {
+  const selected = new Set(selectedEdgeIds);
   return workflow.edges.map((edge) => ({
     id: edge.id,
     source: edge.source,
@@ -353,6 +365,7 @@ function toFlowEdges(workflow: WorkflowDefinition): Edge[] {
     data: { workflowEdge: edge },
     type: "default",
     animated: false,
+    selected: selected.has(edge.id),
   }));
 }
 
@@ -615,28 +628,83 @@ function AgentFields({
   );
 }
 
-function VerifyFields({
+export function VerifyFields({
   node,
   update,
 }: {
   node: VerifyNode;
   update: (patch: Partial<VerifyNode>) => void;
 }) {
-  const command = node.commands[0] ?? { command: "", args: [], timeoutMs: 120_000 };
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  useEffect(() => {
+    setSelectedIndex((current) => Math.min(current, Math.max(0, node.commands.length - 1)));
+  }, [node.commands.length]);
+  const command = node.commands[selectedIndex] ?? {
+    command: "",
+    args: [],
+    timeoutMs: 120_000,
+  };
+  const updateCommand = (patch: Partial<(typeof node.commands)[number]>) => {
+    const commands = node.commands.map((item, index) =>
+      index === selectedIndex ? { ...item, ...patch } : item,
+    );
+    update({ commands });
+  };
+  const addCommand = () => {
+    update({
+      commands: [...node.commands, { command: "", args: [], timeoutMs: 120_000 }],
+    });
+    setSelectedIndex(node.commands.length);
+  };
+  const removeCommand = () => {
+    if (node.commands.length <= 1) return;
+    update({ commands: node.commands.filter((_, index) => index !== selectedIndex) });
+    setSelectedIndex((current) => Math.min(current, node.commands.length - 2));
+  };
   return (
     <>
+      <div className="editor-field-row">
+        <label className="editor-field">
+          <span>Command to edit</span>
+          <select
+            aria-label="Command to edit"
+            value={selectedIndex}
+            onChange={(event) => setSelectedIndex(Number(event.target.value))}
+          >
+            {node.commands.map((item, index) => (
+              <option value={index} key={`${index}-${item.command}`}>
+                {index + 1}. {item.command || "Untitled command"}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="editor-field editor-field--actions">
+          <span>Commands</span>
+          <div>
+            <button type="button" className="editor-small-button" onClick={addCommand}>
+              <Plus /> Add
+            </button>
+            <button
+              type="button"
+              className="editor-small-button"
+              onClick={removeCommand}
+              disabled={node.commands.length <= 1}
+            >
+              <Minus /> Remove
+            </button>
+          </div>
+        </div>
+      </div>
       <div className="editor-field-row">
         <Field
           label="Command"
           value={command.command}
-          onChange={(value) => update({ commands: [{ ...command, command: value }] })}
+          onChange={(value) => updateCommand({ command: value })}
         />
         <Field
           label="Args"
           value={command.args.join(" ")}
-          onChange={(value) =>
-            update({ commands: [{ ...command, args: value.split(" ").filter(Boolean) }] })
-          }
+          onChange={(value) => updateCommand({ args: value.split(" ").filter(Boolean) })}
         />
       </div>
       <div className="editor-field-row">
@@ -720,13 +788,24 @@ function JoinFields({
         <span>Join policy</span>
         <select
           value={node.policy}
-          onChange={(event) => update({ policy: event.target.value as JoinNode["policy"] })}
+          onChange={(event) => {
+            const policy = event.target.value as JoinNode["policy"];
+            update({ policy, ...(policy === "quorum" ? { quorum: node.quorum ?? 1 } : {}) });
+          }}
         >
           <option value="all">All branches</option>
           <option value="any">Any branch</option>
           <option value="quorum">Quorum</option>
         </select>
       </label>
+      {node.policy === "quorum" ? (
+        <Field
+          label="Quorum"
+          type="number"
+          value={String(node.quorum ?? 1)}
+          onChange={(value) => update({ quorum: Math.max(1, Math.floor(Number(value) || 1)) })}
+        />
+      ) : null}
       <label className="editor-field">
         <span>Output</span>
         <select
@@ -901,6 +980,7 @@ function EditorCanvas({
   onConnect,
   onSelectNode,
   onSelectEdge,
+  onClearSelection,
 }: {
   nodes: EditorNode[];
   edges: Edge[];
@@ -909,6 +989,7 @@ function EditorCanvas({
   onConnect: (connection: Connection) => void;
   onSelectNode: (id?: string) => void;
   onSelectEdge: (id?: string) => void;
+  onClearSelection: () => void;
 }) {
   return (
     <div className="editor-canvas" role="application" aria-label="Workflow graph editor">
@@ -921,10 +1002,7 @@ function EditorCanvas({
         onConnect={onConnect}
         onNodeClick={(_, node) => onSelectNode(node.id)}
         onEdgeClick={(_, edge) => onSelectEdge(edge.id)}
-        onPaneClick={() => {
-          onSelectNode(undefined);
-          onSelectEdge(undefined);
-        }}
+        onPaneClick={onClearSelection}
         fitView
         minZoom={0.45}
         maxZoom={1.6}
@@ -1060,35 +1138,62 @@ function VersionDiff({
   previous: WorkflowDefinition;
   current: WorkflowDefinition;
 }) {
-  const added = current.nodes.filter((node) => !previous.nodes.some((old) => old.id === node.id));
-  const removed = previous.nodes.filter(
-    (node) => !current.nodes.some((next) => next.id === node.id),
+  const diff = diffWorkflowVersions(previous, current);
+  const changedFields = diff.changedWorkflowFields.map((field) =>
+    field === "name"
+      ? "name"
+      : field === "description"
+        ? "description"
+        : field === "inputs"
+          ? "inputs"
+          : field === "defaults"
+            ? "provider defaults"
+            : field === "policies"
+              ? "policies"
+              : field,
   );
-  const changed = current.nodes.filter((node) => {
-    const old = previous.nodes.find((candidate) => candidate.id === node.id);
-    return old && JSON.stringify(old) !== JSON.stringify(node);
-  });
+  const changedCount =
+    diff.changedNodes.length + diff.changedEdges.length + (diff.workflowChanged ? 1 : 0);
   return (
     <details className="editor-diff">
       <summary>
-        Version diff · {added.length} added · {removed.length} removed · {changed.length} changed
+        Version diff · {diff.addedNodes.length + diff.addedEdges.length} added ·{" "}
+        {diff.removedNodes.length + diff.removedEdges.length} removed · {changedCount} changed
       </summary>
       <ul>
-        {added.map((node) => (
+        {diff.addedNodes.map((node) => (
           <li className="editor-diff__add" key={`add-${node.id}`}>
             + {node.name}
           </li>
         ))}
-        {removed.map((node) => (
+        {diff.removedNodes.map((node) => (
           <li className="editor-diff__remove" key={`remove-${node.id}`}>
             − {node.name}
           </li>
         ))}
-        {changed.map((node) => (
+        {diff.changedNodes.map(({ after: node }) => (
           <li className="editor-diff__change" key={`change-${node.id}`}>
             ~ {node.name}
           </li>
         ))}
+        {diff.addedEdges.map((edge) => (
+          <li className="editor-diff__add" key={`add-edge-${edge.id}`}>
+            + edge {edge.id}
+          </li>
+        ))}
+        {diff.removedEdges.map((edge) => (
+          <li className="editor-diff__remove" key={`remove-edge-${edge.id}`}>
+            − edge {edge.id}
+          </li>
+        ))}
+        {diff.changedEdges.map(({ after: edge }) => (
+          <li className="editor-diff__change" key={`change-edge-${edge.id}`}>
+            ~ edge {edge.id}
+          </li>
+        ))}
+        {changedFields.length ? (
+          <li className="editor-diff__change">~ workflow {changedFields.join(", ")}</li>
+        ) : null}
       </ul>
     </details>
   );
@@ -1128,8 +1233,8 @@ export function WorkflowEditorPage({
       editorStoreRef.current = store;
       return store.subscribe((state) => {
         setWorkflow(state.document);
-        setNodes(toFlowNodes(state.document, state.positions));
-        setEdges(toFlowEdges(state.document));
+        setNodes(toFlowNodes(state.document, state.positions, state.selection.nodeIds));
+        setEdges(toFlowEdges(state.document, state.selection.edgeIds));
         setEditorTick((tick) => tick + 1);
       });
     },
@@ -1230,6 +1335,21 @@ export function WorkflowEditorPage({
         metadata: {},
       },
     });
+  }, []);
+  const selectNode = useCallback((id?: string) => {
+    editorStoreRef.current?.getState().selectNodes(id ? [id] : []);
+    setSelectedNodeId(id);
+    setSelectedEdgeId(undefined);
+  }, []);
+  const selectEdge = useCallback((id?: string) => {
+    editorStoreRef.current?.getState().selectEdges(id ? [id] : []);
+    setSelectedEdgeId(id);
+    setSelectedNodeId(undefined);
+  }, []);
+  const clearSelection = useCallback(() => {
+    editorStoreRef.current?.getState().clearSelection();
+    setSelectedNodeId(undefined);
+    setSelectedEdgeId(undefined);
   }, []);
   const selectedNode = workflow?.nodes.find((node) => node.id === selectedNodeId);
   const dirty = Boolean(
@@ -1342,7 +1462,7 @@ export function WorkflowEditorPage({
   const redo = () => {
     editorStoreRef.current?.getState().redo();
   };
-  const save = async () => {
+  const save = useCallback(async () => {
     if (!workflow || !record || !editorAdapter) {
       setNotice("No persistence adapter is connected; changes remain local.");
       return;
@@ -1380,7 +1500,7 @@ export function WorkflowEditorPage({
     } finally {
       setSaving(false);
     }
-  };
+  }, [editorAdapter, record, workflow]);
   const run = async () => {
     if (!record || !editorAdapter || dirty) return;
     setRunning(true);
@@ -1395,6 +1515,63 @@ export function WorkflowEditorPage({
       setRunning(false);
     }
   };
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const editableTarget = Boolean(
+        target?.isContentEditable ||
+          target?.tagName === "INPUT" ||
+          target?.tagName === "TEXTAREA" ||
+          target?.tagName === "SELECT",
+      );
+      const intent = keyboardIntent(event, { editableTarget });
+      if (!intent) return;
+      let handled = true;
+      const store = editorStoreRef.current?.getState();
+      if (!store) return;
+      switch (intent) {
+        case "undo":
+          handled = store.undo();
+          break;
+        case "redo":
+          handled = store.redo();
+          break;
+        case "save":
+          void save();
+          break;
+        case "delete":
+          if (selectedNodeId) {
+            store.apply({ type: "remove_node", nodeId: selectedNodeId });
+            setSelectedNodeId(undefined);
+          } else if (selectedEdgeId) {
+            store.apply({ type: "remove_edge", edgeId: selectedEdgeId });
+            setSelectedEdgeId(undefined);
+          } else {
+            handled = false;
+          }
+          break;
+        case "select_all":
+          store.selectNodes(workflow?.nodes.map((node) => node.id) ?? []);
+          setSelectedNodeId(workflow?.nodes[0]?.id);
+          setSelectedEdgeId(undefined);
+          break;
+        case "clear_selection":
+          store.clearSelection();
+          setSelectedNodeId(undefined);
+          setSelectedEdgeId(undefined);
+          break;
+        case "auto_layout":
+          store.autoLayout();
+          setNotice("Layout arranged for editing; positions are local to this Studio view.");
+          break;
+        default:
+          handled = false;
+      }
+      if (handled) event.preventDefault();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [workflow, selectedNodeId, selectedEdgeId, save]);
   const exportWorkflow = () => {
     if (!workflow) return;
     const blob = new Blob([JSON.stringify(workflow, null, 2)], { type: "application/json" });
@@ -1448,8 +1625,9 @@ export function WorkflowEditorPage({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
-        onSelectNode={setSelectedNodeId}
-        onSelectEdge={setSelectedEdgeId}
+        onSelectNode={selectNode}
+        onSelectEdge={selectEdge}
+        onClearSelection={clearSelection}
         canUndo={Boolean(editorStoreRef.current?.getState().history.past.length)}
         canRedo={Boolean(editorStoreRef.current?.getState().history.future.length)}
         onUndo={undo}
@@ -1489,6 +1667,7 @@ function PageEditorLayout(props: {
   onConnect: (connection: Connection) => void;
   onSelectNode: (id?: string) => void;
   onSelectEdge: (id?: string) => void;
+  onClearSelection: () => void;
   canUndo: boolean;
   canRedo: boolean;
   onUndo: () => void;

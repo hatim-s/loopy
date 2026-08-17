@@ -170,6 +170,39 @@ describe("editor core", () => {
     ).toMatchObject({ ok: false, reason: "missing_node" });
   });
 
+  test("edits and removes indexed verification commands without replacing siblings", () => {
+    const store = createEditorStore(fixture());
+    const verifyId = store.getState().document.nodes.find((node) => node.kind === "verify")
+      ?.id as string;
+    expect(
+      store.getState().apply({
+        type: "add_verify_command",
+        nodeId: verifyId,
+        command: { command: "bun", args: ["run", "lint"], timeoutMs: 120000 },
+      }).ok,
+    ).toBe(true);
+    expect(
+      store.getState().apply({
+        type: "update_verify_command",
+        nodeId: verifyId,
+        index: 1,
+        command: { args: ["run", "check:focused"] },
+      }).ok,
+    ).toBe(true);
+    expect(store.getState().document.nodes.find((node) => node.id === verifyId)).toMatchObject({
+      commands: [
+        { command: "bun", args: ["test"] },
+        { command: "bun", args: ["run", "check:focused"] },
+      ],
+    });
+    expect(
+      store.getState().apply({ type: "remove_verify_command", nodeId: verifyId, index: 0 }).ok,
+    ).toBe(true);
+    expect(store.getState().document.nodes.find((node) => node.id === verifyId)).toMatchObject({
+      commands: [{ command: "bun", args: ["run", "check:focused"] }],
+    });
+  });
+
   test("undo/redo is bounded and a new edit invalidates redo", () => {
     const store = createEditorStore(fixture(), { historyLimit: 2 });
     const first = store.getState().document.nodes[0]?.id as string;
@@ -279,5 +312,30 @@ describe("editor core", () => {
     expect(keyboardIntent({ key: "z", metaKey: true })).toBe("undo");
     expect(keyboardIntent({ key: "z", ctrlKey: true, shiftKey: true })).toBe("redo");
     expect(keyboardIntent({ key: "l" })).toBe("auto_layout");
+    expect(keyboardIntent({ key: "Delete" }, { editableTarget: true })).toBeUndefined();
+
+    const edgeId = before.edges[0]?.id;
+    if (!edgeId) throw new Error("fixture must have an edge");
+    const edge = before.edges[0];
+    if (!edge) throw new Error("fixture must have an edge");
+    after.edges[0] = { ...edge, label: "changed" };
+    after.inputs = [{ name: "TARGET", type: "string", required: false, secret: false }];
+    after.policies = { ...before.policies, concurrency: { maxParallel: 2 } };
+    after.metadata = { ...before.metadata, tags: ["updated"] };
+    expect(diffWorkflowVersions(before, after)).toMatchObject({
+      changedEdges: [{ after: { id: edgeId, label: "changed" } }],
+      changedWorkflowFields: expect.arrayContaining(["inputs", "policies", "metadata"]),
+      workflowChanged: true,
+    });
+  });
+
+  test("node and edge selections are mutually exclusive", () => {
+    const store = createEditorStore(fixture());
+    const nodeId = store.getState().document.nodes[0]?.id as string;
+    const edgeId = store.getState().document.edges[0]?.id as string;
+    store.getState().selectNodes([nodeId]);
+    expect(store.getState().selection).toEqual({ nodeIds: [nodeId], edgeIds: [] });
+    store.getState().selectEdges([edgeId]);
+    expect(store.getState().selection).toEqual({ nodeIds: [], edgeIds: [edgeId] });
   });
 });

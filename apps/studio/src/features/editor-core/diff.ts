@@ -2,6 +2,9 @@ import type { WorkflowDefinition, WorkflowEdge, WorkflowNode } from "@loopy/cont
 
 export type WorkflowDiff = {
   workflowChanged: boolean;
+  changedWorkflowFields: Array<
+    "name" | "description" | "inputs" | "defaults" | "policies" | "triggers" | "metadata"
+  >;
   addedNodes: WorkflowNode[];
   removedNodes: WorkflowNode[];
   changedNodes: Array<{ before: WorkflowNode; after: WorkflowNode }>;
@@ -34,12 +37,16 @@ export function diffWorkflowVersions(
     const previous = beforeEdges.get(edge.id);
     return previous && !equalJson(previous, edge) ? [{ before: previous, after: edge }] : [];
   });
-  const withoutGraph = (workflow: WorkflowDefinition) => {
-    const { nodes: _nodes, edges: _edges, ...rest } = workflow;
-    return rest;
-  };
+  const changedWorkflowFields = (
+    ["name", "description", "inputs", "defaults", "policies", "triggers", "metadata"] as const
+  ).filter((field) => {
+    const beforeValue = before[field];
+    const afterValue = after[field];
+    return !equalJson(beforeValue, afterValue);
+  });
   return {
-    workflowChanged: !equalJson(withoutGraph(before), withoutGraph(after)),
+    workflowChanged: changedWorkflowFields.length > 0,
+    changedWorkflowFields: [...changedWorkflowFields],
     addedNodes,
     removedNodes,
     changedNodes,
