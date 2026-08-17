@@ -27,7 +27,6 @@ import {
 } from "@phosphor-icons/react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import {
-  addEdge,
   Background,
   type Connection,
   Controls,
@@ -43,9 +42,10 @@ import {
   useEdgesState,
   useNodesState,
 } from "@xyflow/react";
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ApiClient } from "../app/api";
 import { ErrorState, LoadingState } from "../components/primitives/states";
+import { createEditorStore, type EditorNodePatch } from "./editor-core/index.ts";
 
 export type EditorWorkflowRecord = {
   workflowId: string;
@@ -73,6 +73,15 @@ export type WorkflowEditorAdapter = {
     version: number,
     input?: Record<string, unknown>,
   ) => Promise<{ id: string }>;
+  validate: (definition: WorkflowDefinition) => Promise<{
+    valid: boolean;
+    diagnostics?: Array<{
+      code?: string;
+      message: string;
+      path?: string;
+      severity?: "error" | "warning";
+    }>;
+  }>;
 };
 
 const asWorkflow = (value: unknown): EditorWorkflowRecord | undefined => {
@@ -93,24 +102,34 @@ const asWorkflow = (value: unknown): EditorWorkflowRecord | undefined => {
 export function createWorkflowEditorAdapter(api: ApiClient): WorkflowEditorAdapter {
   return {
     async load(workflowId, version) {
-      const versions = await api.request<unknown>(
-        `/workflows/${encodeURIComponent(workflowId)}/${version ?? 1}`,
-      );
-      const record = asWorkflow(versions);
+      const path =
+        version === undefined
+          ? `/workflows/${encodeURIComponent(workflowId)}`
+          : `/workflows/${encodeURIComponent(workflowId)}/${version}`;
+      const response = await api.request<unknown>(path);
+      const record =
+        asWorkflow(response) ??
+        (response &&
+        typeof response === "object" &&
+        Array.isArray((response as { versions?: unknown[] }).versions)
+          ? asWorkflow((response as { versions: unknown[] }).versions.at(-1))
+          : undefined);
       if (!record) throw new Error("The local API returned an invalid workflow version.");
       return record;
     },
     async save({ workflowId, baseVersion, definition, summary }) {
-      void baseVersion;
       void summary;
-      const result = await api.request<unknown>("/workflows", {
-        method: "POST",
-        body: JSON.stringify({
-          workflowId,
-          version: baseVersion + 1,
-          definition: { ...definition, workflowVersion: baseVersion + 1 },
-        }),
-      });
+      const previous = await api.request<EditorWorkflowRecord>(
+        `/workflows/${encodeURIComponent(workflowId)}/${baseVersion}`,
+      );
+      const operations = workflowPatchOperations(previous.definition, definition);
+      const result = await api.request<unknown>(
+        `/workflows/${encodeURIComponent(workflowId)}/patch`,
+        {
+          method: "POST",
+          body: JSON.stringify({ baseVersion, operations }),
+        },
+      );
       const record = asWorkflow(result);
       if (!record) throw new Error("The local API returned an invalid saved workflow version.");
       return record;
@@ -124,7 +143,79 @@ export function createWorkflowEditorAdapter(api: ApiClient): WorkflowEditorAdapt
       if (!id) throw new Error("The local API did not return a run id.");
       return { id };
     },
+    async validate(definition) {
+      return api.request(`/workflows/${encodeURIComponent(definition.id)}/validate`, {
+        method: "POST",
+        body: JSON.stringify({ definition }),
+      });
+    },
   };
+}
+
+function workflowPatchOperations(
+  before: WorkflowDefinition,
+  after: WorkflowDefinition,
+): Array<Record<string, unknown>> {
+  const operations: Array<Record<string, unknown>> = [];
+  if (before.name !== after.name) operations.push({ op: "set_workflow_name", name: after.name });
+  if ((before.description ?? null) !== (after.description ?? null))
+    operations.push({ op: "set_workflow_description", description: after.description ?? null });
+  if (JSON.stringify(before.defaults) !== JSON.stringify(after.defaults))
+    operations.push({ op: "set_provider_defaults", defaults: after.defaults });
+  if (JSON.stringify(before.policies) !== JSON.stringify(after.policies))
+    operations.push({ op: "set_policy", policies: after.policies });
+  const beforeInputs = new Map(before.inputs.map((input) => [input.name, input]));
+  const afterInputs = new Map(after.inputs.map((input) => [input.name, input]));
+  for (const name of beforeInputs.keys())
+    if (!afterInputs.has(name)) operations.push({ op: "remove_input", name });
+  for (const input of after.inputs) {
+    if (JSON.stringify(beforeInputs.get(input.name)) !== JSON.stringify(input))
+      operations.push({ op: "set_input", input });
+  }
+  const beforeNodes = new Map(before.nodes.map((node) => [node.id, node]));
+  const afterNodes = new Map(after.nodes.map((node) => [node.id, node]));
+  for (const node of before.nodes)
+    if (!afterNodes.has(node.id)) operations.push({ op: "remove_node", nodeId: node.id });
+  for (const node of after.nodes) {
+    if (!beforeNodes.has(node.id)) operations.push({ op: "add_node", node });
+    else if (JSON.stringify(beforeNodes.get(node.id)) !== JSON.stringify(node))
+      operations.push({ op: "replace_node", node });
+  }
+  const beforeEdges = new Map(before.edges.map((edge) => [edge.id, edge]));
+  const afterEdges = new Map(after.edges.map((edge) => [edge.id, edge]));
+  const removedNodeIds = new Set(
+    before.nodes.filter((node) => !afterNodes.has(node.id)).map((node) => node.id),
+  );
+  for (const edge of before.edges)
+    if (
+      !afterEdges.has(edge.id) &&
+      !removedNodeIds.has(edge.source) &&
+      !removedNodeIds.has(edge.target)
+    )
+      operations.push({ op: "remove_edge", edgeId: edge.id });
+  for (const edge of after.edges) {
+    if (!beforeEdges.has(edge.id)) operations.push({ op: "add_edge", edge });
+    else if (JSON.stringify(beforeEdges.get(edge.id)) !== JSON.stringify(edge)) {
+      const previous = beforeEdges.get(edge.id);
+      if (
+        previous &&
+        (previous.source !== edge.source ||
+          previous.target !== edge.target ||
+          ((previous.label ?? null) !== (edge.label ?? null) && !edge.label) ||
+          JSON.stringify(previous.metadata) !== JSON.stringify(edge.metadata))
+      ) {
+        operations.push({ op: "remove_edge", edgeId: edge.id });
+        operations.push({ op: "add_edge", edge });
+        continue;
+      }
+      if (edge.label && previous?.label !== edge.label)
+        operations.push({ op: "set_edge_label", edgeId: edge.id, label: edge.label });
+      if (edge.condition && JSON.stringify(previous?.condition) !== JSON.stringify(edge.condition))
+        operations.push({ op: "set_edge_condition", edgeId: edge.id, condition: edge.condition });
+    }
+  }
+  if (operations.length === 0) operations.push({ op: "set_workflow_name", name: after.name });
+  return operations;
 }
 
 function uuid(): string {
@@ -238,11 +329,17 @@ function WorkflowNodeCard({ data, selected }: { data: EditorNodeData; selected?:
 
 const nodeTypes = { workflow: WorkflowNodeCard };
 
-function toFlowNodes(workflow: WorkflowDefinition): EditorNode[] {
+function toFlowNodes(
+  workflow: WorkflowDefinition,
+  positions?: Record<string, { x: number; y: number }>,
+): EditorNode[] {
   return workflow.nodes.map((workflowNode, index) => ({
     id: workflowNode.id,
     type: "workflow",
-    position: { x: 80 + (index % 3) * 250, y: 90 + Math.floor(index / 3) * 150 },
+    position: positions?.[workflowNode.id] ?? {
+      x: 80 + (index % 3) * 250,
+      y: 90 + Math.floor(index / 3) * 150,
+    },
     data: { workflowNode },
   }));
 }
@@ -257,32 +354,6 @@ function toFlowEdges(workflow: WorkflowDefinition): Edge[] {
     type: "default",
     animated: false,
   }));
-}
-
-function fromFlow(
-  nodes: EditorNode[],
-  edges: Edge[],
-  previous: WorkflowDefinition,
-): WorkflowDefinition {
-  const nodeIds = new Set(nodes.map((node) => node.id));
-  return {
-    ...previous,
-    nodes: nodes.map((node) => node.data.workflowNode),
-    edges: edges
-      .filter((edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target))
-      .map((edge) => ({
-        id: edge.id,
-        source: edge.source,
-        target: edge.target,
-        ...(typeof edge.label === "string" && edge.label.trim() ? { label: edge.label } : {}),
-        ...(edge.data && typeof edge.data === "object" && "workflowEdge" in edge.data
-          ? { condition: (edge.data as { workflowEdge: WorkflowEdge }).workflowEdge.condition }
-          : {}),
-        metadata:
-          (edge.data as { workflowEdge?: WorkflowEdge } | undefined)?.workflowEdge?.metadata ?? {},
-      })),
-    metadata: { ...previous.metadata, updatedAt: now() },
-  };
 }
 
 function diagnosticsFor(workflow: WorkflowDefinition): EditorDiagnostic[] {
@@ -1043,20 +1114,36 @@ export function WorkflowEditorPage({
   const [edges, setEdges] = useEdgesState<Edge>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string>();
   const [selectedEdgeId, setSelectedEdgeId] = useState<string>();
-  const [history, setHistory] = useState<WorkflowDefinition[]>([]);
-  const [future, setFuture] = useState<WorkflowDefinition[]>([]);
   const [diagnostics, setDiagnostics] = useState<EditorDiagnostic[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
   const [notice, setNotice] = useState<string>();
+  const editorStoreRef = useRef<ReturnType<typeof createEditorStore> | undefined>(undefined);
+  const [, setEditorTick] = useState(0);
+
+  const attachEditorStore = useCallback(
+    (store: ReturnType<typeof createEditorStore>) => {
+      editorStoreRef.current = store;
+      return store.subscribe((state) => {
+        setWorkflow(state.document);
+        setNodes(toFlowNodes(state.document, state.positions));
+        setEdges(toFlowEdges(state.document));
+        setEditorTick((tick) => tick + 1);
+      });
+    },
+    [setNodes, setEdges],
+  );
 
   useEffect(() => {
     let active = true;
+    let unsubscribe: (() => void) | undefined;
     setStatus("loading");
     if (!editorAdapter) {
       const value = fallbackWorkflow(workflowId);
+      const store = createEditorStore(value);
+      unsubscribe = attachEditorStore(store);
       setRecord({ workflowId, version: 1, definition: value });
       setWorkflow(value);
       setPrevious(value);
@@ -1065,6 +1152,7 @@ export function WorkflowEditorPage({
       setStatus("ready");
       return () => {
         active = false;
+        unsubscribe?.();
       };
     }
     void editorAdapter
@@ -1074,6 +1162,8 @@ export function WorkflowEditorPage({
         setRecord(loaded);
         setWorkflow(loaded.definition);
         setPrevious(loaded.definition);
+        const store = createEditorStore(loaded.definition);
+        unsubscribe = attachEditorStore(store);
         setNodes(toFlowNodes(loaded.definition));
         setEdges(toFlowEdges(loaded.definition));
         setStatus("ready");
@@ -1085,29 +1175,25 @@ export function WorkflowEditorPage({
       });
     return () => {
       active = false;
+      unsubscribe?.();
+      editorStoreRef.current = undefined;
     };
-  }, [editorAdapter, workflowId, setNodes, setEdges]);
+  }, [attachEditorStore, editorAdapter, workflowId, setNodes, setEdges]);
 
   const commitWorkflow = useCallback(
     (next: WorkflowDefinition, preserveHistory = true) => {
       if (!workflow) return;
-      if (preserveHistory) {
-        setHistory((items) => [...items.slice(-49), workflow]);
-        setFuture([]);
+      const store = editorStoreRef.current;
+      if (store) {
+        store.getState().importDocument(next);
+        return;
       }
+      void preserveHistory;
       setWorkflow(next);
       setNodes(toFlowNodes(next));
       setEdges(toFlowEdges(next));
     },
     [setNodes, setEdges, workflow],
-  );
-  const syncGraph = useCallback(
-    (nextNodes: EditorNode[], nextEdges: Edge[]) => {
-      if (!workflow) return;
-      const next = fromFlow(nextNodes, nextEdges, workflow);
-      setWorkflow(next);
-    },
-    [workflow],
   );
   const onNodesChange = useCallback(
     (changes: NodeChange<EditorNode>[]) => {
@@ -1118,76 +1204,58 @@ export function WorkflowEditorPage({
             return { ...node, position: change.position };
           return node;
         });
-        queueMicrotask(() => syncGraph(next, edges));
+        for (const change of changes) {
+          if (change.type === "position" && change.position)
+            editorStoreRef.current?.getState().setPosition(change.id, change.position);
+        }
         return next;
       });
     },
-    [edges, setNodes, syncGraph],
+    [setNodes],
   );
-  const onEdgesChange = useCallback(
-    (changes: EdgeChange[]) => {
-      setEdges((current) => {
-        const next = current.filter(
-          (edge) =>
-            !changes.some(
-              (change) => change.type === "remove" && "id" in change && change.id === edge.id,
-            ),
-        );
-        queueMicrotask(() => syncGraph(nodes, next));
-        return next;
-      });
-    },
-    [nodes, setEdges, syncGraph],
-  );
-  const onConnect = useCallback(
-    (connection: Connection) => {
-      if (!connection.source || !connection.target) return;
-      const edge: Edge = {
-        id: uuid(),
+  const onEdgesChange = useCallback((changes: EdgeChange[]) => {
+    for (const change of changes)
+      if (change.type === "remove" && "id" in change)
+        editorStoreRef.current?.getState().apply({ type: "remove_edge", edgeId: change.id });
+  }, []);
+  const onConnect = useCallback((connection: Connection) => {
+    if (!connection.source || !connection.target) return;
+    const edgeId = uuid();
+    editorStoreRef.current?.getState().apply({
+      type: "add_edge",
+      edge: {
+        id: edgeId,
         source: connection.source,
         target: connection.target,
-        data: {
-          workflowEdge: {
-            id: uuid(),
-            source: connection.source,
-            target: connection.target,
-            metadata: {},
-          },
-        },
-      };
-      const nextEdges = addEdge(edge, edges);
-      setEdges(nextEdges);
-      if (workflow) setWorkflow(fromFlow(nodes, nextEdges, workflow));
-    },
-    [edges, nodes, setEdges, workflow],
-  );
+        metadata: {},
+      },
+    });
+  }, []);
   const selectedNode = workflow?.nodes.find((node) => node.id === selectedNodeId);
   const dirty = Boolean(
     workflow && previous && JSON.stringify(workflow) !== JSON.stringify(previous),
   );
   const updateNode = (nextNode: WorkflowNode) => {
     if (!workflow || !selectedNode) return;
-    commitWorkflow({
-      ...workflow,
-      nodes: workflow.nodes.map((node) => (node.id === nextNode.id ? nextNode : node)),
+    const { id, kind: _kind, ...patch } = nextNode;
+    editorStoreRef.current?.getState().apply({
+      type: "update_node",
+      nodeId: id,
+      patch: patch as EditorNodePatch,
     });
   };
   const updateEdge = (nextEdge: WorkflowEdge) => {
     if (!workflow) return;
-    commitWorkflow({
-      ...workflow,
-      edges: workflow.edges.map((edge) => (edge.id === nextEdge.id ? nextEdge : edge)),
+    const { id, source: _source, target: _target, ...patch } = nextEdge;
+    editorStoreRef.current?.getState().apply({
+      type: "update_edge",
+      edgeId: id,
+      patch,
     });
   };
   const deleteNode = () => {
     if (!workflow || !selectedNodeId) return;
-    commitWorkflow({
-      ...workflow,
-      nodes: workflow.nodes.filter((node) => node.id !== selectedNodeId),
-      edges: workflow.edges.filter(
-        (edge) => edge.source !== selectedNodeId && edge.target !== selectedNodeId,
-      ),
-    });
+    editorStoreRef.current?.getState().apply({ type: "remove_node", nodeId: selectedNodeId });
     setSelectedNodeId(undefined);
   };
   const addNode = (kind: WorkflowNode["kind"]) => {
@@ -1229,44 +1297,44 @@ export function WorkflowEditorPage({
       };
     else if (kind === "join") node = { ...base, kind, policy: "all", outputMode: "array" };
     else node = { ...base, kind, operation: "pick", mapping: {} };
-    commitWorkflow({ ...workflow, nodes: [...workflow.nodes, node] });
+    editorStoreRef.current?.getState().apply({ type: "add_node", node });
     setSelectedNodeId(id);
   };
   const autoLayout = () => {
-    setNodes((current) =>
-      current.map((node, index) => ({
-        ...node,
-        position: { x: 80 + (index % 3) * 250, y: 90 + Math.floor(index / 3) * 150 },
-      })),
-    );
+    editorStoreRef.current?.getState().autoLayout();
     setNotice("Layout arranged for editing; positions are local to this Studio view.");
   };
-  const validate = () => {
-    const result = diagnosticsFor(workflow ?? fallbackWorkflow(workflowId));
-    setDiagnostics(result);
-    setNotice(
-      result.length
-        ? `${result.length} diagnostic${result.length === 1 ? "" : "s"} found.`
-        : "Workflow is valid for local editing.",
-    );
+  const validate = async () => {
+    const current = workflow ?? fallbackWorkflow(workflowId);
+    setError(undefined);
+    try {
+      const result = editorAdapter
+        ? await editorAdapter.validate(current)
+        : {
+            valid: diagnosticsFor(current).every((item) => item.severity !== "error"),
+            diagnostics: diagnosticsFor(current),
+          };
+      editorStoreRef.current?.getState().applyValidation(result);
+      const diagnostics = (result.diagnostics ?? []).map((item) => ({
+        path: item.path ?? "workflow",
+        message: item.message,
+        severity: item.severity ?? "error",
+      }));
+      setDiagnostics(diagnostics);
+      setNotice(
+        diagnostics.length
+          ? `${diagnostics.length} diagnostic${diagnostics.length === 1 ? "" : "s"} found.`
+          : "Workflow is valid for local editing.",
+      );
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
   };
   const undo = () => {
-    const old = history.at(-1);
-    if (!old || !workflow) return;
-    setFuture((items) => [...items, workflow]);
-    setHistory((items) => items.slice(0, -1));
-    setWorkflow(old);
-    setNodes(toFlowNodes(old));
-    setEdges(toFlowEdges(old));
+    editorStoreRef.current?.getState().undo();
   };
   const redo = () => {
-    const next = future.at(-1);
-    if (!next || !workflow) return;
-    setHistory((items) => [...items, workflow]);
-    setFuture((items) => items.slice(0, -1));
-    setWorkflow(next);
-    setNodes(toFlowNodes(next));
-    setEdges(toFlowEdges(next));
+    editorStoreRef.current?.getState().redo();
   };
   const save = async () => {
     if (!workflow || !record || !editorAdapter) {
@@ -1290,11 +1358,7 @@ export function WorkflowEditorPage({
       });
       setRecord(saved);
       setPrevious(saved.definition);
-      setWorkflow(saved.definition);
-      setNodes(toFlowNodes(saved.definition));
-      setEdges(toFlowEdges(saved.definition));
-      setHistory([]);
-      setFuture([]);
+      editorStoreRef.current?.getState().reset(saved.definition);
       setNotice(`Saved version ${saved.version}.`);
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -1358,8 +1422,8 @@ export function WorkflowEditorPage({
         onConnect={onConnect}
         onSelectNode={setSelectedNodeId}
         onSelectEdge={setSelectedEdgeId}
-        canUndo={history.length > 0}
-        canRedo={future.length > 0}
+        canUndo={Boolean(editorStoreRef.current?.getState().history.past.length)}
+        canRedo={Boolean(editorStoreRef.current?.getState().history.future.length)}
         onUndo={undo}
         onRedo={redo}
         onAutoLayout={autoLayout}

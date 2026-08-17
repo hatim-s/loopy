@@ -11,6 +11,8 @@ import {
   WorkflowNodeCard,
 } from "../src/features/editor";
 
+const domIt = typeof document === "undefined" ? it.skip : it;
+
 describe("workflow editor model", () => {
   it("projects every contract node and edge into an editable graph", () => {
     const workflow = fallbackWorkflow("11111111-1111-4111-8111-111111111111");
@@ -42,7 +44,7 @@ describe("workflow editor model", () => {
     );
   });
 
-  it("keeps custom nodes named and keyboard discoverable", () => {
+  domIt("keeps custom nodes named and keyboard discoverable", () => {
     const workflow = fallbackWorkflow("11111111-1111-4111-8111-111111111111");
     const node = workflow.nodes[0];
     if (!node) throw new Error("fixture did not contain an agent node");

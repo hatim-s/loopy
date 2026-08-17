@@ -43,6 +43,7 @@ export type EditorStore = {
   autoLayout: () => Record<string, EditorPosition>;
   applyValidation: (result: ServerValidationResult) => void;
   markSaved: () => void;
+  reset: (document: WorkflowDefinition, positions?: Record<string, EditorPosition>) => void;
   importDocument: (
     input: unknown,
   ) => { ok: true } | { ok: false; diagnostics: EditorValidation["diagnostics"] };
@@ -212,6 +213,17 @@ export function createEditorStore(
       markSaved() {
         set((state) => {
           state.dirty = false;
+        });
+      },
+      reset(document, positions = autoLayout(document)) {
+        set((state) => {
+          state.document = structuredClone(document) as never;
+          state.positions = structuredClone(positions);
+          state.selection = { nodeIds: [], edgeIds: [] };
+          state.dirty = false;
+          state.revision = 0;
+          state.validation = { status: "idle", diagnostics: [] };
+          state.history = { past: [], future: [], limit: historyLimit };
         });
       },
       importDocument(input) {
