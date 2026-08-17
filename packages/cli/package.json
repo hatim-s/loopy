@@ -19,7 +19,8 @@
   },
   "scripts": {
     "build": "bun build src/index.ts --outfile dist/index.js --target bun",
-    "prepack": "bun run build",
+    "prepack": "bun scripts/build-package.ts",
+    "smoke:package": "bun scripts/package-smoke.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {

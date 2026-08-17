@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { JsonObject, JsonValue } from "@loopy/contracts";
 import { extractImportedSession } from "@loopy/extractor";
@@ -262,11 +262,14 @@ async function openStudio(
 }
 
 function studioPath(args: readonly string[], dependencies: UiDependencies): string {
-  return resolve(
-    option(args, "--studio-dir") ??
-      dependencies.studioDir ??
-      resolve(import.meta.dir, "../../../apps/studio/dist"),
-  );
+  const explicit = option(args, "--studio-dir") ?? dependencies.studioDir;
+  if (explicit) return resolve(explicit);
+
+  // A packed CLI carries its Studio bundle beside the compiled entry point.
+  // Keep the repository build fallback for local development and source tests.
+  const packaged = resolve(import.meta.dir, "studio");
+  if (existsSync(resolve(packaged, "index.html"))) return packaged;
+  return resolve(import.meta.dir, "../../../apps/studio/dist");
 }
 
 async function launchUi(args: readonly string[], dependencies: CliDependencies): Promise<number> {
