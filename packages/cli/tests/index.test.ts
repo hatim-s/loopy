@@ -241,6 +241,20 @@ describe("loopy CLI shell", () => {
     output.mockRestore();
   });
 
+  it("routes replay and fork through the exported synchronous shell API", async () => {
+    const project = mkdtempSync(join(tmpdir(), "loopy-cli-router-"));
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      expect(main(["replay", "missing-run", "--project", project])).toBe(0);
+      expect(main(["fork", "missing-run", "--from-node", "node", "--project", project])).toBe(0);
+      await Bun.sleep(10);
+      expect(error).not.toHaveBeenCalledWith(expect.stringContaining("not implemented"));
+    } finally {
+      process.exitCode = 0;
+      error.mockRestore();
+    }
+  });
+
   it("returns a non-zero status when run is missing its approved workflow", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
 

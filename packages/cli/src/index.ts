@@ -21,7 +21,7 @@ import {
   type Storage,
 } from "@loopy/storage";
 import { DeterministicFakeProvider } from "@loopy/testing";
-import { encodeTraceJsonl, importTraceJsonl } from "@loopy/tracing";
+import { decodeTraceJsonl, encodeTraceJsonl } from "@loopy/tracing";
 import { doctorCommand } from "./doctor";
 import {
   cleanupCommand,
@@ -362,13 +362,8 @@ async function traceCommand(args: readonly string[], deps: CliDependencies): Pro
       return 0;
     }
     const content = readFileSync(resolve(fileOrRun), "utf8");
-    const result = await importTraceJsonl(
-      content,
-      { append: (event) => runtimeStore.appendTraceEvent(event.runId, event) },
-      {
-        rejectDiagnostics: true,
-      },
-    );
+    const result = decodeTraceJsonl(content, { rejectDiagnostics: true });
+    runtimeStore.appendTraceEvents(result.events);
     if (jsonOutput(args)) printJson({ events: result.events.length, lines: result.lines });
     else console.log(`imported ${result.events.length} trace event(s)`);
     return 0;
@@ -387,11 +382,6 @@ async function storageFor(
   if (deps.storageFactory) return deps.storageFactory(projectDir(args), readOnly);
   const { openStorage } = await import("@loopy/storage");
   return openStorage({ projectDir: projectDir(args), readOnly });
-  /*
-  return (deps.storageFactory ?? ((dir, ro) => openStorage({ projectDir: dir, readOnly: ro })))(
-    projectDir(args),
-    readOnly,
-  );*/
 }
 function jsonOutput(args: readonly string[]): boolean {
   return args.includes("--json");
@@ -1127,6 +1117,8 @@ export function main(
       "cancel",
       "retry",
       "trace",
+      "replay",
+      "fork",
       "ui",
       "schedule",
       "cleanup",
