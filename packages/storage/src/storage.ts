@@ -23,7 +23,7 @@ import { ScheduleRepository } from "./schedule-store.js";
 export const STORAGE_DIR = ".loopy";
 export const DATABASE_FILENAME = "loopy.db";
 export const LOCK_FILENAME = "loopy.lock";
-export const CURRENT_MIGRATION = 4;
+export const CURRENT_MIGRATION = 5;
 
 export type RunStatus =
   | "created"
@@ -197,8 +197,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS imported_sessions_content_hash_idx ON imported
   input_json TEXT NOT NULL DEFAULT '{}',
   expression TEXT NOT NULL,
   timezone TEXT NOT NULL DEFAULT 'UTC',
-  overlap_policy TEXT NOT NULL CHECK(overlap_policy IN ('allow','skip','queue')),
-  missed_policy TEXT NOT NULL CHECK(missed_policy IN ('skip','fire_once','catch_up')),
+  overlap_policy TEXT NOT NULL CHECK(overlap_policy IN ('skip','queue','cancel_previous')),
+  missed_policy TEXT NOT NULL CHECK(missed_policy IN ('skip','run_once')),
   enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
   next_fire_at TEXT,
   last_fire_at TEXT,
@@ -241,10 +241,36 @@ CREATE TABLE IF NOT EXISTS retention_policies (
   updated_at TEXT NOT NULL
 );`,
   ],
+  [
+    5,
+    `CREATE TABLE schedules_v5 (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  workflow_id TEXT NOT NULL,
+  workflow_version INTEGER NOT NULL CHECK(workflow_version > 0),
+  input_json TEXT NOT NULL DEFAULT '{}',
+  expression TEXT NOT NULL,
+  timezone TEXT NOT NULL DEFAULT 'UTC',
+  overlap_policy TEXT NOT NULL CHECK(overlap_policy IN ('skip','queue','cancel_previous')),
+  missed_policy TEXT NOT NULL CHECK(missed_policy IN ('skip','run_once')),
+  enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
+  next_fire_at TEXT,
+  last_fire_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY(workflow_id, workflow_version) REFERENCES workflow_versions(workflow_id, version)
+);
+INSERT INTO schedules_v5 SELECT id,name,workflow_id,workflow_version,input_json,expression,timezone,
+  CASE WHEN overlap_policy='allow' THEN 'skip' ELSE overlap_policy END,
+  CASE WHEN missed_policy IN ('fire_once','catch_up') THEN 'run_once' ELSE missed_policy END,
+  enabled,next_fire_at,last_fire_at,created_at,updated_at FROM schedules;
+DROP TABLE schedules;
+ALTER TABLE schedules_v5 RENAME TO schedules;
+CREATE INDEX IF NOT EXISTS schedules_due_idx ON schedules(enabled, next_fire_at);`,
+  ],
 ];
 
 function applyMigrations(db: Database): void {
-  db.run("PRAGMA foreign_keys = ON");
   db.run(
     "CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)",
   );
@@ -466,8 +492,8 @@ export interface CreateRunInput {
   createdAt?: string;
 }
 
-export type ScheduleOverlapPolicy = "allow" | "skip" | "queue";
-export type ScheduleMissedPolicy = "skip" | "fire_once" | "catch_up";
+export type ScheduleOverlapPolicy = "skip" | "queue" | "cancel_previous";
+export type ScheduleMissedPolicy = "skip" | "run_once";
 export type ScheduleFireStatus = "claimed" | "running" | "succeeded" | "failed" | "skipped";
 
 export interface ScheduleRecord {

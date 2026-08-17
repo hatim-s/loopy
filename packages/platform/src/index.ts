@@ -2,10 +2,10 @@ import { randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { CronExpressionParser } from "cron-parser";
+import { nextOccurrence } from "@loopy/scheduler";
 
-export type ScheduleOverlapPolicy = "allow" | "skip" | "queue" | "cancel_previous";
-export type ScheduleMissedPolicy = "skip" | "fire_once" | "catch_up";
+export type ScheduleOverlapPolicy = "skip" | "queue" | "cancel_previous";
+export type ScheduleMissedPolicy = "skip" | "run_once";
 
 export type LocalSchedule = {
   id: string;
@@ -114,7 +114,19 @@ export function validateCronExpression(
   if (!expression.trim()) throw new Error("Schedule cron expression is required");
   validateTimezone(timezone);
   try {
-    CronExpressionParser.parse(expression.trim(), { tz: timezone, currentDate: now });
+    nextOccurrence(
+      {
+        schemaVersion: "1",
+        scheduleId: "validation",
+        expression: expression.trim(),
+        timezone,
+        enabled: true,
+        overlap: "skip",
+        missed: "skip",
+        input: {},
+      },
+      now,
+    );
   } catch (error) {
     throw new Error(
       `Invalid cron expression '${expression}': ${error instanceof Error ? error.message : String(error)}`,
@@ -125,9 +137,19 @@ export function validateCronExpression(
 
 export function nextFireAt(expression: string, timezone: string, now = new Date()): string {
   validateCronExpression(expression, timezone, now);
-  const value = CronExpressionParser.parse(expression, { tz: timezone, currentDate: now })
-    .next()
-    .toISOString();
+  const value = nextOccurrence(
+    {
+      schemaVersion: "1",
+      scheduleId: "next-fire",
+      expression,
+      timezone,
+      enabled: true,
+      overlap: "skip",
+      missed: "skip",
+      input: {},
+    },
+    now,
+  ).toISOString();
   if (!value) throw new Error("Cron expression did not produce a next occurrence");
   return value;
 }

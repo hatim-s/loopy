@@ -10,6 +10,7 @@ import type {
   RuntimeSnapshot,
   RuntimeStore,
 } from "@loopy/runtime";
+import { nextOccurrence } from "@loopy/scheduler";
 import type {
   ArtifactRecord,
   AttemptRecord,
@@ -77,7 +78,12 @@ export type ScheduleCoordinator = (input: {
   now: string;
   activeRunIds: string[];
   scheduledAt: string;
-}) => Promise<"allow" | "skip" | "queue"> | "allow" | "skip" | "queue";
+}) =>
+  | Promise<"allow" | "skip" | "queue" | "cancel_previous">
+  | "allow"
+  | "skip"
+  | "queue"
+  | "cancel_previous";
 export type LocalApiOptions = {
   storage: LocalApiStorage;
   runtime?: RuntimeScheduler;
@@ -921,7 +927,17 @@ export function createLocalApi(options: LocalApiOptions): Hono {
         ? "skip"
         : active.length && schedule.overlapPolicy === "queue"
           ? "queue"
-          : "allow";
+          : active.length && schedule.overlapPolicy === "cancel_previous"
+            ? "cancel_previous"
+            : "allow";
+    if (decision === "cancel_previous") {
+      if (!scheduler || typeof scheduler.cancel !== "function")
+        capability("cancel_previous overlap requires a runtime scheduler with cancellation");
+      for (const runId of active) {
+        await scheduler.cancel(runId, "cancelled by a newer scheduled invocation");
+        store.updateLink(runId, "terminal");
+      }
+    }
     const claimed = store.claimFire({ scheduleId, fireKey, scheduledAt });
     if (claimed.runId) return { schedule, fire: claimed, idempotent: true };
     if (decision === "skip") {
@@ -942,8 +958,24 @@ export function createLocalApi(options: LocalApiOptions): Hono {
     const run = await scheduleEngine.start(workflow.definition, schedule.input);
     const runId = "runId" in run ? run.runId : run.id;
     const link = store.linkRun({ scheduleId, fireId: claimed.id, runId, state: "active" });
+    const nextFire =
+      schedule.expression === "manual"
+        ? undefined
+        : nextOccurrence(
+            {
+              schemaVersion: "1",
+              scheduleId: schedule.id,
+              expression: schedule.expression,
+              timezone: schedule.timezone,
+              enabled: schedule.enabled,
+              overlap: schedule.overlapPolicy === "skip" ? "skip" : "queue",
+              missed: schedule.missedPolicy === "skip" ? "skip" : "run_once",
+              input: schedule.input,
+            },
+            new Date(scheduledAt),
+          ).toISOString();
     return {
-      schedule: store.update(scheduleId, { lastFireAt: scheduledAt, nextFireAt: undefined }),
+      schedule: store.update(scheduleId, { lastFireAt: scheduledAt, nextFireAt: nextFire }),
       fire: store.updateFire(claimed.id, { runId, status: "running" }),
       link,
       idempotent: false,

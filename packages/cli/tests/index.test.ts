@@ -103,6 +103,16 @@ describe("loopy CLI shell", () => {
 
   it("creates and inspects local schedules through JSON CLI commands", async () => {
     const project = mkdtempSync(join(tmpdir(), "loopy-cli-schedule-"));
+    const setup = new Storage({ projectDir: project });
+    const definition = JSON.parse(
+      readFileSync(resolve("fixtures/workflows/valid-basic.json"), "utf8"),
+    ) as { id: string };
+    definition.id = "workflow-1";
+    setup.runtime.createWorkflowVersion({
+      workflowId: "workflow-1",
+      definition,
+    });
+    setup.close();
     const output: string[] = [];
     const log = vi.spyOn(console, "log").mockImplementation((...values) => {
       output.push(values.map((value) => String(value)).join(" "));
@@ -128,6 +138,62 @@ describe("loopy CLI shell", () => {
       expect(JSON.parse(output.at(-1) ?? "null").id).toBe("hourly");
       expect(await mainAsync(["schedule", "list", "--project", project, "--json"])).toBe(0);
       expect(JSON.parse(output.at(-1) ?? "[]")).toHaveLength(1);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("fires a persisted schedule through the SQLite runtime and exposes its events", async () => {
+    const project = mkdtempSync(join(tmpdir(), "loopy-cli-scheduled-run-"));
+    const setup = new Storage({ projectDir: project });
+    setup.runtime.createWorkflowVersion({
+      workflowId: "scheduled-workflow",
+      version: 1,
+      definition: {
+        id: "scheduled-workflow",
+        workflowVersion: 1,
+        nodes: [{ id: "agent", kind: "agent", name: "agent", prompt: "scheduled" }],
+        edges: [],
+        policies: { concurrency: { maxParallel: 1 } },
+      },
+    });
+    setup.close();
+    const output: string[] = [];
+    const log = vi.spyOn(console, "log").mockImplementation((...values) => {
+      output.push(values.map((value) => String(value)).join(" "));
+    });
+    try {
+      expect(
+        await mainAsync([
+          "schedule",
+          "create",
+          "--id",
+          "scheduled",
+          "--workflow",
+          "scheduled-workflow",
+          "--cron",
+          "* * * * *",
+          "--timezone",
+          "UTC",
+          "--project",
+          project,
+          "--json",
+        ]),
+      ).toBe(0);
+      expect(
+        await mainAsync(["schedule", "fire", "scheduled", "--project", project, "--json"]),
+      ).toBe(0);
+      const fired = JSON.parse(output.at(-1) ?? "null") as {
+        run: { run: { status: string }; events: unknown[] };
+      };
+      expect(fired.run.run.status).toBe("succeeded");
+      expect(fired.run.events.length).toBeGreaterThan(0);
+      const persisted = new Storage({ projectDir: project });
+      expect(persisted.runtime.listRuns("succeeded")).toHaveLength(1);
+      expect(
+        persisted.runtime.countEvents(persisted.runtime.listRuns("succeeded")[0]?.id ?? ""),
+      ).toBeGreaterThan(0);
+      persisted.close();
     } finally {
       log.mockRestore();
     }

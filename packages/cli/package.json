@@ -21,5 +21,15 @@
     "build": "bun build src/index.ts --outfile dist/index.js --target bun",
     "prepack": "bun run build",
     "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@loopy/contracts": "workspace:*",
+    "@loopy/extractor": "workspace:*",
+    "@loopy/local-api": "workspace:*",
+    "@loopy/platform": "workspace:*",
+    "@loopy/providers": "workspace:*",
+    "@loopy/runtime": "workspace:*",
+    "@loopy/storage": "workspace:*",
+    "@loopy/testing": "workspace:*"
   }
 }

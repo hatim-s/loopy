@@ -45,6 +45,16 @@
       "bin": {
         "loopy": "./dist/index.js",
       },
+      "devDependencies": {
+        "@loopy/contracts": "workspace:*",
+        "@loopy/extractor": "workspace:*",
+        "@loopy/local-api": "workspace:*",
+        "@loopy/platform": "workspace:*",
+        "@loopy/providers": "workspace:*",
+        "@loopy/runtime": "workspace:*",
+        "@loopy/storage": "workspace:*",
+        "@loopy/testing": "workspace:*",
+      },
     },
     "packages/contracts": {
       "name": "@loopy/contracts",
@@ -73,6 +83,7 @@
         "@loopy/contracts": "workspace:*",
         "@loopy/providers": "workspace:*",
         "@loopy/runtime": "workspace:*",
+        "@loopy/scheduler": "workspace:*",
         "@loopy/storage": "workspace:*",
         "hono": "4.9.6",
       },
@@ -81,7 +92,7 @@
       "name": "@loopy/platform",
       "version": "0.1.0",
       "dependencies": {
-        "cron-parser": "5.4.0",
+        "@loopy/scheduler": "workspace:*",
       },
     },
     "packages/providers": {
@@ -97,6 +108,14 @@
       "dependencies": {
         "@loopy/contracts": "workspace:*",
         "@loopy/providers": "workspace:*",
+      },
+    },
+    "packages/scheduler": {
+      "name": "@loopy/scheduler",
+      "version": "0.1.0",
+      "dependencies": {
+        "@loopy/contracts": "workspace:*",
+        "cron-parser": "5.4.0",
       },
     },
     "packages/storage": {
@@ -284,6 +303,8 @@
     "@loopy/providers": ["@loopy/providers@workspace:packages/providers"],
 
     "@loopy/runtime": ["@loopy/runtime@workspace:packages/runtime"],
+
+    "@loopy/scheduler": ["@loopy/scheduler@workspace:packages/scheduler"],
 
     "@loopy/storage": ["@loopy/storage@workspace:packages/storage"],
 

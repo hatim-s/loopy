@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import type { JsonObject } from "@loopy/contracts";
 import {
   createSchedule,
   FileScheduleStore,
@@ -12,6 +13,8 @@ import {
   uninstallSchedulerArtifacts,
   updateSchedule,
 } from "@loopy/platform";
+import type { RuntimeScheduler, RuntimeSnapshot } from "@loopy/runtime";
+import type { WorkflowVersionRecord } from "@loopy/storage";
 
 export type { LocalSchedule, ScheduleStore } from "@loopy/platform";
 
@@ -19,6 +22,8 @@ export type ScheduleDependencies = {
   storeFactory?: (projectDir: string) => ScheduleStore;
   store?: ScheduleStore;
   now?: () => Date;
+  runtime?: RuntimeScheduler;
+  workflow?: (workflowId: string, version: number) => WorkflowVersionRecord | undefined;
 };
 
 function value(args: readonly string[], name: string): string | undefined {
@@ -92,6 +97,20 @@ function requireSchedule(store: ScheduleStore, id: string): LocalSchedule {
   return schedule;
 }
 
+async function execute(
+  request: ReturnType<typeof fireSchedule>,
+  dependencies: ScheduleDependencies,
+): Promise<RuntimeSnapshot | undefined> {
+  if (!dependencies.runtime || !dependencies.workflow) return undefined;
+  const workflow = dependencies.workflow(request.workflowId, request.workflowVersion);
+  if (!workflow)
+    throw new Error(`Unknown workflow version '${request.workflowId}@${request.workflowVersion}'`);
+  return dependencies.runtime.run(
+    workflow.definition as Parameters<RuntimeScheduler["run"]>[0],
+    request.input as JsonObject,
+  );
+}
+
 export async function scheduleCommand(
   args: readonly string[],
   dependencies: ScheduleDependencies = {},
@@ -156,12 +175,28 @@ export async function scheduleCommand(
   }
   if (action === "fire") {
     const request = fireSchedule(store, requireId(args), now);
-    emit(args, request, `fired ${request.scheduleId} for ${request.workflowId}`);
+    const run = await execute(request, dependencies);
+    emit(
+      args,
+      run ? { request, run } : request,
+      run
+        ? `fired ${request.scheduleId} for ${request.workflowId} (${run.run.runId})`
+        : `fired ${request.scheduleId} for ${request.workflowId}`,
+    );
     return 0;
   }
   if (action === "tick") {
     const result = tickSchedules(store, now);
-    emit(args, result, `fired ${result.due.length}; skipped ${result.skipped.length}`);
+    const runs = [] as RuntimeSnapshot[];
+    for (const request of result.due) {
+      const run = await execute(request, dependencies);
+      if (run) runs.push(run);
+    }
+    emit(
+      args,
+      runs.length ? { ...result, runs } : result,
+      `fired ${result.due.length}; skipped ${result.skipped.length}`,
+    );
     return 0;
   }
   if (action === "install" || action === "uninstall") {

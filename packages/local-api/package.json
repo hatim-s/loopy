@@ -13,6 +13,7 @@
     "@loopy/contracts": "workspace:*",
     "@loopy/providers": "workspace:*",
     "@loopy/runtime": "workspace:*",
+    "@loopy/scheduler": "workspace:*",
     "@loopy/storage": "workspace:*",
     "hono": "4.9.6"
   }

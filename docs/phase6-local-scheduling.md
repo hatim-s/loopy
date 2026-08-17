@@ -1,9 +1,10 @@
 # Phase 6: local scheduling and packaging
 
-Loopy scheduling is local-first. Schedule definitions are stored in
-`.loopy/schedules.json` with mode `0600`; the runtime database remains the
-source of run and trace state. The platform adapter intentionally writes only
-the generated scheduler artifacts it owns.
+Loopy scheduling is local-first. Schedule definitions, durable fire claims,
+run links, and retention metadata are stored transactionally in
+`.loopy/loopy.db`; SQLite is the source of truth whenever a project database
+is available. The platform adapter is limited to generating and removing the
+explicit scheduler artifacts it owns.
 
 ## CLI
 
@@ -21,8 +22,11 @@ loopy cleanup apply --project . --max-age-days 30 --json
 ```
 
 `--json` is available for every schedule and cleanup command. `schedule fire`
-and `schedule tick` produce runtime launch requests; the runtime/storage
-adapter owns claiming, overlap policy, and persistence of fire/run links.
+and `schedule tick` claim work through the SQLite schedule repository and hand
+it to the existing runtime scheduler, so the resulting run, attempts, and
+events are ordinary Studio-visible records. The JSON file store remains
+available only when an embedding explicitly injects it; the normal CLI project
+path never silently falls back to it.
 
 ## OS artifacts
 

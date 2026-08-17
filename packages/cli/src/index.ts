@@ -597,7 +597,23 @@ async function dispatch(args: readonly string[], deps: CliDependencies): Promise
       return scheduleCommand(args, deps.schedule);
     const storage = await storageFor(args, deps);
     try {
-      return scheduleCommand(args, { store: scheduleStoreFromStorage(storage) });
+      const store = scheduleStoreFromStorage(storage);
+      if (!store) throw new Error("SQLite schedule persistence is unavailable for this project");
+      const runtimeStore = new SqliteRuntimeStore(storage);
+      const runtime =
+        deps.runtimeFactory?.(
+          runtimeStore,
+          deps.providerExecutor ?? new DeterministicFakeProvider(),
+        ) ??
+        new RuntimeScheduler({
+          store: runtimeStore,
+          provider: deps.providerExecutor ?? new DeterministicFakeProvider(),
+        });
+      return await scheduleCommand(args, {
+        store,
+        runtime,
+        workflow: (workflowId, version) => storage.runtime.getWorkflowVersion(workflowId, version),
+      });
     } finally {
       storage.close();
     }
@@ -605,7 +621,7 @@ async function dispatch(args: readonly string[], deps: CliDependencies): Promise
   if (command === "cleanup") {
     const storage = await storageFor(args, deps);
     try {
-      return cleanupCommand(
+      return await cleanupCommand(
         args,
         storage as unknown as {
           runtime: Record<string, unknown>;

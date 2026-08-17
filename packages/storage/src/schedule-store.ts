@@ -311,6 +311,13 @@ export class ScheduleRepository {
   previewRetention(input: RetentionFilter = {}): RetentionPreview {
     if (input.before && !Number.isFinite(Date.parse(input.before)))
       throw new Error("before must be an ISO timestamp");
+    if (
+      input.maxAgeDays !== undefined &&
+      (!Number.isSafeInteger(input.maxAgeDays) || input.maxAgeDays <= 0)
+    )
+      throw new Error("maxAgeDays must be a positive integer");
+    if (input.maxRuns !== undefined && (!Number.isSafeInteger(input.maxRuns) || input.maxRuns <= 0))
+      throw new Error("maxRuns must be a positive integer");
     const filter = {
       ...input,
       batchSize: Math.min(
@@ -318,6 +325,11 @@ export class ScheduleRepository {
         Math.max(1, input.batchSize ?? this.getRetentionPolicy()?.batchSize ?? 100),
       ),
     };
+    const before = filter.before
+      ? filter.before
+      : filter.maxAgeDays
+        ? new Date(Date.now() - filter.maxAgeDays * 86_400_000).toISOString()
+        : undefined;
     const protectedRunIds = this.db
       .query<{ id: string }, []>(
         "SELECT id FROM runs WHERE status IN ('created','running','pause_requested','paused','cancelling','blocked_approval') OR id IN (SELECT run_id FROM schedule_run_links WHERE state IN ('queued','active'))",
@@ -330,13 +342,11 @@ export class ScheduleRepository {
         "SELECT * FROM runs WHERE status IN ('succeeded','failed','cancelled') ORDER BY created_at DESC,id DESC",
       )
       .all() as Row[];
-    const selected = rows
-      .filter(
-        (r, i) =>
-          !keep.has(r.id as string) &&
-          (!filter.before || String(r.created_at) < filter.before) &&
-          (filter.maxRuns === undefined || i >= filter.maxRuns),
-      )
+    const terminal = rows.filter(
+      (r) => !keep.has(r.id as string) && (!before || String(r.created_at) < before),
+    );
+    const selected = terminal
+      .filter((_r, i) => filter.maxRuns === undefined || i >= filter.maxRuns)
       .slice(0, filter.batchSize + 1);
     const candidates: RetentionCandidate[] = selected.map((r) => ({
       runId: r.id as string,
