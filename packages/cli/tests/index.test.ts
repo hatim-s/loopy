@@ -100,6 +100,29 @@ describe("loopy CLI shell", () => {
     }
   });
 
+  it("leaves fork inputs undefined when --input is omitted", async () => {
+    const project = mkdtempSync(join(tmpdir(), "loopy-cli-fork-input-"));
+    const calls: unknown[][] = [];
+    const fake = {
+      fork: async (runId: string, nodeId: string, input?: Record<string, unknown>) => {
+        calls.push([runId, nodeId, input]);
+        return { runId: "forked", status: "succeeded" };
+      },
+      wait: async () => ({ run: { runId: "forked", status: "succeeded" } }),
+    } as unknown as RuntimeScheduler;
+    const output = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      expect(
+        await mainAsync(["fork", "run-1", "--from-node", "checkpoint", "--project", project], {
+          runtimeFactory: () => fake,
+        }),
+      ).toBe(0);
+      expect(calls).toEqual([["run-1", "checkpoint", undefined]]);
+    } finally {
+      output.mockRestore();
+    }
+  });
+
   const fakeLiveAdapter = (available = true): ProviderAdapter => ({
     id: "codex",
     version: "test-1",

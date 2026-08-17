@@ -79,6 +79,21 @@ describe("SQLite Phase 1 runtime adapter", () => {
     x.storage.close();
   });
 
+  test("forks atomically in SQLite when the batch creates its run and attempts", async () => {
+    const x = opened();
+    const workflow = plan(
+      [agent("checkpoint"), agent("after")],
+      [{ id: "ca", source: "checkpoint", target: "after" }],
+    );
+    const source = await x.runtime.run(workflow, { preserved: true });
+    const forked = await x.runtime.fork(source.run.runId, "checkpoint");
+    const result = await x.runtime.wait(forked.runId);
+    expect(result.run.status).toBe("succeeded");
+    expect(result.run.inputs).toEqual({ preserved: true });
+    expect(x.provider.calls.map((call) => call.nodeId)).toEqual(["checkpoint", "after", "after"]);
+    x.storage.close();
+  });
+
   test("joins parallel branches after the slower branch and survives reopen", async () => {
     const x = opened();
     x.provider.set("a", async () => {

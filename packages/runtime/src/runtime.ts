@@ -550,13 +550,68 @@ export class RuntimeScheduler {
     for (const attempt of completed) latest.set(attempt.nodeId, attempt);
     if (!latest.has(fromNodeId))
       throw new Error(`Checkpoint ${fromNodeId} has no persisted completed attempt`);
+
+    // A fork must not replay a completed side effect merely because it was
+    // persisted after the selected checkpoint. Carry its causal closure only
+    // when the source graph proves that the same branch/join inputs were
+    // completed; otherwise fail closed before creating the new run.
+    const allCompleted = new Map<string, AttemptRecord>();
+    for (const attempt of sourceAttempts) {
+      if (attempt.status !== "succeeded" && attempt.status !== "skipped") continue;
+      const completionEvent = sourceEvents.find(
+        (event) => event.type === "node.completed" && event.attemptId === attempt.attemptId,
+      );
+      if (completionEvent) allCompleted.set(attempt.nodeId, attempt);
+    }
+    const carry = new Set(latest.keys());
+    const forkInputs = inputs ?? source.inputs;
+    const forkGraph = { ...source, inputs: forkInputs };
+    const inputsChanged = JSON.stringify(forkInputs) !== JSON.stringify(source.inputs);
+    const sideEffectNode = (node: RuntimeNode | undefined): boolean => {
+      if (!node) return false;
+      return (
+        node.sideEffect === true ||
+        node.sideEffectful === true ||
+        node.effect === "side_effect" ||
+        node.effect === "side-effect"
+      );
+    };
+    const causalCarry = (nodeId: string, visiting = new Set<string>()): boolean => {
+      if (carry.has(nodeId)) return true;
+      if (visiting.has(nodeId)) return false;
+      const attempt = allCompleted.get(nodeId);
+      if (!attempt) return false;
+      const incoming = source.plan.edges.filter((edge) => edge.target === nodeId);
+      if (
+        incoming.some(
+          (edge) =>
+            !this.edgeSelected(edge, forkGraph, sourceAttempts) ||
+            !causalCarry(edge.source, new Set([...visiting, nodeId])),
+        )
+      )
+        return false;
+      carry.add(nodeId);
+      latest.set(nodeId, attempt);
+      return true;
+    };
+    for (const attempt of allCompleted.values()) {
+      const completionEvent = sourceEvents.find(
+        (event) => event.type === "node.completed" && event.attemptId === attempt.attemptId,
+      );
+      if (!completionEvent || completionEvent.sequence <= checkpoint.sequence) continue;
+      const node = source.plan.nodes.find((item) => item.id === attempt.nodeId);
+      if (sideEffectNode(node) && (inputsChanged || !causalCarry(attempt.nodeId)))
+        throw new Error(
+          `Fork checkpoint ${fromNodeId} is unsafe for completed side effect ${attempt.nodeId}`,
+        );
+    }
     const run: RunRecord = {
       runId: this.makeId("fork"),
       workflowId: source.workflowId,
       workflowVersion: source.workflowVersion,
       plan: source.plan,
       executionPlanHash: source.executionPlanHash,
-      inputs: inputs ?? source.inputs,
+      inputs: forkInputs,
       status: "running",
       createdAt: this.now(),
       startedAt: this.now(),
@@ -582,6 +637,15 @@ export class RuntimeScheduler {
     ];
     for (const attempt of clones) {
       commands.push({ type: "create_attempt", attempt });
+      if (source.plan.nodes.find((node) => node.id === attempt.nodeId)?.kind === "approval") {
+        const approval = await this.options.store.getApproval(sourceRunId, attempt.nodeId);
+        if (approval) {
+          commands.push({
+            type: "set_approval",
+            approval: { ...approval, runId: run.runId, attemptId: attempt.attemptId },
+          });
+        }
+      }
       commands.push(
         await this.event(run.runId, "node.completed", attempt.nodeId, attempt.attemptId, {
           completion: attempt.completion ?? {

@@ -394,10 +394,15 @@ export class SqliteRuntimeStore implements RuntimeStore {
         const run = this.db
           .query<Row, [string]>("SELECT * FROM runs WHERE id=?")
           .get(attempt.runId);
-        if (!run) throw new Error(`Unknown run ${attempt.runId}`);
-        if (command.expectedRunStatus && run.status !== command.expectedRunStatus)
+        const createdRun = commands.find(
+          (item): item is Extract<RuntimeStoreCommand, { type: "create_run" }> =>
+            item.type === "create_run" && item.run.runId === attempt.runId,
+        )?.run;
+        if (!run && !createdRun) throw new Error(`Unknown run ${attempt.runId}`);
+        const runStatus = run?.status ?? createdRun?.status;
+        if (command.expectedRunStatus && runStatus !== command.expectedRunStatus)
           throw new RuntimeStoreConflictError(
-            `Attempt run precondition failed for ${attempt.runId}: expected ${command.expectedRunStatus}, got ${String(run.status)}`,
+            `Attempt run precondition failed for ${attempt.runId}: expected ${command.expectedRunStatus}, got ${String(runStatus)}`,
           );
         continue;
       }

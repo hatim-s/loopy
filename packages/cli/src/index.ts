@@ -681,6 +681,16 @@ function parseRunInput(args: readonly string[]): JsonObject {
   return parsed as JsonObject;
 }
 
+function parseOptionalRunInput(args: readonly string[]): JsonObject | undefined {
+  const raw = option(args, "--input");
+  if (raw === undefined) return undefined;
+  if (!raw) return {};
+  const parsed = JSON.parse(raw) as unknown;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+    throw new Error("run --input must be a JSON object");
+  return parsed as JsonObject;
+}
+
 function providerOnNode(node: Record<string, unknown>): string | undefined {
   if (typeof node.provider === "string" && node.provider.trim()) return node.provider;
   const configuration = node.configuration;
@@ -886,7 +896,7 @@ async function forkWorkflow(args: readonly string[], deps: CliDependencies): Pro
     const runtime =
       deps.runtimeFactory?.(runtimeStore, provider) ??
       new RuntimeScheduler({ store: runtimeStore, provider });
-    const started = await runtime.fork(runId, nodeId, parseRunInput(args));
+    const started = await runtime.fork(runId, nodeId, parseOptionalRunInput(args));
     const snapshot = await runtime.wait(started.runId);
     if (jsonOutput(args)) printJson(snapshot);
     else console.log(`fork ${runId} from ${nodeId}: ${snapshot.run.runId} ${snapshot.run.status}`);
