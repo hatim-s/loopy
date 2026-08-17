@@ -7,6 +7,7 @@ import { extractImportedSession } from "@loopy/extractor";
 import { createLocalApi, createLocalServerConfig } from "@loopy/local-api";
 import { createDefaultProviderRegistry, type ProviderRegistry } from "@loopy/providers";
 import { type ProviderExecutor, RuntimeScheduler, type RuntimeStore } from "@loopy/runtime";
+import { SchedulerEngine } from "@loopy/scheduler";
 import {
   type CanonicalSessionImportInput,
   type ExtractionResultInput,
@@ -600,18 +601,65 @@ async function dispatch(args: readonly string[], deps: CliDependencies): Promise
       const store = scheduleStoreFromStorage(storage);
       if (!store) throw new Error("SQLite schedule persistence is unavailable for this project");
       const runtimeStore = new SqliteRuntimeStore(storage);
+      const provider = deps.providerExecutor ?? new DeterministicFakeProvider();
       const runtime =
-        deps.runtimeFactory?.(
-          runtimeStore,
-          deps.providerExecutor ?? new DeterministicFakeProvider(),
-        ) ??
-        new RuntimeScheduler({
-          store: runtimeStore,
-          provider: deps.providerExecutor ?? new DeterministicFakeProvider(),
-        });
+        deps.runtimeFactory?.(runtimeStore, provider) ??
+        new RuntimeScheduler({ store: runtimeStore, provider });
+      let scheduler!: SchedulerEngine;
+      const executor = {
+        start: async (invocation: import("@loopy/scheduler").ScheduleInvocation) => {
+          const workflow = storage.runtime.getWorkflowVersion(
+            invocation.workflowId,
+            invocation.workflowVersion,
+          );
+          if (!workflow)
+            throw new Error(
+              `Unknown workflow version '${invocation.workflowId}@${invocation.workflowVersion}'`,
+            );
+          const started = await runtime.start(
+            workflow.definition as Parameters<RuntimeScheduler["start"]>[0],
+            invocation.input,
+          );
+          const fire = storage.schedules
+            .listFires(invocation.scheduleId, 1000)
+            .find((item) => item.fireKey === invocation.idempotencyKey);
+          if (fire)
+            storage.schedules.linkRun({
+              scheduleId: invocation.scheduleId,
+              fireId: fire.id,
+              runId: started.runId,
+            });
+          void runtime.wait(started.runId).then(async (snapshot) => {
+            if (!fire || !["succeeded", "failed", "cancelled"].includes(snapshot.run.status))
+              return;
+            storage.schedules.updateLink(started.runId, "terminal");
+            storage.schedules.updateFire(fire.id, {
+              status:
+                snapshot.run.status === "succeeded"
+                  ? "succeeded"
+                  : snapshot.run.status === "failed"
+                    ? "failed"
+                    : "failed",
+              finishedAt: new Date().toISOString(),
+              runId: started.runId,
+            });
+            await scheduler.complete(invocation.scheduleId, started.runId);
+          });
+          return { executionId: started.runId };
+        },
+        cancel: async (execution: { executionId: string }, reason: string) => {
+          await runtime.cancel(execution.executionId, reason);
+        },
+      };
+      scheduler = new SchedulerEngine({
+        store: storage.schedules.schedulerStore(),
+        executor,
+      });
       return await scheduleCommand(args, {
         store,
         runtime,
+        scheduler,
+        waitExecution: (executionId) => runtime.wait(executionId),
         workflow: (workflowId, version) => storage.runtime.getWorkflowVersion(workflowId, version),
       });
     } finally {

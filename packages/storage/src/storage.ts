@@ -563,6 +563,15 @@ export interface RetentionPreview {
 }
 export interface RetentionApplyResult extends RetentionPreview {
   deletedRunIds: string[];
+  deletedCounts: {
+    runs: number;
+    events: number;
+    artifacts: number;
+    approvals: number;
+    nodeAttempts: number;
+    scheduleRunLinks: number;
+    scheduleFires: number;
+  };
 }
 export interface CreateAttemptInput {
   id?: string;

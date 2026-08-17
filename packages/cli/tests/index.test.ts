@@ -193,6 +193,8 @@ describe("loopy CLI shell", () => {
       expect(
         persisted.runtime.countEvents(persisted.runtime.listRuns("succeeded")[0]?.id ?? ""),
       ).toBeGreaterThan(0);
+      expect(persisted.schedules.listFires("scheduled")).toHaveLength(1);
+      expect(persisted.schedules.listLinks("scheduled", "terminal")).toHaveLength(1);
       persisted.close();
     } finally {
       log.mockRestore();

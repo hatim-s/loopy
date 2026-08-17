@@ -14,6 +14,7 @@ import {
   updateSchedule,
 } from "@loopy/platform";
 import type { RuntimeScheduler, RuntimeSnapshot } from "@loopy/runtime";
+import type { SchedulerEngine } from "@loopy/scheduler";
 import type { WorkflowVersionRecord } from "@loopy/storage";
 
 export type { LocalSchedule, ScheduleStore } from "@loopy/platform";
@@ -23,6 +24,8 @@ export type ScheduleDependencies = {
   store?: ScheduleStore;
   now?: () => Date;
   runtime?: RuntimeScheduler;
+  scheduler?: SchedulerEngine;
+  waitExecution?: (executionId: string) => Promise<RuntimeSnapshot>;
   workflow?: (workflowId: string, version: number) => WorkflowVersionRecord | undefined;
 };
 
@@ -77,12 +80,12 @@ function storeFor(args: readonly string[], dependencies: ScheduleDependencies): 
   );
 }
 
-function parseInput(raw: string | undefined): Record<string, unknown> {
+function parseInput(raw: string | undefined): JsonObject {
   if (!raw) return {};
   const parsed = JSON.parse(raw) as unknown;
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
     throw new Error("schedule --input must be a JSON object");
-  return parsed as Record<string, unknown>;
+  return parsed as JsonObject;
 }
 
 function requireId(args: readonly string[]): string {
@@ -174,6 +177,25 @@ export async function scheduleCommand(
     return 0;
   }
   if (action === "fire") {
+    if (dependencies.scheduler) {
+      const decision = await dependencies.scheduler.fire(
+        requireId(args),
+        parseInput(value(args, "--input")),
+        now,
+      );
+      const run =
+        decision.executionId && dependencies.waitExecution
+          ? await dependencies.waitExecution(decision.executionId)
+          : undefined;
+      emit(
+        args,
+        run ? { decision, run } : decision,
+        run
+          ? `fired ${requireId(args)} for ${decision.invocation?.workflowId ?? "workflow"} (${run.run.runId})`
+          : `fired ${requireId(args)}`,
+      );
+      return 0;
+    }
     const request = fireSchedule(store, requireId(args), now);
     const run = await execute(request, dependencies);
     emit(
@@ -186,6 +208,20 @@ export async function scheduleCommand(
     return 0;
   }
   if (action === "tick") {
+    if (dependencies.scheduler) {
+      const result = await dependencies.scheduler.tick(now);
+      const runs: RuntimeSnapshot[] = [];
+      for (const decision of result.decisions) {
+        if (decision.executionId && dependencies.waitExecution)
+          runs.push(await dependencies.waitExecution(decision.executionId));
+      }
+      emit(
+        args,
+        runs.length ? { ...result, runs } : result,
+        `started ${runs.length}; decisions ${result.decisions.length}`,
+      );
+      return 0;
+    }
     const result = tickSchedules(store, now);
     const runs = [] as RuntimeSnapshot[];
     for (const request of result.due) {

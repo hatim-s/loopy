@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
 import type { JsonObject } from "@loopy/contracts";
+import type { ScheduleDefinition, SchedulerStore, ScheduleState } from "@loopy/scheduler";
 import type {
   RetentionApplyResult,
   RetentionCandidate,
@@ -17,6 +18,7 @@ import type {
 } from "./storage.js";
 
 type Row = Record<string, unknown>;
+type NormalizedRetentionFilter = RetentionFilter & { batchSize: number };
 const encode = (value: unknown) => JSON.stringify(value ?? {});
 const decode = <T>(value: string | null | undefined): T | undefined =>
   value == null ? undefined : (JSON.parse(value) as T);
@@ -203,6 +205,10 @@ export class ScheduleRepository {
           .all(n);
     return (rows as Row[]).map(fire);
   }
+  getFire(id: string): ScheduleFireRecord | undefined {
+    const row = this.db.query<Row, [string]>("SELECT * FROM schedule_fires WHERE id=?").get(id);
+    return row ? fire(row) : undefined;
+  }
   updateFire(
     id: string,
     patch: Partial<
@@ -284,6 +290,90 @@ export class ScheduleRepository {
       runId,
     );
   }
+  /** Adapt the durable schedule tables to the scheduler engine's state port. */
+  schedulerStore(): SchedulerStore {
+    return {
+      listSchedules: async (): Promise<ScheduleDefinition[]> =>
+        this.list().map((record) => ({
+          schedule: {
+            schemaVersion: "1",
+            scheduleId: record.id,
+            expression: record.expression,
+            timezone: record.timezone,
+            enabled: record.enabled,
+            overlap: record.overlapPolicy,
+            missed: record.missedPolicy,
+            input: record.input,
+          },
+          workflowId: record.workflowId,
+          workflowVersion: record.workflowVersion,
+          manual: { enabled: true, input: record.input },
+        })),
+      getState: async (scheduleId: string): Promise<ScheduleState | undefined> => {
+        const record = this.get(scheduleId);
+        if (!record) return undefined;
+        const active = this.listLinks(scheduleId, "active")[0];
+        const activeFire = active ? this.getFire(active.fireId) : undefined;
+        const toInvocation = (item: ScheduleFireRecord) => ({
+          scheduleId,
+          workflowId: record.workflowId,
+          workflowVersion: record.workflowVersion,
+          input: record.input,
+          scheduledFor: item.scheduledAt,
+          firedAt: item.createdAt,
+          idempotencyKey: item.fireKey,
+          source: "cron" as const,
+        });
+        const pendingFire = this.listFires(scheduleId, 1000).find(
+          (item) => item.status === "claimed" && !item.runId,
+        );
+        return {
+          scheduleId,
+          ...(record.nextFireAt ? { nextDueAt: record.nextFireAt } : {}),
+          ...(active && activeFire
+            ? { active: { ...toInvocation(activeFire), executionId: active.runId } }
+            : {}),
+          ...(pendingFire ? { pending: toInvocation(pendingFire) } : {}),
+        };
+      },
+      saveState: async (state: ScheduleState): Promise<void> => {
+        const record = this.get(state.scheduleId);
+        if (!record) throw new Error(`Unknown schedule ${state.scheduleId}`);
+        this.update(record.id, { nextFireAt: state.nextDueAt });
+        if (state.pending) {
+          this.claimFire({
+            scheduleId: state.scheduleId,
+            fireKey: state.pending.idempotencyKey,
+            scheduledAt: state.pending.scheduledFor,
+          });
+        }
+      },
+      claimIdempotencyKey: async (scheduleId: string, key: string): Promise<boolean> => {
+        return this.db.transaction(() => {
+          const existing = this.db
+            .query<Row, [string, string]>(
+              "SELECT 1 FROM schedule_fires WHERE schedule_id=? AND fire_key=?",
+            )
+            .get(scheduleId, key);
+          if (existing) return false;
+          this.run(
+            "INSERT INTO schedule_fires(id,schedule_id,fire_key,scheduled_at,status,created_at) VALUES (?,?,?,?,?,?)",
+            randomUUID(),
+            scheduleId,
+            key,
+            key.startsWith(`${scheduleId}:manual:`)
+              ? key.slice(`${scheduleId}:manual:`.length)
+              : key.startsWith(`${scheduleId}:`)
+                ? key.slice(`${scheduleId}:`.length)
+                : new Date().toISOString(),
+            "claimed",
+            now(),
+          );
+          return true;
+        })() as boolean;
+      },
+    };
+  }
   getRetentionPolicy(id = "default"): RetentionPolicyRecord | undefined {
     const r = this.db.query<Row, [string]>("SELECT * FROM retention_policies WHERE id=?").get(id);
     return r
@@ -309,6 +399,9 @@ export class ScheduleRepository {
     return this.getRetentionPolicy(input.id) as RetentionPolicyRecord;
   }
   previewRetention(input: RetentionFilter = {}): RetentionPreview {
+    return this.retentionPreview(this.normalizeRetentionFilter(input));
+  }
+  private normalizeRetentionFilter(input: RetentionFilter): NormalizedRetentionFilter {
     if (input.before && !Number.isFinite(Date.parse(input.before)))
       throw new Error("before must be an ISO timestamp");
     if (
@@ -318,13 +411,15 @@ export class ScheduleRepository {
       throw new Error("maxAgeDays must be a positive integer");
     if (input.maxRuns !== undefined && (!Number.isSafeInteger(input.maxRuns) || input.maxRuns <= 0))
       throw new Error("maxRuns must be a positive integer");
-    const filter = {
+    return {
       ...input,
       batchSize: Math.min(
         1000,
         Math.max(1, input.batchSize ?? this.getRetentionPolicy()?.batchSize ?? 100),
       ),
     };
+  }
+  private retentionPreview(filter: NormalizedRetentionFilter): RetentionPreview {
     const before = filter.before
       ? filter.before
       : filter.maxAgeDays
@@ -370,7 +465,62 @@ export class ScheduleRepository {
       filter,
     };
   }
-  applyRetention(_input: RetentionFilter = {}): RetentionApplyResult {
-    throw new Error("Retention apply must be enabled by the owning runtime integration");
+  applyRetention(input: RetentionFilter = {}): RetentionApplyResult {
+    const filter = this.normalizeRetentionFilter(input);
+    return this.db.transaction(() => {
+      // Recompute the candidate set under the same write transaction that removes it. This
+      // keeps preview/apply criteria identical while preventing an active run from being
+      // selected between the read and the deletes.
+      const preview = this.retentionPreview(filter);
+      const deletedCounts = {
+        runs: 0,
+        events: 0,
+        artifacts: 0,
+        approvals: 0,
+        nodeAttempts: 0,
+        scheduleRunLinks: 0,
+        scheduleFires: 0,
+      };
+      for (const candidate of preview.candidates) {
+        const runId = candidate.runId;
+        const count = (table: string) =>
+          Number(
+            this.db
+              .query<{ count: number }, [string]>(
+                `SELECT COUNT(*) count FROM ${table} WHERE run_id=?`,
+              )
+              .get(runId)?.count ?? 0,
+          );
+        const deleteByRun = (table: string) =>
+          this.run(`DELETE FROM ${table} WHERE run_id=?`, runId);
+
+        deletedCounts.scheduleRunLinks += count("schedule_run_links");
+        deletedCounts.scheduleFires += Number(
+          this.db
+            .query<{ count: number }, [string]>(
+              "SELECT COUNT(*) count FROM schedule_fires WHERE run_id=?",
+            )
+            .get(runId)?.count ?? 0,
+        );
+        this.run("DELETE FROM schedule_run_links WHERE run_id=?", runId);
+        this.run("DELETE FROM schedule_fires WHERE run_id=?", runId);
+
+        deletedCounts.approvals += count("approvals");
+        deletedCounts.artifacts += count("artifacts");
+        deletedCounts.events += count("events");
+        deletedCounts.nodeAttempts += count("node_attempts");
+        deleteByRun("approvals");
+        deleteByRun("artifacts");
+        deleteByRun("events");
+        deleteByRun("node_attempts");
+        this.run("DELETE FROM runs WHERE id=?", runId);
+        deletedCounts.runs += 1;
+      }
+      return {
+        ...preview,
+        deletedRunIds: preview.candidates.map((candidate) => candidate.runId),
+        deletedCounts,
+      };
+    })() as RetentionApplyResult;
   }
 }

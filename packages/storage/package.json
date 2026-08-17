@@ -12,6 +12,7 @@
   "dependencies": {
     "@loopy/contracts": "workspace:*",
     "@loopy/runtime": "workspace:*",
+    "@loopy/scheduler": "workspace:*",
     "@loopy/tracing": "workspace:*"
   }
 }

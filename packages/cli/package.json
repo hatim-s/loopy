@@ -29,6 +29,7 @@
     "@loopy/platform": "workspace:*",
     "@loopy/providers": "workspace:*",
     "@loopy/runtime": "workspace:*",
+    "@loopy/scheduler": "workspace:*",
     "@loopy/storage": "workspace:*",
     "@loopy/testing": "workspace:*"
   }

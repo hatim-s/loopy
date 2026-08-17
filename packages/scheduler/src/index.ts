@@ -60,6 +60,8 @@ export type ScheduleDecision = {
     | "cancelled_previous"
     | "duplicate";
   invocation?: ScheduleInvocation;
+  /** The runtime execution handoff, when this decision started work. */
+  executionId?: string;
 };
 
 export type TickResult = { at: string; decisions: ScheduleDecision[] };
@@ -226,12 +228,22 @@ export class SchedulerEngine {
       const started = await this.options.executor.start(invocation);
       state.active = { ...invocation, executionId: started.executionId };
       await this.options.store.saveState(state);
-      return { scheduleId: state.scheduleId, action: "cancelled_previous", invocation };
+      return {
+        scheduleId: state.scheduleId,
+        action: "cancelled_previous",
+        invocation,
+        executionId: started.executionId,
+      };
     }
     const started = await this.options.executor.start(invocation);
     state.active = { ...invocation, executionId: started.executionId };
     await this.options.store.saveState(state);
-    return { scheduleId: state.scheduleId, action: actionIfActive, invocation };
+    return {
+      scheduleId: state.scheduleId,
+      action: actionIfActive,
+      invocation,
+      executionId: started.executionId,
+    };
   }
 
   async tick(at = this.now()): Promise<TickResult> {
