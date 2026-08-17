@@ -17,7 +17,12 @@ import type {
   ExtractionJobRecord,
   ExtractionReviewRecord,
   ImportedSessionRecord,
+  RetentionFilter,
   RunRecord,
+  ScheduleMissedPolicy,
+  ScheduleOverlapPolicy,
+  ScheduleRecord,
+  ScheduleRepository,
   Storage,
   WorkflowVersionRecord,
 } from "@loopy/storage";
@@ -64,6 +69,15 @@ export type LocalApiRepository = {
 };
 
 export type LocalApiStorage = Pick<Storage, "runtime"> & { runtime: LocalApiRepository };
+export type ScheduleRuntimeEngine = {
+  start(plan: unknown, input: JsonObject): Promise<{ runId: string } | { id: string }>;
+};
+export type ScheduleCoordinator = (input: {
+  schedule: ScheduleRecord;
+  now: string;
+  activeRunIds: string[];
+  scheduledAt: string;
+}) => Promise<"allow" | "skip" | "queue"> | "allow" | "skip" | "queue";
 export type LocalApiOptions = {
   storage: LocalApiStorage;
   runtime?: RuntimeScheduler;
@@ -76,6 +90,9 @@ export type LocalApiOptions = {
   heartbeatMs?: number;
   pollMs?: number;
   token?: string;
+  scheduleStore?: ScheduleRepository;
+  scheduleEngine?: ScheduleRuntimeEngine;
+  scheduleCoordinator?: ScheduleCoordinator;
 };
 export type LocalServerConfig = {
   host: "127.0.0.1" | "::1";
@@ -503,6 +520,12 @@ function topologyFromDefinition(definition: unknown): {
 export function createLocalApi(options: LocalApiOptions): Hono {
   const repository = options.storage.runtime;
   const scheduler = options.runtime ?? options.scheduler;
+  const scheduleStore =
+    options.scheduleStore ??
+    (options.storage as LocalApiStorage & { schedules?: ScheduleRepository }).schedules;
+  const scheduleEngine =
+    options.scheduleEngine ?? (scheduler as unknown as ScheduleRuntimeEngine | undefined);
+  const scheduleCoordinator = options.scheduleCoordinator;
   const registry = options.providerRegistry ?? options.registry;
   const maxBodyBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
   const heartbeatMs = Math.max(1_000, options.heartbeatMs ?? DEFAULT_HEARTBEAT_MS);
@@ -875,6 +898,188 @@ export function createLocalApi(options: LocalApiOptions): Hono {
         typeof body.version === "number" ? body.version : undefined,
       ),
       201,
+    );
+  });
+
+  const requireScheduleStore = (): ScheduleRepository =>
+    scheduleStore ?? capability("Schedule persistence is not configured");
+  const fireSchedule = async (scheduleId: string, requestedKey?: string, requestedAt?: string) => {
+    const store = requireScheduleStore();
+    if (!scheduleEngine) capability("Runtime scheduler is not configured for schedule execution");
+    const schedule = store.get(scheduleId) ?? notFound("Schedule");
+    const scheduledAt = requestedAt ?? schedule.nextFireAt ?? new Date().toISOString();
+    const fireKey = requestedKey ?? scheduledAt;
+    const active = store.listLinks(scheduleId, "active").map((item) => item.runId);
+    const decision = scheduleCoordinator
+      ? await scheduleCoordinator({
+          schedule,
+          now: new Date().toISOString(),
+          activeRunIds: active,
+          scheduledAt,
+        })
+      : active.length && schedule.overlapPolicy === "skip"
+        ? "skip"
+        : active.length && schedule.overlapPolicy === "queue"
+          ? "queue"
+          : "allow";
+    const claimed = store.claimFire({ scheduleId, fireKey, scheduledAt });
+    if (claimed.runId) return { schedule, fire: claimed, idempotent: true };
+    if (decision === "skip") {
+      return {
+        schedule,
+        fire: store.updateFire(claimed.id, {
+          status: "skipped",
+          finishedAt: new Date().toISOString(),
+          error: "overlap policy skipped this fire",
+        }),
+        idempotent: false,
+      };
+    }
+    if (decision === "queue") return { schedule, fire: claimed, queued: true, idempotent: false };
+    const workflow =
+      repository.getWorkflowVersion(schedule.workflowId, schedule.workflowVersion) ??
+      notFound("Workflow version");
+    const run = await scheduleEngine.start(workflow.definition, schedule.input);
+    const runId = "runId" in run ? run.runId : run.id;
+    const link = store.linkRun({ scheduleId, fireId: claimed.id, runId, state: "active" });
+    return {
+      schedule: store.update(scheduleId, { lastFireAt: scheduledAt, nextFireAt: undefined }),
+      fire: store.updateFire(claimed.id, { runId, status: "running" }),
+      link,
+      idempotent: false,
+    };
+  };
+  api.get("/schedules", (c) => {
+    const store = requireScheduleStore();
+    return c.json({
+      schedules: store.list({
+        enabled:
+          c.req.query("enabled") === undefined ? undefined : c.req.query("enabled") === "true",
+      }),
+    });
+  });
+  api.post("/schedules", async (c) => {
+    const body = await jsonBody(c, maxBodyBytes);
+    const workflowId = requiredString(body, "workflowId");
+    const version = Number(body.workflowVersion ?? body.version ?? 1);
+    if (!Number.isInteger(version) || version < 1)
+      throw new ApiError(400, "invalid_request", "workflowVersion must be positive");
+    const workflow =
+      repository.getWorkflowVersion(workflowId, version) ?? notFound("Workflow version");
+    void workflow;
+    const store = requireScheduleStore();
+    return c.json(
+      store.create({
+        name: requiredString(body, "name"),
+        workflowId,
+        workflowVersion: version,
+        input: jsonObject(body.input),
+        expression: requiredString(body, "expression"),
+        timezone: typeof body.timezone === "string" ? body.timezone : undefined,
+        overlapPolicy: body.overlapPolicy as ScheduleOverlapPolicy | undefined,
+        missedPolicy: body.missedPolicy as ScheduleMissedPolicy | undefined,
+        enabled: body.enabled !== false,
+        nextFireAt: typeof body.nextFireAt === "string" ? body.nextFireAt : undefined,
+      }),
+      201,
+    );
+  });
+  api.get("/schedules/:id", (c) => {
+    const store = requireScheduleStore();
+    const item = store.get(c.req.param("id")) ?? notFound("Schedule");
+    return c.json({
+      schedule: item,
+      fires: store.listFires(item.id),
+      links: store.listLinks(item.id),
+    });
+  });
+  api.patch("/schedules/:id", async (c) => {
+    const store = requireScheduleStore();
+    const body = await jsonBody(c, maxBodyBytes);
+    return c.json(
+      store.update(c.req.param("id"), {
+        ...(typeof body.name === "string" ? { name: body.name } : {}),
+        ...(typeof body.expression === "string" ? { expression: body.expression } : {}),
+        ...(typeof body.timezone === "string" ? { timezone: body.timezone } : {}),
+        ...(typeof body.overlapPolicy === "string"
+          ? { overlapPolicy: body.overlapPolicy as ScheduleOverlapPolicy }
+          : {}),
+        ...(typeof body.missedPolicy === "string"
+          ? { missedPolicy: body.missedPolicy as ScheduleMissedPolicy }
+          : {}),
+        ...(typeof body.enabled === "boolean" ? { enabled: body.enabled } : {}),
+        ...(typeof body.nextFireAt === "string" ? { nextFireAt: body.nextFireAt } : {}),
+        ...(body.input !== undefined ? { input: jsonObject(body.input) } : {}),
+      }),
+    );
+  });
+  api.post("/schedules/:id/enable", (c) =>
+    c.json(requireScheduleStore().update(c.req.param("id"), { enabled: true })),
+  );
+  api.post("/schedules/:id/disable", (c) =>
+    c.json(requireScheduleStore().update(c.req.param("id"), { enabled: false })),
+  );
+  api.post("/schedules/:id/fire", async (c) => {
+    const body = await jsonBody(c, maxBodyBytes);
+    return c.json(
+      await fireSchedule(
+        c.req.param("id"),
+        typeof body.fireKey === "string" ? body.fireKey : undefined,
+        typeof body.scheduledAt === "string" ? body.scheduledAt : undefined,
+      ),
+    );
+  });
+  api.post("/schedules/tick", async (c) => {
+    const body = await jsonBody(c, maxBodyBytes);
+    const at = typeof body.now === "string" ? body.now : new Date().toISOString();
+    const store = requireScheduleStore();
+    const results = [];
+    for (const schedule of store.list({ enabled: true, dueBefore: at }))
+      results.push(await fireSchedule(schedule.id, schedule.nextFireAt, schedule.nextFireAt));
+    return c.json({ now: at, results });
+  });
+  api.get("/schedules/:id/status", (c) => {
+    const store = requireScheduleStore();
+    const schedule = store.get(c.req.param("id")) ?? notFound("Schedule");
+    return c.json({
+      schedule,
+      activeRunIds: store.listLinks(schedule.id, "active").map((item) => item.runId),
+      fires: store.listFires(schedule.id),
+      links: store.listLinks(schedule.id),
+    });
+  });
+  api.get("/retention", (c) => {
+    const store = requireScheduleStore();
+    return c.json({ policy: store.getRetentionPolicy() });
+  });
+  api.post("/retention/preview", async (c) => {
+    const store = requireScheduleStore();
+    const body = await jsonBody(c, maxBodyBytes);
+    return c.json(
+      store.previewRetention({
+        before: typeof body.before === "string" ? body.before : undefined,
+        maxAgeDays: typeof body.maxAgeDays === "number" ? body.maxAgeDays : undefined,
+        maxRuns: typeof body.maxRuns === "number" ? body.maxRuns : undefined,
+        batchSize: typeof body.batchSize === "number" ? body.batchSize : undefined,
+      } satisfies RetentionFilter),
+    );
+  });
+  api.post("/retention/apply", async (c) => {
+    const store = requireScheduleStore();
+    const body = await jsonBody(c, maxBodyBytes);
+    if (body.confirm !== true)
+      return c.json(
+        store.previewRetention({
+          maxAgeDays: typeof body.maxAgeDays === "number" ? body.maxAgeDays : undefined,
+          maxRuns: typeof body.maxRuns === "number" ? body.maxRuns : undefined,
+        }),
+        200,
+      );
+    return c.json(
+      store.applyRetention({
+        maxAgeDays: typeof body.maxAgeDays === "number" ? body.maxAgeDays : undefined,
+        maxRuns: typeof body.maxRuns === "number" ? body.maxRuns : undefined,
+      }),
     );
   });
 

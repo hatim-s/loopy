@@ -107,6 +107,78 @@ describe("local API", () => {
     }
   });
 
+  test("fires a persisted schedule idempotently and exposes the ordinary run trace", async () => {
+    const { dir, storage } = project();
+    try {
+      const workflow = {
+        id: "scheduled-workflow",
+        workflowVersion: 1,
+        name: "scheduled",
+        nodes: [],
+        edges: [],
+      };
+      storage.runtime.createWorkflowVersion({
+        workflowId: workflow.id,
+        version: 1,
+        definition: workflow,
+      });
+      const app = createLocalApi({
+        storage,
+        token,
+        scheduleEngine: {
+          async start(plan, input) {
+            const source = plan as { id: string; workflowVersion: number };
+            const run = storage.runtime.createRun({
+              id: "scheduled-run",
+              workflowId: source.id,
+              workflowVersion: source.workflowVersion,
+              input,
+              status: "running",
+            });
+            storage.runtime.appendEvent(run.id, {
+              type: "run.started",
+              payload: { planHash: "scheduled" },
+            });
+            return { runId: run.id };
+          },
+        },
+      });
+      const created = await app.request("/api/v1/schedules", {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "manual",
+          workflowId: workflow.id,
+          workflowVersion: 1,
+          expression: "manual",
+          nextFireAt: "2026-08-17T00:00:00.000Z",
+        }),
+      });
+      expect(created.status).toBe(201);
+      const schedule = (await created.json()) as { id: string };
+      const first = await app.request(`/api/v1/schedules/${schedule.id}/fire`, {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ fireKey: "fixed-fire", scheduledAt: "2026-08-17T00:00:00.000Z" }),
+      });
+      expect(first.status).toBe(200);
+      const second = await app.request(`/api/v1/schedules/${schedule.id}/fire`, {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ fireKey: "fixed-fire", scheduledAt: "2026-08-17T00:00:00.000Z" }),
+      });
+      expect((await second.json()).idempotent).toBe(true);
+      const run = await app.request("/api/v1/runs/scheduled-run", { headers });
+      expect(run.status).toBe(200);
+      expect((await run.json()).events.map((event: { type: string }) => event.type)).toContain(
+        "run.started",
+      );
+    } finally {
+      storage.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("returns explicit capability errors for absent replay seam", async () => {
     const { dir, storage } = project();
     try {
