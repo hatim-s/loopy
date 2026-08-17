@@ -1365,12 +1365,17 @@ export const WorkflowPatchOperationV1Schema = z.discriminatedUnion("op", [
 export const WorkflowPatchOperationSchema = WorkflowPatchOperationV1Schema;
 export type WorkflowPatchOperationV1 = z.infer<typeof WorkflowPatchOperationV1Schema>;
 export type WorkflowPatchOperation = z.infer<typeof WorkflowPatchOperationV1Schema>;
-const WorkflowPatchEnvelopeV1Schema = z.object({
-  schemaVersion: SchemaVersionV1Schema,
-  workflowId: StableIdSchema,
-  baseVersion: z.number().int().positive(),
-});
-const WorkflowPatchOperationsV1Schema = z.array(WorkflowPatchOperationV1Schema).min(1).max(256);
+const WorkflowPatchEnvelopeV1Schema = z
+  .object({
+    schemaVersion: SchemaVersionV1Schema,
+    workflowId: StableIdSchema,
+    baseVersion: z.number().int().positive(),
+  })
+  .strict();
+export const WorkflowPatchOperationsV1Schema = z
+  .array(WorkflowPatchOperationV1Schema)
+  .min(1)
+  .max(256);
 /** Both names are accepted at the contract boundary; `operations` is canonical. */
 export const WorkflowPatchV1Schema = z.union([
   WorkflowPatchEnvelopeV1Schema.extend({ operations: WorkflowPatchOperationsV1Schema }),
@@ -1412,7 +1417,7 @@ export const WorkflowPatchCommandV1Schema = CommandBaseV1Schema.extend({
   type: z.literal("workflow.patch"),
   workflowId: StableIdSchema,
   baseVersion: z.number().int().positive(),
-  patch: z.array(WorkflowPatchOperationV1Schema).min(1),
+  patch: WorkflowPatchOperationsV1Schema,
 });
 export const WorkflowPatchCommandSchema = WorkflowPatchCommandV1Schema;
 export const WorkflowValidateCommandV1Schema = CommandBaseV1Schema.extend({

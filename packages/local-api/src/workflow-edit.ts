@@ -280,6 +280,12 @@ export function applyWorkflowPatch(
       "Patch workflowId does not match the base workflow.",
       "/workflowId",
     );
+  if (normalized.baseVersion !== input.workflowVersion)
+    fail(
+      "WORKFLOW_VERSION_MISMATCH",
+      "Patch baseVersion does not match the base workflow version.",
+      "/baseVersion",
+    );
   const next = clone(input);
   const operations = "operations" in normalized ? normalized.operations : normalized.patch;
   for (const [index, operation] of operations.entries()) applyOperation(next, operation, index);
@@ -320,6 +326,49 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
+function pointerSegment(value: string): string {
+  return value.replaceAll("~", "~0").replaceAll("/", "~1");
+}
+
+type KeyedArrayPath = "/nodes" | "/edges" | "/inputs";
+
+function keyedArrayKey(path: string, value: unknown): string | undefined {
+  if (!isObject(value)) return undefined;
+  const key = path as KeyedArrayPath;
+  if (key === "/nodes" || key === "/edges")
+    return typeof value.id === "string" ? value.id : undefined;
+  if (key === "/inputs") return typeof value.name === "string" ? value.name : undefined;
+  return undefined;
+}
+
+function diffKeyedArray(
+  before: unknown[],
+  after: unknown[],
+  path: KeyedArrayPath,
+  changes: WorkflowVersionDiff["changes"],
+): boolean {
+  const beforeKeys = before.map((value) => keyedArrayKey(path, value));
+  const afterKeys = after.map((value) => keyedArrayKey(path, value));
+  const keys = [...beforeKeys, ...afterKeys];
+  // A malformed legacy definition may contain duplicate or missing semantic
+  // keys. Preserve the ordinary index diff for that data instead of silently
+  // dropping one of the duplicate entries from a map.
+  const hasDuplicateOrMissingKey = (values: Array<string | undefined>) =>
+    values.some((key) => key === undefined) || new Set(values).size !== values.length;
+  if (hasDuplicateOrMissingKey(beforeKeys) || hasDuplicateOrMissingKey(afterKeys)) return false;
+  const beforeByKey = new Map(beforeKeys.map((key, index) => [key as string, before[index]]));
+  const afterByKey = new Map(afterKeys.map((key, index) => [key as string, after[index]]));
+  const semanticKeys = [...new Set(keys)].filter((key): key is string => key !== undefined).sort();
+  for (const key of semanticKeys)
+    diffValues(
+      beforeByKey.get(key),
+      afterByKey.get(key),
+      `${path}/${pointerSegment(key)}`,
+      changes,
+    );
+  return true;
+}
+
 function diffValues(
   before: unknown,
   after: unknown,
@@ -330,15 +379,15 @@ function diffValues(
   if (isObject(before) && isObject(after)) {
     const keys = [...new Set([...Object.keys(before), ...Object.keys(after)])].sort();
     for (const key of keys)
-      diffValues(
-        before[key],
-        after[key],
-        `${path}/${key.replaceAll("~", "~0").replaceAll("/", "~1")}`,
-        changes,
-      );
+      diffValues(before[key], after[key], `${path}/${pointerSegment(key)}`, changes);
     return;
   }
   if (Array.isArray(before) && Array.isArray(after)) {
+    if (
+      (path === "/nodes" || path === "/edges" || path === "/inputs") &&
+      diffKeyedArray(before, after, path, changes)
+    )
+      return;
     const length = Math.max(before.length, after.length);
     for (let index = 0; index < length; index += 1)
       diffValues(before[index], after[index], `${path}/${index}`, changes);

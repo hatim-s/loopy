@@ -754,12 +754,12 @@ export function createLocalApi(options: LocalApiOptions): Hono {
           requestedBaseVersion: baseVersion,
         },
       );
-    const operations = body.operations ?? body.patch;
     const patch = {
       schemaVersion: "1" as const,
       workflowId,
       baseVersion,
-      operations: Array.isArray(operations) ? operations : [],
+      ...(body.operations === undefined ? {} : { operations: body.operations }),
+      ...(body.patch === undefined ? {} : { patch: body.patch }),
     };
     const parsed = WorkflowPatchSchema.safeParse(patch);
     if (!parsed.success) {
@@ -842,8 +842,16 @@ export function createLocalApi(options: LocalApiOptions): Hono {
       throw new ApiError(400, "invalid_request", "Workflow version must be positive");
     const record =
       repository.getWorkflowVersion(c.req.param("id"), version) ?? notFound("Workflow version");
+    const checked = validateWorkflowForSave(record.definition);
+    if (!checked.workflow || checked.diagnostics.some((item) => item.severity === "error"))
+      throw new ApiError(
+        422,
+        "workflow_export_invalid",
+        "Stored workflow definition failed validation",
+        { diagnostics: checked.diagnostics },
+      );
     c.header("Content-Type", "application/json");
-    return c.body(JSON.stringify(record.definition));
+    return c.body(JSON.stringify(checked.workflow));
   });
   api.post("/workflows/import", async (c) => {
     const body = await jsonBody(c, maxBodyBytes);

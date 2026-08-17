@@ -428,6 +428,17 @@ describe("workflow editing API", () => {
       expect(storage.runtime.listWorkflowVersions(workflowId)).toHaveLength(5);
       const stale = await patch(1, [{ op: "set_workflow_name", name: "stale" }]);
       expect(stale.status).toBe(409);
+      const bothPatchAliases = await app.request(`/api/v1/workflows/${workflowId}/patch`, {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          baseVersion: 5,
+          operations: [{ op: "set_workflow_name", name: "canonical" }],
+          patch: [{ op: "set_workflow_name", name: "alias" }],
+        }),
+      });
+      expect(bothPatchAliases.status).toBe(422);
+      expect(storage.runtime.listWorkflowVersions(workflowId)).toHaveLength(5);
 
       const diff = await app.request(`/api/v1/workflows/${workflowId}/diff?from=1&to=2`, {
         headers,
@@ -435,8 +446,8 @@ describe("workflow editing API", () => {
       expect(diff.status).toBe(200);
       expect((await diff.json()).changes).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ path: `/nodes/0/provider`, after: "pi" }),
-          expect.objectContaining({ path: `/nodes/0/model`, after: "test-model" }),
+          expect.objectContaining({ path: `/nodes/${agentId}/provider`, after: "pi" }),
+          expect.objectContaining({ path: `/nodes/${agentId}/model`, after: "test-model" }),
         ]),
       );
 
@@ -448,6 +459,44 @@ describe("workflow editing API", () => {
       expect(run.status).toBe(201);
       expect((await run.json()).workflowVersion).toBe(2);
       expect(started[0]?.workflowVersion).toBe(2);
+
+      const legacyId = "77777777-7777-4777-8777-777777777777";
+      const legacy = structuredClone(base);
+      legacy.id = legacyId;
+      delete legacy.triggers;
+      storage.runtime.createWorkflowVersion({
+        workflowId: legacyId,
+        version: 1,
+        definition: legacy as import("@loopy/contracts").JsonObject,
+      });
+      const normalizedExport = await app.request(`/api/v1/workflows/${legacyId}/1/export`, {
+        headers,
+      });
+      expect(normalizedExport.status).toBe(200);
+      expect((await normalizedExport.json()).triggers).toEqual({ manual: true });
+
+      const corruptId = "88888888-8888-4888-8888-888888888888";
+      storage.runtime.createWorkflowVersion({
+        workflowId: corruptId,
+        version: 1,
+        definition: {
+          id: corruptId,
+          workflowVersion: 1,
+          name: "corrupt legacy workflow",
+          nodes: [],
+          edges: [],
+        },
+      });
+      const invalidExport = await app.request(`/api/v1/workflows/${corruptId}/1/export`, {
+        headers,
+      });
+      expect(invalidExport.status).toBe(422);
+      expect(await invalidExport.json()).toMatchObject({
+        error: {
+          code: "workflow_export_invalid",
+          message: "Stored workflow definition failed validation",
+        },
+      });
     } finally {
       storage.close();
       rmSync(dir, { recursive: true, force: true });

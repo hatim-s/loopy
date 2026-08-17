@@ -4282,6 +4282,7 @@
             "items": {
               "$ref": "#/$defs/__schema2"
             },
+            "maxItems": 256,
             "minItems": 1,
             "type": "array"
           },
