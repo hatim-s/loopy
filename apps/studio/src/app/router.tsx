@@ -20,7 +20,11 @@ const rootRoute = createRootRouteWithContext<StudioRouterContext>()({
   ),
 });
 
-function slotRoute(path: FeatureKey, pages: ReturnType<typeof createFeaturePages>) {
+function slotRoute(
+  path: FeatureKey,
+  pages: ReturnType<typeof createFeaturePages>,
+  context: StudioRouterContext,
+) {
   return createRoute({
     getParentRoute: () => rootRoute,
     path,
@@ -28,7 +32,7 @@ function slotRoute(path: FeatureKey, pages: ReturnType<typeof createFeaturePages
       const Page = pages[path];
       return (
         <div className="route-view">
-          <Page feature={path} />
+          <Page feature={path} api={context.api} />
         </div>
       );
     },
@@ -50,12 +54,12 @@ export function createStudioRouter(
   const pages = createFeaturePages(featurePages);
   const routeTree = rootRoute.addChildren([
     indexRoute,
-    slotRoute("providers", pages),
-    slotRoute("sessions", pages),
-    slotRoute("extractions", pages),
-    slotRoute("runs", pages),
-    slotRoute("workflows", pages),
-    slotRoute("settings", pages),
+    slotRoute("providers", pages, context),
+    slotRoute("sessions", pages, context),
+    slotRoute("extractions", pages, context),
+    slotRoute("runs", pages, context),
+    slotRoute("workflows", pages, context),
+    slotRoute("settings", pages, context),
   ]);
   return createRouter({ routeTree, context });
 }

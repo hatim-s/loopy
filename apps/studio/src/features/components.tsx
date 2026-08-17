@@ -530,13 +530,22 @@ export interface RunControlsProps {
   onCommand?: (descriptor: ApiMutationDescriptor) => void;
   onReplay?: () => void;
   api?: StudioApiSeam;
+  /** Fork stays opt-in until the runtime exposes durable checkpoint semantics. */
+  forkSupported?: boolean;
 }
 
-export function RunControls({ state, onCommand, onReplay, api }: RunControlsProps) {
+export function RunControls({
+  state,
+  onCommand,
+  onReplay,
+  api,
+  forkSupported = false,
+}: RunControlsProps) {
   const selectedAttempt = state.selectedAttemptId
     ? state.attempts.find((attempt) => attempt.attemptId === state.selectedAttemptId)
     : undefined;
   const controls = legalControls(state.status, selectedAttempt);
+  controls.fork = controls.fork && forkSupported;
   const command = (name: "pause" | "resume" | "cancel" | "retry" | "fork") => {
     const body =
       name === "retry"
@@ -583,6 +592,11 @@ export function RunControls({ state, onCommand, onReplay, api }: RunControlsProp
       <button type="button" onClick={() => command("fork")} disabled={!controls.fork}>
         Fork from checkpoint
       </button>
+      {!forkSupported ? (
+        <span role="note" style={{ color: palette.muted }}>
+          Fork unavailable: checkpoint storage is not implemented by this runtime.
+        </span>
+      ) : null}
     </div>
   );
 }

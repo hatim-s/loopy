@@ -1,0 +1,45 @@
+{
+  "name": "studio-phase4-demo",
+  "description": "Sanitized local Studio debugger state; no provider credentials or network calls.",
+  "provider": {
+    "id": "codex",
+    "status": "supported",
+    "capabilities": ["sessionImport", "traceExport", "workflowExecution"]
+  },
+  "session": {
+    "id": "session-demo-001",
+    "provider": "codex",
+    "source": "fixture/studio/demo.json",
+    "events": ["event-001", "event-002", "event-003"]
+  },
+  "workflow": {
+    "id": "workflow-demo",
+    "version": 1,
+    "nodes": [
+      { "id": "start", "name": "Start", "kind": "input" },
+      { "id": "finish", "name": "Finish", "kind": "output" }
+    ],
+    "edges": [{ "id": "edge-start-finish", "source": "start", "target": "finish" }]
+  },
+  "run": {
+    "id": "run-demo-001",
+    "status": "completed",
+    "events": [
+      { "id": "event-001", "sequence": 1, "type": "run.started", "payload": {} },
+      {
+        "id": "event-002",
+        "sequence": 2,
+        "type": "node.completed",
+        "nodeId": "start",
+        "attemptId": "attempt-001",
+        "payload": {}
+      },
+      {
+        "id": "event-003",
+        "sequence": 3,
+        "type": "run.completed",
+        "payload": { "status": "succeeded" }
+      }
+    ]
+  }
+}

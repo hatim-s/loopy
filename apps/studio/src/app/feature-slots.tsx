@@ -1,4 +1,5 @@
 import { type ComponentType, type LazyExoticComponent, lazy } from "react";
+import type { ApiClient } from "./api";
 
 export type FeatureKey =
   | "overview"
@@ -8,7 +9,7 @@ export type FeatureKey =
   | "runs"
   | "workflows"
   | "settings";
-export type FeaturePageProps = { feature: FeatureKey };
+export type FeaturePageProps = { feature: FeatureKey; api?: ApiClient };
 export type FeaturePage = ComponentType<FeaturePageProps>;
 export type FeaturePageLoader = () => Promise<{ default: FeaturePage }>;
 export type FeaturePageRegistry = Partial<Record<FeatureKey, FeaturePageLoader>>;
@@ -41,12 +42,13 @@ function makeDefaultPage(feature: FeatureKey): FeaturePage {
 
 export const defaultFeaturePages: Record<FeatureKey, FeaturePageLoader> = {
   overview: () => Promise.resolve({ default: makeDefaultPage("overview") }),
-  providers: () => Promise.resolve({ default: makeDefaultPage("providers") }),
-  sessions: () => Promise.resolve({ default: makeDefaultPage("sessions") }),
-  extractions: () => Promise.resolve({ default: makeDefaultPage("extractions") }),
-  runs: () => Promise.resolve({ default: makeDefaultPage("runs") }),
-  workflows: () => Promise.resolve({ default: makeDefaultPage("workflows") }),
-  settings: () => Promise.resolve({ default: makeDefaultPage("settings") }),
+  providers: () => import("./pages").then(({ ProvidersPage }) => ({ default: ProvidersPage })),
+  sessions: () => import("./pages").then(({ SessionsPage }) => ({ default: SessionsPage })),
+  extractions: () =>
+    import("./pages").then(({ ExtractionsPage }) => ({ default: ExtractionsPage })),
+  runs: () => import("./pages").then(({ RunsPage }) => ({ default: RunsPage })),
+  workflows: () => import("./pages").then(({ WorkflowsPage }) => ({ default: WorkflowsPage })),
+  settings: () => import("./pages").then(({ SettingsPage }) => ({ default: SettingsPage })),
 };
 
 export function createFeaturePages(

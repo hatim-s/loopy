@@ -49,4 +49,29 @@ describe("studio API client", () => {
       message: "Unavailable",
     });
   });
+
+  it("parses authenticated SSE events without putting the token in the URL", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        new Response(
+          'event: heartbeat\ndata: {}\n\n\nid: 7\nevent: node.completed\ndata: {"type":"node.completed"}\n\n',
+          { status: 200, headers: { "Content-Type": "text/event-stream" } },
+        ),
+      );
+    const received: Record<string, unknown>[] = [];
+    const client = createAuthenticatedApiClient({
+      baseUrl: "http://studio.test/api/v1",
+      token: "secret",
+      fetcher,
+    });
+    const stop = client.streamEvents("run 1", (event) => received.push(event));
+    await vi.waitFor(() => expect(received).toHaveLength(1));
+    stop();
+    expect(received[0]).toMatchObject({ type: "node.completed", sequence: 7 });
+    expect(String(fetcher.mock.calls[0]?.[0])).not.toContain("secret");
+    expect(new Headers(fetcher.mock.calls[0]?.[1]?.headers).get("Authorization")).toBe(
+      "Bearer secret",
+    );
+  });
 });

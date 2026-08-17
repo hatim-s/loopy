@@ -289,6 +289,21 @@ export function createLocalApi(options: LocalApiOptions): Hono {
     }
     return c.json({ providers, installations: repository.listProviderInstallations() });
   });
+  api.get("/providers/capabilities", (c) => {
+    if (!registry) return c.json({ capabilities: [] });
+    const capabilities = registry.all().flatMap((adapter) =>
+      Object.entries(adapter.capabilities().capabilities)
+        .filter((entry): entry is [string, NonNullable<(typeof entry)[1]>] => Boolean(entry[1]))
+        .map(([capability, assessment]) => ({
+          provider: adapter.id,
+          capability,
+          status: assessment.status,
+          ...(assessment.reason ? { reason: assessment.reason } : {}),
+          source: "provider-adapter",
+        })),
+    );
+    return c.json({ capabilities });
+  });
   api.get("/providers/:id/probe", async (c) => {
     const adapter = registry?.get(c.req.param("id"));
     if (!adapter) notFound("Provider");
