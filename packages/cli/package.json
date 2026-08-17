@@ -1,24 +1,25 @@
 {
-  "name": "@loopy/cli",
+  "name": "loopy",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "type": "module",
   "bin": {
-    "loopy": "./src/index.ts"
+    "loopy": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "package.json"
+  ],
+  "engines": {
+    "bun": ">=1.3.0"
   },
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./dist/index.js"
   },
   "scripts": {
+    "build": "bun build src/index.ts --outfile dist/index.js --target bun",
+    "prepack": "bun run build",
     "typecheck": "tsc --noEmit -p tsconfig.json"
-  },
-  "dependencies": {
-    "@loopy/contracts": "workspace:*",
-    "@loopy/extractor": "workspace:*",
-    "@loopy/local-api": "workspace:*",
-    "@loopy/providers": "workspace:*",
-    "@loopy/runtime": "workspace:*",
-    "@loopy/storage": "workspace:*",
-    "@loopy/testing": "workspace:*"
   }
 }
