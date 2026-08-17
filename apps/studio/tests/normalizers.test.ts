@@ -28,6 +28,10 @@ describe("Studio runtime normalizers", () => {
     });
   });
 
+  it("maps the runtime succeeded status to the completed Studio state", () => {
+    expect(snapshotFrom({ run: { status: "succeeded" } }, "run-1").status).toBe("completed");
+  });
+
   it("decodes a persisted workflow definition for graph rendering", () => {
     expect(
       topologyFrom({

@@ -326,7 +326,7 @@ export function topologyFrom(value: unknown): WorkflowTopology | undefined {
 function normalizeStudioStatus(value: unknown): DebuggerSnapshot["status"] {
   if (value === "paused") return "paused";
   if (value === "failed") return "failed";
-  if (value === "completed" || value === "cancelled") return "completed";
+  if (value === "completed" || value === "succeeded" || value === "cancelled") return "completed";
   if (
     value === "running" ||
     value === "created" ||
