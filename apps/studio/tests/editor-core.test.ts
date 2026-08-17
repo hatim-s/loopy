@@ -212,6 +212,32 @@ describe("editor core", () => {
     });
   });
 
+  test("discards validation responses and saved resets from an older draft revision", () => {
+    const store = createEditorStore(fixture());
+    const submittedRevision = store.getState().revision;
+    const submittedDocument = structuredClone(store.getState().document);
+    const nodeId = store.getState().document.nodes[0]?.id as string;
+    store.getState().apply({ type: "update_node", nodeId, patch: { name: "Later edit" } });
+
+    expect(
+      store
+        .getState()
+        .applyValidation(
+          { valid: false, diagnostics: [{ message: "stale", severity: "error" }] },
+          submittedRevision,
+        ),
+    ).toBe(false);
+    expect(store.getState().validation).toMatchObject({ status: "idle", diagnostics: [] });
+    expect(store.getState().resetIfRevision(submittedDocument, submittedRevision)).toBe(false);
+    expect(store.getState().document.nodes[0]?.name).toBe("Later edit");
+    expect(store.getState().dirty).toBe(true);
+
+    const cleanStore = createEditorStore(fixture());
+    expect(cleanStore.getState().resetIfRevision(submittedDocument, 0)).toBe(true);
+    expect(JSON.stringify(cleanStore.getState().document)).toBe(JSON.stringify(submittedDocument));
+    expect(cleanStore.getState().dirty).toBe(false);
+  });
+
   test("import/export is contract-validated and auto-layout only changes positions", () => {
     const document = fixture();
     const store = createEditorStore(document);
@@ -225,6 +251,18 @@ describe("editor core", () => {
     const draft = JSON.stringify(store.getState().document);
     expect(store.getState().importDocument("not-json")).toMatchObject({ ok: false });
     expect(JSON.stringify(store.getState().document)).toBe(draft);
+  });
+
+  test("returns contract diagnostics for rejected imports without changing the draft", () => {
+    const store = createEditorStore(fixture());
+    const draft = JSON.stringify(store.getState().document);
+    const result = store.getState().importDocument(JSON.stringify({ schemaVersion: "1" }));
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected import to be rejected");
+    expect(result.diagnostics.length).toBeGreaterThan(0);
+    expect(result.diagnostics[0]?.severity).toBe("error");
+    expect(JSON.stringify(store.getState().document)).toBe(draft);
+    expect(store.getState().dirty).toBe(false);
   });
 
   test("builds deterministic version diffs and keyboard intents", () => {

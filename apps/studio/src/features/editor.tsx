@@ -1305,7 +1305,9 @@ export function WorkflowEditorPage({
     setNotice("Layout arranged for editing; positions are local to this Studio view.");
   };
   const validate = async () => {
-    const current = workflow ?? fallbackWorkflow(workflowId);
+    const store = editorStoreRef.current;
+    const submittedRevision = store?.getState().revision ?? 0;
+    const current = structuredClone(workflow ?? fallbackWorkflow(workflowId));
     setError(undefined);
     try {
       const result = editorAdapter
@@ -1314,7 +1316,11 @@ export function WorkflowEditorPage({
             valid: diagnosticsFor(current).every((item) => item.severity !== "error"),
             diagnostics: diagnosticsFor(current),
           };
-      editorStoreRef.current?.getState().applyValidation(result);
+      const accepted = store?.getState().applyValidation(result, submittedRevision) ?? true;
+      if (!accepted) {
+        setNotice("Validation result discarded because the draft changed while it was running.");
+        return;
+      }
       const diagnostics = (result.diagnostics ?? []).map((item) => ({
         path: item.path ?? "workflow",
         message: item.message,
@@ -1341,7 +1347,10 @@ export function WorkflowEditorPage({
       setNotice("No persistence adapter is connected; changes remain local.");
       return;
     }
-    const errors = diagnosticsFor(workflow).filter((item) => item.severity === "error");
+    const store = editorStoreRef.current;
+    const submittedRevision = store?.getState().revision ?? 0;
+    const submittedWorkflow = structuredClone(store?.getState().document ?? workflow);
+    const errors = diagnosticsFor(submittedWorkflow).filter((item) => item.severity === "error");
     setDiagnostics(errors);
     if (errors.length) {
       setNotice("Fix blocking diagnostics before saving.");
@@ -1353,13 +1362,19 @@ export function WorkflowEditorPage({
       const saved = await editorAdapter.save({
         workflowId: record.workflowId,
         baseVersion: record.version,
-        definition: workflow,
-        summary: `${workflow.nodes.length} nodes · ${workflow.edges.length} edges`,
+        definition: submittedWorkflow,
+        summary: `${submittedWorkflow.nodes.length} nodes · ${submittedWorkflow.edges.length} edges`,
       });
       setRecord(saved);
       setPrevious(saved.definition);
-      editorStoreRef.current?.getState().reset(saved.definition);
-      setNotice(`Saved version ${saved.version}.`);
+      const preserved = store
+        ? !store.getState().resetIfRevision(saved.definition, submittedRevision)
+        : false;
+      setNotice(
+        preserved
+          ? `Saved version ${saved.version}; later edits remain unsaved.`
+          : `Saved version ${saved.version}.`,
+      );
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
@@ -1391,10 +1406,23 @@ export function WorkflowEditorPage({
   };
   const importWorkflow = async (file: File) => {
     try {
-      const parsed = JSON.parse(await file.text()) as WorkflowDefinition;
-      if (!parsed || parsed.schemaVersion !== "1" || !Array.isArray(parsed.nodes))
-        throw new Error("Imported file is not a Loopy workflow definition.");
-      commitWorkflow(parsed);
+      setError(undefined);
+      const store = editorStoreRef.current;
+      if (!store) throw new Error("The editor is not ready to import a workflow.");
+      const imported = store.getState().importDocument(await file.text());
+      if (!imported.ok) {
+        const importedDiagnostics = imported.diagnostics.map((item) => ({
+          path: item.path ?? "workflow",
+          message: item.message,
+          severity: item.severity ?? "error",
+        }));
+        setDiagnostics(importedDiagnostics);
+        setNotice(
+          `Import rejected: ${importedDiagnostics.length} diagnostic${importedDiagnostics.length === 1 ? "" : "s"} found.`,
+        );
+        return;
+      }
+      setDiagnostics([]);
       setNotice("Imported workflow as unsaved local changes.");
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));

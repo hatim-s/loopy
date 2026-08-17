@@ -41,9 +41,16 @@ export type EditorStore = {
   clearSelection: () => void;
   setPosition: (nodeId: string, position: EditorPosition) => void;
   autoLayout: () => Record<string, EditorPosition>;
-  applyValidation: (result: ServerValidationResult) => void;
+  /** Apply a response only when it was produced for the current draft revision. */
+  applyValidation: (result: ServerValidationResult, checkedRevision?: number) => boolean;
   markSaved: () => void;
   reset: (document: WorkflowDefinition, positions?: Record<string, EditorPosition>) => void;
+  /** Reset a saved draft only if no edits occurred after the submitted revision. */
+  resetIfRevision: (
+    document: WorkflowDefinition,
+    submittedRevision: number,
+    positions?: Record<string, EditorPosition>,
+  ) => boolean;
   importDocument: (
     input: unknown,
   ) => { ok: true } | { ok: false; diagnostics: EditorValidation["diagnostics"] };
@@ -204,11 +211,13 @@ export function createEditorStore(
         });
         return positions;
       },
-      applyValidation(result) {
+      applyValidation(result, checkedRevision = get().revision) {
         const normalized = validationFromServer(result);
+        if (checkedRevision !== get().revision) return false;
         set((state) => {
-          state.validation = { ...normalized, checkedRevision: state.revision, source: "server" };
+          state.validation = { ...normalized, checkedRevision, source: "server" };
         });
+        return true;
       },
       markSaved() {
         set((state) => {
@@ -225,6 +234,11 @@ export function createEditorStore(
           state.validation = { status: "idle", diagnostics: [] };
           state.history = { past: [], future: [], limit: historyLimit };
         });
+      },
+      resetIfRevision(document, submittedRevision, positions = autoLayout(document)) {
+        if (get().revision !== submittedRevision) return false;
+        get().reset(document, positions);
+        return true;
       },
       importDocument(input) {
         const decoded = decodeWorkflowDocument(input);
