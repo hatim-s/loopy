@@ -314,7 +314,11 @@ describe("loopy CLI shell", () => {
       const persisted = new Storage({ projectDir: project });
       expect(persisted.runtime.listWorkflowVersions()).toHaveLength(1);
       expect(persisted.runtime.listRuns("succeeded")).toHaveLength(1);
+      const runId = persisted.runtime.listRuns("succeeded")[0]?.id;
       persisted.close();
+      expect(runId).toBeDefined();
+      expect(await mainAsync(["replay", runId as string, "--project", project, "--json"])).toBe(0);
+      expect(lastJson<{ frames: unknown[] }>().frames.length).toBeGreaterThan(0);
     } finally {
       log.mockRestore();
     }

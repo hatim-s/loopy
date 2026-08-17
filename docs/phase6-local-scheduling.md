@@ -57,3 +57,18 @@ loopy --version
 injects a one-time in-memory Studio bootstrap global; the bearer token is not
 put in a URL or browser storage. Use `--no-open` for headless environments and
 `--json` for a listener-free launch-contract dry run.
+
+# Phase 7 lifecycle and playback
+
+`loopy schedule remove <id>` is a SQLite transaction. It removes the schedule,
+cursor, and terminal fire/link history together, but refuses when any linked run
+is queued, active, or otherwise non-terminal. A refused removal leaves all
+schedule and run records intact; a removed schedule is absent from both `list`
+and subsequent scheduler ticks.
+
+`loopy replay <run-id>` is provider-free playback of persisted runtime events,
+ordered by durable sequence. It never starts a provider or writes the database.
+`loopy fork <run-id> --from-node <node-id>` requires a persisted successful
+`node.completed` checkpoint and carries completed attempts from that boundary
+into the same workflow version before execution resumes. Without a safe
+checkpoint it fails closed rather than rerunning completed work.

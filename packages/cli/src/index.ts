@@ -8,6 +8,7 @@ import { createLocalApi, createLocalServerConfig } from "@loopy/local-api";
 import { createDefaultProviderRegistry, type ProviderRegistry } from "@loopy/providers";
 import {
   createProviderExecutor,
+  replayRun,
   type ProviderExecutor,
   RuntimeScheduler,
   type RuntimeStore,
@@ -98,6 +99,8 @@ Commands:
   console.log(
     "  loopy cleanup preview|apply [--before <ISO>] [--max-age-days <n>] [--max-runs <n>] [--json]",
   );
+  console.log("  loopy replay <run-id> [--from-sequence <n>] [--project <dir>] [--json]");
+  console.log("  loopy fork <run-id> --from-node <completed-node> [--project <dir>] [--json]");
   console.log(
     "  loopy validate-provider --provider <provider> --opt-in [--json]  (read-only probe; no run/network)",
   );
@@ -210,6 +213,8 @@ function positional(args: readonly string[], start = 1): string | undefined {
     "--origin",
     "--output",
     "--reason",
+    "--from-sequence",
+    "--from-node",
     "--node",
   ]);
   for (let index = start; index < args.length; index += 1) {
@@ -791,6 +796,51 @@ async function runWorkflow(args: readonly string[], deps: CliDependencies): Prom
   }
 }
 
+async function replayWorkflow(args: readonly string[], deps: CliDependencies): Promise<number> {
+  const runId = positional(args);
+  if (!runId) throw new Error("replay requires a run ID");
+  const storage = await storageFor(args, deps, true);
+  try {
+    const result = await replayRun(
+      new SqliteRuntimeStore(storage),
+      runId,
+      option(args, "--from-sequence") === undefined
+        ? 0
+        : Number(option(args, "--from-sequence")),
+    );
+    const output = { run: result.snapshot.run, frames: result.frames };
+    if (jsonOutput(args)) printJson(output);
+    else
+      for (const frame of result.frames)
+        console.log(`${frame.event.sequence}\t${frame.event.type}`);
+    return 0;
+  } finally {
+    storage.close();
+  }
+}
+
+async function forkWorkflow(args: readonly string[], deps: CliDependencies): Promise<number> {
+  const runId = positional(args);
+  const nodeId = option(args, "--from-node") ?? option(args, "--node");
+  if (!runId) throw new Error("fork requires a run ID");
+  if (!nodeId) throw new Error("fork requires --from-node <completed-node>");
+  const storage = await storageFor(args, deps);
+  try {
+    const runtimeStore = new SqliteRuntimeStore(storage);
+    const provider = deps.providerExecutor ?? new DeterministicFakeProvider();
+    const runtime =
+      deps.runtimeFactory?.(runtimeStore, provider) ??
+      new RuntimeScheduler({ store: runtimeStore, provider });
+    const started = await runtime.fork(runId, nodeId, parseRunInput(args));
+    const snapshot = await runtime.wait(started.runId);
+    if (jsonOutput(args)) printJson(snapshot);
+    else console.log(`fork ${runId} from ${nodeId}: ${snapshot.run.runId} ${snapshot.run.status}`);
+    return snapshot.run.status === "succeeded" ? 0 : 1;
+  } finally {
+    storage.close();
+  }
+}
+
 /** Explicit opt-in, read-only installation probe. It never starts a provider run. */
 async function validateProvider(args: readonly string[], deps: CliDependencies): Promise<number> {
   if (!args.includes("--opt-in"))
@@ -828,6 +878,8 @@ async function dispatch(args: readonly string[], deps: CliDependencies): Promise
   if (command === "pause" || command === "resume" || command === "cancel" || command === "retry")
     return runtimeMutation(args, deps, command);
   if (command === "trace") return traceCommand(args, deps);
+  if (command === "replay") return replayWorkflow(args, deps);
+  if (command === "fork") return forkWorkflow(args, deps);
   if (command === "validate-provider" || command === "validate")
     return validateProvider(args, deps);
   if (command === "ui") return launchUi(args, deps);

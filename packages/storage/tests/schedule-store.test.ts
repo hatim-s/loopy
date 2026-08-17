@@ -296,4 +296,41 @@ describe("schedule persistence", () => {
     expect(storage.runtime.getRun("active-run")?.status).toBe("running");
     storage.close();
   });
+
+  test("removes terminal schedule history transactionally and refuses active links", () => {
+    const storage = new Storage({ projectDir: project() });
+    storage.runtime.createWorkflowVersion({
+      workflowId: "wf",
+      version: 1,
+      definition: { id: "wf", workflowVersion: 1 },
+    });
+    const schedule = storage.schedules.create({
+      id: "remove-me",
+      name: "remove",
+      workflowId: "wf",
+      workflowVersion: 1,
+      expression: "manual",
+    });
+    const fire = storage.schedules.claimFire({
+      scheduleId: schedule.id,
+      fireKey: "fire",
+      scheduledAt: "2026-08-17T00:00:00.000Z",
+    });
+    storage.runtime.createRun({
+      id: "active",
+      workflowId: "wf",
+      workflowVersion: 1,
+      status: "running",
+    });
+    storage.schedules.linkRun({ scheduleId: schedule.id, fireId: fire.id, runId: "active" });
+    expect(() => storage.schedules.remove(schedule.id)).toThrow(/active or non-terminal/);
+    expect(storage.schedules.get(schedule.id)).toBeDefined();
+    storage.runtime.transitionRun("active", "succeeded");
+    expect(storage.schedules.remove(schedule.id)).toBe(true);
+    expect(storage.schedules.get(schedule.id)).toBeUndefined();
+    expect(storage.schedules.listFires(schedule.id)).toHaveLength(0);
+    expect(storage.schedules.listLinks(schedule.id)).toHaveLength(0);
+    expect(storage.schedules.remove(schedule.id)).toBe(false);
+    storage.close();
+  });
 });

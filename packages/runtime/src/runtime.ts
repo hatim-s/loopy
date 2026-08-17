@@ -505,7 +505,7 @@ export class RuntimeScheduler {
         workflowId: run.workflowId,
         workflowVersion: run.workflowVersion,
         executionPlanHash: run.executionPlanHash,
-        planHash: run.executionPlanHash,
+        planHash: run.executionPlanHash ?? "fork",
       }),
     ]);
     void this.pump(run.runId);
@@ -517,6 +517,93 @@ export class RuntimeScheduler {
   ): Promise<RuntimeSnapshot> {
     const started = await this.start(plan, inputs);
     return this.wait(started.runId);
+  }
+  /** Start a new run from an explicit persisted completed-node checkpoint. */
+  async fork(
+    sourceRunId: string,
+    fromNodeId: string,
+    inputs?: JsonObject,
+  ): Promise<RunRecord> {
+    const source = await this.requireRun(sourceRunId);
+    if (!(TERMINAL_RUNS.has(source.status) || source.status === "paused"))
+      throw new Error(`Run ${sourceRunId} has no stable checkpoint (${source.status})`);
+    const sourceAttempts = await this.options.store.listAttempts(sourceRunId);
+    const sourceEvents = await this.options.store.listEvents(sourceRunId);
+    const checkpoint = sourceEvents.find(
+      (event) =>
+        event.type === "node.completed" &&
+        event.nodeId === fromNodeId &&
+        (event.payload?.completion as Record<string, unknown> | undefined)?.status === "succeeded",
+    );
+    if (!checkpoint) throw new Error(`No safe completed-node checkpoint exists for ${fromNodeId}`);
+    const completed = sourceAttempts
+      .filter((attempt) => attempt.status === "succeeded" || attempt.status === "skipped")
+      .filter((attempt) =>
+        sourceEvents.some(
+          (event) =>
+            event.type === "node.completed" &&
+            event.attemptId === attempt.attemptId &&
+            event.sequence <= checkpoint.sequence,
+        ),
+      )
+      .sort((a, b) => a.nodeId.localeCompare(b.nodeId) || a.attempt - b.attempt);
+    const latest = new Map<string, AttemptRecord>();
+    for (const attempt of completed) latest.set(attempt.nodeId, attempt);
+    if (!latest.has(fromNodeId))
+      throw new Error(`Checkpoint ${fromNodeId} has no persisted completed attempt`);
+    const run: RunRecord = {
+      runId: this.makeId("fork"),
+      workflowId: source.workflowId,
+      workflowVersion: source.workflowVersion,
+      plan: source.plan,
+      executionPlanHash: source.executionPlanHash,
+      inputs: inputs ?? source.inputs,
+      status: "created",
+      createdAt: this.now(),
+    };
+    const clones = [...latest.values()].map((attempt) => ({
+      ...attempt,
+      attemptId: this.makeId(`fork-attempt-${attempt.nodeId}`),
+      runId: run.runId,
+      attempt: 1,
+      createdAt: this.now(),
+      startedAt: undefined,
+      endedAt: this.now(),
+    }));
+    const commands: RuntimeStoreCommand[] = [
+      { type: "create_run", run },
+      await this.event(run.runId, "run.created", undefined, undefined, {
+        workflowId: run.workflowId,
+        workflowVersion: run.workflowVersion,
+        executionPlanHash: run.executionPlanHash,
+        forkedFromRunId: sourceRunId,
+        checkpointNodeId: fromNodeId,
+      }),
+    ];
+    for (const attempt of clones) {
+      commands.push({ type: "create_attempt", attempt, expectedRunStatus: "created" });
+      commands.push(
+        await this.event(run.runId, "node.completed", attempt.nodeId, attempt.attemptId, {
+          completion: attempt.completion ?? {
+            status: attempt.status === "skipped" ? "skipped" : "succeeded",
+            summary: "Carried from explicit fork checkpoint",
+            outputs: attempt.output ?? {},
+          },
+          carriedFromRunId: sourceRunId,
+        }),
+      );
+    }
+    commands.push(
+      { type: "set_run", runId: run.runId, patch: { status: "running", startedAt: this.now() } },
+      await this.event(run.runId, "run.started", undefined, undefined, {
+        planHash: run.executionPlanHash,
+        forkedFromRunId: sourceRunId,
+        checkpointNodeId: fromNodeId,
+      }),
+    );
+    await this.options.store.commit(commands);
+    void this.pump(run.runId);
+    return (await this.options.store.getRun(run.runId)) as RunRecord;
   }
   async wait(runId: string): Promise<RuntimeSnapshot> {
     while (true) {

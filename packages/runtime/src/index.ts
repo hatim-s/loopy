@@ -1,5 +1,6 @@
 export * from "./provider-executor.ts";
 export * from "./runtime.ts";
+export * from "./replay.ts";
 export type {
   CompilationResult,
   DiagnosticCode,

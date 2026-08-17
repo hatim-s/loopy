@@ -5,7 +5,7 @@ import {
   DeterministicVerifier,
   InMemoryRuntimeStore,
 } from "../../testing/src/index.ts";
-import { RuntimeScheduler } from "../src/index.ts";
+import { replayEvents, RuntimeScheduler } from "../src/index.ts";
 
 const ids = createTestIds();
 function scheduler(
@@ -44,6 +44,24 @@ describe("phase 1 runtime", () => {
     const result = await x.runtime.run(workflow);
     expect(result.run.status).toBe("succeeded");
     expect(result.attempts.filter((a) => a.status === "succeeded")).toHaveLength(2);
+  });
+
+  test("replays persisted events in sequence without executing", () => {
+    const frames = replayEvents([
+      { sequence: 2, type: "later", runId: "r", occurredAt: "" },
+      { sequence: 0, type: "first", runId: "r", occurredAt: "" },
+    ]);
+    expect(frames.map((frame) => frame.event.type)).toEqual(["first", "later"]);
+  });
+
+  test("forks from a completed checkpoint without rerunning its prefix", async () => {
+    const x = scheduler();
+    const workflow = plan([agent("a"), agent("b")], [{ id: "ab", source: "a", target: "b" }]);
+    const source = await x.runtime.run(workflow);
+    const forked = await x.runtime.fork(source.run.runId, "a");
+    const result = await x.runtime.wait(forked.runId);
+    expect(result.run.status).toBe("succeeded");
+    expect(x.provider.calls.map((call) => call.nodeId)).toEqual(["a", "b", "b"]);
   });
 
   test("routes only the safe predicate branch", async () => {
