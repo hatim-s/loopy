@@ -6,8 +6,10 @@ import { describe, expect, it } from "vitest";
 import { createApiClient } from "../src/app/api";
 import { createStudioRouter } from "../src/app/router";
 
+const domIt = typeof document === "undefined" ? it.skip : it;
+
 describe("studio router", () => {
-  it("routes to the sessions feature slot and keeps navigation deterministic", async () => {
+  domIt("routes to the sessions feature slot and keeps navigation deterministic", async () => {
     const router = createStudioRouter({
       api: createApiClient({ fetcher: fetch }),
       queryClient: new QueryClient(),

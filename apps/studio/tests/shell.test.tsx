@@ -7,6 +7,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createApiClient } from "../src/app/api";
 import { createStudioRouter } from "../src/app/router";
 
+const domIt = typeof document === "undefined" ? it.skip : it;
+
 function renderShell() {
   const router = createStudioRouter({ api: createApiClient(), queryClient: new QueryClient() });
   router.history = createMemoryHistory({ initialEntries: ["/sessions"] });
@@ -16,7 +18,7 @@ function renderShell() {
 describe("StudioShell", () => {
   afterEach(() => cleanup());
 
-  it("renders the debugger frame with keyboard-accessible navigation", async () => {
+  domIt("renders the debugger frame with keyboard-accessible navigation", async () => {
     renderShell();
     await waitFor(() => {
       expect(screen.getByRole("navigation", { name: "Studio navigation" })).toBeTruthy();
@@ -26,14 +28,14 @@ describe("StudioShell", () => {
     });
   });
 
-  it("exposes an explicit collapse control", async () => {
+  domIt("exposes an explicit collapse control", async () => {
     renderShell();
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Collapse sidebar" })).toBeTruthy(),
     );
   });
 
-  it("keeps compact icon-only navigation links named and keyboard-focusable", async () => {
+  domIt("keeps compact icon-only navigation links named and keyboard-focusable", async () => {
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 800 });
     renderShell();
 

@@ -9,6 +9,23 @@ function response(body: unknown, init: ResponseInit = {}) {
   });
 }
 
+async function waitForAssertion(assertion: () => void, timeoutMs = 1_000, intervalMs = 10) {
+  const deadline = Date.now() + timeoutMs;
+  let lastError: unknown;
+
+  while (Date.now() <= deadline) {
+    try {
+      assertion();
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Assertion timed out");
+}
+
 describe("studio API client", () => {
   it("keeps auth in memory and sends credentials", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response({ ok: true }));
@@ -66,7 +83,7 @@ describe("studio API client", () => {
       fetcher,
     });
     const stop = client.streamEvents("run 1", (event) => received.push(event));
-    await vi.waitFor(() => expect(received).toHaveLength(1));
+    await waitForAssertion(() => expect(received).toHaveLength(1));
     stop();
     expect(received[0]).toMatchObject({ type: "node.completed", sequence: 7 });
     expect(String(fetcher.mock.calls[0]?.[0])).not.toContain("secret");
