@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { type TraceEvent, TraceEventSchema } from "@loopy/contracts";
 import { describe, expect, test } from "vitest";
 import {
@@ -14,7 +13,7 @@ import {
   type TraceEventSink,
 } from "../src/index.js";
 
-const fixtureText = readFileSync(new URL("../fixtures/trace.jsonl", import.meta.url), "utf8");
+const fixtureText = await Bun.file(new URL("../fixtures/trace.jsonl", import.meta.url)).text();
 const fixture = decodeTraceJsonl(fixtureText, { trailingNewlinePolicy: "required" });
 const events = fixture.events as TraceEvent[];
 
