@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
 import type { TraceEvent } from "@loopy/contracts";
 import workflowFixture from "../../../fixtures/workflows/valid-basic.json";
 import { compileExtractionProposal } from "../src/compiler.ts";
@@ -196,9 +195,7 @@ describe("extraction proposal compiler and repair", () => {
   });
 
   test("rejects unsupported provider selection instead of falling back", async () => {
-    const events = JSON.parse(
-      readFileSync("fixtures/sessions/successful.json", "utf8"),
-    ) as TraceEvent[];
+    const events = (await Bun.file("fixtures/sessions/successful.json").json()) as TraceEvent[];
     const result = await extractImportedSession(
       {
         id: importId,
@@ -213,9 +210,7 @@ describe("extraction proposal compiler and repair", () => {
   });
 
   test("derives distinct read-only prompts and blocks mutating work", async () => {
-    const source = JSON.parse(
-      readFileSync("fixtures/sessions/successful.json", "utf8"),
-    ) as TraceEvent[];
+    const source = (await Bun.file("fixtures/sessions/successful.json").json()) as TraceEvent[];
     const cat = structuredClone(source);
     const requested = cat.find((event) => event.type === "tool.requested");
     if (!requested || requested.type !== "tool.requested") throw new Error("missing tool request");
@@ -268,9 +263,7 @@ describe("extraction proposal compiler and repair", () => {
   });
 
   test("grounds inferred inputs in their matched non-primary variable evidence", async () => {
-    const source = JSON.parse(
-      readFileSync("fixtures/sessions/successful.json", "utf8"),
-    ) as TraceEvent[];
+    const source = (await Bun.file("fixtures/sessions/successful.json").json()) as TraceEvent[];
     const extracted = await extractImportedSession({
       id: importId,
       provider: "codex",
@@ -299,9 +292,7 @@ describe("extraction proposal compiler and repair", () => {
   });
 
   test("blocks an inferred input when prepared evidence does not cover its source events", async () => {
-    const source = JSON.parse(
-      readFileSync("fixtures/sessions/successful.json", "utf8"),
-    ) as TraceEvent[];
+    const source = (await Bun.file("fixtures/sessions/successful.json").json()) as TraceEvent[];
     const prepared = prepareDeterministicExtractionInput({
       id: importId,
       provider: "codex",

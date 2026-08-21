@@ -1,13 +1,10 @@
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { WorkflowDefinitionSchema } from "@loopy/contracts";
 import { describe, expect, test } from "vitest";
 import { applyWorkflowPatch, WorkflowEditError, workflowVersionDiff } from "../src/workflow-edit";
 
 const fixture = WorkflowDefinitionSchema.parse(
-  JSON.parse(
-    readFileSync(join(import.meta.dir, "../../../fixtures/workflows/valid-basic.json"), "utf8"),
-  ),
+  await Bun.file(join(import.meta.dir, "../../../fixtures/workflows/valid-basic.json")).json(),
 );
 
 describe("workflow edit contracts", () => {

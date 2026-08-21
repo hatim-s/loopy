@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtractionProposal, JsonObject } from "@loopy/contracts";
@@ -205,13 +205,13 @@ describe("storage", () => {
     expect(s.runtime.countEvents("run")).toBe(0);
     s.close();
   });
-  test("does not silently steal a live or stale lock and releases owned locks", () => {
+  test("does not silently steal a live or stale lock and releases owned locks", async () => {
     const dir = project();
     const first = new Storage({ projectDir: dir });
     expect(() => new Storage({ projectDir: dir })).toThrow(ProjectLockError);
     first.close();
     const lock = join(dir, ".loopy", "loopy.lock");
-    writeFileSync(
+    await Bun.write(
       lock,
       JSON.stringify({
         pid: 999_999_999,
@@ -221,7 +221,7 @@ describe("storage", () => {
       }),
     );
     expect(() => new Storage({ projectDir: dir, staleLockAfterMs: 0 })).toThrow(/stale/);
-    writeFileSync(
+    await Bun.write(
       lock,
       JSON.stringify({
         pid: process.pid,
@@ -231,7 +231,7 @@ describe("storage", () => {
       }),
     );
     expect(() => new Storage({ projectDir: dir })).toThrow(/live owner/);
-    expect(JSON.parse(readFileSync(lock, "utf8")).token).toBe("foreign");
+    expect((await Bun.file(lock).json()).token).toBe("foreign");
   });
   test("releases the project lock when database initialization fails", () => {
     const dir = project();
