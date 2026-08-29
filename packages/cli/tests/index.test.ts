@@ -1,5 +1,4 @@
-import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,11 +16,11 @@ describe("loopy CLI shell", () => {
       expect(await mainAsync(["init", "--project", project, "--json"])).toBe(0);
       const configPath = resolve(project, ".loopy/config.json");
       expect(existsSync(configPath)).toBe(true);
-      const initial = readFileSync(configPath, "utf8");
-      writeFileSync(configPath, '{"userSetting":true}\n');
+      const initial = await Bun.file(configPath).text();
+      await Bun.write(configPath, '{"userSetting":true}\n');
       expect(await mainAsync(["init", "--project", project, "--json"])).toBe(0);
-      expect(readFileSync(configPath, "utf8")).toBe('{"userSetting":true}\n');
-      expect(initial).not.toBe(readFileSync(configPath, "utf8"));
+      expect(await Bun.file(configPath).text()).toBe('{"userSetting":true}\n');
+      expect(initial).not.toBe(await Bun.file(configPath).text());
     } finally {
       output.mockRestore();
     }
@@ -45,7 +44,7 @@ describe("loopy CLI shell", () => {
           project,
         ]),
       ).toBe(0);
-      expect(readFileSync(outputFile, "utf8")).toBe(readFileSync(fixture, "utf8"));
+      expect(await Bun.file(outputFile).text()).toBe(await Bun.file(fixture).text());
     } finally {
       output.mockRestore();
     }
@@ -277,7 +276,7 @@ describe("loopy CLI shell", () => {
           project,
         ]),
       ).toBe(0);
-      const exportedEvents = readFileSync(traceOutput, "utf8")
+      const exportedEvents = (await Bun.file(traceOutput).text())
         .trim()
         .split("\n")
         .map((line) => JSON.parse(line) as { runId: string; type: string });
@@ -329,20 +328,21 @@ describe("loopy CLI shell", () => {
     error.mockRestore();
   });
 
-  it("executes the package bin entry point directly", () => {
+  it("executes the package bin entry point directly", async () => {
     const packageDirectory = resolve(fileURLToPath(import.meta.url), "../..");
-    const packageJson = JSON.parse(
-      readFileSync(resolve(packageDirectory, "package.json"), "utf8"),
-    ) as { bin: { loopy: string } };
+    const packageJson = (await Bun.file(resolve(packageDirectory, "package.json")).json()) as {
+      bin: { loopy: string };
+    };
     if (!existsSync(resolve(packageDirectory, packageJson.bin.loopy)))
-      spawnSync(process.execPath, ["run", "build"], { cwd: packageDirectory, encoding: "utf8" });
-    const result = spawnSync(resolve(packageDirectory, packageJson.bin.loopy), ["--version"], {
-      encoding: "utf8",
-    });
+      Bun.spawnSync([process.execPath, "run", "build"], {
+        cwd: packageDirectory,
+        stdout: "ignore",
+        stderr: "ignore",
+      });
+    const result = Bun.spawnSync([resolve(packageDirectory, packageJson.bin.loopy), "--version"]);
 
-    expect(result.error).toBeUndefined();
-    expect(result.status).toBe(0);
-    expect(result.stdout.trim()).toBe("0.1.0");
+    expect(result.success).toBe(true);
+    expect(result.stdout?.toString().trim()).toBe("0.1.0");
   });
 
   it("runs an approved extracted workflow through the local fake runtime", async () => {
@@ -411,9 +411,9 @@ describe("loopy CLI shell", () => {
   it("creates and inspects local schedules through JSON CLI commands", async () => {
     const project = mkdtempSync(join(tmpdir(), "loopy-cli-schedule-"));
     const setup = new Storage({ projectDir: project });
-    const definition = JSON.parse(
-      readFileSync(resolve("fixtures/workflows/valid-basic.json"), "utf8"),
-    ) as { id: string };
+    const definition = (await Bun.file(resolve("fixtures/workflows/valid-basic.json")).json()) as {
+      id: string;
+    };
     definition.id = "workflow-1";
     setup.runtime.createWorkflowVersion({
       workflowId: "workflow-1",

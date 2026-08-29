@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -95,7 +95,7 @@ async function main(): Promise<void> {
       if (entries.includes(forbidden))
         throw new Error(`Tarball contains forbidden path: ${forbidden}`);
     }
-    const manifest = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8")) as {
+    const manifest = (await Bun.file(join(packageRoot, "package.json")).json()) as {
       files?: string[];
     };
     if (JSON.stringify(manifest.files) !== JSON.stringify(["dist", "README.md", "package.json"]))
