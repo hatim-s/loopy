@@ -23,7 +23,7 @@ import { ScheduleRepository } from "./schedule-store.js";
 export const STORAGE_DIR = ".loopy";
 export const DATABASE_FILENAME = "loopy.db";
 export const LOCK_FILENAME = "loopy.lock";
-export const CURRENT_MIGRATION = 6;
+export const CURRENT_MIGRATION = 7;
 
 export type RunStatus =
   | "created"
@@ -280,6 +280,11 @@ CREATE INDEX IF NOT EXISTS schedules_due_idx ON schedules(enabled, next_fire_at)
 );
 CREATE INDEX IF NOT EXISTS scheduler_state_cursor_idx ON scheduler_state(cursor);`,
   ],
+  [
+    7,
+    `ALTER TABLE schedules ADD COLUMN execution_mode TEXT NOT NULL DEFAULT 'local'
+      CHECK(execution_mode IN ('local','live'));`,
+  ],
 ];
 
 function applyMigrations(db: Database): void {
@@ -506,6 +511,7 @@ export interface CreateRunInput {
 
 export type ScheduleOverlapPolicy = "skip" | "queue" | "cancel_previous";
 export type ScheduleMissedPolicy = "skip" | "run_once";
+export type ScheduleExecutionMode = "local" | "live";
 export type ScheduleFireStatus = "claimed" | "running" | "succeeded" | "failed" | "skipped";
 
 export interface ScheduleRecord {
@@ -513,6 +519,7 @@ export interface ScheduleRecord {
   name: string;
   workflowId: string;
   workflowVersion: number;
+  executionMode: ScheduleExecutionMode;
   input: JsonObject;
   expression: string;
   timezone: string;

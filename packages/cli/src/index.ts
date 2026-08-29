@@ -2,7 +2,12 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { JsonObject, JsonValue } from "@loopy/contracts";
+import {
+  type JsonObject,
+  type JsonValue,
+  type WorkflowDefinition,
+  WorkflowDefinitionSchema,
+} from "@loopy/contracts";
 import { extractImportedSession } from "@loopy/extractor";
 import { createLocalApi, createLocalServerConfig } from "@loopy/local-api";
 import { createDefaultProviderRegistry, type ProviderRegistry } from "@loopy/providers";
@@ -22,6 +27,7 @@ import {
 } from "@loopy/storage";
 import { DeterministicFakeProvider } from "@loopy/testing";
 import { decodeTraceJsonl, encodeTraceJsonl } from "@loopy/tracing";
+import { type PreparedWorkflowWorkspace, prepareWorkflowWorkspace } from "@loopy/workspace";
 import { doctorCommand } from "./doctor";
 import {
   cleanupCommand,
@@ -58,6 +64,7 @@ const COMMANDS = [
   "ui",
   "schedule",
   "cleanup",
+  "workflow",
 ] as const;
 
 function printHelp(): void {
@@ -80,6 +87,7 @@ Commands:
   loopy extract --import <id>   (deterministic offline extractor by default)
   loopy review list|show <id> [--project <dir>] [--json]
   loopy approve|reject <proposal-or-job-id> [--project <dir>] [--json]
+  loopy workflow import|list|show [workflow.json|workflow-id] [--project <dir>] [--json]
   loopy run <workflow-id> [--local] [--input <json>] [--project <dir>] [--json]`);
   console.log("  loopy pause|resume|cancel <run-id> [--reason <text>] [--project <dir>] [--json]");
   console.log(
@@ -256,10 +264,54 @@ async function initProject(args: readonly string[], deps: CliDependencies): Prom
   }
 }
 
-function runtimeFor(storage: Storage, deps: CliDependencies): RuntimeScheduler {
-  const store = new SqliteRuntimeStore(storage);
-  const provider = deps.providerExecutor ?? new DeterministicFakeProvider();
-  return deps.runtimeFactory?.(store, provider) ?? new RuntimeScheduler({ store, provider });
+async function workflowCommand(args: readonly string[], deps: CliDependencies): Promise<number> {
+  const action = args[1] ?? "list";
+  const storage = await storageFor(args, deps, action === "list" || action === "show");
+  try {
+    if (action === "import") {
+      const file = args[2];
+      if (!file || file.startsWith("--")) throw new Error("workflow import requires a JSON file");
+      const definition = WorkflowDefinitionSchema.parse(
+        JSON.parse(readFileSync(resolve(file), "utf8")) as unknown,
+      );
+      const existing = storage.runtime.getWorkflowVersion(
+        definition.id,
+        definition.workflowVersion,
+      );
+      if (existing) {
+        if (JSON.stringify(existing.definition) !== JSON.stringify(definition))
+          throw new Error(
+            `Workflow ${definition.id}@${definition.workflowVersion} already exists with different content; increment workflowVersion.`,
+          );
+        if (jsonOutput(args)) printJson({ ...existing, imported: false });
+        else console.log(`already imported ${definition.id}@${definition.workflowVersion}`);
+        return 0;
+      }
+      const imported = storage.runtime.createWorkflowVersion({ definition });
+      if (jsonOutput(args)) printJson({ ...imported, imported: true });
+      else console.log(`imported ${definition.id}@${definition.workflowVersion}`);
+      return 0;
+    }
+    if (action === "show") {
+      const workflowId = args[2];
+      if (!workflowId || workflowId.startsWith("--"))
+        throw new Error("workflow show requires a workflow ID");
+      const version = Number(option(args, "--version") ?? 1);
+      const workflow = storage.runtime.getWorkflowVersion(workflowId, version);
+      if (!workflow) throw new Error(`Unknown workflow ${workflowId}@${version}`);
+      if (jsonOutput(args)) printJson(workflow);
+      else console.log(`${workflow.workflowId}@${workflow.version}`);
+      return 0;
+    }
+    if (action !== "list") throw new Error(`Unknown workflow action '${action}'`);
+    const workflows = storage.runtime.listWorkflowVersions(option(args, "--workflow"));
+    if (jsonOutput(args)) printJson({ workflows });
+    else
+      for (const workflow of workflows) console.log(`${workflow.workflowId}@${workflow.version}`);
+    return 0;
+  } finally {
+    storage.close();
+  }
 }
 
 async function providerForMutation(
@@ -778,6 +830,7 @@ async function runWorkflow(args: readonly string[], deps: CliDependencies): Prom
   const version = versionValue === undefined ? 1 : Number(versionValue);
   if (!Number.isInteger(version) || version < 1) throw new Error("run --version must be positive");
   const storage = await storageFor(args, deps);
+  let prepared: PreparedWorkflowWorkspace | undefined;
   try {
     let workflow = storage.runtime.getWorkflowVersion(reference, version);
     if (!workflow) {
@@ -791,7 +844,11 @@ async function runWorkflow(args: readonly string[], deps: CliDependencies): Prom
     const store = new SqliteRuntimeStore(storage);
     let provider: ProviderExecutor;
     let liveRunId: string | undefined;
-    let definition: unknown = workflow.definition;
+    let definition: WorkflowDefinition = WorkflowDefinitionSchema.parse(workflow.definition);
+    if (!deps.runtimeFactory) {
+      prepared = await prepareWorkflowWorkspace(definition, projectDir(args));
+      definition = prepared.definition;
+    }
     if (live) {
       const registry = deps.registry ?? createDefaultProviderRegistry();
       const adapter = registry.get(requestedProvider as string);
@@ -802,7 +859,10 @@ async function runWorkflow(args: readonly string[], deps: CliDependencies): Prom
           `Provider '${requestedProvider}' is unavailable${probe.diagnostic ? `: ${probe.diagnostic}` : "."}`,
         );
       validateLiveWorkflow(workflow, requestedProvider as string);
-      definition = materializeLiveWorkflow(workflow.definition, requestedProvider as string);
+      definition = materializeLiveWorkflow(
+        definition,
+        requestedProvider as string,
+      ) as WorkflowDefinition;
       provider = createProviderExecutor({
         registry,
         onEvent: (event) => {
@@ -817,7 +877,8 @@ async function runWorkflow(args: readonly string[], deps: CliDependencies): Prom
       provider = deps.providerExecutor ?? new DeterministicFakeProvider();
     }
     const runtime =
-      deps.runtimeFactory?.(store, provider) ?? new RuntimeScheduler({ store, provider });
+      deps.runtimeFactory?.(store, provider) ??
+      new RuntimeScheduler({ store, provider, verifier: prepared?.verifier });
     let snapshot: Awaited<ReturnType<RuntimeScheduler["wait"]>>;
     if (live) {
       const started = await runtime.start(
@@ -836,6 +897,11 @@ async function runWorkflow(args: readonly string[], deps: CliDependencies): Prom
     else console.log(`run ${snapshot.run.runId} ${snapshot.run.status}`);
     return snapshot.run.status === "succeeded" ? 0 : 1;
   } finally {
+    if (prepared) {
+      const cleanup = await prepared.cleanup();
+      if (!cleanup.removed && cleanup.reason)
+        console.error(`loopy: ${cleanup.reason} ${cleanup.path}`);
+    }
     storage.close();
   }
 }
@@ -927,6 +993,7 @@ async function validateProvider(args: readonly string[], deps: CliDependencies):
 async function dispatch(args: readonly string[], deps: CliDependencies): Promise<number> {
   const command = args[0];
   if (command === "init") return initProject(args, deps);
+  if (command === "workflow") return workflowCommand(args, deps);
   if (command === "import") return importSession(args, deps);
   if (command === "sessions")
     return args.includes("show") ? printSession(args, deps) : printSessionList(args, deps);
@@ -956,10 +1023,8 @@ async function dispatch(args: readonly string[], deps: CliDependencies): Promise
       const store = scheduleStoreFromStorage(storage);
       if (!store) throw new Error("SQLite schedule persistence is unavailable for this project");
       const runtimeStore = new SqliteRuntimeStore(storage);
-      const provider = deps.providerExecutor ?? new DeterministicFakeProvider();
-      const runtime =
-        deps.runtimeFactory?.(runtimeStore, provider) ??
-        new RuntimeScheduler({ store: runtimeStore, provider });
+      const runtimes = new Map<string, RuntimeScheduler>();
+      const completions = new Map<string, Promise<Awaited<ReturnType<RuntimeScheduler["wait"]>>>>();
       let scheduler!: SchedulerEngine;
       const executor = {
         start: async (invocation: import("@loopy/scheduler").ScheduleInvocation) => {
@@ -971,10 +1036,46 @@ async function dispatch(args: readonly string[], deps: CliDependencies): Promise
             throw new Error(
               `Unknown workflow version '${invocation.workflowId}@${invocation.workflowVersion}'`,
             );
-          const started = await runtime.start(
-            workflow.definition as Parameters<RuntimeScheduler["start"]>[0],
-            invocation.input,
-          );
+          let prepared: PreparedWorkflowWorkspace | undefined;
+          let definition = WorkflowDefinitionSchema.parse(workflow.definition);
+          let provider: ProviderExecutor;
+          if (invocation.executionMode === "live") {
+            const providerId = definition.defaults.provider;
+            validateLiveWorkflow(workflow, providerId);
+            definition = materializeLiveWorkflow(definition, providerId) as WorkflowDefinition;
+            const registry = deps.registry ?? createDefaultProviderRegistry();
+            const adapter = registry.get(providerId);
+            if (!adapter) throw new Error(`Unknown provider '${providerId}'`);
+            const probe = await adapter.probe();
+            if (!probe.available)
+              throw new Error(
+                `Provider '${providerId}' is unavailable${probe.diagnostic ? `: ${probe.diagnostic}` : "."}`,
+              );
+            provider = createProviderExecutor({
+              registry,
+              onEvent: (event) => {
+                const sequence = runtimeStore.listTraceEvents(event.runId).length;
+                runtimeStore.appendTraceEvent(event.runId, { ...event, sequence });
+              },
+            });
+          } else {
+            provider = deps.providerExecutor ?? new DeterministicFakeProvider();
+          }
+          if (!deps.runtimeFactory) {
+            prepared = await prepareWorkflowWorkspace(definition, projectDir(args));
+            definition = prepared.definition;
+          }
+          const runtime =
+            deps.runtimeFactory?.(runtimeStore, provider) ??
+            new RuntimeScheduler({ store: runtimeStore, provider, verifier: prepared?.verifier });
+          let started: Awaited<ReturnType<RuntimeScheduler["start"]>>;
+          try {
+            started = await runtime.start(definition, invocation.input);
+          } catch (error) {
+            if (prepared) await prepared.cleanup();
+            throw error;
+          }
+          runtimes.set(started.runId, runtime);
           const fire = storage.schedules
             .listFires(invocation.scheduleId, 1000)
             .find((item) => item.fireKey === invocation.idempotencyKey);
@@ -984,25 +1085,35 @@ async function dispatch(args: readonly string[], deps: CliDependencies): Promise
               fireId: fire.id,
               runId: started.runId,
             });
-          void runtime.wait(started.runId).then(async (snapshot) => {
-            if (!fire || !["succeeded", "failed", "cancelled"].includes(snapshot.run.status))
-              return;
-            storage.schedules.updateLink(started.runId, "terminal");
-            storage.schedules.updateFire(fire.id, {
-              status:
-                snapshot.run.status === "succeeded"
-                  ? "succeeded"
-                  : snapshot.run.status === "failed"
-                    ? "failed"
-                    : "failed",
-              finishedAt: new Date().toISOString(),
-              runId: started.runId,
+          const completion = runtime
+            .wait(started.runId)
+            .then(async (snapshot) => {
+              if (fire && ["succeeded", "failed", "cancelled"].includes(snapshot.run.status)) {
+                storage.schedules.updateLink(started.runId, "terminal");
+                storage.schedules.updateFire(fire.id, {
+                  status: snapshot.run.status === "succeeded" ? "succeeded" : "failed",
+                  finishedAt: new Date().toISOString(),
+                  runId: started.runId,
+                });
+                await scheduler.complete(invocation.scheduleId, started.runId);
+              }
+              return snapshot;
+            })
+            .finally(async () => {
+              runtimes.delete(started.runId);
+              if (prepared) {
+                const cleanup = await prepared.cleanup();
+                if (!cleanup.removed && cleanup.reason)
+                  console.error(`loopy: ${cleanup.reason} ${cleanup.path}`);
+              }
             });
-            await scheduler.complete(invocation.scheduleId, started.runId);
-          });
+          completions.set(started.runId, completion);
           return { executionId: started.runId };
         },
         cancel: async (execution: { executionId: string }, reason: string) => {
+          const runtime = runtimes.get(execution.executionId);
+          if (!runtime)
+            throw new Error(`Runtime ${execution.executionId} is not owned by this tick`);
           await runtime.cancel(execution.executionId, reason);
         },
       };
@@ -1028,9 +1139,12 @@ async function dispatch(args: readonly string[], deps: CliDependencies): Promise
       });
       return await scheduleCommand(args, {
         store,
-        runtime,
         scheduler,
-        waitExecution: (executionId) => runtime.wait(executionId),
+        waitExecution: (executionId) => {
+          const completion = completions.get(executionId);
+          if (!completion) throw new Error(`Runtime ${executionId} is not owned by this tick`);
+          return completion;
+        },
         workflow: (workflowId, version) => storage.runtime.getWorkflowVersion(workflowId, version),
       });
     } finally {
@@ -1133,6 +1247,7 @@ export function main(
       "schedule",
       "cleanup",
       "providers",
+      "workflow",
     ].includes(command)
   ) {
     void mainAsync(args, dependencies).then((code) => {

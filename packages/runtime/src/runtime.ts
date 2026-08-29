@@ -1406,8 +1406,8 @@ export class RuntimeScheduler {
         const verified = await (
           this.options.verifier ?? {
             verify: async (): Promise<VerificationResult> => ({
-              status: "passed",
-              summary: "Verification passed",
+              status: "failed",
+              summary: "No verification executor is configured.",
             }),
           }
         ).verify({

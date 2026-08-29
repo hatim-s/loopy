@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "1",
+  "workflowVersion": 2,
+  "id": "a3000000-0000-4000-8000-000000000001",
+  "name": "Routine dependency maintenance",
+  "description": "Update direct dependencies within their current major versions and open a checked pull request.",
+  "inputs": [
+    {
+      "name": "dryRun",
+      "type": "boolean",
+      "description": "Inspect outdated packages without changing dependencies or creating a pull request.",
+      "required": false,
+      "default": false,
+      "secret": false
+    }
+  ],
+  "nodes": [
+    {
+      "id": "a3000000-0000-4000-8000-000000000011",
+      "kind": "agent",
+      "name": "Update routine dependencies",
+      "sideEffect": true,
+      "prompt": "Maintain direct dependencies for the repository in the current working directory. Read AGENTS.md and repository instructions first. Detect the committed package manager and inspect outdated direct dependencies across the workspace. Update patch and minor releases within the current major version. Do not perform major upgrades, framework migrations, prerelease adoption, or unrelated source refactors. Preserve package-manager overrides, patches, catalogs, and workspace protocols. Reinstall with the committed package manager, review lockfile changes, and run the repository's documented checks. Create or update one branch named loopy/routine-dependency-maintenance, commit, push, and create or update one pull request. Never merge the pull request. If no eligible updates exist, make no branch or pull request. If workflow input dryRun is true, inspect and report only; do not edit files, create a branch, commit, push, or create a pull request. End with updated packages, skipped majors, checks, and the pull request URL when created.",
+      "provider": "codex",
+      "reasoning": "high",
+      "skills": [],
+      "inputBindings": {
+        "dryRun": { "kind": "workflow_input", "name": "dryRun" }
+      },
+      "requiredCapabilities": [],
+      "completionContract": "node_completion",
+      "tags": ["repository-maintenance", "dependencies", "scheduled"]
+    },
+    {
+      "id": "a3000000-0000-4000-8000-000000000012",
+      "kind": "verify",
+      "name": "Check retained Git changes",
+      "commands": [{ "command": "git", "args": ["diff", "--check"], "timeoutMs": 120000 }],
+      "success": "all",
+      "expectedExitCode": 0,
+      "tags": ["repository-maintenance", "verification"]
+    }
+  ],
+  "edges": [
+    {
+      "id": "a3000000-0000-4000-8000-000000000021",
+      "source": "a3000000-0000-4000-8000-000000000011",
+      "target": "a3000000-0000-4000-8000-000000000012",
+      "metadata": {}
+    }
+  ],
+  "defaults": {
+    "provider": "codex",
+    "reasoning": "high",
+    "timeoutMs": 3600000,
+    "retry": { "maxAttempts": 1, "backoffMs": 0, "retryOn": [] }
+  },
+  "policies": {
+    "sandbox": "danger-full-access",
+    "tools": { "allow": [], "deny": [], "network": "unrestricted" },
+    "workspace": { "writableRoots": [], "useGitWorktree": true, "allowDirtyWorkspace": false },
+    "approval": { "requiredBefore": [], "sideEffectLabels": [] },
+    "budget": { "timeoutMs": 3600000 },
+    "concurrency": { "maxParallel": 1 }
+  },
+  "triggers": { "manual": true },
+  "metadata": {
+    "createdAt": "2026-08-30T00:00:00.000Z",
+    "updatedAt": "2026-08-30T00:00:00.000Z",
+    "createdFrom": "manual",
+    "tags": ["repository-maintenance", "dependencies", "scheduled"]
+  }
+}

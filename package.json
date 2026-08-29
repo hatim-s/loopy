@@ -16,7 +16,7 @@
   "scripts": {
     "build": "bun run build:contracts && bun run typecheck",
     "build:contracts": "tsc -p packages/contracts/tsconfig.json",
-    "check": "bun run fmt:check && bun run lint && bun run typecheck && bun run test:contracts && bun run test:runtime && bun run test:storage && bun run test:tracing && bun run test:extractor && bun run test:cli && bun run test:platform",
+    "check": "bun run fmt:check && bun run lint && bun run typecheck && bun run test:contracts && bun run test:runtime && bun run test:storage && bun run test:tracing && bun run test:extractor && bun run test:cli && bun run test:platform && bun run test:workspace",
     "fmt": "biome format --write .",
     "fmt:check": "biome format .",
     "lint": "biome check .",
@@ -27,6 +27,7 @@
     "test:tracing": "bun test packages/tracing/tests",
     "test:cli": "bun test packages/cli/tests",
     "test:platform": "bun test packages/platform/tests",
+    "test:workspace": "bun test packages/workspace/_tests_",
     "test:extractor": "bun test packages/extractor/tests",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"

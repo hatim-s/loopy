@@ -22,11 +22,17 @@ function providerFor(node: ProviderExecutionContext["node"]): string {
 
 function promptFor(node: ProviderExecutionContext["node"], input: JsonObject): string | undefined {
   const direct = node.prompt;
-  if (typeof direct === "string") return direct;
+  if (typeof direct === "string")
+    return Object.keys(input).length
+      ? `${direct}\n\nWorkflow inputs:\n${JSON.stringify(input, null, 2)}`
+      : direct;
   const configuration = node.configuration;
   if (configuration && typeof configuration === "object") {
     const prompt = (configuration as Record<string, unknown>).prompt;
-    if (typeof prompt === "string") return prompt;
+    if (typeof prompt === "string")
+      return Object.keys(input).length
+        ? `${prompt}\n\nWorkflow inputs:\n${JSON.stringify(input, null, 2)}`
+        : prompt;
   }
   return Object.keys(input).length > 0 ? JSON.stringify(input) : undefined;
 }

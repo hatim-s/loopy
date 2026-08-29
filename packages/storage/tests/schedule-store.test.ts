@@ -20,6 +20,7 @@ describe("schedule persistence", () => {
       name: "nightly",
       workflowId: "wf",
       workflowVersion: 1,
+      executionMode: "live",
       expression: "0 0 * * *",
       nextFireAt: "2026-08-17T00:00:00.000Z",
     });
@@ -38,6 +39,15 @@ describe("schedule persistence", () => {
     first.close();
     const reopened = new Storage({ projectDir: dir });
     expect(reopened.schedules.get(schedule.id)?.nextFireAt).toBe("2026-08-17T00:00:00.000Z");
+    expect(reopened.schedules.get(schedule.id)?.executionMode).toBe("live");
+    reopened.runtime.createWorkflowVersion({
+      workflowId: "wf",
+      version: 2,
+      definition: { id: "wf", workflowVersion: 2 },
+    });
+    expect(
+      reopened.schedules.update(schedule.id, { workflowVersion: 2, executionMode: "local" }),
+    ).toMatchObject({ workflowVersion: 2, executionMode: "local" });
     expect(reopened.schedules.listFires(schedule.id)).toHaveLength(1);
     reopened.close();
   });

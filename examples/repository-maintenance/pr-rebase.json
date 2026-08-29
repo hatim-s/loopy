@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "1",
+  "workflowVersion": 2,
+  "id": "a1000000-0000-4000-8000-000000000001",
+  "name": "Keep open pull requests rebased",
+  "description": "Review non-draft pull requests and rebase branches that can be updated safely.",
+  "inputs": [
+    {
+      "name": "dryRun",
+      "type": "boolean",
+      "description": "Inspect and report without pushing changes.",
+      "required": false,
+      "default": false,
+      "secret": false
+    }
+  ],
+  "nodes": [
+    {
+      "id": "a1000000-0000-4000-8000-000000000011",
+      "kind": "agent",
+      "name": "Rebase eligible pull requests",
+      "sideEffect": true,
+      "prompt": "Maintain the open pull requests for the repository in the current working directory. Read AGENTS.md and repository instructions first. Confirm GitHub authentication, fetch the remote default branch, and inspect open non-draft pull requests with gh. Skip forks, conflicted pull requests, branches without push permission, and pull requests whose checks already show a real code failure. For every eligible branch, fetch its exact head, rebase it onto the current remote base branch, run the repository's documented focused check, and push only with --force-with-lease. Abort a conflicted rebase and leave that pull request unchanged. Never merge, close, or approve a pull request. If workflow input dryRun is true, perform inspection only and report the exact actions that would be taken without rebasing or pushing. End with a concise per-PR result.",
+      "provider": "codex",
+      "reasoning": "high",
+      "skills": [],
+      "inputBindings": {
+        "dryRun": { "kind": "workflow_input", "name": "dryRun" }
+      },
+      "requiredCapabilities": [],
+      "completionContract": "node_completion",
+      "tags": ["repository-maintenance", "pull-requests", "scheduled"]
+    },
+    {
+      "id": "a1000000-0000-4000-8000-000000000012",
+      "kind": "verify",
+      "name": "Check retained Git changes",
+      "commands": [{ "command": "git", "args": ["diff", "--check"], "timeoutMs": 120000 }],
+      "success": "all",
+      "expectedExitCode": 0,
+      "tags": ["repository-maintenance", "verification"]
+    }
+  ],
+  "edges": [
+    {
+      "id": "a1000000-0000-4000-8000-000000000021",
+      "source": "a1000000-0000-4000-8000-000000000011",
+      "target": "a1000000-0000-4000-8000-000000000012",
+      "metadata": {}
+    }
+  ],
+  "defaults": {
+    "provider": "codex",
+    "reasoning": "high",
+    "timeoutMs": 3600000,
+    "retry": { "maxAttempts": 1, "backoffMs": 0, "retryOn": [] }
+  },
+  "policies": {
+    "sandbox": "danger-full-access",
+    "tools": { "allow": [], "deny": [], "network": "unrestricted" },
+    "workspace": { "writableRoots": [], "useGitWorktree": true, "allowDirtyWorkspace": false },
+    "approval": { "requiredBefore": [], "sideEffectLabels": [] },
+    "budget": { "timeoutMs": 3600000 },
+    "concurrency": { "maxParallel": 1 }
+  },
+  "triggers": { "manual": true },
+  "metadata": {
+    "createdAt": "2026-08-30T00:00:00.000Z",
+    "updatedAt": "2026-08-30T00:00:00.000Z",
+    "createdFrom": "manual",
+    "tags": ["repository-maintenance", "scheduled"]
+  }
+}

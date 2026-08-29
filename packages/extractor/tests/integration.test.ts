@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { JsonValue, TraceEvent, WorkflowDefinition } from "@loopy/contracts";
 import { RuntimeScheduler } from "@loopy/runtime";
 import { Storage } from "../../storage/src/index.ts";
-import { InMemoryRuntimeStore } from "../../testing/src/index.ts";
+import { DeterministicVerifier, InMemoryRuntimeStore } from "../../testing/src/index.ts";
 import { extractImportedSession } from "../src/index.ts";
 
 function events(name: string): TraceEvent[] {
@@ -56,6 +56,7 @@ describe("Phase 3 deterministic extraction integration", () => {
     const runtime = new RuntimeScheduler({
       store: new InMemoryRuntimeStore(),
       provider: { execute: async () => ({ status: "succeeded", outputs: { fake: true } }) },
+      verifier: new DeterministicVerifier(),
     });
     const run = await runtime.run(version.definition as WorkflowDefinition);
     expect(run.run.status).toBe("succeeded");

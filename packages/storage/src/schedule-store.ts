@@ -1,4 +1,4 @@
-import type { Database } from "bun:sqlite";
+import type { Database, SQLQueryBindings } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
 import { CronExpressionV1Schema, IanaTimeZoneV1Schema, type JsonObject } from "@loopy/contracts";
 import {
@@ -14,6 +14,7 @@ import type {
   RetentionPolicyRecord,
   RetentionPreview,
   RunStatus,
+  ScheduleExecutionMode,
   ScheduleFireRecord,
   ScheduleFireStatus,
   ScheduleMissedPolicy,
@@ -33,6 +34,7 @@ const schedule = (r: Row): ScheduleRecord => ({
   name: r.name as string,
   workflowId: r.workflow_id as string,
   workflowVersion: r.workflow_version as number,
+  executionMode: (r.execution_mode as ScheduleExecutionMode | undefined) ?? "local",
   input: decode<JsonObject>(r.input_json as string) ?? {},
   expression: r.expression as string,
   timezone: r.timezone as string,
@@ -128,7 +130,7 @@ export class ScheduleRepository {
   }
   list(options: { enabled?: boolean; dueBefore?: string } = {}): ScheduleRecord[] {
     const where: string[] = [];
-    const args: unknown[] = [];
+    const args: SQLQueryBindings[] = [];
     if (options.enabled !== undefined) {
       where.push("enabled=?");
       args.push(options.enabled ? 1 : 0);
@@ -138,10 +140,10 @@ export class ScheduleRepository {
       args.push(options.dueBefore);
     }
     const rows = this.db
-      .query<Row, any>(
+      .query<Row, SQLQueryBindings[]>(
         `SELECT * FROM schedules${where.length ? ` WHERE ${where.join(" AND ")}` : ""} ORDER BY created_at,id`,
       )
-      .all(...(args as any));
+      .all(...args);
     return (rows as Row[]).map(schedule);
   }
   create(input: {
@@ -149,6 +151,7 @@ export class ScheduleRepository {
     name: string;
     workflowId: string;
     workflowVersion: number;
+    executionMode?: ScheduleExecutionMode;
     input?: JsonObject;
     expression: string;
     timezone?: string;
@@ -182,11 +185,12 @@ export class ScheduleRepository {
             new Date(),
           ).toISOString());
     this.run(
-      "INSERT INTO schedules(id,name,workflow_id,workflow_version,input_json,expression,timezone,overlap_policy,missed_policy,enabled,next_fire_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      "INSERT INTO schedules(id,name,workflow_id,workflow_version,execution_mode,input_json,expression,timezone,overlap_policy,missed_policy,enabled,next_fire_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
       id,
       input.name.trim(),
       input.workflowId,
       input.workflowVersion,
+      input.executionMode ?? "local",
       encode(input.input),
       expression,
       timezone,
@@ -205,6 +209,9 @@ export class ScheduleRepository {
       Pick<
         ScheduleRecord,
         | "name"
+        | "workflowId"
+        | "workflowVersion"
+        | "executionMode"
         | "expression"
         | "timezone"
         | "overlapPolicy"
@@ -241,8 +248,11 @@ export class ScheduleRepository {
     }
     this.db.transaction(() => {
       this.run(
-        "UPDATE schedules SET name=?,expression=?,timezone=?,overlap_policy=?,missed_policy=?,enabled=?,next_fire_at=?,last_fire_at=?,input_json=?,updated_at=? WHERE id=?",
+        "UPDATE schedules SET name=?,workflow_id=?,workflow_version=?,execution_mode=?,expression=?,timezone=?,overlap_policy=?,missed_policy=?,enabled=?,next_fire_at=?,last_fire_at=?,input_json=?,updated_at=? WHERE id=?",
         next.name,
+        next.workflowId,
+        next.workflowVersion,
+        next.executionMode,
         next.expression,
         next.timezone,
         next.overlapPolicy,
@@ -371,7 +381,7 @@ export class ScheduleRepository {
   }
   listLinks(scheduleId?: string, state?: ScheduleRunLinkRecord["state"]): ScheduleRunLinkRecord[] {
     const where: string[] = [];
-    const args: unknown[] = [];
+    const args: SQLQueryBindings[] = [];
     if (scheduleId) {
       where.push("schedule_id=?");
       args.push(scheduleId);
@@ -382,10 +392,10 @@ export class ScheduleRepository {
     }
     return (
       this.db
-        .query<Row, any>(
+        .query<Row, SQLQueryBindings[]>(
           `SELECT * FROM schedule_run_links${where.length ? ` WHERE ${where.join(" AND ")}` : ""} ORDER BY created_at,id`,
         )
-        .all(...(args as any)) as Row[]
+        .all(...args) as Row[]
     ).map(link);
   }
   updateLink(runId: string, state: ScheduleRunLinkRecord["state"]): void {
@@ -440,6 +450,7 @@ export class ScheduleRepository {
           },
           workflowId: record.workflowId,
           workflowVersion: record.workflowVersion,
+          executionMode: record.executionMode,
           manual: { enabled: true, input: record.input },
         })),
       getState: async (scheduleId: string): Promise<ScheduleState | undefined> => {
@@ -454,6 +465,7 @@ export class ScheduleRepository {
           scheduleId,
           workflowId: record.workflowId,
           workflowVersion: record.workflowVersion,
+          executionMode: record.executionMode,
           input: record.input,
           scheduledFor: item.scheduledAt,
           firedAt: item.createdAt,
