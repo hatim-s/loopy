@@ -1131,6 +1131,14 @@
             ],
             "type": "object"
           },
+          "sandbox": {
+            "enum": [
+              "read-only",
+              "workspace-write",
+              "danger-full-access"
+            ],
+            "type": "string"
+          },
           "tools": {
             "additionalProperties": false,
             "default": {
@@ -2180,63 +2188,12 @@
         "type": "object"
       },
       "__schema29": {
-        "default": [],
-        "items": {
-          "additionalProperties": false,
-          "properties": {
-            "confidence": {
-              "maximum": 1,
-              "minimum": 0,
-              "type": "number"
-            },
-            "default": {
-              "$ref": "#/$defs/__schema8"
-            },
-            "description": {
-              "$ref": "#/$defs/__schema6"
-            },
-            "evidenceIds": {
-              "items": {
-                "$ref": "#/$defs/__schema1"
-              },
-              "minItems": 1,
-              "type": "array"
-            },
-            "example": {
-              "$ref": "#/$defs/__schema11"
-            },
-            "name": {
-              "$ref": "#/$defs/__schema4"
-            },
-            "observedValues": {
-              "default": [],
-              "items": {
-                "$ref": "#/$defs/__schema9"
-              },
-              "type": "array"
-            },
-            "required": {
-              "$ref": "#/$defs/__schema7"
-            },
-            "secret": {
-              "$ref": "#/$defs/__schema10"
-            },
-            "type": {
-              "$ref": "#/$defs/__schema5"
-            }
-          },
-          "required": [
-            "name",
-            "type",
-            "required",
-            "secret",
-            "confidence",
-            "observedValues",
-            "evidenceIds"
-          ],
-          "type": "object"
-        },
-        "type": "array"
+        "enum": [
+          "read-only",
+          "workspace-write",
+          "danger-full-access"
+        ],
+        "type": "string"
       },
       "__schema3": {
         "additionalProperties": false,
@@ -2467,6 +2424,9 @@
               "concurrency": {
                 "$ref": "#/$defs/__schema28"
               },
+              "sandbox": {
+                "$ref": "#/$defs/__schema29"
+              },
               "tools": {
                 "$ref": "#/$defs/__schema24"
               },
@@ -2599,13 +2559,72 @@
         "type": "object"
       },
       "__schema30": {
+        "default": [],
         "items": {
-          "$ref": "#/$defs/__schema31"
+          "additionalProperties": false,
+          "properties": {
+            "confidence": {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            "default": {
+              "$ref": "#/$defs/__schema8"
+            },
+            "description": {
+              "$ref": "#/$defs/__schema6"
+            },
+            "evidenceIds": {
+              "items": {
+                "$ref": "#/$defs/__schema1"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "example": {
+              "$ref": "#/$defs/__schema11"
+            },
+            "name": {
+              "$ref": "#/$defs/__schema4"
+            },
+            "observedValues": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/__schema9"
+              },
+              "type": "array"
+            },
+            "required": {
+              "$ref": "#/$defs/__schema7"
+            },
+            "secret": {
+              "$ref": "#/$defs/__schema10"
+            },
+            "type": {
+              "$ref": "#/$defs/__schema5"
+            }
+          },
+          "required": [
+            "name",
+            "type",
+            "required",
+            "secret",
+            "confidence",
+            "observedValues",
+            "evidenceIds"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "__schema31": {
+        "items": {
+          "$ref": "#/$defs/__schema32"
         },
         "minItems": 1,
         "type": "array"
       },
-      "__schema31": {
+      "__schema32": {
         "additionalProperties": false,
         "properties": {
           "eventIds": {
@@ -2633,7 +2652,7 @@
         ],
         "type": "object"
       },
-      "__schema32": {
+      "__schema33": {
         "default": [],
         "items": {
           "additionalProperties": false,
@@ -2661,7 +2680,7 @@
         },
         "type": "array"
       },
-      "__schema33": {
+      "__schema34": {
         "default": [],
         "items": {
           "additionalProperties": false,
@@ -2693,14 +2712,14 @@
         },
         "type": "array"
       },
-      "__schema34": {
+      "__schema35": {
         "items": {
-          "$ref": "#/$defs/__schema35"
+          "$ref": "#/$defs/__schema36"
         },
         "minItems": 1,
         "type": "array"
       },
-      "__schema35": {
+      "__schema36": {
         "additionalProperties": false,
         "properties": {
           "check": {
@@ -2732,7 +2751,7 @@
         ],
         "type": "object"
       },
-      "__schema36": {
+      "__schema37": {
         "additionalProperties": false,
         "properties": {
           "approval": {
@@ -2751,6 +2770,9 @@
             "minItems": 1,
             "type": "array"
           },
+          "sandbox": {
+            "$ref": "#/$defs/__schema29"
+          },
           "tools": {
             "$ref": "#/$defs/__schema24"
           },
@@ -2768,14 +2790,14 @@
         ],
         "type": "object"
       },
-      "__schema37": {
+      "__schema38": {
         "default": [],
         "items": {
           "$ref": "#/$defs/__schema4"
         },
         "type": "array"
       },
-      "__schema38": {
+      "__schema39": {
         "default": [],
         "items": {
           "additionalProperties": false,
@@ -2795,17 +2817,17 @@
         },
         "type": "array"
       },
-      "__schema39": {
+      "__schema4": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "__schema40": {
         "default": "draft",
         "enum": [
           "draft",
           "approved",
           "rejected"
         ],
-        "type": "string"
-      },
-      "__schema4": {
-        "minLength": 1,
         "type": "string"
       },
       "__schema5": {
@@ -2872,7 +2894,7 @@
         "$ref": "#/$defs/__schema2"
       },
       "expectedSideEffects": {
-        "$ref": "#/$defs/__schema37"
+        "$ref": "#/$defs/__schema38"
       },
       "id": {
         "$ref": "#/$defs/__schema1"
@@ -2881,31 +2903,31 @@
         "$ref": "#/$defs/__schema1"
       },
       "inferredInputs": {
-        "$ref": "#/$defs/__schema29"
-      },
-      "nodeEvidence": {
         "$ref": "#/$defs/__schema30"
       },
+      "nodeEvidence": {
+        "$ref": "#/$defs/__schema31"
+      },
       "proposedPolicies": {
-        "$ref": "#/$defs/__schema36"
+        "$ref": "#/$defs/__schema37"
       },
       "removedDetours": {
-        "$ref": "#/$defs/__schema32"
+        "$ref": "#/$defs/__schema33"
       },
       "schemaVersion": {
         "$ref": "#/$defs/__schema0"
       },
       "status": {
-        "$ref": "#/$defs/__schema39"
+        "$ref": "#/$defs/__schema40"
       },
       "unresolvedQuestions": {
-        "$ref": "#/$defs/__schema38"
+        "$ref": "#/$defs/__schema39"
       },
       "verifierRequirements": {
-        "$ref": "#/$defs/__schema34"
+        "$ref": "#/$defs/__schema35"
       },
       "warnings": {
-        "$ref": "#/$defs/__schema33"
+        "$ref": "#/$defs/__schema34"
       },
       "workflow": {
         "$ref": "#/$defs/__schema3"
@@ -3385,6 +3407,14 @@
               "maxParallel"
             ],
             "type": "object"
+          },
+          "sandbox": {
+            "enum": [
+              "read-only",
+              "workspace-write",
+              "danger-full-access"
+            ],
+            "type": "string"
           },
           "tools": {
             "additionalProperties": false,
@@ -10116,6 +10146,14 @@
             ],
             "type": "object"
           },
+          "sandbox": {
+            "enum": [
+              "read-only",
+              "workspace-write",
+              "danger-full-access"
+            ],
+            "type": "string"
+          },
           "tools": {
             "additionalProperties": false,
             "default": {
@@ -11030,6 +11068,14 @@
                       "maxParallel"
                     ],
                     "type": "object"
+                  },
+                  "sandbox": {
+                    "enum": [
+                      "read-only",
+                      "workspace-write",
+                      "danger-full-access"
+                    ],
+                    "type": "string"
                   },
                   "tools": {
                     "additionalProperties": false,

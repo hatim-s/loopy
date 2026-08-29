@@ -9,11 +9,13 @@ import { CronExpressionParser } from "cron-parser";
 
 export type SchedulerClock = { now(): Date };
 export const systemClock: SchedulerClock = { now: () => new Date() };
+export type ScheduleExecutionMode = "local" | "live";
 
 export type ScheduleDefinition = {
   schedule: CronTrigger;
   workflowId: string;
   workflowVersion: number;
+  executionMode?: ScheduleExecutionMode;
   manual?: boolean | ManualTrigger;
 };
 
@@ -21,6 +23,7 @@ export type ScheduleInvocation = {
   scheduleId: string;
   workflowId: string;
   workflowVersion: number;
+  executionMode?: ScheduleExecutionMode;
   input: JsonObject;
   scheduledFor: string;
   firedAt: string;
@@ -295,6 +298,7 @@ export class SchedulerEngine {
         scheduleId: state.scheduleId,
         workflowId: schedule.workflowId,
         workflowVersion: schedule.workflowVersion,
+        ...(schedule.executionMode ? { executionMode: schedule.executionMode } : {}),
         input: inputFor(schedule, "cron"),
         scheduledFor,
         firedAt: atIso,
@@ -334,6 +338,7 @@ export class SchedulerEngine {
       scheduleId,
       workflowId: schedule.workflowId,
       workflowVersion: schedule.workflowVersion,
+      ...(schedule.executionMode ? { executionMode: schedule.executionMode } : {}),
       input: inputFor(schedule, "manual", override),
       scheduledFor: firedAtIso,
       firedAt: firedAtIso,

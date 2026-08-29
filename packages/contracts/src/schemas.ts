@@ -159,6 +159,7 @@ export const WorkflowPolicyV1Schema = z.object({
   approval: ApprovalPolicyV1Schema.default({ requiredBefore: [], sideEffectLabels: [] }),
   budget: BudgetPolicyV1Schema.default({ timeoutMs: 3_600_000 }),
   concurrency: ConcurrencyPolicyV1Schema.default({ maxParallel: 1 }),
+  sandbox: z.enum(["read-only", "workspace-write", "danger-full-access"]).optional(),
 });
 export const WorkflowPolicySchema = WorkflowPolicyV1Schema;
 export type WorkflowPolicyV1 = z.infer<typeof WorkflowPolicyV1Schema>;

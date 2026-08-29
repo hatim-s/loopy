@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
-import { nextOccurrence } from "@loopy/scheduler";
+import { nextOccurrence, type ScheduleExecutionMode } from "@loopy/scheduler";
 
 export type ScheduleOverlapPolicy = "skip" | "queue" | "cancel_previous";
 export type ScheduleMissedPolicy = "skip" | "run_once";
@@ -12,6 +12,7 @@ export type LocalSchedule = {
   name: string;
   workflowId: string;
   workflowVersion: number;
+  executionMode: ScheduleExecutionMode;
   input: Record<string, unknown>;
   expression: string;
   timezone: string;
@@ -40,7 +41,13 @@ function readScheduleFile(path: string): ScheduleFile {
     const value = JSON.parse(readFileSync(path, "utf8")) as Partial<ScheduleFile>;
     if (value.schemaVersion !== "1" || !Array.isArray(value.schedules))
       throw new Error("invalid schedule file");
-    return { schemaVersion: "1", schedules: value.schedules as LocalSchedule[] };
+    return {
+      schemaVersion: "1",
+      schedules: (value.schedules as LocalSchedule[]).map((schedule) => ({
+        ...schedule,
+        executionMode: schedule.executionMode ?? "local",
+      })),
+    };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT")
       return { schemaVersion: "1", schedules: [] };
@@ -162,6 +169,7 @@ export type CreateScheduleInput = {
   name?: string;
   workflowId: string;
   workflowVersion?: number;
+  executionMode?: ScheduleExecutionMode;
   input?: Record<string, unknown>;
   expression: string;
   timezone?: string;
@@ -191,6 +199,7 @@ export function createSchedule(input: CreateScheduleInput): LocalSchedule {
     name: input.name?.trim() || id,
     workflowId: input.workflowId,
     workflowVersion,
+    executionMode: input.executionMode ?? "local",
     input: input.input ?? {},
     expression,
     timezone,
@@ -366,6 +375,7 @@ export function renderSchedulerArtifacts(
     projectDir: string;
     platform?: string;
     targetDir?: string;
+    tickAll?: boolean;
   },
 ): SchedulerArtifact[] {
   const platform = platformFor(options.platform);
@@ -373,7 +383,13 @@ export function renderSchedulerArtifacts(
   const projectDir = resolve(options.projectDir);
   const label = `dev.loopy.schedule.${safeLabel(schedule.id)}`;
   const marker = `loopy-managed:${schedule.id}`;
-  const args = commandArgs(executable, projectDir, schedule.id, options.entrypoint);
+  const args = commandArgs(
+    executable,
+    projectDir,
+    options.tickAll ? undefined : schedule.id,
+    options.entrypoint,
+  );
+  const environmentPath = process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin";
   if (platform === "darwin") {
     const plist = [
       `<?xml version="1.0" encoding="UTF-8"?>`,
@@ -384,7 +400,7 @@ export function renderSchedulerArtifacts(
       `<key>ProgramArguments</key><array>${args.map((arg) => `<string>${xml(arg)}</string>`).join("")}</array>`,
       `<key>StartInterval</key><integer>60</integer>`,
       `<key>RunAtLoad</key><false/>`,
-      `<key>EnvironmentVariables</key><dict><key>LOOPY_SCHEDULE_ID</key><string>${xml(schedule.id)}</string><key>LOOPY_TIMEZONE</key><string>${xml(schedule.timezone)}</string></dict>`,
+      `<key>EnvironmentVariables</key><dict><key>LOOPY_SCHEDULE_ID</key><string>${xml(schedule.id)}</string><key>LOOPY_TIMEZONE</key><string>${xml(schedule.timezone)}</string><key>PATH</key><string>${xml(environmentPath)}</string></dict>`,
       `</dict></plist>`,
     ].join("");
     const targetDir = options.targetDir ?? join(homedir(), "Library", "LaunchAgents");
@@ -402,6 +418,7 @@ export function renderSchedulerArtifacts(
     `ExecStart=${args.map(systemd).join(" ")}`,
     `Environment=LOOPY_SCHEDULE_ID=${systemd(schedule.id)}`,
     `Environment=LOOPY_TIMEZONE=${systemd(schedule.timezone)}`,
+    `Environment=PATH=${systemd(environmentPath)}`,
     "",
   ].join("\n");
   const timer = [
@@ -422,6 +439,7 @@ export function renderSchedulerArtifacts(
   const cron = [
     `# ${marker}`,
     `CRON_TZ=${schedule.timezone}`,
+    `PATH=${environmentPath}`,
     `* * * * * ${args.map(shell).join(" ")} # ${marker}`,
     "",
   ].join("\n");
@@ -476,6 +494,7 @@ export function schedulerArtifactPaths(
     projectDir: string;
     platform?: string;
     targetDir?: string;
+    tickAll?: boolean;
   },
 ): string[] {
   return renderSchedulerArtifacts(schedule, options).map((artifact) => artifact.path);

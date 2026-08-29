@@ -134,6 +134,16 @@ describe("local scheduler platform", () => {
     expect(content).toContain("<string>/opt/loopy/dist/index.js</string>");
     expect(content).toContain("<string>schedule</string>");
     expect(content).toContain("<string>--schedule</string>");
+    expect(content).toContain("<key>PATH</key>");
+    const projectArtifacts = renderSchedulerArtifacts(item, {
+      executable: "/opt/homebrew/bin/bun",
+      entrypoint: "/opt/loopy/dist/index.js",
+      projectDir: "/tmp/project",
+      platform: "darwin",
+      targetDir: "/tmp/launchd",
+      tickAll: true,
+    });
+    expect(projectArtifacts[0]?.content).not.toContain("<string>--schedule</string>");
     expect(() =>
       renderSchedulerArtifacts(item, {
         executable: "/opt/homebrew/bin/bun",

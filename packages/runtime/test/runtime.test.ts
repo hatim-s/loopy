@@ -46,6 +46,18 @@ describe("phase 1 runtime", () => {
     expect(result.attempts.filter((a) => a.status === "succeeded")).toHaveLength(2);
   });
 
+  test("fails verification when no executor is configured", async () => {
+    const store = new InMemoryRuntimeStore();
+    const runtime = new RuntimeScheduler({
+      store,
+      provider: new DeterministicFakeProvider(),
+      id: ids,
+    });
+    const result = await runtime.run(plan([verify("v")], []));
+    expect(result.run.status).toBe("failed");
+    expect(result.attempts[0]?.error).toBe("No verification executor is configured.");
+  });
+
   test("replays persisted events in sequence without executing", () => {
     const frames = replayEvents([
       { sequence: 2, type: "later", runId: "r", occurredAt: "" },

@@ -2,11 +2,28 @@ import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { WorkflowDefinition } from "@loopy/contracts";
 import { createProviderRegistry, type ProviderAdapter, type ProviderRun } from "@loopy/providers";
-import type { RuntimeScheduler } from "@loopy/runtime";
+import { RuntimeScheduler } from "@loopy/runtime";
 import { SqliteRuntimeStore, Storage } from "@loopy/storage";
+import { DeterministicVerifier } from "@loopy/testing";
 import { describe, expect, it, vi } from "vitest";
 import { main, mainAsync } from "../src/index";
+
+function initializeRepository(path: string): void {
+  for (const args of [
+    ["init", "--initial-branch=main"],
+    ["config", "user.name", "Loopy Test"],
+    ["config", "user.email", "loopy@example.test"],
+    ["commit", "--allow-empty", "-m", "Initial commit"],
+  ]) {
+    const result = Bun.spawnSync(["git", "-C", path, ...args], {
+      stdout: "ignore",
+      stderr: "pipe",
+    });
+    if (result.exitCode !== 0) throw new Error(result.stderr.toString());
+  }
+}
 
 describe("loopy CLI shell", () => {
   it("initializes idempotently without overwriting project-local config", async () => {
@@ -23,6 +40,29 @@ describe("loopy CLI shell", () => {
       expect(initial).not.toBe(await Bun.file(configPath).text());
     } finally {
       output.mockRestore();
+    }
+  });
+
+  it("imports canonical workflow JSON idempotently", async () => {
+    const project = mkdtempSync(join(tmpdir(), "loopy-cli-workflow-"));
+    const workflow = resolve("examples/repository-maintenance/pr-rebase.json");
+    const output: string[] = [];
+    const log = vi.spyOn(console, "log").mockImplementation((...values) => {
+      output.push(values.map(String).join(" "));
+    });
+    try {
+      expect(
+        await mainAsync(["workflow", "import", workflow, "--project", project, "--json"]),
+      ).toBe(0);
+      expect(JSON.parse(output.at(-1) ?? "null")).toMatchObject({ imported: true, version: 2 });
+      expect(
+        await mainAsync(["workflow", "import", workflow, "--project", project, "--json"]),
+      ).toBe(0);
+      expect(JSON.parse(output.at(-1) ?? "null")).toMatchObject({ imported: false, version: 2 });
+      expect(await mainAsync(["workflow", "list", "--project", project, "--json"])).toBe(0);
+      expect(JSON.parse(output.at(-1) ?? "null").workflows).toHaveLength(1);
+    } finally {
+      log.mockRestore();
     }
   });
 
@@ -206,17 +246,19 @@ describe("loopy CLI shell", () => {
 
   it("runs --live only through the selected available adapter and persists provider trace", async () => {
     const project = mkdtempSync(join(tmpdir(), "loopy-cli-live-"));
+    initializeRepository(project);
     const traceOutput = resolve(project, "live-trace.jsonl");
     const setup = new Storage({ projectDir: project });
+    const definition = (await Bun.file(
+      resolve("fixtures/workflows/valid-basic.json"),
+    ).json()) as WorkflowDefinition;
+    definition.id = "10111111-1111-4111-8111-111111111111";
+    definition.nodes = definition.nodes.slice(0, 1);
+    definition.edges = [];
     setup.runtime.createWorkflowVersion({
-      workflowId: "live-workflow",
+      workflowId: definition.id,
       version: 1,
-      definition: {
-        id: "live-workflow",
-        workflowVersion: 1,
-        nodes: [{ id: "agent", kind: "agent", provider: "codex", prompt: "hello" }],
-        edges: [],
-      },
+      definition,
     });
     setup.close();
     const output: string[] = [];
@@ -229,7 +271,7 @@ describe("loopy CLI shell", () => {
     try {
       expect(
         await mainAsync(
-          ["run", "live-workflow", "--provider", "codex", "--live", "--project", project, "--json"],
+          ["run", definition.id, "--provider", "codex", "--live", "--project", project, "--json"],
           {
             registry: createProviderRegistry([fakeLiveAdapter()]),
           },
@@ -380,16 +422,22 @@ describe("loopy CLI shell", () => {
       );
 
       expect(
-        await mainAsync([
-          "run",
-          review.proposal.workflow.id,
-          "--project",
-          project,
-          "--local",
-          "--input",
-          JSON.stringify({ task: "replay" }),
-          "--json",
-        ]),
+        await mainAsync(
+          [
+            "run",
+            review.proposal.workflow.id,
+            "--project",
+            project,
+            "--local",
+            "--input",
+            JSON.stringify({ task: "replay" }),
+            "--json",
+          ],
+          {
+            runtimeFactory: (store, provider) =>
+              new RuntimeScheduler({ store, provider, verifier: new DeterministicVerifier() }),
+          },
+        ),
       ).toBe(0);
       const run = lastJson<{ run: { status: string }; attempts: unknown[] }>();
       expect(run.run.status).toBe("succeeded");
@@ -437,12 +485,16 @@ describe("loopy CLI shell", () => {
           "0 * * * *",
           "--timezone",
           "UTC",
+          "--live",
           "--project",
           project,
           "--json",
         ]),
       ).toBe(0);
-      expect(JSON.parse(output.at(-1) ?? "null").id).toBe("hourly");
+      expect(JSON.parse(output.at(-1) ?? "null")).toMatchObject({
+        id: "hourly",
+        executionMode: "live",
+      });
       expect(await mainAsync(["schedule", "list", "--project", project, "--json"])).toBe(0);
       expect(JSON.parse(output.at(-1) ?? "[]")).toHaveLength(1);
     } finally {
@@ -452,17 +504,18 @@ describe("loopy CLI shell", () => {
 
   it("fires a persisted schedule through the SQLite runtime and exposes its events", async () => {
     const project = mkdtempSync(join(tmpdir(), "loopy-cli-scheduled-run-"));
+    initializeRepository(project);
     const setup = new Storage({ projectDir: project });
+    const definition = (await Bun.file(
+      resolve("fixtures/workflows/valid-basic.json"),
+    ).json()) as WorkflowDefinition;
+    definition.id = "20111111-1111-4111-8111-111111111111";
+    definition.nodes = definition.nodes.slice(0, 1);
+    definition.edges = [];
     setup.runtime.createWorkflowVersion({
-      workflowId: "scheduled-workflow",
+      workflowId: definition.id,
       version: 1,
-      definition: {
-        id: "scheduled-workflow",
-        workflowVersion: 1,
-        nodes: [{ id: "agent", kind: "agent", name: "agent", prompt: "scheduled" }],
-        edges: [],
-        policies: { concurrency: { maxParallel: 1 } },
-      },
+      definition,
     });
     setup.close();
     const output: string[] = [];
@@ -477,18 +530,21 @@ describe("loopy CLI shell", () => {
           "--id",
           "scheduled",
           "--workflow",
-          "scheduled-workflow",
+          definition.id,
           "--cron",
           "* * * * *",
           "--timezone",
           "UTC",
+          "--live",
           "--project",
           project,
           "--json",
         ]),
       ).toBe(0);
       expect(
-        await mainAsync(["schedule", "fire", "scheduled", "--project", project, "--json"]),
+        await mainAsync(["schedule", "fire", "scheduled", "--project", project, "--json"], {
+          registry: createProviderRegistry([fakeLiveAdapter()]),
+        }),
       ).toBe(0);
       const fired = JSON.parse(output.at(-1) ?? "null") as {
         run: { run: { status: string }; events: unknown[] };
@@ -497,9 +553,11 @@ describe("loopy CLI shell", () => {
       expect(fired.run.events.length).toBeGreaterThan(0);
       const persisted = new Storage({ projectDir: project });
       expect(persisted.runtime.listRuns("succeeded")).toHaveLength(1);
+      const persistedRunId = persisted.runtime.listRuns("succeeded")[0]?.id ?? "";
       expect(
-        persisted.runtime.countEvents(persisted.runtime.listRuns("succeeded")[0]?.id ?? ""),
-      ).toBeGreaterThan(0);
+        (await new SqliteRuntimeStore(persisted).getRun(persistedRunId))?.plan.execution,
+      ).toEqual({ mode: "live", provider: "codex" });
+      expect(persisted.runtime.countEvents(persistedRunId)).toBeGreaterThan(0);
       expect(persisted.schedules.listFires("scheduled")).toHaveLength(1);
       expect(persisted.schedules.listLinks("scheduled", "terminal")).toHaveLength(1);
       persisted.close();

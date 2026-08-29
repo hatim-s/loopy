@@ -131,6 +131,7 @@ export async function scheduleCommand(
       name: value(args, "--name"),
       workflowId,
       workflowVersion: Number(value(args, "--version") ?? 1),
+      executionMode: args.includes("--live") ? "live" : "local",
       input: parseInput(value(args, "--input")),
       expression,
       timezone: value(args, "--timezone"),
@@ -149,7 +150,10 @@ export async function scheduleCommand(
       args,
       schedules,
       schedules
-        .map((item) => `${item.id}\t${item.enabled ? "enabled" : "disabled"}\t${item.expression}`)
+        .map(
+          (item) =>
+            `${item.id}\t${item.enabled ? "enabled" : "disabled"}\t${item.executionMode}\t${item.expression}`,
+        )
         .join("\n"),
     );
     return 0;
@@ -159,7 +163,7 @@ export async function scheduleCommand(
     emit(
       args,
       schedule,
-      `${schedule.id}\t${schedule.workflowId}\t${schedule.expression}\t${schedule.timezone}`,
+      `${schedule.id}\t${schedule.workflowId}\t${schedule.executionMode}\t${schedule.expression}\t${schedule.timezone}`,
     );
     return 0;
   }
@@ -248,6 +252,7 @@ export async function scheduleCommand(
         : {}),
       projectDir: project(args),
       platform: value(args, "--platform") ?? process.platform,
+      tickAll: args.includes("--all"),
       ...(value(args, "--dir") ? { targetDir: resolve(value(args, "--dir") as string) } : {}),
     };
     const artifacts = renderSchedulerArtifacts(schedule, options);
