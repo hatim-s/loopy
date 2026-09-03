@@ -1,0 +1,149 @@
+{
+  "schemaVersion": "1",
+  "workflowVersion": 1,
+  "id": "a4000000-0000-4000-8000-000000000001",
+  "name": "Sync exported assets into uacode",
+  "description": "Export selected UAT assets, sync them into uacode, and open a focused pull request.",
+  "inputs": [
+    {
+      "name": "assets",
+      "type": "json",
+      "description": "Non-empty array of assetClass, assetId, and optional assetVersion objects.",
+      "required": true,
+      "secret": false,
+      "example": [
+        {
+          "assetClass": "WORKFLOW_DEFINITION",
+          "assetId": "6a50d200b05e3e1c2eed8d84",
+          "assetVersion": "11"
+        }
+      ]
+    },
+    {
+      "name": "feature",
+      "type": "string",
+      "description": "Platform feature directory passed to the sync script.",
+      "required": false,
+      "default": "ai-agents",
+      "secret": false
+    },
+    {
+      "name": "indexPath",
+      "type": "path",
+      "description": "Repository-relative asset index updated by the sync script.",
+      "required": false,
+      "default": "configs/platform-features/ai-agents/platform/ai-sdlc/text-to-workflow-assets.json",
+      "secret": false
+    },
+    {
+      "name": "baseBranch",
+      "type": "string",
+      "description": "Remote branch used as the pull request base.",
+      "required": false,
+      "default": "main",
+      "secret": false
+    },
+    {
+      "name": "branchPrefix",
+      "type": "string",
+      "description": "Prefix for the generated asset sync branch.",
+      "required": false,
+      "default": "loopy/uacode-asset-sync",
+      "secret": false
+    },
+    {
+      "name": "prTitle",
+      "type": "string",
+      "description": "Title for the generated pull request.",
+      "required": false,
+      "default": "Sync exported T2W assets",
+      "secret": false
+    },
+    {
+      "name": "exportDirectory",
+      "type": "directory",
+      "description": "Optional extracted export directory. When set, skip the UAT export request.",
+      "required": false,
+      "default": "",
+      "secret": false
+    },
+    {
+      "name": "dryRun",
+      "type": "boolean",
+      "description": "Export and inspect changes without editing files or creating a pull request.",
+      "required": false,
+      "default": false,
+      "secret": false
+    }
+  ],
+  "nodes": [
+    {
+      "id": "a4000000-0000-4000-8000-000000000011",
+      "kind": "agent",
+      "name": "Export and sync uacode assets",
+      "sideEffect": true,
+      "prompt": "Create a focused uacode asset sync pull request from the requested assets. Work only in the current Loopy-created Git worktree. Read AGENTS.md and repository instructions first. Confirm that origin is the expected uacode repository, the worktree is clean, GitHub CLI authentication works, and every assets entry has a non-empty assetClass and assetId; reject malformed input before any side effect. Fetch origin and use the exact origin/<baseBranch> commit. Require scripts/platform-feature-assets/sync-t2w-assets.mjs on that base. If it is absent, stop without changes and report that unify-apps/uacode pull request #40724 must land first. Never run Gradle or Spotless. If exportDirectory is non-empty, resolve it, require exactly one readable CHANGESET export root, and do not call UAT. Otherwise require UA_ASSET_EXPORT_WEBHOOK_URL in the inherited environment, but never print or persist its value. POST {\"assets\": assets} as JSON to that URL. Require a successful response containing a non-empty exportUrl, allowing the field to be nested in the response, and never print or persist that signed URL. Download the export to a directory created with mktemp -d, reject archive entries with absolute paths or parent traversal before extraction, extract it, and locate exactly one export root containing CHANGESET. Delete temporary download data before completing. Run the sync script with --dry-run, --feature <feature>, and --index <indexPath>. If dryRun is true, stop after the preview and report proposed asset files and index changes; do not create a branch, edit tracked files, commit, push, or open a pull request. Otherwise create a unique branch from origin/<baseBranch> using <branchPrefix>-YYYYMMDD and a short asset suffix, adding a numeric suffix if the name already exists. Run the script with --apply, then --check. If its dedicated Node test exists, run it with node --test. Run git diff --check. Inspect every changed path and allow only files under configs/platform-features/<feature>/asset-repository plus the exact indexPath; fail closed on any other change. Confirm the diff contains only requested exported assets and their required index entries. If there is no diff, do not create a commit or pull request. Otherwise commit, push with upstream tracking, and create one non-draft pull request against baseBranch using gh. The pull request body must list requested assets, changed files, checks, and the source automation https://agent-code-migration.uat.unifyapps.com/p/0/automations/6a99f5b5ff996660f72b33ad/preview. Never merge, approve, or close a pull request. End with the base SHA, branch, changed paths, checks, and pull request URL, without exposing webhook or signed download URLs.",
+      "provider": "codex",
+      "reasoning": "high",
+      "skills": [],
+      "inputBindings": {
+        "assets": { "kind": "workflow_input", "name": "assets" },
+        "feature": { "kind": "workflow_input", "name": "feature" },
+        "indexPath": { "kind": "workflow_input", "name": "indexPath" },
+        "baseBranch": { "kind": "workflow_input", "name": "baseBranch" },
+        "branchPrefix": { "kind": "workflow_input", "name": "branchPrefix" },
+        "prTitle": { "kind": "workflow_input", "name": "prTitle" },
+        "exportDirectory": { "kind": "workflow_input", "name": "exportDirectory" },
+        "dryRun": { "kind": "workflow_input", "name": "dryRun" }
+      },
+      "requiredCapabilities": [],
+      "completionContract": "node_completion",
+      "tags": ["uacode", "asset-sync", "pull-requests"]
+    },
+    {
+      "id": "a4000000-0000-4000-8000-000000000012",
+      "kind": "verify",
+      "name": "Check the retained uacode worktree",
+      "commands": [
+        { "command": "git", "args": ["diff", "--check"], "timeoutMs": 120000 },
+        {
+          "command": "sh",
+          "args": ["-lc", "test -z \"$(git status --porcelain)\""],
+          "timeoutMs": 120000
+        }
+      ],
+      "success": "all",
+      "expectedExitCode": 0,
+      "tags": ["uacode", "asset-sync", "verification"]
+    }
+  ],
+  "edges": [
+    {
+      "id": "a4000000-0000-4000-8000-000000000021",
+      "source": "a4000000-0000-4000-8000-000000000011",
+      "target": "a4000000-0000-4000-8000-000000000012",
+      "metadata": {}
+    }
+  ],
+  "defaults": {
+    "provider": "codex",
+    "reasoning": "high",
+    "timeoutMs": 3600000,
+    "retry": { "maxAttempts": 1, "backoffMs": 0, "retryOn": [] }
+  },
+  "policies": {
+    "sandbox": "danger-full-access",
+    "tools": { "allow": [], "deny": [], "network": "unrestricted" },
+    "workspace": { "writableRoots": [], "useGitWorktree": true, "allowDirtyWorkspace": false },
+    "approval": { "requiredBefore": [], "sideEffectLabels": [] },
+    "budget": { "timeoutMs": 3600000 },
+    "concurrency": { "maxParallel": 1 }
+  },
+  "triggers": { "manual": true },
+  "metadata": {
+    "createdAt": "2026-09-04T00:00:00.000Z",
+    "updatedAt": "2026-09-04T00:00:00.000Z",
+    "createdFrom": "manual",
+    "tags": ["uacode", "asset-sync", "pull-requests"]
+  }
+}
