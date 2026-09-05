@@ -1,0 +1,17 @@
+{
+  "name": "@loopy/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@loopy/contracts": "workspace:*",
+    "@loopy/local-api": "workspace:*",
+    "@loopy/providers": "workspace:*",
+    "@loopy/runtime": "workspace:*",
+    "@loopy/storage": "workspace:*",
+    "@loopy/workspace": "workspace:*"
+  }
+}

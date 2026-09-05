@@ -87,6 +87,7 @@ export type ScheduleCoordinator = (input: {
   | "cancel_previous";
 export type LocalApiOptions = {
   storage: LocalApiStorage;
+  startWorkflow?: RuntimeScheduler["start"];
   runtime?: RuntimeScheduler;
   scheduler?: RuntimeScheduler;
   runtimeStore?: RuntimeStore;
@@ -1332,7 +1333,7 @@ export function createLocalApi(options: LocalApiOptions): Hono {
       throw new ApiError(400, "invalid_request", "version must be a positive integer");
     const workflow =
       repository.getWorkflowVersion(workflowId, version) ?? notFound("Workflow version");
-    const run = await scheduler.start(
+    const run = await (options.startWorkflow ?? scheduler.start.bind(scheduler))(
       workflow.definition as WorkflowDefinition,
       jsonObject(body.input),
     );
