@@ -76,7 +76,10 @@ export function StepLibrary({ onAdd }: { onAdd: (kind: WorkflowNode["kind"]) => 
             </button>
           ))}
       </div>
-      <footer>Click a step or drag it onto the canvas. Work runs on your computer.</footer>
+      <footer>
+        Click a step or drag it onto the canvas. Work runs on your computer.{" "}
+        <a href="/providers">Manage CLIs</a>
+      </footer>
     </aside>
   );
 }
