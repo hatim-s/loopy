@@ -53,6 +53,7 @@
         "@loopy/providers": "workspace:*",
         "@loopy/runtime": "workspace:*",
         "@loopy/scheduler": "workspace:*",
+        "@loopy/server": "workspace:*",
         "@loopy/storage": "workspace:*",
         "@loopy/testing": "workspace:*",
         "@loopy/tracing": "workspace:*",
@@ -119,6 +120,18 @@
       "dependencies": {
         "@loopy/contracts": "workspace:*",
         "cron-parser": "5.4.0",
+      },
+    },
+    "packages/server": {
+      "name": "@loopy/server",
+      "version": "0.1.0",
+      "dependencies": {
+        "@loopy/contracts": "workspace:*",
+        "@loopy/local-api": "workspace:*",
+        "@loopy/providers": "workspace:*",
+        "@loopy/runtime": "workspace:*",
+        "@loopy/storage": "workspace:*",
+        "@loopy/workspace": "workspace:*",
       },
     },
     "packages/storage": {
@@ -310,6 +323,8 @@
     "@loopy/runtime": ["@loopy/runtime@workspace:packages/runtime"],
 
     "@loopy/scheduler": ["@loopy/scheduler@workspace:packages/scheduler"],
+
+    "@loopy/server": ["@loopy/server@workspace:packages/server"],
 
     "@loopy/storage": ["@loopy/storage@workspace:packages/storage"],
 
