@@ -28,8 +28,10 @@ import {
 } from "@phosphor-icons/react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import {
+  applyNodeChanges,
   Background,
   type Connection,
+  ConnectionLineType,
   Controls,
   type Edge,
   type EdgeChange,
@@ -42,9 +44,14 @@ import {
   ReactFlowProvider,
   useEdgesState,
   useNodesState,
+  useReactFlow,
 } from "@xyflow/react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ApiClient } from "../app/api";
+import { StepLibrary, steps } from "./builder/palette";
+import { RunConsole } from "./builder/run-console";
+import { ValueSource } from "./builder/values";
+import "./builder/builder.css";
 import { ErrorState, LoadingState } from "../components/primitives/states";
 import {
   createEditorStore,
@@ -288,18 +295,12 @@ function fallbackWorkflow(workflowId: string): WorkflowDefinition {
   };
 }
 
-type EditorNodeData = { workflowNode: WorkflowNode; position?: { x: number; y: number } };
-type EditorNode = Node<EditorNodeData, "workflow">;
-
-const kindColors: Record<WorkflowNode["kind"], string> = {
-  agent: "#f3a946",
-  shell: "#56c8bf",
-  verify: "#56c897",
-  approval: "#d9a7ff",
-  route: "#80b8ff",
-  join: "#ff9f7a",
-  transform: "#c5d478",
+type EditorNodeData = {
+  runStatus?: string;
+  workflowNode: WorkflowNode;
+  position?: { x: number; y: number };
 };
+type EditorNode = Node<EditorNodeData, "workflow">;
 
 function nodeSubtitle(node: WorkflowNode): string {
   if (node.kind === "agent")
@@ -315,22 +316,58 @@ function nodeSubtitle(node: WorkflowNode): string {
 }
 
 function WorkflowNodeCard({ data, selected }: { data: EditorNodeData; selected?: boolean }) {
-  const color = kindColors[data.workflowNode.kind];
+  const node = data.workflowNode;
+  const Icon = steps.find((step) => step.kind === node.kind)?.icon ?? GitBranch;
   return (
     <button
       type="button"
-      className={`workflow-node-card${selected ? " workflow-node-card--selected" : ""}`}
-      style={{ "--node-accent": color } as React.CSSProperties}
-      aria-label={`${data.workflowNode.name} ${data.workflowNode.kind} node`}
+      className={`canvas-node ${selected ? "selected" : ""} node-status-${data.runStatus ?? "idle"}`}
+      aria-label={`${node.name} ${node.kind} node`}
     >
       <Handle type="target" position={Position.Left} className="workflow-handle" />
-      <div className="workflow-node-card__kind">
-        <span className="workflow-node-card__dot" />
-        {data.workflowNode.kind}
+      <div className="canvas-node-head">
+        <span className="canvas-node-icon">
+          <Icon size={16} />
+        </span>
+        <span className="canvas-node-title">
+          <strong>{node.name}</strong>
+          <code>{nodeSubtitle(node)}</code>
+        </span>
+        {data.runStatus ? (
+          <span className="node-status" title={data.runStatus}>
+            {data.runStatus === "succeeded" ? "✓" : data.runStatus === "failed" ? "!" : "•"}
+          </span>
+        ) : null}
       </div>
-      <strong>{data.workflowNode.name}</strong>
-      <span>{nodeSubtitle(data.workflowNode)}</span>
-      <Handle type="source" position={Position.Right} className="workflow-handle" />
+      <p className="node-prompt">
+        {node.kind === "agent"
+          ? node.prompt
+          : node.kind === "shell"
+            ? node.stages.join(" | ")
+            : (node.description ?? nodeSubtitle(node))}
+      </p>
+      {node.kind === "route" ? (
+        <>
+          <Handle
+            id={String(true)}
+            type="source"
+            position={Position.Right}
+            style={{ top: "35%" }}
+            className="workflow-handle"
+          />
+          <Handle
+            id={String(false)}
+            type="source"
+            position={Position.Right}
+            style={{ top: "75%" }}
+            className="workflow-handle"
+          />
+          <span className="route-label route-label-true">true</span>
+          <span className="route-label route-label-false">false</span>
+        </>
+      ) : (
+        <Handle type="source" position={Position.Right} className="workflow-handle" />
+      )}
     </button>
   );
 }
@@ -346,10 +383,11 @@ function toFlowNodes(
   return workflow.nodes.map((workflowNode, index) => ({
     id: workflowNode.id,
     type: "workflow",
-    position: positions?.[workflowNode.id] ?? {
-      x: 80 + (index % 3) * 250,
-      y: 90 + Math.floor(index / 3) * 150,
-    },
+    position: positions?.[workflowNode.id] ??
+      workflowNode.position ?? {
+        x: 80 + (index % 3) * 250,
+        y: 90 + Math.floor(index / 3) * 150,
+      },
     data: { workflowNode },
     selected: selected.has(workflowNode.id),
   }));
@@ -366,7 +404,11 @@ function toFlowEdges(
     target: edge.target,
     label: edge.label,
     data: { workflowEdge: edge },
-    type: "default",
+    sourceHandle:
+      workflow.nodes.find((node) => node.id === edge.source)?.kind === "route"
+        ? edge.label
+        : undefined,
+    type: "smoothstep",
     animated: false,
     selected: selected.has(edge.id),
   }));
@@ -458,10 +500,12 @@ function Field({
 }
 
 function NodeInspector({
+  workflow,
   node,
   onChange,
   onDelete,
 }: {
+  workflow: WorkflowDefinition;
   node: WorkflowNode;
   onChange: (node: WorkflowNode) => void;
   onDelete: () => void;
@@ -496,9 +540,54 @@ function NodeInspector({
         {node.kind === "shell" ? <ShellFields node={node} update={update} /> : null}
         {node.kind === "verify" ? <VerifyFields node={node} update={update} /> : null}
         {node.kind === "approval" ? <ApprovalFields node={node} update={update} /> : null}
-        {node.kind === "route" ? <RouteFields node={node} update={update} /> : null}
+        {node.kind === "route" ? (
+          <RouteFields node={node} update={update} workflow={workflow} />
+        ) : null}
         {node.kind === "join" ? <JoinFields node={node} update={update} /> : null}
         {node.kind === "transform" ? <TransformFields node={node} update={update} /> : null}
+        {node.kind === "shell" || node.kind === "agent" ? (
+          <>
+            <h3>Input bindings</h3>
+            {Object.entries(node.inputBindings).map(([name, value]) => (
+              <div key={name}>
+                <ValueSource
+                  label={name}
+                  value={value}
+                  workflow={workflow}
+                  onChange={(value) =>
+                    update({ inputBindings: { ...node.inputBindings, [name]: value } })
+                  }
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    update({
+                      inputBindings: Object.fromEntries(
+                        Object.entries(node.inputBindings).filter(([key]) => key !== name),
+                      ),
+                    })
+                  }
+                >
+                  Remove {name}
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => {
+                const key =
+                  node.kind === "shell"
+                    ? "stdin"
+                    : `input${Object.keys(node.inputBindings).length + 1}`;
+                update({
+                  inputBindings: { ...node.inputBindings, [key]: { kind: "literal", value: "" } },
+                });
+              }}
+            >
+              Bind {node.kind === "shell" ? "stdin" : "an input"}
+            </button>
+          </>
+        ) : null}
       </div>
     </aside>
   );
@@ -823,20 +912,93 @@ function ApprovalFields({
 function RouteFields({
   node,
   update,
+  workflow,
 }: {
   node: RouteNode;
   update: (patch: Partial<RouteNode>) => void;
+  workflow: WorkflowDefinition;
 }) {
+  const predicate = node.predicate;
+  if (predicate.kind !== "comparison")
+    return (
+      <p>
+        This route uses a compound condition.{" "}
+        <button
+          type="button"
+          onClick={() =>
+            update({
+              predicate: {
+                kind: "comparison",
+                operator: "equals",
+                left: { kind: "literal", value: true },
+                right: { kind: "literal", value: true },
+              },
+            })
+          }
+        >
+          Use a comparison
+        </button>
+      </p>
+    );
   return (
     <>
-      <Field
-        label="Default branch label"
-        value={node.defaultRoute ?? ""}
-        onChange={(value) => update({ defaultRoute: value || undefined })}
+      <ValueSource
+        label="Compare"
+        value={predicate.left.kind === "reference" ? predicate.left.reference : predicate.left}
+        workflow={workflow}
+        onChange={(value) =>
+          update({
+            predicate: {
+              ...predicate,
+              left: value.kind === "literal" ? value : { kind: "reference", reference: value },
+            },
+          })
+        }
+      />
+      <label className="editor-field">
+        <span>Operator</span>
+        <select
+          aria-label="Condition operator"
+          value={predicate.operator}
+          onChange={(event) =>
+            update({
+              predicate: {
+                ...predicate,
+                operator: event.target.value as typeof predicate.operator,
+              },
+            })
+          }
+        >
+          {[
+            "equals",
+            "not_equals",
+            "contains",
+            "less_than",
+            "greater_than",
+            "less_than_or_equal",
+            "greater_than_or_equal",
+          ].map((value) => (
+            <option key={value} value={value}>
+              {value.replaceAll("_", " ")}
+            </option>
+          ))}
+        </select>
+      </label>
+      <ValueSource
+        label="With"
+        value={predicate.right.kind === "reference" ? predicate.right.reference : predicate.right}
+        workflow={workflow}
+        onChange={(value) =>
+          update({
+            predicate: {
+              ...predicate,
+              right: value.kind === "literal" ? value : { kind: "reference", reference: value },
+            },
+          })
+        }
       />
       <p className="editor-help">
-        Edit each edge label in the graph by selecting it. Conditions remain closed data, never
-        executable source.
+        Connect the true and false outputs to the steps that should run.
       </p>
     </>
   );
@@ -1039,16 +1201,7 @@ function WorkflowInputs({
   );
 }
 
-function EditorCanvas({
-  nodes,
-  edges,
-  onNodesChange,
-  onEdgesChange,
-  onConnect,
-  onSelectNode,
-  onSelectEdge,
-  onClearSelection,
-}: {
+function EditorCanvas(props: {
   nodes: EditorNode[];
   edges: Edge[];
   onNodesChange: (changes: NodeChange<EditorNode>[]) => void;
@@ -1057,31 +1210,77 @@ function EditorCanvas({
   onSelectNode: (id?: string) => void;
   onSelectEdge: (id?: string) => void;
   onClearSelection: () => void;
+  onAddNode: (kind: WorkflowNode["kind"], position?: { x: number; y: number }) => void;
+  onPosition: (id: string, position: { x: number; y: number }) => void;
 }) {
+  const { screenToFlowPosition } = useReactFlow();
   return (
-    <div className="editor-canvas" role="application" aria-label="Workflow graph editor">
+    <div
+      className="editor-canvas"
+      role="application"
+      aria-label="Workflow graph editor"
+      onDragOver={(event) => {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        const kind = event.dataTransfer.getData("application/loopy-step");
+        const step = steps.find((step) => step.kind === kind);
+        if (step)
+          props.onAddNode(step.kind, screenToFlowPosition({ x: event.clientX, y: event.clientY }));
+      }}
+    >
       <ReactFlow
-        nodes={nodes}
-        edges={edges}
+        nodes={props.nodes}
+        edges={props.edges}
         nodeTypes={nodeTypes}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        onNodeClick={(_, node) => onSelectNode(node.id)}
-        onEdgeClick={(_, edge) => onSelectEdge(edge.id)}
-        onPaneClick={onClearSelection}
+        onNodesChange={props.onNodesChange}
+        onEdgesChange={props.onEdgesChange}
+        onConnect={props.onConnect}
+        isValidConnection={(connection) =>
+          connection.source !== connection.target &&
+          !props.edges.some(
+            (edge) =>
+              edge.source === connection.source &&
+              edge.target === connection.target &&
+              edge.sourceHandle === connection.sourceHandle,
+          )
+        }
+        onNodeDragStop={(_, node) => props.onPosition(node.id, node.position)}
+        onNodeClick={(_, node) => props.onSelectNode(node.id)}
+        onEdgeClick={(_, edge) => props.onSelectEdge(edge.id)}
+        onPaneClick={props.onClearSelection}
         fitView
-        minZoom={0.45}
+        fitViewOptions={{ padding: 0.22, minZoom: 0.45, maxZoom: 1 }}
+        minZoom={0.2}
         maxZoom={1.6}
+        nodeDragThreshold={2}
+        autoPanOnNodeDrag
+        autoPanSpeed={16}
+        onlyRenderVisibleElements
+        connectionLineType={ConnectionLineType.SmoothStep}
+        connectionRadius={28}
+        deleteKeyCode={["Backspace", "Delete"]}
         proOptions={{ hideAttribution: true }}
+        defaultEdgeOptions={{ type: "smoothstep", style: { stroke: "#747479", strokeWidth: 1.5 } }}
       >
-        <Background color="#2d3138" gap={24} size={1} />
+        <Background color="#28282b" gap={24} size={1.25} />
         <Controls showInteractive={false} />
         <MiniMap
-          nodeColor={(node) => kindColors[(node.data as EditorNodeData).workflowNode.kind]}
-          maskColor="#111214cc"
+          pannable
+          zoomable
+          bgColor="#101011"
+          nodeColor="#b8b7b3"
+          maskColor="rgba(10,10,11,0.78)"
         />
       </ReactFlow>
+      {!props.nodes.length ? (
+        <div className="canvas-empty">
+          <strong>Add your first step</strong>
+          <span>Choose an agent, a condition, or a shell module.</span>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1275,6 +1474,8 @@ export function WorkflowEditorPage({
 }) {
   const { workflowId } = useParams({ strict: false }) as { workflowId: string };
   const navigate = useNavigate();
+  const [runId, setRunId] = useState<string>();
+  const [runStatuses, setRunStatuses] = useState<Record<string, string>>({});
   const editorAdapter = useMemo(
     () => adapter ?? (api ? createWorkflowEditorAdapter(api) : undefined),
     [adapter, api],
@@ -1369,19 +1570,10 @@ export function WorkflowEditorPage({
   );
   const onNodesChange = useCallback(
     (changes: NodeChange<EditorNode>[]) => {
-      setNodes((current) => {
-        const next = current.map((node) => {
-          const change = changes.find((candidate) => "id" in candidate && candidate.id === node.id);
-          if (change?.type === "position" && change.position)
-            return { ...node, position: change.position };
-          return node;
-        });
-        for (const change of changes) {
-          if (change.type === "position" && change.position)
-            editorStoreRef.current?.getState().setPosition(change.id, change.position);
-        }
-        return next;
-      });
+      setNodes((current) => applyNodeChanges(changes, current));
+      for (const change of changes)
+        if (change.type === "remove")
+          editorStoreRef.current?.getState().apply({ type: "remove_node", nodeId: change.id });
     },
     [setNodes],
   );
@@ -1398,6 +1590,7 @@ export function WorkflowEditorPage({
       edge: {
         id: edgeId,
         source: connection.source,
+        ...(connection.sourceHandle ? { label: connection.sourceHandle } : {}),
         target: connection.target,
         metadata: {},
       },
@@ -1445,10 +1638,18 @@ export function WorkflowEditorPage({
     editorStoreRef.current?.getState().apply({ type: "remove_node", nodeId: selectedNodeId });
     setSelectedNodeId(undefined);
   };
-  const addNode = (kind: WorkflowNode["kind"]) => {
+  const addNode = (kind: WorkflowNode["kind"], position?: { x: number; y: number }) => {
     if (!workflow) return;
     const id = uuid();
-    const base = { id, name: `${kind.charAt(0).toUpperCase()}${kind.slice(1)} step`, tags: [] };
+    const base = {
+      id,
+      position: position ?? {
+        x: 80 + workflow.nodes.length * 80,
+        y: 120 + workflow.nodes.length * 40,
+      },
+      name: `${kind.charAt(0).toUpperCase()}${kind.slice(1)} step`,
+      tags: [],
+    };
     let node: WorkflowNode;
     if (kind === "agent")
       node = {
@@ -1496,12 +1697,12 @@ export function WorkflowEditorPage({
       };
     else if (kind === "join") node = { ...base, kind, policy: "all", outputMode: "array" };
     else node = { ...base, kind, operation: "pick", mapping: {} };
-    editorStoreRef.current?.getState().apply({ type: "add_node", node });
+    editorStoreRef.current?.getState().apply({ type: "add_node", node, position: node.position });
     setSelectedNodeId(id);
   };
   const autoLayout = () => {
     editorStoreRef.current?.getState().autoLayout();
-    setNotice("Layout arranged for editing; positions are local to this Studio view.");
+    setNotice("Layout arranged. Save the version to keep these positions.");
   };
   const validate = async () => {
     const store = editorStoreRef.current;
@@ -1580,14 +1781,15 @@ export function WorkflowEditorPage({
       setSaving(false);
     }
   }, [editorAdapter, record, workflow]);
-  const run = async () => {
+  const run = async (input: Record<string, unknown> = {}) => {
     if (!record || !editorAdapter || dirty) return;
     setRunning(true);
     setError(undefined);
     try {
-      const result = await editorAdapter.run(record.workflowId, record.version);
+      const result = await editorAdapter.run(record.workflowId, record.version, input);
       setNotice(`Run ${result.id} started from version ${record.version}.`);
-      void navigate({ to: "/runs" });
+      setRunId(result.id);
+      setRunStatuses({});
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
@@ -1641,7 +1843,7 @@ export function WorkflowEditorPage({
           break;
         case "auto_layout":
           store.autoLayout();
-          setNotice("Layout arranged for editing; positions are local to this Studio view.");
+          setNotice("Layout arranged. Save the version to keep these positions.");
           break;
         default:
           handled = false;
@@ -1699,7 +1901,10 @@ export function WorkflowEditorPage({
         error={error}
         selectedNode={selectedNode}
         selectedEdgeId={selectedEdgeId}
-        nodes={nodes}
+        nodes={nodes.map((node) => ({
+          ...node,
+          data: { ...node.data, runStatus: runStatuses[node.id] },
+        }))}
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
@@ -1716,7 +1921,7 @@ export function WorkflowEditorPage({
         onExport={exportWorkflow}
         onValidate={validate}
         onSave={() => void save()}
-        onRun={() => void run()}
+        onRun={(input) => void run(input)}
         saving={saving}
         running={running}
         onWorkflowChange={(next) => commitWorkflow(next)}
@@ -1725,6 +1930,13 @@ export function WorkflowEditorPage({
         onDeleteNode={deleteNode}
         onAddNode={addNode}
         previous={previous}
+        onBack={() => void navigate({ to: "/workflows" })}
+        onPosition={(id, position) => editorStoreRef.current?.getState().setPosition(id, position)}
+        console={
+          api && runId ? (
+            <RunConsole api={api} runId={runId} onStatuses={setRunStatuses} />
+          ) : undefined
+        }
       />
     </ReactFlowProvider>
   );
@@ -1756,25 +1968,42 @@ function PageEditorLayout(props: {
   onExport: () => void;
   onValidate: () => void;
   onSave: () => void;
-  onRun: () => void;
+  onRun: (input?: Record<string, unknown>) => void;
   saving: boolean;
   running: boolean;
   onWorkflowChange: (workflow: WorkflowDefinition) => void;
   onNodeChange: (node: WorkflowNode) => void;
   onEdgeChange: (edge: WorkflowEdge) => void;
   onDeleteNode: () => void;
-  onAddNode: (kind: WorkflowNode["kind"]) => void;
+  onAddNode: (kind: WorkflowNode["kind"], position?: { x: number; y: number }) => void;
+  onPosition: (id: string, position: { x: number; y: number }) => void;
+  onBack: () => void;
+  console?: React.ReactNode;
   previous?: WorkflowDefinition;
 }) {
-  const [addMenu, setAddMenu] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(true);
+  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [inputsOpen, setInputsOpen] = useState(false);
+  const [inputError, setInputError] = useState<string>();
+  const [inputValues, setInputValues] = useState<Record<string, string>>({});
+  const startRun = () => {
+    if (props.workflow.inputs.length) setInputsOpen(true);
+    else props.onRun();
+  };
   return (
-    <section className="workflow-editor-page" aria-label="Workflow editor">
-      <header className="workflow-editor-header">
-        <div>
-          <div className="editor-breadcrumb">
-            <GitBranch /> Build / Graphs / {props.workflow.name}
-          </div>
-          <div className="workflow-editor-title-row">
+    <section className="builder-shell" aria-label="Workflow editor">
+      <header className="builder-header">
+        <div className="builder-header-left">
+          <button
+            type="button"
+            className="builder-icon-button"
+            aria-label="Back to workflows"
+            onClick={props.onBack}
+          >
+            <ArrowLeft />
+          </button>
+          <span className="builder-mark">L</span>
+          <div className="builder-title">
             <input
               aria-label="Workflow name"
               value={props.workflow.name}
@@ -1782,79 +2011,119 @@ function PageEditorLayout(props: {
                 props.onWorkflowChange({ ...props.workflow, name: event.target.value })
               }
             />
-            <span
-              className={`editor-save-status${props.dirty ? " editor-save-status--dirty" : ""}`}
-            >
-              {props.dirty
-                ? "Unsaved changes"
-                : `v${props.record?.version ?? props.workflow.workflowVersion}`}
+            <span className="editor-save-status">
+              {props.dirty ? "Unsaved" : `v${props.record?.version ?? 1}`}
             </span>
           </div>
         </div>
-        <div className="workflow-editor-header__actions">
+        <div className="builder-header-right">
           <button
             type="button"
-            className="editor-small-button"
-            onClick={() => setAddMenu((value) => !value)}
-            aria-expanded={addMenu}
+            className="builder-tool-button"
+            aria-pressed={paletteOpen}
+            onClick={() => setPaletteOpen(!paletteOpen)}
           >
-            <Plus /> Add node
+            Step library
           </button>
-          {addMenu ? (
-            <div className="editor-add-menu">
-              {(
-                ["agent", "shell", "route", "verify", "approval", "join", "transform"] as const
-              ).map((kind) => (
-                <button
-                  type="button"
-                  key={kind}
-                  onClick={() => {
-                    props.onAddNode(kind);
-                    setAddMenu(false);
-                  }}
-                >
-                  {kind}
-                </button>
-              ))}
-            </div>
-          ) : null}
+          <button
+            type="button"
+            className="builder-tool-button"
+            aria-pressed={inspectorOpen}
+            onClick={() => setInspectorOpen(!inspectorOpen)}
+          >
+            Inspector
+          </button>
         </div>
       </header>
-      <EditorToolbar {...props} />
-      <div className="workflow-editor-body">
-        <div className="workflow-editor-main">
+      <EditorToolbar {...props} onRun={startRun} />
+      <div
+        className={`builder-workspace ${paletteOpen ? "with-library" : ""} ${inspectorOpen ? "with-inspector" : ""}`}
+      >
+        {paletteOpen ? <StepLibrary onAdd={props.onAddNode} /> : null}
+        <div className="builder-canvas">
           <EditorCanvas {...props} />
-          <div className="workflow-editor-meta">
-            <WorkflowInputs workflow={props.workflow} onChange={props.onWorkflowChange} />
-            {props.previous && props.dirty ? (
-              <VersionDiff previous={props.previous} current={props.workflow} />
-            ) : null}
-          </div>
+          {props.console}
         </div>
-        {props.selectedNode ? (
-          <NodeInspector
-            node={props.selectedNode}
-            onChange={props.onNodeChange}
-            onDelete={props.onDeleteNode}
-          />
-        ) : props.selectedEdgeId ? (
-          (() => {
-            const edge = props.workflow.edges.find(
-              (candidate) => candidate.id === props.selectedEdgeId,
-            );
-            return edge ? <EdgeInspector edge={edge} onChange={props.onEdgeChange} /> : null;
-          })()
-        ) : (
-          <aside className="editor-inspector editor-inspector--empty">
-            <span className="editor-eyebrow">Inspector</span>
-            <h2>Select a node</h2>
-            <p>
-              Choose a node in the graph to configure its provider, prompt, verification, or control
-              policy.
-            </p>
-          </aside>
-        )}
+        {inspectorOpen ? (
+          props.selectedNode ? (
+            <NodeInspector
+              workflow={props.workflow}
+              node={props.selectedNode}
+              onChange={props.onNodeChange}
+              onDelete={props.onDeleteNode}
+            />
+          ) : props.selectedEdgeId ? (
+            (() => {
+              const edge = props.workflow.edges.find(
+                (candidate) => candidate.id === props.selectedEdgeId,
+              );
+              return edge ? <EdgeInspector edge={edge} onChange={props.onEdgeChange} /> : null;
+            })()
+          ) : (
+            <aside className="editor-inspector" aria-label="Workflow settings">
+              <header className="editor-inspector__header">
+                <span className="editor-eyebrow">Workflow settings</span>
+              </header>
+              <div className="editor-inspector__body">
+                <Field
+                  label="Description"
+                  value={props.workflow.description ?? ""}
+                  multiline
+                  onChange={(description) =>
+                    props.onWorkflowChange({ ...props.workflow, description })
+                  }
+                />
+                <WorkflowInputs workflow={props.workflow} onChange={props.onWorkflowChange} />
+                {props.previous && props.dirty ? (
+                  <VersionDiff previous={props.previous} current={props.workflow} />
+                ) : null}
+              </div>
+            </aside>
+          )
+        ) : null}
       </div>
+      {inputsOpen ? (
+        <div className="builder-modal">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              const input: Record<string, unknown> = {};
+              try {
+                for (const field of props.workflow.inputs) {
+                  const value = inputValues[field.name];
+                  if (value === undefined || value === "") continue;
+                  input[field.name] = field.type === "string" ? value : JSON.parse(value);
+                }
+                props.onRun(input);
+                setInputsOpen(false);
+              } catch {
+                setInputError("Use valid JSON for numbers, booleans, arrays, and objects.");
+              }
+            }}
+          >
+            <h2>Run inputs</h2>
+            {inputError ? <p role="alert">{inputError}</p> : null}
+            {props.workflow.inputs.map((input) => (
+              <label key={input.name}>
+                {input.name}
+                <input
+                  required={input.required}
+                  aria-label={input.name}
+                  placeholder={input.type}
+                  value={inputValues[input.name] ?? ""}
+                  onChange={(event) =>
+                    setInputValues({ ...inputValues, [input.name]: event.target.value })
+                  }
+                />
+              </label>
+            ))}
+            <button type="button" onClick={() => setInputsOpen(false)}>
+              Cancel
+            </button>
+            <button type="submit">Start run</button>
+          </form>
+        </div>
+      ) : null}
       {props.diagnostics.length ? (
         <section className="editor-diagnostics" aria-label="Workflow diagnostics">
           <div className="editor-diagnostics__heading">
