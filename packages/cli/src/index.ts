@@ -19,6 +19,7 @@ import {
   replayRun,
 } from "@loopy/runtime";
 import { SchedulerEngine, type SchedulerStore } from "@loopy/scheduler";
+import { startMcpStdio } from "@loopy/server";
 import {
   type CanonicalSessionImportInput,
   type ExtractionResultInput,
@@ -68,6 +69,7 @@ const COMMANDS = [
   "trace",
   "ui",
   "server",
+  "mcp",
   "schedule",
   "cleanup",
   "workflow",
@@ -121,6 +123,7 @@ Commands:
   console.log(
     "  loopy ui [--project <path>] [--port <port>] [--no-open]  (connect to the background server)",
     "  loopy server <start|serve|status|stop|restart|logs> [--project <path>] [--port <port>]",
+    "  loopy mcp [--project <path>]  (stdio MCP access to the running server)",
   );
 }
 
@@ -503,9 +506,10 @@ async function launchUi(args: readonly string[], dependencies: CliDependencies):
   if (jsonOutput(args)) return printUiConfig(args);
   const studioDir = studioPath(args, dependencies.ui ?? {});
   if (!dependencies.ui?.serverFactory) {
-    await serverCommand(["server", "start", ...args.slice(1)], studioDir);
+    await serverCommand(["server", "start", ...args.slice(1)], studioDir, () => {});
     const server = await runningServer(projectDir(args));
     if (!server) throw new Error("Server did not become ready");
+    console.log(`Loopy Graph Studio: ${server.url}/`);
     if (!args.includes("--no-open")) await openStudio(server.url, dependencies.ui?.launcher);
     return 0;
   }
@@ -970,6 +974,13 @@ async function validateProvider(args: readonly string[], deps: CliDependencies):
 
 async function dispatch(args: readonly string[], deps: CliDependencies): Promise<number> {
   const command = args[0];
+  if (command === "mcp") {
+    const server = await runningServer(projectDir(args));
+    if (!server)
+      throw new Error("Start the project server with 'loopy server start' before connecting MCP");
+    await startMcpStdio((path, body) => serverRequest(server, path, body));
+    return 0;
+  }
   if (command === "server") return serverCommand(args, studioPath(args, deps.ui ?? {}));
   if (
     !deps.storageFactory &&
@@ -1258,6 +1269,7 @@ export function main(
       "fork",
       "ui",
       "server",
+      "mcp",
       "schedule",
       "cleanup",
       "providers",

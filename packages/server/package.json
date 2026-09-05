@@ -12,7 +12,9 @@
     "@loopy/providers": "workspace:*",
     "@loopy/runtime": "workspace:*",
     "@loopy/storage": "workspace:*",
+    "@loopy/tools": "workspace:*",
     "@loopy/workspace": "workspace:*",
-    "@loopy/tools": "workspace:*"
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "zod": "4.4.3"
   }
 }
