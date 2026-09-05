@@ -229,6 +229,7 @@ export type RuntimeOptions = {
   store: RuntimeStore;
   provider: ProviderExecutor;
   verifier?: VerificationExecutor;
+  shell?: ProviderExecutor;
   now?: () => string;
   id?: () => string;
   /** Confirms that an external owner has observed and signalled cancellation. */
@@ -1421,7 +1422,18 @@ export class RuntimeScheduler {
           signal: controller.signal,
           policy: providerPolicy(run, node),
         });
-      else if (node.kind === "verify") {
+      else if (node.kind === "shell") {
+        if (!this.options.shell) throw new Error("No shell module executor is configured");
+        result = await this.options.shell.execute({
+          runId: run.runId,
+          attemptId: attempt.attemptId,
+          nodeId: node.id,
+          node,
+          input: attempt.input,
+          signal: controller.signal,
+          policy: providerPolicy(run, node),
+        });
+      } else if (node.kind === "verify") {
         const verified = await (
           this.options.verifier ?? {
             verify: async (): Promise<VerificationResult> => ({

@@ -27,7 +27,11 @@ import {
 } from "@loopy/storage";
 import { DeterministicFakeProvider } from "@loopy/testing";
 import { decodeTraceJsonl, encodeTraceJsonl } from "@loopy/tracing";
-import { type PreparedWorkflowWorkspace, prepareWorkflowWorkspace } from "@loopy/workspace";
+import {
+  createShellExecutor,
+  type PreparedWorkflowWorkspace,
+  prepareWorkflowWorkspace,
+} from "@loopy/workspace";
 import { doctorCommand } from "./doctor";
 import {
   cleanupCommand,
@@ -368,6 +372,7 @@ async function runtimeMutation(
       new RuntimeScheduler({
         store: new SqliteRuntimeStore(storage),
         provider: provider ?? new DeterministicFakeProvider(),
+        shell: createShellExecutor(),
       });
     let result: unknown;
     if (operation === "retry") {
@@ -844,7 +849,14 @@ async function runWorkflow(args: readonly string[], deps: CliDependencies): Prom
     }
     const runtime =
       deps.runtimeFactory?.(store, provider) ??
-      new RuntimeScheduler({ store, provider, verifier: prepared?.verifier });
+      new RuntimeScheduler({
+        store,
+        provider,
+        verifier: prepared?.verifier,
+        shell: createShellExecutor({
+          workingDirectory: prepared?.workingDirectory ?? projectDir(args),
+        }),
+      });
     let snapshot: Awaited<ReturnType<RuntimeScheduler["wait"]>>;
     if (live) {
       const started = await runtime.start(
@@ -855,7 +867,7 @@ async function runWorkflow(args: readonly string[], deps: CliDependencies): Prom
       snapshot = await runtime.wait(started.runId);
     } else {
       snapshot = await runtime.run(
-        workflow.definition as Parameters<RuntimeScheduler["run"]>[0],
+        definition as Parameters<RuntimeScheduler["run"]>[0],
         parseRunInput(args),
       );
     }
@@ -927,7 +939,7 @@ async function forkWorkflow(args: readonly string[], deps: CliDependencies): Pro
     const provider = deps.providerExecutor ?? new DeterministicFakeProvider();
     const runtime =
       deps.runtimeFactory?.(runtimeStore, provider) ??
-      new RuntimeScheduler({ store: runtimeStore, provider });
+      new RuntimeScheduler({ store: runtimeStore, provider, shell: createShellExecutor() });
     const started = await runtime.fork(runId, nodeId, parseOptionalRunInput(args));
     const snapshot = await runtime.wait(started.runId);
     if (jsonOutput(args)) printJson(snapshot);
@@ -1061,7 +1073,14 @@ async function dispatch(args: readonly string[], deps: CliDependencies): Promise
           }
           const runtime =
             deps.runtimeFactory?.(runtimeStore, provider) ??
-            new RuntimeScheduler({ store: runtimeStore, provider, verifier: prepared?.verifier });
+            new RuntimeScheduler({
+              store: runtimeStore,
+              provider,
+              verifier: prepared?.verifier,
+              shell: createShellExecutor({
+                workingDirectory: prepared?.workingDirectory ?? projectDir(args),
+              }),
+            });
           let started: Awaited<ReturnType<RuntimeScheduler["start"]>>;
           try {
             started = await runtime.start(definition, invocation.input);

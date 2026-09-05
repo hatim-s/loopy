@@ -5,7 +5,11 @@ import { ApiError, createLocalApi, createLocalServerConfig } from "@loopy/local-
 import { createDefaultProviderRegistry } from "@loopy/providers";
 import { createProviderExecutor, type ProviderExecutor, RuntimeScheduler } from "@loopy/runtime";
 import { openStorage, SqliteRuntimeStore } from "@loopy/storage";
-import { createShellVerifier, prepareWorkflowWorkspace } from "@loopy/workspace";
+import {
+  createShellExecutor,
+  createShellVerifier,
+  prepareWorkflowWorkspace,
+} from "@loopy/workspace";
 
 export type ServerOptions = {
   projectDir: string;
@@ -40,6 +44,7 @@ export async function startServer(options: ServerOptions) {
   const runtime = new RuntimeScheduler({
     store,
     provider,
+    shell: createShellExecutor(),
     verifier: {
       async verify(context) {
         const run = await store.getRun(context.runId);

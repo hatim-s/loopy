@@ -134,7 +134,7 @@ export const WorkspacePolicyV1Schema = z.object({
 });
 export const WorkspacePolicySchema = WorkspacePolicyV1Schema;
 export const ApprovalPolicyV1Schema = z.object({
-  requiredBefore: z.array(z.enum(["agent", "verify", "transform"])).default([]),
+  requiredBefore: z.array(z.enum(["agent", "verify", "transform", "shell"])).default([]),
   sideEffectLabels: z.array(NonEmptyStringSchema).default([]),
 });
 export const ApprovalPolicySchema = ApprovalPolicyV1Schema;
@@ -299,8 +299,23 @@ export const TransformNodeV1Schema = NodeBaseSchema.extend({
 export const TransformNodeSchema = TransformNodeV1Schema;
 export type TransformNodeV1 = z.infer<typeof TransformNodeV1Schema>;
 
+export const ShellConfigurationSchema = z.object({
+  stages: z.array(NonEmptyStringSchema).min(1).max(64),
+  inputBindings: z.record(z.string(), ValueReferenceV1Schema).default({}),
+  execution: z.literal("host"),
+  timeoutMs: z.number().int().positive().max(86_400_000).default(120_000),
+  maxOutputBytes: z.number().int().positive().max(16_777_216).default(1_048_576),
+  retry: RetryPolicyV1Schema.default({ maxAttempts: 1, backoffMs: 0, retryOn: [] }),
+});
+export const ShellNodeSchema = NodeBaseSchema.extend(ShellConfigurationSchema.shape).extend({
+  kind: z.literal("shell"),
+  sideEffect: z.boolean().default(true),
+});
+export type ShellNode = z.infer<typeof ShellNodeSchema>;
+
 export const NodeV1Schema = z.discriminatedUnion("kind", [
   AgentNodeV1Schema,
+  ShellNodeSchema,
   VerifyNodeV1Schema,
   ApprovalNodeV1Schema,
   RouteNodeV1Schema,
@@ -1104,6 +1119,10 @@ const ExecutionAgentNodeSchema = ExecutionNodeBaseSchema.extend({
   }),
   binding: ProviderBindingV1Schema,
 });
+const ExecutionShellNodeSchema = ExecutionNodeBaseSchema.extend({
+  kind: z.literal("shell"),
+  configuration: ShellConfigurationSchema,
+});
 const ExecutionVerifyNodeSchema = ExecutionNodeBaseSchema.extend({
   kind: z.literal("verify"),
   configuration: z.object({
@@ -1144,6 +1163,7 @@ const ExecutionTransformNodeSchema = ExecutionNodeBaseSchema.extend({
 });
 export const ExecutionNodeV1Schema = z.discriminatedUnion("kind", [
   ExecutionAgentNodeSchema,
+  ExecutionShellNodeSchema,
   ExecutionVerifyNodeSchema,
   ExecutionApprovalNodeSchema,
   ExecutionRouteNodeSchema,
