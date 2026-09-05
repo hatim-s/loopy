@@ -88,7 +88,7 @@ export function createEditorStore(
   options: CreateEditorStoreOptions = {},
 ): StoreApi<EditorStore> {
   const historyLimit = Math.max(1, options.historyLimit ?? 100);
-  const initialPositions = options.positions ?? autoLayout(initialDocument);
+  const initialPositions = options.positions ?? savedPositions(initialDocument);
   const ids = options.ids ?? defaultIds;
   const initializer = immer<EditorStore>(
     (set, get): EditorStore => ({
@@ -200,14 +200,24 @@ export function createEditorStore(
       },
       setPosition(nodeId, position) {
         if (!get().document.nodes.some((node) => node.id === nodeId)) return;
-        set((state) => {
-          state.positions[nodeId] = { x: position.x, y: position.y };
-        });
+        const result = get().apply({ type: "update_node", nodeId, patch: { position } });
+        if (result.ok)
+          set((state) => {
+            state.positions[nodeId] = position;
+          });
       },
       autoLayout() {
         const positions = autoLayout(get().document);
         set((state) => {
+          state.history.past.push({
+            document: structuredClone(get().document),
+            positions: structuredClone(get().positions),
+          } as never);
+          state.history.future = [];
           state.positions = positions;
+          for (const node of state.document.nodes) node.position = positions[node.id];
+          state.dirty = true;
+          state.revision += 1;
         });
         return positions;
       },
@@ -224,7 +234,7 @@ export function createEditorStore(
           state.dirty = false;
         });
       },
-      reset(document, positions = autoLayout(document)) {
+      reset(document, positions = savedPositions(document)) {
         set((state) => {
           state.document = structuredClone(document) as never;
           state.positions = structuredClone(positions);
@@ -235,7 +245,7 @@ export function createEditorStore(
           state.history = { past: [], future: [], limit: historyLimit };
         });
       },
-      resetIfRevision(document, submittedRevision, positions = autoLayout(document)) {
+      resetIfRevision(document, submittedRevision, positions = savedPositions(document)) {
         if (get().revision !== submittedRevision) return false;
         get().reset(document, positions);
         return true;
@@ -254,7 +264,7 @@ export function createEditorStore(
           if (state.history.past.length > state.history.limit) state.history.past.shift();
           state.history.future = [];
           state.document = structuredClone(decoded.document) as never;
-          state.positions = autoLayout(decoded.document);
+          state.positions = savedPositions(decoded.document);
           state.selection = { nodeIds: [], edgeIds: [] };
           state.dirty = true;
           state.revision += 1;
@@ -285,3 +295,10 @@ export function createEditorStore(
 }
 
 export type { EditorIdFactory };
+
+function savedPositions(document: WorkflowDefinition) {
+  const fallback = autoLayout(document);
+  return Object.fromEntries(
+    document.nodes.map((node) => [node.id, node.position ?? fallback[node.id]]),
+  ) as Record<string, EditorPosition>;
+}

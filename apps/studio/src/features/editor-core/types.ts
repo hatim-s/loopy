@@ -38,6 +38,7 @@ export type EditorValidation = {
 };
 
 export type EditorNodePatch = {
+  position?: EditorPosition;
   stages?: string[];
   timeoutMs?: number;
   maxOutputBytes?: number;
