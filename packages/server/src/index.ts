@@ -5,6 +5,7 @@ import { ApiError, createLocalApi, createLocalServerConfig } from "@loopy/local-
 import { createDefaultProviderRegistry } from "@loopy/providers";
 import { createProviderExecutor, type ProviderExecutor, RuntimeScheduler } from "@loopy/runtime";
 import { openStorage, SqliteRuntimeStore } from "@loopy/storage";
+import { createToolRegistry } from "@loopy/tools";
 import {
   createShellExecutor,
   createShellVerifier,
@@ -30,6 +31,7 @@ export async function startServer(options: ServerOptions) {
   const storage = openStorage({ projectDir });
   const store = new SqliteRuntimeStore(storage);
   const registry = createDefaultProviderRegistry();
+  const tools = createToolRegistry();
   const provider =
     options.provider ??
     createProviderExecutor({
@@ -76,6 +78,7 @@ export async function startServer(options: ServerOptions) {
   };
   const app = createLocalApi({
     storage,
+    tools,
     runtime,
     runtimeStore: store,
     providerRegistry: registry,
@@ -171,6 +174,7 @@ export async function startServer(options: ServerOptions) {
       clearInterval(timer);
       await tick;
       // Pause at a node boundary. Stopping the server never silently replays a command.
+      await tools.drain();
       await runtime.shutdown();
       listener.stop(true);
       storage.close();
