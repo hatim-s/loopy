@@ -38,6 +38,11 @@ export type EditorValidation = {
 };
 
 export type EditorNodePatch = {
+  stages?: string[];
+  timeoutMs?: number;
+  maxOutputBytes?: number;
+  execution?: "host";
+  retry?: import("@loopy/contracts").RetryPolicy;
   name?: string;
   description?: string;
   tags?: string[];
