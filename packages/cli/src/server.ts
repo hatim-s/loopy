@@ -11,6 +11,7 @@ import {
 } from "node:fs";
 import { resolve } from "node:path";
 import { startServer } from "@loopy/server";
+import { createLoginService } from "./login-service";
 
 type ServerState = { pid: number; url: string; token: string; projectDir: string };
 const statePath = (project: string) => resolve(project, ".loopy/server.json");
@@ -88,6 +89,7 @@ export async function serverCommand(
   const project = realpathSync(option(args, "--project") ?? process.cwd());
   const command = args[1] ?? "status";
   const current = await runningServer(project);
+  const login = createLoginService(project);
   const publicState = (state: ServerState) => ({
     pid: state.pid,
     url: state.url,
@@ -97,8 +99,8 @@ export async function serverCommand(
     report(
       JSON.stringify(
         current
-          ? { running: true, ...publicState(current) }
-          : { running: false, projectDir: project },
+          ? { running: true, ...publicState(current), autostart: await login.status() }
+          : { running: false, projectDir: project, autostart: await login.status() },
       ),
     );
     return current ? 0 : 1;
@@ -107,7 +109,29 @@ export async function serverCommand(
     report(resolve(project, ".loopy/server.log"));
     return 0;
   }
-  if (command === "stop" || command === "restart") {
+  let loginDefinition: string | undefined;
+  if (command === "enable-autostart") {
+    if (!existsSync(resolve(studioDir, "index.html")))
+      throw new Error("Build Studio before starting: bun run --cwd apps/studio build");
+    loginDefinition = login.prepare({
+      executable: realpathSync(process.execPath),
+      cli: realpathSync(process.argv[1] as string),
+      studioDir: realpathSync(studioDir),
+      path: process.env.PATH ?? "/usr/bin:/bin:/usr/sbin:/sbin",
+      port: option(args, "--port"),
+    });
+    if (login.installed() && current) {
+      report(JSON.stringify({ ...publicState(current), autostart: await login.status() }));
+      return 0;
+    }
+  }
+  if (command === "disable-autostart" && !login.installed()) {
+    // Also report unsupported platforms without stopping their detached server.
+    await login.uninstall();
+    report("Login auto-start is already disabled.");
+    return 0;
+  }
+  if (["stop", "restart", "enable-autostart", "disable-autostart"].includes(command)) {
     if (current) {
       await serverRequest(current, "/server/stop", {});
       for (let attempt = 0; attempt < 100; attempt++) {
@@ -124,7 +148,12 @@ export async function serverCommand(
       return 0;
     }
   }
-  if (command === "start" || command === "restart") {
+  if (command === "disable-autostart") {
+    await login.uninstall();
+    report("Login auto-start disabled. Loopy server stopped.");
+    return 0;
+  }
+  if (command === "start" || command === "restart" || command === "enable-autostart") {
     if (current && command === "start") {
       report(JSON.stringify(publicState(current)));
       return 0;
@@ -135,11 +164,20 @@ export async function serverCommand(
     if (!existsSync(resolve(studioDir, "index.html")))
       throw new Error("Build Studio before starting: bun run --cwd apps/studio build");
     mkdirSync(resolve(project, ".loopy"), { recursive: true, mode: 0o700 });
-    // Only reclaim a lock whose dead owner matches our persisted server identity.
-    const lockPath = resolve(project, ".loopy/loopy.lock");
-    if (previous && existsSync(lockPath)) {
-      const lock = JSON.parse(readFileSync(lockPath, "utf8")) as { pid?: number };
-      if (lock.pid === previous.pid) rmSync(lockPath);
+    if (loginDefinition || login.installed()) {
+      if (loginDefinition) await login.install(loginDefinition);
+      else await login.start();
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const state = await runningServer(project);
+        if (state) {
+          report(JSON.stringify({ ...publicState(state), autostart: await login.status() }));
+          return 0;
+        }
+        await Bun.sleep(100);
+      }
+      throw new Error(
+        `Login service did not become ready. Read ${resolve(project, ".loopy/server.log")}`,
+      );
     }
     const log = openSync(resolve(project, ".loopy/server.log"), "a", 0o600);
     const port = option(args, "--port");
@@ -181,6 +219,15 @@ export async function serverCommand(
   }
   if (command === "serve") {
     if (current) throw new Error("A Loopy server already owns this project");
+    const previous = readState(project);
+    if (previous && alive(previous.pid))
+      throw new Error("Server owner is still alive. Inspect the server log.");
+    // launchd invokes serve directly after a crash. Reclaim only its proven dead owner's lock.
+    const lockPath = resolve(project, ".loopy/loopy.lock");
+    if (previous && existsSync(lockPath)) {
+      const lock = JSON.parse(readFileSync(lockPath, "utf8")) as { pid?: number };
+      if (lock.pid === previous.pid) rmSync(lockPath);
+    }
     let server: Awaited<ReturnType<typeof startServer>>;
     const cleanup = () => {
       if (readState(project)?.pid === process.pid) rmSync(statePath(project), { force: true });
@@ -217,6 +264,6 @@ export async function serverCommand(
     return 0;
   }
   throw new Error(
-    "Usage: loopy server <start|serve|status|stop|restart|logs> [--project path] [--port port]",
+    "Usage: loopy server <start|serve|status|stop|restart|logs|enable-autostart|disable-autostart> [--project path] [--port port]",
   );
 }
