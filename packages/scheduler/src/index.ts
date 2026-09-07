@@ -274,6 +274,7 @@ export class SchedulerEngine {
     const atIso = iso(at);
     const decisions: ScheduleDecision[] = [];
     for (const schedule of await this.options.store.listSchedules()) {
+      if (schedule.schedule.expression === "manual") continue;
       const state = await this.stateFor(schedule, at);
       if (!schedule.schedule.enabled) {
         await this.options.store.saveState(state);

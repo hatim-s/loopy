@@ -292,3 +292,71 @@ export async function cleanupCommand(
 }
 
 export { nextFireAt };
+
+export async function remoteScheduleCommand(
+  args: readonly string[],
+  request: (path: string, body?: unknown, method?: string) => Promise<unknown>,
+): Promise<number> {
+  const action = args[1] ?? "list";
+  let result: unknown;
+  if (action === "create") {
+    const workflowId = value(args, "--workflow");
+    const expression = value(args, "--cron");
+    if (!workflowId || !expression)
+      throw new Error("schedule create requires --workflow and --cron");
+    result = await request("/schedules", {
+      id: value(args, "--id"),
+      name: value(args, "--name") ?? workflowId,
+      workflowId,
+      workflowVersion: Number(value(args, "--version") ?? 1),
+      executionMode: args.includes("--live") ? "live" : "local",
+      input: parseInput(value(args, "--input")),
+      expression,
+      timezone: value(args, "--timezone"),
+      overlapPolicy: value(args, "--overlap"),
+      missedPolicy: value(args, "--missed"),
+      enabled: !args.includes("--disabled"),
+    });
+  } else if (action === "list") {
+    const response = (await request("/schedules")) as { schedules: unknown[] };
+    result = response.schedules;
+  } else if (action === "tick") {
+    result = await request("/schedules/tick", { scheduleId: value(args, "--schedule") });
+  } else {
+    const path = `/schedules/${encodeURIComponent(requireId(args))}`;
+    if (action === "show") {
+      const response = (await request(path)) as { schedule: unknown };
+      result = response.schedule;
+    } else if (action === "remove") result = await request(path, undefined, "DELETE");
+    else if (["enable", "disable", "fire"].includes(action)) {
+      if (action === "fire" && value(args, "--input"))
+        throw new Error(
+          "Daemon schedule fire uses the saved schedule inputs; edit the schedule input before firing",
+        );
+      result = await request(
+        `${path}/${action}`,
+        action === "fire" ? { fireKey: crypto.randomUUID() } : {},
+      );
+    } else throw new Error(`Unknown schedule command '${action}'`);
+  }
+  console.log(JSON.stringify(result, null, json(args) ? undefined : 2));
+  return 0;
+}
+
+export async function remoteCleanupCommand(
+  args: readonly string[],
+  request: (path: string, body: unknown) => Promise<unknown>,
+): Promise<number> {
+  const action = args[1] ?? "preview";
+  if (!["preview", "apply"].includes(action))
+    throw new Error(`Unknown cleanup command '${action}'`);
+  const result = await request(`/retention/${action}`, {
+    before: value(args, "--before"),
+    maxAgeDays: value(args, "--max-age-days") ? Number(value(args, "--max-age-days")) : undefined,
+    maxRuns: value(args, "--max-runs") ? Number(value(args, "--max-runs")) : undefined,
+    batchSize: value(args, "--batch-size") ? Number(value(args, "--batch-size")) : undefined,
+    confirm: action === "apply",
+  });
+  console.log(JSON.stringify(result, null, json(args) ? undefined : 2));
+  return 0;
+}
