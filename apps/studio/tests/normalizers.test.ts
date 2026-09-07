@@ -60,6 +60,7 @@ describe("Studio runtime normalizers", () => {
       },
     });
     expect(review).toMatchObject({
+      jobId: "job-1",
       importId: "import-1",
       proposalId: "proposal-1",
       sourceLabel: "codex · session.jsonl",

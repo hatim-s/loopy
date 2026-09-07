@@ -209,10 +209,14 @@ export function SessionsPage({ api }: StudioPageProps) {
   );
 }
 
+const extractionReference = (review: ExtractionReviewModel) =>
+  review.jobId ?? review.proposalId ?? review.importId;
+
 export function ExtractionsPage({ api }: StudioPageProps) {
+  const [revision, setRevision] = useState(0);
   const result = useResource<{ reviews?: ExtractionReviewModel[]; jobs?: unknown[] }>(
     api,
-    "/extractions",
+    `/extractions?revision=${revision}`,
   );
   const [pendingAction, setPendingAction] = useState<"approve" | "reject">();
   const [decision, setDecision] = useState<"approved" | "rejected">();
@@ -220,7 +224,8 @@ export function ExtractionsPage({ api }: StudioPageProps) {
   const [selectedReview, setSelectedReview] = useState<string>();
   const reviewSelectId = useId();
   const reviews = (result.value?.reviews ?? []).map(normalizeExtractionReview).reverse();
-  const rawReview = reviews.find((item) => item.proposalId === selectedReview) ?? reviews[0];
+  const rawReview =
+    reviews.find((item) => extractionReference(item) === selectedReview) ?? reviews[0];
   const review = rawReview;
   const submitDecision = async (action: "approve" | "reject") => {
     if (!api || !review) return;
@@ -228,13 +233,14 @@ export function ExtractionsPage({ api }: StudioPageProps) {
     setActionError(undefined);
     try {
       await api.request(
-        `/extractions/${encodeURIComponent(review.proposalId ?? review.importId)}/${action}`,
+        `/extractions/${encodeURIComponent(extractionReference(review))}/${action}`,
         {
           method: "POST",
           body: JSON.stringify(action === "reject" ? { reason: "Rejected in Studio" } : {}),
         },
       );
       setDecision(action === "approve" ? "approved" : "rejected");
+      setRevision((value) => value + 1);
     } catch (error) {
       setActionError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -248,7 +254,7 @@ export function ExtractionsPage({ api }: StudioPageProps) {
           Proposal{" "}
           <select
             id={reviewSelectId}
-            value={review?.proposalId ?? ""}
+            value={review ? extractionReference(review) : ""}
             onChange={(event) => {
               setSelectedReview(event.target.value);
               setDecision(undefined);
@@ -257,8 +263,8 @@ export function ExtractionsPage({ api }: StudioPageProps) {
             disabled={Boolean(pendingAction)}
           >
             {reviews.map((item) => (
-              <option key={item.proposalId} value={item.proposalId}>
-                {item.proposalId} · {item.status}
+              <option key={extractionReference(item)} value={extractionReference(item)}>
+                {extractionReference(item)} · {item.status}
               </option>
             ))}
           </select>
@@ -341,6 +347,7 @@ export function normalizeExtractionReview(value: unknown): ExtractionReviewModel
         ? "blocked"
         : "draft";
   return {
+    jobId: typeof job.id === "string" ? job.id : undefined,
     importId:
       typeof job.importId === "string"
         ? job.importId
