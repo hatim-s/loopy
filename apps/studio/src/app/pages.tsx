@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useId, useMemo, useState } from "react";
 import { EmptyState, ErrorState, LoadingState } from "../components/primitives/states";
 import {
@@ -12,6 +12,7 @@ import {
 } from "../features";
 import type { GraphInputEdge, GraphInputNode } from "../features/debugger";
 import { createDebuggerState, debuggerReducer, replayEvents } from "../features/debugger";
+import { fallbackWorkflow } from "../features/editor";
 import type {
   DebuggerEvent,
   DebuggerSnapshot,
@@ -250,11 +251,36 @@ export function normalizeExtractionReview(value: unknown): ExtractionReviewModel
 }
 
 export function WorkflowsPage({ api }: StudioPageProps) {
+  const navigate = useNavigate();
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string>();
+  const create = async () => {
+    if (!api) return;
+    setCreating(true);
+    try {
+      const definition = fallbackWorkflow(crypto.randomUUID());
+      await api.request("/workflows", { method: "POST", body: JSON.stringify({ definition }) });
+      await navigate({ to: "/workflows/$workflowId/edit", params: { workflowId: definition.id } });
+    } catch (error) {
+      setCreateError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setCreating(false);
+    }
+  };
   const result = useResource<{
     workflows?: Array<{ workflowId?: string; version?: number; definition?: unknown }>;
   }>(api, "/workflows");
   return (
     <PageFrame title="Graph library" eyebrow="Build / graphs">
+      <button
+        type="button"
+        className="editor-primary-button"
+        disabled={!api || creating}
+        onClick={() => void create()}
+      >
+        {creating ? "Creating…" : "New graph"}
+      </button>
+      {createError ? <ErrorState message={createError} /> : null}
       {result.loading ? <LoadingState label="Loading workflows" /> : null}
       {result.error ? <ErrorState message={result.error} /> : null}
       {!result.loading && !result.error && !result.value?.workflows?.length ? (
@@ -275,7 +301,13 @@ export function WorkflowsPage({ api }: StudioPageProps) {
                 params={{ workflowId: workflow.workflowId ?? "" }}
                 className="workflow-library-link"
               >
-                <strong>{workflow.workflowId ?? "Unnamed graph"}</strong>
+                <strong>
+                  {workflow.definition &&
+                  typeof workflow.definition === "object" &&
+                  "name" in workflow.definition
+                    ? String(workflow.definition.name)
+                    : (workflow.workflowId ?? "Unnamed graph")}
+                </strong>
                 <span>version {workflow.version ?? index + 1} · Edit graph</span>
               </Link>
             </li>

@@ -57,7 +57,7 @@ describe("workflow editor model", () => {
     );
 
     expect(screen.getByRole("button", { name: "Agent step agent node" })).toBeTruthy();
-    expect(screen.getByText("agent")).toBeTruthy();
+    expect(screen.getByText("codex")).toBeTruthy();
   });
 
   domIt("edits the selected verification command while preserving sibling commands", () => {

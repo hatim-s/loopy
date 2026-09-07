@@ -177,6 +177,7 @@ export type ProviderDefaultsV1 = z.infer<typeof ProviderDefaultsV1Schema>;
 export type ProviderDefaults = z.infer<typeof ProviderDefaultsV1Schema>;
 
 const NodeBaseSchema = z.object({
+  position: z.object({ x: z.number().finite(), y: z.number().finite() }).optional(),
   id: StableIdSchema,
   name: NonEmptyStringSchema,
   description: z.string().trim().optional(),

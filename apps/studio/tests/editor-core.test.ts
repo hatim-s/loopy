@@ -271,15 +271,14 @@ describe("editor core", () => {
     expect(cleanStore.getState().dirty).toBe(false);
   });
 
-  test("import/export is contract-validated and auto-layout only changes positions", () => {
+  test("import/export is contract-validated and auto-layout persists positions", () => {
     const document = fixture();
     const store = createEditorStore(document);
     const beforeRevision = store.getState().revision;
-    const beforeDirty = store.getState().dirty;
     const positions = store.getState().autoLayout();
     expect(positions).toEqual(autoLayout(document));
-    expect(store.getState().revision).toBe(beforeRevision);
-    expect(store.getState().dirty).toBe(beforeDirty);
+    expect(store.getState().revision).toBe(beforeRevision + 1);
+    expect(store.getState().dirty).toBe(true);
     expect(decodeWorkflowDocument(store.getState().exportDocument())).toMatchObject({ ok: true });
     const draft = JSON.stringify(store.getState().document);
     expect(store.getState().importDocument("not-json")).toMatchObject({ ok: false });

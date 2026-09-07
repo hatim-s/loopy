@@ -5,6 +5,7 @@ import {
   createRouter,
   Outlet,
   redirect,
+  useLocation,
 } from "@tanstack/react-router";
 import { WorkflowEditorPage } from "../features/editor";
 import type { ApiClient } from "./api";
@@ -14,11 +15,18 @@ import { StudioShell } from "./shell";
 export type StudioRouterContext = { api: ApiClient; queryClient: QueryClient };
 
 const rootRoute = createRootRouteWithContext<StudioRouterContext>()({
-  component: () => (
-    <StudioShell>
+  component: () => {
+    const editing = useLocation({
+      select: (location) => /^\/workflows\/[^/]+\/edit$/.test(location.pathname),
+    });
+    return editing ? (
       <Outlet />
-    </StudioShell>
-  ),
+    ) : (
+      <StudioShell>
+        <Outlet />
+      </StudioShell>
+    );
+  },
 });
 
 function slotRoute(
@@ -44,7 +52,7 @@ const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
   beforeLoad: () => {
-    throw redirect({ to: "/sessions" });
+    throw redirect({ to: "/workflows" });
   },
 });
 
