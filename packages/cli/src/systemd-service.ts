@@ -10,6 +10,12 @@ function quote(value: string) {
     throw new Error("Login service paths cannot contain control characters");
   return `"${value.replaceAll("%", "%%").replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
 }
+function unitPath(value: string) {
+  quote(value);
+  if (/[\s\\]$/.test(value))
+    throw new Error("Systemd service paths cannot end in whitespace or a backslash");
+  return value.replaceAll("%", "%%");
+}
 const runSystemctl: ServiceCommand = async (args) => {
   const child = Bun.spawn(["systemctl", "--user", ...args], { stdout: "pipe", stderr: "pipe" });
   const [code, stdout, stderr] = await Promise.all([
@@ -77,15 +83,15 @@ StartLimitIntervalSec=0
 [Service]
 Type=exec
 ExecStart=:${argv.map(quote).join(" ")}
-WorkingDirectory=${quote(project)}
+WorkingDirectory=${unitPath(project)}
 Environment=${quote(`PATH=${config.path}`)} ${quote(`HOME=${home}`)}
 Restart=on-failure
 RestartSec=10
 KillMode=mixed
 TimeoutStopSec=60
 UMask=0077
-StandardOutput=append:${quote(log)}
-StandardError=append:${quote(log)}
+StandardOutput=append:${unitPath(log)}
+StandardError=append:${unitPath(log)}
 
 [Install]
 WantedBy=default.target
