@@ -1108,7 +1108,8 @@ function WorkflowInputs({
       </div>
       {workflow.inputs.length ? (
         workflow.inputs.map((input, index) => (
-          <div className="editor-input-row" key={`${input.name}-${index}`}>
+          // biome-ignore lint/suspicious/noArrayIndexKey: Names are editable; changing a name must not remount the focused field.
+          <div className="editor-input-row" key={index}>
             <input
               aria-label={`Input ${index + 1} name`}
               value={input.name}
