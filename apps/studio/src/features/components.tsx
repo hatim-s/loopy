@@ -510,6 +510,16 @@ export function AttemptDetails({ state, artifacts = state.artifacts }: AttemptDe
               {details.attempt.error}
             </p>
           )}
+          {(["input", "output"] as const).map((field) =>
+            details.attempt?.[field] !== undefined ? (
+              <details key={field} open>
+                <summary>{field === "input" ? "Input" : "Output"}</summary>
+                <pre style={{ overflow: "auto", maxHeight: 320, fontSize: 12 }}>
+                  {JSON.stringify(details.attempt[field], null, 2)}
+                </pre>
+              </details>
+            ) : null,
+          )}
           <ArtifactList artifacts={details.attempt.artifacts ?? artifacts} />
         </div>
       )}

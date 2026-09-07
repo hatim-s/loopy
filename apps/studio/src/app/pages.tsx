@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { EmptyState, ErrorState, LoadingState } from "../components/primitives/states";
 import {
   AttemptDetails,
@@ -536,7 +536,15 @@ export function snapshotFrom(
   };
 }
 
-function RunDebugger({ api, runId }: { api?: ApiClient; runId: string }) {
+function RunDebugger({
+  api,
+  runId,
+  onStatus,
+}: {
+  api?: ApiClient;
+  runId: string;
+  onStatus: (runId: string, status: string) => void;
+}) {
   const result = useResource<unknown>(api, `/runs/${encodeURIComponent(runId)}`);
   const baseSnapshot = useMemo(
     () => (result.value ? snapshotFrom(result.value, runId) : undefined),
@@ -587,6 +595,18 @@ function RunDebugger({ api, runId }: { api?: ApiClient; runId: string }) {
   );
   const [state, dispatch] = useState(() => createDebuggerState(runId));
   const [message, setMessage] = useState<string>();
+  const runStatus =
+    state.status === "live"
+      ? "running"
+      : state.status === "completed"
+        ? String(
+            [...state.events].reverse().find((event) => event.type === "run.completed")?.payload
+              ?.status ?? "completed",
+          )
+        : state.status;
+  useEffect(() => {
+    if (runStatus !== "loading" && runStatus !== "error") onStatus(runId, runStatus);
+  }, [onStatus, runId, runStatus]);
   useEffect(() => {
     if (!snapshot) return;
     dispatch(debuggerReducer(createDebuggerState(runId), { type: "snapshot", snapshot }));
@@ -625,6 +645,9 @@ function RunDebugger({ api, runId }: { api?: ApiClient; runId: string }) {
   };
   return (
     <div className="debugger-page">
+      <output className="debugger-run-status">
+        Run status: <strong>{runStatus}</strong>
+      </output>
       {result.loading ? <LoadingState label="Reconstructing run state" /> : null}
       {result.error ? <ErrorState message={result.error} /> : null}
       {message ? <ErrorState message={message} /> : null}
@@ -673,6 +696,10 @@ export function RunsPage({ api }: StudioPageProps) {
     () => new URLSearchParams(window.location.search).get("runId") ?? "",
   );
   const selectId = useId();
+  const [runStatuses, setRunStatuses] = useState<Record<string, string>>({});
+  const onStatus = useCallback((id: string, status: string) => {
+    setRunStatuses((current) => (current[id] === status ? current : { ...current, [id]: status }));
+  }, []);
   const runs = [...(result.value?.runs ?? [])].reverse();
   const run = runs.find((run) => run.id === selectedRun) ?? runs[0];
   return (
@@ -701,11 +728,11 @@ export function RunsPage({ api }: StudioPageProps) {
           >
             {runs.map((entry) => (
               <option key={entry.id} value={entry.id}>
-                {entry.id} · {entry.status}
+                {entry.id} · {runStatuses[entry.id] ?? entry.status}
               </option>
             ))}
           </select>
-          <RunDebugger key={run.id} api={api} runId={run.id} />
+          <RunDebugger key={run.id} api={api} runId={run.id} onStatus={onStatus} />
         </>
       ) : null}
     </PageFrame>

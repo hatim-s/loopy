@@ -1063,3 +1063,14 @@ a:focus-visible {
     gap: 4px;
   }
 }
+.builder-approval {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 0;
+}
+.debugger-run-status {
+  display: block;
+  margin: 12px 0;
+}
