@@ -49,6 +49,7 @@ import {
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ApiClient } from "../app/api";
 import { StepLibrary, steps } from "./builder/palette";
+import { ProjectSwitcher } from "./builder/project-switcher";
 import { RunConsole } from "./builder/run-console";
 import { ValueSource } from "./builder/values";
 import "./builder/builder.css";
@@ -1893,6 +1894,7 @@ export function WorkflowEditorPage({
   return (
     <ReactFlowProvider>
       <PageEditorLayout
+        projectSwitcher={api ? <ProjectSwitcher api={api} dirty={dirty} /> : undefined}
         workflow={workflow}
         record={record}
         dirty={dirty}
@@ -1943,6 +1945,7 @@ export function WorkflowEditorPage({
 }
 
 function PageEditorLayout(props: {
+  projectSwitcher?: React.ReactNode;
   workflow: WorkflowDefinition;
   record?: EditorWorkflowRecord;
   dirty: boolean;
@@ -2017,6 +2020,7 @@ function PageEditorLayout(props: {
           </div>
         </div>
         <div className="builder-header-right">
+          {props.projectSwitcher}
           <button
             type="button"
             className="builder-tool-button"
