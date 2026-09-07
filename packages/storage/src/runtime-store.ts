@@ -338,6 +338,9 @@ function attemptFromRow(row: Row): RuntimeAttempt {
 
 /** SQLite implementation of the scheduler's transactional command port. */
 export class SqliteRuntimeStore implements RuntimeStore {
+  get storageIdentity(): object {
+    return this.db;
+  }
   readonly storage: Storage;
   readonly db: Database;
   constructor(storage: Storage) {
@@ -936,6 +939,19 @@ export class SqliteRuntimeStore implements RuntimeStore {
   }
   traceSink(runId: string): TraceEventSink {
     return { append: (event) => this.appendTraceEvent(runId, event) };
+  }
+  /** Allocate live event order in the same transaction as the append. */
+  appendProviderTraceEvent(runId: string, input: Omit<TraceEvent, "sequence">): void {
+    this.db.transaction(() => {
+      const row = this.db
+        .query<{ sequence: number }, [string]>(
+          "SELECT COALESCE(MAX(sequence), -1) + 1 sequence FROM events WHERE run_id=?",
+        )
+        .get(runId);
+      const event = TraceEventSchema.parse({ ...input, sequence: row?.sequence ?? 0 });
+      if (event.runId !== runId) throw new Error("Trace run ID does not match target run");
+      this.appendTraceEventInternal(runId, event);
+    })();
   }
   appendTraceEvent(runId: string, event: TraceEvent): void {
     this.appendTraceEvents([event], runId);

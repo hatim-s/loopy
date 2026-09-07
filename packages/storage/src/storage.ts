@@ -285,6 +285,12 @@ CREATE INDEX IF NOT EXISTS scheduler_state_cursor_idx ON scheduler_state(cursor)
     `ALTER TABLE schedules ADD COLUMN execution_mode TEXT NOT NULL DEFAULT 'local'
       CHECK(execution_mode IN ('local','live'));`,
   ],
+  [
+    8,
+    `CREATE INDEX IF NOT EXISTS runs_history_idx ON runs(created_at DESC,id DESC);
+CREATE INDEX IF NOT EXISTS runs_status_history_idx ON runs(status,created_at DESC,id DESC);
+CREATE INDEX IF NOT EXISTS runs_retention_idx ON runs(created_at DESC,id DESC) WHERE status IN ('succeeded','failed','cancelled');`,
+  ],
 ];
 
 function applyMigrations(db: Database): void {
@@ -441,6 +447,10 @@ export interface ExtractionResultInput {
   proposal: ExtractionProposal;
   audit?: JsonValue;
 }
+export type RunSummary = Omit<RunRecord, "input">;
+export type RunSummaryPage = { runs: RunSummary[]; nextCursor?: string };
+export type RunListOptions = { status?: RunStatus; limit?: number; cursor?: string };
+
 export interface RunRecord {
   id: string;
   workflowId: string;
@@ -711,6 +721,49 @@ const artifact = (r: Row): ArtifactRecord => ({
 });
 
 export class RuntimeRepository {
+  get storageIdentity(): object {
+    return this.db;
+  }
+  listRunSummaries(options: RunListOptions = {}): RunSummaryPage {
+    const limit = Math.max(1, Math.min(200, options.limit ?? 50));
+    const where: string[] = [];
+    const values: (string | number)[] = [];
+    if (options.status) {
+      where.push("status=?");
+      values.push(options.status);
+    }
+    if (options.cursor) {
+      const cursor: unknown = JSON.parse(Buffer.from(options.cursor, "base64url").toString());
+      if (
+        !Array.isArray(cursor) ||
+        cursor.length !== 2 ||
+        cursor.some((part) => typeof part !== "string")
+      )
+        throw new Error("Invalid run cursor");
+      where.push("(created_at,id)<(?,?)");
+      values.push(cursor[0], cursor[1]);
+    }
+    const rows = this.db
+      .query<Row, (string | number)[]>(
+        `SELECT id,workflow_id,workflow_version,status,plan_hash,created_at,updated_at FROM runs ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY created_at DESC,id DESC LIMIT ?`,
+      )
+      .all(...values, limit + 1);
+    const runs = rows.slice(0, limit).map((row) => {
+      const { input: _input, ...summary } = asRun(row);
+      return summary;
+    });
+    const last = runs.at(-1);
+    return {
+      runs,
+      ...(rows.length > limit && last
+        ? {
+            nextCursor: Buffer.from(JSON.stringify([last.createdAt, last.id])).toString(
+              "base64url",
+            ),
+          }
+        : {}),
+    };
+  }
   constructor(private readonly db: Database) {}
   private run(sql: string, ...bindings: unknown[]): void {
     this.db.run(sql, bindings as never);

@@ -59,6 +59,8 @@ export type LocalApiRepository = {
     version?: number;
     definition: WorkflowDefinition | JsonObject;
   }): WorkflowVersionRecord;
+  readonly storageIdentity?: object;
+  listRunSummaries?: import("@loopy/storage").RuntimeRepository["listRunSummaries"];
   listRuns(status?: RunRecord["status"]): RunRecord[];
   getRun(id: string): RunRecord | undefined;
   listAttempts(runId?: string): AttemptRecord[];
@@ -1000,7 +1002,19 @@ export function createLocalApi(options: LocalApiOptions): Hono {
 
   const requireScheduleStore = (): ScheduleRepository =>
     scheduleStore ?? capability("Schedule persistence is not configured");
-  const drainingSchedules = new Set<string>();
+  const scheduleLocks = new Map<string, Promise<unknown>>();
+  const serializeSchedule = <T>(id: string, operation: () => Promise<T>): Promise<T> => {
+    const next = (scheduleLocks.get(id) ?? Promise.resolve())
+      .catch(() => undefined)
+      .then(operation);
+    scheduleLocks.set(id, next);
+    void next
+      .finally(() => {
+        if (scheduleLocks.get(id) === next) scheduleLocks.delete(id);
+      })
+      .catch(() => undefined);
+    return next;
+  };
   const waitForScheduleRun = (scheduleId: string, runId: string) => {
     if (!scheduleEngine?.wait) return;
     void scheduleEngine
@@ -1013,10 +1027,9 @@ export function createLocalApi(options: LocalApiOptions): Hono {
       .catch(() => undefined);
   };
   const drainQueuedScheduleFire = async (scheduleId: string): Promise<void> => {
-    if (drainingSchedules.has(scheduleId)) return;
-    drainingSchedules.add(scheduleId);
-    try {
+    return serializeSchedule(scheduleId, async () => {
       const store = requireScheduleStore();
+      if (store.listLinks(scheduleId, "active").length) return;
       const queued = store
         .listFires(scheduleId, 1000)
         .filter((item) => item.status === "claimed" && !item.runId)
@@ -1036,88 +1049,98 @@ export function createLocalApi(options: LocalApiOptions): Hono {
       const runId = "runId" in run ? run.runId : run.id;
       store.linkRun({ scheduleId, fireId: queued.id, runId, state: "active" });
       store.updateFire(queued.id, { runId, status: "running" });
-      waitForScheduleRun(scheduleId, runId);
-    } finally {
-      drainingSchedules.delete(scheduleId);
-    }
-  };
-  const fireSchedule = async (scheduleId: string, requestedKey?: string, requestedAt?: string) => {
-    const store = requireScheduleStore();
-    if (!scheduleEngine) capability("Runtime scheduler is not configured for schedule execution");
-    const schedule = store.get(scheduleId) ?? notFound("Schedule");
-    const scheduledAt = requestedAt ?? schedule.nextFireAt ?? new Date().toISOString();
-    const fireKey = requestedKey ?? scheduledAt;
-    const active = store.listLinks(scheduleId, "active").map((item) => item.runId);
-    const decision = scheduleCoordinator
-      ? await scheduleCoordinator({
-          schedule,
-          now: new Date().toISOString(),
-          activeRunIds: active,
-          scheduledAt,
-        })
-      : active.length && schedule.overlapPolicy === "skip"
-        ? "skip"
-        : active.length && schedule.overlapPolicy === "queue"
-          ? "queue"
-          : active.length && schedule.overlapPolicy === "cancel_previous"
-            ? "cancel_previous"
-            : "allow";
-    if (decision === "cancel_previous") {
-      if (!scheduler || typeof scheduler.cancel !== "function")
-        capability("cancel_previous overlap requires a runtime scheduler with cancellation");
-      for (const runId of active) {
-        await scheduler.cancel(runId, "cancelled by a newer scheduled invocation");
-        store.updateLink(runId, "terminal");
+      const schedulerStore = store.schedulerStore();
+      const state = await schedulerStore.getState(scheduleId);
+      if (state?.pending?.idempotencyKey === queued.fireKey) {
+        state.pending = undefined;
+        await schedulerStore.saveState(state);
       }
-    }
-    const claimed = store.claimFire({ scheduleId, fireKey, scheduledAt });
-    if (!claimed.claimed || claimed.runId) return { schedule, fire: claimed, idempotent: true };
-    if (decision === "skip") {
+      waitForScheduleRun(scheduleId, runId);
+    });
+  };
+  const fireSchedule = (scheduleId: string, requestedKey?: string, requestedAt?: string) =>
+    serializeSchedule(scheduleId, async () => {
+      const store = requireScheduleStore();
+      if (!scheduleEngine) capability("Runtime scheduler is not configured for schedule execution");
+      const schedule = store.get(scheduleId) ?? notFound("Schedule");
+      const scheduledAt = requestedAt ?? schedule.nextFireAt ?? new Date().toISOString();
+      const fireKey = requestedKey ?? scheduledAt;
+      const claimed = store.claimFire({ scheduleId, fireKey, scheduledAt });
+      if (!claimed.claimed || claimed.runId) return { schedule, fire: claimed, idempotent: true };
+      const active = store.listLinks(scheduleId, "active").map((item) => item.runId);
+      const decision = scheduleCoordinator
+        ? await scheduleCoordinator({
+            schedule,
+            now: new Date().toISOString(),
+            activeRunIds: active,
+            scheduledAt,
+          })
+        : active.length && schedule.overlapPolicy === "skip"
+          ? "skip"
+          : active.length && schedule.overlapPolicy === "queue"
+            ? "queue"
+            : active.length && schedule.overlapPolicy === "cancel_previous"
+              ? "cancel_previous"
+              : "allow";
+      if (decision === "cancel_previous") {
+        if (!scheduler || typeof scheduler.cancel !== "function")
+          capability("cancel_previous overlap requires a runtime scheduler with cancellation");
+        for (const runId of active) {
+          const stopped = await scheduler.cancel(
+            runId,
+            "cancelled by a newer scheduled invocation",
+          );
+          if (!["cancelled", "failed", "succeeded"].includes(stopped.status))
+            return { schedule, fire: claimed, queued: true, idempotent: false };
+          store.updateLink(runId, "terminal");
+        }
+      }
+      if (decision === "skip") {
+        return {
+          schedule,
+          fire: store.updateFire(claimed.id, {
+            status: "skipped",
+            finishedAt: new Date().toISOString(),
+            error: "overlap policy skipped this fire",
+          }),
+          idempotent: false,
+        };
+      }
+      if (decision === "queue") return { schedule, fire: claimed, queued: true, idempotent: false };
+      const workflow =
+        repository.getWorkflowVersion(schedule.workflowId, schedule.workflowVersion) ??
+        notFound("Workflow version");
+      const run = await scheduleEngine.start(
+        workflow.definition,
+        schedule.input,
+        schedule.executionMode,
+      );
+      const runId = "runId" in run ? run.runId : run.id;
+      const link = store.linkRun({ scheduleId, fireId: claimed.id, runId, state: "active" });
+      const nextFire =
+        schedule.expression === "manual"
+          ? undefined
+          : nextOccurrence(
+              {
+                schemaVersion: "1",
+                scheduleId: schedule.id,
+                expression: schedule.expression,
+                timezone: schedule.timezone,
+                enabled: schedule.enabled,
+                overlap: schedule.overlapPolicy === "skip" ? "skip" : "queue",
+                missed: schedule.missedPolicy === "skip" ? "skip" : "run_once",
+                input: schedule.input,
+              },
+              new Date(scheduledAt),
+            ).toISOString();
+      waitForScheduleRun(scheduleId, runId);
       return {
-        schedule,
-        fire: store.updateFire(claimed.id, {
-          status: "skipped",
-          finishedAt: new Date().toISOString(),
-          error: "overlap policy skipped this fire",
-        }),
+        schedule: store.update(scheduleId, { lastFireAt: scheduledAt, nextFireAt: nextFire }),
+        fire: store.updateFire(claimed.id, { runId, status: "running" }),
+        link,
         idempotent: false,
       };
-    }
-    if (decision === "queue") return { schedule, fire: claimed, queued: true, idempotent: false };
-    const workflow =
-      repository.getWorkflowVersion(schedule.workflowId, schedule.workflowVersion) ??
-      notFound("Workflow version");
-    const run = await scheduleEngine.start(
-      workflow.definition,
-      schedule.input,
-      schedule.executionMode,
-    );
-    const runId = "runId" in run ? run.runId : run.id;
-    const link = store.linkRun({ scheduleId, fireId: claimed.id, runId, state: "active" });
-    const nextFire =
-      schedule.expression === "manual"
-        ? undefined
-        : nextOccurrence(
-            {
-              schemaVersion: "1",
-              scheduleId: schedule.id,
-              expression: schedule.expression,
-              timezone: schedule.timezone,
-              enabled: schedule.enabled,
-              overlap: schedule.overlapPolicy === "skip" ? "skip" : "queue",
-              missed: schedule.missedPolicy === "skip" ? "skip" : "run_once",
-              input: schedule.input,
-            },
-            new Date(scheduledAt),
-          ).toISOString();
-    waitForScheduleRun(scheduleId, runId);
-    return {
-      schedule: store.update(scheduleId, { lastFireAt: scheduledAt, nextFireAt: nextFire }),
-      fire: store.updateFire(claimed.id, { runId, status: "running" }),
-      link,
-      idempotent: false,
-    };
-  };
+    });
   api.get("/schedules", (c) => {
     const store = requireScheduleStore();
     return c.json({
@@ -1250,10 +1273,11 @@ export function createLocalApi(options: LocalApiOptions): Hono {
     if (requestedId && !store.get(requestedId)) notFound("Schedule");
     const schedulerStore = store.schedulerStore();
     const policy = new SchedulerEngine({
+      serialize: serializeSchedule,
       store: {
         ...schedulerStore,
-        listSchedules: async () =>
-          (await schedulerStore.listSchedules()).filter(
+        listDueSchedules: async (at) =>
+          (await (schedulerStore.listDueSchedules?.(at) ?? schedulerStore.listSchedules())).filter(
             (item) => !requestedId || item.schedule.scheduleId === requestedId,
           ),
       },
@@ -1288,7 +1312,6 @@ export function createLocalApi(options: LocalApiOptions): Hono {
               .then(async (snapshot) => {
                 store.reconcileRun(runId, snapshot.run.status as RunRecord["status"]);
                 queueMicrotask(() => {
-                  void policy.complete(invocation.scheduleId, runId);
                   void drainQueuedScheduleFire(invocation.scheduleId);
                 });
               })
@@ -1299,8 +1322,10 @@ export function createLocalApi(options: LocalApiOptions): Hono {
         cancel: async (execution, reason) => {
           if (!scheduler?.cancel)
             capability("cancel_previous overlap requires a cancellable runtime");
-          await scheduler.cancel(execution.executionId, reason);
-          store.reconcileRun(execution.executionId, "cancelled");
+          const stopped = await scheduler.cancel(execution.executionId, reason);
+          if (!["cancelled", "failed", "succeeded"].includes(stopped.status)) return false;
+          store.reconcileRun(execution.executionId, stopped.status as RunRecord["status"]);
+          return true;
         },
         skip: async (invocation, reason) => {
           const fire = store
@@ -1419,9 +1444,60 @@ export function createLocalApi(options: LocalApiOptions): Hono {
       `${left.createdAt}:${left.id}`.localeCompare(`${right.createdAt}:${right.id}`),
     );
   };
-  api.get("/runs", async (c) =>
-    c.json({ runs: await listRuns(c.req.query("status") as RunRecord["status"] | undefined) }),
-  );
+  api.get("/runs", async (c) => {
+    const status = c.req.query("status") as RunRecord["status"] | undefined;
+    const limit = Math.max(1, Math.min(200, Number(c.req.query("limit") ?? 50)));
+    if (!Number.isInteger(limit)) throw new ApiError(400, "invalid_request", "Invalid run limit");
+    const cursor = c.req.query("cursor");
+    if (
+      repository.listRunSummaries &&
+      (!runtimeStore || runtimeStore.storageIdentity === repository.storageIdentity)
+    ) {
+      try {
+        return c.json(repository.listRunSummaries({ status, limit, cursor }));
+      } catch {
+        throw new ApiError(400, "invalid_request", "Invalid run cursor");
+      }
+    }
+    const runs = (await listRuns(status)).reverse();
+    let after: string[] | undefined;
+    if (cursor) {
+      try {
+        const value: unknown = JSON.parse(Buffer.from(cursor, "base64url").toString());
+        if (
+          !Array.isArray(value) ||
+          value.length !== 2 ||
+          value.some((part) => typeof part !== "string")
+        )
+          throw new Error();
+        after = value;
+      } catch {
+        throw new ApiError(400, "invalid_request", "Invalid run cursor");
+      }
+    }
+    const selected = runs
+      .filter(
+        (run) =>
+          !after ||
+          run.createdAt < (after[0] ?? "") ||
+          (run.createdAt === after[0] && run.id < (after[1] ?? "")),
+      )
+      .slice(0, limit + 1);
+    const page = selected
+      .slice(0, limit)
+      .map(({ plan: _plan, input: _input, ...summary }) => summary);
+    const last = page.at(-1);
+    return c.json({
+      runs: page,
+      ...(selected.length > limit && last
+        ? {
+            nextCursor: Buffer.from(JSON.stringify([last.createdAt, last.id])).toString(
+              "base64url",
+            ),
+          }
+        : {}),
+    });
+  });
   api.post("/runs", async (c) => {
     if (!scheduler) capability("Runtime scheduler is not configured");
     const body = await jsonBody(c, maxBodyBytes);
