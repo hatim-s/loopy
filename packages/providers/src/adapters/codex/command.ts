@@ -1,4 +1,4 @@
-import type { JsonObject } from "@loopy/contracts";
+import { type JsonObject, ReasoningLevelSchema } from "@loopy/contracts";
 import type { CodexCommandOptions } from "./types.js";
 
 export type ProviderCommand = {
@@ -31,6 +31,11 @@ export function buildCodexCommand(options: CodexCommandOptions = {}): ProviderCo
     args.push("--output-schema", schemaArg(options.outputSchema));
   if (options.sandbox !== undefined) args.push("--sandbox", options.sandbox);
   if (model !== undefined) args.push("--model", model);
+  if (options.reasoning !== undefined)
+    args.push(
+      "--config",
+      `model_reasoning_effort=${JSON.stringify(ReasoningLevelSchema.parse(options.reasoning))}`,
+    );
   if (cwd !== undefined) args.push("--cd", cwd);
   if (prompt !== undefined) args.push("--", prompt);
   return { executable, args };

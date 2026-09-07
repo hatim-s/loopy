@@ -3,6 +3,7 @@ import { createCodexProviderAdapter, createDefaultProviderRegistry } from "../sr
 
 const codexCommandProbe = [
   "const args = process.argv.slice(1);",
+  "if (!args.includes('model_reasoning_effort=\"low\"')) process.exit(3);",
   "if (args[0] !== 'exec' || !args.includes('--json') || !args.includes('--model') || !args.includes('gpt-5.6-luna')) process.exit(2);",
   "for (const row of [{ type: 'thread.started', thread_id: 'probe-session' }, { type: 'item.completed', thread_id: 'probe-session', item: { type: 'agent_message', text: 'probe-ok' } }, { type: 'thread.completed', thread_id: 'probe-session', status: 'succeeded' }]) console.log(JSON.stringify(row));",
 ].join(" ");
@@ -14,6 +15,7 @@ const codexRequest = (network: "disabled" | "restricted" | "unrestricted") => ({
   input: {},
   prompt: "probe",
   model: "gpt-5.6-luna",
+  reasoning: "low",
   policy: { tools: { network } },
 });
 

@@ -616,6 +616,7 @@ export function createCodexProviderAdapter(
         model: request.model,
         cwd: workingDirectory,
         sandbox,
+        reasoning: request.reasoning,
         resumeSessionId: request.metadata?.sessionId as string | undefined,
       });
     },
