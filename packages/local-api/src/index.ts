@@ -1,6 +1,6 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { JsonObject, WorkflowDefinition } from "@loopy/contracts";
-import { WorkflowPatchSchema } from "@loopy/contracts";
+import { WorkflowDefinitionSchema, WorkflowPatchSchema } from "@loopy/contracts";
 import type { ProviderRegistry } from "@loopy/providers";
 import type {
   AttemptRecord as RuntimeAttemptRecord,
@@ -19,6 +19,7 @@ import type {
   EventRecord,
   ExtractionJobRecord,
   ExtractionReviewRecord,
+  ExtractionReviewUpdate,
   ImportedSessionRecord,
   RetentionFilter,
   RunRecord,
@@ -50,7 +51,15 @@ export type LocalApiRepository = {
   createExtractionJob(input: { importId: string; input?: JsonObject }): ExtractionJobRecord;
   listExtractionReviews(): ExtractionReviewRecord[];
   getExtractionReview(reference: string): ExtractionReviewRecord | undefined;
-  approveExtractionProposal(reference: string, resolvedBy?: string): WorkflowVersionRecord;
+  reviewExtractionProposal(
+    reference: string,
+    update: ExtractionReviewUpdate,
+  ): ExtractionReviewRecord;
+  approveExtractionProposal(
+    reference: string,
+    expectedProposalHash: string,
+    resolvedBy?: string,
+  ): WorkflowVersionRecord;
   rejectExtractionProposal(reference: string, reason?: string): ExtractionJobRecord;
   listWorkflowVersions(workflowId?: string): WorkflowVersionRecord[];
   getWorkflowVersion(workflowId: string, version: number): WorkflowVersionRecord | undefined;
@@ -745,14 +754,65 @@ export function createLocalApi(options: LocalApiOptions): Hono {
         notFound("Extraction"),
     ),
   );
+  api.post("/extractions/:id/review", async (c) => {
+    const body = await jsonBody(c, maxBodyBytes);
+    const expectedProposalHash = requiredString(body, "expectedProposalHash");
+    if (
+      !Array.isArray(body.resolutions) ||
+      body.resolutions.some(
+        (item) =>
+          !item ||
+          typeof item !== "object" ||
+          typeof item.question !== "string" ||
+          typeof item.answer !== "string",
+      )
+    )
+      throw new ApiError(
+        422,
+        "invalid_review",
+        "resolutions must contain question and answer strings",
+      );
+    const parsedWorkflow =
+      body.workflow === undefined ? undefined : WorkflowDefinitionSchema.safeParse(body.workflow);
+    if (parsedWorkflow && !parsedWorkflow.success)
+      throw new ApiError(422, "invalid_workflow", "Review workflow failed schema validation");
+    const workflow = parsedWorkflow?.data;
+    try {
+      return c.json(
+        repository.reviewExtractionProposal(c.req.param("id"), {
+          expectedProposalHash,
+          resolutions: body.resolutions,
+          workflow,
+          allowNetworkAccess: body.allowNetworkAccess === true,
+          resolvedBy: typeof body.resolvedBy === "string" ? body.resolvedBy : undefined,
+        }),
+      );
+    } catch (error) {
+      throw new ApiError(
+        409,
+        "review_conflict",
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  });
   api.post("/extractions/:id/approve", async (c) => {
     const body = await jsonBody(c, maxBodyBytes);
-    return c.json(
-      repository.approveExtractionProposal(
-        c.req.param("id"),
-        typeof body.resolvedBy === "string" ? body.resolvedBy : "local-user",
-      ),
-    );
+    const hash = requiredString(body, "expectedProposalHash");
+    try {
+      return c.json(
+        repository.approveExtractionProposal(
+          c.req.param("id"),
+          hash,
+          typeof body.resolvedBy === "string" ? body.resolvedBy : "local-user",
+        ),
+      );
+    } catch (error) {
+      throw new ApiError(
+        409,
+        "approval_conflict",
+        error instanceof Error ? error.message : String(error),
+      );
+    }
   });
   api.post("/extractions/:id/reject", async (c) => {
     const body = await jsonBody(c, maxBodyBytes);
@@ -767,9 +827,15 @@ export function createLocalApi(options: LocalApiOptions): Hono {
   api.get("/reviews/:id", (c) =>
     c.json(repository.getExtractionReview(c.req.param("id")) ?? notFound("Extraction review")),
   );
-  api.post("/reviews/:id/approve", (c) =>
-    c.json(repository.approveExtractionProposal(c.req.param("id"))),
-  );
+  api.post("/reviews/:id/approve", async (c) => {
+    const body = await jsonBody(c, maxBodyBytes);
+    return c.json(
+      repository.approveExtractionProposal(
+        c.req.param("id"),
+        requiredString(body, "expectedProposalHash"),
+      ),
+    );
+  });
   api.post("/reviews/:id/reject", (c) =>
     c.json(repository.rejectExtractionProposal(c.req.param("id"))),
   );

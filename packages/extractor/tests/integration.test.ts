@@ -49,7 +49,7 @@ describe("Phase 3 deterministic extraction integration", () => {
     });
     const review = storage.runtime.getExtractionReview(job.id);
     expect(review?.audit).toBeDefined();
-    const version = storage.runtime.approveExtractionProposal(job.id);
+    const version = storage.runtime.approveExtractionProposal(job.id, review!.proposalHash);
     expect(version.version).toBe(1);
     storage.close();
 

@@ -139,14 +139,22 @@ describe("storage", () => {
     });
     const review = s.runtime.getExtractionReview(job.id);
     expect(review?.audit).toEqual({ segments: 1 });
-    const version = s.runtime.approveExtractionProposal(review?.proposal.id ?? "");
+    const version = s.runtime.approveExtractionProposal(
+      review?.proposal.id ?? "",
+      review!.proposalHash,
+    );
     expect(version.version).toBe(1);
     expect((version.definition as { metadata?: JsonObject }).metadata).toMatchObject({
       createdFrom: "extraction",
       extractionId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
     });
     expect(s.runtime.getExtractionReview(job.id)?.proposal.status).toBe("approved");
-    expect(() => s.runtime.approveExtractionProposal(job.id)).toThrow(/already approved/);
+    expect(() =>
+      s.runtime.approveExtractionProposal(
+        job.id,
+        s.runtime.getExtractionReview(job.id)!.proposalHash,
+      ),
+    ).toThrow(/already approved/);
 
     const rejectedJob = s.runtime.createExtractionJob({ importId: imported.id });
     const rejected = {
@@ -156,7 +164,12 @@ describe("storage", () => {
     s.runtime.saveExtractionResult(rejectedJob.id, { proposal: rejected });
     s.runtime.rejectExtractionProposal(rejectedJob.id);
     expect(s.runtime.getExtractionReview(rejectedJob.id)?.proposal.status).toBe("rejected");
-    expect(() => s.runtime.approveExtractionProposal(rejectedJob.id)).toThrow(/rejected/);
+    expect(() =>
+      s.runtime.approveExtractionProposal(
+        rejectedJob.id,
+        s.runtime.getExtractionReview(rejectedJob.id)!.proposalHash,
+      ),
+    ).toThrow(/rejected/);
     s.close();
   });
 

@@ -44,7 +44,9 @@ test("server imports a trace, extracts evidence, and publishes only after review
     const review = await api<ExtractionReviewRecord>(`/extractions/${job.id}`);
     expect(review.proposal.nodeEvidence.length).toBeGreaterThan(0);
     expect((await api<{ workflows: unknown[] }>("/workflows")).workflows).toHaveLength(0);
-    const published = await api<WorkflowVersionRecord>(`/extractions/${job.id}/approve`, {});
+    const published = await api<WorkflowVersionRecord>(`/extractions/${job.id}/approve`, {
+      expectedProposalHash: review.proposalHash,
+    });
     expect(WorkflowDefinitionSchema.parse(published.definition).nodes.length).toBeGreaterThan(0);
     expect((await api<{ workflows: unknown[] }>("/workflows")).workflows).toHaveLength(1);
     const rejected = await api<ExtractionJobRecord>("/extractions", { importId: session.id });
