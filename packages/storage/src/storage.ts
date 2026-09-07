@@ -987,11 +987,18 @@ export class RuntimeRepository {
     if (!proposalResult.success) return undefined;
     const imported = this.getImportedSession(job.importId);
     if (!imported) return undefined;
+    const audit = output.audit;
+    const reviewHistory =
+      audit && typeof audit === "object" && !Array.isArray(audit) && "reviewHistory" in audit
+        ? audit.reviewHistory
+        : [];
     return {
       job,
       import: imported,
       proposal: proposalResult.data,
-      proposalHash: createHash("sha256").update(encode(proposalResult.data)).digest("hex"),
+      proposalHash: createHash("sha256")
+        .update(encode({ proposal: proposalResult.data, reviewHistory }))
+        .digest("hex"),
       ...(output.audit === undefined ? {} : { audit: output.audit as JsonValue }),
     };
   }

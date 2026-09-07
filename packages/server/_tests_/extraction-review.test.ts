@@ -81,11 +81,30 @@ test("review edits persist answers, reject stale writes and preserve commands an
       allowNetworkAccess: true,
     });
     expect(editedResponse.status).toBe(200);
-    const edited = (await editedResponse.json()) as ExtractionReviewRecord;
+    let edited = (await editedResponse.json()) as ExtractionReviewRecord;
     expect(edited.proposalHash).not.toBe(review.proposalHash);
     expect(edited.proposal.workflow.policies.tools.network).toBe("unrestricted");
     expect(edited.proposal.unresolvedQuestions[0]?.blocksExecution).toBe(false);
     expect(JSON.stringify(edited.audit)).toContain("Local project edits authorized");
+    const beforeCorrection = edited;
+    const correctedResponse = await request(`/extractions/${job.id}/review`, {
+      expectedProposalHash: beforeCorrection.proposalHash,
+      resolutions: [
+        { question: "Confirm local changes", answer: "Only greeting.ts and its tests may change" },
+      ],
+    });
+    expect(correctedResponse.status).toBe(200);
+    edited = (await correctedResponse.json()) as ExtractionReviewRecord;
+    expect(edited.proposal).toEqual(beforeCorrection.proposal);
+    expect(edited.proposalHash).not.toBe(beforeCorrection.proposalHash);
+    expect(
+      (
+        await request(`/extractions/${job.id}/approve`, {
+          expectedProposalHash: beforeCorrection.proposalHash,
+        })
+      ).status,
+    ).toBe(409);
+
     expect(
       (
         await request(`/extractions/${job.id}/review`, {
