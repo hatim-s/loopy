@@ -98,21 +98,112 @@ export function ProvidersPage({ api }: StudioPageProps) {
 }
 
 export function SessionsPage({ api }: StudioPageProps) {
-  const result = useResource<{ sessions?: ImportedSession[] }>(api, "/sessions");
+  const [revision, setRevision] = useState(0);
+  const result = useResource<{ sessions?: ImportedSession[] }>(
+    api,
+    `/sessions?revision=${revision}`,
+  );
+  const [selectedId, setSelectedId] = useState<string>();
+  const [provider, setProvider] = useState("codex");
+  const [file, setFile] = useState<File>();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string>();
+  const fileId = useId();
+  const providerId = useId();
+  const navigate = useNavigate();
+  const importTrace = async () => {
+    if (!api || !file) return;
+    setPending(true);
+    setError(undefined);
+    try {
+      const raw = await file.text();
+      const content = raw.trimStart().startsWith("[")
+        ? `${(JSON.parse(raw) as unknown[]).map((event) => JSON.stringify(event)).join("\n")}\n`
+        : raw;
+      const session = await api.request<ImportedSession>("/sessions", {
+        method: "POST",
+        body: JSON.stringify({ provider, source: file.name, content }),
+      });
+      setSelectedId(session.id);
+      setRevision((value) => value + 1);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setPending(false);
+    }
+  };
+  const extract = async () => {
+    if (!api || !selectedId) return;
+    setPending(true);
+    setError(undefined);
+    try {
+      await api.request("/extractions", {
+        method: "POST",
+        body: JSON.stringify({ importId: selectedId }),
+      });
+      await navigate({ to: "/extractions" });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setPending(false);
+    }
+  };
   return (
     <PageFrame title="Agent sessions" eyebrow="Inspect / sessions">
       <p className="feature-page__lede">
-        Imported traces are kept local and retain their provider provenance.
+        Import a canonical Loopy trace, then extract a workflow proposal to review and edit in the
+        builder.
       </p>
+      <form
+        className="feature-page__actions"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void importTrace();
+        }}
+      >
+        <label htmlFor={providerId}>Provider</label>
+        <select
+          id={providerId}
+          value={provider}
+          onChange={(event) => setProvider(event.target.value)}
+          disabled={pending}
+        >
+          {["codex", "claude", "opencode", "pi"].map((id) => (
+            <option key={id} value={id}>
+              {id}
+            </option>
+          ))}
+        </select>
+        <label htmlFor={fileId}>Canonical trace file</label>
+        <input
+          id={fileId}
+          type="file"
+          accept=".jsonl,.json"
+          disabled={pending}
+          onChange={(event) => setFile(event.target.files?.[0])}
+        />
+        <button type="submit" disabled={!api || !file || pending}>
+          Import trace
+        </button>
+        <button
+          type="button"
+          disabled={!api || !selectedId || pending}
+          onClick={() => void extract()}
+        >
+          {pending ? "Working…" : "Extract selected session"}
+        </button>
+      </form>
+      {error ? <ErrorState message={error} /> : null}
       {result.loading ? <LoadingState label="Loading imported sessions" /> : null}
       {result.error ? <ErrorState message={result.error} /> : null}
       {!result.loading && !result.error ? (
         <ImportedSessionList
           sessions={result.value?.sessions ?? []}
+          selectedId={selectedId}
+          onSelect={(session) => setSelectedId(session.id)}
           status={result.value?.sessions?.length ? undefined : "empty"}
         />
       ) : null}
-      <span className="sr-only">Waiting for feature data</span>
     </PageFrame>
   );
 }
@@ -125,8 +216,11 @@ export function ExtractionsPage({ api }: StudioPageProps) {
   const [pendingAction, setPendingAction] = useState<"approve" | "reject">();
   const [decision, setDecision] = useState<"approved" | "rejected">();
   const [actionError, setActionError] = useState<string>();
-  const rawReview = result.value?.reviews?.[0];
-  const review = rawReview ? normalizeExtractionReview(rawReview) : undefined;
+  const [selectedReview, setSelectedReview] = useState<string>();
+  const reviewSelectId = useId();
+  const reviews = (result.value?.reviews ?? []).map(normalizeExtractionReview).reverse();
+  const rawReview = reviews.find((item) => item.proposalId === selectedReview) ?? reviews[0];
+  const review = rawReview;
   const submitDecision = async (action: "approve" | "reject") => {
     if (!api || !review) return;
     setPendingAction(action);
@@ -148,6 +242,30 @@ export function ExtractionsPage({ api }: StudioPageProps) {
   };
   return (
     <PageFrame title="Trace extractions" eyebrow="Inspect / extractions">
+      {reviews.length ? (
+        <label htmlFor={reviewSelectId}>
+          Proposal{" "}
+          <select
+            id={reviewSelectId}
+            value={review?.proposalId ?? ""}
+            onChange={(event) => {
+              setSelectedReview(event.target.value);
+              setDecision(undefined);
+              setActionError(undefined);
+            }}
+            disabled={Boolean(pendingAction)}
+          >
+            {reviews.map((item) => (
+              <option key={item.proposalId} value={item.proposalId}>
+                {item.proposalId} · {item.status}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+      {decision === "approved" || review?.status === "approved" ? (
+        <Link to="/workflows">Open workflows</Link>
+      ) : null}
       {result.loading ? <LoadingState label="Loading extraction reviews" /> : null}
       {result.error ? <ErrorState message={result.error} /> : null}
       {actionError ? (
