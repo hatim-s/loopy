@@ -215,6 +215,7 @@ function workflowPatchOperations(
         previous &&
         (previous.source !== edge.source ||
           previous.target !== edge.target ||
+          (previous.condition !== undefined && edge.condition === undefined) ||
           ((previous.label ?? null) !== (edge.label ?? null) && !edge.label) ||
           JSON.stringify(previous.metadata) !== JSON.stringify(edge.metadata))
       ) {
@@ -1498,6 +1499,8 @@ export function WorkflowEditorPage({
   const editorStoreRef = useRef<ReturnType<typeof createEditorStore> | undefined>(undefined);
   const [, setEditorTick] = useState(0);
 
+  const editorSession = useRef<object>({});
+  const saveInFlight = useRef<object | undefined>(undefined);
   const attachEditorStore = useCallback(
     (store: ReturnType<typeof createEditorStore>) => {
       editorStoreRef.current = store;
@@ -1513,6 +1516,10 @@ export function WorkflowEditorPage({
 
   useEffect(() => {
     let active = true;
+    const session = {};
+    editorSession.current = session;
+    saveInFlight.current = undefined;
+    setSaving(false);
     let unsubscribe: (() => void) | undefined;
     setStatus("loading");
     if (!editorAdapter) {
@@ -1527,6 +1534,7 @@ export function WorkflowEditorPage({
       setStatus("ready");
       return () => {
         active = false;
+        if (editorSession.current === session) editorSession.current = {};
         unsubscribe?.();
       };
     }
@@ -1550,6 +1558,7 @@ export function WorkflowEditorPage({
       });
     return () => {
       active = false;
+      if (editorSession.current === session) editorSession.current = {};
       unsubscribe?.();
       editorStoreRef.current = undefined;
     };
@@ -1745,6 +1754,7 @@ export function WorkflowEditorPage({
     editorStoreRef.current?.getState().redo();
   };
   const save = useCallback(async () => {
+    if (saveInFlight.current) return;
     if (!workflow || !record || !editorAdapter) {
       setNotice("No persistence adapter is connected; changes remain local.");
       return;
@@ -1758,6 +1768,10 @@ export function WorkflowEditorPage({
       setNotice("Fix blocking diagnostics before saving.");
       return;
     }
+    const session = editorSession.current;
+    const operation = {};
+    saveInFlight.current = operation;
+    const current = () => editorSession.current === session && editorStoreRef.current === store;
     setSaving(true);
     setError(undefined);
     try {
@@ -1767,6 +1781,7 @@ export function WorkflowEditorPage({
         definition: submittedWorkflow,
         summary: `${submittedWorkflow.nodes.length} nodes · ${submittedWorkflow.edges.length} edges`,
       });
+      if (!current()) return;
       setRecord(saved);
       setPrevious(saved.definition);
       const preserved = store
@@ -1778,9 +1793,10 @@ export function WorkflowEditorPage({
           : `Saved version ${saved.version}.`,
       );
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      if (current()) setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
-      setSaving(false);
+      if (saveInFlight.current === operation) saveInFlight.current = undefined;
+      if (current()) setSaving(false);
     }
   }, [editorAdapter, record, workflow]);
   const run = async (input: Record<string, unknown> = {}) => {

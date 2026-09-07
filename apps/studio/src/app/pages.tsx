@@ -27,22 +27,29 @@ import type { ApiClient } from "./api";
 export type StudioPageProps = { feature: string; api?: ApiClient };
 
 function useResource<T>(api: ApiClient | undefined, path: string | undefined) {
-  const [state, setState] = useState<{ value?: T; error?: string; loading: boolean }>({
+  const [state, setState] = useState<{
+    value?: T;
+    error?: string;
+    loading: boolean;
+    path?: string;
+  }>({
+    path,
     loading: Boolean(api && path),
   });
   useEffect(() => {
     if (!api || !path) {
-      setState({ loading: false });
+      setState({ path, loading: false });
       return;
     }
     let active = true;
-    setState({ loading: true });
+    setState({ path, loading: true });
     void api
       .request<T>(path)
-      .then((value) => active && setState({ value, loading: false }))
+      .then((value) => active && setState({ path, value, loading: false }))
       .catch((error: unknown) => {
         if (active)
           setState({
+            path,
             loading: false,
             error: error instanceof Error ? error.message : String(error),
           });
@@ -51,7 +58,7 @@ function useResource<T>(api: ApiClient | undefined, path: string | undefined) {
       active = false;
     };
   }, [api, path]);
-  return state;
+  return state.path === path ? state : { loading: Boolean(api && path) };
 }
 
 function PageFrame({
@@ -613,12 +620,19 @@ function RunDebugger({
   }, [runId, snapshot]);
   useEffect(() => {
     if (!api || result.error) return;
-    return api.streamEvents(
+    let pending: DebuggerEvent[] = [];
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const stop = api.streamEvents(
       runId,
-      (event) =>
-        dispatch((current) =>
-          debuggerReducer(current, { type: "event", event: event as DebuggerEvent }),
-        ),
+      (event) => {
+        pending.push(event as DebuggerEvent);
+        timer ??= setTimeout(() => {
+          const events = pending;
+          pending = [];
+          timer = undefined;
+          dispatch((current) => debuggerReducer(current, { type: "events", events }));
+        }, 16);
+      },
       {
         afterSequence: snapshot?.events.reduce(
           (max, event) => Math.max(max, event.sequence ?? max),
@@ -627,6 +641,10 @@ function RunDebugger({
         onError: (error) => setMessage(error.message),
       },
     );
+    return () => {
+      stop();
+      clearTimeout(timer);
+    };
   }, [api, result.error, runId, snapshot?.events]);
   const dispatchEvent = (event: DebuggerEvent) =>
     dispatch((current) => debuggerReducer(current, { type: "event", event }));
@@ -691,7 +709,18 @@ function RunDebugger({
 }
 
 export function RunsPage({ api }: StudioPageProps) {
-  const result = useResource<{ runs?: Array<{ id: string; status?: string }> }>(api, "/runs");
+  const [cursors, setCursors] = useState<string[]>([]);
+  const cursor = cursors.at(-1);
+  const clearRunSelection = () => {
+    setSelectedRun("");
+    const url = new URL(window.location.href);
+    url.searchParams.delete("runId");
+    window.history.replaceState(window.history.state, "", url);
+  };
+  const result = useResource<{
+    runs?: Array<{ id: string; status?: string }>;
+    nextCursor?: string;
+  }>(api, `/runs?limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`);
   const [selectedRun, setSelectedRun] = useState(
     () => new URLSearchParams(window.location.search).get("runId") ?? "",
   );
@@ -700,8 +729,9 @@ export function RunsPage({ api }: StudioPageProps) {
   const onStatus = useCallback((id: string, status: string) => {
     setRunStatuses((current) => (current[id] === status ? current : { ...current, [id]: status }));
   }, []);
-  const runs = [...(result.value?.runs ?? [])].reverse();
-  const run = runs.find((run) => run.id === selectedRun) ?? runs[0];
+  const runs = result.value?.runs ?? [];
+  const run =
+    runs.find((run) => run.id === selectedRun) ?? (selectedRun ? { id: selectedRun } : runs[0]);
   return (
     <PageFrame title="Graph runs" eyebrow="Inspect / runs">
       {result.loading ? <LoadingState label="Loading workflow runs" /> : null}
@@ -726,12 +756,40 @@ export function RunsPage({ api }: StudioPageProps) {
               window.history.replaceState(window.history.state, "", url);
             }}
           >
+            {selectedRun && !runs.some((entry) => entry.id === selectedRun) ? (
+              <option value={selectedRun}>{selectedRun}</option>
+            ) : null}
             {runs.map((entry) => (
               <option key={entry.id} value={entry.id}>
                 {entry.id} · {runStatuses[entry.id] ?? entry.status}
               </option>
             ))}
           </select>
+          <nav aria-label="Run history pages">
+            <button
+              type="button"
+              disabled={!cursors.length || result.loading}
+              onClick={() => {
+                clearRunSelection();
+                setCursors((value) => value.slice(0, -1));
+              }}
+            >
+              Newer runs
+            </button>
+            <button
+              type="button"
+              disabled={!result.value?.nextCursor || result.loading}
+              onClick={() => {
+                const next = result.value?.nextCursor;
+                if (next) {
+                  clearRunSelection();
+                  setCursors((value) => [...value, next]);
+                }
+              }}
+            >
+              Older runs
+            </button>
+          </nav>
           <RunDebugger key={run.id} api={api} runId={run.id} onStatus={onStatus} />
         </>
       ) : null}

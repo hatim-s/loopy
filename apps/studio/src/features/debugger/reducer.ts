@@ -202,20 +202,43 @@ function artifactsFromEvents(
   return [...byId.values()];
 }
 
+const eventKeys = new WeakMap<readonly DebuggerEvent[], Set<string>>();
+
 function withEvents(
   state: DebuggerState,
   events: readonly DebuggerEvent[],
   reconnects = state.reconnects,
 ): DebuggerState {
-  const merged = mergeDebuggerEvents(state.events, events);
+  let keys = eventKeys.get(state.events);
+  if (!keys) {
+    keys = new Set(state.events.map(eventKey));
+    eventKeys.set(state.events, keys);
+  }
+  let last = state.events.at(-1)?.sequence ?? -1;
+  const fresh = new Set<string>();
+  const ordered = events.every((event) => {
+    const key = eventKey(event);
+    if (event.sequence === undefined || event.sequence <= last || keys.has(key) || fresh.has(key))
+      return false;
+    last = event.sequence;
+    fresh.add(key);
+    return true;
+  });
+  const merged = ordered ? [...state.events, ...events] : mergeDebuggerEvents(state.events, events);
+  // Transfer the append-only identity index; stale reducer states rebuild if revisited.
+  if (ordered) {
+    eventKeys.delete(state.events);
+    for (const key of fresh) keys.add(key);
+    eventKeys.set(merged, keys);
+  }
   return {
     ...state,
     events: merged,
     attempts: mergeAttempts(state.attempts, events),
     artifacts: artifactsFromEvents(events, state.artifacts),
-    status: statusFromEvents(merged, state.status),
+    status: statusFromEvents(ordered ? events : merged, state.status),
     reconnects,
-    lastSequence: merged.reduce((max, event) => Math.max(max, event.sequence ?? max), 0),
+    lastSequence: merged.at(-1)?.sequence ?? state.lastSequence,
   };
 }
 

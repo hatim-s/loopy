@@ -1,4 +1,5 @@
 import { Handle, Position, ReactFlow } from "@xyflow/react";
+import { useState } from "react";
 import type { DebuggerState } from "./debugger/reducer.ts";
 import {
   buildDebuggerGraph,
@@ -416,15 +417,59 @@ export function DebuggerGraph({ nodes, edges, state, onNodeSelect }: DebuggerGra
 
 export interface EventTimelineProps {
   state: DebuggerState;
-  onEventSelect?: (eventId: string) => void;
+  onEventSelect?: (eventId?: string) => void;
 }
 
 export function EventTimeline({ state, onEventSelect }: EventTimelineProps) {
-  const items = buildTimeline(state.events, state.selectedEventId);
+  const [page, setPage] = useState<number>();
+  const pageSize = 100;
+  const lastPage = Math.max(0, Math.ceil(state.events.length / pageSize) - 1);
+  const selectedIndex = state.selectedEventId
+    ? state.events.findIndex((event) => (event.eventId ?? event.id) === state.selectedEventId)
+    : -1;
+  const currentPage = Math.min(
+    page ?? (selectedIndex >= 0 ? Math.floor(selectedIndex / pageSize) : lastPage),
+    lastPage,
+  );
+  const changePage = (next?: number) => {
+    onEventSelect?.(undefined);
+    setPage(next);
+  };
+  const items = buildTimeline(
+    state.events.slice(currentPage * pageSize, (currentPage + 1) * pageSize),
+    state.selectedEventId,
+  );
   if (!items.length) return <section style={panelStyle}>No events yet</section>;
   return (
     <section style={panelStyle} aria-label="Ordered event timeline">
-      <ol style={{ margin: 0, paddingLeft: 22 }}>
+      <nav aria-label="Timeline pages">
+        <button
+          type="button"
+          disabled={currentPage === 0}
+          onClick={() => changePage(currentPage - 1)}
+        >
+          Earlier events
+        </button>
+        <span>
+          {" "}
+          {currentPage + 1} / {lastPage + 1}{" "}
+        </span>
+        <button
+          type="button"
+          disabled={currentPage === lastPage}
+          onClick={() => changePage(currentPage + 1)}
+        >
+          Later events
+        </button>
+        <button
+          type="button"
+          disabled={page === undefined && selectedIndex < 0}
+          onClick={() => changePage(undefined)}
+        >
+          Follow latest
+        </button>
+      </nav>
+      <ol start={currentPage * pageSize + 1} style={{ margin: 0, paddingLeft: 22 }}>
         {items.map((item) => (
           <li
             key={item.eventId}
