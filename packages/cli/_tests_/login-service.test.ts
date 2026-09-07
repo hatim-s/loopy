@@ -95,10 +95,10 @@ test("project registrations stay separate and unrecognized files remain untouche
 
 test("unsupported platforms and invalid configuration fail before registration", async () => {
   const { service, calls, home, run } = setup();
-  const linux = createLoginService("/project", { home, platform: "linux", run });
-  expect(await linux.status()).toEqual({ supported: false, enabled: false, loaded: false });
-  expect(() => linux.prepare(config)).toThrow("macOS only");
-  await expect(linux.uninstall()).rejects.toThrow("macOS only");
+  const windows = createLoginService("/project", { home, platform: "win32", run });
+  expect(await windows.status()).toEqual({ supported: false, enabled: false, loaded: false });
+  expect(() => windows.prepare(config)).toThrow("macOS and Linux");
+  await expect(windows.uninstall()).rejects.toThrow("macOS and Linux");
   expect(() => service.prepare({ ...config, cli: "/invalid\u0000path" })).toThrow(
     "control characters",
   );

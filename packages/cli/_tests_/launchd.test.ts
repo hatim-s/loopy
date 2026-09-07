@@ -13,10 +13,15 @@ import { createLoginService } from "../src/login-service";
 import { runningServer } from "../src/server";
 
 // Opt in because this exercises a real per-user LaunchAgent, removed in finally.
-test.skipIf(process.platform !== "darwin" || process.env.LOOPY_TEST_LAUNCHD !== "1")(
-  "launchd takes over, restarts after a crash, honors stop, and unregisters cleanly",
+test.skipIf(
+  !(["darwin", "linux"].includes(process.platform) && process.env.LOOPY_TEST_SERVICE === "1") &&
+    !(process.platform === "darwin" && process.env.LOOPY_TEST_LAUNCHD === "1"),
+)(
+  "the login service takes over, restarts after a crash, honors stop, and unregisters cleanly",
   async () => {
-    const project = realpathSync(mkdtempSync(resolve(tmpdir(), "loopy-launchd-")));
+    const project = realpathSync(
+      mkdtempSync(resolve(tmpdir(), "loopy-service-path %literal $HOME-")),
+    );
     writeFileSync(resolve(project, "index.html"), "<html><head></head><body>Loopy</body></html>");
     const cli = resolve(import.meta.dir, "../src/index.ts");
     const service = createLoginService(project);
@@ -41,11 +46,13 @@ test.skipIf(process.platform !== "darwin" || process.env.LOOPY_TEST_LAUNCHD !== 
       };
       expect(enabled.pid).not.toBe(detached.pid);
       expect(enabled.autostart.enabled).toBe(true);
-      const plist = Bun.spawn(["/usr/bin/plutil", "-lint", enabled.autostart.file], {
-        stdout: "pipe",
-        stderr: "pipe",
-      });
-      expect(await plist.exited).toBe(0);
+      if (process.platform === "darwin") {
+        const plist = Bun.spawn(["/usr/bin/plutil", "-lint", enabled.autostart.file], {
+          stdout: "ignore",
+          stderr: "inherit",
+        });
+        expect(await plist.exited).toBe(0);
+      }
       const repeated = JSON.parse((await command("enable-autostart")).stdout) as { pid: number };
       expect(repeated.pid).toBe(enabled.pid);
       // Kill only the PID returned by our isolated, authenticated server.

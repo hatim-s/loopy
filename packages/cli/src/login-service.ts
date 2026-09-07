@@ -2,9 +2,13 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
+import { createSystemdService } from "./systemd-service";
 
-export type ServiceCommand = (args: string[]) => Promise<{ code: number; stderr: string }>;
-type ServiceOptions = {
+export type ServiceCommand = (
+  args: string[],
+) => Promise<{ code: number; stderr: string; stdout?: string }>;
+export type ServiceOptions = {
+  configHome?: string;
   platform?: NodeJS.Platform;
   home?: string;
   uid?: number;
@@ -36,7 +40,9 @@ const runLaunchctl: ServiceCommand = async (args) => {
 
 // The caller supplies the canonical project path so symlink aliases share one service.
 export function createLoginService(project: string, options: ServiceOptions = {}) {
-  const supported = (options.platform ?? process.platform) === "darwin";
+  const platform = options.platform ?? process.platform;
+  if (platform === "linux") return createSystemdService(project, options);
+  const supported = platform === "darwin";
   const home = options.home ?? homedir();
   const id = createHash("sha256").update(project).digest("hex").slice(0, 24);
   const label = `dev.loopy.server.${id}`;
@@ -46,7 +52,7 @@ export function createLoginService(project: string, options: ServiceOptions = {}
   const marker = `<!-- Loopy login service ${id} -->`;
   const run = options.run ?? runLaunchctl;
   function requireSupport() {
-    if (!supported) throw new Error("Login auto-start currently supports macOS only");
+    if (!supported) throw new Error("Login auto-start supports macOS and Linux with systemd");
   }
   function installed() {
     if (!supported || !existsSync(file)) return false;
