@@ -45,7 +45,11 @@ describe("Studio debugger view models", () => {
       events: [
         event("a-1", 1, "attempt.created", { nodeId: "n-1", attemptId: "a-1" }),
         event("a-2", 2, "node.started", { nodeId: "n-1", attemptId: "a-1" }),
-        event("a-3", 3, "node.completed", { nodeId: "n-1", attemptId: "a-1" }),
+        event("a-3", 3, "node.completed", {
+          nodeId: "n-1",
+          attemptId: "a-1",
+          payload: { completion: { status: "succeeded" } },
+        }),
       ],
     };
     const state = reconstructDebuggerState(snapshot);
@@ -57,6 +61,34 @@ describe("Studio debugger view models", () => {
     });
     expect(state.lastSequence).toBe(3);
   });
+
+  test.each(["succeeded", "failed", "cancelled", "skipped"])(
+    "preserves %s completion in live events and reloads",
+    (status) => {
+      const completed = event("done", 2, "node.completed", {
+        nodeId: "n",
+        attemptId: "a",
+        payload: { completion: { status, outputs: { stdout: "observed output" } } },
+      });
+      const live = debuggerReducer(createDebuggerState("run-1"), {
+        type: "event",
+        event: completed,
+      });
+      const reloaded = reconstructDebuggerState({
+        runId: "run-1",
+        status: "completed",
+        events: [completed],
+        attempts: [{ attemptId: "a", nodeId: "n", attempt: 1, status }],
+      });
+      for (const state of [live, reloaded]) {
+        expect(state.attempts[0]).toMatchObject({
+          status,
+          endedAt: completed.occurredAt,
+          output: { stdout: "observed output" },
+        });
+      }
+    },
+  );
 
   test("legal controls disable pause/resume/retry based on run and attempt state", () => {
     expect(legalControls("live")).toMatchObject({

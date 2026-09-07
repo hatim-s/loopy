@@ -103,7 +103,20 @@ function attemptStatus(event: DebuggerEvent): NodeAttempt["status"] | undefined 
   if (event.type === "attempt.created") return "pending";
   if (event.type === "node.ready") return "ready";
   if (event.type === "node.started") return "running";
-  if (event.type === "node.completed") return "succeeded";
+  if (event.type === "node.completed") {
+    const completion = payload?.completion;
+    if (completion && typeof completion === "object" && "status" in completion) {
+      const status = completion.status;
+      if (
+        status === "succeeded" ||
+        status === "failed" ||
+        status === "cancelled" ||
+        status === "skipped"
+      )
+        return status;
+    }
+    return undefined;
+  }
   if (event.type === "attempt.failed") return "failed";
   if (event.type === "attempt.cancelled") return "cancelled";
   if (event.type === "node.blocked" || event.type === "approval.requested")
@@ -134,6 +147,11 @@ function mergeAttempts(
     };
     const status = attemptStatus(event);
     const payload = event.payload ?? {};
+    const completion = event.type === "node.completed" ? payload.completion : undefined;
+    const output =
+      completion && typeof completion === "object" && "outputs" in completion
+        ? completion.outputs
+        : payload.output;
     byId.set(event.attemptId, {
       ...current,
       nodeId: event.nodeId ?? current.nodeId,
@@ -142,14 +160,12 @@ function mergeAttempts(
       ...(payload.input && typeof payload.input === "object"
         ? { input: payload.input as NodeAttempt["input"] }
         : {}),
-      ...(payload.output && typeof payload.output === "object"
-        ? { output: payload.output as NodeAttempt["output"] }
-        : {}),
+      ...(output && typeof output === "object" ? { output: output as NodeAttempt["output"] } : {}),
       ...(typeof event.occurredAt === "string" && status === "running"
         ? { startedAt: event.occurredAt }
         : {}),
       ...(typeof event.occurredAt === "string" &&
-      ["succeeded", "failed", "cancelled"].includes(status ?? "")
+      ["succeeded", "failed", "cancelled", "skipped"].includes(status ?? "")
         ? { endedAt: event.occurredAt }
         : {}),
     });
