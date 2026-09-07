@@ -7883,6 +7883,9 @@
                   "cancelled"
                 ],
                 "type": "string"
+              },
+              "summary": {
+                "type": "string"
               }
             },
             "required": [
@@ -8119,6 +8122,9 @@
                 "maximum": 9007199254740991,
                 "minimum": -9007199254740991,
                 "type": "integer"
+              },
+              "isError": {
+                "type": "boolean"
               },
               "output": {
                 "$ref": "#/$defs/__schema15"
