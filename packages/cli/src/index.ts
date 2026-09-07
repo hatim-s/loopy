@@ -278,6 +278,18 @@ async function initProject(args: readonly string[], deps: CliDependencies): Prom
 
 async function workflowCommand(args: readonly string[], deps: CliDependencies): Promise<number> {
   const action = args[1] ?? "list";
+  if (action === "import" && !deps.storageFactory) {
+    const server = await runningServer(projectDir(args));
+    if (server) {
+      const file = args[2];
+      if (!file || file.startsWith("--")) throw new Error("workflow import requires a JSON file");
+      const definition = WorkflowDefinitionSchema.parse(
+        JSON.parse(readFileSync(resolve(file), "utf8")),
+      );
+      printJson(await serverRequest(server, "/workflows", { definition }));
+      return 0;
+    }
+  }
   const storage = await storageFor(args, deps, action === "list" || action === "show");
   try {
     if (action === "import") {
@@ -407,7 +419,7 @@ async function traceCommand(args: readonly string[], deps: CliDependencies): Pro
     throw new Error(
       `trace ${action} requires ${action === "export" ? "a run ID" : "a JSONL file"}`,
     );
-  const storage = await storageFor(args, deps);
+  const storage = await storageFor(args, deps, action === "export");
   try {
     const runtimeStore = new SqliteRuntimeStore(storage);
     if (action === "export") {
@@ -956,6 +968,16 @@ async function forkWorkflow(args: readonly string[], deps: CliDependencies): Pro
   const nodeId = option(args, "--from-node") ?? option(args, "--node");
   if (!runId) throw new Error("fork requires a run ID");
   if (!nodeId) throw new Error("fork requires --from-node <completed-node>");
+  const server = !deps.storageFactory && (await runningServer(projectDir(args)));
+  if (server) {
+    printJson(
+      await serverRequest(server, `/runs/${encodeURIComponent(runId)}/fork`, {
+        nodeId,
+        input: parseOptionalRunInput(args),
+      }),
+    );
+    return 0;
+  }
   const storage = await storageFor(args, deps);
   try {
     const runtimeStore = new SqliteRuntimeStore(storage);

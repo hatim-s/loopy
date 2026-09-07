@@ -74,9 +74,8 @@ export function StudioShell({ children, api }: PropsWithChildren<{ api?: ApiClie
             <span className="workspace-chip__avatar">L</span>
             <span className="workspace-chip__copy">
               <strong>Local workspace</strong>
-              <small>Connected</small>
+              <small>Project storage</small>
             </span>
-            <span className="status-dot status-dot--ok" aria-hidden="true" />
           </div>
           <IconButton
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -100,7 +99,6 @@ export function StudioShell({ children, api }: PropsWithChildren<{ api?: ApiClie
             </div>
           )}
           <div className="topbar__actions">
-            <span className="topbar__hint">⌘ K to search</span>
             <span className="topbar__version">v0.1.0</span>
           </div>
         </header>
@@ -109,7 +107,7 @@ export function StudioShell({ children, api }: PropsWithChildren<{ api?: ApiClie
         </main>
         <output className="status-strip" aria-label="Runtime status">
           <span className="status-strip__item">
-            <Pulse weight="bold" aria-hidden="true" /> Runtime idle
+            <Pulse weight="bold" aria-hidden="true" /> Bun runtime
           </span>
           <span className="status-strip__divider" aria-hidden="true" />
           <span className="status-strip__item">
@@ -117,21 +115,10 @@ export function StudioShell({ children, api }: PropsWithChildren<{ api?: ApiClie
           </span>
           <span className="status-strip__spacer" />
           <span className="status-strip__item status-strip__item--muted">
-            <ListDashes aria-hidden="true" /> No active trace
+            <ListDashes aria-hidden="true" /> Persistent run history
           </span>
         </output>
       </div>
-      <aside className="inspector-pane" aria-label="Trace inspector">
-        <div className="inspector-pane__header">
-          <span>Trace inspector</span>
-          <span className="inspector-pane__count">0</span>
-        </div>
-        <div className="inspector-pane__empty">
-          <Pulse size={18} aria-hidden="true" />
-          <strong>No active trace</strong>
-          <span>Start a session to inspect events, providers, and execution graph state.</span>
-        </div>
-      </aside>
     </div>
   );
 }

@@ -10,6 +10,7 @@ import {
   ProviderCapabilityList,
   RunControls,
 } from "../features";
+import { ApprovalControls } from "../features/builder/approval-controls";
 import { ToolLibrary } from "../features/builder/tool-library";
 import type { GraphInputEdge, GraphInputNode } from "../features/debugger";
 import { createDebuggerState, debuggerReducer, replayEvents } from "../features/debugger";
@@ -618,6 +619,17 @@ function RunDebugger({ api, runId }: { api?: ApiClient; runId: string }) {
       {result.loading ? <LoadingState label="Reconstructing run state" /> : null}
       {result.error ? <ErrorState message={result.error} /> : null}
       {message ? <ErrorState message={message} /> : null}
+      <ApprovalControls
+        attempts={state.attempts}
+        events={state.events}
+        onDecision={(nodeId, attemptId, decision) =>
+          command({
+            endpoint: `/runs/${encodeURIComponent(runId)}/approve`,
+            method: "POST",
+            body: { nodeId, attemptId, decision },
+          })
+        }
+      />
       <RunControls
         state={state}
         onCommand={(descriptor) => void command(descriptor)}

@@ -24,7 +24,7 @@ describe("StudioShell", () => {
       expect(screen.getByRole("navigation", { name: "Studio navigation" })).toBeTruthy();
       expect(screen.getByRole("link", { name: "Sessions" }).getAttribute("href")).toBe("/sessions");
       expect(screen.getByText("Graph Harness")).toBeTruthy();
-      expect(screen.getByText("Runtime idle")).toBeTruthy();
+      expect(screen.getByText("Bun runtime")).toBeTruthy();
       expect(screen.getByText("Agent sessions")).toBeTruthy();
     });
   });
