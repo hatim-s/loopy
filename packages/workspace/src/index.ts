@@ -176,7 +176,16 @@ export async function prepareWorkflowWorkspace(
   const source = resolve(projectDir);
   const policy = definition.policies.workspace;
   const workspace = policy.useGitWorktree ? await createGitWorkspace(source) : undefined;
-  const workingDirectory = workspace?.path ?? resolve(policy.workingDirectory ?? source);
+  const rebaseIntoWorkspace = (absolute: string): string => {
+    if (!workspace) return absolute;
+    const withinRepository = relative(workspace.repositoryRoot, absolute);
+    return withinRepository !== ".." &&
+      !withinRepository.startsWith(`..${sep}`) &&
+      !isAbsolute(withinRepository)
+      ? resolve(workspace.path, withinRepository)
+      : absolute;
+  };
+  const workingDirectory = rebaseIntoWorkspace(resolve(source, policy.workingDirectory ?? "."));
   if (!workspace && !policy.allowDirtyWorkspace) {
     const status = (await git(workingDirectory, ["status", "--porcelain"])).stdout.trim();
     if (status)
@@ -191,16 +200,9 @@ export async function prepareWorkflowWorkspace(
       workspace: {
         ...policy,
         workingDirectory,
-        writableRoots: policy.writableRoots.map((root) => {
-          const absolute = resolve(source, root);
-          const withinProject = relative(source, absolute);
-          return workspace &&
-            withinProject !== ".." &&
-            !withinProject.startsWith(`..${sep}`) &&
-            !isAbsolute(withinProject)
-            ? resolve(workingDirectory, withinProject)
-            : absolute;
-        }),
+        writableRoots: policy.writableRoots.map((root) =>
+          rebaseIntoWorkspace(resolve(source, root)),
+        ),
       },
     },
   };
