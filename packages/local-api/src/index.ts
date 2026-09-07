@@ -10,6 +10,7 @@ import type {
   RuntimeSnapshot,
   RuntimeStore,
 } from "@loopy/runtime";
+import { replayEvents } from "@loopy/runtime";
 import { nextOccurrence, SchedulerEngine } from "@loopy/scheduler";
 import type {
   ArtifactRecord,
@@ -1418,50 +1419,77 @@ export function createLocalApi(options: LocalApiOptions): Hono {
       return c.json(result as never);
     });
   };
-  command("pause", (c) => requireScheduler().pause(c.req.param("id")));
-  command("resume", (c) => requireScheduler().resume(c.req.param("id")));
-  command("cancel", (c, body) =>
-    requireScheduler().cancel(
-      c.req.param("id"),
-      typeof body.reason === "string" ? body.reason : "cancelled by user",
-    ),
-  );
-  command("retry", (c, body) =>
-    requireScheduler().retry(
-      c.req.param("id"),
-      requiredString(body, "nodeId"),
-      jsonObject(body.input),
-    ),
-  );
-  command("replay", () =>
-    capability("Runtime replay is not available through the injected scheduler"),
-  );
-  command("fork", () => capability("Runtime fork is not available through the injected scheduler"));
-  const commandNames = new Set(["pause", "resume", "cancel", "retry", "replay", "fork"]);
+  const commandNames = new Set(["pause", "resume", "cancel", "retry", "approve", "replay", "fork"]);
   const executeNamedCommand = async (name: string, c: Context, body: Record<string, unknown>) => {
     const id = c.req.param("id");
     await runRecord(id);
     if (!commandNames.has(name)) throw new ApiError(404, "not_found", "Command not found");
-    if (!scheduler) capability(`Runtime scheduler does not implement ${name}`);
+    const owner = requireScheduler();
     switch (name) {
       case "pause":
-        return scheduler.pause(id);
+        return owner.pause(id);
       case "resume":
-        return scheduler.resume(id);
+        return owner.resume(id);
       case "cancel":
-        return scheduler.cancel(
+        return owner.cancel(
           id,
           typeof body.reason === "string" ? body.reason : "cancelled by user",
         );
       case "retry":
-        return scheduler.retry(id, requiredString(body, "nodeId"), jsonObject(body.input));
-      case "replay":
-        return capability("Runtime replay is not available through the injected scheduler");
-      case "fork":
-        return capability("Runtime fork is not available through the injected scheduler");
+        return owner.retry(id, requiredString(body, "nodeId"), jsonObject(body.input));
+      case "approve": {
+        const nodeId = requiredString(body, "nodeId");
+        const attemptId = requiredString(body, "attemptId");
+        if (body.decision !== "approved" && body.decision !== "rejected")
+          throw new ApiError(422, "invalid_decision", "Decision must be approved or rejected");
+        try {
+          return await owner.approve(id, nodeId, body.decision, attemptId);
+        } catch (error) {
+          throw new ApiError(
+            409,
+            "approval_conflict",
+            error instanceof Error ? error.message : "Approval changed",
+          );
+        }
+      }
+      case "replay": {
+        const snapshot = await owner.snapshot(id);
+        const fromSequence = body.fromSequence ?? 0;
+        if (
+          typeof fromSequence !== "number" ||
+          !Number.isSafeInteger(fromSequence) ||
+          fromSequence < 0
+        )
+          throw new ApiError(
+            422,
+            "invalid_sequence",
+            "Replay sequence must be a non-negative integer",
+          );
+        return { snapshot, frames: replayEvents(snapshot.events, fromSequence) };
+      }
+      case "fork": {
+        let nodeId = typeof body.nodeId === "string" ? body.nodeId : undefined;
+        if (!nodeId) {
+          const checkpointId = requiredString(body, "checkpointEventId");
+          const checkpoint = (await listEvents(id)).find((event) => event.id === checkpointId);
+          if (checkpoint?.type !== "node.completed" || !checkpoint.nodeId)
+            throw new ApiError(422, "invalid_checkpoint", "Choose a completed node checkpoint");
+          nodeId = checkpoint.nodeId;
+        }
+        try {
+          return normalizeRun(await owner.fork(id, nodeId, jsonObject(body.input)));
+        } catch (error) {
+          throw new ApiError(
+            409,
+            "fork_conflict",
+            error instanceof Error ? error.message : "Checkpoint cannot be forked",
+          );
+        }
+      }
     }
     return capability("Command is not implemented");
   };
+  for (const name of commandNames) command(name, (c, body) => executeNamedCommand(name, c, body));
   api.post("/runs/:id/commands/:name", async (c) => {
     const body = await jsonBody(c, maxBodyBytes);
     const result = await executeNamedCommand(c.req.param("name"), c, body);

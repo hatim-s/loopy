@@ -528,7 +528,12 @@ function RunDebugger({ api, runId }: { api?: ApiClient; runId: string }) {
 
 export function RunsPage({ api }: StudioPageProps) {
   const result = useResource<{ runs?: Array<{ id: string; status?: string }> }>(api, "/runs");
-  const run = result.value?.runs?.[0];
+  const [selectedRun, setSelectedRun] = useState(
+    () => new URLSearchParams(window.location.search).get("runId") ?? "",
+  );
+  const selectId = useId();
+  const runs = [...(result.value?.runs ?? [])].reverse();
+  const run = runs.find((run) => run.id === selectedRun) ?? runs[0];
   return (
     <PageFrame title="Graph runs" eyebrow="Inspect / runs">
       {result.loading ? <LoadingState label="Loading workflow runs" /> : null}
@@ -539,7 +544,23 @@ export function RunsPage({ api }: StudioPageProps) {
           detail="Start an execution graph from the local API to inspect its live trace."
         />
       ) : null}
-      {run ? <RunDebugger api={api} runId={run.id} /> : null}
+      {run ? (
+        <>
+          <label htmlFor={selectId}>Run history</label>
+          <select
+            id={selectId}
+            value={run.id}
+            onChange={(event) => setSelectedRun(event.target.value)}
+          >
+            {runs.map((entry) => (
+              <option key={entry.id} value={entry.id}>
+                {entry.id} · {entry.status}
+              </option>
+            ))}
+          </select>
+          <RunDebugger key={run.id} api={api} runId={run.id} />
+        </>
+      ) : null}
     </PageFrame>
   );
 }
