@@ -122,7 +122,7 @@ Commands:
   );
   console.log(
     "  loopy ui [--project <path>] [--port <port>] [--no-open]  (connect to the background server)",
-    "  loopy server <start|serve|status|stop|restart|logs> [--project <path>] [--port <port>]",
+    "  loopy server <start|serve|status|stop|restart|logs|enable-autostart|disable-autostart> [--project <path>] [--port <port>]",
     "  loopy mcp [--project <path>]  (stdio MCP access to the running server)",
   );
 }
