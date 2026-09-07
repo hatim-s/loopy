@@ -37,6 +37,8 @@ import { doctorCommand } from "./doctor";
 import {
   cleanupCommand,
   type LocalSchedule,
+  remoteCleanupCommand,
+  remoteScheduleCommand,
   type ScheduleDependencies,
   type ScheduleStore,
   scheduleCommand,
@@ -1077,7 +1079,12 @@ async function dispatch(args: readonly string[], deps: CliDependencies): Promise
   if (command === "schedule") {
     if (deps.schedule?.store || deps.schedule?.storeFactory)
       return scheduleCommand(args, deps.schedule);
-    const storage = await storageFor(args, deps);
+    const remote = !deps.storageFactory && (await runningServer(projectDir(args)));
+    if (remote && !["install", "uninstall"].includes(args[1] ?? "list"))
+      return remoteScheduleCommand(args, (path, body, method) =>
+        serverRequest(remote, path, body, method),
+      );
+    const storage = await storageFor(args, deps, Boolean(remote));
     try {
       const store = scheduleStoreFromStorage(storage);
       if (!store) throw new Error("SQLite schedule persistence is unavailable for this project");
@@ -1218,6 +1225,9 @@ async function dispatch(args: readonly string[], deps: CliDependencies): Promise
     }
   }
   if (command === "cleanup") {
+    const remote = !deps.storageFactory && (await runningServer(projectDir(args)));
+    if (remote)
+      return remoteCleanupCommand(args, (path, body) => serverRequest(remote, path, body));
     const storage = await storageFor(args, deps);
     try {
       return await cleanupCommand(

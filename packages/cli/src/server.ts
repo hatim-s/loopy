@@ -72,9 +72,14 @@ export async function runningServer(projectDir: string) {
   }
   return undefined;
 }
-export async function serverRequest(state: ServerState, path: string, body?: unknown) {
+export async function serverRequest(
+  state: ServerState,
+  path: string,
+  body?: unknown,
+  method = body === undefined ? "GET" : "POST",
+) {
   const response = await fetch(`${state.url}/api/v1${path}`, {
-    method: body === undefined ? "GET" : "POST",
+    method,
     headers: { Authorization: `Bearer ${state.token}`, "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });

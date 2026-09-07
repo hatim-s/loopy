@@ -74,7 +74,11 @@ export type LocalApiRepository = {
 
 export type LocalApiStorage = Pick<Storage, "runtime"> & { runtime: LocalApiRepository };
 export type ScheduleRuntimeEngine = {
-  start(plan: unknown, input: JsonObject): Promise<{ runId: string } | { id: string }>;
+  start(
+    plan: unknown,
+    input: JsonObject,
+    mode?: ScheduleRecord["executionMode"],
+  ): Promise<{ runId: string } | { id: string }>;
   wait?(runId: string): Promise<{ run: { status: string } }>;
 };
 export type ScheduleCoordinator = (input: {
@@ -1010,7 +1014,11 @@ export function createLocalApi(options: LocalApiOptions): Hono {
       const workflow =
         repository.getWorkflowVersion(schedule.workflowId, schedule.workflowVersion) ??
         notFound("Workflow version");
-      const run = await scheduleEngine.start(workflow.definition, schedule.input);
+      const run = await scheduleEngine.start(
+        workflow.definition,
+        schedule.input,
+        schedule.executionMode,
+      );
       const runId = "runId" in run ? run.runId : run.id;
       store.linkRun({ scheduleId, fireId: queued.id, runId, state: "active" });
       store.updateFire(queued.id, { runId, status: "running" });
@@ -1065,7 +1073,11 @@ export function createLocalApi(options: LocalApiOptions): Hono {
     const workflow =
       repository.getWorkflowVersion(schedule.workflowId, schedule.workflowVersion) ??
       notFound("Workflow version");
-    const run = await scheduleEngine.start(workflow.definition, schedule.input);
+    const run = await scheduleEngine.start(
+      workflow.definition,
+      schedule.input,
+      schedule.executionMode,
+    );
     const runId = "runId" in run ? run.runId : run.id;
     const link = store.linkRun({ scheduleId, fireId: claimed.id, runId, state: "active" });
     const nextFire =
@@ -1109,6 +1121,12 @@ export function createLocalApi(options: LocalApiOptions): Hono {
       body.lastFireAt !== undefined
     )
       throw new ApiError(400, "invalid_request", "Schedule cursors are server-managed");
+    if (
+      body.executionMode !== undefined &&
+      body.executionMode !== "local" &&
+      body.executionMode !== "live"
+    )
+      throw new ApiError(400, "invalid_request", "executionMode must be local or live");
     const workflowId = requiredString(body, "workflowId");
     const version = Number(body.workflowVersion ?? body.version ?? 1);
     if (!Number.isInteger(version) || version < 1)
@@ -1120,7 +1138,9 @@ export function createLocalApi(options: LocalApiOptions): Hono {
     try {
       return c.json(
         store.create({
+          id: typeof body.id === "string" ? body.id : undefined,
           name: requiredString(body, "name"),
+          executionMode: body.executionMode as ScheduleRecord["executionMode"] | undefined,
           workflowId,
           workflowVersion: version,
           input: jsonObject(body.input),
@@ -1139,6 +1159,11 @@ export function createLocalApi(options: LocalApiOptions): Hono {
         error instanceof Error ? error.message : String(error),
       );
     }
+  });
+  api.delete("/schedules/:id", (c) => {
+    const id = c.req.param("id");
+    if (!requireScheduleStore().remove(id)) notFound("Schedule");
+    return c.json({ id, removed: true });
   });
   api.get("/schedules/:id", (c) => {
     const store = requireScheduleStore();
@@ -1207,8 +1232,17 @@ export function createLocalApi(options: LocalApiOptions): Hono {
     const at = typeof body.now === "string" ? body.now : new Date().toISOString();
     const store = requireScheduleStore();
     if (!scheduleEngine) capability("Runtime scheduler is not configured for schedule execution");
+    const requestedId = typeof body.scheduleId === "string" ? body.scheduleId : undefined;
+    if (requestedId && !store.get(requestedId)) notFound("Schedule");
+    const schedulerStore = store.schedulerStore();
     const policy = new SchedulerEngine({
-      store: store.schedulerStore(),
+      store: {
+        ...schedulerStore,
+        listSchedules: async () =>
+          (await schedulerStore.listSchedules()).filter(
+            (item) => !requestedId || item.schedule.scheduleId === requestedId,
+          ),
+      },
       executor: {
         start: async (invocation) => {
           const schedule = store.get(invocation.scheduleId) ?? notFound("Schedule");
@@ -1220,7 +1254,11 @@ export function createLocalApi(options: LocalApiOptions): Hono {
           const workflow =
             repository.getWorkflowVersion(schedule.workflowId, schedule.workflowVersion) ??
             notFound("Workflow version");
-          const started = await scheduleEngine.start(workflow.definition, invocation.input);
+          const started = await scheduleEngine.start(
+            workflow.definition,
+            invocation.input,
+            schedule.executionMode,
+          );
           const runId = "runId" in started ? started.runId : started.id;
           store.linkRun({
             scheduleId: invocation.scheduleId,

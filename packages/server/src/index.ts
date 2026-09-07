@@ -1,6 +1,10 @@
 import { realpathSync } from "node:fs";
 import { resolve, sep } from "node:path";
-import { WorkflowDefinitionSchema } from "@loopy/contracts";
+import {
+  type JsonObject,
+  type WorkflowDefinition,
+  WorkflowDefinitionSchema,
+} from "@loopy/contracts";
 import { ApiError, createLocalApi, createLocalServerConfig } from "@loopy/local-api";
 import { createDefaultProviderRegistry } from "@loopy/providers";
 import { createProviderExecutor, type ProviderExecutor, RuntimeScheduler } from "@loopy/runtime";
@@ -50,7 +54,18 @@ export async function startServer(options: ServerOptions) {
     });
   const runtime = new RuntimeScheduler({
     store,
-    provider,
+    provider: {
+      async execute(context) {
+        const run = await store.getRun(context.runId);
+        if (run?.plan.execution?.mode === "local")
+          return {
+            status: "succeeded",
+            outputs: {},
+            summary: "Local simulation: agent call skipped",
+          };
+        return provider.execute(context);
+      },
+    },
     shell: createShellExecutor(),
     verifier: {
       async verify(context) {
@@ -63,7 +78,11 @@ export async function startServer(options: ServerOptions) {
   });
   let closing = false;
   let shutdown: Promise<void> | undefined;
-  const startWorkflow: RuntimeScheduler["start"] = async (definition, input) => {
+  const startWithMode = async (
+    definition: WorkflowDefinition,
+    input?: JsonObject,
+    mode?: "local" | "live",
+  ) => {
     if (closing) throw new ApiError(503, "server_stopping", "Server is stopping");
     const parsed = WorkflowDefinitionSchema.safeParse(definition);
     if (!parsed.success) throw new ApiError(422, "invalid_workflow", parsed.error.message);
@@ -71,7 +90,10 @@ export async function startServer(options: ServerOptions) {
     try {
       prepared = await prepareWorkflowWorkspace(parsed.data, projectDir);
       // Workspaces remain available for retries, inspection, and checkpoint forks.
-      return await runtime.start(prepared.definition, input);
+      return await runtime.start(
+        { ...prepared.definition, ...(mode ? { execution: { mode } } : {}) },
+        input,
+      );
     } catch (error) {
       if (prepared) await prepared.cleanup();
       throw new ApiError(
@@ -81,6 +103,8 @@ export async function startServer(options: ServerOptions) {
       );
     }
   };
+  const startWorkflow: RuntimeScheduler["start"] = (definition, input) =>
+    startWithMode(WorkflowDefinitionSchema.parse(definition), input);
   const extraction = createExtractionService(storage);
   const app = createLocalApi({
     importSession: (input) => storage.runtime.importCanonicalSession(input),
@@ -92,7 +116,8 @@ export async function startServer(options: ServerOptions) {
     providerRegistry: registry,
     startWorkflow,
     scheduleEngine: {
-      start: (plan, input) => startWorkflow(WorkflowDefinitionSchema.parse(plan), input),
+      start: (plan, input, mode) =>
+        startWithMode(WorkflowDefinitionSchema.parse(plan), input, mode),
       wait: (id) => runtime.wait(id),
     },
     token: config.token,
