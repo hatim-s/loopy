@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ApiClient } from "../../app/api";
+import type { DebuggerEvent } from "../types";
+import { ApprovalControls } from "./approval-controls";
 
 export type BuilderRun = {
   id: string;
@@ -13,7 +15,7 @@ export type BuilderRun = {
     output?: Record<string, unknown>;
     error?: string;
   }>;
-  events: Array<{ sequence: number; type: string }>;
+  events: DebuggerEvent[];
 };
 export function RunConsole({
   api,
@@ -90,37 +92,16 @@ export function RunConsole({
           </button>
         ) : null}
       </header>
-      {run?.attempts
-        .filter((attempt) => attempt.status === "blocked_approval")
-        .map((attempt) => (
-          <div key={attempt.id} className="builder-approval">
-            <strong>Approval needed for {attempt.nodeId}</strong>
-            <button
-              type="button"
-              onClick={() =>
-                void control("approve", {
-                  nodeId: attempt.nodeId,
-                  attemptId: attempt.attemptId ?? attempt.id,
-                  decision: "approved",
-                })
-              }
-            >
-              Approve step
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                void control("approve", {
-                  nodeId: attempt.nodeId,
-                  attemptId: attempt.attemptId ?? attempt.id,
-                  decision: "rejected",
-                })
-              }
-            >
-              Reject step
-            </button>
-          </div>
-        ))}
+      <ApprovalControls
+        attempts={(run?.attempts ?? []).map((attempt) => ({
+          ...attempt,
+          attemptId: attempt.attemptId ?? attempt.id,
+        }))}
+        events={run?.events ?? []}
+        onDecision={(nodeId, attemptId, decision) =>
+          control("approve", { nodeId, attemptId, decision })
+        }
+      />
       {run?.status === "failed"
         ? run.attempts
             .filter((attempt) => attempt.status === "failed")
