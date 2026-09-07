@@ -9,7 +9,7 @@ import {
   WorkflowDefinitionSchema,
 } from "@loopy/contracts";
 import { extractImportedSession } from "@loopy/extractor";
-import { createLocalApi, createLocalServerConfig } from "@loopy/local-api";
+import { createLocalServerConfig } from "@loopy/local-api";
 import { createDefaultProviderRegistry, type ProviderRegistry } from "@loopy/providers";
 import {
   createProviderExecutor,
@@ -36,6 +36,7 @@ import {
   type ScheduleStore,
   scheduleCommand,
 } from "./schedule";
+import { runningServer, serverCommand, serverRequest } from "./server";
 
 export { doctorCommand, formatDoctor, runDoctor } from "./doctor";
 
@@ -62,6 +63,7 @@ const COMMANDS = [
   "replay",
   "trace",
   "ui",
+  "server",
   "schedule",
   "cleanup",
   "workflow",
@@ -113,7 +115,8 @@ Commands:
     "  loopy validate-provider --provider <provider> --opt-in [--json]  (read-only probe; no run/network)",
   );
   console.log(
-    "  loopy ui [--port <port>] [--origin <origin[,origin]>] [--json]  (print local Studio launch config)",
+    "  loopy ui [--project <path>] [--port <port>] [--no-open]  (connect to the background server)",
+    "  loopy server <start|serve|status|stop|restart|logs> [--project <path>] [--port <port>]",
   );
 }
 
@@ -494,6 +497,13 @@ async function launchUi(args: readonly string[], dependencies: CliDependencies):
   // without opening a browser or binding a listener.
   if (jsonOutput(args)) return printUiConfig(args);
   const studioDir = studioPath(args, dependencies.ui ?? {});
+  if (!dependencies.ui?.serverFactory) {
+    await serverCommand(["server", "start", ...args.slice(1)], studioDir);
+    const server = await runningServer(projectDir(args));
+    if (!server) throw new Error("Server did not become ready");
+    if (!args.includes("--no-open")) await openStudio(server.url, dependencies.ui?.launcher);
+    return 0;
+  }
   const requestedPort = option(args, "--port");
   const port = requestedPort === undefined ? undefined : Number(requestedPort);
   const origins = option(args, "--origin")
@@ -508,51 +518,7 @@ async function launchUi(args: readonly string[], dependencies: CliDependencies):
   const storage = await storageFor(args, dependencies);
   let server: UiServer;
   try {
-    if (dependencies.ui?.serverFactory) {
-      server = dependencies.ui.serverFactory({ config, storage, studioDir });
-    } else {
-      if (typeof Bun === "undefined") throw new Error("loopy ui requires Bun");
-      const app = createLocalApi({
-        storage,
-        token: config.token,
-        origins: config.origins,
-      });
-      const indexPath = resolve(studioDir, "index.html");
-      const index = Bun.file(indexPath);
-      if (!(await index.exists()))
-        throw new Error(
-          `Studio bundle not found at ${studioDir}; run 'bun run --cwd apps/studio build' first`,
-        );
-      const bootstrap = `<script>globalThis.__LOOPY_STUDIO_SESSION__=${JSON.stringify({ baseUrl: "/api/v1", token: config.token })};</script>`;
-      const indexHtml = (await index.text()).replace("</head>", `${bootstrap}</head>`);
-      const listener = Bun.serve({
-        hostname: config.host,
-        port: config.port,
-        fetch: async (request) => {
-          const url = new URL(request.url);
-          if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/v1/"))
-            return app.fetch(request);
-          const relative = url.pathname === "/" ? "index.html" : url.pathname.replace(/^\//, "");
-          const filePath = resolve(studioDir, relative);
-          if (!filePath.startsWith(`${studioDir}/`) && filePath !== studioDir)
-            return new Response("Not found", { status: 404 });
-          if (relative === "index.html")
-            return new Response(indexHtml, {
-              headers: { "Content-Type": "text/html; charset=utf-8" },
-            });
-          const file = Bun.file(filePath);
-          if (await file.exists()) return new Response(file);
-          return new Response(indexHtml, {
-            headers: { "Content-Type": "text/html; charset=utf-8" },
-          });
-        },
-      });
-      server = {
-        url: `http://${config.host}:${config.port}/`,
-        token: config.token,
-        stop: () => listener.stop(true),
-      };
-    }
+    server = dependencies.ui.serverFactory({ config, storage, studioDir });
   } catch (error) {
     storage.close();
     throw error;
@@ -992,6 +958,34 @@ async function validateProvider(args: readonly string[], deps: CliDependencies):
 
 async function dispatch(args: readonly string[], deps: CliDependencies): Promise<number> {
   const command = args[0];
+  if (command === "server") return serverCommand(args, studioPath(args, deps.ui ?? {}));
+  if (
+    !deps.storageFactory &&
+    ["run", "pause", "resume", "cancel", "retry"].includes(command ?? "")
+  ) {
+    const server = await runningServer(projectDir(args));
+    if (server) {
+      const reference = option(args, "--workflow") ?? positional(args);
+      if (!reference) throw new Error(`${command} requires an ID`);
+      if (args.includes("--fake") || args.includes("--local") || option(args, "--provider"))
+        throw new Error(
+          "Server runs use the workflow's configured providers. Edit the workflow to change its provider.",
+        );
+      const result =
+        command === "run"
+          ? await serverRequest(server, "/runs", {
+              workflowId: reference,
+              version: Number(option(args, "--version") ?? 1),
+              input: parseRunInput(args),
+            })
+          : await serverRequest(server, `/runs/${encodeURIComponent(reference)}/${command}`, {
+              nodeId: option(args, "--node"),
+              input: parseRunInput(args),
+            });
+      printJson(result);
+      return 0;
+    }
+  }
   if (command === "init") return initProject(args, deps);
   if (command === "workflow") return workflowCommand(args, deps);
   if (command === "import") return importSession(args, deps);
@@ -1244,6 +1238,7 @@ export function main(
       "replay",
       "fork",
       "ui",
+      "server",
       "schedule",
       "cleanup",
       "providers",

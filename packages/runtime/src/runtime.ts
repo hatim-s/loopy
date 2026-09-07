@@ -435,6 +435,8 @@ function normalizePlan(
 
 export class RuntimeScheduler {
   private readonly options: RuntimeOptions;
+  private stopped = false;
+  private readonly executions = new Set<Promise<void>>();
   private readonly active = new Map<string, Set<string>>();
   private readonly activeNodes = new Map<string, Map<string, string>>();
   private readonly controllers = new Map<string, AbortController>();
@@ -483,6 +485,7 @@ export class RuntimeScheduler {
     planInput: RuntimePlan | RuntimePlanInput | WorkflowDefinition | ExecutionPlan,
     inputs: JsonObject = {},
   ): Promise<RunRecord> {
+    if (this.stopped) throw new Error("Runtime is stopping");
     const plan = normalizePlan(planInput);
     const run: RunRecord = {
       runId: this.makeId("run"),
@@ -1017,6 +1020,17 @@ export class RuntimeScheduler {
     }
     return recovered;
   }
+  async shutdown(): Promise<void> {
+    this.stopped = true;
+    while (this.pumping.size) await new Promise((resolve) => setTimeout(resolve, 10));
+    for (const run of await this.options.store.listRuns()) {
+      if (!TERMINAL_RUNS.has(run.status)) await this.pause(run.runId);
+    }
+    await Promise.allSettled([...this.executions]);
+    for (const run of await this.options.store.listRuns()) {
+      if (run.status === "pause_requested") await this.pause(run.runId);
+    }
+  }
   private async requireRun(runId: string): Promise<RunRecord> {
     const run = await this.options.store.getRun(runId);
     if (!run) throw new Error(`Unknown run ${runId}`);
@@ -1083,6 +1097,7 @@ export class RuntimeScheduler {
     this.notify(runId);
   }
   private async pump(runId: string): Promise<void> {
+    if (this.stopped) return;
     if (this.pumping.has(runId)) return;
     this.pumping.add(runId);
     try {
@@ -1185,7 +1200,11 @@ export class RuntimeScheduler {
         launches.push({ node, attempt });
       }
       if (commands.length) await this.options.store.commit(commands);
-      for (const launch of launches) void this.execute(run, launch.node, launch.attempt);
+      for (const launch of launches) {
+        const execution = this.execute(run, launch.node, launch.attempt);
+        this.executions.add(execution);
+        void execution.finally(() => this.executions.delete(execution));
+      }
       const latest = await this.options.store.listAttempts(runId);
       if (!active.size && this.allDone(run, latest)) {
         const latestByNode = new Map<string, AttemptRecord>();

@@ -35,6 +35,7 @@
     "@loopy/tracing": "workspace:*",
     "@loopy/storage": "workspace:*",
     "@loopy/testing": "workspace:*",
-    "@loopy/workspace": "workspace:*"
+    "@loopy/workspace": "workspace:*",
+    "@loopy/server": "workspace:*"
   }
 }
