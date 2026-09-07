@@ -19,6 +19,6 @@ describe("studio router", () => {
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "Agent sessions" })).toBeTruthy(),
     );
-    expect(screen.getByText("Waiting for feature data")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Import trace" })).toBeTruthy();
   });
 });

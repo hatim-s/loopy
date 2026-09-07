@@ -635,6 +635,11 @@ async function importSession(args: readonly string[], deps: CliDependencies): Pr
     ...(capabilities ? { capabilities: JSON.parse(capabilities) as JsonObject } : {}),
     ...(lossiness ? { lossiness: JSON.parse(lossiness) as JsonObject } : {}),
   };
+  const server = !deps.storageFactory && (await runningServer(projectDir(args)));
+  if (server) {
+    printJson(await serverRequest(server, "/sessions", input));
+    return 0;
+  }
   const storage = await storageFor(args, deps);
   try {
     const session = storage.runtime.importCanonicalSession(input);
@@ -648,6 +653,11 @@ async function importSession(args: readonly string[], deps: CliDependencies): Pr
 async function extractSession(args: readonly string[], deps: CliDependencies): Promise<number> {
   const importId = option(args, "--import") ?? positional(args);
   if (!importId) throw new Error("extract requires an import ID");
+  const server = !deps.storageFactory && (await runningServer(projectDir(args)));
+  if (server) {
+    printJson(await serverRequest(server, "/extractions", { importId }));
+    return 0;
+  }
   const storage = await storageFor(args, deps);
   try {
     const imported = storage.runtime.getImportedSession(importId);
@@ -687,6 +697,13 @@ async function approveOrReject(
 ): Promise<number> {
   const id = positional(args);
   if (!id) throw new Error(`${decision} requires a proposal or job ID`);
+  const server = !deps.storageFactory && (await runningServer(projectDir(args)));
+  if (server) {
+    printJson(
+      await serverRequest(server, `/extractions/${encodeURIComponent(id)}/${decision}`, {}),
+    );
+    return 0;
+  }
   const storage = await storageFor(args, deps);
   try {
     const result =

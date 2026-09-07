@@ -15,6 +15,7 @@ import { nextOccurrence, SchedulerEngine } from "@loopy/scheduler";
 import type {
   ArtifactRecord,
   AttemptRecord,
+  CanonicalSessionImportInput,
   EventRecord,
   ExtractionJobRecord,
   ExtractionReviewRecord,
@@ -89,6 +90,8 @@ export type ScheduleCoordinator = (input: {
   | "cancel_previous";
 export type LocalApiOptions = {
   tools?: ToolRegistry;
+  importSession?: (input: CanonicalSessionImportInput) => ImportedSessionRecord;
+  extractSession?: (importId: string) => Promise<ExtractionJobRecord>;
   storage: LocalApiStorage;
   startWorkflow?: RuntimeScheduler["start"];
   runtime?: RuntimeScheduler;
@@ -675,6 +678,30 @@ export function createLocalApi(options: LocalApiOptions): Hono {
       });
     }
   });
+  api.post("/sessions", async (c) => {
+    if (!options.importSession)
+      throw new ApiError(503, "import_unavailable", "Session import is unavailable");
+    const body = await jsonBody(c, maxBodyBytes);
+    try {
+      return c.json(
+        options.importSession({
+          provider: requiredString(body, "provider"),
+          source: requiredString(body, "source"),
+          content: requiredString(body, "content"),
+          capabilities: jsonObject(body.capabilities),
+          lossiness: jsonObject(body.lossiness),
+        }),
+        201,
+      );
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw new ApiError(
+        422,
+        "invalid_session",
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  });
   api.get("/sessions", (c) => c.json({ sessions: repository.listImportedSessions() }));
   api.get("/sessions/:id", (c) =>
     c.json(repository.getImportedSession(c.req.param("id")) ?? notFound("Imported session")),
@@ -689,7 +716,9 @@ export function createLocalApi(options: LocalApiOptions): Hono {
     const body = await jsonBody(c, maxBodyBytes);
     const importId = requiredString(body, "importId");
     if (!repository.getImportedSession(importId)) notFound("Imported session");
-    return c.json(repository.createExtractionJob({ importId, input: jsonObject(body.input) }), 201);
+    if (!options.extractSession)
+      throw new ApiError(503, "extraction_unavailable", "Session extraction is unavailable");
+    return c.json(await options.extractSession(importId), 201);
   });
   api.get("/extractions/:id", (c) =>
     c.json(

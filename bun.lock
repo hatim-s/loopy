@@ -129,6 +129,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@loopy/contracts": "workspace:*",
+        "@loopy/extractor": "workspace:*",
         "@loopy/local-api": "workspace:*",
         "@loopy/providers": "workspace:*",
         "@loopy/runtime": "workspace:*",

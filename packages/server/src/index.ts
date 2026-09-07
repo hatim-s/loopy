@@ -12,6 +12,7 @@ import {
   prepareWorkflowWorkspace,
 } from "@loopy/workspace";
 import { z } from "zod";
+import { createExtractionService } from "./extraction";
 import { handleMcpRequest } from "./mcp";
 import type { ProjectManager } from "./projects";
 
@@ -80,7 +81,10 @@ export async function startServer(options: ServerOptions) {
       );
     }
   };
+  const extraction = createExtractionService(storage);
   const app = createLocalApi({
+    importSession: (input) => storage.runtime.importCanonicalSession(input),
+    extractSession: (id) => extraction.extract(id),
     storage,
     tools,
     runtime,
@@ -233,6 +237,7 @@ export async function startServer(options: ServerOptions) {
       await tick;
       // Pause at a node boundary. Stopping the server never silently replays a command.
       await tools.drain();
+      await extraction.drain();
       await runtime.shutdown();
       listener.stop(true);
       storage.close();
