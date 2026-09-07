@@ -10,6 +10,7 @@ export type CodexSandbox = "read-only" | "workspace-write" | "danger-full-access
 export type CodexCommandOptions = {
   prompt?: string;
   model?: string;
+  reasoning?: string;
   cwd?: string;
   sandbox?: CodexSandbox;
   outputSchema?: string | JsonObject;

@@ -34,7 +34,7 @@ export function buildCodexCapabilities(
     sessionResume: true,
     sessionFork: false,
     explicitModelSelection: true,
-    explicitReasoningLevel: false,
+    explicitReasoningLevel: true,
     toolAllowlist: false,
     writablePathPolicy: true,
     networkPolicy: false,
