@@ -1,0 +1,6 @@
+{"type": "step_start", "sessionID": "coding-session"}
+{"type": "message", "sessionID": "coding-session", "role": "user", "part": {"type": "text", "text": "Update the greeting for the supplied name and run tests."}}
+{"type": "tool_use", "sessionID": "coding-session", "part": {"type": "tool", "callID": "edit-1", "tool": "edit", "state": {"status": "completed", "input": {"filePath": "greeting.ts", "oldString": "Hello", "newString": "Hello Ada"}, "output": "Updated greeting.ts"}}}
+{"type": "tool_use", "sessionID": "coding-session", "part": {"type": "tool", "callID": "test-1", "tool": "bash", "state": {"status": "completed", "input": {"command": "bun test"}, "output": "1 pass, 0 fail"}}}
+{"type": "text", "sessionID": "coding-session", "part": {"type": "text", "text": "Updated greeting.ts. Tests passed."}}
+{"type": "step_finish", "sessionID": "coding-session", "part": {"type": "step-finish", "reason": "stop", "tokens": {"input": 20, "output": 10}}}

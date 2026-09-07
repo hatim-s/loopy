@@ -23,14 +23,14 @@ import {
   buildOpenCodeCapabilities,
   buildOpenCodeRunCommand,
   importOpenCodeSession,
-  normalizeOpenCodeEvent,
+  normalizeOpenCodeJsonLines,
   parseOpenCodeVersion,
 } from "./adapters/opencode/index.js";
 import {
   buildPiCapabilities,
   buildPiRunCommand,
   importPiSession,
-  normalizePiEvent,
+  normalizePiJsonLines,
   parsePiVersion,
 } from "./adapters/pi/index.js";
 import {
@@ -166,7 +166,7 @@ function fromTraceEvent(
         ? { parentSessionId: payload.parentSessionId }
         : {}),
     },
-    payload,
+    payload: { ...payload, ...(event.toolCallId ? { toolCallId: event.toolCallId } : {}) },
     ...(type === "unknown" && typeof payload.rawType === "string"
       ? { rawType: payload.rawType }
       : {}),
@@ -475,6 +475,7 @@ function makeAdapter(input: {
         events: (async function* () {
           let terminal = false;
           let malformed = false;
+          const requestedTools = new Set<string>();
           const convert = (event: NormalizedLineEvent): ProviderEvent | undefined => {
             const converted =
               "provenance" in event
@@ -495,7 +496,10 @@ function makeAdapter(input: {
           };
           try {
             for await (const line of live.lines) {
-              const normalized = await input.normalizeLine(line, request);
+              const normalized = await input.normalizeLine(line, {
+                ...request,
+                metadata: { ...request.metadata, ...(sessionId ? { sessionId } : {}) },
+              });
               for (const diagnostic of normalized.diagnostics ?? []) {
                 malformed ||= diagnostic.code === "malformed_event";
                 yield diagnosticEvent(input.id, request, diagnostic, sessionId);
@@ -507,7 +511,14 @@ function makeAdapter(input: {
                     "malformed_event";
                 }
                 const converted = convert(event);
-                if (converted) yield converted;
+                if (converted) {
+                  const callId = converted.payload?.toolCallId;
+                  if (converted.type === "tool_call" && typeof callId === "string") {
+                    if (requestedTools.has(callId)) continue;
+                    requestedTools.add(callId);
+                  }
+                  yield converted;
+                }
               }
             }
             const result = await live.done;
@@ -632,14 +643,19 @@ export function createCodexProviderAdapter(
           source: "historical-import",
           providerVersion: options.version ?? "unknown",
           importedAt: new Date().toISOString(),
-        }).events.map((event) =>
-          fromLineEvent(event, {
+        }).events.map((event) => ({
+          ...fromLineEvent(event, {
             runId: "import",
             attemptId: "import",
             nodeId: "import",
             input: {},
           }),
-        ),
+          provenance: {
+            source: "historical-import",
+            sessionId: event.sessionId,
+            version: options.version ?? "unknown",
+          },
+        })),
       ),
     ],
   });
@@ -694,14 +710,19 @@ export function createClaudeProviderAdapter(
           source: "historical-import",
           providerVersion: options.version ?? "unknown",
           importedAt: new Date().toISOString(),
-        }).events.map((event) =>
-          fromLineEvent(event, {
+        }).events.map((event) => ({
+          ...fromLineEvent(event, {
             runId: "import",
             attemptId: "import",
             nodeId: "import",
             input: {},
           }),
-        ),
+          provenance: {
+            source: "historical-import",
+            sessionId: event.sessionId,
+            version: options.version ?? "unknown",
+          },
+        })),
       ),
     ],
   });
@@ -742,14 +763,14 @@ export function createOpenCodeProviderAdapter(
       };
     },
     normalizeLine: async (line, request) => {
-      const normalized = normalizeOpenCodeEvent(JSON.parse(line), {
+      const normalized = await normalizeOpenCodeJsonLines([line], {
         runId: request.runId,
         nodeId: request.nodeId,
         attemptId: request.attemptId,
         sessionId: request.metadata?.sessionId as string | undefined,
       });
       return {
-        events: normalized.event ? [normalized.event] : [],
+        events: normalized.events,
         diagnostics: normalized.diagnostics,
       };
     },
@@ -829,14 +850,14 @@ export function createPiProviderAdapter(options: RegisteredProviderOptions = {})
       };
     },
     normalizeLine: async (line, request) => {
-      const normalized = normalizePiEvent(JSON.parse(line), {
+      const normalized = await normalizePiJsonLines([line], {
         runId: request.runId,
         nodeId: request.nodeId,
         attemptId: request.attemptId,
         sessionId: request.metadata?.sessionId as string | undefined,
       });
       return {
-        events: normalized.event ? [normalized.event] : [],
+        events: normalized.events,
         diagnostics: normalized.diagnostics,
       };
     },

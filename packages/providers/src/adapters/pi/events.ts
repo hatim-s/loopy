@@ -57,7 +57,7 @@ export function normalizePiEvent(
   const session =
     safeString(value.sessionId) ??
     safeString(value.sessionID) ??
-    safeString(value.id) ??
+    (type === "session" ? safeString(value.id) : undefined) ??
     context.sessionId ??
     "pi-session-unknown";
   const payload = record(value.message);
@@ -79,14 +79,19 @@ export function normalizePiEvent(
       diagnostics: [],
     };
   }
-  if (type === "message_start") {
+  if (type === "message_start" || type === "message") {
     const role = safeString(payload.role);
     const content = text(payload.content);
+    if (
+      !content &&
+      role === "assistant" &&
+      Array.isArray(payload.content) &&
+      payload.content.some((block) => record(block).type === "toolCall")
+    )
+      return { diagnostics: [] };
     if (!content || (role !== "user" && role !== "assistant" && role !== "system"))
       return {
-        diagnostics: [
-          diagnostic("malformed_event", "Pi message_start has no supported visible message.", type),
-        ],
+        diagnostics: [diagnostic("lossy_event", "Pi message has no supported visible text.", type)],
       };
     return { event: base("provider.message", { role, content }), diagnostics: [] };
   }
@@ -99,7 +104,12 @@ export function normalizePiEvent(
           diagnostic("lossy_event", "Pi hidden reasoning content was intentionally omitted.", type),
         ],
       };
-    const content = safeString(update.delta) ?? text(update.content);
+    const content =
+      updateType === "text_delta"
+        ? safeString(update.delta)
+        : updateType === "text_end"
+          ? undefined
+          : text(update.content);
     if (!content)
       return {
         diagnostics: [
@@ -111,7 +121,10 @@ export function normalizePiEvent(
   if (type === "message_end") {
     const content = text(payload.content);
     const events: TraceEvent[] = [];
-    if (content) events.push(base("provider.message", { role: "assistant", content }));
+    if (content)
+      events.push(
+        base("provider.message", { role: payload.role === "user" ? "user" : "assistant", content }),
+      );
     const counters = usage(payload.usage);
     if (counters) events.push(base("provider.usage", { usage: counters }));
     // Keep the single-event normalizer predictable; usage is represented on the
@@ -140,27 +153,32 @@ export function normalizePiEvent(
       safeString(value.toolCallId) ??
       safeString(value.callId) ??
       `${session}:tool:${context.sequence ?? 0}`;
-    const tool = safeString(value.toolName) ?? "unknown-tool";
-    if (value.isError === true)
-      return {
-        event: base(
-          "tool.denied",
-          { tool, reason: text(value.result) ?? "Pi tool execution failed." },
-          callId,
-        ),
-        diagnostics: [],
-      };
     return {
       event: base(
         "tool.completed",
-        { output: jsonValue(value.result ?? value.output ?? "") },
+        { output: jsonValue(value.result ?? value.output ?? ""), isError: value.isError === true },
         callId,
       ),
       diagnostics: [],
     };
   }
-  if (type === "agent_end" || type === "session_end" || type === "session_ended")
-    return { event: base("provider.session_ended", { status: "succeeded" }), diagnostics: [] };
+  if (type === "agent_end" || type === "session_end" || type === "session_ended") {
+    const messages = Array.isArray(value.messages) ? value.messages.map(record) : [];
+    const last = messages.at(-1);
+    const status =
+      last?.stopReason === "error"
+        ? "failed"
+        : last?.stopReason === "aborted"
+          ? "cancelled"
+          : "succeeded";
+    return {
+      event: base("provider.session_ended", {
+        status,
+        ...(typeof last?.errorMessage === "string" ? { error: last.errorMessage } : {}),
+      }),
+      diagnostics: [],
+    };
+  }
   if (type === "error" || type === "agent_error")
     return {
       event: base("provider.session_ended", {
@@ -197,6 +215,7 @@ export async function normalizePiJsonLines(
   const events: TraceEvent[] = [];
   const diagnostics: AdapterDiagnostic[] = [];
   let sequence = context.sequence ?? 0;
+  let sessionId = context.sessionId;
   for await (const line of lines) {
     if (!line.trim()) continue;
     const parsed = parseJsonLine(line);
@@ -204,15 +223,53 @@ export async function normalizePiJsonLines(
       diagnostics.push(parsed.error as AdapterDiagnostic);
       continue;
     }
-    const normalized = normalizePiEvent(parsed.value, { ...context, sequence });
-    diagnostics.push(...normalized.diagnostics);
-    if (normalized.event) {
-      events.push(normalized.event);
-      sequence += 1;
+    if (parsed.value.type === "session" && typeof parsed.value.id === "string")
+      sessionId = parsed.value.id;
+    const message = record(parsed.value.message);
+    const rows: unknown[] = [parsed.value];
+    if (parsed.value.type === "message") {
+      if (message.role === "toolResult")
+        rows.splice(0, 1, {
+          type: "tool_execution_end",
+          toolCallId: message.toolCallId,
+          toolName: message.toolName,
+          result: message.content,
+          isError: message.isError,
+        });
+      if (message.role === "assistant" && Array.isArray(message.content)) {
+        for (const block of message.content.map(record))
+          if (block.type === "toolCall")
+            rows.push({
+              type: "tool_execution_start",
+              toolCallId: block.id,
+              toolName: block.name,
+              args: block.arguments,
+            });
+      }
+    }
+    if (
+      parsed.value.type === "message" &&
+      ["stop", "error", "aborted"].includes(String(message.stopReason))
+    )
+      rows.push({ type: "agent_end", messages: [message] });
+    for (const row of rows) {
+      const normalized = normalizePiEvent(row, {
+        ...context,
+        sessionId,
+        sequence,
+        ...(typeof parsed.value.timestamp === "string"
+          ? { occurredAt: parsed.value.timestamp }
+          : {}),
+      });
+      diagnostics.push(...normalized.diagnostics);
+      if (normalized.event) {
+        events.push(normalized.event);
+        sequence += 1;
+      }
     }
     // Pi places usage on message_end. Preserve it as a separate canonical
     // event so stream consumers do not have to inspect provider payloads.
-    if (parsed.value.type === "message_end") {
+    if (parsed.value.type === "message_end" || parsed.value.type === "message") {
       const messageUsage = record(record(parsed.value.message).usage);
       if (Object.keys(messageUsage).length > 0) {
         const usageEvent = normalizePiEvent(
@@ -221,7 +278,7 @@ export async function normalizePiJsonLines(
             sessionId: parsed.value.sessionId ?? parsed.value.sessionID,
             usage: messageUsage,
           },
-          { ...context, sequence },
+          { ...context, sessionId, sequence },
         );
         diagnostics.push(...usageEvent.diagnostics);
         if (usageEvent.event) {

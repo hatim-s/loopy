@@ -1,0 +1,6 @@
+{"type": "thread.started", "thread_id": "coding-session"}
+{"type": "user.message", "role": "user", "content": "Update the greeting for the supplied name and run tests."}
+{"type": "item.completed", "item": {"id": "edit-1", "type": "file_change", "changes": [{"path": "greeting.ts", "kind": "update", "diff": "-Hello\\n+Hello Ada"}], "status": "completed"}}
+{"type": "item.completed", "item": {"id": "test-1", "type": "command_execution", "command": "bun test", "aggregated_output": "1 pass, 0 fail", "exit_code": 0, "status": "completed"}}
+{"type": "item.completed", "item": {"id": "answer", "type": "agent_message", "text": "Updated greeting.ts. Tests passed."}}
+{"type": "turn.completed", "usage": {"input_tokens": 20, "output_tokens": 10}}

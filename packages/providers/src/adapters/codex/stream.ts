@@ -189,7 +189,54 @@ export function normalizeCodexEvent(
   const event = record(input);
   if (!event || typeof event.type !== "string")
     return [diagnostic("malformed_event", "Codex record has no string type", input, context)];
+  // Rollout files wrap messages and function calls in response_item envelopes.
+  if (event.type === "session_meta") {
+    const payload = record(event.payload);
+    return normalizeCodexEvent({ type: "thread.started", thread_id: payload?.id }, context);
+  }
+  if (event.type === "response_item") {
+    const payload = record(event.payload);
+    if (payload?.type === "message")
+      return normalizeCodexEvent({ ...payload, type: "message" }, context);
+    if (payload?.type === "function_call" || payload?.type === "custom_tool_call") {
+      let args = payload.arguments ?? payload.input;
+      if (typeof args === "string") {
+        try {
+          args = JSON.parse(args);
+        } catch {
+          /* Native custom tools can use plain text. */
+        }
+      }
+      return normalizeCodexEvent(
+        { type: "item.started", item: { ...payload, id: payload.call_id, input: args } },
+        context,
+      );
+    }
+    if (payload?.type === "function_call_output" || payload?.type === "custom_tool_call_output")
+      return [
+        {
+          kind: "tool_result",
+          type: "tool.completed",
+          provider: "codex",
+          sessionId: context.sessionId,
+          toolCallId: typeof payload.call_id === "string" ? payload.call_id : undefined,
+          output: jsonValue(payload.output),
+        },
+      ];
+    return normalizeCodexEvent(payload, context);
+  }
+  if (event.type === "event_msg") {
+    const payload = record(event.payload);
+    if (payload?.type === "task_complete")
+      return normalizeCodexEvent(
+        { type: "turn.completed", message: payload.last_agent_message },
+        context,
+      );
+    if (["task_started", "user_message", "agent_message"].includes(String(payload?.type)))
+      return [];
+  }
   const type = event.type;
+  if (type === "turn.started") return [];
   if (HIDDEN_KEYS.has(type) || /(?:reasoning|thinking|analysis|chain.of.thought)/i.test(type)) {
     return [
       diagnostic(
@@ -336,7 +383,8 @@ export function normalizeCodexEvent(
     (itemType === "command_execution" ||
       itemType === "tool_call" ||
       itemType === "mcp_tool_call" ||
-      itemType === "function_call")
+      itemType === "function_call" ||
+      itemType === "custom_tool_call")
   ) {
     const callId =
       typeof item.id === "string"
@@ -356,9 +404,21 @@ export function normalizeCodexEvent(
     const output = item.aggregated_output ?? item.output ?? item.result;
     const isComplete = type.endsWith("completed") || type.endsWith("result");
     const value = isComplete ? jsonValue(output) : undefined;
-    const input = jsonValue(command);
+    const input = jsonValue(itemType === "command_execution" ? { command } : command);
     if (isComplete)
       return [
+        ...(input === undefined
+          ? []
+          : [
+              {
+                kind: "tool" as const,
+                type: "tool.requested" as const,
+                ...common,
+                toolCallId: callId,
+                tool,
+                input,
+              },
+            ]),
         {
           kind: "tool_result",
           type: "tool.completed",
@@ -378,6 +438,32 @@ export function normalizeCodexEvent(
         tool,
         ...(input !== undefined ? { input } : {}),
       },
+    ];
+  }
+  if (itemType === "file_change" && item) {
+    const callId = typeof item.id === "string" ? item.id : undefined;
+    return [
+      {
+        kind: "tool",
+        type: "tool.requested",
+        ...common,
+        toolCallId: callId,
+        tool: "apply_patch",
+        input: { changes: jsonValue(item.changes) ?? [] },
+      },
+      ...(type.endsWith("completed")
+        ? [
+            {
+              kind: "tool_result" as const,
+              type: "tool.completed" as const,
+              ...common,
+              toolCallId: callId,
+              tool: "apply_patch",
+              output: jsonValue(item.changes) ?? [],
+              metadata: { isError: item.status === "failed" },
+            },
+          ]
+        : []),
     ];
   }
   if (type === "usage" || type === "response.usage") {
@@ -441,7 +527,19 @@ export function normalizeCodexStream(
 ): CodexEvent[] {
   const lines = typeof input === "string" ? input.split(/\r?\n/) : input;
   const events: CodexEvent[] = [];
-  for (const line of lines) if (line.trim()) events.push(...parseCodexJsonLine(line, context));
+  let sessionId = context.sessionId;
+  const calls = new Set<string>();
+  for (const line of lines)
+    if (line.trim()) {
+      for (const event of parseCodexJsonLine(line, { ...context, sessionId })) {
+        sessionId = event.sessionId ?? sessionId;
+        if (event.kind === "tool" && event.toolCallId) {
+          if (calls.has(event.toolCallId)) continue;
+          calls.add(event.toolCallId);
+        }
+        events.push(event);
+      }
+    }
   return events;
 }
 

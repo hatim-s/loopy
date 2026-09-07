@@ -314,7 +314,9 @@ export function normalizeClaudeEvent(
         : event,
     );
     const failed =
-      event.is_error === true || event.subtype === "error" || event.subtype === "failure";
+      event.is_error === true ||
+      (typeof event.subtype === "string" && event.subtype.startsWith("error")) ||
+      event.subtype === "failure";
     const output: ClaudeEvent = {
       kind: "result",
       type: "provider.result",
@@ -392,7 +394,13 @@ export function normalizeClaudeStream(
 ): ClaudeEvent[] {
   const lines = typeof input === "string" ? input.split(/\r?\n/) : input;
   const events: ClaudeEvent[] = [];
-  for (const line of lines) if (line.trim()) events.push(...parseClaudeJsonLine(line, context));
+  let sessionId = context.sessionId;
+  for (const line of lines)
+    if (line.trim()) {
+      const parsed = parseClaudeJsonLine(line, { ...context, sessionId });
+      sessionId = parsed.find((event) => event.sessionId)?.sessionId ?? sessionId;
+      events.push(...parsed);
+    }
   return events;
 }
 export const parseClaudeStream = normalizeClaudeStream;
