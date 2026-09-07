@@ -191,7 +191,16 @@ export async function prepareWorkflowWorkspace(
       workspace: {
         ...policy,
         workingDirectory,
-        writableRoots: [workingDirectory],
+        writableRoots: policy.writableRoots.map((root) => {
+          const absolute = resolve(source, root);
+          const withinProject = relative(source, absolute);
+          return workspace &&
+            withinProject !== ".." &&
+            !withinProject.startsWith(`..${sep}`) &&
+            !isAbsolute(withinProject)
+            ? resolve(workingDirectory, withinProject)
+            : absolute;
+        }),
       },
     },
   };

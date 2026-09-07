@@ -483,7 +483,7 @@ function makeAdapter(input: {
       const command = input.build(request, options);
       const live = startJsonlSubprocess({
         argv: argvFor(command.executable, options.commandPrefixArgs, command.args),
-        cwd: request.cwd ?? cwdFor(options),
+        cwd: request.policy?.workspace?.workingDirectory ?? request.cwd ?? cwdFor(options),
         env: options.env,
         envAllowlist: options.envAllowlist ?? DEFAULT_ENV[input.id],
         signal: controller.signal,
@@ -700,7 +700,6 @@ export function createClaudeProviderAdapter(
           "network policy",
         ],
         [(policy?.workspace?.writableRoots?.length ?? 0) > 0, "writable-root policy"],
-        [policy?.workspace?.workingDirectory !== undefined, "working-directory policy"],
         [policy?.sandbox !== undefined, "sandbox policy"],
         [(policy?.approval?.sideEffectLabels?.length ?? 0) > 0, "approval side-effect policy"],
         ...unsupportedBudgetChecks(policy, { maxTurns: true, maxCostUsd: true }),
@@ -853,7 +852,6 @@ export function createPiProviderAdapter(options: RegisteredProviderOptions = {})
           "network policy; Pi --offline only disables startup network operations",
         ],
         [(policy?.workspace?.writableRoots?.length ?? 0) > 0, "writable-root policy"],
-        [policy?.workspace?.workingDirectory !== undefined, "working-directory policy"],
         [policy?.sandbox !== undefined, "sandbox policy"],
         [(policy?.approval?.requiredBefore?.length ?? 0) > 0, "approval checkpoint policy"],
         [(policy?.approval?.sideEffectLabels?.length ?? 0) > 0, "approval side-effect policy"],
