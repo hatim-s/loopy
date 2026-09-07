@@ -235,7 +235,7 @@ export function normalizeClaudeEvent(
           toolCallId: typeof item.tool_use_id === "string" ? item.tool_use_id : undefined,
           tool: "tool",
           ...(output !== undefined ? { output } : {}),
-          metadata: { ...(item.is_error === true ? { isError: true } : {}) },
+          metadata: { ...(typeof item.is_error === "boolean" ? { isError: item.is_error } : {}) },
         });
       }
     }
@@ -295,7 +295,7 @@ export function normalizeClaudeEvent(
         toolCallId: typeof event.tool_use_id === "string" ? event.tool_use_id : undefined,
         tool: typeof event.tool_name === "string" ? event.tool_name : "tool",
         ...(output !== undefined ? { output } : {}),
-        metadata: { ...(event.is_error === true ? { isError: true } : {}) },
+        metadata: { ...(typeof event.is_error === "boolean" ? { isError: event.is_error } : {}) },
       },
     ];
   }

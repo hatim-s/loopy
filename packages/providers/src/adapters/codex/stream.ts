@@ -196,6 +196,15 @@ export function normalizeCodexEvent(
   }
   if (event.type === "response_item") {
     const payload = record(event.payload);
+    if (payload?.type === "message" && payload.channel === "analysis")
+      return [
+        diagnostic(
+          "redacted_event",
+          "Provider reasoning content is intentionally not imported",
+          undefined,
+          context,
+        ),
+      ];
     if (payload?.type === "message")
       return normalizeCodexEvent({ ...payload, type: "message" }, context);
     if (payload?.type === "function_call" || payload?.type === "custom_tool_call") {

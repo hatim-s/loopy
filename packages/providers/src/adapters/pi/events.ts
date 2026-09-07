@@ -120,21 +120,17 @@ export function normalizePiEvent(
   }
   if (type === "message_end") {
     const content = text(payload.content);
-    const events: TraceEvent[] = [];
-    if (content)
-      events.push(
-        base("provider.message", { role: payload.role === "user" ? "user" : "assistant", content }),
-      );
-    const counters = usage(payload.usage);
-    if (counters) events.push(base("provider.usage", { usage: counters }));
-    // Keep the single-event normalizer predictable; usage is represented on the
-    // message only when callers consume stream normalization below.
+    // Stream normalization emits usage once, independently of visible text.
     return {
-      event: events[0],
-      diagnostics:
-        counters && events.length === 0
-          ? [diagnostic("lossy_event", "Pi usage was present without visible message text.", type)]
-          : [],
+      ...(content
+        ? {
+            event: base("provider.message", {
+              role: payload.role === "user" ? "user" : "assistant",
+              content,
+            }),
+          }
+        : {}),
+      diagnostics: [],
     };
   }
   if (type === "tool_execution_start") {
