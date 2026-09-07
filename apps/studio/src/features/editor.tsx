@@ -3,6 +3,7 @@ import type {
   ApprovalNode,
   JoinNode,
   RouteNode,
+  ShellNode,
   TransformNode,
   VerifyNode,
   WorkflowDefinition,
@@ -292,6 +293,7 @@ type EditorNode = Node<EditorNodeData, "workflow">;
 
 const kindColors: Record<WorkflowNode["kind"], string> = {
   agent: "#f3a946",
+  shell: "#56c8bf",
   verify: "#56c897",
   approval: "#d9a7ff",
   route: "#80b8ff",
@@ -308,6 +310,7 @@ function nodeSubtitle(node: WorkflowNode): string {
   if (node.kind === "route")
     return node.defaultRoute ? `default → ${node.defaultRoute}` : "conditional branch";
   if (node.kind === "join") return `${node.policy} / ${node.outputMode}`;
+  if (node.kind === "shell") return `${node.stages.length} Bash stages`;
   return node.operation;
 }
 
@@ -490,6 +493,7 @@ function NodeInspector({
           multiline
         />
         {node.kind === "agent" ? <AgentFields node={node} update={update} /> : null}
+        {node.kind === "shell" ? <ShellFields node={node} update={update} /> : null}
         {node.kind === "verify" ? <VerifyFields node={node} update={update} /> : null}
         {node.kind === "approval" ? <ApprovalFields node={node} update={update} /> : null}
         {node.kind === "route" ? <RouteFields node={node} update={update} /> : null}
@@ -624,6 +628,66 @@ function AgentFields({
           }
         />
       </div>
+    </>
+  );
+}
+
+export function ShellFields({
+  node,
+  update,
+}: {
+  node: ShellNode;
+  update: (patch: Partial<ShellNode>) => void;
+}) {
+  return (
+    <>
+      <p className="muted">
+        Runs Bash on this computer in the run workspace. Each stage pipes stdout into the next.
+      </p>
+      {node.stages.map((stage, index) => (
+        <div key={`${node.id}-${index}`}>
+          <Field
+            label={`Stage ${index + 1}`}
+            value={stage}
+            multiline
+            onChange={(value) =>
+              update({
+                stages: node.stages.map((item, position) => (position === index ? value : item)),
+              })
+            }
+          />
+          {node.stages.length > 1 ? (
+            <button
+              type="button"
+              onClick={() =>
+                update({ stages: node.stages.filter((_, position) => position !== index) })
+              }
+            >
+              Remove stage {index + 1}
+            </button>
+          ) : null}
+        </div>
+      ))}
+      <button type="button" onClick={() => update({ stages: [...node.stages, "cat"] })}>
+        Add pipeline stage
+      </button>
+      <Field
+        label="Timeout in milliseconds"
+        value={String(node.timeoutMs)}
+        onChange={(value) => {
+          const timeoutMs = Number(value);
+          if (Number.isInteger(timeoutMs) && timeoutMs > 0) update({ timeoutMs });
+        }}
+      />
+      <Field
+        label="Maximum attempts"
+        value={String(node.retry.maxAttempts)}
+        onChange={(value) => {
+          const maxAttempts = Number(value);
+          if (Number.isInteger(maxAttempts) && maxAttempts > 0)
+            update({ retry: { ...node.retry, maxAttempts } });
+        }}
+      />
     </>
   );
 }
@@ -1397,6 +1461,18 @@ export function WorkflowEditorPage({
         requiredCapabilities: [],
         completionContract: "node_completion",
       };
+    else if (kind === "shell")
+      node = {
+        ...base,
+        kind,
+        stages: ["cat"],
+        inputBindings: {},
+        execution: "host",
+        timeoutMs: 120_000,
+        maxOutputBytes: 1_048_576,
+        retry: { maxAttempts: 1, backoffMs: 0, retryOn: [] },
+        sideEffect: true,
+      };
     else if (kind === "verify")
       node = {
         ...base,
@@ -1726,20 +1802,20 @@ function PageEditorLayout(props: {
           </button>
           {addMenu ? (
             <div className="editor-add-menu">
-              {(["agent", "verify", "approval", "route", "join", "transform"] as const).map(
-                (kind) => (
-                  <button
-                    type="button"
-                    key={kind}
-                    onClick={() => {
-                      props.onAddNode(kind);
-                      setAddMenu(false);
-                    }}
-                  >
-                    {kind}
-                  </button>
-                ),
-              )}
+              {(
+                ["agent", "shell", "route", "verify", "approval", "join", "transform"] as const
+              ).map((kind) => (
+                <button
+                  type="button"
+                  key={kind}
+                  onClick={() => {
+                    props.onAddNode(kind);
+                    setAddMenu(false);
+                  }}
+                >
+                  {kind}
+                </button>
+              ))}
             </div>
           ) : null}
         </div>

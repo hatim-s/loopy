@@ -216,6 +216,10 @@ function validateKindFields(
     case "agent":
       requiredField(node, index, "prompt", diagnostics, nonEmptyString);
       break;
+    case "shell":
+      requiredField(node, index, "stages", diagnostics, nonEmptyArray);
+      requiredField(node, index, "execution", diagnostics, (value) => value === "host");
+      break;
     case "verify":
       if (!hasOwn(node, "commands") && !hasOwn(node, "command")) {
         requiredField(node, index, "commands", diagnostics, nonEmptyArray);

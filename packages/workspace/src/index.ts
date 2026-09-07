@@ -204,3 +204,5 @@ export async function prepareWorkflowWorkspace(
       : async () => ({ removed: false, path: workingDirectory, reason: "Using project checkout." }),
   };
 }
+
+export { createShellExecutor, shellEnvironment } from "./shell";
