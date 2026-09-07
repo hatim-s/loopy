@@ -211,6 +211,7 @@ try {
       ...review.proposal.workflow,
       defaults: {
         ...review.proposal.workflow.defaults,
+        timeoutMs: 120000,
         provider,
         model,
         ...(provider === "codex" ? { reasoning: "low" } : {}),
