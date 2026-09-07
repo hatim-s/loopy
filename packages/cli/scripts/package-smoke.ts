@@ -102,6 +102,9 @@ async function main(): Promise<void> {
       throw new Error("Package files allowlist changed unexpectedly");
     console.log("package tarball smoke: installed CLI served Studio assets and enforced API auth");
   } finally {
+    const installedBin = join(projectDir, "node_modules", ".bin", "loopy");
+    if (existsSync(installedBin))
+      run(["server", "stop", "--project", projectDir], projectDir, installedBin);
     server?.kill();
     if (server) await server.exited;
     rmSync(packDir, { force: true, recursive: true });

@@ -11,6 +11,7 @@ import {
   createShellVerifier,
   prepareWorkflowWorkspace,
 } from "@loopy/workspace";
+import { handleMcpRequest } from "./mcp";
 
 export type ServerOptions = {
   projectDir: string;
@@ -102,10 +103,30 @@ export async function startServer(options: ServerOptions) {
       hostname: config.host,
       port: config.port,
       idleTimeout: 0,
+      maxRequestBodySize: 1_048_576,
       async fetch(request) {
         const url = new URL(request.url);
         if (url.origin !== origin) return new Response("Invalid host", { status: 403 });
         if (closing) return new Response("Server is stopping", { status: 503 });
+        if (url.pathname === "/mcp") {
+          const auth = await authenticated(request);
+          if (!auth.ok) return auth;
+          if (Number(request.headers.get("content-length") ?? 0) > 1_048_576)
+            return new Response("Request too large", { status: 413 });
+          return handleMcpRequest(request, async (path, body) => {
+            const response = await app.request(`/api/v1${path}`, {
+              method: body === undefined ? "GET" : "POST",
+              headers: {
+                Authorization: `Bearer ${config.token}`,
+                "Content-Type": "application/json",
+              },
+              body: body === undefined ? undefined : JSON.stringify(body),
+            });
+            const result: unknown = await response.json();
+            if (!response.ok) throw new Error(JSON.stringify(result));
+            return result;
+          });
+        }
         if (url.pathname === "/api/v1/server" || url.pathname === "/api/v1/server/stop") {
           const auth = await authenticated(request);
           if (!auth.ok) return auth;
@@ -183,3 +204,5 @@ export async function startServer(options: ServerOptions) {
   }
   return { url: origin, token: config.token, projectDir, runtime, storage, stop };
 }
+
+export { startMcpStdio } from "./mcp";

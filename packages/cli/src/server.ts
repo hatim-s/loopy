@@ -80,7 +80,11 @@ export async function serverRequest(state: ServerState, path: string, body?: unk
   if (!response.ok) throw new Error(JSON.stringify(result));
   return result;
 }
-export async function serverCommand(args: readonly string[], studioDir: string): Promise<number> {
+export async function serverCommand(
+  args: readonly string[],
+  studioDir: string,
+  report: (text: string) => void = console.log,
+): Promise<number> {
   const project = realpathSync(option(args, "--project") ?? process.cwd());
   const command = args[1] ?? "status";
   const current = await runningServer(project);
@@ -90,7 +94,7 @@ export async function serverCommand(args: readonly string[], studioDir: string):
     projectDir: project,
   });
   if (command === "status") {
-    console.log(
+    report(
       JSON.stringify(
         current
           ? { running: true, ...publicState(current) }
@@ -100,7 +104,7 @@ export async function serverCommand(args: readonly string[], studioDir: string):
     return current ? 0 : 1;
   }
   if (command === "logs") {
-    console.log(resolve(project, ".loopy/server.log"));
+    report(resolve(project, ".loopy/server.log"));
     return 0;
   }
   if (command === "stop" || command === "restart") {
@@ -116,13 +120,13 @@ export async function serverCommand(args: readonly string[], studioDir: string):
       throw new Error("Server owner is alive but unavailable; no signal was sent.");
     }
     if (command === "stop") {
-      console.log("Loopy server stopped.");
+      report("Loopy server stopped.");
       return 0;
     }
   }
   if (command === "start" || command === "restart") {
     if (current && command === "start") {
-      console.log(JSON.stringify(publicState(current)));
+      report(JSON.stringify(publicState(current)));
       return 0;
     }
     const previous = readState(project);
@@ -167,7 +171,7 @@ export async function serverCommand(args: readonly string[], studioDir: string):
       if (spawnError) throw spawnError;
       const state = await runningServer(project);
       if (state) {
-        console.log(JSON.stringify(publicState(state)));
+        report(JSON.stringify(publicState(state)));
         return 0;
       }
       if (child.exitCode !== null) break;
@@ -209,7 +213,7 @@ export async function serverCommand(args: readonly string[], studioDir: string):
     };
     process.once("SIGTERM", shutdown);
     process.once("SIGINT", shutdown);
-    console.log(`Loopy server listening at ${server.url}`);
+    report(`Loopy server listening at ${server.url}`);
     return 0;
   }
   throw new Error(
