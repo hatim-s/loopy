@@ -98,6 +98,7 @@ export function RunConsole({
         ) : null}
       </header>
       <ApprovalControls
+        canDecide={run?.status === "running"}
         attempts={(run?.attempts ?? []).map((attempt) => ({
           ...attempt,
           attemptId: attempt.attemptId ?? attempt.id,

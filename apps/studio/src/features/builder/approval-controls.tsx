@@ -4,10 +4,12 @@ import type { DebuggerEvent } from "../types";
 export function ApprovalControls({
   attempts,
   events,
+  canDecide,
   onDecision,
 }: {
   attempts: readonly { nodeId: string; attemptId: string; status: string }[];
   events: readonly DebuggerEvent[];
+  canDecide: boolean;
   onDecision: (
     nodeId: string,
     attemptId: string,
@@ -37,16 +39,17 @@ export function ApprovalControls({
           <strong>
             {typeof message === "string" ? message : `Approval needed for ${attempt.nodeId}`}
           </strong>
+          {!canDecide ? <span>Resume the run before deciding.</span> : null}
           <button
             type="button"
-            disabled={Boolean(pending)}
+            disabled={!canDecide || Boolean(pending)}
             onClick={() => void decide(attempt.nodeId, attempt.attemptId, "approved")}
           >
             Approve step
           </button>
           <button
             type="button"
-            disabled={Boolean(pending)}
+            disabled={!canDecide || Boolean(pending)}
             onClick={() => void decide(attempt.nodeId, attempt.attemptId, "rejected")}
           >
             Reject step

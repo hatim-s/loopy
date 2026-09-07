@@ -629,6 +629,7 @@ function RunDebugger({ api, runId }: { api?: ApiClient; runId: string }) {
       {result.error ? <ErrorState message={result.error} /> : null}
       {message ? <ErrorState message={message} /> : null}
       <ApprovalControls
+        canDecide={state.status === "live"}
         attempts={state.attempts}
         events={state.events}
         onDecision={(nodeId, attemptId, decision) =>
@@ -690,7 +691,13 @@ export function RunsPage({ api }: StudioPageProps) {
           <select
             id={selectId}
             value={run.id}
-            onChange={(event) => setSelectedRun(event.target.value)}
+            onChange={(event) => {
+              const runId = event.target.value;
+              setSelectedRun(runId);
+              const url = new URL(window.location.href);
+              url.searchParams.set("runId", runId);
+              window.history.replaceState(window.history.state, "", url);
+            }}
           >
             {runs.map((entry) => (
               <option key={entry.id} value={entry.id}>
