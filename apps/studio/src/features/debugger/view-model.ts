@@ -168,7 +168,7 @@ export function legalControls(status: StudioStatus, selectedAttempt?: NodeAttemp
       (status === "failed" || status === "completed" || status === "paused") && failedAttempt,
     replay: status === "completed" || status === "failed" || status === "paused",
     fork:
-      Boolean(selectedAttempt) &&
+      selectedAttempt?.status === "succeeded" &&
       (status === "completed" || status === "failed" || status === "paused"),
   };
 }

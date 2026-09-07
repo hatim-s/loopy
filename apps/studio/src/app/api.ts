@@ -196,8 +196,18 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
         credentials: "include",
         headers,
       });
-      if (!response.ok)
-        throw new ApiError(response.status, response.statusText || "Request failed");
+      if (!response.ok) {
+        const body: unknown = await response.json().catch(() => undefined);
+        const detail = body && typeof body === "object" && "error" in body ? body.error : undefined;
+        const message =
+          detail &&
+          typeof detail === "object" &&
+          "message" in detail &&
+          typeof detail.message === "string"
+            ? detail.message
+            : response.statusText || "Request failed";
+        throw new ApiError(response.status, message);
+      }
       if (response.status === 204) return undefined as T;
       return (await response.json()) as T;
     },

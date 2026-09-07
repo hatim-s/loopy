@@ -541,19 +541,25 @@ export function RunControls({
   api,
   forkSupported = false,
 }: RunControlsProps) {
+  const selectedEvent = state.events.find(
+    (event) => (event.eventId ?? event.id) === state.selectedEventId,
+  );
   const selectedAttempt = state.selectedAttemptId
     ? state.attempts.find((attempt) => attempt.attemptId === state.selectedAttemptId)
     : state.selectedNodeId
       ? state.attempts.filter((attempt) => attempt.nodeId === state.selectedNodeId).at(-1)
-      : undefined;
+      : state.attempts.find((attempt) => attempt.attemptId === selectedEvent?.attemptId);
   const controls = legalControls(state.status, selectedAttempt);
-  controls.fork = controls.fork && forkSupported;
+  controls.fork =
+    controls.fork && forkSupported && (!selectedEvent || selectedEvent.type === "node.completed");
   const command = (name: "pause" | "resume" | "cancel" | "retry" | "fork") => {
     const body =
       name === "retry"
         ? { nodeId: selectedAttempt?.nodeId }
         : name === "fork"
-          ? { checkpointEventId: state.selectedEventId }
+          ? selectedEvent
+            ? { checkpointEventId: state.selectedEventId }
+            : { nodeId: selectedAttempt?.nodeId }
           : {};
     const descriptor: ApiMutationDescriptor = {
       kind: "mutation",

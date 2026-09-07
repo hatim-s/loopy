@@ -1,4 +1,5 @@
 import "@radix-ui/themes/styles.css";
+import "@xyflow/react/dist/style.css";
 import { Theme } from "@radix-ui/themes";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";

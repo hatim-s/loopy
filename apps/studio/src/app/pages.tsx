@@ -606,10 +606,12 @@ function RunDebugger({ api, runId }: { api?: ApiClient; runId: string }) {
   const command = async (descriptor: { endpoint: string; method: string; body?: unknown }) => {
     if (!api) return;
     try {
-      await api.request(descriptor.endpoint, {
+      const result = await api.request<{ id?: string }>(descriptor.endpoint, {
         method: descriptor.method,
         body: JSON.stringify(descriptor.body ?? {}),
       });
+      if (descriptor.endpoint.endsWith("/fork") && result.id)
+        window.location.assign(`/runs?runId=${encodeURIComponent(result.id)}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     }
@@ -631,6 +633,7 @@ function RunDebugger({ api, runId }: { api?: ApiClient; runId: string }) {
         }
       />
       <RunControls
+        forkSupported={Boolean(api)}
         state={state}
         onCommand={(descriptor) => void command(descriptor)}
         onReplay={() => void replayEvents(state.events, dispatchEvent)}

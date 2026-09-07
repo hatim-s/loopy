@@ -67,7 +67,7 @@ describe("Studio debugger view models", () => {
     });
     expect(
       legalControls("paused", { attemptId: "a", nodeId: "n", attempt: 1, status: "failed" }),
-    ).toMatchObject({ pause: false, resume: true, retryFailedNode: true, fork: true });
+    ).toMatchObject({ pause: false, resume: true, retryFailedNode: true, fork: false });
     expect(
       legalControls("completed", { attemptId: "a", nodeId: "n", attempt: 1, status: "succeeded" })
         .retryFailedNode,
