@@ -135,6 +135,7 @@
         "@loopy/runtime": "workspace:*",
         "@loopy/storage": "workspace:*",
         "@loopy/tools": "workspace:*",
+        "@loopy/tracing": "workspace:*",
         "@loopy/workspace": "workspace:*",
         "@modelcontextprotocol/sdk": "1.30.0",
         "zod": "4.4.3",

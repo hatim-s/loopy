@@ -10,6 +10,7 @@ import { createDefaultProviderRegistry } from "@loopy/providers";
 import { createProviderExecutor, type ProviderExecutor, RuntimeScheduler } from "@loopy/runtime";
 import { openStorage, SqliteRuntimeStore } from "@loopy/storage";
 import { createToolRegistry } from "@loopy/tools";
+import { decodeTraceJsonl } from "@loopy/tracing";
 import {
   createShellExecutor,
   createShellVerifier,
@@ -107,6 +108,11 @@ export async function startServer(options: ServerOptions) {
     startWithMode(WorkflowDefinitionSchema.parse(definition), input);
   const extraction = createExtractionService(storage);
   const app = createLocalApi({
+    importTrace(content) {
+      const result = decodeTraceJsonl(content, { rejectDiagnostics: true });
+      store.appendTraceEvents(result.events);
+      return { events: result.events.length, lines: result.lines };
+    },
     importSession: (input) => storage.runtime.importCanonicalSession(input),
     extractSession: (id) => extraction.extract(id),
     storage,

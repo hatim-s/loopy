@@ -421,6 +421,17 @@ async function traceCommand(args: readonly string[], deps: CliDependencies): Pro
     throw new Error(
       `trace ${action} requires ${action === "export" ? "a run ID" : "a JSONL file"}`,
     );
+  if (action === "import" && !deps.storageFactory) {
+    const remote = await runningServer(projectDir(args));
+    if (remote) {
+      const result = await serverRequest(remote, "/traces/import", {
+        content: readFileSync(resolve(fileOrRun), "utf8"),
+      });
+      if (jsonOutput(args)) printJson(result);
+      else console.log(`imported ${result.events} trace event(s)`);
+      return 0;
+    }
+  }
   const storage = await storageFor(args, deps, action === "export");
   try {
     const runtimeStore = new SqliteRuntimeStore(storage);

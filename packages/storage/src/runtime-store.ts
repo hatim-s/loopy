@@ -871,9 +871,12 @@ export class SqliteRuntimeStore implements RuntimeStore {
     return row ? runFromRow(row) : undefined;
   }
   async listRuns(): Promise<RuntimeRun[]> {
-    return (this.db.query<Row, []>("SELECT * FROM runs ORDER BY created_at,id").all() as Row[]).map(
-      runFromRow,
-    );
+    // Imported traces remain in repository history but have no executable runtime state.
+    return (
+      this.db
+        .query<Row, []>("SELECT * FROM runs WHERE runtime_json IS NOT NULL ORDER BY created_at,id")
+        .all() as Row[]
+    ).map(runFromRow);
   }
   async listAttempts(runId: string): Promise<RuntimeAttempt[]> {
     return (

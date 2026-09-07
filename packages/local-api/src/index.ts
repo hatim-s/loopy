@@ -94,6 +94,7 @@ export type ScheduleCoordinator = (input: {
   | "cancel_previous";
 export type LocalApiOptions = {
   tools?: ToolRegistry;
+  importTrace?: (content: string) => { events: number; lines: number };
   importSession?: (input: CanonicalSessionImportInput) => ImportedSessionRecord;
   extractSession?: (importId: string) => Promise<ExtractionJobRecord>;
   storage: LocalApiStorage;
@@ -680,6 +681,19 @@ export function createLocalApi(options: LocalApiOptions): Hono {
         configurationError: true,
         diagnostic: "Probe failed",
       });
+    }
+  });
+  api.post("/traces/import", async (c) => {
+    if (!options.importTrace) capability("Trace import is not configured");
+    const body = await jsonBody(c, maxBodyBytes);
+    try {
+      return c.json(options.importTrace(requiredString(body, "content")), 201);
+    } catch (error) {
+      throw new ApiError(
+        400,
+        "invalid_trace",
+        error instanceof Error ? error.message : String(error),
+      );
     }
   });
   api.post("/sessions", async (c) => {
