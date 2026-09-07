@@ -1,7 +1,9 @@
 import type { ExtractionProposal } from "@loopy/contracts";
+import { TraceEventSchema } from "@loopy/contracts";
 import { compileWorkflow, type WorkflowDiagnostic } from "@loopy/runtime";
 import type { DeterministicExtractionInput } from "./prompt.ts";
 import { type ProposalDiagnostic, parseExtractionProposal } from "./proposal.ts";
+import { observedCheck, PROJECT_CHECKS } from "./verification.ts";
 
 export type ProposalApproval = "approved" | "draft" | "rejected";
 
@@ -55,7 +57,7 @@ function commandLine(command: string, args: readonly string[]): string {
   return [command, ...args].join(" ").trim().toLowerCase();
 }
 
-const ALLOWED_VERIFIER_COMMANDS = new Set(["bun test", "bun run lint", "bun run typecheck"]);
+const ALLOWED_VERIFIER_COMMANDS = new Set(PROJECT_CHECKS.keys());
 const ALLOWED_VERIFIER_CHECKS = new Set(["test", "tests", "lint", "typecheck"]);
 
 function verifierDiagnostics(
@@ -120,6 +122,11 @@ function verifierDiagnostics(
         .map((eventId) => sourceEventsById.get(eventId))
         .find((event) => {
           if (!event || typeof event.type !== "string") return false;
+          if (event.type === "tool.requested") {
+            const parsed = TraceEventSchema.safeParse(event);
+            const command = parsed.success ? observedCheck(parsed.data) : undefined;
+            return Boolean(command && PROJECT_CHECKS.has(command));
+          }
           if (event.type !== "verification.started" && event.type !== "verification.result")
             return false;
           const payload = isRecord(event.payload) ? event.payload : undefined;
@@ -195,7 +202,27 @@ function policyDiagnostics(proposal: ExtractionProposal): ProposalDiagnostic[] {
 function sideEffectDiagnostics(proposal: ExtractionProposal): ProposalDiagnostic[] {
   if (proposal.expectedSideEffects.length === 0) return [];
   const approval = proposal.workflow.policies.approval;
-  const hasBarrier = approval.requiredBefore.length > 0 || approval.sideEffectLabels.length > 0;
+  const incoming = new Set(proposal.workflow.edges.map((edge) => edge.target));
+  const pending = proposal.workflow.nodes
+    .filter((node) => !incoming.has(node.id))
+    .map((node) => node.id);
+  const seen = new Set<string>();
+  let unguardedExecution = false;
+  while (pending.length) {
+    const id = pending.pop()!;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const node = proposal.workflow.nodes.find((item) => item.id === id);
+    if (!node || node.kind === "approval") continue;
+    if (["agent", "verify", "shell"].includes(node.kind)) unguardedExecution = true;
+    pending.push(
+      ...proposal.workflow.edges.filter((edge) => edge.source === id).map((edge) => edge.target),
+    );
+  }
+  const graphBarrier =
+    proposal.workflow.nodes.some((node) => node.kind === "approval") && !unguardedExecution;
+  const hasBarrier =
+    graphBarrier || approval.requiredBefore.length > 0 || approval.sideEffectLabels.length > 0;
   if (hasBarrier) return [];
   return [
     {
