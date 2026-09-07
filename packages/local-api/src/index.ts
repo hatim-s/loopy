@@ -27,6 +27,7 @@ import type {
   Storage,
   WorkflowVersionRecord,
 } from "@loopy/storage";
+import { ToolInstallError, type ToolRegistry } from "@loopy/tools";
 import type { Context } from "hono";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
@@ -86,6 +87,7 @@ export type ScheduleCoordinator = (input: {
   | "queue"
   | "cancel_previous";
 export type LocalApiOptions = {
+  tools?: ToolRegistry;
   storage: LocalApiStorage;
   startWorkflow?: RuntimeScheduler["start"];
   runtime?: RuntimeScheduler;
@@ -602,6 +604,21 @@ export function createLocalApi(options: LocalApiOptions): Hono {
     );
   });
   api.get("/health", (c) => c.json({ ok: true, version: "v1" }));
+  api.get("/tools", (c) => c.json({ tools: options.tools?.list() ?? [] }));
+  api.post("/tools/:id/install", async (c) => {
+    if (!options.tools) capability("CLI installation is not configured");
+    try {
+      return c.json(await options.tools.install(c.req.param("id")));
+    } catch (error) {
+      if (error instanceof ToolInstallError)
+        throw new ApiError(
+          error.code === "unknown_tool" ? 404 : error.code === "install_busy" ? 409 : 422,
+          error.code,
+          error.message,
+        );
+      throw error;
+    }
+  });
   api.get("/providers", async (c) => {
     if (!registry)
       return c.json({

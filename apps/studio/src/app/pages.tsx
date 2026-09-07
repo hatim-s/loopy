@@ -10,6 +10,7 @@ import {
   ProviderCapabilityList,
   RunControls,
 } from "../features";
+import { ToolLibrary } from "../features/builder/tool-library";
 import type { GraphInputEdge, GraphInputNode } from "../features/debugger";
 import { createDebuggerState, debuggerReducer, replayEvents } from "../features/debugger";
 import { fallbackWorkflow } from "../features/editor";
@@ -82,7 +83,8 @@ export function ProvidersPage({ api }: StudioPageProps) {
   );
   const capabilities = result.value?.capabilities ?? [];
   return (
-    <PageFrame title="Provider connections" eyebrow="Build / providers">
+    <PageFrame title="Tools and providers" eyebrow="Build / providers">
+      {api ? <ToolLibrary api={api} /> : null}
       {result.loading ? <LoadingState label="Loading provider connections" /> : null}
       {result.error ? <ErrorState message={result.error} /> : null}
       {!result.loading && !result.error ? (

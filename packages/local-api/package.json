@@ -15,6 +15,7 @@
     "@loopy/runtime": "workspace:*",
     "@loopy/scheduler": "workspace:*",
     "@loopy/storage": "workspace:*",
-    "hono": "4.9.6"
+    "hono": "4.9.6",
+    "@loopy/tools": "workspace:*"
   }
 }
