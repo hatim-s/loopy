@@ -83,6 +83,7 @@ try {
   if (resumeProject) {
     const previous = await Bun.file(resolve(project, "acceptance.json")).json();
     Object.assign(evidence, previous, { status: "running" });
+    delete evidence.error;
     review = await api<Review>(`/extractions/${previous.extractionJobId}`);
     job = review.job;
   } else {
@@ -295,6 +296,7 @@ try {
   });
   assert.equal(verification.exitCode, 0, verification.stderr.toString());
   evidence.status = "passed";
+  delete evidence.error;
 } catch (error) {
   evidence.status = error instanceof ReviewRequired ? "awaiting_review" : "failed";
   evidence.error = error instanceof Error ? error.message : String(error);

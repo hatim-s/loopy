@@ -21,6 +21,8 @@ export async function runProductRecovery(options: {
     resolve(project, "index.html"),
     "<html><head></head><body>Acceptance</body></html>",
   );
+  const git = Bun.spawnSync(["git", "init", "-q"], { cwd: project });
+  assert.equal(git.exitCode, 0, git.stderr.toString());
   let server = await startServer({
     projectDir: project,
     studioDir: project,
@@ -144,7 +146,11 @@ export async function runProductRecovery(options: {
       const failed = await server.runtime.wait(started.runId);
       assert.equal(failed.run.status, "failed");
       const agentAttempt = failed.attempts.find((a) => a.nodeId === agent);
-      assert.equal(agentAttempt?.status, "succeeded");
+      assert.equal(
+        agentAttempt?.status,
+        "succeeded",
+        agentAttempt?.error ?? "Agent attempt did not succeed",
+      );
       assert.equal(agentAttempt?.output?.message, text === "pass" ? "GREEN" : "RED");
       assert.equal(
         failed.attempts.find((a) => a.nodeId === (text === "pass" ? green : red))?.output?.stdout,
