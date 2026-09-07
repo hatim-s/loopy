@@ -41,7 +41,7 @@ import {
   type ScheduleStore,
   scheduleCommand,
 } from "./schedule";
-import { runningServer, serverCommand, serverRequest } from "./server";
+import { projectsCommand, runningServer, serverCommand, serverRequest } from "./server";
 
 export { doctorCommand, formatDoctor, runDoctor } from "./doctor";
 
@@ -70,6 +70,7 @@ const COMMANDS = [
   "ui",
   "server",
   "mcp",
+  "projects",
   "schedule",
   "cleanup",
   "workflow",
@@ -124,6 +125,7 @@ Commands:
     "  loopy ui [--project <path>] [--port <port>] [--no-open]  (connect to the background server)",
     "  loopy server <start|serve|status|stop|restart|logs|enable-autostart|disable-autostart> [--project <path>] [--port <port>]",
     "  loopy mcp [--project <path>]  (stdio MCP access to the running server)",
+    "  loopy projects <list|open /absolute/path|forget id> [--project <path>]",
   );
 }
 
@@ -974,6 +976,7 @@ async function validateProvider(args: readonly string[], deps: CliDependencies):
 
 async function dispatch(args: readonly string[], deps: CliDependencies): Promise<number> {
   const command = args[0];
+  if (command === "projects") return projectsCommand(args, studioPath(args, deps.ui ?? {}));
   if (command === "mcp") {
     const server = await runningServer(projectDir(args));
     if (!server)
@@ -1270,6 +1273,7 @@ export function main(
       "ui",
       "server",
       "mcp",
+      "projects",
       "schedule",
       "cleanup",
       "providers",

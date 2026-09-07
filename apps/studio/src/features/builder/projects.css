@@ -1,0 +1,117 @@
+.project-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 240px;
+  padding: 8px 10px;
+  color: var(--studio-text);
+  background: var(--studio-surface);
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.project-trigger span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-dialog {
+  width: min(680px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  padding: 24px;
+  color: var(--studio-text);
+  background: var(--studio-surface);
+  border: 1px solid var(--studio-border-strong);
+  border-radius: 12px;
+  box-shadow: 0 20px 80px #0009;
+}
+.project-dialog::backdrop {
+  background: #0009;
+}
+.project-dialog header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.project-dialog h2 {
+  margin: 0;
+  font-size: 20px;
+}
+.project-dialog p {
+  color: var(--studio-text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.project-dialog [role="alert"] {
+  color: var(--studio-red);
+}
+.project-dialog label {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+.project-dialog input {
+  min-width: 0;
+  flex: 1;
+  background: var(--studio-bg);
+  color: var(--studio-text);
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+  padding: 10px;
+}
+.project-dialog button {
+  background: var(--studio-surface-hover);
+  color: var(--studio-text);
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.project-dialog button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.project-path,
+.project-actions {
+  display: flex;
+  gap: 8px;
+}
+.project-dialog ul {
+  list-style: none;
+  padding: 0;
+  margin: 24px 0 0;
+}
+.project-dialog li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 0;
+  border-top: 1px solid var(--studio-border);
+}
+.project-dialog li > div {
+  min-width: 0;
+}
+.project-dialog li small {
+  display: block;
+  overflow-wrap: anywhere;
+  margin: 6px 0;
+  color: var(--studio-text-muted);
+}
+.project-dialog li span {
+  font-size: 11px;
+  color: var(--studio-text-muted);
+}
+.project-actions {
+  flex-direction: column;
+  flex-shrink: 0;
+}
+@media (max-width: 600px) {
+  .project-path,
+  .project-dialog li {
+    flex-direction: column;
+  }
+  .project-trigger {
+    max-width: 150px;
+  }
+}

@@ -9,8 +9,9 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { homedir } from "node:os";
 import { resolve } from "node:path";
-import { startServer } from "@loopy/server";
+import { createProjectCatalog, type ProjectManager, projectPath, startServer } from "@loopy/server";
 import { createLoginService } from "./login-service";
 
 type ServerState = { pid: number; url: string; token: string; projectDir: string };
@@ -80,6 +81,63 @@ export async function serverRequest(state: ServerState, path: string, body?: unk
   const result = await response.json();
   if (!response.ok) throw new Error(JSON.stringify(result));
   return result;
+}
+export function createProjectManager(
+  project: string,
+  studioDir: string,
+  home = process.env.LOOPY_HOME ?? resolve(homedir(), ".loopy"),
+): ProjectManager {
+  const catalog = createProjectCatalog(home);
+  const opening = new Map<string, ReturnType<ProjectManager["open"]>>();
+  return {
+    async list() {
+      const current = catalog.remember(project);
+      const projects = await Promise.all(
+        catalog.list().map(async (entry) => {
+          const state = await runningServer(entry.path).catch(() => undefined);
+          return {
+            ...entry,
+            current: entry.id === current.id,
+            running: !!state,
+            ...(state ? { url: state.url } : {}),
+          };
+        }),
+      );
+      return { current: current.id, projects };
+    },
+    open(path) {
+      catalog.remember(project);
+      const canonical = projectPath(path);
+      const existing = opening.get(canonical);
+      if (existing) return existing;
+      const operation = (async () => {
+        await serverCommand(["server", "start", "--project", canonical], studioDir, () => {});
+        const state = await runningServer(canonical);
+        if (!state) throw new Error("Project server did not become ready");
+        return { url: state.url, project: catalog.remember(canonical) };
+      })();
+      opening.set(canonical, operation);
+      void operation.finally(() => opening.delete(canonical)).catch(() => {});
+      return operation;
+    },
+    forget(id) {
+      catalog.forget(id);
+    },
+  };
+}
+export async function projectsCommand(args: readonly string[], studioDir: string) {
+  const project = projectPath(option(args, "--project") ?? process.cwd());
+  const manager = createProjectManager(project, studioDir);
+  const action = args[1] ?? "list";
+  if (action === "list") console.log(JSON.stringify(await manager.list()));
+  else if (action === "open" && args[2] && !args[2].startsWith("--"))
+    console.log(JSON.stringify(await manager.open(args[2])));
+  else if (action === "forget" && args[2] && !args[2].startsWith("--")) {
+    manager.forget(args[2]);
+    console.log("Project removed from the list. Its files and server remain available.");
+  } else
+    throw new Error("Usage: loopy projects <list|open /absolute/path|forget id> [--project path]");
+  return 0;
 }
 export async function serverCommand(
   args: readonly string[],
@@ -238,6 +296,7 @@ export async function serverCommand(
       studioDir,
       port: option(args, "--port") ? Number(option(args, "--port")) : undefined,
       onShutdown: cleanup,
+      projects: createProjectManager(project, studioDir),
     });
     writeFileSync(
       statePath(project),

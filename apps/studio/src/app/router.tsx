@@ -16,13 +16,14 @@ export type StudioRouterContext = { api: ApiClient; queryClient: QueryClient };
 
 const rootRoute = createRootRouteWithContext<StudioRouterContext>()({
   component: () => {
+    const { api } = rootRoute.useRouteContext();
     const editing = useLocation({
       select: (location) => /^\/workflows\/[^/]+\/edit$/.test(location.pathname),
     });
     return editing ? (
       <Outlet />
     ) : (
-      <StudioShell>
+      <StudioShell api={api}>
         <Outlet />
       </StudioShell>
     );

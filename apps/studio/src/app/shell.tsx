@@ -14,6 +14,8 @@ import {
 import { Link } from "@tanstack/react-router";
 import { type PropsWithChildren, type ReactNode, useId, useState } from "react";
 import { IconButton } from "../components/primitives/icon-button";
+import { ProjectSwitcher } from "../features/builder/project-switcher";
+import type { ApiClient } from "./api";
 
 type NavItem = { to: string; label: string; icon: ReactNode; section: string };
 const navItems: NavItem[] = [
@@ -25,7 +27,7 @@ const navItems: NavItem[] = [
   { to: "/settings", label: "Settings", icon: <GearSix />, section: "System" },
 ];
 
-export function StudioShell({ children }: PropsWithChildren) {
+export function StudioShell({ children, api }: PropsWithChildren<{ api?: ApiClient }>) {
   const [collapsed, setCollapsed] = useState(false);
   const mainId = `main-${useId().replaceAll(":", "")}`;
   const sections = [...new Set(navItems.map((item) => item.section))];
@@ -88,11 +90,15 @@ export function StudioShell({ children }: PropsWithChildren) {
       </aside>
       <div className="shell-main">
         <header className="topbar">
-          <div className="topbar__context">
-            <span className="topbar__path">workspace</span>
-            <span className="topbar__slash">/</span>
-            <span className="topbar__current">local graph harness</span>
-          </div>
+          {api ? (
+            <ProjectSwitcher api={api} />
+          ) : (
+            <div className="topbar__context">
+              <span className="topbar__path">workspace</span>
+              <span className="topbar__slash">/</span>
+              <span className="topbar__current">local graph harness</span>
+            </div>
+          )}
           <div className="topbar__actions">
             <span className="topbar__hint">⌘ K to search</span>
             <span className="topbar__version">v0.1.0</span>
