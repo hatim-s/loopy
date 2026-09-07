@@ -55,6 +55,9 @@ export interface EvidenceLink {
 
 export interface ExtractionReviewModel {
   jobId?: string;
+  proposalHash?: string;
+  publishedWorkflow?: { workflowId: string; version: number };
+  resolutions?: { question: string; answer: string }[];
   importId: string;
   proposalId?: string;
   sourceLabel: string;

@@ -48,6 +48,13 @@ describe("Studio runtime normalizers", () => {
 
   it("projects the local API extraction record into an actionable review", () => {
     const review = normalizeExtractionReview({
+      proposalHash: "hash-1",
+      audit: {
+        publishedWorkflow: { workflowId: "graph-1", version: 2 },
+        reviewHistory: [
+          { resolutions: [{ question: "Which project?", answer: "Current project" }] },
+        ],
+      },
       job: { id: "job-1", importId: "import-1" },
       import: { provider: "codex", source: "session.jsonl", session: [] },
       proposal: {
@@ -60,6 +67,9 @@ describe("Studio runtime normalizers", () => {
       },
     });
     expect(review).toMatchObject({
+      proposalHash: "hash-1",
+      publishedWorkflow: { workflowId: "graph-1", version: 2 },
+      resolutions: [{ question: "Which project?", answer: "Current project" }],
       jobId: "job-1",
       importId: "import-1",
       proposalId: "proposal-1",

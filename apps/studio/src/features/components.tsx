@@ -1,4 +1,6 @@
-import { Handle, Position, ReactFlow } from "@xyflow/react";
+import { CursorClick, TerminalWindow } from "@phosphor-icons/react";
+import { Background, Controls, Handle, Position, ReactFlow } from "@xyflow/react";
+import { useState } from "react";
 import type { DebuggerState } from "./debugger/reducer.ts";
 import {
   buildDebuggerGraph,
@@ -8,6 +10,7 @@ import {
   legalControls,
   selectDebuggerDetails,
 } from "./debugger/view-model.ts";
+import { ExtractionEdits, type ReviewChanges } from "./extraction-edits";
 import type {
   ApiMutationDescriptor,
   ArtifactRef,
@@ -18,30 +21,21 @@ import type {
   StudioApiSeam,
 } from "./types.ts";
 
-const palette = {
-  bg: "#171717",
-  panel: "#202020",
-  border: "#3b3b3b",
-  text: "#f3f0e9",
-  muted: "#aaa49a",
-  amber: "#e9a23b",
-  red: "#ef6f61",
-  green: "#71c391",
-};
-
-const panelStyle = {
-  background: palette.panel,
-  border: `1px solid ${palette.border}`,
-  color: palette.text,
-  padding: 16,
-  fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-};
-
 function statusColor(status: string): string {
-  if (["supported", "completed", "succeeded", "ready"].includes(status)) return palette.green;
-  if (["degraded", "paused", "running"].includes(status)) return palette.amber;
-  if (["unavailable", "failed", "error"].includes(status)) return palette.red;
-  return palette.muted;
+  if (["supported", "completed", "succeeded", "ready", "approved"].includes(status))
+    return "var(--studio-green)";
+  if (["degraded", "paused", "running", "blocked", "blocked_approval"].includes(status))
+    return "var(--studio-amber)";
+  if (["unavailable", "failed", "error", "rejected"].includes(status)) return "var(--studio-red)";
+  return "var(--studio-text-muted)";
+}
+
+export function StatusBadge({ status }: { status: string }) {
+  return (
+    <span className="status-badge" style={{ color: statusColor(status) }}>
+      {status.replaceAll("_", " ")}
+    </span>
+  );
 }
 
 export interface ProviderCapabilityListProps {
@@ -49,7 +43,6 @@ export interface ProviderCapabilityListProps {
   status?: "loading" | "empty" | "error";
   error?: string;
 }
-
 export function ProviderCapabilityList({
   capabilities,
   status,
@@ -57,58 +50,48 @@ export function ProviderCapabilityList({
 }: ProviderCapabilityListProps) {
   if (status === "loading")
     return (
-      <section style={panelStyle} aria-busy="true">
+      <section className="panel" aria-busy="true">
         Loading provider capabilities
       </section>
     );
   if (status === "error")
     return (
-      <section style={panelStyle} role="alert">
+      <section className="panel" role="alert">
         Unable to load provider capabilities{error ? `: ${error}` : ""}
       </section>
     );
-  if (status === "empty" || capabilities.length === 0)
-    return <section style={panelStyle}>No provider capabilities reported</section>;
+  if (status === "empty" || !capabilities.length)
+    return <section className="panel">No provider capabilities reported</section>;
   return (
-    <section style={panelStyle}>
-      <h2 style={{ marginTop: 0, fontSize: 15 }}>Provider capability matrix</h2>
-      <table
-        aria-label="Provider capabilities"
-        style={{ width: "100%", borderCollapse: "collapse" }}
-      >
-        <thead>
-          <tr
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1.5fr 110px 2fr",
-              color: palette.muted,
-            }}
-          >
-            <th style={{ textAlign: "left" }}>Provider</th>
-            <th style={{ textAlign: "left" }}>Capability</th>
-            <th style={{ textAlign: "left" }}>Status</th>
-            <th style={{ textAlign: "left" }}>Reason</th>
-          </tr>
-        </thead>
-        <tbody>
-          {capabilities.map((item) => (
-            <tr
-              key={`${item.provider}:${item.capability}`}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1.5fr 110px 2fr",
-                borderTop: `1px solid ${palette.border}`,
-                paddingTop: 7,
-              }}
-            >
-              <td>{item.provider}</td>
-              <td>{item.capability}</td>
-              <td style={{ color: statusColor(item.status) }}>{item.status}</td>
-              <td style={{ color: palette.muted }}>{item.reason ?? item.source ?? ""}</td>
+    <section className="panel">
+      <div className="panel-heading">
+        <h2>Provider capabilities</h2>
+        <span className="panel-count">Runtime compatibility</span>
+      </div>
+      <div className="table-scroll">
+        <table className="capability-table" aria-label="Provider capabilities">
+          <thead>
+            <tr>
+              <th>Provider</th>
+              <th>Capability</th>
+              <th>Status</th>
+              <th>Reason</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {capabilities.map((item) => (
+              <tr key={`${item.provider}:${item.capability}`}>
+                <td>{item.provider}</td>
+                <td>{item.capability.replace(/([a-z])([A-Z])/g, "$1 $2")}</td>
+                <td>
+                  <StatusBadge status={item.status} />
+                </td>
+                <td>{item.reason ?? item.source ?? ""}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }
@@ -120,7 +103,6 @@ export interface ImportedSessionListProps {
   status?: "loading" | "empty" | "error";
   error?: string;
 }
-
 export function ImportedSessionList({
   sessions,
   selectedId,
@@ -130,22 +112,31 @@ export function ImportedSessionList({
 }: ImportedSessionListProps) {
   if (status === "loading")
     return (
-      <section style={panelStyle} aria-busy="true">
+      <section className="panel" aria-busy="true">
         Loading imported sessions
       </section>
     );
   if (status === "error")
     return (
-      <section style={panelStyle} role="alert">
+      <section className="panel" role="alert">
         Unable to load imported sessions{error ? `: ${error}` : ""}
       </section>
     );
-  if (status === "empty" || sessions.length === 0)
-    return <section style={panelStyle}>No imported sessions</section>;
+  if (status === "empty" || !sessions.length)
+    return (
+      <section className="panel details-empty">
+        <TerminalWindow size={32} />
+        <h2>No imported sessions</h2>
+        <p>Choose a trace file above to bring your completed work into Loopy.</p>
+      </section>
+    );
   return (
-    <section style={panelStyle}>
-      <h2 style={{ marginTop: 0, fontSize: 15 }}>Imported sessions</h2>
-      <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 7 }}>
+    <section className="panel">
+      <div className="panel-heading">
+        <h2>Imported sessions</h2>
+        <span className="panel-count">{sessions.length} available</span>
+      </div>
+      <ul className="session-list">
         {sessions.map((session) => {
           const lossinessCount =
             (session.lossiness?.redactedEventIds?.length ?? 0) +
@@ -154,31 +145,25 @@ export function ImportedSessionList({
             <li key={session.id}>
               <button
                 type="button"
+                className="session-row"
                 onClick={() => onSelect?.(session)}
                 aria-pressed={selectedId === session.id}
-                style={{
-                  width: "100%",
-                  textAlign: "left",
-                  color: palette.text,
-                  background: selectedId === session.id ? "#3a2d1c" : "transparent",
-                  border: `1px solid ${selectedId === session.id ? palette.amber : palette.border}`,
-                  padding: 10,
-                  cursor: "pointer",
-                }}
               >
-                <span style={{ display: "block" }}>{session.id}</span>
-                <span style={{ display: "block", color: palette.muted, fontSize: 12 }}>
-                  {session.provider} · {session.source}
+                <TerminalWindow className="session-row__icon" size={24} aria-hidden="true" />
+                <span className="session-row__copy">
+                  <strong>{session.source}</strong>
+                  <small>{session.provider}</small>
+                  <span className="session-row__id">{session.id}</span>
+                  <small
+                    style={{
+                      color: lossinessCount ? "var(--studio-amber)" : "var(--studio-green)",
+                    }}
+                  >
+                    {lossinessCount
+                      ? `Lossy import · ${lossinessCount} marker${lossinessCount === 1 ? "" : "s"}`
+                      : "Lossiness not reported"}
+                  </small>
                 </span>
-                {lossinessCount > 0 ? (
-                  <span style={{ display: "block", color: palette.amber, fontSize: 12 }}>
-                    Lossy import · {lossinessCount} marker{lossinessCount === 1 ? "" : "s"}
-                  </span>
-                ) : (
-                  <span style={{ display: "block", color: palette.green, fontSize: 12 }}>
-                    Lossiness not reported
-                  </span>
-                )}
               </button>
             </li>
           );
@@ -194,8 +179,8 @@ export interface ExtractionReviewProps {
   onApprove?: () => void;
   onReject?: () => void;
   actionsDisabled?: boolean;
+  onSaveReview?: (changes: ReviewChanges) => Promise<void>;
 }
-
 function proposalNodeNames(proposal: ExtractionReviewModel["proposal"]): string[] {
   const workflow =
     proposal && typeof proposal === "object" && "workflow" in proposal
@@ -214,38 +199,44 @@ function proposalNodeNames(proposal: ExtractionReviewModel["proposal"]): string[
       : "Unnamed node",
   );
 }
-
 export function ExtractionReview({
   model,
   onEvidenceSelect,
   onApprove,
   onReject,
   actionsDisabled,
+  onSaveReview,
 }: ExtractionReviewProps) {
+  const [reviewDirty, setReviewDirty] = useState(false);
+  const [selectedEvidence, setSelectedEvidence] = useState<EvidenceLink>();
   const nodeNames = proposalNodeNames(model.proposal);
   const blocked =
     model.status === "blocked" || model.status === "approved" || model.status === "rejected";
   return (
-    <section style={panelStyle}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 12,
-          alignItems: "baseline",
-        }}
-      >
-        <h2 style={{ marginTop: 0, fontSize: 15 }}>Extraction review</h2>
-        <span style={{ color: statusColor(model.status) }}>{model.status}</span>
+    <section className="panel">
+      <div className="panel-heading">
+        <h2>Extraction review</h2>
+        <StatusBadge status={model.status} />
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <section style={{ border: `1px solid ${palette.border}`, padding: 10 }}>
-          <h3 style={{ marginTop: 0, fontSize: 13 }}>Imported evidence</h3>
-          <p style={{ color: palette.muted, fontSize: 12 }}>{model.sourceLabel}</p>
-          {model.lossiness && (
-            <p style={{ color: palette.amber, fontSize: 12 }}>
-              Lossiness is preserved and must be considered before approval.
-            </p>
+      <div className="review-columns">
+        <section className="review-column">
+          <h3>Imported evidence</h3>
+          <p>{model.sourceLabel}</p>
+          {model.lossiness ? (
+            <details>
+              <summary>Import completeness</summary>
+              <p>
+                {model.lossiness.redactedEventIds?.length ?? 0} redacted events.{" "}
+                {Object.keys(model.lossiness.removedFields ?? {}).length} events with removed
+                fields.
+              </p>
+              {model.lossiness.notes?.map((note) => (
+                <p key={note}>{note}</p>
+              ))}
+              <pre>{JSON.stringify(model.lossiness, null, 2)}</pre>
+            </details>
+          ) : (
+            <p>The import does not report completeness metadata.</p>
           )}
           <ul>
             {model.evidence.map((link) => (
@@ -253,81 +244,90 @@ export function ExtractionReview({
                 {link.href ? (
                   <a
                     href={link.href}
-                    onClick={() => onEvidenceSelect?.(link)}
-                    style={{ color: palette.amber }}
+                    onClick={() => {
+                      setSelectedEvidence(link);
+                      onEvidenceSelect?.(link);
+                    }}
                   >
                     {link.label ?? link.evidenceId}
                   </a>
                 ) : (
                   <button
                     type="button"
-                    onClick={() => onEvidenceSelect?.(link)}
-                    style={{
-                      color: palette.amber,
-                      background: "transparent",
-                      border: 0,
-                      padding: 0,
-                      cursor: "pointer",
+                    className="text-button"
+                    onClick={() => {
+                      setSelectedEvidence(link);
+                      onEvidenceSelect?.(link);
                     }}
                   >
                     {link.label ?? link.evidenceId}
                   </button>
                 )}
-                {link.rationale ? (
-                  <span style={{ color: palette.muted }}> · {link.rationale}</span>
-                ) : null}
+                {link.rationale ? <p>{link.rationale}</p> : null}
               </li>
             ))}
           </ul>
         </section>
-        <section style={{ border: `1px solid ${palette.border}`, padding: 10 }}>
-          <h3 style={{ marginTop: 0, fontSize: 13 }}>Proposed workflow</h3>
+        <section className="review-column">
+          <h3>Proposed workflow</h3>
           {nodeNames.length ? (
             <ol>
-              {nodeNames.map((name) => (
-                <li key={`node-${name}`}>{name}</li>
+              {nodeNames.map((name, index) => (
+                <li key={`${index}-${name}`}>{name}</li>
               ))}
             </ol>
           ) : (
-            <pre style={{ overflow: "auto", fontSize: 11 }}>
-              {JSON.stringify(model.proposal, null, 2)}
-            </pre>
+            <pre>{JSON.stringify(model.proposal, null, 2)}</pre>
           )}
         </section>
       </div>
+      {selectedEvidence ? (
+        <details open className="review-evidence">
+          <summary>
+            Source evidence for {selectedEvidence.label ?? selectedEvidence.evidenceId}
+          </summary>
+          {selectedEvidence.eventIds.map((id) => {
+            const event = model.sourceEvents.find((event) => event.id === id);
+            return (
+              <div key={id}>
+                <small>{id}</small>
+                <pre>
+                  {event
+                    ? JSON.stringify(event, null, 2)
+                    : "This source event is unavailable in the imported trace."}
+                </pre>
+              </div>
+            );
+          })}
+        </details>
+      ) : null}
+      <ExtractionEdits
+        model={model}
+        disabled={actionsDisabled}
+        onSave={onSaveReview}
+        onDirty={setReviewDirty}
+      />
+      {reviewDirty ? <p>Save your review changes before approving this extraction.</p> : null}
       {model.warnings?.length ? (
-        <ul aria-label="Extraction warnings" style={{ color: palette.amber }}>
+        <ul className="review-warnings" aria-label="Extraction warnings">
           {model.warnings.map((warning) => (
             <li key={warning}>{warning}</li>
           ))}
         </ul>
       ) : null}
-      <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+      <div className="review-actions">
         <button
+          className="editor-primary-button"
           type="button"
           onClick={onApprove}
-          disabled={actionsDisabled || blocked}
-          style={{
-            color: palette.bg,
-            background: palette.amber,
-            border: 0,
-            padding: "8px 12px",
-            cursor: "pointer",
-          }}
+          disabled={actionsDisabled || blocked || reviewDirty}
         >
-          Approve extraction
+          Approve and publish graph
         </button>
         <button
           type="button"
           onClick={onReject}
-          disabled={actionsDisabled || blocked}
-          style={{
-            color: palette.text,
-            background: "transparent",
-            border: `1px solid ${palette.border}`,
-            padding: "8px 12px",
-            cursor: "pointer",
-          }}
+          disabled={actionsDisabled || model.status === "approved" || model.status === "rejected"}
         >
           Reject extraction
         </button>
@@ -368,84 +368,78 @@ export interface DebuggerGraphProps {
   state: DebuggerState;
   onNodeSelect?: (nodeId: string) => void;
 }
-
 function DebuggerNode({
   data,
 }: {
   data: { label: string; status: string; attemptCount: number; selected: boolean };
 }) {
   return (
-    <div
-      style={{
-        background: palette.bg,
-        border: `1px solid ${data.selected ? palette.amber : palette.border}`,
-        color: palette.text,
-        minWidth: 150,
-        padding: 10,
-      }}
-    >
+    <div className="debugger-node" data-selected={data.selected}>
       <Handle type="target" position={Position.Top} />
       <strong>{data.label}</strong>
-      <span style={{ display: "block", color: statusColor(data.status), fontSize: 11 }}>
-        {data.status} · {data.attemptCount} attempt{data.attemptCount === 1 ? "" : "s"}
-      </span>
+      <StatusBadge status={data.status} />
+      <small>
+        {data.attemptCount} attempt{data.attemptCount === 1 ? "" : "s"}
+      </small>
       <Handle type="source" position={Position.Bottom} />
     </div>
   );
 }
-
+const debuggerNodeTypes = { "debugger-node": DebuggerNode };
 export function DebuggerGraph({ nodes, edges, state, onNodeSelect }: DebuggerGraphProps) {
   const graph = buildDebuggerGraph(nodes, edges, state.attempts, state.selectedNodeId);
-  const nodeTypes = { "debugger-node": DebuggerNode };
   return (
-    <section
-      aria-label="Run graph"
-      style={{ height: 380, background: palette.bg, border: `1px solid ${palette.border}` }}
-    >
+    <section className="debugger-graph" aria-label="Run graph">
       <ReactFlow
         nodes={graph.nodes}
         edges={graph.edges}
-        nodeTypes={nodeTypes}
+        nodeTypes={debuggerNodeTypes}
         fitView
-        onNodeClick={(_event: unknown, node: { id: string }) => onNodeSelect?.(node.id)}
+        fitViewOptions={{ padding: 0.2 }}
+        minZoom={0.15}
+        nodesDraggable={false}
+        nodesConnectable={false}
+        onNodeClick={(_event, node) => onNodeSelect?.(node.id)}
         proOptions={{ hideAttribution: true }}
-      />
+      >
+        <Background color="var(--studio-border)" gap={28} size={1} />
+        <Controls showInteractive={false} />
+      </ReactFlow>
     </section>
   );
 }
-
 export interface EventTimelineProps {
   state: DebuggerState;
   onEventSelect?: (eventId: string) => void;
 }
-
 export function EventTimeline({ state, onEventSelect }: EventTimelineProps) {
   const items = buildTimeline(state.events, state.selectedEventId);
-  if (!items.length) return <section style={panelStyle}>No events yet</section>;
+  if (!items.length) return <section className="panel">No events yet</section>;
   return (
-    <section style={panelStyle} aria-label="Ordered event timeline">
-      <ol style={{ margin: 0, paddingLeft: 22 }}>
+    <section className="panel timeline-panel" aria-label="Ordered event timeline">
+      <div className="panel-heading">
+        <h2>Event timeline</h2>
+        <span className="panel-count">{items.length} events</span>
+      </div>
+      <ol className="timeline-list">
         {items.map((item) => (
-          <li
-            key={item.eventId}
-            style={{ padding: "6px 0", color: item.selected ? palette.amber : palette.text }}
-          >
+          <li key={item.eventId}>
             <button
               type="button"
+              className="timeline-event"
               onClick={() => onEventSelect?.(item.eventId)}
               aria-pressed={item.selected}
-              style={{
-                background: "transparent",
-                border: 0,
-                color: "inherit",
-                cursor: "pointer",
-                textAlign: "left",
-              }}
             >
-              <span style={{ color: palette.muted, marginRight: 8 }}>{item.sequence ?? "-"}</span>
-              {item.label}
-              {item.nodeId ? ` · node ${item.nodeId}` : ""}
-              {item.attemptId ? ` · attempt ${item.attemptId}` : ""}
+              <span className="timeline-sequence">{item.sequence ?? "-"}</span>
+              <span className="timeline-copy">
+                <strong>{item.label}</strong>
+                {item.nodeId ? (
+                  <small title={item.nodeId}>
+                    Node {item.nodeId.slice(0, 8)}
+                    {item.attemptId ? ` / Attempt ${item.attemptId.slice(0, 8)}` : ""}
+                  </small>
+                ) : null}
+              </span>
             </button>
           </li>
         ))}
@@ -453,60 +447,52 @@ export function EventTimeline({ state, onEventSelect }: EventTimelineProps) {
     </section>
   );
 }
-
 export interface AttemptDetailsProps {
   state: DebuggerState;
   artifacts?: readonly ArtifactRef[];
 }
-
 function ArtifactList({ artifacts }: { artifacts: readonly ArtifactRef[] }) {
   return (
     <div>
-      <h3 style={{ fontSize: 13 }}>Artifacts</h3>
+      <h3>Artifacts</h3>
       {artifacts.length ? (
         <ul>
           {artifacts.map((artifact) => (
             <li key={artifact.id ?? artifact.name}>
-              {artifact.href ? (
-                <a href={artifact.href} style={{ color: palette.amber }}>
-                  {artifact.name}
-                </a>
-              ) : (
-                artifact.name
-              )}
+              {artifact.href ? <a href={artifact.href}>{artifact.name}</a> : artifact.name}
               {artifact.sizeBytes === undefined ? "" : ` · ${artifact.sizeBytes} bytes`}
             </li>
           ))}
         </ul>
       ) : (
-        <p style={{ color: palette.muted }}>No artifacts</p>
+        <p>No artifacts</p>
       )}
     </div>
   );
 }
-
 export function AttemptDetails({ state, artifacts = state.artifacts }: AttemptDetailsProps) {
   const details = selectDebuggerDetails(state);
   if (!details.event && !details.attempt)
     return (
-      <section style={panelStyle}>Select a node, attempt, or event to inspect details</section>
+      <section className="panel details-empty">
+        <CursorClick size={32} aria-hidden="true" />
+        <h2>Follow the work</h2>
+        <p>Select a node, attempt, or event to inspect details</p>
+      </section>
     );
   return (
-    <section style={panelStyle} aria-label="Selected run details">
-      <h2 style={{ marginTop: 0, fontSize: 15 }}>Selected details</h2>
+    <section className="panel details-panel" aria-label="Selected run details">
+      <h2>Selected details</h2>
       {details.attempt && (
         <div>
           <p>
             <strong>Attempt:</strong> {details.attempt.attemptId}
           </p>
           <p>
-            <strong>Status:</strong>{" "}
-            <span style={{ color: statusColor(details.attempt.status) }}>
-              {details.attempt.status}
-            </span>
+            <strong>Status:</strong> <StatusBadge status={details.attempt.status} />
           </p>
           {details.attempt.error && (
-            <p role="alert" style={{ color: palette.red }}>
+            <p role="alert" style={{ color: "var(--studio-red)" }}>
               {details.attempt.error}
             </p>
           )}
@@ -514,9 +500,7 @@ export function AttemptDetails({ state, artifacts = state.artifacts }: AttemptDe
             details.attempt?.[field] !== undefined ? (
               <details key={field} open>
                 <summary>{field === "input" ? "Input" : "Output"}</summary>
-                <pre style={{ overflow: "auto", maxHeight: 320, fontSize: 12 }}>
-                  {JSON.stringify(details.attempt[field], null, 2)}
-                </pre>
+                <pre>{JSON.stringify(details.attempt[field], null, 2)}</pre>
               </details>
             ) : null,
           )}
@@ -526,9 +510,7 @@ export function AttemptDetails({ state, artifacts = state.artifacts }: AttemptDe
       {details.event && (
         <details open>
           <summary>Event {details.eventId}</summary>
-          <pre style={{ overflow: "auto", fontSize: 11 }}>
-            {JSON.stringify(details.event, null, 2)}
-          </pre>
+          <pre>{JSON.stringify(details.event, null, 2)}</pre>
         </details>
       )}
     </section>
@@ -582,11 +564,7 @@ export function RunControls({
     if (api) void api.mutate(descriptor);
   };
   return (
-    <div
-      role="toolbar"
-      aria-label="Run controls"
-      style={{ ...panelStyle, display: "flex", gap: 8, flexWrap: "wrap" }}
-    >
+    <div role="toolbar" aria-label="Run controls" className="run-controls">
       <button type="button" onClick={() => command("pause")} disabled={!controls.pause}>
         Pause
       </button>
@@ -611,7 +589,7 @@ export function RunControls({
         Fork from checkpoint
       </button>
       {!forkSupported ? (
-        <span role="note" style={{ color: palette.muted }}>
+        <span role="note" style={{ color: "var(--studio-text-muted)" }}>
           Fork unavailable: checkpoint storage is not implemented by this runtime.
         </span>
       ) : null}

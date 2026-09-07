@@ -4,7 +4,12 @@ export type ApiClient = {
   streamEvents(
     runId: string,
     onEvent: (event: Record<string, unknown>) => void,
-    options?: { afterSequence?: number; signal?: AbortSignal; onError?: (error: Error) => void },
+    options?: {
+      afterSequence?: number;
+      signal?: AbortSignal;
+      onError?: (error: Error) => void;
+      onConnectionChange?: (status: "connected" | "reconnecting" | "disconnected") => void;
+    },
   ): () => void;
 };
 
@@ -95,8 +100,14 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
             },
           );
           if (!response.ok)
-            throw new ApiError(response.status, response.statusText || "Stream failed");
+            throw new ApiError(
+              response.status,
+              response.status === 401
+                ? "Studio session expired. Reload Studio to reconnect to the local server."
+                : response.statusText || "Stream failed",
+            );
           if (!response.body) throw new Error("Stream response did not include a body");
+          streamOptions.onConnectionChange?.("connected");
           const reader = response.body.getReader();
           const decoder = new TextDecoder();
           let buffer = "";
@@ -141,7 +152,12 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
               break;
             }
           }
-          if (stopped || signal.aborted || reconnects >= maxReconnects) break;
+          if (stopped || signal.aborted) break;
+          if (reconnects >= maxReconnects) {
+            streamOptions.onConnectionChange?.("disconnected");
+            break;
+          }
+          streamOptions.onConnectionChange?.("reconnecting");
           reconnects += 1;
           await new Promise<void>((resolve) => {
             const delay = reconnectBaseMs * 2 ** (reconnects - 1);
@@ -158,9 +174,11 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
         } catch (error) {
           if (stopped || signal.aborted) break;
           if (reconnects >= maxReconnects) {
+            streamOptions.onConnectionChange?.("disconnected");
             streamOptions.onError?.(error instanceof Error ? error : new Error(String(error)));
             break;
           }
+          streamOptions.onConnectionChange?.("reconnecting");
           reconnects += 1;
           await new Promise<void>((resolve) => {
             const delay = reconnectBaseMs * 2 ** (reconnects - 1);
@@ -206,7 +224,12 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
           typeof detail.message === "string"
             ? detail.message
             : response.statusText || "Request failed";
-        throw new ApiError(response.status, message);
+        throw new ApiError(
+          response.status,
+          response.status === 401
+            ? "Studio session expired. Reload Studio to reconnect to the local server."
+            : message,
+        );
       }
       if (response.status === 204) return undefined as T;
       return (await response.json()) as T;

@@ -1026,3 +1026,13 @@ summary {
   color: var(--studio-text-muted);
   padding: 12px;
 }
+.review-network-permission {
+  display: flex;
+  align-items: start;
+  gap: 12px;
+  color: var(--studio-amber);
+}
+.review-network-permission input {
+  width: auto;
+  flex: none;
+}
