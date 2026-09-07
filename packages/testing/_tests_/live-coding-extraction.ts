@@ -14,6 +14,8 @@ import {
 import { encodeTraceJsonl } from "../../tracing/src/index";
 import { type AcceptanceProvider, acceptanceProviders } from "./product-recovery";
 
+class ReviewRequired extends Error {}
+
 const provider = process.argv[2] as AcceptanceProvider;
 const model = process.argv[3];
 if (process.env.LOOPY_LIVE_ACCEPTANCE !== "1")
@@ -195,10 +197,10 @@ try {
   }
   // Resolutions come from inspection of the saved proposal; they are never guessed.
   const resolutionPath = process.env.LOOPY_ACCEPTANCE_RESOLUTIONS;
-  assert(
-    resolutionPath,
-    `Review ${resolve(project, "extraction-review.json")} and supply LOOPY_ACCEPTANCE_RESOLUTIONS. No workflow was published.`,
-  );
+  if (!resolutionPath)
+    throw new ReviewRequired(
+      `Review ${resolve(project, "extraction-review.json")} and supply LOOPY_ACCEPTANCE_RESOLUTIONS. No workflow was published.`,
+    );
   const resolutions: unknown = await Bun.file(resolutionPath).json();
   const reviewed = await api<Review>(`/extractions/${job.id}/review`, {
     expectedProposalHash: review.proposalHash,
@@ -278,9 +280,9 @@ try {
   assert.equal(verification.exitCode, 0, verification.stderr.toString());
   evidence.status = "passed";
 } catch (error) {
-  evidence.status = "failed";
+  evidence.status = error instanceof ReviewRequired ? "awaiting_review" : "failed";
   evidence.error = error instanceof Error ? error.message : String(error);
-  throw error;
+  if (!(error instanceof ReviewRequired)) throw error;
 } finally {
   await Bun.write(resolve(project, "acceptance.json"), JSON.stringify(evidence, null, 2));
   console.log(JSON.stringify(evidence, null, 2));
