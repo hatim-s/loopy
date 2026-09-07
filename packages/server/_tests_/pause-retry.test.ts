@@ -32,10 +32,8 @@ for (const action of ["pause", "shutdown"] as const) {
       workflow.nodes = workflow.nodes.filter((node) => node.kind === "agent");
       workflow.inputs = [];
       workflow.edges = [];
-      const run = await server.runtime.start({
-        ...workflow,
-        nodes: workflow.nodes.map((node) => ({ ...node, retry: { maxAttempts: 2 } })),
-      });
+      workflow.defaults.retry = { maxAttempts: 2, backoffMs: 0, retryOn: [] };
+      const run = await server.runtime.start(workflow);
       for (let i = 0; i < 200 && !finish; i++) await Bun.sleep(5);
       expect(finish).toBeDefined();
       const stopping = action === "shutdown" ? server.stop() : server.runtime.pause(run.runId);

@@ -364,6 +364,8 @@ export function createProviderExecutor(options: ProviderExecutorOptions): Provid
           : {}),
         ...(context.policy ? { policy: context.policy as JsonObject } : {}),
       };
+      const model = context.node.model ?? configured.model;
+      const reasoning = context.node.reasoning ?? configured.reasoning;
       const request = {
         runId: context.runId,
         attemptId: context.attemptId,
@@ -371,8 +373,8 @@ export function createProviderExecutor(options: ProviderExecutorOptions): Provid
         input: context.input,
         prompt: promptFor(context.node, context.input),
         cwd: typeof configured.cwd === "string" ? configured.cwd : undefined,
-        model: typeof configured.model === "string" ? configured.model : undefined,
-        reasoning: typeof configured.reasoning === "string" ? configured.reasoning : undefined,
+        model: typeof model === "string" ? model : undefined,
+        reasoning: typeof reasoning === "string" ? reasoning : undefined,
         metadata,
         ...(context.policy ? { policy: context.policy } : {}),
         signal: context.signal,
