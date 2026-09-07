@@ -52,6 +52,36 @@ function adapter(
 const session: ProviderSession = { provider: "codex", sessionId: "session-1" };
 
 describe("provider executor", () => {
+  test("forwards direct agent model and reasoning overrides", async () => {
+    let received: ProviderRequest | undefined;
+    const executor = createProviderExecutor({
+      registry: createProviderRegistry([
+        adapter(async (request) => {
+          received = request;
+          return {
+            session: Promise.resolve(session),
+            events: (async function* () {})(),
+            cancel: async () => {},
+          };
+        }),
+      ]),
+    });
+    await executor.execute(
+      context({
+        node: {
+          id: "agent-1",
+          kind: "agent",
+          provider: "codex",
+          model: "chosen-model",
+          reasoning: "high",
+          configuration: { model: "old-model", reasoning: "low" },
+        },
+      }),
+    );
+    expect(received?.model).toBe("chosen-model");
+    expect(received?.reasoning).toBe("high");
+  });
+
   test("allocates unique monotonic sequences across sequential and parallel attempts", async () => {
     const stored: TraceEvent[] = [];
     let parallelAttemptsStarted = 0;

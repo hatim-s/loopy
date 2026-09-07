@@ -66,7 +66,13 @@ export type RuntimePlan = {
   edges: RuntimeEdge[];
   topology?: { startNodeIds?: string[]; terminalNodeIds?: string[]; topologicalOrder?: string[] };
   policies?: ProviderPolicy & { concurrency?: { maxParallel?: number } };
-  defaults?: { provider?: string; retry?: RetryPolicy };
+  defaults?: {
+    provider?: string;
+    model?: string;
+    reasoning?: string;
+    timeoutMs?: number;
+    retry?: RetryPolicy;
+  };
   execution?: { mode: "local" | "live"; provider?: string };
   [key: string]: unknown;
 };
@@ -420,11 +426,20 @@ function normalizePlan(
     workflowId?: string;
     topology?: RuntimePlan["topology"];
   };
-  const nodes = (source.nodes as unknown as Array<Record<string, unknown>>).map((node) => ({
-    ...node,
-    id: String(node.id ?? node.nodeId),
-    kind: String(node.kind),
-  })) as RuntimeNode[];
+  const nodes = (source.nodes as unknown as Array<Record<string, unknown>>).map((node) => {
+    const normalized: RuntimeNode = {
+      ...node,
+      id: String(node.id ?? node.nodeId),
+      kind: String(node.kind),
+    };
+    if (normalized.kind === "agent") {
+      for (const key of ["provider", "model", "reasoning", "timeoutMs", "retry"] as const) {
+        const effective = config(normalized, key) ?? source.defaults?.[key];
+        if (effective !== undefined) normalized[key] = effective;
+      }
+    }
+    return normalized;
+  });
   return {
     ...source,
     workflowId: String(source.workflowId ?? source.id ?? "workflow"),
