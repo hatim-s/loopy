@@ -1207,7 +1207,13 @@ export class RuntimeScheduler {
       for (const launch of launches) {
         const execution = this.execute(run, launch.node, launch.attempt);
         this.executions.add(execution);
-        void execution.finally(() => this.executions.delete(execution));
+        void execution.then(
+          () => this.executions.delete(execution),
+          (error) => {
+            this.executions.delete(execution);
+            console.error("Loopy node execution failed", error);
+          },
+        );
       }
       const latest = await this.options.store.listAttempts(runId);
       if (!active.size && this.allDone(run, latest)) {
@@ -1590,21 +1596,27 @@ export class RuntimeScheduler {
       },
       await this.event(run.runId, "node.completed", node.id, attempt.attemptId, { completion }),
     ];
-    if (shouldRetry)
+    if (shouldRetry) {
+      const next = this.makeAttempt(run, node, attempt.attempt + 1, attempt.input, "pending");
       commands.push(
         await this.event(run.runId, "attempt.retrying", node.id, attempt.attemptId, {
-          nextAttempt: attempt.attempt + 1,
+          nextAttempt: next.attempt,
           reason: result.error ?? "failed",
         }),
+        { type: "create_attempt", attempt: next },
+        await this.event(run.runId, "attempt.created", node.id, next.attemptId, {
+          attempt: next.attempt,
+        }),
       );
+    }
     try {
       await this.options.store.commit(commands);
     } catch (error) {
-      if (!cancelled) throw error;
+      if (!cancelled && !this.cancellationRequested.has(run.runId)) throw error;
       return;
     }
     if (shouldRetry) {
-      await this.retry(run.runId, node.id, attempt.input);
+      setTimeout(() => void this.pump(run.runId), 0);
     } else if (result.status === "failed" && !this.hasAlternativeJoin(run, node.id))
       await this.finishRun(run.runId, "failed", result.error);
     else if (
