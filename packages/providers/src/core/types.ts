@@ -21,6 +21,8 @@ export type CapabilityReport = {
 };
 
 export type ProviderProbe = {
+  readiness?: import("./readiness.js").ProviderReadiness;
+  /** Installation availability only; not proof of authentication or model access. */
   provider: ProviderId;
   available: boolean;
   executable?: string;
@@ -160,6 +162,8 @@ export interface ProviderAdapter {
   readonly version: string;
   probe(): Promise<ProviderProbe>;
   capabilities(): CapabilityReport;
+  /** Build and validate the request without spawning a provider or making network calls. */
+  validateRequest?(request: ProviderRequest): void;
   start(request: ProviderRequest): Promise<ProviderRun>;
   resume?(request: ProviderResumeRequest): Promise<ProviderRun>;
   cancel?(run: ProviderRun): Promise<void>;

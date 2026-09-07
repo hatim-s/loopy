@@ -78,7 +78,7 @@ export function formatDoctor(result: DoctorResult, json = false): string {
   const lines = ["Loopy provider doctor"];
   if (!result.providers.length) lines.push("No providers registered.");
   for (const provider of result.providers) {
-    const status = provider.available ? "available" : "unavailable";
+    const status = provider.available ? "installed" : "missing";
     const capabilities = [
       ...provider.capabilities.supported.map((name) => `${name}=supported`),
       ...provider.capabilities.degraded.map((name) => `${name}=degraded`),
@@ -87,6 +87,12 @@ export function formatDoctor(result: DoctorResult, json = false): string {
     lines.push(`${provider.provider}: ${status}`);
     if (provider.path || provider.executable)
       lines.push(`  cli: ${provider.path ?? provider.executable}`);
+    if (provider.readiness) {
+      lines.push(
+        `  authentication: ${provider.readiness.authentication}; run usability: ${provider.readiness.usability}`,
+      );
+      lines.push(`  setup: ${provider.readiness.message}`);
+    }
     if (provider.version) lines.push(`  version: ${provider.version}`);
     if (capabilities.length) lines.push(`  capabilities: ${capabilities.join(", ")}`);
     if (provider.diagnostic) lines.push(`  diagnostic: ${provider.diagnostic}`);
