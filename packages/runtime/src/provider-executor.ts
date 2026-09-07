@@ -428,16 +428,21 @@ export function createProviderExecutor(options: ProviderExecutorOptions): Provid
         const terminalSuccess = endedStatus === "succeeded";
         const lastMessage = [...events]
           .reverse()
-          .find((event) => event.type === "provider.message");
+          .find(
+            (event): event is Extract<TraceEvent, { type: "provider.message" }> =>
+              event.type === "provider.message" && event.payload.role === "assistant",
+          );
         const usageEvent = [...events].reverse().find((event) => event.type === "provider.usage");
         const usage = usageEvent?.payload.usage;
         const outputs: JsonObject = {
           provider: providerId,
           sessionId: session.sessionId,
           eventCount: events.length,
-          ...(lastMessage?.payload.content !== undefined
-            ? { message: lastMessage.payload.content }
-            : {}),
+          ...(typeof ended?.payload.summary === "string"
+            ? { message: ended.payload.summary }
+            : lastMessage?.payload.content !== undefined
+              ? { message: lastMessage.payload.content }
+              : {}),
           ...(usage && typeof usage === "object" ? { usage: usage as JsonObject } : {}),
         };
         if (cancelled) return { status: "cancelled", outputs, summary: "Provider run cancelled." };

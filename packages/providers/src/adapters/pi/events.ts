@@ -216,12 +216,24 @@ export async function normalizePiJsonLines(
   const diagnostics: AdapterDiagnostic[] = [];
   let sequence = context.sequence ?? 0;
   let sessionId = context.sessionId;
+  const parentIds = new Set<string>();
   for await (const line of lines) {
     if (!line.trim()) continue;
     const parsed = parseJsonLine(line);
     if (!parsed.value) {
       diagnostics.push(parsed.error as AdapterDiagnostic);
       continue;
+    }
+    if (typeof parsed.value.parentId === "string") {
+      if (parentIds.has(parsed.value.parentId))
+        diagnostics.push(
+          diagnostic(
+            "lossy_event",
+            "Pi history contains branches; imported events include multiple paths.",
+            "message",
+          ),
+        );
+      parentIds.add(parsed.value.parentId);
     }
     if (parsed.value.type === "session" && typeof parsed.value.id === "string")
       sessionId = parsed.value.id;

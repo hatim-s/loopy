@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { normalizeClaudeStream } from "../src/adapters/claude/stream.js";
 import { normalizeCodexStream } from "../src/adapters/codex/stream.js";
 import { normalizeOpenCodeJsonLines } from "../src/adapters/opencode/events.js";
+import { importOpenCodeSession } from "../src/adapters/opencode/import.js";
 import { normalizePiJsonLines } from "../src/adapters/pi/events.js";
 import { createDefaultProviderRegistry } from "../src/registered.js";
 
@@ -97,5 +98,53 @@ describe("coding trace fidelity", () => {
       JSON.stringify({ type: "result", subtype: "error_max_turns", is_error: true }),
     ]);
     expect(claude[0]?.result?.status).toBe("failed");
+  });
+  test("OpenCode official exports preserve user roles and completed tool inputs", async () => {
+    const imported = await importOpenCodeSession(
+      JSON.stringify({
+        info: { id: "export-session" },
+        messages: [
+          {
+            info: { role: "user", sessionID: "export-session" },
+            parts: [{ type: "text", text: "Run tests" }],
+          },
+          {
+            info: { role: "assistant", sessionID: "export-session" },
+            parts: [
+              {
+                type: "tool",
+                tool: "bash",
+                callID: "test",
+                state: { status: "completed", input: { command: "bun test" }, output: "pass" },
+              },
+              { type: "step-finish", reason: "stop", tokens: { input: 1, output: 1 } },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(imported.events.map((event) => event.type)).toEqual([
+      "provider.message",
+      "tool.requested",
+      "tool.completed",
+      "provider.usage",
+      "provider.session_ended",
+    ]);
+    expect(imported.events[0]).toMatchObject({
+      sessionId: "export-session",
+      payload: { role: "user", content: "Run tests" },
+    });
+  });
+  test("Codex emits one request for a started and completed command", () => {
+    const item = { id: "command-1", type: "command_execution", command: "bun test" };
+    const events = normalizeCodexStream([
+      JSON.stringify({ type: "item.started", item }),
+      JSON.stringify({
+        type: "item.completed",
+        item: { ...item, exit_code: 0, aggregated_output: "passed" },
+      }),
+    ]);
+    expect(events.map((event) => event.kind)).toEqual(["tool", "tool_result"]);
+    expect(events[1]?.metadata?.exitCode).toBe(0);
   });
 });

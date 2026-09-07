@@ -35,7 +35,19 @@ export async function importPiSession(
       diagnostics.push(...normalized.diagnostics);
     }
   } else if (Array.isArray(input) || (input && typeof input === "object")) {
-    const rows = Array.isArray(input) ? input : [input];
+    const object = input as Record<string, unknown>;
+    const rows = Array.isArray(input)
+      ? input
+      : Array.isArray(object.messages)
+        ? [
+            {
+              type: "session",
+              version: object.version ?? PI_SESSION_FORMAT_V3,
+              id: object.id ?? context.sessionId,
+            },
+            ...object.messages,
+          ]
+        : [input];
     const normalized = await importPiSession(
       rows.map((row) => JSON.stringify(row)).join("\n"),
       context,

@@ -273,7 +273,7 @@ function importDescriptor(
         source.includes("\n") || source.trim().startsWith("{")
           ? source
           : await readFile(source, "utf8");
-      yield* await importer(input, source);
+      yield* await importer(input, input === source ? "inline-import" : source);
     },
   };
 }
@@ -638,9 +638,9 @@ export function createCodexProviderAdapter(
     }),
     probeVersion: parseCodexVersion,
     imports: [
-      importDescriptor("codex-jsonl", ["codex-jsonl"], async (source) =>
+      importDescriptor("codex-jsonl", ["codex-jsonl"], async (source, origin) =>
         importCodexHistory(source, {
-          source: "historical-import",
+          source: origin,
           providerVersion: options.version ?? "unknown",
           importedAt: new Date().toISOString(),
         }).events.map((event) => ({
@@ -651,8 +651,9 @@ export function createCodexProviderAdapter(
             input: {},
           }),
           provenance: {
-            source: "historical-import",
+            source: origin,
             sessionId: event.sessionId,
+            ...(event.parentSessionId ? { parentSessionId: event.parentSessionId } : {}),
             version: options.version ?? "unknown",
           },
         })),
@@ -705,9 +706,9 @@ export function createClaudeProviderAdapter(
     }),
     probeVersion: parseClaudeVersion,
     imports: [
-      importDescriptor("claude-stream-json", ["claude-stream-json"], async (source) =>
+      importDescriptor("claude-stream-json", ["claude-stream-json"], async (source, origin) =>
         importClaudeHistory(source, {
-          source: "historical-import",
+          source: origin,
           providerVersion: options.version ?? "unknown",
           importedAt: new Date().toISOString(),
         }).events.map((event) => ({
@@ -718,8 +719,9 @@ export function createClaudeProviderAdapter(
             input: {},
           }),
           provenance: {
-            source: "historical-import",
+            source: origin,
             sessionId: event.sessionId,
+            ...(event.parentSessionId ? { parentSessionId: event.parentSessionId } : {}),
             version: options.version ?? "unknown",
           },
         })),
