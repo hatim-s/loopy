@@ -136,7 +136,7 @@ export async function runProductRecovery(options: {
             useGitWorktree: false,
             allowDirtyWorkspace: true,
             workingDirectory: project,
-            writableRoots: [project],
+            writableRoots: options.providerId === "codex" ? [project] : [],
           },
         },
       });

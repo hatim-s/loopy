@@ -195,49 +195,64 @@ try {
       "Extraction needs a required reusable task input",
     );
   }
-  // Resolutions come from inspection of the saved proposal; they are never guessed.
-  const resolutionPath = process.env.LOOPY_ACCEPTANCE_RESOLUTIONS;
-  if (!resolutionPath)
-    throw new ReviewRequired(
-      `Review ${resolve(project, "extraction-review.json")} and supply LOOPY_ACCEPTANCE_RESOLUTIONS. No workflow was published.`,
+  let published: WorkflowVersionRecord;
+  if (review.proposal.status === "approved") {
+    const existing = server.storage.runtime.getWorkflowVersion(
+      review.proposal.workflow.id,
+      review.proposal.workflow.workflowVersion,
     );
-  const resolutions: unknown = await Bun.file(resolutionPath).json();
-  const reviewed = await api<Review>(`/extractions/${job.id}/review`, {
-    expectedProposalHash: review.proposalHash,
-    resolutions,
-    resolvedBy: "acceptance-review",
-    allowNetworkAccess: process.env.LOOPY_ACCEPTANCE_ALLOW_NETWORK === "1",
-    workflow: {
-      ...review.proposal.workflow,
-      defaults: {
-        ...review.proposal.workflow.defaults,
-        timeoutMs: 120000,
-        provider,
-        model,
-        ...(provider === "codex" ? { reasoning: "low" } : {}),
+    assert(existing, "Approved extraction workflow version is missing");
+    published = existing;
+  } else {
+    // Resolutions come from inspection of the saved proposal; they are never guessed.
+    const resolutionPath = process.env.LOOPY_ACCEPTANCE_RESOLUTIONS;
+    if (!resolutionPath)
+      throw new ReviewRequired(
+        `Review ${resolve(project, "extraction-review.json")} and supply LOOPY_ACCEPTANCE_RESOLUTIONS. No workflow was published.`,
+      );
+    const resolutions: unknown = await Bun.file(resolutionPath).json();
+    const reviewed = await api<Review>(`/extractions/${job.id}/review`, {
+      expectedProposalHash: review.proposalHash,
+      resolutions,
+      resolvedBy: "acceptance-review",
+      allowNetworkAccess: process.env.LOOPY_ACCEPTANCE_ALLOW_NETWORK === "1",
+      workflow: {
+        ...review.proposal.workflow,
+        defaults: {
+          ...review.proposal.workflow.defaults,
+          timeoutMs: 120000,
+          provider,
+          model,
+          ...(provider === "codex" ? { reasoning: "low" } : {}),
+        },
       },
-    },
-  });
-  assert(!reviewed.proposal.unresolvedQuestions.some((question) => question.blocksExecution));
-  const published = await api<WorkflowVersionRecord>(`/extractions/${job.id}/approve`, {
-    expectedProposalHash: reviewed.proposalHash,
-  });
+    });
+    assert(!reviewed.proposal.unresolvedQuestions.some((question) => question.blocksExecution));
+    published = await api<WorkflowVersionRecord>(`/extractions/${job.id}/approve`, {
+      expectedProposalHash: reviewed.proposalHash,
+    });
+  }
   evidence.workflowId = published.workflowId;
   writeFileSync(resolve(project, "expected.json"), JSON.stringify({ prefix: "Welcome" }));
-  for (const args of [
-    ["add", "greeting.ts", "expected.json"],
-    [
-      "-c",
-      "user.name=Loopy Acceptance",
-      "-c",
-      "user.email=acceptance@localhost",
-      "commit",
-      "-qm",
-      "Set second task expectation",
-    ],
-  ]) {
-    const result = Bun.spawnSync(["git", ...args], { cwd: project });
-    assert.equal(result.exitCode, 0, result.stderr.toString());
+  const stage = Bun.spawnSync(["git", "add", "greeting.ts", "expected.json"], { cwd: project });
+  assert.equal(stage.exitCode, 0, stage.stderr.toString());
+  const stagedDiff = Bun.spawnSync(["git", "diff", "--cached", "--quiet"], { cwd: project });
+  assert([0, 1].includes(stagedDiff.exitCode), stagedDiff.stderr.toString());
+  if (stagedDiff.exitCode === 1) {
+    const commit = Bun.spawnSync(
+      [
+        "git",
+        "-c",
+        "user.name=Loopy Acceptance",
+        "-c",
+        "user.email=acceptance@localhost",
+        "commit",
+        "-qm",
+        "Set second task expectation",
+      ],
+      { cwd: project },
+    );
+    assert.equal(commit.exitCode, 0, commit.stderr.toString());
   }
   const second = await api<{ id: string }>("/runs", {
     workflowId: published.workflowId,
