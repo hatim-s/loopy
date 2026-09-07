@@ -7,6 +7,7 @@ export type BuilderRun = {
   attempts: Array<{
     id: string;
     nodeId: string;
+    attemptId?: string;
     attempt: number;
     status: string;
     output?: Record<string, unknown>;
@@ -25,6 +26,8 @@ export function RunConsole({
 }) {
   const [run, setRun] = useState<BuilderRun>();
   const [error, setError] = useState<string>();
+  const [refreshKey, setRefreshKey] = useState(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Controls restart polling after a terminal run is retried.
   useEffect(() => {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
@@ -49,7 +52,15 @@ export function RunConsole({
       controller.abort();
       clearTimeout(timer);
     };
-  }, [api, runId, onStatuses]);
+  }, [api, runId, onStatuses, refreshKey]);
+  const control = async (action: string, body: Record<string, unknown> = {}) => {
+    try {
+      await api.request(`/runs/${runId}/${action}`, { method: "POST", body: JSON.stringify(body) });
+      setRefreshKey((value) => value + 1);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
   const cancel = async () => {
     try {
       await api.request(`/runs/${runId}/cancel`, { method: "POST", body: "{}" });
@@ -62,13 +73,67 @@ export function RunConsole({
       <header>
         <strong>Run output</strong>
         <span className={`run-state run-state-${run?.status}`}>{run?.status ?? "Loading"}</span>
-        <a href="/runs">Open debugger</a>
+        <a href={`/runs?runId=${encodeURIComponent(runId)}`}>Open debugger</a>
+        {run?.status === "running" ? (
+          <button type="button" onClick={() => void control("pause")}>
+            Pause run
+          </button>
+        ) : null}
+        {run?.status === "paused" ? (
+          <button type="button" onClick={() => void control("resume")}>
+            Resume run
+          </button>
+        ) : null}
         {run && !["succeeded", "failed", "cancelled"].includes(run.status) ? (
           <button type="button" onClick={() => void cancel()}>
             Cancel run
           </button>
         ) : null}
       </header>
+      {run?.attempts
+        .filter((attempt) => attempt.status === "blocked_approval")
+        .map((attempt) => (
+          <div key={attempt.id} className="builder-approval">
+            <strong>Approval needed for {attempt.nodeId}</strong>
+            <button
+              type="button"
+              onClick={() =>
+                void control("approve", {
+                  nodeId: attempt.nodeId,
+                  attemptId: attempt.attemptId ?? attempt.id,
+                  decision: "approved",
+                })
+              }
+            >
+              Approve step
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                void control("approve", {
+                  nodeId: attempt.nodeId,
+                  attemptId: attempt.attemptId ?? attempt.id,
+                  decision: "rejected",
+                })
+              }
+            >
+              Reject step
+            </button>
+          </div>
+        ))}
+      {run?.status === "failed"
+        ? run.attempts
+            .filter((attempt) => attempt.status === "failed")
+            .map((attempt) => (
+              <button
+                type="button"
+                key={attempt.id}
+                onClick={() => void control("retry", { nodeId: attempt.nodeId })}
+              >
+                Retry {attempt.nodeId}
+              </button>
+            ))
+        : null}
       {error ? <p role="alert">{error}</p> : null}
       <div className="run-attempts">
         {run?.attempts.map((attempt) => (

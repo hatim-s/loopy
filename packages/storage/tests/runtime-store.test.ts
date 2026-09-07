@@ -176,7 +176,12 @@ describe("SQLite Phase 1 runtime adapter", () => {
       ],
     );
     const started = await x.runtime.start(workflow);
-    await Bun.sleep(30);
+    for (let i = 0; i < 200; i++) {
+      const snapshot = await x.runtime.snapshot(started.runId);
+      if (snapshot.attempts.some((a) => a.nodeId === "approve" && a.status === "blocked_approval"))
+        break;
+      await Bun.sleep(10);
+    }
     expect(
       (await x.runtime.snapshot(started.runId)).attempts.find((a) => a.nodeId === "approve")
         ?.status,

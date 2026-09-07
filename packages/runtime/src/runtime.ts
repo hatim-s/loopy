@@ -808,6 +808,7 @@ export class RuntimeScheduler {
     runId: string,
     nodeId: string,
     decision: "approved" | "rejected",
+    expectedAttemptId?: string,
   ): Promise<RunRecord> {
     const run = await this.requireRun(runId);
     if (run.status !== "running") throw new Error("Approvals require an active running run");
@@ -817,6 +818,8 @@ export class RuntimeScheduler {
     );
     if (!approval || approval.decision) throw new Error("No pending approval");
     if (!attempt) throw new Error("No pending approval attempt");
+    if (expectedAttemptId && attempt.attemptId !== expectedAttemptId)
+      throw new Error("Approval attempt changed; reload the run before deciding");
     const completion: Completion =
       decision === "approved"
         ? { status: "succeeded", summary: "Approval granted", outputs: { approved: true } }
@@ -1128,7 +1131,7 @@ export class RuntimeScheduler {
       const launches: Array<{ node: RuntimeNode; attempt: AttemptRecord }> = [];
       const activeNodeIds = new Set([
         ...(this.activeNodes.get(runId)?.values() ?? []),
-        [...active]
+        ...[...active]
           .map((attemptId) => attempts.find((attempt) => attempt.attemptId === attemptId)?.nodeId)
           .filter((nodeId): nodeId is string => nodeId !== undefined),
       ]);
@@ -1234,11 +1237,27 @@ export class RuntimeScheduler {
       input[key] = (refValue(value, run, attempts) as JsonValue) ?? null;
     return input;
   }
+  private predecessorState(run: RunRecord, attempts: AttemptRecord[]) {
+    const latest = new Map<string, AttemptRecord>();
+    for (const attempt of attempts) {
+      if ((latest.get(attempt.nodeId)?.attempt ?? 0) < attempt.attempt)
+        latest.set(attempt.nodeId, attempt);
+    }
+    const done = new Set<string>();
+    const terminal = new Set<string>();
+    for (const attempt of latest.values()) {
+      if (attempt.status === "succeeded") done.add(attempt.nodeId);
+      if (!TERMINAL_ATTEMPTS.has(attempt.status)) continue;
+      const node = run.plan.nodes.find((item) => item.id === attempt.nodeId);
+      // A failed attempt remains unsettled while its automatic retry is being scheduled.
+      if (attempt.status === "failed" && node && this.retryAllowed(node, attempt, attempt.error))
+        continue;
+      terminal.add(attempt.nodeId);
+    }
+    return { done, terminal };
+  }
   private readyNodes(run: RunRecord, attempts: AttemptRecord[]): RuntimeNode[] {
-    const done = new Set(attempts.filter((a) => a.status === "succeeded").map((a) => a.nodeId));
-    const terminal = new Set(
-      attempts.filter((a) => TERMINAL_ATTEMPTS.has(a.status)).map((a) => a.nodeId),
-    );
+    const { done, terminal } = this.predecessorState(run, attempts);
     const incoming = new Map<string, RuntimeEdge[]>();
     for (const edge of run.plan.edges)
       incoming.set(edge.target, [...(incoming.get(edge.target) ?? []), edge]);
@@ -1269,11 +1288,7 @@ export class RuntimeScheduler {
       if (kind === "join") {
         return this.joinReadiness(node, edges, done, terminal, run, attempts).state === "ready";
       }
-      if (eligible.length) return true;
-      return (
-        edges.every((edge) => terminal.has(edge.source)) &&
-        edges.every((edge) => !done.has(edge.source))
-      );
+      return eligible.length > 0;
     });
   }
 
@@ -1311,10 +1326,7 @@ export class RuntimeScheduler {
   }
 
   private impossibleJoins(run: RunRecord, attempts: AttemptRecord[]): RuntimeNode[] {
-    const done = new Set(attempts.filter((a) => a.status === "succeeded").map((a) => a.nodeId));
-    const terminal = new Set(
-      attempts.filter((a) => TERMINAL_ATTEMPTS.has(a.status)).map((a) => a.nodeId),
-    );
+    const { done, terminal } = this.predecessorState(run, attempts);
     return run.plan.nodes.filter((node) => {
       if (node.kind !== "join" || attempts.some((attempt) => attempt.nodeId === node.id))
         return false;
@@ -1323,10 +1335,7 @@ export class RuntimeScheduler {
     });
   }
   private skippableNodes(run: RunRecord, attempts: AttemptRecord[]): RuntimeNode[] {
-    const terminal = new Set(
-      attempts.filter((a) => TERMINAL_ATTEMPTS.has(a.status)).map((a) => a.nodeId),
-    );
-    const done = new Set(attempts.filter((a) => a.status === "succeeded").map((a) => a.nodeId));
+    const { done, terminal } = this.predecessorState(run, attempts);
     return run.plan.nodes.filter((node) => {
       if (attempts.some((a) => a.nodeId === node.id)) return false;
       const incoming = run.plan.edges.filter((edge) => edge.target === node.id);
