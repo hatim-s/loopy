@@ -166,32 +166,23 @@ function queue<T>(): Queue<T> {
 }
 
 function terminate(child: ChildProcess, gracefulMs: number): Promise<void> {
-  return new Promise((resolve) => {
-    if (child.exitCode !== null || child.signalCode !== null) {
-      resolve();
-      return;
-    }
+  const signalGroup = (signal: NodeJS.Signals) => {
     try {
-      child.kill("SIGTERM");
+      if (process.platform !== "win32" && child.pid) process.kill(-child.pid, signal);
+      else child.kill(signal);
     } catch {
-      resolve();
-      return;
+      /* Group has already exited. */
     }
-    const timer = setTimeout(() => {
-      if (child.exitCode === null && child.signalCode === null) {
-        try {
-          child.kill("SIGKILL");
-        } catch {
-          // The process may have exited between the checks.
-        }
-      }
+  };
+  signalGroup("SIGTERM");
+  // The leader can exit while a resistant descendant still owns the pipes.
+  // Always escalate the original group after the grace interval.
+  return new Promise((resolve) =>
+    setTimeout(() => {
+      signalGroup("SIGKILL");
       resolve();
-    }, gracefulMs);
-    child.once("exit", () => {
-      clearTimeout(timer);
-      resolve();
-    });
-  });
+    }, gracefulMs),
+  );
 }
 
 export async function runSubprocess(options: SubprocessOptions): Promise<SubprocessResult> {
@@ -207,6 +198,7 @@ export async function runSubprocess(options: SubprocessOptions): Promise<Subproc
       cwd: options.cwd,
       env: environment(options.envAllowlist, options.env),
       shell: false,
+      detached: process.platform !== "win32",
       stdio: ["ignore", "pipe", "pipe"],
     });
   } catch (error) {
@@ -306,6 +298,7 @@ export function startJsonlSubprocess(options: JsonlSubprocessOptions): LiveJsonl
       cwd: options.cwd,
       env: environment(options.envAllowlist, options.env),
       shell: false,
+      detached: process.platform !== "win32",
       stdio: ["ignore", "pipe", "pipe"],
     });
   } catch (error) {
@@ -429,7 +422,14 @@ export function startJsonlSubprocess(options: JsonlSubprocessOptions): LiveJsonl
       resolve(result);
     });
   });
-  return { lines: lines.iterable, done, cancel: async () => abort() };
+  return {
+    lines: lines.iterable,
+    done,
+    cancel: async () => {
+      abort();
+      await done;
+    },
+  };
 }
 
 export async function runJsonlSubprocess<T = unknown>(

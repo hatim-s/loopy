@@ -57,6 +57,7 @@ export type RegisteredProviderOptions = {
   env?: Readonly<Record<string, string | undefined>>;
   envAllowlist?: readonly string[];
   version?: string;
+  probeTimeoutMs?: number;
 };
 
 export type DefaultProviderOptions = Partial<
@@ -409,6 +410,7 @@ function makeAdapter(input: {
           cwd: cwdFor(options),
           env: options.env,
           envAllowlist: options.envAllowlist ?? DEFAULT_ENV[input.id],
+          timeoutMs: options.probeTimeoutMs ?? 2_000,
           maxStdoutBytes: 64 * 1024,
           maxStderrBytes: 64 * 1024,
         });
@@ -419,12 +421,14 @@ function makeAdapter(input: {
           {
             schemaVersion: "1",
             provider: input.id,
-            installed: result.exitCode === 0 && Boolean(version),
+            installed: !result.timedOut && result.exitCode === 0 && Boolean(version),
             executable,
             ...(version ? { version } : {}),
             detectedAt: new Date().toISOString(),
             capabilities: {} as ProviderInstallation["capabilities"],
-            ...(result.exitCode === 0 && version ? {} : { diagnostic: `${input.id} unavailable.` }),
+            ...(!result.timedOut && result.exitCode === 0 && version
+              ? {}
+              : { diagnostic: `${input.id} unavailable.` }),
           },
           report(),
         );

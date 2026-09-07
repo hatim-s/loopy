@@ -1,8 +1,10 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { JsonValue, WorkflowDefinition } from "@loopy/contracts";
 import type { VerificationContext, VerificationExecutor, VerificationResult } from "@loopy/runtime";
+
+import { shellEnvironment } from "./shell";
 
 export type GitWorkspaceCleanup = {
   removed: boolean;
@@ -30,48 +32,82 @@ type CommandResult = {
   stdout: string;
   stderr: string;
   timedOut: boolean;
+  truncated: boolean;
 };
-
-function truncate(value: string, limit: number): string {
-  if (value.length <= limit) return value;
-  return `${value.slice(0, limit)}\n[output truncated by Loopy]`;
-}
 
 async function runCommand(
   argv: string[],
   cwd: string,
   timeoutMs: number,
   maxOutputChars: number,
+  signal?: AbortSignal,
+  env = shellEnvironment(),
 ): Promise<CommandResult> {
+  signal?.throwIfAborted();
   const child = Bun.spawn(argv, {
     cwd,
-    env: process.env,
+    env,
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
+    detached: true,
   });
   let timedOut = false;
+  const stop = () => {
+    try {
+      process.kill(-child.pid, "SIGKILL");
+    } catch {
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        /* Already reaped. */
+      }
+    }
+  };
   const timer = setTimeout(() => {
     timedOut = true;
-    child.kill("SIGTERM");
+    stop();
   }, timeoutMs);
-  const [exitCode, stdout, stderr] = await Promise.all([
-    child.exited,
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ]).finally(() => clearTimeout(timer));
-  return {
-    argv,
-    cwd,
-    exitCode,
-    stdout: truncate(stdout, maxOutputChars),
-    stderr: truncate(stderr, maxOutputChars),
-    timedOut,
+  signal?.addEventListener("abort", stop, { once: true });
+  if (signal?.aborted) stop();
+  // Discard excess output while draining both pipes under one retained byte budget.
+  let remaining = maxOutputChars;
+  let truncated = false;
+  const read = async (stream: ReadableStream<Uint8Array>) => {
+    const reader = stream.getReader();
+    const chunks: Uint8Array[] = [];
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const take = Math.min(remaining, value.byteLength);
+        truncated ||= take < value.byteLength;
+        if (take) chunks.push(value.slice(0, take));
+        remaining -= take;
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    return new TextDecoder().decode(Buffer.concat(chunks), { stream: true });
   };
+  try {
+    const [exitCode, stdout, stderr] = await Promise.all([
+      child.exited,
+      read(child.stdout),
+      read(child.stderr),
+    ]);
+    return { argv, cwd, exitCode, stdout, stderr, timedOut, truncated };
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", stop);
+  }
 }
 
 async function git(cwd: string, args: string[]): Promise<CommandResult> {
-  const result = await runCommand(["git", "-C", cwd, ...args], cwd, 120_000, 32_000);
+  const result = await runCommand(["git", "-C", cwd, ...args], cwd, 120_000, 32_000, undefined, {
+    ...shellEnvironment(),
+    ...(process.env.SSH_AUTH_SOCK ? { SSH_AUTH_SOCK: process.env.SSH_AUTH_SOCK } : {}),
+  });
   if (result.exitCode !== 0)
     throw new Error(
       `git ${args.join(" ")} failed in ${cwd}: ${result.stderr.trim() || result.stdout.trim()}`,
@@ -80,11 +116,9 @@ async function git(cwd: string, args: string[]): Promise<CommandResult> {
 }
 
 function commandCwd(root: string, configured?: string): string {
-  const candidate = configured
-    ? isAbsolute(configured)
-      ? resolve(configured)
-      : resolve(root, configured)
-    : root;
+  const candidate = realpathSync(
+    configured ? (isAbsolute(configured) ? resolve(configured) : resolve(root, configured)) : root,
+  );
   const pathFromRoot = relative(root, candidate);
   if (pathFromRoot === ".." || pathFromRoot.startsWith(`..${sep}`) || isAbsolute(pathFromRoot))
     throw new Error(`Verification cwd escapes the run workspace: ${configured}`);
@@ -95,7 +129,7 @@ export function createShellVerifier(options: {
   workingDirectory: string;
   maxOutputChars?: number;
 }): VerificationExecutor {
-  const root = resolve(options.workingDirectory);
+  const root = realpathSync(options.workingDirectory);
   const maxOutputChars = options.maxOutputChars ?? 64_000;
   return {
     async verify(context: VerificationContext): Promise<VerificationResult> {
@@ -110,6 +144,7 @@ export function createShellVerifier(options: {
 
       const results: CommandResult[] = [];
       for (const item of configured) {
+        context.signal?.throwIfAborted();
         if (!item || typeof item !== "object")
           return { status: "failed", summary: "Verification command is malformed." };
         const command = item as Record<string, unknown>;
@@ -121,7 +156,9 @@ export function createShellVerifier(options: {
           commandCwd(root, typeof command.cwd === "string" ? command.cwd : undefined),
           typeof command.timeoutMs === "number" ? command.timeoutMs : 120_000,
           maxOutputChars,
+          context.signal,
         );
+        context.signal?.throwIfAborted();
         results.push(result);
         if (result.timedOut || result.exitCode !== 0)
           return {

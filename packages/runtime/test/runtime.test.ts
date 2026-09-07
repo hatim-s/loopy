@@ -331,7 +331,7 @@ describe("phase 1 runtime", () => {
     if (!active) throw new Error("expected active provider call");
 
     const cancelled = await x.runtime.cancel(started.runId);
-    expect(cancelled.status).toBe("cancelled");
+    expect(cancelled.status).toBe("cancelling");
     expect(cleanupCalls).toBe(1);
     provider.release(active.attemptId, { status: "succeeded", outputs: { late: true } });
     await Bun.sleep(5);
@@ -359,7 +359,7 @@ describe("phase 1 runtime", () => {
         setTimeout(() => reject(new Error("cancellation timed out")), 100),
       ),
     ]);
-    expect(cancelled.status).toBe("cancelled");
+    expect(cancelled.status).toBe("cancelling");
     expect(cleanupCalls).toBe(1);
     provider.release(active.attemptId, { status: "succeeded", outputs: { late: true } });
     await Bun.sleep(5);
