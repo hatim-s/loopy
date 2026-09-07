@@ -68,3 +68,24 @@ test("string chunk surrogate boundaries and strict diagnostic precedence match s
     }
   }
 });
+
+test("strict streams retain the first parse error before a later event limit", async () => {
+  const valid = fixture.map((event) => JSON.stringify(event)).join("\n");
+  for (const prefix of ["{\n", "\n"]) {
+    for (const policy of ["required", "optional", "forbidden"] as const) {
+      const text = `${prefix}${valid}\n`;
+      let expected: unknown;
+      try {
+        decodeTraceJsonl(text, { maxEvents: 1, trailingNewlinePolicy: policy });
+      } catch (error) {
+        expected = error;
+      }
+      await expect(
+        decodeTraceJsonlStream([prefix, valid, "\n"], {
+          maxEvents: 1,
+          trailingNewlinePolicy: policy,
+        }),
+      ).rejects.toMatchObject({ diagnostics: (expected as { diagnostics: unknown }).diagnostics });
+    }
+  }
+});

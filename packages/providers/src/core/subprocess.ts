@@ -428,6 +428,7 @@ export function startJsonlSubprocess(options: JsonlSubprocessOptions): LiveJsonl
     cancel: async () => {
       abort();
       await done;
+      await termination;
     },
   };
 }

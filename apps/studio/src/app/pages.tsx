@@ -742,6 +742,31 @@ export function RunsPage({ api }: StudioPageProps) {
           detail="Start an execution graph from the local API to inspect its live trace."
         />
       ) : null}
+      <nav aria-label="Run history pages">
+        <button
+          type="button"
+          disabled={!cursors.length || result.loading}
+          onClick={() => {
+            clearRunSelection();
+            setCursors((value) => value.slice(0, -1));
+          }}
+        >
+          Newer runs
+        </button>
+        <button
+          type="button"
+          disabled={!result.value?.nextCursor || result.loading}
+          onClick={() => {
+            const next = result.value?.nextCursor;
+            if (next) {
+              clearRunSelection();
+              setCursors((value) => [...value, next]);
+            }
+          }}
+        >
+          Older runs
+        </button>
+      </nav>
       {run ? (
         <>
           <label htmlFor={selectId}>Run history</label>
@@ -765,31 +790,7 @@ export function RunsPage({ api }: StudioPageProps) {
               </option>
             ))}
           </select>
-          <nav aria-label="Run history pages">
-            <button
-              type="button"
-              disabled={!cursors.length || result.loading}
-              onClick={() => {
-                clearRunSelection();
-                setCursors((value) => value.slice(0, -1));
-              }}
-            >
-              Newer runs
-            </button>
-            <button
-              type="button"
-              disabled={!result.value?.nextCursor || result.loading}
-              onClick={() => {
-                const next = result.value?.nextCursor;
-                if (next) {
-                  clearRunSelection();
-                  setCursors((value) => [...value, next]);
-                }
-              }}
-            >
-              Older runs
-            </button>
-          </nav>
+
           <RunDebugger key={run.id} api={api} runId={run.id} onStatus={onStatus} />
         </>
       ) : null}

@@ -829,12 +829,16 @@ export async function decodeTraceJsonlStream(
       throw new TraceCodecError("Trace line limit exceeded.", [
         { code: "max_lines_exceeded", message: `Maximum lines is ${limits.maxLines}.` },
       ]);
+    if (parseFailure) return;
     if (!line.trim()) {
-      diagnostics.push({
+      const diagnostic: TraceDiagnostic = {
         code: "malformed_json",
         message: "Blank JSONL lines are not events.",
         line: inputIndex + 1,
-      });
+      };
+      diagnostics.push(diagnostic);
+      if (options.rejectDiagnostics !== false)
+        parseFailure = new TraceCodecError(diagnostic.message, [diagnostic]);
       return;
     }
     try {
@@ -861,14 +865,17 @@ export async function decodeTraceJsonlStream(
       else if (error instanceof TraceCodecError) parseFailure ??= error;
       else throw error;
     }
-    if (parsed.length > limits.maxEvents)
-      throw new TraceCodecError("Trace event limit exceeded.", [
+    if (parsed.length > limits.maxEvents) {
+      const failure = new TraceCodecError("Trace event limit exceeded.", [
         {
           code: "max_events_exceeded",
           message: `Maximum events is ${limits.maxEvents}.`,
           line: inputIndex + 1,
         },
       ]);
+      if (options.rejectDiagnostics === false) throw failure;
+      parseFailure ??= failure;
+    }
   };
   const decode = (chunk?: Uint8Array) => {
     try {
@@ -922,6 +929,7 @@ export async function decodeTraceJsonlStream(
   if (bytes === 1 && trailing && parsed.length === 0) {
     lines = 0;
     diagnostics.length = 0;
+    parseFailure = undefined;
   }
   const policy = trailingPolicy(options);
   const newlineDiagnostics: TraceDiagnostic[] = [];
