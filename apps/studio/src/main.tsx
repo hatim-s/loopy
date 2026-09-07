@@ -13,7 +13,13 @@ import {
 } from "./app/api";
 import { createStudioQueryClient } from "./app/query";
 import { createStudioRouter } from "./app/router";
+import "@fontsource/cormorant-garamond/latin-500.css";
+import "@fontsource/cormorant-garamond/latin-600.css";
+import "@fontsource/manrope/latin-400.css";
+import "@fontsource/manrope/latin-500.css";
+import "@fontsource/manrope/latin-600.css";
 import "./styles/tokens.css";
+import "./styles/foundation.css";
 import "./styles/studio.css";
 
 async function startStudio() {
@@ -27,7 +33,7 @@ async function startStudio() {
   if (!root) throw new Error("Studio root element is missing");
   createRoot(root).render(
     <StrictMode>
-      <Theme appearance="dark" accentColor="amber" grayColor="slate" radius="none" scaling="100%">
+      <Theme appearance="dark" accentColor="amber" grayColor="slate" radius="large" scaling="100%">
         <QueryClientProvider client={queryClient}>
           <RouterProvider router={router} />
         </QueryClientProvider>
