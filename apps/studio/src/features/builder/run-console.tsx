@@ -33,10 +33,12 @@ export function RunConsole({
   useEffect(() => {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
+    let retryDelay = 500;
     const refresh = async () => {
       try {
         const next = await api.request<BuilderRun>(`/runs/${runId}`, { signal: controller.signal });
         if (controller.signal.aborted) return;
+        retryDelay = 500;
         setRun(next);
         setError(undefined);
         onStatuses(
@@ -45,8 +47,11 @@ export function RunConsole({
         if (!["succeeded", "failed", "cancelled"].includes(next.status))
           timer = setTimeout(() => void refresh(), 500);
       } catch (reason) {
-        if (!controller.signal.aborted)
+        if (!controller.signal.aborted) {
           setError(reason instanceof Error ? reason.message : String(reason));
+          timer = setTimeout(() => void refresh(), retryDelay);
+          retryDelay = Math.min(retryDelay * 2, 5000);
+        }
       }
     };
     void refresh();

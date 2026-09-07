@@ -2096,7 +2096,9 @@ function PageEditorLayout(props: {
                 for (const field of props.workflow.inputs) {
                   const value = inputValues[field.name];
                   if (value === undefined || value === "") continue;
-                  input[field.name] = field.type === "string" ? value : JSON.parse(value);
+                  input[field.name] = ["string", "path", "directory"].includes(field.type)
+                    ? value
+                    : JSON.parse(value);
                 }
                 props.onRun(input);
                 setInputsOpen(false);

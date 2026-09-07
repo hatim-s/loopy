@@ -1,4 +1,5 @@
 import type { ValueReference, WorkflowDefinition } from "@loopy/contracts";
+import { useEffect, useState } from "react";
 
 export function ValueSource({
   label,
@@ -69,14 +70,16 @@ export function ValueSource({
                     ? 0
                     : event.target.value === "boolean"
                       ? true
-                      : "",
+                      : event.target.value === "object"
+                        ? {}
+                        : "",
               })
             }
           >
             <option value="string">Text</option>
             <option value="number">Number</option>
             <option value="boolean">Boolean</option>
-            {typeof value.value === "object" ? <option value="object">JSON</option> : null}
+            <option value="object">JSON</option>
           </select>
           {typeof value.value === "boolean" ? (
             <select
@@ -89,6 +92,12 @@ export function ValueSource({
               <option value="true">true</option>
               <option value="false">false</option>
             </select>
+          ) : typeof value.value === "object" ? (
+            <JsonLiteral
+              label={label}
+              value={value.value}
+              onChange={(next) => onChange({ kind: "literal", value: next })}
+            />
           ) : (
             <input
               aria-label={`${label} value`}
@@ -110,5 +119,47 @@ export function ValueSource({
         </>
       ) : null}
     </fieldset>
+  );
+}
+
+function JsonLiteral({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: Extract<ValueReference, { kind: "literal" }>["value"];
+  onChange: (value: Extract<ValueReference, { kind: "literal" }>["value"]) => void;
+}) {
+  const serialized = JSON.stringify(value);
+  const [text, setText] = useState(serialized);
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    setText(serialized);
+    setError(false);
+  }, [serialized]);
+  return (
+    <>
+      <input
+        aria-label={`${label} value`}
+        value={text}
+        aria-invalid={error}
+        onChange={(event) => {
+          const next = event.target.value;
+          setText(next);
+          try {
+            const parsed = JSON.parse(next);
+            if (typeof parsed !== "object") throw new Error("Expected JSON object, array, or null");
+            setError(false);
+            onChange(parsed);
+          } catch {
+            setError(true);
+          }
+        }}
+      />
+      {error ? (
+        <p role="alert">Enter a JSON object, array, or null. The last valid value is retained.</p>
+      ) : null}
+    </>
   );
 }
