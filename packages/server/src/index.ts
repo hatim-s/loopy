@@ -104,7 +104,7 @@ export async function startServer(options: ServerOptions) {
     const health = new Request(`${origin}/api/v1/health`, { headers: request.headers });
     return app.fetch(health);
   };
-  let listener: ReturnType<typeof Bun.serve>;
+  let listener: ReturnType<typeof Bun.serve> | undefined;
   try {
     listener = Bun.serve({
       hostname: config.host,
@@ -208,7 +208,12 @@ export async function startServer(options: ServerOptions) {
     });
     await runtime.recover();
   } catch (error) {
-    storage.close();
+    listener?.stop(true);
+    try {
+      await runtime.shutdown();
+    } finally {
+      storage.close();
+    }
     throw error;
   }
   let ticking = false;
@@ -239,7 +244,7 @@ export async function startServer(options: ServerOptions) {
       await tools.drain();
       await extraction.drain();
       await runtime.shutdown();
-      listener.stop(true);
+      listener?.stop(true);
       storage.close();
     })();
     return shutdown;
