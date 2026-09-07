@@ -204,6 +204,7 @@ try {
     expectedProposalHash: review.proposalHash,
     resolutions,
     resolvedBy: "acceptance-review",
+    allowNetworkAccess: process.env.LOOPY_ACCEPTANCE_ALLOW_NETWORK === "1",
     workflow: {
       ...review.proposal.workflow,
       defaults: {
