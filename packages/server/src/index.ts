@@ -11,10 +11,13 @@ import {
   createShellVerifier,
   prepareWorkflowWorkspace,
 } from "@loopy/workspace";
+import { z } from "zod";
 import { handleMcpRequest } from "./mcp";
+import type { ProjectManager } from "./projects";
 
 export type ServerOptions = {
   projectDir: string;
+  projects?: ProjectManager;
   studioDir: string;
   port?: number;
   token?: string;
@@ -108,6 +111,40 @@ export async function startServer(options: ServerOptions) {
         const url = new URL(request.url);
         if (url.origin !== origin) return new Response("Invalid host", { status: 403 });
         if (closing) return new Response("Server is stopping", { status: 503 });
+        if (url.pathname.startsWith("/api/v1/projects")) {
+          const auth = await authenticated(request);
+          if (!auth.ok) return auth;
+          if (!options.projects)
+            return Response.json(
+              { error: { message: "Project switching is not configured" } },
+              { status: 503 },
+            );
+          try {
+            if (url.pathname === "/api/v1/projects" && request.method === "GET")
+              return Response.json(await options.projects.list());
+            if (url.pathname === "/api/v1/projects/open" && request.method === "POST") {
+              const input = z.object({ path: z.string().min(1) }).parse(await request.json());
+              return Response.json(await options.projects.open(input.path));
+            }
+            if (url.pathname === "/api/v1/projects/forget" && request.method === "POST") {
+              const input = z
+                .object({ id: z.string().regex(/^[a-f0-9]{24}$/) })
+                .parse(await request.json());
+              options.projects.forget(input.id);
+              return Response.json({ forgotten: true });
+            }
+            return new Response("Not found", { status: 404 });
+          } catch (error) {
+            return Response.json(
+              {
+                error: {
+                  message: error instanceof Error ? error.message : "Project operation failed",
+                },
+              },
+              { status: 422 },
+            );
+          }
+        }
         if (url.pathname === "/mcp") {
           const auth = await authenticated(request);
           if (!auth.ok) return auth;
@@ -206,3 +243,11 @@ export async function startServer(options: ServerOptions) {
 }
 
 export { startMcpStdio } from "./mcp";
+
+export {
+  createProjectCatalog,
+  type ProjectManager,
+  type ProjectRecord,
+  type ProjectSummary,
+  projectPath,
+} from "./projects";
