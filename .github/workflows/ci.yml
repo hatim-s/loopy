@@ -18,3 +18,15 @@ jobs:
         run: bun run check && bun run test:storage && bun run test:tracing
       - name: Build
         run: bun run build
+
+  linux-service:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - name: Verify the systemd user service lifecycle
+        run: |
+          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+          sudo systemctl start "user@$(id -u).service"
+          LOOPY_TEST_SERVICE=1 bun test packages/cli/_tests_/launchd.test.ts
