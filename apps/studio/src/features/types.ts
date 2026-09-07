@@ -54,6 +54,7 @@ export interface EvidenceLink {
 }
 
 export interface ExtractionReviewModel {
+  jobId?: string;
   importId: string;
   proposalId?: string;
   sourceLabel: string;
