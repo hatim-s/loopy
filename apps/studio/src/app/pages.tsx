@@ -1,4 +1,3 @@
-import type { ExtractionProposal } from "@loopy/contracts";
 import { ArrowUpRight, GitBranch, HardDrives, Plus, ShieldCheck } from "@phosphor-icons/react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
@@ -17,6 +16,7 @@ import { ToolLibrary } from "../features/builder/tool-library";
 import type { GraphInputEdge, GraphInputNode } from "../features/debugger";
 import { createDebuggerState, debuggerReducer, replayEvents } from "../features/debugger";
 import { fallbackWorkflow } from "../features/editor";
+import type { ReviewChanges } from "../features/extraction-edits";
 import { ProviderReadiness } from "../features/provider-readiness";
 import type {
   DebuggerEvent,
@@ -277,11 +277,7 @@ export function ExtractionsPage({ api }: StudioPageProps) {
       setPendingAction(undefined);
     }
   };
-  const saveReview = async (changes: {
-    resolutions: { question: string; answer: string }[];
-    workflow?: ExtractionProposal["workflow"];
-    allowNetworkAccess?: boolean;
-  }) => {
+  const saveReview = async (changes: ReviewChanges) => {
     if (!api || !review) return;
     setPendingAction("review");
     setActionError(undefined);

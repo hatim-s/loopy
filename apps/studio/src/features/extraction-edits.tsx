@@ -6,6 +6,7 @@ export type ReviewChanges = {
   resolutions: { question: string; answer: string }[];
   workflow?: ExtractionProposal["workflow"];
   allowNetworkAccess?: boolean;
+  allowLocalTools?: boolean;
 };
 
 export function ExtractionEdits({
@@ -22,6 +23,7 @@ export function ExtractionEdits({
   const parsed = ExtractionProposalSchema.safeParse(model.proposal);
   const proposal = parsed.success ? parsed.data : undefined;
   const [allowNetworkAccess, setAllowNetworkAccess] = useState(false);
+  const [allowLocalTools, setAllowLocalTools] = useState(false);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [workflow, setWorkflow] = useState(proposal?.workflow);
   const editable = model.status === "draft" || model.status === "blocked";
@@ -31,8 +33,8 @@ export function ExtractionEdits({
     .map(([question, answer]) => ({ question, answer: answer.trim() }));
   const workflowChanged = JSON.stringify(workflow) !== JSON.stringify(proposal?.workflow);
   useEffect(() => {
-    onDirty(changes.length > 0 || workflowChanged || allowNetworkAccess);
-  }, [changes.length, workflowChanged, allowNetworkAccess, onDirty]);
+    onDirty(changes.length > 0 || workflowChanged || allowNetworkAccess || allowLocalTools);
+  }, [changes.length, workflowChanged, allowNetworkAccess, allowLocalTools, onDirty]);
   if (!proposal || !workflow) return null;
   return (
     <div className="extraction-review-edits">
@@ -65,6 +67,25 @@ export function ExtractionEdits({
             </div>
           ))}
         </section>
+      ) : null}
+      {editable &&
+      proposal.unresolvedQuestions.some((item) =>
+        item.question.includes(
+          "Explicitly allow Claude tools Read, Edit, Write and Bash to run this coding workflow.",
+        ),
+      ) ? (
+        <label className="review-network-permission">
+          <input
+            type="checkbox"
+            checked={allowLocalTools}
+            disabled={disabled}
+            onChange={(event) => setAllowLocalTools(event.target.checked)}
+          />
+          <span>
+            Allow Claude tools Read, Edit, Write and Bash for this workflow. These tools can read
+            and write files and run shell commands. Network access requires separate consent.
+          </span>
+        </label>
       ) : null}
       {editable &&
       workflow.policies.tools.network === "disabled" &&
@@ -134,12 +155,16 @@ export function ExtractionEdits({
       {editable && onSave ? (
         <button
           type="button"
-          disabled={disabled || (!changes.length && !workflowChanged && !allowNetworkAccess)}
+          disabled={
+            disabled ||
+            (!changes.length && !workflowChanged && !allowNetworkAccess && !allowLocalTools)
+          }
           onClick={() =>
             void onSave({
               resolutions: changes,
               ...(workflowChanged ? { workflow } : {}),
               ...(allowNetworkAccess ? { allowNetworkAccess: true } : {}),
+              ...(allowLocalTools ? { allowLocalTools: true } : {}),
             })
           }
         >
