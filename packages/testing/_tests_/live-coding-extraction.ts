@@ -22,6 +22,13 @@ if (process.env.LOOPY_LIVE_ACCEPTANCE !== "1")
   throw new Error("Set LOOPY_LIVE_ACCEPTANCE=1 to invoke paid coding calls.");
 assert(acceptanceProviders.includes(provider) && model, "Supply provider and explicit model");
 assert(provider !== "codex" || model === "gpt-5.6-luna", "Codex requires gpt-5.6-luna low");
+const toolAllow: string[] = process.env.LOOPY_ACCEPTANCE_TOOL_ALLOW
+  ? JSON.parse(process.env.LOOPY_ACCEPTANCE_TOOL_ALLOW)
+  : [];
+assert(
+  Array.isArray(toolAllow) && toolAllow.every((tool) => typeof tool === "string"),
+  "LOOPY_ACCEPTANCE_TOOL_ALLOW must be a JSON array of explicit tool names",
+);
 const resumeProject = process.env.LOOPY_ACCEPTANCE_PROJECT;
 const project = resumeProject ?? mkdtempSync(resolve(tmpdir(), `loopy-coding-${provider}-`));
 if (!resumeProject) {
@@ -228,6 +235,10 @@ try {
       allowNetworkAccess: process.env.LOOPY_ACCEPTANCE_ALLOW_NETWORK === "1",
       workflow: {
         ...review.proposal.workflow,
+        policies: {
+          ...review.proposal.workflow.policies,
+          tools: { ...review.proposal.workflow.policies.tools, allow: toolAllow },
+        },
         defaults: {
           ...review.proposal.workflow.defaults,
           timeoutMs: 120000,
