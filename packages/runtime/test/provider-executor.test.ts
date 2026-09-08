@@ -139,7 +139,9 @@ describe("provider executor", () => {
       executor.execute(context({ attemptId: "attempt-parallel-2", nodeId: "agent-2" })),
     ]);
 
-    expect(stored.map((event) => event.sequence)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    expect(stored.map((event) => event.sequence)).toEqual(
+      Array.from({ length: 16 }, (_, index) => index),
+    );
     expect(new Set(stored.map((event) => event.sequence)).size).toBe(stored.length);
     expect(new Set(stored.map((event) => event.attemptId)).size).toBe(4);
     expect(stored.every((event) => event.runId === stored[0]?.runId)).toBe(true);
@@ -187,7 +189,8 @@ describe("provider executor", () => {
     });
     const result = await executor.execute(context());
     expect(result.status).toBe("succeeded");
-    expect(stored).toHaveLength(3);
+    expect(stored).toHaveLength(4);
+    expect(stored[0]).toMatchObject({ type: "provider.message", payload: { role: "user" } });
     for (const event of stored) {
       const parsed = TraceEventSchema.safeParse(event);
       expect(parsed.success).toBe(true);

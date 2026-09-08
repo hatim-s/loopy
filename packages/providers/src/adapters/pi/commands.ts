@@ -1,5 +1,5 @@
 import type { PiCommand, PiRunRequest } from "./types.js";
-import { ensureArg, listArg } from "./util.js";
+import { ensureArg, ensurePrompt, listArg } from "./util.js";
 
 function option(args: string[], flag: string, value: string | undefined): void {
   if (value === undefined) return;
@@ -8,7 +8,7 @@ function option(args: string[], flag: string, value: string | undefined): void {
 }
 
 export function buildPiRunCommand(request: PiRunRequest): PiCommand {
-  ensureArg(request.prompt, "prompt");
+  ensurePrompt(request.prompt);
   if (request.noTools && (request.tools?.length || request.excludeTools?.length))
     throw new TypeError("Pi --no-tools cannot be combined with tool lists.");
   const args = ["--print", "--mode", "json"];

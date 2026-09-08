@@ -770,7 +770,11 @@ const ProviderUsageEventSchema = traceEventWithAttribution(
 const ProviderSessionEndedEventSchema = traceEventWithAttribution(
   "provider.session_ended",
   z
-    .object({ status: z.enum(["succeeded", "failed", "cancelled"]), error: z.string().optional() })
+    .object({
+      status: z.enum(["succeeded", "failed", "cancelled"]),
+      error: z.string().optional(),
+      summary: z.string().optional(),
+    })
     .strict(),
   {
     provider: ProviderIdSchema,
@@ -803,7 +807,13 @@ const ToolStartedEventSchema = traceEventWithAttribution(
 );
 const ToolCompletedEventSchema = traceEventWithAttribution(
   "tool.completed",
-  z.object({ output: JsonValueSchema, exitCode: z.number().int().optional() }).strict(),
+  z
+    .object({
+      output: JsonValueSchema,
+      exitCode: z.number().int().optional(),
+      isError: z.boolean().optional(),
+    })
+    .strict(),
   {
     provider: ProviderIdSchema,
     sessionId: NonEmptyStringSchema,
