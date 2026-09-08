@@ -128,7 +128,11 @@ try {
       policies: {
         ...fixture.policies,
         sandbox: provider === "codex" ? "workspace-write" : undefined,
-        tools: { allow: [], deny: [], network: "unrestricted" },
+        tools: {
+          allow: provider === "claude" ? ["Read", "Edit", "Write", "Bash"] : [],
+          deny: [],
+          network: "unrestricted",
+        },
         budget: { timeoutMs: 120000 },
         workspace: {
           useGitWorktree: false,
