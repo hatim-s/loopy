@@ -1071,10 +1071,15 @@ async function dispatch(args: readonly string[], deps: CliDependencies): Promise
               version: Number(option(args, "--version") ?? 1),
               input: parseRunInput(args),
             })
-          : await serverRequest(server, `/runs/${encodeURIComponent(reference)}/${command}`, {
-              nodeId: option(args, "--node"),
-              input: parseRunInput(args),
-            });
+          : await serverRequest(
+              server,
+              `/runs/${encodeURIComponent(reference)}/${command}`,
+              command === "cancel"
+                ? { reason: option(args, "--reason") }
+                : command === "retry"
+                  ? { nodeId: option(args, "--node"), input: parseRunInput(args) }
+                  : {},
+            );
       printJson(result);
       return 0;
     }

@@ -181,12 +181,12 @@ describe("storage", () => {
     expect(first.db.query("PRAGMA journal_mode").get()).toEqual({ journal_mode: "wal" });
     expect(first.db.query("PRAGMA foreign_keys").get()).toEqual({ foreign_keys: 1 });
     expect(first.db.query("SELECT COUNT(*) AS count FROM schema_migrations").get()).toEqual({
-      count: 7,
+      count: 8,
     });
     first.close();
     const second = new Storage({ projectDir: dir });
     expect(second.db.query("SELECT COUNT(*) AS count FROM schema_migrations").get()).toEqual({
-      count: 7,
+      count: 8,
     });
     second.close();
   });
@@ -290,6 +290,7 @@ describe("storage", () => {
       { version: 5 },
       { version: 6 },
       { version: 7 },
+      { version: 8 },
     ]);
     expect(
       upgraded.db

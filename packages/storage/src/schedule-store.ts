@@ -435,24 +435,34 @@ export class ScheduleRepository {
   }
   /** Adapt the durable schedule tables to the scheduler engine's state port. */
   schedulerStore(): SchedulerStore {
+    const definitions = (records: ScheduleRecord[]): ScheduleDefinition[] =>
+      records.map((record) => ({
+        schedule: {
+          schemaVersion: "1",
+          scheduleId: record.id,
+          expression: record.expression,
+          timezone: record.timezone,
+          enabled: record.enabled,
+          overlap: record.overlapPolicy,
+          missed: record.missedPolicy,
+          input: record.input,
+        },
+        workflowId: record.workflowId,
+        workflowVersion: record.workflowVersion,
+        executionMode: record.executionMode,
+        manual: { enabled: true, input: record.input },
+      }));
     return {
-      listSchedules: async (): Promise<ScheduleDefinition[]> =>
-        this.list().map((record) => ({
-          schedule: {
-            schemaVersion: "1",
-            scheduleId: record.id,
-            expression: record.expression,
-            timezone: record.timezone,
-            enabled: record.enabled,
-            overlap: record.overlapPolicy,
-            missed: record.missedPolicy,
-            input: record.input,
-          },
-          workflowId: record.workflowId,
-          workflowVersion: record.workflowVersion,
-          executionMode: record.executionMode,
-          manual: { enabled: true, input: record.input },
-        })),
+      listSchedules: async () => definitions(this.list()),
+      listDueSchedules: async (at) =>
+        definitions(
+          this.db
+            .query<Row, [string]>(
+              "SELECT * FROM schedules WHERE enabled=1 AND expression != 'manual' AND (next_fire_at IS NULL OR next_fire_at<=?)",
+            )
+            .all(at)
+            .map(schedule),
+        ),
       getState: async (scheduleId: string): Promise<ScheduleState | undefined> => {
         const record = this.get(scheduleId);
         if (!record) return undefined;
@@ -483,8 +493,8 @@ export class ScheduleRepository {
           state.revision = Number(persisted.revision);
           if (typeof persisted.cursor === "string") state.cursor = persisted.cursor;
           state.nextDueAt = typeof persisted.cursor === "string" ? persisted.cursor : undefined;
-          state.active =
-            decode<ScheduleState["active"]>(persisted.active_json as string) ?? state.active;
+          // Active links are authoritative across cron and manual starts.
+          // A persisted engine snapshot can reference a run already reconciled as terminal.
           state.pending =
             decode<ScheduleState["pending"]>(persisted.pending_json as string) ?? state.pending;
         } else {
@@ -628,32 +638,25 @@ export class ScheduleRepository {
       )
       .all()
       .map((r) => r.id);
-    const keep = new Set(protectedRunIds);
-    const rows = this.db
-      .query<Row, []>(
-        "SELECT * FROM runs WHERE status IN ('succeeded','failed','cancelled') ORDER BY created_at DESC,id DESC",
+    const selected = this.db
+      .query<Row, (string | number)[]>(
+        `SELECT id,workflow_id,workflow_version,status,created_at,
+        (SELECT COUNT(*) FROM events WHERE run_id=runs.id) event_count,
+        (SELECT COUNT(*) FROM artifacts WHERE run_id=runs.id) artifact_count
+       FROM runs WHERE status IN ('succeeded','failed','cancelled')
+       AND NOT EXISTS (SELECT 1 FROM schedule_run_links WHERE run_id=runs.id AND state IN ('queued','active'))
+       ${before ? "AND created_at < ?" : ""}
+       ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?`,
       )
-      .all() as Row[];
-    const terminal = rows.filter(
-      (r) => !keep.has(r.id as string) && (!before || String(r.created_at) < before),
-    );
-    const selected = terminal
-      .filter((_r, i) => filter.maxRuns === undefined || i >= filter.maxRuns)
-      .slice(0, filter.batchSize + 1);
+      .all(...(before ? [before] : []), filter.batchSize + 1, filter.maxRuns ?? 0);
     const candidates: RetentionCandidate[] = selected.map((r) => ({
       runId: r.id as string,
       workflowId: r.workflow_id as string,
       workflowVersion: r.workflow_version as number,
       status: r.status as RunStatus,
       createdAt: r.created_at as string,
-      eventCount:
-        this.db
-          .query<{ count: number }, [string]>("SELECT COUNT(*) count FROM events WHERE run_id=?")
-          .get(r.id as string)?.count ?? 0,
-      artifactCount:
-        this.db
-          .query<{ count: number }, [string]>("SELECT COUNT(*) count FROM artifacts WHERE run_id=?")
-          .get(r.id as string)?.count ?? 0,
+      eventCount: Number(r.event_count),
+      artifactCount: Number(r.artifact_count),
     }));
     return {
       candidates: candidates.slice(0, filter.batchSize),

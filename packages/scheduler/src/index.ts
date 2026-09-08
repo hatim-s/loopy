@@ -45,6 +45,7 @@ export type ScheduleState = {
 
 export type SchedulerStore = {
   listSchedules(): Promise<ScheduleDefinition[]>;
+  listDueSchedules?(at: string): Promise<ScheduleDefinition[]>;
   getState(scheduleId: string): Promise<ScheduleState | undefined>;
   /** Persist a state transition with the revision/cursor observed by the caller. */
   saveState(state: ScheduleState): Promise<void>;
@@ -54,7 +55,7 @@ export type SchedulerStore = {
 
 export type SchedulerExecutor = {
   start(invocation: ScheduleInvocation): Promise<{ executionId: string }>;
-  cancel(execution: ScheduleExecution, reason: string): Promise<void>;
+  cancel(execution: ScheduleExecution, reason: string): Promise<void> | Promise<boolean>;
   /** Record a policy skip without starting runtime work. */
   skip?(invocation: ScheduleInvocation, reason: string): Promise<void>;
 };
@@ -190,12 +191,26 @@ function inputFor(
  * executor port; persistence and workflow execution remain outside this package.
  */
 export class SchedulerEngine {
+  private readonly locks = new Map<string, Promise<unknown>>();
+  private serialize<T>(id: string, operation: () => Promise<T>): Promise<T> {
+    if (this.options.serialize) return this.options.serialize(id, operation);
+    const next = (this.locks.get(id) ?? Promise.resolve()).catch(() => undefined).then(operation);
+    this.locks.set(id, next);
+    void next
+      .finally(() => {
+        if (this.locks.get(id) === next) this.locks.delete(id);
+      })
+      .catch(() => undefined);
+    return next;
+  }
   constructor(
     private readonly options: {
       store: SchedulerStore;
       executor: SchedulerExecutor;
       clock?: SchedulerClock;
       id?: () => string;
+      serialize?: <T>(id: string, operation: () => Promise<T>) => Promise<T>;
+      pollingToleranceMs?: number;
     },
   ) {}
 
@@ -225,7 +240,9 @@ export class SchedulerEngine {
       at.getUTCSeconds() === 0 && at.getUTCMilliseconds() === 0
         ? nextOccurrence(schedule.schedule, new Date(at.getTime() - 1))
         : nextOccurrence(schedule.schedule, at);
-    return { scheduleId: schedule.schedule.scheduleId, nextDueAt: iso(next), revision: 0 };
+    const state = { scheduleId: schedule.schedule.scheduleId, nextDueAt: iso(next), revision: 0 };
+    await this.options.store.saveState(state);
+    return state;
   }
 
   private async startInvocation(
@@ -238,16 +255,28 @@ export class SchedulerEngine {
       const overlap = schedule.schedule.overlap as OverlapPolicy;
       if (overlap === "skip") {
         await this.options.executor.skip?.(invocation, "overlap policy skipped this fire");
+        await this.options.store.saveState(state);
         return { scheduleId: state.scheduleId, action: "skipped_overlap", invocation };
       }
       if (overlap === "queue") {
-        if (state.pending)
+        if (state.pending) {
+          await this.options.executor.skip?.(invocation, "one invocation is already queued");
+          await this.options.store.saveState(state);
           return { scheduleId: state.scheduleId, action: "skipped_overlap", invocation };
+        }
         state.pending = invocation;
         await this.options.store.saveState(state);
         return { scheduleId: state.scheduleId, action: "queued", invocation };
       }
-      await this.options.executor.cancel(state.active, "cancelled by a newer scheduled invocation");
+      const stopped = await this.options.executor.cancel(
+        state.active,
+        "cancelled by a newer scheduled invocation",
+      );
+      if (stopped === false) {
+        state.pending ??= invocation;
+        await this.options.store.saveState(state);
+        return { scheduleId: state.scheduleId, action: "queued", invocation };
+      }
       state.active = undefined;
       const started = await this.options.executor.start(invocation);
       state.active = { ...invocation, executionId: started.executionId };
@@ -273,57 +302,63 @@ export class SchedulerEngine {
   async tick(at = this.now()): Promise<TickResult> {
     const atIso = iso(at);
     const decisions: ScheduleDecision[] = [];
-    for (const schedule of await this.options.store.listSchedules()) {
-      if (schedule.schedule.expression === "manual") continue;
-      const state = await this.stateFor(schedule, at);
-      if (!schedule.schedule.enabled) {
-        await this.options.store.saveState(state);
-        decisions.push({ scheduleId: state.scheduleId, action: "disabled" });
-        continue;
-      }
-      const nextDueAt = state.nextDueAt
-        ? new Date(state.nextDueAt)
-        : nextOccurrence(schedule.schedule, at);
-      if (nextDueAt > at) {
-        await this.options.store.saveState(state);
-        decisions.push({ scheduleId: state.scheduleId, action: "not_due" });
-        continue;
-      }
-
-      // A tick can span an arbitrary outage. Advance the cursor to the future
-      // first, then emit at most one invocation (never a catch-up fan-out).
-      const latest = previousOccurrence(schedule.schedule, new Date(at.getTime() + 1));
-      state.nextDueAt = iso(nextOccurrence(schedule.schedule, at));
-      const scheduledFor = iso(latest);
-      const invocation: ScheduleInvocation = {
-        scheduleId: state.scheduleId,
-        workflowId: schedule.workflowId,
-        workflowVersion: schedule.workflowVersion,
-        ...(schedule.executionMode ? { executionMode: schedule.executionMode } : {}),
-        input: inputFor(schedule, "cron"),
-        scheduledFor,
-        firedAt: atIso,
-        idempotencyKey: stableKey(state.scheduleId, scheduledFor, "cron"),
-        source: "cron",
-      };
-      if (schedule.schedule.missed === ("skip" satisfies MissedRunPolicy)) {
-        // A due value older than the current polling interval is a missed run.
-        // It is still allowed when the tick lands on that exact occurrence.
-        const exact = latest.getTime() === at.getTime();
-        if (!exact) {
-          await this.options.store.saveState(state);
-          decisions.push({ scheduleId: state.scheduleId, action: "not_due" });
-          continue;
+    const schedules = await (this.options.store.listDueSchedules?.(atIso) ??
+      this.options.store.listSchedules());
+    for (const schedule of schedules)
+      await this.serialize(schedule.schedule.scheduleId, async () => {
+        if (schedule.schedule.expression === "manual") return;
+        const state = await this.stateFor(schedule, at);
+        if (!schedule.schedule.enabled) {
+          decisions.push({ scheduleId: state.scheduleId, action: "disabled" });
+          return;
         }
-      }
-      if (
-        !(await this.options.store.claimIdempotencyKey(state.scheduleId, invocation.idempotencyKey))
-      ) {
-        decisions.push({ scheduleId: state.scheduleId, action: "duplicate", invocation });
-        continue;
-      }
-      decisions.push(await this.startInvocation(schedule, state, invocation));
-    }
+        const nextDueAt = state.nextDueAt
+          ? new Date(state.nextDueAt)
+          : nextOccurrence(schedule.schedule, at);
+        if (nextDueAt > at) {
+          decisions.push({ scheduleId: state.scheduleId, action: "not_due" });
+          return;
+        }
+
+        // A tick can span an arbitrary outage. Advance the cursor to the future
+        // first, then emit at most one invocation (never a catch-up fan-out).
+        const latest = previousOccurrence(schedule.schedule, new Date(at.getTime() + 1));
+        state.nextDueAt = iso(nextOccurrence(schedule.schedule, at));
+        const scheduledFor = iso(latest);
+        const invocation: ScheduleInvocation = {
+          scheduleId: state.scheduleId,
+          workflowId: schedule.workflowId,
+          workflowVersion: schedule.workflowVersion,
+          ...(schedule.executionMode ? { executionMode: schedule.executionMode } : {}),
+          input: inputFor(schedule, "cron"),
+          scheduledFor,
+          firedAt: atIso,
+          idempotencyKey: stableKey(state.scheduleId, scheduledFor, "cron"),
+          source: "cron",
+        };
+        if (schedule.schedule.missed === ("skip" satisfies MissedRunPolicy)) {
+          // A due value older than the current polling interval is a missed run.
+          // Allow two seconds for the normal one-second polling timer to wake up.
+          const exact =
+            at.getTime() - nextDueAt.getTime() <= (this.options.pollingToleranceMs ?? 2_000);
+          if (!exact) {
+            await this.options.store.saveState(state);
+            decisions.push({ scheduleId: state.scheduleId, action: "not_due" });
+            return;
+          }
+        }
+        if (
+          !(await this.options.store.claimIdempotencyKey(
+            state.scheduleId,
+            invocation.idempotencyKey,
+          ))
+        ) {
+          await this.options.store.saveState(state);
+          decisions.push({ scheduleId: state.scheduleId, action: "duplicate", invocation });
+          return;
+        }
+        decisions.push(await this.startInvocation(schedule, state, invocation));
+      });
     return { at: atIso, decisions };
   }
 
@@ -331,6 +366,13 @@ export class SchedulerEngine {
     scheduleId: string,
     override?: JsonObject,
     firedAt = this.now(),
+  ): Promise<ScheduleDecision> {
+    return this.serialize(scheduleId, () => this.fireInternal(scheduleId, override, firedAt));
+  }
+  private async fireInternal(
+    scheduleId: string,
+    override: JsonObject | undefined,
+    firedAt: Date,
   ): Promise<ScheduleDecision> {
     const schedule = await this.definition(scheduleId);
     if (!manualEnabled(schedule.manual)) return { scheduleId, action: "disabled" };
@@ -354,6 +396,12 @@ export class SchedulerEngine {
 
   /** Complete the active handoff, starting a queued invocation if one exists. */
   async complete(scheduleId: string, executionId: string): Promise<ScheduleExecution | undefined> {
+    return this.serialize(scheduleId, () => this.completeInternal(scheduleId, executionId));
+  }
+  private async completeInternal(
+    scheduleId: string,
+    executionId: string,
+  ): Promise<ScheduleExecution | undefined> {
     const state = await this.options.store.getState(scheduleId);
     if (!state?.active || state.active.executionId !== executionId) return undefined;
     state.active = undefined;

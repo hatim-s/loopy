@@ -53,15 +53,28 @@ describe("registered provider adapter conformance", () => {
         provider,
         provider,
         provider,
+        provider,
+        provider,
       ]);
-      expect(stored.filter((event) => event.type === "provider.message")).toHaveLength(2);
+      expect(
+        stored
+          .filter((event) => event.type === "provider.message")
+          .map((event) => ({ role: event.payload.role, content: event.payload.content })),
+      ).toEqual([
+        { role: "user", content: "first" },
+        { role: "assistant", content: "fixture-visible" },
+        { role: "user", content: "second" },
+        { role: "assistant", content: "fixture-visible" },
+      ]);
       shapes.push(stored.map((event) => event.type));
     }
     expect(shapes.every((shape) => JSON.stringify(shape) === JSON.stringify(shapes[0]))).toBe(true);
     expect(shapes[0]).toEqual([
+      "provider.message",
       "provider.session_started",
       "provider.message",
       "provider.session_ended",
+      "provider.message",
       "provider.session_started",
       "provider.message",
       "provider.session_ended",

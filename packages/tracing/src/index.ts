@@ -321,6 +321,9 @@ export function redactTraceEvent(event: TraceEvent, policy: RedactionPolicy): Re
 }
 
 export interface TraceCodecOptions {
+  /** Stream ordered, contiguous input without buffering. Violations reject after any emitted prefix.
+   * The default buffers and normalizes tolerant, out-of-order input before exporting. */
+  ordered?: boolean;
   limits?: Partial<TraceLimits>;
   redaction?: RedactionPolicy;
   /** Output always uses LF. The default includes exactly one final LF for non-empty exports. */
@@ -569,6 +572,51 @@ export async function* encodeTraceJsonlStream(
   source: TraceEventInput | TraceEventSource,
   options: TraceCodecOptions = {},
 ): AsyncGenerator<Uint8Array> {
+  if (options.ordered) {
+    const events =
+      "events" in source && typeof source.events === "function"
+        ? source.events()
+        : (source as TraceEventInput);
+    const limits = limitsFor(options);
+    const encoder = new TextEncoder();
+    const trailing =
+      options.trailingNewline === undefined ||
+      options.trailingNewline === true ||
+      options.trailingNewline === "required";
+    let count = 0;
+    let bytes = 0;
+    for await (const input of events) {
+      let event = parseEvent(input, { inputIndex: count });
+      if (event.sequence !== count)
+        throw new TraceCodecError("Ordered trace sequence is not contiguous.", [
+          {
+            code: event.sequence < count ? "duplicate_sequence" : "sequence_gap",
+            message: `Expected sequence ${count}, received ${event.sequence}.`,
+            inputIndex: count,
+            expectedSequence: count,
+            actualSequence: event.sequence,
+          },
+        ]);
+      if (options.redaction) event = redactTraceEvent(event, options.redaction).event;
+      if (count >= limits.maxEvents || count >= limits.maxLines) {
+        const code = count >= limits.maxEvents ? "max_events_exceeded" : "max_lines_exceeded";
+        throw new TraceCodecError("Trace limit exceeded.", [
+          { code, message: "Trace exceeds configured event or line limit." },
+        ]);
+      }
+      const chunk = encoder.encode(
+        `${!trailing && count ? "\n" : ""}${canonicalJson(event as unknown as JsonValue)}${trailing ? "\n" : ""}`,
+      );
+      bytes += chunk.byteLength;
+      if (bytes > limits.maxBytes)
+        throw new TraceCodecError("Trace byte limit exceeded.", [
+          { code: "max_bytes_exceeded", message: `Maximum bytes is ${limits.maxBytes}.` },
+        ]);
+      count += 1;
+      yield chunk;
+    }
+    return;
+  }
   const normalized = await normalizeAsync(source, options);
   const limits = limitsFor(options);
   const trailingNewline =
@@ -604,8 +652,14 @@ export async function writeTraceJsonl(
   const normalized = await normalizeAsync(source, options);
   const rendered = renderEvents(normalized.events, options);
   const encoder = new TextEncoder();
-  for (const line of rendered.text.match(/[^\n]*\n|[^\n]+$/g) ?? []) {
-    await sink.write(encoder.encode(line));
+  // This report API retains text/events by contract. Streaming callers use encodeTraceJsonlStream.
+  const trailing = rendered.text.endsWith("\n");
+  for (const [index, event] of normalized.events.entries()) {
+    await sink.write(
+      encoder.encode(
+        `${canonicalJson(event as unknown as JsonValue)}${trailing || index < normalized.events.length - 1 ? "\n" : ""}`,
+      ),
+    );
   }
   await sink.close?.();
   return { ...rendered, ...normalized };
@@ -757,36 +811,167 @@ export async function decodeTraceJsonlStream(
   chunks: AsyncIterable<string | Uint8Array> | Iterable<string | Uint8Array>,
   options: TraceCodecOptions = {},
 ): Promise<TraceJsonlImport> {
-  const textDecoder = new TextDecoder("utf-8", { fatal: true });
-  const parts: string[] = [];
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  const encoder = new TextEncoder();
+  const limits = limitsFor(options);
+  const parsed: Array<{ event: TraceEvent; inputIndex: number }> = [];
+  const diagnostics: TraceDiagnostic[] = [];
+  const redactions: RedactionRecord[] = [];
+  let carry = "";
   let bytes = 0;
-  try {
-    for await (const chunk of chunks) {
-      if (typeof chunk === "string") {
-        const encoded = new TextEncoder().encode(chunk);
-        bytes += encoded.byteLength;
-        parts.push(chunk);
-      } else {
-        bytes += chunk.byteLength;
-        parts.push(textDecoder.decode(chunk, { stream: true }));
-      }
-      if (bytes > limitsFor(options).maxBytes) {
-        throw new TraceCodecError("Trace byte limit exceeded.", [
+  let lines = 0;
+  let trailing = false;
+  let previousHighSurrogate = false;
+  let parseFailure: TraceCodecError | undefined;
+  const consume = (line: string, final: boolean) => {
+    const inputIndex = lines++;
+    if (lines > limits.maxLines)
+      throw new TraceCodecError("Trace line limit exceeded.", [
+        { code: "max_lines_exceeded", message: `Maximum lines is ${limits.maxLines}.` },
+      ]);
+    if (parseFailure) return;
+    if (!line.trim()) {
+      const diagnostic: TraceDiagnostic = {
+        code: "malformed_json",
+        message: "Blank JSONL lines are not events.",
+        line: inputIndex + 1,
+      };
+      diagnostics.push(diagnostic);
+      if (options.rejectDiagnostics !== false)
+        parseFailure = new TraceCodecError(diagnostic.message, [diagnostic]);
+      return;
+    }
+    try {
+      let value: unknown;
+      try {
+        value = JSON.parse(line);
+      } catch {
+        throw new TraceCodecError("Trace line is not valid JSON.", [
           {
-            code: "max_bytes_exceeded",
-            message: `Maximum bytes is ${limitsFor(options).maxBytes}.`,
+            code: !line.trim() || !final ? "malformed_json" : "truncated_line",
+            message: !line.trim()
+              ? "Blank JSONL lines are not events."
+              : "Trace line is not valid JSON.",
+            line: inputIndex + 1,
           },
         ]);
       }
+      const event = parseEvent(value, { line: inputIndex + 1, inputIndex });
+      parsed.push({ event, inputIndex });
+      redactions.push(...recordsFromRedaction(event));
+    } catch (error) {
+      if (options.rejectDiagnostics === false && error instanceof TraceCodecError)
+        diagnostics.push(...error.diagnostics);
+      else if (error instanceof TraceCodecError) parseFailure ??= error;
+      else throw error;
     }
-    parts.push(textDecoder.decode());
-  } catch (error) {
-    if (error instanceof TraceCodecError) throw error;
-    throw new TraceCodecError("Trace is not valid UTF-8.", [
-      { code: "invalid_utf8", message: "Trace bytes are not valid UTF-8." },
-    ]);
+    if (parsed.length > limits.maxEvents) {
+      const failure = new TraceCodecError("Trace event limit exceeded.", [
+        {
+          code: "max_events_exceeded",
+          message: `Maximum events is ${limits.maxEvents}.`,
+          line: inputIndex + 1,
+        },
+      ]);
+      if (options.rejectDiagnostics === false) throw failure;
+      parseFailure ??= failure;
+    }
+  };
+  const decode = (chunk?: Uint8Array) => {
+    try {
+      return chunk ? decoder.decode(chunk, { stream: true }) : decoder.decode();
+    } catch {
+      throw new TraceCodecError("Trace is not valid UTF-8.", [
+        { code: "invalid_utf8", message: "Trace bytes are not valid UTF-8." },
+      ]);
+    }
+  };
+  for await (const chunk of chunks) {
+    let text: string;
+    if (typeof chunk === "string") {
+      text = decode() + chunk;
+      const first = chunk.charCodeAt(0);
+      bytes +=
+        encoder.encode(chunk).byteLength -
+        (previousHighSurrogate && first >= 0xdc00 && first <= 0xdfff ? 2 : 0);
+      if (chunk.length) {
+        const last = chunk.charCodeAt(chunk.length - 1);
+        previousHighSurrogate = last >= 0xd800 && last <= 0xdbff;
+      }
+    } else {
+      bytes += chunk.byteLength;
+      text = decode(chunk);
+      if (chunk.byteLength) previousHighSurrogate = false;
+    }
+    if (bytes > limits.maxBytes)
+      throw new TraceCodecError("Trace byte limit exceeded.", [
+        { code: "max_bytes_exceeded", message: `Maximum bytes is ${limits.maxBytes}.` },
+      ]);
+    carry += text;
+    let offset = 0;
+    let newline = carry.indexOf("\n");
+    while (newline >= 0) {
+      consume(carry.slice(offset, newline), false);
+      offset = newline + 1;
+      newline = carry.indexOf("\n", offset);
+    }
+    if (offset) {
+      trailing = offset === carry.length;
+      carry = carry.slice(offset);
+    } else if (carry.length) trailing = false;
   }
-  return decodeText(parts.join(""), bytes, options);
+  carry += decode();
+  if (carry.length) {
+    trailing = false;
+    consume(carry, true);
+  }
+  // A single LF encodes an empty body in the original codec.
+  if (bytes === 1 && trailing && parsed.length === 0) {
+    lines = 0;
+    diagnostics.length = 0;
+    parseFailure = undefined;
+  }
+  const policy = trailingPolicy(options);
+  const newlineDiagnostics: TraceDiagnostic[] = [];
+  if (policy === "required" && bytes > 0 && !trailing)
+    newlineDiagnostics.push({
+      code: "missing_trailing_newline",
+      message: "Trace must end with LF.",
+    });
+  if (policy === "forbidden" && trailing)
+    newlineDiagnostics.push({
+      code: "unexpected_trailing_newline",
+      message: "Trace must not end with LF.",
+    });
+  if (options.rejectDiagnostics !== false && newlineDiagnostics.length)
+    throw new TraceCodecError(
+      newlineDiagnostics[0]?.message ?? "Invalid trailing newline",
+      newlineDiagnostics,
+    );
+  if (options.rejectDiagnostics !== false) {
+    const blank = diagnostics.find((item) => item.code === "malformed_json");
+    if (
+      blank &&
+      (!parseFailure || (blank.line ?? Infinity) < (parseFailure.diagnostics[0]?.line ?? Infinity))
+    )
+      throw new TraceCodecError(blank.message, [blank]);
+    if (parseFailure) throw parseFailure;
+  }
+  diagnostics.unshift(...newlineDiagnostics);
+  const sorted = [...parsed].sort((left, right) => left.event.sequence - right.event.sequence);
+  diagnostics.push(
+    ...orderingDiagnostics(
+      sorted.map((item) => item.event),
+      sorted.map((item) => item.inputIndex),
+      parsed.map((item) => item.event),
+      parsed.map((item) => item.inputIndex),
+    ).map((diagnostic) => ({
+      ...diagnostic,
+      line: diagnostic.inputIndex === undefined ? undefined : diagnostic.inputIndex + 1,
+    })),
+  );
+  failIfRequested(diagnostics, options);
+  return { events: sorted.map((item) => item.event), diagnostics, bytes, lines, redactions };
 }
 
 export async function importTraceJsonl(

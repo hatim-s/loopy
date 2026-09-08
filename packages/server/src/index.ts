@@ -47,10 +47,7 @@ export async function startServer(options: ServerOptions) {
     createProviderExecutor({
       registry,
       onEvent(event) {
-        store.appendTraceEvent(event.runId, {
-          ...event,
-          sequence: store.listTraceEvents(event.runId).length,
-        });
+        store.appendProviderTraceEvent(event.runId, event);
       },
     });
   const runtime = new RuntimeScheduler({

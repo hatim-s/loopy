@@ -463,7 +463,6 @@ describe("local API", () => {
         id: run.id,
         workflowId: workflow.id,
         workflowVersion: 1,
-        input: {},
         createdAt: run.createdAt,
         updatedAt: run.updatedAt,
       });
