@@ -8,7 +8,12 @@ import type { ExtractorAgent, ExtractorAgentRequest } from "./proposal.ts";
 import { type ExtractionRunResult, extractWithRepair, type RepairOptions } from "./repair.ts";
 import type { CapabilityMetadata, LossinessMetadata, SegmentationResult } from "./segmentation.ts";
 import { segmentTrace } from "./segmentation.ts";
-import { includeToolVerification, observedCheck, PROJECT_CHECKS } from "./verification.ts";
+import {
+  includeToolVerification,
+  observedCheck,
+  PROJECT_CHECKS,
+  verificationDirectory,
+} from "./verification.ts";
 
 export * from "./compiler.ts";
 export * from "./evidence.ts";
@@ -204,6 +209,7 @@ interface TraceIntent {
 
 interface CanonicalVerifier {
   check: string;
+  cwd?: string;
   command: string;
   args: string[];
   evidenceId: string;
@@ -265,12 +271,18 @@ function canonicalVerifiers(segmentation: SegmentationResult): {
       unsupportedChecks.push(check ?? "opaque verification");
       continue;
     }
-    const observedCommands = segmentation.events
-      .filter((event) => verification.eventIds.includes(event.id))
-      .flatMap((event) => {
-        const command = observedCheck(event);
-        return command ? [command.toLowerCase()] : [];
-      });
+    const verificationEvents = segmentation.events.filter((event) =>
+      verification.eventIds.includes(event.id),
+    );
+    const directory = verificationDirectory(verificationEvents);
+    if (!directory.ok) {
+      unsupportedChecks.push(`${check} (${directory.reason})`);
+      continue;
+    }
+    const observedCommands = verificationEvents.flatMap((event) => {
+      const command = observedCheck(event);
+      return command ? [command.toLowerCase()] : [];
+    });
     const canonicalLine = observedCommands[0] ?? [canonical.command, ...canonical.args].join(" ");
     if (
       !PROJECT_CHECKS.has(canonicalLine) ||
@@ -285,6 +297,7 @@ function canonicalVerifiers(segmentation: SegmentationResult): {
       ...canonical,
       command,
       args,
+      ...(directory.cwd ? { cwd: directory.cwd } : {}),
       evidenceId: evidence.evidenceId,
       eventIds: evidence.eventIds,
     });
@@ -445,9 +458,10 @@ function proposalFromEvidence(
           description: `Run only canonical checks observed in the trace: ${verifierResult.verifiers
             .map((item) => item.check)
             .join(", ")}.`,
-          commands: verifierResult.verifiers.map(({ command, args }) => ({
+          commands: verifierResult.verifiers.map(({ command, args, cwd }) => ({
             command,
             args,
+            ...(cwd ? { cwd } : {}),
             timeoutMs: 120_000,
           })),
           success: "all" as const,

@@ -24,6 +24,47 @@ export function observedCheck(event: TraceEvent): string | undefined {
   return observedCommand(event);
 }
 
+export function verificationDirectory(
+  events: readonly TraceEvent[],
+): { ok: true; cwd?: string } | { ok: false; reason: string } {
+  const values: unknown[] = [];
+  const collect = (input: unknown): void => {
+    if (!input || typeof input !== "object") return;
+    for (const [key, value] of Object.entries(input)) {
+      if (["cwd", "workdir", "workingDirectory"].includes(key)) values.push(value);
+      else if (value && typeof value === "object") collect(value);
+    }
+  };
+  for (const event of events) {
+    if (event.type === "tool.requested") collect(event.payload.input);
+    if (event.type === "verification.result") collect(event.payload.details);
+  }
+  const normalized = new Set<string>();
+  for (const value of values) {
+    if (
+      typeof value !== "string" ||
+      !value.trim() ||
+      value.startsWith("/") ||
+      value.includes("\\") ||
+      /^[a-z]:/i.test(value) ||
+      value.split("/").includes("..")
+    )
+      return {
+        ok: false,
+        reason: "source working directory cannot be mapped to a project-relative path",
+      };
+    normalized.add(
+      value
+        .split("/")
+        .filter((part) => part && part !== ".")
+        .join("/") || ".",
+    );
+  }
+  if (normalized.size > 1) return { ok: false, reason: "source working directories conflict" };
+  const cwd = [...normalized][0];
+  return { ok: true, ...(cwd ? { cwd } : {}) };
+}
+
 /** Attach evidence to existing events. Never invent source events or infer success from assistant prose. */
 export function includeToolVerification(segmentation: SegmentationResult): void {
   for (const event of segmentation.events) {
@@ -36,7 +77,9 @@ export function includeToolVerification(segmentation: SegmentationResult): void 
     if (
       !result ||
       result.type !== "tool.completed" ||
-      result.payload.exitCode !== 0 ||
+      (result.payload.exitCode !== undefined
+        ? result.payload.exitCode !== 0
+        : (result.payload as Record<string, unknown>).isError !== false) ||
       (result.payload as Record<string, unknown>).isError === true
     )
       continue;
@@ -55,7 +98,10 @@ export function includeToolVerification(segmentation: SegmentationResult): void 
       kind: "verification",
       firstSequence: event.sequence,
       lastSequence: result.sequence,
-      summary: `Observed successful project check: ${command}.`,
+      summary:
+        result.payload.exitCode === 0
+          ? `Observed project check exited with code 0: ${command}.`
+          : `Tool reported successful completion for ${command}; the source did not record a numeric exit code.`,
     });
   }
 }

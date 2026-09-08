@@ -143,3 +143,32 @@ test("preserves the observed package manager and requires a successful check", a
     ),
   ).toBe(true);
 });
+
+for (const field of ["cwd", "workdir", "workingDirectory"]) {
+  test(`preserves project-relative verifier ${field} and blocks unknown absolute mapping`, async () => {
+    const session = codingTrace("codex", "npm test");
+    const request = session[3];
+    if (request?.type !== "tool.requested") throw new Error("Missing fixture request");
+    request.payload.input = { command: "npm test", [field]: "packages/service" };
+    const extraction = await extractImportedSession({
+      id: randomUUID(),
+      provider: "codex",
+      session,
+    });
+    if (!extraction.result.ok) throw new Error(JSON.stringify(extraction.result.diagnostics));
+    expect(
+      extraction.result.proposal.workflow.nodes.find((node) => node.kind === "verify"),
+    ).toMatchObject({ commands: [{ command: "npm", args: ["test"], cwd: "packages/service" }] });
+    request.payload.input = { command: "npm test", [field]: "/repo/packages/service" };
+    const absolute = await extractImportedSession({ id: randomUUID(), provider: "codex", session });
+    if (!absolute.result.ok) throw new Error(JSON.stringify(absolute.result.diagnostics));
+    expect(absolute.result.proposal.workflow.nodes.some((node) => node.kind === "verify")).toBe(
+      false,
+    );
+    expect(
+      absolute.result.proposal.unresolvedQuestions.some((question) =>
+        question.question.includes("source working directory cannot be mapped"),
+      ),
+    ).toBe(true);
+  });
+}
