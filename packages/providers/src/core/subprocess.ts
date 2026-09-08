@@ -185,6 +185,43 @@ function terminate(child: ChildProcess, gracefulMs: number): Promise<void> {
   );
 }
 
+function terminateRemainingGroup(
+  child: ChildProcess,
+  gracefulMs: number,
+): Promise<void> | undefined {
+  if (process.platform === "win32" || !child.pid) return;
+  try {
+    process.kill(-child.pid, 0);
+  } catch {
+    return;
+  }
+  return terminate(child, gracefulMs);
+}
+
+async function drainAfterExit(child: ChildProcess, termination?: Promise<void>): Promise<void> {
+  let closed = false;
+  let resolveClosed!: () => void;
+  const onClose = () => {
+    closed = true;
+    resolveClosed();
+  };
+  const drained = new Promise<void>((resolve) => {
+    resolveClosed = resolve;
+    child.once("close", onClose);
+  });
+  await termination;
+  if (closed) return;
+  // A process outside our group can inherit a pipe. Close our readers after a bounded drain.
+  const timer = setTimeout(() => {
+    child.stdout?.destroy();
+    child.stderr?.destroy();
+    resolveClosed();
+  }, 100);
+  await drained;
+  clearTimeout(timer);
+  child.removeListener("close", onClose);
+}
+
 export async function runSubprocess(options: SubprocessOptions): Promise<SubprocessResult> {
   if (!options.argv[0]) throw new SubprocessError("Subprocess argv must not be empty.");
   if (!options.cwd?.trim()) throw new SubprocessError("Subprocess cwd is required.");
@@ -244,7 +281,12 @@ export async function runSubprocess(options: SubprocessOptions): Promise<Subproc
   const exit = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
     (resolve, reject) => {
       child.once("error", reject);
-      child.once("exit", (code, signal) => resolve({ code, signal }));
+      child.once("exit", async (code, signal) => {
+        if (timeout) clearTimeout(timeout);
+        termination ??= terminateRemainingGroup(child, gracefulMs);
+        await drainAfterExit(child, termination);
+        resolve({ code, signal });
+      });
     },
   ).catch((error: unknown) => {
     throw new SubprocessError(`Subprocess '${options.argv[0]}' failed: ${String(error)}`);
@@ -315,6 +357,7 @@ export function startJsonlSubprocess(options: JsonlSubprocessOptions): LiveJsonl
   let timedOut = false;
   let limitExceeded: SubprocessResult["limitExceeded"];
   let termination: Promise<void> | undefined;
+  let finished = false;
   const terminateFor = (reason: NonNullable<SubprocessResult["limitExceeded"]>) => {
     limitExceeded ??= reason;
     if (reason === "stdout") stdoutState.truncated = true;
@@ -386,6 +429,9 @@ export function startJsonlSubprocess(options: JsonlSubprocessOptions): LiveJsonl
       });
     });
     child.once("exit", async (code, signal) => {
+      if (timeout) clearTimeout(timeout);
+      termination ??= terminateRemainingGroup(child, gracefulMs);
+      await drainAfterExit(child, termination);
       if (lineBuffer && !limitExceeded) {
         lineCount += 1;
         if (lineCount > maxLines) terminateFor("lines");
@@ -419,6 +465,7 @@ export function startJsonlSubprocess(options: JsonlSubprocessOptions): LiveJsonl
               ? `Subprocess exited with ${signal ? `signal ${signal}` : `code ${String(code)}`}.`
               : undefined,
       };
+      finished = true;
       resolve(result);
     });
   });
@@ -426,6 +473,7 @@ export function startJsonlSubprocess(options: JsonlSubprocessOptions): LiveJsonl
     lines: lines.iterable,
     done,
     cancel: async () => {
+      if (finished) return;
       abort();
       await done;
       await termination;
