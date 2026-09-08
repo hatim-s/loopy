@@ -29,6 +29,12 @@ assert(
   Array.isArray(toolAllow) && toolAllow.every((tool) => typeof tool === "string"),
   "LOOPY_ACCEPTANCE_TOOL_ALLOW must be a JSON array of explicit tool names",
 );
+assert(
+  toolAllow.length === 0 ||
+    (provider === "claude" &&
+      JSON.stringify([...toolAllow].sort()) === JSON.stringify(["Bash", "Edit", "Read", "Write"])),
+  "Local tool consent supports exactly Claude Read/Edit/Write/Bash",
+);
 const resumeProject = process.env.LOOPY_ACCEPTANCE_PROJECT;
 const project = resumeProject ?? mkdtempSync(resolve(tmpdir(), `loopy-coding-${provider}-`));
 if (!resumeProject) {
@@ -233,12 +239,9 @@ try {
       resolutions,
       resolvedBy: "acceptance-review",
       allowNetworkAccess: process.env.LOOPY_ACCEPTANCE_ALLOW_NETWORK === "1",
+      allowLocalTools: toolAllow.length > 0,
       workflow: {
         ...review.proposal.workflow,
-        policies: {
-          ...review.proposal.workflow.policies,
-          tools: { ...review.proposal.workflow.policies.tools, allow: toolAllow },
-        },
         defaults: {
           ...review.proposal.workflow.defaults,
           timeoutMs: 120000,
