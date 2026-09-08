@@ -535,7 +535,10 @@ export function WorkflowsPage({ api }: StudioPageProps) {
                       {definition?.description || "Connect steps into a repeatable local workflow."}
                     </p>
                     <div className="graph-card-footer">
-                      <span>{definition?.nodes?.length ?? 0} steps</span>
+                      <span>
+                        {definition?.nodes?.length ?? 0} step
+                        {definition?.nodes?.length === 1 ? "" : "s"}
+                      </span>
                       <strong>
                         Open graph <ArrowUpRight size={14} aria-hidden="true" />
                       </strong>
