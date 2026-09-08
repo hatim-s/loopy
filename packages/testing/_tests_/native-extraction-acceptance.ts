@@ -130,19 +130,22 @@ for (const provider of acceptanceProviders) {
       assert(
         question.question.includes("may edit files") ||
           question.question.includes("cannot enforce network isolation") ||
-          question.question.includes("Multiple user instructions were observed"),
+          question.question.includes("Multiple user instructions were observed") ||
+          (provider === "claude" &&
+            question.question.includes("Explicitly allow Claude tools Read, Edit, Write and Bash")),
         `Unexpected fixture boundary: ${question.question}`,
       );
       return {
         question: question.question,
         answer:
-          "Reviewed synthetic fixture contains only a local greeting edit and bun test. Duplicate user instructions express the same greeting task; the required current task input defines the reusable scope. Allow local QA edits and provider network policy in this disposable test project; the injected provider performs no network requests.",
+          "Reviewed synthetic fixture contains only a local greeting edit and bun test. Duplicate user instructions express the same greeting task; the required current task input defines the reusable scope. Explicitly allow Claude Read/Edit/Write/Bash when requested. Allow local QA edits and provider network policy in this disposable test project; the injected provider performs no network requests.",
       };
     });
     const reviewed = await api<Review>(`/extractions/${job.id}/review`, {
       expectedProposalHash: review.proposalHash,
       resolutions,
       allowNetworkAccess: true,
+      allowLocalTools: provider === "claude",
     });
     const published = await api<WorkflowVersionRecord>(`/extractions/${job.id}/approve`, {
       expectedProposalHash: reviewed.proposalHash,
