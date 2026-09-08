@@ -127,6 +127,9 @@ test("maps absolute verification directories only within the recorded source run
   for (const [cwd, expected] of [
     ["/repo", "."],
     ["/repo/packages/service", "packages/service"],
+    ["/private/repo/packages/service", "packages/service"],
+    ["/private/repo-other", undefined],
+    ["/private/repo/../outside", undefined],
     ["/repo-other", undefined],
     ["/other/repo", undefined],
     ["/repo/../outside", undefined],
@@ -137,7 +140,7 @@ test("maps absolute verification directories only within the recorded source run
     request.payload.input = { command: "bun test", cwd };
     const result = await extractImportedSession(
       { id: randomUUID(), provider: "opencode", session },
-      { sourceWorkspaceRoots: { [request.runId]: "/repo" } },
+      { sourceWorkspaceRoots: { [request.runId]: ["/repo", "/private/repo"] } },
     );
     if (!result.result.ok) throw new Error(JSON.stringify(result.result.diagnostics));
     const verify = result.result.proposal.workflow.nodes.find((node) => node.kind === "verify");
@@ -145,7 +148,7 @@ test("maps absolute verification directories only within the recorded source run
     else expect(verify).toBeUndefined();
     const unrelated = await extractImportedSession(
       { id: randomUUID(), provider: "opencode", session },
-      { sourceWorkspaceRoots: { [randomUUID()]: "/repo" } },
+      { sourceWorkspaceRoots: { [randomUUID()]: ["/repo"] } },
     );
     if (!unrelated.result.ok) throw new Error(JSON.stringify(unrelated.result.diagnostics));
     expect(unrelated.result.proposal.workflow.nodes.some((node) => node.kind === "verify")).toBe(

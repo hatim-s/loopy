@@ -46,7 +46,7 @@ export interface ExtractionAudit {
   repairDiagnostics: readonly unknown[];
   review: DeterministicReview;
   deterministic: true;
-  sourceWorkspaceRoots?: Readonly<Record<string, string>>;
+  sourceWorkspaceRoots?: Readonly<Record<string, readonly string[]>>;
 }
 
 export interface DeterministicReview {
@@ -256,7 +256,7 @@ function readOnlyIntents(segmentation: SegmentationResult): TraceIntent[] {
 
 function canonicalVerifiers(
   segmentation: SegmentationResult,
-  sourceWorkspaceRoots?: Readonly<Record<string, string>>,
+  sourceWorkspaceRoots?: Readonly<Record<string, readonly string[]>>,
 ): {
   verifiers: CanonicalVerifier[];
   unsupportedChecks: string[];
@@ -379,7 +379,7 @@ function proposalFromEvidence(
   request: ExtractorAgentRequest,
   segmentation: SegmentationResult,
   provider: string,
-  sourceWorkspaceRoots?: Readonly<Record<string, string>>,
+  sourceWorkspaceRoots?: Readonly<Record<string, readonly string[]>>,
 ): ExtractionProposal {
   const primary = firstEvidence(segmentation);
   const coding = codingIntent(segmentation.events);
@@ -715,7 +715,7 @@ function proposalFromEvidence(
 
 export interface DeterministicAgentOptions {
   /** Recorded native run roots supplied only after matching the imported trace to stored events. */
-  sourceWorkspaceRoots?: Readonly<Record<string, string>>;
+  sourceWorkspaceRoots?: Readonly<Record<string, readonly string[]>>;
   provider?: string;
   failFirstWith?: unknown;
 }

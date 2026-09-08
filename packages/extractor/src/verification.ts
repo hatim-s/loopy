@@ -26,7 +26,7 @@ export function observedCheck(event: TraceEvent): string | undefined {
 
 export function verificationDirectory(
   events: readonly TraceEvent[],
-  sourceWorkspaceRoots: Readonly<Record<string, string>> = {},
+  sourceWorkspaceRoots: Readonly<Record<string, readonly string[]>> = {},
 ): { ok: true; cwd?: string } | { ok: false; reason: string } {
   const values: unknown[] = [];
   const collect = (input: unknown): void => {
@@ -42,13 +42,22 @@ export function verificationDirectory(
   }
   const runIds = new Set(events.map((event) => event.runId));
   const first = events[0];
-  const root = runIds.size === 1 && first ? sourceWorkspaceRoots[first.runId] : undefined;
-  const safeRoot =
-    root?.startsWith("/") && root !== "/" && !root.includes("\\") && !root.split("/").includes("..")
-      ? root.replace(/\/+$/, "")
-      : undefined;
+  const roots = runIds.size === 1 && first ? (sourceWorkspaceRoots[first.runId] ?? []) : [];
+  const safeRoots = roots
+    .filter(
+      (root) =>
+        root.startsWith("/") &&
+        root !== "/" &&
+        !root.includes("\\") &&
+        !root.split("/").includes(".."),
+    )
+    .map((root) => root.replace(/\/+$/, ""));
   const normalized = new Set<string>();
   for (const observed of values) {
+    const safeRoot =
+      typeof observed === "string"
+        ? safeRoots.find((root) => observed === root || observed.startsWith(`${root}/`))
+        : undefined;
     const value =
       typeof observed === "string" &&
       safeRoot &&

@@ -1,3 +1,4 @@
+import { realpath } from "node:fs/promises";
 import { isDeepStrictEqual } from "node:util";
 import type { JsonValue } from "@loopy/contracts";
 import { TraceEventSchema } from "@loopy/contracts";
@@ -24,7 +25,7 @@ export function createExtractionService(storage: Storage) {
     });
     try {
       storage.runtime.updateExtractionJob(job.id, { status: "running" });
-      const sourceWorkspaceRoots: Record<string, string> = {};
+      const sourceWorkspaceRoots: Record<string, string[]> = {};
       if (Array.isArray(imported.session)) {
         const events = imported.session.map((event) => TraceEventSchema.parse(event));
         const runIds = new Set(events.map((event) => event.runId));
@@ -34,7 +35,12 @@ export function createExtractionService(storage: Storage) {
           if (typeof root !== "string") continue;
           const recorded = runtimeStore.listTraceEvents(run.runId);
           const source = events.filter((event) => event.runId === run.runId);
-          if (isDeepStrictEqual(source, recorded)) sourceWorkspaceRoots[run.runId] = root;
+          if (!isDeepStrictEqual(source, recorded)) continue;
+          const roots = [root];
+          // Resolve only the recorded root; never infer aliases from imported command paths.
+          const canonicalRoot = await realpath(root).catch(() => undefined);
+          if (canonicalRoot && canonicalRoot !== root) roots.push(canonicalRoot);
+          sourceWorkspaceRoots[run.runId] = roots;
         }
       }
       const extraction = await extractImportedSession(
