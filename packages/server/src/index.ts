@@ -6,7 +6,7 @@ import {
   WorkflowDefinitionSchema,
 } from "@loopy/contracts";
 import { ApiError, createLocalApi, createLocalServerConfig } from "@loopy/local-api";
-import { createDefaultProviderRegistry } from "@loopy/providers";
+import { assertWorkflowProvidersReady, createDefaultProviderRegistry } from "@loopy/providers";
 import { createProviderExecutor, type ProviderExecutor, RuntimeScheduler } from "@loopy/runtime";
 import { openStorage, SqliteRuntimeStore } from "@loopy/storage";
 import { createToolRegistry } from "@loopy/tools";
@@ -89,7 +89,9 @@ export async function startServer(options: ServerOptions) {
     if (!parsed.success) throw new ApiError(422, "invalid_workflow", parsed.error.message);
     let prepared: Awaited<ReturnType<typeof prepareWorkflowWorkspace>> | undefined;
     try {
+      const usesRegisteredProvider = mode !== "local" && !options.provider;
       prepared = await prepareWorkflowWorkspace(parsed.data, projectDir);
+      if (usesRegisteredProvider) await assertWorkflowProvidersReady(prepared.definition, registry);
       // Workspaces remain available for retries, inspection, and checkpoint forks.
       return await runtime.start(
         { ...prepared.definition, ...(mode ? { execution: { mode } } : {}) },

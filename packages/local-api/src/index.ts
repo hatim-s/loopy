@@ -2,6 +2,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { JsonObject, WorkflowDefinition } from "@loopy/contracts";
 import { WorkflowPatchSchema } from "@loopy/contracts";
 import type { ProviderRegistry } from "@loopy/providers";
+import { validateWorkflowProviders } from "@loopy/providers";
 import type {
   AttemptRecord as RuntimeAttemptRecord,
   RuntimeEvent,
@@ -593,7 +594,13 @@ export function createLocalApi(options: LocalApiOptions): Hono {
     const match = c.req.header("Authorization")?.match(/^Bearer ([^\s]+)$/);
     if (!sameToken(token, match?.[1]))
       return c.json(
-        { error: { code: "unauthorized", message: "Bearer authentication required" } },
+        {
+          error: {
+            code: "unauthorized",
+            message:
+              "Studio session expired or authentication is missing. Reload Studio from the local server URL to reconnect.",
+          },
+        },
         401,
       );
     return next();
@@ -930,6 +937,8 @@ export function createLocalApi(options: LocalApiOptions): Hono {
   api.post("/workflows/:id/validate", async (c) => {
     const body = await jsonBody(c, maxBodyBytes);
     const checked = validateWorkflowForSave(body.definition ?? body.workflow ?? body);
+    if (checked.workflow && registry)
+      checked.diagnostics.push(...validateWorkflowProviders(checked.workflow, registry));
     return c.json({
       valid:
         Boolean(checked.workflow) && checked.diagnostics.every((item) => item.severity !== "error"),

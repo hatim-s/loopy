@@ -10,7 +10,11 @@ import {
 } from "@loopy/contracts";
 import { extractImportedSession } from "@loopy/extractor";
 import { createLocalServerConfig } from "@loopy/local-api";
-import { createDefaultProviderRegistry, type ProviderRegistry } from "@loopy/providers";
+import {
+  assertWorkflowProvidersReady,
+  createDefaultProviderRegistry,
+  type ProviderRegistry,
+} from "@loopy/providers";
 import {
   createProviderExecutor,
   type ProviderExecutor,
@@ -820,7 +824,7 @@ async function printProviders(args: readonly string[], deps: CliDependencies): P
         ...provider.capabilities.unavailable.map((name) => `${name}=unavailable`),
       ].join(",");
       console.log(
-        `${provider.provider}\t${provider.available ? "available" : "unavailable"}\t${provider.version ?? "-"}\t${capabilities}`,
+        `${provider.provider}\t${provider.available ? "installed" : "missing"}\t${provider.version ?? "-"}\t${capabilities}`,
       );
     }
   return 0;
@@ -882,6 +886,7 @@ async function runWorkflow(args: readonly string[], deps: CliDependencies): Prom
         definition,
         requestedProvider as string,
       ) as WorkflowDefinition;
+      await assertWorkflowProvidersReady(definition, registry);
       provider = createProviderExecutor({
         registry,
         onEvent: (event) => {
@@ -1019,7 +1024,11 @@ async function validateProvider(args: readonly string[], deps: CliDependencies):
   const probe = await adapter.probe();
   if (jsonOutput(args)) printJson(probe);
   else {
-    console.log(`${probe.provider}: ${probe.available ? "available" : "unavailable"}`);
+    console.log(`${probe.provider}: ${probe.available ? "installed" : "missing"}`);
+    if (probe.readiness)
+      console.log(
+        `authentication: ${probe.readiness.authentication}; usability: ${probe.readiness.usability}\n${probe.readiness.message}`,
+      );
     if (probe.version) console.log(`version: ${probe.version}`);
     if (probe.diagnostic) console.log(`diagnostic: ${probe.diagnostic}`);
   }
@@ -1128,6 +1137,7 @@ async function dispatch(args: readonly string[], deps: CliDependencies): Promise
               throw new Error(
                 `Provider '${providerId}' is unavailable${probe.diagnostic ? `: ${probe.diagnostic}` : "."}`,
               );
+            await assertWorkflowProvidersReady(definition, registry);
             provider = createProviderExecutor({
               registry,
               onEvent: (event) => {

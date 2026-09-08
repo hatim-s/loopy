@@ -45,6 +45,7 @@ import {
   type ProviderRequest,
   type ProviderRun,
 } from "./core/index.js";
+import { authenticationStatus, providerReadiness } from "./core/readiness.js";
 import { createProviderRegistry } from "./core/registry.js";
 import { runSubprocess, startJsonlSubprocess } from "./core/subprocess.js";
 
@@ -107,6 +108,7 @@ function installationProbe(
   return {
     provider,
     available: installation.installed,
+    readiness: providerReadiness(provider, installation.installed),
     ...(installation.executable ? { executable: installation.executable } : {}),
     ...(installation.path ? { path: installation.path } : {}),
     ...(installation.version ? { version: installation.version } : {}),
@@ -288,7 +290,10 @@ function policyList(policy: ProviderPolicy | undefined, key: "allow" | "deny"): 
 
 function assertUnsupportedPolicy(provider: string, checks: Array<[boolean, string]>): void {
   for (const [unsupported, message] of checks) {
-    if (unsupported) throw new Error(`${provider} cannot enforce ${message}.`);
+    if (unsupported)
+      throw new Error(
+        `${provider} cannot enforce ${message}. Choose a provider that supports this policy, or explicitly edit the workflow policy before running. The configured policy was not changed.`,
+      );
   }
 }
 
@@ -401,6 +406,9 @@ function makeAdapter(input: {
     id: input.id,
     version: options.version ?? "unknown",
     capabilities: report,
+    validateRequest(request) {
+      input.build(request, options);
+    },
     async probe() {
       const executable = options.executable ?? input.id;
       try {
@@ -409,12 +417,13 @@ function makeAdapter(input: {
           cwd: cwdFor(options),
           env: options.env,
           envAllowlist: options.envAllowlist ?? DEFAULT_ENV[input.id],
+          timeoutMs: 5_000,
           maxStdoutBytes: 64 * 1024,
           maxStderrBytes: 64 * 1024,
         });
         const version = input.probeVersion(`${result.stdout}\n${result.stderr}`);
         if (version) observedVersion = version;
-        return installationProbe(
+        const probe = installationProbe(
           input.id,
           {
             schemaVersion: "1",
@@ -428,10 +437,40 @@ function makeAdapter(input: {
           },
           report(),
         );
+        if (probe.available && (input.id === "codex" || input.id === "claude")) {
+          try {
+            const auth = await runSubprocess({
+              argv: argvFor(
+                executable,
+                options.commandPrefixArgs,
+                input.id === "codex" ? ["login", "status"] : ["auth", "status", "--json"],
+              ),
+              cwd: cwdFor(options),
+              env: options.env,
+              envAllowlist: options.envAllowlist ?? DEFAULT_ENV[input.id],
+              timeoutMs: 5_000,
+              maxStdoutBytes: 16 * 1024,
+              maxStderrBytes: 16 * 1024,
+            });
+            if (!auth.timedOut && !auth.limitExceeded)
+              probe.readiness = providerReadiness(
+                input.id,
+                true,
+                authenticationStatus(
+                  input.id,
+                  input.id === "codex" ? `${auth.stdout}\n${auth.stderr}` : auth.stdout,
+                ),
+              );
+          } catch {
+            /* A status command is optional; installation is still known. */
+          }
+        }
+        return probe;
       } catch (error) {
         return {
           provider: input.id,
           available: false,
+          readiness: providerReadiness(input.id, false),
           executable,
           capabilities: report(),
           diagnostic: `${input.id} unavailable: ${String(error).replace(/[\r\n]+/g, " ")}`,
@@ -444,7 +483,7 @@ function makeAdapter(input: {
       const command = input.build(request, options);
       const live = startJsonlSubprocess({
         argv: argvFor(command.executable, options.commandPrefixArgs, command.args),
-        cwd: request.cwd ?? cwdFor(options),
+        cwd: request.policy?.workspace?.workingDirectory ?? request.cwd ?? cwdFor(options),
         env: options.env,
         envAllowlist: options.envAllowlist ?? DEFAULT_ENV[input.id],
         signal: controller.signal,
@@ -673,9 +712,11 @@ export function createClaudeProviderAdapter(
     build: (request, current) => {
       const policy = request.policy;
       assertUnsupportedPolicy("Claude Code", [
-        [(policy?.tools?.network ?? undefined) !== undefined, "network policy"],
+        [
+          policy?.tools?.network !== undefined && policy.tools.network !== "unrestricted",
+          "network policy",
+        ],
         [(policy?.workspace?.writableRoots?.length ?? 0) > 0, "writable-root policy"],
-        [policy?.workspace?.workingDirectory !== undefined, "working-directory policy"],
         [policy?.sandbox !== undefined, "sandbox policy"],
         [(policy?.approval?.sideEffectLabels?.length ?? 0) > 0, "approval side-effect policy"],
         ...unsupportedBudgetChecks(policy, { maxTurns: true, maxCostUsd: true }),
@@ -745,7 +786,10 @@ export function createOpenCodeProviderAdapter(
           policyList(policy, "allow").length > 0 || policyList(policy, "deny").length > 0,
           "tool allow/deny policy",
         ],
-        [policy?.tools?.network !== undefined, "network policy"],
+        [
+          policy?.tools?.network !== undefined && policy.tools.network !== "unrestricted",
+          "network policy",
+        ],
         [(policy?.workspace?.writableRoots?.length ?? 0) > 0, "writable-root policy"],
         [policy?.sandbox !== undefined, "sandbox policy"],
         [(policy?.approval?.requiredBefore?.length ?? 0) > 0, "approval policy"],
@@ -827,11 +871,10 @@ export function createPiProviderAdapter(options: RegisteredProviderOptions = {})
       const policy = request.policy;
       assertUnsupportedPolicy("Pi", [
         [
-          policy?.tools?.network === "restricted" || policy?.tools?.network === "unrestricted",
-          "restricted network policy",
+          policy?.tools?.network !== undefined && policy.tools.network !== "unrestricted",
+          "network policy; Pi --offline only disables startup network operations",
         ],
         [(policy?.workspace?.writableRoots?.length ?? 0) > 0, "writable-root policy"],
-        [policy?.workspace?.workingDirectory !== undefined, "working-directory policy"],
         [policy?.sandbox !== undefined, "sandbox policy"],
         [(policy?.approval?.requiredBefore?.length ?? 0) > 0, "approval checkpoint policy"],
         [(policy?.approval?.sideEffectLabels?.length ?? 0) > 0, "approval side-effect policy"],

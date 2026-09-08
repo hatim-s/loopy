@@ -136,3 +136,31 @@ test("background server survives its CLI launcher and accepts runs from a later 
     await command("server", "stop");
   }
 }, 15_000);
+
+test("restart rotates the token and same-origin reload supplies a new session", async () => {
+  const { path } = project();
+  const original = await startServer({ projectDir: path, studioDir: path });
+  const oldToken = original.token;
+  await original.stop();
+  const restarted = await startServer({ projectDir: path, studioDir: path });
+  servers.push(restarted);
+  expect(restarted.token).not.toBe(oldToken);
+  const stale = await fetch(`${restarted.url}/api/v1/health`, {
+    headers: { Authorization: `Bearer ${oldToken}` },
+  });
+  expect(stale.status).toBe(401);
+  expect((await stale.json()).error.message).toContain("Reload Studio");
+  const page = await fetch(restarted.url, { headers: { "Sec-Fetch-Site": "same-origin" } });
+  expect(page.headers.get("cache-control")).toBe("no-store");
+  expect(await page.text()).toContain(restarted.token);
+  expect((await fetch(restarted.url, { headers: { "Sec-Fetch-Site": "cross-site" } })).status).toBe(
+    403,
+  );
+  expect(
+    (
+      await fetch(`${restarted.url}/api/v1/health`, {
+        headers: { Authorization: `Bearer ${restarted.token}` },
+      })
+    ).status,
+  ).toBe(200);
+});
