@@ -86,6 +86,11 @@ try {
     delete evidence.error;
     review = await api<Review>(`/extractions/${previous.extractionJobId}`);
     job = review.job;
+    if (process.env.LOOPY_ACCEPTANCE_REEXTRACT === "1") {
+      job = await api<ExtractionJobRecord>("/extractions", { importId: review.import.id });
+      evidence.extractionJobId = job.id;
+      review = await api<Review>(`/extractions/${job.id}`);
+    }
   } else {
     const fixture = await Bun.file(
       new URL("../../../fixtures/workflows/valid-basic.json", import.meta.url),
@@ -186,20 +191,20 @@ try {
     job = await api<ExtractionJobRecord>("/extractions", { importId: imported.id });
     evidence.extractionJobId = job.id;
     review = await api<Review>(`/extractions/${job.id}`);
-    await Bun.write(resolve(project, "extraction-review.json"), JSON.stringify(review, null, 2));
-    assert(
-      review.proposal.workflow.nodes.some((node) => node.kind === "agent"),
-      "Extraction did not recover coding work",
-    );
-    assert(
-      review.proposal.workflow.nodes.some((node) => node.kind === "verify"),
-      "Extraction did not recover verification",
-    );
-    assert(
-      review.proposal.workflow.inputs.some((input) => input.name === "task" && input.required),
-      "Extraction needs a required reusable task input",
-    );
   }
+  await Bun.write(resolve(project, "extraction-review.json"), JSON.stringify(review, null, 2));
+  assert(
+    review.proposal.workflow.nodes.some((node) => node.kind === "agent"),
+    "Extraction did not recover coding work",
+  );
+  assert(
+    review.proposal.workflow.nodes.some((node) => node.kind === "verify"),
+    "Extraction did not recover verification",
+  );
+  assert(
+    review.proposal.workflow.inputs.some((input) => input.name === "task" && input.required),
+    "Extraction needs a required reusable task input",
+  );
   let published: WorkflowVersionRecord;
   if (review.proposal.status === "approved") {
     const existing = server.storage.runtime.getWorkflowVersion(
