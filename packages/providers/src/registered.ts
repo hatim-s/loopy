@@ -23,14 +23,14 @@ import {
   buildOpenCodeCapabilities,
   buildOpenCodeRunCommand,
   importOpenCodeSession,
-  normalizeOpenCodeEvent,
+  normalizeOpenCodeJsonLines,
   parseOpenCodeVersion,
 } from "./adapters/opencode/index.js";
 import {
   buildPiCapabilities,
   buildPiRunCommand,
   importPiSession,
-  normalizePiEvent,
+  normalizePiJsonLines,
   parsePiVersion,
 } from "./adapters/pi/index.js";
 import {
@@ -45,6 +45,7 @@ import {
   type ProviderRequest,
   type ProviderRun,
 } from "./core/index.js";
+import { authenticationStatus, providerReadiness } from "./core/readiness.js";
 import { createProviderRegistry } from "./core/registry.js";
 import { runSubprocess, startJsonlSubprocess } from "./core/subprocess.js";
 
@@ -107,6 +108,7 @@ function installationProbe(
   return {
     provider,
     available: installation.installed,
+    readiness: providerReadiness(provider, installation.installed),
     ...(installation.executable ? { executable: installation.executable } : {}),
     ...(installation.path ? { path: installation.path } : {}),
     ...(installation.version ? { version: installation.version } : {}),
@@ -166,7 +168,7 @@ function fromTraceEvent(
         ? { parentSessionId: payload.parentSessionId }
         : {}),
     },
-    payload,
+    payload: { ...payload, ...(event.toolCallId ? { toolCallId: event.toolCallId } : {}) },
     ...(type === "unknown" && typeof payload.rawType === "string"
       ? { rawType: payload.rawType }
       : {}),
@@ -273,7 +275,7 @@ function importDescriptor(
         source.includes("\n") || source.trim().startsWith("{")
           ? source
           : await readFile(source, "utf8");
-      yield* await importer(input, source);
+      yield* await importer(input, input === source ? "inline-import" : source);
     },
   };
 }
@@ -288,7 +290,10 @@ function policyList(policy: ProviderPolicy | undefined, key: "allow" | "deny"): 
 
 function assertUnsupportedPolicy(provider: string, checks: Array<[boolean, string]>): void {
   for (const [unsupported, message] of checks) {
-    if (unsupported) throw new Error(`${provider} cannot enforce ${message}.`);
+    if (unsupported)
+      throw new Error(
+        `${provider} cannot enforce ${message}. Choose a provider that supports this policy, or explicitly edit the workflow policy before running. The configured policy was not changed.`,
+      );
   }
 }
 
@@ -401,6 +406,9 @@ function makeAdapter(input: {
     id: input.id,
     version: options.version ?? "unknown",
     capabilities: report,
+    validateRequest(request) {
+      input.build(request, options);
+    },
     async probe() {
       const executable = options.executable ?? input.id;
       try {
@@ -409,12 +417,13 @@ function makeAdapter(input: {
           cwd: cwdFor(options),
           env: options.env,
           envAllowlist: options.envAllowlist ?? DEFAULT_ENV[input.id],
+          timeoutMs: 5_000,
           maxStdoutBytes: 64 * 1024,
           maxStderrBytes: 64 * 1024,
         });
         const version = input.probeVersion(`${result.stdout}\n${result.stderr}`);
         if (version) observedVersion = version;
-        return installationProbe(
+        const probe = installationProbe(
           input.id,
           {
             schemaVersion: "1",
@@ -428,10 +437,40 @@ function makeAdapter(input: {
           },
           report(),
         );
+        if (probe.available && (input.id === "codex" || input.id === "claude")) {
+          try {
+            const auth = await runSubprocess({
+              argv: argvFor(
+                executable,
+                options.commandPrefixArgs,
+                input.id === "codex" ? ["login", "status"] : ["auth", "status", "--json"],
+              ),
+              cwd: cwdFor(options),
+              env: options.env,
+              envAllowlist: options.envAllowlist ?? DEFAULT_ENV[input.id],
+              timeoutMs: 5_000,
+              maxStdoutBytes: 16 * 1024,
+              maxStderrBytes: 16 * 1024,
+            });
+            if (!auth.timedOut && !auth.limitExceeded)
+              probe.readiness = providerReadiness(
+                input.id,
+                true,
+                authenticationStatus(
+                  input.id,
+                  input.id === "codex" ? `${auth.stdout}\n${auth.stderr}` : auth.stdout,
+                ),
+              );
+          } catch {
+            /* A status command is optional; installation is still known. */
+          }
+        }
+        return probe;
       } catch (error) {
         return {
           provider: input.id,
           available: false,
+          readiness: providerReadiness(input.id, false),
           executable,
           capabilities: report(),
           diagnostic: `${input.id} unavailable: ${String(error).replace(/[\r\n]+/g, " ")}`,
@@ -444,7 +483,7 @@ function makeAdapter(input: {
       const command = input.build(request, options);
       const live = startJsonlSubprocess({
         argv: argvFor(command.executable, options.commandPrefixArgs, command.args),
-        cwd: request.cwd ?? cwdFor(options),
+        cwd: request.policy?.workspace?.workingDirectory ?? request.cwd ?? cwdFor(options),
         env: options.env,
         envAllowlist: options.envAllowlist ?? DEFAULT_ENV[input.id],
         signal: controller.signal,
@@ -475,6 +514,7 @@ function makeAdapter(input: {
         events: (async function* () {
           let terminal = false;
           let malformed = false;
+          const requestedTools = new Set<string>();
           const convert = (event: NormalizedLineEvent): ProviderEvent | undefined => {
             const converted =
               "provenance" in event
@@ -495,7 +535,10 @@ function makeAdapter(input: {
           };
           try {
             for await (const line of live.lines) {
-              const normalized = await input.normalizeLine(line, request);
+              const normalized = await input.normalizeLine(line, {
+                ...request,
+                metadata: { ...request.metadata, ...(sessionId ? { sessionId } : {}) },
+              });
               for (const diagnostic of normalized.diagnostics ?? []) {
                 malformed ||= diagnostic.code === "malformed_event";
                 yield diagnosticEvent(input.id, request, diagnostic, sessionId);
@@ -507,7 +550,14 @@ function makeAdapter(input: {
                     "malformed_event";
                 }
                 const converted = convert(event);
-                if (converted) yield converted;
+                if (converted) {
+                  const callId = converted.payload?.toolCallId;
+                  if (converted.type === "tool_call" && typeof callId === "string") {
+                    if (requestedTools.has(callId)) continue;
+                    requestedTools.add(callId);
+                  }
+                  yield converted;
+                }
               }
             }
             const result = await live.done;
@@ -627,19 +677,25 @@ export function createCodexProviderAdapter(
     }),
     probeVersion: parseCodexVersion,
     imports: [
-      importDescriptor("codex-jsonl", ["codex-jsonl"], async (source) =>
+      importDescriptor("codex-jsonl", ["codex-jsonl"], async (source, origin) =>
         importCodexHistory(source, {
-          source: "historical-import",
+          source: origin,
           providerVersion: options.version ?? "unknown",
           importedAt: new Date().toISOString(),
-        }).events.map((event) =>
-          fromLineEvent(event, {
+        }).events.map((event) => ({
+          ...fromLineEvent(event, {
             runId: "import",
             attemptId: "import",
             nodeId: "import",
             input: {},
           }),
-        ),
+          provenance: {
+            source: origin,
+            sessionId: event.sessionId,
+            ...(event.parentSessionId ? { parentSessionId: event.parentSessionId } : {}),
+            version: options.version ?? "unknown",
+          },
+        })),
       ),
     ],
   });
@@ -656,9 +712,11 @@ export function createClaudeProviderAdapter(
     build: (request, current) => {
       const policy = request.policy;
       assertUnsupportedPolicy("Claude Code", [
-        [(policy?.tools?.network ?? undefined) !== undefined, "network policy"],
+        [
+          policy?.tools?.network !== undefined && policy.tools.network !== "unrestricted",
+          "network policy",
+        ],
         [(policy?.workspace?.writableRoots?.length ?? 0) > 0, "writable-root policy"],
-        [policy?.workspace?.workingDirectory !== undefined, "working-directory policy"],
         [policy?.sandbox !== undefined, "sandbox policy"],
         [(policy?.approval?.sideEffectLabels?.length ?? 0) > 0, "approval side-effect policy"],
         ...unsupportedBudgetChecks(policy, { maxTurns: true, maxCostUsd: true }),
@@ -689,19 +747,25 @@ export function createClaudeProviderAdapter(
     }),
     probeVersion: parseClaudeVersion,
     imports: [
-      importDescriptor("claude-stream-json", ["claude-stream-json"], async (source) =>
+      importDescriptor("claude-stream-json", ["claude-stream-json"], async (source, origin) =>
         importClaudeHistory(source, {
-          source: "historical-import",
+          source: origin,
           providerVersion: options.version ?? "unknown",
           importedAt: new Date().toISOString(),
-        }).events.map((event) =>
-          fromLineEvent(event, {
+        }).events.map((event) => ({
+          ...fromLineEvent(event, {
             runId: "import",
             attemptId: "import",
             nodeId: "import",
             input: {},
           }),
-        ),
+          provenance: {
+            source: origin,
+            sessionId: event.sessionId,
+            ...(event.parentSessionId ? { parentSessionId: event.parentSessionId } : {}),
+            version: options.version ?? "unknown",
+          },
+        })),
       ),
     ],
   });
@@ -722,7 +786,10 @@ export function createOpenCodeProviderAdapter(
           policyList(policy, "allow").length > 0 || policyList(policy, "deny").length > 0,
           "tool allow/deny policy",
         ],
-        [policy?.tools?.network !== undefined, "network policy"],
+        [
+          policy?.tools?.network !== undefined && policy.tools.network !== "unrestricted",
+          "network policy",
+        ],
         [(policy?.workspace?.writableRoots?.length ?? 0) > 0, "writable-root policy"],
         [policy?.sandbox !== undefined, "sandbox policy"],
         [(policy?.approval?.requiredBefore?.length ?? 0) > 0, "approval policy"],
@@ -742,14 +809,14 @@ export function createOpenCodeProviderAdapter(
       };
     },
     normalizeLine: async (line, request) => {
-      const normalized = normalizeOpenCodeEvent(JSON.parse(line), {
+      const normalized = await normalizeOpenCodeJsonLines([line], {
         runId: request.runId,
         nodeId: request.nodeId,
         attemptId: request.attemptId,
         sessionId: request.metadata?.sessionId as string | undefined,
       });
       return {
-        events: normalized.event ? [normalized.event] : [],
+        events: normalized.events,
         diagnostics: normalized.diagnostics,
       };
     },
@@ -804,11 +871,10 @@ export function createPiProviderAdapter(options: RegisteredProviderOptions = {})
       const policy = request.policy;
       assertUnsupportedPolicy("Pi", [
         [
-          policy?.tools?.network === "restricted" || policy?.tools?.network === "unrestricted",
-          "restricted network policy",
+          policy?.tools?.network !== undefined && policy.tools.network !== "unrestricted",
+          "network policy; Pi --offline only disables startup network operations",
         ],
         [(policy?.workspace?.writableRoots?.length ?? 0) > 0, "writable-root policy"],
-        [policy?.workspace?.workingDirectory !== undefined, "working-directory policy"],
         [policy?.sandbox !== undefined, "sandbox policy"],
         [(policy?.approval?.requiredBefore?.length ?? 0) > 0, "approval checkpoint policy"],
         [(policy?.approval?.sideEffectLabels?.length ?? 0) > 0, "approval side-effect policy"],
@@ -829,14 +895,14 @@ export function createPiProviderAdapter(options: RegisteredProviderOptions = {})
       };
     },
     normalizeLine: async (line, request) => {
-      const normalized = normalizePiEvent(JSON.parse(line), {
+      const normalized = await normalizePiJsonLines([line], {
         runId: request.runId,
         nodeId: request.nodeId,
         attemptId: request.attemptId,
         sessionId: request.metadata?.sessionId as string | undefined,
       });
       return {
-        events: normalized.event ? [normalized.event] : [],
+        events: normalized.events,
         diagnostics: normalized.diagnostics,
       };
     },

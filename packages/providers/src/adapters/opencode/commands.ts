@@ -1,5 +1,5 @@
 import type { OpenCodeCommand, OpenCodeExportRequest, OpenCodeRunRequest } from "./types.js";
-import { ensureArg } from "./util.js";
+import { ensureArg, ensurePrompt } from "./util.js";
 
 function option(command: string[], flag: string, value: string | undefined): void {
   if (value === undefined) return;
@@ -8,7 +8,7 @@ function option(command: string[], flag: string, value: string | undefined): voi
 }
 
 export function buildOpenCodeRunCommand(request: OpenCodeRunRequest): OpenCodeCommand {
-  ensureArg(request.prompt, "prompt");
+  ensurePrompt(request.prompt);
   if (request.fork && !request.sessionId) {
     throw new TypeError("OpenCode --fork requires an existing --session.");
   }

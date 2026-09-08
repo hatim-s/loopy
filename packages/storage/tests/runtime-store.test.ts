@@ -76,6 +76,7 @@ describe("SQLite Phase 1 runtime adapter", () => {
     expect(
       x.store.listTraceEvents(result.run.runId).every((event) => event.schemaVersion === "1"),
     ).toBe(true);
+    await x.runtime.shutdown();
     x.storage.close();
   });
 
@@ -91,6 +92,7 @@ describe("SQLite Phase 1 runtime adapter", () => {
     expect(result.run.status).toBe("succeeded");
     expect(result.run.inputs).toEqual({ preserved: true });
     expect(x.provider.calls.map((call) => call.nodeId)).toEqual(["checkpoint", "after", "after"]);
+    await x.runtime.shutdown();
     x.storage.close();
   });
 
@@ -124,6 +126,7 @@ describe("SQLite Phase 1 runtime adapter", () => {
     expect(result.run.status).toBe("succeeded");
     expect(result.attempts.find((a) => a.nodeId === "join")?.status).toBe("succeeded");
     const runId = result.run.runId;
+    await x.runtime.shutdown();
     x.storage.close();
     const reopened = new Storage({ projectDir: x.storage.projectDir });
     expect((await new SqliteRuntimeStore(reopened).getRun(runId))?.status).toBe("succeeded");
@@ -145,6 +148,7 @@ describe("SQLite Phase 1 runtime adapter", () => {
     expect(await crashingStore.listAttempts(started.runId)).toHaveLength(1);
     expect((await crashingStore.listAttempts(started.runId))[0]?.status).toBe("ready");
     expect(staleProvider.calls).toHaveLength(0);
+    // Simulate process loss while the ready-attempt commit remains suspended.
     storage.close();
 
     const reopened = new Storage({ projectDir: storage.projectDir });
@@ -159,6 +163,7 @@ describe("SQLite Phase 1 runtime adapter", () => {
     expect(result.attempts).toHaveLength(1);
     expect(result.attempts[0]?.status).toBe("succeeded");
     expect(result.events.filter((event) => event.type === "node.ready")).toHaveLength(1);
+    await runtime.shutdown();
     reopened.close();
   });
 
@@ -209,8 +214,11 @@ describe("SQLite Phase 1 runtime adapter", () => {
     expect((await deferred.runtime.wait(active.runId)).run.status).toBe("cancelled");
     const orphan = await deferred.store.listAttempts(active.runId);
     expect(orphan[0]?.status).toBe("cancelled");
+    await x.runtime.shutdown();
     x.storage.close();
+    await retry.runtime.shutdown();
     retry.storage.close();
+    await deferred.runtime.shutdown();
     deferred.storage.close();
   });
 
@@ -237,6 +245,7 @@ describe("SQLite Phase 1 runtime adapter", () => {
     expect(encodeTraceJsonl(fresh.store.listTraceEvents(events[0]?.runId ?? started.runId))).toBe(
       text,
     );
+    // Recovery abandons the old process; its fake provider stays suspended.
     x.storage.close();
     fresh.storage.close();
   });

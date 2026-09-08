@@ -110,7 +110,13 @@ function canonical(
           diagnostic("malformed_event", "OpenCode message event has no visible text.", type),
         ],
       };
-    return { event: base("provider.message", { role: "assistant", content }), diagnostics };
+    return {
+      event: base("provider.message", {
+        role: raw.role === "user" ? "user" : "assistant",
+        content,
+      }),
+      diagnostics,
+    };
   }
   if (["tool_use", "tool", "tool_call"].includes(type)) {
     const tool = stringValue(part, "tool", "name") ?? "unknown-tool";
@@ -120,22 +126,16 @@ function canonical(
       part.state && typeof part.state === "object" ? (part.state as Record<string, unknown>) : part;
     const status = stringValue(state, "status")?.toLowerCase();
     if (["completed", "complete", "success", "failed", "error"].includes(status ?? "")) {
-      if (status === "failed" || status === "error" || state.error === true) {
-        return {
-          event: base(
-            "tool.denied",
-            { tool, reason: safeString(state.error) ?? "OpenCode tool failed." },
-            callId,
-          ),
-          diagnostics,
-        };
-      }
-      const output = state.output ?? state.result ?? "";
+      const output = state.output ?? state.result ?? state.error ?? "";
       const exitCode = typeof state.exitCode === "number" ? state.exitCode : undefined;
       return {
         event: base(
           "tool.completed",
-          { output: jsonValue(output), ...(exitCode === undefined ? {} : { exitCode }) },
+          {
+            output: jsonValue(output),
+            isError: status === "failed" || status === "error",
+            ...(exitCode === undefined ? {} : { exitCode }),
+          },
           callId,
         ),
         diagnostics,
@@ -206,11 +206,41 @@ export function normalizeOpenCodeJsonLines(
         diagnostics.push(parsed.error as AdapterDiagnostic);
         continue;
       }
+      const part = partOf(parsed.value);
+      const state =
+        part.state && typeof part.state === "object"
+          ? (part.state as Record<string, unknown>)
+          : undefined;
+      // The CLI emits completed tool parts without a separate start event.
+      if (
+        state &&
+        state.input !== undefined &&
+        ["completed", "error", "failed"].includes(String(state.status))
+      ) {
+        const requested = normalizeOpenCodeEvent(
+          { ...parsed.value, part: { ...part, state: { ...state, status: "running" } } },
+          { ...context, sequence },
+        );
+        if (requested.event) {
+          events.push(requested.event);
+          sequence += 1;
+        }
+      }
       const normalized = normalizeOpenCodeEvent(parsed.value, { ...context, sequence });
       diagnostics.push(...normalized.diagnostics);
       if (normalized.event) {
         events.push(normalized.event);
         sequence += 1;
+      }
+      if (parsed.value.type === "step_finish" && part.reason === "stop") {
+        const ended = normalizeOpenCodeEvent(
+          { type: "session_end", sessionID: sessionOf(parsed.value, part, context) },
+          { ...context, sequence },
+        );
+        if (ended.event) {
+          events.push(ended.event);
+          sequence += 1;
+        }
       }
     }
     return { events, diagnostics };
