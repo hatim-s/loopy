@@ -46,6 +46,7 @@ export interface ExtractionAudit {
   repairDiagnostics: readonly unknown[];
   review: DeterministicReview;
   deterministic: true;
+  sourceWorkspaceRoots?: Readonly<Record<string, string>>;
 }
 
 export interface DeterministicReview {
@@ -253,7 +254,10 @@ function readOnlyIntents(segmentation: SegmentationResult): TraceIntent[] {
   });
 }
 
-function canonicalVerifiers(segmentation: SegmentationResult): {
+function canonicalVerifiers(
+  segmentation: SegmentationResult,
+  sourceWorkspaceRoots?: Readonly<Record<string, string>>,
+): {
   verifiers: CanonicalVerifier[];
   unsupportedChecks: string[];
 } {
@@ -274,7 +278,7 @@ function canonicalVerifiers(segmentation: SegmentationResult): {
     const verificationEvents = segmentation.events.filter((event) =>
       verification.eventIds.includes(event.id),
     );
-    const directory = verificationDirectory(verificationEvents);
+    const directory = verificationDirectory(verificationEvents, sourceWorkspaceRoots);
     if (!directory.ok) {
       unsupportedChecks.push(`${check} (${directory.reason})`);
       continue;
@@ -375,6 +379,7 @@ function proposalFromEvidence(
   request: ExtractorAgentRequest,
   segmentation: SegmentationResult,
   provider: string,
+  sourceWorkspaceRoots?: Readonly<Record<string, string>>,
 ): ExtractionProposal {
   const primary = firstEvidence(segmentation);
   const coding = codingIntent(segmentation.events);
@@ -393,7 +398,7 @@ function proposalFromEvidence(
           },
         ]
       : readOnlyIntents(segmentation);
-  const verifierResult = canonicalVerifiers(segmentation);
+  const verifierResult = canonicalVerifiers(segmentation, sourceWorkspaceRoots);
   const variableGroundings = segmentation.candidateVariables.map((variable) => ({
     variable,
     match: variableEvidenceMatch(segmentation, variable.eventIds),
@@ -412,6 +417,11 @@ function proposalFromEvidence(
             .filter((failure) => !failure.resolved)
             .map((failure) => `Source ${failure.kind} has no observed recovery.`),
           "The provider cannot enforce network isolation. Explicitly allow provider network access to run this workflow.",
+          ...(provider === "claude"
+            ? [
+                "Explicitly allow Claude tools Read, Edit, Write and Bash to run this coding workflow.",
+              ]
+            : []),
           ...segmentation.verification
             .filter((check) => check.result !== "passed")
             .map((check) => `Source verification ${check.check ?? "unknown"} did not pass.`),
@@ -704,6 +714,8 @@ function proposalFromEvidence(
 }
 
 export interface DeterministicAgentOptions {
+  /** Recorded native run roots supplied only after matching the imported trace to stored events. */
+  sourceWorkspaceRoots?: Readonly<Record<string, string>>;
   provider?: string;
   failFirstWith?: unknown;
 }
@@ -721,7 +733,12 @@ export function createDeterministicExtractorAgent(
         return options.failFirstWith;
       }
       first = false;
-      return proposalFromEvidence(request, segmentation, options.provider ?? "codex");
+      return proposalFromEvidence(
+        request,
+        segmentation,
+        options.provider ?? "codex",
+        options.sourceWorkspaceRoots,
+      );
     },
   };
 }
@@ -744,6 +761,9 @@ export async function extractImportedSession(
     result,
     audit: {
       version: "1",
+      ...(options.sourceWorkspaceRoots
+        ? { sourceWorkspaceRoots: options.sourceWorkspaceRoots }
+        : {}),
       importId: imported.id,
       provider: imported.provider,
       sourceEventCount: prepared.segmentation.events.length,

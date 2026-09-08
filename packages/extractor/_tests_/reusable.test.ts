@@ -1,57 +1,7 @@
 import { expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
-import { type ProviderId, TraceEventSchema } from "@loopy/contracts";
 import { extractImportedSession } from "../src/index.ts";
-
-export function codingTrace(provider: ProviderId = "codex", command = "bun test") {
-  const identity = {
-    runId: randomUUID(),
-    nodeId: randomUUID(),
-    attemptId: randomUUID(),
-    provider,
-    sessionId: "source-session",
-  };
-  let sequence = 0;
-  const event = (type: string, payload: unknown, toolCallId?: string) =>
-    TraceEventSchema.parse({
-      schemaVersion: "1",
-      id: randomUUID(),
-      ...identity,
-      sequence: sequence++,
-      occurredAt: "2026-09-08T00:00:00.000Z",
-      monotonicOffsetMs: sequence,
-      type,
-      payload,
-      ...(toolCallId ? { toolCallId } : {}),
-    });
-  const editId = randomUUID();
-  const verifyId = randomUUID();
-  const editTool = { codex: "apply_patch", claude: "Edit", pi: "write", opencode: "edit" }[
-    provider
-  ];
-  const shellTool = { codex: "command", claude: "Bash", pi: "bash", opencode: "bash" }[provider];
-  return [
-    event("provider.message", {
-      role: "user",
-      content: "Implement greeting.ts greet(name), returning Hello plus the name, and test it.",
-    }),
-    event(
-      "tool.requested",
-      {
-        tool: editTool,
-        input: {
-          path: "greeting.ts",
-          content: "export const greet = (name: string) => `Hello, ${name}!`;",
-        },
-      },
-      editId,
-    ),
-    event("tool.completed", { output: "File updated", exitCode: 0 }, editId),
-    event("tool.requested", { tool: shellTool, input: { command } }, verifyId),
-    event("tool.completed", { output: "2 pass, 0 fail", exitCode: 0 }, verifyId),
-    event("provider.session_ended", { status: "succeeded" }),
-  ];
-}
+import { codingTrace } from "./coding-fixture.ts";
 
 for (const provider of ["codex", "claude", "pi", "opencode"] as const) {
   test(`${provider} yields a task-bound implementation and evidenced verification`, async () => {
@@ -74,7 +24,7 @@ for (const provider of ["codex", "claude", "pi", "opencode"] as const) {
     });
     expect(proposal.workflow.nodes[0]?.kind).toBe("approval");
     expect(extraction.audit.review.status).toBe("blocked");
-    expect(proposal.unresolvedQuestions).toHaveLength(2);
+    expect(proposal.unresolvedQuestions).toHaveLength(provider === "claude" ? 3 : 2);
     const ids = new Set(session.map((event) => event.id));
     expect(
       proposal.nodeEvidence.every((evidence) => evidence.eventIds.every((id) => ids.has(id))),
@@ -172,3 +122,34 @@ for (const field of ["cwd", "workdir", "workingDirectory"]) {
     ).toBe(true);
   });
 }
+
+test("maps absolute verification directories only within the recorded source run workspace", async () => {
+  for (const [cwd, expected] of [
+    ["/repo", "."],
+    ["/repo/packages/service", "packages/service"],
+    ["/repo-other", undefined],
+    ["/other/repo", undefined],
+    ["/repo/../outside", undefined],
+  ] as const) {
+    const session = codingTrace("opencode", "bun test");
+    const request = session[3];
+    if (request?.type !== "tool.requested") throw new Error("Missing fixture request");
+    request.payload.input = { command: "bun test", cwd };
+    const result = await extractImportedSession(
+      { id: randomUUID(), provider: "opencode", session },
+      { sourceWorkspaceRoots: { [request.runId]: "/repo" } },
+    );
+    if (!result.result.ok) throw new Error(JSON.stringify(result.result.diagnostics));
+    const verify = result.result.proposal.workflow.nodes.find((node) => node.kind === "verify");
+    if (expected) expect(verify).toMatchObject({ commands: [{ cwd: expected }] });
+    else expect(verify).toBeUndefined();
+    const unrelated = await extractImportedSession(
+      { id: randomUUID(), provider: "opencode", session },
+      { sourceWorkspaceRoots: { [randomUUID()]: "/repo" } },
+    );
+    if (!unrelated.result.ok) throw new Error(JSON.stringify(unrelated.result.diagnostics));
+    expect(unrelated.result.proposal.workflow.nodes.some((node) => node.kind === "verify")).toBe(
+      false,
+    );
+  }
+});

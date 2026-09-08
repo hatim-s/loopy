@@ -7,6 +7,7 @@ import type {
   ExtractionReviewRecord,
   ImportedSessionRecord,
 } from "@loopy/storage";
+import { codingTrace } from "../../extractor/_tests_/coding-fixture.ts";
 import { startServer } from "../src/index";
 
 test("review edits persist answers, reject stale writes and preserve commands and approval policies", async () => {
@@ -145,6 +146,68 @@ test("review edits persist answers, reject stale writes and preserve commands an
           resolutions: [],
         })
       ).status,
+    ).toBe(409);
+  } finally {
+    await server.stop();
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("Claude coding tool consent is explicit, scoped and recorded in review history", async () => {
+  const project = mkdtempSync(resolve(tmpdir(), "loopy-tools-review-"));
+  writeFileSync(resolve(project, "index.html"), "<html><head></head></html>");
+  const server = await startServer({ projectDir: project, studioDir: project });
+  const request = (path: string, body: unknown) =>
+    fetch(`${server.url}/api/v1${path}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${server.token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  try {
+    const session = (await (
+      await request("/sessions", {
+        provider: "claude",
+        source: "claude.jsonl",
+        content: codingTrace("claude")
+          .map((event) => JSON.stringify(event))
+          .join("\n"),
+      })
+    ).json()) as ImportedSessionRecord;
+    const job = (await (
+      await request("/extractions", { importId: session.id })
+    ).json()) as ExtractionJobRecord;
+    const review = server.storage.runtime.getExtractionReview(job.id)!;
+    const question = review.proposal.unresolvedQuestions.find((item) =>
+      item.question.includes("Explicitly allow Claude tools"),
+    )!;
+    const body = {
+      expectedProposalHash: review.proposalHash,
+      resolutions: [
+        { question: question.question, answer: "Allow local edits and shell commands" },
+      ],
+    };
+    expect((await request(`/extractions/${job.id}/review`, body)).status).toBe(409);
+    expect(
+      (
+        await request(`/extractions/${job.id}/review`, {
+          ...body,
+          resolutions: [],
+          allowLocalTools: true,
+        })
+      ).status,
+    ).toBe(409);
+    const response = await request(`/extractions/${job.id}/review`, {
+      ...body,
+      allowLocalTools: true,
+    });
+    expect(response.status).toBe(200);
+    const saved = (await response.json()) as ExtractionReviewRecord;
+    expect(saved.proposalHash).not.toBe(review.proposalHash);
+    expect(saved.proposal.workflow.policies.tools.allow).toEqual(["Read", "Edit", "Write", "Bash"]);
+    expect(saved.proposal.workflow.policies.tools.network).toBe("disabled");
+    expect(saved.audit).toMatchObject({ reviewHistory: [{ allowLocalTools: true }] });
+    expect(
+      (await request(`/extractions/${job.id}/review`, { ...body, allowLocalTools: true })).status,
     ).toBe(409);
   } finally {
     await server.stop();

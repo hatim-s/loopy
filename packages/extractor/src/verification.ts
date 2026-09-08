@@ -26,6 +26,7 @@ export function observedCheck(event: TraceEvent): string | undefined {
 
 export function verificationDirectory(
   events: readonly TraceEvent[],
+  sourceWorkspaceRoots: Readonly<Record<string, string>> = {},
 ): { ok: true; cwd?: string } | { ok: false; reason: string } {
   const values: unknown[] = [];
   const collect = (input: unknown): void => {
@@ -39,8 +40,21 @@ export function verificationDirectory(
     if (event.type === "tool.requested") collect(event.payload.input);
     if (event.type === "verification.result") collect(event.payload.details);
   }
+  const runIds = new Set(events.map((event) => event.runId));
+  const first = events[0];
+  const root = runIds.size === 1 && first ? sourceWorkspaceRoots[first.runId] : undefined;
+  const safeRoot =
+    root?.startsWith("/") && root !== "/" && !root.includes("\\") && !root.split("/").includes("..")
+      ? root.replace(/\/+$/, "")
+      : undefined;
   const normalized = new Set<string>();
-  for (const value of values) {
+  for (const observed of values) {
+    const value =
+      typeof observed === "string" &&
+      safeRoot &&
+      (observed === safeRoot || observed.startsWith(`${safeRoot}/`))
+        ? observed.slice(safeRoot.length).replace(/^\/+/, "") || "."
+        : observed;
     if (
       typeof value !== "string" ||
       !value.trim() ||

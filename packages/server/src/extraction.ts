@@ -1,7 +1,9 @@
+import { isDeepStrictEqual } from "node:util";
 import type { JsonValue } from "@loopy/contracts";
+import { TraceEventSchema } from "@loopy/contracts";
 import { extractImportedSession } from "@loopy/extractor";
 import { ApiError } from "@loopy/local-api";
-import type { ExtractionJobRecord, Storage } from "@loopy/storage";
+import { type ExtractionJobRecord, SqliteRuntimeStore, type Storage } from "@loopy/storage";
 
 export function createExtractionService(storage: Storage) {
   for (const job of storage.runtime.listExtractionJobs()) {
@@ -11,6 +13,7 @@ export function createExtractionService(storage: Storage) {
         error: "Extraction interrupted by server restart; extract the session again.",
       });
   }
+  const runtimeStore = new SqliteRuntimeStore(storage);
   const active = new Map<string, Promise<ExtractionJobRecord>>();
   const extract = async (importId: string) => {
     const imported = storage.runtime.getImportedSession(importId);
@@ -21,13 +24,29 @@ export function createExtractionService(storage: Storage) {
     });
     try {
       storage.runtime.updateExtractionJob(job.id, { status: "running" });
-      const extraction = await extractImportedSession({
-        id: importId,
-        provider: imported.provider,
-        session: imported.session,
-        capabilities: imported.capabilities,
-        lossiness: imported.lossiness,
-      });
+      const sourceWorkspaceRoots: Record<string, string> = {};
+      if (Array.isArray(imported.session)) {
+        const events = imported.session.map((event) => TraceEventSchema.parse(event));
+        const runIds = new Set(events.map((event) => event.runId));
+        for (const run of await runtimeStore.listRuns()) {
+          if (!runIds.has(run.runId)) continue;
+          const root = run.plan.policies?.workspace?.workingDirectory;
+          if (typeof root !== "string") continue;
+          const recorded = runtimeStore.listTraceEvents(run.runId);
+          const source = events.filter((event) => event.runId === run.runId);
+          if (isDeepStrictEqual(source, recorded)) sourceWorkspaceRoots[run.runId] = root;
+        }
+      }
+      const extraction = await extractImportedSession(
+        {
+          id: importId,
+          provider: imported.provider,
+          session: imported.session,
+          capabilities: imported.capabilities,
+          lossiness: imported.lossiness,
+        },
+        { sourceWorkspaceRoots },
+      );
       if (!extraction.result.ok)
         throw new Error(extraction.result.diagnostics.map((item) => item.code).join(", "));
       return storage.runtime.saveExtractionResult(job.id, {

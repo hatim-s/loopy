@@ -421,6 +421,7 @@ export interface ExtractionAudit {
 export interface ExtractionReviewUpdate {
   expectedProposalHash: string;
   allowNetworkAccess?: boolean;
+  allowLocalTools?: boolean;
   resolutions: Array<{ question: string; answer: string }>;
   workflow?: WorkflowDefinition;
   resolvedBy?: string;
@@ -1094,6 +1095,37 @@ export class RuntimeRepository {
           throw new Error("Resolve the network isolation question before allowing network access");
         reviewedWorkflow.policies.tools.network = "unrestricted";
       }
+      const localToolsQuestion = review.proposal.unresolvedQuestions.find((item) =>
+        item.question.includes(
+          "Explicitly allow Claude tools Read, Edit, Write and Bash to run this coding workflow.",
+        ),
+      );
+      const localTools = ["Read", "Edit", "Write", "Bash"];
+      if (update.allowLocalTools) {
+        if (
+          !localToolsQuestion ||
+          !resolutions.has(localToolsQuestion.question) ||
+          !original.nodes.some(
+            (node) =>
+              node.kind === "agent" &&
+              node.provider === "claude" &&
+              node.tags.includes("local-implementation"),
+          ) ||
+          localTools.some((tool) => original.policies.tools.deny.includes(tool))
+        )
+          throw new Error(
+            "Resolve the Claude local tools question before allowing its coding tools",
+          );
+        reviewedWorkflow.policies.tools.allow = [
+          ...new Set([...original.policies.tools.allow, ...localTools]),
+        ];
+      }
+      if (
+        localToolsQuestion &&
+        resolutions.has(localToolsQuestion.question) &&
+        !localTools.every((tool) => reviewedWorkflow.policies.tools.allow.includes(tool))
+      )
+        throw new Error("Explicitly allow local tools to resolve the Claude coding tools question");
       const networkQuestion = review.proposal.unresolvedQuestions.find((item) =>
         item.question.includes("The provider cannot enforce network isolation."),
       );
@@ -1145,6 +1177,7 @@ export class RuntimeRepository {
               resolutions: [...resolutions].map(([question, answer]) => ({ question, answer })),
               workflowEdited: Boolean(update.workflow),
               allowNetworkAccess: Boolean(update.allowNetworkAccess),
+              allowLocalTools: Boolean(update.allowLocalTools),
               previousProposal: review.proposal,
             },
           ],

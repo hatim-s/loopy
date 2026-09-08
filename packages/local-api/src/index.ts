@@ -784,6 +784,7 @@ export function createLocalApi(options: LocalApiOptions): Hono {
           resolutions: body.resolutions,
           workflow,
           allowNetworkAccess: body.allowNetworkAccess === true,
+          allowLocalTools: body.allowLocalTools === true,
           resolvedBy: typeof body.resolvedBy === "string" ? body.resolvedBy : undefined,
         }),
       );
