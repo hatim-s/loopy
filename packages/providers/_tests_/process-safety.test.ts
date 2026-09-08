@@ -2,7 +2,12 @@ import { expect, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createCodexProviderAdapter, runSubprocess, startJsonlSubprocess } from "../src/index.ts";
+import {
+  createCodexProviderAdapter,
+  runSubprocess,
+  SubprocessError,
+  startJsonlSubprocess,
+} from "../src/index.ts";
 
 test("await cancel stops a resistant descendant even when its leader exits", async () => {
   const root = mkdtempSync(join(tmpdir(), "loopy-provider-safety-"));
@@ -75,6 +80,42 @@ test("normal leader exit drains its descendants before done and later cancel is 
 });
 
 for (const jsonl of [false, true]) {
+  test(`forced pipe drain reports incomplete output without killing another process group, JSONL ${jsonl}`, async () => {
+    const root = mkdtempSync(join(tmpdir(), "loopy-inherited-pipe-"));
+    const marker = join(root, "finished");
+    try {
+      const descendant = `setTimeout(()=>{Bun.write(${JSON.stringify(marker)},'done');console.log('{"tail":true}');},350);setTimeout(()=>process.exit(),450)`;
+      const options = {
+        argv: [
+          process.execPath,
+          "-e",
+          `const child=require('node:child_process').spawn(process.execPath,['-e',${JSON.stringify(descendant)}],{detached:true,stdio:['ignore','inherit','inherit']});child.unref();console.log('{}');setTimeout(()=>process.exit(),80)`,
+        ] as const,
+        cwd: root,
+        gracefulTerminationMs: 30,
+      };
+      const started = Date.now();
+      if (jsonl) {
+        const live = startJsonlSubprocess(options);
+        const result = await live.done;
+        expect(result.outputIncomplete).toBe(true);
+        expect(result.diagnostic).toContain("incomplete");
+      } else {
+        try {
+          await runSubprocess(options);
+          throw new Error("Incomplete output was accepted");
+        } catch (error) {
+          expect(error).toBeInstanceOf(SubprocessError);
+          expect((error as SubprocessError).result?.outputIncomplete).toBe(true);
+        }
+      }
+      expect(Date.now() - started).toBeLessThan(1000);
+      await Bun.sleep(500);
+      expect(existsSync(marker)).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
   test(`normal exit drains inherited pipes and stops resistant descendants, JSONL ${jsonl}`, async () => {
     const root = mkdtempSync(join(tmpdir(), "loopy-normal-exit-"));
     const marker = join(root, "late");

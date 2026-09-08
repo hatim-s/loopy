@@ -26,7 +26,7 @@ import {
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { useBlocker, useNavigate, useParams } from "@tanstack/react-router";
 import {
   applyNodeChanges,
   Background,
@@ -48,6 +48,7 @@ import {
 } from "@xyflow/react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ApiClient } from "../app/api";
+import { BrandMark } from "../components/primitives/brand-mark";
 import { StepLibrary, steps } from "./builder/palette";
 import { ProjectSwitcher } from "./builder/project-switcher";
 import { RunConsole } from "./builder/run-console";
@@ -313,7 +314,8 @@ function nodeSubtitle(node: WorkflowNode): string {
   if (node.kind === "route")
     return node.defaultRoute ? `default → ${node.defaultRoute}` : "conditional branch";
   if (node.kind === "join") return `${node.policy} / ${node.outputMode}`;
-  if (node.kind === "shell") return `${node.stages.length} Bash stages`;
+  if (node.kind === "shell")
+    return `${node.stages.length} Bash stage${node.stages.length === 1 ? "" : "s"}`;
   return node.operation;
 }
 
@@ -323,6 +325,7 @@ function WorkflowNodeCard({ data, selected }: { data: EditorNodeData; selected?:
   return (
     <button
       type="button"
+      data-kind={node.kind}
       className={`canvas-node ${selected ? "selected" : ""} node-status-${data.runStatus ?? "idle"}`}
       aria-label={`${node.name} ${node.kind} node`}
     >
@@ -1266,16 +1269,19 @@ function EditorCanvas(props: {
         connectionRadius={28}
         deleteKeyCode={["Backspace", "Delete"]}
         proOptions={{ hideAttribution: true }}
-        defaultEdgeOptions={{ type: "smoothstep", style: { stroke: "#747479", strokeWidth: 1.5 } }}
+        defaultEdgeOptions={{
+          type: "smoothstep",
+          style: { stroke: "var(--studio-border-strong)", strokeWidth: 1.5 },
+        }}
       >
-        <Background color="#28282b" gap={24} size={1.25} />
+        <Background color="var(--studio-border)" gap={28} size={1} />
         <Controls showInteractive={false} />
         <MiniMap
           pannable
           zoomable
-          bgColor="#101011"
-          nodeColor="#b8b7b3"
-          maskColor="rgba(10,10,11,0.78)"
+          bgColor="var(--studio-bg)"
+          nodeColor="var(--studio-amber)"
+          maskColor="rgba(25,19,30,0.8)"
         />
       </ReactFlow>
       {!props.nodes.length ? (
@@ -1522,6 +1528,12 @@ export function WorkflowEditorPage({
     setSaving(false);
     let unsubscribe: (() => void) | undefined;
     setStatus("loading");
+    setRunId(undefined);
+    setRunStatuses({});
+    setError(undefined);
+    setNotice(undefined);
+    setSelectedNodeId(undefined);
+    setSelectedEdgeId(undefined);
     if (!editorAdapter) {
       const value = fallbackWorkflow(workflowId);
       const store = createEditorStore(value);
@@ -1626,6 +1638,10 @@ export function WorkflowEditorPage({
   const dirty = Boolean(
     workflow && previous && JSON.stringify(workflow) !== JSON.stringify(previous),
   );
+  useBlocker({
+    shouldBlockFn: () => dirty && !window.confirm("Leave this graph and discard unsaved changes?"),
+    enableBeforeUnload: dirty,
+  });
   const updateNode = (nextNode: WorkflowNode) => {
     if (!workflow || !selectedNode) return;
     const { id, kind: _kind, ...patch } = nextNode;
@@ -1881,6 +1897,7 @@ export function WorkflowEditorPage({
     URL.revokeObjectURL(link.href);
   };
   const importWorkflow = async (file: File) => {
+    if (dirty && !window.confirm("Replace unsaved changes with the imported graph?")) return;
     try {
       setError(undefined);
       const store = editorStoreRef.current;
@@ -2022,7 +2039,9 @@ function PageEditorLayout(props: {
           >
             <ArrowLeft />
           </button>
-          <span className="builder-mark">L</span>
+          <span className="builder-mark">
+            <BrandMark />
+          </span>
           <div className="builder-title">
             <input
               aria-label="Workflow name"

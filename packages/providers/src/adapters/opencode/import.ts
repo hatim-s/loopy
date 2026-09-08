@@ -1,4 +1,4 @@
-import { normalizeOpenCodeEvent, normalizeOpenCodeJsonLines } from "./events.js";
+import { normalizeOpenCodeJsonLines } from "./events.js";
 import type { OpenCodeImportedSession, ProviderAdapterContext } from "./types.js";
 import { diagnostic, parseJsonLine } from "./util.js";
 
@@ -86,16 +86,45 @@ export async function importOpenCodeSession(
       eventsInput.push(...((input as Record<string, unknown>).events as unknown[]));
     }
   } else eventsInput.push(input);
-  const events = [] as OpenCodeImportedSession["events"];
-  let sequence = context.sequence ?? 0;
+  const expanded: unknown[] = [];
   for (const raw of eventsInput) {
-    const normalized = normalizeOpenCodeEvent(raw, { ...context, sequence });
-    diagnostics.push(...normalized.diagnostics);
-    if (normalized.event) {
-      events.push(normalized.event);
-      sequence += 1;
-    }
+    if (raw && typeof raw === "object" && "messages" in raw && Array.isArray(raw.messages)) {
+      const info =
+        "info" in raw && raw.info && typeof raw.info === "object"
+          ? (raw.info as Record<string, unknown>)
+          : {};
+      for (const message of raw.messages) {
+        if (!message || typeof message !== "object") continue;
+        const row = message as Record<string, unknown>;
+        const meta =
+          row.info && typeof row.info === "object" ? (row.info as Record<string, unknown>) : {};
+        for (const part of Array.isArray(row.parts) ? row.parts : []) {
+          if (!part || typeof part !== "object") continue;
+          expanded.push({
+            type:
+              part.type === "tool"
+                ? "tool_use"
+                : part.type === "step-finish"
+                  ? "step_finish"
+                  : part.type === "step-start"
+                    ? "step_start"
+                    : part.type,
+            part,
+            role: meta.role,
+            sessionID: meta.sessionID ?? info.id,
+          });
+        }
+      }
+    } else expanded.push(raw);
   }
+  eventsInput.splice(0, eventsInput.length, ...expanded);
+  const events = [] as OpenCodeImportedSession["events"];
+  const normalized = await normalizeOpenCodeJsonLines(
+    eventsInput.map((raw) => JSON.stringify(raw)),
+    context,
+  );
+  events.push(...normalized.events);
+  diagnostics.push(...normalized.diagnostics);
   const sessionId =
     context.sessionId ??
     events.find((event) => event.sessionId)?.sessionId ??

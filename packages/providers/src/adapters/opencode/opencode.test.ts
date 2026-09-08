@@ -39,7 +39,7 @@ describe("OpenCode adapter", () => {
     });
     expect(() => buildOpenCodeRunCommand({ prompt: "hello", auto: true })).toThrow(/allowAuto/);
     expect(() => buildOpenCodeRunCommand({ prompt: "hello", fork: true })).toThrow(/session/);
-    expect(() => buildOpenCodeRunCommand({ prompt: "hello\nworld" })).toThrow(/unsafe/);
+    expect(() => buildOpenCodeRunCommand({ prompt: "hello\0world" })).toThrow(/unsafe/);
   });
 
   test("parses official version and honest capability degradation", () => {

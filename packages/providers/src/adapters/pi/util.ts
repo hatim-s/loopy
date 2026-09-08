@@ -70,3 +70,13 @@ export function listArg(values: string[] | undefined, label: string): string | u
     throw new TypeError(`${label} entries must not contain commas.`);
   return values.join(",");
 }
+
+/** Prompts are one argv entry and may contain normal multiline text. */
+export function ensurePrompt(value: string): void {
+  if (!value.trim()) throw new TypeError("prompt must not be empty.");
+  for (const character of value) {
+    const code = character.charCodeAt(0);
+    if ((code < 32 && code !== 9 && code !== 10 && code !== 13) || code === 127)
+      throw new TypeError("prompt contains an unsafe control character.");
+  }
+}

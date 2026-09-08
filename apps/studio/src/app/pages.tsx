@@ -1,3 +1,4 @@
+import { ArrowUpRight, GitBranch, HardDrives, Plus, ShieldCheck } from "@phosphor-icons/react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { EmptyState, ErrorState, LoadingState } from "../components/primitives/states";
@@ -15,6 +16,8 @@ import { ToolLibrary } from "../features/builder/tool-library";
 import type { GraphInputEdge, GraphInputNode } from "../features/debugger";
 import { createDebuggerState, debuggerReducer, replayEvents } from "../features/debugger";
 import { fallbackWorkflow } from "../features/editor";
+import type { ReviewChanges } from "../features/extraction-edits";
+import { ProviderReadiness } from "../features/provider-readiness";
 import type {
   DebuggerEvent,
   DebuggerSnapshot,
@@ -65,9 +68,11 @@ function PageFrame({
   title,
   eyebrow,
   children,
+  action,
 }: {
   title: string;
   eyebrow: string;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const titleId = `feature-page-title-${useId().replaceAll(":", "")}`;
@@ -75,9 +80,24 @@ function PageFrame({
     <section className="feature-page" aria-labelledby={titleId}>
       <div className="feature-page__heading">
         <div>
-          <div className="feature-slot__eyebrow">{eyebrow}</div>
           <h1 id={titleId}>{title}</h1>
+          <p>
+            {
+              (
+                {
+                  "Build / graphs": "Build, save, and run graphs in this project.",
+                  "Inspect / sessions": "Bring completed agent work into your workspace.",
+                  "Inspect / runs": "Follow each decision, inspect every result.",
+                  "Inspect / extractions":
+                    "Review what was recovered from a recorded session before publishing.",
+                  "Build / providers": "The agents and command-line tools behind your workflows.",
+                  "System / settings": "A private workspace, running on your computer.",
+                } as Record<string, string>
+              )[eyebrow]
+            }
+          </p>
         </div>
+        {action}
       </div>
       {children}
     </section>
@@ -92,6 +112,7 @@ export function ProvidersPage({ api }: StudioPageProps) {
   const capabilities = result.value?.capabilities ?? [];
   return (
     <PageFrame title="Tools and providers" eyebrow="Build / providers">
+      {api ? <ProviderReadiness api={api} /> : null}
       {api ? <ToolLibrary api={api} /> : null}
       {result.loading ? <LoadingState label="Loading provider connections" /> : null}
       {result.error ? <ErrorState message={result.error} /> : null}
@@ -114,14 +135,14 @@ export function SessionsPage({ api }: StudioPageProps) {
   const [selectedId, setSelectedId] = useState<string>();
   const [provider, setProvider] = useState("codex");
   const [file, setFile] = useState<File>();
-  const [pending, setPending] = useState(false);
+  const [pending, setPending] = useState<"import" | "extract">();
   const [error, setError] = useState<string>();
   const fileId = useId();
   const providerId = useId();
   const navigate = useNavigate();
   const importTrace = async () => {
     if (!api || !file) return;
-    setPending(true);
+    setPending("import");
     setError(undefined);
     try {
       const raw = await file.text();
@@ -133,16 +154,17 @@ export function SessionsPage({ api }: StudioPageProps) {
         body: JSON.stringify({ provider, source: file.name, content }),
       });
       setSelectedId(session.id);
+      setFile(undefined);
       setRevision((value) => value + 1);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
-      setPending(false);
+      setPending(undefined);
     }
   };
   const extract = async () => {
     if (!api || !selectedId) return;
-    setPending(true);
+    setPending("extract");
     setError(undefined);
     try {
       await api.request("/extractions", {
@@ -153,7 +175,7 @@ export function SessionsPage({ api }: StudioPageProps) {
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
-      setPending(false);
+      setPending(undefined);
     }
   };
   return (
@@ -174,7 +196,7 @@ export function SessionsPage({ api }: StudioPageProps) {
           id={providerId}
           value={provider}
           onChange={(event) => setProvider(event.target.value)}
-          disabled={pending}
+          disabled={Boolean(pending)}
         >
           {["codex", "claude", "opencode", "pi"].map((id) => (
             <option key={id} value={id}>
@@ -184,21 +206,22 @@ export function SessionsPage({ api }: StudioPageProps) {
         </select>
         <label htmlFor={fileId}>Canonical trace file</label>
         <input
+          key={revision}
           id={fileId}
           type="file"
           accept=".jsonl,.json"
-          disabled={pending}
+          disabled={Boolean(pending)}
           onChange={(event) => setFile(event.target.files?.[0])}
         />
-        <button type="submit" disabled={!api || !file || pending}>
-          Import trace
+        <button type="submit" disabled={!api || !file || Boolean(pending)}>
+          {pending === "import" ? "Importing trace…" : "Import trace"}
         </button>
         <button
           type="button"
-          disabled={!api || !selectedId || pending}
+          disabled={!api || !selectedId || Boolean(pending)}
           onClick={() => void extract()}
         >
-          {pending ? "Working…" : "Extract selected session"}
+          {pending === "extract" ? "Extracting session…" : "Extract selected session"}
         </button>
       </form>
       {error ? <ErrorState message={error} /> : null}
@@ -225,7 +248,8 @@ export function ExtractionsPage({ api }: StudioPageProps) {
     api,
     `/extractions?revision=${revision}`,
   );
-  const [pendingAction, setPendingAction] = useState<"approve" | "reject">();
+  const [pendingAction, setPendingAction] = useState<"approve" | "reject" | "review">();
+  const [published, setPublished] = useState<{ workflowId: string; version: number }>();
   const [decision, setDecision] = useState<"approved" | "rejected">();
   const [actionError, setActionError] = useState<string>();
   const [selectedReview, setSelectedReview] = useState<string>();
@@ -234,19 +258,41 @@ export function ExtractionsPage({ api }: StudioPageProps) {
   const rawReview =
     reviews.find((item) => extractionReference(item) === selectedReview) ?? reviews[0];
   const review = rawReview;
+  const publishedGraph = published ?? review?.publishedWorkflow;
   const submitDecision = async (action: "approve" | "reject") => {
     if (!api || !review) return;
     setPendingAction(action);
     setActionError(undefined);
     try {
-      await api.request(
+      const response = await api.request<{ workflowId: string; version: number }>(
         `/extractions/${encodeURIComponent(extractionReference(review))}/${action}`,
         {
           method: "POST",
-          body: JSON.stringify(action === "reject" ? { reason: "Rejected in Studio" } : {}),
+          body: JSON.stringify(
+            action === "reject"
+              ? { reason: "Rejected in Studio" }
+              : { expectedProposalHash: review.proposalHash },
+          ),
         },
       );
+      if (action === "approve") setPublished(response);
       setDecision(action === "approve" ? "approved" : "rejected");
+      setRevision((value) => value + 1);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setPendingAction(undefined);
+    }
+  };
+  const saveReview = async (changes: ReviewChanges) => {
+    if (!api || !review) return;
+    setPendingAction("review");
+    setActionError(undefined);
+    try {
+      await api.request(`/extractions/${encodeURIComponent(extractionReference(review))}/review`, {
+        method: "POST",
+        body: JSON.stringify({ ...changes, expectedProposalHash: review.proposalHash }),
+      });
       setRevision((value) => value + 1);
     } catch (error) {
       setActionError(error instanceof Error ? error.message : String(error));
@@ -265,6 +311,7 @@ export function ExtractionsPage({ api }: StudioPageProps) {
             onChange={(event) => {
               setSelectedReview(event.target.value);
               setDecision(undefined);
+              setPublished(undefined);
               setActionError(undefined);
             }}
             disabled={Boolean(pendingAction)}
@@ -278,7 +325,13 @@ export function ExtractionsPage({ api }: StudioPageProps) {
         </label>
       ) : null}
       {decision === "approved" || review?.status === "approved" ? (
-        <Link to="/workflows">Open workflows</Link>
+        publishedGraph ? (
+          <Link to="/workflows/$workflowId/edit" params={{ workflowId: publishedGraph.workflowId }}>
+            Open published graph, version {publishedGraph.version}
+          </Link>
+        ) : (
+          <Link to="/workflows">Open published graphs</Link>
+        )
       ) : null}
       {result.loading ? <LoadingState label="Loading extraction reviews" /> : null}
       {result.error ? <ErrorState message={result.error} /> : null}
@@ -287,6 +340,8 @@ export function ExtractionsPage({ api }: StudioPageProps) {
       ) : null}
       {!result.loading && !result.error && review ? (
         <ExtractionReview
+          key={`${extractionReference(review)}:${review.proposalHash ?? revision}`}
+          onSaveReview={saveReview}
           model={decision ? { ...review, status: decision } : review}
           actionsDisabled={Boolean(pendingAction || decision)}
           onApprove={() => void submitDecision("approve")}
@@ -353,7 +408,17 @@ export function normalizeExtractionReview(value: unknown): ExtractionReviewModel
       : hasBlockingQuestion
         ? "blocked"
         : "draft";
+  const audit =
+    source.audit && typeof source.audit === "object"
+      ? (source.audit as {
+          publishedWorkflow?: ExtractionReviewModel["publishedWorkflow"];
+          reviewHistory?: { resolutions?: ExtractionReviewModel["resolutions"] }[];
+        })
+      : {};
   return {
+    publishedWorkflow: audit.publishedWorkflow,
+    resolutions: audit.reviewHistory?.flatMap((entry) => entry.resolutions ?? []),
+    proposalHash: typeof source.proposalHash === "string" ? source.proposalHash : undefined,
     jobId: typeof job.id === "string" ? job.id : undefined,
     importId:
       typeof job.importId === "string"
@@ -405,49 +470,88 @@ export function WorkflowsPage({ api }: StudioPageProps) {
   const result = useResource<{
     workflows?: Array<{ workflowId?: string; version?: number; definition?: unknown }>;
   }>(api, "/workflows");
+  // Editing always opens the current version, so the library represents each graph once.
+  const latest = new Map<
+    string,
+    NonNullable<NonNullable<typeof result.value>["workflows"]>[number]
+  >();
+  for (const workflow of result.value?.workflows ?? []) {
+    if (!workflow.workflowId) continue;
+    const previous = latest.get(workflow.workflowId);
+    if (!previous || (workflow.version ?? 0) > (previous.version ?? 0))
+      latest.set(workflow.workflowId, workflow);
+  }
+  const workflows = [...latest.values()];
   return (
-    <PageFrame title="Graph library" eyebrow="Build / graphs">
-      <button
-        type="button"
-        className="editor-primary-button"
-        disabled={!api || creating}
-        onClick={() => void create()}
-      >
-        {creating ? "Creating…" : "New graph"}
-      </button>
+    <PageFrame
+      title="Graph library"
+      eyebrow="Build / graphs"
+      action={
+        <button
+          type="button"
+          className="editor-primary-button"
+          disabled={!api || creating}
+          onClick={() => void create()}
+        >
+          <Plus size={16} />
+          {creating ? "Creating…" : "New graph"}
+        </button>
+      }
+    >
       {createError ? <ErrorState message={createError} /> : null}
       {result.loading ? <LoadingState label="Loading workflows" /> : null}
       {result.error ? <ErrorState message={result.error} /> : null}
-      {!result.loading && !result.error && !result.value?.workflows?.length ? (
+      {!result.loading && !result.error && !workflows.length ? (
         <EmptyState
-          title="No graphs yet"
-          detail="Approved extractions become versioned local execution graphs."
+          title="Your first graph starts here"
+          detail="Create a graph and connect an agent, a condition, or a shell module. You can also import a completed session."
         />
       ) : null}
-      {result.value?.workflows?.length ? (
-        <ul className="data-list" aria-label="Execution graph versions">
-          {result.value.workflows.map((workflow, index) => (
-            <li
-              className="data-list__row"
-              key={`${workflow.workflowId ?? "workflow"}:${workflow.version ?? index}`}
-            >
-              <Link
-                to="/workflows/$workflowId/edit"
-                params={{ workflowId: workflow.workflowId ?? "" }}
-                className="workflow-library-link"
-              >
-                <strong>
-                  {workflow.definition &&
-                  typeof workflow.definition === "object" &&
-                  "name" in workflow.definition
-                    ? String(workflow.definition.name)
-                    : (workflow.workflowId ?? "Unnamed graph")}
-                </strong>
-                <span>version {workflow.version ?? index + 1} · Edit graph</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
+      {workflows.length ? (
+        <>
+          <div className="library-summary">
+            {workflows.length} graph{workflows.length === 1 ? "" : "s"} in this project
+          </div>
+          <ul className="graph-library data-list" aria-label="Execution graph versions">
+            {workflows.map((workflow) => {
+              const definition =
+                workflow.definition && typeof workflow.definition === "object"
+                  ? (workflow.definition as {
+                      name?: string;
+                      description?: string;
+                      nodes?: unknown[];
+                    })
+                  : undefined;
+              return (
+                <li className="graph-card" key={workflow.workflowId}>
+                  <Link
+                    to="/workflows/$workflowId/edit"
+                    params={{ workflowId: workflow.workflowId ?? "" }}
+                    className="graph-card-link"
+                  >
+                    <div className="graph-card-top">
+                      <GitBranch aria-hidden="true" />
+                      <span className="graph-version">Version {workflow.version ?? 1}</span>
+                    </div>
+                    <h2>{definition?.name ?? "Unnamed graph"}</h2>
+                    <p>
+                      {definition?.description || "Connect steps into a repeatable local workflow."}
+                    </p>
+                    <div className="graph-card-footer">
+                      <span>
+                        {definition?.nodes?.length ?? 0} step
+                        {definition?.nodes?.length === 1 ? "" : "s"}
+                      </span>
+                      <strong>
+                        Open graph <ArrowUpRight size={14} aria-hidden="true" />
+                      </strong>
+                    </div>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </>
       ) : null}
     </PageFrame>
   );
@@ -602,6 +706,8 @@ function RunDebugger({
   );
   const [state, dispatch] = useState(() => createDebuggerState(runId));
   const [message, setMessage] = useState<string>();
+  const [connection, setConnection] = useState("connecting");
+  const [streamRevision, setStreamRevision] = useState(0);
   const runStatus =
     state.status === "live"
       ? "running"
@@ -618,8 +724,11 @@ function RunDebugger({
     if (!snapshot) return;
     dispatch(debuggerReducer(createDebuggerState(runId), { type: "snapshot", snapshot }));
   }, [runId, snapshot]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Reconnect restarts the authenticated stream from its snapshot cursor.
   useEffect(() => {
     if (!api || result.error) return;
+    setConnection("connecting");
+    setMessage(undefined);
     let pending: DebuggerEvent[] = [];
     let timer: ReturnType<typeof setTimeout> | undefined;
     const stop = api.streamEvents(
@@ -639,13 +748,14 @@ function RunDebugger({
           -1,
         ),
         onError: (error) => setMessage(error.message),
+        onConnectionChange: setConnection,
       },
     );
     return () => {
       stop();
       clearTimeout(timer);
     };
-  }, [api, result.error, runId, snapshot?.events]);
+  }, [api, result.error, runId, snapshot?.events, streamRevision]);
   const dispatchEvent = (event: DebuggerEvent) =>
     dispatch((current) => debuggerReducer(current, { type: "event", event }));
   const command = async (descriptor: { endpoint: string; method: string; body?: unknown }) => {
@@ -665,6 +775,14 @@ function RunDebugger({
     <div className="debugger-page">
       <output className="debugger-run-status">
         Run status: <strong>{runStatus}</strong>
+        {state.status === "live" || state.status === "paused" ? (
+          <span>Live updates: {connection}</span>
+        ) : null}
+        {connection === "disconnected" && (state.status === "live" || state.status === "paused") ? (
+          <button type="button" onClick={() => setStreamRevision((value) => value + 1)}>
+            Reconnect updates
+          </button>
+        ) : null}
       </output>
       {result.loading ? <LoadingState label="Reconstructing run state" /> : null}
       {result.error ? <ErrorState message={result.error} /> : null}
@@ -739,7 +857,7 @@ export function RunsPage({ api }: StudioPageProps) {
       {!result.loading && !result.error && !run ? (
         <EmptyState
           title="No graph runs"
-          detail="Start an execution graph from the local API to inspect its live trace."
+          detail="Open a graph in the builder and choose Run saved to see its progress here."
         />
       ) : null}
       <nav aria-label="Run history pages">
@@ -801,11 +919,23 @@ export function RunsPage({ api }: StudioPageProps) {
 export function SettingsPage() {
   return (
     <PageFrame title="Studio settings" eyebrow="System / settings">
-      <div className="settings-card">
-        <strong>Local graph runtime</strong>
-        <span>
-          Credentials stay in memory and requests are restricted to the configured loopback origin.
-        </span>
+      <div className="settings-grid">
+        <div className="settings-card">
+          <HardDrives aria-hidden="true" />
+          <strong>Local graph runtime</strong>
+          <span>
+            Your graphs and run history belong to this project. Keep the local server running while
+            graphs execute.
+          </span>
+        </div>
+        <div className="settings-card">
+          <ShieldCheck aria-hidden="true" />
+          <strong>Private by default</strong>
+          <span>
+            The Studio session token stays in memory. Provider credentials are managed by each CLI.
+            Graph policies are checked before a run starts.
+          </span>
+        </div>
       </div>
     </PageFrame>
   );

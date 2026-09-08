@@ -136,9 +136,13 @@ describe("studio API client", () => {
       reconnectBaseMs: 0,
       maxStreamReconnects: 1,
     });
-    const stop = client.streamEvents("run-1", (event) => received.push(event));
+    const connectionStates: string[] = [];
+    const stop = client.streamEvents("run-1", (event) => received.push(event), {
+      onConnectionChange: (status) => connectionStates.push(status),
+    });
     await waitForAssertion(() => expect(received).toHaveLength(2));
     stop();
     expect(new Headers(fetcher.mock.calls[1]?.[1]?.headers).get("Last-Event-ID")).toBe("4");
+    expect(connectionStates).toEqual(["connected", "reconnecting", "connected", "disconnected"]);
   });
 });

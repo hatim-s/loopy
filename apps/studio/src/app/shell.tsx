@@ -13,6 +13,7 @@ import {
 } from "@phosphor-icons/react";
 import { Link } from "@tanstack/react-router";
 import { type PropsWithChildren, type ReactNode, useId, useState } from "react";
+import { BrandMark } from "../components/primitives/brand-mark";
 import { IconButton } from "../components/primitives/icon-button";
 import { ProjectSwitcher } from "../features/builder/project-switcher";
 import type { ApiClient } from "./api";
@@ -39,7 +40,7 @@ export function StudioShell({ children, api }: PropsWithChildren<{ api?: ApiClie
       <aside className="sidebar" aria-label="Studio navigation">
         <div className="brand-lockup">
           <div className="brand-mark" aria-hidden="true">
-            <Graph weight="bold" />
+            <BrandMark />
           </div>
           <div className="brand-copy">
             <span className="brand-name">Loopy</span>
@@ -57,6 +58,7 @@ export function StudioShell({ children, api }: PropsWithChildren<{ api?: ApiClie
                     activeProps={{ className: "nav-link nav-link--active" }}
                     aria-label={item.label}
                     className="nav-link"
+                    title={item.label}
                     key={item.to}
                     to={item.to}
                   >
@@ -99,7 +101,9 @@ export function StudioShell({ children, api }: PropsWithChildren<{ api?: ApiClie
             </div>
           )}
           <div className="topbar__actions">
-            <span className="topbar__version">v0.1.0</span>
+            <span className="topbar__local">
+              <span className="status-dot status-dot--ok" /> Local workspace
+            </span>
           </div>
         </header>
         <main className="main-content" id={mainId}>

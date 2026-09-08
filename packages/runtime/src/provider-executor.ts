@@ -166,7 +166,11 @@ function canonicalProviderEvent(
       canonical = {
         ...base,
         type: "provider.session_ended",
-        payload: { status, ...(typeof payload.error === "string" ? { error: payload.error } : {}) },
+        payload: {
+          status,
+          ...(typeof payload.error === "string" ? { error: payload.error } : {}),
+          ...(typeof payload.summary === "string" ? { summary: payload.summary } : {}),
+        },
       };
       break;
     }
@@ -212,7 +216,15 @@ function canonicalProviderEvent(
         ...base,
         type: "tool.completed",
         toolCallId: stableId(toolCallId ?? `${context.attemptId}:tool:${sequence}`),
-        payload: { output: jsonValue(payload.output ?? payload.result ?? "") },
+        payload: {
+          output: jsonValue(payload.output ?? payload.result ?? ""),
+          ...(typeof (payload.exitCode ?? record(payload.metadata).exitCode) === "number"
+            ? { exitCode: payload.exitCode ?? record(payload.metadata).exitCode }
+            : {}),
+          ...(typeof (payload.isError ?? record(payload.metadata).isError) === "boolean"
+            ? { isError: payload.isError ?? record(payload.metadata).isError }
+            : {}),
+        },
       };
       break;
     case "error":
@@ -383,7 +395,20 @@ export function createProviderExecutor(options: ProviderExecutorOptions): Provid
       active.set(context.attemptId, run);
       const events: TraceEvent[] = [];
       try {
+        let promptCaptured = false;
         for await (const event of run.events) {
+          if (request.prompt && !promptCaptured) {
+            const provenance = record(record(event).provenance);
+            const trace = canonicalProviderEvent(
+              { type: "message", provenance, payload: { role: "user", content: request.prompt } },
+              context,
+              providerId,
+              nextSequence(context.runId),
+            );
+            events.push(trace);
+            await options.onEvent?.(trace);
+            promptCaptured = true;
+          }
           const trace = canonicalProviderEvent(
             event,
             context,
@@ -403,16 +428,21 @@ export function createProviderExecutor(options: ProviderExecutorOptions): Provid
         const terminalSuccess = endedStatus === "succeeded";
         const lastMessage = [...events]
           .reverse()
-          .find((event) => event.type === "provider.message");
+          .find(
+            (event): event is Extract<TraceEvent, { type: "provider.message" }> =>
+              event.type === "provider.message" && event.payload.role === "assistant",
+          );
         const usageEvent = [...events].reverse().find((event) => event.type === "provider.usage");
         const usage = usageEvent?.payload.usage;
         const outputs: JsonObject = {
           provider: providerId,
           sessionId: session.sessionId,
           eventCount: events.length,
-          ...(lastMessage?.payload.content !== undefined
-            ? { message: lastMessage.payload.content }
-            : {}),
+          ...(typeof ended?.payload.summary === "string"
+            ? { message: ended.payload.summary }
+            : lastMessage?.payload.content !== undefined
+              ? { message: lastMessage.payload.content }
+              : {}),
           ...(usage && typeof usage === "object" ? { usage: usage as JsonObject } : {}),
         };
         if (cancelled) return { status: "cancelled", outputs, summary: "Provider run cancelled." };

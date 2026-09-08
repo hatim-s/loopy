@@ -1,0 +1,7 @@
+{"type": "session", "version": 3, "id": "coding-session"}
+{"type": "message", "id": "m1", "message": {"role": "user", "content": "Update the greeting for the supplied name and run tests."}}
+{"type": "message", "id": "m2", "message": {"role": "assistant", "content": [{"type": "toolCall", "id": "edit-1", "name": "edit", "arguments": {"path": "greeting.ts", "oldText": "Hello", "newText": "Hello Ada"}}]}}
+{"type": "message", "id": "m3", "message": {"role": "toolResult", "toolCallId": "edit-1", "toolName": "edit", "content": [{"type": "text", "text": "Updated greeting.ts"}], "isError": false}}
+{"type": "message", "id": "m4", "message": {"role": "assistant", "content": [{"type": "toolCall", "id": "test-1", "name": "bash", "arguments": {"command": "bun test"}}]}}
+{"type": "message", "id": "m5", "message": {"role": "toolResult", "toolCallId": "test-1", "toolName": "bash", "content": [{"type": "text", "text": "1 pass, 0 fail"}], "isError": false}}
+{"type": "message", "id": "m6", "message": {"role": "assistant", "content": [{"type": "text", "text": "Updated greeting.ts. Tests passed."}], "stopReason": "stop"}}

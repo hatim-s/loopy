@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ApiClient } from "../../app/api";
+import { ErrorState } from "../../components/primitives/states";
 import type { DebuggerEvent } from "../types";
 import { ApprovalControls } from "./approval-controls";
 
@@ -34,6 +35,8 @@ export function RunConsole({
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
     let retryDelay = 500;
+    setRun(undefined);
+    setError(undefined);
     const refresh = async () => {
       try {
         const next = await api.request<BuilderRun>(`/runs/${runId}`, { signal: controller.signal });
@@ -79,7 +82,9 @@ export function RunConsole({
     <section className="builder-run-console" aria-label="Run console">
       <header>
         <strong>Run output</strong>
-        <span className={`run-state run-state-${run?.status}`}>{run?.status ?? "Loading"}</span>
+        <span className={`run-state run-state-${run?.status}`}>
+          {error ? "Disconnected, retrying" : (run?.status ?? "Connecting")}
+        </span>
         <a href={`/runs?runId=${encodeURIComponent(runId)}`}>Open debugger</a>
         {run?.status === "running" ? (
           <button type="button" onClick={() => void control("pause")}>
@@ -121,19 +126,48 @@ export function RunConsole({
               </button>
             ))
         : null}
-      {error ? <p role="alert">{error}</p> : null}
+      {error ? <ErrorState message={error} /> : null}
+      {run && !run.attempts.length ? <p>Waiting for the first step to start.</p> : null}
       <div className="run-attempts">
         {run?.attempts.map((attempt) => (
           <details key={attempt.id} open>
             <summary>
               {attempt.status} · attempt {attempt.attempt} · {attempt.nodeId.slice(0, 8)}
             </summary>
-            <pre>
-              {attempt.error ??
-                (typeof attempt.output?.stdout === "string"
-                  ? attempt.output.stdout
-                  : JSON.stringify(attempt.output ?? {}, null, 2))}
-            </pre>
+            {attempt.error ? (
+              <pre>{attempt.error}</pre>
+            ) : (
+              (() => {
+                const messages = run.events
+                  .filter(
+                    (event) =>
+                      event.attemptId === (attempt.attemptId ?? attempt.id) &&
+                      event.type === "provider.message" &&
+                      event.payload?.role === "assistant",
+                  )
+                  .map((event) => event.payload?.content)
+                  .filter(
+                    (content): content is string => typeof content === "string" && Boolean(content),
+                  );
+                const output =
+                  typeof attempt.output?.stdout === "string"
+                    ? attempt.output.stdout
+                    : attempt.output && Object.keys(attempt.output).length
+                      ? JSON.stringify(attempt.output, null, 2)
+                      : undefined;
+                return output ? (
+                  <pre>{output}</pre>
+                ) : messages.length ? (
+                  <pre>{messages.join("\n\n")}</pre>
+                ) : (
+                  <p className="run-output-pending">
+                    {["running", "created", "pending"].includes(attempt.status)
+                      ? "This step is running. Output will appear when the provider reports it."
+                      : "This step returned no output."}
+                  </p>
+                );
+              })()
+            )}
             {attempt.output?.stderr ? <pre>{String(attempt.output.stderr)}</pre> : null}
           </details>
         ))}

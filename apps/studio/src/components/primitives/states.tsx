@@ -19,12 +19,20 @@ export function EmptyState({ title, detail }: { title: string; detail: string })
   );
 }
 export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  const sessionExpired = message.includes("Studio session expired");
   return (
     <div className="state-panel state-panel--error" role="alert">
       <WarningCircle size={18} aria-hidden="true" />
       <div>
-        <div className="state-panel__title">Unable to load this view</div>
+        <div className="state-panel__title">
+          {sessionExpired ? "Reconnect to Studio" : "Something needs attention"}
+        </div>
         <div className="state-panel__detail">{message}</div>
+        {sessionExpired ? (
+          <button type="button" onClick={() => window.location.reload()}>
+            Reload Studio
+          </button>
+        ) : null}
         {onRetry ? (
           <button className="text-button" onClick={onRetry} type="button">
             Try again

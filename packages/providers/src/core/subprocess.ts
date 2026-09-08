@@ -22,6 +22,7 @@ export type SubprocessResult = {
   signal: NodeJS.Signals | null;
   aborted: boolean;
   timedOut: boolean;
+  outputIncomplete?: boolean;
   truncated: { stdout: boolean; stderr: boolean };
   durationMs: number;
   limitExceeded?: "stdout" | "stderr" | "line" | "lines";
@@ -41,7 +42,7 @@ export type JsonlSubprocessResult<T = unknown> = SubprocessResult & {
 export type LiveJsonlSubprocess = {
   /** Lines are yielded as soon as a newline is received from stdout. */
   lines: AsyncIterable<string>;
-  /** Resolves once the child has exited and all stream data has been drained. */
+  /** Resolves after process cleanup and pipe drainage, or reports outputIncomplete after the drain deadline. */
   done: Promise<JsonlSubprocessResult<never>>;
   cancel(): Promise<void>;
 };
@@ -198,7 +199,7 @@ function terminateRemainingGroup(
   return terminate(child, gracefulMs);
 }
 
-async function drainAfterExit(child: ChildProcess, termination?: Promise<void>): Promise<void> {
+async function drainAfterExit(child: ChildProcess, termination?: Promise<void>): Promise<boolean> {
   let closed = false;
   let resolveClosed!: () => void;
   const onClose = () => {
@@ -210,9 +211,11 @@ async function drainAfterExit(child: ChildProcess, termination?: Promise<void>):
     child.once("close", onClose);
   });
   await termination;
-  if (closed) return;
+  if (closed) return true;
+  let forced = false;
   // A process outside our group can inherit a pipe. Close our readers after a bounded drain.
   const timer = setTimeout(() => {
+    forced = true;
     child.stdout?.destroy();
     child.stderr?.destroy();
     resolveClosed();
@@ -220,6 +223,7 @@ async function drainAfterExit(child: ChildProcess, termination?: Promise<void>):
   await drained;
   clearTimeout(timer);
   child.removeListener("close", onClose);
+  return !forced;
 }
 
 export async function runSubprocess(options: SubprocessOptions): Promise<SubprocessResult> {
@@ -249,6 +253,7 @@ export async function runSubprocess(options: SubprocessOptions): Promise<Subproc
   let timedOut = false;
   let limitExceeded: SubprocessResult["limitExceeded"];
   let termination: Promise<void> | undefined;
+  let outputIncomplete = false;
   const abort = (timeout = false) => {
     aborted = true;
     timedOut ||= timeout;
@@ -284,7 +289,7 @@ export async function runSubprocess(options: SubprocessOptions): Promise<Subproc
       child.once("exit", async (code, signal) => {
         if (timeout) clearTimeout(timeout);
         termination ??= terminateRemainingGroup(child, gracefulMs);
-        await drainAfterExit(child, termination);
+        outputIncomplete = !(await drainAfterExit(child, termination));
         resolve({ code, signal });
       });
     },
@@ -302,19 +307,23 @@ export async function runSubprocess(options: SubprocessOptions): Promise<Subproc
     signal: exit.signal,
     aborted,
     timedOut,
+    ...(outputIncomplete ? { outputIncomplete: true } : {}),
     truncated: { stdout: stdoutState.truncated, stderr: stderrState.truncated },
     durationMs: Date.now() - started,
     ...(limitExceeded ? { limitExceeded } : {}),
-    diagnostic: aborted
-      ? timedOut
-        ? "Subprocess timed out and was terminated."
-        : "Subprocess was cancelled and terminated."
-      : limitExceeded
-        ? `Subprocess ${limitExceeded} limit was exceeded and the process was terminated.`
-        : exit.code !== 0
-          ? `Subprocess exited with ${exit.signal ? `signal ${exit.signal}` : `code ${String(exit.code)}`}.`
-          : undefined,
+    diagnostic: outputIncomplete
+      ? "Subprocess output remained open after process cleanup; output is incomplete."
+      : aborted
+        ? timedOut
+          ? "Subprocess timed out and was terminated."
+          : "Subprocess was cancelled and terminated."
+        : limitExceeded
+          ? `Subprocess ${limitExceeded} limit was exceeded and the process was terminated.`
+          : exit.code !== 0
+            ? `Subprocess exited with ${exit.signal ? `signal ${exit.signal}` : `code ${String(exit.code)}`}.`
+            : undefined,
   };
+  if (outputIncomplete) throw new SubprocessError("Subprocess output is incomplete.", result);
   if (stdoutState.truncated || stderrState.truncated)
     throw new SubprocessError("Subprocess output exceeded configured limits.", result);
   return result;
@@ -431,7 +440,7 @@ export function startJsonlSubprocess(options: JsonlSubprocessOptions): LiveJsonl
     child.once("exit", async (code, signal) => {
       if (timeout) clearTimeout(timeout);
       termination ??= terminateRemainingGroup(child, gracefulMs);
-      await drainAfterExit(child, termination);
+      const outputIncomplete = !(await drainAfterExit(child, termination));
       if (lineBuffer && !limitExceeded) {
         lineCount += 1;
         if (lineCount > maxLines) terminateFor("lines");
@@ -450,20 +459,23 @@ export function startJsonlSubprocess(options: JsonlSubprocessOptions): LiveJsonl
         signal,
         aborted,
         timedOut,
+        ...(outputIncomplete ? { outputIncomplete: true } : {}),
         truncated: { stdout: stdoutState.truncated, stderr: stderrState.truncated },
         durationMs: Date.now() - started,
         records: [],
         malformedLines: [],
         ...(limitExceeded ? { limitExceeded } : {}),
-        diagnostic: aborted
-          ? timedOut
-            ? "Subprocess timed out and was terminated."
-            : "Subprocess was cancelled and terminated."
-          : limitExceeded
-            ? `Subprocess ${limitExceeded} limit was exceeded and the process was terminated.`
-            : code !== 0
-              ? `Subprocess exited with ${signal ? `signal ${signal}` : `code ${String(code)}`}.`
-              : undefined,
+        diagnostic: outputIncomplete
+          ? "Subprocess output remained open after process cleanup; output is incomplete."
+          : aborted
+            ? timedOut
+              ? "Subprocess timed out and was terminated."
+              : "Subprocess was cancelled and terminated."
+            : limitExceeded
+              ? `Subprocess ${limitExceeded} limit was exceeded and the process was terminated.`
+              : code !== 0
+                ? `Subprocess exited with ${signal ? `signal ${signal}` : `code ${String(code)}`}.`
+                : undefined,
       };
       finished = true;
       resolve(result);
@@ -498,6 +510,8 @@ export async function runJsonlSubprocess<T = unknown>(
     }
   }
   const result = await live.done;
+  if (result.outputIncomplete)
+    throw new SubprocessError("Subprocess output is incomplete.", result);
   if (result.limitExceeded || result.truncated.stdout || result.truncated.stderr)
     throw new SubprocessError(
       result.limitExceeded === "line"

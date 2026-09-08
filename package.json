@@ -28,7 +28,7 @@
     "test:cli": "bun test packages/cli/tests packages/cli/_tests_",
     "test:platform": "bun test packages/platform/tests",
     "test:workspace": "bun test packages/workspace/_tests_",
-    "test:extractor": "bun test packages/extractor/tests",
+    "test:extractor": "bun test packages/extractor/tests packages/extractor/_tests_",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "test:api": "bun test packages/local-api",
@@ -37,7 +37,8 @@
     "test:tools": "bun test packages/tools/_tests_",
     "test:providers": "bun test packages/providers",
     "test:scheduler": "bun test packages/scheduler",
-    "test:testing": "bun test packages/testing"
+    "test:testing": "bun test packages/testing",
+    "test:acceptance": "bun test packages/testing/_tests_"
   },
   "devDependencies": {
     "@biomejs/biome": "2.2.2",

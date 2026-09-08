@@ -416,10 +416,21 @@ describe("loopy CLI shell", () => {
           "--json",
         ]),
       ).toBe(0);
-      const review = lastJson<{ proposal: { id: string; workflow: { id: string } } }>();
-      expect(await mainAsync(["approve", review.proposal.id, "--project", project, "--json"])).toBe(
-        0,
-      );
+      const review = lastJson<{
+        proposalHash: string;
+        proposal: { id: string; workflow: { id: string } };
+      }>();
+      expect(
+        await mainAsync([
+          "approve",
+          review.proposal.id,
+          "--expected-proposal-hash",
+          review.proposalHash,
+          "--project",
+          project,
+          "--json",
+        ]),
+      ).toBe(0);
 
       expect(
         await mainAsync(

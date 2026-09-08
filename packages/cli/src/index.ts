@@ -10,7 +10,11 @@ import {
 } from "@loopy/contracts";
 import { extractImportedSession } from "@loopy/extractor";
 import { createLocalServerConfig } from "@loopy/local-api";
-import { createDefaultProviderRegistry, type ProviderRegistry } from "@loopy/providers";
+import {
+  assertWorkflowProvidersReady,
+  createDefaultProviderRegistry,
+  type ProviderRegistry,
+} from "@loopy/providers";
 import {
   createProviderExecutor,
   type ProviderExecutor,
@@ -97,7 +101,7 @@ Commands:
   loopy sessions list|show <id> [--project <dir>] [--json]
   loopy extract --import <id>   (deterministic offline extractor by default)
   loopy review list|show <id> [--project <dir>] [--json]
-  loopy approve|reject <proposal-or-job-id> [--project <dir>] [--json]
+  loopy approve|reject <proposal-or-job-id> [--expected-proposal-hash <hash>] [--project <dir>] [--json]
   loopy workflow import|list|show [workflow.json|workflow-id] [--project <dir>] [--json]
   loopy run <workflow-id> [--local] [--input <json>] [--project <dir>] [--json]`);
   console.log("  loopy pause|resume|cancel <run-id> [--reason <text>] [--project <dir>] [--json]");
@@ -235,6 +239,7 @@ function positional(args: readonly string[], start = 1): string | undefined {
     "--origin",
     "--output",
     "--reason",
+    "--expected-proposal-hash",
     "--from-sequence",
     "--from-node",
     "--node",
@@ -722,10 +727,15 @@ async function approveOrReject(
 ): Promise<number> {
   const id = positional(args);
   if (!id) throw new Error(`${decision} requires a proposal or job ID`);
+  const expectedProposalHash = option(args, "--expected-proposal-hash");
+  if (decision === "approve" && !expectedProposalHash)
+    throw new Error("approve requires --expected-proposal-hash from the reviewed proposal");
   const server = !deps.storageFactory && (await runningServer(projectDir(args)));
   if (server) {
     printJson(
-      await serverRequest(server, `/extractions/${encodeURIComponent(id)}/${decision}`, {}),
+      await serverRequest(server, `/extractions/${encodeURIComponent(id)}/${decision}`, {
+        expectedProposalHash,
+      }),
     );
     return 0;
   }
@@ -733,7 +743,7 @@ async function approveOrReject(
   try {
     const result =
       decision === "approve"
-        ? storage.runtime.approveExtractionProposal(id)
+        ? storage.runtime.approveExtractionProposal(id, expectedProposalHash ?? "")
         : storage.runtime.rejectExtractionProposal(id);
     if (jsonOutput(args)) printJson(result);
     else console.log(`${decision}d ${id}`);
@@ -820,7 +830,7 @@ async function printProviders(args: readonly string[], deps: CliDependencies): P
         ...provider.capabilities.unavailable.map((name) => `${name}=unavailable`),
       ].join(",");
       console.log(
-        `${provider.provider}\t${provider.available ? "available" : "unavailable"}\t${provider.version ?? "-"}\t${capabilities}`,
+        `${provider.provider}\t${provider.available ? "installed" : "missing"}\t${provider.version ?? "-"}\t${capabilities}`,
       );
     }
   return 0;
@@ -882,6 +892,7 @@ async function runWorkflow(args: readonly string[], deps: CliDependencies): Prom
         definition,
         requestedProvider as string,
       ) as WorkflowDefinition;
+      await assertWorkflowProvidersReady(definition, registry);
       provider = createProviderExecutor({
         registry,
         onEvent: (event) => {
@@ -1019,7 +1030,11 @@ async function validateProvider(args: readonly string[], deps: CliDependencies):
   const probe = await adapter.probe();
   if (jsonOutput(args)) printJson(probe);
   else {
-    console.log(`${probe.provider}: ${probe.available ? "available" : "unavailable"}`);
+    console.log(`${probe.provider}: ${probe.available ? "installed" : "missing"}`);
+    if (probe.readiness)
+      console.log(
+        `authentication: ${probe.readiness.authentication}; usability: ${probe.readiness.usability}\n${probe.readiness.message}`,
+      );
     if (probe.version) console.log(`version: ${probe.version}`);
     if (probe.diagnostic) console.log(`diagnostic: ${probe.diagnostic}`);
   }
@@ -1133,6 +1148,7 @@ async function dispatch(args: readonly string[], deps: CliDependencies): Promise
               throw new Error(
                 `Provider '${providerId}' is unavailable${probe.diagnostic ? `: ${probe.diagnostic}` : "."}`,
               );
+            await assertWorkflowProvidersReady(definition, registry);
             provider = createProviderExecutor({
               registry,
               onEvent: (event) => {
