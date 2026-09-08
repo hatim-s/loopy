@@ -101,7 +101,7 @@ Commands:
   loopy sessions list|show <id> [--project <dir>] [--json]
   loopy extract --import <id>   (deterministic offline extractor by default)
   loopy review list|show <id> [--project <dir>] [--json]
-  loopy approve|reject <proposal-or-job-id> [--project <dir>] [--json]
+  loopy approve|reject <proposal-or-job-id> [--expected-proposal-hash <hash>] [--project <dir>] [--json]
   loopy workflow import|list|show [workflow.json|workflow-id] [--project <dir>] [--json]
   loopy run <workflow-id> [--local] [--input <json>] [--project <dir>] [--json]`);
   console.log("  loopy pause|resume|cancel <run-id> [--reason <text>] [--project <dir>] [--json]");
@@ -239,6 +239,7 @@ function positional(args: readonly string[], start = 1): string | undefined {
     "--origin",
     "--output",
     "--reason",
+    "--expected-proposal-hash",
     "--from-sequence",
     "--from-node",
     "--node",
@@ -726,10 +727,15 @@ async function approveOrReject(
 ): Promise<number> {
   const id = positional(args);
   if (!id) throw new Error(`${decision} requires a proposal or job ID`);
+  const expectedProposalHash = option(args, "--expected-proposal-hash");
+  if (decision === "approve" && !expectedProposalHash)
+    throw new Error("approve requires --expected-proposal-hash from the reviewed proposal");
   const server = !deps.storageFactory && (await runningServer(projectDir(args)));
   if (server) {
     printJson(
-      await serverRequest(server, `/extractions/${encodeURIComponent(id)}/${decision}`, {}),
+      await serverRequest(server, `/extractions/${encodeURIComponent(id)}/${decision}`, {
+        expectedProposalHash,
+      }),
     );
     return 0;
   }
@@ -737,7 +743,7 @@ async function approveOrReject(
   try {
     const result =
       decision === "approve"
-        ? storage.runtime.approveExtractionProposal(id)
+        ? storage.runtime.approveExtractionProposal(id, expectedProposalHash ?? "")
         : storage.runtime.rejectExtractionProposal(id);
     if (jsonOutput(args)) printJson(result);
     else console.log(`${decision}d ${id}`);

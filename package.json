@@ -28,7 +28,7 @@
     "test:cli": "bun test packages/cli/tests packages/cli/_tests_",
     "test:platform": "bun test packages/platform/tests",
     "test:workspace": "bun test packages/workspace/_tests_",
-    "test:extractor": "bun test packages/extractor/tests",
+    "test:extractor": "bun test packages/extractor/tests packages/extractor/_tests_",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "test:api": "bun test packages/local-api/tests",

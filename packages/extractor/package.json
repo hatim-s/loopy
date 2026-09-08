@@ -8,7 +8,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "bun test tests"
+    "test": "bun test tests _tests_"
   },
   "dependencies": {
     "@loopy/contracts": "workspace:*",

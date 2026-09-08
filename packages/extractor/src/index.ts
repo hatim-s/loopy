@@ -2,11 +2,18 @@ import { createHash } from "node:crypto";
 import type { ExtractionProposal, JsonObject, ProviderId, TraceEvent } from "@loopy/contracts";
 import { TraceEventSchema } from "@loopy/contracts";
 import { stableEvidenceId } from "./evidence.ts";
+import { codingIntent } from "./intent.ts";
 import type { DeterministicExtractionInput } from "./prompt.ts";
 import type { ExtractorAgent, ExtractorAgentRequest } from "./proposal.ts";
 import { type ExtractionRunResult, extractWithRepair, type RepairOptions } from "./repair.ts";
 import type { CapabilityMetadata, LossinessMetadata, SegmentationResult } from "./segmentation.ts";
 import { segmentTrace } from "./segmentation.ts";
+import {
+  includeToolVerification,
+  observedCheck,
+  PROJECT_CHECKS,
+  verificationDirectory,
+} from "./verification.ts";
 
 export * from "./compiler.ts";
 export * from "./evidence.ts";
@@ -39,6 +46,7 @@ export interface ExtractionAudit {
   repairDiagnostics: readonly unknown[];
   review: DeterministicReview;
   deterministic: true;
+  sourceWorkspaceRoots?: Readonly<Record<string, readonly string[]>>;
 }
 
 export interface DeterministicReview {
@@ -109,6 +117,7 @@ export function prepareDeterministicExtractionInput(imported: ImportedSessionFor
     capabilities: asCapabilities(imported.capabilities ?? imported.capabilityMetadata),
     lossiness: asLossiness(imported.lossiness ?? imported.lossinessMetadata),
   });
+  includeToolVerification(segmentation);
   return {
     input: {
       importId: imported.id,
@@ -201,6 +210,7 @@ interface TraceIntent {
 
 interface CanonicalVerifier {
   check: string;
+  cwd?: string;
   command: string;
   args: string[];
   evidenceId: string;
@@ -244,7 +254,10 @@ function readOnlyIntents(segmentation: SegmentationResult): TraceIntent[] {
   });
 }
 
-function canonicalVerifiers(segmentation: SegmentationResult): {
+function canonicalVerifiers(
+  segmentation: SegmentationResult,
+  sourceWorkspaceRoots?: Readonly<Record<string, readonly string[]>>,
+): {
   verifiers: CanonicalVerifier[];
   unsupportedChecks: string[];
 } {
@@ -262,18 +275,36 @@ function canonicalVerifiers(segmentation: SegmentationResult): {
       unsupportedChecks.push(check ?? "opaque verification");
       continue;
     }
-    const observedCommands = segmentation.events
-      .filter((event) => verification.eventIds.includes(event.id))
-      .flatMap((event) => {
-        const command = text(eventPayload(event).command);
-        return command ? [command.toLowerCase()] : [];
-      });
-    const canonicalLine = [canonical.command, ...canonical.args].join(" ");
-    if (observedCommands.some((command) => command !== canonicalLine)) {
+    const verificationEvents = segmentation.events.filter((event) =>
+      verification.eventIds.includes(event.id),
+    );
+    const directory = verificationDirectory(verificationEvents, sourceWorkspaceRoots);
+    if (!directory.ok) {
+      unsupportedChecks.push(`${check} (${directory.reason})`);
+      continue;
+    }
+    const observedCommands = verificationEvents.flatMap((event) => {
+      const command = observedCheck(event);
+      return command ? [command.toLowerCase()] : [];
+    });
+    const canonicalLine = observedCommands[0] ?? [canonical.command, ...canonical.args].join(" ");
+    if (
+      !PROJECT_CHECKS.has(canonicalLine) ||
+      observedCommands.some((command) => command !== canonicalLine)
+    ) {
       unsupportedChecks.push(`${check} (non-canonical command)`);
       continue;
     }
-    verifiers.push({ ...canonical, evidenceId: evidence.evidenceId, eventIds: evidence.eventIds });
+    const [command, ...args] = canonicalLine.split(" ");
+    if (!command) continue;
+    verifiers.push({
+      ...canonical,
+      command,
+      args,
+      ...(directory.cwd ? { cwd: directory.cwd } : {}),
+      evidenceId: evidence.evidenceId,
+      eventIds: evidence.eventIds,
+    });
   }
   return { verifiers, unsupportedChecks };
 }
@@ -348,10 +379,26 @@ function proposalFromEvidence(
   request: ExtractorAgentRequest,
   segmentation: SegmentationResult,
   provider: string,
+  sourceWorkspaceRoots?: Readonly<Record<string, readonly string[]>>,
 ): ExtractionProposal {
   const primary = firstEvidence(segmentation);
-  const intents = readOnlyIntents(segmentation);
-  const verifierResult = canonicalVerifiers(segmentation);
+  const coding = codingIntent(segmentation.events);
+  const taskEvidence = coding
+    ? evidenceForEvent(segmentation, coding.request.id, "feature")
+    : undefined;
+  const intents =
+    coding && taskEvidence
+      ? [
+          {
+            event: coding.request,
+            evidenceId: taskEvidence.evidenceId,
+            eventIds: taskEvidence.eventIds,
+            prompt:
+              "Implement the current task supplied in input.task in the current isolated project workspace. Inspect the project and follow its instructions. Make the necessary local code changes and tests. Use the current task as the complete requirement; do not reproduce a previous session's patch or commands. Do not publish, deploy, push, install dependencies, contact external services, or change branches. If the task needs any of those operations, report blocked with the reason. Summarize changes and report incomplete work truthfully. The following verify node runs the source-observed project checks.",
+          },
+        ]
+      : readOnlyIntents(segmentation);
+  const verifierResult = canonicalVerifiers(segmentation, sourceWorkspaceRoots);
   const variableGroundings = segmentation.candidateVariables.map((variable) => ({
     variable,
     match: variableEvidenceMatch(segmentation, variable.eventIds),
@@ -363,22 +410,54 @@ function proposalFromEvidence(
         `candidate variable '${variable.name}' has no prepared evidence covering source event(s): ${match.missingEventIds.join(", ")}`,
     );
   const blockers = [
-    ...traceBlockers(segmentation, intents, verifierResult.unsupportedChecks),
+    ...(coding
+      ? [
+          ...coding.blockers,
+          ...segmentation.failures
+            .filter((failure) => !failure.resolved)
+            .map((failure) => `Source ${failure.kind} has no observed recovery.`),
+          "The provider cannot enforce network isolation. Explicitly allow provider network access to run this workflow.",
+          ...(provider === "claude"
+            ? [
+                "Explicitly allow Claude tools Read, Edit, Write and Bash to run this coding workflow.",
+              ]
+            : []),
+          ...segmentation.verification
+            .filter((check) => check.result !== "passed")
+            .map((check) => `Source verification ${check.check ?? "unknown"} did not pass.`),
+          ...segmentation.warnings
+            .filter(
+              (warning) =>
+                warning.code === "invalid_causal_reference" || warning.code === "lossy_event",
+            )
+            .map((warning) => warning.message),
+          ...verifierResult.unsupportedChecks.map(
+            (check) => `Review unsupported verification '${check}'.`,
+          ),
+          ...(verifierResult.verifiers.length
+            ? []
+            : [
+                "No supported verification was observed. Add and review a project verification command before reuse.",
+              ]),
+        ]
+      : traceBlockers(segmentation, intents, verifierResult.unsupportedChecks)),
     ...variableBlockers,
   ];
   const workflowId = stableId("workflow", request.importId);
   const createdAt = segmentation.events[0]?.occurredAt ?? "2026-01-01T00:00:00.000Z";
   const agentNodes = intents.map((intent, index) => ({
     id: stableId("workflow-node", `${request.importId}:agent:${index}:${intent.event.id}`),
-    name: `Read observed ${text(eventPayload(intent.event).tool) ?? "repository"}`,
+    name: coding
+      ? "Implement supplied task"
+      : `Read observed ${text(eventPayload(intent.event).tool) ?? "repository"}`,
     kind: "agent" as const,
     prompt: intent.prompt,
     provider: providerId(provider),
     skills: [],
-    inputBindings: {},
+    inputBindings: coding ? { task: { kind: "workflow_input" as const, name: "task" } } : {},
     requiredCapabilities: [],
     completionContract: "node_completion" as const,
-    tags: ["extracted", "read-only", "trace-derived"],
+    tags: ["extracted", coding ? "local-implementation" : "read-only", "trace-derived"],
   }));
   const verifyNodes = verifierResult.verifiers.length
     ? [
@@ -389,9 +468,10 @@ function proposalFromEvidence(
           description: `Run only canonical checks observed in the trace: ${verifierResult.verifiers
             .map((item) => item.check)
             .join(", ")}.`,
-          commands: verifierResult.verifiers.map(({ command, args }) => ({
+          commands: verifierResult.verifiers.map(({ command, args, cwd }) => ({
             command,
             args,
+            ...(cwd ? { cwd } : {}),
             timeoutMs: 120_000,
           })),
           success: "all" as const,
@@ -413,7 +493,7 @@ function proposalFromEvidence(
       ? [
           {
             id: stableId("workflow-node", `${request.importId}:approval`),
-            name: "Review unsupported trace work",
+            name: coding ? "Review implementation scope" : "Review unsupported trace work",
             kind: "approval" as const,
             message: `Review before execution: ${blockers.join("; ")}.`,
             approvalKey: stableId("approval", request.importId),
@@ -429,7 +509,7 @@ function proposalFromEvidence(
     target,
     metadata: {},
   }));
-  const variables = variableGroundings
+  const observedVariables = variableGroundings
     .map(({ variable, match }) => {
       if (match.missingEventIds.length > 0 || match.evidenceIds.length === 0) return undefined;
       return {
@@ -444,11 +524,27 @@ function proposalFromEvidence(
       };
     })
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
+  const variables =
+    coding && taskEvidence
+      ? [
+          {
+            name: "task",
+            type: "string" as const,
+            description:
+              "The coding task to implement in this project. Supply a new task for each run.",
+            required: true,
+            example: coding.request.payload.content,
+            observedValues: [coding.request.payload.content],
+            confidence: 1,
+            evidenceIds: [taskEvidence.evidenceId],
+          },
+        ]
+      : observedVariables;
   const agentEvidence = intents.map((intent, index) => ({
     evidenceId: intent.evidenceId,
     nodeId: agentNodes[index]?.id as string,
     eventIds: intent.eventIds,
-    rationale: `The read-only agent prompt is grounded in source event ${intent.event.id}.`,
+    rationale: `The ${coding ? "reusable task input" : "read-only agent prompt"} is grounded in source event ${intent.event.id}.`,
   }));
   const verifyEvidence = verifierResult.verifiers.map((verifier) => ({
     evidenceId: verifier.evidenceId,
@@ -459,6 +555,9 @@ function proposalFromEvidence(
   const variableEvidenceNodeId = agentNodes[0]?.id ?? verifyNodes[0]?.id ?? approvalNodes[0]?.id;
   const variableNodeEvidence = variableEvidenceNodeId
     ? variables
+        .filter(
+          (variable) => !coding || !variable.evidenceIds.includes(taskEvidence?.evidenceId ?? ""),
+        )
         .flatMap((variable) =>
           variable.evidenceIds.map((evidenceId) => {
             const evidence = segmentation.evidence.find((item) => item.evidenceId === evidenceId);
@@ -527,13 +626,16 @@ function proposalFromEvidence(
       retry: { maxAttempts: 1, backoffMs: 0, retryOn: [] },
     },
     policies: {
+      ...(coding && provider === "codex" ? { sandbox: "workspace-write" as const } : {}),
       tools: { allow: [], deny: [], network: "disabled" as const },
       workspace: { writableRoots: [], useGitWorktree: true, allowDirtyWorkspace: false },
       approval: {
-        requiredBefore: blockers.length ? (["agent", "verify"] as const) : [],
-        sideEffectLabels: segmentation.features
-          .filter((feature) => feature.class === "side_effect")
-          .map((feature) => feature.rationale),
+        requiredBefore: !coding && blockers.length ? (["agent", "verify"] as const) : [],
+        sideEffectLabels: coding
+          ? []
+          : segmentation.features
+              .filter((feature) => feature.class === "side_effect")
+              .map((feature) => feature.rationale),
       },
       budget: { timeoutMs: 3_600_000 },
       concurrency: { maxParallel: 1 },
@@ -543,7 +645,7 @@ function proposalFromEvidence(
       createdAt,
       updatedAt: createdAt,
       createdFrom: "extraction" as const,
-      tags: ["deterministic", "phase3"],
+      tags: ["deterministic", coding ? "reusable-coding-task" : "trace-derived"],
     },
   };
   return {
@@ -585,13 +687,16 @@ function proposalFromEvidence(
           },
         ],
     proposedPolicies: {
+      ...(coding && provider === "codex" ? { sandbox: "workspace-write" as const } : {}),
       tools: { allow: [], deny: [], network: "disabled" as const },
       workspace: { writableRoots: [], useGitWorktree: true, allowDirtyWorkspace: false },
       approval: {
-        requiredBefore: blockers.length ? (["agent", "verify"] as const) : [],
-        sideEffectLabels: segmentation.features
-          .filter((feature) => feature.class === "side_effect")
-          .map((feature) => feature.rationale),
+        requiredBefore: !coding && blockers.length ? (["agent", "verify"] as const) : [],
+        sideEffectLabels: coding
+          ? []
+          : segmentation.features
+              .filter((feature) => feature.class === "side_effect")
+              .map((feature) => feature.rationale),
       },
       budget: { timeoutMs: 3_600_000 },
       concurrency: { maxParallel: 1 },
@@ -609,6 +714,8 @@ function proposalFromEvidence(
 }
 
 export interface DeterministicAgentOptions {
+  /** Recorded native run roots supplied only after matching the imported trace to stored events. */
+  sourceWorkspaceRoots?: Readonly<Record<string, readonly string[]>>;
   provider?: string;
   failFirstWith?: unknown;
 }
@@ -626,7 +733,12 @@ export function createDeterministicExtractorAgent(
         return options.failFirstWith;
       }
       first = false;
-      return proposalFromEvidence(request, segmentation, options.provider ?? "codex");
+      return proposalFromEvidence(
+        request,
+        segmentation,
+        options.provider ?? "codex",
+        options.sourceWorkspaceRoots,
+      );
     },
   };
 }
@@ -638,7 +750,10 @@ export async function extractImportedSession(
   const prepared = prepareDeterministicExtractionInput(imported);
   const result = await extractWithRepair(
     prepared.input,
-    createDeterministicExtractorAgent(prepared.segmentation, options),
+    createDeterministicExtractorAgent(prepared.segmentation, {
+      ...options,
+      provider: options.provider ?? imported.provider,
+    }),
     options,
   );
   return {
@@ -646,6 +761,9 @@ export async function extractImportedSession(
     result,
     audit: {
       version: "1",
+      ...(options.sourceWorkspaceRoots
+        ? { sourceWorkspaceRoots: options.sourceWorkspaceRoots }
+        : {}),
       importId: imported.id,
       provider: imported.provider,
       sourceEventCount: prepared.segmentation.events.length,

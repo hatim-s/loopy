@@ -418,7 +418,16 @@ export interface ExtractionJobRecord {
 export interface ExtractionAudit {
   [key: string]: JsonValue;
 }
+export interface ExtractionReviewUpdate {
+  expectedProposalHash: string;
+  allowNetworkAccess?: boolean;
+  allowLocalTools?: boolean;
+  resolutions: Array<{ question: string; answer: string }>;
+  workflow?: WorkflowDefinition;
+  resolvedBy?: string;
+}
 export interface ExtractionReviewRecord {
+  proposalHash: string;
   job: ExtractionJobRecord;
   import: ImportedSessionRecord;
   proposal: ExtractionProposal;
@@ -979,10 +988,18 @@ export class RuntimeRepository {
     if (!proposalResult.success) return undefined;
     const imported = this.getImportedSession(job.importId);
     if (!imported) return undefined;
+    const audit = output.audit;
+    const reviewHistory =
+      audit && typeof audit === "object" && !Array.isArray(audit) && "reviewHistory" in audit
+        ? audit.reviewHistory
+        : [];
     return {
       job,
       import: imported,
       proposal: proposalResult.data,
+      proposalHash: createHash("sha256")
+        .update(encode({ proposal: proposalResult.data, reviewHistory }))
+        .digest("hex"),
       ...(output.audit === undefined ? {} : { audit: output.audit as JsonValue }),
     };
   }
@@ -1010,10 +1027,176 @@ export class RuntimeRepository {
       },
     });
   }
-  approveExtractionProposal(reference: string, resolvedBy = "local-user"): WorkflowVersionRecord {
+  reviewExtractionProposal(
+    reference: string,
+    update: ExtractionReviewUpdate,
+  ): ExtractionReviewRecord {
     return this.db.transaction(() => {
       const review = this.getExtractionReview(reference);
       if (!review) throw new Error(`Unknown extraction proposal or job ${reference}`);
+      if (review.proposal.status !== "draft") throw new Error("Only draft proposals can be edited");
+      if (update.expectedProposalHash !== review.proposalHash)
+        throw new Error("Extraction proposal changed; reload before reviewing");
+      const resolutions = new Map<string, string>();
+      for (const resolution of update.resolutions) {
+        if (!resolution.answer.trim()) throw new Error("Every resolution needs an answer");
+        if (
+          !review.proposal.unresolvedQuestions.some((item) => item.question === resolution.question)
+        )
+          throw new Error("Unknown review question");
+        if (resolutions.has(resolution.question)) throw new Error("Duplicate review question");
+        resolutions.set(resolution.question, resolution.answer.trim());
+      }
+      const workflow = update.workflow ?? review.proposal.workflow;
+      const original = review.proposal.workflow;
+      if (workflow.id !== original.id || workflow.workflowVersion !== original.workflowVersion)
+        throw new Error("Review cannot change workflow identity");
+      // Review edits preserve source-backed operations and approval boundaries. The graph editor can create a new version after publication.
+      if (
+        workflow.nodes.length !== original.nodes.length ||
+        workflow.nodes.some(
+          (node) =>
+            !original.nodes.some((before) => before.id === node.id && before.kind === node.kind),
+        )
+      )
+        throw new Error("Review cannot replace source-backed nodes");
+      if (
+        encode(workflow.edges) !== encode(original.edges) ||
+        encode(workflow.policies) !== encode(original.policies)
+      )
+        throw new Error("Review cannot change source-backed edges or approval policies");
+      for (const node of workflow.nodes) {
+        const before = original.nodes.find((item) => item.id === node.id)!;
+        if (node.kind === "agent" && before.kind === "agent") {
+          const { name: _name, description: _description, prompt: _prompt, ...rest } = node;
+          const {
+            name: _beforeName,
+            description: _beforeDescription,
+            prompt: _beforePrompt,
+            ...beforeRest
+          } = before;
+          if (encode(rest) !== encode(beforeRest))
+            throw new Error("Review may edit agent name, description and prompt only");
+        } else if (encode(node) !== encode(before))
+          throw new Error("Review cannot change source-backed commands or approval nodes");
+      }
+      const task = workflow.inputs.find((input) => input.name === "task");
+      if (
+        original.inputs.some((input) => input.name === "task") &&
+        (!task || task.type !== "string" || !task.required || task.default !== undefined)
+      )
+        throw new Error("The reusable task input must remain a required string without a default");
+      const reviewedWorkflow = structuredClone(workflow);
+      if (update.allowNetworkAccess) {
+        const networkQuestion = review.proposal.unresolvedQuestions.find((item) =>
+          item.question.includes("The provider cannot enforce network isolation."),
+        );
+        if (!networkQuestion || !resolutions.has(networkQuestion.question))
+          throw new Error("Resolve the network isolation question before allowing network access");
+        reviewedWorkflow.policies.tools.network = "unrestricted";
+      }
+      const localToolsQuestion = review.proposal.unresolvedQuestions.find((item) =>
+        item.question.includes(
+          "Explicitly allow Claude tools Read, Edit, Write and Bash to run this coding workflow.",
+        ),
+      );
+      const localTools = ["Read", "Edit", "Write", "Bash"];
+      if (update.allowLocalTools) {
+        if (
+          !localToolsQuestion ||
+          !resolutions.has(localToolsQuestion.question) ||
+          !original.nodes.some(
+            (node) =>
+              node.kind === "agent" &&
+              node.provider === "claude" &&
+              node.tags.includes("local-implementation"),
+          ) ||
+          localTools.some((tool) => original.policies.tools.deny.includes(tool))
+        )
+          throw new Error(
+            "Resolve the Claude local tools question before allowing its coding tools",
+          );
+        reviewedWorkflow.policies.tools.allow = [
+          ...new Set([...original.policies.tools.allow, ...localTools]),
+        ];
+      }
+      if (
+        localToolsQuestion &&
+        resolutions.has(localToolsQuestion.question) &&
+        !localTools.every((tool) => reviewedWorkflow.policies.tools.allow.includes(tool))
+      )
+        throw new Error("Explicitly allow local tools to resolve the Claude coding tools question");
+      const networkQuestion = review.proposal.unresolvedQuestions.find((item) =>
+        item.question.includes("The provider cannot enforce network isolation."),
+      );
+      if (
+        networkQuestion &&
+        resolutions.has(networkQuestion.question) &&
+        !update.allowNetworkAccess &&
+        workflow.policies.tools.network !== "unrestricted"
+      )
+        throw new Error(
+          "Explicitly allow network access to resolve the provider network isolation question",
+        );
+      const proposal = ExtractionProposalSchema.parse({
+        ...review.proposal,
+        workflow: reviewedWorkflow,
+        proposedPolicies: { ...review.proposal.proposedPolicies, ...reviewedWorkflow.policies },
+        unresolvedQuestions: review.proposal.unresolvedQuestions.map((item) =>
+          resolutions.has(item.question) ? { ...item, blocksExecution: false } : item,
+        ),
+      });
+      const graph = validateWorkflow(proposal.workflow);
+      if (!graph.valid)
+        throw new Error(
+          `Invalid reviewed graph: ${graph.diagnostics.map((item) => item.message).join("; ")}`,
+        );
+      const audit =
+        review.audit && typeof review.audit === "object" && !Array.isArray(review.audit)
+          ? review.audit
+          : {};
+      const history = Array.isArray(audit.reviewHistory) ? audit.reviewHistory : [];
+      const nextReview = {
+        ...review,
+        audit: {
+          ...audit,
+          review: {
+            status: proposal.unresolvedQuestions.some((item) => item.blocksExecution)
+              ? "blocked"
+              : "ready",
+            blockingQuestions: proposal.unresolvedQuestions.filter((item) => item.blocksExecution)
+              .length,
+            diagnostics: [],
+          },
+          reviewHistory: [
+            ...history,
+            {
+              at: timestamp(),
+              resolvedBy: update.resolvedBy ?? "local-user",
+              previousProposalHash: review.proposalHash,
+              resolutions: [...resolutions].map(([question, answer]) => ({ question, answer })),
+              workflowEdited: Boolean(update.workflow),
+              allowNetworkAccess: Boolean(update.allowNetworkAccess),
+              allowLocalTools: Boolean(update.allowLocalTools),
+              previousProposal: review.proposal,
+            },
+          ],
+        },
+      };
+      this.updateStoredProposal(nextReview, proposal);
+      return must(this.getExtractionReview(reference), "extraction review");
+    })();
+  }
+  approveExtractionProposal(
+    reference: string,
+    expectedProposalHash: string,
+    resolvedBy = "local-user",
+  ): WorkflowVersionRecord {
+    return this.db.transaction(() => {
+      const review = this.getExtractionReview(reference);
+      if (!review) throw new Error(`Unknown extraction proposal or job ${reference}`);
+      if (expectedProposalHash !== review.proposalHash)
+        throw new Error("Extraction proposal changed; reload before approving");
       if (review.proposal.status === "approved")
         throw new Error(`Extraction proposal ${review.proposal.id} is already approved`);
       if (review.proposal.status === "rejected")
@@ -1027,6 +1210,13 @@ export class RuntimeRepository {
       if (!graph.valid)
         throw new Error(
           `Cannot approve an invalid workflow graph: ${graph.diagnostics.map((diagnostic) => diagnostic.message).join("; ")}`,
+        );
+      if (
+        review.proposal.verifierRequirements.some((requirement) => requirement.required) &&
+        !review.proposal.workflow.nodes.some((node) => node.kind === "verify")
+      )
+        throw new Error(
+          "Required verification is unavailable. Import a trace with an observed project check before approving",
         );
       const existing = this.getWorkflowVersion(review.proposal.workflow.id, 1);
       if (existing)
@@ -1053,12 +1243,23 @@ export class RuntimeRepository {
         encode(parsedWorkflow),
         now,
       );
-      this.updateStoredProposal(review, { ...review.proposal, status: "approved" }, "succeeded");
-      void resolvedBy;
+      this.updateStoredProposal(
+        {
+          ...review,
+          audit: {
+            ...(review.audit && typeof review.audit === "object" && !Array.isArray(review.audit)
+              ? review.audit
+              : {}),
+            publishedWorkflow: { workflowId: workflow.id, version: 1, resolvedBy, at: now },
+          },
+        },
+        { ...review.proposal, status: "approved" },
+        "succeeded",
+      );
       return must(this.getWorkflowVersion(workflow.id, 1), "workflow version");
     })();
   }
-  rejectExtractionProposal(reference: string, _reason?: string): ExtractionJobRecord {
+  rejectExtractionProposal(reference: string, reason?: string): ExtractionJobRecord {
     return this.db.transaction(() => {
       const review = this.getExtractionReview(reference);
       if (!review) throw new Error(`Unknown extraction proposal or job ${reference}`);
@@ -1066,7 +1267,15 @@ export class RuntimeRepository {
         throw new Error(`Extraction proposal ${review.proposal.id} is already approved`);
       if (review.proposal.status === "rejected") return review.job;
       return this.updateStoredProposal(
-        review,
+        {
+          ...review,
+          audit: {
+            ...(review.audit && typeof review.audit === "object" && !Array.isArray(review.audit)
+              ? review.audit
+              : {}),
+            rejection: { reason: reason ?? "", at: timestamp() },
+          },
+        },
         { ...review.proposal, status: "rejected" },
         "cancelled",
       );
