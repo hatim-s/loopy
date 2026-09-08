@@ -313,7 +313,8 @@ function nodeSubtitle(node: WorkflowNode): string {
   if (node.kind === "route")
     return node.defaultRoute ? `default → ${node.defaultRoute}` : "conditional branch";
   if (node.kind === "join") return `${node.policy} / ${node.outputMode}`;
-  if (node.kind === "shell") return `${node.stages.length} Bash stages`;
+  if (node.kind === "shell")
+    return `${node.stages.length} Bash stage${node.stages.length === 1 ? "" : "s"}`;
   return node.operation;
 }
 
