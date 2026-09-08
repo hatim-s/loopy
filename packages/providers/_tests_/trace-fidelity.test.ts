@@ -10,6 +10,26 @@ import { normalizePiJsonLines } from "../src/adapters/pi/events.js";
 import { createDefaultProviderRegistry } from "../src/registered.js";
 
 describe("coding trace fidelity", () => {
+  test("Pi preserves explicit tool status without inferring success from missing or invalid flags", async () => {
+    for (const isError of [true, false, undefined, null, "false", 0]) {
+      for (const historical of [false, true]) {
+        const result = await normalizePiJsonLines([
+          JSON.stringify(
+            historical
+              ? {
+                  type: "message",
+                  message: { role: "toolResult", toolCallId: "check", content: "output", isError },
+                }
+              : { type: "tool_execution_end", toolCallId: "check", result: "output", isError },
+          ),
+        ]);
+        const completion = result.events.find((event) => event.type === "tool.completed");
+        expect(completion).toBeDefined();
+        if (typeof isError === "boolean") expect(completion?.payload.isError).toBe(isError);
+        else expect(completion?.payload).not.toHaveProperty("isError");
+      }
+    }
+  });
   for (const provider of ["codex", "claude", "pi", "opencode"] as const) {
     test(`${provider} imports intent, native edits, paired commands and results`, async () => {
       const source = await readFile(

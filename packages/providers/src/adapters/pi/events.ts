@@ -152,7 +152,10 @@ export function normalizePiEvent(
     return {
       event: base(
         "tool.completed",
-        { output: jsonValue(value.result ?? value.output ?? ""), isError: value.isError === true },
+        {
+          output: jsonValue(value.result ?? value.output ?? ""),
+          ...(typeof value.isError === "boolean" ? { isError: value.isError } : {}),
+        },
         callId,
       ),
       diagnostics: [],
