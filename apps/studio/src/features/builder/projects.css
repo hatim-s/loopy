@@ -18,7 +18,7 @@
 .project-dialog {
   width: min(680px, calc(100vw - 32px));
   max-height: calc(100vh - 48px);
-  padding: 24px;
+  padding: 32px;
   color: var(--studio-text);
   background: var(--studio-surface);
   border: 1px solid var(--studio-border-strong);
@@ -26,7 +26,8 @@
   box-shadow: 0 20px 80px #0009;
 }
 .project-dialog::backdrop {
-  background: #0009;
+  background: #100916bf;
+  backdrop-filter: blur(8px);
 }
 .project-dialog header {
   display: flex;
@@ -36,7 +37,9 @@
 }
 .project-dialog h2 {
   margin: 0;
-  font-size: 20px;
+  font-size: 34px;
+  font-family: var(--font-display);
+  font-weight: 500;
 }
 .project-dialog p {
   color: var(--studio-text-muted);

@@ -40,7 +40,7 @@ export function StepLibrary({ onAdd }: { onAdd: (kind: WorkflowNode["kind"]) => 
   return (
     <aside className="step-library" aria-label="Step library">
       <header>
-        <span className="editor-eyebrow">Add step</span>
+        <p>Compose your workflow</p>
         <h2>Step library</h2>
       </header>
       <input
@@ -58,6 +58,7 @@ export function StepLibrary({ onAdd }: { onAdd: (kind: WorkflowNode["kind"]) => 
             <button
               type="button"
               className="palette-action"
+              data-kind={kind}
               key={kind}
               draggable
               onDragStart={(event) => {
