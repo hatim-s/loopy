@@ -453,6 +453,18 @@ function normalizePlan(
   };
 }
 
+function applyWorkflowInputDefaults(plan: RuntimePlan, inputs: JsonObject): JsonObject {
+  if (!Array.isArray(plan.inputs)) return { ...inputs };
+
+  const defaults: JsonObject = {};
+  for (const definition of plan.inputs) {
+    if (!isRecord(definition) || typeof definition.name !== "string") continue;
+    if (!Object.hasOwn(definition, "default")) continue;
+    defaults[definition.name] = structuredClone(definition.default) as JsonValue;
+  }
+  return { ...defaults, ...inputs };
+}
+
 export class RuntimeScheduler {
   private readonly options: RuntimeOptions;
   private stopped = false;
@@ -509,13 +521,14 @@ export class RuntimeScheduler {
   ): Promise<RunRecord> {
     if (this.stopped) throw new Error("Runtime is stopping");
     const plan = normalizePlan(planInput);
+    const resolvedInputs = applyWorkflowInputDefaults(plan, inputs);
     const run: RunRecord = {
       runId: this.makeId("run"),
       workflowId: plan.workflowId,
       workflowVersion: plan.workflowVersion,
       plan,
       executionPlanHash: executionPlanHash(plan),
-      inputs,
+      inputs: resolvedInputs,
       status: "created",
       createdAt: this.now(),
     };
@@ -589,7 +602,7 @@ export class RuntimeScheduler {
       if (completionEvent) allCompleted.set(attempt.nodeId, attempt);
     }
     const carry = new Set(latest.keys());
-    const forkInputs = inputs ?? source.inputs;
+    const forkInputs = applyWorkflowInputDefaults(source.plan, inputs ?? source.inputs);
     const forkGraph = { ...source, inputs: forkInputs };
     const inputsChanged = JSON.stringify(forkInputs) !== JSON.stringify(source.inputs);
     const sideEffectNode = (node: RuntimeNode | undefined): boolean => {

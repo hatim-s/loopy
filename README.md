@@ -61,6 +61,11 @@ bun packages/cli/src/index.ts cleanup preview --project . --max-age-days 30 --js
 
 See [the local scheduling and packaging guide](docs/phase6-local-scheduling.md).
 
+Runnable examples:
+
+- [Repository maintenance loops](examples/repository-maintenance/README.md)
+- [Uacode asset sync loop](examples/uacode-asset-sync/README.md)
+
 ## Architecture and roadmap
 
 - [Loopy Local-First Graph Harness Architecture and Roadmap](.planloft/plans/loopy-local-first-mvp.md)

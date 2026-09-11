@@ -46,6 +46,36 @@ describe("phase 1 runtime", () => {
     expect(result.attempts.filter((a) => a.status === "succeeded")).toHaveLength(2);
   });
 
+  test("applies workflow input defaults without overriding explicit values", async () => {
+    const x = scheduler();
+    const workflow = plan(
+      [
+        {
+          ...agent("a"),
+          inputBindings: {
+            defaulted: { kind: "workflow_input", name: "defaulted" },
+            overridden: { kind: "workflow_input", name: "overridden" },
+          },
+        },
+      ],
+      [],
+      {
+        inputs: [
+          { name: "defaulted", type: "string", required: false, default: "fallback" },
+          { name: "overridden", type: "string", required: false, default: "fallback" },
+        ],
+      },
+    );
+
+    const result = await x.runtime.run(workflow, { overridden: "provided" });
+
+    expect(result.run.inputs).toEqual({ defaulted: "fallback", overridden: "provided" });
+    expect(x.provider.calls[0]?.input).toEqual({
+      defaulted: "fallback",
+      overridden: "provided",
+    });
+  });
+
   test("fails verification when no executor is configured", async () => {
     const store = new InMemoryRuntimeStore();
     const runtime = new RuntimeScheduler({
