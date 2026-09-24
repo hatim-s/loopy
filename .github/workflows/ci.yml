@@ -10,6 +10,8 @@ jobs:
           bun-version: 1.4.0
       - name: Install Linux sandbox
         run: sudo apt-get update && sudo apt-get install -y bubblewrap
+      - name: Check Linux namespace support
+        run: bwrap --unshare-all --ro-bind / / -- /bin/true
       - run: bun install --frozen-lockfile
       - run: bun run check
       - run: bun run build
