@@ -8,7 +8,7 @@ import { Runtime } from "./runtime.ts";
 type ServerOptions = { home?: string; cwd?: string; port?: number; assets?: string };
 
 function snapshotAssets(directory: string) {
-  const files = new Map<string, { body: Uint8Array; type: string }>();
+  const files = new Map<string, { body: Blob; type: string }>();
   const visit = (path: string, prefix: string) => {
     for (const entry of readdirSync(path, { withFileTypes: true })) {
       if (entry.name.startsWith(".") || entry.isSymbolicLink()) continue;
@@ -16,7 +16,10 @@ function snapshotAssets(directory: string) {
       const key = `${prefix}${entry.name}`;
       if (entry.isDirectory()) visit(filename, `${key}/`);
       else if (entry.isFile())
-        files.set(key, { body: readFileSync(filename), type: Bun.file(filename).type });
+        files.set(key, {
+          body: new Blob([new Uint8Array(readFileSync(filename))]),
+          type: Bun.file(filename).type,
+        });
     }
   };
   if (existsSync(directory)) visit(directory, "");
