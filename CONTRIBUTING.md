@@ -1,25 +1,9 @@
-# Contributing to Loopy
+# Contributing
 
-Thanks for helping build Loopy. The project is a local-first developer tool: source-controlled workflow definitions stay separate from per-project runtime state, provider credentials, traces, and artifacts.
+Use Bun 1.4 or newer. Run `bun install`, `bun run check`, `bun run fmt:check` and `bun run build` before submitting a change.
 
-## Before opening a change
+Keep the public package in `packages/loopy`. Add internal modules when they hide a distinct responsibility; do not create a package for each module. Studio only views definitions and runs them. Workflow edits belong in TypeScript.
 
-- Read the [MVP architecture and roadmap](.planloft/plans/loopy-local-first-mvp.md).
-- Keep changes within the package boundary they belong to.
-- Do not commit provider credentials, `.loopy/` runtime state, raw private sessions, or generated artifacts.
-- Keep provider-specific limitations explicit; do not silently emulate unsupported capabilities.
+Put tests in `packages/loopy/_tests_`. Focus them on compilation and type guarantees, subprocess confinement, durable state transitions and end-to-end CLI behavior. Test a packed installation when package exports or assets change.
 
-## Local checks
-
-Install Bun, then run:
-
-```sh
-bun install
-bun run check
-```
-
-The check command formats and lints the workspace, type-checks strict TypeScript, and runs Vitest. Tests that need an installed provider or paid account must be opt-in and clearly labelled.
-
-## Pull requests
-
-Describe the user-visible contract, package boundaries touched, and the checks you ran. Include fixture or migration notes when a persisted contract changes. Keep unrelated worktree changes out of the commit.
+Treat each run's graph, input, mode and workspace as immutable. Never silently replay an uncertain external command. Commit checkpoint output and its event in one SQLite transaction. Sandbox execution must fail closed.

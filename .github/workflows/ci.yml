@@ -1,32 +1,17 @@
 name: CI
-
-on:
-  push:
-  pull_request:
-
+on: [push, pull_request]
 jobs:
   checks:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-      - name: Run checks
-        run: bun run check
-      - name: Build
-        run: bun run build
-
-  linux-service:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - name: Install Linux sandbox
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+      - name: Check Linux namespace support
+        run: bwrap --unshare-all --ro-bind / / -- /bin/true
       - run: bun install --frozen-lockfile
-      - name: Verify the systemd user service lifecycle
-        run: |
-          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
-          sudo systemctl start "user@$(id -u).service"
-          LOOPY_TEST_SERVICE=1 bun test packages/cli/_tests_/launchd.test.ts
+      - run: bun run check
+      - run: bun run build

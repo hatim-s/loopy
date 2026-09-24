@@ -1,39 +1,23 @@
 {
   "name": "@loopy/studio",
-  "version": "0.1.0",
-  "description": "Visual graph engineering and debugging for the Loopy local graph harness.",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:package": "vite build --config vite.package.config.ts",
-    "preview": "vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run --config vitest.config.ts --root ../.. apps/studio"
+    "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@fontsource/cormorant-garamond": "5.3.0",
-    "@fontsource/manrope": "5.3.0",
-    "@loopy/contracts": "workspace:*",
-    "@loopy/tools": "workspace:*",
-    "@phosphor-icons/react": "2.1.7",
-    "@radix-ui/themes": "3.2.1",
-    "@tanstack/react-query": "5.85.5",
-    "@tanstack/react-router": "1.130.2",
-    "@xyflow/react": "12.8.1",
-    "immer": "10.1.1",
+    "@fontsource-variable/geist": "5.3.0",
+    "@fontsource-variable/geist-mono": "5.3.0",
     "react": "19.1.1",
-    "react-dom": "19.1.1",
-    "zustand": "5.0.8"
+    "react-dom": "19.1.1"
   },
   "devDependencies": {
-    "@testing-library/dom": "10.4.1",
-    "@testing-library/react": "16.3.0",
     "@types/react": "19.1.10",
     "@types/react-dom": "19.1.7",
     "@vitejs/plugin-react": "5.0.2",
-    "jsdom": "26.1.0",
     "vite": "7.1.2"
   }
 }

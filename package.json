@@ -1,52 +1,27 @@
 {
-  "name": "@loopy/workspace-root",
-  "version": "0.1.0",
+  "name": "loopy-workspace",
   "private": true,
   "type": "module",
-  "description": "Local-first graph harness, trace extractor, runtime, and visual debugger for coding agents.",
-  "license": "Apache-2.0",
   "workspaces": [
-    "apps/*",
-    "packages/*"
+    "packages/*",
+    "apps/*"
   ],
   "packageManager": "bun@1.4.0",
-  "engines": {
-    "bun": ">=1.4"
-  },
   "scripts": {
-    "build": "bun run build:contracts && bun run typecheck",
-    "build:contracts": "tsc -p packages/contracts/tsconfig.json",
-    "check": "bun run fmt:check && bun run lint && bun run typecheck && bun run test:contracts && bun run test:runtime && bun run test:storage && bun run test:tracing && bun run test:extractor && bun run test:cli && bun run test:platform && bun run test:workspace && bun run test:server && bun run test:api && bun run test:studio && bun run test:tools && bun run test:providers && bun run test:scheduler && bun run test:testing",
+    "dev": "bun packages/loopy/src/cli.ts ui",
+    "loopy": "bun packages/loopy/src/cli.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test packages/loopy/_tests_",
+    "check": "bun run lint && bun run typecheck && bun run test",
+    "build": "bun scripts/build.ts",
     "fmt": "biome format --write .",
     "fmt:check": "biome format .",
-    "lint": "biome check .",
-    "test": "bun test",
-    "test:contracts": "bun test packages/contracts/test",
-    "test:runtime": "bun test packages/runtime",
-    "test:storage": "bun test packages/storage",
-    "test:tracing": "bun test packages/tracing",
-    "test:cli": "bun test packages/cli/tests packages/cli/_tests_",
-    "test:platform": "bun test packages/platform/tests",
-    "test:workspace": "bun test packages/workspace/_tests_",
-    "test:extractor": "bun test packages/extractor/tests packages/extractor/_tests_",
-    "test:watch": "vitest",
-    "typecheck": "tsc --noEmit",
-    "test:api": "bun test packages/local-api",
-    "test:server": "bun test packages/server/_tests_",
-    "test:studio": "vitest run apps/studio",
-    "test:tools": "bun test packages/tools/_tests_",
-    "test:providers": "bun test packages/providers",
-    "test:scheduler": "bun test packages/scheduler",
-    "test:testing": "bun test packages/testing",
-    "test:acceptance": "bun test packages/testing/_tests_"
+    "lint": "biome check ."
   },
   "devDependencies": {
     "@biomejs/biome": "2.2.2",
     "bun-types": "1.4.0",
-    "typescript": "5.9.2",
-    "vitest": "3.2.4"
-  },
-  "dependencies": {
-    "cron-parser": "5.4.0"
+    "loopy": "workspace:*",
+    "typescript": "5.9.2"
   }
 }
