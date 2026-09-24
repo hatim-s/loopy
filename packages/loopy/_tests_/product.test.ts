@@ -88,6 +88,7 @@ test("local API requires authorization and origin checks, runs saved workflows, 
   );
   const server = startServer({ home, cwd, assets, port: 0 });
   servers.push(server);
+  writeFileSync(join(assets, "index.html"), "Changed after server started");
   const url = new URL(server.url);
   const token = new URLSearchParams(url.hash.slice(1)).get("token");
   const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };

@@ -118,4 +118,6 @@ bun run loopy ui
 
 The runtime is also available through `import { Runtime } from "loopy/runtime"`. It exposes create, execute, read and resume operations over one SQLite store. The CLI and HTTP server call that same runtime. The server binds to loopback, checks host and origin, and requires its session token for every API request.
 
+The viewer serves a fixed copy of its assets loaded at startup and excludes symlinks. Workflow writes cannot replace the JavaScript of an already running viewer. As with any workspace code, inspect package or source changes before starting another trusted Loopy process.
+
 The source modules keep the boundaries small: workflow compilation, command typing/help parsing, process execution, run storage/runtime, local registry, and CLI/HTTP adapters. The rebuild removes the old extraction, trace-import, visual-editing, provider, tool-installer, scheduler, MCP-edit and worktree packages.

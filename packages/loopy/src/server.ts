@@ -1,11 +1,27 @@
 import { timingSafeEqual } from "node:crypto";
-import { realpath } from "node:fs/promises";
-import { resolve, sep } from "node:path";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import type { Json, RunRecord } from "./model.ts";
 import { defaultHome, Registry } from "./registry.ts";
 import { Runtime } from "./runtime.ts";
 
 type ServerOptions = { home?: string; cwd?: string; port?: number; assets?: string };
+
+function snapshotAssets(directory: string) {
+  const files = new Map<string, { body: Uint8Array; type: string }>();
+  const visit = (path: string, prefix: string) => {
+    for (const entry of readdirSync(path, { withFileTypes: true })) {
+      if (entry.name.startsWith(".") || entry.isSymbolicLink()) continue;
+      const filename = join(path, entry.name);
+      const key = `${prefix}${entry.name}`;
+      if (entry.isDirectory()) visit(filename, `${key}/`);
+      else if (entry.isFile())
+        files.set(key, { body: readFileSync(filename), type: Bun.file(filename).type });
+    }
+  };
+  if (existsSync(directory)) visit(directory, "");
+  return files;
+}
 
 export function startServer(options: ServerOptions = {}) {
   const home = options.home ?? defaultHome();
@@ -13,7 +29,10 @@ export function startServer(options: ServerOptions = {}) {
   const registry = new Registry(home);
   const runtime = new Runtime({ home });
   const token = crypto.randomUUID();
-  const assets = resolve(options.assets ?? resolve(import.meta.dir, "../dist/studio"));
+  // Workflow writes must not replace the code served by a running viewer.
+  const assets = snapshotAssets(
+    resolve(options.assets ?? resolve(import.meta.dir, "../dist/studio")),
+  );
   const controllers = new Map<string, AbortController>();
   const jobs = new Set<Promise<unknown>>();
   const launch = (run: RunRecord, retryUncertain = false) => {
@@ -116,28 +135,10 @@ export function startServer(options: ServerOptions = {}) {
         if (request.method !== "GET" && request.method !== "HEAD")
           return new Response("Method not allowed", { status: 405 });
         const relative = path === "/" ? "index.html" : path.replace(/^\/+/, "");
-        const filename = resolve(assets, relative);
-        if (
-          !filename.startsWith(`${assets}${sep}`) ||
-          relative.split("/").some((part) => part.startsWith("."))
-        )
-          return new Response("Not found", { status: 404 });
-        let resolvedAssets: string;
-        let resolvedFile: string;
-        try {
-          [resolvedAssets, resolvedFile] = await Promise.all([
-            realpath(assets),
-            realpath(filename),
-          ]);
-        } catch {
-          return new Response("Not found", { status: 404 });
-        }
-        if (!resolvedFile.startsWith(`${resolvedAssets}${sep}`))
-          return new Response("Not found", { status: 404 });
-        const file = Bun.file(resolvedFile);
-        if (!(await file.exists()))
+        const file = assets.get(relative);
+        if (!file)
           return new Response("Viewer assets missing. Run bun run build first.", { status: 404 });
-        return new Response(request.method === "HEAD" ? null : file, {
+        return new Response(request.method === "HEAD" ? null : file.body, {
           headers: {
             "Content-Type": file.type,
             "X-Content-Type-Options": "nosniff",
