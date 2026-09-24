@@ -1,8 +1,0 @@
-{
-  "schemaVersion": "2",
-  "workflowVersion": 0,
-  "id": "not-an-id",
-  "name": "",
-  "nodes": [],
-  "defaults": { "provider": "unknown" }
-}

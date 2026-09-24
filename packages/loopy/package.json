@@ -1,0 +1,32 @@
+{
+  "name": "loopy",
+  "version": "0.2.0",
+  "type": "module",
+  "description": "TypeScript workflows for local CLI tools, with durable runs and a graph viewer.",
+  "license": "Apache-2.0",
+  "engines": {
+    "bun": ">=1.4.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./runtime": {
+      "types": "./dist/types/runtime.d.ts",
+      "default": "./src/runtime.ts"
+    }
+  },
+  "bin": {
+    "loopy": "./src/cli.ts"
+  },
+  "files": [
+    "src",
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "prepack": "bun ../../scripts/build.ts"
+  }
+}
