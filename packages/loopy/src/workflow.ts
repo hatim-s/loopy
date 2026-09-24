@@ -5,6 +5,7 @@ import type {
   ConditionNode,
   Expression,
   Reference,
+  Scalar,
   Value,
   Workflow,
   WorkflowNode,
@@ -33,11 +34,15 @@ function referenceTree<T>(source: "input" | "steps", path: string[] = []): T {
   });
 }
 
+export function at<Item>(source: Reference<readonly Item[]>, index: number): Reference<Item>;
 export function at<T, Key extends keyof T & string>(
   source: Reference<T>,
   key: Key,
-): Reference<T[Key]> {
-  return reference(source.$ref.source, [...source.$ref.path, key]);
+): Reference<T[Key]>;
+export function at(source: Reference<unknown>, key: string | number): Reference<unknown> {
+  if (typeof key === "number" && (!Number.isSafeInteger(key) || key < 0))
+    throw new Error("Array reference index must be a nonnegative integer");
+  return reference(source.$ref.source, [...source.$ref.path, String(key)]);
 }
 
 function context<Input, Steps>(): WorkflowContext<Input, Steps> {
@@ -51,9 +56,9 @@ function expression<T>(op: Expression<T>["$op"], ...args: unknown[]): Expression
   return { $op: op, args };
 }
 
-export const eq = <T>(left: Value<T>, right: Value<T>): Expression<boolean> =>
+export const eq = <T extends Scalar>(left: Value<T>, right: Value<T>): Expression<boolean> =>
   expression("eq", left, right);
-export const ne = <T>(left: Value<T>, right: Value<T>): Expression<boolean> =>
+export const ne = <T extends Scalar>(left: Value<T>, right: Value<T>): Expression<boolean> =>
   expression("ne", left, right);
 export const gt = (left: Value<number>, right: Value<number>): Expression<boolean> =>
   expression("gt", left, right);
@@ -238,6 +243,7 @@ function validateNodes(
       knownKeys(command, `${path}.command`, [
         "program",
         "args",
+        "argConstraints",
         "stdin",
         "env",
         "cwd",
@@ -249,6 +255,49 @@ function validateNodes(
       if (!Array.isArray(command.args)) throw new Error(`${path}.command.args must be an array`);
       for (const [argIndex, arg] of command.args.entries())
         validateValue(arg, `${path}.command.args[${argIndex}]`, visible);
+      if (command.argConstraints !== undefined) {
+        const constraints = requireRecord(command.argConstraints, `${path}.command.argConstraints`);
+        for (const [index, raw] of Object.entries(constraints)) {
+          if (!/^(0|[1-9][0-9]*)$/.test(index) || Number(index) >= command.args.length)
+            throw new Error(
+              `${path}.command.argConstraints has an invalid argument index '${index}'`,
+            );
+          const constraint = requireRecord(raw, `${path}.command.argConstraints.${index}`);
+          knownKeys(constraint, `${path}.command.argConstraints.${index}`, [
+            "kind",
+            "choices",
+            "prefix",
+          ]);
+          if (constraint.kind !== "string" && constraint.kind !== "number")
+            throw new Error(`${path}.command.argConstraints.${index}.kind is invalid`);
+          if (
+            constraint.choices !== undefined &&
+            (!Array.isArray(constraint.choices) ||
+              !constraint.choices.length ||
+              constraint.choices.some((choice) => typeof choice !== "string") ||
+              constraint.kind !== "string")
+          )
+            throw new Error(`${path}.command.argConstraints.${index}.choices is invalid`);
+          if (
+            constraint.prefix !== undefined &&
+            (typeof constraint.prefix !== "string" || !constraint.prefix)
+          )
+            throw new Error(`${path}.command.argConstraints.${index}.prefix is invalid`);
+          if (constraint.prefix !== undefined) {
+            const attached = requireRecord(
+              command.args[Number(index)],
+              `${path}.command.args[${index}]`,
+            );
+            if (
+              attached.$op !== "concat" ||
+              !Array.isArray(attached.args) ||
+              attached.args.length !== 2 ||
+              attached.args[0] !== constraint.prefix
+            )
+              throw new Error(`${path}.command.argConstraints.${index} has no matching value`);
+          }
+        }
+      }
       if (command.stdin !== undefined)
         validateValue(command.stdin, `${path}.command.stdin`, visible);
       if (command.env !== undefined) {

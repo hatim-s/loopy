@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -6,7 +7,7 @@ import { pathToFileURL } from "node:url";
 import type { CommandOutput, ExecuteCommand, Workflow } from "../src/model";
 import { CommandExecutionError } from "../src/process";
 import { Runtime } from "../src/runtime";
-import { RunBusyError } from "../src/store";
+import { RunBusyError, RunStore } from "../src/store";
 
 const directories: string[] = [];
 const runtimes: Runtime[] = [];
@@ -243,6 +244,77 @@ describe("durable workflow runtime", () => {
     await expect(second.execute(run.id)).rejects.toBeInstanceOf(RunBusyError);
     release(output("done"));
     expect((await running).status).toBe("succeeded");
+  });
+
+  test("explicit recovery fences a foreign owner and leaves its command uncertain", async () => {
+    let calls = 0;
+    const { home, runtime, options } = fixture(async () => {
+      calls += 1;
+      return output("retried");
+    });
+    const run = runtime.createRun(
+      {
+        version: 1,
+        slug: "foreign-owner",
+        nodes: [{ id: "effect", kind: "command", command: { program: "tool", args: [] } }],
+      },
+      {},
+      options,
+    );
+    const oldOwner = new RunStore(home);
+    const oldToken = "old-owner";
+    oldOwner.claim(run.id, oldToken);
+    const started = oldOwner.startAttempt(run.id, oldToken, "effect", {
+      program: "tool",
+      args: [],
+    });
+    const db = new Database(join(home, "runs.sqlite"));
+    db.run("UPDATE runs SET owner_host=? WHERE id=?", ["previous-host", run.id]);
+    db.close();
+
+    try {
+      expect(runtime.getRun(run.id)?.status).toBe("running");
+      const recovered = runtime.recoverOwner(run.id);
+      expect(recovered.status).toBe("interrupted");
+      expect(runtime.getAttempts(run.id).map((attempt) => attempt.status)).toEqual(["uncertain"]);
+      expect(
+        runtime.getEvents(run.id).find((event) => event.type === "run.owner_recovered")?.data,
+      ).toMatchObject({
+        previousOwnerHost: "previous-host",
+        uncertainAttempts: 1,
+      });
+      expect(() =>
+        oldOwner.finishAttempt(run.id, oldToken, started.id, "succeeded", output("late")),
+      ).toThrow(RunBusyError);
+      expect((await runtime.execute(run.id)).status).toBe("interrupted");
+      expect(calls).toBe(0);
+      expect((await runtime.execute(run.id, { retryUncertain: true })).status).toBe("succeeded");
+      expect(calls).toBe(1);
+    } finally {
+      oldOwner.close();
+    }
+  });
+
+  test("explicit recovery refuses to displace a live local owner", () => {
+    const { home, runtime, options } = fixture();
+    const run = runtime.createRun(
+      {
+        version: 1,
+        slug: "local-owner",
+        nodes: [{ id: "effect", kind: "command", command: { program: "tool", args: [] } }],
+      },
+      {},
+      options,
+    );
+    const owner = new RunStore(home);
+    try {
+      owner.claim(run.id, "local-owner");
+      expect(() => runtime.recoverOwner(run.id)).toThrow(RunBusyError);
+      expect(runtime.getRun(run.id)?.status).toBe("running");
+    } finally {
+      owner.release(run.id, "local-owner");
+      owner.close();
+    }
   });
 
   test("marks a crashed command uncertain and requires explicit retry", async () => {

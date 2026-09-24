@@ -6,6 +6,7 @@ export type FlagDefinition = {
   readonly kind: "boolean" | "string" | "number";
   readonly repeatable?: boolean;
   readonly optionalValue?: boolean;
+  readonly attachedValue?: boolean;
   readonly choices?: readonly string[];
 };
 export type PositionalDefinition = {
@@ -16,6 +17,7 @@ export type PositionalDefinition = {
 export type CommandDescriptor = {
   readonly program: string;
   readonly path?: readonly string[];
+  readonly positionalSeparator?: boolean;
   readonly positionals?: readonly PositionalDefinition[];
   readonly flags?: Readonly<Record<string, FlagDefinition>>;
   readonly helpHash?: string;
@@ -88,6 +90,11 @@ function argument(value: unknown, location: string): asserts value is CommandArg
 
 function validateDescriptor(descriptor: CommandDescriptor): void {
   if (!descriptor.program.trim()) throw new Error("Command descriptor needs a program");
+  if (
+    descriptor.positionalSeparator !== undefined &&
+    typeof descriptor.positionalSeparator !== "boolean"
+  )
+    throw new Error("positionalSeparator must be boolean");
   let optionalSeen = false;
   for (const [index, part] of (descriptor.positionals ?? []).entries()) {
     if (optionalSeen && !part.optional)
@@ -99,6 +106,8 @@ function validateDescriptor(descriptor: CommandDescriptor): void {
   for (const [key, flag] of Object.entries(descriptor.flags ?? {})) {
     if (!/^--[a-zA-Z0-9][a-zA-Z0-9-]*$/.test(flag.cli))
       throw new Error(`Flag '${key}' has an invalid CLI spelling`);
+    if (flag.attachedValue && (!flag.optionalValue || flag.kind === "boolean"))
+      throw new Error(`Flag '${key}' has invalid attached-value metadata`);
   }
   const names = Object.values(descriptor.flags ?? {}).map((flag) => flag.cli);
   if (new Set(names).size !== names.length) throw new Error("Command descriptor repeats a flag");
@@ -122,12 +131,17 @@ export function defineCommand<const Descriptor extends CommandDescriptor>(descri
     input: CommandInput<readonly (CommandArgument | undefined)[], Record<string, unknown>> = {},
   ): Command => {
     const provided = input.args ?? [];
-    if (descriptor.positionals)
-      validateArity(
-        provided.filter((value) => value !== undefined),
-        descriptor.positionals,
-      );
+    if (
+      provided.some(
+        (value, index) =>
+          value === undefined && provided.slice(index + 1).some((next) => next !== undefined),
+      )
+    )
+      throw new Error("Cannot omit a positional before a later positional");
+    const positionals = provided.filter((value) => value !== undefined);
+    if (descriptor.positionals) validateArity(positionals, descriptor.positionals);
     const args: CommandArgument[] = [...(descriptor.path ?? [])];
+    const argConstraints: NonNullable<Command["argConstraints"]> = {};
     for (const [key, value] of Object.entries(input.flags ?? {})) {
       const flag = descriptor.flags?.[key];
       if (!flag) throw new Error(`Unknown flag '${key}' for ${descriptor.program}`);
@@ -149,18 +163,35 @@ export function defineCommand<const Descriptor extends CommandDescriptor>(descri
             throw new Error(`Flag '${key}' must be numeric`);
           if (flag.choices && typeof item === "string" && !flag.choices.includes(item))
             throw new Error(`Flag '${key}' must be one of ${flag.choices.join(", ")}`);
-          args.push(flag.cli, item);
+          if (flag.attachedValue) {
+            const prefix = `${flag.cli}=`;
+            argConstraints[args.length] = {
+              kind: flag.kind,
+              ...(flag.choices ? { choices: [...flag.choices] } : {}),
+              prefix,
+            };
+            args.push({ $op: "concat", args: [prefix, item] });
+          } else {
+            args.push(flag.cli);
+            argConstraints[args.length] = {
+              kind: flag.kind,
+              ...(flag.choices ? { choices: [...flag.choices] } : {}),
+            };
+            args.push(item);
+          }
         }
       }
     }
-    for (const [index, value] of provided.entries()) {
-      if (value === undefined) continue;
+    if (positionals.length && descriptor.positionalSeparator !== false) args.push("--");
+    for (const [index, value] of positionals.entries()) {
       argument(value, `Argument ${index + 1}`);
+      if (descriptor.positionals) argConstraints[args.length] = { kind: "string" };
       args.push(value);
     }
     return {
       program: descriptor.program,
       args,
+      ...(Object.keys(argConstraints).length ? { argConstraints } : {}),
       ...(input.stdin !== undefined ? { stdin: input.stdin } : {}),
       ...(input.env ? { env: input.env } : {}),
       ...(input.cwd ? { cwd: input.cwd } : {}),

@@ -49,8 +49,15 @@ describe("CLI help generation", () => {
       "--json",
       "--model",
       "gpt",
+      "--",
       "hi",
     ]);
+    const literal = codexExec({ args: ["--help"], flags: { sandbox: "read-only" } } as never);
+    expect(literal.args).toEqual(["exec", "--sandbox", "read-only", "--", "--help"]);
+    expect(literal.argConstraints).toEqual({
+      2: { kind: "string", choices: ["read-only", "workspace-write", "danger-full-access"] },
+      4: { kind: "string" },
+    });
     expect(() => codexExec({ args: [], flags: { typo: true } as never })).toThrow("Unknown flag");
   });
 
@@ -77,6 +84,17 @@ describe("CLI help generation", () => {
     ]);
   });
 
+  test("reads bracketed, lowercase, and variadic positional syntax", () => {
+    const parsed = parseCliHelp(
+      "tool",
+      [],
+      "Usage: tool [OPTIONS] [<file>...]\n\nOptions:\n  --help  Show help\n",
+    );
+    expect(parsed.descriptor.positionals).toEqual([
+      { name: "file", optional: true, variadic: true },
+    ]);
+  });
+
   test("models flags with optional values and rejects reserved export names", () => {
     const parsed = parseCliHelp(
       "tool",
@@ -87,6 +105,7 @@ describe("CLI help generation", () => {
       cli: "--inspect",
       kind: "number",
       optionalValue: true,
+      attachedValue: true,
     });
     expect(() => renderCommandSource("default", parsed.descriptor)).toThrow(
       "valid TypeScript identifier",
@@ -98,11 +117,39 @@ describe("CLI help generation", () => {
     });
     expect(inspect({ flags: { inspect: true } }).args).toEqual(["--inspect"]);
     expect(inspect({ flags: { inspect: 9229 } }).args).toEqual(["--inspect", 9229]);
+    const attached = defineCommand(parsed.descriptor)({ flags: { inspect: 9229 } } as never);
+    expect(attached.args).toEqual([{ $op: "concat", args: ["--inspect=", 9229] }]);
+    expect(attached.argConstraints).toEqual({ 0: { kind: "number", prefix: "--inspect=" } });
     expect(() =>
       defineCommand({
         program: "tool",
         positionals: [{ name: "first", optional: true }, { name: "second" }],
       }),
     ).toThrow("required positional cannot follow an optional");
+  });
+
+  test("reads inline choices and permits tools without a positional separator", () => {
+    const parsed = parseCliHelp(
+      "tool",
+      [],
+      "Usage: tool [OPTIONS] [NAME]\n\nOptions:\n  --mode <MODE>  Choose [possible values: safe, fast]\n",
+    );
+    expect(parsed.descriptor.flags?.mode?.choices).toEqual(["safe", "fast"]);
+    const echo = defineCommand({
+      program: "echo",
+      positionals: [{ name: "message" }],
+      positionalSeparator: false,
+    });
+    expect(echo({ args: ["hello"] }).args).toEqual(["hello"]);
+    const two = defineCommand({
+      program: "tool",
+      positionals: [
+        { name: "first", optional: true },
+        { name: "second", optional: true },
+      ],
+    });
+    expect(() => two({ args: [undefined, "second"] })).toThrow(
+      "Cannot omit a positional before a later positional",
+    );
   });
 });

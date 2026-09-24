@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import { realpath } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 import type { Json, RunRecord } from "./model.ts";
 import { defaultHome, Registry } from "./registry.ts";
@@ -83,7 +84,7 @@ export function startServer(options: ServerOptions = {}) {
                 throw new Error("Choose sandbox or full execution.");
               const run = runtime.createRun(
                 registry.get(value.slug).workflow,
-                (value.input ?? {}) as Json,
+                (value.input === undefined ? {} : value.input) as Json,
                 { cwd, mode: value.mode },
               );
               launch(run);
@@ -121,7 +122,19 @@ export function startServer(options: ServerOptions = {}) {
           relative.split("/").some((part) => part.startsWith("."))
         )
           return new Response("Not found", { status: 404 });
-        const file = Bun.file(filename);
+        let resolvedAssets: string;
+        let resolvedFile: string;
+        try {
+          [resolvedAssets, resolvedFile] = await Promise.all([
+            realpath(assets),
+            realpath(filename),
+          ]);
+        } catch {
+          return new Response("Not found", { status: 404 });
+        }
+        if (!resolvedFile.startsWith(`${resolvedAssets}${sep}`))
+          return new Response("Not found", { status: 404 });
+        const file = Bun.file(resolvedFile);
         if (!(await file.exists()))
           return new Response("Viewer assets missing. Run bun run build first.", { status: 404 });
         return new Response(request.method === "HEAD" ? null : file, {

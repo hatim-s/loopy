@@ -139,9 +139,37 @@ function stringValue(value: Json, label: string): string {
 
 function resolveCommand(node: CommandNode, input: Json, outputs: Values): ResolvedCommand {
   const source = node.command;
-  const args = source.args.map((arg, index) =>
-    stringValue(resolveValue(arg, input, outputs), `Argument ${index + 1}`),
-  );
+  const args = source.args.map((arg, index) => {
+    const label = `Argument ${index + 1}`;
+    const value = resolveValue(arg, input, outputs);
+    const constraint = source.argConstraints?.[index];
+    if (constraint) {
+      let checked: Json = value;
+      if (constraint.prefix !== undefined) {
+        if (
+          !arg ||
+          typeof arg !== "object" ||
+          !("$op" in arg) ||
+          arg.$op !== "concat" ||
+          arg.args.length !== 2 ||
+          arg.args[0] !== constraint.prefix
+        )
+          throw new Error(`${label} has an invalid attached flag`);
+        if (typeof value !== "string" || !value.startsWith(constraint.prefix))
+          throw new Error(`${label} must start with ${constraint.prefix}`);
+        checked = resolveValue(arg.args[1], input, outputs);
+      }
+      if (typeof checked !== constraint.kind)
+        throw new Error(`${label} must resolve to a ${constraint.kind}`);
+      if (
+        constraint.choices &&
+        typeof checked === "string" &&
+        !constraint.choices.includes(checked)
+      )
+        throw new Error(`${label} must be one of ${constraint.choices.join(", ")}`);
+    }
+    return stringValue(value, label);
+  });
   const stdin =
     source.stdin === undefined
       ? undefined
@@ -222,6 +250,11 @@ export class Runtime {
 
   getEvents(id: string, after?: number): RunEvent[] {
     return this.store.getEvents(id, after);
+  }
+
+  /** Explicitly release a run owned by another host and fence its old write token. */
+  recoverOwner(id: string): RunRecord {
+    return this.store.recoverOwner(id);
   }
 
   async execute(

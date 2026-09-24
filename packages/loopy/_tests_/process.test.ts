@@ -1,5 +1,15 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { CommandExecutionError, executeCommand } from "../src/process.js";
@@ -33,6 +43,20 @@ describe("process executor", () => {
       { cwd, mode: "full" },
     );
     expect(failed.exitCode).toBe(7);
+  });
+
+  test("resolves relative PATH entries from the command directory", async () => {
+    const cwd = workspace();
+    mkdirSync(join(cwd, "tools"));
+    const executable = join(cwd, "tools", "probe-cmd");
+    writeFileSync(executable, "#!/bin/sh\necho expected\n");
+    chmodSync(executable, 0o755);
+
+    const output = await executeCommand(
+      { program: "probe-cmd", args: [], env: { PATH: "tools" } },
+      { cwd, mode: "full" },
+    );
+    expect(output.stdout).toBe("expected\n");
   });
 
   test("bounds combined output", async () => {
@@ -100,6 +124,26 @@ describe("process executor", () => {
     expect(existsSync(join(cwd, "orphan"))).toBe(false);
   });
 
+  test("settles when a separate session inherits output pipes", async () => {
+    const cwd = workspace();
+    const started = Date.now();
+    const source = `
+      const { spawn } = require("node:child_process");
+      const child = spawn("/bin/sh", ["-c", "sleep 2"], {
+        detached: true,
+        stdio: ["ignore", "inherit", "inherit"],
+      });
+      child.unref();
+    `;
+    await expect(
+      executeCommand(
+        { program: process.execPath, args: ["-e", source], timeoutMs: 100 },
+        { cwd, mode: "full" },
+      ),
+    ).rejects.toThrow("timed out");
+    expect(Date.now() - started).toBeLessThan(1_500);
+  });
+
   test("kills descendants that ignore termination", async () => {
     const cwd = workspace();
     await expect(
@@ -135,12 +179,13 @@ describe("process executor", () => {
       const direct = await executeCommand(
         {
           program: process.execPath,
-          args: ["-e", "require('node:fs').writeFileSync('inside', 'ok')"],
+          args: ["-e", "require('node:fs').writeFileSync('inside', process.env.LOOPY_TEST_VALUE)"],
+          env: { LOOPY_TEST_VALUE: "ok" },
         },
         { cwd, mode: "sandbox" },
       );
       expect(direct.exitCode).toBe(0);
-      expect(existsSync(join(cwd, "inside"))).toBe(true);
+      expect(readFileSync(join(cwd, "inside"), "utf8")).toBe("ok");
 
       const denied = await executeCommand(
         {
@@ -219,12 +264,17 @@ describe("process executor", () => {
     const inside = await executeCommand(
       {
         program: process.execPath,
-        args: ["-e", "require('node:fs').writeFileSync('inside', 'ok')"],
+        args: ["-e", "require('node:fs').writeFileSync('inside', process.env.LOOPY_TEST_VALUE)"],
+        env: { LOOPY_TEST_VALUE: "ok" },
       },
       { cwd, mode: "sandbox" },
     );
-    expect(inside.exitCode).toBe(0);
-    expect(existsSync(join(cwd, "inside"))).toBe(true);
+    if (inside.exitCode !== 0) {
+      throw new Error(
+        `Linux sandbox exited ${inside.exitCode}: stdout=${JSON.stringify(inside.stdout)} stderr=${JSON.stringify(inside.stderr)}`,
+      );
+    }
+    expect(readFileSync(join(cwd, "inside"), "utf8")).toBe("ok");
 
     const denied = await executeCommand(
       {
@@ -252,4 +302,41 @@ describe("process executor", () => {
       server.stop(true);
     }
   });
+
+  test.skipIf(!hasBubblewrap || !existsSync("/usr/bin/cc"))(
+    "Linux sandbox does not load command libraries in the launcher",
+    async () => {
+      const cwd = workspace();
+      const outside = workspace();
+      const library = join(cwd, "preload.so");
+      const source = join(cwd, "preload.c");
+      const insideMarker = join(cwd, "inside-preload");
+      const outsideMarker = join(outside, "outside-preload");
+      writeFileSync(
+        source,
+        `#include <fcntl.h>
+#include <unistd.h>
+__attribute__((constructor)) static void mark(void) {
+  int inside = open(${JSON.stringify(insideMarker)}, O_WRONLY | O_CREAT, 0600);
+  if (inside >= 0) close(inside);
+  int outside = open(${JSON.stringify(outsideMarker)}, O_WRONLY | O_CREAT, 0600);
+  if (outside >= 0) close(outside);
+}
+`,
+      );
+      const compiled = spawnSync("/usr/bin/cc", ["-shared", "-fPIC", source, "-o", library], {
+        encoding: "utf8",
+      });
+      if (compiled.status !== 0) throw new Error(`Could not compile preload: ${compiled.stderr}`);
+
+      const output = await executeCommand(
+        { program: "/bin/echo", args: ["inside"], env: { LD_PRELOAD: library } },
+        { cwd, mode: "sandbox" },
+      );
+      if (output.exitCode !== 0) throw new Error(`Sandbox failed: ${output.stderr}`);
+      expect(output.stdout).toBe("inside\n");
+      expect(existsSync(insideMarker)).toBe(true);
+      expect(existsSync(outsideMarker)).toBe(false);
+    },
+  );
 });

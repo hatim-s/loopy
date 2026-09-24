@@ -55,6 +55,18 @@ describe("TypeScript workflow authoring", () => {
     expect(extended.build().nodes).toHaveLength(2);
   });
 
+  test("addresses array input by index", () => {
+    const graph = trigger<{ files: string[] }>("array-ref")
+      .node("show", ({ input }) => command("echo", at(input.files, 0)))
+      .build();
+    expect((graph.nodes[0] as { command: { args: unknown[] } }).command.args[0]).toEqual({
+      $ref: { source: "input", path: ["files", "0"] },
+    });
+    expect(() => at({ $ref: { source: "input", path: ["files"] } }, -1)).toThrow(
+      "nonnegative integer",
+    );
+  });
+
   test("rejects duplicate ids across branches and invalid persisted values", () => {
     const duplicate = trigger("duplicate")
       .node("same", command("git", "status"))
@@ -104,5 +116,21 @@ describe("TypeScript workflow authoring", () => {
       ],
     };
     expect(() => validateWorkflow(invalid)).toThrow("unsupported field 'hidden'");
+    const badConstraint = {
+      version: 1,
+      slug: "bad-constraint",
+      nodes: [
+        {
+          id: "run",
+          kind: "command",
+          command: {
+            program: "tool",
+            args: [{ $op: "concat", args: ["--port=", 9229] }],
+            argConstraints: { 0: { kind: "number", prefix: "--inspect=" } },
+          },
+        },
+      ],
+    };
+    expect(() => validateWorkflow(badConstraint)).toThrow("has no matching value");
   });
 });

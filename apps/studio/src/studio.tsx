@@ -202,7 +202,15 @@ function Graph({
             onSelect={onSelect}
           />
           <div className="graph-link" aria-hidden="true" />
-          <div className="graph-end">End</div>
+          <div className={`graph-end ${detail?.run.status ?? ""}`}>
+            {detail?.run.status === "succeeded"
+              ? "Complete"
+              : detail?.run.status === "failed"
+                ? "Failed"
+                : detail?.run.status === "interrupted"
+                  ? "Interrupted"
+                  : "End"}
+          </div>
         </div>
       </div>
     </section>
@@ -512,8 +520,11 @@ function RunPanel({
 }) {
   const [retryUncertain, setRetryUncertain] = useState(false);
   const selected = detail?.run;
-  const uncertainCount =
-    detail?.attempts.filter((attempt) => attempt.status === "uncertain").length ?? 0;
+  const uncertainCount = detail
+    ? [...latestAttempts(detail.attempts).values()].filter(
+        (attempt) => attempt.status === "uncertain",
+      ).length
+    : 0;
   return (
     <section className="runs-section">
       <div className="section-heading">
@@ -731,10 +742,11 @@ export function App() {
       return;
     let cancelled = false;
     const timer = window.setInterval(() => {
-      void Promise.all([endpoints.runs(slug), endpoints.run(selectedRunId)])
-        .then(([history, next]) => {
+      void endpoints
+        .run(selectedRunId)
+        .then((next) => {
           if (cancelled) return;
-          setRuns([...history].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+          setRuns((previous) => previous.map((run) => (run.id === next.run.id ? next.run : run)));
           setDetail(next);
           if (
             resumeBaseline?.id === selectedRunId &&

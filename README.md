@@ -63,7 +63,9 @@ export default trigger<{ prompt: string }>("review")
   }));
 ```
 
-The generator executes `<cli> <command...> --help`, records its hash and the observed CLI version, and emits one command descriptor. TypeScript infers the wrapper's positional tuple, flag names, value types and documented choices from that descriptor. Unknown flags fail typechecking and runtime construction. No CLI command runs while the workflow is compiled.
+The generator executes `<cli> <command...> --help`, records its hash and the observed CLI version, and emits one command descriptor. TypeScript infers the wrapper's positional tuple, flag names, value types and documented choices from that descriptor. Unknown flags fail typechecking and runtime construction. Saved graphs retain value constraints so resolved run inputs are checked before launching the command. No CLI command runs while the workflow is compiled.
+
+Wrappers insert `--` before positional arguments so a leading dash in input cannot become another option. For tools that do not support this separator, set `positionalSeparator: false` on the descriptor and validate option-like inputs yourself. Optional flags documented as `--flag[=<VALUE>]` retain their attached-value syntax.
 
 Help formats vary. The generator reports omitted or ambiguous syntax and does not discover every subcommand automatically. Generate a wrapper for each command path you need. A descriptor can specify `repeatable: true`, numeric values or choices when the help text leaves those unclear. The saved hash records what was observed; Loopy does not enforce an installed CLI version on every run. Regenerate wrappers after upgrading a CLI.
 
@@ -80,11 +82,14 @@ loopy runs review
 loopy inspect <run-id>
 loopy resume <run-id>
 loopy resume <run-id> --retry-uncertain
+loopy recover <run-id> --force
 ```
 
 Saving imports trusted TypeScript on the host and writes a validated JSON graph. Only save code you trust. Running reads that graph and snapshots it alongside the input, working directory and execution mode. Saving a new definition never changes an existing run.
 
 SQLite commits a running attempt before launching its command, then commits its completion and output together. Resume skips completed commands and retries failed commands. Dead owners are recovered on opening or reading the store. A crash, cancellation, timeout or output-limit termination after a command starts leaves an uncertain attempt. Resuming it requires `--retry-uncertain`, because an external side effect may already have happened. CLI side effects are not exactly once. A live owner prevents concurrent execution of the same run.
+
+After a hostname change or moving the database to another machine, `loopy recover <run-id> --force` releases a foreign owner's claim and marks any in-flight attempt uncertain. Stop the original runner first. Recovery prevents its later database writes, but cannot stop a command on another host. Resume still requires explicit retry of uncertain work.
 
 Runs execute sequentially with nested conditions. This version does not provide parallel execution, scheduled triggers, automatic retries, cycles, approval nodes or replay forks. Those can be added against concrete workflow needs without reviving the old provider and trace layers.
 
@@ -94,9 +99,11 @@ State defaults to `~/.loopy/v2`, with `workflows/<slug>.json` and `runs.sqlite`.
 
 Sandbox is the default and never falls back to full permissions. On macOS it uses `sandbox-exec`; on Linux it requires `/usr/bin/bwrap`. Unsupported systems or unavailable backends fail the run before unrestricted execution.
 
-The sandbox allows writes inside the chosen workspace and denies network access. It masks or denies home-directory reads outside the workspace and the executable's package. System files and readable paths outside the home remain readable, so this is not a confidentiality boundary for all host files. Use a narrow workspace directory. Linux uses separate namespaces and a private temporary directory. The Linux backend has a conditional test but has not been executed on the macOS development host.
+The sandbox allows writes inside the chosen workspace and denies network access. It masks or denies home-directory reads outside the workspace and the executable's package. System files and readable paths outside the home remain readable, so this is not a confidentiality boundary for all host files. Use a narrow workspace directory. Linux uses separate namespaces and a private temporary directory. CI exercises Linux confinement on Ubuntu 22.04 with bubblewrap. Hosts that block unprivileged namespaces cannot use this backend; execution fails closed.
 
-`--full` runs with the current user's filesystem, environment and network access. Both modes enforce a five-minute default timeout and an eight-MiB combined output limit. Set `timeoutMs` and `maxOutputBytes` on a command to change them. Cancellation and completion clean up the command's process group.
+`--full` runs with the current user's filesystem, environment and network access. Both modes enforce a five-minute default timeout and an eight-MiB combined output limit. Set `timeoutMs` and `maxOutputBytes` on a command to change them. Sandbox launchers receive a clean environment; explicit command variables are applied inside confinement.
+
+Cancellation and completion stop the command's process group. Commands that deliberately create separate sessions can escape group cleanup, and hard-killing Loopy can leave a child alive. Daemonizing commands are unsupported. Output pipes close after a bounded drain period so escaped descendants cannot keep Loopy waiting indefinitely. Inspect remaining processes and external effects before retrying uncertain work.
 
 For existing Bash scripts, `bash(script)` is an explicit escape hatch with the same execution policy. The normal API never requires a shell script.
 

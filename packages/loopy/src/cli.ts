@@ -16,6 +16,7 @@ const usage = `loopy: TypeScript workflows for CLI tools
   loopy run <slug> [--input JSON|@file]          Run in a sandbox
   loopy run <slug> --full                       Run with your full host permissions
   loopy resume <run-id> [--retry-uncertain]      Continue from saved checkpoints
+  loopy recover <run-id> --force               Release a run owned by another host
   loopy runs [slug]                             List runs
   loopy inspect <run-id>                        Show inputs, attempts, outputs, and events
   loopy types <cli> [command...] --out file.ts   Generate a typed wrapper from CLI help
@@ -50,6 +51,7 @@ export async function main(args = process.argv.slice(2)) {
       name: { type: "string" },
       port: { type: "string" },
       "retry-uncertain": { type: "boolean" },
+      force: { type: "boolean" },
     },
   });
   if (values.help || !positionals[0]) {
@@ -101,7 +103,7 @@ export async function main(args = process.argv.slice(2)) {
     print(registry.get(required(target, "Slug")).workflow);
     return;
   }
-  if (!["run", "resume", "runs", "inspect"].includes(command ?? ""))
+  if (!["run", "resume", "recover", "runs", "inspect"].includes(command ?? ""))
     throw new Error(`Unknown command '${command}'. Run loopy --help.`);
   const runtime = new Runtime({ home });
   const controller = new AbortController();
@@ -109,6 +111,14 @@ export async function main(args = process.argv.slice(2)) {
   process.once("SIGINT", abort);
   process.once("SIGTERM", abort);
   try {
+    if (command === "recover") {
+      if (!values.force)
+        throw new Error(
+          "Recovery requires --force. Stop the original host's runner first; it may still be executing a command.",
+        );
+      print(runtime.recoverOwner(required(target, "Run ID")));
+      return;
+    }
     if (command === "runs") {
       print(runtime.listRuns(target));
       return;

@@ -323,8 +323,20 @@ pre {
   padding: 7px 17px;
 }
 .graph-end {
+  color: var(--muted);
+  border-color: var(--line-strong);
+}
+.graph-end.succeeded {
   color: var(--success);
   border-color: var(--success);
+}
+.graph-end.failed {
+  color: var(--error);
+  border-color: var(--error);
+}
+.graph-end.interrupted {
+  color: var(--warning);
+  border-color: var(--warning);
 }
 .graph-link {
   width: 1px;
@@ -456,8 +468,8 @@ pre {
   content: "";
   position: absolute;
   top: 0;
-  left: 25%;
-  width: 50%;
+  left: calc(25% - 7px);
+  width: calc(50% + 14px);
   border-top: 1px solid var(--line-strong);
 }
 .branch-arm {
@@ -525,8 +537,8 @@ pre {
   content: "";
   position: absolute;
   top: 0;
-  left: 25%;
-  width: 50%;
+  left: calc(25% - 7px);
+  width: calc(50% + 14px);
   border-top: 1px solid var(--line-strong);
 }
 .branch-join::after {

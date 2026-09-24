@@ -8,6 +8,7 @@ import type { CommandOutput, ExecuteCommand, ResolvedCommand, RunOptions } from 
 const DEFAULT_TIMEOUT_MS = 5 * 60_000;
 const DEFAULT_MAX_OUTPUT_BYTES = 8 * 1024 * 1024;
 const SANDBOX_EXEC = "/usr/bin/sandbox-exec";
+const ENV_EXEC = "/usr/bin/env";
 
 export class CommandExecutionError extends Error {
   readonly output: CommandOutput;
@@ -45,7 +46,7 @@ async function resolveProgram(program: string, cwd: string, path: string): Promi
     if (await executable(candidate)) return realpath(candidate);
   } else {
     for (const directory of path.split(delimiter)) {
-      const candidate = resolve(directory || cwd, program);
+      const candidate = resolve(cwd, directory, program);
       if (await executable(candidate)) return realpath(candidate);
     }
   }
@@ -74,7 +75,20 @@ function sbpl(path: string): string {
   return JSON.stringify(path);
 }
 
-async function macSandbox(program: string, workspace: string): Promise<[string, string[]]> {
+function sandboxEnvironment(env: NodeJS.ProcessEnv): string[] {
+  return Object.entries(env).map(([name, value]) => {
+    if (!name || name.includes("=") || name.includes("\0") || value?.includes("\0")) {
+      throw new Error(`Invalid command environment variable: ${name}`);
+    }
+    return `${name}=${value ?? ""}`;
+  });
+}
+
+async function macSandbox(
+  program: string,
+  workspace: string,
+  env: NodeJS.ProcessEnv,
+): Promise<[string, string[]]> {
   if (!(await executable(SANDBOX_EXEC))) {
     throw new Error("Sandbox mode requires /usr/bin/sandbox-exec on macOS");
   }
@@ -96,13 +110,14 @@ async function macSandbox(program: string, workspace: string): Promise<[string, 
     `(allow file-write* (subpath ${sbpl(workspace)}))`,
     "(deny network*)",
   ].join("\n");
-  return [SANDBOX_EXEC, ["-p", profile, program]];
+  return [SANDBOX_EXEC, ["-p", profile, ENV_EXEC, "-i", "--", ...sandboxEnvironment(env), program]];
 }
 
 async function linuxSandbox(
   program: string,
   workspace: string,
   cwd: string,
+  env: NodeJS.ProcessEnv,
 ): Promise<[string, string[]]> {
   const bwrap = (await executable("/usr/bin/bwrap"))
     ? "/usr/bin/bwrap"
@@ -167,7 +182,7 @@ async function linuxSandbox(
   }
   if (programMount) args.push("--ro-bind", programMount, programMount);
   args.push("--bind", workspace, workspace);
-  args.push("--chdir", cwd, "--", program);
+  args.push("--chdir", cwd, "--", ENV_EXEC, "-i", "--", ...sandboxEnvironment(env), program);
   return [bwrap, args];
 }
 
@@ -203,13 +218,18 @@ async function commandContext(command: ResolvedCommand, options: RunOptions) {
 
   const [launcher, prefix] =
     process.platform === "darwin"
-      ? await macSandbox(program, workspace)
+      ? await macSandbox(program, workspace, env)
       : process.platform === "linux"
-        ? await linuxSandbox(program, workspace, cwd)
+        ? await linuxSandbox(program, workspace, cwd, env)
         : (() => {
             throw new Error(`Sandbox mode is unavailable on ${process.platform}`);
           })();
-  return { cwd, env, program: launcher, args: [...prefix, ...command.args] };
+  return {
+    cwd,
+    env: { PATH: "/usr/bin:/bin", LANG: "C" },
+    program: launcher,
+    args: [...prefix, ...command.args],
+  };
 }
 
 export const executeCommand: ExecuteCommand = async (command, options) => {
@@ -244,6 +264,7 @@ export const executeCommand: ExecuteCommand = async (command, options) => {
     let settled = false;
     let exited = false;
     let killTimer: ReturnType<typeof setTimeout> | undefined;
+    let drainTimer: ReturnType<typeof setTimeout> | undefined;
 
     const kill = (signal: NodeJS.Signals) => {
       if (!child.pid) return;
@@ -277,6 +298,7 @@ export const executeCommand: ExecuteCommand = async (command, options) => {
       if (!exited) kill("SIGKILL");
       clearTimeout(timeout);
       if (killTimer) clearTimeout(killTimer);
+      if (drainTimer) clearTimeout(drainTimer);
       options.signal?.removeEventListener("abort", onAbort);
       const output: CommandOutput = {
         stdout: Buffer.concat(stdout).toString("utf8"),
@@ -310,10 +332,16 @@ export const executeCommand: ExecuteCommand = async (command, options) => {
     child.stdout.on("data", collect(stdout));
     child.stderr.on("data", collect(stderr));
     child.stdin.on("error", () => {});
-    child.once("exit", () => {
+    child.once("exit", (code, signal) => {
       exited = true;
       kill("SIGKILL");
       if (killTimer) clearTimeout(killTimer);
+      drainTimer = setTimeout(() => {
+        child.stdout.destroy();
+        child.stderr.destroy();
+        finish(code, signal);
+      }, 250);
+      drainTimer.unref();
     });
     child.once("error", (error) => finish(null, null, error));
     child.once("close", (code, signal) => finish(code, signal));

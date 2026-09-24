@@ -1,4 +1,5 @@
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
+export type Scalar = null | boolean | number | string;
 
 export type Reference<T = unknown> = {
   readonly $ref: { readonly source: "input" | "steps"; readonly path: readonly string[] };
@@ -24,6 +25,10 @@ export type Value<T> = T | Reference<T> | Expression<T>;
 export type Command = {
   program: string;
   args: Value<string | number>[];
+  argConstraints?: Record<
+    string,
+    { kind: "string" | "number"; choices?: string[]; prefix?: string }
+  >;
   stdin?: Value<string>;
   env?: Record<string, Value<string>>;
   cwd?: string;

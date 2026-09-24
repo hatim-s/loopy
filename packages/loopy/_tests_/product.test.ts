@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { command } from "../src/command.ts";
@@ -78,16 +78,22 @@ export default trigger('checkpoint')
 test("local API requires authorization and origin checks, runs saved workflows, and has no edit endpoint", async () => {
   const cwd = directory();
   const home = directory();
+  const assets = directory();
+  writeFileSync(join(assets, "index.html"), "Viewer");
+  writeFileSync(join(home, "secret"), "Outside assets");
+  symlinkSync(join(home, "secret"), join(assets, "leak"));
   new Registry(home).save(
     trigger("hello").node("greet", command("/bin/echo", "hello")).build(),
     "hello.ts",
   );
-  const server = startServer({ home, cwd, port: 0 });
+  const server = startServer({ home, cwd, assets, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
   const token = new URLSearchParams(url.hash.slice(1)).get("token");
   const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
   const endpoint = (path: string) => `${url.origin}/api${path}`;
+  expect(await (await fetch(url.origin)).text()).toBe("Viewer");
+  expect((await fetch(`${url.origin}/leak`)).status).toBe(404);
   expect((await fetch(endpoint("/workflows"))).status).toBe(401);
   expect(
     (
@@ -103,11 +109,13 @@ test("local API requires authorization and origin checks, runs saved workflows, 
   const started = await fetch(endpoint("/runs"), {
     method: "POST",
     headers,
-    body: JSON.stringify({ slug: "hello", input: {}, mode: "full" }),
+    body: JSON.stringify({ slug: "hello", input: null, mode: "full" }),
   });
   expect(started.status).toBe(202);
   const run = (await started.json()) as { id: string };
-  let detail: { run: { status: string }; attempts: { output?: { stdout: string } }[] } | undefined;
+  let detail:
+    | { run: { status: string; input: unknown }; attempts: { output?: { stdout: string } }[] }
+    | undefined;
   for (let i = 0; i < 100; i++) {
     detail = (await (
       await fetch(endpoint(`/runs/${run.id}`), { headers })
@@ -116,5 +124,6 @@ test("local API requires authorization and origin checks, runs saved workflows, 
     await Bun.sleep(10);
   }
   expect(detail?.run.status).toBe("succeeded");
+  expect(detail?.run.input).toBeNull();
   expect(detail?.attempts[0]?.output?.stdout).toBe("hello\n");
 });

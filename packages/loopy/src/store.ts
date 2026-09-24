@@ -212,6 +212,52 @@ export class RunStore {
     }
   }
 
+  /** Explicitly fence an owner from another host when its liveness cannot be checked locally. */
+  recoverOwner(runId: string): RunRecord {
+    this.recoverOrphans();
+    return this.db.transaction(() => {
+      const row = this.db.query<RunRow, [string]>("SELECT * FROM runs WHERE id=?").get(runId);
+      if (!row) throw new Error(`Unknown run ${runId}`);
+      if (!row.owner_token) {
+        if (row.status === "interrupted") return runFromRow(row);
+        throw new Error(`Run ${runId} has no owner to recover`);
+      }
+      if (!row.owner_host || row.owner_host === hostname()) {
+        if (ownerAlive(row)) throw new RunBusyError(runId);
+        throw new Error(`Run ${runId} has no foreign owner to recover`);
+      }
+
+      const attempts = this.db
+        .query<AttemptRow, [string]>("SELECT * FROM attempts WHERE run_id=? AND status='running'")
+        .all(runId);
+      for (const attempt of attempts) {
+        this.db.run("UPDATE attempts SET status='uncertain',error=?,ended_at=? WHERE id=?", [
+          "Foreign execution owner was explicitly recovered before recording a result",
+          now(),
+          attempt.id,
+        ]);
+        this.event(runId, "node.uncertain", { attemptId: attempt.id }, attempt.node_id);
+      }
+      const status = row.status === "succeeded" ? "succeeded" : "interrupted";
+      const error =
+        status === "interrupted" ? "Foreign execution owner was explicitly recovered" : null;
+      this.db.run(
+        "UPDATE runs SET status=?,error=?,owner_token=NULL,owner_pid=NULL,owner_host=NULL,heartbeat_at=NULL,updated_at=? WHERE id=? AND owner_token=?",
+        [status, error, now(), runId, row.owner_token],
+      );
+      this.event(runId, "run.owner_recovered", {
+        previousOwnerHost: row.owner_host,
+        previousOwnerPid: row.owner_pid,
+        previousStatus: row.status,
+        uncertainAttempts: attempts.length,
+      });
+      if (row.status === "running")
+        this.event(runId, "run.interrupted", { uncertainAttempts: attempts.length });
+      const recovered = this.db.query<RunRow, [string]>("SELECT * FROM runs WHERE id=?").get(runId);
+      return runFromRow(recovered as RunRow);
+    })();
+  }
+
   private event(runId: string, type: string, data: Json, nodeId?: string): void {
     const next =
       this.db

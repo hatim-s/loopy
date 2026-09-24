@@ -48,21 +48,25 @@ function parsePositionals(lines: string[]): PositionalDefinition[] {
       ? [line.trim().split(/\s{2,}/)[0] ?? ""]
       : line.trim().split(/\s+/);
     for (const token of candidates) {
-      const match = /^(\[|<)([A-Z][A-Z0-9_-]*)(\]|>)(\.\.\.)?$/.exec(token);
-      if (!match || match[2] === "OPTIONS") continue;
-      const name = match[2]?.toLowerCase();
+      if (!argumentsSection.length && !token.startsWith("[") && !token.startsWith("<")) continue;
+      const variadic = token.includes("...");
+      const optional = token.startsWith("[");
+      const rawName = token.replace(/[<>[\]]/g, "").replace(/\.\.\.$/, "");
+      if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(rawName) || rawName.toUpperCase() === "OPTIONS")
+        continue;
+      const name = rawName.toLowerCase();
       if (!name || seen.has(name)) continue;
       seen.add(name);
-      result.push({ name, optional: match[1] === "[", ...(match[4] ? { variadic: true } : {}) });
+      result.push({ name, optional, ...(variadic ? { variadic: true } : {}) });
     }
   }
   return result;
 }
 
 function choicesAfter(lines: string[], start: number): string[] | undefined {
-  for (let index = start + 1; index < Math.min(lines.length, start + 12); index += 1) {
+  for (let index = start; index < Math.min(lines.length, start + 12); index += 1) {
     const line = lines[index] ?? "";
-    if (/^\s*--?[\w-]+(?:,|\s|$)/.test(line)) break;
+    if (index > start && /^\s*--?[\w-]+(?:,|\s|$)/.test(line)) break;
     const match = /\[possible values:\s*([^\]]+)\]/i.exec(line);
     if (match)
       return match[1]
@@ -118,6 +122,7 @@ function parseFlags(lines: string[], warnings: string[]): Record<string, FlagDef
       kind,
       ...(repeatable ? { repeatable: true } : {}),
       ...(optionalValue ? { optionalValue: true } : {}),
+      ...(match[3] ? { attachedValue: true } : {}),
       ...(choices?.length ? { choices } : {}),
     };
   }

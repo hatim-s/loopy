@@ -39,5 +39,7 @@ function compileOnlyChecks() {
   noArgs({ flags: { typo: true } });
   // @ts-expect-error An explicitly empty flag descriptor rejects unknown flags too.
   defineCommand({ program: "git", flags: {} })({ flags: { typo: true } });
+  // @ts-expect-error Object comparisons are not supported by serializable expressions.
+  eq({ label: "a" }, { label: "b" });
 }
 void compileOnlyChecks;
