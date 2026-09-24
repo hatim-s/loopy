@@ -6,8 +6,8 @@ export type {
   CommandInput,
   FlagDefinition,
   PositionalDefinition,
-} from "./command.ts";
-export { bash, command, defineCommand } from "./command.ts";
+} from "./command.js";
+export { bash, command, defineCommand } from "./command.js";
 export type {
   AttemptRecord,
   Command,
@@ -23,8 +23,8 @@ export type {
   Value,
   Workflow,
   WorkflowNode,
-} from "./model.ts";
-export type { WorkflowContext } from "./workflow.ts";
+} from "./model.js";
+export type { WorkflowContext } from "./workflow.js";
 export {
   and,
   at,
@@ -43,4 +43,4 @@ export {
   trigger,
   validateWorkflow,
   WorkflowBuilder,
-} from "./workflow.ts";
+} from "./workflow.js";
