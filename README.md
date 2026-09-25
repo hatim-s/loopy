@@ -19,6 +19,8 @@ Open the URL printed by `loopy ui`. Its fragment contains a local session token.
 
 For a project using the built package, install its packed archive with `bun add /path/to/loopy-0.3.0.tgz`. The package provides both `import ... from "loopy"` and `bunx loopy`.
 
+For a working agent asset sync, see [the www to uacode example](https://github.com/hatim-s/loopy/tree/main/examples/www-uacode-sync).
+
 ## Author a loopy
 
 ```ts
