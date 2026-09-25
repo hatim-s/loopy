@@ -9,8 +9,8 @@ import {
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { Workflow, WorkflowNode } from "./model.ts";
-import { compileWorkflow, validateWorkflow } from "./workflow.ts";
+import type { Workflow, WorkflowNode } from "../core/model.js";
+import { compileWorkflow, validateWorkflow } from "../core/workflow.js";
 
 export const defaultHome = () => resolve(process.env.LOOPY_HOME ?? join(homedir(), ".loopy", "v2"));
 

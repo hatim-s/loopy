@@ -7,5 +7,10 @@
     "rootDir": "src",
     "outDir": "dist/types"
   },
-  "include": ["src/runtime.ts"]
+  "include": [
+    "src/core/index.ts",
+    "src/runtime/index.ts",
+    "src/local/index.ts",
+    "src/cloud/index.ts"
+  ]
 }

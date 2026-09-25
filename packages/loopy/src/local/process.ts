@@ -1,29 +1,27 @@
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { spawn } from "node:child_process";
-import { constants } from "node:fs";
+import { constants, realpathSync, statSync } from "node:fs";
 import { access, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import type { CommandOutput, ExecuteCommand, ResolvedCommand, RunOptions } from "./model.js";
+import type { CommandOutput, ExecutionMode, ResolvedCommand, RunOptions } from "../core/model.js";
+import { CommandExecutionError } from "../runtime/errors.js";
+
+export { CommandExecutionError } from "../runtime/errors.js";
 
 const DEFAULT_TIMEOUT_MS = 5 * 60_000;
 const DEFAULT_MAX_OUTPUT_BYTES = 8 * 1024 * 1024;
 const SANDBOX_EXEC = "/usr/bin/sandbox-exec";
 const ENV_EXEC = "/usr/bin/env";
 
-export class CommandExecutionError extends Error {
-  readonly output: CommandOutput;
-  readonly started: boolean;
-
-  constructor(message: string, output: CommandOutput, started: boolean, options?: ErrorOptions) {
-    super(message, options);
-    this.name = "CommandExecutionError";
-    this.output = output;
-    this.started = started;
-  }
-}
-
 function emptyOutput(): CommandOutput {
   return { stdout: "", stderr: "", exitCode: -1, durationMs: 0 };
+}
+
+export function localRunOptions(cwd: string, mode: ExecutionMode): RunOptions {
+  const path = realpathSync(cwd);
+  if (!statSync(path).isDirectory()) throw new Error(`Workspace is not a directory: ${cwd}`);
+  return { workspace: { kind: "local", path }, mode };
 }
 
 function within(parent: string, child: string): boolean {
@@ -194,7 +192,10 @@ function positiveLimit(value: number | undefined, fallback: number, name: string
 }
 
 async function commandContext(command: ResolvedCommand, options: RunOptions) {
-  const workspace = await realpath(options.cwd);
+  if (options.workspace.kind !== "local") {
+    throw new Error("Local command executor requires a local workspace");
+  }
+  const workspace = await realpath(options.workspace.path);
   const cwd = await realpath(resolve(workspace, command.cwd ?? "."));
   if (options.mode === "sandbox" && !within(workspace, cwd)) {
     throw new Error(`Command directory is outside the sandbox workspace: ${command.cwd}`);
@@ -232,18 +233,33 @@ async function commandContext(command: ResolvedCommand, options: RunOptions) {
   };
 }
 
-export const executeCommand: ExecuteCommand = async (command, options) => {
+export const executeLocalCommand = async (
+  command: ResolvedCommand,
+  options: RunOptions & { signal?: AbortSignal },
+): Promise<CommandOutput> => {
   if (options.signal?.aborted)
     throw new CommandExecutionError("Command aborted", emptyOutput(), false, {
       cause: options.signal.reason,
     });
-  const timeoutMs = positiveLimit(command.timeoutMs, DEFAULT_TIMEOUT_MS, "timeoutMs");
-  const maxOutputBytes = positiveLimit(
-    command.maxOutputBytes,
-    DEFAULT_MAX_OUTPUT_BYTES,
-    "maxOutputBytes",
-  );
-  const { cwd, env, program, args } = await commandContext(command, options);
+  let timeoutMs: number;
+  let maxOutputBytes: number;
+  let context: Awaited<ReturnType<typeof commandContext>>;
+  try {
+    timeoutMs = positiveLimit(command.timeoutMs, DEFAULT_TIMEOUT_MS, "timeoutMs");
+    maxOutputBytes = positiveLimit(
+      command.maxOutputBytes,
+      DEFAULT_MAX_OUTPUT_BYTES,
+      "maxOutputBytes",
+    );
+    context = await commandContext(command, options);
+  } catch (error) {
+    throw new CommandExecutionError(
+      error instanceof Error ? error.message : String(error),
+      emptyOutput(),
+      false,
+      { cause: error },
+    );
+  }
   if (options.signal?.aborted)
     throw new CommandExecutionError("Command aborted", emptyOutput(), false, {
       cause: options.signal.reason,
@@ -251,12 +267,25 @@ export const executeCommand: ExecuteCommand = async (command, options) => {
 
   const started = performance.now();
   return new Promise((resolveOutput, rejectOutput) => {
-    const child = spawn(program, args, {
-      cwd,
-      env,
-      detached: process.platform !== "win32",
-      stdio: ["pipe", "pipe", "pipe"],
-    });
+    let child: ChildProcessWithoutNullStreams;
+    try {
+      child = spawn(context.program, context.args, {
+        cwd: context.cwd,
+        env: context.env,
+        detached: process.platform !== "win32",
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+    } catch (error) {
+      rejectOutput(
+        new CommandExecutionError(
+          error instanceof Error ? error.message : String(error),
+          emptyOutput(),
+          false,
+          { cause: error },
+        ),
+      );
+      return;
+    }
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
     let bytes = 0;

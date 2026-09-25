@@ -1,9 +1,10 @@
 import { timingSafeEqual } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import type { Json, RunRecord } from "./model.ts";
+import type { Json, RunRecord } from "../core/model.js";
+import { localRunOptions } from "./process.js";
 import { defaultHome, Registry } from "./registry.ts";
-import { Runtime } from "./runtime.ts";
+import { createLocalRuntime } from "./runtime.js";
 
 type ServerOptions = { home?: string; cwd?: string; port?: number; assets?: string };
 
@@ -30,11 +31,12 @@ export function startServer(options: ServerOptions = {}) {
   const home = options.home ?? defaultHome();
   const cwd = resolve(options.cwd ?? process.cwd());
   const registry = new Registry(home);
-  const runtime = new Runtime({ home });
+  const local = createLocalRuntime({ home });
+  const { runtime } = local;
   const token = crypto.randomUUID();
   // Workflow writes must not replace the code served by a running viewer.
   const assets = snapshotAssets(
-    resolve(options.assets ?? resolve(import.meta.dir, "../dist/studio")),
+    resolve(options.assets ?? resolve(import.meta.dir, "../../dist/studio")),
   );
   const controllers = new Map<string, AbortController>();
   const jobs = new Set<Promise<unknown>>();
@@ -97,17 +99,17 @@ export function startServer(options: ServerOptions = {}) {
             return json(registry.get(workflowMatch[1]).workflow);
           if (path === "/api/runs") {
             if (method === "GET")
-              return json(runtime.listRuns(url.searchParams.get("slug") ?? undefined));
+              return json(await runtime.listRuns(url.searchParams.get("slug") ?? undefined));
             if (method === "POST") {
               const value = await body(request);
               if (typeof value.slug !== "string")
                 throw new Error("A saved workflow slug is required.");
               if (value.mode !== "sandbox" && value.mode !== "full")
                 throw new Error("Choose sandbox or full execution.");
-              const run = runtime.createRun(
+              const run = await runtime.createRun(
                 registry.get(value.slug).workflow,
                 (value.input === undefined ? {} : value.input) as Json,
-                { cwd, mode: value.mode },
+                localRunOptions(cwd, value.mode),
               );
               launch(run);
               return json(run, 202);
@@ -115,13 +117,13 @@ export function startServer(options: ServerOptions = {}) {
           }
           const runMatch = /^\/api\/runs\/([^/]+)(\/resume)?$/.exec(path);
           if (runMatch?.[1]) {
-            const run = runtime.getRun(runMatch[1]);
+            const run = await runtime.getRun(runMatch[1]);
             if (!run) return json({ error: "Run not found." }, 404);
             if (method === "GET" && !runMatch[2])
               return json({
                 run,
-                attempts: runtime.getAttempts(run.id),
-                events: runtime.getEvents(run.id),
+                attempts: await runtime.getAttempts(run.id),
+                events: await runtime.getEvents(run.id),
               });
             if (method === "POST" && runMatch[2]) {
               const value = await body(request);
@@ -130,7 +132,7 @@ export function startServer(options: ServerOptions = {}) {
               if (run.status === "succeeded" || run.status === "running")
                 throw new Error(`Cannot resume a ${run.status} run.`);
               launch(run, value.retryUncertain === true);
-              return json(runtime.getRun(run.id), 202);
+              return json(await runtime.getRun(run.id), 202);
             }
           }
           return json({ error: "Endpoint not found." }, 404);
@@ -161,7 +163,7 @@ export function startServer(options: ServerOptions = {}) {
       for (const controller of controllers.values()) controller.abort();
       await Promise.allSettled(jobs);
       await server.stop(true);
-      runtime.close();
+      local.close();
     },
   };
 }

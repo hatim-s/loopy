@@ -1,9 +1,4 @@
-import type {
-  AttemptRecord,
-  RunEvent,
-  RunRecord,
-  Workflow,
-} from "../../../packages/loopy/src/model.ts";
+import type { AttemptRecord, RunEvent, RunRecord, Workflow } from "loopy";
 
 export type WorkflowSummary = {
   slug: string;

@@ -2,7 +2,7 @@
 
 Write local CLI workflows in TypeScript. Save them by slug, run them in a sandbox or with full permissions, and inspect their graph and execution history.
 
-Loopy requires Bun 1.4 or newer. The public package contains the authoring API, runtime, CLI, and bundled viewer. Studio is the only other workspace package.
+The local CLI and adapters require Bun 1.4 or newer. Workflow authoring, orchestration and the cloud worker use standard JavaScript and web APIs. One public package exposes separate concern boundaries; Studio remains the only other workspace package.
 
 ## Try this checkout
 
@@ -17,7 +17,7 @@ bun run loopy ui
 
 Open the URL printed by `loopy ui`. Its fragment contains a local session token. The viewer lists saved workflows, shows commands and branches, runs workflows, and inspects inputs, outputs, events and resume state. Edit the TypeScript file or ask an agent to edit it, save it again, then use Refresh in the viewer.
 
-For a project using the built package, install its packed archive with `bun add /path/to/loopy-0.2.0.tgz`. The package provides both `import ... from "loopy"` and `bunx loopy`.
+For a project using the built package, install its packed archive with `bun add /path/to/loopy-0.3.0.tgz`. The package provides both `import ... from "loopy"` and `bunx loopy`.
 
 ## Author a loopy
 
@@ -116,7 +116,54 @@ bun run build       # Build and bundle the readonly viewer
 bun run loopy ui
 ```
 
-The runtime is also available through `import { Runtime } from "loopy/runtime"`. It exposes create, execute, read and resume operations over one SQLite store. The CLI and HTTP server call that same runtime. The server binds to loopback, checks host and origin, and requires its session token for every API request.
+## Architecture and cloud readiness
+
+| Import | Owns | Depends on |
+| --- | --- | --- |
+| `loopy` | Typed workflow authoring, command descriptors, graph model and validation | Standard JavaScript |
+| `loopy/runtime` | Async orchestration, repository contract and execution errors | Core and injected adapters |
+| `loopy/local` | SQLite, filesystem registry, trusted TypeScript loading, CLI-help discovery, sandbox processes and local server | Core, runtime, Bun and the OS |
+| `loopy/cloud` | Queue-delivery validation and worker entry point | Core and runtime contracts |
+| CLI executable | Arguments and local composition | Local adapters |
+
+`Runtime` takes a `RunRepository` and an `ExecuteCommand`. It does not open a database, access the filesystem or launch processes. Its create, execute and read methods return promises. The caller owns adapter cleanup. Each executor invocation receives `runId`, `nodeId`, `attemptId` and `ownerToken` for correlation and remote dispatch deduplication.
+
+```ts
+import { createLocalRuntime, localRunOptions } from "loopy/local";
+
+const local = createLocalRuntime({ home: "./.loopy" });
+try {
+  const run = await local.runtime.createRun(
+    workflow.build(), input, localRunOptions(process.cwd(), "sandbox"),
+  );
+  await local.runtime.execute(run.id);
+} finally {
+  local.close();
+}
+```
+
+Local workspaces are `{ kind: "local", path }`; managed workspaces are `{ kind: "managed", id }`. Only the local adapter canonicalizes host paths. A hosted executor resolves managed workspace IDs and applies its own isolation, environment, secret and network policy. An edge environment can run orchestration, but CLI execution still needs an OS-backed runner.
+
+```ts
+import { Runtime, type RunRepository, type ExecuteCommand } from "loopy/runtime";
+import { CloudWorker } from "loopy/cloud";
+
+export function worker(store: RunRepository, executor: ExecuteCommand) {
+  return new CloudWorker(new Runtime({ store, executor }));
+}
+// Deliver { runId } only after that run has been durably created.
+// Acknowledge outcome.disposition === "ack"; retry "retry" or infrastructure errors.
+```
+
+Cloud delivery is for initial execution. It atomically leaves succeeded, failed and interrupted runs unchanged, even when deliveries race. Resuming a terminal run is a separate explicit `Runtime.execute` operation. Retrying uncertain work additionally requires `retryUncertain: true`. Do not put a reusable retry permission on a queue message: redelivery could otherwise authorize a new uncertain attempt without another decision.
+
+The repository contract requires atomic attempt/event transitions and owner-token fencing. Distributed implementations must use bounded leases and atomic expired-owner recovery; the local SQLite adapter uses host process liveness. Expired work becomes uncertain, and old tokens cannot commit. The runtime serializes async heartbeats, checks ownership before launch, and treats unknown executor transport errors as uncertain. Adapters must bound network calls and honor the abort signal. A database fence cannot stop a command already running on another machine.
+
+This refactor does not deploy a cloud service. Before hosting, implement tenant-scoped authorization and storage, durable dispatch with an outbox or pending-run reconciliation, workspace provisioning, and an isolated command runner. The local server's in-memory job set and loopback session token are local conveniences, not cloud queue or authentication implementations. The portable build and browser bundle check enforce the dependency boundary.
+
+Stop older Loopy processes before opening existing data with 0.3. SQLite migration converts v1 `cwd` options to local workspace references once and preserves snapshots, attempts and events. The upgraded database is v2; older binaries cannot reopen it.
+
+The local server binds to loopback, checks host and origin, and requires its session token for every API request.
 
 The viewer serves a fixed copy of its assets loaded at startup and excludes symlinks. Workflow writes cannot replace the JavaScript of an already running viewer. As with any workspace code, inspect package or source changes before starting another trusted Loopy process.
 

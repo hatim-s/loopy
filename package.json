@@ -8,9 +8,9 @@
   ],
   "packageManager": "bun@1.4.0",
   "scripts": {
-    "dev": "bun packages/loopy/src/cli.ts ui",
-    "loopy": "bun packages/loopy/src/cli.ts",
-    "typecheck": "tsc --noEmit",
+    "dev": "bun packages/loopy/src/cli/index.ts ui",
+    "loopy": "bun packages/loopy/src/cli/index.ts",
+    "typecheck": "tsc --noEmit && tsc -p packages/loopy/tsconfig.portable.json",
     "test": "bun test packages/loopy/_tests_",
     "check": "bun run lint && bun run typecheck && bun run test",
     "build": "bun scripts/build.ts",

@@ -12,7 +12,7 @@ import {
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { CommandExecutionError, executeCommand } from "../src/process.js";
+import { CommandExecutionError, executeLocalCommand } from "../src/local/process.js";
 
 const workspaces: string[] = [];
 function workspace(): string {
@@ -31,16 +31,16 @@ const hasBubblewrap =
 describe("process executor", () => {
   test("passes arguments literally and preserves a failing exit code", async () => {
     const cwd = workspace();
-    const output = await executeCommand(
+    const output = await executeLocalCommand(
       { program: "/bin/echo", args: ["$(touch injected)", "; exit 2"] },
-      { cwd, mode: "full" },
+      { workspace: { kind: "local", path: cwd }, mode: "full" },
     );
     expect(output.stdout).toBe("$(touch injected) ; exit 2\n");
     expect(existsSync(join(cwd, "injected"))).toBe(false);
 
-    const failed = await executeCommand(
+    const failed = await executeLocalCommand(
       { program: process.execPath, args: ["-e", "process.exit(7)"] },
-      { cwd, mode: "full" },
+      { workspace: { kind: "local", path: cwd }, mode: "full" },
     );
     expect(failed.exitCode).toBe(7);
   });
@@ -52,16 +52,16 @@ describe("process executor", () => {
     writeFileSync(executable, "#!/bin/sh\necho expected\n");
     chmodSync(executable, 0o755);
 
-    const output = await executeCommand(
+    const output = await executeLocalCommand(
       { program: "probe-cmd", args: [], env: { PATH: "tools" } },
-      { cwd, mode: "full" },
+      { workspace: { kind: "local", path: cwd }, mode: "full" },
     );
     expect(output.stdout).toBe("expected\n");
   });
 
   test("bounds combined output", async () => {
     try {
-      await executeCommand(
+      await executeLocalCommand(
         {
           program: process.execPath,
           args: [
@@ -70,7 +70,7 @@ describe("process executor", () => {
           ],
           maxOutputBytes: 100,
         },
-        { cwd: workspace(), mode: "full" },
+        { workspace: { kind: "local", path: workspace() }, mode: "full" },
       );
       throw new Error("Expected output limit to stop the command");
     } catch (error) {
@@ -85,14 +85,14 @@ describe("process executor", () => {
   });
 
   test("passes stdin and explicit environment values", async () => {
-    const output = await executeCommand(
+    const output = await executeLocalCommand(
       {
         program: process.execPath,
         args: ["-e", "console.log(process.env.LOOPY_VALUE + ':' + await Bun.stdin.text())"],
         env: { LOOPY_VALUE: "input" },
         stdin: "hello",
       },
-      { cwd: workspace(), mode: "full" },
+      { workspace: { kind: "local", path: workspace() }, mode: "full" },
     );
     expect(output.stdout).toBe("input:hello\n");
   });
@@ -100,13 +100,13 @@ describe("process executor", () => {
   test("stops a timed out process and its descendants", async () => {
     const cwd = workspace();
     await expect(
-      executeCommand(
+      executeLocalCommand(
         {
           program: "/bin/sh",
           args: ["-c", "(sleep 1; touch child-survived) & wait"],
           timeoutMs: 150,
         },
-        { cwd, mode: "full" },
+        { workspace: { kind: "local", path: cwd }, mode: "full" },
       ),
     ).rejects.toThrow("timed out");
     await Bun.sleep(1_200);
@@ -115,9 +115,9 @@ describe("process executor", () => {
 
   test("stops background children after a successful parent exit", async () => {
     const cwd = workspace();
-    const output = await executeCommand(
+    const output = await executeLocalCommand(
       { program: "/bin/sh", args: ["-c", "(sleep 0.5; touch orphan) & exit 0"] },
-      { cwd, mode: "full" },
+      { workspace: { kind: "local", path: cwd }, mode: "full" },
     );
     expect(output.exitCode).toBe(0);
     await Bun.sleep(700);
@@ -136,9 +136,9 @@ describe("process executor", () => {
       child.unref();
     `;
     await expect(
-      executeCommand(
+      executeLocalCommand(
         { program: process.execPath, args: ["-e", source], timeoutMs: 100 },
-        { cwd, mode: "full" },
+        { workspace: { kind: "local", path: cwd }, mode: "full" },
       ),
     ).rejects.toThrow("timed out");
     expect(Date.now() - started).toBeLessThan(1_500);
@@ -147,13 +147,13 @@ describe("process executor", () => {
   test("kills descendants that ignore termination", async () => {
     const cwd = workspace();
     await expect(
-      executeCommand(
+      executeLocalCommand(
         {
           program: "/bin/sh",
           args: ["-c", "(trap '' TERM; sleep 0.5; touch ignored) & wait"],
           timeoutMs: 100,
         },
-        { cwd, mode: "full" },
+        { workspace: { kind: "local", path: cwd }, mode: "full" },
       ),
     ).rejects.toThrow("timed out");
     await Bun.sleep(700);
@@ -164,9 +164,13 @@ describe("process executor", () => {
     const controller = new AbortController();
     setTimeout(() => controller.abort(), 50);
     await expect(
-      executeCommand(
+      executeLocalCommand(
         { program: process.execPath, args: ["-e", "setTimeout(() => {}, 10000)"] },
-        { cwd: workspace(), mode: "full", signal: controller.signal },
+        {
+          workspace: { kind: "local", path: workspace() },
+          mode: "full",
+          signal: controller.signal,
+        },
       ),
     ).rejects.toThrow("aborted");
   });
@@ -176,18 +180,18 @@ describe("process executor", () => {
     async () => {
       const cwd = workspace();
       const outside = workspace();
-      const direct = await executeCommand(
+      const direct = await executeLocalCommand(
         {
           program: process.execPath,
           args: ["-e", "require('node:fs').writeFileSync('inside', process.env.LOOPY_TEST_VALUE)"],
           env: { LOOPY_TEST_VALUE: "ok" },
         },
-        { cwd, mode: "sandbox" },
+        { workspace: { kind: "local", path: cwd }, mode: "sandbox" },
       );
       expect(direct.exitCode).toBe(0);
       expect(readFileSync(join(cwd, "inside"), "utf8")).toBe("ok");
 
-      const denied = await executeCommand(
+      const denied = await executeLocalCommand(
         {
           program: process.execPath,
           args: [
@@ -196,27 +200,27 @@ describe("process executor", () => {
             join(outside, "escaped"),
           ],
         },
-        { cwd, mode: "sandbox" },
+        { workspace: { kind: "local", path: cwd }, mode: "sandbox" },
       );
       expect(denied.exitCode).not.toBe(0);
       expect(existsSync(join(outside, "escaped"))).toBe(false);
 
       symlinkSync(join(outside, "linked-escape"), join(cwd, "file-link"));
-      const linked = await executeCommand(
+      const linked = await executeLocalCommand(
         {
           program: process.execPath,
           args: ["-e", "require('node:fs').writeFileSync('file-link', 'no')"],
         },
-        { cwd, mode: "sandbox" },
+        { workspace: { kind: "local", path: cwd }, mode: "sandbox" },
       );
       expect(linked.exitCode).not.toBe(0);
       expect(existsSync(join(outside, "linked-escape"))).toBe(false);
 
       symlinkSync(outside, join(cwd, "link"));
       await expect(
-        executeCommand(
+        executeLocalCommand(
           { program: "/bin/echo", args: ["hello"], cwd: "link" },
-          { cwd, mode: "sandbox" },
+          { workspace: { kind: "local", path: cwd }, mode: "sandbox" },
         ),
       ).rejects.toThrow("outside the sandbox workspace");
     },
@@ -231,8 +235,18 @@ describe("process executor", () => {
         args: ["-e", `console.log(await (await fetch('http://127.0.0.1:${server.port}')).text())`],
         timeoutMs: 5_000,
       };
-      expect((await executeCommand(command, { cwd, mode: "full" })).stdout).toContain("reachable");
-      const denied = await executeCommand(command, { cwd, mode: "sandbox" });
+      expect(
+        (
+          await executeLocalCommand(command, {
+            workspace: { kind: "local", path: cwd },
+            mode: "full",
+          })
+        ).stdout,
+      ).toContain("reachable");
+      const denied = await executeLocalCommand(command, {
+        workspace: { kind: "local", path: cwd },
+        mode: "sandbox",
+      });
       expect(denied.exitCode).not.toBe(0);
     } finally {
       server.stop(true);
@@ -251,8 +265,18 @@ describe("process executor", () => {
           join(homedir(), ".zshrc"),
         ],
       };
-      expect((await executeCommand(command, { cwd, mode: "full" })).stdout).toContain("read");
-      const denied = await executeCommand(command, { cwd, mode: "sandbox" });
+      expect(
+        (
+          await executeLocalCommand(command, {
+            workspace: { kind: "local", path: cwd },
+            mode: "full",
+          })
+        ).stdout,
+      ).toContain("read");
+      const denied = await executeLocalCommand(command, {
+        workspace: { kind: "local", path: cwd },
+        mode: "sandbox",
+      });
       expect(denied.exitCode).not.toBe(0);
     },
   );
@@ -261,13 +285,13 @@ describe("process executor", () => {
     const cwd = mkdtempSync("/tmp/loopy-process-");
     const outside = mkdtempSync("/tmp/loopy-process-");
     workspaces.push(cwd, outside);
-    const inside = await executeCommand(
+    const inside = await executeLocalCommand(
       {
         program: process.execPath,
         args: ["-e", "require('node:fs').writeFileSync('inside', process.env.LOOPY_TEST_VALUE)"],
         env: { LOOPY_TEST_VALUE: "ok" },
       },
-      { cwd, mode: "sandbox" },
+      { workspace: { kind: "local", path: cwd }, mode: "sandbox" },
     );
     if (inside.exitCode !== 0) {
       throw new Error(
@@ -276,7 +300,7 @@ describe("process executor", () => {
     }
     expect(readFileSync(join(cwd, "inside"), "utf8")).toBe("ok");
 
-    const denied = await executeCommand(
+    const denied = await executeLocalCommand(
       {
         program: process.execPath,
         args: [
@@ -285,7 +309,7 @@ describe("process executor", () => {
           join(outside, "escape"),
         ],
       },
-      { cwd, mode: "sandbox" },
+      { workspace: { kind: "local", path: cwd }, mode: "sandbox" },
     );
     expect(denied.exitCode).not.toBe(0);
     expect(existsSync(join(outside, "escape"))).toBe(false);
@@ -296,8 +320,22 @@ describe("process executor", () => {
         program: process.execPath,
         args: ["-e", `console.log(await (await fetch('http://127.0.0.1:${server.port}')).text())`],
       };
-      expect((await executeCommand(network, { cwd, mode: "full" })).stdout).toContain("reachable");
-      expect((await executeCommand(network, { cwd, mode: "sandbox" })).exitCode).not.toBe(0);
+      expect(
+        (
+          await executeLocalCommand(network, {
+            workspace: { kind: "local", path: cwd },
+            mode: "full",
+          })
+        ).stdout,
+      ).toContain("reachable");
+      expect(
+        (
+          await executeLocalCommand(network, {
+            workspace: { kind: "local", path: cwd },
+            mode: "sandbox",
+          })
+        ).exitCode,
+      ).not.toBe(0);
     } finally {
       server.stop(true);
     }
@@ -329,9 +367,9 @@ __attribute__((constructor)) static void mark(void) {
       });
       if (compiled.status !== 0) throw new Error(`Could not compile preload: ${compiled.stderr}`);
 
-      const output = await executeCommand(
+      const output = await executeLocalCommand(
         { program: "/bin/echo", args: ["inside"], env: { LD_PRELOAD: library } },
-        { cwd, mode: "sandbox" },
+        { workspace: { kind: "local", path: cwd }, mode: "sandbox" },
       );
       if (output.exitCode !== 0) throw new Error(`Sandbox failed: ${output.stderr}`);
       expect(output.stdout).toBe("inside\n");

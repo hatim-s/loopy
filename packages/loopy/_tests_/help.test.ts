@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { defineCommand } from "../src/command";
-import { parseCliHelp, renderCommandSource } from "../src/help";
+import { defineCommand } from "../src/core/command";
+import { parseCliHelp, renderCommandSource } from "../src/local/help";
 
 const help = `Run Codex non-interactively
 

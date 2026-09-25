@@ -14,6 +14,8 @@ export type {
   CommandNode,
   CommandOutput,
   ConditionNode,
+  ExecuteCommand,
+  ExecutionMode,
   Expression,
   Json,
   Reference,
@@ -23,6 +25,7 @@ export type {
   Value,
   Workflow,
   WorkflowNode,
+  Workspace,
 } from "./model.js";
 export type { WorkflowContext } from "./workflow.js";
 export {
