@@ -2,9 +2,10 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { defineCommand } from "../src/command";
-import { Runtime } from "../src/runtime";
-import { trigger } from "../src/workflow";
+import { defineCommand } from "../src/core/command";
+import { trigger } from "../src/core/workflow";
+import { localRunOptions } from "../src/local/process";
+import { createLocalRuntime } from "../src/local/runtime";
 
 const typedTool = defineCommand({
   program: "tool",
@@ -33,13 +34,14 @@ const workflow = trigger<{
 test("serialized CLI constraints reject invalid run input before invoking the tool", async () => {
   const home = mkdtempSync(join(tmpdir(), "loopy-command-"));
   const calls: string[][] = [];
-  const runtime = new Runtime({
+  const local = createLocalRuntime({
     home,
     executor: async (command) => {
       calls.push(command.args);
       return { stdout: "ok", stderr: "", exitCode: 0, durationMs: 1 };
     },
   });
+  const { runtime } = local;
   const base = { mode: "safe", timeout: 3, inspect: 9229, target: "-needle" };
   try {
     for (const [input, expectedError] of [
@@ -49,21 +51,21 @@ test("serialized CLI constraints reject invalid run input before invoking the to
       [{ ...base, inspect: "9229" }, "number"],
       [{ ...base, target: 42 }, "string"],
     ] as const) {
-      const run = runtime.createRun(workflow, input, { cwd: home, mode: "full" });
+      const run = await runtime.createRun(workflow, input, localRunOptions(home, "full"));
       const result = await runtime.execute(run.id);
       expect(result.status).toBe("failed");
       expect(result.error).toContain(expectedError);
-      expect(runtime.getAttempts(run.id)[0]?.status).toBe("failed");
+      expect((await runtime.getAttempts(run.id))[0]?.status).toBe("failed");
     }
     expect(calls).toHaveLength(0);
 
-    const run = runtime.createRun(workflow, base, { cwd: home, mode: "full" });
+    const run = await runtime.createRun(workflow, base, localRunOptions(home, "full"));
     expect((await runtime.execute(run.id)).status).toBe("succeeded");
     expect(calls).toHaveLength(1);
     expect(calls[0]).toContain("--inspect=9229");
     expect(calls[0]).toContain("-needle");
   } finally {
-    runtime.close();
+    local.close();
     rmSync(home, { recursive: true, force: true });
   }
 });

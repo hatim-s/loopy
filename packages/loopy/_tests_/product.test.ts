@@ -2,10 +2,10 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { command } from "../src/command.ts";
-import { Registry } from "../src/registry.ts";
-import { startServer } from "../src/server.ts";
-import { trigger } from "../src/workflow.ts";
+import { command } from "../src/core/command.ts";
+import { trigger } from "../src/core/workflow.ts";
+import { Registry } from "../src/local/registry.ts";
+import { startServer } from "../src/local/server.ts";
 
 const temporary: string[] = [];
 const servers: ReturnType<typeof startServer>[] = [];
@@ -19,7 +19,7 @@ afterEach(async () => {
   for (const path of temporary.splice(0)) rmSync(path, { recursive: true, force: true });
 });
 
-const cliPath = join(import.meta.dir, "../src/cli.ts");
+const cliPath = join(import.meta.dir, "../src/cli/index.ts");
 async function cli(home: string, cwd: string, ...args: string[]) {
   const child = Bun.spawn([process.execPath, cliPath, ...args, "--home", home], {
     cwd,
@@ -38,7 +38,7 @@ test("CLI saves TypeScript and resumes failed steps from the original snapshot",
   const cwd = directory();
   const home = directory();
   const source = join(cwd, "checkpoint.loopy.ts");
-  const modulePath = join(import.meta.dir, "../src/index.ts");
+  const modulePath = join(import.meta.dir, "../src/core/index.ts");
   writeFileSync(
     source,
     `import { trigger, command } from ${JSON.stringify(modulePath)};

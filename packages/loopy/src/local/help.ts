@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { basename } from "node:path";
 import { promisify } from "node:util";
-import type { CommandDescriptor, FlagDefinition, PositionalDefinition } from "./command";
+import type { CommandDescriptor, FlagDefinition, PositionalDefinition } from "../core/command.js";
 
 const execFileAsync = promisify(execFile);
 

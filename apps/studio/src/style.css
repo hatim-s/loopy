@@ -387,6 +387,9 @@ pre {
 .graph-node.uncertain {
   border-left: 3px solid var(--warning);
 }
+.graph-node.cancelled {
+  border-left: 3px solid var(--muted);
+}
 .node-icon {
   flex: none;
   width: 24px;

@@ -1,6 +1,6 @@
+import type { Json, WorkflowNode, Workspace } from "loopy";
 import type { FormEvent } from "react";
 import { useEffect, useId, useMemo, useState } from "react";
-import type { Json, WorkflowNode } from "../../../packages/loopy/src/model.ts";
 import type { AttemptRecord, RunDetail, RunRecord, Workflow, WorkflowSummary } from "./api.ts";
 import { captureToken, endpoints } from "./api.ts";
 import { BrandMark } from "./brand-mark.tsx";
@@ -568,7 +568,9 @@ function RunPanel({
             </div>
             <div>
               <dt>Directory</dt>
-              <dd title={selected.options.cwd}>{selected.options.cwd}</dd>
+              <dd title={workspaceName(selected.options.workspace)}>
+                {workspaceName(selected.options.workspace)}
+              </dd>
             </div>
           </dl>
           {(selected.status === "failed" || selected.status === "interrupted") && (
@@ -912,4 +914,8 @@ export function App() {
       </div>
     </div>
   );
+}
+
+function workspaceName(workspace: Workspace): string {
+  return workspace.kind === "local" ? workspace.path : workspace.id;
 }

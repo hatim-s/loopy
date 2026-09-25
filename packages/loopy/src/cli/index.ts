@@ -2,11 +2,12 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { generateCommand } from "./help.ts";
-import type { Json } from "./model.ts";
-import { defaultHome, Registry } from "./registry.ts";
-import { Runtime } from "./runtime.ts";
-import { startServer } from "./server.ts";
+import type { Json } from "../core/model.js";
+import { generateCommand } from "../local/help.js";
+import { localRunOptions } from "../local/process.js";
+import { defaultHome, Registry } from "../local/registry.js";
+import { createLocalRuntime } from "../local/runtime.js";
+import { startServer } from "../local/server.js";
 
 const usage = `loopy: TypeScript workflows for CLI tools
 
@@ -105,7 +106,8 @@ export async function main(args = process.argv.slice(2)) {
   }
   if (!["run", "resume", "recover", "runs", "inspect"].includes(command ?? ""))
     throw new Error(`Unknown command '${command}'. Run loopy --help.`);
-  const runtime = new Runtime({ home });
+  const local = createLocalRuntime({ home });
+  const { runtime } = local;
   const controller = new AbortController();
   const abort = () => controller.abort();
   process.once("SIGINT", abort);
@@ -116,17 +118,21 @@ export async function main(args = process.argv.slice(2)) {
         throw new Error(
           "Recovery requires --force. Stop the original host's runner first; it may still be executing a command.",
         );
-      print(runtime.recoverOwner(required(target, "Run ID")));
+      print(await local.recoverOwner(required(target, "Run ID")));
       return;
     }
     if (command === "runs") {
-      print(runtime.listRuns(target));
+      print(await runtime.listRuns(target));
       return;
     }
     if (command === "inspect") {
-      const run = runtime.getRun(required(target, "Run ID"));
+      const run = await runtime.getRun(required(target, "Run ID"));
       if (!run) throw new Error(`Unknown run '${target}'.`);
-      print({ run, attempts: runtime.getAttempts(run.id), events: runtime.getEvents(run.id) });
+      print({
+        run,
+        attempts: await runtime.getAttempts(run.id),
+        events: await runtime.getEvents(run.id),
+      });
       return;
     }
     let id: string;
@@ -135,10 +141,11 @@ export async function main(args = process.argv.slice(2)) {
         ? await Bun.file(resolve(values.input.slice(1))).text()
         : values.input;
       const input = (inputText === undefined ? {} : JSON.parse(inputText)) as Json;
-      const run = runtime.createRun(registry.get(required(target, "Slug")).workflow, input, {
-        cwd,
-        mode: values.full ? "full" : "sandbox",
-      });
+      const run = await runtime.createRun(
+        registry.get(required(target, "Slug")).workflow,
+        input,
+        localRunOptions(cwd, values.full ? "full" : "sandbox"),
+      );
       id = run.id;
     } else {
       if (values.full || values.input || values.cwd)
@@ -155,7 +162,7 @@ export async function main(args = process.argv.slice(2)) {
   } finally {
     process.removeListener("SIGINT", abort);
     process.removeListener("SIGTERM", abort);
-    runtime.close();
+    local.close();
   }
 }
 

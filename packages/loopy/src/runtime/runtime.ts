@@ -1,5 +1,3 @@
-import { createHash, randomUUID } from "node:crypto";
-import { realpathSync, statSync } from "node:fs";
 import type {
   AttemptRecord,
   CommandNode,
@@ -12,13 +10,16 @@ import type {
   RunRecord,
   Workflow,
   WorkflowNode,
-} from "./model";
-import { CommandExecutionError, executeCommand } from "./process";
-import { RunStore } from "./store";
-import { validateWorkflow } from "./workflow";
+} from "../core/model.js";
+import { validateWorkflow } from "../core/workflow.js";
+import { CommandExecutionError } from "./errors.js";
+import type { RunRepository } from "./repository.js";
 
 type Values = Map<string, Json>;
-type ExecutionResult = { status: "succeeded" | "failed" | "interrupted"; error?: string };
+type ExecutionResult = {
+  status: "pending" | "succeeded" | "failed" | "interrupted";
+  error?: string;
+};
 
 function assertJson(
   value: unknown,
@@ -203,83 +204,126 @@ function latestAttempts(attempts: AttemptRecord[]): Map<string, AttemptRecord> {
 }
 
 export class Runtime {
-  private readonly store: RunStore;
+  private readonly store: RunRepository;
   private readonly executor: ExecuteCommand;
+  private readonly heartbeatIntervalMs: number;
 
-  constructor(options: { home: string; executor?: ExecuteCommand }) {
-    this.store = new RunStore(options.home);
-    this.executor = options.executor ?? executeCommand;
+  constructor(options: {
+    store: RunRepository;
+    executor: ExecuteCommand;
+    heartbeatIntervalMs?: number;
+  }) {
+    this.store = options.store;
+    this.executor = options.executor;
+    this.heartbeatIntervalMs = options.heartbeatIntervalMs ?? 3_000;
+    if (!Number.isSafeInteger(this.heartbeatIntervalMs) || this.heartbeatIntervalMs <= 0)
+      throw new Error("heartbeatIntervalMs must be a positive integer");
   }
 
-  createRun(workflow: Workflow, input: Json, options: RunOptions): RunRecord {
+  async createRun(workflow: Workflow, input: Json, options: RunOptions): Promise<RunRecord> {
     validateWorkflow(workflow);
     assertJson(input);
     if (options.mode !== "sandbox" && options.mode !== "full")
       throw new Error(`Invalid execution mode ${String(options.mode)}`);
-    const cwd = realpathSync(options.cwd);
-    if (!statSync(cwd).isDirectory()) throw new Error(`Run directory is not a directory: ${cwd}`);
+    const workspace = options.workspace;
+    if (
+      !workspace ||
+      (workspace.kind !== "local" && workspace.kind !== "managed") ||
+      (workspace.kind === "local" && (!workspace.path || typeof workspace.path !== "string")) ||
+      (workspace.kind === "managed" && (!workspace.id || typeof workspace.id !== "string"))
+    )
+      throw new Error("Invalid workspace");
+    const frozenOptions: RunOptions = {
+      workspace:
+        workspace.kind === "local"
+          ? { kind: "local", path: workspace.path }
+          : { kind: "managed", id: workspace.id },
+      mode: options.mode,
+    };
     const createdAt = new Date().toISOString();
     const snapshot = JSON.parse(JSON.stringify(workflow)) as Workflow;
     const frozenInput = JSON.parse(JSON.stringify(input)) as Json;
+    const bytes = new TextEncoder().encode(JSON.stringify(snapshot));
+    const digest = await crypto.subtle.digest("SHA-256", bytes);
     const run: RunRecord = {
-      id: randomUUID(),
-      slug: workflow.slug,
+      id: crypto.randomUUID(),
+      slug: snapshot.slug,
       workflow: snapshot,
-      workflowHash: createHash("sha256").update(JSON.stringify(snapshot)).digest("hex"),
+      workflowHash: Array.from(new Uint8Array(digest), (byte) =>
+        byte.toString(16).padStart(2, "0"),
+      ).join(""),
       input: frozenInput,
-      options: { cwd, mode: options.mode },
+      options: frozenOptions,
       status: "pending",
       createdAt,
       updatedAt: createdAt,
     };
-    this.store.createRun(run);
+    await this.store.createRun(run);
     return run;
   }
 
-  getRun(id: string): RunRecord | undefined {
+  getRun(id: string): Promise<RunRecord | undefined> {
     return this.store.getRun(id);
   }
 
-  listRuns(slug?: string): RunRecord[] {
+  listRuns(slug?: string): Promise<RunRecord[]> {
     return this.store.listRuns(slug);
   }
 
-  getAttempts(id: string): AttemptRecord[] {
+  getAttempts(id: string): Promise<AttemptRecord[]> {
     return this.store.getAttempts(id);
   }
 
-  getEvents(id: string, after?: number): RunEvent[] {
+  getEvents(id: string, after?: number): Promise<RunEvent[]> {
     return this.store.getEvents(id, after);
-  }
-
-  /** Explicitly release a run owned by another host and fence its old write token. */
-  recoverOwner(id: string): RunRecord {
-    return this.store.recoverOwner(id);
   }
 
   async execute(
     id: string,
-    options: { retryUncertain?: boolean; signal?: AbortSignal } = {},
+    options: { retryUncertain?: boolean; resume?: boolean; signal?: AbortSignal } = {},
   ): Promise<RunRecord> {
-    const initial = this.store.getRun(id);
-    if (!initial) throw new Error(`Unknown run ${id}`);
-    if (initial.status === "succeeded") return initial;
-    const token = randomUUID();
-    const run = this.store.claim(id, token);
+    const token = crypto.randomUUID();
+    const run = await this.store.claim(id, token, { resume: options.resume });
+    if (run.status !== "running") return run;
     const controller = new AbortController();
     const abort = () => controller.abort(options.signal?.reason);
     options.signal?.addEventListener("abort", abort, { once: true });
     if (options.signal?.aborted) abort();
-    const heartbeat = setInterval(() => {
-      try {
-        if (!this.store.heartbeat(id, token)) controller.abort(new Error("Run ownership lost"));
-      } catch (error) {
-        controller.abort(error);
-      }
-    }, 3_000);
-    heartbeat.unref?.();
+    let heartbeatInFlight: Promise<boolean> | undefined;
+    let heartbeatError: unknown;
+    let heartbeatFailed = false;
+    const pulse = (): Promise<boolean> => {
+      if (heartbeatInFlight) return heartbeatInFlight;
+      const pending = Promise.resolve()
+        .then(() => this.store.heartbeat(id, token))
+        .then((owned) => {
+          if (!owned) {
+            heartbeatError = new Error("Run ownership lost");
+            heartbeatFailed = true;
+            controller.abort(heartbeatError);
+          }
+          return owned;
+        })
+        .catch((error: unknown) => {
+          heartbeatError = error;
+          heartbeatFailed = true;
+          controller.abort(error);
+          return false;
+        })
+        .finally(() => {
+          heartbeatInFlight = undefined;
+        });
+      heartbeatInFlight = pending;
+      return pending;
+    };
+    const heartbeatTimer = setInterval(() => {
+      void pulse();
+    }, this.heartbeatIntervalMs);
+    let completed: RunRecord | undefined;
+    let executionError: unknown;
+    let failed = false;
     try {
-      const attempts = latestAttempts(this.store.getAttempts(id));
+      const attempts = latestAttempts(await this.store.getAttempts(id));
       const outputs: Values = new Map();
       for (const attempt of attempts.values())
         if (attempt.status === "succeeded" && attempt.output !== undefined)
@@ -290,15 +334,37 @@ export class Runtime {
         token,
         attempts,
         outputs,
+        options.resume !== false,
         Boolean(options.retryUncertain),
         controller.signal,
+        pulse,
+        () => heartbeatFailed,
       );
-      return this.store.finishRun(id, token, result.status, result.error);
-    } finally {
-      clearInterval(heartbeat);
-      options.signal?.removeEventListener("abort", abort);
-      this.store.release(id, token);
+      clearInterval(heartbeatTimer);
+      if (heartbeatInFlight) await heartbeatInFlight;
+      if (heartbeatFailed) throw heartbeatError;
+      completed = await this.store.finishRun(id, token, result.status, result.error);
+    } catch (error) {
+      executionError = error;
+      failed = true;
     }
+    clearInterval(heartbeatTimer);
+    options.signal?.removeEventListener("abort", abort);
+    if (heartbeatInFlight) await heartbeatInFlight;
+    try {
+      await this.store.release(id, token);
+    } catch (error) {
+      if (!failed) {
+        executionError = error;
+        failed = true;
+      }
+    }
+    if (!failed && heartbeatFailed) {
+      executionError = heartbeatError;
+      failed = true;
+    }
+    if (failed) throw executionError;
+    return completed as RunRecord;
   }
 
   private async executeNodes(
@@ -307,12 +373,24 @@ export class Runtime {
     token: string,
     attempts: Map<string, AttemptRecord>,
     outputs: Values,
+    resume: boolean,
     retryUncertain: boolean,
     signal: AbortSignal,
+    ensureOwner: () => Promise<boolean>,
+    isOwnershipLost: () => boolean,
   ): Promise<ExecutionResult> {
+    const interrupted = (error: string): ExecutionResult => ({
+      status: resume ? "interrupted" : "pending",
+      error,
+    });
     for (const node of nodes) {
-      if (signal.aborted) return { status: "interrupted", error: "Run interrupted" };
+      if (signal.aborted)
+        return isOwnershipLost()
+          ? { status: "interrupted", error: "Run ownership lost" }
+          : interrupted("Run interrupted before command launch");
       const previous = attempts.get(node.id);
+      if (previous?.status === "failed" && !resume)
+        return { status: "failed", error: previous.error ?? `Node ${node.id} failed` };
       if (previous?.status === "uncertain" && !retryUncertain)
         return {
           status: "interrupted",
@@ -328,8 +406,11 @@ export class Runtime {
           token,
           attempts,
           outputs,
+          resume,
           retryUncertain,
           signal,
+          ensureOwner,
+          isOwnershipLost,
         );
         if (result.status !== "succeeded") return result;
         continue;
@@ -340,46 +421,55 @@ export class Runtime {
         command = resolveCommand(node, run.input, outputs);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        const attempt = this.store.startAttempt(run.id, token, node.id, {
+        const attempt = await this.store.startAttempt(run.id, token, node.id, {
           command: node.command as Json,
         });
         attempts.set(
           node.id,
-          this.store.finishAttempt(run.id, token, attempt.id, "failed", undefined, message),
+          await this.store.finishAttempt(run.id, token, attempt.id, "failed", undefined, message),
         );
         return { status: "failed", error: message };
       }
-      const attempt = this.store.startAttempt(run.id, token, node.id, command as Json);
+      const attempt = await this.store.startAttempt(run.id, token, node.id, command as Json);
       attempts.set(node.id, attempt);
-      try {
-        const output = await this.executor(command, { ...run.options, signal });
-        if (signal.aborted) {
-          const error = "Command was interrupted; its external effects are uncertain";
-          attempts.set(
-            node.id,
-            this.store.finishAttempt(run.id, token, attempt.id, "uncertain", output as Json, error),
-          );
-          return { status: "interrupted", error };
-        }
-        const status = output.exitCode === 0 ? "succeeded" : "failed";
-        const error =
-          status === "failed" ? `Command exited with code ${output.exitCode}` : undefined;
+      const cancelledBeforeLaunch = async (): Promise<ExecutionResult> => {
+        const error = "Run interrupted before command launch";
         attempts.set(
           node.id,
-          this.store.finishAttempt(run.id, token, attempt.id, status, output as Json, error),
+          await this.store.finishAttempt(run.id, token, attempt.id, "cancelled", undefined, error),
         );
-        if (status === "failed") return { status, error };
-        outputs.set(node.id, output as Json);
+        return interrupted(error);
+      };
+      if (signal.aborted && !isOwnershipLost()) return cancelledBeforeLaunch();
+      if (!(await ensureOwner())) return { status: "interrupted", error: "Run ownership lost" };
+      if (signal.aborted && !isOwnershipLost()) return cancelledBeforeLaunch();
+      if (signal.aborted) return { status: "interrupted", error: "Run ownership lost" };
+      let output: Awaited<ReturnType<ExecuteCommand>>;
+      try {
+        output = await this.executor(command, {
+          ...run.options,
+          runId: run.id,
+          nodeId: node.id,
+          attemptId: attempt.id,
+          ownerToken: token,
+          signal,
+        });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         const partial = error instanceof CommandExecutionError ? error.output : undefined;
-        const status =
-          signal.aborted || (error instanceof CommandExecutionError && error.started)
-            ? "uncertain"
-            : "failed";
+        const cancelled =
+          error instanceof CommandExecutionError &&
+          !error.started &&
+          signal.aborted &&
+          !isOwnershipLost();
+        const status = cancelled
+          ? "cancelled"
+          : error instanceof CommandExecutionError && !error.started
+            ? "failed"
+            : "uncertain";
         attempts.set(
           node.id,
-          this.store.finishAttempt(
+          await this.store.finishAttempt(
             run.id,
             token,
             attempt.id,
@@ -388,8 +478,32 @@ export class Runtime {
             message,
           ),
         );
+        if (cancelled) return interrupted(message);
         return { status: status === "uncertain" ? "interrupted" : "failed", error: message };
       }
+      if (signal.aborted) {
+        const error = "Command was interrupted; its external effects are uncertain";
+        attempts.set(
+          node.id,
+          await this.store.finishAttempt(
+            run.id,
+            token,
+            attempt.id,
+            "uncertain",
+            output as Json,
+            error,
+          ),
+        );
+        return { status: "interrupted", error };
+      }
+      const status = output.exitCode === 0 ? "succeeded" : "failed";
+      const error = status === "failed" ? `Command exited with code ${output.exitCode}` : undefined;
+      attempts.set(
+        node.id,
+        await this.store.finishAttempt(run.id, token, attempt.id, status, output as Json, error),
+      );
+      if (status === "failed") return { status, error };
+      outputs.set(node.id, output as Json);
     }
     return { status: "succeeded" };
   }
@@ -415,24 +529,23 @@ export class Runtime {
         throw new Error(`Condition ${node.id} must resolve to boolean`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      const attempt = this.store.startAttempt(run.id, token, node.id, {
+      const attempt = await this.store.startAttempt(run.id, token, node.id, {
         test: node.test as Json,
       });
       attempts.set(
         node.id,
-        this.store.finishAttempt(run.id, token, attempt.id, "failed", undefined, message),
+        await this.store.finishAttempt(run.id, token, attempt.id, "failed", undefined, message),
       );
       return { status: "failed", error: message };
     }
-    const attempt = this.store.startAttempt(run.id, token, node.id, { test });
+    const attempt = await this.store.startAttempt(run.id, token, node.id, { test });
     const branch = test ? "then" : "else";
     const output = { branch } as const;
-    attempts.set(node.id, this.store.finishAttempt(run.id, token, attempt.id, "succeeded", output));
+    attempts.set(
+      node.id,
+      await this.store.finishAttempt(run.id, token, attempt.id, "succeeded", output),
+    );
     outputs.set(node.id, output);
     return { status: "succeeded", branch };
-  }
-
-  close(): void {
-    this.store.close();
   }
 }

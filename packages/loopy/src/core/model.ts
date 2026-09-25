@@ -52,7 +52,8 @@ export type ConditionNode = {
 export type WorkflowNode = CommandNode | ConditionNode;
 export type Workflow = { version: 1; slug: string; description?: string; nodes: WorkflowNode[] };
 export type ExecutionMode = "sandbox" | "full";
-export type RunOptions = { cwd: string; mode: ExecutionMode };
+export type Workspace = { kind: "local"; path: string } | { kind: "managed"; id: string };
+export type RunOptions = { workspace: Workspace; mode: ExecutionMode };
 export type RunStatus = "pending" | "running" | "succeeded" | "failed" | "interrupted";
 export type RunRecord = {
   id: string;
@@ -71,7 +72,7 @@ export type AttemptRecord = {
   runId: string;
   nodeId: string;
   number: number;
-  status: "running" | "succeeded" | "failed" | "uncertain";
+  status: "running" | "succeeded" | "failed" | "uncertain" | "cancelled";
   input: Json;
   output?: Json;
   error?: string;
@@ -93,5 +94,11 @@ export type ResolvedCommand = Omit<Command, "args" | "stdin" | "env"> & {
 };
 export type ExecuteCommand = (
   command: ResolvedCommand,
-  options: RunOptions & { signal?: AbortSignal },
+  options: RunOptions & {
+    runId: string;
+    nodeId: string;
+    attemptId: string;
+    ownerToken: string;
+    signal?: AbortSignal;
+  },
 ) => Promise<CommandOutput>;

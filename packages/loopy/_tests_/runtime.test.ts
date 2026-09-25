@@ -4,24 +4,24 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { CommandOutput, ExecuteCommand, Workflow } from "../src/model";
-import { CommandExecutionError } from "../src/process";
-import { Runtime } from "../src/runtime";
-import { RunBusyError, RunStore } from "../src/store";
+import type { CommandOutput, ExecuteCommand, Workflow } from "../src/core/model";
+import { CommandExecutionError, localRunOptions } from "../src/local/process";
+import { createLocalRuntime } from "../src/local/runtime";
+import { RunBusyError, SqliteRunStore } from "../src/local/store";
 
 const directories: string[] = [];
-const runtimes: Runtime[] = [];
+const locals: ReturnType<typeof createLocalRuntime>[] = [];
 
 function fixture(executor?: ExecuteCommand) {
   const home = mkdtempSync(join(tmpdir(), "loopy-runtime-"));
   directories.push(home);
-  const runtime = new Runtime({ home, executor });
-  runtimes.push(runtime);
-  return { home, runtime, options: { cwd: home, mode: "full" as const } };
+  const local = createLocalRuntime({ home, executor });
+  locals.push(local);
+  return { home, ...local, options: localRunOptions(home, "full") };
 }
 
 afterEach(() => {
-  for (const runtime of runtimes.splice(0)) runtime.close();
+  for (const local of locals.splice(0)) local.close();
   for (const directory of directories.splice(0))
     rmSync(directory, { recursive: true, force: true });
 });
@@ -36,7 +36,7 @@ const output = (stdout: string, exitCode = 0): CommandOutput => ({
 describe("durable workflow runtime", () => {
   test("runs a real argv command and records its output", async () => {
     const { runtime, options } = fixture();
-    const run = runtime.createRun(
+    const run = await runtime.createRun(
       {
         version: 1,
         slug: "real-command",
@@ -52,7 +52,10 @@ describe("durable workflow runtime", () => {
       options,
     );
     expect((await runtime.execute(run.id)).status).toBe("succeeded");
-    expect(runtime.getAttempts(run.id)[0]?.output).toMatchObject({ stdout: "hello", exitCode: 0 });
+    expect((await runtime.getAttempts(run.id))[0]?.output).toMatchObject({
+      stdout: "hello",
+      exitCode: 0,
+    });
   });
 
   test("persists resolved inputs and outputs, then retries only the failed node", async () => {
@@ -86,25 +89,27 @@ describe("durable workflow runtime", () => {
         },
       ],
     };
-    const run = runtime.createRun(workflow, { name: "Ada" }, options);
+    const run = await runtime.createRun(workflow, { name: "Ada" }, options);
     expect((await runtime.execute(run.id)).status).toBe("failed");
-    expect(runtime.getAttempts(run.id).map((attempt) => attempt.input)).toEqual([
+    expect((await runtime.getAttempts(run.id)).map((attempt) => attempt.input)).toEqual([
       { program: "first", args: ["Ada"] },
       { program: "second", args: ["Ada"] },
     ]);
-    runtime.close();
-    runtimes.splice(runtimes.indexOf(runtime), 1);
-    const resumed = new Runtime({ home, executor });
-    runtimes.push(resumed);
+    const previous = locals.pop();
+    previous?.close();
+    const reopened = createLocalRuntime({ home, executor });
+    locals.push(reopened);
+    const { runtime: resumed } = reopened;
     expect((await resumed.execute(run.id)).status).toBe("succeeded");
     expect(calls).toEqual(["first Ada", "second Ada", "second Ada"]);
-    expect(resumed.getAttempts(run.id).map((attempt) => attempt.status)).toEqual([
+    expect((await resumed.getAttempts(run.id)).map((attempt) => attempt.status)).toEqual([
       "succeeded",
       "failed",
       "succeeded",
     ]);
-    expect(resumed.getEvents(run.id).map((event) => event.sequence)).toEqual(
-      Array.from({ length: resumed.getEvents(run.id).length }, (_, index) => index),
+    const events = await resumed.getEvents(run.id);
+    expect(events.map((event) => event.sequence)).toEqual(
+      Array.from({ length: events.length }, (_, index) => index),
     );
   });
 
@@ -119,17 +124,17 @@ describe("durable workflow runtime", () => {
       slug: "snapshot",
       nodes: [{ id: "one", kind: "command", command: { program: "original", args: [] } }],
     };
-    const run = runtime.createRun(workflow, {}, options);
+    const run = await runtime.createRun(workflow, {}, options);
     const sourceNode = workflow.nodes[0];
     if (sourceNode?.kind === "command") sourceNode.command.program = "changed";
     expect((await runtime.execute(run.id)).status).toBe("succeeded");
     expect(programs).toEqual(["original"]);
-    expect(runtime.getRun(run.id)?.workflowHash).toBe(run.workflowHash);
+    expect((await runtime.getRun(run.id))?.workflowHash).toBe(run.workflowHash);
   });
 
   test("records a failed attempt when a command input cannot be resolved", async () => {
     const { runtime, options } = fixture(async () => output("unexpected"));
-    const run = runtime.createRun(
+    const run = await runtime.createRun(
       {
         version: 1,
         slug: "missing-input",
@@ -148,7 +153,7 @@ describe("durable workflow runtime", () => {
       options,
     );
     expect((await runtime.execute(run.id)).status).toBe("failed");
-    expect(runtime.getAttempts(run.id)).toMatchObject([
+    expect(await runtime.getAttempts(run.id)).toMatchObject([
       {
         nodeId: "effect",
         status: "failed",
@@ -163,7 +168,7 @@ describe("durable workflow runtime", () => {
     const { runtime, options } = fixture(async () => {
       throw new CommandExecutionError("Timed out", output("partial", -1), true);
     });
-    const run = runtime.createRun(
+    const run = await runtime.createRun(
       {
         version: 1,
         slug: "partial-output",
@@ -173,7 +178,7 @@ describe("durable workflow runtime", () => {
       options,
     );
     expect((await runtime.execute(run.id)).status).toBe("interrupted");
-    expect(runtime.getAttempts(run.id)[0]).toMatchObject({
+    expect((await runtime.getAttempts(run.id))[0]).toMatchObject({
       status: "uncertain",
       output: { stdout: "partial", exitCode: -1 },
     });
@@ -205,14 +210,15 @@ describe("durable workflow runtime", () => {
         { id: "tail", kind: "command", command: { program: "tail", args: [] } },
       ],
     };
-    const run = runtime.createRun(workflow, { kind: "yes" }, options);
+    const run = await runtime.createRun(workflow, { kind: "yes" }, options);
     expect((await runtime.execute(run.id)).status).toBe("failed");
     expect((await runtime.execute(run.id)).status).toBe("succeeded");
     expect(calls).toEqual(["yes", "tail", "tail"]);
-    expect(runtime.getAttempts(run.id).find((item) => item.nodeId === "choice")?.output).toEqual({
+    const attempts = await runtime.getAttempts(run.id);
+    expect(attempts.find((item) => item.nodeId === "choice")?.output).toEqual({
       branch: "then",
     });
-    expect(runtime.getAttempts(run.id).some((item) => item.nodeId === "no")).toBe(false);
+    expect(attempts.some((item) => item.nodeId === "no")).toBe(false);
   });
 
   test("does not allow two active owners for the same run", async () => {
@@ -228,9 +234,9 @@ describe("durable workflow runtime", () => {
       });
     };
     const { home, runtime, options } = fixture(executor);
-    const second = new Runtime({ home, executor });
-    runtimes.push(second);
-    const run = runtime.createRun(
+    const second = createLocalRuntime({ home, executor });
+    locals.push(second);
+    const run = await runtime.createRun(
       {
         version: 1,
         slug: "owned",
@@ -241,18 +247,18 @@ describe("durable workflow runtime", () => {
     );
     const running = runtime.execute(run.id);
     await entered;
-    await expect(second.execute(run.id)).rejects.toBeInstanceOf(RunBusyError);
+    await expect(second.runtime.execute(run.id)).rejects.toBeInstanceOf(RunBusyError);
     release(output("done"));
     expect((await running).status).toBe("succeeded");
   });
 
   test("explicit recovery fences a foreign owner and leaves its command uncertain", async () => {
     let calls = 0;
-    const { home, runtime, options } = fixture(async () => {
+    const { home, runtime, recoverOwner, options } = fixture(async () => {
       calls += 1;
       return output("retried");
     });
-    const run = runtime.createRun(
+    const run = await runtime.createRun(
       {
         version: 1,
         slug: "foreign-owner",
@@ -261,10 +267,10 @@ describe("durable workflow runtime", () => {
       {},
       options,
     );
-    const oldOwner = new RunStore(home);
+    const oldOwner = new SqliteRunStore(home);
     const oldToken = "old-owner";
-    oldOwner.claim(run.id, oldToken);
-    const started = oldOwner.startAttempt(run.id, oldToken, "effect", {
+    await oldOwner.claim(run.id, oldToken);
+    const started = await oldOwner.startAttempt(run.id, oldToken, "effect", {
       program: "tool",
       args: [],
     });
@@ -273,19 +279,22 @@ describe("durable workflow runtime", () => {
     db.close();
 
     try {
-      expect(runtime.getRun(run.id)?.status).toBe("running");
-      const recovered = runtime.recoverOwner(run.id);
+      expect((await runtime.getRun(run.id))?.status).toBe("running");
+      const recovered = await recoverOwner(run.id);
       expect(recovered.status).toBe("interrupted");
-      expect(runtime.getAttempts(run.id).map((attempt) => attempt.status)).toEqual(["uncertain"]);
+      expect((await runtime.getAttempts(run.id)).map((attempt) => attempt.status)).toEqual([
+        "uncertain",
+      ]);
       expect(
-        runtime.getEvents(run.id).find((event) => event.type === "run.owner_recovered")?.data,
+        (await runtime.getEvents(run.id)).find((event) => event.type === "run.owner_recovered")
+          ?.data,
       ).toMatchObject({
         previousOwnerHost: "previous-host",
         uncertainAttempts: 1,
       });
-      expect(() =>
+      await expect(
         oldOwner.finishAttempt(run.id, oldToken, started.id, "succeeded", output("late")),
-      ).toThrow(RunBusyError);
+      ).rejects.toBeInstanceOf(RunBusyError);
       expect((await runtime.execute(run.id)).status).toBe("interrupted");
       expect(calls).toBe(0);
       expect((await runtime.execute(run.id, { retryUncertain: true })).status).toBe("succeeded");
@@ -295,9 +304,9 @@ describe("durable workflow runtime", () => {
     }
   });
 
-  test("explicit recovery refuses to displace a live local owner", () => {
-    const { home, runtime, options } = fixture();
-    const run = runtime.createRun(
+  test("explicit recovery refuses to displace a live local owner", async () => {
+    const { home, runtime, recoverOwner, options } = fixture();
+    const run = await runtime.createRun(
       {
         version: 1,
         slug: "local-owner",
@@ -306,13 +315,15 @@ describe("durable workflow runtime", () => {
       {},
       options,
     );
-    const owner = new RunStore(home);
+    const owner = new SqliteRunStore(home);
     try {
-      owner.claim(run.id, "local-owner");
-      expect(() => runtime.recoverOwner(run.id)).toThrow(RunBusyError);
-      expect(runtime.getRun(run.id)?.status).toBe("running");
+      await owner.claim(run.id, "local-owner");
+      await expect(Promise.resolve().then(() => recoverOwner(run.id))).rejects.toBeInstanceOf(
+        RunBusyError,
+      );
+      expect((await runtime.getRun(run.id))?.status).toBe("running");
     } finally {
-      owner.release(run.id, "local-owner");
+      await owner.release(run.id, "local-owner");
       owner.close();
     }
   });
@@ -320,8 +331,8 @@ describe("durable workflow runtime", () => {
   test("marks a crashed command uncertain and requires explicit retry", async () => {
     const { home, runtime, options } = fixture(async () => output("retried"));
     const marker = join(home, "started");
-    const runtimeUrl = pathToFileURL(join(import.meta.dir, "../src/runtime.ts")).href;
-    const live = runtime.createRun(
+    const localUrl = pathToFileURL(join(import.meta.dir, "../src/local/runtime.ts")).href;
+    const live = await runtime.createRun(
       {
         version: 1,
         slug: "crash-live",
@@ -342,7 +353,7 @@ describe("durable workflow runtime", () => {
       {},
       options,
     );
-    const source = `import { Runtime } from ${JSON.stringify(runtimeUrl)}; const runtime = new Runtime({home:${JSON.stringify(home)}}); await runtime.execute(${JSON.stringify(live.id)});`;
+    const source = `import { createLocalRuntime } from ${JSON.stringify(localUrl)}; const local = createLocalRuntime({home:${JSON.stringify(home)}}); await local.runtime.execute(${JSON.stringify(live.id)});`;
     const child = Bun.spawn([process.execPath, "-e", source], { stdout: "pipe", stderr: "pipe" });
     try {
       for (let count = 0; count < 100 && !existsSync(marker); count += 1) await Bun.sleep(20);
@@ -359,16 +370,20 @@ describe("durable workflow runtime", () => {
         }
       }
     }
-    runtime.close();
-    runtimes.splice(runtimes.indexOf(runtime), 1);
-    const reopened = new Runtime({ home, executor: async () => output("retried") });
-    runtimes.push(reopened);
-    expect(reopened.getRun(live.id)?.status).toBe("interrupted");
-    expect(reopened.getAttempts(live.id).map((attempt) => attempt.status)).toEqual(["uncertain"]);
-    expect((await reopened.execute(live.id)).status).toBe("interrupted");
-    expect(reopened.getAttempts(live.id)).toHaveLength(1);
-    expect((await reopened.execute(live.id, { retryUncertain: true })).status).toBe("succeeded");
-    expect(reopened.getAttempts(live.id).map((attempt) => attempt.status)).toEqual([
+    const previous = locals.pop();
+    previous?.close();
+    const reopened = createLocalRuntime({ home, executor: async () => output("retried") });
+    locals.push(reopened);
+    expect((await reopened.runtime.getRun(live.id))?.status).toBe("interrupted");
+    expect((await reopened.runtime.getAttempts(live.id)).map((attempt) => attempt.status)).toEqual([
+      "uncertain",
+    ]);
+    expect((await reopened.runtime.execute(live.id)).status).toBe("interrupted");
+    expect(await reopened.runtime.getAttempts(live.id)).toHaveLength(1);
+    expect((await reopened.runtime.execute(live.id, { retryUncertain: true })).status).toBe(
+      "succeeded",
+    );
+    expect((await reopened.runtime.getAttempts(live.id)).map((attempt) => attempt.status)).toEqual([
       "uncertain",
       "succeeded",
     ]);

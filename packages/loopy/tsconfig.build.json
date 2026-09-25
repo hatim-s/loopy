@@ -2,10 +2,11 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "noEmit": false,
+    "allowImportingTsExtensions": false,
     "declaration": true,
-    "emitDeclarationOnly": true,
+    "declarationDir": "dist/types",
     "rootDir": "src",
-    "outDir": "dist/types"
+    "outDir": "dist"
   },
-  "include": ["src/runtime.ts"]
+  "include": ["src"]
 }
