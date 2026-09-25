@@ -5,6 +5,7 @@ import { join, resolve, sep } from "node:path";
 
 const ASSET_ROOT = "configs/platform-features/ai-agents/asset-repository";
 const MANIFEST_ROOT = "configs/platform-features/ai-agents/platform/ai-sdlc";
+const RELEASE_RECORDS = `${ASSET_ROOT}/ENTITY_TYPE/ai_sdlc_feature_release.jsonl`;
 const workflowAgentId = "e_6aa19955aeb9ea1371af57c7";
 
 const agents = [
@@ -318,6 +319,29 @@ export function shouldUpdateSyncBranch(existingTreeSha: string, desiredTreeSha: 
   return existingTreeSha !== desiredTreeSha;
 }
 
+type SyncPullRequest = { url: string; headRefName: string };
+
+export function selectSyncPullRequest(
+  pullRequests: SyncPullRequest[],
+  targetBranch: string,
+): SyncPullRequest | undefined {
+  const suffix = targetBranch.replace(/[^a-zA-Z0-9-]/g, "-");
+  const generatedBranch = new RegExp(`^chore/www-agent-assets-[0-9a-f]{8}-${suffix}$`);
+  const matches = pullRequests.filter((pullRequest) =>
+    generatedBranch.test(pullRequest.headRefName),
+  );
+  if (matches.length > 1) {
+    throw new Error(
+      `Found multiple open www asset sync PRs for base ${targetBranch}: ${matches.map((item) => item.headRefName).join(", ")}`,
+    );
+  }
+  return matches[0];
+}
+
+function syncBranchName(sourceSha: string, targetBranch: string) {
+  return `chore/www-agent-assets-${sourceSha.slice(0, 8)}-${targetBranch.replace(/[^a-zA-Z0-9-]/g, "-")}`;
+}
+
 function mergeAgentInstructions(existing: string, source: string): string {
   const frontmatter = /^---\n[\s\S]*?\n---\n/;
   const sourceHeader = source.match(frontmatter)?.[0] ?? "";
@@ -365,6 +389,7 @@ async function sourceContents(repo: string) {
 export async function applyAssetSync(
   checkout: string,
   content: Map<string, string>,
+  sourceSha: string,
 ): Promise<string[]> {
   const changed: string[] = [];
 
@@ -492,6 +517,60 @@ export async function applyAssetSync(
     }
   }
 
+  const changedFeatures = new Set<string>();
+  for (const path of changed) {
+    const manifest = path.match(/platform\/ai-sdlc\/([\w-]+)-assets\.json$/)?.[1];
+    if (manifest) changedFeatures.add(manifest);
+    if (
+      path === `${ASSET_ROOT}/ai_agent/${agents[0].id}.json` ||
+      skills.some(([, id]) => path === `${ASSET_ROOT}/e_skill_ai_agent/${id}.json`)
+    ) {
+      changedFeatures.add("text-to-workflow");
+    }
+    if (path === `${ASSET_ROOT}/ai_agent/${agents[1].id}.json`)
+      changedFeatures.add("solution-builder");
+    if (path === `${ASSET_ROOT}/ai_agent/${agents[2].id}.json`) {
+      changedFeatures.add("solution-builder");
+      changedFeatures.add("ai-fde");
+    }
+  }
+  if (changedFeatures.size) {
+    const releasePath = join(checkout, RELEASE_RECORDS);
+    const lines = (await readFile(releasePath, "utf8")).split("\n");
+    const found = new Set<string>();
+    const nextLines = lines.map((line) => {
+      if (!line.trim()) return line;
+      const record = JSON.parse(line) as JsonObject;
+      const properties = isJsonObject(record.properties) ? record.properties : undefined;
+      const featureId = properties?.featureId;
+      if (typeof featureId !== "string" || !changedFeatures.has(featureId)) return line;
+      const releaseProperties = requireObject(
+        record.properties,
+        `${RELEASE_RECORDS}.${featureId}.properties`,
+      );
+      if (found.has(featureId))
+        throw new Error(`Duplicate ai-sdlc release record for ${featureId}`);
+      found.add(featureId);
+      const currentVersion = requireString(
+        releaseProperties.version,
+        `${RELEASE_RECORDS}.${featureId}.version`,
+      );
+      const version = currentVersion.match(/^(\d+)\.(\d+)\.(\d+)$/);
+      if (!version)
+        throw new Error(`Expected semver release version for ${featureId}, got ${currentVersion}`);
+      releaseProperties.version = `${version[1]}.${version[2]}.${Number(version[3]) + 1}`;
+      releaseProperties.message = `Sync www agent prompts and skills from ${sourceSha.slice(0, 12)}`;
+      return JSON.stringify(record);
+    });
+    const missing = [...changedFeatures].filter((feature) => !found.has(feature));
+    if (missing.length) throw new Error(`Missing ai-sdlc release record(s): ${missing.join(", ")}`);
+    const nextText = nextLines.join("\n");
+    if (nextText !== (await readFile(releasePath, "utf8"))) {
+      await writeFile(releasePath, nextText);
+      changed.push(RELEASE_RECORDS);
+    }
+  }
+
   return changed;
 }
 
@@ -506,7 +585,7 @@ export async function syncCheckout(
   const base = await git(checkout, "rev-parse", "FETCH_HEAD");
   const branchName = `chore/www-agent-assets-${sourceSha.slice(0, 8)}-${branch.replace(/[^a-zA-Z0-9-]/g, "-")}`;
   await git(checkout, "checkout", "-B", branchName, base);
-  await applyAssetSync(checkout, content);
+  await applyAssetSync(checkout, content, sourceSha);
   await writePatch(checkout, branch, options.patchDir);
 
   const status = await git(checkout, "status", "--porcelain");
@@ -558,6 +637,7 @@ const targetFiles = [
   ...agents.map((agent) => `${ASSET_ROOT}/ai_agent/${agent.id}.json`),
   ...skills.map(([, id]) => `${ASSET_ROOT}/e_skill_ai_agent/${id}.json`),
   ...agents.map((agent) => `${MANIFEST_ROOT}/${agent.manifest}`),
+  RELEASE_RECORDS,
 ];
 const allowedPaths = new Set(targetFiles);
 
@@ -651,7 +731,7 @@ async function githubSync(
     const base = requireString(baseObject.sha, `uacode ref ${branch}.object.sha`);
     const checkout = join(temp, `uacode-${branch.replaceAll("/", "-")}`);
     await prepareTargetFiles(base, checkout);
-    await applyAssetSync(checkout, content);
+    await applyAssetSync(checkout, content, sourceSha);
     await writePatch(checkout, branch, options.patchDir);
     await git(checkout, "diff", "--check", "--", ...targetFiles);
     const paths = (await git(checkout, "diff", "--name-only", "--", ...targetFiles))
@@ -659,25 +739,30 @@ async function githubSync(
       .filter(Boolean);
     if (paths.some((path) => !allowedPaths.has(path)))
       throw new Error(`Sync attempted to change an unapproved path on ${branch}`);
-    const branchName = `chore/www-agent-assets-${sourceSha.slice(0, 8)}-${branch.replace(/[^a-zA-Z0-9-]/g, "-")}`;
+    let branchName = syncBranchName(sourceSha, branch);
     if (!paths.length || options.dryRun) {
       results.push({ branch, branchName, base, changed: paths, pullRequest: null });
       continue;
     }
-    const existing = await run("gh", [
-      "pr",
-      "list",
-      "--repo",
-      "unify-apps/uacode",
-      "--head",
-      branchName,
-      "--base",
-      branch,
-      "--json",
-      "url",
-      "--jq",
-      ".[0].url",
-    ]);
+    const pullRequests = JSON.parse(
+      await run("gh", [
+        "pr",
+        "list",
+        "--repo",
+        "unify-apps/uacode",
+        "--base",
+        branch,
+        "--state",
+        "open",
+        "--limit",
+        "500",
+        "--json",
+        "url,headRefName",
+      ]),
+    ) as SyncPullRequest[];
+    const selectedPullRequest = selectSyncPullRequest(pullRequests, branch);
+    const existing = selectedPullRequest?.url ?? "";
+    if (selectedPullRequest) branchName = selectedPullRequest.headRefName;
     const baseCommit = await ghJson(`repos/unify-apps/uacode/git/commits/${base}`, temp);
     const baseTree = requireObject(baseCommit.tree, `uacode commit ${base}.tree`);
     const tree = [];
@@ -694,7 +779,7 @@ async function githubSync(
     });
     const createdTreeSha = requireString(createdTree.sha, "created Git tree SHA");
     if (existing) {
-      const syncBranch = `chore/www-agent-assets-${sourceSha.slice(0, 8)}-${branch.replace(/[^a-zA-Z0-9-]/g, "-")}`;
+      const syncBranch = branchName;
       const syncRef = await ghJson(
         `repos/unify-apps/uacode/git/ref/heads/${encodeURIComponent(syncBranch)}`,
         temp,
@@ -717,6 +802,22 @@ async function githubSync(
         `sync commit ${existingCommitSha}.tree.sha`,
       );
       if (!shouldUpdateSyncBranch(existingTreeSha, createdTreeSha)) {
+        const bodyFile = await writePullRequestBody(temp, sourceSha, base, paths);
+        try {
+          await run("gh", [
+            "pr",
+            "edit",
+            existing,
+            "--repo",
+            "unify-apps/uacode",
+            "--title",
+            `Sync www agent assets (${sourceSha.slice(0, 8)})`,
+            "--body-file",
+            bodyFile,
+          ]);
+        } finally {
+          await rm(bodyFile, { force: true });
+        }
         results.push({
           branch,
           branchName,
@@ -786,6 +887,8 @@ async function githubSync(
           existing,
           "--repo",
           "unify-apps/uacode",
+          "--title",
+          `Sync www agent assets (${sourceSha.slice(0, 8)})`,
           "--body-file",
           bodyFile,
         ]);

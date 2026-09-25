@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { applyAssetSync, shouldUpdateSyncBranch, sourceText } from "../sync";
+import { applyAssetSync, selectSyncPullRequest, shouldUpdateSyncBranch, sourceText } from "../sync";
 
 const root = "/tmp/www-uacode-sync-core-test";
 const assetRoot = "configs/platform-features/ai-agents/asset-repository";
@@ -11,6 +11,8 @@ const plannerAgentId = "e_6a801aea757839657bbec2a1";
 const firstSkillName = "external-data-inspection";
 const firstSkillId = "e_6ab1053b200bf5533fd0ad0b";
 const lastSkillId = "e_6a5f2c12f62c9924bb176689";
+const sourceSha = "abcdef1234567890abcdef1234567890abcdef12";
+const releasePath = join(root, assetRoot, "ENTITY_TYPE/ai_sdlc_feature_release.jsonl");
 const skills = [
   ["external-data-inspection", "e_6ab1053b200bf5533fd0ad0b"],
   ["automation-run-debugging", "e_6aa851442b4d71304f6477b1"],
@@ -93,6 +95,18 @@ async function makeFixture(versionMismatch = false) {
   await writeJson(join(manifestRoot, "ai-fde-assets.json"), {
     assetClassVsAssetDetails: { ai_agent: [{ assetClass: "ai_agent", assetId: agentIds[2] }] },
   });
+  await mkdir(join(root, assetRoot, "ENTITY_TYPE"), { recursive: true });
+  await writeFile(
+    releasePath,
+    `${[
+      { properties: { featureId: "ai-fde", version: "1.1.29", message: "old" } },
+      { properties: { featureId: "solution-builder", version: "2.4.19", message: "old" } },
+      { properties: { featureId: "text-to-workflow", version: "3.0.17", message: "old" } },
+      { properties: { featureId: "unrelated", version: "1.2.3", message: "preserve" } },
+    ]
+      .map((record) => JSON.stringify(record))
+      .join("\n")}\n`,
+  );
   return content;
 }
 
@@ -123,6 +137,33 @@ describe("www to uacode asset mapping", () => {
     expect(shouldUpdateSyncBranch("tree-old", "tree-new")).toBe(true);
   });
 
+  test("reuses the single open generated sync PR for its base across source SHA changes", () => {
+    const mainCandidate = {
+      url: "https://github.com/unify-apps/uacode/pull/48961",
+      headRefName: "chore/www-agent-assets-ed6ab8d6-main",
+    };
+    const candidates = [
+      mainCandidate,
+      {
+        url: "https://github.com/unify-apps/uacode/pull/123",
+        headRefName: "feature/something-main",
+      },
+      {
+        url: "https://github.com/unify-apps/uacode/pull/48962",
+        headRefName: "chore/www-agent-assets-ed6ab8d6-uat",
+      },
+    ];
+    expect(selectSyncPullRequest(candidates, "main")).toEqual(candidates[0]);
+    expect(selectSyncPullRequest(candidates, "uat")).toEqual(candidates[2]);
+    expect(selectSyncPullRequest(candidates, "release/1")).toBeUndefined();
+    expect(() =>
+      selectSyncPullRequest(
+        [mainCandidate, { ...mainCandidate, headRefName: "chore/www-agent-assets-550febe0-main" }],
+        "main",
+      ),
+    ).toThrow("multiple open www asset sync PRs for base main");
+  });
+
   test("updates registered skill copies once and preserves export metadata and JSON layout", async () => {
     const content = await makeFixture();
     const workflowAgentPath = join(root, assetRoot, "ai_agent", `${agentIds[0]}.json`);
@@ -139,14 +180,14 @@ describe("www to uacode asset mapping", () => {
       "configs/platform-features/ai-agents/platform/ai-sdlc/text-to-workflow-assets.json",
     );
 
-    const firstChanges = await applyAssetSync(root, content);
-    const secondChanges = await applyAssetSync(root, content);
+    const firstChanges = await applyAssetSync(root, content, sourceSha);
+    const secondChanges = await applyAssetSync(root, content, sourceSha);
     const workflowAgent = JSON.parse(await readFile(workflowAgentPath, "utf8"));
     const standaloneSkill = JSON.parse(await readFile(compactSkillPath, "utf8"));
     const embedded = workflowAgent.skills[0].skillEntity;
     const skillRaw = await readFile(compactSkillPath, "utf8");
 
-    expect(firstChanges).toHaveLength(12);
+    expect(firstChanges).toHaveLength(13);
     expect(secondChanges).toEqual([]);
     expect(workflowAgent.aiAgentEntity.properties.instructions).toBe(content.get(workflowAgentId));
     expect(workflowAgent.aiAgentEntity.version).toBe(19);
@@ -163,11 +204,45 @@ describe("www to uacode asset mapping", () => {
     expect(standaloneSkill.version).toBe(4);
     expect(skillRaw).toContain('"tags": ["keep compact formatting"]');
     expect(await readFile(manifestPath, "utf8")).toBe(originalManifest);
+    const releaseLines = (await readFile(releasePath, "utf8")).trim().split("\n");
+    const releases = releaseLines.map((line) => JSON.parse(line));
+    expect(releases.slice(0, 3).map((record) => record.properties.version)).toEqual([
+      "1.1.30",
+      "2.4.20",
+      "3.0.18",
+    ]);
+    expect(releases.slice(0, 3).map((record) => record.properties.message)).toEqual(
+      Array(3).fill(`Sync www agent prompts and skills from ${sourceSha.slice(0, 12)}`),
+    );
+    expect(releaseLines[3]).toBe(
+      JSON.stringify({
+        properties: { featureId: "unrelated", version: "1.2.3", message: "preserve" },
+      }),
+    );
+  });
+
+  test("bumps only the release feature affected by a later Workflow Agent change", async () => {
+    const content = await makeFixture();
+    await applyAssetSync(root, content, sourceSha);
+    content.set(workflowAgentId, "updated Workflow Agent prompt\n");
+
+    const changes = await applyAssetSync(root, content, sourceSha);
+    const releases = (await readFile(releasePath, "utf8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+
+    expect(changes).toContain(`${assetRoot}/ai_agent/${workflowAgentId}.json`);
+    expect(releases.slice(0, 3).map((record) => record.properties.version)).toEqual([
+      "1.1.30",
+      "2.4.20",
+      "3.0.19",
+    ]);
   });
 
   test("fails before syncing a skill whose embedded and standalone export versions disagree", async () => {
     const content = await makeFixture(true);
-    await expect(applyAssetSync(root, content)).rejects.toThrow(
+    await expect(applyAssetSync(root, content, sourceSha)).rejects.toThrow(
       "Standalone and embedded skill versions differ",
     );
   });
@@ -184,7 +259,7 @@ describe("www to uacode asset mapping", () => {
         (entry: { assetId: string }) => entry.assetId !== lastSkillId,
       );
     await writeJson(manifestPath, manifest);
-    const changes = await applyAssetSync(root, content);
+    const changes = await applyAssetSync(root, content, sourceSha);
     const updated = JSON.parse(await readFile(manifestPath, "utf8"));
 
     expect(changes).toContain(
@@ -207,7 +282,7 @@ describe("www to uacode asset mapping", () => {
     asset.aiAgentEntity.properties.instructions = "---\ndescription: no name\n---\nold body\n";
     await writeJson(path, asset);
 
-    await expect(applyAssetSync(root, content)).rejects.toThrow(
+    await expect(applyAssetSync(root, content, sourceSha)).rejects.toThrow(
       "Agent frontmatter must include a name field",
     );
   });
