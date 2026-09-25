@@ -14,4 +14,3 @@ jobs:
         run: bwrap --unshare-all --ro-bind / / -- /bin/true
       - run: bun install --frozen-lockfile
       - run: bun run check
-      - run: bun run build

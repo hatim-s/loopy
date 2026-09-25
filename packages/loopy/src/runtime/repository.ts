@@ -5,6 +5,8 @@ import type { AttemptRecord, Json, RunEvent, RunRecord, RunStatus } from "../cor
  * Implementations must fence writes by owner token. Distributed stores need a
  * bounded lease; a local store may use process liveness. Reclaiming a stopped
  * owner marks its running attempts uncertain before another attempt can start.
+ * A cancelled attempt proves its command never launched and may be retried by
+ * another initial delivery. A failed or uncertain attempt needs explicit resume.
  * Claiming a succeeded run returns it unchanged, even when deliveries race.
  * With resume disabled, all terminal runs return unchanged so a duplicate queue
  * message cannot replay a failed or interrupted run.
@@ -22,7 +24,7 @@ export interface RunRepository {
     runId: string,
     token: string,
     attemptId: string,
-    status: "succeeded" | "failed" | "uncertain",
+    status: Exclude<AttemptRecord["status"], "running">,
     output?: Json,
     error?: string,
   ): Promise<AttemptRecord>;

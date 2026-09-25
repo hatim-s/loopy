@@ -30,6 +30,7 @@ class MemoryRepository implements RunRepository {
   events: RunEvent[] = [];
   beforeStart?: () => Promise<void>;
   beforeFinishAttempt?: () => Promise<void>;
+  afterFinishAttempt?: () => Promise<void>;
   beforeHeartbeat?: () => Promise<void>;
   heartbeatCalls = 0;
   heartbeatConcurrent = 0;
@@ -100,7 +101,7 @@ class MemoryRepository implements RunRepository {
     _runId: string,
     token: string,
     attemptId: string,
-    status: "succeeded" | "failed" | "uncertain",
+    status: Exclude<AttemptRecord["status"], "running">,
     output?: Json,
     error?: string,
   ): Promise<AttemptRecord> {
@@ -112,6 +113,7 @@ class MemoryRepository implements RunRepository {
     if (!prior) throw new Error("Unknown attempt");
     const next = { ...prior, status, output, error, endedAt: new Date().toISOString() };
     this.attempts[index] = next;
+    await this.afterFinishAttempt?.();
     return next;
   }
   async finishRun(
@@ -154,8 +156,87 @@ test("waits for a delayed attempt write and checks ownership before command laun
   gate.resolve();
   expect((await execution).status).toBe("interrupted");
   expect(launches).toBe(0);
-  expect(store.attempts[0]?.status).toBe("failed");
+  expect(store.attempts[0]?.status).toBe("cancelled");
   expect(store.releases).toBe(1);
+});
+
+test("an initial delivery cancelled after attempt creation remains pending for redelivery", async () => {
+  const store = new MemoryRepository();
+  const gate = deferred<void>();
+  const entered = deferred<void>();
+  store.beforeStart = () => {
+    store.beforeStart = undefined;
+    entered.resolve();
+    return gate.promise;
+  };
+  const aborter = new AbortController();
+  let launches = 0;
+  const runtime = new Runtime({
+    store,
+    executor: async () => {
+      launches += 1;
+      return output;
+    },
+  });
+  const run = await runtime.createRun(workflow, {}, runOptions);
+  const first = runtime.execute(run.id, { resume: false, signal: aborter.signal });
+  await entered.promise;
+  aborter.abort();
+  gate.resolve();
+
+  expect((await first).status).toBe("pending");
+  expect(store.attempts[0]?.status).toBe("cancelled");
+  expect(launches).toBe(0);
+  expect((await runtime.execute(run.id, { resume: false })).status).toBe("succeeded");
+  expect(launches).toBe(1);
+  expect(store.attempts.map((attempt) => attempt.status)).toEqual(["cancelled", "succeeded"]);
+});
+
+test("an executor that proves it never started can retry after worker cancellation", async () => {
+  const store = new MemoryRepository();
+  const aborter = new AbortController();
+  let calls = 0;
+  const runtime = new Runtime({
+    store,
+    executor: async () => {
+      calls += 1;
+      if (calls === 1) {
+        aborter.abort();
+        throw new CommandExecutionError("Worker cancelled", output, false);
+      }
+      return output;
+    },
+  });
+  const run = await runtime.createRun(workflow, {}, runOptions);
+
+  expect((await runtime.execute(run.id, { resume: false, signal: aborter.signal })).status).toBe(
+    "pending",
+  );
+  expect(store.attempts[0]?.status).toBe("cancelled");
+  expect((await runtime.execute(run.id, { resume: false })).status).toBe("succeeded");
+  expect(calls).toBe(2);
+});
+
+test("worker cancellation cannot redeliver a command that may have started", async () => {
+  const store = new MemoryRepository();
+  const aborter = new AbortController();
+  let calls = 0;
+  const runtime = new Runtime({
+    store,
+    executor: async () => {
+      calls += 1;
+      aborter.abort();
+      throw new CommandExecutionError("Worker cancelled", output, true);
+    },
+  });
+  const run = await runtime.createRun(workflow, {}, runOptions);
+
+  expect((await runtime.execute(run.id, { resume: false, signal: aborter.signal })).status).toBe(
+    "interrupted",
+  );
+  expect(store.attempts[0]?.status).toBe("uncertain");
+  expect((await runtime.execute(run.id, { resume: false })).status).toBe("interrupted");
+  expect(calls).toBe(1);
 });
 
 test("a duplicate delivery cannot resume a terminal failure", async () => {
@@ -221,6 +302,32 @@ test("propagates a delayed storage commit failure without recording a second res
   expect(store.finishAttemptCalls).toBe(1);
   expect(store.attempts[0]?.status).toBe("running");
   expect(store.releases).toBe(1);
+});
+
+test("a lost failed-attempt acknowledgement cannot replay a command on initial redelivery", async () => {
+  const store = new MemoryRepository();
+  let launches = 0;
+  store.afterFinishAttempt = async () => {
+    store.afterFinishAttempt = undefined;
+    throw new Error("Commit acknowledgement lost");
+  };
+  const runtime = new Runtime({
+    store,
+    executor: async () => {
+      launches += 1;
+      return { ...output, exitCode: 2 };
+    },
+  });
+  const run = await runtime.createRun(workflow, {}, runOptions);
+  await expect(runtime.execute(run.id, { resume: false })).rejects.toThrow(
+    "Commit acknowledgement lost",
+  );
+  expect(store.attempts[0]?.status).toBe("failed");
+  expect(store.run?.status).toBe("running");
+
+  expect((await runtime.execute(run.id, { resume: false })).status).toBe("failed");
+  expect(launches).toBe(1);
+  expect(store.attempts).toHaveLength(1);
 });
 
 test("heartbeats are single flight and finish before release", async () => {

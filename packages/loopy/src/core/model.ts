@@ -72,7 +72,7 @@ export type AttemptRecord = {
   runId: string;
   nodeId: string;
   number: number;
-  status: "running" | "succeeded" | "failed" | "uncertain";
+  status: "running" | "succeeded" | "failed" | "uncertain" | "cancelled";
   input: Json;
   output?: Json;
   error?: string;

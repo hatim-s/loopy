@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { CloudWorker } from "../src/cloud/worker.js";
-import type { RunRecord } from "../src/core/model.js";
+import type { AttemptRecord, Json, RunRecord } from "../src/core/model.js";
+import { SqliteRunStore } from "../src/local/store.js";
 import { RunBusyError } from "../src/runtime/errors.js";
+import { Runtime } from "../src/runtime/runtime.js";
 
 const managedRun = (status: RunRecord["status"] = "pending"): RunRecord => ({
   id: "run-1",
@@ -111,6 +116,101 @@ describe("cloud worker", () => {
       },
     });
     await expect(failedExecution.handle({ runId: "run-1" })).rejects.toBe(unavailable);
+  });
+
+  test("retries an already-cancelled delivery without claiming the run", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    let executions = 0;
+    const worker = new CloudWorker({
+      getRun: async () => managedRun(),
+      execute: async () => {
+        executions += 1;
+        return managedRun("succeeded");
+      },
+    });
+
+    expect(await worker.handle({ runId: "run-1" }, { signal: controller.signal })).toEqual({
+      disposition: "retry",
+      reason: "cancelled",
+      runId: "run-1",
+    });
+    expect(executions).toBe(0);
+  });
+
+  test("retries a pending result after cancellation during initial execution", async () => {
+    const worker = new CloudWorker({
+      getRun: async () => managedRun(),
+      execute: async (_id, options) => {
+        expect(options?.resume).toBe(false);
+        return managedRun("pending");
+      },
+    });
+
+    expect(await worker.handle({ runId: "run-1" })).toEqual({
+      disposition: "retry",
+      reason: "cancelled",
+      runId: "run-1",
+    });
+  });
+
+  test("SQLite keeps an unlaunched command retryable after worker cancellation", async () => {
+    class AbortingStore extends SqliteRunStore {
+      abortAfterStart?: () => void;
+
+      override async startAttempt(
+        runId: string,
+        token: string,
+        nodeId: string,
+        input: Json,
+      ): Promise<AttemptRecord> {
+        const attempt = await super.startAttempt(runId, token, nodeId, input);
+        this.abortAfterStart?.();
+        this.abortAfterStart = undefined;
+        return attempt;
+      }
+    }
+
+    const home = mkdtempSync(join(tmpdir(), "loopy-cloud-cancel-"));
+    const store = new AbortingStore(home);
+    try {
+      let launches = 0;
+      const runtime = new Runtime({
+        store,
+        executor: async () => {
+          launches += 1;
+          return { stdout: "ok", stderr: "", exitCode: 0, durationMs: 1 };
+        },
+      });
+      const run = await runtime.createRun(
+        {
+          version: 1,
+          slug: "cancelled-cloud-run",
+          nodes: [{ id: "effect", kind: "command", command: { program: "tool", args: [] } }],
+        },
+        {},
+        { workspace: { kind: "managed", id: "workspace-1" }, mode: "full" },
+      );
+      const controller = new AbortController();
+      store.abortAfterStart = () => controller.abort();
+      const worker = new CloudWorker(runtime);
+
+      expect(await worker.handle({ runId: run.id }, { signal: controller.signal })).toEqual({
+        disposition: "retry",
+        reason: "cancelled",
+        runId: run.id,
+      });
+      expect((await runtime.getRun(run.id))?.status).toBe("pending");
+      expect((await runtime.getAttempts(run.id))[0]?.status).toBe("cancelled");
+      expect(launches).toBe(0);
+
+      expect((await worker.handle({ runId: run.id })).disposition).toBe("ack");
+      expect((await runtime.getRun(run.id))?.status).toBe("succeeded");
+      expect(launches).toBe(1);
+    } finally {
+      store.close();
+      rmSync(home, { recursive: true, force: true });
+    }
   });
 
   test("rejects malformed messages, unknown runs, and local workspaces", async () => {

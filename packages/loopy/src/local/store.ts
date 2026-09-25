@@ -441,7 +441,7 @@ export class SqliteRunStore implements RunRepository {
     runId: string,
     token: string,
     attemptId: string,
-    status: "succeeded" | "failed" | "uncertain",
+    status: Exclude<AttemptRecord["status"], "running">,
     output?: Json,
     error?: string,
   ): Promise<AttemptRecord> {

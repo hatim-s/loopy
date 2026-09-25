@@ -6,7 +6,7 @@ export type CloudWorkMessage = { runId: string };
 
 export type CloudWorkOutcome =
   | { disposition: "ack"; run: RunRecord }
-  | { disposition: "retry"; reason: "busy"; runId: string };
+  | { disposition: "retry"; reason: "busy" | "cancelled"; runId: string };
 
 type WorkerRuntime = Pick<Runtime, "getRun" | "execute">;
 
@@ -25,9 +25,9 @@ function parseMessage(value: unknown): CloudWorkMessage {
 
 /**
  * Executes a persisted run delivered by a host queue. The host acknowledges `ack`,
- * retries `busy`, and retries thrown infrastructure errors. It must dead-letter
+ * retries `busy` or `cancelled`, and retries thrown infrastructure errors. It must dead-letter
  * malformed or unknown messages according to its own queue policy. Queue
- * deliveries only start pending runs. A host must authorize resumes separately.
+ * deliveries start or continue initial execution. A host must authorize terminal resumes separately.
  */
 export class CloudWorker {
   constructor(private readonly runtime: WorkerRuntime) {}
@@ -41,14 +41,16 @@ export class CloudWorker {
     if (!run) throw new Error(`Unknown run ${runId}`);
     if (run.options.workspace.kind !== "managed")
       throw new Error(`Run ${runId} uses a local workspace`);
+    if (options.signal?.aborted && (run.status === "pending" || run.status === "running"))
+      return { disposition: "retry", reason: "cancelled", runId };
 
     try {
       const result = await this.runtime.execute(runId, {
         resume: false,
         ...(options.signal ? { signal: options.signal } : {}),
       });
-      if (result.status === "pending" || result.status === "running")
-        throw new Error(`Run ${runId} did not settle`);
+      if (result.status === "pending") return { disposition: "retry", reason: "cancelled", runId };
+      if (result.status === "running") throw new Error(`Run ${runId} did not settle`);
       return { disposition: "ack", run: result };
     } catch (error) {
       if (error instanceof RunBusyError) return { disposition: "retry", reason: "busy", runId };

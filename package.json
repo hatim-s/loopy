@@ -12,7 +12,7 @@
     "loopy": "bun packages/loopy/src/cli/index.ts",
     "typecheck": "tsc --noEmit && tsc -p packages/loopy/tsconfig.portable.json",
     "test": "bun test packages/loopy/_tests_",
-    "check": "bun run lint && bun run typecheck && bun run test",
+    "check": "bun run build && bun run lint && bun run typecheck && bun run test",
     "build": "bun scripts/build.ts",
     "fmt": "biome format --write .",
     "fmt:check": "biome format .",

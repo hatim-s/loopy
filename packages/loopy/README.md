@@ -2,7 +2,7 @@
 
 Write local CLI workflows in TypeScript. Save them by slug, run them in a sandbox or with full permissions, and inspect their graph and execution history.
 
-The local CLI and adapters require Bun 1.4 or newer. Workflow authoring, orchestration and the cloud worker use standard JavaScript and web APIs. One public package exposes separate concern boundaries; Studio remains the only other workspace package.
+The local CLI and adapters require Bun 1.4 or newer. Workflow authoring, orchestration and the cloud worker ship as JavaScript modules using standard web APIs, with TypeScript declarations. One public package exposes separate concern boundaries; Studio remains the only other workspace package.
 
 ## Try this checkout
 
@@ -110,7 +110,7 @@ For existing Bash scripts, `bash(script)` is an explicit escape hatch with the s
 ## Development
 
 ```sh
-bun run check       # Typecheck and core runtime/product tests
+bun run check       # Build, lint, typecheck and core runtime/product tests
 bun run fmt:check
 bun run build       # Build and bundle the readonly viewer
 bun run loopy ui
@@ -155,9 +155,9 @@ export function worker(store: RunRepository, executor: ExecuteCommand) {
 // Acknowledge outcome.disposition === "ack"; retry "retry" or infrastructure errors.
 ```
 
-Cloud delivery is for initial execution. It atomically leaves succeeded, failed and interrupted runs unchanged, even when deliveries race. Resuming a terminal run is a separate explicit `Runtime.execute` operation. Retrying uncertain work additionally requires `retryUncertain: true`. Do not put a reusable retry permission on a queue message: redelivery could otherwise authorize a new uncertain attempt without another decision.
+Cloud delivery is for initial execution. It atomically leaves succeeded, failed and interrupted runs unchanged, even when deliveries race. A worker cancellation before command launch marks any created attempt cancelled and returns the run to pending for redelivery. Commands already completed stay checkpointed. Cancellation after launch remains uncertain. Resuming a terminal run is a separate explicit `Runtime.execute` operation. Retrying uncertain work additionally requires `retryUncertain: true`. Do not put a reusable retry permission on a queue message: redelivery could otherwise authorize a new uncertain attempt without another decision.
 
-The repository contract requires atomic attempt/event transitions and owner-token fencing. Distributed implementations must use bounded leases and atomic expired-owner recovery; the local SQLite adapter uses host process liveness. Expired work becomes uncertain, and old tokens cannot commit. The runtime serializes async heartbeats, checks ownership before launch, and treats unknown executor transport errors as uncertain. Adapters must bound network calls and honor the abort signal. A database fence cannot stop a command already running on another machine.
+The repository contract requires atomic attempt/event transitions and owner-token fencing. Distributed implementations must use bounded leases and atomic expired-owner recovery; the local SQLite adapter uses host process liveness. Expired work becomes uncertain, and old tokens cannot commit. The runtime serializes async heartbeats, checks ownership before launch, and treats unknown executor transport errors as uncertain. It drains heartbeats before the fenced completion write. Adapters must bound network calls and honor the abort signal. A database fence cannot stop a command already running on another machine.
 
 This refactor does not deploy a cloud service. Before hosting, implement tenant-scoped authorization and storage, durable dispatch with an outbox or pending-run reconciliation, workspace provisioning, and an isolated command runner. The local server's in-memory job set and loopback session token are local conveniences, not cloud queue or authentication implementations. The portable build and browser bundle check enforce the dependency boundary.
 

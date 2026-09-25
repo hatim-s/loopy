@@ -3,7 +3,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Json, RunRecord } from "../core/model.js";
 import { localRunOptions } from "./process.js";
-import { defaultHome, Registry } from "./registry.ts";
+import { defaultHome, Registry } from "./registry.js";
 import { createLocalRuntime } from "./runtime.js";
 
 type ServerOptions = { home?: string; cwd?: string; port?: number; assets?: string };

@@ -16,7 +16,10 @@ import { CommandExecutionError } from "./errors.js";
 import type { RunRepository } from "./repository.js";
 
 type Values = Map<string, Json>;
-type ExecutionResult = { status: "succeeded" | "failed" | "interrupted"; error?: string };
+type ExecutionResult = {
+  status: "pending" | "succeeded" | "failed" | "interrupted";
+  error?: string;
+};
 
 function assertJson(
   value: unknown,
@@ -331,15 +334,16 @@ export class Runtime {
         token,
         attempts,
         outputs,
+        options.resume !== false,
         Boolean(options.retryUncertain),
         controller.signal,
         pulse,
         () => heartbeatFailed,
       );
+      clearInterval(heartbeatTimer);
       if (heartbeatInFlight) await heartbeatInFlight;
       if (heartbeatFailed) throw heartbeatError;
       completed = await this.store.finishRun(id, token, result.status, result.error);
-      if (heartbeatFailed) throw heartbeatError;
     } catch (error) {
       executionError = error;
       failed = true;
@@ -369,14 +373,24 @@ export class Runtime {
     token: string,
     attempts: Map<string, AttemptRecord>,
     outputs: Values,
+    resume: boolean,
     retryUncertain: boolean,
     signal: AbortSignal,
     ensureOwner: () => Promise<boolean>,
     isOwnershipLost: () => boolean,
   ): Promise<ExecutionResult> {
+    const interrupted = (error: string): ExecutionResult => ({
+      status: resume ? "interrupted" : "pending",
+      error,
+    });
     for (const node of nodes) {
-      if (signal.aborted) return { status: "interrupted", error: "Run interrupted" };
+      if (signal.aborted)
+        return isOwnershipLost()
+          ? { status: "interrupted", error: "Run ownership lost" }
+          : interrupted("Run interrupted before command launch");
       const previous = attempts.get(node.id);
+      if (previous?.status === "failed" && !resume)
+        return { status: "failed", error: previous.error ?? `Node ${node.id} failed` };
       if (previous?.status === "uncertain" && !retryUncertain)
         return {
           status: "interrupted",
@@ -392,6 +406,7 @@ export class Runtime {
           token,
           attempts,
           outputs,
+          resume,
           retryUncertain,
           signal,
           ensureOwner,
@@ -421,9 +436,9 @@ export class Runtime {
         const error = "Run interrupted before command launch";
         attempts.set(
           node.id,
-          await this.store.finishAttempt(run.id, token, attempt.id, "failed", undefined, error),
+          await this.store.finishAttempt(run.id, token, attempt.id, "cancelled", undefined, error),
         );
-        return { status: "interrupted", error };
+        return interrupted(error);
       };
       if (signal.aborted && !isOwnershipLost()) return cancelledBeforeLaunch();
       if (!(await ensureOwner())) return { status: "interrupted", error: "Run ownership lost" };
@@ -442,8 +457,16 @@ export class Runtime {
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         const partial = error instanceof CommandExecutionError ? error.output : undefined;
-        const status =
-          error instanceof CommandExecutionError && !error.started ? "failed" : "uncertain";
+        const cancelled =
+          error instanceof CommandExecutionError &&
+          !error.started &&
+          signal.aborted &&
+          !isOwnershipLost();
+        const status = cancelled
+          ? "cancelled"
+          : error instanceof CommandExecutionError && !error.started
+            ? "failed"
+            : "uncertain";
         attempts.set(
           node.id,
           await this.store.finishAttempt(
@@ -455,6 +478,7 @@ export class Runtime {
             message,
           ),
         );
+        if (cancelled) return interrupted(message);
         return { status: status === "uncertain" ? "interrupted" : "failed", error: message };
       }
       if (signal.aborted) {

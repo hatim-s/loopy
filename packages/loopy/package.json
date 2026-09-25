@@ -9,27 +9,26 @@
   },
   "exports": {
     ".": {
-      "types": "./src/core/index.ts",
-      "default": "./src/core/index.ts"
+      "types": "./dist/types/core/index.d.ts",
+      "default": "./dist/core/index.js"
     },
     "./runtime": {
-      "types": "./src/runtime/index.ts",
-      "default": "./src/runtime/index.ts"
+      "types": "./dist/types/runtime/index.d.ts",
+      "default": "./dist/runtime/index.js"
     },
     "./local": {
       "types": "./dist/types/local/index.d.ts",
-      "default": "./src/local/index.ts"
+      "default": "./dist/local/index.js"
     },
     "./cloud": {
-      "types": "./src/cloud/index.ts",
-      "default": "./src/cloud/index.ts"
+      "types": "./dist/types/cloud/index.d.ts",
+      "default": "./dist/cloud/index.js"
     }
   },
   "bin": {
-    "loopy": "./src/cli/index.ts"
+    "loopy": "./dist/cli/index.js"
   },
   "files": [
-    "src",
     "dist",
     "README.md",
     "LICENSE"
