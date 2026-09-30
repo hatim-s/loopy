@@ -114,7 +114,7 @@ export class Registry {
     try {
       if (existsSync(file)) {
         const existing = this.get(workflow.slug);
-        if (canonicalSource(existing.source) !== owner && !options.replace)
+        if (existing.source !== owner && !options.replace)
           throw new Error(
             `Slug '${workflow.slug}' belongs to '${existing.source}'. Rename the workflow slug or use --replace to transfer it to '${owner}'.`,
           );

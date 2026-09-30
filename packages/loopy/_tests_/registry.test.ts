@@ -54,3 +54,17 @@ test("a held slug lock prevents competing writes, including explicit replacement
   );
   expect(registry.get("hello").workflow).toEqual(workflow("original"));
 });
+
+test("changing a source into a symlink cannot transfer stored ownership", () => {
+  const home = directory();
+  const registry = new Registry(home);
+  const source = join(home, "original.ts");
+  const other = join(home, "other.ts");
+  writeFileSync(source, "");
+  writeFileSync(other, "");
+  registry.save(workflow("original"), source);
+  rmSync(source);
+  symlinkSync(other, source);
+  expect(() => registry.save(workflow("other"), other)).toThrow("belongs to");
+  expect(registry.get("hello").workflow).toEqual(workflow("original"));
+});
