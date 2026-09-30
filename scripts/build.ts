@@ -1,4 +1,4 @@
-import { cp, mkdir, rm } from "node:fs/promises";
+import { chmod, cp, mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const root = resolve(import.meta.dir, "..");
@@ -25,4 +25,5 @@ await cp(resolve(root, "apps/studio/dist"), resolve(packageDist, "studio"), {
 });
 await cp(resolve(root, "LICENSE"), resolve(root, "packages/loopy/LICENSE"));
 await cp(resolve(root, "README.md"), resolve(root, "packages/loopy/README.md"));
+await chmod(resolve(packageDist, "cli/index.js"), 0o755);
 console.log("Built loopy with the graph viewer.");
