@@ -1,5 +1,5 @@
 import { mkdir, mkdtemp, rename, rm } from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
 const root = resolve(import.meta.dir, "..");
@@ -13,7 +13,9 @@ async function run(args: string[], cwd = root) {
 }
 
 await run(["run", "build"]);
-const staging = await mkdtemp(join(tmpdir(), "loopy-install-"));
+const packages = join(homedir(), ".loopy", "packages");
+await mkdir(packages, { recursive: true });
+const staging = await mkdtemp(join(packages, ".install-"));
 try {
   const archive = join(staging, "loopy.tgz");
   await run(
@@ -23,8 +25,6 @@ try {
   const hash = new Bun.CryptoHasher("sha256")
     .update(await Bun.file(archive).arrayBuffer())
     .digest("hex");
-  const packages = join(homedir(), ".loopy", "packages");
-  await mkdir(packages, { recursive: true });
   const snapshot = join(packages, `loopy-${hash}.tgz`);
   await rename(archive, snapshot);
   await run(["add", "--global", snapshot]);
