@@ -11,7 +11,7 @@ import { startServer } from "../local/server.js";
 
 const usage = `loopy: TypeScript workflows for CLI tools
 
-  loopy save <file.ts>                         Compile and save a default-exported workflow
+  loopy save <file.ts>                         Compile and save a workflow globally
   loopy list                                   List saved loopies
   loopy graph <slug>                            Print the saved graph as JSON
   loopy run <slug> [--input JSON|@file]          Run in a sandbox
@@ -25,6 +25,7 @@ const usage = `loopy: TypeScript workflows for CLI tools
 
   --home <directory>    Local definitions and run database. Default: ~/.loopy/v2
   --cwd <directory>     Workspace for a new run or the viewer. Default: current directory
+  --replace            Transfer a saved slug from another source file
   --name <identifier>   Export name for a generated CLI wrapper
 
 Saved TypeScript is trusted code executed during save. Saved graphs contain only data.
@@ -53,6 +54,7 @@ export async function main(args = process.argv.slice(2)) {
       port: { type: "string" },
       "retry-uncertain": { type: "boolean" },
       force: { type: "boolean" },
+      replace: { type: "boolean" },
     },
   });
   if (values.help || !positionals[0]) {
@@ -93,7 +95,9 @@ export async function main(args = process.argv.slice(2)) {
   }
   const registry = new Registry(home);
   if (command === "save") {
-    print(await registry.saveFile(required(target, "TypeScript file")));
+    print(
+      await registry.saveFile(required(target, "TypeScript file"), { replace: values.replace }),
+    );
     return;
   }
   if (command === "list") {
