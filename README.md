@@ -85,6 +85,10 @@ loopy resume <run-id> --retry-uncertain
 loopy recover <run-id> --force
 ```
 
+Saved slugs are global within the selected Loopy home. Keep source files in their own repositories or a dedicated loopies project and save each file once. `loopy list` includes the source path that owns each slug. Saving that same file again updates the graph. A different source with the same slug fails without changing the saved graph. Rename its `trigger` slug or run `loopy save ./file.loopy.ts --replace` to transfer ownership explicitly. Source symlinks resolve to their real paths.
+
+Saves use a per-slug lock and atomically replace the graph. Concurrent saves of that slug fail with the lock path and can be retried. If a process dies during saving, remove the reported lock directory after confirming the saver has stopped.
+
 Saving imports trusted TypeScript on the host and writes a validated JSON graph. Only save code you trust. Running reads that graph and snapshots it alongside the input, working directory and execution mode. Saving a new definition never changes an existing run.
 
 SQLite commits a running attempt before launching its command, then commits its completion and output together. Resume skips completed commands and retries failed commands. Dead owners are recovered on opening or reading the store. A crash, cancellation, timeout or output-limit termination after a command starts leaves an uncertain attempt. Resuming it requires `--retry-uncertain`, because an external side effect may already have happened. CLI side effects are not exactly once. A live owner prevents concurrent execution of the same run.
