@@ -19,6 +19,32 @@ Open the URL printed by `loopy ui`. Its fragment contains a local session token.
 
 For a project using the built package, install its packed archive with `bun add /path/to/loopy-0.3.0.tgz`. The package provides both `import ... from "loopy"` and `bunx loopy`.
 
+## Install globally and save project folders
+
+From this checkout, run:
+
+```sh
+bun install
+bun run install:global
+loopy --help
+```
+
+The installer builds and packs the public package, keeps a content-addressed archive in `~/.loopy/packages`, and installs it with Bun globally. Add the directory printed by `bun pm bin -g` to your shell's PATH if needed. Bun must also be on PATH. Rerun the installer after pulling updates. It prints a `bun add <archive>` command for projects that import `loopy`; the global CLI alone does not provide project dependencies.
+
+Keep `*.loopy.ts` files in the repositories they automate or in a dedicated loopies project with its own `loopy` dependency:
+
+```sh
+loopy save /path/to/repo/loopies
+loopy save /path/to/loopies-project
+loopy list
+cd /path/to/another/repo
+loopy run review --full
+```
+
+Folder saves recursively discover `*.loopy.ts`. They skip hidden entries, symlinks, `node_modules`, `dist`, and `coverage`. Loopy imports and checks every discovered workflow before writing graphs. Duplicate slugs within a folder always fail, even with `--replace`; rename one workflow's `trigger` slug. Existing ownership conflicts also fail before writing unless you pass `--replace`. Individual saves recheck ownership under their locks. A competing save or filesystem error can stop a folder save after earlier graphs were written; retry after resolving the error.
+
+The store holds compiled snapshots. Editing, moving or deleting a source does not update its saved graph. Save again after edits; use `--replace` to transfer a slug after moving its source. Running a slug executes commands in the current directory, or `--cwd`, wherever its source lives. Run and graph commands never import source TypeScript. No background source discovery or file watcher runs.
+
 ## Author a loopy
 
 ```ts

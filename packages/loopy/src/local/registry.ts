@@ -7,6 +7,7 @@ import {
   realpathSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
@@ -130,13 +131,65 @@ export class Registry {
     }
   }
 
-  async saveFile(file: string, options: { replace?: boolean } = {}): Promise<SavedWorkflow> {
-    const source = resolve(file);
+  private async loadFile(file: string): Promise<{ workflow: Workflow; source: string }> {
+    const source = realpathSync(resolve(file));
     const module = (await import(`${pathToFileURL(source).href}?loopy=${crypto.randomUUID()}`)) as {
       default?: Parameters<typeof compileWorkflow>[0];
     };
     if (!module.default)
       throw new Error("A loopy file must default-export a workflow built with trigger(...).");
-    return this.save(compileWorkflow(module.default), source, options);
+    const workflow = compileWorkflow(module.default);
+    validateSlug(workflow.slug);
+    return { workflow, source };
+  }
+
+  async saveFile(file: string, options: { replace?: boolean } = {}): Promise<SavedWorkflow> {
+    const { workflow, source } = await this.loadFile(file);
+    return this.save(workflow, source, options);
+  }
+
+  async saveDirectory(
+    directory: string,
+    options: { replace?: boolean } = {},
+  ): Promise<SavedWorkflow[]> {
+    const root = realpathSync(resolve(directory));
+    if (!statSync(root).isDirectory()) throw new Error(`Not a directory: '${root}'.`);
+    const files: string[] = [];
+    const walk = (path: string) => {
+      for (const entry of readdirSync(path, { withFileTypes: true }).sort((a, b) =>
+        a.name.localeCompare(b.name),
+      )) {
+        if (entry.name.startsWith(".") || ["node_modules", "dist", "coverage"].includes(entry.name))
+          continue;
+        const child = join(path, entry.name);
+        if (entry.isDirectory()) walk(child);
+        else if (entry.isFile() && entry.name.endsWith(".loopy.ts")) files.push(child);
+      }
+    };
+    walk(root);
+    if (!files.length) throw new Error(`No *.loopy.ts files in '${root}'.`);
+    const loaded: { workflow: Workflow; source: string }[] = [];
+    const sources = new Map<string, string>();
+    for (const file of files) {
+      const item = await this.loadFile(file);
+      const previous = sources.get(item.workflow.slug);
+      if (previous)
+        throw new Error(
+          `Duplicate slug '${item.workflow.slug}' in '${previous}' and '${item.source}'.`,
+        );
+      sources.set(item.workflow.slug, item.source);
+      loaded.push(item);
+    }
+    // Check the entire folder before writing. Each save rechecks ownership under its slug lock.
+    for (const { workflow, source } of loaded) {
+      if (existsSync(this.file(workflow.slug))) {
+        const existing = this.get(workflow.slug);
+        if (existing.source !== source && !options.replace)
+          throw new Error(
+            `Slug '${workflow.slug}' belongs to '${existing.source}'. Use --replace or rename it.`,
+          );
+      }
+    }
+    return loaded.map(({ workflow, source }) => this.save(workflow, source, options));
   }
 }

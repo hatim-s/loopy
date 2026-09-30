@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import type { Json } from "../core/model.js";
@@ -11,7 +11,7 @@ import { startServer } from "../local/server.js";
 
 const usage = `loopy: TypeScript workflows for CLI tools
 
-  loopy save <file.ts>                         Compile and save a workflow globally
+  loopy save <file.ts|directory>               Compile files and save their slugs globally
   loopy list                                   List saved loopies
   loopy graph <slug>                            Print the saved graph as JSON
   loopy run <slug> [--input JSON|@file]          Run in a sandbox
@@ -95,8 +95,12 @@ export async function main(args = process.argv.slice(2)) {
   }
   const registry = new Registry(home);
   if (command === "save") {
+    const source = required(target, "TypeScript file or directory");
+    const options = { replace: values.replace };
     print(
-      await registry.saveFile(required(target, "TypeScript file"), { replace: values.replace }),
+      (await stat(source)).isDirectory()
+        ? await registry.saveDirectory(source, options)
+        : await registry.saveFile(source, options),
     );
     return;
   }

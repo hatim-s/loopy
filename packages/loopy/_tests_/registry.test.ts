@@ -68,3 +68,48 @@ test("changing a source into a symlink cannot transfer stored ownership", () => 
   expect(() => registry.save(workflow("other"), other)).toThrow("belongs to");
   expect(registry.get("hello").workflow).toEqual(workflow("original"));
 });
+
+function sourceFile(path: string, slug: string) {
+  writeFileSync(
+    path,
+    `import { trigger, command } from ${JSON.stringify(join(import.meta.dir, "../src/core/index.ts"))};
+export default trigger(${JSON.stringify(slug)}).node('echo', command('echo', 'hello'));`,
+  );
+}
+
+test("folder saves discover project workflows and reject duplicate slugs before writes", async () => {
+  const folder = directory();
+  const registry = new Registry(directory());
+  mkdirSync(join(folder, "nested"));
+  mkdirSync(join(folder, "node_modules"));
+  mkdirSync(join(folder, ".hidden"));
+  sourceFile(join(folder, "first.loopy.ts"), "first");
+  sourceFile(join(folder, "nested", "second.loopy.ts"), "second");
+  writeFileSync(join(folder, "node_modules", "bad.loopy.ts"), "invalid");
+  writeFileSync(join(folder, ".hidden", "bad.loopy.ts"), "invalid");
+  writeFileSync(join(folder, "helper.ts"), "invalid");
+  symlinkSync(folder, join(folder, "cycle"));
+  expect((await registry.saveDirectory(folder)).map((saved) => saved.workflow.slug)).toEqual([
+    "first",
+    "second",
+  ]);
+  const duplicate = new Registry(directory());
+  sourceFile(join(folder, "duplicate.loopy.ts"), "second");
+  await expect(duplicate.saveDirectory(folder, { replace: true })).rejects.toThrow(
+    "Duplicate slug",
+  );
+  expect(duplicate.list()).toEqual([]);
+});
+
+test("folder ownership conflicts and invalid code leave all saved graphs unchanged", async () => {
+  const folder = directory();
+  const registry = new Registry(directory());
+  sourceFile(join(folder, "a.loopy.ts"), "first");
+  sourceFile(join(folder, "z.loopy.ts"), "hello");
+  registry.save(workflow("original"), "owner.ts");
+  await expect(registry.saveDirectory(folder)).rejects.toThrow("belongs to");
+  expect(registry.list().map((saved) => saved.slug)).toEqual(["hello"]);
+  writeFileSync(join(folder, "invalid.loopy.ts"), "export default null;");
+  await expect(registry.saveDirectory(folder, { replace: true })).rejects.toThrow("default-export");
+  expect(registry.get("hello").workflow).toEqual(workflow("original"));
+});

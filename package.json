@@ -14,6 +14,7 @@
     "test": "bun test packages/loopy/_tests_",
     "check": "bun run build && bun run lint && bun run typecheck && bun run test",
     "build": "bun scripts/build.ts",
+    "install:global": "bun scripts/install-global.ts",
     "fmt": "biome format --write .",
     "fmt:check": "biome format .",
     "lint": "biome check ."
