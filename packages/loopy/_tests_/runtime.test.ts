@@ -4,10 +4,11 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { CommandOutput, ExecuteCommand, Workflow } from "../src/core/model";
-import { CommandExecutionError, localRunOptions } from "../src/local/process";
-import { createLocalRuntime } from "../src/local/runtime";
-import { RunBusyError, SqliteRunStore } from "../src/local/store";
+import type { CommandOutput, ExecuteCommand, Workflow } from "../src/core/model.js";
+import { localRunOptions } from "../src/local/process.js";
+import { createLocalRuntime } from "../src/local/runtime.js";
+import { SqliteRunStore } from "../src/local/store.js";
+import { CommandExecutionError, RunBusyError } from "../src/runtime/errors.js";
 
 const directories: string[] = [];
 const locals: ReturnType<typeof createLocalRuntime>[] = [];

@@ -10,9 +10,9 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { command } from "../src/core/command.ts";
-import { trigger } from "../src/core/workflow.ts";
-import { Registry } from "../src/local/registry.ts";
+import { command } from "../src/core/command.js";
+import { trigger } from "../src/core/workflow.js";
+import { Registry } from "../src/local/registry.js";
 
 const temporary: string[] = [];
 function directory() {

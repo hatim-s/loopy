@@ -2,10 +2,10 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { defineCommand } from "../src/core/command";
-import { trigger } from "../src/core/workflow";
-import { localRunOptions } from "../src/local/process";
-import { createLocalRuntime } from "../src/local/runtime";
+import { defineCommand } from "../src/core/command.js";
+import { trigger } from "../src/core/workflow.js";
+import { localRunOptions } from "../src/local/process.js";
+import { createLocalRuntime } from "../src/local/runtime.js";
 
 const typedTool = defineCommand({
   program: "tool",
