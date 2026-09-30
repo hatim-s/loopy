@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { defineCommand } from "../src/core/command";
-import { eq, node, trigger } from "../src/core/workflow";
+import { defineCommand } from "../src/core/command.js";
+import { eq, node, trigger } from "../src/core/workflow.js";
 
 const codexExec = defineCommand({
   program: "codex",
