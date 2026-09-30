@@ -32,6 +32,7 @@ class MemoryRepository implements RunRepository {
   beforeFinishAttempt?: () => Promise<void>;
   afterFinishAttempt?: () => Promise<void>;
   beforeHeartbeat?: () => Promise<void>;
+  afterFinishRun?: () => Promise<void>;
   heartbeatCalls = 0;
   heartbeatConcurrent = 0;
   maxHeartbeatConcurrent = 0;
@@ -72,7 +73,7 @@ class MemoryRepository implements RunRepository {
     this.maxHeartbeatConcurrent = Math.max(this.maxHeartbeatConcurrent, this.heartbeatConcurrent);
     try {
       await this.beforeHeartbeat?.();
-      return this.owner === token;
+      return this.owner === token && this.run?.status === "running";
     } finally {
       this.heartbeatConcurrent -= 1;
     }
@@ -124,6 +125,7 @@ class MemoryRepository implements RunRepository {
   ): Promise<RunRecord> {
     if (this.owner !== token || !this.run) throw new Error("Lost owner");
     this.run = { ...this.run, status, error };
+    await this.afterFinishRun?.();
     return this.run;
   }
   async release(_runId: string, token: string): Promise<void> {
@@ -369,4 +371,13 @@ test("a lost lease after attempt creation prevents command launch", async () => 
   expect(launches).toBe(0);
   expect(store.attempts[0]?.status).toBe("running");
   expect(store.releases).toBe(1);
+});
+
+test("a slow final commit does not turn a completed run into an ownership error", async () => {
+  const store = new MemoryRepository();
+  store.afterFinishRun = () => Bun.sleep(20);
+  const runtime = new Runtime({ store, executor: async () => output, heartbeatIntervalMs: 1 });
+  const run = await runtime.createRun(workflow, {}, runOptions);
+  expect((await runtime.execute(run.id)).status).toBe("succeeded");
+  expect(store.run?.status).toBe("succeeded");
 });
