@@ -7,14 +7,19 @@ export class RunBusyError extends Error {
   }
 }
 
+/** `started` tells the runtime whether the command may have had side effects. */
 export class CommandExecutionError extends Error {
-  readonly output: CommandOutput;
-  readonly started: boolean;
-
-  constructor(message: string, output: CommandOutput, started: boolean, options?: ErrorOptions) {
+  constructor(
+    message: string,
+    readonly output: CommandOutput,
+    readonly started: boolean,
+    options?: ErrorOptions,
+  ) {
     super(message, options);
     this.name = "CommandExecutionError";
-    this.output = output;
-    this.started = started;
   }
+}
+
+export function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

@@ -4,10 +4,11 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { CommandOutput, ExecuteCommand, Workflow } from "../src/core/model";
-import { CommandExecutionError, localRunOptions } from "../src/local/process";
-import { createLocalRuntime } from "../src/local/runtime";
-import { RunBusyError, SqliteRunStore } from "../src/local/store";
+import type { CommandOutput, ExecuteCommand, Workflow } from "../src/core/model.js";
+import { localRunOptions } from "../src/local/process.js";
+import { createLocalRuntime } from "../src/local/runtime.js";
+import { SqliteRunStore } from "../src/local/store.js";
+import { CommandExecutionError, RunBusyError } from "../src/runtime/errors.js";
 
 const directories: string[] = [];
 const locals: ReturnType<typeof createLocalRuntime>[] = [];
@@ -301,6 +302,42 @@ describe("durable workflow runtime", () => {
       expect(calls).toBe(1);
     } finally {
       oldOwner.close();
+    }
+  });
+
+  test("recovers a released running owner once and fences its unfinished command", async () => {
+    const { home, runtime, options } = fixture();
+    const run = await runtime.createRun(
+      {
+        version: 1,
+        slug: "released-owner",
+        nodes: [{ id: "effect", kind: "command", command: { program: "tool", args: [] } }],
+      },
+      {},
+      options,
+    );
+    const owner = new SqliteRunStore(home);
+    const token = "released-owner";
+    try {
+      await owner.claim(run.id, token);
+      const attempt = await owner.startAttempt(run.id, token, "effect", {
+        program: "tool",
+        args: [],
+      });
+      await owner.release(run.id, token);
+
+      expect((await runtime.getRun(run.id))?.status).toBe("interrupted");
+      owner.recoverOrphans();
+      expect((await runtime.getRun(run.id))?.status).toBe("interrupted");
+      expect((await runtime.getAttempts(run.id))[0]?.status).toBe("uncertain");
+      const events = await runtime.getEvents(run.id);
+      expect(events.filter((event) => event.type === "run.interrupted")).toHaveLength(1);
+      expect(events.filter((event) => event.type === "node.uncertain")).toHaveLength(1);
+      await expect(
+        owner.finishAttempt(run.id, token, attempt.id, "succeeded", output("late")),
+      ).rejects.toBeInstanceOf(RunBusyError);
+    } finally {
+      owner.close();
     }
   });
 

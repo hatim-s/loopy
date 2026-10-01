@@ -9,7 +9,9 @@ export type {
 } from "./command.js";
 export { bash, command, defineCommand } from "./command.js";
 export type {
+  ArgConstraint,
   AttemptRecord,
+  AttemptStatus,
   Command,
   CommandNode,
   CommandOutput,
@@ -18,10 +20,13 @@ export type {
   ExecutionMode,
   Expression,
   Json,
+  Operator,
   Reference,
+  ResolvedCommand,
   RunEvent,
   RunOptions,
   RunRecord,
+  RunStatus,
   Value,
   Workflow,
   WorkflowNode,

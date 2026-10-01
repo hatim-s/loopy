@@ -1,5 +1,12 @@
 import { expect, test } from "bun:test";
-import type { AttemptRecord, Json, RunEvent, RunRecord, RunStatus } from "../src/core/model.js";
+import type {
+  AttemptRecord,
+  Json,
+  RunEvent,
+  RunOptions,
+  RunRecord,
+  RunStatus,
+} from "../src/core/model.js";
 import { CommandExecutionError } from "../src/runtime/errors.js";
 import type { RunRepository } from "../src/runtime/repository.js";
 import { Runtime } from "../src/runtime/runtime.js";
@@ -32,6 +39,7 @@ class MemoryRepository implements RunRepository {
   beforeFinishAttempt?: () => Promise<void>;
   afterFinishAttempt?: () => Promise<void>;
   beforeHeartbeat?: () => Promise<void>;
+  afterFinishRun?: () => Promise<void>;
   heartbeatCalls = 0;
   heartbeatConcurrent = 0;
   maxHeartbeatConcurrent = 0;
@@ -72,7 +80,7 @@ class MemoryRepository implements RunRepository {
     this.maxHeartbeatConcurrent = Math.max(this.maxHeartbeatConcurrent, this.heartbeatConcurrent);
     try {
       await this.beforeHeartbeat?.();
-      return this.owner === token;
+      return this.owner === token && this.run?.status === "running";
     } finally {
       this.heartbeatConcurrent -= 1;
     }
@@ -124,6 +132,7 @@ class MemoryRepository implements RunRepository {
   ): Promise<RunRecord> {
     if (this.owner !== token || !this.run) throw new Error("Lost owner");
     this.run = { ...this.run, status, error };
+    await this.afterFinishRun?.();
     return this.run;
   }
   async release(_runId: string, token: string): Promise<void> {
@@ -370,3 +379,60 @@ test("a lost lease after attempt creation prevents command launch", async () => 
   expect(store.attempts[0]?.status).toBe("running");
   expect(store.releases).toBe(1);
 });
+
+test("a slow final commit does not turn a completed run into an ownership error", async () => {
+  const store = new MemoryRepository();
+  store.afterFinishRun = () => Bun.sleep(20);
+  const runtime = new Runtime({ store, executor: async () => output, heartbeatIntervalMs: 1 });
+  const run = await runtime.createRun(workflow, {}, runOptions);
+  expect((await runtime.execute(run.id)).status).toBe("succeeded");
+  expect(store.run?.status).toBe("succeeded");
+});
+
+test("createRun snapshots caller input and options before yielding", async () => {
+  const store = new MemoryRepository();
+  const runtime = new Runtime({ store, executor: async () => output });
+  const input = { nested: { value: "original" } };
+  const options = {
+    workspace: { kind: "managed" as const, id: "original-workspace" },
+    mode: "sandbox" as RunOptions["mode"],
+  };
+  const creation = runtime.createRun(workflow, input, options);
+  input.nested.value = "changed";
+  options.workspace.id = "changed-workspace";
+  options.mode = "full";
+  const run = await creation;
+  expect(run.input).toEqual({ nested: { value: "original" } });
+  expect(run.options).toEqual({
+    workspace: { kind: "managed", id: "original-workspace" },
+    mode: "sandbox",
+  });
+  expect(store.run).toEqual(run);
+});
+
+for (const failure of ["reject", "throw"] as const) {
+  test(`a heartbeat that ${failure}s undefined rejects execution without finishing the run`, async () => {
+    const store = new MemoryRepository();
+    store.beforeHeartbeat = () => {
+      if (failure === "throw") throw undefined;
+      return Promise.reject();
+    };
+    let launches = 0;
+    const runtime = new Runtime({
+      store,
+      executor: async () => {
+        launches += 1;
+        return output;
+      },
+    });
+    const run = await runtime.createRun(workflow, {}, runOptions);
+    const outcome = await runtime.execute(run.id, { resume: false }).then(
+      (value) => ({ resolved: true, value }),
+      (error: unknown) => ({ resolved: false, error }),
+    );
+    expect(outcome).toEqual({ resolved: false, error: undefined });
+    expect(store.run?.status).toBe("running");
+    expect(launches).toBe(0);
+    expect(store.releases).toBe(1);
+  });
+}

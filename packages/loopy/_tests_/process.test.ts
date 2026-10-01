@@ -12,7 +12,8 @@ import {
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { CommandExecutionError, executeLocalCommand } from "../src/local/process.js";
+import { executeLocalCommand } from "../src/local/process.js";
+import { CommandExecutionError } from "../src/runtime/errors.js";
 
 const workspaces: string[] = [];
 function workspace(): string {

@@ -79,9 +79,8 @@ function choicesAfter(lines: string[], start: number): string[] | undefined {
 
 function parseFlags(lines: string[], warnings: string[]): Record<string, FlagDefinition> {
   const flags: Record<string, FlagDefinition> = {};
-  const options = section(lines, "Options").length
-    ? section(lines, "Options")
-    : section(lines, "Flags");
+  const optionsSection = section(lines, "Options");
+  const options = optionsSection.length ? optionsSection : section(lines, "Flags");
   const optionLine =
     /^\s*(?:(?:-\w,\s*)?)(--[A-Za-z0-9][A-Za-z0-9-]*)(?:[ =](<[^>\s]+>|\[[A-Z][A-Z0-9_-]*\])|(\[=<[^>\s]+>\]))?(\.\.\.)?(?:\s{2,}.*)?$/;
   for (const [index, line] of options.entries()) {
@@ -165,48 +164,14 @@ export function parseCliHelp(binary: string, path: readonly string[], help: stri
   return { descriptor, warnings };
 }
 
+const RESERVED_WORDS = new Set(
+  "await break case catch class const continue debugger default delete do else enum export extends false finally for function if import in instanceof new null return super switch this throw true try typeof var void while with yield".split(
+    " ",
+  ),
+);
+
 export function renderCommandSource(name: string, descriptor: CommandDescriptor): string {
-  const reserved = new Set([
-    "await",
-    "break",
-    "case",
-    "catch",
-    "class",
-    "const",
-    "continue",
-    "debugger",
-    "default",
-    "delete",
-    "do",
-    "else",
-    "enum",
-    "export",
-    "extends",
-    "false",
-    "finally",
-    "for",
-    "function",
-    "if",
-    "import",
-    "in",
-    "instanceof",
-    "new",
-    "null",
-    "return",
-    "super",
-    "switch",
-    "this",
-    "throw",
-    "true",
-    "try",
-    "typeof",
-    "var",
-    "void",
-    "while",
-    "with",
-    "yield",
-  ]);
-  if (!/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) || reserved.has(name))
+  if (!/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) || RESERVED_WORDS.has(name))
     throw new Error(`'${name}' is not a valid TypeScript identifier`);
   return (
     `import { type CommandDescriptor, defineCommand } from "loopy";\n\n` +
