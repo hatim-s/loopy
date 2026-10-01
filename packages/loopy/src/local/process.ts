@@ -5,17 +5,22 @@ import { access, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { CommandOutput, ExecutionMode, ResolvedCommand, RunOptions } from "../core/model.js";
-import { CommandExecutionError } from "../runtime/errors.js";
-
-export { CommandExecutionError } from "../runtime/errors.js";
+import { CommandExecutionError, errorMessage } from "../runtime/errors.js";
 
 const DEFAULT_TIMEOUT_MS = 5 * 60_000;
 const DEFAULT_MAX_OUTPUT_BYTES = 8 * 1024 * 1024;
+const KILL_GRACE_MS = 250;
 const SANDBOX_EXEC = "/usr/bin/sandbox-exec";
 const ENV_EXEC = "/usr/bin/env";
+const BWRAP_CANDIDATES = ["/usr/bin/bwrap", "/bin/bwrap"];
 
-function emptyOutput(): CommandOutput {
-  return { stdout: "", stderr: "", exitCode: -1, durationMs: 0 };
+type Launch = { program: string; args: string[]; cwd: string; env: NodeJS.ProcessEnv };
+
+const emptyOutput = (): CommandOutput => ({ stdout: "", stderr: "", exitCode: -1, durationMs: 0 });
+
+/** An error raised before the process spawned, so retrying it is safe. */
+function unstarted(error: unknown): CommandExecutionError {
+  return new CommandExecutionError(errorMessage(error), emptyOutput(), false, { cause: error });
 }
 
 export function localRunOptions(cwd: string, mode: ExecutionMode): RunOptions {
@@ -39,23 +44,17 @@ async function executable(path: string): Promise<boolean> {
 }
 
 async function resolveProgram(program: string, cwd: string, path: string): Promise<string> {
-  if (program.includes(sep)) {
-    const candidate = resolve(cwd, program);
-    if (await executable(candidate)) return realpath(candidate);
-  } else {
-    for (const directory of path.split(delimiter)) {
-      const candidate = resolve(cwd, directory, program);
-      if (await executable(candidate)) return realpath(candidate);
-    }
-  }
+  const candidates = program.includes(sep)
+    ? [resolve(cwd, program)]
+    : path.split(delimiter).map((directory) => resolve(cwd, directory, program));
+  for (const candidate of candidates) if (await executable(candidate)) return realpath(candidate);
   throw new Error(`Executable not found: ${program}`);
 }
 
+/** The nearest package root above a program inside the home directory, if any. */
 async function packageDirectory(program: string, home: string): Promise<string | undefined> {
   if (!within(home, program)) return undefined;
-  let directory = dirname(program);
-  while (within(home, directory)) {
-    if (directory === home) break;
+  for (let directory = dirname(program); within(home, directory) && directory !== home; ) {
     try {
       await access(join(directory, "package.json"));
       return directory;
@@ -67,17 +66,14 @@ async function packageDirectory(program: string, home: string): Promise<string |
 }
 
 function sbpl(path: string): string {
-  if (path.includes("\0") || path.includes("\n") || path.includes("\r")) {
-    throw new Error("Paths with control characters cannot be sandboxed");
-  }
+  if (/[\0\n\r]/.test(path)) throw new Error("Paths with control characters cannot be sandboxed");
   return JSON.stringify(path);
 }
 
-function sandboxEnvironment(env: NodeJS.ProcessEnv): string[] {
+function envArgs(env: NodeJS.ProcessEnv): string[] {
   return Object.entries(env).map(([name, value]) => {
-    if (!name || name.includes("=") || name.includes("\0") || value?.includes("\0")) {
+    if (!name || name.includes("=") || name.includes("\0") || value?.includes("\0"))
       throw new Error(`Invalid command environment variable: ${name}`);
-    }
     return `${name}=${value ?? ""}`;
   });
 }
@@ -87,13 +83,12 @@ async function macSandbox(
   workspace: string,
   env: NodeJS.ProcessEnv,
 ): Promise<[string, string[]]> {
-  if (!(await executable(SANDBOX_EXEC))) {
+  if (!(await executable(SANDBOX_EXEC)))
     throw new Error("Sandbox mode requires /usr/bin/sandbox-exec on macOS");
-  }
   const home = await realpath(homedir());
-  const allowedPackage = !within(workspace, program)
-    ? await packageDirectory(program, home)
-    : undefined;
+  const allowedPackage = within(workspace, program)
+    ? undefined
+    : await packageDirectory(program, home);
   const profile = [
     "(version 1)",
     "(deny default)",
@@ -101,32 +96,38 @@ async function macSandbox(
     "(allow process-fork)",
     "(allow sysctl-read)",
     "(allow file-read*)",
-    ...(!within(workspace, home) ? [`(deny file-read* (subpath ${sbpl(home)}))`] : []),
+    ...(within(workspace, home) ? [] : [`(deny file-read* (subpath ${sbpl(home)}))`]),
     `(allow file-read* (subpath ${sbpl(workspace)}))`,
     `(allow file-read* (literal ${sbpl(program)}))`,
     ...(allowedPackage ? [`(allow file-read* (subpath ${sbpl(allowedPackage)}))`] : []),
     `(allow file-write* (subpath ${sbpl(workspace)}))`,
     "(deny network*)",
   ].join("\n");
-  return [SANDBOX_EXEC, ["-p", profile, ENV_EXEC, "-i", "--", ...sandboxEnvironment(env), program]];
+  return [SANDBOX_EXEC, ["-p", profile, ENV_EXEC, "-i", "--", ...envArgs(env), program]];
 }
 
+/**
+ * Read-only root, tmpfs over /tmp, /run and the home directory, then the
+ * workspace (and the program's package, if it lives under home) bound back in.
+ */
 async function linuxSandbox(
   program: string,
   workspace: string,
   cwd: string,
   env: NodeJS.ProcessEnv,
 ): Promise<[string, string[]]> {
-  const bwrap = (await executable("/usr/bin/bwrap"))
-    ? "/usr/bin/bwrap"
-    : (await executable("/bin/bwrap"))
-      ? "/bin/bwrap"
-      : undefined;
+  let bwrap: string | undefined;
+  for (const candidate of BWRAP_CANDIDATES) {
+    if (await executable(candidate)) {
+      bwrap = candidate;
+      break;
+    }
+  }
   if (!bwrap) throw new Error("Sandbox mode requires bubblewrap on Linux");
-
-  const args = ["--die-with-parent", "--new-session", "--unshare-all", "--ro-bind", "/", "/"];
   const home = await realpath(homedir());
   if (home === "/") throw new Error("Sandbox mode requires a private home directory");
+
+  const args = ["--die-with-parent", "--new-session", "--unshare-all", "--ro-bind", "/", "/"];
   args.push("--tmpfs", "/tmp", "--proc", "/proc", "--dev", "/dev");
   try {
     if ((await stat("/run")).isDirectory()) args.push("--tmpfs", "/run");
@@ -134,53 +135,40 @@ async function linuxSandbox(
     // Some Linux environments have no /run mount.
   }
 
-  const createdDirectories = new Set<string>();
-  const addDirectories = (base: string, target: string, includeTarget = false) => {
+  // Mount points under a tmpfs must be created inside it before binding.
+  const masks = ["/tmp", "/run"];
+  const created = new Set<string>();
+  const mkdirs = (base: string, target: string, includeTarget: boolean) => {
     if (!within(base, target)) return;
-    let path = base;
     const parts = relative(base, target).split(sep).filter(Boolean);
+    let path = base;
     for (const part of includeTarget ? parts : parts.slice(0, -1)) {
       path = join(path, part);
-      if (!createdDirectories.has(path)) {
-        args.push("--dir", path);
-        createdDirectories.add(path);
-      }
+      if (created.has(path)) continue;
+      args.push("--dir", path);
+      created.add(path);
     }
   };
-  if (home !== "/tmp" && home !== "/run") {
-    const maskedHomeParent = within("/tmp", home)
-      ? "/tmp"
-      : within("/run", home)
-        ? "/run"
-        : undefined;
-    if (maskedHomeParent) addDirectories(maskedHomeParent, home, true);
+  const maskOf = (path: string) => [home, ...masks].find((mask) => within(mask, path));
+
+  if (!masks.includes(home)) {
+    const parent = masks.find((mask) => within(mask, home));
+    if (parent) mkdirs(parent, home, true);
     args.push("--tmpfs", home);
   }
-
   const programMount =
     !within(workspace, program) && within(home, program)
       ? ((await packageDirectory(program, home)) ?? program)
       : undefined;
-  const maskedBase = (path: string) =>
-    within(home, path)
-      ? home
-      : within("/tmp", path)
-        ? "/tmp"
-        : within("/run", path)
-          ? "/run"
-          : undefined;
-  const sources: [string | undefined, boolean][] = [
-    [workspace, true],
-    [programMount, programMount ? (await stat(programMount)).isDirectory() : false],
-  ];
-  for (const [source, isDirectory] of sources) {
-    if (!source) continue;
-    const base = maskedBase(source);
-    if (base) addDirectories(base, source, isDirectory);
+  const workspaceMask = maskOf(workspace);
+  if (workspaceMask) mkdirs(workspaceMask, workspace, true);
+  if (programMount) {
+    const mask = maskOf(programMount);
+    if (mask) mkdirs(mask, programMount, (await stat(programMount)).isDirectory());
+    args.push("--ro-bind", programMount, programMount);
   }
-  if (programMount) args.push("--ro-bind", programMount, programMount);
   args.push("--bind", workspace, workspace);
-  args.push("--chdir", cwd, "--", ENV_EXEC, "-i", "--", ...sandboxEnvironment(env), program);
+  args.push("--chdir", cwd, "--", ENV_EXEC, "-i", "--", ...envArgs(env), program);
   return [bwrap, args];
 }
 
@@ -191,15 +179,24 @@ function positiveLimit(value: number | undefined, fallback: number, name: string
   return limit;
 }
 
-async function commandContext(command: ResolvedCommand, options: RunOptions) {
-  if (options.workspace.kind !== "local") {
+async function sandboxLauncher(
+  program: string,
+  workspace: string,
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+): Promise<[string, string[]]> {
+  if (process.platform === "darwin") return macSandbox(program, workspace, env);
+  if (process.platform === "linux") return linuxSandbox(program, workspace, cwd, env);
+  throw new Error(`Sandbox mode is unavailable on ${process.platform}`);
+}
+
+async function prepareLaunch(command: ResolvedCommand, options: RunOptions): Promise<Launch> {
+  if (options.workspace.kind !== "local")
     throw new Error("Local command executor requires a local workspace");
-  }
   const workspace = await realpath(options.workspace.path);
   const cwd = await realpath(resolve(workspace, command.cwd ?? "."));
-  if (options.mode === "sandbox" && !within(workspace, cwd)) {
+  if (options.mode === "sandbox" && !within(workspace, cwd))
     throw new Error(`Command directory is outside the sandbox workspace: ${command.cwd}`);
-  }
   if (!(await stat(cwd)).isDirectory())
     throw new Error(`Command directory is not a directory: ${cwd}`);
 
@@ -217,14 +214,8 @@ async function commandContext(command: ResolvedCommand, options: RunOptions) {
   if (options.mode === "full") return { cwd, env, program, args: command.args };
   if (options.mode !== "sandbox") throw new Error(`Unknown execution mode: ${options.mode}`);
 
-  const [launcher, prefix] =
-    process.platform === "darwin"
-      ? await macSandbox(program, workspace, env)
-      : process.platform === "linux"
-        ? await linuxSandbox(program, workspace, cwd, env)
-        : (() => {
-            throw new Error(`Sandbox mode is unavailable on ${process.platform}`);
-          })();
+  // The launcher itself runs with a minimal environment; `env -i` inside applies the real one.
+  const [launcher, prefix] = await sandboxLauncher(program, workspace, cwd, env);
   return {
     cwd,
     env: { PATH: "/usr/bin:/bin", LANG: "C" },
@@ -233,57 +224,35 @@ async function commandContext(command: ResolvedCommand, options: RunOptions) {
   };
 }
 
-export const executeLocalCommand = async (
-  command: ResolvedCommand,
-  options: RunOptions & { signal?: AbortSignal },
-): Promise<CommandOutput> => {
-  if (options.signal?.aborted)
-    throw new CommandExecutionError("Command aborted", emptyOutput(), false, {
-      cause: options.signal.reason,
-    });
-  let timeoutMs: number;
-  let maxOutputBytes: number;
-  let context: Awaited<ReturnType<typeof commandContext>>;
+function killTree(child: ChildProcessWithoutNullStreams, signal: NodeJS.Signals): void {
+  if (!child.pid) return;
   try {
-    timeoutMs = positiveLimit(command.timeoutMs, DEFAULT_TIMEOUT_MS, "timeoutMs");
-    maxOutputBytes = positiveLimit(
-      command.maxOutputBytes,
-      DEFAULT_MAX_OUTPUT_BYTES,
-      "maxOutputBytes",
-    );
-    context = await commandContext(command, options);
-  } catch (error) {
-    throw new CommandExecutionError(
-      error instanceof Error ? error.message : String(error),
-      emptyOutput(),
-      false,
-      { cause: error },
-    );
+    if (process.platform === "win32") child.kill(signal);
+    else process.kill(-child.pid, signal);
+  } catch {
+    if (!child.killed) child.kill(signal);
   }
-  if (options.signal?.aborted)
-    throw new CommandExecutionError("Command aborted", emptyOutput(), false, {
-      cause: options.signal.reason,
-    });
+}
 
-  const started = performance.now();
+/** Runs the process in its own group, bounds output and time, and captures both streams. */
+function run(
+  launch: Launch,
+  command: ResolvedCommand,
+  limits: { timeoutMs: number; maxOutputBytes: number },
+  signal: AbortSignal | undefined,
+  started: number,
+): Promise<CommandOutput> {
   return new Promise((resolveOutput, rejectOutput) => {
     let child: ChildProcessWithoutNullStreams;
     try {
-      child = spawn(context.program, context.args, {
-        cwd: context.cwd,
-        env: context.env,
+      child = spawn(launch.program, launch.args, {
+        cwd: launch.cwd,
+        env: launch.env,
         detached: process.platform !== "win32",
         stdio: ["pipe", "pipe", "pipe"],
       });
     } catch (error) {
-      rejectOutput(
-        new CommandExecutionError(
-          error instanceof Error ? error.message : String(error),
-          emptyOutput(),
-          false,
-          { cause: error },
-        ),
-      );
+      rejectOutput(unstarted(error));
       return;
     }
     const stdout: Buffer[] = [];
@@ -295,40 +264,31 @@ export const executeLocalCommand = async (
     let killTimer: ReturnType<typeof setTimeout> | undefined;
     let drainTimer: ReturnType<typeof setTimeout> | undefined;
 
-    const kill = (signal: NodeJS.Signals) => {
-      if (!child.pid) return;
-      try {
-        if (process.platform === "win32") child.kill(signal);
-        else process.kill(-child.pid, signal);
-      } catch {
-        if (!child.killed) child.kill(signal);
-      }
-    };
     const stop = (error: Error) => {
       if (failure) return;
       failure = error;
-      kill("SIGTERM");
+      killTree(child, "SIGTERM");
       if (!exited) {
-        killTimer = setTimeout(() => kill("SIGKILL"), 250);
+        killTimer = setTimeout(() => killTree(child, "SIGKILL"), KILL_GRACE_MS);
         killTimer.unref();
       }
     };
-    const onAbort = () => stop(new Error("Command aborted", { cause: options.signal?.reason }));
-    options.signal?.addEventListener("abort", onAbort, { once: true });
+    const onAbort = () => stop(new Error("Command aborted", { cause: signal?.reason }));
+    signal?.addEventListener("abort", onAbort, { once: true });
     const timeout = setTimeout(
-      () => stop(new Error(`Command timed out after ${timeoutMs} ms`)),
-      timeoutMs,
+      () => stop(new Error(`Command timed out after ${limits.timeoutMs} ms`)),
+      limits.timeoutMs,
     );
     timeout.unref();
 
-    const finish = (exitCode: number | null, signal: NodeJS.Signals | null, error?: Error) => {
+    const finish = (exitCode: number | null, exitSignal: NodeJS.Signals | null, error?: Error) => {
       if (settled) return;
       settled = true;
-      if (!exited) kill("SIGKILL");
+      if (!exited) killTree(child, "SIGKILL");
       clearTimeout(timeout);
-      if (killTimer) clearTimeout(killTimer);
-      if (drainTimer) clearTimeout(drainTimer);
-      options.signal?.removeEventListener("abort", onAbort);
+      clearTimeout(killTimer);
+      clearTimeout(drainTimer);
+      signal?.removeEventListener("abort", onAbort);
       const output: CommandOutput = {
         stdout: Buffer.concat(stdout).toString("utf8"),
         stderr: Buffer.concat(stderr).toString("utf8"),
@@ -336,44 +296,75 @@ export const executeLocalCommand = async (
         durationMs: Math.round(performance.now() - started),
       };
       const reason =
-        failure ?? error ?? (signal ? new Error(`Command terminated by ${signal}`) : undefined);
+        failure ??
+        error ??
+        (exitSignal ? new Error(`Command terminated by ${exitSignal}`) : undefined);
       if (reason) {
-        return rejectOutput(
+        rejectOutput(
           new CommandExecutionError(reason.message, output, child.pid !== undefined, {
             cause: reason,
           }),
         );
+        return;
       }
       resolveOutput(output);
     };
 
     const collect = (destination: Buffer[]) => (chunk: Buffer) => {
-      const remaining = maxOutputBytes - bytes;
+      const remaining = limits.maxOutputBytes - bytes;
       if (remaining > 0) {
         const captured = chunk.subarray(0, remaining);
         destination.push(captured);
         bytes += captured.length;
       }
-      if (chunk.length > remaining) {
-        stop(new Error(`Command output exceeded ${maxOutputBytes} bytes`));
-      }
+      if (chunk.length > remaining)
+        stop(new Error(`Command output exceeded ${limits.maxOutputBytes} bytes`));
     };
     child.stdout.on("data", collect(stdout));
     child.stderr.on("data", collect(stderr));
     child.stdin.on("error", () => {});
-    child.once("exit", (code, signal) => {
+    child.once("exit", (code, exitSignal) => {
       exited = true;
-      kill("SIGKILL");
-      if (killTimer) clearTimeout(killTimer);
+      // Kill the rest of the group; a grandchild holding the pipes must not keep us waiting.
+      killTree(child, "SIGKILL");
+      clearTimeout(killTimer);
       drainTimer = setTimeout(() => {
         child.stdout.destroy();
         child.stderr.destroy();
-        finish(code, signal);
-      }, 250);
+        finish(code, exitSignal);
+      }, KILL_GRACE_MS);
       drainTimer.unref();
     });
     child.once("error", (error) => finish(null, null, error));
-    child.once("close", (code, signal) => finish(code, signal));
+    child.once("close", (code, exitSignal) => finish(code, exitSignal));
     child.stdin.end(command.stdin);
   });
+}
+
+export const executeLocalCommand = async (
+  command: ResolvedCommand,
+  options: RunOptions & { signal?: AbortSignal },
+): Promise<CommandOutput> => {
+  const aborted = () =>
+    new CommandExecutionError("Command aborted", emptyOutput(), false, {
+      cause: options.signal?.reason,
+    });
+  if (options.signal?.aborted) throw aborted();
+  let launch: Launch;
+  let limits: { timeoutMs: number; maxOutputBytes: number };
+  try {
+    limits = {
+      timeoutMs: positiveLimit(command.timeoutMs, DEFAULT_TIMEOUT_MS, "timeoutMs"),
+      maxOutputBytes: positiveLimit(
+        command.maxOutputBytes,
+        DEFAULT_MAX_OUTPUT_BYTES,
+        "maxOutputBytes",
+      ),
+    };
+    launch = await prepareLaunch(command, options);
+  } catch (error) {
+    throw unstarted(error);
+  }
+  if (options.signal?.aborted) throw aborted();
+  return run(launch, command, limits, options.signal, performance.now());
 };
