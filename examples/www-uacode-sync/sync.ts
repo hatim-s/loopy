@@ -64,7 +64,7 @@ function requiredContent(content: Map<string, string>, key: string): string {
   return value;
 }
 
-function parseArgs(argv: string[]): Options {
+export function parseArgs(argv: string[]): Options {
   const values = new Map<string, string>();
   for (let i = 0; i < argv.length; i += 1) {
     const key = argv[i];
@@ -94,6 +94,10 @@ function parseArgs(argv: string[]): Options {
     throw new Error("Pass both --source-repo and --target-repo for local fixture mode");
   const dryRunValue = values.get("dry-run") ?? "true";
   if (!["true", "false"].includes(dryRunValue)) throw new Error("--dry-run must be true or false");
+  if (sourceRepo && dryRunValue === "false")
+    throw new Error(
+      "Local fixture mode supports dry-run only; omit local repos to publish through GitHub",
+    );
   return {
     ...(sourceRepo ? { sourceRepo } : {}),
     ...(targetRepo ? { targetRepo } : {}),
@@ -581,6 +585,7 @@ export async function syncCheckout(
   options: Options,
   sourceSha: string,
 ) {
+  if (!options.dryRun) throw new Error("Local fixture mode supports dry-run only");
   await git(checkout, "fetch", "origin", branch);
   const base = await git(checkout, "rev-parse", "FETCH_HEAD");
   const branchName = `chore/www-agent-assets-${sourceSha.slice(0, 8)}-${branch.replace(/[^a-zA-Z0-9-]/g, "-")}`;
@@ -594,43 +599,7 @@ export async function syncCheckout(
   const paths = (await git(checkout, "diff", "--name-only")).split("\n").filter(Boolean);
   if (paths.some((path) => !allowedPaths.has(path)))
     throw new Error(`Sync attempted to change an unapproved path on ${branch}`);
-  if (options.dryRun) return { branch, branchName, base, changed: paths, pullRequest: null };
-
-  await git(checkout, "add", ...paths);
-  await git(checkout, "commit", "-m", `Sync www agent assets from ${sourceSha.slice(0, 12)}`);
-  await git(checkout, "push", "--set-upstream", "origin", branchName);
-  const existing = await run("gh", [
-    "pr",
-    "list",
-    "--repo",
-    "unify-apps/uacode",
-    "--head",
-    branchName,
-    "--base",
-    branch,
-    "--json",
-    "url",
-    "--jq",
-    ".[0].url",
-  ]);
-  let pullRequest = existing || "";
-  if (!pullRequest) {
-    pullRequest = await run("gh", [
-      "pr",
-      "create",
-      "--repo",
-      "unify-apps/uacode",
-      "--base",
-      branch,
-      "--head",
-      branchName,
-      "--title",
-      `Sync www agent assets (${sourceSha.slice(0, 8)})`,
-      "--body",
-      `Updates agent prompts and skills from www commit ${sourceSha}.`,
-    ]);
-  }
-  return { branch, branchName, base, changed: paths, pullRequest };
+  return { branch, branchName, base, changed: paths, pullRequest: null };
 }
 
 const targetFiles = [
@@ -716,6 +685,76 @@ async function prepareTargetFiles(baseSha: string, checkout: string) {
   await git(checkout, "commit", "-m", "Base asset sync preview");
 }
 
+export function syncCommitMessage(sourceSha: string, baseSha: string) {
+  return `Sync www agent assets from ${sourceSha.slice(0, 12)}\n\nLoopy-www-source: ${sourceSha}\nLoopy-uacode-base: ${baseSha}`;
+}
+
+export async function verifyGeneratedCommit(
+  commit: JsonObject,
+  reconstruct: (source: string, base: string) => Promise<string>,
+): Promise<void> {
+  const message = requireString(commit.message, "sync commit message");
+  const source = message.match(/^Loopy-www-source: ([0-9a-f]{40})$/m)?.[1];
+  const base = message.match(/^Loopy-uacode-base: ([0-9a-f]{40})$/m)?.[1];
+  if (!source || !base || message !== syncCommitMessage(source, base))
+    throw new Error(
+      "Refusing to update an unrecognized sync branch commit; review its edits manually",
+    );
+  const tree = requireObject(commit.tree, "sync commit tree");
+  if (requireString(tree.sha, "sync commit tree SHA") !== (await reconstruct(source, base)))
+    throw new Error(
+      "Refusing to update a sync branch with manual edits; review its edits manually",
+    );
+}
+
+async function createSyncTree(checkout: string, base: string, paths: string[], temp: string) {
+  const baseCommit = await ghJson(`repos/unify-apps/uacode/git/commits/${base}`, temp);
+  const baseTree = requireObject(baseCommit.tree, `uacode commit ${base}.tree`);
+  const tree = [];
+  for (const path of paths)
+    tree.push({
+      path,
+      mode: "100644",
+      type: "blob",
+      content: await readFile(join(checkout, path), "utf8"),
+    });
+  const created = await ghJson("repos/unify-apps/uacode/git/trees", temp, {
+    base_tree: requireString(baseTree.sha, "base tree SHA"),
+    tree,
+  });
+  return requireString(created.sha, "created Git tree SHA");
+}
+
+export async function publishSyncRef(
+  branch: string,
+  sha: string,
+  observedHead: string | undefined,
+  temp: string,
+  execute: typeof run = run,
+) {
+  const existing = observedHead !== undefined;
+  const input = join(temp, `gh-ref-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
+  try {
+    await writeFile(
+      input,
+      JSON.stringify({ sha, ...(existing ? { force: false } : { ref: `refs/heads/${branch}` }) }),
+    );
+    const endpoint = existing
+      ? `repos/unify-apps/uacode/git/refs/heads/${encodeURIComponent(branch)}`
+      : "repos/unify-apps/uacode/git/refs";
+    await execute("gh", [
+      "api",
+      "--method",
+      existing ? "PATCH" : "POST",
+      endpoint,
+      "--input",
+      input,
+    ]);
+  } finally {
+    await rm(input, { force: true });
+  }
+}
+
 async function githubSync(
   options: Options,
   sourceSha: string,
@@ -763,32 +802,35 @@ async function githubSync(
     const selectedPullRequest = selectSyncPullRequest(pullRequests, branch);
     const existing = selectedPullRequest?.url ?? "";
     if (selectedPullRequest) branchName = selectedPullRequest.headRefName;
-    const baseCommit = await ghJson(`repos/unify-apps/uacode/git/commits/${base}`, temp);
-    const baseTree = requireObject(baseCommit.tree, `uacode commit ${base}.tree`);
-    const tree = [];
-    for (const path of paths)
-      tree.push({
-        path,
-        mode: "100644",
-        type: "blob",
-        content: await readFile(join(checkout, path), "utf8"),
-      });
-    const createdTree = await ghJson("repos/unify-apps/uacode/git/trees", temp, {
-      base_tree: requireString(baseTree.sha, `uacode commit ${base}.tree.sha`),
-      tree,
-    });
-    const createdTreeSha = requireString(createdTree.sha, "created Git tree SHA");
-    if (existing) {
-      const syncBranch = branchName;
-      const syncRef = await ghJson(
-        `repos/unify-apps/uacode/git/ref/heads/${encodeURIComponent(syncBranch)}`,
+    const createdTreeSha = await createSyncTree(checkout, base, paths, temp);
+    let observedHead: string | undefined;
+    try {
+      const ref = await ghJson(
+        `repos/unify-apps/uacode/git/ref/heads/${encodeURIComponent(branchName)}`,
         temp,
       );
-      const syncRefObject = requireObject(syncRef.object, `sync branch ${syncBranch}.object`);
-      const existingCommitSha = requireString(
-        syncRefObject.sha,
-        `sync branch ${syncBranch}.object.sha`,
+      observedHead = requireString(
+        requireObject(ref.object, "sync ref object").sha,
+        "sync head SHA",
       );
+    } catch (error) {
+      if (existing || (!String(error).includes("HTTP 404") && !String(error).includes("Not Found")))
+        throw error;
+    }
+    if (observedHead) {
+      const priorCommit = await ghJson(`repos/unify-apps/uacode/git/commits/${observedHead}`, temp);
+      await verifyGeneratedCommit(priorCommit, async (priorSource, priorBase) => {
+        const priorCheckout = await mkdtemp(join(temp, "verify-"));
+        await prepareTargetFiles(priorBase, priorCheckout);
+        await applyAssetSync(priorCheckout, await githubSourceContent(priorSource), priorSource);
+        const priorPaths = (await git(priorCheckout, "diff", "--name-only"))
+          .split("\n")
+          .filter(Boolean);
+        return createSyncTree(priorCheckout, priorBase, priorPaths, temp);
+      });
+    }
+    if (existing && observedHead) {
+      const existingCommitSha = observedHead;
       const existingCommit = await ghJson(
         `repos/unify-apps/uacode/git/commits/${existingCommitSha}`,
         temp,
@@ -830,38 +872,12 @@ async function githubSync(
       }
     }
     const commit = await ghJson("repos/unify-apps/uacode/git/commits", temp, {
-      message: `Sync www agent assets from ${sourceSha.slice(0, 12)}`,
+      message: syncCommitMessage(sourceSha, base),
       tree: createdTreeSha,
-      parents: [base],
+      parents: observedHead ? [...new Set([observedHead, base])] : [base],
     });
     const commitSha = requireString(commit.sha, "created Git commit SHA");
-    const syncRef = `refs/heads/${branchName}`;
-    const encodedSyncBranch = encodeURIComponent(branchName);
-    let existingRef = false;
-    try {
-      await ghJson(`repos/unify-apps/uacode/git/ref/heads/${encodedSyncBranch}`, temp);
-      existingRef = true;
-    } catch (error) {
-      if (!String(error).includes("HTTP 404") && !String(error).includes("Not Found")) throw error;
-    }
-    const refPath = join(temp, `gh-ref-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
-    try {
-      await writeFile(
-        refPath,
-        JSON.stringify({
-          sha: commitSha,
-          ...(existingRef ? { force: true } : {}),
-          ...(!existingRef ? { ref: syncRef } : {}),
-        }),
-      );
-      const endpoint = existingRef
-        ? `repos/unify-apps/uacode/git/refs/heads/${encodedSyncBranch}`
-        : "repos/unify-apps/uacode/git/refs";
-      const method = existingRef ? "PATCH" : "POST";
-      await run("gh", ["api", "--method", method, endpoint, "--input", refPath]);
-    } finally {
-      await rm(refPath, { force: true });
-    }
+    await publishSyncRef(branchName, commitSha, observedHead, temp);
     const pullRequest =
       existing ||
       (await run("gh", [
@@ -939,17 +955,6 @@ async function main() {
       const content = await githubSourceContent(sourceSha);
       results = await githubSync(options, sourceSha, content, temporary);
     } else {
-      const sourcePath = resolve(options.sourceRepo);
-      const targetPath = resolve(options.targetRepo);
-      const sourceOrigin = await git(sourcePath, "remote", "get-url", "origin");
-      const targetOrigin = await git(targetPath, "remote", "get-url", "origin");
-      if (
-        !options.dryRun &&
-        (!sourceOrigin.includes("unify-apps/www.git") ||
-          !targetOrigin.includes("unify-apps/uacode.git"))
-      ) {
-        throw new Error("Local apply mode requires the expected www and uacode origins");
-      }
       const source = join(temporary, "www");
       await run("git", ["clone", "--no-checkout", options.sourceRepo, source]);
       await git(source, "fetch", "origin", options.sourceRef);

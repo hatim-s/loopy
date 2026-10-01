@@ -1,7 +1,17 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { applyAssetSync, selectSyncPullRequest, shouldUpdateSyncBranch, sourceText } from "../sync";
+import {
+  applyAssetSync,
+  parseArgs,
+  publishSyncRef,
+  selectSyncPullRequest,
+  shouldUpdateSyncBranch,
+  sourceText,
+  syncCheckout,
+  syncCommitMessage,
+  verifyGeneratedCommit,
+} from "../sync";
 
 const root = "/tmp/www-uacode-sync-core-test";
 const assetRoot = "configs/platform-features/ai-agents/asset-repository";
@@ -285,5 +295,76 @@ describe("www to uacode asset mapping", () => {
     await expect(applyAssetSync(root, content, sourceSha)).rejects.toThrow(
       "Agent frontmatter must include a name field",
     );
+  });
+});
+
+describe("publication safety", () => {
+  test("rejects local apply before accessing repositories", async () => {
+    expect(() =>
+      parseArgs([
+        "--source-repo",
+        "/missing/www",
+        "--target-repo",
+        "/missing/uacode",
+        "--dry-run",
+        "false",
+      ]),
+    ).toThrow("dry-run only");
+    await expect(
+      syncCheckout(
+        "/missing",
+        "main",
+        new Map(),
+        { sourceRef: "main", targetBranches: ["main"], dryRun: false },
+        sourceSha,
+      ),
+    ).rejects.toThrow("dry-run only");
+  });
+  test("recognizes only a reconstructed generated tree", async () => {
+    const base = "1".repeat(40);
+    const commit = { message: syncCommitMessage(sourceSha, base), tree: { sha: "generated-tree" } };
+    const reconstruct = async (source: string, recordedBase: string) => {
+      expect(source).toBe(sourceSha);
+      expect(recordedBase).toBe(base);
+      return "generated-tree";
+    };
+    await verifyGeneratedCommit(commit, reconstruct);
+    await expect(
+      verifyGeneratedCommit({ ...commit, tree: { sha: "manual-tree" } }, reconstruct),
+    ).rejects.toThrow("manual edits");
+    await expect(
+      verifyGeneratedCommit({ ...commit, message: "manual commit" }, reconstruct),
+    ).rejects.toThrow("unrecognized");
+  });
+  test("refuses a concurrent update through a non-force PATCH and propagates rejection", async () => {
+    let branchHead = "observed-head";
+    const execute = async (program: string, args: string[]) => {
+      expect(program).toBe("gh");
+      expect(args.slice(0, 3)).toEqual(["api", "--method", "PATCH"]);
+      const request = JSON.parse(await readFile(args[args.length - 1] ?? "", "utf8"));
+      expect(request).toEqual({ sha: "new-descendant-of-observed-head", force: false });
+      // GitHub rejects a commit whose parent was superseded by a parallel push.
+      if (branchHead !== "observed-head") throw new Error("HTTP 422: Update is not a fast forward");
+      branchHead = request.sha;
+      return "";
+    };
+    await publishSyncRef(
+      "chore/sync",
+      "new-descendant-of-observed-head",
+      "observed-head",
+      root,
+      execute,
+    );
+    branchHead = "concurrent-manual-head";
+    await expect(
+      publishSyncRef(
+        "chore/sync",
+        "new-descendant-of-observed-head",
+        "observed-head",
+        root,
+        execute,
+      ),
+    ).rejects.toThrow("not a fast forward");
+    expect(branchHead).toBe("concurrent-manual-head");
   });
 });
