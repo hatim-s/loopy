@@ -1,15 +1,26 @@
 {
-  "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "noEmit": true,
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
     "jsx": "react-jsx",
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "verbatimModuleSyntax": true,
     "paths": {
-      "react": ["./apps/studio/node_modules/@types/react/index.d.ts"],
-      "react/*": ["./apps/studio/node_modules/@types/react/*"],
-      "react-dom": ["./apps/studio/node_modules/@types/react-dom/index.d.ts"],
-      "react-dom/*": ["./apps/studio/node_modules/@types/react-dom/*"]
-    }
+      "loopy": ["./packages/loopy/src/core/index.ts"],
+      "loopy/runtime": ["./packages/loopy/src/runtime/index.ts"],
+      "loopy/local": ["./packages/loopy/src/local/index.ts"],
+      "loopy/cloud": ["./packages/loopy/src/cloud/index.ts"]
+    },
+    "skipLibCheck": true,
+    "types": ["bun-types"]
   },
-  "include": ["apps", "packages", "vitest.config.ts", "vitest.setup.ts"],
-  "exclude": ["node_modules", "dist", "coverage"]
+  "include": ["packages", "apps", "scripts", "examples"],
+  "exclude": ["node_modules", "**/dist"]
 }

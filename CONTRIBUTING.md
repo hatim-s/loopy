@@ -1,25 +1,17 @@
-# Contributing to Loopy
+# Contributing
 
-Thanks for helping build Loopy. The project is a local-first developer tool: source-controlled workflow definitions stay separate from per-project runtime state, provider credentials, traces, and artifacts.
+Bun 1.4 or newer. `bun install`, then `bun run check` before you push; it builds, lints, typechecks and runs the tests.
 
-## Before opening a change
+One package, `packages/loopy`, with four entry points: `core`, `runtime`, `local`, `cloud`. Add a module when it hides a distinct responsibility; don't add a package per module. Studio (`apps/studio`) only views and runs saved graphs. Workflow editing stays in TypeScript files.
 
-- Read the [MVP architecture and roadmap](.planloft/plans/loopy-local-first-mvp.md).
-- Keep changes within the package boundary they belong to.
-- Do not commit provider credentials, `.loopy/` runtime state, raw private sessions, or generated artifacts.
-- Keep provider-specific limitations explicit; do not silently emulate unsupported capabilities.
+`core`, `runtime` and `cloud` must not import Bun, Node or anything OS-specific. The portable typecheck and the browser-bundle test enforce that. `local` owns SQLite, paths and subprocesses; the CLI wires the local pieces together. A hosted adapter implements `RunRepository` and `ExecuteCommand` rather than reaching into `local`.
 
-## Local checks
+Tests live in `packages/loopy/_tests_` and cover what's expensive to get wrong: type guarantees, sandbox confinement, durable state transitions and end-to-end CLI behaviour. Skip unit tests for glue.
 
-Install Bun, then run:
+Invariants worth knowing before you touch the runtime or store:
 
-```sh
-bun install
-bun run check
-```
-
-The check command formats and lints the workspace, type-checks strict TypeScript, and runs Vitest. Tests that need an installed provider or paid account must be opt-in and clearly labelled.
-
-## Pull requests
-
-Describe the user-visible contract, package boundaries touched, and the checks you ran. Include fixture or migration notes when a persisted contract changes. Keep unrelated worktree changes out of the commit.
+- A run's graph, input, mode and workspace never change after creation.
+- Never replay a command whose outcome is uncertain without an explicit `retryUncertain`.
+- Attempt results and their events commit in one transaction, fenced on the owner token.
+- Distributed adapters expire leases and mark abandoned attempts uncertain.
+- Sandbox execution fails closed.

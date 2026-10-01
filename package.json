@@ -1,44 +1,28 @@
 {
-  "name": "@loopy/workspace-root",
-  "version": "0.1.0",
+  "name": "loopy-workspace",
   "private": true,
   "type": "module",
-  "description": "Local-first graph harness, trace extractor, runtime, and visual debugger for coding agents.",
-  "license": "Apache-2.0",
   "workspaces": [
-    "apps/*",
-    "packages/*"
+    "packages/*",
+    "apps/*"
   ],
   "packageManager": "bun@1.4.0",
-  "engines": {
-    "bun": ">=1.4"
-  },
   "scripts": {
-    "build": "bun run build:contracts && bun run typecheck",
-    "build:contracts": "tsc -p packages/contracts/tsconfig.json",
-    "check": "bun run fmt:check && bun run lint && bun run typecheck && bun run test:contracts && bun run test:runtime && bun run test:storage && bun run test:tracing && bun run test:extractor && bun run test:cli && bun run test:platform && bun run test:workspace",
+    "dev": "bun packages/loopy/src/cli/index.ts ui",
+    "loopy": "bun packages/loopy/src/cli/index.ts",
+    "typecheck": "tsc --noEmit && tsc -p packages/loopy/tsconfig.portable.json",
+    "test": "bun test packages/loopy/_tests_ examples/uacode-asset-sync/_tests_",
+    "check": "bun run build && bun run lint && bun run typecheck && bun run test",
+    "build": "bun scripts/build.ts",
+    "install:global": "bun scripts/install-global.ts",
     "fmt": "biome format --write .",
     "fmt:check": "biome format .",
-    "lint": "biome check .",
-    "test": "bun test",
-    "test:contracts": "bun test packages/contracts/test",
-    "test:runtime": "bun test packages/runtime/test",
-    "test:storage": "bun test packages/storage/tests",
-    "test:tracing": "bun test packages/tracing/tests",
-    "test:cli": "bun test packages/cli/tests",
-    "test:platform": "bun test packages/platform/tests",
-    "test:workspace": "bun test packages/workspace/_tests_",
-    "test:extractor": "bun test packages/extractor/tests",
-    "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "lint": "biome check ."
   },
   "devDependencies": {
     "@biomejs/biome": "2.2.2",
     "bun-types": "1.4.0",
-    "typescript": "5.9.2",
-    "vitest": "3.2.4"
-  },
-  "dependencies": {
-    "cron-parser": "5.4.0"
+    "loopy": "workspace:*",
+    "typescript": "5.9.2"
   }
 }
