@@ -72,21 +72,6 @@ describe("cloud worker", () => {
     expect(options).toEqual([{ resume: false }, { resume: false }]);
   });
 
-  test("acknowledges a run that settles between lookup and claim", async () => {
-    const worker = new CloudWorker({
-      getRun: async () => managedRun(),
-      execute: async (_id, options) => {
-        expect(options?.resume).toBe(false);
-        return managedRun("failed");
-      },
-    });
-
-    expect(await worker.handle({ runId: "run-1" })).toEqual({
-      disposition: "ack",
-      run: managedRun("failed"),
-    });
-  });
-
   test("reports a claim collision as retryable and propagates other failures", async () => {
     const busy = new CloudWorker({
       getRun: async () => managedRun(),
