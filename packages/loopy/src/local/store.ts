@@ -221,9 +221,14 @@ export class SqliteRunStore implements RunRepository {
     return attempts.length;
   }
 
-  private clearOwner(runId: string, token: string, status: RunStatus, error: string | null): void {
+  private clearOwner(
+    runId: string,
+    token: string | null,
+    status: RunStatus,
+    error: string | null,
+  ): void {
     this.db.run(
-      "UPDATE runs SET status=?,error=?,owner_token=NULL,owner_pid=NULL,owner_host=NULL,heartbeat_at=NULL,updated_at=? WHERE id=? AND owner_token=?",
+      "UPDATE runs SET status=?,error=?,owner_token=NULL,owner_pid=NULL,owner_host=NULL,heartbeat_at=NULL,updated_at=? WHERE id=? AND owner_token IS ?",
       [status, error, now(), runId, token],
     );
   }
@@ -249,7 +254,7 @@ export class SqliteRunStore implements RunRepository {
         )
           return;
         const uncertainAttempts = this.abandonAttempts(row.id, reason);
-        this.clearOwner(row.id, row.owner_token as string, "interrupted", reason);
+        this.clearOwner(row.id, row.owner_token, "interrupted", reason);
         this.event(row.id, "run.interrupted", { uncertainAttempts });
       })();
     }
