@@ -54,6 +54,7 @@ function checkRunOptions(options: RunOptions): RunOptions {
 class Lease {
   private inFlight?: Promise<boolean>;
   private timer?: ReturnType<typeof setInterval>;
+  private failed = false;
   error?: unknown;
 
   constructor(
@@ -65,7 +66,7 @@ class Lease {
   }
 
   get lost(): boolean {
-    return this.error !== undefined;
+    return this.failed;
   }
 
   pulse(): Promise<boolean> {
@@ -87,6 +88,7 @@ class Lease {
   }
 
   private fail(error: unknown): void {
+    this.failed = true;
     this.error = error;
     this.controller.abort(error);
   }
@@ -291,6 +293,8 @@ export class Runtime {
   async createRun(workflow: Workflow, input: Json, options: RunOptions): Promise<RunRecord> {
     validateWorkflow(workflow);
     assertJson(input);
+    const savedInput = JSON.parse(JSON.stringify(input)) as Json;
+    const savedOptions = checkRunOptions(options);
     const snapshot = JSON.stringify(workflow);
     const createdAt = new Date().toISOString();
     const run: RunRecord = {
@@ -298,8 +302,8 @@ export class Runtime {
       slug: workflow.slug,
       workflow: JSON.parse(snapshot) as Workflow,
       workflowHash: await sha256(snapshot),
-      input: JSON.parse(JSON.stringify(input)) as Json,
-      options: checkRunOptions(options),
+      input: savedInput,
+      options: savedOptions,
       status: "pending",
       createdAt,
       updatedAt: createdAt,
