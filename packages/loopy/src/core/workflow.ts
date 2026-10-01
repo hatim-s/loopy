@@ -4,12 +4,14 @@ import type {
   CommandOutput,
   ConditionNode,
   Expression,
+  Operator,
   Reference,
+  ReferenceSource,
   Scalar,
   Value,
   Workflow,
   WorkflowNode,
-} from "./model";
+} from "./model.js";
 
 type Refs<T> = { readonly [K in keyof T]: Reference<T[K]> };
 export type WorkflowContext<Input, Steps> = {
@@ -17,13 +19,16 @@ export type WorkflowContext<Input, Steps> = {
   readonly steps: { readonly [K in keyof Steps]: Refs<Steps[K]> };
 };
 
+/** A literal value, or a callback that builds one from typed references. */
 type Author<Input, Steps, T> = T | ((context: WorkflowContext<Input, Steps>) => T);
+type Branch = WorkflowNode | readonly WorkflowNode[];
 
-function reference<T>(source: "input" | "steps", path: string[]): Reference<T> {
+function reference<T>(source: ReferenceSource, path: string[]): Reference<T> {
   return { $ref: { source, path } };
 }
 
-function referenceTree<T>(source: "input" | "steps", path: string[] = []): T {
+/** Lazily builds references: `input.x` is one level deep, `steps.id.field` is two. */
+function referenceTree<T>(source: ReferenceSource, path: string[] = []): T {
   return new Proxy(Object.create(null) as T & object, {
     get(_target, key) {
       if (typeof key !== "string") return undefined;
@@ -32,6 +37,16 @@ function referenceTree<T>(source: "input" | "steps", path: string[] = []): T {
       return reference(source, next);
     },
   });
+}
+
+function context<Input, Steps>(): WorkflowContext<Input, Steps> {
+  return { input: referenceTree("input"), steps: referenceTree("steps") };
+}
+
+function author<Input, Steps, T>(value: Author<Input, Steps, T>): T {
+  return typeof value === "function"
+    ? (value as (context: WorkflowContext<Input, Steps>) => T)(context())
+    : value;
 }
 
 export function at<Item>(source: Reference<readonly Item[]>, index: number): Reference<Item>;
@@ -45,14 +60,7 @@ export function at(source: Reference<unknown>, key: string | number): Reference<
   return reference(source.$ref.source, [...source.$ref.path, String(key)]);
 }
 
-function context<Input, Steps>(): WorkflowContext<Input, Steps> {
-  return {
-    input: referenceTree("input"),
-    steps: referenceTree("steps"),
-  };
-}
-
-function expression<T>(op: Expression<T>["$op"], ...args: unknown[]): Expression<T> {
+function expression<T>(op: Operator, ...args: unknown[]): Expression<T> {
   return { $op: op, args };
 }
 
@@ -81,60 +89,50 @@ export function node(id: string, command: Command): CommandNode {
   return { id, kind: "command", command };
 }
 
+function nodeList(branch: Branch): WorkflowNode[] {
+  return "kind" in branch ? [branch] : [...branch];
+}
+
 export class WorkflowBuilder<Input, Steps = Record<never, never>> {
   constructor(
     readonly slug: string,
     private readonly nodes: readonly WorkflowNode[] = [],
-    private readonly descriptionValue?: string,
+    private readonly summary?: string,
   ) {}
 
-  description(description: string): WorkflowBuilder<Input, Steps> {
-    return new WorkflowBuilder(this.slug, this.nodes, description);
+  description(text: string): WorkflowBuilder<Input, Steps> {
+    return new WorkflowBuilder(this.slug, this.nodes, text);
   }
 
   node<const Id extends string>(
     id: Id,
     command: Author<Input, Steps, Command>,
   ): WorkflowBuilder<Input, Steps & Record<Id, CommandOutput>> {
-    const value = typeof command === "function" ? command(context<Input, Steps>()) : command;
-    return new WorkflowBuilder<Input, Steps & Record<Id, CommandOutput>>(
-      this.slug,
-      [...this.nodes, node(id, value)],
-      this.descriptionValue,
-    );
+    return new WorkflowBuilder(this.slug, [...this.nodes, node(id, author(command))], this.summary);
   }
 
   condition<const Id extends string>(
     id: Id,
     test: Author<Input, Steps, Value<boolean>>,
-    thenBranch: Author<Input, Steps, WorkflowNode | readonly WorkflowNode[]>,
-    elseBranch: Author<Input, Steps, WorkflowNode | readonly WorkflowNode[]>,
+    thenBranch: Author<Input, Steps, Branch>,
+    elseBranch: Author<Input, Steps, Branch>,
   ): WorkflowBuilder<Input, Steps & Record<Id, { branch: "then" | "else" }>> {
-    const value = typeof test === "function" ? test(context<Input, Steps>()) : test;
-    const thenValue =
-      typeof thenBranch === "function" ? thenBranch(context<Input, Steps>()) : thenBranch;
-    const elseValue =
-      typeof elseBranch === "function" ? elseBranch(context<Input, Steps>()) : elseBranch;
     const condition: ConditionNode = {
       id,
       kind: "condition",
-      test: value,
+      test: author(test),
       // biome-ignore lint/suspicious/noThenProperty: This is the persisted condition branch key.
-      then: Array.isArray(thenValue) ? [...thenValue] : [thenValue as WorkflowNode],
-      else: Array.isArray(elseValue) ? [...elseValue] : [elseValue as WorkflowNode],
+      then: nodeList(author(thenBranch)),
+      else: nodeList(author(elseBranch)),
     };
-    return new WorkflowBuilder<Input, Steps & Record<Id, { branch: "then" | "else" }>>(
-      this.slug,
-      [...this.nodes, condition],
-      this.descriptionValue,
-    );
+    return new WorkflowBuilder(this.slug, [...this.nodes, condition], this.summary);
   }
 
   build(): Workflow {
     return compileWorkflow({
       version: 1,
       slug: this.slug,
-      ...(this.descriptionValue ? { description: this.descriptionValue } : {}),
+      description: this.summary,
       nodes: [...this.nodes],
     });
   }
@@ -146,7 +144,10 @@ export function trigger<Input = Record<string, never>>(slug: string): WorkflowBu
 
 const idPattern = /^[a-z][a-z0-9_-]*$/;
 const slugPattern = /^[a-z0-9][a-z0-9-]{0,79}$/;
-const operations: Record<Expression["$op"], number | "variadic"> = {
+const envKeyPattern = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const indexPattern = /^(0|[1-9][0-9]*)$/;
+const maxDepth = 32;
+const arity: Record<Operator, number | "variadic"> = {
   eq: 2,
   ne: 2,
   gt: 2,
@@ -160,67 +161,136 @@ const operations: Record<Expression["$op"], number | "variadic"> = {
   concat: "variadic",
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
 function requireRecord(value: unknown, location: string): Record<string, unknown> {
-  if (!isRecord(value)) throw new Error(`${location} must be an object`);
-  return value;
+  if (value === null || typeof value !== "object" || Array.isArray(value))
+    throw new Error(`${location} must be an object`);
+  return value as Record<string, unknown>;
 }
 
-function knownKeys(
-  value: Record<string, unknown>,
-  location: string,
-  allowed: readonly string[],
-): void {
-  for (const key of Object.keys(value)) {
+function allowKeys(value: Record<string, unknown>, location: string, allowed: string[]): void {
+  for (const key of Object.keys(value))
     if (!allowed.includes(key)) throw new Error(`${location} has an unsupported field '${key}'`);
-  }
 }
 
+function validateReference(ref: unknown, location: string, visible: ReadonlySet<string>): void {
+  const record = requireRecord(ref, location);
+  allowKeys(record, location, ["source", "path"]);
+  if (record.source !== "input" && record.source !== "steps")
+    throw new Error(`${location} has an invalid reference source`);
+  const path = record.path;
+  const minimum = record.source === "steps" ? 2 : 1;
+  if (
+    !Array.isArray(path) ||
+    path.length < minimum ||
+    !path.every((p) => typeof p === "string" && p)
+  )
+    throw new Error(`${location} has an invalid reference path`);
+  if (record.source === "steps" && !visible.has(path[0] as string))
+    throw new Error(`${location} references a step that is not available yet: ${path[0]}`);
+}
+
+/** Accepts a JSON scalar, a reference to visible data, or an expression over those. */
 function validateValue(
   value: unknown,
   location: string,
   visible: ReadonlySet<string>,
   depth = 0,
 ): void {
-  if (depth > 32) throw new Error(`${location} is too deeply nested`);
-  if (value === null || ["string", "boolean"].includes(typeof value)) return;
+  if (depth > maxDepth) throw new Error(`${location} is too deeply nested`);
+  if (value === null || typeof value === "string" || typeof value === "boolean") return;
   if (typeof value === "number" && Number.isFinite(value)) return;
-  if (typeof value === "function")
-    throw new Error(`${location} must be a literal, reference, or expression`);
-  const item = requireRecord(value, location);
+  const invalid = new Error(`${location} must be a literal, reference, or expression`);
+  if (typeof value !== "object" || Array.isArray(value)) throw invalid;
+  const item = value as Record<string, unknown>;
   if ("$ref" in item) {
-    if (Object.keys(item).some((key) => key !== "$ref"))
-      throw new Error(`${location} has unsupported reference fields`);
-    const ref = requireRecord(item.$ref, `${location}.$ref`);
-    knownKeys(ref, `${location}.$ref`, ["source", "path"]);
-    if (ref.source !== "input" && ref.source !== "steps")
-      throw new Error(`${location} has an invalid reference source`);
-    if (!Array.isArray(ref.path) || ref.path.length < (ref.source === "steps" ? 2 : 1))
-      throw new Error(`${location} has an invalid reference path`);
-    if (ref.path.some((part) => typeof part !== "string" || !part))
-      throw new Error(`${location} has an invalid reference path`);
-    if (ref.source === "steps" && !visible.has(ref.path[0] as string))
-      throw new Error(`${location} references a step that is not available yet: ${ref.path[0]}`);
+    allowKeys(item, location, ["$ref"]);
+    validateReference(item.$ref, `${location}.$ref`, visible);
     return;
   }
-  if ("$op" in item) {
-    if (Object.keys(item).some((key) => key !== "$op" && key !== "args"))
-      throw new Error(`${location} has unsupported expression fields`);
-    const arity = operations[item.$op as Expression["$op"]];
-    if (!arity || !Array.isArray(item.args))
-      throw new Error(`${location} has an invalid expression`);
-    if (arity === "variadic" ? item.args.length < 1 : item.args.length !== arity)
-      throw new Error(`${location} has the wrong number of operands`);
-    for (const [index, arg] of item.args.entries())
-      validateValue(arg, `${location}.args[${index}]`, visible, depth + 1);
-    return;
-  }
-  throw new Error(`${location} must be a literal, reference, or expression`);
+  if (!("$op" in item)) throw invalid;
+  allowKeys(item, location, ["$op", "args"]);
+  const expected = arity[item.$op as Operator];
+  if (!expected || !Array.isArray(item.args))
+    throw new Error(`${location} has an invalid expression`);
+  if (expected === "variadic" ? item.args.length < 1 : item.args.length !== expected)
+    throw new Error(`${location} has the wrong number of operands`);
+  for (const [index, arg] of item.args.entries())
+    validateValue(arg, `${location}.args[${index}]`, visible, depth + 1);
 }
 
+function validateArgConstraints(raw: unknown, args: unknown[], command: string): void {
+  const location = `${command}.argConstraints`;
+  const constraints = requireRecord(raw, location);
+  for (const [index, value] of Object.entries(constraints)) {
+    const here = `${location}.${index}`;
+    if (!indexPattern.test(index) || Number(index) >= args.length)
+      throw new Error(`${location} has an invalid argument index '${index}'`);
+    const constraint = requireRecord(value, here);
+    allowKeys(constraint, here, ["kind", "choices", "prefix"]);
+    if (constraint.kind !== "string" && constraint.kind !== "number")
+      throw new Error(`${here}.kind is invalid`);
+    const { choices, prefix } = constraint;
+    if (
+      choices !== undefined &&
+      (constraint.kind !== "string" ||
+        !Array.isArray(choices) ||
+        !choices.length ||
+        !choices.every((choice) => typeof choice === "string"))
+    )
+      throw new Error(`${here}.choices is invalid`);
+    if (prefix === undefined) continue;
+    if (typeof prefix !== "string" || !prefix) throw new Error(`${here}.prefix is invalid`);
+    // An attached flag must be stored as concat(prefix, value) so the runtime can check the value alone.
+    const attached = requireRecord(args[Number(index)], `${command}.args[${index}]`);
+    if (
+      attached.$op !== "concat" ||
+      !Array.isArray(attached.args) ||
+      attached.args.length !== 2 ||
+      attached.args[0] !== prefix
+    )
+      throw new Error(`${here} has no matching value`);
+  }
+}
+
+function validateCommand(raw: unknown, location: string, visible: ReadonlySet<string>): void {
+  const command = requireRecord(raw, location);
+  allowKeys(command, location, [
+    "program",
+    "args",
+    "argConstraints",
+    "stdin",
+    "env",
+    "cwd",
+    "timeoutMs",
+    "maxOutputBytes",
+  ]);
+  if (typeof command.program !== "string" || !command.program.trim())
+    throw new Error(`${location}.program is required`);
+  if (!Array.isArray(command.args)) throw new Error(`${location}.args must be an array`);
+  for (const [index, arg] of command.args.entries())
+    validateValue(arg, `${location}.args[${index}]`, visible);
+  if (command.argConstraints !== undefined)
+    validateArgConstraints(command.argConstraints, command.args, location);
+  if (command.stdin !== undefined) validateValue(command.stdin, `${location}.stdin`, visible);
+  if (command.env !== undefined) {
+    for (const [key, value] of Object.entries(requireRecord(command.env, `${location}.env`))) {
+      if (!envKeyPattern.test(key)) throw new Error(`Invalid environment key '${key}'`);
+      validateValue(value, `${location}.env.${key}`, visible);
+    }
+  }
+  if (command.cwd !== undefined && typeof command.cwd !== "string")
+    throw new Error(`${location}.cwd must be a string`);
+  for (const key of ["timeoutMs", "maxOutputBytes"] as const) {
+    const limit = command[key];
+    if (limit !== undefined && (!Number.isSafeInteger(limit) || (limit as number) < 1))
+      throw new Error(`${location}.${key} must be a positive integer`);
+  }
+}
+
+/**
+ * Walks one node list. `ids` is shared across the whole graph so ids stay unique;
+ * `visible` is copied per branch so branch-local outputs stay out of reach afterwards.
+ */
 function validateNodes(
   nodes: unknown,
   ids: Set<string>,
@@ -228,98 +298,21 @@ function validateNodes(
   location: string,
   depth = 0,
 ): void {
-  if (depth > 32) throw new Error("Workflow branches are too deeply nested");
+  if (depth > maxDepth) throw new Error("Workflow branches are too deeply nested");
   if (!Array.isArray(nodes) || nodes.length === 0) throw new Error(`${location} must have nodes`);
-  for (let index = 0; index < nodes.length; index += 1) {
+  for (const [index, raw] of nodes.entries()) {
     const path = `${location}[${index}]`;
-    const item = requireRecord(nodes[index], path);
+    const item = requireRecord(raw, path);
     if (typeof item.id !== "string" || !idPattern.test(item.id))
       throw new Error(`${path}.id must start with a letter and contain letters, numbers, _ or -`);
     if (ids.has(item.id)) throw new Error(`Duplicate workflow node id '${item.id}'`);
     ids.add(item.id);
     if (item.kind === "command") {
-      knownKeys(item, path, ["id", "kind", "command"]);
-      const command = requireRecord(item.command, `${path}.command`);
-      knownKeys(command, `${path}.command`, [
-        "program",
-        "args",
-        "argConstraints",
-        "stdin",
-        "env",
-        "cwd",
-        "timeoutMs",
-        "maxOutputBytes",
-      ]);
-      if (typeof command.program !== "string" || !command.program.trim())
-        throw new Error(`${path}.command.program is required`);
-      if (!Array.isArray(command.args)) throw new Error(`${path}.command.args must be an array`);
-      for (const [argIndex, arg] of command.args.entries())
-        validateValue(arg, `${path}.command.args[${argIndex}]`, visible);
-      if (command.argConstraints !== undefined) {
-        const constraints = requireRecord(command.argConstraints, `${path}.command.argConstraints`);
-        for (const [index, raw] of Object.entries(constraints)) {
-          if (!/^(0|[1-9][0-9]*)$/.test(index) || Number(index) >= command.args.length)
-            throw new Error(
-              `${path}.command.argConstraints has an invalid argument index '${index}'`,
-            );
-          const constraint = requireRecord(raw, `${path}.command.argConstraints.${index}`);
-          knownKeys(constraint, `${path}.command.argConstraints.${index}`, [
-            "kind",
-            "choices",
-            "prefix",
-          ]);
-          if (constraint.kind !== "string" && constraint.kind !== "number")
-            throw new Error(`${path}.command.argConstraints.${index}.kind is invalid`);
-          if (
-            constraint.choices !== undefined &&
-            (!Array.isArray(constraint.choices) ||
-              !constraint.choices.length ||
-              constraint.choices.some((choice) => typeof choice !== "string") ||
-              constraint.kind !== "string")
-          )
-            throw new Error(`${path}.command.argConstraints.${index}.choices is invalid`);
-          if (
-            constraint.prefix !== undefined &&
-            (typeof constraint.prefix !== "string" || !constraint.prefix)
-          )
-            throw new Error(`${path}.command.argConstraints.${index}.prefix is invalid`);
-          if (constraint.prefix !== undefined) {
-            const attached = requireRecord(
-              command.args[Number(index)],
-              `${path}.command.args[${index}]`,
-            );
-            if (
-              attached.$op !== "concat" ||
-              !Array.isArray(attached.args) ||
-              attached.args.length !== 2 ||
-              attached.args[0] !== constraint.prefix
-            )
-              throw new Error(`${path}.command.argConstraints.${index} has no matching value`);
-          }
-        }
-      }
-      if (command.stdin !== undefined)
-        validateValue(command.stdin, `${path}.command.stdin`, visible);
-      if (command.env !== undefined) {
-        const env = requireRecord(command.env, `${path}.command.env`);
-        for (const [key, value] of Object.entries(env)) {
-          if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key))
-            throw new Error(`Invalid environment key '${key}'`);
-          validateValue(value, `${path}.command.env.${key}`, visible);
-        }
-      }
-      if (command.cwd !== undefined && typeof command.cwd !== "string")
-        throw new Error(`${path}.command.cwd must be a string`);
-      for (const key of ["timeoutMs", "maxOutputBytes"] as const) {
-        if (
-          command[key] !== undefined &&
-          (!Number.isSafeInteger(command[key]) || Number(command[key]) < 1)
-        )
-          throw new Error(`${path}.command.${key} must be a positive integer`);
-      }
+      allowKeys(item, path, ["id", "kind", "command"]);
+      validateCommand(item.command, `${path}.command`, visible);
       visible.add(item.id);
     } else if (item.kind === "condition") {
-      knownKeys(item, path, ["id", "kind", "test", "then", "else"]);
+      allowKeys(item, path, ["id", "kind", "test", "then", "else"]);
       validateValue(item.test, `${path}.test`, visible);
       visible.add(item.id);
       validateNodes(item.then, ids, new Set(visible), `${path}.then`, depth + 1);
@@ -332,25 +325,18 @@ function validateNodes(
 
 export function validateWorkflow(value: unknown): asserts value is Workflow {
   const workflow = requireRecord(value, "Workflow");
-  knownKeys(workflow, "Workflow", ["version", "slug", "description", "nodes"]);
+  allowKeys(workflow, "Workflow", ["version", "slug", "description", "nodes"]);
   if (workflow.version !== 1) throw new Error("Unsupported workflow version");
   if (typeof workflow.slug !== "string" || !slugPattern.test(workflow.slug))
     throw new Error("Workflow slug must use lowercase letters, numbers and hyphens");
   if (workflow.description !== undefined && typeof workflow.description !== "string")
     throw new Error("Workflow description must be a string");
   validateNodes(workflow.nodes, new Set(), new Set(), "Workflow.nodes");
-  try {
-    JSON.stringify(workflow);
-  } catch {
-    throw new Error("Workflow must be serializable as JSON");
-  }
 }
 
+/** Accepts a built graph or any builder, including one from another copy of this package. */
 export function compileWorkflow(input: Workflow | { build(): Workflow }): Workflow {
-  const workflow =
-    input && typeof input === "object" && "build" in input && typeof input.build === "function"
-      ? input.build()
-      : input;
+  const workflow = "build" in input && typeof input.build === "function" ? input.build() : input;
   validateWorkflow(workflow);
-  return structuredClone(workflow);
+  return JSON.parse(JSON.stringify(workflow)) as Workflow;
 }
