@@ -92,6 +92,9 @@ Help formats vary. The generator warns about lines it could not parse and only c
 
 `examples/codex.ts` was generated from the installed Codex CLI and `examples/review.loopy.ts` uses it. Agent CLIs need the network, so run those with `--full`.
 
+The [uacode asset sync example](https://github.com/hatim-s/loopy/tree/main/examples/uacode-asset-sync)
+uses a current TypeScript graph and an isolated worktree runner to export assets and open a focused PR.
+
 ## Run, resume, recover
 
 ```sh
