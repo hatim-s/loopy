@@ -40,6 +40,8 @@ Folder saves walk the tree for `*.loopy.ts`, skipping hidden entries, symlinks, 
 
 Saves are snapshots. Editing, moving or deleting the source changes nothing until you save again. Running a slug never imports TypeScript; it reads the stored JSON graph and runs commands in the current directory (or `--cwd`).
 
+For syncing www agent prompts and skills into uacode, see [the www-to-uacode example](https://github.com/hatim-s/loopy/tree/main/examples/www-uacode-sync).
+
 ## Author a workflow
 
 ```ts
