@@ -166,7 +166,9 @@ export function worker(store: RunRepository, executor: ExecuteCommand) {
   return new CloudWorker(new Runtime({ store, executor }));
 }
 // Deliver { runId } only after createRun has committed.
-// Ack on disposition "ack"; retry on "retry" or a thrown error.
+// Ack on disposition "ack"; retry on "retry" or thrown infrastructure failures.
+// Malformed, unknown-run and local-workspace deliveries follow the host
+// queue's dead-letter or rejection policy.
 ```
 
 Queue delivery is for the first execution only. Succeeded, failed and interrupted runs come back unchanged no matter how many times a message is redelivered. A cancellation before launch marks the attempt cancelled and puts the run back to pending; a cancellation after launch leaves it uncertain. Resuming is a separate `Runtime.execute` call, and retrying uncertain work needs `retryUncertain: true` on that call, never on a queue message.
