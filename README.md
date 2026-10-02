@@ -81,7 +81,9 @@ Arguments are separate argv entries. No shell, no expansion, no pipes. Pass an e
 
 Callbacks run once, at authoring time, with typed references rather than values. `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `and`, `or`, `not`, `contains` and `concat` build expressions the runtime evaluates later; a plain JavaScript `if` on a reference does nothing useful. `at(reference, key)` reaches into nested input. Branches take a node, an array of nodes, or a callback returning either. Node ids are unique across the graph, and a branch's outputs are not visible after the branch; use `steps.<conditionId>.branch` instead.
 
-The `Input` type parameter checks your authoring code. At run time, references must exist and values must fit the operation or argument they feed. Nothing generates a JSON schema for the whole input.
+The `Input` type parameter checks your authoring code. Before creating a run, the runtime checks input references, expressions and typed argument constraints across unconditional nodes and branches selected by known input. Missing input in a later command fails before earlier commands launch.
+
+Conditions that depend on command outputs defer their branches until those outputs exist. The runtime then checks the selected branch before its first command launches. It never rejects input required only by an unchosen branch. This does not validate arbitrary script input or generate a JSON schema for the whole input. Use `validateRunInput` from `loopy/runtime` for the same check outside run creation.
 
 `command(program, ...args)` takes anything. For checked flags and positionals, generate a wrapper.
 
