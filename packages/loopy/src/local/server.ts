@@ -59,7 +59,7 @@ async function jsonBody(request: Request): Promise<Record<string, unknown>> {
 export function startServer(options: ServerOptions = {}) {
   const home = options.home ?? defaultHome();
   const cwd = resolve(options.cwd ?? process.cwd());
-  const registry = new Registry(home);
+  const registry = new Registry(home, cwd);
   const local = createLocalRuntime({ home });
   const { runtime } = local;
   const token = crypto.randomUUID();

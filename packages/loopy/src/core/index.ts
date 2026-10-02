@@ -19,6 +19,7 @@ export type {
   ExecuteCommand,
   ExecutionMode,
   Expression,
+  FilePath,
   Json,
   Operator,
   Reference,
@@ -29,6 +30,7 @@ export type {
   RunStatus,
   Value,
   Workflow,
+  WorkflowConfig,
   WorkflowNode,
   Workspace,
 } from "./model.js";
@@ -40,6 +42,7 @@ export {
   concat,
   contains,
   eq,
+  file,
   gt,
   gte,
   lt,

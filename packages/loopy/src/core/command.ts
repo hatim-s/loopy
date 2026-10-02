@@ -95,7 +95,8 @@ type LooseInput = CommandInput<readonly (CommandArgument | undefined)[], Record<
 
 function assertArgument(value: unknown, location: string): asserts value is CommandArgument {
   if (typeof value === "string" || (typeof value === "number" && Number.isFinite(value))) return;
-  if (value && typeof value === "object" && ("$ref" in value || "$op" in value)) return;
+  if (value && typeof value === "object" && ("$ref" in value || "$op" in value || "$file" in value))
+    return;
   throw new Error(`${location} must be a string, number, or workflow value`);
 }
 

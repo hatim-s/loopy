@@ -4,12 +4,14 @@ import type {
   CommandOutput,
   ConditionNode,
   Expression,
+  FilePath,
   Operator,
   Reference,
   ReferenceSource,
   Scalar,
   Value,
   Workflow,
+  WorkflowConfig,
   WorkflowNode,
 } from "./model.js";
 
@@ -85,6 +87,11 @@ export const contains = (value: Value<string>, part: Value<string>): Expression<
 export const concat = (...parts: Value<string | number>[]): Expression<string> =>
   expression("concat", ...parts);
 
+export function file(path: string): FilePath {
+  if (!path.trim()) throw new Error("File path is required");
+  return { $file: path };
+}
+
 export function node(id: string, command: Command): CommandNode {
   return { id, kind: "command", command };
 }
@@ -98,17 +105,27 @@ export class WorkflowBuilder<Input, Steps = Record<never, never>> {
     readonly slug: string,
     private readonly nodes: readonly WorkflowNode[] = [],
     private readonly summary?: string,
+    private readonly settings?: WorkflowConfig,
   ) {}
 
   description(text: string): WorkflowBuilder<Input, Steps> {
-    return new WorkflowBuilder(this.slug, this.nodes, text);
+    return new WorkflowBuilder(this.slug, this.nodes, text, this.settings);
+  }
+
+  config(settings: WorkflowConfig): WorkflowBuilder<Input, Steps> {
+    return new WorkflowBuilder(this.slug, this.nodes, this.summary, settings);
   }
 
   node<const Id extends string>(
     id: Id,
     command: Author<Input, Steps, Command>,
   ): WorkflowBuilder<Input, Steps & Record<Id, CommandOutput>> {
-    return new WorkflowBuilder(this.slug, [...this.nodes, node(id, author(command))], this.summary);
+    return new WorkflowBuilder(
+      this.slug,
+      [...this.nodes, node(id, author(command))],
+      this.summary,
+      this.settings,
+    );
   }
 
   condition<const Id extends string>(
@@ -125,7 +142,7 @@ export class WorkflowBuilder<Input, Steps = Record<never, never>> {
       then: nodeList(author(thenBranch)),
       else: nodeList(author(elseBranch)),
     };
-    return new WorkflowBuilder(this.slug, [...this.nodes, condition], this.summary);
+    return new WorkflowBuilder(this.slug, [...this.nodes, condition], this.summary, this.settings);
   }
 
   build(): Workflow {
@@ -133,6 +150,7 @@ export class WorkflowBuilder<Input, Steps = Record<never, never>> {
       version: 1,
       slug: this.slug,
       description: this.summary,
+      config: this.settings,
       nodes: [...this.nodes],
     });
   }
@@ -202,6 +220,12 @@ function validateValue(
   const invalid = new Error(`${location} must be a literal, reference, or expression`);
   if (typeof value !== "object" || Array.isArray(value)) throw invalid;
   const item = value as Record<string, unknown>;
+  if ("$file" in item) {
+    allowKeys(item, location, ["$file"]);
+    if (typeof item.$file !== "string" || !item.$file.trim())
+      throw new Error(`${location} has an invalid file path`);
+    return;
+  }
   if ("$ref" in item) {
     allowKeys(item, location, ["$ref"]);
     validateReference(item.$ref, `${location}.$ref`, visible);
@@ -325,12 +349,18 @@ function validateNodes(
 
 export function validateWorkflow(value: unknown): asserts value is Workflow {
   const workflow = requireRecord(value, "Workflow");
-  allowKeys(workflow, "Workflow", ["version", "slug", "description", "nodes"]);
+  allowKeys(workflow, "Workflow", ["version", "slug", "description", "config", "nodes"]);
   if (workflow.version !== 1) throw new Error("Unsupported workflow version");
   if (typeof workflow.slug !== "string" || !slugPattern.test(workflow.slug))
     throw new Error("Workflow slug must use lowercase letters, numbers and hyphens");
   if (workflow.description !== undefined && typeof workflow.description !== "string")
     throw new Error("Workflow description must be a string");
+  if (workflow.config !== undefined) {
+    const config = requireRecord(workflow.config, "Workflow.config");
+    allowKeys(config, "Workflow.config", ["scope"]);
+    if (config.scope !== "project" && config.scope !== "global")
+      throw new Error("Workflow.config.scope must be project or global");
+  }
   validateNodes(workflow.nodes, new Set(), new Set(), "Workflow.nodes");
 }
 

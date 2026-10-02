@@ -30,7 +30,7 @@ This builds and packs the package into `~/.loopy/packages/loopy-<sha256>.tgz` an
 Keep `*.loopy.ts` files next to the code they automate, or in one loopies project with its own `loopy` dependency:
 
 ```sh
-loopy save /path/to/repo/loopies
+loopy save /path/to/repo/loopies --cwd /path/to/repo
 loopy list
 cd /path/to/another/repo
 loopy run review --full
@@ -38,7 +38,23 @@ loopy run review --full
 
 Folder saves walk the tree for `*.loopy.ts`, skipping hidden entries, symlinks, `node_modules`, `dist` and `coverage`. Every file is imported and checked before anything is written. Two files with the same slug fail the whole save, `--replace` or not; rename one. A slug already owned by a different source fails unless you pass `--replace`.
 
-Saves are snapshots. Editing, moving or deleting the source changes nothing until you save again. Running a slug never imports TypeScript; it reads the stored JSON graph and runs commands in the current directory (or `--cwd`).
+Workflows default to project scope. Project graphs live in `<project>/.loopy/workflows` and are available from that directory and its children. `loopy save` uses the current project directory for sources inside it, or the source directory for external sources; pass `--cwd /path/to/project` to select another project. Only workflows configured with global scope are saved to `~/.loopy/v2/workflows` and available everywhere. A project slug overrides a global slug of the same name.
+
+```ts
+import { command, file, trigger } from "loopy";
+
+export default trigger("review")
+  .config({ scope: "global" })
+  .node("review", command("bun", file("scripts/review.ts")));
+```
+
+Use `.config({ scope: "project" })` for explicit project scope. Saving snapshots the JSON graph. Global saves convert `file(...)`, standalone argv and env strings starting with `./` or `../`, relative executable paths, and explicit command `cwd` into absolute paths. Paths resolve against the workflow source directory, or its explicit command `cwd`. Use `file("scripts/review.ts")` for paths without a leading `./`, including paths inside `concat` expressions. Marked paths in expressions, stdin, and conditions are resolved too. Plain expression fragments and shell script text are not rewritten. CLI executables such as `bun` still resolve through PATH.
+
+Global scripts, assets, or command directories outside the sandbox workspace may require `loopy run <slug> --full`. Global scope does not change sandbox permissions.
+
+Referenced scripts and assets stay in their source locations. Editing them affects later runs; moving or deleting them can break a saved global workflow. Changing scope and saving removes the same source's old registration. Older graphs in global storage need to be saved again with explicit global scope.
+
+Running a slug never imports TypeScript. Commands run in the caller's current directory or `--cwd`, unless a command sets its own `cwd`.
 
 For syncing www agent prompts and skills into uacode, see [the www-to-uacode example](https://github.com/hatim-s/loopy/tree/main/examples/www-uacode-sync).
 
@@ -111,7 +127,7 @@ loopy resume <run-id> --retry-uncertain
 loopy recover <run-id> --force
 ```
 
-Slugs are global within a Loopy home. `loopy list` shows which source owns each one. Saving the same file again updates the graph; a different file with the same slug fails until you rename it or pass `--replace`. Symlinked sources resolve to their real path. Saves take a per-slug lock directory and rename the new file into place; if a save dies mid-way, remove the lock it names once you're sure the process is gone.
+Slugs are scoped to a project directory or the global Loopy home. `loopy list` shows which source owns each one. Saving the same file again updates the graph; a different file with the same slug fails until you rename it or pass `--replace`. Symlinked sources resolve to their real path. Saves take a per-slug lock directory and rename the new file into place; if a save dies mid-way, remove the lock it names once you're sure the process is gone.
 
 Saving imports and executes your TypeScript. Only save code you trust. Running snapshots the graph, input, working directory and mode into the run, so later saves never change an in-flight or finished run.
 
@@ -121,7 +137,7 @@ Each attempt is committed as running before the command launches, then its resul
 
 Runs are sequential with nested conditions. No parallelism, schedules, automatic retries, cycles, approvals or forks yet.
 
-State lives in `~/.loopy/v2` (`workflows/<slug>.json` and `runs.sqlite`); set `LOOPY_HOME` or pass `--home` to move it. Run records keep resolved argv, stdin, explicit env, stdout and stderr, so don't pass credentials through them unless you want them on disk.
+Global graphs and run state live in `~/.loopy/v2` (`workflows/<slug>.json` and `runs.sqlite`); project graphs live in `<project>/.loopy/workflows`. set `LOOPY_HOME` or pass `--home` to move it. Run records keep resolved argv, stdin, explicit env, stdout and stderr, so don't pass credentials through them unless you want them on disk.
 
 ## Sandbox
 

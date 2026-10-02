@@ -1,5 +1,12 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { command } from "../src/core/command.ts";
@@ -54,7 +61,7 @@ export default trigger('checkpoint')
   expect(run.status).toBe("failed");
   expect(readFileSync(join(cwd, "count"), "utf8")).toBe("x");
 
-  new Registry(home).save(
+  new Registry(home, cwd).save(
     trigger("checkpoint").node("different", command("not-a-real-cli")).build(),
     source,
   );
@@ -82,7 +89,7 @@ test("local API requires authorization and origin checks, runs saved workflows, 
   writeFileSync(join(assets, "index.html"), "Viewer");
   writeFileSync(join(home, "secret"), "Outside assets");
   symlinkSync(join(home, "secret"), join(assets, "leak"));
-  new Registry(home).save(
+  new Registry(home, cwd).save(
     trigger("hello").node("greet", command("/bin/echo", "hello")).build(),
     "hello.ts",
   );
@@ -127,4 +134,28 @@ test("local API requires authorization and origin checks, runs saved workflows, 
   expect(detail?.run.status).toBe("succeeded");
   expect(detail?.run.input).toBeNull();
   expect(detail?.attempts[0]?.output?.stdout).toBe("hello\n");
+});
+
+test("a global loopy runs source scripts from another project without reimporting its definition", async () => {
+  const home = directory();
+  const sourceProject = directory();
+  const caller = directory();
+  const source = join(sourceProject, "global.loopy.ts");
+  const script = join(sourceProject, "script.ts");
+  writeFileSync(script, "console.log(process.cwd())");
+  writeFileSync(
+    source,
+    `import { trigger, command, file } from ${JSON.stringify(join(import.meta.dir, "../src/core/index.ts"))};
+export default trigger('global-tool').config({ scope: 'global' })
+.node('script', command(${JSON.stringify(process.execPath)}, file('script.ts')));`,
+  );
+  expect((await cli(home, sourceProject, "save", source)).exitCode).toBe(0);
+  rmSync(source);
+  const result = await cli(home, caller, "run", "global-tool", "--full");
+  expect(result.exitCode).toBe(0);
+  const detail = JSON.parse(
+    (await cli(home, caller, "inspect", JSON.parse(result.stdout).id)).stdout,
+  );
+  expect(detail.attempts[0].output.stdout.trim()).toBe(realpathSync(caller));
+  expect(detail.attempts[0].input.args).toContain(join(realpathSync(sourceProject), "script.ts"));
 });
