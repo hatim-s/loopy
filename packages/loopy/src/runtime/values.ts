@@ -99,6 +99,7 @@ export function resolveValue(value: unknown, input: Json, outputs: Outputs): Jso
   if (Array.isArray(value)) return value.map((item) => resolveValue(item, input, outputs));
   if (!value || typeof value !== "object") throw new Error("Unsupported workflow value");
   const record = value as Record<string, unknown>;
+  if ("$file" in record && typeof record.$file === "string") return record.$file;
   if ("$ref" in record) {
     const ref = record.$ref as { source: "input" | "steps"; path: string[] };
     if (!Array.isArray(ref.path) || ref.path.some((part) => typeof part !== "string"))

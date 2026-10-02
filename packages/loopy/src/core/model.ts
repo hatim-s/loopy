@@ -25,7 +25,8 @@ export type Expression<T = unknown> = {
   readonly __type?: T;
 };
 
-export type Value<T> = T | Reference<T> | Expression<T>;
+export type FilePath = { readonly $file: string };
+export type Value<T> = T | Reference<T> | Expression<T> | (T extends string ? FilePath : never);
 
 /** A check applied to one resolved argv entry before the command launches. */
 export type ArgConstraint = { kind: "string" | "number"; choices?: string[]; prefix?: string };
@@ -61,7 +62,14 @@ export type ConditionNode = {
   else: WorkflowNode[];
 };
 export type WorkflowNode = CommandNode | ConditionNode;
-export type Workflow = { version: 1; slug: string; description?: string; nodes: WorkflowNode[] };
+export type WorkflowConfig = { scope: "project" | "global" };
+export type Workflow = {
+  version: 1;
+  slug: string;
+  description?: string;
+  config?: WorkflowConfig;
+  nodes: WorkflowNode[];
+};
 
 export type ExecutionMode = "sandbox" | "full";
 export type Workspace = { kind: "local"; path: string } | { kind: "managed"; id: string };

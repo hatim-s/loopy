@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { mkdir, stat, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import type { Json } from "../core/model.js";
 import { generateCommand } from "../local/help.js";
@@ -14,7 +14,7 @@ const DEFAULT_PORT = 4310;
 
 const usage = `loopy: TypeScript workflows for CLI tools
 
-  loopy save <file.ts|directory>               Compile files and save their slugs globally
+  loopy save <file.ts|directory>               Compile files and save by configured scope
   loopy list                                   List saved loopies
   loopy graph <slug>                            Print the saved graph as JSON
   loopy run <slug> [--input JSON|@file]          Run in a sandbox
@@ -118,7 +118,14 @@ export async function main(args = process.argv.slice(2)) {
     return;
   }
 
-  const registry = new Registry(home);
+  let project = cwd;
+  if (command === "save" && target && !values.cwd) {
+    const source = resolve(target);
+    const fromCwd = relative(cwd, source);
+    if (fromCwd === ".." || fromCwd.startsWith("../"))
+      project = (await stat(source)).isDirectory() ? source : dirname(source);
+  }
+  const registry = new Registry(home, project);
   switch (command) {
     case "save": {
       const source = required(target, "TypeScript file or directory");

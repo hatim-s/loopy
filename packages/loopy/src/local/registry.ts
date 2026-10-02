@@ -11,7 +11,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Workflow, WorkflowNode } from "../core/model.js";
 import { compileWorkflow, validateWorkflow } from "../core/workflow.js";
@@ -22,6 +22,7 @@ export type SavedWorkflow = { workflow: Workflow; source: string; updatedAt: str
 export type WorkflowSummary = {
   slug: string;
   description?: string;
+  scope: "project" | "global";
   nodeCount: number;
   updatedAt: string;
   source: string;
@@ -53,12 +54,11 @@ function isSavedFile(
 }
 
 /** Saved graphs live in `<home>/workflows/<slug>.json`, one owner source per slug. */
-export class Registry {
+class ScopedRegistry {
   readonly directory: string;
 
-  constructor(readonly home = defaultHome()) {
+  constructor(readonly home: string) {
     this.directory = join(home, "workflows");
-    mkdirSync(this.directory, { recursive: true, mode: 0o700 });
   }
 
   private file(slug: string): string {
@@ -66,6 +66,10 @@ export class Registry {
     if (!/^[a-z0-9][a-z0-9-]{0,79}$/.test(slug))
       throw new Error("A slug must contain 1-80 lowercase letters, numbers, or hyphens.");
     return join(this.directory, `${slug}.json`);
+  }
+
+  has(slug: string): boolean {
+    return existsSync(this.file(slug));
   }
 
   get(slug: string): SavedWorkflow {
@@ -84,6 +88,7 @@ export class Registry {
   }
 
   list(): WorkflowSummary[] {
+    if (!existsSync(this.directory)) return [];
     return readdirSync(this.directory)
       .filter((name) => name.endsWith(".json"))
       .sort()
@@ -92,6 +97,7 @@ export class Registry {
         return {
           slug: workflow.slug,
           description: workflow.description,
+          scope: workflow.config?.scope ?? "project",
           nodeCount: countNodes(workflow.nodes),
           updatedAt,
           source,
@@ -99,7 +105,7 @@ export class Registry {
       });
   }
 
-  private assertOwner(slug: string, source: string, options: SaveOptions): void {
+  assertOwner(slug: string, source: string, options: SaveOptions): void {
     if (options.replace || !existsSync(this.file(slug))) return;
     const existing = this.get(slug).source;
     if (existing !== source)
@@ -114,6 +120,7 @@ export class Registry {
     const file = this.file(workflow.slug);
     const owner = canonical(source);
     const lock = `${file}.lock`;
+    mkdirSync(this.directory, { recursive: true, mode: 0o700 });
     try {
       mkdirSync(lock, { mode: 0o700 });
     } catch (error) {
@@ -138,7 +145,7 @@ export class Registry {
   }
 
   /** Imports trusted TypeScript. The cache-busting query lets one process reload edits. */
-  private async load(file: string): Promise<Loaded> {
+  async load(file: string): Promise<Loaded> {
     const source = realpathSync(resolve(file));
     const module = (await import(`${pathToFileURL(source).href}?loopy=${crypto.randomUUID()}`)) as {
       default?: Parameters<typeof compileWorkflow>[0];
@@ -148,12 +155,90 @@ export class Registry {
     return { workflow: compileWorkflow(module.default), source };
   }
 
+  removeOwned(slug: string, source: string): void {
+    const file = this.file(slug);
+    if (!existsSync(file) || this.get(slug).source !== canonical(source)) return;
+    const lock = `${file}.lock`;
+    mkdirSync(lock, { mode: 0o700 });
+    try {
+      if (this.get(slug).source === canonical(source)) rmSync(file);
+    } finally {
+      rmSync(lock, { recursive: true });
+    }
+  }
+}
+
+function projectRoot(cwd: string): string {
+  let directory = canonical(cwd);
+  while (true) {
+    if (existsSync(join(directory, ".loopy", "workflows"))) return directory;
+    const parent = dirname(directory);
+    if (parent === directory) return canonical(cwd);
+    directory = parent;
+  }
+}
+
+/** Project definitions override global definitions with the same slug. */
+export class Registry {
+  readonly project: string;
+  readonly directory: string;
+  private readonly global: ScopedRegistry;
+  private readonly local: ScopedRegistry;
+
+  constructor(
+    readonly home = defaultHome(),
+    cwd = process.cwd(),
+  ) {
+    this.project = projectRoot(cwd);
+    this.global = new ScopedRegistry(home);
+    this.local = new ScopedRegistry(join(this.project, ".loopy"));
+    this.directory = this.local.directory;
+  }
+
+  get(slug: string): SavedWorkflow {
+    if (this.local.has(slug)) return this.local.get(slug);
+    const saved = this.global.get(slug);
+    if (saved.workflow.config?.scope !== "global")
+      throw new Error(
+        `Loopy '${slug}' has no global scope. Save its source again with explicit scope.`,
+      );
+    return saved;
+  }
+
+  list(): WorkflowSummary[] {
+    const workflows = new Map(
+      this.global
+        .list()
+        .filter((item) => item.scope === "global")
+        .map((item) => [item.slug, item]),
+    );
+    for (const item of this.local.list()) workflows.set(item.slug, item);
+    return [...workflows.values()].sort((a, b) => a.slug.localeCompare(b.slug));
+  }
+
+  private store(workflow: Workflow): ScopedRegistry {
+    return workflow.config?.scope === "global" ? this.global : this.local;
+  }
+
+  save(workflow: Workflow, source: string, options: SaveOptions = {}): SavedWorkflow {
+    const snapshot = snapshotPaths(compileWorkflow(workflow), canonical(source));
+    const store = this.store(snapshot);
+    const saved = store.save(snapshot, source, options);
+    const other = store === this.global ? this.local : this.global;
+    other.removeOwned(workflow.slug, source);
+    if (store === this.global) {
+      const sourceProject = projectRoot(dirname(canonical(source)));
+      if (sourceProject !== this.project)
+        new ScopedRegistry(join(sourceProject, ".loopy")).removeOwned(workflow.slug, source);
+    }
+    return saved;
+  }
+
   async saveFile(file: string, options: SaveOptions = {}): Promise<SavedWorkflow> {
-    const { workflow, source } = await this.load(file);
+    const { workflow, source } = await this.global.load(file);
     return this.save(workflow, source, options);
   }
 
-  /** Loads every `*.loopy.ts` under a folder and checks all of them before writing any. */
   async saveDirectory(directory: string, options: SaveOptions = {}): Promise<SavedWorkflow[]> {
     const root = realpathSync(resolve(directory));
     if (!statSync(root).isDirectory()) throw new Error(`Not a directory: '${root}'.`);
@@ -162,18 +247,71 @@ export class Registry {
     const loaded: Loaded[] = [];
     const seen = new Map<string, string>();
     for (const file of files) {
-      const item = await this.load(file);
+      const item = await this.global.load(file);
       const previous = seen.get(item.workflow.slug);
       if (previous)
         throw new Error(
           `Duplicate slug '${item.workflow.slug}' in '${previous}' and '${item.source}'.`,
         );
       seen.set(item.workflow.slug, item.source);
+      item.workflow = snapshotPaths(item.workflow, item.source);
       loaded.push(item);
     }
-    for (const { workflow, source } of loaded) this.assertOwner(workflow.slug, source, options);
+    for (const { workflow, source } of loaded)
+      this.store(workflow).assertOwner(workflow.slug, source, options);
     return loaded.map(({ workflow, source }) => this.save(workflow, source, options));
   }
+}
+
+function snapshotPaths(workflow: Workflow, source: string): Workflow {
+  const global = workflow.config?.scope === "global";
+  const base = dirname(source);
+  const explicitRelative = (path: string) => path.startsWith("./") || path.startsWith("../");
+  const value = (item: unknown, cwd: string): unknown => {
+    if (typeof item === "string")
+      return global && explicitRelative(item) ? resolve(cwd, item) : item;
+    if (!item || typeof item !== "object") return item;
+    if ("$file" in item) {
+      const path = (item as { $file: string }).$file;
+      return global ? resolve(cwd, path) : path;
+    }
+    if ("$op" in item) {
+      const expression = item as { $op: string; args: unknown[] };
+      // Only marked paths are rewritten inside expressions; string fragments may be prose.
+      return {
+        ...expression,
+        args: expression.args.map((part) => (typeof part === "string" ? part : value(part, cwd))),
+      };
+    }
+    return item;
+  };
+  const walk = (nodes: WorkflowNode[]): void => {
+    for (const node of nodes) {
+      if (node.kind === "condition") {
+        node.test = value(node.test, base) as typeof node.test;
+        walk(node.then);
+        walk(node.else);
+        continue;
+      }
+      const command = node.command;
+      const cwd = resolve(base, command.cwd ?? ".");
+      if (global) {
+        if (command.cwd !== undefined) command.cwd = cwd;
+        if (isAbsolute(command.program) || command.program.includes("/"))
+          command.program = resolve(cwd, command.program);
+      }
+      command.args = command.args.map((arg) => value(arg, cwd)) as typeof command.args;
+      if (command.stdin !== undefined)
+        command.stdin = value(command.stdin, cwd) as typeof command.stdin;
+      if (command.env)
+        command.env = Object.fromEntries(
+          Object.entries(command.env).map(([key, item]) => [key, value(item, cwd)]),
+        ) as typeof command.env;
+    }
+  };
+  walk(workflow.nodes);
+  validateWorkflow(workflow);
+  return workflow;
 }
 
 function findWorkflowFiles(root: string): string[] {
