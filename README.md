@@ -27,6 +27,10 @@ loopy --help
 
 This builds and packs the package into `~/.loopy/packages/loopy-<sha256>.tgz` and installs it with `bun add --global`. Put the directory from `bun pm bin -g` on your PATH. Rerun after pulling. The installer also prints a `bun add <archive>` command for projects that import `loopy`; the global CLI does not provide that dependency.
 
+Run `loopy --version` to see the installed package version, Git revision, whether the build included uncommitted changes, and the SHA-256 of its built files. `loopy doctor` compares the project's authoring package with the CLI and reports saved registrations in the wrong scope, including legacy global registrations hidden from `list`. It does not import workflow source or change saved data.
+
+Use `loopy doctor <slug> --cwd /path/to/workspace` to check command directories, executable lookup and missing absolute file arguments. Missing files are warnings because an argument may name a new output destination. Conditional commands are advisory until the run selects a branch. Doctor checks host paths; it does not prove sandbox access or validate arbitrary script input.
+
 Keep `*.loopy.ts` files next to the code they automate, or in one loopies project with its own `loopy` dependency:
 
 ```sh

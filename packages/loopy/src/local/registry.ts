@@ -27,6 +27,13 @@ export type WorkflowSummary = {
   updatedAt: string;
   source: string;
 };
+export type RegistrationDiagnostic = {
+  file: string;
+  location: "project" | "global";
+  slug: string;
+  source?: string;
+  error?: string;
+};
 type Loaded = { workflow: Workflow; source: string };
 type SaveOptions = { replace?: boolean };
 
@@ -102,6 +109,33 @@ class ScopedRegistry {
           updatedAt,
           source,
         };
+      });
+  }
+
+  diagnose(location: "project" | "global"): RegistrationDiagnostic[] {
+    if (!existsSync(this.directory)) return [];
+    return readdirSync(this.directory)
+      .filter((name) => name.endsWith(".json"))
+      .sort()
+      .map((name) => {
+        const slug = name.slice(0, -".json".length);
+        const diagnostic: RegistrationDiagnostic = {
+          file: join(this.directory, name),
+          location,
+          slug,
+        };
+        try {
+          const saved = this.get(slug);
+          diagnostic.source = saved.source;
+          if ((saved.workflow.config?.scope ?? "project") !== location)
+            diagnostic.error =
+              location === "global"
+                ? "This global registration has no global scope. Add .config({ scope: 'global' }) to its source and save it again, or save the source with project scope to move it."
+                : "This project registration declares global scope. Save its source again to move it to the global registry.";
+        } catch (error) {
+          diagnostic.error = error instanceof Error ? error.message : String(error);
+        }
+        return diagnostic;
       });
   }
 
@@ -214,6 +248,10 @@ export class Registry {
     );
     for (const item of this.local.list()) workflows.set(item.slug, item);
     return [...workflows.values()].sort((a, b) => a.slug.localeCompare(b.slug));
+  }
+
+  diagnose(): RegistrationDiagnostic[] {
+    return [...this.local.diagnose("project"), ...this.global.diagnose("global")];
   }
 
   private store(workflow: Workflow): ScopedRegistry {

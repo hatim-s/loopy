@@ -132,7 +132,7 @@ class Execution {
       if (previous?.status === "uncertain" && !this.options.retryUncertain)
         return {
           status: "interrupted",
-          error: `Node ${node.id} may have changed external state. Resume with retryUncertain to run it again.`,
+          error: `Node ${node.id} may have changed external state. Inspect its saved attempt and external effects before explicitly permitting another attempt.`,
         };
       const result =
         node.kind === "condition"
