@@ -3,7 +3,9 @@ import { mkdir, stat, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import type { Json } from "../core/model.js";
+import { doctor } from "../local/doctor.js";
 import { generateCommand } from "../local/help.js";
+import { runningBuildIdentity } from "../local/identity.js";
 import { localRunOptions } from "../local/process.js";
 import { defaultHome, Registry } from "../local/registry.js";
 import { createLocalRuntime } from "../local/runtime.js";
@@ -17,6 +19,8 @@ const usage = `loopy: TypeScript workflows for CLI tools
   loopy save <file.ts|directory>               Compile files and save by configured scope
   loopy list                                   List saved loopies
   loopy graph <slug>                            Print the saved graph as JSON
+  loopy version                                Show installed version and build identity
+  loopy doctor [slug]                           Check package, scope, programs, and file paths
   loopy run <slug> [--input JSON|@file]          Run in a sandbox
   loopy run <slug> --full                       Run with your full host permissions
   loopy resume <run-id> [--retry-uncertain]      Continue from saved checkpoints
@@ -75,6 +79,7 @@ export async function main(args = process.argv.slice(2)) {
     strict: true,
     options: {
       help: { type: "boolean", short: "h" },
+      version: { type: "boolean", short: "v" },
       home: { type: "string" },
       cwd: { type: "string" },
       input: { type: "string" },
@@ -88,6 +93,10 @@ export async function main(args = process.argv.slice(2)) {
     },
   });
   const [command, target, ...rest] = positionals;
+  if (values.version || command === "version") {
+    print(runningBuildIdentity());
+    return;
+  }
   if (values.help || !command) {
     console.log(usage);
     return;
@@ -127,6 +136,12 @@ export async function main(args = process.argv.slice(2)) {
   }
   const registry = new Registry(home, project);
   switch (command) {
+    case "doctor": {
+      const report = await doctor(registry, cwd, target);
+      print(report);
+      if (!report.ok) process.exitCode = 1;
+      return;
+    }
     case "save": {
       const source = required(target, "TypeScript file or directory");
       const options = { replace: values.replace };
@@ -184,8 +199,10 @@ export async function main(args = process.argv.slice(2)) {
       const options = localRunOptions(cwd, values.full ? "full" : "sandbox");
       id = (await runtime.createRun(workflow, await readInput(values.input), options)).id;
     } else {
-      if (values.full || values.input || values.cwd)
-        throw new Error("A resumed run keeps its original mode, input, and workspace.");
+      if (values.full || values.input !== undefined || values.cwd)
+        throw new Error(
+          "A resumed run keeps its original mode, input, and workspace. Use loopy run <slug> --input JSON to start a new run with corrected input.",
+        );
       id = required(target, "Run ID");
     }
     console.error(`Run ${id}`);
@@ -193,7 +210,22 @@ export async function main(args = process.argv.slice(2)) {
       runtime.execute(id, { retryUncertain: values["retry-uncertain"], signal }),
     );
     print(run);
-    if (run.status !== "succeeded") process.exitCode = 1;
+    if (run.status !== "succeeded") {
+      process.exitCode = 1;
+      const homeFlag = `--home '${home.replaceAll("'", "'\\''")}'`;
+      console.error(`Inspect the saved attempts and stderr: loopy inspect ${id} ${homeFlag}`);
+      const attempts = await runtime.getAttempts(id);
+      const latest = new Map<string, (typeof attempts)[number]>();
+      for (const attempt of attempts) {
+        const prior = latest.get(attempt.nodeId);
+        if (!prior || attempt.number > prior.number) latest.set(attempt.nodeId, attempt);
+      }
+      if ([...latest.values()].some((attempt) => attempt.status === "uncertain"))
+        console.error(
+          `Check external effects before retrying. To permit a repeat: loopy resume ${id} --retry-uncertain ${homeFlag}`,
+        );
+      else console.error(`After fixing the cause, continue with: loopy resume ${id} ${homeFlag}`);
+    }
   } finally {
     local.close();
   }

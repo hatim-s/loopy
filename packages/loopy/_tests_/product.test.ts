@@ -57,6 +57,8 @@ export default trigger('checkpoint')
   expect(saved.exitCode).toBe(0);
   const failed = await cli(home, cwd, "run", "checkpoint", "--full");
   expect(failed.exitCode).toBe(1);
+  expect(failed.stderr).toContain("loopy inspect");
+  expect(failed.stderr).toContain("loopy resume");
   const run = JSON.parse(failed.stdout);
   expect(run.status).toBe("failed");
   expect(readFileSync(join(cwd, "count"), "utf8")).toBe("x");

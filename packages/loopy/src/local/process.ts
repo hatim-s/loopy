@@ -43,7 +43,7 @@ async function executable(path: string): Promise<boolean> {
   }
 }
 
-async function resolveProgram(program: string, cwd: string, path: string): Promise<string> {
+export async function resolveProgram(program: string, cwd: string, path: string): Promise<string> {
   const candidates = program.includes(sep)
     ? [resolve(cwd, program)]
     : path.split(delimiter).map((directory) => resolve(cwd, directory, program));
