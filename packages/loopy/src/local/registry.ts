@@ -34,6 +34,13 @@ export type RegistrationDiagnostic = {
   source?: string;
   error?: string;
 };
+export type ScopeMigration = {
+  slug: string;
+  source: string;
+  registration: string;
+  sourceExists: boolean;
+  instruction: string;
+};
 type Loaded = { workflow: Workflow; source: string };
 type SaveOptions = { replace?: boolean };
 
@@ -178,9 +185,11 @@ class ScopedRegistry {
     }
   }
 
-  /** Imports trusted TypeScript. The cache-busting query lets one process reload edits. */
+  /** Imports trusted TypeScript, reloading edits to the owner source in this process. */
   async load(file: string): Promise<Loaded> {
     const source = realpathSync(resolve(file));
+    // Bun caches file URL imports by canonical filename even when the query changes.
+    delete require.cache[source];
     const module = (await import(`${pathToFileURL(source).href}?loopy=${crypto.randomUUID()}`)) as {
       default?: Parameters<typeof compileWorkflow>[0];
     };
@@ -252,6 +261,54 @@ export class Registry {
 
   diagnose(): RegistrationDiagnostic[] {
     return [...this.local.diagnose("project"), ...this.global.diagnose("global")];
+  }
+
+  /** Inventories legacy registrations without executing or changing their source. */
+  planScopeMigration(slug?: string): ScopeMigration[] {
+    const candidates = slug
+      ? [this.global.get(slug)]
+      : this.global.list().map((item) => this.global.get(item.slug));
+    return candidates
+      .filter((saved) => saved.workflow.config === undefined)
+      .map((saved) => ({
+        slug: saved.workflow.slug,
+        source: saved.source,
+        registration: join(this.global.directory, `${saved.workflow.slug}.json`),
+        sourceExists: existsSync(saved.source),
+        instruction:
+          "Set .config({ scope: 'global' }) or .config({ scope: 'project' }) in the source, then run loopy migrate <slug> --apply. Apply imports trusted source, preserves its ownership, and saves only the graph. It never copies dependencies or edits the source.",
+      }));
+  }
+
+  /** Applies one migration only after the owner source explicitly chooses its scope. */
+  async migrateScope(slug: string): Promise<SavedWorkflow> {
+    const saved = this.global.get(slug);
+    if (saved.workflow.config !== undefined)
+      throw new Error(
+        `Loopy '${slug}' is not a legacy registration without scope. No migration is needed.`,
+      );
+    if (!existsSync(saved.source))
+      throw new Error(`Restore the owner source '${saved.source}' before migrating '${slug}'.`);
+    const loaded = await this.global.load(saved.source);
+    if (loaded.source !== saved.source)
+      throw new Error(
+        `Owner source '${saved.source}' now resolves to a different path. Restore its original location before migrating.`,
+      );
+    if (loaded.workflow.slug !== slug)
+      throw new Error(
+        `The owner source now declares '${loaded.workflow.slug}', not '${slug}'. Restore the original slug before migrating.`,
+      );
+    if (!loaded.workflow.config)
+      throw new Error(
+        `Choose an explicit scope in '${saved.source}' with .config({ scope: 'global' }) or .config({ scope: 'project' }), then retry. No registration was changed.`,
+      );
+    const current = this.global.get(slug);
+    if (current.source !== saved.source || current.workflow.config !== undefined)
+      throw new Error(
+        `Registration '${slug}' changed during migration. Run loopy migrate again to inspect it.`,
+      );
+    const sourceProject = projectRoot(dirname(loaded.source));
+    return new Registry(this.home, sourceProject).save(loaded.workflow, loaded.source);
   }
 
   private store(workflow: Workflow): ScopedRegistry {
