@@ -42,6 +42,8 @@ loopy run review --full
 
 Folder saves walk the tree for `*.loopy.ts`, skipping hidden entries, symlinks, `node_modules`, `dist` and `coverage`. Every file is imported and checked before anything is written. Two files with the same slug fail the whole save, `--replace` or not; rename one. A slug already owned by a different source fails unless you pass `--replace`.
 
+Legacy global registrations saved before workflow scopes may be hidden from `loopy list`. Run `loopy migrate --dry-run` to list them without importing source or changing data. Edit each owner source to declare `.config({ scope: "global" })` or `.config({ scope: "project" })`, then run `loopy migrate <slug> --apply`. Apply imports that trusted source and migrates one registration. Global paths become absolute references to existing locations; project registrations move beside their source project. Migration preserves source ownership, refuses slug collisions, and never edits source or copies dependencies. Restore a missing source before applying its migration.
+
 Workflows default to project scope. Project graphs live in `<project>/.loopy/workflows` and are available from that directory and its children. `loopy save` uses the current project directory for sources inside it, or the source directory for external sources; pass `--cwd /path/to/project` to select another project. Only workflows configured with global scope are saved to `~/.loopy/v2/workflows` and available everywhere. A project slug overrides a global slug of the same name.
 
 ```ts

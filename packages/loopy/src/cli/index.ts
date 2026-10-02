@@ -21,6 +21,8 @@ const usage = `loopy: TypeScript workflows for CLI tools
   loopy graph <slug>                            Print the saved graph as JSON
   loopy version                                Show installed version and build identity
   loopy doctor [slug]                           Check package, scope, programs, and file paths
+  loopy migrate [slug] [--dry-run]              Preview legacy global scope migration
+  loopy migrate <slug> --apply                  Migrate from its explicitly scoped source
   loopy run <slug> [--input JSON|@file]          Run in a sandbox
   loopy run <slug> --full                       Run with your full host permissions
   loopy resume <run-id> [--retry-uncertain]      Continue from saved checkpoints
@@ -90,6 +92,8 @@ export async function main(args = process.argv.slice(2)) {
       "retry-uncertain": { type: "boolean" },
       force: { type: "boolean" },
       replace: { type: "boolean" },
+      "dry-run": { type: "boolean" },
+      apply: { type: "boolean" },
     },
   });
   const [command, target, ...rest] = positionals;
@@ -140,6 +144,16 @@ export async function main(args = process.argv.slice(2)) {
       const report = await doctor(registry, cwd, target);
       print(report);
       if (!report.ok) process.exitCode = 1;
+      return;
+    }
+    case "migrate": {
+      if (values.apply && values["dry-run"])
+        throw new Error("Use either --dry-run or --apply, not both.");
+      if (values.apply) {
+        print(await registry.migrateScope(required(target, "One legacy slug for --apply")));
+      } else {
+        print({ dryRun: true, migrations: registry.planScopeMigration(target) });
+      }
       return;
     }
     case "save": {
