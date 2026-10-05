@@ -119,13 +119,20 @@ uses a current TypeScript graph and an isolated worktree runner to export assets
 loopy save ./review.loopy.ts
 loopy list
 loopy graph review
-loopy run review --input @input.json --cwd /path/to/repo --full
+loopy run review --branch main --instructions "Review the changes" --full
+loopy run review --args input.json --cwd /path/to/repo --full
 loopy runs review
 loopy inspect <run-id>
 loopy resume <run-id>
 loopy resume <run-id> --retry-uncertain
 loopy recover <run-id> --force
 ```
+
+Pass trigger fields as `--key value` or `--key=value`. Values stay strings, including `false` and `123`. Quote values containing spaces. Use `--key=--value` for values starting with `--`. Repeated fields and missing values are errors.
+
+For typed or nested input, `--args input.json` reads the complete JSON value from a file, relative to your shell directory. `--input '{"key":"value"}'` and `--input @input.json` also work. Choose one input source per run; files and named flags cannot be mixed. Trigger TypeScript types are not stored as a runtime input schema.
+
+Loopy options such as `--cwd`, `--full`, and `--args` are reserved. To use those names as trigger fields, put them after `--`, for example `loopy run example --full -- --cwd elsewhere --args text`. All Loopy options must precede that separator. Named fields map directly to top-level input keys; use JSON for nested objects and arrays.
 
 Slugs are scoped to a project directory or the global Loopy home. `loopy list` shows which source owns each one. Saving the same file again updates the graph; a different file with the same slug fails until you rename it or pass `--replace`. Symlinked sources resolve to their real path. Saves take a per-slug lock directory and rename the new file into place; if a save dies mid-way, remove the lock it names once you're sure the process is gone.
 

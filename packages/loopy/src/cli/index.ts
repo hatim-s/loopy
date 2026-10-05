@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
-import { parseArgs } from "node:util";
 import type { Json } from "../core/model.js";
 import { generateCommand } from "../local/help.js";
 import { localRunOptions } from "../local/process.js";
@@ -9,6 +8,7 @@ import { defaultHome, Registry } from "../local/registry.js";
 import { createLocalRuntime } from "../local/runtime.js";
 import { startServer } from "../local/server.js";
 import { errorMessage } from "../runtime/errors.js";
+import { parseCliArgs } from "./args.js";
 
 const DEFAULT_PORT = 4310;
 
@@ -17,7 +17,9 @@ const usage = `loopy: TypeScript workflows for CLI tools
   loopy save <file.ts|directory>               Compile files and save by configured scope
   loopy list                                   List saved loopies
   loopy graph <slug>                            Print the saved graph as JSON
-  loopy run <slug> [--input JSON|@file]          Run in a sandbox
+  loopy run <slug> [--key value ...]            Run with string trigger inputs
+  loopy run <slug> --args input.json            Run with a JSON input file
+  loopy run <slug> --input JSON|@file           Run with JSON input
   loopy run <slug> --full                       Run with your full host permissions
   loopy resume <run-id> [--retry-uncertain]      Continue from saved checkpoints
   loopy recover <run-id> --force               Release a run owned by another host
@@ -30,6 +32,9 @@ const usage = `loopy: TypeScript workflows for CLI tools
   --cwd <directory>     Workspace for a new run or the viewer. Default: current directory
   --replace            Transfer a saved slug from another source file
   --name <identifier>   Export name for a generated CLI wrapper
+
+Run input: choose named flags, --args, or --input. Named values are strings.
+Use --key=value for dash-prefixed values; use -- --key value for reserved names.
 
 Saved TypeScript is trusted code executed during save. Saved graphs contain only data.
 Sandbox runs deny network and restrict writes to the workspace. No host fallback.
@@ -69,24 +74,7 @@ function untilSignalled<T>(work: (signal: AbortSignal) => Promise<T>): Promise<T
 }
 
 export async function main(args = process.argv.slice(2)) {
-  const { values, positionals } = parseArgs({
-    args,
-    allowPositionals: true,
-    strict: true,
-    options: {
-      help: { type: "boolean", short: "h" },
-      home: { type: "string" },
-      cwd: { type: "string" },
-      input: { type: "string" },
-      full: { type: "boolean" },
-      out: { type: "string" },
-      name: { type: "string" },
-      port: { type: "string" },
-      "retry-uncertain": { type: "boolean" },
-      force: { type: "boolean" },
-      replace: { type: "boolean" },
-    },
-  });
+  const { values, positionals, triggerInput } = parseCliArgs(args);
   const [command, target, ...rest] = positionals;
   if (values.help || !command) {
     console.log(usage);
@@ -182,7 +170,15 @@ export async function main(args = process.argv.slice(2)) {
     if (command === "run") {
       const workflow = registry.get(required(target, "Slug")).workflow;
       const options = localRunOptions(cwd, values.full ? "full" : "sandbox");
-      id = (await runtime.createRun(workflow, await readInput(values.input), options)).id;
+      id = (
+        await runtime.createRun(
+          workflow,
+          values.args !== undefined
+            ? await readInput(`@${values.args}`)
+            : (triggerInput ?? (await readInput(values.input))),
+          options,
+        )
+      ).id;
     } else {
       if (values.full || values.input || values.cwd)
         throw new Error("A resumed run keeps its original mode, input, and workspace.");
