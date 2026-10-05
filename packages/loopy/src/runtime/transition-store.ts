@@ -1,13 +1,16 @@
-import type { TenantScope } from "../application/ports.js";
+import type { ArtifactIdentity, TenantScope } from "../application/ports.js";
 import type { AttemptRecord, RunRecord } from "../core/model.js";
 import type { StartCommand, WorkspaceObservation } from "./remote-executor.js";
 
 export type TransitionLease = { runId: string; token: string; fence: number; expiresAt: string };
+export type StoredExecutionIntent = Omit<StartCommand, "command"> & {
+  commandArtifact: ArtifactIdentity;
+};
 export type DurableRunState = {
   revision: number;
   run: RunRecord;
   attempts: AttemptRecord[];
-  intent?: StartCommand;
+  intent?: StartCommand | StoredExecutionIntent;
   workspace: WorkspaceObservation;
   cancelRequested: boolean;
 };
