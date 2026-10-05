@@ -1,3 +1,6 @@
+export const MAX_EXECUTION_OUTPUT_BYTES = 1_048_576;
+export const MAX_EXECUTION_METADATA_BYTES = 512_000;
+
 import type { CommandOutput, ResolvedCommand } from "../core/model.js";
 
 export type ExecutionKey = { tenantId: string; runId: string; attemptId: string };
@@ -27,6 +30,8 @@ export type CancelReceipt = ExecutionObservation;
  * Unknown means the command may have run and requires an explicit retry decision.
  */
 export interface RemoteExecutor {
+  /** Supported aggregate UTF-8 stdout and stderr capacity, known before admission. */
+  readonly maxOutputBytes: number;
   start(request: StartCommand): Promise<StartReceipt>;
   inspect(key: ExecutionKey): Promise<ExecutionObservation>;
   cancel(key: ExecutionKey): Promise<CancelReceipt>;

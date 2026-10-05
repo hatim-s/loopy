@@ -18,6 +18,11 @@ export type WorkflowVersion = {
   readonly compiler: string;
   readonly runtime: RuntimeIdentity;
   readonly imageDigest: string;
+  readonly publication?: {
+    readonly bundle: ArtifactIdentity;
+    readonly lockfileHash: string;
+    readonly sourceMappings: readonly { readonly source: string; readonly target: string }[];
+  };
 };
 export type AdmissionRequest = {
   idempotencyKey: string;
