@@ -2,8 +2,14 @@
 export const sqliteSchema = [
   `CREATE TABLE loopy_artifacts (
     tenant_id TEXT NOT NULL, id TEXT NOT NULL, sha256 TEXT NOT NULL,
-    bytes INTEGER NOT NULL CHECK(bytes >= 0), content BLOB NOT NULL,
-    PRIMARY KEY (tenant_id, id), CHECK(length(content) = bytes)
+    bytes INTEGER NOT NULL CHECK(bytes >= 0 AND bytes <= 8000000),
+    PRIMARY KEY (tenant_id, id)
+  )`,
+  `CREATE TABLE loopy_artifact_chunks (
+    tenant_id TEXT NOT NULL, artifact_id TEXT NOT NULL, part INTEGER NOT NULL CHECK(part >= 0),
+    content BLOB NOT NULL CHECK(length(content) <= 262144),
+    PRIMARY KEY (tenant_id, artifact_id, part),
+    FOREIGN KEY (tenant_id, artifact_id) REFERENCES loopy_artifacts(tenant_id, id)
   )`,
   `CREATE TABLE loopy_versions (
     tenant_id TEXT NOT NULL, id TEXT NOT NULL, slug TEXT NOT NULL,
@@ -18,6 +24,8 @@ export const sqliteSchema = [
     PRIMARY KEY (tenant_id, id), UNIQUE (tenant_id, admission_key),
     FOREIGN KEY (tenant_id, version_id) REFERENCES loopy_versions(tenant_id, id)
   )`,
+  `CREATE INDEX loopy_runs_recovery ON loopy_runs(tenant_id, id)
+    WHERE json_extract(payload, '$.status') IN ('pending', 'running') OR json_type(state, '$.intent') = 'object'`,
   `CREATE TABLE loopy_outbox (
     tenant_id TEXT NOT NULL, id TEXT NOT NULL, run_id TEXT NOT NULL,
     kind TEXT NOT NULL CHECK(kind IN ('dispatch', 'analytics')), payload TEXT NOT NULL,
@@ -26,6 +34,8 @@ export const sqliteSchema = [
     FOREIGN KEY (tenant_id, run_id) REFERENCES loopy_runs(tenant_id, id)
   )`,
   `CREATE INDEX loopy_outbox_pending ON loopy_outbox(tenant_id, kind, delivered_at, created_at)`,
+  `CREATE INDEX loopy_dispatch_recovery ON loopy_outbox(tenant_id)
+    WHERE kind = 'dispatch' AND delivered_at IS NULL`,
   `CREATE TABLE loopy_events (
     tenant_id TEXT NOT NULL, run_id TEXT NOT NULL, sequence INTEGER NOT NULL,
     payload TEXT NOT NULL, created_at TEXT NOT NULL,
