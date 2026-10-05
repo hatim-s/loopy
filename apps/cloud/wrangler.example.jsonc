@@ -1,0 +1,25 @@
+{
+  "name": "loopy-control",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-30",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "loopy",
+      "database_id": "REPLACE_WITH_PROVISIONED_DATABASE_ID"
+    }
+  ],
+  "durable_objects": { "bindings": [{ "name": "COORDINATORS", "class_name": "RunCoordinator" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RunCoordinator"] }],
+  "services": [{ "binding": "EXECUTOR", "service": "loopy-executor" }],
+  "triggers": { "crons": ["* * * * *"] },
+  "vars": {
+    "RUNTIME_BUILD": "REPLACE_WITH_PINNED_RUNTIME_BUILD",
+    "CLERK_PUBLISHABLE_KEY": "REPLACE_WITH_CLERK_PUBLISHABLE_KEY",
+    "CLERK_AUTHORIZED_PARTIES": "https://REPLACE_WITH_STUDIO_ORIGIN"
+  }
+  // Configure CLERK_SECRET_KEY and CLERK_JWT_KEY as secrets.
+  // EXECUTOR must provide start/inspect/cancel/provisionWorkspace/inspectWorkspace via trusted RPC.
+  // Apply loopy/storage sqliteSchema migrations before admitting runs.
+}
