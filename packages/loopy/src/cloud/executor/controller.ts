@@ -112,8 +112,17 @@ export class RemoteLinuxExecutor implements RemoteExecutor {
     const receipt = await this.store.read(key);
     if (!receipt) return { state: "not-started" };
     if (terminal(receipt.observation)) return receipt.observation;
-    if (receipt.cancelRequested || (receipt.deadline && this.now() >= Date.parse(receipt.deadline)))
+    if (receipt.cancelRequested) return await this.cancel(key);
+    if (receipt.deadline && this.now() >= Date.parse(receipt.deadline)) {
+      let observed: ExecutionObservation | undefined;
+      try {
+        observed = await this.provider.inspect(key);
+      } catch {
+        // Failure to observe a result must still enforce the persisted deadline.
+      }
+      if (observed?.state === "completed") return await this.record(key, observed);
       return await this.cancel(key);
+    }
     if (receipt.workspace) {
       let availability: "available" | "lost";
       try {
@@ -130,6 +139,8 @@ export class RemoteLinuxExecutor implements RemoteExecutor {
     } catch {
       return await this.latestObservation(key);
     }
+    // Provider completion is authoritative even when the coordinator observes it after the deadline.
+    if (observed.state === "completed") return await this.record(key, observed);
     // Absence cannot prove that a pending start was never accepted.
     return await this.record(
       key,

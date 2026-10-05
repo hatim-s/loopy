@@ -337,3 +337,35 @@ test("output limit counts isolated surrogates in each stream separately", async 
     reason: "Provider exceeded output limit; result rejected",
   });
 });
+
+test("expired deadline propagates completed receipt persistence failure without cancelling", async () => {
+  let now = Date.parse(request.deadline) - 1000;
+  let cancellations = 0;
+  const store = new Store();
+  const executor = new RemoteLinuxExecutor(
+    store,
+    {
+      async workspace() {
+        return "available";
+      },
+      async start() {
+        return { state: "running", jobId: "job", workspace: request.workspace };
+      },
+      async inspect() {
+        return completed;
+      },
+      async cancel() {
+        cancellations++;
+        return { state: "cancelled-before-start" };
+      },
+    },
+    () => now,
+  );
+  await executor.start(request);
+  now = Date.parse(request.deadline) + 1000;
+  store.compareAndSwap = async () => {
+    throw new Error("receipt CAS unavailable");
+  };
+  await expect(executor.inspect(request.key)).rejects.toThrow("receipt CAS unavailable");
+  expect(cancellations).toBe(0);
+});
