@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { Miniflare } from "miniflare";
+import { HostedControl } from "../src/cloud/control.js";
 import {
   type ExecutionReceipt,
   type LinuxExecutionProvider,
@@ -68,7 +69,7 @@ async function fixture(workflow: Workflow) {
       artifacts: store,
       executor: new RemoteLinuxExecutor(receiptStore, provider, () => clock),
       runtime,
-      runtimeForRun: async () => runtime,
+      runtimeForRun: (runId) => store.runtimeForRun(runId),
       now: () => clock,
       stateBytes: store.limits.stateBytes,
       workspaces: {
@@ -234,6 +235,21 @@ test("real D1 stores accumulated 600k outputs outside state and hydrates branch 
       (attempts.find((attempt) => attempt.nodeId === "yes")?.input as { args: string[] }).args[0]
         ?.length,
     ).toBe(600000);
+    const control = new HostedControl(
+      () => ({ catalog: f.store, admission: f.store, runs: f.store, artifacts: f.store }),
+      { async ensureStarted() {}, async cancel() {} },
+      {
+        protocol: 1,
+        runtime: { build: "v1", graphSchema: 1 },
+        operations: ["read"],
+        executors: ["controlled"],
+      },
+    );
+    const inspected = await control.inspect(
+      { subject: "user", tenantId: "tenant", operations: ["read"] },
+      f.run.id,
+    );
+    expect((inspected.attempts[0]?.output as { stdout: string }).stdout.length).toBe(600000);
     expect(launches).toBe(3);
   } finally {
     await f.mf.dispose();

@@ -135,9 +135,13 @@ export class DurableRunner {
             ),
           }
         : undefined;
-    const commandArtifact = command
-      ? await putExecutionArtifact(this.options.artifacts, command)
-      : undefined;
+    let commandArtifact: import("../application/ports.js").ArtifactIdentity | undefined;
+    try {
+      if (command) commandArtifact = await putExecutionArtifact(this.options.artifacts, command);
+    } catch {
+      decision = undefined;
+      decisionError = "Resolved command exceeds execution artifact limits";
+    }
     return await this.mutate(runId, async (current) => {
       if (
         current.revision !== state.revision ||
@@ -335,7 +339,7 @@ export class DurableRunner {
           "Execution history reached its storage limit. No new command was launched.";
       }
       if (!(await this.options.store.commit(lease, current.revision, current))) return this.later();
-      return current.intent
+      return current.intent && current.run.status === "interrupted"
         ? { state: "blocked", wakeAt: new Date(this.now() + this.pollMs).toISOString() }
         : terminal(current.run)
           ? { state: "terminal" }
