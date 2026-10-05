@@ -69,6 +69,7 @@ async function fixture(
     },
   };
   const executor: RemoteExecutor = {
+    maxOutputBytes: 1_048_576,
     async inspect(key) {
       expect(held).toBeUndefined();
       return jobs.get(key.attemptId) ?? { state: "not-started" };
@@ -101,11 +102,18 @@ async function fixture(
       return artifacts.get(identity.id);
     },
   };
-  const make = (build = "v1") =>
+  const make = (
+    build = "v1",
+    maxOutputBytes?: number,
+    artifactBytes = 8_000_000,
+    executorCapacity = 1_048_576,
+  ) =>
     new DurableRunner({
       store,
-      executor,
+      executor: { ...executor, maxOutputBytes: executorCapacity },
       artifacts: artifactStore,
+      artifactBytes,
+      maxOutputBytes,
       runtime: { ...runtime, build },
       runtimeForRun: async () => runtime,
       workspaces: {
@@ -225,4 +233,29 @@ test("unknown remote effects block duplicate delivery without replay", async () 
   expect(f.state().run.status).toBe("interrupted");
   await f.make().tick(f.run.id);
   expect(f.launches()).toBe(1);
+});
+
+test("unsupported output configuration rejects before persisting intent or launching", async () => {
+  const f = await fixture();
+  expect(() => f.make("v1", 2_097_152)).toThrow("capacity");
+  expect(() => f.make("v1", 1_048_576, 1_000_000)).toThrow("capacity");
+  expect(() => f.make("v1", 1_048_576, 8_000_000, 65_536)).toThrow("capacity");
+  expect(f.state().intent).toBeUndefined();
+  expect(f.state().attempts).toEqual([]);
+  expect(f.launches()).toBe(0);
+});
+test("workflow output cap beyond selected capacity fails before persisting intent", async () => {
+  const f = await fixture([
+    {
+      id: "one",
+      kind: "command",
+      command: { program: "echo", args: [], maxOutputBytes: 2_097_152 },
+    },
+  ]);
+  await f.make().tick(f.run.id);
+  await f.make().tick(f.run.id);
+  expect(f.state().run.status).toBe("failed");
+  expect(f.state().intent).toBeUndefined();
+  expect(f.state().attempts).toEqual([]);
+  expect(f.launches()).toBe(0);
 });

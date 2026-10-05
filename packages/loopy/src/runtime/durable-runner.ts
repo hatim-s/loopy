@@ -11,6 +11,7 @@ import type {
   RemoteExecutor,
   WorkspaceGeneration,
 } from "./remote-executor.js";
+import { MAX_EXECUTION_METADATA_BYTES, MAX_EXECUTION_OUTPUT_BYTES } from "./remote-executor.js";
 import type { DurableRunRepository, DurableRunState } from "./transition-store.js";
 import { decideNext } from "./transitions.js";
 
@@ -27,6 +28,7 @@ export type DurableRunnerOptions = {
   store: DurableRunRepository;
   executor: RemoteExecutor;
   artifacts: ArtifactStore;
+  artifactBytes: number;
   stateBytes?: number;
   workspaces: WorkspaceProvider;
   runtime: RuntimeIdentity;
@@ -59,7 +61,20 @@ export class DurableRunner {
     this.leaseMs = options.leaseMs ?? 10_000;
     this.pollMs = options.pollMs ?? 1_000;
     this.timeoutMs = options.timeoutMs ?? 300_000;
-    this.maxOutputBytes = options.maxOutputBytes ?? 1_048_576;
+    const supported = Math.min(
+      MAX_EXECUTION_OUTPUT_BYTES,
+      options.executor.maxOutputBytes,
+      Math.floor((options.artifactBytes - MAX_EXECUTION_METADATA_BYTES) / 6),
+    );
+    this.maxOutputBytes = options.maxOutputBytes ?? supported;
+    if (
+      !Number.isSafeInteger(options.executor.maxOutputBytes) ||
+      options.executor.maxOutputBytes < 1 ||
+      !Number.isSafeInteger(options.artifactBytes) ||
+      supported < 1 ||
+      this.maxOutputBytes > supported
+    )
+      throw new Error("Runner output budget exceeds executor or artifact capacity");
     for (const value of [
       this.leaseMs,
       this.pollMs,
@@ -123,6 +138,13 @@ export class DurableRunner {
       });
     } catch (error) {
       decisionError = errorMessage(error);
+    }
+    if (
+      decision?.kind === "command" &&
+      (decision.command.maxOutputBytes ?? this.maxOutputBytes) > this.maxOutputBytes
+    ) {
+      decision = undefined;
+      decisionError = "Command output budget exceeds configured execution capacity";
     }
     const command =
       decision?.kind === "command"

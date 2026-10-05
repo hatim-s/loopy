@@ -5,5 +5,11 @@ export type { Authenticator, TenantControl, VerifiedPrincipal } from "./control.
 export { ControlError, HostedControl } from "./control.js";
 export type { DispatchDelivery, DurableDriver, OutboxStore } from "./dispatch.js";
 export { dispatchPending } from "./dispatch.js";
+export type {
+  ExecutionReceipt,
+  ExecutionReceiptStore,
+  LinuxExecutionProvider,
+} from "./executor/index.js";
+export { RemoteLinuxExecutor } from "./executor/index.js";
 export type { CloudWorkMessage, CloudWorkOutcome } from "./worker.js";
 export { CloudWorker } from "./worker.js";

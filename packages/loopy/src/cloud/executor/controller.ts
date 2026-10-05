@@ -6,6 +6,7 @@ import type {
   StartReceipt,
   WorkspaceGeneration,
 } from "../../runtime/remote-executor.js";
+import { MAX_EXECUTION_OUTPUT_BYTES } from "../../runtime/remote-executor.js";
 
 export type ExecutionReceipt = {
   key: ExecutionKey;
@@ -22,6 +23,8 @@ export type ExecutionReceipt = {
  * Receipts live outside the workload. They never contain command input or credentials.
  */
 export interface ExecutionReceiptStore {
+  /** Maximum raw UTF-8 output budget this store can persist, including JSON escaping. */
+  readonly maxOutputBytes?: number;
   read(key: ExecutionKey): Promise<ExecutionReceipt | undefined>;
   compareAndSwap(
     key: ExecutionKey,
@@ -47,6 +50,12 @@ const terminal = (value: ExecutionObservation) =>
   value.state === "completed" || value.state === "cancelled-before-start";
 
 export class RemoteLinuxExecutor implements RemoteExecutor {
+  get maxOutputBytes(): number {
+    return Math.min(
+      MAX_EXECUTION_OUTPUT_BYTES,
+      this.store.maxOutputBytes ?? MAX_EXECUTION_OUTPUT_BYTES,
+    );
+  }
   constructor(
     private readonly store: ExecutionReceiptStore,
     private readonly provider: LinuxExecutionProvider,
@@ -59,6 +68,8 @@ export class RemoteLinuxExecutor implements RemoteExecutor {
     const limit = request.command.maxOutputBytes;
     if (limit === undefined || !Number.isSafeInteger(limit) || limit < 0)
       throw new Error("Remote commands require a bounded maxOutputBytes");
+    if (limit > this.maxOutputBytes)
+      throw new Error("Command output budget exceeds receipt storage limit");
     for (;;) {
       const existing = await this.store.read(request.key);
       if (existing) {

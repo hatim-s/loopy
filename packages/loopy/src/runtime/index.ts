@@ -11,6 +11,7 @@ export { CommandExecutionError, RunBusyError } from "./errors.js";
 export { InputValidationError, validateRunInput } from "./preflight.js";
 export { prepareRun } from "./prepare.js";
 export type * from "./remote-executor.js";
+export { MAX_EXECUTION_METADATA_BYTES, MAX_EXECUTION_OUTPUT_BYTES } from "./remote-executor.js";
 export type { RunRepository } from "./repository.js";
 export { Runtime } from "./runtime.js";
 export type * from "./transition-store.js";
