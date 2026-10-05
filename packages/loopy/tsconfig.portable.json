@@ -4,5 +4,5 @@
     "types": [],
     "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },
-  "include": ["src/core", "src/runtime", "src/cloud"]
+  "include": ["src/core", "src/runtime", "src/cloud", "src/application", "src/protocol"]
 }
