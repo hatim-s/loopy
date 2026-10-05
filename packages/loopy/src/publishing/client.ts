@@ -1,6 +1,7 @@
 import type { WorkflowVersion } from "../application/ports.js";
 import { validateWorkflow } from "../core/workflow.js";
-import { type PublishBundle, verifyPublishBundle } from "./manifest.js";
+import { compilationBytes, workflowGraphHash } from "./identity.js";
+import { hashContent, type PublishBundle, verifyPublishBundle } from "./manifest.js";
 
 export type HostedPublisherOptions = {
   readonly origin: string;
@@ -107,6 +108,20 @@ export class HostedPublisher {
       !/^sha256:[a-f0-9]{64}$/.test(version.imageDigest)
     )
       throw new Error("Hosted publishing returned an invalid version identity");
+    const graphHash = await workflowGraphHash(version.workflow);
+    if (graphHash !== version.graphHash)
+      throw new Error("Hosted publishing returned a mismatched graph hash");
+    const bytesIdentity = compilationBytes(
+      verified,
+      version.workflow,
+      graphHash,
+      version.imageDigest,
+    );
+    if (
+      (await hashContent(bytesIdentity)) !== version.id ||
+      bytesIdentity.byteLength !== publication.bundle.bytes
+    )
+      throw new Error("Hosted publishing returned a mismatched compilation identity");
     return version;
   }
 }

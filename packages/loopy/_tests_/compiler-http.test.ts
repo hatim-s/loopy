@@ -129,3 +129,38 @@ test("compiler service and client bound response bytes and sanitize internal fai
     }).compile(request),
   ).rejects.toThrow("exceeds");
 });
+
+test("compiler body ingestion stops a pending read on cancellation or its own host timeout", async () => {
+  for (const cancel of [false, true]) {
+    const controller = new AbortController();
+    let cancelled = false;
+    let compiles = 0;
+    const handler = createCompilerHandler({
+      serviceToken: "token",
+      bodyTimeoutMs: 10,
+      compiler: {
+        compile: async () => {
+          compiles++;
+          return result;
+        },
+      },
+    });
+    const body = new ReadableStream<Uint8Array>({
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const request = new Request("https://compiler.example/compile", {
+      method: "POST",
+      headers: { Authorization: "Bearer token" },
+      body,
+      signal: controller.signal,
+    });
+    const pending = handler(request);
+    if (cancel) controller.abort();
+    const response = await pending;
+    expect(response.status).toBe(422);
+    expect(cancelled).toBe(true);
+    expect(compiles).toBe(0);
+  }
+});

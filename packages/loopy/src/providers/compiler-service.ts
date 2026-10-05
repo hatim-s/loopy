@@ -5,6 +5,7 @@ import type { CompileRequest, IsolatedCompiler } from "../publishing/service.js"
 export type CompilerServiceOptions = {
   readonly serviceToken: string;
   readonly compiler: IsolatedCompiler;
+  readonly bodyTimeoutMs?: number;
 };
 
 /** Trusted Node/Bun handler. Hosting and the independent service credential are host configuration. */
@@ -13,6 +14,9 @@ export function createCompilerHandler(
 ): (request: Request) => Promise<Response> {
   if (!options.serviceToken || /[\r\n]/.test(options.serviceToken))
     throw new Error("Compiler service token is required");
+  const bodyTimeoutMs = options.bodyTimeoutMs ?? 10_000;
+  if (!Number.isSafeInteger(bodyTimeoutMs) || bodyTimeoutMs < 1 || bodyTimeoutMs > 10_000)
+    throw new Error("Invalid compiler body timeout");
   const expected = new TextEncoder().encode(`Bearer ${options.serviceToken}`);
   return async (request) => {
     const supplied = new TextEncoder().encode(request.headers.get("authorization") ?? "");
@@ -22,20 +26,32 @@ export function createCompilerHandler(
       return Response.json({ error: "Not found" }, { status: 404 });
     try {
       if (!request.body) throw new Error("Missing compiler request");
+      const bodySignal = AbortSignal.any([request.signal, AbortSignal.timeout(bodyTimeoutMs)]);
+      bodySignal.throwIfAborted();
       const reader = request.body.getReader();
+      let rejectRead: ((reason: Error) => void) | undefined;
+      const abortedRead = new Promise<never>((_, reject) => {
+        rejectRead = reject;
+      });
+      const cancelRead = () => {
+        rejectRead?.(new Error("Compiler body ingestion aborted"));
+        void reader.cancel().catch(() => {});
+      };
+      bodySignal.addEventListener("abort", cancelRead, { once: true });
       const chunks: Uint8Array[] = [];
       let count = 0;
       try {
         while (true) {
-          request.signal.throwIfAborted();
-          const item = await reader.read();
+          bodySignal.throwIfAborted();
+          const item = await Promise.race([reader.read(), abortedRead]);
           if (item.done) break;
           count += item.value.byteLength;
           if (count > 1_000_000) throw new Error("Compiler request exceeds limits");
           chunks.push(item.value);
         }
       } finally {
-        await reader.cancel().catch(() => {});
+        bodySignal.removeEventListener("abort", cancelRead);
+        void reader.cancel().catch(() => {});
         reader.releaseLock();
       }
       const bytes = new Uint8Array(count);

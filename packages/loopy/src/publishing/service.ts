@@ -7,6 +7,7 @@ import type {
 } from "../application/ports.js";
 import type { Workflow } from "../core/model.js";
 import { validateWorkflow } from "../core/workflow.js";
+import { canonicalWorkflow, compilationBytes, workflowGraphHash } from "./identity.js";
 import {
   hashContent,
   normalizeBundlePath,
@@ -80,17 +81,6 @@ function mapFiles(workflow: Workflow, bundle: PublishBundle): Workflow {
   return visit(workflow) as Workflow;
 }
 
-function canonical(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonical);
-  if (value !== null && typeof value === "object")
-    return Object.fromEntries(
-      Object.entries(value)
-        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-        .map(([key, child]) => [key, canonical(child)]),
-    );
-  return value;
-}
-
 export class PublishingService {
   constructor(private readonly ports: PublishingPorts) {}
 
@@ -149,10 +139,8 @@ export class PublishingService {
     if (graphBytes.byteLength > maxOutputBytes) throw new Error("Compiler output exceeds limits");
     const graph: unknown = JSON.parse(new TextDecoder().decode(graphBytes));
     validateWorkflow(graph);
-    const workflow = mapFiles(graph, verified);
-    const graphHash = await hashContent(
-      new TextEncoder().encode(JSON.stringify(canonical(workflow))),
-    );
+    const workflow = canonicalWorkflow(mapFiles(graph, verified));
+    const graphHash = await workflowGraphHash(workflow);
     async function put(bytes: Uint8Array): Promise<ArtifactIdentity> {
       const identity = await artifacts.put(bytes);
       if (
@@ -163,8 +151,7 @@ export class PublishingService {
         throw new Error("Artifact store returned an invalid content identity");
       return identity;
     }
-    const compiled = { bundle: verified, workflow, graphHash, imageDigest: result.imageDigest };
-    const compiledBytes = new TextEncoder().encode(JSON.stringify(compiled));
+    const compiledBytes = compilationBytes(verified, workflow, graphHash, result.imageDigest);
     if (compiledBytes.byteLength > 1_000_000)
       throw new Error("Compiled publication artifact exceeds pilot storage limits");
     const bundleIdentity = {

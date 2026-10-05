@@ -143,3 +143,40 @@ test("offline publish chain keeps machine publishing and internal compiler crede
   expect((await publisher.publish(await prepare())).workflow.slug).toBe("demo");
   expect(compiles).toBe(1);
 });
+
+test("hosted publishing recomputes returned graph and compiled artifact identities", async () => {
+  const original = await version();
+  const changed = {
+    ...original,
+    workflow: {
+      ...original.workflow,
+      nodes: [{ id: "first", kind: "command", command: { program: "echo", args: ["changed"] } }],
+    },
+  };
+  const client = (response: unknown) =>
+    new HostedPublisher({
+      origin: "https://loopy.example",
+      token: "token",
+      fetch: async () => Response.json(response, { status: 201 }),
+    });
+  await expect(client(changed).publish(await prepare())).rejects.toThrow("graph hash");
+  const { workflowGraphHash } = await import("../src/publishing/identity.js");
+  await expect(
+    client({
+      ...changed,
+      graphHash: await workflowGraphHash(changed.workflow as typeof original.workflow),
+    }).publish(await prepare()),
+  ).rejects.toThrow("compilation identity");
+});
+
+test("published workflow snapshot has the exact identity used by run admission", async () => {
+  const saved = await version();
+  const { prepareRun } = await import("../src/runtime/prepare.js");
+  const run = await prepareRun(
+    saved.workflow,
+    {},
+    { workspace: { kind: "managed", id: "workspace" }, mode: "sandbox" },
+  );
+  expect(run.workflowHash).toBe(saved.graphHash);
+  expect(JSON.stringify(run.workflow)).toBe(JSON.stringify(saved.workflow));
+});

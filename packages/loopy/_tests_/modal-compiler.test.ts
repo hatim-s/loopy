@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { SandboxService } from "modal";
 import {
   type ModalCompilerOptions,
   ModalIsolatedCompiler,
@@ -41,6 +42,7 @@ function fake(options: { output?: string; exit?: number; terminationFailure?: bo
   const inputs: string[] = [];
   let settings: unknown;
   const commands: string[][] = [];
+  const terminations: unknown[] = [];
   const stream = (text: string) =>
     new ReadableStream<string>({
       start(controller) {
@@ -67,11 +69,15 @@ function fake(options: { output?: string; exit?: number; terminationFailure?: bo
         creates++;
         settings = params;
         return {
-          terminate: async () => {
+          terminate: async (params: unknown) => {
+            terminations.push(params);
             terminates++;
             if (options.terminationFailure) throw new Error("SDK termination failure");
+            return 137;
           },
-          exec: async (argv: string[]) => {
+          exec: async (argv: string[], params: { timeoutMs: number }) => {
+            expect(params.timeoutMs % 1_000).toBe(0);
+            expect(params.timeoutMs).toBeGreaterThanOrEqual(1_000);
             commands.push(argv);
             return {
               stdin: new WritableStream<string>({
@@ -94,7 +100,7 @@ function fake(options: { output?: string; exit?: number; terminationFailure?: bo
   } as unknown as ModalCompilerOptions["client"];
   return {
     compiler: new ModalIsolatedCompiler({ client, appName: "compiler-app", image }),
-    snapshot: () => ({ creates, terminates, inputs, settings, commands }),
+    snapshot: () => ({ creates, terminates, inputs, settings, commands, terminations }),
   };
 }
 
@@ -108,6 +114,7 @@ test("Modal compiler confines author evaluation to a fresh pinned sandbox with e
   const called = fixture.snapshot();
   expect(called.creates).toBe(1);
   expect(called.terminates).toBe(1);
+  expect(called.terminations).toEqual([{ wait: true }]);
   expect(called.settings).toMatchObject({
     blockNetwork: true,
     secrets: [],
@@ -152,4 +159,39 @@ test("unconfirmed sandbox termination prevents returning a successful compilatio
     "termination could not be confirmed",
   );
   expect(fixture.snapshot().terminates).toBe(1);
+});
+
+test("installed Modal SDK accepts quantized sandbox timeout without any provider calls", async () => {
+  let boundaryReached = false;
+  let timeoutSeconds = 0;
+  const sdk = new SandboxService({
+    profile: { sandboxV2: false },
+    cpClient: {
+      sandboxCreate: async (request: { definition: { timeoutSecs: number } }) => {
+        boundaryReached = true;
+        timeoutSeconds = request.definition.timeoutSecs;
+        throw new Error("offline SDK boundary");
+      },
+    },
+  } as unknown as ConstructorParameters<typeof SandboxService>[0]);
+  const app = { appId: "ap-offline" } as Parameters<typeof sdk.create>[0];
+  const registryImage = { imageId: "im-offline", build: async () => {} } as unknown as Parameters<
+    typeof sdk.create
+  >[1];
+  await expect(sdk.create(app, registryImage, { timeoutMs: 59_999 })).rejects.toThrow(
+    "multiple of 1000",
+  );
+  expect(boundaryReached).toBe(false);
+  const client = {
+    apps: { fromName: async () => app },
+    images: { fromRegistry: () => registryImage },
+    sandboxes: sdk,
+  } as unknown as ModalCompilerOptions["client"];
+  const compiler = new ModalIsolatedCompiler({ client, appName: "offline", image });
+  const input = await request();
+  await expect(
+    compiler.compile({ ...input, policy: { ...input.policy, deadlineMs: Date.now() + 59_999 } }),
+  ).rejects.toThrow("offline SDK boundary");
+  expect(boundaryReached).toBe(true);
+  expect(timeoutSeconds).toBe(59);
 });

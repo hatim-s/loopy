@@ -38,9 +38,24 @@ async function readBounded(
   return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
 }
 
-async function confirmTermination(terminate: () => Promise<void>) {
+async function confirmTermination(terminate: () => Promise<number>) {
   try {
-    await terminate();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const exitCode = await Promise.race([
+        terminate(),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error("Termination confirmation deadline exceeded")),
+            5_000,
+          );
+        }),
+      ]);
+      if (!Number.isInteger(exitCode))
+        throw new Error("Termination returned no confirmed exit code");
+    } finally {
+      clearTimeout(timer);
+    }
   } catch (cause) {
     throw new Error("Compiler sandbox termination could not be confirmed", { cause });
   }
@@ -63,11 +78,22 @@ export class ModalIsolatedCompiler implements IsolatedCompiler {
       request.policy.maxOutputBytes > 100_000
     )
       throw new Error("Unsupported isolated compiler policy");
+    const initialRemaining = request.policy.deadlineMs - Date.now();
+    if (
+      !Number.isSafeInteger(initialRemaining) ||
+      initialRemaining < 1 ||
+      initialRemaining > 60_000
+    )
+      throw new Error("Compiler deadline exceeded");
+    const signal = AbortSignal.any([request.signal, AbortSignal.timeout(initialRemaining)]);
     const remaining = () => {
-      request.signal.throwIfAborted();
+      signal.throwIfAborted();
       const timeout = request.policy.deadlineMs - Date.now();
       if (timeout < 1 || timeout > 60_000) throw new Error("Compiler deadline exceeded");
-      return timeout;
+      const vendorTimeout = Math.floor(timeout / 1_000) * 1_000;
+      if (vendorTimeout < 1_000)
+        throw new Error("Compiler deadline has less than one SDK timeout second remaining");
+      return vendorTimeout;
     };
     remaining();
     const app = await this.options.client.apps.fromName(this.options.appName, {
@@ -87,11 +113,11 @@ export class ModalIsolatedCompiler implements IsolatedCompiler {
       command: ["sleep", "60"],
     });
     const stop = () => {
-      void sandbox.terminate().catch(() => {});
+      void confirmTermination(() => sandbox.terminate({ wait: true })).catch(() => {});
     };
-    request.signal.addEventListener("abort", stop, { once: true });
+    signal.addEventListener("abort", stop, { once: true });
     try {
-      request.signal.throwIfAborted();
+      signal.throwIfAborted();
       const process = await sandbox.exec(["bun", "/opt/loopy/dist/providers/compiler-worker.js"], {
         mode: "text",
         workdir: "/tmp",
@@ -111,7 +137,7 @@ export class ModalIsolatedCompiler implements IsolatedCompiler {
         }
       };
       const [, , exitCode] = await Promise.all([output, errors, process.wait(), upload()]);
-      request.signal.throwIfAborted();
+      signal.throwIfAborted();
       if (exitCode !== 0) throw new Error("Isolated compiler exited unsuccessfully");
       const resultProcess = await sandbox.exec(["cat", "/compile-result.json"], {
         mode: "text",
@@ -124,7 +150,7 @@ export class ModalIsolatedCompiler implements IsolatedCompiler {
         readBounded(resultProcess.stderr, request.policy.maxOutputBytes),
         resultProcess.wait(),
       ]);
-      request.signal.throwIfAborted();
+      signal.throwIfAborted();
       if (resultCode !== 0) throw new Error("Isolated compiler returned no completed result");
       const raw: unknown = JSON.parse(resultText);
       if (!raw || typeof raw !== "object" || !("workflow" in raw))
@@ -134,8 +160,8 @@ export class ModalIsolatedCompiler implements IsolatedCompiler {
         imageDigest: `sha256:${this.options.image.split("@sha256:")[1]}`,
       };
     } finally {
-      request.signal.removeEventListener("abort", stop);
-      await confirmTermination(() => sandbox.terminate());
+      signal.removeEventListener("abort", stop);
+      await confirmTermination(() => sandbox.terminate({ wait: true }));
     }
   }
 }
