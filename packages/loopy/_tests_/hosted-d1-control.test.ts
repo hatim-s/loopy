@@ -122,21 +122,31 @@ test("HTTP control uses real D1 atomic admission, tenant isolation and fenced ca
     await client.cancel(runId);
     expect((await a.read(runId))?.cancelRequested).toBe(true);
     expect((await a.read(runId))?.revision).toBe(1);
+    // Cancellation invalidates the snapshot revision independently of lease fencing.
     expect(await a.commit(oldLease, oldState.revision, oldState)).toBe(false);
+    const current = await a.read(runId);
+    if (!current) throw new Error("Missing current cancelled state");
+    expect(current.revision).toBe(1);
     const cancelIntent = await a.claimDispatch("cancel-delivery", 10, 100);
     expect(cancelIntent.map((item) => item.kind)).toEqual(["cancel"]);
     now += 11;
     expect(await a.ackDispatch(admitted.dispatch.id, "old-delivery")).toBe(false);
     expect(await a.retryDispatch(admitted.dispatch.id, "old-delivery", "stale")).toBe(false);
+    // Current revision reaches the lease SQL, so these checks prove expiry and replacement fencing.
+    expect(await a.commit(oldLease, current.revision, current)).toBe(false);
     const replacement = await a.acquire(runId, "replacement", 1000);
-    expect(replacement?.fence).toBe(2);
-    expect(await a.commit(oldLease, oldState.revision, oldState)).toBe(false);
+    if (!replacement) throw new Error("Missing replacement lease");
+    expect(replacement.fence).toBe(2);
+    expect(await a.commit(oldLease, current.revision, current)).toBe(false);
+    expect(await a.commit(replacement, current.revision, current)).toBe(true);
+    expect((await a.read(runId))?.revision).toBe(2);
     const recovered = await a.claimDispatch("recovery", 1000, 100);
     expect(recovered.map((item) => item.kind).sort()).toEqual(["cancel", "start"]);
     for (const row of recovered)
       expect(await a.retryDispatch(row.id, row.leaseToken, "retry")).toBe(true);
     online = true;
     expect(await dispatchPending(a, driver)).toEqual({ delivered: 2, retried: 0, stale: 0 });
+    // This injected driver models a cancellation-aware host, not a deployed coordinator.
     expect(starts).toBe(0);
     expect(await a.claimDispatch("nothing-left", 1000, 100)).toEqual([]);
     expect((await b.claimDispatch("bob-delivery", 1000, 100)).length).toBe(1);
