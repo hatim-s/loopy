@@ -326,14 +326,14 @@ export class DurableRunner {
     const lease = await this.options.store.acquire(runId, crypto.randomUUID(), this.leaseMs);
     if (!lease) return this.later();
     try {
-      const current = await this.options.store.read(runId);
+      let current = await this.options.store.read(runId);
       if (!current || (terminal(current.run) && !reconcile))
         return { state: current ? "terminal" : "idle" };
       const original = structuredClone(current);
       if ((await change(current)) === false) return this.later();
       current.run.updatedAt = new Date(this.now()).toISOString();
       if (new TextEncoder().encode(JSON.stringify(current)).byteLength > this.stateBytes - 2048) {
-        Object.assign(current, original);
+        current = original;
         current.run.status = "interrupted";
         current.run.error =
           "Execution history reached its storage limit. No new command was launched.";
