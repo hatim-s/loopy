@@ -3,6 +3,7 @@ import { Miniflare } from "miniflare";
 import { HostedControl } from "../src/cloud/control.js";
 import {
   type ExecutionReceipt,
+  type ExecutionReceiptStore,
   type LinuxExecutionProvider,
   RemoteLinuxExecutor,
 } from "../src/cloud/executor/controller.js";
@@ -52,6 +53,7 @@ async function fixture(workflow: Workflow, input: Json = {}) {
   );
   const receipts = new Map<string, ExecutionReceipt>();
   const receiptStore = {
+    maxOutputBytes: 1_048_576,
     async read(key: { attemptId: string }) {
       const value = receipts.get(key.attemptId);
       return value && structuredClone(value);
@@ -431,6 +433,103 @@ test("real runner and D1 receipt capacity reject two MiB before intent and accep
     expect(launches).toBe(1);
     const hydrated = await hydrateAttempts(accepted?.attempts ?? [], f.store);
     expect((hydrated[0]?.output as { stdout: string }).stdout.length).toBe(1_048_576);
+  } finally {
+    await f.mf.dispose();
+  }
+}, 30000);
+
+test("real runner fails closed on missing receipt capacity and selects declared 64 KiB", async () => {
+  const f = await fixture({ version: 1, slug: "declared-capacity", nodes: [command("one")] });
+  for (const sql of executionReceiptSchema) await f.db.prepare(sql).run();
+  const persisted = new SqliteExecutionReceiptStore(f.db, f.store.scope);
+  let writes = 0;
+  let launches = 0;
+  let selected = 0;
+  const provider: LinuxExecutionProvider = {
+    async workspace() {
+      return "available";
+    },
+    async start(request) {
+      launches++;
+      selected = request.command.maxOutputBytes ?? 0;
+      return {
+        state: "completed",
+        jobId: "job",
+        workspace: request.workspace,
+        output: { stdout: "z".repeat(65536), stderr: "", exitCode: 0, durationMs: 1 },
+      };
+    },
+    async inspect() {
+      return { state: "not-started" };
+    },
+    async cancel() {
+      return { state: "cancelled-before-start" };
+    },
+  };
+  const methods = {
+    read: persisted.read.bind(persisted),
+    async compareAndSwap(
+      key: Parameters<ExecutionReceiptStore["compareAndSwap"]>[0],
+      revision: number | undefined,
+      next: ExecutionReceipt,
+    ) {
+      const output = next.observation.state === "completed" ? next.observation.output : undefined;
+      if (
+        output &&
+        new TextEncoder().encode(output.stdout).length +
+          new TextEncoder().encode(output.stderr).length >
+          65536
+      )
+        throw new Error("Receipt exceeds declared64KiB");
+      writes++;
+      return await persisted.compareAndSwap(key, revision, next);
+    },
+  };
+  const make = (executor: RemoteLinuxExecutor, maxOutputBytes?: number) =>
+    new DurableRunner({
+      store: f.store,
+      artifacts: f.store,
+      artifactBytes: f.store.limits.artifactBytes,
+      stateBytes: f.store.limits.stateBytes,
+      executor,
+      runtime: { build: "v1", graphSchema: 1 },
+      runtimeForRun: (runId) => f.store.runtimeForRun(runId),
+      maxOutputBytes,
+      workspaces: {
+        async provision(_, __, workspaceId) {
+          return { workspaceId, generation: "g1" };
+        },
+        async inspect() {
+          return "available";
+        },
+      },
+    });
+  try {
+    expect(() => make(new RemoteLinuxExecutor(methods as ExecutionReceiptStore, provider))).toThrow(
+      "capacity",
+    );
+    const executor = new RemoteLinuxExecutor({ ...methods, maxOutputBytes: 65536 }, provider);
+    expect(() => make(executor, 1_048_576)).toThrow("capacity");
+    const before = await f.store.read(f.run.id);
+    expect(before?.revision).toBe(0);
+    expect(before?.attempts).toEqual([]);
+    expect(before?.intent).toBeUndefined();
+    expect(writes).toBe(0);
+    expect(launches).toBe(0);
+    expect(
+      await f.db
+        .prepare("SELECT COUNT(*) AS count FROM loopy_execution_receipts")
+        .first<{ count: number }>(),
+    ).toEqual({ count: 0 });
+    const runner = make(executor);
+    for (let tick = 0; tick < 8; tick++) {
+      await runner.tick(f.run.id);
+      if ((await f.store.read(f.run.id))?.run.status === "succeeded") break;
+    }
+    expect(selected).toBe(65536);
+    expect(launches).toBe(1);
+    expect(writes).toBeGreaterThan(0);
+    expect((await f.store.read(f.run.id))?.run.status).toBe("succeeded");
   } finally {
     await f.mf.dispose();
   }
