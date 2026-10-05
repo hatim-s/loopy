@@ -1,4 +1,6 @@
 export type { ExecuteCommand, RunOptions, RunRecord, Workspace } from "../core/model.js";
+export type { CommandOutputReference, ResolvedCommandReference } from "./attempt-artifacts.js";
+export { hydrateAttempts } from "./attempt-artifacts.js";
 export {
   DurableRunner,
   type DurableRunnerOptions,
