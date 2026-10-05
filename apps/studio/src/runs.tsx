@@ -37,7 +37,11 @@ function ResumeControls({
         disabled={busy}
         onClick={() => void onResume(retryUncertain)}
       >
-        {busy ? "Resuming..." : "Resume run"}
+        {busy
+          ? "Resuming..."
+          : retryUncertain
+            ? "Resume and retry uncertain steps"
+            : "Resume without retrying uncertain steps"}
       </button>
     </div>
   );

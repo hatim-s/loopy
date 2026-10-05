@@ -6,6 +6,7 @@ import { errorMessage } from "../runtime/errors.js";
 import { localRunOptions } from "./process.js";
 import { defaultHome, Registry } from "./registry.js";
 import { createLocalRuntime } from "./runtime.js";
+import type { RunDetail } from "./studio-client.js";
 
 type ServerOptions = { home?: string; cwd?: string; port?: number; assets?: string };
 type Asset = { body: Blob; type: string };
@@ -131,7 +132,7 @@ export function startServer(options: ServerOptions = {}) {
           run,
           attempts: await runtime.getAttempts(run.id),
           events: await runtime.getEvents(run.id),
-        });
+        } satisfies RunDetail);
       },
     },
     {
