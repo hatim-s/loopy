@@ -1,20 +1,25 @@
 #!/usr/bin/env bun
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
+import type { WorkflowVersion } from "../application/ports.js";
 import type { Json } from "../core/model.js";
 import { generateCommand } from "../local/help.js";
 import { localRunOptions } from "../local/process.js";
 import { defaultHome, Registry } from "../local/registry.js";
 import { createLocalRuntime } from "../local/runtime.js";
 import { startServer } from "../local/server.js";
+import type { PublishBundle } from "../publishing/manifest.js";
 import { errorMessage } from "../runtime/errors.js";
 import { parseCliArgs } from "./args.js";
+import { prepareManifestFile } from "./publish.js";
 
 const DEFAULT_PORT = 4310;
 
 const usage = `loopy: TypeScript workflows for CLI tools
 
   loopy save <file.ts|directory>               Compile files and save by configured scope
+  loopy publish <manifest.json> --out bundle.json  Prepare a declared portable bundle
+  loopy publish <manifest.json>                  Publish through a configured isolated compiler
   loopy list                                   List saved loopies
   loopy graph <slug>                            Print the saved graph as JSON
   loopy run <slug> [--key value ...]            Run with string trigger inputs
@@ -73,7 +78,10 @@ function untilSignalled<T>(work: (signal: AbortSignal) => Promise<T>): Promise<T
   });
 }
 
-export async function main(args = process.argv.slice(2)) {
+export async function main(
+  args = process.argv.slice(2),
+  publishing?: { publish(bundle: PublishBundle): Promise<WorkflowVersion> },
+) {
   const { values, positionals, triggerInput } = parseCliArgs(args);
   const [command, target, ...rest] = positionals;
   if (values.help || !command) {
@@ -95,6 +103,20 @@ export async function main(args = process.argv.slice(2)) {
     return;
   }
   if (rest.length) throw new Error(`Unexpected arguments: ${rest.join(" ")}`);
+
+  if (command === "publish") {
+    if (!values.out && !publishing)
+      throw new Error(
+        "Publishing transport and isolated compiler are not configured. Use --out to prepare a bundle.",
+      );
+    const bundle = await prepareManifestFile(required(target, "Manifest JSON file"));
+    if (values.out) {
+      const file = resolve(values.out);
+      await writeFile(file, JSON.stringify(bundle, null, 2));
+      print({ file, sha256: bundle.sha256, bytes: bundle.bytes });
+    } else if (publishing) print(await publishing.publish(bundle));
+    return;
+  }
 
   if (command === "ui") {
     const server = startServer({ home, cwd, port: parsePort(values.port) });

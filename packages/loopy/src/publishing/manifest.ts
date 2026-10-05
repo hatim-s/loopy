@@ -162,7 +162,11 @@ export async function verifyPublishBundle(
   );
   for (const file of verified.files) {
     const received = incoming.get(file.path);
-    if (received?.sha256 !== file.sha256 || received.bytes !== file.bytes) {
+    if (
+      received?.sha256 !== file.sha256 ||
+      received.bytes !== file.bytes ||
+      received.content !== file.content
+    ) {
       throw new Error(`Bundle file identity mismatch: ${file.path}`);
     }
   }

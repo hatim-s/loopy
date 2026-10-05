@@ -6,3 +6,10 @@ export {
   preparePublishBundle,
   verifyPublishBundle,
 } from "./manifest.js";
+export type {
+  CompileRequest,
+  CompileResult,
+  IsolatedCompiler,
+  PublishingPorts,
+} from "./service.js";
+export { PublishingService } from "./service.js";
