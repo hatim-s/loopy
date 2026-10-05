@@ -1,0 +1,11 @@
+# Remote Linux controller
+
+`RemoteLinuxExecutor` implements the shared runtime lifecycle using an injected receipt store and Linux provider. It has no SDK, credentials, deployment configuration or database implementation. Import it through this directory's index until cloud integration selects the public export.
+
+The store must persist each tenant/run/attempt key outside the workload and atomically compare revisions, including absent rows. Never delete receipts while a start request can remain in flight. Store failures propagate; callers can retry the same key, but must not create a replacement attempt automatically. Only the winner of the initial CAS calls provider start. A crash between intent and start leaves an uncertain attempt, deliberately requiring an explicit retry decision.
+
+Providers must independently supervise deadlines, limit output while streaming, terminate process groups and fence cancellation against concurrent start using durable tombstones. They must look up the stable key after a lost acknowledgement. Those are adapter requirements, not enforcement delivered by this controller. Its output check rejects an oversized completed result after receipt; it does not bound a provider's memory or network allocation. No real provider has been validated here. Provider failures return the latest durable observation; receipt-store failures propagate, including failures after a provider response.
+
+A workspace generation mismatch returns `unknown` with a `workspace-lost` reason. Workspace loss does not prove the process stopped. Cancellation and expired deadlines still reconcile through provider cancellation. The controller never recreates the workspace or replays successful work. Drivers must inspect workspace availability before continuing from file-producing checkpoints. The shared lifecycle does not yet have a distinct blocked state.
+
+The supplied fingerprint must cover the immutable command and execution policy. The controller compares fingerprints; it does not hash commands or store command input, stdin, environment values or credential material. Credential grants and provider control authentication belong to trusted adapter wiring, outside the workload and receipt records.
