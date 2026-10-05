@@ -1,4 +1,10 @@
 export type { ExecuteCommand, RunOptions, RunRecord, Workspace } from "../core/model.js";
+export {
+  DurableRunner,
+  type DurableRunnerOptions,
+  type TickResult,
+  type WorkspaceProvider,
+} from "./durable-runner.js";
 export { CommandExecutionError, RunBusyError } from "./errors.js";
 export { InputValidationError, validateRunInput } from "./preflight.js";
 export { prepareRun } from "./prepare.js";
