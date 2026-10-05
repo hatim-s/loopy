@@ -64,17 +64,18 @@ export class SqliteStore
   }
   async put(bytes: Uint8Array): Promise<ArtifactIdentity> {
     if (bytes.length > this.limits.artifactBytes) throw new Error("Artifact exceeds limit");
+    const snapshot = new Uint8Array(bytes);
     const sha256 = Array.from(
-      new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array(bytes))),
+      new Uint8Array(await crypto.subtle.digest("SHA-256", snapshot)),
       (b) => b.toString(16).padStart(2, "0"),
     ).join("");
-    const identity = { id: sha256, sha256, bytes: bytes.length };
+    const identity = { id: sha256, sha256, bytes: snapshot.length };
     await this.sql(
       "INSERT INTO loopy_artifacts(tenant_id,id,sha256,bytes,content) VALUES(?,?,?,?,?) ON CONFLICT(tenant_id,id) DO NOTHING",
       identity.id,
       sha256,
-      bytes.length,
-      bytes,
+      snapshot.length,
+      snapshot,
     ).run();
     return identity;
   }
@@ -96,6 +97,8 @@ export class SqliteStore
   }
   async publish(version: WorkflowVersion): Promise<WorkflowVersion> {
     if (version.files.length > this.limits.sourceFiles) throw new Error("Too many source files");
+    if (version.publication && !(await this.get(version.publication.bundle)))
+      throw new Error("Missing publication bundle artifact");
     const paths = new Set<string>();
     for (const file of version.files) {
       if (

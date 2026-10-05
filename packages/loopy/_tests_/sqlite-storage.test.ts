@@ -217,3 +217,48 @@ test("cancellation queues once and run/analytics transitions roll back together"
   expect((await f.store.getEvents("r1")).length).toBe(1);
   expect(await f.store.pruneEvents("2027-01-01T00:00:00Z", 1)).toBe(1);
 });
+
+test("artifact put snapshots caller bytes before hashing yields", async () => {
+  const { db } = database();
+  const store = new SqliteStore(db, { tenantId: "tenant" });
+  const bytes = new TextEncoder().encode("original");
+  const pending = store.put(bytes);
+  bytes.fill(0);
+  const identity = await pending;
+  expect(new TextDecoder().decode(await store.get(identity))).toBe("original");
+  expect(identity.sha256).toBe(
+    await Bun.CryptoHasher.hash("sha256", new TextEncoder().encode("original"), "hex"),
+  );
+});
+
+test("publication bundles belong to the tenant and metadata survives immutable readback", async () => {
+  const f = await fixture();
+  const foreign = new SqliteStore(f.db, { tenantId: "foreign" });
+  const foreignBundle = await foreign.put(new TextEncoder().encode("foreign bundle"));
+  const publication = {
+    bundle: foreignBundle,
+    lockfileHash: "lock-hash",
+    sourceMappings: [{ source: "main.ts", target: "bundle.js" }],
+  };
+  await expect(f.store.publish({ ...f.version, id: "published", publication })).rejects.toThrow(
+    "Missing publication",
+  );
+  const absent = { id: "missing", sha256: "missing", bytes: 1 };
+  await expect(
+    f.store.publish({
+      ...f.version,
+      id: "published",
+      publication: { ...publication, bundle: absent },
+    }),
+  ).rejects.toThrow("Missing publication");
+  const bundle = await f.store.put(new TextEncoder().encode("tenant bundle"));
+  const version = { ...f.version, id: "published", publication: { ...publication, bundle } };
+  expect(await f.store.publish(version)).toEqual(version);
+  expect(await f.store.getVersion("published")).toEqual(version);
+  await expect(
+    f.store.publish({
+      ...version,
+      publication: { ...version.publication, lockfileHash: "changed" },
+    }),
+  ).rejects.toThrow("Immutable version");
+});
