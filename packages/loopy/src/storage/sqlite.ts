@@ -5,6 +5,7 @@ import type {
   ArtifactIdentity,
   ArtifactStore,
   DispatchIntent,
+  RuntimeIdentity,
   TenantScope,
   WorkflowCatalog,
   WorkflowVersion,
@@ -25,7 +26,7 @@ export type StorageLimits = {
   stateBytes: number;
 };
 const defaults: StorageLimits = {
-  artifactBytes: 1_000_000,
+  artifactBytes: 8_000_000,
   sourceFiles: 100,
   versionBytes: 512_000,
   stateBytes: 512_000,
@@ -70,23 +71,55 @@ export class SqliteStore
       (b) => b.toString(16).padStart(2, "0"),
     ).join("");
     const identity = { id: sha256, sha256, bytes: snapshot.length };
-    await this.sql(
-      "INSERT INTO loopy_artifacts(tenant_id,id,sha256,bytes,content) VALUES(?,?,?,?,?) ON CONFLICT(tenant_id,id) DO NOTHING",
-      identity.id,
-      sha256,
-      snapshot.length,
-      snapshot,
-    ).run();
+    const statements = [
+      this.sql(
+        "INSERT INTO loopy_artifacts(tenant_id,id,sha256,bytes) VALUES(?,?,?,?) ON CONFLICT(tenant_id,id) DO NOTHING",
+        identity.id,
+        sha256,
+        snapshot.length,
+      ),
+    ];
+    for (let offset = 0, part = 0; offset < snapshot.length; offset += 262144, part++) {
+      statements.push(
+        this.sql(
+          "INSERT INTO loopy_artifact_chunks(tenant_id,artifact_id,part,content) VALUES(?,?,?,?) ON CONFLICT(tenant_id,artifact_id,part) DO NOTHING",
+          identity.id,
+          part,
+          snapshot.slice(offset, offset + 262144),
+        ),
+      );
+    }
+    await this.db.batch(statements);
     return identity;
   }
   async get(identity: ArtifactIdentity): Promise<Uint8Array | undefined> {
     const row = await this.sql(
-      "SELECT content FROM loopy_artifacts WHERE tenant_id=? AND id=? AND sha256=? AND bytes=?",
+      "SELECT bytes FROM loopy_artifacts WHERE tenant_id=? AND id=? AND sha256=? AND bytes=?",
       identity.id,
       identity.sha256,
       identity.bytes,
-    ).first<{ content: ArrayBuffer | Uint8Array }>();
-    return row ? new Uint8Array(row.content) : undefined;
+    ).first<{ bytes: number }>();
+    if (!row) return undefined;
+    const rows = await this.sql(
+      "SELECT part,content FROM loopy_artifact_chunks WHERE tenant_id=? AND artifact_id=? ORDER BY part",
+      identity.id,
+    ).all<{ part: number; content: ArrayBuffer | Uint8Array }>();
+    const bytes = new Uint8Array(row.bytes);
+    let offset = 0;
+    for (const [part, chunk] of (rows.results ?? []).entries()) {
+      const content = new Uint8Array(chunk.content);
+      if (chunk.part !== part || offset + content.length > bytes.length)
+        throw new Error("Corrupt artifact chunks");
+      bytes.set(content, offset);
+      offset += content.length;
+    }
+    if (offset !== bytes.length) throw new Error("Incomplete artifact chunks");
+    const sha256 = Array.from(
+      new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)),
+      (byte) => byte.toString(16).padStart(2, "0"),
+    ).join("");
+    if (sha256 !== identity.sha256) throw new Error("Corrupt artifact digest");
+    return bytes;
   }
   async getVersion(id: string): Promise<WorkflowVersion | undefined> {
     const row = await this.sql(
@@ -95,12 +128,58 @@ export class SqliteStore
     ).first<{ payload: string }>();
     return row ? (JSON.parse(row.payload) as WorkflowVersion) : undefined;
   }
+  async runtimeForRun(runId: string): Promise<RuntimeIdentity | undefined> {
+    const row = await this.sql(
+      "SELECT v.payload FROM loopy_runs r JOIN loopy_versions v ON v.tenant_id=r.tenant_id AND v.id=r.version_id WHERE r.tenant_id=? AND r.id=?",
+      runId,
+    ).first<{ payload: string }>();
+    return row ? (JSON.parse(row.payload) as WorkflowVersion).runtime : undefined;
+  }
+  static async recoveryTenants(
+    db: SqliteDatabase,
+    cursor?: string,
+    limit = 100,
+  ): Promise<{ tenantIds: string[]; cursor?: string }> {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)
+      throw new Error("Invalid recovery limit");
+    const rows = await db
+      .prepare(
+        "SELECT tenant_id FROM (SELECT tenant_id FROM loopy_outbox WHERE kind='dispatch' AND delivered_at IS NULL UNION SELECT tenant_id FROM loopy_runs WHERE json_extract(payload,'$.status') IN ('pending','running') OR json_type(state,'$.intent')='object') WHERE tenant_id>? ORDER BY tenant_id LIMIT ?",
+      )
+      .bind(cursor ?? "", limit + 1)
+      .all<{ tenant_id: string }>();
+    const tenantIds = (rows.results ?? []).slice(0, limit).map((row) => row.tenant_id);
+    return {
+      tenantIds,
+      ...((rows.results ?? []).length > limit ? { cursor: tenantIds.at(-1) } : {}),
+    };
+  }
+  async recoveryRuns(
+    cursor?: string,
+    limit = 100,
+  ): Promise<{ runs: { runId: string; runtime: RuntimeIdentity }[]; cursor?: string }> {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)
+      throw new Error("Invalid recovery limit");
+    const rows = await this.sql(
+      "SELECT r.id,v.payload FROM loopy_runs r JOIN loopy_versions v ON v.tenant_id=r.tenant_id AND v.id=r.version_id WHERE r.tenant_id=? AND r.id>? AND (json_extract(r.payload,'$.status') IN ('pending','running') OR json_type(r.state,'$.intent')='object') ORDER BY r.id LIMIT ?",
+      cursor ?? "",
+      limit + 1,
+    ).all<{ id: string; payload: string }>();
+    const runs = (rows.results ?? []).slice(0, limit).map((row) => ({
+      runId: row.id,
+      runtime: (JSON.parse(row.payload) as WorkflowVersion).runtime,
+    }));
+    return { runs, ...((rows.results ?? []).length > limit ? { cursor: runs.at(-1)?.runId } : {}) };
+  }
   async publish(version: WorkflowVersion): Promise<WorkflowVersion> {
     if (version.files.length > this.limits.sourceFiles) throw new Error("Too many source files");
+    if (version.publication && version.publication.bundle.bytes > 1_000_000)
+      throw new Error("Publication bundle exceeds limit");
     if (version.publication && !(await this.get(version.publication.bundle)))
       throw new Error("Missing publication bundle artifact");
     const paths = new Set<string>();
     for (const file of version.files) {
+      if (file.artifact.bytes > 1_000_000) throw new Error("Source artifact exceeds limit");
       if (
         !file.path ||
         file.path.startsWith("/") ||
@@ -140,6 +219,16 @@ export class SqliteStore
       JSON.stringify(version.runtime) !== JSON.stringify(dispatch.runtime)
     )
       throw new Error("Admission version mismatch");
+    encode(
+      {
+        revision: 0,
+        run,
+        attempts: [],
+        workspace: { state: "unallocated" },
+        cancelRequested: false,
+      },
+      this.limits.stateBytes - 4096,
+    );
     const payload = encode(run, this.limits.stateBytes);
     const result = await this.db.batch([
       this.sql(
