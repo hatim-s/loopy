@@ -77,33 +77,34 @@ export class RemoteLinuxExecutor implements RemoteExecutor {
         observation: unknown("Start intent recorded; acknowledgement pending"),
       };
       if (!(await this.store.compareAndSwap(request.key, undefined, intent))) continue;
+      let availability: "available" | "lost";
       try {
-        if ((await this.provider.workspace(request.workspace)) === "lost")
-          return await this.record(
-            request.key,
-            unknown("workspace-lost: expected generation unavailable"),
-          );
-        const latest = await this.store.read(request.key);
-        if (latest?.cancelRequested || this.now() >= Date.parse(request.deadline)) {
-          return await this.record(request.key, { state: "cancelled-before-start" });
-        }
-        const launched = await this.provider.start(request);
-        await this.record(request.key, launched);
-        if ((await this.store.read(request.key))?.cancelRequested) {
-          const cancelled = await this.cancel(request.key);
-          return cancelled.state === "not-started" ? unknown("Cancellation pending") : cancelled;
-        }
-        return (
-          (await this.store.read(request.key))?.observation ??
-          unknown("Execution receipt unavailable")
+        availability = await this.provider.workspace(request.workspace);
+      } catch {
+        return await this.latestObservation(request.key);
+      }
+      if (availability === "lost")
+        return await this.record(
+          request.key,
+          unknown("workspace-lost: expected generation unavailable"),
         );
+      const latest = await this.store.read(request.key);
+      if (latest?.cancelRequested || this.now() >= Date.parse(request.deadline)) {
+        return await this.record(request.key, { state: "cancelled-before-start" });
+      }
+      let launched: StartReceipt;
+      try {
+        launched = await this.provider.start(request);
       } catch {
         // The provider may have accepted the command. Only inspect can reconcile it.
-        return (
-          (await this.store.read(request.key))?.observation ??
-          unknown("Execution receipt unavailable")
-        );
+        return await this.latestObservation(request.key);
       }
+      await this.record(request.key, launched);
+      if ((await this.store.read(request.key))?.cancelRequested) {
+        const cancelled = await this.cancel(request.key);
+        return cancelled.state === "not-started" ? unknown("Cancellation pending") : cancelled;
+      }
+      return await this.latestObservation(request.key);
     }
   }
 
@@ -111,25 +112,31 @@ export class RemoteLinuxExecutor implements RemoteExecutor {
     const receipt = await this.store.read(key);
     if (!receipt) return { state: "not-started" };
     if (terminal(receipt.observation)) return receipt.observation;
-    try {
-      if (receipt.workspace && (await this.provider.workspace(receipt.workspace)) === "lost")
+    if (receipt.cancelRequested || (receipt.deadline && this.now() >= Date.parse(receipt.deadline)))
+      return await this.cancel(key);
+    if (receipt.workspace) {
+      let availability: "available" | "lost";
+      try {
+        availability = await this.provider.workspace(receipt.workspace);
+      } catch {
+        return await this.latestObservation(key);
+      }
+      if (availability === "lost")
         return await this.record(key, unknown("workspace-lost: expected generation unavailable"));
-      if (
-        receipt.cancelRequested ||
-        (receipt.deadline && this.now() >= Date.parse(receipt.deadline))
-      )
-        return await this.cancel(key);
-      const observed = await this.provider.inspect(key);
-      // Absence cannot prove that a pending start was never accepted.
-      return await this.record(
-        key,
-        observed.state === "not-started"
-          ? unknown("Provider has no receipt; execution may still have started")
-          : observed,
-      );
-    } catch {
-      return receipt.observation;
     }
+    let observed: ExecutionObservation;
+    try {
+      observed = await this.provider.inspect(key);
+    } catch {
+      return await this.latestObservation(key);
+    }
+    // Absence cannot prove that a pending start was never accepted.
+    return await this.record(
+      key,
+      observed.state === "not-started"
+        ? unknown("Provider has no receipt; execution may still have started")
+        : observed,
+    );
   }
 
   async cancel(key: ExecutionKey): Promise<ExecutionObservation> {
@@ -146,19 +153,24 @@ export class RemoteLinuxExecutor implements RemoteExecutor {
           };
       if (!(await this.store.compareAndSwap(key, current?.revision, next))) continue;
       if (!current) return next.observation;
+      let result: ExecutionObservation;
       try {
-        const result = await this.provider.cancel(key);
-        // A concurrent launch can follow an absent lookup. Require the provider's durable cancellation tombstone.
-        return await this.record(
-          key,
-          result.state === "not-started"
-            ? unknown("Cancellation pending; provider did not prove launch prevention")
-            : result,
-        );
+        result = await this.provider.cancel(key);
       } catch {
-        return next.observation;
+        return await this.latestObservation(key);
       }
+      // A concurrent launch can follow an absent lookup. Require the provider's durable cancellation tombstone.
+      return await this.record(
+        key,
+        result.state === "not-started"
+          ? unknown("Cancellation pending; provider did not prove launch prevention")
+          : result,
+      );
     }
+  }
+
+  private async latestObservation(key: ExecutionKey): Promise<StartReceipt> {
+    return (await this.store.read(key))?.observation ?? unknown("Execution receipt unavailable");
   }
 
   private async record(key: ExecutionKey, observation: StartReceipt): Promise<StartReceipt> {
@@ -177,7 +189,8 @@ export class RemoteLinuxExecutor implements RemoteExecutor {
       }
       if (
         observation.state === "completed" &&
-        new TextEncoder().encode(observation.output.stdout + observation.output.stderr).byteLength >
+        new TextEncoder().encode(observation.output.stdout).byteLength +
+          new TextEncoder().encode(observation.output.stderr).byteLength >
           (current.maxOutputBytes ?? 0)
       ) {
         accepted = unknown("Provider exceeded output limit; result rejected");

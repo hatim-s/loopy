@@ -189,3 +189,151 @@ test("CAS storage failure never launches a command", async () => {
   );
   expect(starts).toBe(0);
 });
+
+const completed = {
+  state: "completed",
+  jobId: "job",
+  workspace: request.workspace,
+  output: { stdout: "ok", stderr: "", exitCode: 0, durationMs: 1 },
+} as const;
+
+test.each(["inspect", "cancel"] as const)(
+  "%s provider failure returns completion persisted by a concurrent inspection",
+  async (operation) => {
+    let entered!: () => void;
+    const pendingProvider = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let reject!: (reason: Error) => void;
+    const failedResponse = new Promise<ExecutionObservation>((_resolve, rejectPromise) => {
+      reject = rejectPromise;
+    });
+    let complete!: (value: ExecutionObservation) => void;
+    let inspecting!: () => void;
+    const completionPending = new Promise<void>((resolve) => {
+      inspecting = resolve;
+    });
+    let firstInspect = true;
+    const { executor } = setup({
+      inspect: async () => {
+        if (firstInspect) {
+          firstInspect = false;
+          inspecting();
+          return await new Promise<ExecutionObservation>((resolve) => {
+            complete = resolve;
+          });
+        }
+        entered();
+        return await failedResponse;
+      },
+      cancel: async () => {
+        entered();
+        return await failedResponse;
+      },
+    });
+    await executor.start(request);
+    const concurrent = executor.inspect(request.key);
+    await completionPending;
+    const pending = executor[operation](request.key);
+    await pendingProvider;
+    complete(completed);
+    expect(await concurrent).toEqual(completed);
+    reject(Error("provider response lost"));
+    expect(await pending).toEqual(completed);
+  },
+);
+
+test.each(["cancel", "deadline"] as const)(
+  "%s keeps reconciling cancellation after workspace loss",
+  async (cause) => {
+    let lost = false;
+    let cancellations = 0;
+    let now = Date.parse("2029-01-01T00:00:00Z");
+    const { store } = setup();
+    const executor = new RemoteLinuxExecutor(
+      store,
+      {
+        workspace: async () => (lost ? "lost" : "available"),
+        start: async () => ({ state: "running", jobId: "job", workspace: request.workspace }),
+        inspect: async () => {
+          throw Error("cancel should reconcile this attempt");
+        },
+        cancel: async () => {
+          cancellations++;
+          return { state: "unknown", reason: "kill pending" };
+        },
+      },
+      () => now,
+    );
+    await executor.start(request);
+    if (cause === "cancel") await executor.cancel(request.key);
+    else now = Date.parse(request.deadline);
+    lost = true;
+    expect((await executor.inspect(request.key)).state).toBe("unknown");
+    expect((await executor.inspect(request.key)).state).toBe("unknown");
+    expect(cancellations).toBe(cause === "cancel" ? 3 : 2);
+    expect((await store.read(request.key))?.cancelRequested).toBe(true);
+  },
+);
+
+for (const operation of ["start", "inspect", "cancel"] as const) {
+  test.each(["read", "compareAndSwap"] as const)(
+    `${operation} propagates %s failure after provider acknowledgement`,
+    async (storeOperation) => {
+      let fail = false;
+      const acknowledge = async () => {
+        fail = true;
+        return completed;
+      };
+      const { executor, store } = setup({ [operation]: acknowledge });
+      if (operation !== "start") await executor.start(request);
+      if (storeOperation === "read") {
+        const original = store.read.bind(store);
+        store.read = async (key) => {
+          if (fail) throw Error("receipt read unavailable");
+          return await original(key);
+        };
+      } else {
+        const original = store.compareAndSwap.bind(store);
+        store.compareAndSwap = async (key, revision, next) => {
+          if (fail) throw Error("receipt CAS unavailable");
+          return await original(key, revision, next);
+        };
+      }
+      await expect(
+        operation === "start" ? executor.start(request) : executor[operation](request.key),
+      ).rejects.toThrow(storeOperation === "read" ? "receipt read" : "receipt CAS");
+    },
+  );
+}
+
+test("start propagates receipt read failure after workspace validation", async () => {
+  let fail = false;
+  const { executor, store, starts } = setup({
+    workspace: async () => {
+      fail = true;
+      return "available";
+    },
+  });
+  const read = store.read.bind(store);
+  store.read = async (key) => {
+    if (fail) throw Error("receipt read unavailable");
+    return await read(key);
+  };
+  await expect(executor.start(request)).rejects.toThrow("receipt read");
+  expect(starts()).toBe(0);
+});
+
+test("output limit counts isolated surrogates in each stream separately", async () => {
+  const { executor } = setup({
+    inspect: async () => ({
+      ...completed,
+      output: { ...completed.output, stdout: "\ud800", stderr: "\udc00" },
+    }),
+  });
+  await executor.start({ ...request, command: { ...request.command, maxOutputBytes: 4 } });
+  expect(await executor.inspect(request.key)).toEqual({
+    state: "unknown",
+    reason: "Provider exceeded output limit; result rejected",
+  });
+});
