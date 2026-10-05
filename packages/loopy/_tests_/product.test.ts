@@ -28,7 +28,7 @@ afterEach(async () => {
 
 const cliPath = join(import.meta.dir, "../src/cli/index.ts");
 async function cli(home: string, cwd: string, ...args: string[]) {
-  const child = Bun.spawn([process.execPath, cliPath, ...args, "--home", home], {
+  const child = Bun.spawn([process.execPath, cliPath, "--home", home, ...args], {
     cwd,
     stdout: "pipe",
     stderr: "pipe",
@@ -158,4 +158,63 @@ export default trigger('global-tool').config({ scope: 'global' })
   );
   expect(detail.attempts[0].output.stdout.trim()).toBe(realpathSync(caller));
   expect(detail.attempts[0].input.args).toContain(join(realpathSync(sourceProject), "script.ts"));
+});
+
+test("CLI passes named and JSON file trigger inputs into the saved run", async () => {
+  const cwd = directory();
+  const home = directory();
+  const source = join(cwd, "input.loopy.ts");
+  new Registry(home, cwd).save(
+    trigger<{ message: string }>("input")
+      .node("echo", ({ input }) =>
+        command(process.execPath, "-e", "console.log(process.argv[1])", input.message),
+      )
+      .build(),
+    source,
+  );
+  const named = await cli(
+    home,
+    cwd,
+    "run",
+    "input",
+    "--full",
+    "--message",
+    "hello world",
+    "--code=001",
+    "--",
+    "--args",
+    "literal",
+  );
+  expect(named.exitCode).toBe(0);
+  expect(JSON.parse(named.stdout).input).toEqual({
+    message: "hello world",
+    code: "001",
+    args: "literal",
+  });
+  const detail = JSON.parse((await cli(home, cwd, "inspect", JSON.parse(named.stdout).id)).stdout);
+  expect(detail.attempts[0].output.stdout).toBe("hello world\n");
+  writeFileSync(
+    join(cwd, "input.json"),
+    JSON.stringify({ message: "from file", nested: { count: 2 }, enabled: false }),
+  );
+  const file = await cli(home, cwd, "run", "input", "--full", "--args", "input.json");
+  expect(file.exitCode).toBe(0);
+  expect(JSON.parse(file.stdout).input).toEqual({
+    message: "from file",
+    nested: { count: 2 },
+    enabled: false,
+  });
+  const invalid = await cli(
+    home,
+    cwd,
+    "run",
+    "input",
+    "--args",
+    "input.json",
+    "--message",
+    "mixed",
+  );
+  expect(invalid.exitCode).toBe(1);
+  expect(invalid.stderr).toContain("Choose one input source");
+  expect(JSON.parse((await cli(home, cwd, "runs")).stdout)).toHaveLength(2);
 });

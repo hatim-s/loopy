@@ -23,6 +23,14 @@
     "./cloud": {
       "types": "./dist/types/cloud/index.d.ts",
       "default": "./dist/cloud/index.js"
+    },
+    "./application": {
+      "types": "./dist/types/application/index.d.ts",
+      "default": "./dist/application/index.js"
+    },
+    "./protocol": {
+      "types": "./dist/types/protocol/index.d.ts",
+      "default": "./dist/protocol/index.js"
     }
   },
   "bin": {

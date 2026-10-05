@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 
 test("authoring, runtime and cloud exports bundle without host dependencies", async () => {
   const result = await Bun.build({
-    entrypoints: ["core", "runtime", "cloud"].map((name) =>
+    entrypoints: ["core", "runtime", "cloud", "application", "protocol"].map((name) =>
       resolve(import.meta.dir, `../src/${name}/index.ts`),
     ),
     target: "browser",
