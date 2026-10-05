@@ -31,6 +31,10 @@
     "./protocol": {
       "types": "./dist/types/protocol/index.d.ts",
       "default": "./dist/protocol/index.js"
+    },
+    "./publishing": {
+      "types": "./dist/types/publishing/index.d.ts",
+      "default": "./dist/publishing/index.js"
     }
   },
   "bin": {

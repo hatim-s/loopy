@@ -87,7 +87,7 @@ test("publication validates compiler graph, maps explicit files and persists imm
   });
   const version = await service.publish(await bundle());
   expect(request?.policy.serviceCredentials).toBe(false);
-  expect(request?.policy.maxOutputBytes).toBe(1024 * 1024);
+  expect(request?.policy.maxOutputBytes).toBe(100_000);
   expect(version.workflow.nodes[0]).toEqual({
     id: "read",
     kind: "command",
@@ -107,6 +107,32 @@ test("publication validates compiler graph, maps explicit files and persists imm
 test("malformed compiler results never publish or upload", async () => {
   for (const result of [
     { workflow, imageDigest: "latest" },
+    {
+      workflow: {
+        ...workflow,
+        nodes: [
+          {
+            id: "read",
+            kind: "command",
+            command: { program: "cat", cwd: "src", args: [{ $file: "source.ts" }] },
+          },
+        ],
+      },
+      imageDigest,
+    },
+    {
+      workflow: {
+        ...workflow,
+        nodes: [
+          {
+            id: "read",
+            kind: "command",
+            command: { program: "./source.ts", cwd: "src", args: [] },
+          },
+        ],
+      },
+      imageDigest,
+    },
     { workflow: { version: 1, slug: "demo", nodes: [] }, imageDigest },
     {
       workflow: {
@@ -146,5 +172,28 @@ test("malformed compiler results never publish or upload", async () => {
     ).rejects.toThrow();
     expect(ports.versions).toHaveLength(0);
     expect(ports.stored).toHaveLength(0);
+  }
+});
+
+test("serialized publication and version bounds include metadata before artifact writes", async () => {
+  for (const count of [600_000, 1_000_000]) {
+    const input = await bundle();
+    const bounded = await preparePublishBundle(
+      {
+        ...input.manifest,
+        sources: [...input.manifest.sources, { source: "x".repeat(count), target: "bun.lock" }],
+      },
+      async () => new TextEncoder().encode("contents"),
+    );
+    const ports = stores();
+    await expect(
+      new PublishingService({
+        ...ports,
+        expected,
+        compiler: { compile: async () => ({ workflow, imageDigest }) },
+      }).publish(bounded),
+    ).rejects.toThrow("storage limits");
+    expect(ports.stored).toHaveLength(0);
+    expect(ports.versions).toHaveLength(0);
   }
 });

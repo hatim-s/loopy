@@ -16,8 +16,8 @@ export type BundleLimits = {
 };
 export const defaultBundleLimits: BundleLimits = {
   maxFiles: 100,
-  maxFileBytes: 1024 * 1024,
-  maxBundleBytes: 10 * 1024 * 1024,
+  maxFileBytes: 100_000,
+  maxBundleBytes: 100_000,
 };
 export type BundleFile = {
   readonly path: string;

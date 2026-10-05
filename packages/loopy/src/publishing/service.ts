@@ -54,7 +54,13 @@ function mapFiles(workflow: Workflow, bundle: PublishBundle): Workflow {
     }
     if (object.kind === "command") {
       const command = object.command as Record<string, unknown>;
-      if (typeof command.cwd === "string" && command.cwd !== ".") normalizeBundlePath(command.cwd);
+      if (typeof command.cwd === "string" && command.cwd !== ".") {
+        normalizeBundlePath(command.cwd);
+        if (mappings.size > 0)
+          throw new Error(
+            "Portable source mappings require commands to use the workspace root cwd",
+          );
+      }
       if (
         typeof command.program === "string" &&
         (command.program.startsWith("/") ||
@@ -104,7 +110,7 @@ export class PublishingService {
       throw new Error("Bundle compiler or runtime identity is unsupported");
     if (!/^sha256:[a-f0-9]{64}$/.test(expected.imageDigest))
       throw new Error("Publishing requires a host-selected pinned image digest");
-    const maxOutputBytes = 1024 * 1024;
+    const maxOutputBytes = 100_000;
     const deadlineMs = Date.now() + 60_000;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -157,13 +163,21 @@ export class PublishingService {
         throw new Error("Artifact store returned an invalid content identity");
       return identity;
     }
-    const files = [];
-    for (const file of verified.files)
-      files.push({ path: file.path, artifact: await put(new TextEncoder().encode(file.content)) });
     const compiled = { bundle: verified, workflow, graphHash, imageDigest: result.imageDigest };
-    const bundleArtifact = await put(new TextEncoder().encode(JSON.stringify(compiled)));
+    const compiledBytes = new TextEncoder().encode(JSON.stringify(compiled));
+    if (compiledBytes.byteLength > 1_000_000)
+      throw new Error("Compiled publication artifact exceeds pilot storage limits");
+    const bundleIdentity = {
+      id: await hashContent(compiledBytes),
+      sha256: await hashContent(compiledBytes),
+      bytes: compiledBytes.byteLength,
+    };
+    const files = verified.files.map((file) => ({
+      path: file.path,
+      artifact: { id: file.sha256, sha256: file.sha256, bytes: file.bytes },
+    }));
     const version: WorkflowVersion = {
-      id: bundleArtifact.sha256,
+      id: bundleIdentity.sha256,
       slug: workflow.slug,
       workflow,
       graphHash,
@@ -173,11 +187,21 @@ export class PublishingService {
       runtime: verified.manifest.runtime,
       imageDigest: result.imageDigest,
       publication: {
-        bundle: bundleArtifact,
+        bundle: bundleIdentity,
         lockfileHash: verified.lockfileHash,
         sourceMappings: verified.manifest.sources,
       },
     };
+    if (new TextEncoder().encode(JSON.stringify(version)).byteLength > 512_000)
+      throw new Error("Published version exceeds pilot storage limits");
+    for (const file of verified.files) {
+      const identity = await put(new TextEncoder().encode(file.content));
+      if (identity.id !== file.sha256)
+        throw new Error("Pilot publishing requires content-addressed artifact identifiers");
+    }
+    const persisted = await put(compiledBytes);
+    if (persisted.id !== bundleIdentity.id)
+      throw new Error("Pilot publishing requires content-addressed artifact identifiers");
     return catalog.publish(version);
   }
 }
