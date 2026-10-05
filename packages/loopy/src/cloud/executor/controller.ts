@@ -24,7 +24,7 @@ export type ExecutionReceipt = {
  */
 export interface ExecutionReceiptStore {
   /** Maximum raw UTF-8 output budget this store can persist, including JSON escaping. */
-  readonly maxOutputBytes?: number;
+  readonly maxOutputBytes: number;
   read(key: ExecutionKey): Promise<ExecutionReceipt | undefined>;
   compareAndSwap(
     key: ExecutionKey,
@@ -50,17 +50,16 @@ const terminal = (value: ExecutionObservation) =>
   value.state === "completed" || value.state === "cancelled-before-start";
 
 export class RemoteLinuxExecutor implements RemoteExecutor {
-  get maxOutputBytes(): number {
-    return Math.min(
-      MAX_EXECUTION_OUTPUT_BYTES,
-      this.store.maxOutputBytes ?? MAX_EXECUTION_OUTPUT_BYTES,
-    );
-  }
+  readonly maxOutputBytes: number;
   constructor(
     private readonly store: ExecutionReceiptStore,
     private readonly provider: LinuxExecutionProvider,
     private readonly now = () => Date.now(),
-  ) {}
+  ) {
+    if (!Number.isSafeInteger(store.maxOutputBytes) || store.maxOutputBytes < 1)
+      throw new Error("Receipt store must declare a valid output capacity");
+    this.maxOutputBytes = Math.min(MAX_EXECUTION_OUTPUT_BYTES, store.maxOutputBytes);
+  }
 
   async start(request: StartCommand): Promise<StartReceipt> {
     if (!request.fingerprint || !Number.isFinite(Date.parse(request.deadline)))

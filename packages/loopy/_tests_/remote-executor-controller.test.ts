@@ -12,6 +12,7 @@ import type {
 } from "../src/runtime/remote-executor.js";
 
 class Store implements ExecutionReceiptStore {
+  readonly maxOutputBytes = 1_048_576;
   rows = new Map<string, ExecutionReceipt>();
   id(key: ExecutionKey) {
     return JSON.stringify([key.tenantId, key.runId, key.attemptId]);
@@ -170,6 +171,7 @@ test("terminal completion survives stale cancellation results", async () => {
 test("CAS storage failure never launches a command", async () => {
   let starts = 0;
   const store: ExecutionReceiptStore = {
+    maxOutputBytes: 1_048_576,
     read: async () => undefined,
     compareAndSwap: async () => {
       throw Error("database unavailable");
@@ -369,3 +371,41 @@ test("expired deadline propagates completed receipt persistence failure without 
   await expect(executor.inspect(request.key)).rejects.toThrow("receipt CAS unavailable");
   expect(cancellations).toBe(0);
 });
+
+test.each([undefined, 0, Number.NaN, -1, 1.5])(
+  "untyped receipt store capacity %s fails closed before any receipt or launch",
+  (maxOutputBytes) => {
+    let writes = 0;
+    let launches = 0;
+    const store = {
+      maxOutputBytes,
+      async read() {
+        return undefined;
+      },
+      async compareAndSwap() {
+        writes++;
+        return true;
+      },
+    };
+    const provider: LinuxExecutionProvider = {
+      async workspace() {
+        return "available";
+      },
+      async start() {
+        launches++;
+        return completed;
+      },
+      async inspect() {
+        return completed;
+      },
+      async cancel() {
+        return { state: "cancelled-before-start" };
+      },
+    };
+    expect(() => new RemoteLinuxExecutor(store as ExecutionReceiptStore, provider)).toThrow(
+      "capacity",
+    );
+    expect(writes).toBe(0);
+    expect(launches).toBe(0);
+  },
+);
