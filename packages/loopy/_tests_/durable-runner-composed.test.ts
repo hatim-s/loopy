@@ -11,6 +11,10 @@ import { hydrateAttempts } from "../src/runtime/attempt-artifacts.js";
 import { DurableRunner } from "../src/runtime/durable-runner.js";
 import { prepareRun } from "../src/runtime/prepare.js";
 import type { ExecutionObservation, StartCommand } from "../src/runtime/remote-executor.js";
+import {
+  executionReceiptSchema,
+  SqliteExecutionReceiptStore,
+} from "../src/storage/execution-receipts.js";
 import { sqliteSchema } from "../src/storage/schema.js";
 import { SqliteStore } from "../src/storage/sqlite.js";
 
@@ -83,6 +87,7 @@ async function fixture(workflow: Workflow, input: Json = {}) {
     });
   return {
     mf,
+    db,
     store,
     run,
     make,
@@ -354,3 +359,79 @@ test("storage boundary rollback removes new intent and stops recovery without or
     await f.mf.dispose();
   }
 }, 60000);
+
+test("real runner and D1 receipt capacity reject two MiB before intent and accept one MiB", async () => {
+  const f = await fixture({ version: 1, slug: "capacity", nodes: [command("one")] });
+  for (const sql of executionReceiptSchema) await f.db.prepare(sql).run();
+  let launches = 0;
+  const provider: LinuxExecutionProvider = {
+    async workspace() {
+      return "available";
+    },
+    async start(request) {
+      launches++;
+      return {
+        state: "completed",
+        jobId: "job",
+        workspace: request.workspace,
+        output: { stdout: "z".repeat(1_048_576), stderr: "", exitCode: 0, durationMs: 1 },
+      };
+    },
+    async inspect() {
+      return { state: "not-started" };
+    },
+    async cancel() {
+      return { state: "cancelled-before-start" };
+    },
+  };
+  const executor = new RemoteLinuxExecutor(
+    new SqliteExecutionReceiptStore(f.db, f.store.scope),
+    provider,
+  );
+  const make = (maxOutputBytes: number) =>
+    new DurableRunner({
+      store: f.store,
+      artifacts: f.store,
+      artifactBytes: f.store.limits.artifactBytes,
+      stateBytes: f.store.limits.stateBytes,
+      executor,
+      runtime: { build: "v1", graphSchema: 1 },
+      runtimeForRun: (runId) => f.store.runtimeForRun(runId),
+      maxOutputBytes,
+      workspaces: {
+        async provision(_, __, workspaceId) {
+          return { workspaceId, generation: "g1" };
+        },
+        async inspect() {
+          return "available";
+        },
+      },
+    });
+  try {
+    expect(executor.maxOutputBytes).toBe(1_048_576);
+    expect(() => make(2_097_152)).toThrow("capacity");
+    const rejected = await f.store.read(f.run.id);
+    expect(rejected?.revision).toBe(0);
+    expect(rejected?.attempts).toEqual([]);
+    expect(rejected?.intent).toBeUndefined();
+    expect(launches).toBe(0);
+    expect(
+      await f.db
+        .prepare("SELECT COUNT(*) AS count FROM loopy_execution_receipts")
+        .first<{ count: number }>(),
+    ).toEqual({ count: 0 });
+    const runner = make(1_048_576);
+    for (let tick = 0; tick < 8; tick++) {
+      await runner.tick(f.run.id);
+      if ((await f.store.read(f.run.id))?.run.status === "succeeded") break;
+    }
+    const accepted = await f.store.read(f.run.id);
+    expect(accepted?.run.status).toBe("succeeded");
+    expect(accepted?.intent).toBeUndefined();
+    expect(launches).toBe(1);
+    const hydrated = await hydrateAttempts(accepted?.attempts ?? [], f.store);
+    expect((hydrated[0]?.output as { stdout: string }).stdout.length).toBe(1_048_576);
+  } finally {
+    await f.mf.dispose();
+  }
+}, 30000);
