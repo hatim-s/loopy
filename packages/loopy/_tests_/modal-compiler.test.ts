@@ -195,3 +195,64 @@ test("installed Modal SDK accepts quantized sandbox timeout without any provider
   expect(boundaryReached).toBe(true);
   expect(timeoutSeconds).toBe(59);
 });
+
+test("stalled Modal app lookup obeys the absolute host deadline before allocation", async () => {
+  let creates = 0;
+  const client = {
+    apps: { fromName: () => new Promise(() => {}) },
+    images: { fromRegistry: () => ({}) },
+    sandboxes: {
+      create: async () => {
+        creates++;
+      },
+    },
+  } as unknown as ModalCompilerOptions["client"];
+  const compiler = new ModalIsolatedCompiler({ client, appName: "offline", image });
+  const input = await request();
+  const started = Date.now();
+  await expect(
+    compiler.compile({ ...input, policy: { ...input.policy, deadlineMs: Date.now() + 1_050 } }),
+  ).rejects.toThrow("deadline");
+  expect(Date.now() - started).toBeLessThan(1_500);
+  expect(creates).toBe(0);
+});
+
+test("a sandbox allocated after cancellation receives bounded confirmed termination", async () => {
+  const controller = new AbortController();
+  let allocate: ((sandbox: unknown) => void) | undefined;
+  let created: (() => void) | undefined;
+  const creating = new Promise<void>((resolve) => {
+    created = resolve;
+  });
+  const terminations: unknown[] = [];
+  let ended: (() => void) | undefined;
+  const terminated = new Promise<void>((resolve) => {
+    ended = resolve;
+  });
+  const client = {
+    apps: { fromName: async () => ({}) },
+    images: { fromRegistry: () => ({}) },
+    sandboxes: {
+      create: () => {
+        created?.();
+        return new Promise((resolve) => {
+          allocate = resolve;
+        });
+      },
+    },
+  } as unknown as ModalCompilerOptions["client"];
+  const compiler = new ModalIsolatedCompiler({ client, appName: "offline", image });
+  const pending = compiler.compile(await request(controller.signal));
+  await creating;
+  controller.abort();
+  await expect(pending).rejects.toThrow();
+  allocate?.({
+    terminate: async (params: unknown) => {
+      terminations.push(params);
+      ended?.();
+      return 137;
+    },
+  });
+  await terminated;
+  expect(terminations).toEqual([{ wait: true }]);
+});

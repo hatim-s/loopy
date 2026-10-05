@@ -1,3 +1,4 @@
+import { abortable } from "./abort.js";
 import type { CompileRequest, CompileResult, IsolatedCompiler } from "./service.js";
 
 export type HttpCompilerOptions = {
@@ -35,22 +36,25 @@ export class HttpIsolatedCompiler implements IsolatedCompiler {
     const signal = AbortSignal.any([request.signal, AbortSignal.timeout(remaining)]);
     let response: Response;
     try {
-      response = await (this.options.fetch ?? fetch)(this.endpoint, {
-        method: "POST",
-        redirect: "error",
-        credentials: "omit",
+      response = await abortable(
+        (this.options.fetch ?? fetch)(this.endpoint, {
+          method: "POST",
+          redirect: "manual",
+          credentials: "omit",
+          signal,
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${this.options.serviceToken}`,
+          },
+          body,
+        }),
         signal,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${this.options.serviceToken}`,
-        },
-        body,
-      });
+      );
     } catch {
       throw new Error("Compiler service request failed");
     }
     if (response.status !== 200 || !response.body) {
-      await response.body?.cancel().catch(() => {});
+      void response.body?.cancel().catch(() => {});
       throw new Error(`Compiler service failed with HTTP ${response.status}`);
     }
     const reader = response.body.getReader();
@@ -59,14 +63,14 @@ export class HttpIsolatedCompiler implements IsolatedCompiler {
     try {
       while (true) {
         signal.throwIfAborted();
-        const item = await reader.read();
+        const item = await abortable(reader.read(), signal);
         if (item.done) break;
         count += item.value.byteLength;
         if (count > 128_000) throw new Error("Compiler service response exceeds limits");
         chunks.push(item.value);
       }
     } finally {
-      await reader.cancel().catch(() => {});
+      void reader.cancel().catch(() => {});
       reader.releaseLock();
     }
     const bytes = new Uint8Array(count);

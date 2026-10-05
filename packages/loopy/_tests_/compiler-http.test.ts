@@ -49,7 +49,7 @@ test("authenticated compiler HTTP transport preserves the canonical request with
     serviceToken: "internal-service-token",
     fetch: async (url, options) => {
       expect(String(url)).toBe("https://compiler.example/compile");
-      expect(options?.redirect).toBe("error");
+      expect(options?.redirect).toBe("manual");
       expect(options?.credentials).toBe("omit");
       return handler(new Request(url, options));
     },
@@ -163,4 +163,27 @@ test("compiler body ingestion stops a pending read on cancellation or its own ho
     expect(cancelled).toBe(true);
     expect(compiles).toBe(0);
   }
+});
+
+test("compiler response reads and nonsettling stream cancellation cannot outlive request abort", async () => {
+  const controller = new AbortController();
+  let cancelled = false;
+  const response = new Response(
+    new ReadableStream<Uint8Array>({
+      cancel() {
+        cancelled = true;
+        return new Promise(() => {});
+      },
+    }),
+  );
+  const compiler = new HttpIsolatedCompiler({
+    origin: "https://compiler.example",
+    serviceToken: "token",
+    fetch: async () => response,
+  });
+  const pending = compiler.compile(await input(controller.signal));
+  await Promise.resolve();
+  controller.abort();
+  await expect(pending).rejects.toThrow();
+  expect(cancelled).toBe(true);
 });

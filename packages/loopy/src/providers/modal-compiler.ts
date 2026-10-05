@@ -1,4 +1,5 @@
 import type { ModalClient } from "modal";
+import { abortable } from "../publishing/abort.js";
 import { verifyPublishBundle } from "../publishing/manifest.js";
 import type { CompileRequest, CompileResult, IsolatedCompiler } from "../publishing/service.js";
 
@@ -11,13 +12,14 @@ export type ModalCompilerOptions = {
 async function readBounded(
   stream: ReadableStream<string | Uint8Array>,
   limit: number,
+  signal: AbortSignal,
 ): Promise<string> {
   const reader = stream.getReader();
   const chunks: Uint8Array[] = [];
   let count = 0;
   try {
     while (true) {
-      const next = await reader.read();
+      const next = await abortable(reader.read(), signal);
       if (next.done) break;
       const bytes =
         typeof next.value === "string" ? new TextEncoder().encode(next.value) : next.value;
@@ -26,7 +28,7 @@ async function readBounded(
       chunks.push(bytes);
     }
   } finally {
-    await reader.cancel().catch(() => {});
+    void reader.cancel().catch(() => {});
     reader.releaseLock();
   }
   const bytes = new Uint8Array(count);
@@ -96,11 +98,14 @@ export class ModalIsolatedCompiler implements IsolatedCompiler {
       return vendorTimeout;
     };
     remaining();
-    const app = await this.options.client.apps.fromName(this.options.appName, {
-      createIfMissing: false,
-    });
+    const app = await abortable(
+      this.options.client.apps.fromName(this.options.appName, {
+        createIfMissing: false,
+      }),
+      signal,
+    );
     const image = this.options.client.images.fromRegistry(this.options.image);
-    const sandbox = await this.options.client.sandboxes.create(app, image, {
+    const creation = this.options.client.sandboxes.create(app, image, {
       timeoutMs: remaining(),
       cpu: 1,
       cpuLimit: 1,
@@ -112,43 +117,65 @@ export class ModalIsolatedCompiler implements IsolatedCompiler {
       env: {},
       command: ["sleep", "60"],
     });
+    let claimed = false;
+    void creation
+      .then((lateSandbox) => {
+        if (signal.aborted && !claimed)
+          return confirmTermination(() => lateSandbox.terminate({ wait: true }));
+      })
+      .catch(() => {});
+    const sandbox = await abortable(creation, signal);
+    claimed = true;
+    let termination: Promise<void> | undefined;
     const stop = () => {
-      void confirmTermination(() => sandbox.terminate({ wait: true })).catch(() => {});
+      termination ??= confirmTermination(() => sandbox.terminate({ wait: true }));
+      void termination.catch(() => {});
     };
     signal.addEventListener("abort", stop, { once: true });
     try {
       signal.throwIfAborted();
-      const process = await sandbox.exec(["bun", "/opt/loopy/dist/providers/compiler-worker.js"], {
-        mode: "text",
-        workdir: "/tmp",
-        timeoutMs: remaining(),
-        secrets: [],
-        env: {},
-      });
-      const output = readBounded(process.stdout, request.policy.maxOutputBytes);
-      const errors = readBounded(process.stderr, request.policy.maxOutputBytes);
+      const process = await abortable(
+        sandbox.exec(["bun", "/opt/loopy/dist/providers/compiler-worker.js"], {
+          mode: "text",
+          workdir: "/tmp",
+          timeoutMs: remaining(),
+          secrets: [],
+          env: {},
+        }),
+        signal,
+      );
+      const output = readBounded(process.stdout, request.policy.maxOutputBytes, signal);
+      const errors = readBounded(process.stderr, request.policy.maxOutputBytes, signal);
       const upload = async () => {
         const writer = process.stdin.getWriter();
         try {
-          await writer.write(JSON.stringify(bundle));
-          await writer.close();
+          await abortable(writer.write(JSON.stringify(bundle)), signal);
+          await abortable(writer.close(), signal);
         } finally {
           writer.releaseLock();
         }
       };
-      const [, , exitCode] = await Promise.all([output, errors, process.wait(), upload()]);
+      const [, , exitCode] = await Promise.all([
+        output,
+        errors,
+        abortable(process.wait(), signal),
+        upload(),
+      ]);
       signal.throwIfAborted();
       if (exitCode !== 0) throw new Error("Isolated compiler exited unsuccessfully");
-      const resultProcess = await sandbox.exec(["cat", "/compile-result.json"], {
-        mode: "text",
-        timeoutMs: remaining(),
-        secrets: [],
-        env: {},
-      });
+      const resultProcess = await abortable(
+        sandbox.exec(["cat", "/compile-result.json"], {
+          mode: "text",
+          timeoutMs: remaining(),
+          secrets: [],
+          env: {},
+        }),
+        signal,
+      );
       const [resultText, , resultCode] = await Promise.all([
-        readBounded(resultProcess.stdout, request.policy.maxOutputBytes),
-        readBounded(resultProcess.stderr, request.policy.maxOutputBytes),
-        resultProcess.wait(),
+        readBounded(resultProcess.stdout, request.policy.maxOutputBytes, signal),
+        readBounded(resultProcess.stderr, request.policy.maxOutputBytes, signal),
+        abortable(resultProcess.wait(), signal),
       ]);
       signal.throwIfAborted();
       if (resultCode !== 0) throw new Error("Isolated compiler returned no completed result");
@@ -161,7 +188,8 @@ export class ModalIsolatedCompiler implements IsolatedCompiler {
       };
     } finally {
       signal.removeEventListener("abort", stop);
-      await confirmTermination(() => sandbox.terminate({ wait: true }));
+      stop();
+      await termination;
     }
   }
 }
