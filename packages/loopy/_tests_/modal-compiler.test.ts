@@ -36,7 +36,14 @@ async function request(signal = new AbortController().signal): Promise<CompileRe
     },
   };
 }
-function fake(options: { output?: string; exit?: number; terminationFailure?: boolean } = {}) {
+function fake(
+  options: {
+    output?: string;
+    exit?: number;
+    terminationFailure?: boolean;
+    termination?: () => Promise<number>;
+  } = {},
+) {
   let creates = 0;
   let terminates = 0;
   const inputs: string[] = [];
@@ -73,7 +80,7 @@ function fake(options: { output?: string; exit?: number; terminationFailure?: bo
             terminations.push(params);
             terminates++;
             if (options.terminationFailure) throw new Error("SDK termination failure");
-            return 137;
+            return options.termination ? await options.termination() : 137;
           },
           exec: async (argv: string[], params: { timeoutMs: number }) => {
             expect(params.timeoutMs % 1_000).toBe(0);
@@ -255,4 +262,33 @@ test("a sandbox allocated after cancellation receives bounded confirmed terminat
   });
   await terminated;
   expect(terminations).toEqual([{ wait: true }]);
+});
+
+test("cancellation during confirmed cleanup prevents returning a prepared compilation", async () => {
+  const controller = new AbortController();
+  const fixture = fake({
+    termination: async () => {
+      controller.abort();
+      return 137;
+    },
+  });
+  await expect(fixture.compiler.compile(await request(controller.signal))).rejects.toThrow();
+  expect(fixture.snapshot().terminations).toEqual([{ wait: true }]);
+});
+
+test("deadline expiry during confirmed cleanup prevents returning a prepared compilation", async () => {
+  const fixture = fake({
+    termination: async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1_200));
+      return 137;
+    },
+  });
+  const input = await request();
+  await expect(
+    fixture.compiler.compile({
+      ...input,
+      policy: { ...input.policy, deadlineMs: Date.now() + 1_100 },
+    }),
+  ).rejects.toThrow();
+  expect(fixture.snapshot().terminations).toEqual([{ wait: true }]);
 });

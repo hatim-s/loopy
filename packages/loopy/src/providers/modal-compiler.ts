@@ -132,6 +132,7 @@ export class ModalIsolatedCompiler implements IsolatedCompiler {
       void termination.catch(() => {});
     };
     signal.addEventListener("abort", stop, { once: true });
+    let result: CompileResult;
     try {
       signal.throwIfAborted();
       const process = await abortable(
@@ -182,7 +183,7 @@ export class ModalIsolatedCompiler implements IsolatedCompiler {
       const raw: unknown = JSON.parse(resultText);
       if (!raw || typeof raw !== "object" || !("workflow" in raw))
         throw new Error("Invalid isolated compiler response");
-      return {
+      result = {
         workflow: raw.workflow,
         imageDigest: `sha256:${this.options.image.split("@sha256:")[1]}`,
       };
@@ -191,5 +192,9 @@ export class ModalIsolatedCompiler implements IsolatedCompiler {
       stop();
       await termination;
     }
+    signal.throwIfAborted();
+    if (Date.now() >= request.policy.deadlineMs)
+      throw new Error("Compiler deadline exceeded during cleanup");
+    return result;
   }
 }
