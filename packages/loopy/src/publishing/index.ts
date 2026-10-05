@@ -1,3 +1,7 @@
+export type { HostedPublisherOptions } from "./client.js";
+export { HostedPublisher } from "./client.js";
+export type { HttpCompilerOptions } from "./compiler-http.js";
+export { HttpIsolatedCompiler } from "./compiler-http.js";
 export type { BundleFile, BundleLimits, PublishBundle, PublishManifest } from "./manifest.js";
 export {
   defaultBundleLimits,

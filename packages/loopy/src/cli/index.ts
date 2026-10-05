@@ -8,6 +8,7 @@ import { localRunOptions } from "../local/process.js";
 import { defaultHome, Registry } from "../local/registry.js";
 import { createLocalRuntime } from "../local/runtime.js";
 import { startServer } from "../local/server.js";
+import { HostedPublisher } from "../publishing/client.js";
 import type { PublishBundle } from "../publishing/manifest.js";
 import { errorMessage } from "../runtime/errors.js";
 import { parseCliArgs } from "./args.js";
@@ -19,7 +20,7 @@ const usage = `loopy: TypeScript workflows for CLI tools
 
   loopy save <file.ts|directory>               Compile files and save by configured scope
   loopy publish <manifest.json> --out bundle.json  Prepare a declared portable bundle
-  loopy publish <manifest.json>                  Publish through a configured isolated compiler
+  loopy publish <manifest.json> --origin https://host  Publish with LOOPY_PUBLISH_TOKEN
   loopy list                                   List saved loopies
   loopy graph <slug>                            Print the saved graph as JSON
   loopy run <slug> [--key value ...]            Run with string trigger inputs
@@ -105,7 +106,16 @@ export async function main(
   if (rest.length) throw new Error(`Unexpected arguments: ${rest.join(" ")}`);
 
   if (command === "publish") {
-    if (!values.out && !publishing)
+    if (values.out && values.origin) throw new Error("Choose --out or --origin for publishing");
+    const publisher =
+      publishing ??
+      (values.origin
+        ? new HostedPublisher({
+            origin: values.origin,
+            token: process.env.LOOPY_PUBLISH_TOKEN ?? "",
+          })
+        : undefined);
+    if (!values.out && !publisher)
       throw new Error(
         "Publishing transport and isolated compiler are not configured. Use --out to prepare a bundle.",
       );
@@ -114,7 +124,7 @@ export async function main(
       const file = resolve(values.out);
       await writeFile(file, JSON.stringify(bundle, null, 2));
       print({ file, sha256: bundle.sha256, bytes: bundle.bytes });
-    } else if (publishing) print(await publishing.publish(bundle));
+    } else if (publisher) print(await publisher.publish(bundle));
     return;
   }
 

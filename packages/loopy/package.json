@@ -35,6 +35,14 @@
     "./publishing": {
       "types": "./dist/types/publishing/index.d.ts",
       "default": "./dist/publishing/index.js"
+    },
+    "./modal-compiler": {
+      "types": "./dist/types/providers/modal-compiler.d.ts",
+      "default": "./dist/providers/modal-compiler.js"
+    },
+    "./compiler-service": {
+      "types": "./dist/types/providers/compiler-service.d.ts",
+      "default": "./dist/providers/compiler-service.js"
     }
   },
   "bin": {
@@ -47,5 +55,8 @@
   ],
   "scripts": {
     "prepack": "bun ../../scripts/build.ts"
+  },
+  "dependencies": {
+    "modal": "0.11.0"
   }
 }

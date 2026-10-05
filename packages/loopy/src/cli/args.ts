@@ -8,6 +8,7 @@ const options = {
   args: { type: "string" },
   full: { type: "boolean" },
   out: { type: "string" },
+  origin: { type: "string" },
   name: { type: "string" },
   port: { type: "string" },
   "retry-uncertain": { type: "boolean" },
