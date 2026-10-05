@@ -1,4 +1,5 @@
 import { DurableRunner } from "../../../packages/loopy/src/runtime/durable-runner.js";
+import { MAX_EXECUTION_OUTPUT_BYTES } from "../../../packages/loopy/src/runtime/remote-executor.js";
 import { SqliteStore } from "../../../packages/loopy/src/storage/sqlite.js";
 import type { CloudEnv, CoordinatorState } from "./types.js";
 
@@ -44,7 +45,13 @@ export class RunCoordinator {
       store,
       artifacts: store,
       stateBytes: store.limits.stateBytes,
-      executor: this.env.EXECUTOR,
+      artifactBytes: store.limits.artifactBytes,
+      executor: {
+        maxOutputBytes: MAX_EXECUTION_OUTPUT_BYTES,
+        start: (request) => this.env.EXECUTOR.start(request),
+        inspect: (key) => this.env.EXECUTOR.inspect(key),
+        cancel: (key) => this.env.EXECUTOR.cancel(key),
+      },
       workspaces: {
         provision: (...args) => this.env.EXECUTOR.provisionWorkspace(...args),
         inspect: (...args) => this.env.EXECUTOR.inspectWorkspace(...args),
