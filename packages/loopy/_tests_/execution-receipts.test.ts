@@ -146,6 +146,20 @@ test("D1 controllers persist escaped and accumulated output in bounded receipt a
       workspace,
       deadline: "2099-01-01T00:00:00Z",
     };
+    await expect(
+      controller().start({
+        ...request,
+        key: { ...key, attemptId: "unsupported-budget" },
+        command: { ...request.command, maxOutputBytes: 2_097_152 },
+      }),
+    ).rejects.toThrow("receipt storage limit");
+    expect(starts).toBe(0);
+    expect(
+      await new SqliteExecutionReceiptStore(db, scope).read({
+        ...key,
+        attemptId: "unsupported-budget",
+      }),
+    ).toBeUndefined();
     let accumulatedBytes = 0;
     for (let attempt = 0; attempt < 9; attempt++) {
       const attemptKey = { ...key, attemptId: `escaped-${attempt}` };
@@ -185,7 +199,7 @@ test("D1 controllers persist escaped and accumulated output in bounded receipt a
         revision: current.revision + 1,
         observation: { state: "unknown", reason: "\0".repeat(1_400_000) },
       }),
-    ).rejects.toThrow("Artifact exceeds limit");
+    ).rejects.toThrow("Execution receipt metadata exceeds limit");
     expect(await store.read(current.key)).toEqual(current);
   } finally {
     await mf.dispose();

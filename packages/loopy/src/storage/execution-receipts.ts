@@ -16,6 +16,8 @@ export const executionReceiptSchema = [
 ] as const;
 
 export class SqliteExecutionReceiptStore implements ExecutionReceiptStore {
+  // JSON can expand each raw UTF-8 byte to six bytes. Reserve space for bounded metadata as well.
+  readonly maxOutputBytes = 1_048_576;
   private readonly artifacts: SqliteStore;
 
   constructor(
@@ -52,6 +54,23 @@ export class SqliteExecutionReceiptStore implements ExecutionReceiptStore {
       next.revision < 0
     )
       throw new Error("Invalid execution receipt CAS");
+    const observation = next.observation;
+    const metadata = {
+      ...next,
+      observation:
+        observation.state === "completed"
+          ? { ...observation, output: { ...observation.output, stdout: "", stderr: "" } }
+          : observation,
+    };
+    if (new TextEncoder().encode(JSON.stringify(metadata)).length > 512_000)
+      throw new Error("Execution receipt metadata exceeds limit");
+    if (
+      observation.state === "completed" &&
+      new TextEncoder().encode(observation.output.stdout).length +
+        new TextEncoder().encode(observation.output.stderr).length >
+        this.maxOutputBytes
+    )
+      throw new Error("Execution receipt output exceeds limit");
     // Persist immutable chunks before publishing their pointer. A losing CAS cannot change a winner.
     const artifact = await this.artifacts.put(new TextEncoder().encode(JSON.stringify(next)));
     const payload = JSON.stringify(artifact);

@@ -22,6 +22,8 @@ export type ExecutionReceipt = {
  * Receipts live outside the workload. They never contain command input or credentials.
  */
 export interface ExecutionReceiptStore {
+  /** Maximum raw UTF-8 output budget this store can persist, including JSON escaping. */
+  readonly maxOutputBytes?: number;
   read(key: ExecutionKey): Promise<ExecutionReceipt | undefined>;
   compareAndSwap(
     key: ExecutionKey,
@@ -59,6 +61,8 @@ export class RemoteLinuxExecutor implements RemoteExecutor {
     const limit = request.command.maxOutputBytes;
     if (limit === undefined || !Number.isSafeInteger(limit) || limit < 0)
       throw new Error("Remote commands require a bounded maxOutputBytes");
+    if (this.store.maxOutputBytes !== undefined && limit > this.store.maxOutputBytes)
+      throw new Error("Command output budget exceeds receipt storage limit");
     for (;;) {
       const existing = await this.store.read(request.key);
       if (existing) {
