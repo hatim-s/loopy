@@ -66,6 +66,7 @@ async function fixture(workflow: Workflow, input: Json = {}) {
     new DurableRunner({
       store,
       artifacts: store,
+      artifactBytes: store.limits.artifactBytes,
       executor: new RemoteLinuxExecutor(receiptStore, provider, () => clock),
       runtime,
       runtimeForRun: (runId) => store.runtimeForRun(runId),

@@ -1,6 +1,10 @@
 import type { ArtifactIdentity, TenantScope } from "../application/ports.js";
 import type { ExecutionReceipt, ExecutionReceiptStore } from "../cloud/executor/controller.js";
 import type { ExecutionKey } from "../runtime/remote-executor.js";
+import {
+  MAX_EXECUTION_METADATA_BYTES,
+  MAX_EXECUTION_OUTPUT_BYTES,
+} from "../runtime/remote-executor.js";
 import { SqliteStore } from "./sqlite.js";
 import type { SqliteDatabase } from "./sqlite-driver.js";
 
@@ -17,7 +21,7 @@ export const executionReceiptSchema = [
 
 export class SqliteExecutionReceiptStore implements ExecutionReceiptStore {
   // JSON can expand each raw UTF-8 byte to six bytes. Reserve space for bounded metadata as well.
-  readonly maxOutputBytes = 1_048_576;
+  readonly maxOutputBytes = MAX_EXECUTION_OUTPUT_BYTES;
   private readonly artifacts: SqliteStore;
 
   constructor(
@@ -62,7 +66,7 @@ export class SqliteExecutionReceiptStore implements ExecutionReceiptStore {
           ? { ...observation, output: { ...observation.output, stdout: "", stderr: "" } }
           : observation,
     };
-    if (new TextEncoder().encode(JSON.stringify(metadata)).length > 512_000)
+    if (new TextEncoder().encode(JSON.stringify(metadata)).length > MAX_EXECUTION_METADATA_BYTES)
       throw new Error("Execution receipt metadata exceeds limit");
     if (
       observation.state === "completed" &&
