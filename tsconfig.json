@@ -18,7 +18,8 @@
       "loopy/local": ["./packages/loopy/src/local/index.ts"],
       "loopy/cloud": ["./packages/loopy/src/cloud/index.ts"],
       "loopy/application": ["./packages/loopy/src/application/index.ts"],
-      "loopy/protocol": ["./packages/loopy/src/protocol/index.ts"]
+      "loopy/protocol": ["./packages/loopy/src/protocol/index.ts"],
+      "loopy/publishing": ["./packages/loopy/src/publishing/index.ts"]
     },
     "skipLibCheck": true,
     "types": ["bun-types"]
