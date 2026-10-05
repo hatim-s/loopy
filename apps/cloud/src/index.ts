@@ -52,22 +52,43 @@ export default {
   async scheduled(_controller: unknown, env: CloudEnv): Promise<void> {
     checkBindings(env);
     const driver = new CloudflareDriver(env);
-    // Pagination bounds each SQL query while covering every tenant and active run.
+    // Each failed delivery remains durable. Finish the sweep before reporting failures.
+    let failures = 0;
     let cursor: string | undefined;
     do {
       const page = await SqliteStore.recoveryTenants(env.DB, cursor, 100);
       for (const tenantId of page.tenantIds) {
         const store = new SqliteStore(env.DB, { tenantId });
-        await dispatchPending(store, driver);
+        try {
+          const dispatch = await dispatchPending(store, driver);
+          failures += dispatch.retried + dispatch.stale;
+        } catch {
+          failures++;
+        }
         let runCursor: string | undefined;
         do {
-          const runs = await store.recoveryRuns(runCursor, 100);
-          for (const run of runs.runs)
-            await driver.ensureStarted(store.scope, run.runId, run.runtime);
+          let runs: Awaited<ReturnType<SqliteStore["recoveryRuns"]>>;
+          try {
+            runs = await store.recoveryRuns(runCursor, 100);
+          } catch {
+            failures++;
+            break;
+          }
+          for (const run of runs.runs) {
+            try {
+              await driver.ensureStarted(store.scope, run.runId, run.runtime);
+            } catch {
+              failures++;
+            }
+          }
           runCursor = runs.cursor;
         } while (runCursor);
       }
       cursor = page.cursor;
     } while (cursor);
+    if (failures)
+      throw new Error(
+        `Recovery sweep failed for ${failures} operations; remaining runs were processed`,
+      );
   },
 };

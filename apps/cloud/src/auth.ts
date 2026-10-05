@@ -48,7 +48,9 @@ export function clerkAuthenticator(config: ClerkConfig): Authenticator {
       !auth.isAuthenticated ||
       auth.tokenType !== "session_token" ||
       !auth.userId ||
-      auth.sessionStatus === "pending"
+      auth.sessionStatus === "pending" ||
+      typeof auth.sessionClaims.azp !== "string" ||
+      !authorizedParties.includes(auth.sessionClaims.azp)
     )
       return undefined;
     // Active organization membership is verified by Clerk's normalized session auth object.

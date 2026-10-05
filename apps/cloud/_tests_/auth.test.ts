@@ -31,6 +31,8 @@ test("Clerk verifies signed session JWTs and normalized v2 organization permissi
     { tenantId: "org:org_test", operations: [] },
   );
   expect(await authenticate(await request({ sts: "pending" }))).toBeUndefined();
+  expect(await authenticate(await request({ azp: undefined }))).toBeUndefined();
+  expect(await authenticate(await request({ azp: "" }))).toBeUndefined();
   expect(await authenticate(await request({ azp: "https://attacker.test" }))).toBeUndefined();
   expect(
     await authenticate(

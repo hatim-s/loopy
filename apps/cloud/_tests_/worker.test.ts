@@ -4,6 +4,8 @@ import { Miniflare, type MiniflareOptions } from "miniflare";
 import { prepareRun } from "../../../packages/loopy/src/runtime/prepare.js";
 import { sqliteSchema } from "../../../packages/loopy/src/storage/schema.js";
 import { SqliteStore } from "../../../packages/loopy/src/storage/sqlite.js";
+import cloudWorker from "../src/index.js";
+import type { CloudEnv } from "../src/types.js";
 import { localClerk } from "./clerk-fixture.js";
 
 async function bundle(path: string) {
@@ -261,6 +263,66 @@ test("real Worker and Durable Object use Clerk, D1 and runner across alarms, evi
       600_000, 600_000,
     ]);
     expect(raw?.intent).toBeUndefined();
+
+    // One rejected coordinator must not prevent recovery of a later tenant.
+    const createTenantRun = async (tenantId: string) => {
+      const scoped = new SqliteStore(db, { tenantId });
+      const source = await scoped.put(new TextEncoder().encode("export default {}"));
+      await scoped.publish({
+        id: "version",
+        slug: "hello",
+        workflow,
+        graphHash: snapshot.workflowHash,
+        files: [{ path: "main.ts", artifact: source }],
+        entrypoint: "main.ts",
+        compiler: "integration",
+        runtime: { build: "integration", graphSchema: 1 },
+        imageDigest: "sha256:fixture",
+      });
+      const run = await prepareRun(workflow, null, {
+        workspace: { kind: "managed", id: crypto.randomUUID() },
+        mode: "sandbox",
+      });
+      await scoped.admit(
+        { versionId: "version", idempotencyKey: "recovery", fingerprint: "fixture", input: null },
+        run,
+        {
+          id: crypto.randomUUID(),
+          runId: run.id,
+          runtime: { build: "integration", graphSchema: 1 },
+        },
+      );
+      return { scoped, runId: run.id };
+    };
+    const firstTenant = await createTenantRun("a");
+    const lastTenant = await createTenantRun("z");
+    const bindings = await mf.getBindings<CloudEnv>("control");
+    const rejectedId = bindings.COORDINATORS.idFromName(JSON.stringify(["a", firstTenant.runId]));
+    let rejected = 0;
+    const failingNamespace = new Proxy(bindings.COORDINATORS, {
+      get(target, property) {
+        if (property === "get")
+          return (id: Parameters<CloudEnv["COORDINATORS"]["get"]>[0]) => {
+            if (id.toString() === rejectedId.toString()) {
+              rejected++;
+              throw new Error("Fixture coordinator unavailable");
+            }
+            return target.get(id);
+          };
+        const member = Reflect.get(target, property);
+        return typeof member === "function" ? member.bind(target) : member;
+      },
+    });
+    for (let sweep = 0; sweep < 2; sweep++) {
+      await expect(
+        cloudWorker.scheduled({}, { ...bindings, COORDINATORS: failingNamespace }),
+      ).rejects.toThrow("Recovery sweep failed");
+      await until(async () => !!(await lastTenant.scoped.read(lastTenant.runId))?.intent);
+    }
+    expect(rejected).toBeGreaterThanOrEqual(4);
+    expect((await firstTenant.scoped.read(firstTenant.runId))?.run.status).toBe("pending");
+    expect((await lastTenant.scoped.read(lastTenant.runId))?.attempts.length).toBe(1);
+    expect((await firstTenant.scoped.claimDispatch("retry-proof", 1000, 10)).length).toBe(1);
   } finally {
     await mf.dispose();
   }
