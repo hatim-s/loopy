@@ -1,6 +1,7 @@
 import type { RuntimeIdentity, TenantScope } from "../application/ports.js";
 
 export type DispatchDelivery = {
+  kind: "start" | "cancel";
   id: string;
   runId: string;
   runtime: RuntimeIdentity;
@@ -41,10 +42,13 @@ export async function dispatchPending(
   let stale = 0;
   for (const delivery of deliveries) {
     try {
-      await driver.ensureStarted(store.scope, delivery.runId, delivery.runtime);
+      if (delivery.kind === "cancel") await driver.cancel(store.scope, delivery.runId);
+      else await driver.ensureStarted(store.scope, delivery.runId, delivery.runtime);
     } catch {
       // Provider errors can contain command text or credentials. Persist a fixed error.
-      if (await store.retryDispatch(delivery.id, delivery.leaseToken, "Coordinator dispatch failed"))
+      if (
+        await store.retryDispatch(delivery.id, delivery.leaseToken, "Coordinator dispatch failed")
+      )
         retried++;
       else stale++;
       continue;
