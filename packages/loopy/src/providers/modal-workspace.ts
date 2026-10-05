@@ -1,4 +1,5 @@
 import { type ModalClient, NotFoundError } from "modal";
+import { ClientError, Status } from "nice-grpc";
 import type { TenantScope } from "../application/ports.js";
 import type { WorkspaceProvider } from "../runtime/durable-runner.js";
 import type { WorkspaceGeneration } from "../runtime/remote-executor.js";
@@ -64,7 +65,11 @@ export class ModalWorkspaceProvider implements WorkspaceProvider {
       const sandbox = await this.client.sandboxes.fromId(row.sandbox_id);
       return (await sandbox.poll()) === null ? "available" : "lost";
     } catch (error) {
-      if (error instanceof NotFoundError) return "lost";
+      if (
+        error instanceof NotFoundError ||
+        (error instanceof ClientError && error.code === Status.NOT_FOUND)
+      )
+        return "lost";
       throw error;
     }
   }

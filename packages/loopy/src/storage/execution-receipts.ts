@@ -1,9 +1,12 @@
-import type { TenantScope } from "../application/ports.js";
+import type { ArtifactIdentity, TenantScope } from "../application/ports.js";
 import type { ExecutionReceipt, ExecutionReceiptStore } from "../cloud/executor/controller.js";
 import type { ExecutionKey } from "../runtime/remote-executor.js";
+import { SqliteStore } from "./sqlite.js";
 import type { SqliteDatabase } from "./sqlite-driver.js";
 
-/** Apply once through the host migration runner. Keep this table outside workload access. */
+/** Apply after sqliteSchema through the host migration runner. Payload is an immutable artifact identity.
+ * Keep receipts and artifacts outside workload access.
+ */
 export const executionReceiptSchema = [
   `CREATE TABLE loopy_execution_receipts (
     tenant_id TEXT NOT NULL, run_id TEXT NOT NULL, attempt_id TEXT NOT NULL,
@@ -13,10 +16,14 @@ export const executionReceiptSchema = [
 ] as const;
 
 export class SqliteExecutionReceiptStore implements ExecutionReceiptStore {
+  private readonly artifacts: SqliteStore;
+
   constructor(
     private readonly db: SqliteDatabase,
     readonly scope: TenantScope,
-  ) {}
+  ) {
+    this.artifacts = new SqliteStore(db, scope);
+  }
 
   async read(key: ExecutionKey): Promise<ExecutionReceipt | undefined> {
     this.authorize(key);
@@ -27,7 +34,10 @@ export class SqliteExecutionReceiptStore implements ExecutionReceiptStore {
       .bind(key.tenantId, key.runId, key.attemptId)
       .first<{ revision: number; payload: string }>();
     if (!row) return undefined;
-    const receipt: ExecutionReceipt = JSON.parse(row.payload);
+    const artifact: ArtifactIdentity = JSON.parse(row.payload);
+    const bytes = await this.artifacts.get(artifact);
+    if (!bytes) throw new Error("Missing execution receipt artifact");
+    const receipt: ExecutionReceipt = JSON.parse(new TextDecoder().decode(bytes));
     if (!sameKey(key, receipt.key) || receipt.revision !== row.revision)
       throw new Error("Corrupt execution receipt identity or revision");
     return receipt;
@@ -42,7 +52,9 @@ export class SqliteExecutionReceiptStore implements ExecutionReceiptStore {
       next.revision < 0
     )
       throw new Error("Invalid execution receipt CAS");
-    const payload = JSON.stringify(next);
+    // Persist immutable chunks before publishing their pointer. A losing CAS cannot change a winner.
+    const artifact = await this.artifacts.put(new TextEncoder().encode(JSON.stringify(next)));
+    const payload = JSON.stringify(artifact);
     const result =
       revision === undefined
         ? await this.db
