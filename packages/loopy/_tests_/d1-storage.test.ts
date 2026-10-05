@@ -73,6 +73,63 @@ test("D1 atomic batches, blob identities, conditional writes and dispatch claims
     expect(await store.ackAnalytics("analytics", "wrong-owner")).toBe(false);
     expect(await store.ackAnalytics("analytics", "analytics-owner")).toBe(true);
     expect(await store.pruneAnalytics("2027-01-01T00:00:00Z")).toBe(1);
+    expect(await store.runtimeForRun("r")).toEqual(runtime);
+    expect(await store.runtimeForRun("missing")).toBeUndefined();
+    expect(await SqliteStore.recoveryTenants(db)).toEqual({ tenantIds: ["tenant"] });
+    expect((await store.recoveryRuns()).runs).toEqual([{ runId: "r", runtime }]);
+    const completed = { ...next, run: { ...next.run, status: "succeeded" as const } };
+    expect(await store.commit(lease, 1, completed)).toBe(true);
+    expect((await store.recoveryRuns()).runs).toEqual([]);
+    expect(await SqliteStore.recoveryTenants(db)).toEqual({ tenantIds: [] });
+    const outstanding = {
+      ...completed,
+      revision: 2,
+      run: { ...completed.run, status: "interrupted" as const },
+      intent: {
+        key: { tenantId: "tenant", runId: "r", attemptId: "a" },
+        fingerprint: "fp",
+        command: { program: "tool", args: [] },
+        workspace: { workspaceId: "ws", generation: "g" },
+        deadline: "2026-10-05T00:00:00Z",
+      },
+    };
+    expect(await store.commit(lease, 2, outstanding)).toBe(true);
+    expect((await store.recoveryRuns()).runs).toEqual([{ runId: "r", runtime }]);
+    const other = new SqliteStore(db, { tenantId: "z-tenant" });
+    expect(await other.runtimeForRun("r")).toBeUndefined();
+    expect((await other.recoveryRuns()).runs).toEqual([]);
+    const version = await store.getVersion("v");
+    if (!version) throw new Error("Missing version");
+    await other.put(new TextEncoder().encode("source"));
+    await other.publish({ ...version, runtime: { ...runtime, build: "new-build" } });
+    await other.admit(request, run, { ...dispatch, runtime: { ...runtime, build: "new-build" } });
+    expect(await other.runtimeForRun("r")).toEqual({ ...runtime, build: "new-build" });
+    expect(await store.runtimeForRun("r")).toEqual(runtime);
+    const page = await SqliteStore.recoveryTenants(db, undefined, 1);
+    expect(page).toEqual({ tenantIds: ["tenant"], cursor: "tenant" });
+    expect(await SqliteStore.recoveryTenants(db, page.cursor, 1)).toEqual({
+      tenantIds: ["z-tenant"],
+    });
+    await store.admit(
+      { ...request, idempotencyKey: "key-2" },
+      { ...run, id: "r2" },
+      { ...dispatch, id: "d2", runId: "r2" },
+    );
+    const runPage = await store.recoveryRuns(undefined, 1);
+    expect(runPage).toEqual({ runs: [{ runId: "r", runtime }], cursor: "r" });
+    expect(await store.recoveryRuns(runPage.cursor, 1)).toEqual({
+      runs: [{ runId: "r2", runtime }],
+    });
+    const oversizedJson = new TextEncoder().encode(
+      JSON.stringify({ stdout: "\u0000".repeat(1048576), stderr: "", exitCode: 0, durationMs: 1 }),
+    );
+    const largeArtifact = await store.put(oversizedJson);
+    expect(largeArtifact.bytes).toBeGreaterThan(6000000);
+    expect(await store.get(largeArtifact)).toEqual(oversizedJson);
+    const chunkLimit = await db
+      .prepare("SELECT MAX(length(content)) AS max FROM loopy_artifact_chunks")
+      .first<{ max: number }>();
+    expect(chunkLimit?.max).toBe(262144);
   } finally {
     await mf.dispose();
   }

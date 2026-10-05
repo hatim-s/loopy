@@ -262,3 +262,25 @@ test("publication bundles belong to the tenant and metadata survives immutable r
     }),
   ).rejects.toThrow("Immutable version");
 });
+
+test("chunk failure rolls back metadata and earlier chunks", async () => {
+  const { db, raw } = database();
+  const store = new SqliteStore(db, { tenantId: "tenant" });
+  raw.exec(
+    "CREATE TRIGGER reject_second_chunk BEFORE INSERT ON loopy_artifact_chunks WHEN NEW.part=1 BEGIN SELECT RAISE(ABORT,'chunk failed'); END",
+  );
+  await expect(store.put(new Uint8Array(300000))).rejects.toThrow("chunk failed");
+  expect(raw.query("SELECT count(*) AS n FROM loopy_artifacts").get()).toEqual({ n: 0 });
+  expect(raw.query("SELECT count(*) AS n FROM loopy_artifact_chunks").get()).toEqual({ n: 0 });
+});
+
+test("admission reserves terminal state budget before writing a run or dispatch", async () => {
+  const f = await fixture();
+  const store = new SqliteStore(f.db, { tenantId: "one" }, { stateBytes: 10000 });
+  const input = "x".repeat(6000);
+  await expect(
+    store.admit({ ...f.request, input }, { ...f.run, input }, f.dispatch),
+  ).rejects.toThrow("Storage payload");
+  expect(f.raw.query("SELECT count(*) AS n FROM loopy_runs").get()).toEqual({ n: 0 });
+  expect(f.raw.query("SELECT count(*) AS n FROM loopy_outbox").get()).toEqual({ n: 0 });
+});
