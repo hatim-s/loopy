@@ -119,7 +119,7 @@ uses a current TypeScript graph and an isolated worktree runner to export assets
 loopy save ./review.loopy.ts
 loopy list
 loopy graph review
-loopy run review --branch main --instructions "Review the changes" --full
+loopy run review --instructions "Review the changes" --full
 loopy run review --args input.json --cwd /path/to/repo --full
 loopy runs review
 loopy inspect <run-id>
