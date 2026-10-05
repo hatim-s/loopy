@@ -114,12 +114,13 @@ export class RemoteLinuxExecutor implements RemoteExecutor {
     if (terminal(receipt.observation)) return receipt.observation;
     if (receipt.cancelRequested) return await this.cancel(key);
     if (receipt.deadline && this.now() >= Date.parse(receipt.deadline)) {
+      let observed: ExecutionObservation | undefined;
       try {
-        const observed = await this.provider.inspect(key);
-        if (observed.state === "completed") return await this.record(key, observed);
+        observed = await this.provider.inspect(key);
       } catch {
         // Failure to observe a result must still enforce the persisted deadline.
       }
+      if (observed?.state === "completed") return await this.record(key, observed);
       return await this.cancel(key);
     }
     if (receipt.workspace) {
