@@ -1,5 +1,10 @@
-import type { RuntimeIdentity, TenantScope } from "../application/ports.js";
+import type { ArtifactStore, RuntimeIdentity, TenantScope } from "../application/ports.js";
 import type { AttemptRecord, Json, RunRecord } from "../core/model.js";
+import {
+  getExecutionArtifact,
+  hydrateAttempts,
+  putExecutionArtifact,
+} from "./attempt-artifacts.js";
 import { errorMessage } from "./errors.js";
 import type {
   ExecutionObservation,
@@ -21,9 +26,11 @@ export type TickResult = {
 export type DurableRunnerOptions = {
   store: DurableRunRepository;
   executor: RemoteExecutor;
+  artifacts: ArtifactStore;
+  stateBytes?: number;
   workspaces: WorkspaceProvider;
   runtime: RuntimeIdentity;
-  runtimeForRun: (runId: string) => Promise<RuntimeIdentity>;
+  runtimeForRun: (runId: string) => Promise<RuntimeIdentity | undefined>;
   now?: () => number;
   leaseMs?: number;
   pollMs?: number;
@@ -43,13 +50,23 @@ export class DurableRunner {
   private readonly pollMs: number;
   private readonly timeoutMs: number;
   private readonly maxOutputBytes: number;
+  private readonly stateBytes: number;
   constructor(private readonly options: DurableRunnerOptions) {
+    if (options.artifacts.scope.tenantId !== options.store.scope.tenantId)
+      throw new Error("Artifact tenant mismatch");
+    this.stateBytes = options.stateBytes ?? 512_000;
     this.now = options.now ?? Date.now;
     this.leaseMs = options.leaseMs ?? 10_000;
     this.pollMs = options.pollMs ?? 1_000;
     this.timeoutMs = options.timeoutMs ?? 300_000;
     this.maxOutputBytes = options.maxOutputBytes ?? 1_048_576;
-    for (const value of [this.leaseMs, this.pollMs, this.timeoutMs, this.maxOutputBytes])
+    for (const value of [
+      this.leaseMs,
+      this.pollMs,
+      this.timeoutMs,
+      this.maxOutputBytes,
+      this.stateBytes,
+    ])
       if (!Number.isSafeInteger(value) || value <= 0)
         throw new Error("Runner limits must be positive integers");
     if (this.leaseMs > 60_000) throw new Error("Transition lease exceeds storage limit");
@@ -60,16 +77,17 @@ export class DurableRunner {
   }
 
   async tick(runId: string): Promise<TickResult> {
+    const state = await this.options.store.read(runId);
+    if (!state) return { state: "idle" };
     const pinned = await this.options.runtimeForRun(runId);
     if (
+      !pinned ||
       pinned.build !== this.options.runtime.build ||
       pinned.graphSchema !== this.options.runtime.graphSchema
     )
       return { state: "blocked" };
-    const state = await this.options.store.read(runId);
-    if (!state) return { state: "idle" };
-    if (terminal(state.run)) return { state: "terminal" };
     if (state.intent) return await this.reconcile(state);
+    if (terminal(state.run)) return { state: "terminal" };
     if (state.cancelRequested)
       return await this.mutate(runId, (current) => {
         if (current.intent) return false;
@@ -95,23 +113,43 @@ export class DurableRunner {
     const workspace = state.workspace.workspace;
     const available = await this.options.workspaces.inspect(this.options.store.scope, workspace);
     if (available === "lost") return await this.blockWorkspace(runId, workspace);
+    const attempts = await hydrateAttempts(state.attempts, this.options.artifacts);
+    let decision: ReturnType<typeof decideNext> | undefined;
+    let decisionError: string | undefined;
+    try {
+      decision = decideNext(state.run.workflow, state.run.input, attempts, {
+        resume: false,
+        retryUncertain: false,
+      });
+    } catch (error) {
+      decisionError = errorMessage(error);
+    }
+    const command =
+      decision?.kind === "command"
+        ? {
+            ...decision.command,
+            timeoutMs: Math.min(decision.command.timeoutMs ?? this.timeoutMs, this.timeoutMs),
+            maxOutputBytes: Math.min(
+              decision.command.maxOutputBytes ?? this.maxOutputBytes,
+              this.maxOutputBytes,
+            ),
+          }
+        : undefined;
+    const commandArtifact = command
+      ? await putExecutionArtifact(this.options.artifacts, command)
+      : undefined;
     return await this.mutate(runId, async (current) => {
       if (
+        current.revision !== state.revision ||
         current.intent ||
         current.cancelRequested ||
         current.workspace.state !== "available" ||
         !sameWorkspace(current.workspace.workspace, workspace)
       )
         return false;
-      let decision: ReturnType<typeof decideNext>;
-      try {
-        decision = decideNext(current.run.workflow, current.run.input, current.attempts, {
-          resume: false,
-          retryUncertain: false,
-        });
-      } catch (error) {
+      if (!decision) {
         current.run.status = "failed";
-        current.run.error = errorMessage(error);
+        current.run.error = decisionError;
         return;
       }
       if (decision.kind === "done") {
@@ -154,23 +192,17 @@ export class DurableRunner {
         attempt.endedAt = attempt.startedAt;
         return;
       }
-      const command = {
-        ...decision.command,
-        timeoutMs: Math.min(decision.command.timeoutMs ?? this.timeoutMs, this.timeoutMs),
-        maxOutputBytes: Math.min(
-          decision.command.maxOutputBytes ?? this.maxOutputBytes,
-          this.maxOutputBytes,
-        ),
-      };
+      if (!command || !commandArtifact) throw new Error("Resolved command artifact missing");
       const deadline = new Date(this.now() + command.timeoutMs).toISOString();
       const key = { tenantId: this.options.store.scope.tenantId, runId, attemptId: attempt.id };
       const digest = await crypto.subtle.digest(
         "SHA-256",
         new TextEncoder().encode(JSON.stringify({ command, workspace, deadline })),
       );
+      attempt.input = { $resolvedCommand: commandArtifact } as Json;
       current.intent = {
         key,
-        command,
+        commandArtifact,
         workspace,
         deadline,
         fingerprint: Array.from(new Uint8Array(digest), (byte) =>
@@ -202,10 +234,20 @@ export class DurableRunner {
   }
 
   private async reconcile(snapshot: DurableRunState): Promise<TickResult> {
-    const intent = snapshot.intent;
-    if (!intent) return this.later();
+    const persisted = snapshot.intent;
+    if (!persisted) return this.later();
+    const intent =
+      "command" in persisted
+        ? persisted
+        : {
+            ...persisted,
+            command: await getExecutionArtifact<import("../core/model.js").ResolvedCommand>(
+              this.options.artifacts,
+              persisted.commandArtifact,
+            ),
+          };
     let observation: ExecutionObservation;
-    if (snapshot.cancelRequested || this.now() >= Date.parse(intent.deadline)) {
+    if (snapshot.cancelRequested) {
       observation = await this.options.executor.cancel(intent.key);
     } else {
       observation = await this.options.executor.inspect(intent.key);
@@ -214,65 +256,90 @@ export class DurableRunner {
         const current = await this.options.store.read(snapshot.run.id);
         if (!current || terminal(current.run) || current.intent?.fingerprint !== intent.fingerprint)
           return this.later();
-        if (current.cancelRequested) observation = await this.options.executor.cancel(intent.key);
+        if (current.cancelRequested || this.now() >= Date.parse(intent.deadline))
+          observation = await this.options.executor.cancel(intent.key);
         else observation = await this.options.executor.start(intent);
       }
     }
     if (observation.state === "running") return this.later();
     if (observation.state === "not-started") return this.later();
-    return await this.mutate(snapshot.run.id, (current) => {
-      if (
-        current.intent?.key.attemptId !== intent.key.attemptId ||
-        current.intent.fingerprint !== intent.fingerprint
-      )
-        return false;
-      const attempt = current.attempts.find((item) => item.id === intent.key.attemptId);
-      if (!attempt || attempt.status !== "running") return false;
-      attempt.endedAt = new Date(this.now()).toISOString();
-      if (
-        observation.state === "completed" &&
-        sameWorkspace(observation.workspace, intent.workspace) &&
-        !current.cancelRequested &&
-        this.now() < Date.parse(intent.deadline) &&
-        new TextEncoder().encode(observation.output.stdout).byteLength +
-          new TextEncoder().encode(observation.output.stderr).byteLength <=
-          (intent.command.maxOutputBytes ?? this.maxOutputBytes)
-      ) {
-        attempt.output = observation.output as Json;
-        attempt.status = observation.output.exitCode === 0 ? "succeeded" : "failed";
-        if (attempt.status === "failed") {
-          attempt.error = `Command exited with code ${observation.output.exitCode}`;
-          current.run.status = "failed";
+    const outputArtifact =
+      observation.state === "completed"
+        ? await putExecutionArtifact(this.options.artifacts, observation.output)
+        : undefined;
+    return await this.mutate(
+      snapshot.run.id,
+      (current) => {
+        if (
+          current.intent?.key.attemptId !== intent.key.attemptId ||
+          current.intent.fingerprint !== intent.fingerprint
+        )
+          return false;
+        const attempt = current.attempts.find((item) => item.id === intent.key.attemptId);
+        if (!attempt || (attempt.status !== "running" && attempt.status !== "uncertain"))
+          return false;
+        attempt.endedAt = new Date(this.now()).toISOString();
+        if (
+          observation.state === "completed" &&
+          sameWorkspace(observation.workspace, intent.workspace) &&
+          !current.cancelRequested &&
+          new TextEncoder().encode(observation.output.stdout).byteLength +
+            new TextEncoder().encode(observation.output.stderr).byteLength <=
+            (intent.command.maxOutputBytes ?? this.maxOutputBytes)
+        ) {
+          attempt.output = { $commandOutput: outputArtifact } as Json;
+          current.run.status = "running";
+          current.run.error = undefined;
+          attempt.error = undefined;
+          attempt.status = observation.output.exitCode === 0 ? "succeeded" : "failed";
+          if (attempt.status === "failed") {
+            attempt.error = `Command exited with code ${observation.output.exitCode}`;
+            current.run.status = "failed";
+            current.run.error = attempt.error;
+          }
+        } else {
+          attempt.status =
+            observation.state === "cancelled-before-start" ? "cancelled" : "uncertain";
+          attempt.error =
+            observation.state === "unknown"
+              ? observation.reason
+              : "Command interrupted; external effects may remain";
+          current.run.status = "interrupted";
           current.run.error = attempt.error;
         }
-      } else {
-        attempt.status = observation.state === "cancelled-before-start" ? "cancelled" : "uncertain";
-        attempt.error =
-          observation.state === "unknown"
-            ? observation.reason
-            : "Command interrupted; external effects may remain";
-        current.run.status = "interrupted";
-        current.run.error = attempt.error;
-      }
-      current.intent = undefined;
-    });
+        if (observation.state === "completed" || observation.state === "cancelled-before-start")
+          current.intent = undefined;
+      },
+      true,
+    );
   }
 
   private async mutate(
     runId: string,
     change: (state: DurableRunState) => undefined | false | Promise<undefined | false>,
+    reconcile = false,
   ): Promise<TickResult> {
     const lease = await this.options.store.acquire(runId, crypto.randomUUID(), this.leaseMs);
     if (!lease) return this.later();
     try {
       const current = await this.options.store.read(runId);
-      if (!current || terminal(current.run)) return { state: current ? "terminal" : "idle" };
+      if (!current || (terminal(current.run) && !reconcile))
+        return { state: current ? "terminal" : "idle" };
+      const original = structuredClone(current);
       if ((await change(current)) === false) return this.later();
       current.run.updatedAt = new Date(this.now()).toISOString();
+      if (new TextEncoder().encode(JSON.stringify(current)).byteLength > this.stateBytes - 2048) {
+        Object.assign(current, original);
+        current.run.status = "interrupted";
+        current.run.error =
+          "Execution history reached its storage limit. No new command was launched.";
+      }
       if (!(await this.options.store.commit(lease, current.revision, current))) return this.later();
-      return terminal(current.run)
-        ? { state: "terminal" }
-        : { state: "advanced", wakeAt: new Date(this.now()).toISOString() };
+      return current.intent
+        ? { state: "blocked", wakeAt: new Date(this.now() + this.pollMs).toISOString() }
+        : terminal(current.run)
+          ? { state: "terminal" }
+          : { state: "advanced", wakeAt: new Date(this.now()).toISOString() };
     } finally {
       await this.options.store.release(lease);
     }

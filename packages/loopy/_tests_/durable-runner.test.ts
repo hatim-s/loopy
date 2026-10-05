@@ -89,10 +89,23 @@ async function fixture(
       return observed;
     },
   };
+  const artifacts = new Map<string, Uint8Array>();
+  const artifactStore = {
+    scope: store.scope,
+    async put(bytes: Uint8Array) {
+      const id = crypto.randomUUID();
+      artifacts.set(id, bytes);
+      return { id, sha256: id, bytes: bytes.length };
+    },
+    async get(identity: { id: string }) {
+      return artifacts.get(identity.id);
+    },
+  };
   const make = (build = "v1") =>
     new DurableRunner({
       store,
       executor,
+      artifacts: artifactStore,
       runtime: { ...runtime, build },
       runtimeForRun: async () => runtime,
       workspaces: {

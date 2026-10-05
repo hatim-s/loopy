@@ -1,4 +1,9 @@
-import type { AdmissionStore, TenantScope, WorkflowCatalog } from "../application/ports.js";
+import type {
+  AdmissionStore,
+  ArtifactStore,
+  TenantScope,
+  WorkflowCatalog,
+} from "../application/ports.js";
 import type { Json, RunRecord } from "../core/model.js";
 import type {
   Capabilities,
@@ -8,6 +13,7 @@ import type {
   RunRequest,
   RunResponse,
 } from "../protocol/index.js";
+import { hydrateAttempts } from "../runtime/attempt-artifacts.js";
 import { prepareRun } from "../runtime/prepare.js";
 import type { DurableRunRepository } from "../runtime/transition-store.js";
 import type { DurableDriver } from "./dispatch.js";
@@ -23,6 +29,7 @@ export type TenantControl = {
   catalog: WorkflowCatalog;
   admission: AdmissionStore;
   runs: DurableRunRepository;
+  artifacts?: ArtifactStore;
 };
 export class ControlError extends Error {
   constructor(
@@ -67,6 +74,8 @@ export class HostedControl {
       if (service.scope.tenantId !== principal.tenantId)
         throw new Error("Control repository tenant mismatch");
     }
+    if (services.artifacts && services.artifacts.scope.tenantId !== principal.tenantId)
+      throw new Error("Artifact tenant mismatch");
     return services;
   }
 
@@ -104,9 +113,15 @@ export class HostedControl {
   }
 
   async inspect(principal: VerifiedPrincipal, runId: string): Promise<InspectResponse> {
-    const state = await this.authorize(principal, "read").runs.read(runId);
+    const services = this.authorize(principal, "read");
+    const state = await services.runs.read(runId);
     if (!state) throw new ControlError(404, "not-found", "Run not found");
-    return { run: state.run, attempts: state.attempts };
+    return {
+      run: state.run,
+      attempts: services.artifacts
+        ? await hydrateAttempts(state.attempts, services.artifacts)
+        : state.attempts,
+    };
   }
 
   async cancel(principal: VerifiedPrincipal, runId: string): Promise<void> {
