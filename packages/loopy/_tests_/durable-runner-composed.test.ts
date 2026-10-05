@@ -6,7 +6,7 @@ import {
   type LinuxExecutionProvider,
   RemoteLinuxExecutor,
 } from "../src/cloud/executor/controller.js";
-import type { Workflow } from "../src/core/model.js";
+import type { Json, Workflow } from "../src/core/model.js";
 import { hydrateAttempts } from "../src/runtime/attempt-artifacts.js";
 import { DurableRunner } from "../src/runtime/durable-runner.js";
 import { prepareRun } from "../src/runtime/prepare.js";
@@ -14,7 +14,7 @@ import type { ExecutionObservation, StartCommand } from "../src/runtime/remote-e
 import { sqliteSchema } from "../src/storage/schema.js";
 import { SqliteStore } from "../src/storage/sqlite.js";
 
-async function fixture(workflow: Workflow) {
+async function fixture(workflow: Workflow, input: Json = {}) {
   const mf = new Miniflare({
     modules: true,
     script: 'export default {fetch(){return new Response("ok")}}',
@@ -26,11 +26,10 @@ async function fixture(workflow: Workflow) {
   let clock = Date.now();
   const store = new SqliteStore(db, { tenantId: "tenant" }, {}, () => new Date(clock));
   const runtime = { build: "v1", graphSchema: 1 as const };
-  const run = await prepareRun(
-    workflow,
-    {},
-    { mode: "sandbox", workspace: { kind: "managed", id: "ws" } },
-  );
+  const run = await prepareRun(workflow, input, {
+    mode: "sandbox",
+    workspace: { kind: "managed", id: "ws" },
+  });
   await store.publish({
     id: "version",
     slug: workflow.slug,
@@ -43,7 +42,7 @@ async function fixture(workflow: Workflow) {
     imageDigest: "image",
   });
   await store.admit(
-    { versionId: "version", input: {}, idempotencyKey: "key", fingerprint: "fp" },
+    { versionId: "version", input, idempotencyKey: "key", fingerprint: "fp" },
     run,
     { id: "dispatch", runId: run.id, runtime },
   );
@@ -294,3 +293,63 @@ test("authoritative completed receipt succeeds when coordinator polls after dead
     await f.mf.dispose();
   }
 }, 30000);
+
+test("storage boundary rollback removes new intent and stops recovery without orphan cancellation", async () => {
+  const f = await fixture(
+    {
+      version: 1,
+      slug: "boundary",
+      nodes: Array.from({ length: 35 }, (_, index) => command(`step${index}`)),
+    },
+    "x".repeat(502000),
+  );
+  let launches = 0;
+  let cancels = 0;
+  const observations = new Map<string, ExecutionObservation>();
+  const provider: LinuxExecutionProvider = {
+    async workspace() {
+      return "available";
+    },
+    async start(request) {
+      launches++;
+      const result = {
+        state: "completed" as const,
+        jobId: request.key.attemptId,
+        workspace: request.workspace,
+        output: { stdout: "z".repeat(600000), stderr: "", exitCode: 0, durationMs: 1 },
+      };
+      observations.set(request.key.attemptId, result);
+      return result;
+    },
+    async inspect(key) {
+      return observations.get(key.attemptId) ?? { state: "not-started" };
+    },
+    async cancel() {
+      cancels++;
+      return { state: "unknown", reason: "Orphan intent" };
+    },
+  };
+  try {
+    const runner = f.make(provider);
+    for (let tick = 0; tick < 60; tick++) {
+      await runner.tick(f.run.id);
+      if ((await f.store.read(f.run.id))?.run.status === "interrupted") break;
+    }
+    const state = await f.store.read(f.run.id);
+    expect(state?.run.status).toBe("interrupted");
+    expect(state?.run.error).toContain("storage limit");
+    expect(state?.intent).toBeUndefined();
+    expect(state?.attempts.length).toBe(launches);
+    expect((await f.store.recoveryRuns()).runs).toEqual([]);
+    await f.store.requestCancel(f.run.id);
+    f.advance(300001);
+    expect((await runner.tick(f.run.id)).state).toBe("terminal");
+    expect((await f.store.recoveryRuns()).runs).toEqual([]);
+    expect(cancels).toBe(0);
+    expect(
+      new TextEncoder().encode(JSON.stringify(await f.store.read(f.run.id))).length,
+    ).toBeLessThan(512000);
+  } finally {
+    await f.mf.dispose();
+  }
+}, 60000);
