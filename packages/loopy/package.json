@@ -31,6 +31,10 @@
     "./protocol": {
       "types": "./dist/types/protocol/index.d.ts",
       "default": "./dist/protocol/index.js"
+    },
+    "./storage": {
+      "types": "./dist/types/storage/index.d.ts",
+      "default": "./dist/storage/index.js"
     }
   },
   "bin": {
