@@ -35,6 +35,10 @@
     "./storage": {
       "types": "./dist/types/storage/index.d.ts",
       "default": "./dist/storage/index.js"
+    },
+    "./modal": {
+      "types": "./dist/types/providers/modal.d.ts",
+      "default": "./dist/providers/modal.js"
     }
   },
   "bin": {
@@ -47,5 +51,8 @@
   ],
   "scripts": {
     "prepack": "bun ../../scripts/build.ts"
+  },
+  "dependencies": {
+    "modal": "0.11.0"
   }
 }
