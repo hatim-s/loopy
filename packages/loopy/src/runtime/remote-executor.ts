@@ -3,6 +3,7 @@ import type { CommandOutput, ResolvedCommand } from "../core/model.js";
 export type ExecutionKey = { tenantId: string; runId: string; attemptId: string };
 export type WorkspaceGeneration = { workspaceId: string; generation: string };
 export type WorkspaceObservation =
+  | { state: "unallocated" }
   | { state: "available"; workspace: WorkspaceGeneration }
   | { state: "lost"; workspace: WorkspaceGeneration; reason: string };
 export type StartCommand = {

@@ -17,7 +17,9 @@
     "install:global": "bun scripts/install-global.ts",
     "fmt": "biome format --write .",
     "fmt:check": "biome format .",
-    "lint": "biome check ."
+    "lint": "biome check .",
+    "build:portable": "bun scripts/build-portable.ts",
+    "build:studio": "bun run --cwd apps/studio build"
   },
   "devDependencies": {
     "@biomejs/biome": "2.2.2",

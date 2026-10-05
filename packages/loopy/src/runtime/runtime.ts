@@ -1,7 +1,6 @@
 import type {
   AttemptRecord,
   AttemptStatus,
-  CommandNode,
   ConditionNode,
   ExecuteCommand,
   Json,
@@ -11,11 +10,12 @@ import type {
   Workflow,
   WorkflowNode,
 } from "../core/model.js";
-import { validateWorkflow } from "../core/workflow.js";
 import { CommandExecutionError, errorMessage } from "./errors.js";
 import { InputValidationError, validateRunInput } from "./preflight.js";
+import { prepareRun } from "./prepare.js";
 import type { RunRepository } from "./repository.js";
-import { assertJson, type Outputs, resolveCommand, resolveValue } from "./values.js";
+import { decideNode, type RuntimeDecision } from "./transitions.js";
+import type { Outputs } from "./values.js";
 
 type Result = { status: "succeeded" | "failed" | "interrupted" | "pending"; error?: string };
 type ExecuteOptions = { retryUncertain?: boolean; resume?: boolean; signal?: AbortSignal };
@@ -30,22 +30,6 @@ function latestAttempts(attempts: AttemptRecord[]): Map<string, AttemptRecord> {
     if (!prior || attempt.number > prior.number) latest.set(attempt.nodeId, attempt);
   }
   return latest;
-}
-
-async function sha256(text: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-function checkRunOptions(options: RunOptions): RunOptions {
-  if (options.mode !== "sandbox" && options.mode !== "full")
-    throw new Error(`Invalid execution mode ${String(options.mode)}`);
-  const workspace = options.workspace;
-  if (workspace?.kind === "local" && typeof workspace.path === "string" && workspace.path)
-    return { workspace: { kind: "local", path: workspace.path }, mode: options.mode };
-  if (workspace?.kind === "managed" && typeof workspace.id === "string" && workspace.id)
-    return { workspace: { kind: "managed", id: workspace.id }, mode: options.mode };
-  throw new Error("Invalid workspace");
 }
 
 /**
@@ -134,19 +118,23 @@ class Execution {
         return this.fail(error.nodeId, { preflight: true }, error.message);
       }
       const previous = this.attempts.get(node.id);
-      if (previous?.status === "failed" && !this.options.resume)
-        return { status: "failed", error: previous.error ?? `Node ${node.id} failed` };
-      if (previous?.status === "uncertain" && !this.options.retryUncertain)
-        return {
-          status: "interrupted",
-          error: `Node ${node.id} may have changed external state. Resume with retryUncertain to run it again.`,
-        };
+      let decision: RuntimeDecision;
+      try {
+        decision = decideNode(node, this.run.input, this.outputs, previous, this.options);
+      } catch (error) {
+        return this.fail(
+          node.id,
+          node.kind === "command" ? { command: node.command as Json } : { test: node.test as Json },
+          errorMessage(error),
+        );
+      }
+      if (decision.kind === "blocked") return { status: decision.status, error: decision.error };
       const result =
-        node.kind === "condition"
-          ? await this.condition(node, previous)
-          : previous?.status === "succeeded"
-            ? undefined
-            : await this.command(node);
+        decision.kind === "condition" && node.kind === "condition"
+          ? await this.condition(node, decision)
+          : decision.kind === "command"
+            ? await this.command(node.id, decision.command)
+            : undefined;
       if (result && result.status !== "succeeded") return result;
     }
     return { status: "succeeded" };
@@ -154,24 +142,10 @@ class Execution {
 
   private async condition(
     node: ConditionNode,
-    previous: AttemptRecord | undefined,
+    decision: Extract<RuntimeDecision, { kind: "condition" }>,
   ): Promise<Result> {
-    let branch: "then" | "else";
-    if (previous?.status === "succeeded") {
-      const recorded = (previous.output as { branch?: unknown } | undefined)?.branch;
-      if (recorded !== "then" && recorded !== "else")
-        return { status: "failed", error: `Condition ${node.id} has no recorded branch` };
-      branch = recorded;
-    } else {
-      let test: Json;
-      try {
-        test = resolveValue(node.test, this.run.input, this.outputs);
-        if (typeof test !== "boolean")
-          throw new Error(`Condition ${node.id} must resolve to boolean`);
-      } catch (error) {
-        return this.fail(node.id, { test: node.test as Json }, errorMessage(error));
-      }
-      branch = test ? "then" : "else";
+    const { branch, test } = decision;
+    if (test !== undefined) {
       const attempt = await this.store.startAttempt(this.run.id, this.token, node.id, { test });
       await this.finish(attempt, "succeeded", { branch });
       this.outputs.set(node.id, { branch });
@@ -179,20 +153,12 @@ class Execution {
     return this.nodes(branch === "then" ? node.then : node.else);
   }
 
-  private async command(node: CommandNode): Promise<Result> {
-    let command: ReturnType<typeof resolveCommand>;
-    try {
-      command = resolveCommand(node, this.run.input, this.outputs);
-    } catch (error) {
-      return this.fail(node.id, { command: node.command as Json }, errorMessage(error));
-    }
-    const attempt = await this.store.startAttempt(
-      this.run.id,
-      this.token,
-      node.id,
-      command as Json,
-    );
-    this.attempts.set(node.id, attempt);
+  private async command(
+    nodeId: string,
+    command: Extract<RuntimeDecision, { kind: "command" }>["command"],
+  ): Promise<Result> {
+    const attempt = await this.store.startAttempt(this.run.id, this.token, nodeId, command as Json);
+    this.attempts.set(nodeId, attempt);
 
     // A cancellation that lands before launch leaves nothing to be uncertain about.
     if (this.cancelled()) return this.cancel(attempt);
@@ -204,7 +170,7 @@ class Execution {
       output = await this.executor(command, {
         ...this.run.options,
         runId: this.run.id,
-        nodeId: node.id,
+        nodeId,
         attemptId: attempt.id,
         ownerToken: this.token,
         signal: this.signal,
@@ -232,7 +198,7 @@ class Execution {
       return { status: "failed", error };
     }
     await this.finish(attempt, "succeeded", output as Json);
-    this.outputs.set(node.id, output as Json);
+    this.outputs.set(nodeId, output as Json);
     return { status: "succeeded" };
   }
 
@@ -298,24 +264,7 @@ export class Runtime {
 
   /** Freezes the graph, input and options so later edits never reach a run. */
   async createRun(workflow: Workflow, input: Json, options: RunOptions): Promise<RunRecord> {
-    validateWorkflow(workflow);
-    assertJson(input);
-    validateRunInput(workflow.nodes, input);
-    const savedInput = JSON.parse(JSON.stringify(input)) as Json;
-    const savedOptions = checkRunOptions(options);
-    const snapshot = JSON.stringify(workflow);
-    const createdAt = new Date().toISOString();
-    const run: RunRecord = {
-      id: crypto.randomUUID(),
-      slug: workflow.slug,
-      workflow: JSON.parse(snapshot) as Workflow,
-      workflowHash: await sha256(snapshot),
-      input: savedInput,
-      options: savedOptions,
-      status: "pending",
-      createdAt,
-      updatedAt: createdAt,
-    };
+    const run = await prepareRun(workflow, input, options);
     await this.store.createRun(run);
     return run;
   }

@@ -9,7 +9,7 @@ export type Capabilities = {
   operations: readonly Capability[];
   executors: readonly string[];
 };
-export type RunRequest = AdmissionRequest;
+export type RunRequest = Omit<AdmissionRequest, "fingerprint">;
 export type RunResponse = AdmissionResult;
 export type InspectResponse = { run: RunRecord; attempts: AttemptRecord[] };
 export type EventsResponse = { events: RunEvent[]; cursor: number };
