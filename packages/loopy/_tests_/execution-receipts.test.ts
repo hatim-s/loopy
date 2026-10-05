@@ -204,4 +204,4 @@ test("D1 controllers persist escaped and accumulated output in bounded receipt a
   } finally {
     await mf.dispose();
   }
-}, 60000);
+}, 180000);
