@@ -409,3 +409,48 @@ test.each([undefined, 0, Number.NaN, -1, 1.5])(
     expect(launches).toBe(0);
   },
 );
+
+test.each([Number.NaN, 1_048_576])(
+  "changing receipt capacity getter is captured once before launch",
+  async (nextCapacity) => {
+    let reads = 0;
+    let writes = 0;
+    let launches = 0;
+    const store: ExecutionReceiptStore = {
+      get maxOutputBytes() {
+        reads++;
+        return reads <= 2 ? 65536 : nextCapacity;
+      },
+      async read() {
+        return undefined;
+      },
+      async compareAndSwap() {
+        writes++;
+        return true;
+      },
+    };
+    const executor = new RemoteLinuxExecutor(store, {
+      async workspace() {
+        return "available";
+      },
+      async start() {
+        launches++;
+        return completed;
+      },
+      async inspect() {
+        return completed;
+      },
+      async cancel() {
+        return { state: "cancelled-before-start" };
+      },
+    });
+    expect(reads).toBe(1);
+    expect(executor.maxOutputBytes).toBe(65536);
+    await expect(
+      executor.start({ ...request, command: { ...request.command, maxOutputBytes: 65537 } }),
+    ).rejects.toThrow("budget");
+    expect(reads).toBe(1);
+    expect(writes).toBe(0);
+    expect(launches).toBe(0);
+  },
+);

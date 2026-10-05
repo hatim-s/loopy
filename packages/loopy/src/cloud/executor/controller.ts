@@ -56,9 +56,10 @@ export class RemoteLinuxExecutor implements RemoteExecutor {
     private readonly provider: LinuxExecutionProvider,
     private readonly now = () => Date.now(),
   ) {
-    if (!Number.isSafeInteger(store.maxOutputBytes) || store.maxOutputBytes < 1)
+    const capacity = store.maxOutputBytes;
+    if (!Number.isSafeInteger(capacity) || capacity < 1)
       throw new Error("Receipt store must declare a valid output capacity");
-    this.maxOutputBytes = Math.min(MAX_EXECUTION_OUTPUT_BYTES, store.maxOutputBytes);
+    this.maxOutputBytes = Math.min(MAX_EXECUTION_OUTPUT_BYTES, capacity);
   }
 
   async start(request: StartCommand): Promise<StartReceipt> {
