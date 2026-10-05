@@ -1,4 +1,5 @@
 export { createControlHandler } from "./api.js";
+export type { ControlTransport } from "./client.js";
 export { HostedClientError, HostedControlClient } from "./client.js";
 export type { Authenticator, TenantControl, VerifiedPrincipal } from "./control.js";
 export { ControlError, HostedControl } from "./control.js";

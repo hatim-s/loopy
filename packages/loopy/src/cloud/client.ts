@@ -6,6 +6,8 @@ import type {
   RunResponse,
 } from "../protocol/index.js";
 
+export type ControlTransport = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+
 export class HostedClientError extends Error {
   constructor(
     readonly status: number,
@@ -21,7 +23,7 @@ export class HostedControlClient {
   constructor(
     url: string,
     private readonly token: () => Promise<string>,
-    private readonly transport: typeof fetch = fetch,
+    private readonly transport: ControlTransport = fetch,
   ) {
     this.base = new URL(url);
     if (
