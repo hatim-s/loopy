@@ -10,12 +10,16 @@ import { startServer } from "../local/server.js";
 import { errorMessage } from "../runtime/errors.js";
 import { parseCliArgs } from "./args.js";
 import { promptInputs } from "./inputs.js";
+import { manageSecrets } from "./secrets.js";
 
 const DEFAULT_PORT = 4310;
 
 const usage = `loopy: TypeScript workflows for CLI tools
 
   loopy save <file.ts|directory>               Compile files and save by configured scope
+  loopy secrets set <name> [--stdin]           Store a secret through hidden entry or stdin
+  loopy secrets list                           List secret names
+  loopy secrets remove <name>                  Delete a stored secret
   loopy list                                   List saved loopies
   loopy graph <slug>                            Print the saved graph as JSON
   loopy run <slug>                             Prompt for inputs, then run
@@ -97,6 +101,11 @@ export async function main(args = process.argv.slice(2)) {
     print({ file: destination });
     return;
   }
+  if (command === "secrets") {
+    await manageSecrets(home, positionals.slice(1), values.stdin);
+    return;
+  }
+  if (values.stdin) throw new Error("--stdin is only supported by loopy secrets set.");
   if (rest.length) throw new Error(`Unexpected arguments: ${rest.join(" ")}`);
 
   if (command === "ui") {

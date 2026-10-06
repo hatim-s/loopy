@@ -219,3 +219,26 @@ bun run check       # build, lint, typecheck, test
 bun run fmt
 bun run loopy ui
 ```
+
+## Local secrets
+
+Store credentials once without keychain prompts:
+
+```sh
+loopy secrets set orbit-cookie
+loopy secrets list
+loopy secrets remove orbit-cookie
+```
+
+`set` reads through a hidden terminal prompt. For automation, pipe a value with
+`loopy secrets set <name> --stdin`. Values cannot be passed as command arguments,
+and listing shows names only. Piped entry removes one trailing line ending.
+
+Secrets live as plaintext in `~/.loopy/secrets.json`, separate from workflow
+snapshots and run history. Loopy sets directory permissions to `0700` and file
+permissions to `0600`. Programs running as your user can read this file.
+A custom `--home` or `LOOPY_HOME` stores secrets in `<home>/secrets.json`.
+The store refuses a symlink at the secret directory or file itself, and refuses
+hard-linked secret files. Choose a trusted home directory and trusted ancestors.
+Concurrent updates fail with a lock error; a stopped writer's lock must be
+removed before retrying. Do not commit or sync the store.

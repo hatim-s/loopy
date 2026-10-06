@@ -13,6 +13,7 @@ const options = {
   "retry-uncertain": { type: "boolean" },
   force: { type: "boolean" },
   replace: { type: "boolean" },
+  stdin: { type: "boolean" },
 } as const;
 
 export function parseCliArgs(args: string[]) {
