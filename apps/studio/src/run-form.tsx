@@ -4,8 +4,8 @@ import { useId, useState } from "react";
 import type { Mode } from "./api.ts";
 
 const modeHelp: Record<Mode, string> = {
-  sandbox: "Workspace writes are allowed. Network access is blocked.",
-  full: "Run with your local user permissions.",
+  sandbox: "Executes real commands. Workspace writes are allowed. Network access is blocked.",
+  full: "Executes real commands with your local user permissions, including file and network access.",
 };
 
 export function RunForm({
@@ -53,7 +53,7 @@ export function RunForm({
     <form className="run-form" onSubmit={submit}>
       <div className="section-heading">
         <h3>Run {slug}</h3>
-        <span>Local execution</span>
+        <span>Command execution</span>
       </div>
       <label htmlFor={inputId}>Input JSON</label>
       <textarea

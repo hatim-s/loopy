@@ -29,7 +29,8 @@ export function WorkflowRail({
       </div>
       {summaries.length === 0 ? (
         <p className="empty-note">
-          No workflows saved. Run <code>loopy save &lt;file.ts&gt;</code> to add one.
+          No workflows saved. Create and edit workflow code outside Studio, then run{" "}
+          <code>loopy save &lt;file.ts&gt;</code> to add one.
         </p>
       ) : (
         <div className="workflow-list">

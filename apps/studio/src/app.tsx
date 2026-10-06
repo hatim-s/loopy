@@ -209,7 +209,7 @@ export function App() {
           <span>Studio</span>
         </div>
         <div className="header-context">
-          Local workflows <span aria-hidden="true">/</span> {slug ?? "No workflow"}
+          Review workflows <span aria-hidden="true">/</span> {slug ?? "No workflow"}
         </div>
       </header>
       {error && (
@@ -262,7 +262,7 @@ export function App() {
             <p>
               {slug
                 ? "Reading its definition and run history."
-                : "Save a TypeScript workflow to see its graph here."}
+                : "Create or update workflows with the CLI or API, then review them here."}
             </p>
           </main>
         )}
