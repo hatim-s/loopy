@@ -305,3 +305,61 @@ test("CLI binding commands store references and run from a different directory",
     "private-cookie-first",
   );
 });
+
+for (const key of ["toString", "constructor", "__proto__"]) {
+  test(`inherited environment property ${key} does not override a stored secret`, async () => {
+    const { home, cwd, registry, workflow } = setup();
+    registry.unbindSecret(workflow.slug, "LOOPY_BOUND_COOKIE");
+    registry.bindSecret(workflow.slug, key, "shared-cookie");
+    let calls = 0;
+    const local = createLocalRuntime({
+      home,
+      executor: async (cmd) => {
+        calls++;
+        expect(cmd.env?.[key]).toBe("private-cookie-first");
+        return { stdout: "", stderr: "", exitCode: 0, durationMs: 0 };
+      },
+    });
+    try {
+      const saved = registry.get(workflow.slug);
+      const run = await local.runtime.createRun(
+        saved.workflow,
+        {},
+        { ...localRunOptions(cwd, "full"), secretBindings: saved.secretBindings },
+      );
+      expect((await local.runtime.execute(run.id)).status).toBe("succeeded");
+      expect(calls).toBe(1);
+    } finally {
+      local.close();
+    }
+  });
+}
+
+test("a UTF-8 output limit cannot persist a partial secret before an incomplete code point", async () => {
+  const { home, cwd, registry, workflow, source, secrets } = setup();
+  secrets.set("shared-cookie", "abcédef");
+  const limited = trigger(workflow.slug)
+    .config({ scope: "global" })
+    .node("probe", {
+      program: process.execPath,
+      args: ["-e", "process.stdout.write(process.env.LOOPY_BOUND_COOKIE)"],
+      maxOutputBytes: 4,
+    })
+    .build();
+  registry.save(limited, source);
+  const local = createLocalRuntime({ home });
+  try {
+    const saved = registry.get(workflow.slug);
+    const run = await local.runtime.createRun(
+      saved.workflow,
+      {},
+      { ...localRunOptions(cwd, "full"), secretBindings: saved.secretBindings },
+    );
+    expect((await local.runtime.execute(run.id)).status).toBe("interrupted");
+    const attempt = (await local.runtime.getAttempts(run.id))[0];
+    expect(attempt?.output).toMatchObject({ stdout: "[redacted]" });
+    expect(JSON.stringify(attempt)).not.toContain("abc");
+  } finally {
+    local.close();
+  }
+});

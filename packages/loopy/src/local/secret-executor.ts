@@ -62,7 +62,8 @@ export function secretExecutor(
               `Secret binding '${key}' changed. Start a new run to use the current bindings.`,
             );
           const value =
-            process.env[key] ?? (Object.hasOwn(values, name) ? values[name] : undefined);
+            (Object.hasOwn(process.env, key) ? process.env[key] : undefined) ??
+            (Object.hasOwn(values, name) ? values[name] : undefined);
           if (value === undefined)
             throw new Error(`No stored secret '${name}'. Use loopy secrets set ${name}.`);
           return [key, value];

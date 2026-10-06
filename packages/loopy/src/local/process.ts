@@ -343,9 +343,17 @@ function run(
       clearTimeout(killTimer);
       clearTimeout(drainTimer);
       signal?.removeEventListener("abort", onAbort);
+      // A byte limit or interruption may cut a UTF-8 code point. Leave it pending
+      // rather than adding a replacement character that obscures a secret prefix.
+      const text = (chunks: Buffer[]) => {
+        const buffer = Buffer.concat(chunks);
+        return failure || error || exitSignal
+          ? new TextDecoder().decode(buffer, { stream: true })
+          : buffer.toString("utf8");
+      };
       const output: CommandOutput = {
-        stdout: Buffer.concat(stdout).toString("utf8"),
-        stderr: Buffer.concat(stderr).toString("utf8"),
+        stdout: text(stdout),
+        stderr: text(stderr),
         exitCode: exitCode ?? -1,
         durationMs: Math.round(performance.now() - started),
       };
