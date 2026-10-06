@@ -28,6 +28,7 @@ export type {
   RunOptions,
   RunRecord,
   RunStatus,
+  SecretBindings,
   Value,
   Workflow,
   WorkflowConfig,

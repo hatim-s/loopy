@@ -14,17 +14,12 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { validateSecretName } from "../core/secret-bindings.js";
 import { defaultHome } from "./registry.js";
 
-const NAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/;
-const MAX_VALUE_BYTES = 64 * 1024;
+export { validateSecretName } from "../core/secret-bindings.js";
 
-export function validateSecretName(name: string): void {
-  if (!NAME.test(name))
-    throw new Error(
-      "Secret names must contain 1-80 letters, numbers, dots, underscores, or hyphens, starting with a letter or number.",
-    );
-}
+const MAX_VALUE_BYTES = 64 * 1024;
 
 export function validateSecretValue(value: string): void {
   if (!value || value.includes("\0") || Buffer.byteLength(value) > MAX_VALUE_BYTES)

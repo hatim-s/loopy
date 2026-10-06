@@ -14,7 +14,28 @@ const SANDBOX_EXEC = "/usr/bin/sandbox-exec";
 const ENV_EXEC = "/usr/bin/env";
 const BWRAP_CANDIDATES = ["/usr/bin/bwrap", "/bin/bwrap"];
 
-type Launch = { program: string; args: string[]; cwd: string; env: NodeJS.ProcessEnv };
+type Launch = {
+  program: string;
+  args: string[];
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+  stdin?: string;
+};
+type LocalExecutionOptions = RunOptions & {
+  signal?: AbortSignal;
+  sensitiveEnv?: Record<string, string>;
+};
+
+// Runs inside the sandbox. Credentials arrive through stdin, never launcher argv.
+const PRIVATE_ENV_LAUNCHER = `
+const config = JSON.parse(await Bun.stdin.text());
+const child = Bun.spawn([config.program, ...config.args], {
+  env: { ...process.env, ...config.env },
+  stdin: config.stdin === undefined ? "ignore" : new Blob([config.stdin]),
+  stdout: "inherit", stderr: "inherit",
+});
+process.exit(await child.exited);
+`;
 
 const emptyOutput = (): CommandOutput => ({ stdout: "", stderr: "", exitCode: -1, durationMs: 0 });
 
@@ -82,6 +103,7 @@ async function macSandbox(
   program: string,
   workspace: string,
   env: NodeJS.ProcessEnv,
+  helper?: string,
 ): Promise<[string, string[]]> {
   if (!(await executable(SANDBOX_EXEC)))
     throw new Error("Sandbox mode requires /usr/bin/sandbox-exec on macOS");
@@ -99,11 +121,12 @@ async function macSandbox(
     ...(within(workspace, home) ? [] : [`(deny file-read* (subpath ${sbpl(home)}))`]),
     `(allow file-read* (subpath ${sbpl(workspace)}))`,
     `(allow file-read* (literal ${sbpl(program)}))`,
+    ...(helper ? [`(allow file-read* (literal ${sbpl(helper)}))`] : []),
     ...(allowedPackage ? [`(allow file-read* (subpath ${sbpl(allowedPackage)}))`] : []),
     `(allow file-write* (subpath ${sbpl(workspace)}))`,
     "(deny network*)",
   ].join("\n");
-  return [SANDBOX_EXEC, ["-p", profile, ENV_EXEC, "-i", "--", ...envArgs(env), program]];
+  return [SANDBOX_EXEC, ["-p", profile, ENV_EXEC, "-i", "--", ...envArgs(env), helper ?? program]];
 }
 
 /**
@@ -115,6 +138,7 @@ async function linuxSandbox(
   workspace: string,
   cwd: string,
   env: NodeJS.ProcessEnv,
+  helper?: string,
 ): Promise<[string, string[]]> {
   let bwrap: string | undefined;
   for (const candidate of BWRAP_CANDIDATES) {
@@ -167,8 +191,15 @@ async function linuxSandbox(
     if (mask) mkdirs(mask, programMount, (await stat(programMount)).isDirectory());
     args.push("--ro-bind", programMount, programMount);
   }
+  if (helper && !within(workspace, helper) && (!programMount || !within(programMount, helper))) {
+    const mask = maskOf(helper);
+    if (mask) {
+      mkdirs(mask, helper, false);
+      args.push("--ro-bind", helper, helper);
+    }
+  }
   args.push("--bind", workspace, workspace);
-  args.push("--chdir", cwd, "--", ENV_EXEC, "-i", "--", ...envArgs(env), program);
+  args.push("--chdir", cwd, "--", ENV_EXEC, "-i", "--", ...envArgs(env), helper ?? program);
   return [bwrap, args];
 }
 
@@ -184,13 +215,17 @@ async function sandboxLauncher(
   workspace: string,
   cwd: string,
   env: NodeJS.ProcessEnv,
+  helper?: string,
 ): Promise<[string, string[]]> {
-  if (process.platform === "darwin") return macSandbox(program, workspace, env);
-  if (process.platform === "linux") return linuxSandbox(program, workspace, cwd, env);
+  if (process.platform === "darwin") return macSandbox(program, workspace, env, helper);
+  if (process.platform === "linux") return linuxSandbox(program, workspace, cwd, env, helper);
   throw new Error(`Sandbox mode is unavailable on ${process.platform}`);
 }
 
-async function prepareLaunch(command: ResolvedCommand, options: RunOptions): Promise<Launch> {
+async function prepareLaunch(
+  command: ResolvedCommand,
+  options: LocalExecutionOptions,
+): Promise<Launch> {
   if (options.workspace.kind !== "local")
     throw new Error("Local command executor requires a local workspace");
   const workspace = await realpath(options.workspace.path);
@@ -210,17 +245,36 @@ async function prepareLaunch(command: ResolvedCommand, options: RunOptions): Pro
           ...command.env,
         }
       : { ...process.env, ...command.env };
-  const program = await resolveProgram(command.program, cwd, env.PATH ?? "");
-  if (options.mode === "full") return { cwd, env, program, args: command.args };
+  const effectiveEnv = { ...env, ...options.sensitiveEnv };
+  // Validate without putting sensitive values into launcher arguments.
+  envArgs(options.sensitiveEnv ?? {});
+  const program = await resolveProgram(command.program, cwd, effectiveEnv.PATH ?? "");
+  if (options.mode === "full") return { cwd, env: effectiveEnv, program, args: command.args };
   if (options.mode !== "sandbox") throw new Error(`Unknown execution mode: ${options.mode}`);
 
   // The launcher itself runs with a minimal environment; `env -i` inside applies the real one.
-  const [launcher, prefix] = await sandboxLauncher(program, workspace, cwd, env);
+  const privateEnvironment = options.sensitiveEnv && Object.keys(options.sensitiveEnv).length > 0;
+  const helper = privateEnvironment ? await realpath(process.execPath) : undefined;
+  if (privateEnvironment)
+    for (const key of Object.keys(options.sensitiveEnv ?? {})) delete env[key];
+  const [launcher, prefix] = await sandboxLauncher(program, workspace, cwd, env, helper);
   return {
     cwd,
     env: { PATH: "/usr/bin:/bin", LANG: "C" },
     program: launcher,
-    args: [...prefix, ...command.args],
+    args: privateEnvironment
+      ? [...prefix, "-e", PRIVATE_ENV_LAUNCHER]
+      : [...prefix, ...command.args],
+    ...(privateEnvironment
+      ? {
+          stdin: JSON.stringify({
+            program,
+            args: command.args,
+            env: options.sensitiveEnv,
+            stdin: command.stdin,
+          }),
+        }
+      : {}),
   };
 }
 
@@ -337,13 +391,13 @@ function run(
     });
     child.once("error", (error) => finish(null, null, error));
     child.once("close", (code, exitSignal) => finish(code, exitSignal));
-    child.stdin.end(command.stdin);
+    child.stdin.end(launch.stdin ?? command.stdin);
   });
 }
 
 export const executeLocalCommand = async (
   command: ResolvedCommand,
-  options: RunOptions & { signal?: AbortSignal },
+  options: LocalExecutionOptions,
 ): Promise<CommandOutput> => {
   const aborted = () =>
     new CommandExecutionError("Command aborted", emptyOutput(), false, {

@@ -219,3 +219,58 @@ bun run check       # build, lint, typecheck, test
 bun run fmt
 bun run loopy ui
 ```
+
+## Local secrets
+
+Store credentials once without keychain prompts:
+
+```sh
+loopy secrets set orbit-cookie
+loopy secrets list
+loopy secrets remove orbit-cookie
+```
+
+`set` reads through a hidden terminal prompt. For automation, pipe a value with
+`loopy secrets set <name> --stdin`. Values cannot be passed as command arguments,
+and listing shows names only. Piped entry removes one trailing line ending.
+
+Secrets live as plaintext in `~/.loopy/secrets.json`, separate from workflow
+snapshots and run history. Loopy sets directory permissions to `0700` and file
+permissions to `0600`. Programs running as your user can read this file.
+A custom `--home` or `LOOPY_HOME` stores secrets in `<home>/secrets.json`.
+The store refuses a symlink at the secret directory or file itself, and refuses
+hard-linked secret files. Choose a trusted home directory and trusted ancestors.
+Concurrent updates fail with a lock error; a stopped writer's lock must be
+removed before retrying. Do not commit or sync the store.
+
+Bind a stored secret to an environment variable for a saved workflow:
+
+```sh
+loopy secrets bind case-traces UA_COOKIE orbit-cookie
+loopy secrets bindings case-traces
+loopy run case-traces --full --input '{"caseId":"<case-id>"}'
+loopy secrets unbind case-traces UA_COOKIE
+```
+
+Bindings belong to the saved source selected in the current workspace. A project
+workflow can override a global workflow with the same slug, so use `--cwd` when
+binding if you need to select a particular project. Same-source saves preserve
+bindings. `--replace` clears them when a different source takes the slug.
+
+New CLI and viewer runs checkpoint the binding names and identity, never the
+values. Loopy verifies the grant and rereads values before each command launches,
+including on resume. Updating a secret lets a failed run use the new value;
+removing or changing a binding prevents an old run from using its old grant.
+Runs started before a binding was added need a new run to pick it up.
+An explicitly supplied environment variable overrides its stored value. For
+bound variables, this value also takes precedence over the command's `env`.
+
+Secrets are injected into the command environment after its input checkpoint.
+Sandbox launchers receive them through a private stdin pipe rather than arguments.
+Captured stdout, stderr, and executor errors mask exact injected values; output
+cut off by a limit or interruption also masks a matching prefix at the boundary.
+Redacted outputs are what later workflow steps and resumed runs receive. Avoid
+passing credentials between steps through output. Encoding or transforming a
+secret can evade exact-value redaction, and files written by workflow commands
+are not redacted. Source files and explicit trigger inputs are saved as supplied,
+so keep credential values out of both.
