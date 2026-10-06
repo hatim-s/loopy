@@ -133,35 +133,84 @@ describe("durable workflow runtime", () => {
     expect((await runtime.getRun(run.id))?.workflowHash).toBe(run.workflowHash);
   });
 
-  test("records a failed attempt when a command input cannot be resolved", async () => {
-    const { runtime, options } = fixture(async () => output("unexpected"));
+  test("rejects missing later input before creating a run or executing an earlier side effect", async () => {
+    const calls: string[] = [];
+    const { runtime, options } = fixture(async (command) => {
+      calls.push(command.program);
+      return output("unexpected");
+    });
+    await expect(
+      runtime.createRun(
+        {
+          version: 1,
+          slug: "missing-input",
+          nodes: [
+            { id: "effect", kind: "command", command: { program: "mutate", args: [] } },
+            {
+              id: "later",
+              kind: "command",
+              command: {
+                program: "tool",
+                args: [{ $ref: { source: "input", path: ["absent"] } }],
+              },
+            },
+          ],
+        },
+        {},
+        options,
+      ),
+    ).rejects.toThrow("Node later: Missing input.absent");
+    expect(calls).toEqual([]);
+    expect(await runtime.listRuns()).toEqual([]);
+  });
+
+  test("checks an output-selected branch before its first command launches", async () => {
+    const calls: string[] = [];
+    const { runtime, options } = fixture(async (command) => {
+      calls.push(command.program);
+      return output("yes");
+    });
     const run = await runtime.createRun(
       {
         version: 1,
-        slug: "missing-input",
+        slug: "deferred-input",
         nodes: [
+          { id: "probe", kind: "command", command: { program: "probe", args: [] } },
           {
-            id: "effect",
-            kind: "command",
-            command: {
-              program: "tool",
-              args: [{ $ref: { source: "input", path: ["absent"] } }],
+            id: "choice",
+            kind: "condition",
+            test: {
+              $op: "eq",
+              args: [{ $ref: { source: "steps", path: ["probe", "stdout"] } }, "yes"],
             },
+            // biome-ignore lint/suspicious/noThenProperty: The workflow format names its true branch `then`.
+            then: [
+              { id: "effect", kind: "command", command: { program: "mutate", args: [] } },
+              {
+                id: "later",
+                kind: "command",
+                command: {
+                  program: "tool",
+                  args: [{ $ref: { source: "input", path: ["absent"] } }],
+                },
+              },
+            ],
+            else: [{ id: "skip", kind: "command", command: { program: "skip", args: [] } }],
           },
         ],
       },
       {},
       options,
     );
-    expect((await runtime.execute(run.id)).status).toBe("failed");
-    expect(await runtime.getAttempts(run.id)).toMatchObject([
-      {
-        nodeId: "effect",
-        status: "failed",
-        input: {
-          command: { program: "tool", args: [{ $ref: { source: "input", path: ["absent"] } }] },
-        },
-      },
+    const result = await runtime.execute(run.id);
+    expect(result.status).toBe("failed");
+    expect(result.error).toBe("Node later: Missing input.absent");
+    expect(calls).toEqual(["probe"]);
+    expect(
+      (await runtime.getAttempts(run.id)).map(({ nodeId, status }) => ({ nodeId, status })),
+    ).toEqual([
+      { nodeId: "probe", status: "succeeded" },
+      { nodeId: "later", status: "failed" },
     ]);
   });
 

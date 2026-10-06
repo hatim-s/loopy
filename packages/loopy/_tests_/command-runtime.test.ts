@@ -51,11 +51,9 @@ test("serialized CLI constraints reject invalid run input before invoking the to
       [{ ...base, inspect: "9229" }, "number"],
       [{ ...base, target: 42 }, "string"],
     ] as const) {
-      const run = await runtime.createRun(workflow, input, localRunOptions(home, "full"));
-      const result = await runtime.execute(run.id);
-      expect(result.status).toBe("failed");
-      expect(result.error).toContain(expectedError);
-      expect((await runtime.getAttempts(run.id))[0]?.status).toBe("failed");
+      await expect(
+        runtime.createRun(workflow, input, localRunOptions(home, "full")),
+      ).rejects.toThrow(expectedError);
     }
     expect(calls).toHaveLength(0);
 

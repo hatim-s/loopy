@@ -2,6 +2,8 @@ import type { ArgConstraint, CommandNode, Json, ResolvedCommand } from "../core/
 
 export type Outputs = Map<string, Json>;
 
+const unavailable = Symbol("unavailable step output");
+
 const maxDepth = 32;
 
 export function assertJson(
@@ -90,13 +92,21 @@ function evaluate(op: unknown, values: Json[]): Json {
 }
 
 /** Replaces references and expressions inside a persisted value with run data. */
-export function resolveValue(value: unknown, input: Json, outputs: Outputs): Json {
+function resolve(
+  value: unknown,
+  input: Json,
+  outputs: Outputs,
+  partial: boolean,
+): Json | typeof unavailable {
   if (value === null || typeof value === "string" || typeof value === "boolean") return value;
   if (typeof value === "number") {
     if (!Number.isFinite(value)) throw new Error("Workflow value must be finite");
     return value;
   }
-  if (Array.isArray(value)) return value.map((item) => resolveValue(item, input, outputs));
+  if (Array.isArray(value)) {
+    const items = value.map((item) => resolve(item, input, outputs, partial));
+    return items.includes(unavailable) ? unavailable : (items as Json[]);
+  }
   if (!value || typeof value !== "object") throw new Error("Unsupported workflow value");
   const record = value as Record<string, unknown>;
   if ("$file" in record && typeof record.$file === "string") return record.$file;
@@ -106,19 +116,52 @@ export function resolveValue(value: unknown, input: Json, outputs: Outputs): Jso
       throw new Error("Invalid workflow reference path");
     if (ref.source === "input") return pathValue(input, ref.path, "input");
     const [step, ...path] = ref.path;
-    if (!step || !outputs.has(step)) throw new Error(`Output for ${step ?? "step"} is unavailable`);
+    if (!step || !outputs.has(step)) {
+      if (partial) return unavailable;
+      throw new Error(`Output for ${step ?? "step"} is unavailable`);
+    }
     return pathValue(outputs.get(step) as Json, path, `steps.${step}`);
   }
   if ("$op" in record) {
     if (!Array.isArray(record.args)) throw new Error("Expression args must be an array");
-    return evaluate(
-      record.$op,
-      record.args.map((arg) => resolveValue(arg, input, outputs)),
-    );
+    const args = record.args.map((arg) => resolve(arg, input, outputs, partial));
+    return args.includes(unavailable) ? unavailable : evaluate(record.$op, args as Json[]);
   }
-  return Object.fromEntries(
-    Object.entries(record).map(([key, item]) => [key, resolveValue(item, input, outputs)]),
+  const entries = Object.entries(record).map(
+    ([key, item]) => [key, resolve(item, input, outputs, partial)] as const,
   );
+  return entries.some(([, item]) => item === unavailable)
+    ? unavailable
+    : (Object.fromEntries(entries) as Json);
+}
+
+export function resolveValue(value: unknown, input: Json, outputs: Outputs): Json {
+  return resolve(value, input, outputs, false) as Json;
+}
+
+/** Unknown step outputs defer evaluation, but every input reference is still checked. */
+export function resolveAvailableValue(value: unknown, input: Json, outputs: Outputs) {
+  const resolved = resolve(value, input, outputs, true);
+  return resolved === unavailable ? undefined : { value: resolved };
+}
+
+export function validateCommandInput(node: CommandNode, input: Json, outputs: Outputs): void {
+  for (const [index, arg] of node.command.args.entries()) {
+    const resolved = resolveAvailableValue(arg, input, outputs);
+    if (!resolved) continue;
+    const label = `Argument ${index + 1}`;
+    const constraint = node.command.argConstraints?.[index];
+    if (constraint) checkConstraint(arg, resolved.value, constraint, label, input, outputs);
+    stringValue(resolved.value, label);
+  }
+  for (const [key, value] of Object.entries(node.command.env ?? {})) {
+    const resolved = resolveAvailableValue(value, input, outputs);
+    if (resolved) stringValue(resolved.value, `Environment ${key}`);
+  }
+  if (node.command.stdin !== undefined) {
+    const resolved = resolveAvailableValue(node.command.stdin, input, outputs);
+    if (resolved) stringValue(resolved.value, "stdin");
+  }
 }
 
 function stringValue(value: Json, label: string): string {

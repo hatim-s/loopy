@@ -13,6 +13,7 @@ import type {
 } from "../core/model.js";
 import { validateWorkflow } from "../core/workflow.js";
 import { CommandExecutionError, errorMessage } from "./errors.js";
+import { InputValidationError, validateRunInput } from "./preflight.js";
 import type { RunRepository } from "./repository.js";
 import { assertJson, type Outputs, resolveCommand, resolveValue } from "./values.js";
 
@@ -123,9 +124,15 @@ class Execution {
   }
 
   async nodes(nodes: readonly WorkflowNode[]): Promise<Result> {
-    for (const node of nodes) {
+    for (const [index, node] of nodes.entries()) {
       if (this.signal.aborted)
         return this.lease.lost ? this.lost() : this.interrupted(CANCELLED_BEFORE_LAUNCH);
+      try {
+        validateRunInput(nodes.slice(index), this.run.input, this.outputs);
+      } catch (error) {
+        if (!(error instanceof InputValidationError)) throw error;
+        return this.fail(error.nodeId, { preflight: true }, error.message);
+      }
       const previous = this.attempts.get(node.id);
       if (previous?.status === "failed" && !this.options.resume)
         return { status: "failed", error: previous.error ?? `Node ${node.id} failed` };
@@ -293,6 +300,7 @@ export class Runtime {
   async createRun(workflow: Workflow, input: Json, options: RunOptions): Promise<RunRecord> {
     validateWorkflow(workflow);
     assertJson(input);
+    validateRunInput(workflow.nodes, input);
     const savedInput = JSON.parse(JSON.stringify(input)) as Json;
     const savedOptions = checkRunOptions(options);
     const snapshot = JSON.stringify(workflow);
