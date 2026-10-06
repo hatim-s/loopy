@@ -21,7 +21,7 @@ export function workflowInputs(workflow: Workflow): InputField[] {
       };
       if (kind) (hint ? evidence.hints : evidence.required).add(kind);
       kinds.set(key, evidence);
-      const candidates = evidence.required.size ? evidence.required : evidence.hints;
+      const candidates = new Set([...evidence.required, ...evidence.hints]);
       const allowed = previous
         ? previous.choices && choices
           ? [...new Set([...previous.choices, ...choices])]

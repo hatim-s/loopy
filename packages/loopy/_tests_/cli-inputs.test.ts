@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { collectInputs, workflowInputs } from "../src/cli/inputs.ts";
 import { at, concat, eq, gt, node, trigger } from "../src/core/workflow.ts";
 
-test("branch choices remain alternatives and equality hints yield to constraints", async () => {
+test("branch choices and types preserve each valid alternative", async () => {
   const graph = trigger<{ count: number | string; color: string }>("alternatives")
     .condition(
       "branch",
@@ -24,10 +24,10 @@ test("branch choices remain alternatives and equality hints yield to constraints
   expect(
     workflowInputs(graph).map((field) => ({ kind: field.kind, choices: field.choices })),
   ).toEqual([
-    { kind: "number", choices: undefined },
+    { kind: undefined, choices: undefined },
     { kind: "string", choices: ["red", "blue"] },
   ]);
-  const answers = ["2", "blue"];
+  const answers = ["json:2", "blue"];
   expect(
     await collectInputs(
       graph,
@@ -36,6 +36,15 @@ test("branch choices remain alternatives and equality hints yield to constraints
       () => {},
     ),
   ).toEqual({ count: 2, color: "blue" });
+  const other = ["none", "red"];
+  expect(
+    await collectInputs(
+      graph,
+      {},
+      async () => other.shift() as string,
+      () => {},
+    ),
+  ).toEqual({ count: "none", color: "red" });
 });
 
 test("a parent JSON answer supplies nested references without overwriting them", async () => {
