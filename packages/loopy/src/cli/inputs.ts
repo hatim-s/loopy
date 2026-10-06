@@ -7,24 +7,31 @@ type InputField = { path: readonly string[]; kind?: InputKind; choices?: string[
 /** Saved graphs retain input references even though TypeScript input types are erased. */
 export function workflowInputs(workflow: Workflow): InputField[] {
   const fields = new Map<string, InputField>();
-  function visit(value: unknown, kind?: InputKind, choices?: string[]) {
+  const kinds = new Map<string, { required: Set<InputKind>; hints: Set<InputKind> }>();
+  function visit(value: unknown, kind?: InputKind, choices?: string[], hint = false) {
     if (!value || typeof value !== "object") return;
     if ("$ref" in value) {
       const ref = (value as Reference).$ref;
       if (ref.source !== "input") return;
       const key = JSON.stringify(ref.path);
       const previous = fields.get(key);
-      if (previous?.kind && kind && previous.kind !== kind)
-        throw new Error(
-          `Input ${ref.path.join(".")} requires conflicting types. Use --input JSON.`,
-        );
-      const allowed =
-        previous?.choices && choices
-          ? previous.choices.filter((choice) => choices.includes(choice))
-          : (previous?.choices ?? choices);
-      if (allowed?.length === 0)
-        throw new Error(`Input ${ref.path.join(".")} has no shared choices. Use --input JSON.`);
-      fields.set(key, { path: ref.path, kind: previous?.kind ?? kind, choices: allowed });
+      const evidence = kinds.get(key) ?? {
+        required: new Set<InputKind>(),
+        hints: new Set<InputKind>(),
+      };
+      if (kind) (hint ? evidence.hints : evidence.required).add(kind);
+      kinds.set(key, evidence);
+      const candidates = evidence.required.size ? evidence.required : evidence.hints;
+      const allowed = previous
+        ? previous.choices && choices
+          ? [...new Set([...previous.choices, ...choices])]
+          : undefined
+        : choices;
+      fields.set(key, {
+        path: ref.path,
+        kind: candidates.size === 1 ? [...candidates][0] : undefined,
+        choices: allowed,
+      });
     } else if ("$op" in value) {
       const expression = value as { $op: string; args: unknown[] };
       let operandKind: InputKind | undefined;
@@ -52,7 +59,8 @@ export function workflowInputs(workflow: Workflow): InputField[] {
           break;
         }
       }
-      for (const arg of expression.args) visit(arg, operandKind);
+      for (const arg of expression.args)
+        visit(arg, operandKind, undefined, expression.$op === "eq" || expression.$op === "ne");
     }
   }
   function walk(nodes: WorkflowNode[]) {
@@ -146,6 +154,7 @@ export async function collectInputs(
   const input = structuredClone(supplied);
   const fields = workflowInputs(workflow).filter((field) => !hasPath(input, field.path));
   for (const [index, field] of fields.entries()) {
+    if (hasPath(input, field.path)) continue;
     const hint = field.choices?.join(" | ") ?? field.kind ?? "text or json:value";
     while (true) {
       const answer = await ask(

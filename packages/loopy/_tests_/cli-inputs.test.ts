@@ -1,6 +1,70 @@
 import { expect, test } from "bun:test";
 import { collectInputs, workflowInputs } from "../src/cli/inputs.ts";
-import { at, concat, gt, node, trigger } from "../src/core/workflow.ts";
+import { at, concat, eq, gt, node, trigger } from "../src/core/workflow.ts";
+
+test("branch choices remain alternatives and equality hints yield to constraints", async () => {
+  const graph = trigger<{ count: number | string; color: string }>("alternatives")
+    .condition(
+      "branch",
+      ({ input }) => eq(input.count, "none"),
+      ({ input }) =>
+        node("red", {
+          program: "echo",
+          args: [input.color],
+          argConstraints: { 0: { kind: "string", choices: ["red"] } },
+        }),
+      ({ input }) =>
+        node("blue", {
+          program: "echo",
+          args: [input.color, input.count],
+          argConstraints: { 0: { kind: "string", choices: ["blue"] }, 1: { kind: "number" } },
+        }),
+    )
+    .build();
+  expect(
+    workflowInputs(graph).map((field) => ({ kind: field.kind, choices: field.choices })),
+  ).toEqual([
+    { kind: "number", choices: undefined },
+    { kind: "string", choices: ["red", "blue"] },
+  ]);
+  const answers = ["2", "blue"];
+  expect(
+    await collectInputs(
+      graph,
+      {},
+      async () => answers.shift() as string,
+      () => {},
+    ),
+  ).toEqual({ count: 2, color: "blue" });
+});
+
+test("a parent JSON answer supplies nested references without overwriting them", async () => {
+  const graph = trigger<{ data: { name: string } }>("parent")
+    .condition(
+      "branch",
+      ({ input }) => ({ $op: "eq", args: [input.data, null] }),
+      node("empty", { program: "true", args: [] }),
+      ({ input }) =>
+        node("name", {
+          program: "echo",
+          args: [at(input.data, "name")],
+        }),
+    )
+    .build();
+  let asks = 0;
+  expect(
+    await collectInputs(
+      graph,
+      {},
+      async () => {
+        asks++;
+        return 'json:{"name":"Ada"}';
+      },
+      () => {},
+    ),
+  ).toEqual({ data: { name: "Ada" } });
+  expect(asks).toBe(1);
+});
 
 const workflow = trigger<{
   message: string;
