@@ -18,6 +18,9 @@ const usage = `loopy: TypeScript workflows for CLI tools
 
   loopy save <file.ts|directory>               Compile files and save by configured scope
   loopy secrets set <name> [--stdin]           Store a secret through hidden entry or stdin
+  loopy secrets bind <slug> <ENV> <name>        Grant a workflow access to a secret
+  loopy secrets unbind <slug> <ENV>             Revoke a binding
+  loopy secrets bindings <slug>                List a workflow's bindings
   loopy secrets list                           List secret names
   loopy secrets remove <name>                  Delete a stored secret
   loopy list                                   List saved loopies
@@ -102,7 +105,7 @@ export async function main(args = process.argv.slice(2)) {
     return;
   }
   if (command === "secrets") {
-    await manageSecrets(home, positionals.slice(1), values.stdin);
+    await manageSecrets(home, cwd, positionals.slice(1), values.stdin);
     return;
   }
   if (values.stdin) throw new Error("--stdin is only supported by loopy secrets set.");
@@ -180,7 +183,8 @@ export async function main(args = process.argv.slice(2)) {
     }
     let id: string;
     if (command === "run") {
-      const workflow = registry.get(required(target, "Slug")).workflow;
+      const saved = registry.get(required(target, "Slug"));
+      const { workflow } = saved;
       const options = localRunOptions(cwd, values.full ? "full" : "sandbox");
       const input =
         values.args !== undefined
@@ -190,7 +194,12 @@ export async function main(args = process.argv.slice(2)) {
             : process.stdin.isTTY && process.stderr.isTTY
               ? await promptInputs(workflow, triggerInput ?? {})
               : (triggerInput ?? {});
-      id = (await runtime.createRun(workflow, input, options)).id;
+      id = (
+        await runtime.createRun(workflow, input, {
+          ...options,
+          secretBindings: saved.secretBindings,
+        })
+      ).id;
     } else {
       if (values.full || values.input || values.cwd)
         throw new Error("A resumed run keeps its original mode, input, and workspace.");

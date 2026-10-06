@@ -1,5 +1,6 @@
 import { createInterface } from "node:readline";
 import { Writable } from "node:stream";
+import { Registry, type SavedWorkflow } from "../local/registry.js";
 import { SecretStore, validateSecretName, validateSecretValue } from "../local/secrets.js";
 
 async function readSecret(fromStdin: boolean): Promise<string> {
@@ -47,8 +48,31 @@ async function readSecret(fromStdin: boolean): Promise<string> {
   }
 }
 
-export async function manageSecrets(home: string, args: string[], fromStdin = false) {
+export async function manageSecrets(home: string, cwd: string, args: string[], fromStdin = false) {
   const [action, name, ...rest] = args;
+  if (["bind", "unbind", "bindings"].includes(action ?? "")) {
+    if (fromStdin) throw new Error("--stdin is only supported by loopy secrets set.");
+    if (!name) throw new Error("A saved workflow slug is required.");
+    const registry = new Registry(home, cwd);
+    let saved: SavedWorkflow;
+    if (action === "bind") {
+      const [environment, secret, ...extra] = rest;
+      if (!environment || !secret || extra.length)
+        throw new Error("Use loopy secrets bind <slug> <ENV_VAR> <secret-name>.");
+      new SecretStore(home).get(secret);
+      saved = registry.bindSecret(name, environment, secret);
+    } else if (action === "unbind") {
+      const [environment, ...extra] = rest;
+      if (!environment || extra.length)
+        throw new Error("Use loopy secrets unbind <slug> <ENV_VAR>.");
+      saved = registry.unbindSecret(name, environment);
+    } else {
+      if (rest.length) throw new Error("Use loopy secrets bindings <slug>.");
+      saved = registry.get(name);
+    }
+    console.log(JSON.stringify({ slug: name, bindings: saved.secretBindings?.env ?? {} }, null, 2));
+    return;
+  }
   if (rest.length)
     throw new Error(
       "Unexpected secret arguments. Values must be entered privately or supplied through --stdin.",
@@ -76,6 +100,8 @@ export async function manageSecrets(home: string, args: string[], fromStdin = fa
       console.log(JSON.stringify({ name, removed: true }));
       return;
     default:
-      throw new Error("Use loopy secrets set <name>, list, or remove <name>.");
+      throw new Error(
+        "Use loopy secrets set <name>, list, remove <name>, bind, unbind, or bindings.",
+      );
   }
 }

@@ -112,10 +112,11 @@ export function startServer(options: ServerOptions = {}) {
         if (typeof body.slug !== "string") throw new Error("A saved workflow slug is required.");
         if (body.mode !== "sandbox" && body.mode !== "full")
           throw new Error("Choose sandbox or full execution.");
+        const saved = registry.get(body.slug);
         const run = await runtime.createRun(
-          registry.get(body.slug).workflow,
+          saved.workflow,
           (body.input === undefined ? {} : body.input) as Json,
-          localRunOptions(cwd, body.mode),
+          { ...localRunOptions(cwd, body.mode), secretBindings: saved.secretBindings },
         );
         launch(run);
         return json(run, 202);

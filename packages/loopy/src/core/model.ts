@@ -73,7 +73,13 @@ export type Workflow = {
 
 export type ExecutionMode = "sandbox" | "full";
 export type Workspace = { kind: "local"; path: string } | { kind: "managed"; id: string };
-export type RunOptions = { workspace: Workspace; mode: ExecutionMode };
+/** References only. Values are loaded by the local adapter at command launch. */
+export type SecretBindings = { ownerId: string; env: Record<string, string> };
+export type RunOptions = {
+  workspace: Workspace;
+  mode: ExecutionMode;
+  secretBindings?: SecretBindings;
+};
 
 export type RunStatus = "pending" | "running" | "succeeded" | "failed" | "interrupted";
 export type RunRecord = {

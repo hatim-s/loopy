@@ -13,12 +13,22 @@ import {
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { Workflow, WorkflowNode } from "../core/model.js";
+import type { SecretBindings, Workflow, WorkflowNode } from "../core/model.js";
+import {
+  validateEnvironmentName,
+  validateSecretBindings,
+  validateSecretName,
+} from "../core/secret-bindings.js";
 import { compileWorkflow, validateWorkflow } from "../core/workflow.js";
 
 export const defaultHome = () => resolve(process.env.LOOPY_HOME ?? join(homedir(), ".loopy", "v2"));
 
-export type SavedWorkflow = { workflow: Workflow; source: string; updatedAt: string };
+export type SavedWorkflow = {
+  workflow: Workflow;
+  source: string;
+  updatedAt: string;
+  secretBindings?: SecretBindings;
+};
 export type WorkflowSummary = {
   slug: string;
   description?: string;
@@ -47,7 +57,7 @@ function canonical(path: string): string {
 
 function isSavedFile(
   value: unknown,
-): value is { workflow: unknown; source: string; updatedAt: string } {
+): value is { workflow: unknown; source: string; updatedAt: string; secretBindings?: unknown } {
   if (!value || typeof value !== "object") return false;
   const record = value as Record<string, unknown>;
   return typeof record.source === "string" && typeof record.updatedAt === "string";
@@ -84,7 +94,13 @@ class ScopedRegistry {
     if (!isSavedFile(value)) throw new Error(`Invalid saved loopy '${slug}'.`);
     validateWorkflow(value.workflow);
     if (value.workflow.slug !== slug) throw new Error(`Saved loopy slug does not match '${slug}'.`);
-    return { workflow: value.workflow, source: value.source, updatedAt: value.updatedAt };
+    if (value.secretBindings !== undefined) validateSecretBindings(value.secretBindings);
+    return {
+      workflow: value.workflow,
+      source: value.source,
+      updatedAt: value.updatedAt,
+      ...(value.secretBindings === undefined ? {} : { secretBindings: value.secretBindings }),
+    };
   }
 
   list(): WorkflowSummary[] {
@@ -114,11 +130,8 @@ class ScopedRegistry {
       );
   }
 
-  /** Writes under a per-slug lock directory, then renames into place. */
-  save(workflow: Workflow, source: string, options: SaveOptions = {}): SavedWorkflow {
-    validateWorkflow(workflow);
-    const file = this.file(workflow.slug);
-    const owner = canonical(source);
+  private locked<T>(slug: string, work: (file: string) => T): T {
+    const file = this.file(slug);
     const lock = `${file}.lock`;
     mkdirSync(this.directory, { recursive: true, mode: 0o700 });
     try {
@@ -130,18 +143,60 @@ class ScopedRegistry {
         );
       throw error;
     }
+    try {
+      return work(file);
+    } finally {
+      rmSync(lock, { recursive: true });
+    }
+  }
+
+  private write(file: string, saved: SavedWorkflow): SavedWorkflow {
     const temporary = join(dirname(file), `.${crypto.randomUUID()}.tmp`);
     try {
-      this.assertOwner(workflow.slug, owner, options);
-      const saved = { workflow, source: owner, updatedAt: new Date().toISOString() };
       writeFileSync(temporary, `${JSON.stringify(saved, null, 2)}\n`, { mode: 0o600 });
       renameSync(temporary, file);
       chmodSync(file, 0o600);
       return saved;
     } finally {
       rmSync(temporary, { force: true });
-      rmSync(lock, { recursive: true });
     }
+  }
+
+  /** Same-source saves retain grants; transferring ownership clears them under the slug lock. */
+  save(workflow: Workflow, source: string, options: SaveOptions = {}): SavedWorkflow {
+    validateWorkflow(workflow);
+    const owner = canonical(source);
+    return this.locked(workflow.slug, (file) => {
+      this.assertOwner(workflow.slug, owner, options);
+      const previous = existsSync(file) ? this.get(workflow.slug) : undefined;
+      const secretBindings = previous?.source === owner ? previous.secretBindings : undefined;
+      return this.write(file, {
+        workflow,
+        source: owner,
+        updatedAt: new Date().toISOString(),
+        ...(secretBindings === undefined ? {} : { secretBindings }),
+      });
+    });
+  }
+
+  bindSecret(slug: string, environment: string, name?: string): SavedWorkflow {
+    validateEnvironmentName(environment);
+    if (name !== undefined) validateSecretName(name);
+    return this.locked(slug, (file) => {
+      const saved = this.get(slug);
+      const env = { ...saved.secretBindings?.env };
+      if (name === undefined) delete env[environment];
+      else
+        Object.defineProperty(env, environment, {
+          value: name,
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
+      saved.secretBindings = { ownerId: saved.secretBindings?.ownerId ?? crypto.randomUUID(), env };
+      saved.updatedAt = new Date().toISOString();
+      return this.write(file, saved);
+    });
   }
 
   /** Imports trusted TypeScript. The cache-busting query lets one process reload edits. */
@@ -203,6 +258,18 @@ export class Registry {
         `Loopy '${slug}' has no global scope. Save its source again with explicit scope.`,
       );
     return saved;
+  }
+
+  bindSecret(slug: string, environment: string, name: string): SavedWorkflow {
+    const store = this.local.has(slug) ? this.local : this.global;
+    this.get(slug);
+    return store.bindSecret(slug, environment, name);
+  }
+
+  unbindSecret(slug: string, environment: string): SavedWorkflow {
+    const store = this.local.has(slug) ? this.local : this.global;
+    this.get(slug);
+    return store.bindSecret(slug, environment);
   }
 
   list(): WorkflowSummary[] {

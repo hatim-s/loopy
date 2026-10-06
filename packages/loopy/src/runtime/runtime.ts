@@ -11,6 +11,7 @@ import type {
   Workflow,
   WorkflowNode,
 } from "../core/model.js";
+import { validateSecretBindings } from "../core/secret-bindings.js";
 import { validateWorkflow } from "../core/workflow.js";
 import { CommandExecutionError, errorMessage } from "./errors.js";
 import type { RunRepository } from "./repository.js";
@@ -40,8 +41,16 @@ function checkRunOptions(options: RunOptions): RunOptions {
   if (options.mode !== "sandbox" && options.mode !== "full")
     throw new Error(`Invalid execution mode ${String(options.mode)}`);
   const workspace = options.workspace;
+  if (options.secretBindings !== undefined) {
+    validateSecretBindings(options.secretBindings);
+    if (workspace?.kind !== "local") throw new Error("Secret bindings require a local workspace");
+  }
+  const bindings =
+    options.secretBindings === undefined
+      ? {}
+      : { secretBindings: structuredClone(options.secretBindings) };
   if (workspace?.kind === "local" && typeof workspace.path === "string" && workspace.path)
-    return { workspace: { kind: "local", path: workspace.path }, mode: options.mode };
+    return { workspace: { kind: "local", path: workspace.path }, mode: options.mode, ...bindings };
   if (workspace?.kind === "managed" && typeof workspace.id === "string" && workspace.id)
     return { workspace: { kind: "managed", id: workspace.id }, mode: options.mode };
   throw new Error("Invalid workspace");
