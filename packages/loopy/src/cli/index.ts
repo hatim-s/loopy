@@ -9,6 +9,7 @@ import { createLocalRuntime } from "../local/runtime.js";
 import { startServer } from "../local/server.js";
 import { errorMessage } from "../runtime/errors.js";
 import { parseCliArgs } from "./args.js";
+import { promptInputs } from "./inputs.js";
 
 const DEFAULT_PORT = 4310;
 
@@ -17,6 +18,7 @@ const usage = `loopy: TypeScript workflows for CLI tools
   loopy save <file.ts|directory>               Compile files and save by configured scope
   loopy list                                   List saved loopies
   loopy graph <slug>                            Print the saved graph as JSON
+  loopy run <slug>                             Prompt for inputs, then run
   loopy run <slug> [--key value ...]            Run with string trigger inputs
   loopy run <slug> --args input.json            Run with a JSON input file
   loopy run <slug> --input JSON|@file           Run with JSON input
@@ -34,6 +36,7 @@ const usage = `loopy: TypeScript workflows for CLI tools
   --name <identifier>   Export name for a generated CLI wrapper
 
 Run input: choose named flags, --args, or --input. Named values are strings.
+In a terminal, missing named inputs are prompted one at a time before running.
 Use --key=value for dash-prefixed values; use -- --key value for reserved names.
 
 Saved TypeScript is trusted code executed during save. Saved graphs contain only data.
@@ -170,15 +173,15 @@ export async function main(args = process.argv.slice(2)) {
     if (command === "run") {
       const workflow = registry.get(required(target, "Slug")).workflow;
       const options = localRunOptions(cwd, values.full ? "full" : "sandbox");
-      id = (
-        await runtime.createRun(
-          workflow,
-          values.args !== undefined
-            ? await readInput(`@${values.args}`)
-            : (triggerInput ?? (await readInput(values.input))),
-          options,
-        )
-      ).id;
+      const input =
+        values.args !== undefined
+          ? await readInput(`@${values.args}`)
+          : values.input !== undefined
+            ? await readInput(values.input)
+            : process.stdin.isTTY && process.stderr.isTTY
+              ? await promptInputs(workflow, triggerInput ?? {})
+              : (triggerInput ?? {});
+      id = (await runtime.createRun(workflow, input, options)).id;
     } else {
       if (values.full || values.input || values.cwd)
         throw new Error("A resumed run keeps its original mode, input, and workspace.");

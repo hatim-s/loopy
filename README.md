@@ -119,6 +119,7 @@ uses a current TypeScript graph and an isolated worktree runner to export assets
 loopy save ./review.loopy.ts
 loopy list
 loopy graph review
+loopy run review --full
 loopy run review --instructions "Review the changes" --full
 loopy run review --args input.json --cwd /path/to/repo --full
 loopy runs review
@@ -129,6 +130,12 @@ loopy recover <run-id> --force
 ```
 
 Pass trigger fields as `--key value` or `--key=value`. Values stay strings, including `false` and `123`. Quote values containing spaces. Use `--key=--value` for values starting with `--`. Repeated fields and missing values are errors.
+
+In a terminal, `loopy run <slug>` asks for each input referenced by the saved graph, then starts the run. You can supply some named flags and answer prompts for the rest. Each field is asked once, including fields in conditional branches. Ctrl+C or end of input cancels before a run is created. Workflows without input references run immediately.
+
+Prompts infer numbers, booleans, and choices from expressions and command constraints where possible. Other answers stay text, including empty strings. Use `json:{"key":"value"}` for an object or `json:[1,2]` for an array. Use `text:json:example` to enter the literal text `json:example`. Nested references prompt for each referenced path. TypeScript input types, defaults, and descriptions are not available in saved graphs.
+
+Explicit `--args` and `--input` bypass prompts. Piped input and other non-interactive runs keep the supplied input and never prompt.
 
 For typed or nested input, `--args input.json` reads the complete JSON value from a file, relative to your shell directory. `--input '{"key":"value"}'` and `--input @input.json` also work. Choose one input source per run; files and named flags cannot be mixed. Trigger TypeScript types are not stored as a runtime input schema.
 
