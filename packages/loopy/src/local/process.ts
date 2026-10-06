@@ -348,7 +348,7 @@ function run(
       const text = (chunks: Buffer[]) => {
         const buffer = Buffer.concat(chunks);
         return failure || error || exitSignal
-          ? new TextDecoder().decode(buffer, { stream: true })
+          ? new TextDecoder("utf-8", { ignoreBOM: true }).decode(buffer, { stream: true })
           : buffer.toString("utf8");
       };
       const output: CommandOutput = {

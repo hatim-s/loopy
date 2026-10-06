@@ -335,31 +335,36 @@ for (const key of ["toString", "constructor", "__proto__"]) {
   });
 }
 
-test("a UTF-8 output limit cannot persist a partial secret before an incomplete code point", async () => {
-  const { home, cwd, registry, workflow, source, secrets } = setup();
-  secrets.set("shared-cookie", "abcédef");
-  const limited = trigger(workflow.slug)
-    .config({ scope: "global" })
-    .node("probe", {
-      program: process.execPath,
-      args: ["-e", "process.stdout.write(process.env.LOOPY_BOUND_COOKIE)"],
-      maxOutputBytes: 4,
-    })
-    .build();
-  registry.save(limited, source);
-  const local = createLocalRuntime({ home });
-  try {
-    const saved = registry.get(workflow.slug);
-    const run = await local.runtime.createRun(
-      saved.workflow,
-      {},
-      { ...localRunOptions(cwd, "full"), secretBindings: saved.secretBindings },
-    );
-    expect((await local.runtime.execute(run.id)).status).toBe("interrupted");
-    const attempt = (await local.runtime.getAttempts(run.id))[0];
-    expect(attempt?.output).toMatchObject({ stdout: "[redacted]" });
-    expect(JSON.stringify(attempt)).not.toContain("abc");
-  } finally {
-    local.close();
-  }
-});
+for (const [value, limit] of [
+  ["abcédef", 4],
+  ["\uFEFFabcdef", 5],
+] as const) {
+  test(`UTF-8 output limit ${limit} preserves secret prefixes for redaction`, async () => {
+    const { home, cwd, registry, workflow, source, secrets } = setup();
+    secrets.set("shared-cookie", value);
+    const limited = trigger(workflow.slug)
+      .config({ scope: "global" })
+      .node("probe", {
+        program: process.execPath,
+        args: ["-e", "process.stdout.write(process.env.LOOPY_BOUND_COOKIE)"],
+        maxOutputBytes: limit,
+      })
+      .build();
+    registry.save(limited, source);
+    const local = createLocalRuntime({ home });
+    try {
+      const saved = registry.get(workflow.slug);
+      const run = await local.runtime.createRun(
+        saved.workflow,
+        {},
+        { ...localRunOptions(cwd, "full"), secretBindings: saved.secretBindings },
+      );
+      expect((await local.runtime.execute(run.id)).status).toBe("interrupted");
+      const attempt = (await local.runtime.getAttempts(run.id))[0];
+      expect(attempt?.output).toMatchObject({ stdout: "[redacted]" });
+      expect(JSON.stringify(attempt)).not.toContain(value);
+    } finally {
+      local.close();
+    }
+  });
+}
