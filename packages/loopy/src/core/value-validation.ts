@@ -2,6 +2,7 @@ import type { Operator } from "./model.js";
 import {
   allowKeys,
   isRecord,
+  isStringArray,
   requireNonEmptyString,
   requireOneOf,
   requireRecord,
@@ -34,17 +35,13 @@ function isScalar(value: unknown): boolean {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-export function isStringList(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
-}
-
 function validateReference(raw: unknown, location: string, visible: ReadonlySet<string>): void {
   const ref = requireRecord(raw, location);
   allowKeys(ref, location, ["source", "path"]);
   const source = requireOneOf(ref.source, ["input", "steps"], `${location}.source`);
   const minimum = source === "steps" ? 2 : 1;
   const path = ref.path;
-  if (!isStringList(path) || path.length < minimum || path.some((part) => !part)) {
+  if (!isStringArray(path) || path.length < minimum || path.some((part) => !part)) {
     throw new Error(`${location}.path must list at least ${minimum} non-empty segments.`);
   }
   const step = path[0];

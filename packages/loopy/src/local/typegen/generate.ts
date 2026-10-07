@@ -1,9 +1,10 @@
 import { execFile } from "node:child_process";
 import { basename } from "node:path";
 import { promisify } from "node:util";
-import { errorMessage } from "../../core/index.js";
+import { errorMessage, isRecord } from "../../core/index.js";
+import { identifier } from "./names.js";
 import { parseCliHelp } from "./parse-help.js";
-import { identifier, renderCommandSource } from "./render.js";
+import { renderCommandSource } from "./render.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -17,12 +18,14 @@ export async function outputOf(binary: string, args: string[]): Promise<string> 
     });
     return `${result.stdout}\n${result.stderr}`.trim();
   } catch (error) {
-    const processError = error as Error & { stdout?: string; stderr?: string };
-    const output = `${processError.stdout ?? ""}\n${processError.stderr ?? ""}`.trim();
+    const partial = isRecord(error) ? error : {};
+    const stdout = typeof partial.stdout === "string" ? partial.stdout : "";
+    const stderr = typeof partial.stderr === "string" ? partial.stderr : "";
+    const output = `${stdout}\n${stderr}`.trim();
     if (output) {
       return output;
     }
-    throw new Error(`Could not run ${binary} ${args.join(" ")}: ${errorMessage(error)}`);
+    throw new Error(`Could not run ${binary} ${args.join(" ")}. ${errorMessage(error)}`);
   }
 }
 

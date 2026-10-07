@@ -3,10 +3,21 @@ import { spawn } from "node:child_process";
 import type { CommandOutput } from "../core/index.js";
 import { errorMessage } from "../core/index.js";
 import { CommandExecutionError } from "../runtime/index.js";
-import type { Launch, Limits } from "./process.js";
-import { emptyOutput } from "./process.js";
 
 const KILL_GRACE_MS = 250;
+
+export type Launch = {
+  program: string;
+  args: string[];
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+  stdin?: string;
+};
+export type Limits = { timeoutMs: number; maxOutputBytes: number };
+
+export function emptyOutput(): CommandOutput {
+  return { stdout: "", stderr: "", exitCode: -1, durationMs: 0 };
+}
 
 /** An error raised before the process spawned, so retrying it is safe. */
 export function unstarted(error: unknown): CommandExecutionError {

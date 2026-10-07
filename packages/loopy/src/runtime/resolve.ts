@@ -2,6 +2,7 @@ import {
   type ArgConstraint,
   type CommandNode,
   isRecord,
+  isStringArray,
   type Json,
   type ResolvedCommand,
   requireRecord,
@@ -10,10 +11,6 @@ import { evaluate } from "./evaluate.js";
 
 /** Outputs of settled nodes, keyed by node id, visible to later references. */
 export type Outputs = Map<string, Json>;
-
-function isStringList(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((part) => typeof part === "string");
-}
 
 function pathValue(value: Json, path: readonly string[], label: string): Json {
   let current: Json = value;
@@ -36,7 +33,7 @@ function pathValue(value: Json, path: readonly string[], label: string): Json {
 function resolveReference(raw: unknown, input: Json, outputs: Outputs): Json {
   const ref = requireRecord(raw, "Workflow reference");
   const path = ref.path;
-  if (!isStringList(path)) {
+  if (!isStringArray(path)) {
     throw new Error("A workflow reference path must be a list of strings.");
   }
   if (ref.source === "input") {

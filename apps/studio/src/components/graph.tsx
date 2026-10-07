@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import type { RunDetail } from "../api.ts";
 import { GraphSequence } from "./graph-sequence.tsx";
 
-const endLabels: Partial<Record<RunStatus, string>> = {
+const END_LABELS: Partial<Record<RunStatus, string>> = {
   succeeded: "Complete",
   failed: "Failed",
   interrupted: "Interrupted",
@@ -49,7 +49,7 @@ export function Graph({ workflow, detail, selectedId, onSelect, onSavedDefinitio
           />
           <div className="graph-link" aria-hidden="true" />
           <div className={`graph-end ${status ?? ""}`}>
-            {(status && endLabels[status]) ?? "End"}
+            {(status && END_LABELS[status]) ?? "End"}
           </div>
         </div>
       </div>

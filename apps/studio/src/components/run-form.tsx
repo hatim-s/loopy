@@ -2,7 +2,7 @@ import type { ExecutionMode, Json } from "loopy";
 import type { FormEvent } from "react";
 import { useId, useState } from "react";
 
-const modeHelp: Record<ExecutionMode, string> = {
+const MODE_HELP: Record<ExecutionMode, string> = {
   sandbox: "Workspace writes are allowed. Network access is blocked.",
   full: "Run with your local user permissions.",
 };
@@ -75,7 +75,7 @@ export function RunForm({ slug, onRun, busy }: RunFormProps) {
         {modeOption("sandbox", "Sandbox")}
         {modeOption("full", "Full access")}
       </fieldset>
-      <p className="permission-help">{modeHelp[mode]}</p>
+      <p className="permission-help">{MODE_HELP[mode]}</p>
       <button className="primary-button" type="submit" disabled={busy}>
         {busy ? "Starting..." : "Run workflow"}
       </button>

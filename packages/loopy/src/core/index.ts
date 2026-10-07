@@ -43,19 +43,7 @@ export type {
   WorkflowSummary,
   Workspace,
 } from "./model.js";
-export {
-  ARRAY_INDEX_PATTERN,
-  ENVIRONMENT_NAME_PATTERN,
-  FLAG_CLI_PATTERN,
-  NODE_ID_PATTERN,
-  SECRET_NAME_PATTERN,
-  SLUG_PATTERN,
-  UUID_PATTERN,
-  validateEnvironmentName,
-  validateNodeId,
-  validateSecretName,
-  validateSlug,
-} from "./names.js";
+export { validateEnvironmentName, validateSecretName, validateSlug } from "./names.js";
 export type { WorkflowContext } from "./references.js";
 export { at } from "./references.js";
 export { validateSecretBindings } from "./secret-bindings.js";
@@ -63,6 +51,7 @@ export type { UnknownRecord } from "./validation.js";
 export {
   allowKeys,
   isRecord,
+  isStringArray,
   requireBoolean,
   requireNonEmptyString,
   requireOneOf,

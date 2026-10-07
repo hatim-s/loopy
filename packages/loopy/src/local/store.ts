@@ -14,18 +14,35 @@ import type {
 } from "../core/index.js";
 import type { RunRepository } from "../runtime/index.js";
 import { RunBusyError } from "../runtime/index.js";
+import { errnoCode } from "./fs.js";
 import type { AttemptRow, EventRow, RunRow } from "./store-schema.js";
 import {
   attemptFromRow,
   encode,
   eventFromRow,
   now,
-  ownerActive,
-  ownerAlive,
   runFromRow,
   SCHEMA,
   SCHEMA_VERSION,
 } from "./store-schema.js";
+
+/** True when the owning process is alive on this host. */
+function ownerAlive(row: RunRow): boolean {
+  if (!row.owner_token || !row.owner_pid || row.owner_host !== hostname()) {
+    return false;
+  }
+  try {
+    process.kill(row.owner_pid, 0);
+    return true;
+  } catch (error) {
+    return errnoCode(error) === "EPERM";
+  }
+}
+
+/** A foreign host's owner cannot be probed, so it counts as active until recovered. */
+function ownerActive(row: RunRow): boolean {
+  return ownerAlive(row) || Boolean(row.owner_token && row.owner_host !== hostname());
+}
 
 /** One SQLite owner for run state, node attempts, and ordered events. */
 export class SqliteRunStore implements RunRepository {

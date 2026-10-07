@@ -2,22 +2,16 @@ import { realpathSync, statSync } from "node:fs";
 import { realpath, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { CommandOutput, ExecutionMode, ResolvedCommand, RunOptions } from "../core/index.js";
+import { requirePositiveInteger } from "../core/index.js";
 import { CommandExecutionError } from "../runtime/index.js";
 import { sandboxLauncher } from "./sandbox/launcher.js";
 import { envArgs, resolveProgram, within } from "./sandbox/paths.js";
-import { spawnCaptured, unstarted } from "./spawn.js";
+import type { Launch, Limits } from "./spawn.js";
+import { emptyOutput, spawnCaptured, unstarted } from "./spawn.js";
 
 const DEFAULT_TIMEOUT_MS = 5 * 60_000;
 const DEFAULT_MAX_OUTPUT_BYTES = 8 * 1024 * 1024;
 
-export type Launch = {
-  program: string;
-  args: string[];
-  cwd: string;
-  env: NodeJS.ProcessEnv;
-  stdin?: string;
-};
-export type Limits = { timeoutMs: number; maxOutputBytes: number };
 export type LocalExecutionOptions = RunOptions & {
   signal?: AbortSignal;
   sensitiveEnv?: Record<string, string>;
@@ -34,10 +28,6 @@ const child = Bun.spawn([config.program, ...config.args], {
 process.exit(await child.exited);
 `;
 
-export function emptyOutput(): CommandOutput {
-  return { stdout: "", stderr: "", exitCode: -1, durationMs: 0 };
-}
-
 export function localRunOptions(cwd: string, mode: ExecutionMode): RunOptions {
   const path = realpathSync(cwd);
   if (!statSync(path).isDirectory()) {
@@ -46,20 +36,11 @@ export function localRunOptions(cwd: string, mode: ExecutionMode): RunOptions {
   return { workspace: { kind: "local", path }, mode };
 }
 
-function positiveLimit(value: number | undefined, fallback: number, name: string): number {
-  const limit = value ?? fallback;
-  if (!Number.isSafeInteger(limit) || limit <= 0) {
-    throw new Error(`${name} must be a positive integer.`);
-  }
-  return limit;
-}
-
 function commandLimits(command: ResolvedCommand): Limits {
   return {
-    timeoutMs: positiveLimit(command.timeoutMs, DEFAULT_TIMEOUT_MS, "timeoutMs"),
-    maxOutputBytes: positiveLimit(
-      command.maxOutputBytes,
-      DEFAULT_MAX_OUTPUT_BYTES,
+    timeoutMs: requirePositiveInteger(command.timeoutMs ?? DEFAULT_TIMEOUT_MS, "timeoutMs"),
+    maxOutputBytes: requirePositiveInteger(
+      command.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES,
       "maxOutputBytes",
     ),
   };

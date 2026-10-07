@@ -2,7 +2,7 @@ import type { CommandOutput } from "../core/index.js";
 
 export class RunBusyError extends Error {
   constructor(runId: string) {
-    super(`Run ${runId} is already executing`);
+    super(`Run ${runId} is already executing.`);
     this.name = "RunBusyError";
   }
 }

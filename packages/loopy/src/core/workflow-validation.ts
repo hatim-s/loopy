@@ -7,13 +7,15 @@ import {
 } from "./names.js";
 import {
   allowKeys,
+  isRecord,
+  isStringArray,
   requireNonEmptyString,
   requireOneOf,
   requirePositiveInteger,
   requireRecord,
   requireString,
 } from "./validation.js";
-import { isStringList, MAX_DEPTH, validateValue } from "./value-validation.js";
+import { MAX_DEPTH, validateValue } from "./value-validation.js";
 
 /** An attached flag is stored as concat(prefix, value) so the runtime can check the value alone. */
 function validateAttachedPrefix(arg: unknown, prefix: string, location: string): void {
@@ -34,7 +36,7 @@ function validateArgConstraint(raw: unknown, arg: unknown, location: string): vo
   allowKeys(constraint, location, ["kind", "choices", "prefix"]);
   const kind = requireOneOf(constraint.kind, ["string", "number"], `${location}.kind`);
   const { choices, prefix } = constraint;
-  if (choices !== undefined && (kind !== "string" || !isStringList(choices) || !choices.length)) {
+  if (choices !== undefined && (kind !== "string" || !isStringArray(choices) || !choices.length)) {
     throw new Error(`${location}.choices must be a non-empty list of strings on a string arg.`);
   }
   if (prefix === undefined) {
@@ -172,8 +174,8 @@ export function validateWorkflow(value: unknown): asserts value is Workflow {
 }
 
 /** Accepts a built graph or any builder, including one from another copy of this package. */
-export function compileWorkflow(input: Workflow | { build(): Workflow }): Workflow {
-  const workflow = "build" in input && typeof input.build === "function" ? input.build() : input;
+export function compileWorkflow(input: unknown): Workflow {
+  const workflow = isRecord(input) && typeof input.build === "function" ? input.build() : input;
   validateWorkflow(workflow);
   return JSON.parse(JSON.stringify(workflow)) as Workflow;
 }

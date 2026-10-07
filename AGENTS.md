@@ -21,14 +21,18 @@ Layers import downward only: `cli -> local -> runtime -> core`, `cloud -> runtim
 Cross-layer imports go through the target layer's `index.ts`. Same-layer imports use the
 file path. Studio imports the package only as `"loopy"`.
 
-Adding a feature: put the data shape in `core/model.ts`, the validation next to it, the OS
-work in `local/`, the command in `cli/commands/<name>.ts`, and register it in the dispatch
-table. A new file gets one responsibility and a kebab-case name. Three files sharing a
-prefix become a folder without an inner `index.ts`.
+Adding a feature: put the data shape in `core/model.ts` and its validation next to it, the OS
+work in `local/`, the command in `cli/commands/<name>.ts` registered in the dispatch table. A
+new store column means SQL and row types in `local/store-schema.ts` and queries in
+`local/store.ts`. A new Studio panel is a component in `components/`, its state in a hook in
+`hooks/`, wired through `use-studio.ts` and `app.tsx`. A new file gets one responsibility and a
+kebab-case name; related files share a folder without an inner `index.ts`.
 
 ## Patterns to follow
 
-**Narrow unknown data with guards, not casts.** Guards live in `core/validation.ts`.
+**Narrow unknown data with guards, not casts.** Generic guards (`requireRecord`,
+`isStringArray`) live in `core/validation.ts`; checks that know the domain (`validateWorkflow`,
+`validateSlug`) live next to the type they check.
 
 ```ts
 // bad
@@ -64,7 +68,7 @@ export async function runGraph(context: CliContext): Promise<void> {
 **Braces and early returns.** Every `if`, `for` and `while` body is a block. Check the
 failure case first and return or throw; keep the happy path at the left margin.
 
-**Error messages are one sentence, ending with a period, that says what to do.**
+**Error messages end with a period and say what failed and what to do.**
 `No saved loopy 'review'. Use loopy save <file.ts> first.` not `not found`.
 
 **Types describe the data, not the code.** `type` for shapes, `interface` only for a
@@ -80,13 +84,13 @@ already say it. No banners, no restating the code, no em dashes.
 
 ## Patterns to avoid
 
-- A function the linter flags for cognitive complexity. Split it; do not raise the limit.
+- A function the linter rejects for cognitive complexity. Split it; do not raise the limit.
 - A file that holds two jobs (parsing and rendering, schema and queries). Split it.
 - `export const name = () => ...` at module level.
 - `(error as NodeJS.ErrnoException).code`: use `errnoCode(error)`.
-- `Object.defineProperty(record, key, { value, enumerable, writable, configurable })`: use
-  `setOwnProperty`.
-- Importing `../local/registry/registry.js` from `cli/`. Use `../local/index.js`.
-- Re-exporting one layer's function from another to shorten an import path.
+- Importing `../local/registry/registry.js` from `cli/`, or re-exporting one layer's function
+  from another to shorten a path. Use the barrel.
+- Exporting from a barrel because it might be useful. Export what another layer or a package
+  consumer uses today.
 - Compatibility shims, deprecated aliases, or keeping an old path alive. Move it and fix the callers.
 - Tests for glue. Test invariants: types, sandbox confinement, durable state, CLI behaviour.

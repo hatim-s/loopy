@@ -1,9 +1,10 @@
 import type { CommandOutput, ExecuteCommand, RunRecord, SecretBindings } from "../core/index.js";
 import { errorMessage, validateSecretBindings } from "../core/index.js";
 import { CommandExecutionError } from "../runtime/index.js";
-import { emptyOutput, executeLocalCommand } from "./process.js";
+import { executeLocalCommand } from "./process.js";
 import { Registry } from "./registry/registry.js";
 import { SecretStore } from "./secrets.js";
+import { emptyOutput } from "./spawn.js";
 import type { SqliteRunStore } from "./store.js";
 
 export const REDACTED = "[redacted]";

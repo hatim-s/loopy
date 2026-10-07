@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { basename } from "node:path";
 import type { CommandDescriptor, FlagDefinition, PositionalDefinition } from "../../core/index.js";
-import { identifier } from "./render.js";
+import { identifier } from "./names.js";
 
 export type ParsedHelp = {
   descriptor: CommandDescriptor;

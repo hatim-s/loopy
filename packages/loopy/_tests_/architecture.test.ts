@@ -3,6 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 
 const SOURCE = resolve(import.meta.dir, "../src");
+const STUDIO = resolve(import.meta.dir, "../../../apps/studio/src");
 const LAYERS = ["core", "runtime", "cloud", "local", "cli"] as const;
 type Layer = (typeof LAYERS)[number];
 
@@ -21,7 +22,7 @@ function sourceFiles(directory: string): string[] {
     if (entry.isDirectory()) {
       return sourceFiles(path);
     }
-    return entry.name.endsWith(".ts") ? [path] : [];
+    return /\.tsx?$/.test(entry.name) ? [path] : [];
   });
 }
 
@@ -33,9 +34,12 @@ function layerOf(file: string): Layer {
   return layer as Layer;
 }
 
-/** Static imports, re-exports, side-effect imports and literal dynamic imports. */
+/**
+ * Static imports, re-exports, side-effect imports and literal dynamic imports.
+ * Template literals are dropped first: typegen renders import lines as text.
+ */
 function importsOf(file: string): string[] {
-  const text = readFileSync(file, "utf8");
+  const text = readFileSync(file, "utf8").replace(/`[^`]*`/g, "``");
   return [...text.matchAll(/\b(?:from|import)\s*\(?\s*"([^"]+)"/g)].map((match) => match[1] ?? "");
 }
 
@@ -54,12 +58,16 @@ test("layers import downward, and only through the target layer's index", () => 
     const layer = layerOf(file);
     const name = relative(SOURCE, file);
     for (const specifier of importsOf(file)) {
+      if (specifier === "loopy" || specifier.startsWith("loopy/")) {
+        violations.push(`${name} imports the package through its own alias (${specifier}).`);
+        continue;
+      }
       if (!specifier.startsWith(".")) {
         continue;
       }
       const target = layerOf(resolve(file, "..", specifier));
       if (target === layer) {
-        if (specifier.endsWith("/index.js")) {
+        if (/\/index(\.js)?$/.test(specifier)) {
           violations.push(`${name} imports its own barrel (${specifier}).`);
         }
         continue;
@@ -68,6 +76,24 @@ test("layers import downward, and only through the target layer's index", () => 
         violations.push(`${name} (${layer}) may not import ${target} (${specifier}).`);
       } else if (!specifier.endsWith(`/${target}/index.js`)) {
         violations.push(`${name} must import ${target} through ${target}/index.js (${specifier}).`);
+      }
+    }
+  }
+  expect(violations).toEqual([]);
+});
+
+test("studio reaches the package only through the portable 'loopy' entry", () => {
+  const violations: string[] = [];
+  for (const file of sourceFiles(STUDIO)) {
+    const name = relative(STUDIO, file);
+    for (const specifier of importsOf(file)) {
+      if (specifier.startsWith("loopy/")) {
+        violations.push(`${name} imports a non-portable entry (${specifier}).`);
+      } else if (
+        specifier.startsWith(".") &&
+        relative(STUDIO, resolve(file, "..", specifier)).startsWith("..")
+      ) {
+        violations.push(`${name} reaches outside the app (${specifier}).`);
       }
     }
   }

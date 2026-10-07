@@ -14,7 +14,7 @@ export type RunDetail = {
   events: RunEvent[];
 };
 
-const tokenKey = "loopy-studio-token";
+const TOKEN_KEY = "loopy-studio-token";
 
 /** Moves the session token from the URL fragment into session storage. */
 export function captureToken(): void {
@@ -22,7 +22,7 @@ export function captureToken(): void {
   if (!token) {
     return;
   }
-  sessionStorage.setItem(tokenKey, token);
+  sessionStorage.setItem(TOKEN_KEY, token);
   const url = new URL(window.location.href);
   url.hash = "";
   history.replaceState(null, "", url);
@@ -33,11 +33,11 @@ async function failureMessage(response: Response): Promise<string> {
   if (isRecord(body) && typeof body.error === "string") {
     return body.error;
   }
-  return `Request failed (${response.status})`;
+  return `Request failed with status ${response.status}.`;
 }
 
 async function api<T>(path: string, body?: unknown): Promise<T> {
-  const token = sessionStorage.getItem(tokenKey);
+  const token = sessionStorage.getItem(TOKEN_KEY);
   const response = await fetch(path, {
     method: body === undefined ? "GET" : "POST",
     body: body === undefined ? undefined : JSON.stringify(body),

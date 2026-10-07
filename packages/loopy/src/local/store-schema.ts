@@ -1,4 +1,3 @@
-import { hostname } from "node:os";
 import type {
   AttemptRecord,
   AttemptStatus,
@@ -8,7 +7,6 @@ import type {
   RunRecord,
   RunStatus,
 } from "../core/index.js";
-import { errnoCode } from "./fs.js";
 
 export const SCHEMA_VERSION = 2;
 export const SCHEMA = `
@@ -144,22 +142,4 @@ export function eventFromRow(row: EventRow): RunEvent {
     data: decode(row.data_json),
     createdAt: row.created_at,
   };
-}
-
-/** True when the owning process is alive on this host. */
-export function ownerAlive(row: RunRow): boolean {
-  if (!row.owner_token || !row.owner_pid || row.owner_host !== hostname()) {
-    return false;
-  }
-  try {
-    process.kill(row.owner_pid, 0);
-    return true;
-  } catch (error) {
-    return errnoCode(error) === "EPERM";
-  }
-}
-
-/** A foreign host's owner cannot be probed, so it counts as active until recovered. */
-export function ownerActive(row: RunRow): boolean {
-  return ownerAlive(row) || Boolean(row.owner_token && row.owner_host !== hostname());
 }

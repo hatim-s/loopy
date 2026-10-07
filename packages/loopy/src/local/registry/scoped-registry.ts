@@ -153,9 +153,9 @@ export class ScopedRegistry {
   /** Imports trusted TypeScript. The cache-busting query lets one process reload edits. */
   async load(file: string): Promise<Loaded> {
     const source = realpathSync(resolve(file));
-    const module = (await import(`${pathToFileURL(source).href}?loopy=${crypto.randomUUID()}`)) as {
-      default?: Parameters<typeof compileWorkflow>[0];
-    };
+    const module: { default?: unknown } = await import(
+      `${pathToFileURL(source).href}?loopy=${crypto.randomUUID()}`
+    );
     if (!module.default) {
       throw new Error("A loopy file must default-export a workflow built with trigger(...).");
     }
