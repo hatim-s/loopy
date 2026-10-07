@@ -8,6 +8,8 @@ import { useScopedState } from "./use-scoped-state.ts";
 
 type Options = {
   slug: string | null;
+  /** False until the workflow and its runs have arrived; the first selection waits for them. */
+  loaded: boolean;
   runs: RunRecord[];
   putRun: (run: RunRecord) => void;
   errors: ErrorReporter;
@@ -18,9 +20,14 @@ type Options = {
 type ResumeBaseline = { id: string; updatedAt: string };
 
 /** The selected run, its loaded detail, live polling, and the start and resume actions. */
-export function useRunDetail({ slug, runs, putRun, errors }: Options) {
-  // Newest run until the user picks one or chooses the saved definition (null).
-  const [selectedRunId, selectRun] = useScopedState<string | null>(slug, runs[0]?.id ?? null);
+export function useRunDetail({ slug, loaded, runs, putRun, errors }: Options) {
+  // Undefined means nothing chosen yet; null means the saved definition. The newest run is
+  // pinned once per workflow so a later refresh does not move the selection.
+  const [chosen, selectRun] = useScopedState<string | null | undefined>(slug, undefined);
+  if (loaded && chosen === undefined) {
+    selectRun(runs[0]?.id ?? null);
+  }
+  const selectedRunId = chosen ?? null;
   const [detail, setDetail] = useScopedState<RunDetail | null>(selectedRunId, null);
   const [busy, setBusy] = useState(false);
   const [baseline, setBaseline] = useState<ResumeBaseline | null>(null);

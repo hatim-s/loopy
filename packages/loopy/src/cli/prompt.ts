@@ -1,19 +1,20 @@
 import { createInterface } from "node:readline";
 import type { Json, Workflow } from "../core/index.js";
-import { errorMessage, isRecord, setOwnProperty } from "../core/index.js";
+import { errorMessage, setOwnProperty } from "../core/index.js";
 import { type InputField, workflowInputs } from "./input-fields.js";
 import { report } from "./output.js";
 
 type JsonRecord = Record<string, Json>;
 
-function isJsonRecord(value: Json): value is JsonRecord {
-  return isRecord(value);
+/** Objects and arrays both hold children; `at(input.items, 0)` walks into an array. */
+function isContainer(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function hasPath(input: Json, path: readonly string[]): boolean {
   let current: unknown = input;
   for (const key of path) {
-    if (!isRecord(current) || !Object.hasOwn(current, key)) {
+    if (!isContainer(current) || !Object.hasOwn(current, key)) {
       return false;
     }
     current = current[key];
@@ -21,18 +22,19 @@ function hasPath(input: Json, path: readonly string[]): boolean {
   return true;
 }
 
+/** Throws when an existing parent is a scalar; that cannot be fixed by another answer. */
 function setPath(input: JsonRecord, path: readonly string[], value: Json): void {
-  let current = input;
+  let current: Record<string, unknown> = input;
   for (const [index, key] of path.entries()) {
     if (index === path.length - 1) {
-      setOwnProperty(current, key, value);
+      setOwnProperty<unknown>(current, key, value);
       return;
     }
     if (!Object.hasOwn(current, key)) {
-      setOwnProperty<Json>(current, key, {});
+      setOwnProperty<unknown>(current, key, {});
     }
     const child = current[key];
-    if (child === undefined || !isJsonRecord(child)) {
+    if (!isContainer(child)) {
       throw new Error(
         `Input ${path.slice(0, index + 1).join(".")} must be an object. Use --input JSON.`,
       );
@@ -99,12 +101,15 @@ export async function collectInputs(
       const answer = await ask(
         `[${index + 1}/${fields.length}] ${field.path.join(".")} (${hint}): `,
       );
+      let value: Json;
       try {
-        setPath(input, field.path, parseAnswer(answer, field));
-        break;
+        value = parseAnswer(answer, field);
       } catch (error) {
         warn(errorMessage(error));
+        continue;
       }
+      setPath(input, field.path, value);
+      break;
     }
   }
   return input;

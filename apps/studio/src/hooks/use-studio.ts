@@ -10,6 +10,7 @@ export function useStudio() {
   const library = useWorkflows(errors);
   const run = useRunDetail({
     slug: library.slug,
+    loaded: library.workflow !== null,
     runs: library.runs,
     putRun: library.putRun,
     errors,
