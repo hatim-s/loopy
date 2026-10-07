@@ -8,6 +8,7 @@ import type {
   AttemptStatus,
   Json,
   RunEvent,
+  RunEventType,
   RunRecord,
   RunStatus,
 } from "../core/model.js";
@@ -92,7 +93,7 @@ type EventRow = {
   sequence: number;
   run_id: string;
   node_id: string | null;
-  type: string;
+  type: RunEventType;
   data_json: string;
   created_at: string;
 };
@@ -196,7 +197,7 @@ export class SqliteRunStore implements RunRepository {
     return row;
   }
 
-  private event(runId: string, type: string, data: Json, nodeId?: string): void {
+  private event(runId: string, type: RunEventType, data: Json, nodeId?: string): void {
     const next =
       this.db
         .query<{ sequence: number }, [string]>(

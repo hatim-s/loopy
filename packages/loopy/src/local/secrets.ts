@@ -14,10 +14,10 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { validateSecretName } from "../core/secret-bindings.js";
+import { validateSecretName } from "../core/names.js";
 import { defaultHome } from "./registry.js";
 
-export { validateSecretName } from "../core/secret-bindings.js";
+export { validateSecretName } from "../core/names.js";
 
 const MAX_VALUE_BYTES = 64 * 1024;
 

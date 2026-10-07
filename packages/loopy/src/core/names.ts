@@ -14,7 +14,7 @@ export function validateSlug(slug: string): void {
 
 export function validateNodeId(id: string, location: string): void {
   if (!NODE_ID_PATTERN.test(id)) {
-    throw new Error(`${location} must start with a letter and contain letters, numbers, _ or -`);
+    throw new Error(`${location} must start with a letter and contain letters, numbers, _ or -.`);
   }
 }
 

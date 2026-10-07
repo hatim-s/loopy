@@ -11,35 +11,35 @@ export function isRecord(value: unknown): value is UnknownRecord {
 
 export function requireRecord(value: unknown, location: string): UnknownRecord {
   if (!isRecord(value)) {
-    throw new Error(`${location} must be an object`);
+    throw new Error(`${location} must be an object.`);
   }
   return value;
 }
 
 export function requireString(value: unknown, location: string): string {
   if (typeof value !== "string") {
-    throw new Error(`${location} must be a string`);
+    throw new Error(`${location} must be a string.`);
   }
   return value;
 }
 
 export function requireNonEmptyString(value: unknown, location: string): string {
   if (typeof value !== "string" || !value.trim()) {
-    throw new Error(`${location} is required`);
+    throw new Error(`${location} is required.`);
   }
   return value;
 }
 
 export function requireBoolean(value: unknown, location: string): boolean {
   if (typeof value !== "boolean") {
-    throw new Error(`${location} must be a boolean`);
+    throw new Error(`${location} must be a boolean.`);
   }
   return value;
 }
 
 export function requirePositiveInteger(value: unknown, location: string): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) {
-    throw new Error(`${location} must be a positive integer`);
+    throw new Error(`${location} must be a positive integer.`);
   }
   return value;
 }
@@ -50,7 +50,7 @@ export function requireOneOf<const Choices extends readonly string[]>(
   location: string,
 ): Choices[number] {
   if (typeof value !== "string" || !choices.includes(value)) {
-    throw new Error(`${location} must be one of ${choices.join(", ")}`);
+    throw new Error(`${location} must be one of ${choices.join(", ")}.`);
   }
   return value;
 }
@@ -63,7 +63,7 @@ export function allowKeys(
 ): void {
   for (const key of Object.keys(value)) {
     if (!allowed.includes(key)) {
-      throw new Error(`${location} has an unsupported field '${key}'`);
+      throw new Error(`${location} has an unsupported field '${key}'.`);
     }
   }
 }

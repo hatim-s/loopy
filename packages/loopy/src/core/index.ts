@@ -1,3 +1,4 @@
+export { latestAttempts } from "./attempts.js";
 export type {
   CommandArgs,
   CommandArgument,
@@ -8,6 +9,7 @@ export type {
   PositionalDefinition,
 } from "./command.js";
 export { bash, command, defineCommand } from "./command.js";
+export { errorMessage } from "./errors.js";
 export type {
   ArgConstraint,
   AttemptRecord,
@@ -23,18 +25,47 @@ export type {
   Json,
   Operator,
   Reference,
+  ReferenceSource,
   ResolvedCommand,
   RunEvent,
+  RunEventType,
   RunOptions,
   RunRecord,
   RunStatus,
+  Scalar,
   SecretBindings,
   Value,
   Workflow,
   WorkflowConfig,
   WorkflowNode,
+  WorkflowSummary,
   Workspace,
 } from "./model.js";
+export {
+  ARRAY_INDEX_PATTERN,
+  ENVIRONMENT_NAME_PATTERN,
+  NODE_ID_PATTERN,
+  SECRET_NAME_PATTERN,
+  SLUG_PATTERN,
+  UUID_PATTERN,
+  validateEnvironmentName,
+  validateNodeId,
+  validateSecretName,
+  validateSlug,
+} from "./names.js";
+export { validateSecretBindings } from "./secret-bindings.js";
+export type { UnknownRecord } from "./validation.js";
+export {
+  allowKeys,
+  isRecord,
+  requireBoolean,
+  requireNonEmptyString,
+  requireOneOf,
+  requirePositiveInteger,
+  requireRecord,
+  requireString,
+  setOwnProperty,
+} from "./validation.js";
 export type { WorkflowContext } from "./workflow.js";
 export {
   and,

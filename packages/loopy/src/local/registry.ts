@@ -14,11 +14,8 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { SecretBindings, Workflow, WorkflowNode } from "../core/model.js";
-import {
-  validateEnvironmentName,
-  validateSecretBindings,
-  validateSecretName,
-} from "../core/secret-bindings.js";
+import { validateEnvironmentName, validateSecretName } from "../core/names.js";
+import { validateSecretBindings } from "../core/secret-bindings.js";
 import { compileWorkflow, validateWorkflow } from "../core/workflow.js";
 
 export const defaultHome = () => resolve(process.env.LOOPY_HOME ?? join(homedir(), ".loopy", "v2"));

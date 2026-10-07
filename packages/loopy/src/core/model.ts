@@ -109,13 +109,32 @@ export type AttemptRecord = {
   endedAt?: string;
 };
 
+/** Every event the stores emit. Run status changes map one to one. */
+export type RunEventType =
+  | "run.created"
+  | "run.started"
+  | "run.resumed"
+  | "run.owner_recovered"
+  | `run.${RunStatus}`
+  | "node.started"
+  | `node.${Exclude<AttemptStatus, "running">}`;
 export type RunEvent = {
   sequence: number;
   runId: string;
   nodeId?: string;
-  type: string;
+  type: RunEventType;
   data: Json;
   createdAt: string;
+};
+
+/** One row of a saved-workflow listing, shared by the registry, the HTTP API and Studio. */
+export type WorkflowSummary = {
+  slug: string;
+  description?: string;
+  scope: "project" | "global";
+  nodeCount: number;
+  updatedAt: string;
+  source: string;
 };
 
 export type ExecuteCommand = (
