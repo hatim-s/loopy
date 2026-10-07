@@ -430,6 +430,7 @@ for (const failure of ["reject", "throw"] as const) {
     const store = new MemoryRepository();
     store.beforeHeartbeat = () => {
       if (failure === "throw") {
+        // biome-ignore lint/style/useThrowOnlyError: the lease must survive a non-Error rejection.
         throw undefined;
       }
       return Promise.reject();

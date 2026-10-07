@@ -9,10 +9,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { command } from "../src/core/command.ts";
-import { trigger } from "../src/core/workflow.ts";
-import { Registry } from "../src/local/registry.ts";
-import { startServer } from "../src/local/server.ts";
+import { command, trigger } from "../src/core/index.ts";
+import { Registry, startServer } from "../src/local/index.ts";
 
 const temporary: string[] = [];
 const servers: ReturnType<typeof startServer>[] = [];

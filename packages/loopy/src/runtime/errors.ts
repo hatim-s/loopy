@@ -1,4 +1,4 @@
-import type { CommandOutput } from "../core/model.js";
+import type { CommandOutput } from "../core/index.js";
 
 export class RunBusyError extends Error {
   constructor(runId: string) {

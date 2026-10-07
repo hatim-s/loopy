@@ -10,9 +10,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { command } from "../src/core/command.js";
-import { concat, eq, file, node, trigger } from "../src/core/workflow.js";
-import { Registry } from "../src/local/registry.js";
+import { command, concat, eq, file, node, trigger } from "../src/core/index.js";
+import { Registry } from "../src/local/registry/registry.js";
 
 const temporary: string[] = [];
 function directory() {

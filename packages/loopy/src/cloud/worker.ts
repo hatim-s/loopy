@@ -1,6 +1,5 @@
-import type { RunRecord } from "../core/model.js";
-import { RunBusyError } from "../runtime/errors.js";
-import type { Runtime } from "../runtime/runtime.js";
+import { allowKeys, type RunRecord, requireNonEmptyString, requireRecord } from "../core/index.js";
+import { RunBusyError, type Runtime } from "../runtime/index.js";
 
 export type CloudWorkMessage = { runId: string };
 
@@ -11,18 +10,9 @@ export type CloudWorkOutcome =
 type WorkerRuntime = Pick<Runtime, "getRun" | "execute">;
 
 function parseMessage(value: unknown): CloudWorkMessage {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("Cloud work message must be an object");
-  }
-  const message = value as Record<string, unknown>;
-  if (
-    typeof message.runId !== "string" ||
-    message.runId.trim().length === 0 ||
-    Object.keys(message).some((key) => key !== "runId")
-  ) {
-    throw new Error("Invalid cloud work message");
-  }
-  return { runId: message.runId };
+  const message = requireRecord(value, "Cloud work message");
+  allowKeys(message, "Cloud work message", ["runId"]);
+  return { runId: requireNonEmptyString(message.runId, "Cloud work message.runId") };
 }
 
 /**
@@ -41,10 +31,10 @@ export class CloudWorker {
     const { runId } = parseMessage(message);
     const run = await this.runtime.getRun(runId);
     if (!run) {
-      throw new Error(`Unknown run ${runId}`);
+      throw new Error(`Unknown run ${runId}.`);
     }
     if (run.options.workspace.kind !== "managed") {
-      throw new Error(`Run ${runId} uses a local workspace`);
+      throw new Error(`Run ${runId} uses a local workspace, which a cloud worker cannot execute.`);
     }
     if (options.signal?.aborted && (run.status === "pending" || run.status === "running")) {
       return { disposition: "retry", reason: "cancelled", runId };
@@ -59,7 +49,7 @@ export class CloudWorker {
         return { disposition: "retry", reason: "cancelled", runId };
       }
       if (result.status === "running") {
-        throw new Error(`Run ${runId} did not settle`);
+        throw new Error(`Run ${runId} did not settle.`);
       }
       return { disposition: "ack", run: result };
     } catch (error) {

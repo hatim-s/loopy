@@ -1,6 +1,10 @@
 import { expect, test } from "bun:test";
-import { collectInputs, workflowInputs } from "../src/cli/inputs.ts";
-import { at, concat, eq, gt, node, trigger } from "../src/core/workflow.ts";
+import { workflowInputs } from "../src/cli/input-fields.ts";
+import { collectInputs } from "../src/cli/prompt.ts";
+import { at, concat, eq, gt, node, trigger } from "../src/core/index.ts";
+
+/** For prompts whose validation messages are not under test. */
+const ignoreWarning = () => undefined;
 
 test("branch choices and types preserve each valid alternative", async () => {
   const graph = trigger<{ count: number | string; color: string }>("alternatives")
@@ -29,21 +33,11 @@ test("branch choices and types preserve each valid alternative", async () => {
   ]);
   const answers = ["json:2", "blue"];
   expect(
-    await collectInputs(
-      graph,
-      {},
-      async () => answers.shift() as string,
-      () => {},
-    ),
+    await collectInputs(graph, {}, async () => answers.shift() as string, ignoreWarning),
   ).toEqual({ count: 2, color: "blue" });
   const other = ["none", "red"];
   expect(
-    await collectInputs(
-      graph,
-      {},
-      async () => other.shift() as string,
-      () => {},
-    ),
+    await collectInputs(graph, {}, async () => other.shift() as string, ignoreWarning),
   ).toEqual({ count: "none", color: "red" });
 });
 
@@ -69,7 +63,7 @@ test("a parent JSON answer supplies nested references without overwriting them",
         asks++;
         return 'json:{"name":"Ada"}';
       },
-      () => {},
+      ignoreWarning,
     ),
   ).toEqual({ data: { name: "Ada" } });
   expect(asks).toBe(1);
@@ -168,7 +162,7 @@ test("text, JSON, and prototype-named inputs stay safe", async () => {
     graph,
     {},
     async () => answers.shift() as string,
-    () => {},
+    ignoreWarning,
   );
   expect(Object.getPrototypeOf(input)).toBe(Object.prototype);
   expect(Object.hasOwn(input, "__proto__")).toBe(true);
@@ -189,7 +183,7 @@ test("cancellation rejects collection and graphs without inputs never ask", asyn
       async () => {
         throw new Error("cancelled");
       },
-      () => {},
+      ignoreWarning,
     ),
   ).rejects.toThrow("cancelled");
   const graph = trigger("no-input").node("noop", { program: "true", args: [] }).build();
@@ -200,7 +194,7 @@ test("cancellation rejects collection and graphs without inputs never ask", asyn
       async () => {
         throw new Error("unexpected prompt");
       },
-      () => {},
+      ignoreWarning,
     ),
   ).toEqual({});
 });

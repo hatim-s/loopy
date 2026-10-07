@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { command, trigger } from "../src/core/index.js";
 import type { ExecuteCommand, ExecutionMode } from "../src/core/model.js";
 import { localRunOptions } from "../src/local/process.js";
-import { Registry } from "../src/local/registry.js";
+import { Registry } from "../src/local/registry/registry.js";
 import { createLocalRuntime } from "../src/local/runtime.js";
 import { secretRedactor } from "../src/local/secret-executor.js";
 import { SecretStore } from "../src/local/secrets.js";

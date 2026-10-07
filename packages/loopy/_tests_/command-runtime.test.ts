@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defineCommand } from "../src/core/command.js";
-import { trigger } from "../src/core/workflow.js";
+import { trigger } from "../src/core/index.js";
 import { localRunOptions } from "../src/local/process.js";
 import { createLocalRuntime } from "../src/local/runtime.js";
 
