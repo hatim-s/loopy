@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
+import ts from "typescript";
 
 const SOURCE = resolve(import.meta.dir, "../src");
 const STUDIO = resolve(import.meta.dir, "../../../apps/studio/src");
@@ -34,13 +35,39 @@ function layerOf(file: string): Layer {
   return layer as Layer;
 }
 
-/**
- * Static imports, re-exports, side-effect imports and literal dynamic imports.
- * Template literals are dropped first: typegen renders import lines as text.
- */
+/** Static imports, re-exports, side-effect imports and literal dynamic imports, from the AST. */
 function importsOf(file: string): string[] {
-  const text = readFileSync(file, "utf8").replace(/`[^`]*`/g, "``");
-  return [...text.matchAll(/\b(?:from|import)\s*\(?\s*"([^"]+)"/g)].map((match) => match[1] ?? "");
+  const source = ts.createSourceFile(
+    file,
+    readFileSync(file, "utf8"),
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const specifiers: string[] = [];
+  const visit = (node: ts.Node): void => {
+    if (
+      (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
+      node.moduleSpecifier &&
+      ts.isStringLiteral(node.moduleSpecifier)
+    ) {
+      specifiers.push(node.moduleSpecifier.text);
+    } else if (
+      ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+      node.arguments[0] &&
+      ts.isStringLiteralLike(node.arguments[0])
+    ) {
+      specifiers.push(node.arguments[0].text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return specifiers;
+}
+
+/** True for `./index`, `./index.js` and `./index.ts` alike. */
+function isBarrel(specifier: string): boolean {
+  return /\/index(\.[jt]s)?$/.test(specifier);
 }
 
 test("authoring, runtime and cloud exports bundle without host dependencies", async () => {
@@ -67,14 +94,14 @@ test("layers import downward, and only through the target layer's index", () => 
       }
       const target = layerOf(resolve(file, "..", specifier));
       if (target === layer) {
-        if (/\/index(\.js)?$/.test(specifier)) {
+        if (isBarrel(specifier)) {
           violations.push(`${name} imports its own barrel (${specifier}).`);
         }
         continue;
       }
       if (!ALLOWED_IMPORTS[layer].includes(target)) {
         violations.push(`${name} (${layer}) may not import ${target} (${specifier}).`);
-      } else if (!specifier.endsWith(`/${target}/index.js`)) {
+      } else if (!isBarrel(specifier)) {
         violations.push(`${name} must import ${target} through ${target}/index.js (${specifier}).`);
       }
     }
