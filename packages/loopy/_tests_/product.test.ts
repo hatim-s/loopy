@@ -23,7 +23,9 @@ function directory() {
 }
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => server.stop()));
-  for (const path of temporary.splice(0)) rmSync(path, { recursive: true, force: true });
+  for (const path of temporary.splice(0)) {
+    rmSync(path, { recursive: true, force: true });
+  }
 });
 
 const cliPath = join(import.meta.dir, "../src/cli/index.ts");
@@ -128,7 +130,9 @@ test("local API requires authorization and origin checks, runs saved workflows, 
     detail = (await (
       await fetch(endpoint(`/runs/${run.id}`), { headers })
     ).json()) as typeof detail;
-    if (detail?.run.status === "succeeded") break;
+    if (detail?.run.status === "succeeded") {
+      break;
+    }
     await Bun.sleep(10);
   }
   expect(detail?.run.status).toBe("succeeded");

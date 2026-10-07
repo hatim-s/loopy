@@ -21,10 +21,114 @@
       "trailingCommas": "all"
     }
   },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true
+      "recommended": true,
+      "complexity": {
+        "noExcessiveCognitiveComplexity": {
+          "level": "warn",
+          "options": {
+            "maxAllowedComplexity": 20
+          }
+        },
+        "noUselessStringConcat": "error",
+        "useSimplifiedLogicExpression": "off"
+      },
+      "correctness": {
+        "noUnusedImports": "error",
+        "noUnusedVariables": "error",
+        "noUnusedFunctionParameters": "error",
+        "noUndeclaredDependencies": "off"
+      },
+      "style": {
+        "useBlockStatements": "error",
+        "useImportType": "error",
+        "useExportType": "error",
+        "useConst": "error",
+        "useTemplate": "error",
+        "noUselessElse": "error",
+        "useCollapsedElseIf": "error",
+        "noParameterAssign": "error",
+        "noNegationElse": "error",
+        "useNodejsImportProtocol": "error",
+        "useThrowOnlyError": "error",
+        "noInferrableTypes": "error",
+        "useConsistentArrayType": {
+          "level": "error",
+          "options": {
+            "syntax": "shorthand"
+          }
+        },
+        "useFilenamingConvention": {
+          "level": "error",
+          "options": {
+            "filenameCases": ["kebab-case"],
+            "requireAscii": true
+          }
+        }
+      },
+      "suspicious": {
+        "noExplicitAny": "error",
+        "noConsole": "error",
+        "noEmptyBlockStatements": "error",
+        "useAwait": "off"
+      }
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["packages/loopy/src/cli/**", "scripts/**", "examples/**"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/loopy/_tests_/**", "examples/**"],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noExcessiveCognitiveComplexity": "off"
+          },
+          "suspicious": {
+            "noConsole": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "packages/loopy/src/core/**",
+        "packages/loopy/src/runtime/**",
+        "packages/loopy/src/cloud/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "bun": "core, runtime and cloud stay portable: no Bun APIs.",
+                  "bun:sqlite": "core, runtime and cloud stay portable: no Bun APIs.",
+                  "bun:test": "core, runtime and cloud stay portable: no Bun APIs."
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

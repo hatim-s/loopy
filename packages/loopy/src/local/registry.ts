@@ -58,7 +58,9 @@ function canonical(path: string): string {
 function isSavedFile(
   value: unknown,
 ): value is { workflow: unknown; source: string; updatedAt: string; secretBindings?: unknown } {
-  if (!value || typeof value !== "object") return false;
+  if (!value || typeof value !== "object") {
+    return false;
+  }
   const record = value as Record<string, unknown>;
   return typeof record.source === "string" && typeof record.updatedAt === "string";
 }
@@ -73,8 +75,9 @@ class ScopedRegistry {
 
   private file(slug: string): string {
     // Slugs reach this from HTTP paths, so keep them from escaping the directory.
-    if (!/^[a-z0-9][a-z0-9-]{0,79}$/.test(slug))
+    if (!/^[a-z0-9][a-z0-9-]{0,79}$/.test(slug)) {
       throw new Error("A slug must contain 1-80 lowercase letters, numbers, or hyphens.");
+    }
     return join(this.directory, `${slug}.json`);
   }
 
@@ -87,14 +90,21 @@ class ScopedRegistry {
     try {
       value = JSON.parse(readFileSync(this.file(slug), "utf8"));
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT")
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         throw new Error(`No saved loopy '${slug}'. Use loopy save <file.ts> first.`);
+      }
       throw error;
     }
-    if (!isSavedFile(value)) throw new Error(`Invalid saved loopy '${slug}'.`);
+    if (!isSavedFile(value)) {
+      throw new Error(`Invalid saved loopy '${slug}'.`);
+    }
     validateWorkflow(value.workflow);
-    if (value.workflow.slug !== slug) throw new Error(`Saved loopy slug does not match '${slug}'.`);
-    if (value.secretBindings !== undefined) validateSecretBindings(value.secretBindings);
+    if (value.workflow.slug !== slug) {
+      throw new Error(`Saved loopy slug does not match '${slug}'.`);
+    }
+    if (value.secretBindings !== undefined) {
+      validateSecretBindings(value.secretBindings);
+    }
     return {
       workflow: value.workflow,
       source: value.source,
@@ -104,7 +114,9 @@ class ScopedRegistry {
   }
 
   list(): WorkflowSummary[] {
-    if (!existsSync(this.directory)) return [];
+    if (!existsSync(this.directory)) {
+      return [];
+    }
     return readdirSync(this.directory)
       .filter((name) => name.endsWith(".json"))
       .sort()
@@ -122,12 +134,15 @@ class ScopedRegistry {
   }
 
   assertOwner(slug: string, source: string, options: SaveOptions): void {
-    if (options.replace || !existsSync(this.file(slug))) return;
+    if (options.replace || !existsSync(this.file(slug))) {
+      return;
+    }
     const existing = this.get(slug).source;
-    if (existing !== source)
+    if (existing !== source) {
       throw new Error(
         `Slug '${slug}' belongs to '${existing}'. Rename the workflow slug or use --replace to transfer it to '${source}'.`,
       );
+    }
   }
 
   private locked<T>(slug: string, work: (file: string) => T): T {
@@ -137,10 +152,11 @@ class ScopedRegistry {
     try {
       mkdirSync(lock, { mode: 0o700 });
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "EEXIST")
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") {
         throw new Error(
           `Another save holds '${lock}'. If its process stopped, remove that lock directory and retry.`,
         );
+      }
       throw error;
     }
     try {
@@ -181,18 +197,22 @@ class ScopedRegistry {
 
   bindSecret(slug: string, environment: string, name?: string): SavedWorkflow {
     validateEnvironmentName(environment);
-    if (name !== undefined) validateSecretName(name);
+    if (name !== undefined) {
+      validateSecretName(name);
+    }
     return this.locked(slug, (file) => {
       const saved = this.get(slug);
       const env = { ...saved.secretBindings?.env };
-      if (name === undefined) delete env[environment];
-      else
+      if (name === undefined) {
+        delete env[environment];
+      } else {
         Object.defineProperty(env, environment, {
           value: name,
           enumerable: true,
           writable: true,
           configurable: true,
         });
+      }
       saved.secretBindings = { ownerId: saved.secretBindings?.ownerId ?? crypto.randomUUID(), env };
       saved.updatedAt = new Date().toISOString();
       return this.write(file, saved);
@@ -205,18 +225,23 @@ class ScopedRegistry {
     const module = (await import(`${pathToFileURL(source).href}?loopy=${crypto.randomUUID()}`)) as {
       default?: Parameters<typeof compileWorkflow>[0];
     };
-    if (!module.default)
+    if (!module.default) {
       throw new Error("A loopy file must default-export a workflow built with trigger(...).");
+    }
     return { workflow: compileWorkflow(module.default), source };
   }
 
   removeOwned(slug: string, source: string): void {
     const file = this.file(slug);
-    if (!existsSync(file) || this.get(slug).source !== canonical(source)) return;
+    if (!existsSync(file) || this.get(slug).source !== canonical(source)) {
+      return;
+    }
     const lock = `${file}.lock`;
     mkdirSync(lock, { mode: 0o700 });
     try {
-      if (this.get(slug).source === canonical(source)) rmSync(file);
+      if (this.get(slug).source === canonical(source)) {
+        rmSync(file);
+      }
     } finally {
       rmSync(lock, { recursive: true });
     }
@@ -226,9 +251,13 @@ class ScopedRegistry {
 function projectRoot(cwd: string): string {
   let directory = canonical(cwd);
   while (true) {
-    if (existsSync(join(directory, ".loopy", "workflows"))) return directory;
+    if (existsSync(join(directory, ".loopy", "workflows"))) {
+      return directory;
+    }
     const parent = dirname(directory);
-    if (parent === directory) return canonical(cwd);
+    if (parent === directory) {
+      return canonical(cwd);
+    }
     directory = parent;
   }
 }
@@ -251,12 +280,15 @@ export class Registry {
   }
 
   get(slug: string): SavedWorkflow {
-    if (this.local.has(slug)) return this.local.get(slug);
+    if (this.local.has(slug)) {
+      return this.local.get(slug);
+    }
     const saved = this.global.get(slug);
-    if (saved.workflow.config?.scope !== "global")
+    if (saved.workflow.config?.scope !== "global") {
       throw new Error(
         `Loopy '${slug}' has no global scope. Save its source again with explicit scope.`,
       );
+    }
     return saved;
   }
 
@@ -279,7 +311,9 @@ export class Registry {
         .filter((item) => item.scope === "global")
         .map((item) => [item.slug, item]),
     );
-    for (const item of this.local.list()) workflows.set(item.slug, item);
+    for (const item of this.local.list()) {
+      workflows.set(item.slug, item);
+    }
     return [...workflows.values()].sort((a, b) => a.slug.localeCompare(b.slug));
   }
 
@@ -295,8 +329,9 @@ export class Registry {
     other.removeOwned(workflow.slug, source);
     if (store === this.global) {
       const sourceProject = projectRoot(dirname(canonical(source)));
-      if (sourceProject !== this.project)
+      if (sourceProject !== this.project) {
         new ScopedRegistry(join(sourceProject, ".loopy")).removeOwned(workflow.slug, source);
+      }
     }
     return saved;
   }
@@ -308,24 +343,30 @@ export class Registry {
 
   async saveDirectory(directory: string, options: SaveOptions = {}): Promise<SavedWorkflow[]> {
     const root = realpathSync(resolve(directory));
-    if (!statSync(root).isDirectory()) throw new Error(`Not a directory: '${root}'.`);
+    if (!statSync(root).isDirectory()) {
+      throw new Error(`Not a directory: '${root}'.`);
+    }
     const files = findWorkflowFiles(root);
-    if (!files.length) throw new Error(`No *.loopy.ts files in '${root}'.`);
+    if (!files.length) {
+      throw new Error(`No *.loopy.ts files in '${root}'.`);
+    }
     const loaded: Loaded[] = [];
     const seen = new Map<string, string>();
     for (const file of files) {
       const item = await this.global.load(file);
       const previous = seen.get(item.workflow.slug);
-      if (previous)
+      if (previous) {
         throw new Error(
           `Duplicate slug '${item.workflow.slug}' in '${previous}' and '${item.source}'.`,
         );
+      }
       seen.set(item.workflow.slug, item.source);
       item.workflow = snapshotPaths(item.workflow, item.source);
       loaded.push(item);
     }
-    for (const { workflow, source } of loaded)
+    for (const { workflow, source } of loaded) {
       this.store(workflow).assertOwner(workflow.slug, source, options);
+    }
     return loaded.map(({ workflow, source }) => this.save(workflow, source, options));
   }
 }
@@ -335,9 +376,12 @@ function snapshotPaths(workflow: Workflow, source: string): Workflow {
   const base = dirname(source);
   const explicitRelative = (path: string) => path.startsWith("./") || path.startsWith("../");
   const value = (item: unknown, cwd: string): unknown => {
-    if (typeof item === "string")
+    if (typeof item === "string") {
       return global && explicitRelative(item) ? resolve(cwd, item) : item;
-    if (!item || typeof item !== "object") return item;
+    }
+    if (!item || typeof item !== "object") {
+      return item;
+    }
     if ("$file" in item) {
       const path = (item as { $file: string }).$file;
       return global ? resolve(cwd, path) : path;
@@ -363,17 +407,22 @@ function snapshotPaths(workflow: Workflow, source: string): Workflow {
       const command = node.command;
       const cwd = resolve(base, command.cwd ?? ".");
       if (global) {
-        if (command.cwd !== undefined) command.cwd = cwd;
-        if (isAbsolute(command.program) || command.program.includes("/"))
+        if (command.cwd !== undefined) {
+          command.cwd = cwd;
+        }
+        if (isAbsolute(command.program) || command.program.includes("/")) {
           command.program = resolve(cwd, command.program);
+        }
       }
       command.args = command.args.map((arg) => value(arg, cwd)) as typeof command.args;
-      if (command.stdin !== undefined)
+      if (command.stdin !== undefined) {
         command.stdin = value(command.stdin, cwd) as typeof command.stdin;
-      if (command.env)
+      }
+      if (command.env) {
         command.env = Object.fromEntries(
           Object.entries(command.env).map(([key, item]) => [key, value(item, cwd)]),
         ) as typeof command.env;
+      }
     }
   };
   walk(workflow.nodes);
@@ -388,10 +437,15 @@ function findWorkflowFiles(root: string): string[] {
       a.name.localeCompare(b.name),
     );
     for (const entry of entries) {
-      if (entry.name.startsWith(".") || SKIPPED_DIRECTORIES.includes(entry.name)) continue;
+      if (entry.name.startsWith(".") || SKIPPED_DIRECTORIES.includes(entry.name)) {
+        continue;
+      }
       const child = join(path, entry.name);
-      if (entry.isDirectory()) walk(child);
-      else if (entry.isFile() && entry.name.endsWith(".loopy.ts")) files.push(child);
+      if (entry.isDirectory()) {
+        walk(child);
+      } else if (entry.isFile() && entry.name.endsWith(".loopy.ts")) {
+        files.push(child);
+      }
     }
   };
   walk(root);

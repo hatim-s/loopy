@@ -29,7 +29,9 @@ function BranchArm({
 }
 
 function GraphSequence({ nodes, attempts, selectedId, onSelect, inactive = false }: SequenceProps) {
-  if (nodes.length === 0) return <div className="graph-empty">No steps</div>;
+  if (nodes.length === 0) {
+    return <div className="graph-empty">No steps</div>;
+  }
   return (
     <div className={`graph-sequence${inactive ? " graph-sequence-inactive" : ""}`}>
       {nodes.map((node, index) => {

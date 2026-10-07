@@ -42,8 +42,9 @@ export function latestAttempts(attempts: AttemptRecord[]): Map<string, AttemptRe
       !previous ||
       attempt.number > previous.number ||
       (attempt.number === previous.number && attempt.startedAt > previous.startedAt)
-    )
+    ) {
       byNode.set(attempt.nodeId, attempt);
+    }
   }
   return byNode;
 }
@@ -54,24 +55,31 @@ export function selectedBranch(attempt?: AttemptRecord): "then" | "else" | undef
     !attempt.output ||
     typeof attempt.output !== "object" ||
     Array.isArray(attempt.output)
-  )
+  ) {
     return;
+  }
   const branch = attempt.output.branch;
   return branch === "then" || branch === "else" ? branch : undefined;
 }
 
 export function outputText(output: Json | undefined, key: "stdout" | "stderr"): string | undefined {
-  if (!output || typeof output !== "object" || Array.isArray(output)) return;
+  if (!output || typeof output !== "object" || Array.isArray(output)) {
+    return;
+  }
   const value = output[key];
   return typeof value === "string" ? value : undefined;
 }
 
 export function findNode(nodes: WorkflowNode[], id: string): WorkflowNode | undefined {
   for (const node of nodes) {
-    if (node.id === id) return node;
+    if (node.id === id) {
+      return node;
+    }
     if (node.kind === "condition") {
       const child = findNode(node.then, id) ?? findNode(node.else, id);
-      if (child) return child;
+      if (child) {
+        return child;
+      }
     }
   }
 }

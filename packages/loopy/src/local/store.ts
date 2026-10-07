@@ -144,7 +144,9 @@ function eventFromRow(row: EventRow): RunEvent {
 
 /** True when the owning process is alive on this host. */
 function ownerAlive(row: RunRow): boolean {
-  if (!row.owner_token || !row.owner_pid || row.owner_host !== hostname()) return false;
+  if (!row.owner_token || !row.owner_pid || row.owner_host !== hostname()) {
+    return false;
+  }
   try {
     process.kill(row.owner_pid, 0);
     return true;
@@ -188,7 +190,9 @@ export class SqliteRunStore implements RunRepository {
 
   private requireRow(runId: string): RunRow {
     const row = this.row(runId);
-    if (!row) throw new Error(`Unknown run ${runId}`);
+    if (!row) {
+      throw new Error(`Unknown run ${runId}`);
+    }
     return row;
   }
 
@@ -234,8 +238,9 @@ export class SqliteRunStore implements RunRepository {
   }
 
   private assertOwner(runId: string, token: string): void {
-    if (!this.db.query("SELECT 1 FROM runs WHERE id=? AND owner_token=?").get(runId, token))
+    if (!this.db.query("SELECT 1 FROM runs WHERE id=? AND owner_token=?").get(runId, token)) {
       throw new RunBusyError(runId);
+    }
   }
 
   /** A dead owner cannot leave a run looking active or silently replay its command. */
@@ -243,7 +248,9 @@ export class SqliteRunStore implements RunRepository {
     const reason = "Execution owner stopped before recording a result";
     const rows = this.db.query<RunRow, []>("SELECT * FROM runs WHERE status='running'").all();
     for (const row of rows) {
-      if (ownerActive(row)) continue;
+      if (ownerActive(row)) {
+        continue;
+      }
       this.db.transaction(() => {
         const current = this.row(row.id);
         if (
@@ -251,8 +258,9 @@ export class SqliteRunStore implements RunRepository {
           current.status !== "running" ||
           current.owner_token !== row.owner_token ||
           ownerActive(current)
-        )
+        ) {
           return;
+        }
         const uncertainAttempts = this.abandonAttempts(row.id, reason);
         this.clearOwner(row.id, row.owner_token, "interrupted", reason);
         this.event(row.id, "run.interrupted", { uncertainAttempts });
@@ -266,11 +274,15 @@ export class SqliteRunStore implements RunRepository {
     return this.db.transaction(() => {
       const row = this.requireRow(runId);
       if (!row.owner_token) {
-        if (row.status === "interrupted") return runFromRow(row);
+        if (row.status === "interrupted") {
+          return runFromRow(row);
+        }
         throw new Error(`Run ${runId} has no owner to recover`);
       }
       if (!row.owner_host || row.owner_host === hostname()) {
-        if (ownerAlive(row)) throw new RunBusyError(runId);
+        if (ownerAlive(row)) {
+          throw new RunBusyError(runId);
+        }
         throw new Error(`Run ${runId} has no foreign owner to recover`);
       }
       const uncertainAttempts = this.abandonAttempts(
@@ -290,7 +302,9 @@ export class SqliteRunStore implements RunRepository {
         previousStatus: row.status,
         uncertainAttempts,
       });
-      if (row.status === "running") this.event(runId, "run.interrupted", { uncertainAttempts });
+      if (row.status === "running") {
+        this.event(runId, "run.interrupted", { uncertainAttempts });
+      }
       return runFromRow(this.requireRow(runId));
     })();
   }
@@ -358,14 +372,19 @@ export class SqliteRunStore implements RunRepository {
     return this.db.transaction(() => {
       const row = this.requireRow(runId);
       const terminal = row.status === "failed" || row.status === "interrupted";
-      if (row.status === "succeeded" || (options.resume === false && terminal))
+      if (row.status === "succeeded" || (options.resume === false && terminal)) {
         return runFromRow(row);
-      if (ownerActive(row)) throw new RunBusyError(runId);
+      }
+      if (ownerActive(row)) {
+        throw new RunBusyError(runId);
+      }
       const claimed = this.db.run(
         "UPDATE runs SET owner_token=?,owner_pid=?,owner_host=?,heartbeat_at=?,status='running',error=NULL,updated_at=? WHERE id=? AND owner_token IS ?",
         [token, process.pid, hostname(), now(), now(), runId, row.owner_token],
       );
-      if (claimed.changes !== 1) throw new RunBusyError(runId);
+      if (claimed.changes !== 1) {
+        throw new RunBusyError(runId);
+      }
       this.abandonAttempts(runId, "Previous process stopped before recording a result");
       this.event(runId, row.status === "pending" ? "run.started" : "run.resumed", {});
       return runFromRow(this.requireRow(runId));
@@ -426,7 +445,9 @@ export class SqliteRunStore implements RunRepository {
       const row = this.db
         .query<AttemptRow, [string, string]>("SELECT * FROM attempts WHERE id=? AND run_id=?")
         .get(attemptId, runId);
-      if (!row || row.status !== "running") throw new Error(`Attempt ${attemptId} is not running`);
+      if (!row || row.status !== "running") {
+        throw new Error(`Attempt ${attemptId} is not running`);
+      }
       const finished: AttemptRow = {
         ...row,
         status,

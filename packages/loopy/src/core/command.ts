@@ -94,32 +94,48 @@ type CommandCall<
 type LooseInput = CommandInput<readonly (CommandArgument | undefined)[], Record<string, unknown>>;
 
 function assertArgument(value: unknown, location: string): asserts value is CommandArgument {
-  if (typeof value === "string" || (typeof value === "number" && Number.isFinite(value))) return;
-  if (value && typeof value === "object" && ("$ref" in value || "$op" in value || "$file" in value))
+  if (typeof value === "string" || (typeof value === "number" && Number.isFinite(value))) {
     return;
+  }
+  if (
+    value &&
+    typeof value === "object" &&
+    ("$ref" in value || "$op" in value || "$file" in value)
+  ) {
+    return;
+  }
   throw new Error(`${location} must be a string, number, or workflow value`);
 }
 
 function validateDescriptor(descriptor: CommandDescriptor): void {
-  if (!descriptor.program.trim()) throw new Error("Command descriptor needs a program");
+  if (!descriptor.program.trim()) {
+    throw new Error("Command descriptor needs a program");
+  }
   const positionals = descriptor.positionals ?? [];
   let optionalSeen = false;
   for (const [index, part] of positionals.entries()) {
-    if (optionalSeen && !part.optional)
+    if (optionalSeen && !part.optional) {
       throw new Error("A required positional cannot follow an optional positional");
-    if (part.variadic && index !== positionals.length - 1)
+    }
+    if (part.variadic && index !== positionals.length - 1) {
       throw new Error("A variadic positional must be last");
-    if (part.optional) optionalSeen = true;
+    }
+    if (part.optional) {
+      optionalSeen = true;
+    }
   }
   const flags = Object.entries(descriptor.flags ?? {});
   for (const [key, flag] of flags) {
-    if (!/^--[a-zA-Z0-9][a-zA-Z0-9-]*$/.test(flag.cli))
+    if (!/^--[a-zA-Z0-9][a-zA-Z0-9-]*$/.test(flag.cli)) {
       throw new Error(`Flag '${key}' has an invalid CLI spelling`);
-    if (flag.attachedValue && (!flag.optionalValue || flag.kind === "boolean"))
+    }
+    if (flag.attachedValue && (!flag.optionalValue || flag.kind === "boolean")) {
       throw new Error(`Flag '${key}' has invalid attached-value metadata`);
+    }
   }
-  if (new Set(flags.map(([, flag]) => flag.cli)).size !== flags.length)
+  if (new Set(flags.map(([, flag]) => flag.cli)).size !== flags.length) {
     throw new Error("Command descriptor repeats a flag");
+  }
 }
 
 function checkArity(
@@ -128,10 +144,11 @@ function checkArity(
 ): void {
   const required = positionals.filter((part) => !part.optional).length;
   const variadic = positionals.some((part) => part.variadic);
-  if (args.length < required || (!variadic && args.length > positionals.length))
+  if (args.length < required || (!variadic && args.length > positionals.length)) {
     throw new Error(
       `Expected ${required}${variadic ? "+" : `-${positionals.length}`} positional arguments; received ${args.length}`,
     );
+  }
 }
 
 /** Appends one flag occurrence to argv and records the constraint its value must satisfy. */
@@ -143,7 +160,9 @@ function pushFlag(
   constraints: Record<number, ArgConstraint>,
 ): void {
   if (flag.kind === "boolean") {
-    if (item !== true) throw new Error(`Flag '${key}' must be boolean`);
+    if (item !== true) {
+      throw new Error(`Flag '${key}' must be boolean`);
+    }
     args.push(flag.cli);
     return;
   }
@@ -151,14 +170,20 @@ function pushFlag(
     args.push(flag.cli);
     return;
   }
-  if (typeof item === "boolean") throw new Error(`Flag '${key}' needs a value`);
+  if (typeof item === "boolean") {
+    throw new Error(`Flag '${key}' needs a value`);
+  }
   assertArgument(item, `Flag '${key}'`);
-  if (flag.kind === "number" && typeof item === "string")
+  if (flag.kind === "number" && typeof item === "string") {
     throw new Error(`Flag '${key}' must be numeric`);
-  if (flag.choices && typeof item === "string" && !flag.choices.includes(item))
+  }
+  if (flag.choices && typeof item === "string" && !flag.choices.includes(item)) {
     throw new Error(`Flag '${key}' must be one of ${flag.choices.join(", ")}`);
+  }
   const constraint: ArgConstraint = { kind: flag.kind };
-  if (flag.choices) constraint.choices = [...flag.choices];
+  if (flag.choices) {
+    constraint.choices = [...flag.choices];
+  }
   if (flag.attachedValue) {
     const prefix = `${flag.cli}=`;
     constraint.prefix = prefix;
@@ -178,21 +203,36 @@ export function defineCommand<const Descriptor extends CommandDescriptor>(descri
     const argConstraints: Record<number, ArgConstraint> = {};
     for (const [key, value] of Object.entries(input.flags ?? {})) {
       const flag = descriptor.flags?.[key];
-      if (!flag) throw new Error(`Unknown flag '${key}' for ${descriptor.program}`);
-      if (value === undefined || value === false) continue;
+      if (!flag) {
+        throw new Error(`Unknown flag '${key}' for ${descriptor.program}`);
+      }
+      if (value === undefined || value === false) {
+        continue;
+      }
       const items = flag.repeatable ? value : [value];
-      if (!Array.isArray(items)) throw new Error(`Flag '${key}' must be an array`);
-      for (const item of items) pushFlag(key, flag, item, args, argConstraints);
+      if (!Array.isArray(items)) {
+        throw new Error(`Flag '${key}' must be an array`);
+      }
+      for (const item of items) {
+        pushFlag(key, flag, item, args, argConstraints);
+      }
     }
     const provided = input.args ?? [];
     const positionals = provided.filter((value) => value !== undefined);
-    if (provided.slice(0, positionals.length).includes(undefined))
+    if (provided.slice(0, positionals.length).includes(undefined)) {
       throw new Error("Cannot omit a positional before a later positional");
-    if (descriptor.positionals) checkArity(positionals, descriptor.positionals);
-    if (positionals.length && descriptor.positionalSeparator !== false) args.push("--");
+    }
+    if (descriptor.positionals) {
+      checkArity(positionals, descriptor.positionals);
+    }
+    if (positionals.length && descriptor.positionalSeparator !== false) {
+      args.push("--");
+    }
     for (const [index, value] of positionals.entries()) {
       assertArgument(value, `Argument ${index + 1}`);
-      if (descriptor.positionals) argConstraints[args.length] = { kind: "string" };
+      if (descriptor.positionals) {
+        argConstraints[args.length] = { kind: "string" };
+      }
       args.push(value);
     }
     return {
@@ -210,8 +250,12 @@ export function defineCommand<const Descriptor extends CommandDescriptor>(descri
 }
 
 export function command(program: string, ...args: CommandArgument[]): Command {
-  if (!program.trim()) throw new Error("Command needs a program");
-  for (const [index, value] of args.entries()) assertArgument(value, `Argument ${index + 1}`);
+  if (!program.trim()) {
+    throw new Error("Command needs a program");
+  }
+  for (const [index, value] of args.entries()) {
+    assertArgument(value, `Argument ${index + 1}`);
+  }
   return { program, args };
 }
 

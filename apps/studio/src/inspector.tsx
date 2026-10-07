@@ -68,7 +68,7 @@ export function NodeInspector({
   node: WorkflowNode | undefined;
   detail: RunDetail | null;
 }) {
-  if (!node)
+  if (!node) {
     return (
       <section className="inspector-section">
         <div className="section-heading">
@@ -77,6 +77,7 @@ export function NodeInspector({
         <p className="empty-note">Select a step in the graph to see its definition.</p>
       </section>
     );
+  }
   const attempts = detail?.attempts.filter((attempt) => attempt.nodeId === node.id) ?? [];
   return (
     <section className="inspector-section">

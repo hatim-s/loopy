@@ -22,8 +22,9 @@ export { validateSecretName } from "../core/secret-bindings.js";
 const MAX_VALUE_BYTES = 64 * 1024;
 
 export function validateSecretValue(value: string): void {
-  if (!value || value.includes("\0") || Buffer.byteLength(value) > MAX_VALUE_BYTES)
+  if (!value || value.includes("\0") || Buffer.byteLength(value) > MAX_VALUE_BYTES) {
     throw new Error("A secret must be nonempty, contain no NUL bytes, and fit within 64 KiB.");
+  }
 }
 
 /** Keep default secrets outside the versioned graph store; custom homes stay isolated. */
@@ -33,8 +34,9 @@ export function secretDirectory(home = defaultHome()): string {
 }
 
 function owned(stats: ReturnType<typeof fstatSync>, label: string): void {
-  if (process.getuid && stats.uid !== process.getuid())
+  if (process.getuid && stats.uid !== process.getuid()) {
     throw new Error(`${label} must be owned by the current user.`);
+  }
 }
 
 /** Plaintext storage protected by user-only permissions. No values are printed by the CLI. */
@@ -48,16 +50,21 @@ export class SecretStore {
   }
 
   private directoryExists(create: boolean): boolean {
-    if (create) mkdirSync(this.directory, { recursive: true, mode: 0o700 });
+    if (create) {
+      mkdirSync(this.directory, { recursive: true, mode: 0o700 });
+    }
     let stats: ReturnType<typeof lstatSync>;
     try {
       stats = lstatSync(this.directory);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return false;
+      }
       throw error;
     }
-    if (!stats.isDirectory() || stats.isSymbolicLink())
+    if (!stats.isDirectory() || stats.isSymbolicLink()) {
       throw new Error("The secret directory must be a real directory, not a symlink.");
+    }
     owned(stats, "The secret directory");
     const fd = openSync(this.directory, constants.O_RDONLY | constants.O_NOFOLLOW);
     try {
@@ -69,19 +76,24 @@ export class SecretStore {
   }
 
   snapshot(): Record<string, string> {
-    if (!this.directoryExists(false)) return {};
+    if (!this.directoryExists(false)) {
+      return {};
+    }
     let fd: number;
     try {
       fd = openSync(this.file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return {};
+      }
       throw new Error("Cannot open the secret store. It must be a regular file, not a symlink.");
     }
     let value: unknown;
     try {
       const stats = fstatSync(fd);
-      if (!stats.isFile() || stats.nlink !== 1)
+      if (!stats.isFile() || stats.nlink !== 1) {
         throw new Error("The secret store must be a regular file with no hard links.");
+      }
       owned(stats, "The secret store");
       fchmodSync(fd, 0o600);
       try {
@@ -92,12 +104,15 @@ export class SecretStore {
     } finally {
       closeSync(fd);
     }
-    if (!value || typeof value !== "object" || Array.isArray(value))
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
       throw new Error("Invalid secret store format.");
+    }
     const entries = Object.entries(value);
     for (const [name, secret] of entries) {
       validateSecretName(name);
-      if (typeof secret !== "string") throw new Error("Invalid secret store value.");
+      if (typeof secret !== "string") {
+        throw new Error("Invalid secret store value.");
+      }
       validateSecretValue(secret);
     }
     return Object.fromEntries(entries) as Record<string, string>;
@@ -110,8 +125,9 @@ export class SecretStore {
   get(name: string): string {
     validateSecretName(name);
     const values = this.snapshot();
-    if (!Object.hasOwn(values, name))
+    if (!Object.hasOwn(values, name)) {
       throw new Error(`No stored secret '${name}'. Use loopy secrets set ${name}.`);
+    }
     return values[name] as string;
   }
 
@@ -121,10 +137,11 @@ export class SecretStore {
     try {
       mkdirSync(lock, { mode: 0o700 });
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "EEXIST")
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") {
         throw new Error(
           `Another secret update holds '${lock}'. If its process stopped, remove that lock directory and retry.`,
         );
+      }
       throw error;
     }
     const temporary = join(this.directory, `.secrets-${crypto.randomUUID()}.tmp`);

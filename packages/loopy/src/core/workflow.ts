@@ -33,9 +33,13 @@ function reference<T>(source: ReferenceSource, path: string[]): Reference<T> {
 function referenceTree<T>(source: ReferenceSource, path: string[] = []): T {
   return new Proxy(Object.create(null) as T & object, {
     get(_target, key) {
-      if (typeof key !== "string") return undefined;
+      if (typeof key !== "string") {
+        return undefined;
+      }
       const next = [...path, key];
-      if (source === "steps" && path.length === 0) return referenceTree(source, next);
+      if (source === "steps" && path.length === 0) {
+        return referenceTree(source, next);
+      }
       return reference(source, next);
     },
   });
@@ -57,8 +61,9 @@ export function at<T, Key extends keyof T & string>(
   key: Key,
 ): Reference<T[Key]>;
 export function at(source: Reference<unknown>, key: string | number): Reference<unknown> {
-  if (typeof key === "number" && (!Number.isSafeInteger(key) || key < 0))
+  if (typeof key === "number" && (!Number.isSafeInteger(key) || key < 0)) {
     throw new Error("Array reference index must be a nonnegative integer");
+  }
   return reference(source.$ref.source, [...source.$ref.path, String(key)]);
 }
 
@@ -88,7 +93,9 @@ export const concat = (...parts: Value<string | number>[]): Expression<string> =
   expression("concat", ...parts);
 
 export function file(path: string): FilePath {
-  if (!path.trim()) throw new Error("File path is required");
+  if (!path.trim()) {
+    throw new Error("File path is required");
+  }
   return { $file: path };
 }
 
@@ -180,31 +187,38 @@ const arity: Record<Operator, number | "variadic"> = {
 };
 
 function requireRecord(value: unknown, location: string): Record<string, unknown> {
-  if (value === null || typeof value !== "object" || Array.isArray(value))
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`${location} must be an object`);
+  }
   return value as Record<string, unknown>;
 }
 
 function allowKeys(value: Record<string, unknown>, location: string, allowed: string[]): void {
-  for (const key of Object.keys(value))
-    if (!allowed.includes(key)) throw new Error(`${location} has an unsupported field '${key}'`);
+  for (const key of Object.keys(value)) {
+    if (!allowed.includes(key)) {
+      throw new Error(`${location} has an unsupported field '${key}'`);
+    }
+  }
 }
 
 function validateReference(ref: unknown, location: string, visible: ReadonlySet<string>): void {
   const record = requireRecord(ref, location);
   allowKeys(record, location, ["source", "path"]);
-  if (record.source !== "input" && record.source !== "steps")
+  if (record.source !== "input" && record.source !== "steps") {
     throw new Error(`${location} has an invalid reference source`);
+  }
   const path = record.path;
   const minimum = record.source === "steps" ? 2 : 1;
   if (
     !Array.isArray(path) ||
     path.length < minimum ||
     !path.every((p) => typeof p === "string" && p)
-  )
+  ) {
     throw new Error(`${location} has an invalid reference path`);
-  if (record.source === "steps" && !visible.has(path[0] as string))
+  }
+  if (record.source === "steps" && !visible.has(path[0] as string)) {
     throw new Error(`${location} references a step that is not available yet: ${path[0]}`);
+  }
 }
 
 /** Accepts a JSON scalar, a reference to visible data, or an expression over those. */
@@ -214,16 +228,25 @@ function validateValue(
   visible: ReadonlySet<string>,
   depth = 0,
 ): void {
-  if (depth > maxDepth) throw new Error(`${location} is too deeply nested`);
-  if (value === null || typeof value === "string" || typeof value === "boolean") return;
-  if (typeof value === "number" && Number.isFinite(value)) return;
+  if (depth > maxDepth) {
+    throw new Error(`${location} is too deeply nested`);
+  }
+  if (value === null || typeof value === "string" || typeof value === "boolean") {
+    return;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return;
+  }
   const invalid = new Error(`${location} must be a literal, reference, or expression`);
-  if (typeof value !== "object" || Array.isArray(value)) throw invalid;
+  if (typeof value !== "object" || Array.isArray(value)) {
+    throw invalid;
+  }
   const item = value as Record<string, unknown>;
   if ("$file" in item) {
     allowKeys(item, location, ["$file"]);
-    if (typeof item.$file !== "string" || !item.$file.trim())
+    if (typeof item.$file !== "string" || !item.$file.trim()) {
       throw new Error(`${location} has an invalid file path`);
+    }
     return;
   }
   if ("$ref" in item) {
@@ -231,15 +254,20 @@ function validateValue(
     validateReference(item.$ref, `${location}.$ref`, visible);
     return;
   }
-  if (!("$op" in item)) throw invalid;
+  if (!("$op" in item)) {
+    throw invalid;
+  }
   allowKeys(item, location, ["$op", "args"]);
   const expected = arity[item.$op as Operator];
-  if (!expected || !Array.isArray(item.args))
+  if (!expected || !Array.isArray(item.args)) {
     throw new Error(`${location} has an invalid expression`);
-  if (expected === "variadic" ? item.args.length < 1 : item.args.length !== expected)
+  }
+  if (expected === "variadic" ? item.args.length < 1 : item.args.length !== expected) {
     throw new Error(`${location} has the wrong number of operands`);
-  for (const [index, arg] of item.args.entries())
+  }
+  for (const [index, arg] of item.args.entries()) {
     validateValue(arg, `${location}.args[${index}]`, visible, depth + 1);
+  }
 }
 
 function validateArgConstraints(raw: unknown, args: unknown[], command: string): void {
@@ -247,12 +275,14 @@ function validateArgConstraints(raw: unknown, args: unknown[], command: string):
   const constraints = requireRecord(raw, location);
   for (const [index, value] of Object.entries(constraints)) {
     const here = `${location}.${index}`;
-    if (!indexPattern.test(index) || Number(index) >= args.length)
+    if (!indexPattern.test(index) || Number(index) >= args.length) {
       throw new Error(`${location} has an invalid argument index '${index}'`);
+    }
     const constraint = requireRecord(value, here);
     allowKeys(constraint, here, ["kind", "choices", "prefix"]);
-    if (constraint.kind !== "string" && constraint.kind !== "number")
+    if (constraint.kind !== "string" && constraint.kind !== "number") {
       throw new Error(`${here}.kind is invalid`);
+    }
     const { choices, prefix } = constraint;
     if (
       choices !== undefined &&
@@ -260,10 +290,15 @@ function validateArgConstraints(raw: unknown, args: unknown[], command: string):
         !Array.isArray(choices) ||
         !choices.length ||
         !choices.every((choice) => typeof choice === "string"))
-    )
+    ) {
       throw new Error(`${here}.choices is invalid`);
-    if (prefix === undefined) continue;
-    if (typeof prefix !== "string" || !prefix) throw new Error(`${here}.prefix is invalid`);
+    }
+    if (prefix === undefined) {
+      continue;
+    }
+    if (typeof prefix !== "string" || !prefix) {
+      throw new Error(`${here}.prefix is invalid`);
+    }
     // An attached flag must be stored as concat(prefix, value) so the runtime can check the value alone.
     const attached = requireRecord(args[Number(index)], `${command}.args[${index}]`);
     if (
@@ -271,8 +306,9 @@ function validateArgConstraints(raw: unknown, args: unknown[], command: string):
       !Array.isArray(attached.args) ||
       attached.args.length !== 2 ||
       attached.args[0] !== prefix
-    )
+    ) {
       throw new Error(`${here} has no matching value`);
+    }
   }
 }
 
@@ -288,26 +324,37 @@ function validateCommand(raw: unknown, location: string, visible: ReadonlySet<st
     "timeoutMs",
     "maxOutputBytes",
   ]);
-  if (typeof command.program !== "string" || !command.program.trim())
+  if (typeof command.program !== "string" || !command.program.trim()) {
     throw new Error(`${location}.program is required`);
-  if (!Array.isArray(command.args)) throw new Error(`${location}.args must be an array`);
-  for (const [index, arg] of command.args.entries())
+  }
+  if (!Array.isArray(command.args)) {
+    throw new Error(`${location}.args must be an array`);
+  }
+  for (const [index, arg] of command.args.entries()) {
     validateValue(arg, `${location}.args[${index}]`, visible);
-  if (command.argConstraints !== undefined)
+  }
+  if (command.argConstraints !== undefined) {
     validateArgConstraints(command.argConstraints, command.args, location);
-  if (command.stdin !== undefined) validateValue(command.stdin, `${location}.stdin`, visible);
+  }
+  if (command.stdin !== undefined) {
+    validateValue(command.stdin, `${location}.stdin`, visible);
+  }
   if (command.env !== undefined) {
     for (const [key, value] of Object.entries(requireRecord(command.env, `${location}.env`))) {
-      if (!envKeyPattern.test(key)) throw new Error(`Invalid environment key '${key}'`);
+      if (!envKeyPattern.test(key)) {
+        throw new Error(`Invalid environment key '${key}'`);
+      }
       validateValue(value, `${location}.env.${key}`, visible);
     }
   }
-  if (command.cwd !== undefined && typeof command.cwd !== "string")
+  if (command.cwd !== undefined && typeof command.cwd !== "string") {
     throw new Error(`${location}.cwd must be a string`);
+  }
   for (const key of ["timeoutMs", "maxOutputBytes"] as const) {
     const limit = command[key];
-    if (limit !== undefined && (!Number.isSafeInteger(limit) || (limit as number) < 1))
+    if (limit !== undefined && (!Number.isSafeInteger(limit) || (limit as number) < 1)) {
       throw new Error(`${location}.${key} must be a positive integer`);
+    }
   }
 }
 
@@ -322,14 +369,21 @@ function validateNodes(
   location: string,
   depth = 0,
 ): void {
-  if (depth > maxDepth) throw new Error("Workflow branches are too deeply nested");
-  if (!Array.isArray(nodes) || nodes.length === 0) throw new Error(`${location} must have nodes`);
+  if (depth > maxDepth) {
+    throw new Error("Workflow branches are too deeply nested");
+  }
+  if (!Array.isArray(nodes) || nodes.length === 0) {
+    throw new Error(`${location} must have nodes`);
+  }
   for (const [index, raw] of nodes.entries()) {
     const path = `${location}[${index}]`;
     const item = requireRecord(raw, path);
-    if (typeof item.id !== "string" || !idPattern.test(item.id))
+    if (typeof item.id !== "string" || !idPattern.test(item.id)) {
       throw new Error(`${path}.id must start with a letter and contain letters, numbers, _ or -`);
-    if (ids.has(item.id)) throw new Error(`Duplicate workflow node id '${item.id}'`);
+    }
+    if (ids.has(item.id)) {
+      throw new Error(`Duplicate workflow node id '${item.id}'`);
+    }
     ids.add(item.id);
     if (item.kind === "command") {
       allowKeys(item, path, ["id", "kind", "command"]);
@@ -350,16 +404,21 @@ function validateNodes(
 export function validateWorkflow(value: unknown): asserts value is Workflow {
   const workflow = requireRecord(value, "Workflow");
   allowKeys(workflow, "Workflow", ["version", "slug", "description", "config", "nodes"]);
-  if (workflow.version !== 1) throw new Error("Unsupported workflow version");
-  if (typeof workflow.slug !== "string" || !slugPattern.test(workflow.slug))
+  if (workflow.version !== 1) {
+    throw new Error("Unsupported workflow version");
+  }
+  if (typeof workflow.slug !== "string" || !slugPattern.test(workflow.slug)) {
     throw new Error("Workflow slug must use lowercase letters, numbers and hyphens");
-  if (workflow.description !== undefined && typeof workflow.description !== "string")
+  }
+  if (workflow.description !== undefined && typeof workflow.description !== "string") {
     throw new Error("Workflow description must be a string");
+  }
   if (workflow.config !== undefined) {
     const config = requireRecord(workflow.config, "Workflow.config");
     allowKeys(config, "Workflow.config", ["scope"]);
-    if (config.scope !== "project" && config.scope !== "global")
+    if (config.scope !== "project" && config.scope !== "global") {
       throw new Error("Workflow.config.scope must be project or global");
+    }
   }
   validateNodes(workflow.nodes, new Set(), new Set(), "Workflow.nodes");
 }

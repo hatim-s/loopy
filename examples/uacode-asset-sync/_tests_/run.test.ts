@@ -17,7 +17,7 @@ function fixture(options: { missingScript?: boolean; dirty?: boolean; movedHead?
     calls.push({ args, cwd, stdin });
     if (args[0] === "codex") {
       const summaryPath = args[args.indexOf("--output-last-message") + 1];
-      if (summaryPath)
+      if (summaryPath) {
         await Bun.write(
           summaryPath,
           JSON.stringify({
@@ -25,13 +25,23 @@ function fixture(options: { missingScript?: boolean; dirty?: boolean; movedHead?
             checks: ["sync-preview"],
           }),
         );
+      }
     }
-    if (args[1] === "remote") return "git@github.com:unify-apps/uacode.git\n";
-    if (args[1] === "rev-parse" && args[2] === "--abbrev-ref") return "HEAD";
-    if (args[1] === "rev-parse")
+    if (args[1] === "remote") {
+      return "git@github.com:unify-apps/uacode.git\n";
+    }
+    if (args[1] === "rev-parse" && args[2] === "--abbrev-ref") {
+      return "HEAD";
+    }
+    if (args[1] === "rev-parse") {
       return options.movedHead && args[2] === "HEAD" ? "b".repeat(40) : base;
-    if (args[1] === "cat-file" && options.missingScript) throw new Error("missing");
-    if (args[1] === "status") return options.dirty ? " M forbidden.txt\n" : "";
+    }
+    if (args[1] === "cat-file" && options.missingScript) {
+      throw new Error("missing");
+    }
+    if (args[1] === "status") {
+      return options.dirty ? " M forbidden.txt\n" : "";
+    }
     return "";
   };
   return { exec, calls };
@@ -99,7 +109,9 @@ test("dry-run violations fail and retain the worktree for inspection", async () 
     await expect(run(parseRequest({ ...input, dryRun: true }), f.exec)).rejects.toThrow();
     expect(f.calls.some(({ args }) => args[1] === "worktree" && args[2] === "remove")).toBe(false);
     const worktree = f.calls.find(({ args }) => args[0] === "codex")?.cwd;
-    if (worktree) await rm(worktree.replace(/\/worktree$/, ""), { recursive: true, force: true });
+    if (worktree) {
+      await rm(worktree.replace(/\/worktree$/, ""), { recursive: true, force: true });
+    }
     expect(f.calls.some(({ args }) => args[0] === "gh")).toBe(false);
   }
 });
@@ -120,7 +132,9 @@ test("real local Git isolates a dirty checkout and unregisters the successful wo
   await mkdir(repository);
   const git = (args: string[], cwd = repository) => {
     const result = Bun.spawnSync(["git", ...args], { cwd, stdout: "pipe", stderr: "pipe" });
-    if (result.exitCode !== 0) throw new Error(`Fixture git failed: ${args[0]}`);
+    if (result.exitCode !== 0) {
+      throw new Error(`Fixture git failed: ${args[0]}`);
+    }
     return result.stdout.toString();
   };
   try {
@@ -140,14 +154,17 @@ test("real local Git isolates a dirty checkout and unregisters the successful wo
     const before = git(["status", "--porcelain"]);
     let isolated = "";
     const exec: Execute = async (args, cwd) => {
-      if (args[0] === "git" && args[1] === "remote") return "git@github.com:unify-apps/uacode.git";
+      if (args[0] === "git" && args[1] === "remote") {
+        return "git@github.com:unify-apps/uacode.git";
+      }
       if (args[0] === "codex") {
         isolated = cwd;
         expect(await Bun.file(join(cwd, "local.txt")).text()).toBe("original\n");
         expect(git(["status", "--porcelain"], cwd)).toBe("");
         const summaryPath = args[args.indexOf("--output-last-message") + 1];
-        if (summaryPath)
+        if (summaryPath) {
           await Bun.write(summaryPath, '{"proposedFiles":[],"checks":["sync-preview"]}');
+        }
         return "";
       }
       return git(args.slice(1), cwd);

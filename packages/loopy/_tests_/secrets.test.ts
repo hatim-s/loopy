@@ -21,8 +21,9 @@ function setup() {
   return { directory, store: new SecretStore(join(directory, "home")) };
 }
 afterEach(() => {
-  for (const directory of directories.splice(0))
+  for (const directory of directories.splice(0)) {
     rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test("private CRUD preserves other secrets and lists names only", () => {

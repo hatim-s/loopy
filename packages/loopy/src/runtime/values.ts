@@ -10,23 +10,39 @@ export function assertJson(
   seen = new Set<object>(),
   depth = 0,
 ): asserts value is Json {
-  if (depth > maxDepth) throw new Error(`${path} is too deeply nested`);
-  if (value === null || typeof value === "string" || typeof value === "boolean") return;
-  if (typeof value === "number" && Number.isFinite(value)) return;
-  if (!value || typeof value !== "object") throw new Error(`${path} must be JSON data`);
-  if (seen.has(value)) throw new Error(`${path} contains a cycle`);
+  if (depth > maxDepth) {
+    throw new Error(`${path} is too deeply nested`);
+  }
+  if (value === null || typeof value === "string" || typeof value === "boolean") {
+    return;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return;
+  }
+  if (!value || typeof value !== "object") {
+    throw new Error(`${path} must be JSON data`);
+  }
+  if (seen.has(value)) {
+    throw new Error(`${path} contains a cycle`);
+  }
   const prototype = Object.getPrototypeOf(value);
-  if (!Array.isArray(value) && prototype !== Object.prototype && prototype !== null)
+  if (!Array.isArray(value) && prototype !== Object.prototype && prototype !== null) {
     throw new Error(`${path} must be a plain JSON object`);
+  }
   if (Array.isArray(value)) {
-    for (let index = 0; index < value.length; index += 1)
-      if (!Object.hasOwn(value, index)) throw new Error(`${path} cannot contain array holes`);
-    if (Object.keys(value).length !== value.length)
+    for (let index = 0; index < value.length; index += 1) {
+      if (!Object.hasOwn(value, index)) {
+        throw new Error(`${path} cannot contain array holes`);
+      }
+    }
+    if (Object.keys(value).length !== value.length) {
       throw new Error(`${path} cannot contain extra array properties`);
+    }
   }
   seen.add(value);
-  for (const [key, child] of Object.entries(value))
+  for (const [key, child] of Object.entries(value)) {
     assertJson(child, `${path}.${key}`, seen, depth + 1);
+  }
   seen.delete(value);
 }
 
@@ -35,8 +51,9 @@ function pathValue(value: Json, path: readonly string[], label: string): Json {
   for (const key of path) {
     if (Array.isArray(current)) {
       const index = Number(key);
-      if (!Number.isInteger(index) || index < 0 || index >= current.length)
+      if (!Number.isInteger(index) || index < 0 || index >= current.length) {
         throw new Error(`Missing ${label}.${key}`);
+      }
       current = current[index] as Json;
     } else if (current && typeof current === "object" && Object.hasOwn(current, key)) {
       current = current[key] as Json;
@@ -65,24 +82,30 @@ function evaluate(op: unknown, values: Json[]): Json {
     case "gte":
     case "lt":
     case "lte":
-      if (typeof first !== "number" || typeof second !== "number")
+      if (typeof first !== "number" || typeof second !== "number") {
         throw new Error(`${op} requires numbers`);
+      }
       return compare[op](first, second);
     case "and":
     case "or":
-      if (values.some((item) => typeof item !== "boolean"))
+      if (values.some((item) => typeof item !== "boolean")) {
         throw new Error(`${op} requires booleans`);
+      }
       return op === "and" ? values.every(Boolean) : values.some(Boolean);
     case "not":
-      if (typeof first !== "boolean") throw new Error("not requires a boolean");
+      if (typeof first !== "boolean") {
+        throw new Error("not requires a boolean");
+      }
       return !first;
     case "contains":
-      if (typeof first !== "string" || typeof second !== "string")
+      if (typeof first !== "string" || typeof second !== "string") {
         throw new Error("contains requires strings");
+      }
       return first.includes(second);
     case "concat":
-      if (values.some((item) => typeof item !== "string" && typeof item !== "number"))
+      if (values.some((item) => typeof item !== "string" && typeof item !== "number")) {
         throw new Error("concat requires strings or numbers");
+      }
       return values.join("");
     default:
       throw new Error(`Unsupported expression ${String(op)}`);
@@ -91,26 +114,43 @@ function evaluate(op: unknown, values: Json[]): Json {
 
 /** Replaces references and expressions inside a persisted value with run data. */
 export function resolveValue(value: unknown, input: Json, outputs: Outputs): Json {
-  if (value === null || typeof value === "string" || typeof value === "boolean") return value;
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) throw new Error("Workflow value must be finite");
+  if (value === null || typeof value === "string" || typeof value === "boolean") {
     return value;
   }
-  if (Array.isArray(value)) return value.map((item) => resolveValue(item, input, outputs));
-  if (!value || typeof value !== "object") throw new Error("Unsupported workflow value");
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      throw new Error("Workflow value must be finite");
+    }
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => resolveValue(item, input, outputs));
+  }
+  if (!value || typeof value !== "object") {
+    throw new Error("Unsupported workflow value");
+  }
   const record = value as Record<string, unknown>;
-  if ("$file" in record && typeof record.$file === "string") return record.$file;
+  if ("$file" in record && typeof record.$file === "string") {
+    return record.$file;
+  }
   if ("$ref" in record) {
     const ref = record.$ref as { source: "input" | "steps"; path: string[] };
-    if (!Array.isArray(ref.path) || ref.path.some((part) => typeof part !== "string"))
+    if (!Array.isArray(ref.path) || ref.path.some((part) => typeof part !== "string")) {
       throw new Error("Invalid workflow reference path");
-    if (ref.source === "input") return pathValue(input, ref.path, "input");
+    }
+    if (ref.source === "input") {
+      return pathValue(input, ref.path, "input");
+    }
     const [step, ...path] = ref.path;
-    if (!step || !outputs.has(step)) throw new Error(`Output for ${step ?? "step"} is unavailable`);
+    if (!step || !outputs.has(step)) {
+      throw new Error(`Output for ${step ?? "step"} is unavailable`);
+    }
     return pathValue(outputs.get(step) as Json, path, `steps.${step}`);
   }
   if ("$op" in record) {
-    if (!Array.isArray(record.args)) throw new Error("Expression args must be an array");
+    if (!Array.isArray(record.args)) {
+      throw new Error("Expression args must be an array");
+    }
     return evaluate(
       record.$op,
       record.args.map((arg) => resolveValue(arg, input, outputs)),
@@ -122,7 +162,9 @@ export function resolveValue(value: unknown, input: Json, outputs: Outputs): Jso
 }
 
 function stringValue(value: Json, label: string): string {
-  if (typeof value === "string" || typeof value === "number") return String(value);
+  if (typeof value === "string" || typeof value === "number") {
+    return String(value);
+  }
   throw new Error(`${label} must resolve to a string or number`);
 }
 
@@ -144,16 +186,20 @@ function checkConstraint(
       attached.$op !== "concat" ||
       attached.args?.length !== 2 ||
       attached.args[0] !== constraint.prefix
-    )
+    ) {
       throw new Error(`${label} has an invalid attached flag`);
-    if (typeof value !== "string" || !value.startsWith(constraint.prefix))
+    }
+    if (typeof value !== "string" || !value.startsWith(constraint.prefix)) {
       throw new Error(`${label} must start with ${constraint.prefix}`);
+    }
     checked = resolveValue(attached.args[1], input, outputs);
   }
-  if (typeof checked !== constraint.kind)
+  if (typeof checked !== constraint.kind) {
     throw new Error(`${label} must resolve to a ${constraint.kind}`);
-  if (constraint.choices && typeof checked === "string" && !constraint.choices.includes(checked))
+  }
+  if (constraint.choices && typeof checked === "string" && !constraint.choices.includes(checked)) {
     throw new Error(`${label} must be one of ${constraint.choices.join(", ")}`);
+  }
 }
 
 export function resolveCommand(node: CommandNode, input: Json, outputs: Outputs): ResolvedCommand {
@@ -162,7 +208,9 @@ export function resolveCommand(node: CommandNode, input: Json, outputs: Outputs)
     const label = `Argument ${index + 1}`;
     const value = resolveValue(arg, input, outputs);
     const constraint = source.argConstraints?.[index];
-    if (constraint) checkConstraint(arg, value, constraint, label, input, outputs);
+    if (constraint) {
+      checkConstraint(arg, value, constraint, label, input, outputs);
+    }
     return stringValue(value, label);
   });
   const env = source.env

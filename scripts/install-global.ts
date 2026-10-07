@@ -9,7 +9,9 @@ async function run(args: string[], cwd = root) {
     stdout: "inherit",
     stderr: "inherit",
   });
-  if ((await child.exited) !== 0) throw new Error(`Failed: bun ${args.join(" ")}`);
+  if ((await child.exited) !== 0) {
+    throw new Error(`Failed: bun ${args.join(" ")}`);
+  }
 }
 
 await run(["run", "build"]);

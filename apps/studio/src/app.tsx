@@ -38,14 +38,18 @@ export function App() {
     let cancelled = false;
     void Promise.all([endpoints.workflows(), endpoints.config()])
       .then(([items, config]) => {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         setSummaries(items);
         setCwd(config.cwd);
         const requested = new URLSearchParams(window.location.search).get("workflow");
         setSlug(items.find((item) => item.slug === requested)?.slug ?? items[0]?.slug ?? null);
       })
       .catch((cause: unknown) => {
-        if (!cancelled) fail(cause);
+        if (!cancelled) {
+          fail(cause);
+        }
       });
     return () => {
       cancelled = true;
@@ -53,7 +57,9 @@ export function App() {
   }, [fail]);
 
   useEffect(() => {
-    if (!slug) return;
+    if (!slug) {
+      return;
+    }
     let cancelled = false;
     setWorkflow(null);
     setRuns([]);
@@ -66,7 +72,9 @@ export function App() {
     history.replaceState(null, "", url);
     void Promise.all([endpoints.workflow(slug), endpoints.runs(slug)])
       .then(([definition, history]) => {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         setWorkflow(definition);
         const sorted = newestFirst(history);
         setRuns(sorted);
@@ -74,7 +82,9 @@ export function App() {
         setError(null);
       })
       .catch((cause: unknown) => {
-        if (!cancelled) fail(cause);
+        if (!cancelled) {
+          fail(cause);
+        }
       });
     return () => {
       cancelled = true;
@@ -91,10 +101,14 @@ export function App() {
     void endpoints
       .run(selectedRunId)
       .then((next) => {
-        if (!cancelled) setDetail(next);
+        if (!cancelled) {
+          setDetail(next);
+        }
       })
       .catch((cause: unknown) => {
-        if (!cancelled) fail(cause);
+        if (!cancelled) {
+          fail(cause);
+        }
       });
     return () => {
       cancelled = true;
@@ -104,20 +118,27 @@ export function App() {
   useEffect(() => {
     const active = detail?.run.status === "pending" || detail?.run.status === "running";
     const awaitingResume = resumeBaseline?.id === selectedRunId;
-    if (!slug || !selectedRunId || (!active && !awaitingResume)) return;
+    if (!slug || !selectedRunId || (!active && !awaitingResume)) {
+      return;
+    }
     let cancelled = false;
     const timer = window.setInterval(() => {
       void endpoints
         .run(selectedRunId)
         .then((next) => {
-          if (cancelled) return;
+          if (cancelled) {
+            return;
+          }
           setRuns((previous) => previous.map((run) => (run.id === next.run.id ? next.run : run)));
           setDetail(next);
-          if (awaitingResume && next.run.updatedAt !== resumeBaseline?.updatedAt)
+          if (awaitingResume && next.run.updatedAt !== resumeBaseline?.updatedAt) {
             setResumeBaseline(null);
+          }
         })
         .catch((cause: unknown) => {
-          if (!cancelled) fail(cause);
+          if (!cancelled) {
+            fail(cause);
+          }
         });
     }, POLL_MS);
     return () => {
@@ -127,7 +148,9 @@ export function App() {
   }, [slug, selectedRunId, detail?.run.status, resumeBaseline, fail]);
 
   async function start(input: Json, mode: Mode) {
-    if (!slug) return;
+    if (!slug) {
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -178,7 +201,9 @@ export function App() {
   }
 
   async function resume(retryUncertain: boolean) {
-    if (!selectedRunId) return;
+    if (!selectedRunId) {
+      return;
+    }
     const baseline = detail?.run.updatedAt;
     setBusy(true);
     setError(null);
@@ -186,7 +211,9 @@ export function App() {
       const run = await endpoints.resume(selectedRunId, retryUncertain);
       setRuns((previous) => previous.map((item) => (item.id === run.id ? run : item)));
       setDetail((previous) => (previous ? { ...previous, run } : previous));
-      if (baseline) setResumeBaseline({ id: run.id, updatedAt: baseline });
+      if (baseline) {
+        setResumeBaseline({ id: run.id, updatedAt: baseline });
+      }
     } catch (cause) {
       fail(cause);
     } finally {

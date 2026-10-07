@@ -53,6 +53,7 @@ test("ambiguous or incomplete inputs fail before execution", () => {
     ["run", "x", "--input", "{}", "--key=a"],
     ["resume", "id", "--args", "a.json"],
     ["list", "--typo", "x"],
-  ])
+  ]) {
     expect(() => parseCliArgs(args)).toThrow();
+  }
 });

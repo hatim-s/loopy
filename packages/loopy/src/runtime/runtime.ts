@@ -1,3 +1,4 @@
+import { errorMessage } from "../core/errors.js";
 import type {
   AttemptRecord,
   AttemptStatus,
@@ -13,7 +14,7 @@ import type {
 } from "../core/model.js";
 import { validateSecretBindings } from "../core/secret-bindings.js";
 import { validateWorkflow } from "../core/workflow.js";
-import { CommandExecutionError, errorMessage } from "./errors.js";
+import { CommandExecutionError } from "./errors.js";
 import type { RunRepository } from "./repository.js";
 import { assertJson, type Outputs, resolveCommand, resolveValue } from "./values.js";
 
@@ -27,7 +28,9 @@ function latestAttempts(attempts: AttemptRecord[]): Map<string, AttemptRecord> {
   const latest = new Map<string, AttemptRecord>();
   for (const attempt of attempts) {
     const prior = latest.get(attempt.nodeId);
-    if (!prior || attempt.number > prior.number) latest.set(attempt.nodeId, attempt);
+    if (!prior || attempt.number > prior.number) {
+      latest.set(attempt.nodeId, attempt);
+    }
   }
   return latest;
 }
@@ -38,21 +41,26 @@ async function sha256(text: string): Promise<string> {
 }
 
 function checkRunOptions(options: RunOptions): RunOptions {
-  if (options.mode !== "sandbox" && options.mode !== "full")
+  if (options.mode !== "sandbox" && options.mode !== "full") {
     throw new Error(`Invalid execution mode ${String(options.mode)}`);
+  }
   const workspace = options.workspace;
   if (options.secretBindings !== undefined) {
     validateSecretBindings(options.secretBindings);
-    if (workspace?.kind !== "local") throw new Error("Secret bindings require a local workspace");
+    if (workspace?.kind !== "local") {
+      throw new Error("Secret bindings require a local workspace");
+    }
   }
   const bindings =
     options.secretBindings === undefined
       ? {}
       : { secretBindings: structuredClone(options.secretBindings) };
-  if (workspace?.kind === "local" && typeof workspace.path === "string" && workspace.path)
+  if (workspace?.kind === "local" && typeof workspace.path === "string" && workspace.path) {
     return { workspace: { kind: "local", path: workspace.path }, mode: options.mode, ...bindings };
-  if (workspace?.kind === "managed" && typeof workspace.id === "string" && workspace.id)
+  }
+  if (workspace?.kind === "managed" && typeof workspace.id === "string" && workspace.id) {
     return { workspace: { kind: "managed", id: workspace.id }, mode: options.mode };
+  }
   throw new Error("Invalid workspace");
 }
 
@@ -79,11 +87,15 @@ class Lease {
   }
 
   pulse(): Promise<boolean> {
-    if (this.inFlight) return this.inFlight;
+    if (this.inFlight) {
+      return this.inFlight;
+    }
     this.inFlight = Promise.resolve()
       .then(this.beat)
       .then((owned) => {
-        if (!owned) this.fail(new Error(OWNERSHIP_LOST));
+        if (!owned) {
+          this.fail(new Error(OWNERSHIP_LOST));
+        }
         return owned;
       })
       .catch((error: unknown) => {
@@ -106,7 +118,9 @@ class Lease {
   async stop(): Promise<void> {
     clearInterval(this.timer);
     this.timer = undefined;
-    if (this.inFlight) await this.inFlight;
+    if (this.inFlight) {
+      await this.inFlight;
+    }
   }
 }
 
@@ -126,30 +140,37 @@ class Execution {
     attempts: AttemptRecord[],
   ) {
     this.attempts = latestAttempts(attempts);
-    for (const attempt of this.attempts.values())
-      if (attempt.status === "succeeded" && attempt.output !== undefined)
+    for (const attempt of this.attempts.values()) {
+      if (attempt.status === "succeeded" && attempt.output !== undefined) {
         this.outputs.set(attempt.nodeId, attempt.output);
+      }
+    }
   }
 
   async nodes(nodes: readonly WorkflowNode[]): Promise<Result> {
     for (const node of nodes) {
-      if (this.signal.aborted)
+      if (this.signal.aborted) {
         return this.lease.lost ? this.lost() : this.interrupted(CANCELLED_BEFORE_LAUNCH);
+      }
       const previous = this.attempts.get(node.id);
-      if (previous?.status === "failed" && !this.options.resume)
+      if (previous?.status === "failed" && !this.options.resume) {
         return { status: "failed", error: previous.error ?? `Node ${node.id} failed` };
-      if (previous?.status === "uncertain" && !this.options.retryUncertain)
+      }
+      if (previous?.status === "uncertain" && !this.options.retryUncertain) {
         return {
           status: "interrupted",
           error: `Node ${node.id} may have changed external state. Resume with retryUncertain to run it again.`,
         };
+      }
       const result =
         node.kind === "condition"
           ? await this.condition(node, previous)
           : previous?.status === "succeeded"
             ? undefined
             : await this.command(node);
-      if (result && result.status !== "succeeded") return result;
+      if (result && result.status !== "succeeded") {
+        return result;
+      }
     }
     return { status: "succeeded" };
   }
@@ -161,15 +182,17 @@ class Execution {
     let branch: "then" | "else";
     if (previous?.status === "succeeded") {
       const recorded = (previous.output as { branch?: unknown } | undefined)?.branch;
-      if (recorded !== "then" && recorded !== "else")
+      if (recorded !== "then" && recorded !== "else") {
         return { status: "failed", error: `Condition ${node.id} has no recorded branch` };
+      }
       branch = recorded;
     } else {
       let test: Json;
       try {
         test = resolveValue(node.test, this.run.input, this.outputs);
-        if (typeof test !== "boolean")
+        if (typeof test !== "boolean") {
           throw new Error(`Condition ${node.id} must resolve to boolean`);
+        }
       } catch (error) {
         return this.fail(node.id, { test: node.test as Json }, errorMessage(error));
       }
@@ -197,9 +220,15 @@ class Execution {
     this.attempts.set(node.id, attempt);
 
     // A cancellation that lands before launch leaves nothing to be uncertain about.
-    if (this.cancelled()) return this.cancel(attempt);
-    if (!(await this.lease.pulse())) return this.lost();
-    if (this.cancelled()) return this.cancel(attempt);
+    if (this.cancelled()) {
+      return this.cancel(attempt);
+    }
+    if (!(await this.lease.pulse())) {
+      return this.lost();
+    }
+    if (this.cancelled()) {
+      return this.cancel(attempt);
+    }
 
     let output: Awaited<ReturnType<ExecuteCommand>>;
     try {
@@ -294,8 +323,9 @@ export class Runtime {
     this.store = options.store;
     this.executor = options.executor;
     this.heartbeatIntervalMs = options.heartbeatIntervalMs ?? 3_000;
-    if (!Number.isSafeInteger(this.heartbeatIntervalMs) || this.heartbeatIntervalMs <= 0)
+    if (!Number.isSafeInteger(this.heartbeatIntervalMs) || this.heartbeatIntervalMs <= 0) {
       throw new Error("heartbeatIntervalMs must be a positive integer");
+    }
   }
 
   /** Freezes the graph, input and options so later edits never reach a run. */
@@ -345,12 +375,16 @@ export class Runtime {
   async execute(id: string, options: ExecuteOptions = {}): Promise<RunRecord> {
     const token = crypto.randomUUID();
     const run = await this.store.claim(id, token, { resume: options.resume });
-    if (run.status !== "running") return run;
+    if (run.status !== "running") {
+      return run;
+    }
 
     const controller = new AbortController();
     const forwardAbort = () => controller.abort(options.signal?.reason);
     options.signal?.addEventListener("abort", forwardAbort, { once: true });
-    if (options.signal?.aborted) forwardAbort();
+    if (options.signal?.aborted) {
+      forwardAbort();
+    }
     const lease = new Lease(
       () => this.store.heartbeat(id, token),
       controller,
@@ -372,7 +406,9 @@ export class Runtime {
       const result = await execution.nodes(run.workflow.nodes);
       // Drain heartbeats first: one landing after the final write would read as lost ownership.
       await lease.stop();
-      if (lease.lost) throw lease.error;
+      if (lease.lost) {
+        throw lease.error;
+      }
       outcome = { run: await this.store.finishRun(id, token, result.status, result.error) };
     } catch (error) {
       outcome = { error };
@@ -382,9 +418,13 @@ export class Runtime {
     try {
       await this.store.release(id, token);
     } catch (error) {
-      if ("run" in outcome) outcome = { error };
+      if ("run" in outcome) {
+        outcome = { error };
+      }
     }
-    if ("error" in outcome) throw outcome.error;
+    if ("error" in outcome) {
+      throw outcome.error;
+    }
     return outcome.run;
   }
 }

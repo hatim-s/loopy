@@ -36,7 +36,9 @@ export function parseRequest(raw: unknown): Request {
   const input = object(raw);
   const allowed = new Set(["assets", "repository", ...Object.keys(defaults)]);
   for (const key of Object.keys(input)) {
-    if (!allowed.has(key)) throw new Error(`Unknown option: ${key}`);
+    if (!allowed.has(key)) {
+      throw new Error(`Unknown option: ${key}`);
+    }
   }
   if (!Array.isArray(input.assets) || !input.assets.length) {
     throw new Error("assets must be a non-empty array");
@@ -56,7 +58,9 @@ export function parseRequest(raw: unknown): Request {
   });
   const options = { ...defaults, ...input };
   const feature = text(options.feature, "feature");
-  if (!/^[a-zA-Z0-9_-]+$/.test(feature)) throw new Error("feature must be one directory name");
+  if (!/^[a-zA-Z0-9_-]+$/.test(feature)) {
+    throw new Error("feature must be one directory name");
+  }
   const indexPath = text(options.indexPath, "indexPath");
   if (
     isAbsolute(indexPath) ||
@@ -69,9 +73,12 @@ export function parseRequest(raw: unknown): Request {
       "indexPath must be a repository-relative JSON path within the selected feature",
     );
   }
-  if (typeof options.dryRun !== "boolean") throw new Error("dryRun must be a boolean");
-  if (typeof options.exportDirectory !== "string")
+  if (typeof options.dryRun !== "boolean") {
+    throw new Error("dryRun must be a boolean");
+  }
+  if (typeof options.exportDirectory !== "string") {
     throw new Error("exportDirectory must be a string");
+  }
   return {
     assets,
     repository: resolve(text(input.repository, "repository")),
@@ -101,7 +108,9 @@ const execute: Execute = async (args, cwd, stdin) => {
       child.exited,
     ]);
     // Agent output and command errors can contain export credentials. Do not forward them.
-    if (code !== 0) throw new Error(`${args[0]} ${args[1]} failed with exit code ${code}`);
+    if (code !== 0) {
+      throw new Error(`${args[0]} ${args[1]} failed with exit code ${code}`);
+    }
     return stdout;
   } finally {
     clearTimeout(timeout);
@@ -122,7 +131,9 @@ export async function run(request: Request, exec: Execute = execute) {
   await git("check-ref-format", "--branch", `${request.branchPrefix}-check`);
   await git("fetch", "origin", `refs/heads/${request.baseBranch}`);
   const base = (await git("rev-parse", "--verify", "FETCH_HEAD^{commit}")).trim();
-  if (!/^[a-f0-9]{40,64}$/.test(base)) throw new Error("Git returned an invalid base SHA");
+  if (!/^[a-f0-9]{40,64}$/.test(base)) {
+    throw new Error("Git returned an invalid base SHA");
+  }
   try {
     await git("cat-file", "-e", `${base}:${script}`);
   } catch {
@@ -203,7 +214,9 @@ export async function run(request: Request, exec: Execute = execute) {
     const inWorktree = (...args: string[]) => exec(["git", ...args], worktree);
     await inWorktree("diff", "--check", base);
     const status = await inWorktree("status", "--porcelain");
-    if (status.trim()) throw new Error("Agent left uncommitted or untracked changes");
+    if (status.trim()) {
+      throw new Error("Agent left uncommitted or untracked changes");
+    }
     const head = (await inWorktree("rev-parse", "HEAD")).trim();
     const branchName = (await inWorktree("rev-parse", "--abbrev-ref", "HEAD")).trim();
     const branch = branchName === "HEAD" ? "" : branchName;
@@ -241,15 +254,18 @@ export async function run(request: Request, exec: Execute = execute) {
     }
     throw error;
   } finally {
-    if (completed || !added) await cleanup();
+    if (completed || !added) {
+      await cleanup();
+    }
   }
 }
 
 if (import.meta.main) {
   try {
     const requestFile = process.argv[2];
-    if (!requestFile || process.argv.length !== 3)
+    if (!requestFile || process.argv.length !== 3) {
       throw new Error("Expected one request JSON file path");
+    }
     const request = parseRequest(JSON.parse(await Bun.file(requestFile).text()));
     console.log(JSON.stringify(await run(request)));
   } catch (error) {

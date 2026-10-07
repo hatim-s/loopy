@@ -9,17 +9,23 @@ export function workflowInputs(workflow: Workflow): InputField[] {
   const fields = new Map<string, InputField>();
   const kinds = new Map<string, { required: Set<InputKind>; hints: Set<InputKind> }>();
   function visit(value: unknown, kind?: InputKind, choices?: string[], hint = false) {
-    if (!value || typeof value !== "object") return;
+    if (!value || typeof value !== "object") {
+      return;
+    }
     if ("$ref" in value) {
       const ref = (value as Reference).$ref;
-      if (ref.source !== "input") return;
+      if (ref.source !== "input") {
+        return;
+      }
       const key = JSON.stringify(ref.path);
       const previous = fields.get(key);
       const evidence = kinds.get(key) ?? {
         required: new Set<InputKind>(),
         hints: new Set<InputKind>(),
       };
-      if (kind) (hint ? evidence.hints : evidence.required).add(kind);
+      if (kind) {
+        (hint ? evidence.hints : evidence.required).add(kind);
+      }
       kinds.set(key, evidence);
       const candidates = new Set([...evidence.required, ...evidence.hints]);
       const allowed = previous
@@ -55,12 +61,15 @@ export function workflowInputs(workflow: Workflow): InputField[] {
           const literal = expression.args.find(
             (arg) => typeof arg === "string" || typeof arg === "number" || typeof arg === "boolean",
           );
-          if (literal !== undefined) operandKind = typeof literal as InputKind;
+          if (literal !== undefined) {
+            operandKind = typeof literal as InputKind;
+          }
           break;
         }
       }
-      for (const arg of expression.args)
+      for (const arg of expression.args) {
         visit(arg, operandKind, undefined, expression.$op === "eq" || expression.$op === "ne");
+      }
     }
   }
   function walk(nodes: WorkflowNode[]) {
@@ -75,10 +84,14 @@ export function workflowInputs(workflow: Workflow): InputField[] {
           if (constraint?.prefix !== undefined) {
             const attached = arg as { args: readonly unknown[] };
             visit(attached.args[1], constraint.kind, constraint.choices);
-          } else visit(arg, constraint?.kind, constraint?.choices);
+          } else {
+            visit(arg, constraint?.kind, constraint?.choices);
+          }
         }
         visit(node.command.stdin);
-        for (const value of Object.values(node.command.env ?? {})) visit(value);
+        for (const value of Object.values(node.command.env ?? {})) {
+          visit(value);
+        }
       }
     }
   }
@@ -89,7 +102,9 @@ export function workflowInputs(workflow: Workflow): InputField[] {
 function hasPath(input: Json, path: readonly string[]): boolean {
   let current = input;
   for (const key of path) {
-    if (!current || typeof current !== "object" || !Object.hasOwn(current, key)) return false;
+    if (!current || typeof current !== "object" || !Object.hasOwn(current, key)) {
+      return false;
+    }
     current = (current as Record<string, Json>)[key] as Json;
   }
   return true;
@@ -107,18 +122,20 @@ function setPath(input: Record<string, Json>, path: readonly string[], value: Js
       });
       return;
     }
-    if (!Object.hasOwn(current, key))
+    if (!Object.hasOwn(current, key)) {
       Object.defineProperty(current, key, {
         value: {},
         enumerable: true,
         writable: true,
         configurable: true,
       });
+    }
     const child = current[key];
-    if (!child || typeof child !== "object")
+    if (!child || typeof child !== "object") {
       throw new Error(
         `Input ${path.slice(0, index + 1).join(".")} must be an object. Use --input JSON.`,
       );
+    }
     current = child as Record<string, Json>;
   }
 }
@@ -126,11 +143,14 @@ function setPath(input: Record<string, Json>, path: readonly string[], value: Js
 function parseAnswer(answer: string, field: InputField): Json {
   let value: Json = answer;
   if (field.kind === "number") {
-    if (!answer.trim() || !Number.isFinite(Number(answer)))
+    if (!answer.trim() || !Number.isFinite(Number(answer))) {
       throw new Error("Enter a finite number.");
+    }
     value = Number(answer);
   } else if (field.kind === "boolean") {
-    if (!["true", "false"].includes(answer.trim())) throw new Error("Enter true or false.");
+    if (!["true", "false"].includes(answer.trim())) {
+      throw new Error("Enter true or false.");
+    }
     value = answer.trim() === "true";
   } else if (answer.startsWith("json:")) {
     try {
@@ -138,10 +158,15 @@ function parseAnswer(answer: string, field: InputField): Json {
     } catch {
       throw new Error("Enter valid JSON after json:.");
     }
-    if (field.kind && typeof value !== field.kind) throw new Error(`Enter a ${field.kind}.`);
-  } else if (answer.startsWith("text:")) value = answer.slice(5);
-  if (field.choices && !field.choices.includes(String(value)))
+    if (field.kind && typeof value !== field.kind) {
+      throw new Error(`Enter a ${field.kind}.`);
+    }
+  } else if (answer.startsWith("text:")) {
+    value = answer.slice(5);
+  }
+  if (field.choices && !field.choices.includes(String(value))) {
     throw new Error(`Choose one of: ${field.choices.join(", ")}.`);
+  }
   return value;
 }
 
@@ -154,7 +179,9 @@ export async function collectInputs(
   const input = structuredClone(supplied);
   const fields = workflowInputs(workflow).filter((field) => !hasPath(input, field.path));
   for (const [index, field] of fields.entries()) {
-    if (hasPath(input, field.path)) continue;
+    if (hasPath(input, field.path)) {
+      continue;
+    }
     const hint = field.choices?.join(" | ") ?? field.kind ?? "text or json:value";
     while (true) {
       const answer = await ask(
@@ -175,7 +202,9 @@ export async function collectInputs(
 }
 
 export async function promptInputs(workflow: Workflow, supplied: Record<string, Json>) {
-  if (workflowInputs(workflow).every((field) => hasPath(supplied, field.path))) return supplied;
+  if (workflowInputs(workflow).every((field) => hasPath(supplied, field.path))) {
+    return supplied;
+  }
   console.error(`Run ${workflow.slug}. Enter each input. Ctrl+C cancels before running.`);
   console.error("Text stays text. Use json:value for JSON or text:value for literal text.");
   const terminal = createInterface({
@@ -194,7 +223,9 @@ export async function promptInputs(workflow: Workflow, supplied: Record<string, 
       async (label) => {
         process.stderr.write(label);
         const line = await lines.next();
-        if (line.done) throw new Error("Input cancelled. No run was started.");
+        if (line.done) {
+          throw new Error("Input cancelled. No run was started.");
+        }
         return line.value;
       },
       (message) => console.error(message),

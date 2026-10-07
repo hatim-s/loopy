@@ -1,6 +1,7 @@
+import { errorMessage } from "../core/errors.js";
 import type { CommandOutput, ExecuteCommand } from "../core/model.js";
 import { validateSecretBindings } from "../core/secret-bindings.js";
-import { CommandExecutionError, errorMessage } from "../runtime/errors.js";
+import { CommandExecutionError } from "../runtime/errors.js";
 import { executeLocalCommand } from "./process.js";
 import { Registry } from "./registry.js";
 import { SecretStore } from "./secrets.js";
@@ -26,7 +27,9 @@ export function secretRedactor(values: string[]) {
           }
         }
       }
-      if (boundary) text = `${text.slice(0, -boundary)}[redacted]`;
+      if (boundary) {
+        text = `${text.slice(0, -boundary)}[redacted]`;
+      }
     }
     return pattern ? text.replace(pattern, "[redacted]") : text;
   };
@@ -41,31 +44,36 @@ export function secretExecutor(
   return async (command, options) => {
     const run = await store.getRun(options.runId);
     const bindings = run?.options.secretBindings;
-    if (!bindings || !Object.keys(bindings.env).length)
+    if (!bindings || !Object.keys(bindings.env).length) {
       return (executor ?? executeLocalCommand)(command, options);
+    }
     const empty: CommandOutput = { stdout: "", stderr: "", exitCode: -1, durationMs: 0 };
     let env: Record<string, string>;
     try {
       validateSecretBindings(bindings);
-      if (!run || run.options.workspace.kind !== "local")
+      if (!run || run.options.workspace.kind !== "local") {
         throw new Error("Secret bindings require a local workspace.");
+      }
       const active = new Registry(home, run.options.workspace.path).get(run.slug).secretBindings;
-      if (!active || active.ownerId !== bindings.ownerId)
+      if (!active || active.ownerId !== bindings.ownerId) {
         throw new Error(
           `Secret grants for '${run.slug}' were revoked or its source changed. Bind secrets and start a new run.`,
         );
+      }
       const values = new SecretStore(home).snapshot();
       env = Object.fromEntries(
         Object.entries(bindings.env).map(([key, name]) => {
-          if (!Object.hasOwn(active.env, key) || active.env[key] !== name)
+          if (!Object.hasOwn(active.env, key) || active.env[key] !== name) {
             throw new Error(
               `Secret binding '${key}' changed. Start a new run to use the current bindings.`,
             );
+          }
           const value =
             (Object.hasOwn(process.env, key) ? process.env[key] : undefined) ??
             (Object.hasOwn(values, name) ? values[name] : undefined);
-          if (value === undefined)
+          if (value === undefined) {
             throw new Error(`No stored secret '${name}'. Use loopy secrets set ${name}.`);
+          }
           return [key, value];
         }),
       );
@@ -84,12 +92,13 @@ export function secretExecutor(
         : await executeLocalCommand(command, { ...options, sensitiveEnv: env });
       return output(value);
     } catch (error) {
-      if (error instanceof CommandExecutionError)
+      if (error instanceof CommandExecutionError) {
         throw new CommandExecutionError(
           redact(error.message),
           output(error.output, true),
           error.started,
         );
+      }
       // Preserve the runtime's uncertainty classification for an unknown executor failure.
       throw new Error(redact(errorMessage(error)));
     }

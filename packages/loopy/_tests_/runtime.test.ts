@@ -22,9 +22,12 @@ function fixture(executor?: ExecuteCommand) {
 }
 
 afterEach(() => {
-  for (const local of locals.splice(0)) local.close();
-  for (const directory of directories.splice(0))
+  for (const local of locals.splice(0)) {
+    local.close();
+  }
+  for (const directory of directories.splice(0)) {
     rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 const output = (stdout: string, exitCode = 0): CommandOutput => ({
@@ -127,7 +130,9 @@ describe("durable workflow runtime", () => {
     };
     const run = await runtime.createRun(workflow, {}, options);
     const sourceNode = workflow.nodes[0];
-    if (sourceNode?.kind === "command") sourceNode.command.program = "changed";
+    if (sourceNode?.kind === "command") {
+      sourceNode.command.program = "changed";
+    }
     expect((await runtime.execute(run.id)).status).toBe("succeeded");
     expect(programs).toEqual(["original"]);
     expect((await runtime.getRun(run.id))?.workflowHash).toBe(run.workflowHash);
@@ -393,7 +398,9 @@ describe("durable workflow runtime", () => {
     const source = `import { createLocalRuntime } from ${JSON.stringify(localUrl)}; const local = createLocalRuntime({home:${JSON.stringify(home)}}); await local.runtime.execute(${JSON.stringify(live.id)});`;
     const child = Bun.spawn([process.execPath, "-e", source], { stdout: "pipe", stderr: "pipe" });
     try {
-      for (let count = 0; count < 100 && !existsSync(marker); count += 1) await Bun.sleep(20);
+      for (let count = 0; count < 100 && !existsSync(marker); count += 1) {
+        await Bun.sleep(20);
+      }
       expect(existsSync(marker)).toBe(true);
     } finally {
       child.kill("SIGKILL");

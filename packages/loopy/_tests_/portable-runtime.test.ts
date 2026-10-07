@@ -62,14 +62,19 @@ class MemoryRepository implements RunRepository {
     return this.events;
   }
   async claim(runId: string, token: string, options?: { resume?: boolean }): Promise<RunRecord> {
-    if (!this.run || this.run.id !== runId) throw new Error("Unknown run");
+    if (!this.run || this.run.id !== runId) {
+      throw new Error("Unknown run");
+    }
     if (
       this.run.status === "succeeded" ||
       (options?.resume === false &&
         (this.run.status === "failed" || this.run.status === "interrupted"))
-    )
+    ) {
       return this.run;
-    if (this.owner) throw new Error("Busy");
+    }
+    if (this.owner) {
+      throw new Error("Busy");
+    }
     this.owner = token;
     this.run = { ...this.run, status: "running" };
     return this.run;
@@ -92,7 +97,9 @@ class MemoryRepository implements RunRepository {
     input: Json,
   ): Promise<AttemptRecord> {
     await this.beforeStart?.();
-    if (this.owner !== token) throw new Error("Lost owner");
+    if (this.owner !== token) {
+      throw new Error("Lost owner");
+    }
     const attempt: AttemptRecord = {
       id: `attempt-${this.attempts.length + 1}`,
       runId,
@@ -115,10 +122,14 @@ class MemoryRepository implements RunRepository {
   ): Promise<AttemptRecord> {
     this.finishAttemptCalls += 1;
     await this.beforeFinishAttempt?.();
-    if (this.owner !== token) throw new Error("Lost owner");
+    if (this.owner !== token) {
+      throw new Error("Lost owner");
+    }
     const index = this.attempts.findIndex((attempt) => attempt.id === attemptId);
     const prior = this.attempts[index];
-    if (!prior) throw new Error("Unknown attempt");
+    if (!prior) {
+      throw new Error("Unknown attempt");
+    }
     const next = { ...prior, status, output, error, endedAt: new Date().toISOString() };
     this.attempts[index] = next;
     await this.afterFinishAttempt?.();
@@ -130,14 +141,18 @@ class MemoryRepository implements RunRepository {
     status: RunStatus,
     error?: string,
   ): Promise<RunRecord> {
-    if (this.owner !== token || !this.run) throw new Error("Lost owner");
+    if (this.owner !== token || !this.run) {
+      throw new Error("Lost owner");
+    }
     this.run = { ...this.run, status, error };
     await this.afterFinishRun?.();
     return this.run;
   }
   async release(_runId: string, token: string): Promise<void> {
     this.releases += 1;
-    if (this.owner === token) this.owner = undefined;
+    if (this.owner === token) {
+      this.owner = undefined;
+    }
   }
 }
 
@@ -414,7 +429,9 @@ for (const failure of ["reject", "throw"] as const) {
   test(`a heartbeat that ${failure}s undefined rejects execution without finishing the run`, async () => {
     const store = new MemoryRepository();
     store.beforeHeartbeat = () => {
-      if (failure === "throw") throw undefined;
+      if (failure === "throw") {
+        throw undefined;
+      }
       return Promise.reject();
     };
     let launches = 0;

@@ -344,7 +344,9 @@ describe("publication safety", () => {
       const request = JSON.parse(await readFile(args[args.length - 1] ?? "", "utf8"));
       expect(request).toEqual({ sha: "new-descendant-of-observed-head", force: false });
       // GitHub rejects a commit whose parent was superseded by a parallel push.
-      if (branchHead !== "observed-head") throw new Error("HTTP 422: Update is not a fast forward");
+      if (branchHead !== "observed-head") {
+        throw new Error("HTTP 422: Update is not a fast forward");
+      }
       branchHead = request.sha;
       return "";
     };

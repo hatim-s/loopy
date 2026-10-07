@@ -1,13 +1,13 @@
 #!/usr/bin/env bun
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
+import { errorMessage } from "../core/errors.js";
 import type { Json } from "../core/model.js";
 import { generateCommand } from "../local/help.js";
 import { localRunOptions } from "../local/process.js";
 import { defaultHome, Registry } from "../local/registry.js";
 import { createLocalRuntime } from "../local/runtime.js";
 import { startServer } from "../local/server.js";
-import { errorMessage } from "../runtime/errors.js";
 import { parseCliArgs } from "./args.js";
 import { promptInputs } from "./inputs.js";
 import { manageSecrets } from "./secrets.js";
@@ -54,19 +54,24 @@ Retrying an uncertain attempt can repeat a side effect from an interrupted comma
 const print = (value: unknown) => console.log(JSON.stringify(value, null, 2));
 
 function required(value: string | undefined, label: string): string {
-  if (!value) throw new Error(`${label} is required. Run loopy --help for usage.`);
+  if (!value) {
+    throw new Error(`${label} is required. Run loopy --help for usage.`);
+  }
   return value;
 }
 
 function parsePort(value: string | undefined): number {
   const port = value === undefined ? DEFAULT_PORT : Number(value);
-  if (!Number.isInteger(port) || port < 0 || port > 65535)
+  if (!Number.isInteger(port) || port < 0 || port > 65535) {
     throw new Error("Port must be an integer from 0 to 65535.");
+  }
   return port;
 }
 
 async function readInput(value: string | undefined): Promise<Json> {
-  if (value === undefined) return {};
+  if (value === undefined) {
+    return {};
+  }
   const text = value.startsWith("@") ? await Bun.file(resolve(value.slice(1))).text() : value;
   return JSON.parse(text) as Json;
 }
@@ -100,7 +105,9 @@ export async function main(args = process.argv.slice(2)) {
     });
     await mkdir(dirname(destination), { recursive: true });
     await writeFile(destination, generated.source);
-    for (const warning of generated.warnings) console.error(warning);
+    for (const warning of generated.warnings) {
+      console.error(warning);
+    }
     print({ file: destination });
     return;
   }
@@ -108,8 +115,12 @@ export async function main(args = process.argv.slice(2)) {
     await manageSecrets(home, cwd, positionals.slice(1), values.stdin);
     return;
   }
-  if (values.stdin) throw new Error("--stdin is only supported by loopy secrets set.");
-  if (rest.length) throw new Error(`Unexpected arguments: ${rest.join(" ")}`);
+  if (values.stdin) {
+    throw new Error("--stdin is only supported by loopy secrets set.");
+  }
+  if (rest.length) {
+    throw new Error(`Unexpected arguments: ${rest.join(" ")}`);
+  }
 
   if (command === "ui") {
     const server = startServer({ home, cwd, port: parsePort(values.port) });
@@ -125,8 +136,9 @@ export async function main(args = process.argv.slice(2)) {
   if (command === "save" && target && !values.cwd) {
     const source = resolve(target);
     const fromCwd = relative(cwd, source);
-    if (fromCwd === ".." || fromCwd.startsWith("../"))
+    if (fromCwd === ".." || fromCwd.startsWith("../")) {
       project = (await stat(source)).isDirectory() ? source : dirname(source);
+    }
   }
   const registry = new Registry(home, project);
   switch (command) {
@@ -161,10 +173,11 @@ export async function main(args = process.argv.slice(2)) {
   try {
     switch (command) {
       case "recover":
-        if (!values.force)
+        if (!values.force) {
           throw new Error(
             "Recovery requires --force. Stop the original host's runner first; it may still be executing a command.",
           );
+        }
         print(await local.recoverOwner(required(target, "Run ID")));
         return;
       case "runs":
@@ -172,7 +185,9 @@ export async function main(args = process.argv.slice(2)) {
         return;
       case "inspect": {
         const run = await runtime.getRun(required(target, "Run ID"));
-        if (!run) throw new Error(`Unknown run '${target}'.`);
+        if (!run) {
+          throw new Error(`Unknown run '${target}'.`);
+        }
         print({
           run,
           attempts: await runtime.getAttempts(run.id),
@@ -201,8 +216,9 @@ export async function main(args = process.argv.slice(2)) {
         })
       ).id;
     } else {
-      if (values.full || values.input || values.cwd)
+      if (values.full || values.input || values.cwd) {
         throw new Error("A resumed run keeps its original mode, input, and workspace.");
+      }
       id = required(target, "Run ID");
     }
     console.error(`Run ${id}`);
@@ -210,7 +226,9 @@ export async function main(args = process.argv.slice(2)) {
       runtime.execute(id, { retryUncertain: values["retry-uncertain"], signal }),
     );
     print(run);
-    if (run.status !== "succeeded") process.exitCode = 1;
+    if (run.status !== "succeeded") {
+      process.exitCode = 1;
+    }
   } finally {
     local.close();
   }

@@ -4,8 +4,9 @@ import { constants, realpathSync, statSync } from "node:fs";
 import { access, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { errorMessage } from "../core/errors.js";
 import type { CommandOutput, ExecutionMode, ResolvedCommand, RunOptions } from "../core/model.js";
-import { CommandExecutionError, errorMessage } from "../runtime/errors.js";
+import { CommandExecutionError } from "../runtime/errors.js";
 
 const DEFAULT_TIMEOUT_MS = 5 * 60_000;
 const DEFAULT_MAX_OUTPUT_BYTES = 8 * 1024 * 1024;
@@ -46,7 +47,9 @@ function unstarted(error: unknown): CommandExecutionError {
 
 export function localRunOptions(cwd: string, mode: ExecutionMode): RunOptions {
   const path = realpathSync(cwd);
-  if (!statSync(path).isDirectory()) throw new Error(`Workspace is not a directory: ${cwd}`);
+  if (!statSync(path).isDirectory()) {
+    throw new Error(`Workspace is not a directory: ${cwd}`);
+  }
   return { workspace: { kind: "local", path }, mode };
 }
 
@@ -68,13 +71,19 @@ async function resolveProgram(program: string, cwd: string, path: string): Promi
   const candidates = program.includes(sep)
     ? [resolve(cwd, program)]
     : path.split(delimiter).map((directory) => resolve(cwd, directory, program));
-  for (const candidate of candidates) if (await executable(candidate)) return realpath(candidate);
+  for (const candidate of candidates) {
+    if (await executable(candidate)) {
+      return realpath(candidate);
+    }
+  }
   throw new Error(`Executable not found: ${program}`);
 }
 
 /** The nearest package root above a program inside the home directory, if any. */
 async function packageDirectory(program: string, home: string): Promise<string | undefined> {
-  if (!within(home, program)) return undefined;
+  if (!within(home, program)) {
+    return undefined;
+  }
   for (let directory = dirname(program); within(home, directory) && directory !== home; ) {
     try {
       await access(join(directory, "package.json"));
@@ -87,14 +96,17 @@ async function packageDirectory(program: string, home: string): Promise<string |
 }
 
 function sbpl(path: string): string {
-  if (/[\0\n\r]/.test(path)) throw new Error("Paths with control characters cannot be sandboxed");
+  if (/[\0\n\r]/.test(path)) {
+    throw new Error("Paths with control characters cannot be sandboxed");
+  }
   return JSON.stringify(path);
 }
 
 function envArgs(env: NodeJS.ProcessEnv): string[] {
   return Object.entries(env).map(([name, value]) => {
-    if (!name || name.includes("=") || name.includes("\0") || value?.includes("\0"))
+    if (!name || name.includes("=") || name.includes("\0") || value?.includes("\0")) {
       throw new Error(`Invalid command environment variable: ${name}`);
+    }
     return `${name}=${value ?? ""}`;
   });
 }
@@ -105,8 +117,9 @@ async function macSandbox(
   env: NodeJS.ProcessEnv,
   helper?: string,
 ): Promise<[string, string[]]> {
-  if (!(await executable(SANDBOX_EXEC)))
+  if (!(await executable(SANDBOX_EXEC))) {
     throw new Error("Sandbox mode requires /usr/bin/sandbox-exec on macOS");
+  }
   const home = await realpath(homedir());
   const allowedPackage = within(workspace, program)
     ? undefined
@@ -147,14 +160,20 @@ async function linuxSandbox(
       break;
     }
   }
-  if (!bwrap) throw new Error("Sandbox mode requires bubblewrap on Linux");
+  if (!bwrap) {
+    throw new Error("Sandbox mode requires bubblewrap on Linux");
+  }
   const home = await realpath(homedir());
-  if (home === "/") throw new Error("Sandbox mode requires a private home directory");
+  if (home === "/") {
+    throw new Error("Sandbox mode requires a private home directory");
+  }
 
   const args = ["--die-with-parent", "--new-session", "--unshare-all", "--ro-bind", "/", "/"];
   args.push("--tmpfs", "/tmp", "--proc", "/proc", "--dev", "/dev");
   try {
-    if ((await stat("/run")).isDirectory()) args.push("--tmpfs", "/run");
+    if ((await stat("/run")).isDirectory()) {
+      args.push("--tmpfs", "/run");
+    }
   } catch {
     // Some Linux environments have no /run mount.
   }
@@ -163,12 +182,16 @@ async function linuxSandbox(
   const masks = ["/tmp", "/run"];
   const created = new Set<string>();
   const mkdirs = (base: string, target: string, includeTarget: boolean) => {
-    if (!within(base, target)) return;
+    if (!within(base, target)) {
+      return;
+    }
     const parts = relative(base, target).split(sep).filter(Boolean);
     let path = base;
     for (const part of includeTarget ? parts : parts.slice(0, -1)) {
       path = join(path, part);
-      if (created.has(path)) continue;
+      if (created.has(path)) {
+        continue;
+      }
       args.push("--dir", path);
       created.add(path);
     }
@@ -177,7 +200,9 @@ async function linuxSandbox(
 
   if (!masks.includes(home)) {
     const parent = masks.find((mask) => within(mask, home));
-    if (parent) mkdirs(parent, home, true);
+    if (parent) {
+      mkdirs(parent, home, true);
+    }
     args.push("--tmpfs", home);
   }
   const programMount =
@@ -185,10 +210,14 @@ async function linuxSandbox(
       ? ((await packageDirectory(program, home)) ?? program)
       : undefined;
   const workspaceMask = maskOf(workspace);
-  if (workspaceMask) mkdirs(workspaceMask, workspace, true);
+  if (workspaceMask) {
+    mkdirs(workspaceMask, workspace, true);
+  }
   if (programMount) {
     const mask = maskOf(programMount);
-    if (mask) mkdirs(mask, programMount, (await stat(programMount)).isDirectory());
+    if (mask) {
+      mkdirs(mask, programMount, (await stat(programMount)).isDirectory());
+    }
     args.push("--ro-bind", programMount, programMount);
   }
   if (helper && !within(workspace, helper) && (!programMount || !within(programMount, helper))) {
@@ -205,8 +234,9 @@ async function linuxSandbox(
 
 function positiveLimit(value: number | undefined, fallback: number, name: string): number {
   const limit = value ?? fallback;
-  if (!Number.isSafeInteger(limit) || limit <= 0)
+  if (!Number.isSafeInteger(limit) || limit <= 0) {
     throw new Error(`${name} must be a positive integer`);
+  }
   return limit;
 }
 
@@ -217,8 +247,12 @@ async function sandboxLauncher(
   env: NodeJS.ProcessEnv,
   helper?: string,
 ): Promise<[string, string[]]> {
-  if (process.platform === "darwin") return macSandbox(program, workspace, env, helper);
-  if (process.platform === "linux") return linuxSandbox(program, workspace, cwd, env, helper);
+  if (process.platform === "darwin") {
+    return macSandbox(program, workspace, env, helper);
+  }
+  if (process.platform === "linux") {
+    return linuxSandbox(program, workspace, cwd, env, helper);
+  }
   throw new Error(`Sandbox mode is unavailable on ${process.platform}`);
 }
 
@@ -226,14 +260,17 @@ async function prepareLaunch(
   command: ResolvedCommand,
   options: LocalExecutionOptions,
 ): Promise<Launch> {
-  if (options.workspace.kind !== "local")
+  if (options.workspace.kind !== "local") {
     throw new Error("Local command executor requires a local workspace");
+  }
   const workspace = await realpath(options.workspace.path);
   const cwd = await realpath(resolve(workspace, command.cwd ?? "."));
-  if (options.mode === "sandbox" && !within(workspace, cwd))
+  if (options.mode === "sandbox" && !within(workspace, cwd)) {
     throw new Error(`Command directory is outside the sandbox workspace: ${command.cwd}`);
-  if (!(await stat(cwd)).isDirectory())
+  }
+  if (!(await stat(cwd)).isDirectory()) {
     throw new Error(`Command directory is not a directory: ${cwd}`);
+  }
 
   const env: NodeJS.ProcessEnv =
     options.mode === "sandbox"
@@ -249,14 +286,21 @@ async function prepareLaunch(
   // Validate without putting sensitive values into launcher arguments.
   envArgs(options.sensitiveEnv ?? {});
   const program = await resolveProgram(command.program, cwd, effectiveEnv.PATH ?? "");
-  if (options.mode === "full") return { cwd, env: effectiveEnv, program, args: command.args };
-  if (options.mode !== "sandbox") throw new Error(`Unknown execution mode: ${options.mode}`);
+  if (options.mode === "full") {
+    return { cwd, env: effectiveEnv, program, args: command.args };
+  }
+  if (options.mode !== "sandbox") {
+    throw new Error(`Unknown execution mode: ${options.mode}`);
+  }
 
   // The launcher itself runs with a minimal environment; `env -i` inside applies the real one.
   const privateEnvironment = options.sensitiveEnv && Object.keys(options.sensitiveEnv).length > 0;
   const helper = privateEnvironment ? await realpath(process.execPath) : undefined;
-  if (privateEnvironment)
-    for (const key of Object.keys(options.sensitiveEnv ?? {})) delete env[key];
+  if (privateEnvironment) {
+    for (const key of Object.keys(options.sensitiveEnv ?? {})) {
+      delete env[key];
+    }
+  }
   const [launcher, prefix] = await sandboxLauncher(program, workspace, cwd, env, helper);
   return {
     cwd,
@@ -279,12 +323,19 @@ async function prepareLaunch(
 }
 
 function killTree(child: ChildProcessWithoutNullStreams, signal: NodeJS.Signals): void {
-  if (!child.pid) return;
+  if (!child.pid) {
+    return;
+  }
   try {
-    if (process.platform === "win32") child.kill(signal);
-    else process.kill(-child.pid, signal);
+    if (process.platform === "win32") {
+      child.kill(signal);
+    } else {
+      process.kill(-child.pid, signal);
+    }
   } catch {
-    if (!child.killed) child.kill(signal);
+    if (!child.killed) {
+      child.kill(signal);
+    }
   }
 }
 
@@ -319,7 +370,9 @@ function run(
     let drainTimer: ReturnType<typeof setTimeout> | undefined;
 
     const stop = (error: Error) => {
-      if (failure) return;
+      if (failure) {
+        return;
+      }
       failure = error;
       killTree(child, "SIGTERM");
       if (!exited) {
@@ -336,9 +389,13 @@ function run(
     timeout.unref();
 
     const finish = (exitCode: number | null, exitSignal: NodeJS.Signals | null, error?: Error) => {
-      if (settled) return;
+      if (settled) {
+        return;
+      }
       settled = true;
-      if (!exited) killTree(child, "SIGKILL");
+      if (!exited) {
+        killTree(child, "SIGKILL");
+      }
       clearTimeout(timeout);
       clearTimeout(killTimer);
       clearTimeout(drainTimer);
@@ -379,8 +436,9 @@ function run(
         destination.push(captured);
         bytes += captured.length;
       }
-      if (chunk.length > remaining)
+      if (chunk.length > remaining) {
         stop(new Error(`Command output exceeded ${limits.maxOutputBytes} bytes`));
+      }
     };
     child.stdout.on("data", collect(stdout));
     child.stderr.on("data", collect(stderr));
@@ -411,7 +469,9 @@ export const executeLocalCommand = async (
     new CommandExecutionError("Command aborted", emptyOutput(), false, {
       cause: options.signal?.reason,
     });
-  if (options.signal?.aborted) throw aborted();
+  if (options.signal?.aborted) {
+    throw aborted();
+  }
   let launch: Launch;
   let limits: { timeoutMs: number; maxOutputBytes: number };
   try {
@@ -427,6 +487,8 @@ export const executeLocalCommand = async (
   } catch (error) {
     throw unstarted(error);
   }
-  if (options.signal?.aborted) throw aborted();
+  if (options.signal?.aborted) {
+    throw aborted();
+  }
   return run(launch, command, limits, options.signal, performance.now());
 };

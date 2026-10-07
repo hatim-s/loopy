@@ -25,7 +25,9 @@ function identifier(value: string): string {
 
 function section(lines: string[], title: string): string[] {
   const start = lines.findIndex((line) => line.trim() === `${title}:`);
-  if (start < 0) return [];
+  if (start < 0) {
+    return [];
+  }
   const end = lines.findIndex(
     (line, index) => index > start && /^[A-Za-z][\w /-]*:\s*$/.test(line),
   );
@@ -43,19 +45,26 @@ function parsePositionals(lines: string[]): PositionalDefinition[] {
   const result: PositionalDefinition[] = [];
   const seen = new Set<string>();
   for (const line of source) {
-    if (!argumentsSection.length && result.length) break;
+    if (!argumentsSection.length && result.length) {
+      break;
+    }
     const candidates = argumentsSection.length
       ? [line.trim().split(/\s{2,}/)[0] ?? ""]
       : line.trim().split(/\s+/);
     for (const token of candidates) {
-      if (!argumentsSection.length && !token.startsWith("[") && !token.startsWith("<")) continue;
+      if (!argumentsSection.length && !token.startsWith("[") && !token.startsWith("<")) {
+        continue;
+      }
       const variadic = token.includes("...");
       const optional = token.startsWith("[");
       const rawName = token.replace(/[<>[\]]/g, "").replace(/\.\.\.$/, "");
-      if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(rawName) || rawName.toUpperCase() === "OPTIONS")
+      if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(rawName) || rawName.toUpperCase() === "OPTIONS") {
         continue;
+      }
       const name = rawName.toLowerCase();
-      if (!name || seen.has(name)) continue;
+      if (!name || seen.has(name)) {
+        continue;
+      }
       seen.add(name);
       result.push({ name, optional, ...(variadic ? { variadic: true } : {}) });
     }
@@ -66,13 +75,16 @@ function parsePositionals(lines: string[]): PositionalDefinition[] {
 function choicesAfter(lines: string[], start: number): string[] | undefined {
   for (let index = start; index < Math.min(lines.length, start + 12); index += 1) {
     const line = lines[index] ?? "";
-    if (index > start && /^\s*--?[\w-]+(?:,|\s|$)/.test(line)) break;
+    if (index > start && /^\s*--?[\w-]+(?:,|\s|$)/.test(line)) {
+      break;
+    }
     const match = /\[possible values:\s*([^\]]+)\]/i.exec(line);
-    if (match)
+    if (match) {
       return match[1]
         ?.split(",")
         .map((part) => part.trim())
         .filter(Boolean);
+    }
   }
   return undefined;
 }
@@ -86,12 +98,15 @@ function parseFlags(lines: string[], warnings: string[]): Record<string, FlagDef
   for (const [index, line] of options.entries()) {
     const match = optionLine.exec(line);
     if (!match) {
-      if (/^\s{0,8}(?:-\w,\s*)?--[\w-]+/.test(line))
+      if (/^\s{0,8}(?:-\w,\s*)?--[\w-]+/.test(line)) {
         warnings.push(`Could not parse option: ${line.trim()}`);
+      }
       continue;
     }
     const cli = match[1];
-    if (!cli) continue;
+    if (!cli) {
+      continue;
+    }
     const name = identifier(cli);
     if (!name) {
       warnings.push(`Could not name option: ${cli}`);
@@ -104,15 +119,17 @@ function parseFlags(lines: string[], warnings: string[]): Record<string, FlagDef
     const placeholder = (match[2] ?? match[3])?.replace(/[<>[\]=]/g, "").toLowerCase();
     const optionalValue = Boolean(match[3] || match[2]?.startsWith("["));
     const choices = choicesAfter(options, index);
-    const kind = !placeholder
-      ? "boolean"
-      : /(?:^|_)(count|number|timeout|limit|port|seconds|ms)(?:$|_)/.test(placeholder)
+    const kind = placeholder
+      ? /(?:^|_)(count|number|timeout|limit|port|seconds|ms)(?:$|_)/.test(placeholder)
         ? "number"
-        : "string";
+        : "string"
+      : "boolean";
     const description: string[] = [line];
     for (let next = index + 1; next < options.length; next += 1) {
       const candidate = options[next] ?? "";
-      if (/^\s*(?:-\w,\s*)?--[A-Za-z0-9]/.test(candidate)) break;
+      if (/^\s*(?:-\w,\s*)?--[A-Za-z0-9]/.test(candidate)) {
+        break;
+      }
       description.push(candidate);
     }
     const repeatable = Boolean(match[4] || /\brepeatable\b/i.test(description.join(" ")));
@@ -125,15 +142,18 @@ function parseFlags(lines: string[], warnings: string[]): Record<string, FlagDef
       ...(choices?.length ? { choices } : {}),
     };
   }
-  if (!options.length)
+  if (!options.length) {
     warnings.push("No Options or Flags section found; generated command has no flags");
+  }
   return flags;
 }
 
 export function parseCliHelp(binary: string, path: readonly string[], help: string): ParsedHelp {
   const lines = help.replaceAll("\r\n", "\n").split("\n");
   const warnings: string[] = [];
-  if (!help.trim()) throw new Error("CLI help output is empty");
+  if (!help.trim()) {
+    throw new Error("CLI help output is empty");
+  }
   const positionals = parsePositionals(lines);
   const flags = parseFlags(lines, warnings);
   const usageIndex = lines.findIndex((line) => /^Usage:\s*\S/i.test(line));
@@ -141,7 +161,9 @@ export function parseCliHelp(binary: string, path: readonly string[], help: stri
     const prefix = [basename(binary), ...path].join(" ");
     for (let index = usageIndex + 1; index < lines.length; index += 1) {
       const line = lines[index]?.trim() ?? "";
-      if (!line) break;
+      if (!line) {
+        break;
+      }
       if (line.startsWith(prefix)) {
         warnings.push(
           "Multiple Usage forms found; verify positional arguments for the selected subcommand",
@@ -150,10 +172,12 @@ export function parseCliHelp(binary: string, path: readonly string[], help: stri
       }
     }
   }
-  if (!positionals.length)
+  if (!positionals.length) {
     warnings.push("No positional arguments detected; verify the generated tuple");
-  if (Object.values(flags).some((flag) => flag.kind !== "boolean" && !flag.repeatable))
+  }
+  if (Object.values(flags).some((flag) => flag.kind !== "boolean" && !flag.repeatable)) {
     warnings.push("Help may omit which valued flags can repeat; review repeatable flag metadata");
+  }
   const descriptor: CommandDescriptor = {
     program: binary,
     path,
@@ -171,8 +195,9 @@ const RESERVED_WORDS = new Set(
 );
 
 export function renderCommandSource(name: string, descriptor: CommandDescriptor): string {
-  if (!/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) || RESERVED_WORDS.has(name))
+  if (!/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) || RESERVED_WORDS.has(name)) {
     throw new Error(`'${name}' is not a valid TypeScript identifier`);
+  }
   return (
     `import { type CommandDescriptor, defineCommand } from "loopy";\n\n` +
     `const descriptor = ${JSON.stringify(descriptor, null, 2)} as const satisfies CommandDescriptor;\n\n` +
@@ -191,7 +216,9 @@ async function outputOf(binary: string, args: string[]): Promise<string> {
   } catch (error) {
     const processError = error as Error & { stdout?: string; stderr?: string };
     const output = `${processError.stdout ?? ""}\n${processError.stderr ?? ""}`.trim();
-    if (output) return output;
+    if (output) {
+      return output;
+    }
     throw new Error(`Could not run ${binary} ${args.join(" ")}: ${processError.message}`);
   }
 }
