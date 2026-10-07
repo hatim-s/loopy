@@ -33,9 +33,10 @@ function layerOf(file: string): Layer {
   return layer as Layer;
 }
 
+/** Static imports, re-exports, side-effect imports and literal dynamic imports. */
 function importsOf(file: string): string[] {
   const text = readFileSync(file, "utf8");
-  return [...text.matchAll(/from\s+"([^"]+)"/g)].map((match) => match[1] ?? "");
+  return [...text.matchAll(/\b(?:from|import)\s*\(?\s*"([^"]+)"/g)].map((match) => match[1] ?? "");
 }
 
 test("authoring, runtime and cloud exports bundle without host dependencies", async () => {

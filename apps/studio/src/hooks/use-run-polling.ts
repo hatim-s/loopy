@@ -1,6 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef } from "react";
 import { endpoints, type RunDetail } from "../api.ts";
-import { useRequest } from "./use-request.ts";
 
 const POLL_MS = 1000;
 
@@ -11,18 +10,43 @@ type Options = {
   onError: (cause: unknown) => void;
 };
 
-/** Refetches the run once per second while `active`, plus once as soon as it turns on. */
+/**
+ * Refetches the run while `active`: once immediately, then one second after each
+ * response lands. Waiting for the response keeps a slow server from piling up
+ * requests whose results would be dropped as stale.
+ */
 export function useRunPolling({ runId, active, apply, onError }: Options): void {
-  const [tick, setTick] = useState(0);
+  // The callbacks close over the latest render; the effect reads them through a ref so
+  // a changed callback does not restart the loop.
+  const callbacks = useRef({ apply, onError });
+  callbacks.current = { apply, onError };
 
   useEffect(() => {
-    if (!active) {
+    if (!active || !runId) {
       return;
     }
-    const timer = window.setInterval(() => setTick((count) => count + 1), POLL_MS);
-    return () => window.clearInterval(timer);
-  }, [active]);
-
-  const load = active && runId ? () => endpoints.run(runId) : null;
-  useRequest({ load, apply, onError }, [tick, runId, active]);
+    const id = runId;
+    let stopped = false;
+    let timer: number | undefined;
+    async function poll() {
+      try {
+        const detail = await endpoints.run(id);
+        if (!stopped) {
+          callbacks.current.apply(detail);
+        }
+      } catch (cause) {
+        if (!stopped) {
+          callbacks.current.onError(cause);
+        }
+      }
+      if (!stopped) {
+        timer = window.setTimeout(() => void poll(), POLL_MS);
+      }
+    }
+    void poll();
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+    };
+  }, [active, runId]);
 }
