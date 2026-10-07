@@ -1,4 +1,4 @@
-import type { AttemptRecord, Json, RunEvent, RunRecord, RunStatus } from "../core/model.js";
+import type { AttemptRecord, Json, RunEvent, RunRecord, RunStatus } from "../core/index.js";
 
 /**
  * Durable run state shared by local and remote workers. Each mutation is atomic.

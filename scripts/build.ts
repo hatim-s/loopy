@@ -12,13 +12,17 @@ const compiled = Bun.spawn(
     stderr: "inherit",
   },
 );
-if ((await compiled.exited) !== 0) throw new Error("Package JavaScript build failed");
+if ((await compiled.exited) !== 0) {
+  throw new Error("Package JavaScript build failed");
+}
 const result = Bun.spawn([process.execPath, "run", "--cwd", "apps/studio", "build"], {
   cwd: root,
   stdout: "inherit",
   stderr: "inherit",
 });
-if ((await result.exited) !== 0) throw new Error("Studio build failed");
+if ((await result.exited) !== 0) {
+  throw new Error("Studio build failed");
+}
 await mkdir(packageDist, { recursive: true });
 await cp(resolve(root, "apps/studio/dist"), resolve(packageDist, "studio"), {
   recursive: true,

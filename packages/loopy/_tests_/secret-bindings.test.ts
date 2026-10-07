@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { command, trigger } from "../src/core/index.js";
 import type { ExecuteCommand, ExecutionMode } from "../src/core/model.js";
 import { localRunOptions } from "../src/local/process.js";
-import { Registry } from "../src/local/registry.js";
+import { Registry } from "../src/local/registry/registry.js";
 import { createLocalRuntime } from "../src/local/runtime.js";
 import { secretRedactor } from "../src/local/secret-executor.js";
 import { SecretStore } from "../src/local/secrets.js";
@@ -33,8 +33,9 @@ function setup() {
 }
 afterEach(() => {
   delete process.env.LOOPY_BOUND_COOKIE;
-  for (const directory of directories.splice(0))
+  for (const directory of directories.splice(0)) {
     rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -261,8 +262,9 @@ for (const mode of ["full", "sandbox"] as ExecutionMode[]) {
         { ...localRunOptions(cwd, mode), secretBindings: saved.secretBindings },
       );
       const finished = await local.runtime.execute(run.id);
-      if (finished.status !== "succeeded")
+      if (finished.status !== "succeeded") {
         throw new Error(JSON.stringify(await local.runtime.getAttempts(run.id)));
+      }
       expect((await local.runtime.getAttempts(run.id))[0]?.output).toMatchObject({
         stdout: `${digest("private-cookie-first")}\nordinary input\n`,
         stderr: "[redacted]\n",

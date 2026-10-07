@@ -23,7 +23,9 @@ function workspace(): string {
 }
 
 afterEach(() => {
-  for (const path of workspaces.splice(0)) rmSync(path, { recursive: true, force: true });
+  for (const path of workspaces.splice(0)) {
+    rmSync(path, { recursive: true, force: true });
+  }
 });
 
 const hasBubblewrap =
@@ -366,13 +368,17 @@ __attribute__((constructor)) static void mark(void) {
       const compiled = spawnSync("/usr/bin/cc", ["-shared", "-fPIC", source, "-o", library], {
         encoding: "utf8",
       });
-      if (compiled.status !== 0) throw new Error(`Could not compile preload: ${compiled.stderr}`);
+      if (compiled.status !== 0) {
+        throw new Error(`Could not compile preload: ${compiled.stderr}`);
+      }
 
       const output = await executeLocalCommand(
         { program: "/bin/echo", args: ["inside"], env: { LD_PRELOAD: library } },
         { workspace: { kind: "local", path: cwd }, mode: "sandbox" },
       );
-      if (output.exitCode !== 0) throw new Error(`Sandbox failed: ${output.stderr}`);
+      if (output.exitCode !== 0) {
+        throw new Error(`Sandbox failed: ${output.stderr}`);
+      }
       expect(output.stdout).toBe("inside\n");
       expect(existsSync(insideMarker)).toBe(true);
       expect(existsSync(outsideMarker)).toBe(false);

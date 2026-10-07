@@ -51,16 +51,22 @@ function isJsonObject(value: JsonValue | undefined): value is JsonObject {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 function requireObject(value: JsonValue | undefined, location: string): JsonObject {
-  if (!isJsonObject(value)) throw new Error(`Expected JSON object at ${location}`);
+  if (!isJsonObject(value)) {
+    throw new Error(`Expected JSON object at ${location}`);
+  }
   return value;
 }
 function requireString(value: JsonValue | undefined, location: string): string {
-  if (typeof value !== "string") throw new Error(`Expected string at ${location}`);
+  if (typeof value !== "string") {
+    throw new Error(`Expected string at ${location}`);
+  }
   return value;
 }
 function requiredContent(content: Map<string, string>, key: string): string {
   const value = content.get(key);
-  if (value === undefined) throw new Error(`Source content is missing ${key}`);
+  if (value === undefined) {
+    throw new Error(`Source content is missing ${key}`);
+  }
   return value;
 }
 
@@ -69,8 +75,9 @@ export function parseArgs(argv: string[]): Options {
   for (let i = 0; i < argv.length; i += 1) {
     const key = argv[i];
     const value = argv[i + 1];
-    if (!key?.startsWith("--") || value === undefined)
+    if (!key?.startsWith("--") || value === undefined) {
       throw new Error(`Expected --option value, got '${key ?? ""}'`);
+    }
     const option = key.slice(2);
     if (
       !new Set([
@@ -90,14 +97,18 @@ export function parseArgs(argv: string[]): Options {
   const sourceRepo = values.get("source-repo");
   const targetRepo = values.get("target-repo");
   const patchDir = values.get("patch-dir");
-  if (Boolean(sourceRepo) !== Boolean(targetRepo))
+  if (Boolean(sourceRepo) !== Boolean(targetRepo)) {
     throw new Error("Pass both --source-repo and --target-repo for local fixture mode");
+  }
   const dryRunValue = values.get("dry-run") ?? "true";
-  if (!["true", "false"].includes(dryRunValue)) throw new Error("--dry-run must be true or false");
-  if (sourceRepo && dryRunValue === "false")
+  if (!["true", "false"].includes(dryRunValue)) {
+    throw new Error("--dry-run must be true or false");
+  }
+  if (sourceRepo && dryRunValue === "false") {
     throw new Error(
       "Local fixture mode supports dry-run only; omit local repos to publish through GitHub",
     );
+  }
   return {
     ...(sourceRepo ? { sourceRepo } : {}),
     ...(targetRepo ? { targetRepo } : {}),
@@ -149,7 +160,9 @@ async function git(cwd: string, ...args: string[]) {
   return run("git", args, cwd);
 }
 async function writePatch(checkout: string, branch: string, patchDir: string | undefined) {
-  if (!patchDir) return;
+  if (!patchDir) {
+    return;
+  }
   const output = resolve(patchDir);
   await mkdir(output, { recursive: true });
   const patch = await git(checkout, "diff", "--binary", "--", ...targetFiles);
@@ -160,15 +173,20 @@ async function readJson(path: string): Promise<JsonObject> {
 }
 function skipSpace(text: string, start: number): number {
   let cursor = start;
-  while (/\s/.test(text[cursor] ?? "")) cursor += 1;
+  while (/\s/.test(text[cursor] ?? "")) {
+    cursor += 1;
+  }
   return cursor;
 }
 
 function stringEnd(text: string, start: number): number {
   let cursor = start + 1;
   while (cursor < text.length) {
-    if (text[cursor] === "\\") cursor += 2;
-    else if (text[cursor++] === '"') return cursor;
+    if (text[cursor] === "\\") {
+      cursor += 2;
+    } else if (text[cursor++] === '"') {
+      return cursor;
+    }
   }
   throw new Error("Malformed JSON string");
 }
@@ -184,11 +202,16 @@ function jsonSpans(text: string): Map<string, [number, number]> {
         const keyEnd = stringEnd(text, next);
         const key = JSON.parse(text.slice(next, keyEnd)) as string;
         next = skipSpace(text, keyEnd);
-        if (text[next++] !== ":") throw new Error("Malformed JSON object");
+        if (text[next++] !== ":") {
+          throw new Error("Malformed JSON object");
+        }
         next = value(next, [...path, key]);
         next = skipSpace(text, next);
-        if (text[next] === ",") next = skipSpace(text, next + 1);
-        else if (text[next] !== "}") throw new Error("Malformed JSON object");
+        if (text[next] === ",") {
+          next = skipSpace(text, next + 1);
+        } else if (text[next] !== "}") {
+          throw new Error("Malformed JSON object");
+        }
       }
       spans.set(JSON.stringify(path), [cursor, next + 1]);
       return next + 1;
@@ -199,8 +222,11 @@ function jsonSpans(text: string): Map<string, [number, number]> {
       while (text[next] !== "]") {
         next = value(next, [...path, index++]);
         next = skipSpace(text, next);
-        if (text[next] === ",") next = skipSpace(text, next + 1);
-        else if (text[next] !== "]") throw new Error("Malformed JSON array");
+        if (text[next] === ",") {
+          next = skipSpace(text, next + 1);
+        } else if (text[next] !== "]") {
+          throw new Error("Malformed JSON array");
+        }
       }
       spans.set(JSON.stringify(path), [cursor, next + 1]);
       return next + 1;
@@ -210,14 +236,18 @@ function jsonSpans(text: string): Map<string, [number, number]> {
         ? stringEnd(text, cursor)
         : (() => {
             let next = cursor;
-            while (next < text.length && !/[\s,}\]]/.test(text.charAt(next))) next += 1;
+            while (next < text.length && !/[\s,}\]]/.test(text.charAt(next))) {
+              next += 1;
+            }
             return next;
           })();
     spans.set(JSON.stringify(path), [cursor, end]);
     return end;
   }
   const end = value(0, []);
-  if (skipSpace(text, end) !== text.length) throw new Error("Trailing content after JSON value");
+  if (skipSpace(text, end) !== text.length) {
+    throw new Error("Trailing content after JSON value");
+  }
   return spans;
 }
 
@@ -227,10 +257,13 @@ async function writeJsonPreserving(path: string, nextValue: JsonObject) {
   const spans = jsonSpans(original);
   const replacements: { start: number; end: number; text: string }[] = [];
   function compare(before: JsonValue, after: JsonValue, pathParts: (string | number)[]) {
-    if (Object.is(before, after)) return;
+    if (Object.is(before, after)) {
+      return;
+    }
     if (Array.isArray(before) && Array.isArray(after) && before.length === after.length) {
-      for (const [index, item] of before.entries())
+      for (const [index, item] of before.entries()) {
         compare(item, after[index] ?? null, [...pathParts, index]);
+      }
       return;
     }
     if (isJsonObject(before) && isJsonObject(after)) {
@@ -238,21 +271,25 @@ async function writeJsonPreserving(path: string, nextValue: JsonObject) {
       if (
         beforeKeys.length !== Object.keys(after).length ||
         beforeKeys.some((key) => !(key in after))
-      )
+      ) {
         throw new Error(`Refusing to reformat existing JSON structure in ${path}`);
-      for (const key of beforeKeys)
+      }
+      for (const key of beforeKeys) {
         compare(before[key] ?? null, after[key] ?? null, [...pathParts, key]);
+      }
       return;
     }
     const span = spans.get(JSON.stringify(pathParts));
-    if (!span || (after !== null && typeof after === "object"))
+    if (!span || (after !== null && typeof after === "object")) {
       throw new Error(`Cannot target JSON value at ${pathParts.join(".")} in ${path}`);
+    }
     replacements.push({ start: span[0], end: span[1], text: JSON.stringify(after) ?? "null" });
   }
   compare(current, nextValue, []);
   let patched = original;
-  for (const replacement of replacements.sort((a, b) => b.start - a.start))
+  for (const replacement of replacements.sort((a, b) => b.start - a.start)) {
     patched = `${patched.slice(0, replacement.start)}${replacement.text}${patched.slice(replacement.end)}`;
+  }
   JSON.parse(patched);
   await writeFile(path, patched);
 }
@@ -271,19 +308,25 @@ async function appendJsonArray(
         ? (target[String(part)] ?? null)
         : null;
   }
-  if (!Array.isArray(target))
+  if (!Array.isArray(target)) {
     throw new Error(`Expected registration array at ${targetPath.join(".")} in ${path}`);
+  }
   const missing = entries.filter(
     (entry) =>
       !target.some((current) => isJsonObject(current) && current.assetId === entry.assetId),
   );
-  if (!missing.length) return false;
+  if (!missing.length) {
+    return false;
+  }
   const span = jsonSpans(original).get(JSON.stringify(targetPath));
-  if (!span)
+  if (!span) {
     throw new Error(`Could not locate registration array at ${targetPath.join(".")} in ${path}`);
+  }
   const [start, end] = span;
   let trailingStart = end - 1;
-  while (trailingStart > start && /\s/.test(original.charAt(trailingStart - 1))) trailingStart -= 1;
+  while (trailingStart > start && /\s/.test(original.charAt(trailingStart - 1))) {
+    trailingStart -= 1;
+  }
   const inner = original.slice(start + 1, trailingStart);
   const lineStart = original.lastIndexOf("\n", start) + 1;
   const parentIndent = original.slice(lineStart, start).match(/^\s*/)?.[0] ?? "";
@@ -303,18 +346,24 @@ async function appendJsonArray(
 
 function assertWithin(root: string, path: string) {
   const relative = resolve(path).slice(resolve(root).length);
-  if (relative === resolve(path) || !(relative.startsWith(sep) || relative === ""))
+  if (relative === resolve(path) || !(relative.startsWith(sep) || relative === "")) {
     throw new Error(`Path escaped checkout: ${path}`);
+  }
 }
 
 export function sourceText(text: string, stripMaintainerComment = false): string {
-  if (!stripMaintainerComment) return text.replace(/\r\n/g, "\n");
+  if (!stripMaintainerComment) {
+    return text.replace(/\r\n/g, "\n");
+  }
   const normalized = text.replace(/\r\n/g, "\n");
   const marker = "\n\n<!--\nMAINTAINER NOTE";
   const start = normalized.indexOf(marker);
-  if (start < 0) return normalized;
-  if (normalized.indexOf("-->", start) < 0)
+  if (start < 0) {
+    return normalized;
+  }
+  if (normalized.indexOf("-->", start) < 0) {
     throw new Error("Canonical prompt is missing its maintainer-note block");
+  }
   const end = normalized.indexOf("-->", start) + 3;
   return `${normalized.slice(0, start)}${normalized.slice(end).replace(/^\n+/, "\n\n")}`;
 }
@@ -349,11 +398,15 @@ function syncBranchName(sourceSha: string, targetBranch: string) {
 function mergeAgentInstructions(existing: string, source: string): string {
   const frontmatter = /^---\n[\s\S]*?\n---\n/;
   const sourceHeader = source.match(frontmatter)?.[0] ?? "";
-  if (!sourceHeader) return source;
+  if (!sourceHeader) {
+    return source;
+  }
   const existingHeader = existing.match(frontmatter)?.[0] ?? sourceHeader;
   const sourceName = sourceHeader.match(/^name:\s*(.+)$/m)?.[1];
   const existingName = existingHeader.match(/^name:\s*(.+)$/m)?.[1];
-  if (!sourceName || !existingName) throw new Error("Agent frontmatter must include a name field");
+  if (!sourceName || !existingName) {
+    throw new Error("Agent frontmatter must include a name field");
+  }
   const mergedHeader = sourceHeader.replace(/^name:\s*.+$/m, `name: ${existingName}`);
   return `${mergedHeader}${source.slice(sourceHeader.length)}`;
 }
@@ -379,8 +432,9 @@ async function sourceContents(repo: string) {
     );
   }
   result.set(workflowAgentId, canonical);
-  for (const agent of agents.slice(1))
+  for (const agent of agents.slice(1)) {
     result.set(agent.id, sourceText(await readFile(join(repo, agent.source), "utf8")));
+  }
   for (const [name] of skills) {
     result.set(
       name,
@@ -434,8 +488,9 @@ export async function applyAssetSync(
   );
   const workflowAgent = await readJson(workflowAgentFile);
   const embedded = workflowAgent.skills;
-  if (!Array.isArray(embedded))
+  if (!Array.isArray(embedded)) {
     throw new Error(`Workflow Agent asset has no skills array: ${workflowAgentFile}`);
+  }
   for (const [name, id] of skills.slice(0, 9)) {
     const match = embedded
       .map((item) => requireObject(item, `${workflowAgentFile}.skills[]`))
@@ -443,7 +498,9 @@ export async function applyAssetSync(
         const entity = item.skillEntity;
         return isJsonObject(entity) && entity.id === id;
       });
-    if (!match) throw new Error(`Workflow Agent is missing embedded skill ${id}`);
+    if (!match) {
+      throw new Error(`Workflow Agent is missing embedded skill ${id}`);
+    }
     const embeddedEntity = requireObject(
       match.skillEntity,
       `${workflowAgentFile}.skills.${id}.skillEntity`,
@@ -454,16 +511,19 @@ export async function applyAssetSync(
     );
     const skill = requiredContent(content, name);
     const standalone = await readJson(join(checkout, ASSET_ROOT, "e_skill_ai_agent", `${id}.json`));
-    if (standalone.version !== embeddedEntity.version)
+    if (standalone.version !== embeddedEntity.version) {
       throw new Error(`Standalone and embedded skill versions differ for ${id}`);
+    }
     if (embeddedProperties.skill !== skill) {
       embeddedProperties.skill = skill;
-      if (!changed.includes(workflowAgentFile.slice(checkout.length + 1)))
+      if (!changed.includes(workflowAgentFile.slice(checkout.length + 1))) {
         changed.push(workflowAgentFile.slice(checkout.length + 1));
+      }
     }
   }
-  if (changed.includes(workflowAgentFile.slice(checkout.length + 1)))
+  if (changed.includes(workflowAgentFile.slice(checkout.length + 1))) {
     await writeJsonPreserving(workflowAgentFile, workflowAgent);
+  }
 
   for (const agent of agents) {
     const file = join(checkout, MANIFEST_ROOT, agent.manifest);
@@ -473,10 +533,13 @@ export async function applyAssetSync(
       `${file}.assetClassVsAssetDetails`,
     );
     const entries = manifestDetails.ai_agent;
-    if (!Array.isArray(entries)) throw new Error(`Manifest has no ai_agent entries: ${file}`);
+    if (!Array.isArray(entries)) {
+      throw new Error(`Manifest has no ai_agent entries: ${file}`);
+    }
     const matches = entries.filter((entry) => isJsonObject(entry) && entry.assetId === agent.id);
-    if (matches.length > 1)
+    if (matches.length > 1) {
       throw new Error(`Manifest has duplicate agent registration ${agent.id}: ${file}`);
+    }
     if (!matches.length) {
       const assetName =
         agent.id === "e_6aa19955aeb9ea1371af57c7"
@@ -490,8 +553,9 @@ export async function applyAssetSync(
           ["assetClassVsAssetDetails", "ai_agent"],
           [{ assetClass: "ai_agent", assetId: agent.id, assetName }],
         )
-      )
+      ) {
         changed.push(file.slice(checkout.length + 1));
+      }
     }
   }
 
@@ -502,12 +566,14 @@ export async function applyAssetSync(
     `${skillManifestFile}.assetClassVsAssetDetails`,
   );
   const skillEntries = skillDetails.e_skill_ai_agent;
-  if (!Array.isArray(skillEntries))
+  if (!Array.isArray(skillEntries)) {
     throw new Error(`Manifest has no e_skill_ai_agent entries: ${skillManifestFile}`);
+  }
   for (const [, id] of skills) {
     const matches = skillEntries.filter((entry) => isJsonObject(entry) && entry.assetId === id);
-    if (matches.length > 1)
+    if (matches.length > 1) {
       throw new Error(`Manifest has duplicate skill registration ${id}: ${skillManifestFile}`);
+    }
     if (
       !matches.length &&
       (await appendJsonArray(
@@ -524,15 +590,18 @@ export async function applyAssetSync(
   const changedFeatures = new Set<string>();
   for (const path of changed) {
     const manifest = path.match(/platform\/ai-sdlc\/([\w-]+)-assets\.json$/)?.[1];
-    if (manifest) changedFeatures.add(manifest);
+    if (manifest) {
+      changedFeatures.add(manifest);
+    }
     if (
       path === `${ASSET_ROOT}/ai_agent/${agents[0].id}.json` ||
       skills.some(([, id]) => path === `${ASSET_ROOT}/e_skill_ai_agent/${id}.json`)
     ) {
       changedFeatures.add("text-to-workflow");
     }
-    if (path === `${ASSET_ROOT}/ai_agent/${agents[1].id}.json`)
+    if (path === `${ASSET_ROOT}/ai_agent/${agents[1].id}.json`) {
       changedFeatures.add("solution-builder");
+    }
     if (path === `${ASSET_ROOT}/ai_agent/${agents[2].id}.json`) {
       changedFeatures.add("solution-builder");
       changedFeatures.add("ai-fde");
@@ -543,31 +612,39 @@ export async function applyAssetSync(
     const lines = (await readFile(releasePath, "utf8")).split("\n");
     const found = new Set<string>();
     const nextLines = lines.map((line) => {
-      if (!line.trim()) return line;
+      if (!line.trim()) {
+        return line;
+      }
       const record = JSON.parse(line) as JsonObject;
       const properties = isJsonObject(record.properties) ? record.properties : undefined;
       const featureId = properties?.featureId;
-      if (typeof featureId !== "string" || !changedFeatures.has(featureId)) return line;
+      if (typeof featureId !== "string" || !changedFeatures.has(featureId)) {
+        return line;
+      }
       const releaseProperties = requireObject(
         record.properties,
         `${RELEASE_RECORDS}.${featureId}.properties`,
       );
-      if (found.has(featureId))
+      if (found.has(featureId)) {
         throw new Error(`Duplicate ai-sdlc release record for ${featureId}`);
+      }
       found.add(featureId);
       const currentVersion = requireString(
         releaseProperties.version,
         `${RELEASE_RECORDS}.${featureId}.version`,
       );
       const version = currentVersion.match(/^(\d+)\.(\d+)\.(\d+)$/);
-      if (!version)
+      if (!version) {
         throw new Error(`Expected semver release version for ${featureId}, got ${currentVersion}`);
+      }
       releaseProperties.version = `${version[1]}.${version[2]}.${Number(version[3]) + 1}`;
       releaseProperties.message = `Sync www agent prompts and skills from ${sourceSha.slice(0, 12)}`;
       return JSON.stringify(record);
     });
     const missing = [...changedFeatures].filter((feature) => !found.has(feature));
-    if (missing.length) throw new Error(`Missing ai-sdlc release record(s): ${missing.join(", ")}`);
+    if (missing.length) {
+      throw new Error(`Missing ai-sdlc release record(s): ${missing.join(", ")}`);
+    }
     const nextText = nextLines.join("\n");
     if (nextText !== (await readFile(releasePath, "utf8"))) {
       await writeFile(releasePath, nextText);
@@ -585,7 +662,9 @@ export async function syncCheckout(
   options: Options,
   sourceSha: string,
 ) {
-  if (!options.dryRun) throw new Error("Local fixture mode supports dry-run only");
+  if (!options.dryRun) {
+    throw new Error("Local fixture mode supports dry-run only");
+  }
   await git(checkout, "fetch", "origin", branch);
   const base = await git(checkout, "rev-parse", "FETCH_HEAD");
   const branchName = `chore/www-agent-assets-${sourceSha.slice(0, 8)}-${branch.replace(/[^a-zA-Z0-9-]/g, "-")}`;
@@ -594,11 +673,14 @@ export async function syncCheckout(
   await writePatch(checkout, branch, options.patchDir);
 
   const status = await git(checkout, "status", "--porcelain");
-  if (!status) return { branch, branchName, base, changed: [], pullRequest: null };
+  if (!status) {
+    return { branch, branchName, base, changed: [], pullRequest: null };
+  }
   await git(checkout, "diff", "--check");
   const paths = (await git(checkout, "diff", "--name-only")).split("\n").filter(Boolean);
-  if (paths.some((path) => !allowedPaths.has(path)))
+  if (paths.some((path) => !allowedPaths.has(path))) {
     throw new Error(`Sync attempted to change an unapproved path on ${branch}`);
+  }
   return { branch, branchName, base, changed: paths, pullRequest: null };
 }
 
@@ -616,7 +698,9 @@ async function ghJson(endpoint: string, temp: string, request?: unknown): Promis
     `gh-request-${Date.now()}-${Math.random().toString(36).slice(2)}.json`,
   );
   try {
-    if (request !== undefined) await writeFile(inputPath, JSON.stringify(request));
+    if (request !== undefined) {
+      await writeFile(inputPath, JSON.stringify(request));
+    }
     const args =
       request === undefined
         ? ["api", endpoint]
@@ -663,9 +747,12 @@ async function githubSourceContent(sourceSha: string) {
     );
   }
   result.set(workflowAgentId, canonical);
-  for (const agent of agents.slice(1)) result.set(agent.id, sourceText(await get(agent.source)));
-  for (const [name] of skills)
+  for (const agent of agents.slice(1)) {
+    result.set(agent.id, sourceText(await get(agent.source)));
+  }
+  for (const [name] of skills) {
     result.set(name, sourceText(await get(`packages/uac/skills/${name}/SKILL.md`)));
+  }
   return result;
 }
 
@@ -696,28 +783,31 @@ export async function verifyGeneratedCommit(
   const message = requireString(commit.message, "sync commit message");
   const source = message.match(/^Loopy-www-source: ([0-9a-f]{40})$/m)?.[1];
   const base = message.match(/^Loopy-uacode-base: ([0-9a-f]{40})$/m)?.[1];
-  if (!source || !base || message !== syncCommitMessage(source, base))
+  if (!source || !base || message !== syncCommitMessage(source, base)) {
     throw new Error(
       "Refusing to update an unrecognized sync branch commit; review its edits manually",
     );
+  }
   const tree = requireObject(commit.tree, "sync commit tree");
-  if (requireString(tree.sha, "sync commit tree SHA") !== (await reconstruct(source, base)))
+  if (requireString(tree.sha, "sync commit tree SHA") !== (await reconstruct(source, base))) {
     throw new Error(
       "Refusing to update a sync branch with manual edits; review its edits manually",
     );
+  }
 }
 
 async function createSyncTree(checkout: string, base: string, paths: string[], temp: string) {
   const baseCommit = await ghJson(`repos/unify-apps/uacode/git/commits/${base}`, temp);
   const baseTree = requireObject(baseCommit.tree, `uacode commit ${base}.tree`);
   const tree = [];
-  for (const path of paths)
+  for (const path of paths) {
     tree.push({
       path,
       mode: "100644",
       type: "blob",
       content: await readFile(join(checkout, path), "utf8"),
     });
+  }
   const created = await ghJson("repos/unify-apps/uacode/git/trees", temp, {
     base_tree: requireString(baseTree.sha, "base tree SHA"),
     tree,
@@ -763,7 +853,9 @@ async function githubSync(
 ) {
   const results = [];
   for (const branch of options.targetBranches) {
-    if (!/^[A-Za-z0-9._/-]+$/.test(branch)) throw new Error(`Invalid target branch '${branch}'`);
+    if (!/^[A-Za-z0-9._/-]+$/.test(branch)) {
+      throw new Error(`Invalid target branch '${branch}'`);
+    }
     const encodedBranch = encodeURIComponent(branch);
     const baseRef = await ghJson(`repos/unify-apps/uacode/git/ref/heads/${encodedBranch}`, temp);
     const baseObject = requireObject(baseRef.object, `uacode ref ${branch}.object`);
@@ -776,8 +868,9 @@ async function githubSync(
     const paths = (await git(checkout, "diff", "--name-only", "--", ...targetFiles))
       .split("\n")
       .filter(Boolean);
-    if (paths.some((path) => !allowedPaths.has(path)))
+    if (paths.some((path) => !allowedPaths.has(path))) {
       throw new Error(`Sync attempted to change an unapproved path on ${branch}`);
+    }
     let branchName = syncBranchName(sourceSha, branch);
     if (!paths.length || options.dryRun) {
       results.push({ branch, branchName, base, changed: paths, pullRequest: null });
@@ -801,7 +894,9 @@ async function githubSync(
     ) as SyncPullRequest[];
     const selectedPullRequest = selectSyncPullRequest(pullRequests, branch);
     const existing = selectedPullRequest?.url ?? "";
-    if (selectedPullRequest) branchName = selectedPullRequest.headRefName;
+    if (selectedPullRequest) {
+      branchName = selectedPullRequest.headRefName;
+    }
     const createdTreeSha = await createSyncTree(checkout, base, paths, temp);
     let observedHead: string | undefined;
     try {
@@ -814,8 +909,12 @@ async function githubSync(
         "sync head SHA",
       );
     } catch (error) {
-      if (existing || (!String(error).includes("HTTP 404") && !String(error).includes("Not Found")))
+      if (
+        existing ||
+        (!String(error).includes("HTTP 404") && !String(error).includes("Not Found"))
+      ) {
         throw error;
+      }
     }
     if (observedHead) {
       const priorCommit = await ghJson(`repos/unify-apps/uacode/git/commits/${observedHead}`, temp);
@@ -963,8 +1062,9 @@ async function main() {
       const content = await sourceContents(source);
       results = [];
       for (const branch of options.targetBranches) {
-        if (!/^[A-Za-z0-9._/-]+$/.test(branch))
+        if (!/^[A-Za-z0-9._/-]+$/.test(branch)) {
           throw new Error(`Invalid target branch '${branch}'`);
+        }
         const checkout = join(temporary, `uacode-${branch.replaceAll("/", "-")}`);
         await run("git", ["clone", "--no-checkout", options.targetRepo, checkout]);
         results.push(await syncCheckout(checkout, branch, content, options, sourceSha));
@@ -976,4 +1076,6 @@ async function main() {
   }
 }
 
-if (import.meta.main) await main();
+if (import.meta.main) {
+  await main();
+}

@@ -8,148 +8,34 @@ import type {
   AttemptStatus,
   Json,
   RunEvent,
+  RunEventType,
   RunRecord,
   RunStatus,
-} from "../core/model.js";
-import { RunBusyError } from "../runtime/errors.js";
-import type { RunRepository } from "../runtime/repository.js";
-
-const SCHEMA_VERSION = 2;
-const SCHEMA = `
-  CREATE TABLE IF NOT EXISTS runs (
-    id TEXT PRIMARY KEY,
-    slug TEXT NOT NULL,
-    workflow_json TEXT NOT NULL,
-    workflow_hash TEXT NOT NULL,
-    input_json TEXT NOT NULL,
-    options_json TEXT NOT NULL,
-    status TEXT NOT NULL,
-    error TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    owner_token TEXT,
-    owner_pid INTEGER,
-    owner_host TEXT,
-    heartbeat_at TEXT
-  );
-  CREATE INDEX IF NOT EXISTS runs_slug_created ON runs(slug, created_at DESC);
-  CREATE TABLE IF NOT EXISTS attempts (
-    id TEXT PRIMARY KEY,
-    run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
-    node_id TEXT NOT NULL,
-    number INTEGER NOT NULL CHECK(number > 0),
-    status TEXT NOT NULL,
-    input_json TEXT NOT NULL,
-    output_json TEXT,
-    error TEXT,
-    started_at TEXT NOT NULL,
-    ended_at TEXT,
-    UNIQUE(run_id, node_id, number)
-  );
-  CREATE INDEX IF NOT EXISTS attempts_run ON attempts(run_id, node_id, number);
-  CREATE TABLE IF NOT EXISTS events (
-    run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
-    sequence INTEGER NOT NULL,
-    node_id TEXT,
-    type TEXT NOT NULL,
-    data_json TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    PRIMARY KEY(run_id, sequence)
-  );
-`;
-
-type RunRow = {
-  id: string;
-  slug: string;
-  workflow_json: string;
-  workflow_hash: string;
-  input_json: string;
-  options_json: string;
-  status: RunStatus;
-  error: string | null;
-  created_at: string;
-  updated_at: string;
-  owner_token: string | null;
-  owner_pid: number | null;
-  owner_host: string | null;
-  heartbeat_at: string | null;
-};
-
-type AttemptRow = {
-  id: string;
-  run_id: string;
-  node_id: string;
-  number: number;
-  status: AttemptStatus;
-  input_json: string;
-  output_json: string | null;
-  error: string | null;
-  started_at: string;
-  ended_at: string | null;
-};
-
-type EventRow = {
-  sequence: number;
-  run_id: string;
-  node_id: string | null;
-  type: string;
-  data_json: string;
-  created_at: string;
-};
-
-const now = () => new Date().toISOString();
-const encode = (value: Json) => JSON.stringify(value);
-const decode = <T>(value: string): T => JSON.parse(value) as T;
-
-function runFromRow(row: RunRow): RunRecord {
-  return {
-    id: row.id,
-    slug: row.slug,
-    workflow: decode(row.workflow_json),
-    workflowHash: row.workflow_hash,
-    input: decode(row.input_json),
-    options: decode(row.options_json),
-    status: row.status,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    error: row.error ?? undefined,
-  };
-}
-
-function attemptFromRow(row: AttemptRow): AttemptRecord {
-  return {
-    id: row.id,
-    runId: row.run_id,
-    nodeId: row.node_id,
-    number: row.number,
-    status: row.status,
-    input: decode(row.input_json),
-    output: row.output_json === null ? undefined : decode(row.output_json),
-    error: row.error ?? undefined,
-    startedAt: row.started_at,
-    endedAt: row.ended_at ?? undefined,
-  };
-}
-
-function eventFromRow(row: EventRow): RunEvent {
-  return {
-    sequence: row.sequence,
-    runId: row.run_id,
-    nodeId: row.node_id ?? undefined,
-    type: row.type,
-    data: decode(row.data_json),
-    createdAt: row.created_at,
-  };
-}
+} from "../core/index.js";
+import type { RunRepository } from "../runtime/index.js";
+import { RunBusyError } from "../runtime/index.js";
+import { errnoCode } from "./fs.js";
+import type { AttemptRow, EventRow, RunRow } from "./store-schema.js";
+import {
+  attemptFromRow,
+  encode,
+  eventFromRow,
+  now,
+  runFromRow,
+  SCHEMA,
+  SCHEMA_VERSION,
+} from "./store-schema.js";
 
 /** True when the owning process is alive on this host. */
 function ownerAlive(row: RunRow): boolean {
-  if (!row.owner_token || !row.owner_pid || row.owner_host !== hostname()) return false;
+  if (!row.owner_token || !row.owner_pid || row.owner_host !== hostname()) {
+    return false;
+  }
   try {
     process.kill(row.owner_pid, 0);
     return true;
   } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM";
+    return errnoCode(error) === "EPERM";
   }
 }
 
@@ -175,7 +61,7 @@ export class SqliteRunStore implements RunRepository {
       .get()?.user_version;
     if (version !== 0 && version !== SCHEMA_VERSION) {
       this.db.close();
-      throw new Error(`Unsupported run database version ${version}`);
+      throw new Error(`Run database version ${version} is unsupported.`);
     }
     this.db.exec(SCHEMA);
     this.db.exec(`PRAGMA user_version=${SCHEMA_VERSION}`);
@@ -188,11 +74,13 @@ export class SqliteRunStore implements RunRepository {
 
   private requireRow(runId: string): RunRow {
     const row = this.row(runId);
-    if (!row) throw new Error(`Unknown run ${runId}`);
+    if (!row) {
+      throw new Error(`Run ${runId} does not exist.`);
+    }
     return row;
   }
 
-  private event(runId: string, type: string, data: Json, nodeId?: string): void {
+  private event(runId: string, type: RunEventType, data: Json, nodeId?: string): void {
     const next =
       this.db
         .query<{ sequence: number }, [string]>(
@@ -234,8 +122,9 @@ export class SqliteRunStore implements RunRepository {
   }
 
   private assertOwner(runId: string, token: string): void {
-    if (!this.db.query("SELECT 1 FROM runs WHERE id=? AND owner_token=?").get(runId, token))
+    if (!this.db.query("SELECT 1 FROM runs WHERE id=? AND owner_token=?").get(runId, token)) {
       throw new RunBusyError(runId);
+    }
   }
 
   /** A dead owner cannot leave a run looking active or silently replay its command. */
@@ -243,7 +132,9 @@ export class SqliteRunStore implements RunRepository {
     const reason = "Execution owner stopped before recording a result";
     const rows = this.db.query<RunRow, []>("SELECT * FROM runs WHERE status='running'").all();
     for (const row of rows) {
-      if (ownerActive(row)) continue;
+      if (ownerActive(row)) {
+        continue;
+      }
       this.db.transaction(() => {
         const current = this.row(row.id);
         if (
@@ -251,8 +142,9 @@ export class SqliteRunStore implements RunRepository {
           current.status !== "running" ||
           current.owner_token !== row.owner_token ||
           ownerActive(current)
-        )
+        ) {
           return;
+        }
         const uncertainAttempts = this.abandonAttempts(row.id, reason);
         this.clearOwner(row.id, row.owner_token, "interrupted", reason);
         this.event(row.id, "run.interrupted", { uncertainAttempts });
@@ -266,12 +158,16 @@ export class SqliteRunStore implements RunRepository {
     return this.db.transaction(() => {
       const row = this.requireRow(runId);
       if (!row.owner_token) {
-        if (row.status === "interrupted") return runFromRow(row);
-        throw new Error(`Run ${runId} has no owner to recover`);
+        if (row.status === "interrupted") {
+          return runFromRow(row);
+        }
+        throw new Error(`Run ${runId} has no owner to recover.`);
       }
       if (!row.owner_host || row.owner_host === hostname()) {
-        if (ownerAlive(row)) throw new RunBusyError(runId);
-        throw new Error(`Run ${runId} has no foreign owner to recover`);
+        if (ownerAlive(row)) {
+          throw new RunBusyError(runId);
+        }
+        throw new Error(`Run ${runId} has no foreign owner to recover.`);
       }
       const uncertainAttempts = this.abandonAttempts(
         runId,
@@ -290,7 +186,9 @@ export class SqliteRunStore implements RunRepository {
         previousStatus: row.status,
         uncertainAttempts,
       });
-      if (row.status === "running") this.event(runId, "run.interrupted", { uncertainAttempts });
+      if (row.status === "running") {
+        this.event(runId, "run.interrupted", { uncertainAttempts });
+      }
       return runFromRow(this.requireRow(runId));
     })();
   }
@@ -358,14 +256,19 @@ export class SqliteRunStore implements RunRepository {
     return this.db.transaction(() => {
       const row = this.requireRow(runId);
       const terminal = row.status === "failed" || row.status === "interrupted";
-      if (row.status === "succeeded" || (options.resume === false && terminal))
+      if (row.status === "succeeded" || (options.resume === false && terminal)) {
         return runFromRow(row);
-      if (ownerActive(row)) throw new RunBusyError(runId);
+      }
+      if (ownerActive(row)) {
+        throw new RunBusyError(runId);
+      }
       const claimed = this.db.run(
         "UPDATE runs SET owner_token=?,owner_pid=?,owner_host=?,heartbeat_at=?,status='running',error=NULL,updated_at=? WHERE id=? AND owner_token IS ?",
         [token, process.pid, hostname(), now(), now(), runId, row.owner_token],
       );
-      if (claimed.changes !== 1) throw new RunBusyError(runId);
+      if (claimed.changes !== 1) {
+        throw new RunBusyError(runId);
+      }
       this.abandonAttempts(runId, "Previous process stopped before recording a result");
       this.event(runId, row.status === "pending" ? "run.started" : "run.resumed", {});
       return runFromRow(this.requireRow(runId));
@@ -426,7 +329,9 @@ export class SqliteRunStore implements RunRepository {
       const row = this.db
         .query<AttemptRow, [string, string]>("SELECT * FROM attempts WHERE id=? AND run_id=?")
         .get(attemptId, runId);
-      if (!row || row.status !== "running") throw new Error(`Attempt ${attemptId} is not running`);
+      if (!row || row.status !== "running") {
+        throw new Error(`Attempt ${attemptId} is not running.`);
+      }
       const finished: AttemptRow = {
         ...row,
         status,

@@ -1,6 +1,6 @@
-import type { ExecuteCommand } from "../core/model.js";
-import { Runtime } from "../runtime/runtime.js";
-import { defaultHome } from "./registry.js";
+import type { ExecuteCommand } from "../core/index.js";
+import { Runtime } from "../runtime/index.js";
+import { defaultHome } from "./home.js";
 import { secretExecutor } from "./secret-executor.js";
 import { SqliteRunStore } from "./store.js";
 

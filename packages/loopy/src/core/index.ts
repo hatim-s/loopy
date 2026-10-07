@@ -1,3 +1,6 @@
+export { latestAttempts } from "./attempts.js";
+export { node, trigger, WorkflowBuilder } from "./builder.js";
+export { bash, command, defineCommand } from "./command.js";
 export type {
   CommandArgs,
   CommandArgument,
@@ -6,8 +9,9 @@ export type {
   CommandInput,
   FlagDefinition,
   PositionalDefinition,
-} from "./command.js";
-export { bash, command, defineCommand } from "./command.js";
+} from "./command-types.js";
+export { errorMessage } from "./errors.js";
+export { and, concat, contains, eq, file, gt, gte, lt, lte, ne, not, or } from "./expressions.js";
 export type {
   ArgConstraint,
   AttemptRecord,
@@ -23,36 +27,37 @@ export type {
   Json,
   Operator,
   Reference,
+  ReferenceSource,
   ResolvedCommand,
   RunEvent,
+  RunEventType,
   RunOptions,
   RunRecord,
   RunStatus,
+  Scalar,
   SecretBindings,
   Value,
   Workflow,
   WorkflowConfig,
   WorkflowNode,
+  WorkflowSummary,
   Workspace,
 } from "./model.js";
-export type { WorkflowContext } from "./workflow.js";
+export { validateEnvironmentName, validateSecretName, validateSlug } from "./names.js";
+export type { WorkflowContext } from "./references.js";
+export { at } from "./references.js";
+export { validateSecretBindings } from "./secret-bindings.js";
+export type { UnknownRecord } from "./validation.js";
 export {
-  and,
-  at,
-  compileWorkflow,
-  concat,
-  contains,
-  eq,
-  file,
-  gt,
-  gte,
-  lt,
-  lte,
-  ne,
-  node,
-  not,
-  or,
-  trigger,
-  validateWorkflow,
-  WorkflowBuilder,
-} from "./workflow.js";
+  allowKeys,
+  isRecord,
+  isStringArray,
+  requireBoolean,
+  requireNonEmptyString,
+  requireOneOf,
+  requirePositiveInteger,
+  requireRecord,
+  requireString,
+  setOwnProperty,
+} from "./validation.js";
+export { compileWorkflow, validateWorkflow } from "./workflow-validation.js";

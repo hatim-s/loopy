@@ -1,8 +1,8 @@
-import type { CommandOutput } from "../core/model.js";
+import type { CommandOutput } from "../core/index.js";
 
 export class RunBusyError extends Error {
   constructor(runId: string) {
-    super(`Run ${runId} is already executing`);
+    super(`Run ${runId} is already executing.`);
     this.name = "RunBusyError";
   }
 }
@@ -18,8 +18,4 @@ export class CommandExecutionError extends Error {
     super(message, options);
     this.name = "CommandExecutionError";
   }
-}
-
-export function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

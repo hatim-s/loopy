@@ -10,9 +10,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { command } from "../src/core/command.js";
-import { concat, eq, file, node, trigger } from "../src/core/workflow.js";
-import { Registry } from "../src/local/registry.js";
+import { command, concat, eq, file, node, trigger } from "../src/core/index.js";
+import { Registry } from "../src/local/registry/registry.js";
 
 const temporary: string[] = [];
 function directory() {
@@ -21,7 +20,9 @@ function directory() {
   return path;
 }
 afterEach(() => {
-  for (const path of temporary.splice(0)) rmSync(path, { recursive: true, force: true });
+  for (const path of temporary.splice(0)) {
+    rmSync(path, { recursive: true, force: true });
+  }
 });
 const workflow = (message: string) =>
   trigger("hello").node("echo", command("echo", message)).build();
@@ -174,7 +175,9 @@ test("global snapshots resolve marked files, relative programs, cwd, and nested 
     .build();
   const saved = registry.save(graph, join(root, "paths.ts")).workflow;
   const first = saved.nodes[0];
-  if (first?.kind !== "command") throw new Error("Missing command");
+  if (first?.kind !== "command") {
+    throw new Error("Missing command");
+  }
   expect(first.command.cwd).toBe(join(root, "work"));
   expect(first.command.program).toBe(join(root, "work", "bin/tool"));
   expect(first.command.stdin).toBe(join(root, "work/stdin.txt"));
@@ -184,8 +187,9 @@ test("global snapshots resolve marked files, relative programs, cwd, and nested 
     "ordinary text",
   ]);
   const branch = saved.nodes[1];
-  if (branch?.kind !== "condition" || branch.then[0]?.kind !== "command")
+  if (branch?.kind !== "condition" || branch.then[0]?.kind !== "command") {
     throw new Error("Missing branch");
+  }
   expect(branch.test).toEqual({ $op: "eq", args: [join(root, "condition.txt"), "expected"] });
   expect(branch.then[0].command.args).toEqual([
     join(root, "scripts/run.ts"),

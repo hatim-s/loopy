@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { command } from "../src/core/command.js";
-import { at, compileWorkflow, eq, node, trigger, validateWorkflow } from "../src/core/workflow.js";
+import { at, compileWorkflow, eq, node, trigger, validateWorkflow } from "../src/core/index.js";
 
 describe("TypeScript workflow authoring", () => {
   test("accepts a builder from another package installation", () => {

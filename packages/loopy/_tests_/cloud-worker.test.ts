@@ -201,7 +201,9 @@ describe("cloud worker", () => {
   test("rejects malformed messages, unknown runs, and local workspaces", async () => {
     const worker = new CloudWorker({
       getRun: async (id) => {
-        if (id === "missing") return undefined;
+        if (id === "missing") {
+          return undefined;
+        }
         return {
           ...managedRun(),
           options: { workspace: { kind: "local", path: "/tmp/work" }, mode: "full" },
@@ -218,8 +220,9 @@ describe("cloud worker", () => {
       { runId: " " },
       { runId: "run-1", retryUncertain: true },
       { runId: "run-1", extra: true },
-    ])
+    ]) {
       await expect(worker.handle(message)).rejects.toThrow();
+    }
     await expect(worker.handle({ runId: "missing" })).rejects.toThrow("Unknown run");
     await expect(worker.handle({ runId: "run-1" })).rejects.toThrow("local workspace");
   });
