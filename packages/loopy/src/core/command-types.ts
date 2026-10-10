@@ -1,6 +1,7 @@
 import type { Command, Value } from "./model.js";
 
 export type CommandArgument = Value<string | number>;
+
 export type FlagDefinition = {
   readonly cli: string;
   readonly kind: "boolean" | "string" | "number";
@@ -9,11 +10,13 @@ export type FlagDefinition = {
   readonly attachedValue?: boolean;
   readonly choices?: readonly string[];
 };
+
 export type PositionalDefinition = {
   readonly name: string;
   readonly optional?: boolean;
   readonly variadic?: boolean;
 };
+
 export type CommandDescriptor = {
   readonly program: string;
   readonly path?: readonly string[];
@@ -46,6 +49,7 @@ export type CommandArgs<Descriptor extends CommandDescriptor> = Descriptor exten
 type OptionalTrue<Flag extends FlagDefinition> = Flag extends { readonly optionalValue: true }
   ? true
   : never;
+
 type FlagValue<Flag extends FlagDefinition> = Flag["kind"] extends "boolean"
   ? boolean
   : Flag["kind"] extends "number"

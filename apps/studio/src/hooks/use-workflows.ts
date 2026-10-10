@@ -16,11 +16,13 @@ function pickSlug(items: WorkflowSummary[], wanted: string | null): string | nul
 
 async function loadLibrary() {
   const [summaries, config] = await Promise.all([endpoints.workflows(), endpoints.config()]);
+
   return { summaries, cwd: config.cwd };
 }
 
 async function loadWorkflow(slug: string): Promise<Loaded> {
   const [workflow, runs] = await Promise.all([endpoints.workflow(slug), endpoints.runs(slug)]);
+
   return { slug, workflow, runs: newestFirst(runs) };
 }
 
@@ -65,6 +67,7 @@ export function useWorkflows(errors: ErrorReporter) {
     if (!slug) {
       return;
     }
+
     const url = new URL(window.location.href);
     url.searchParams.set("workflow", slug);
     history.replaceState(null, "", url);
@@ -76,10 +79,13 @@ export function useWorkflows(errors: ErrorReporter) {
       if (!previous || previous.slug !== run.slug) {
         return previous;
       }
+
       const known = previous.runs.some((item) => item.id === run.id);
+
       const runs = known
         ? previous.runs.map((item) => (item.id === run.id ? run : item))
         : [run, ...previous.runs];
+
       return { ...previous, runs };
     });
   }
@@ -87,16 +93,20 @@ export function useWorkflows(errors: ErrorReporter) {
   async function refresh() {
     setRefreshing(true);
     errors.clear();
+
     try {
       const library = await loadLibrary();
       setSummaries(library.summaries);
       setCwd(library.cwd);
       const next = pickSlug(library.summaries, slug);
+
       if (next !== slug) {
         // The slug effect above loads the new workflow.
         setSlug(next);
+
         return;
       }
+
       if (next) {
         setLoaded(await loadWorkflow(next));
       }

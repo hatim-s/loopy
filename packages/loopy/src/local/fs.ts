@@ -12,11 +12,11 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { isRecord } from "../core/index.js";
+import { isRecord, isString } from "../core/index.js";
 
 /** The `code` of a Node filesystem error, or undefined for anything else. */
-export function errnoCode(error: unknown): string | undefined {
-  return isRecord(error) && typeof error.code === "string" ? error.code : undefined;
+export function errnoCode(cause: unknown): string | undefined {
+  return isRecord(cause) && isString(cause.code) ? cause.code : undefined;
 }
 
 /** Canonical path for ownership checks: symlinks resolve, missing files stay absolute. */
@@ -37,8 +37,10 @@ export function withLockDirectory<T>(lock: string, holder: string, work: () => T
         `Another ${holder} holds '${lock}'. If its process stopped, remove that lock directory and retry.`,
       );
     }
+
     throw error;
   }
+
   try {
     return work();
   } finally {
@@ -49,18 +51,21 @@ export function withLockDirectory<T>(lock: string, holder: string, work: () => T
 /** Writes through a sibling temp file so a reader sees the old or the new content, never half. */
 export function writeFileAtomically(file: string, text: string, mode: number): void {
   const temporary = join(dirname(file), `.${basename(file)}.${crypto.randomUUID()}.tmp`);
+
   try {
     const fd = openSync(
       temporary,
       constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
       mode,
     );
+
     try {
       writeFileSync(fd, text);
       fsyncSync(fd);
     } finally {
       closeSync(fd);
     }
+
     renameSync(temporary, file);
     chmodSync(file, mode);
   } finally {

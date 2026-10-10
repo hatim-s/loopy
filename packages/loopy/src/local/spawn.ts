@@ -13,6 +13,7 @@ export type Launch = {
   env: NodeJS.ProcessEnv;
   stdin?: string;
 };
+
 export type Limits = { timeoutMs: number; maxOutputBytes: number };
 
 export function emptyOutput(): CommandOutput {
@@ -20,14 +21,15 @@ export function emptyOutput(): CommandOutput {
 }
 
 /** An error raised before the process spawned, so retrying it is safe. */
-export function unstarted(error: unknown): CommandExecutionError {
-  return new CommandExecutionError(errorMessage(error), emptyOutput(), false, { cause: error });
+export function unstarted(cause: unknown): CommandExecutionError {
+  return new CommandExecutionError(errorMessage(cause), emptyOutput(), false, { cause });
 }
 
 function killTree(child: ChildProcessWithoutNullStreams, signal: NodeJS.Signals): void {
   if (!child.pid) {
     return;
   }
+
   try {
     if (process.platform === "win32") {
       child.kill(signal);
@@ -51,6 +53,7 @@ function ignoreStdinError(): void {
  */
 function decodeCaptured(chunks: Buffer[], partial: boolean): string {
   const buffer = Buffer.concat(chunks);
+
   return partial
     ? new TextDecoder("utf-8", { ignoreBOM: true }).decode(buffer, { stream: true })
     : buffer.toString("utf8");
@@ -64,11 +67,13 @@ function capture(
   limit: number,
 ): boolean {
   const remaining = limit - budget.bytes;
+
   if (remaining > 0) {
     const kept = chunk.subarray(0, remaining);
     destination.push(kept);
     budget.bytes += kept.length;
   }
+
   return chunk.length > remaining;
 }
 
@@ -90,12 +95,15 @@ export function spawnCaptured(
 ): Promise<CommandOutput> {
   return new Promise((resolveOutput, rejectOutput) => {
     let child: ChildProcessWithoutNullStreams;
+
     try {
       child = trySpawn(launch);
     } catch (error) {
       rejectOutput(unstarted(error));
+
       return;
     }
+
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
     const budget = { bytes: 0 };
@@ -109,52 +117,65 @@ export function spawnCaptured(
       if (failure) {
         return;
       }
+
       failure = error;
       killTree(child, "SIGTERM");
+
       if (!exited) {
         killTimer = setTimeout(() => killTree(child, "SIGKILL"), KILL_GRACE_MS);
         killTimer.unref();
       }
     };
+
     const onAbort = () => stop(new Error("Command aborted.", { cause: signal?.reason }));
     signal?.addEventListener("abort", onAbort, { once: true });
+
     const timeout = setTimeout(
       () => stop(new Error(`Command timed out after ${limits.timeoutMs} ms.`)),
       limits.timeoutMs,
     );
+
     timeout.unref();
 
     const finish = (exitCode: number | null, exitSignal: NodeJS.Signals | null, error?: Error) => {
       if (settled) {
         return;
       }
+
       settled = true;
+
       if (!exited) {
         killTree(child, "SIGKILL");
       }
+
       clearTimeout(timeout);
       clearTimeout(killTimer);
       clearTimeout(drainTimer);
       signal?.removeEventListener("abort", onAbort);
       const partial = Boolean(failure || error || exitSignal);
+
       const output: CommandOutput = {
         stdout: decodeCaptured(stdout, partial),
         stderr: decodeCaptured(stderr, partial),
         exitCode: exitCode ?? -1,
         durationMs: Math.round(performance.now() - started),
       };
+
       const reason =
         failure ??
         error ??
         (exitSignal ? new Error(`Command terminated by ${exitSignal}.`) : undefined);
+
       if (reason) {
         rejectOutput(
           new CommandExecutionError(reason.message, output, child.pid !== undefined, {
             cause: reason,
           }),
         );
+
         return;
       }
+
       resolveOutput(output);
     };
 
@@ -163,6 +184,7 @@ export function spawnCaptured(
         stop(new Error(`Command output exceeded ${limits.maxOutputBytes} bytes.`));
       }
     };
+
     child.stdout.on("data", collect(stdout));
     child.stderr.on("data", collect(stderr));
     child.stdin.on("error", ignoreStdinError);

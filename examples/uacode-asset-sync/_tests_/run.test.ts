@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { type Execute, parseRequest, run } from "../run.ts";
 
 const base = "a".repeat(40);
+
 const input = {
   repository: "/fixture/uacode",
   assets: [{ assetClass: "WORKFLOW_DEFINITION", assetId: "fixture" }],
@@ -13,10 +14,13 @@ const input = {
 
 function fixture(options: { missingScript?: boolean; dirty?: boolean; movedHead?: boolean } = {}) {
   const calls: { args: string[]; cwd: string; stdin?: string }[] = [];
+
   const exec: Execute = async (args, cwd, stdin) => {
     calls.push({ args, cwd, stdin });
+
     if (args[0] === "codex") {
       const summaryPath = args[args.indexOf("--output-last-message") + 1];
+
       if (summaryPath) {
         await Bun.write(
           summaryPath,
@@ -27,23 +31,30 @@ function fixture(options: { missingScript?: boolean; dirty?: boolean; movedHead?
         );
       }
     }
+
     if (args[1] === "remote") {
       return "git@github.com:unify-apps/uacode.git\n";
     }
+
     if (args[1] === "rev-parse" && args[2] === "--abbrev-ref") {
       return "HEAD";
     }
+
     if (args[1] === "rev-parse") {
       return options.movedHead && args[2] === "HEAD" ? "b".repeat(40) : base;
     }
+
     if (args[1] === "cat-file" && options.missingScript) {
       throw new Error("missing");
     }
+
     if (args[1] === "status") {
       return options.dirty ? " M forbidden.txt\n" : "";
     }
+
     return "";
   };
+
   return { exec, calls };
 }
 
@@ -53,6 +64,7 @@ test("defaults and input validation happen before execution", () => {
   expect(request.baseBranch).toBe("main");
   expect(request.dryRun).toBe(false);
   expect(request.prTitle).toBe("Sync exported T2W assets");
+
   for (const invalid of [
     { assets: [] },
     { assets: [{ assetClass: "", assetId: "a" }] },
@@ -109,19 +121,24 @@ test("dry-run violations fail and retain the worktree for inspection", async () 
     await expect(run(parseRequest({ ...input, dryRun: true }), f.exec)).rejects.toThrow();
     expect(f.calls.some(({ args }) => args[1] === "worktree" && args[2] === "remove")).toBe(false);
     const worktree = f.calls.find(({ args }) => args[0] === "codex")?.cwd;
+
     if (worktree) {
       await rm(worktree.replace(/\/worktree$/, ""), { recursive: true, force: true });
     }
+
     expect(f.calls.some(({ args }) => args[0] === "gh")).toBe(false);
   }
 });
 
 test("unexpected remote fails before fetch", async () => {
   const calls: string[][] = [];
+
   const exec: Execute = async (args) => {
     calls.push(args);
+
     return "git@github.com:someone/other.git";
   };
+
   await expect(run(parseRequest(input), exec)).rejects.toThrow("origin must");
   expect(calls).toHaveLength(1);
 });
@@ -130,13 +147,17 @@ test("real local Git isolates a dirty checkout and unregisters the successful wo
   const temporary = await mkdtemp(join(tmpdir(), "asset-sync-fixture-"));
   const repository = join(temporary, "source");
   await mkdir(repository);
+
   const git = (args: string[], cwd = repository) => {
     const result = Bun.spawnSync(["git", ...args], { cwd, stdout: "pipe", stderr: "pipe" });
+
     if (result.exitCode !== 0) {
       throw new Error(`Fixture git failed: ${args[0]}`);
     }
+
     return result.stdout.toString();
   };
+
   try {
     git(["init", "-b", "main"]);
     git(["config", "user.email", "fixture@example.invalid"]);
@@ -153,22 +174,28 @@ test("real local Git isolates a dirty checkout and unregisters the successful wo
     await Bun.write(join(repository, "local.txt"), "keep this local change\n");
     const before = git(["status", "--porcelain"]);
     let isolated = "";
+
     const exec: Execute = async (args, cwd) => {
       if (args[0] === "git" && args[1] === "remote") {
         return "git@github.com:unify-apps/uacode.git";
       }
+
       if (args[0] === "codex") {
         isolated = cwd;
         expect(await Bun.file(join(cwd, "local.txt")).text()).toBe("original\n");
         expect(git(["status", "--porcelain"], cwd)).toBe("");
         const summaryPath = args[args.indexOf("--output-last-message") + 1];
+
         if (summaryPath) {
           await Bun.write(summaryPath, '{"proposedFiles":[],"checks":["sync-preview"]}');
         }
+
         return "";
       }
+
       return git(args.slice(1), cwd);
     };
+
     await run(parseRequest({ ...input, repository, dryRun: true }), exec);
     expect(git(["status", "--porcelain"])).toBe(before);
     expect(await Bun.file(join(repository, "local.txt")).text()).toBe("keep this local change\n");

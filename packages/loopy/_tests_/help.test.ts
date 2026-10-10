@@ -45,6 +45,7 @@ describe("CLI help generation", () => {
     const parsed = parseCliHelp("codex", ["exec"], help);
     const codexExec = defineCommand(parsed.descriptor);
     expect(codexExec({ args: [] }).args).toEqual(["exec"]);
+    // SAFETY: The parsed help descriptor contains these flags; its dynamically constructed type loses their literal names.
     expect(codexExec({ args: ["hi"], flags: { json: true, model: "gpt" } } as never).args).toEqual([
       "exec",
       "--json",
@@ -53,12 +54,14 @@ describe("CLI help generation", () => {
       "--",
       "hi",
     ]);
+    // SAFETY: The generated descriptor declares sandbox; this test checks the runtime spelling from dynamic metadata.
     const literal = codexExec({ args: ["--help"], flags: { sandbox: "read-only" } } as never);
     expect(literal.args).toEqual(["exec", "--sandbox", "read-only", "--", "--help"]);
     expect(literal.argConstraints).toEqual({
       2: { kind: "string", choices: ["read-only", "workspace-write", "danger-full-access"] },
       4: { kind: "string" },
     });
+    // SAFETY: This intentionally invalid flag exercises runtime rejection for untyped callers.
     expect(() => codexExec({ args: [], flags: { typo: true } as never })).toThrow("Unknown flag");
   });
 
@@ -68,6 +71,7 @@ describe("CLI help generation", () => {
       [],
       "Usage: tool [OPTIONS]\n\nOptions:\n  --bad=<strange token>\n",
     );
+
     expect(parsed.warnings.some((warning) => warning.includes("Could not parse option"))).toBe(
       true,
     );
@@ -79,6 +83,7 @@ describe("CLI help generation", () => {
       ["run"],
       "Usage: tool run [OPTIONS] <FILE> [LABEL]\n\nOptions:\n  --json\n",
     );
+
     expect(parsed.descriptor.positionals).toEqual([
       { name: "file", optional: false },
       { name: "label", optional: true },
@@ -91,6 +96,7 @@ describe("CLI help generation", () => {
       [],
       "Usage: tool [OPTIONS] [<file>...]\n\nOptions:\n  --help  Show help\n",
     );
+
     expect(parsed.descriptor.positionals).toEqual([
       { name: "file", optional: true, variadic: true },
     ]);
@@ -102,6 +108,7 @@ describe("CLI help generation", () => {
       [],
       "Usage: tool [OPTIONS]\n\nOptions:\n  --inspect[=<PORT>]  Inspect a process\n",
     );
+
     expect(parsed.descriptor.flags?.inspect).toMatchObject({
       cli: "--inspect",
       kind: "number",
@@ -111,13 +118,16 @@ describe("CLI help generation", () => {
     expect(() => renderCommandSource("default", parsed.descriptor)).toThrow(
       "valid TypeScript identifier",
     );
+
     const inspect = defineCommand({
       program: "tool",
       positionals: [],
       flags: { inspect: { cli: "--inspect", kind: "number", optionalValue: true } },
     });
+
     expect(inspect({ flags: { inspect: true } }).args).toEqual(["--inspect"]);
     expect(inspect({ flags: { inspect: 9229 } }).args).toEqual(["--inspect", 9229]);
+    // SAFETY: The parsed descriptor declares inspect; dynamic metadata cannot retain that flag name in its TypeScript type.
     const attached = defineCommand(parsed.descriptor)({ flags: { inspect: 9229 } } as never);
     expect(attached.args).toEqual([{ $op: "concat", args: ["--inspect=", 9229] }]);
     expect(attached.argConstraints).toEqual({ 0: { kind: "number", prefix: "--inspect=" } });
@@ -135,13 +145,17 @@ describe("CLI help generation", () => {
       [],
       "Usage: tool [OPTIONS] [NAME]\n\nOptions:\n  --mode <MODE>  Choose [possible values: safe, fast]\n",
     );
+
     expect(parsed.descriptor.flags?.mode?.choices).toEqual(["safe", "fast"]);
+
     const echo = defineCommand({
       program: "echo",
       positionals: [{ name: "message" }],
       positionalSeparator: false,
     });
+
     expect(echo({ args: ["hello"] }).args).toEqual(["hello"]);
+
     const two = defineCommand({
       program: "tool",
       positionals: [
@@ -149,6 +163,7 @@ describe("CLI help generation", () => {
         { name: "second", optional: true },
       ],
     });
+
     expect(() => two({ args: [undefined, "second"] })).toThrow(
       "Cannot omit a positional before a later positional",
     );

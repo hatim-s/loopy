@@ -6,6 +6,16 @@ import { at, concat, eq, gt, node, trigger } from "../src/core/index.ts";
 /** For prompts whose validation messages are not under test. */
 const ignoreWarning = () => undefined;
 
+function nextAnswer(answers: string[]): string {
+  const answer = answers.shift();
+
+  if (answer === undefined) {
+    throw new Error("The prompt asked beyond the scripted answers.");
+  }
+
+  return answer;
+}
+
 test("branch choices and types preserve each valid alternative", async () => {
   const graph = trigger<{ count: number | string; color: string }>("alternatives")
     .condition(
@@ -25,6 +35,7 @@ test("branch choices and types preserve each valid alternative", async () => {
         }),
     )
     .build();
+
   expect(
     workflowInputs(graph).map((field) => ({ kind: field.kind, choices: field.choices })),
   ).toEqual([
@@ -32,13 +43,15 @@ test("branch choices and types preserve each valid alternative", async () => {
     { kind: "string", choices: ["red", "blue"] },
   ]);
   const answers = ["json:2", "blue"];
-  expect(
-    await collectInputs(graph, {}, async () => answers.shift() as string, ignoreWarning),
-  ).toEqual({ count: 2, color: "blue" });
+  expect(await collectInputs(graph, {}, async () => nextAnswer(answers), ignoreWarning)).toEqual({
+    count: 2,
+    color: "blue",
+  });
   const other = ["none", "red"];
-  expect(
-    await collectInputs(graph, {}, async () => other.shift() as string, ignoreWarning),
-  ).toEqual({ count: "none", color: "red" });
+  expect(await collectInputs(graph, {}, async () => nextAnswer(other), ignoreWarning)).toEqual({
+    count: "none",
+    color: "red",
+  });
 });
 
 test("a parent JSON answer supplies nested references without overwriting them", async () => {
@@ -54,6 +67,7 @@ test("a parent JSON answer supplies nested references without overwriting them",
         }),
     )
     .build();
+
   let asks = 0;
   expect(
     await collectInputs(
@@ -61,6 +75,7 @@ test("a parent JSON answer supplies nested references without overwriting them",
       {},
       async () => {
         asks++;
+
         return 'json:{"name":"Ada"}';
       },
       ignoreWarning,
@@ -108,7 +123,8 @@ test("collects missing fields, retries invalid values, and preserves supplied in
       supplied,
       async (label) => {
         labels.push(label);
-        return answers.shift() as string;
+
+        return nextAnswer(answers);
       },
       (message) => errors.push(message),
     ),
@@ -132,13 +148,14 @@ test("validates attached choices and expression numbers", async () => {
       node("small", { program: "true", args: [] }),
     )
     .build();
+
   const answers = ["green", "red", "4"];
   const errors: string[] = [];
   expect(
     await collectInputs(
       graph,
       {},
-      async () => answers.shift() as string,
+      async () => nextAnswer(answers),
       (message) => errors.push(message),
     ),
   ).toEqual({ color: "red", size: 4 });
@@ -157,13 +174,11 @@ test("text, JSON, and prototype-named inputs stay safe", async () => {
       args: [input.__proto__, at(input.constructor, "name"), input.value, input.empty],
     }))
     .build();
+
   const answers = ["safe", "json:[1,2]", "text:json:literal", ""];
-  const input = await collectInputs(
-    graph,
-    {},
-    async () => answers.shift() as string,
-    ignoreWarning,
-  );
+
+  const input = await collectInputs(graph, {}, async () => nextAnswer(answers), ignoreWarning);
+
   expect(Object.getPrototypeOf(input)).toBe(Object.prototype);
   expect(Object.hasOwn(input, "__proto__")).toBe(true);
   expect(input).toEqual(

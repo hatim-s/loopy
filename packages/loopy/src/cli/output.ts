@@ -1,5 +1,18 @@
+import type { Json, RunDetail, RunRecord, Workflow, WorkflowSummary } from "../core/index.js";
+import type { SavedWorkflow } from "../local/index.js";
+
+type CliResult =
+  | Json
+  | Workflow
+  | WorkflowSummary[]
+  | RunRecord
+  | RunRecord[]
+  | RunDetail
+  | SavedWorkflow
+  | SavedWorkflow[];
+
 /** Machine-readable results go to stdout as indented JSON. */
-export function printJson(value: unknown): void {
+export function printJson(value: CliResult): void {
   console.log(JSON.stringify(value, null, 2));
 }
 

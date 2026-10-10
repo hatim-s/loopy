@@ -8,6 +8,7 @@ export async function runRecover(context: CliContext): Promise<void> {
       "Recovery requires --force. Stop the original host's runner first; it may still be executing a command.",
     );
   }
+
   const id = requireTarget(context, "Run ID");
   printJson(await withLocalRuntime(context.home, async (local) => local.recoverOwner(id)));
 }

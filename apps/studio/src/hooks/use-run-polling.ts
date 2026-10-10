@@ -25,12 +25,15 @@ export function useRunPolling({ runId, active, apply, onError }: Options): void 
     if (!active || !runId) {
       return;
     }
+
     const id = runId;
     let stopped = false;
     let timer: number | undefined;
+
     async function poll() {
       try {
         const detail = await endpoints.run(id);
+
         if (!stopped) {
           callbacks.current.apply(detail);
         }
@@ -39,11 +42,14 @@ export function useRunPolling({ runId, active, apply, onError }: Options): void 
           callbacks.current.onError(cause);
         }
       }
+
       if (!stopped) {
         timer = window.setTimeout(() => void poll(), POLL_MS);
       }
     }
+
     void poll();
+
     return () => {
       stopped = true;
       window.clearTimeout(timer);

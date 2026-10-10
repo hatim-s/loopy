@@ -10,7 +10,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { requireRecord, setOwnProperty, validateSecretName } from "../core/index.js";
+import { isString, requireRecord, setOwnProperty, validateSecretName } from "../core/index.js";
 import { errnoCode, withLockDirectory, writeFileAtomically } from "./fs.js";
 import { defaultHome } from "./home.js";
 
@@ -25,6 +25,7 @@ export function validateSecretValue(value: string): void {
 /** Keep default secrets outside the versioned graph store; custom homes stay isolated. */
 export function secretDirectory(home = defaultHome()): string {
   const path = resolve(home);
+
   return path === join(homedir(), ".loopy", "v2") ? dirname(path) : path;
 }
 
@@ -34,17 +35,22 @@ function assertOwned(stats: ReturnType<typeof fstatSync>, label: string): void {
   }
 }
 
-function parseSecrets(value: unknown): Record<string, string> {
+// BOUNDARY: The secrets.json file is checked for an object with valid secret names and bounded string values.
+function parseSecrets(value: unknown) {
   const record = requireRecord(value, "The secret store");
   const secrets: Record<string, string> = {};
+
   for (const [name, secret] of Object.entries(record)) {
     validateSecretName(name);
-    if (typeof secret !== "string") {
+
+    if (!isString(secret)) {
       throw new Error(`The secret store value for '${name}' must be a string.`);
     }
+
     validateSecretValue(secret);
     setOwnProperty(secrets, name, secret);
   }
+
   return secrets;
 }
 
@@ -62,25 +68,32 @@ export class SecretStore {
     if (create) {
       mkdirSync(this.directory, { recursive: true, mode: 0o700 });
     }
+
     let stats: ReturnType<typeof lstatSync>;
+
     try {
       stats = lstatSync(this.directory);
     } catch (error) {
       if (errnoCode(error) === "ENOENT") {
         return false;
       }
+
       throw error;
     }
+
     if (!stats.isDirectory() || stats.isSymbolicLink()) {
       throw new Error("The secret directory must be a real directory, not a symlink.");
     }
+
     assertOwned(stats, "The secret directory");
     const fd = openSync(this.directory, constants.O_RDONLY | constants.O_NOFOLLOW);
+
     try {
       fchmodSync(fd, 0o700);
     } finally {
       closeSync(fd);
     }
+
     return true;
   }
 
@@ -91,6 +104,7 @@ export class SecretStore {
       if (errnoCode(error) === "ENOENT") {
         return undefined;
       }
+
       throw new Error("Cannot open the secret store. It must be a regular file, not a symlink.");
     }
   }
@@ -99,18 +113,25 @@ export class SecretStore {
     if (!this.directoryExists(false)) {
       return {};
     }
+
     const fd = this.openStore();
+
     if (fd === undefined) {
       return {};
     }
+
     let value: unknown;
+
     try {
       const stats = fstatSync(fd);
+
       if (!stats.isFile() || stats.nlink !== 1) {
         throw new Error("The secret store must be a regular file with no hard links.");
       }
+
       assertOwned(stats, "The secret store");
       fchmodSync(fd, 0o600);
+
       try {
         value = JSON.parse(readFileSync(fd, "utf8"));
       } catch {
@@ -119,6 +140,7 @@ export class SecretStore {
     } finally {
       closeSync(fd);
     }
+
     return parseSecrets(value);
   }
 
@@ -130,9 +152,11 @@ export class SecretStore {
     validateSecretName(name);
     const values = this.snapshot();
     const value = Object.hasOwn(values, name) ? values[name] : undefined;
+
     if (value === undefined) {
       throw new Error(`No stored secret '${name}'. Use loopy secrets set ${name}.`);
     }
+
     return value;
   }
 

@@ -18,7 +18,7 @@ import type { CliContext } from "./context.js";
 import { printLine, report } from "./output.js";
 import { usage } from "./usage.js";
 
-const COMMANDS: Record<string, (context: CliContext) => Promise<void>> = {
+const COMMANDS = {
   save: runSave,
   list: runList,
   graph: runGraph,
@@ -30,19 +30,28 @@ const COMMANDS: Record<string, (context: CliContext) => Promise<void>> = {
   types: runTypes,
   ui: runUi,
   secrets: runSecrets,
-};
+} satisfies Record<string, (context: CliContext) => Promise<void>>;
+
+function isCommandName(value: string): value is keyof typeof COMMANDS {
+  return Object.hasOwn(COMMANDS, value);
+}
 
 export async function main(args = process.argv.slice(2)): Promise<void> {
   const { values, positionals, triggerInput } = parseCliArgs(args);
   const [command, ...rest] = positionals;
+
   if (values.help || !command) {
     printLine(usage());
+
     return;
   }
-  const handler = Object.hasOwn(COMMANDS, command) ? COMMANDS[command] : undefined;
+
+  const handler = isCommandName(command) ? COMMANDS[command] : undefined;
+
   if (!handler) {
     throw new Error(`Unknown command '${command}'. Run loopy --help.`);
   }
+
   await handler({
     home: resolve(values.home ?? defaultHome()),
     cwd: resolve(values.cwd ?? process.cwd()),
@@ -53,8 +62,8 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
 }
 
 if (import.meta.main) {
-  main().catch((error: unknown) => {
-    report(errorMessage(error));
+  main().catch((cause: unknown) => {
+    report(errorMessage(cause));
     process.exitCode = 1;
   });
 }

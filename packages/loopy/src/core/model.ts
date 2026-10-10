@@ -1,7 +1,9 @@
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
+
 export type Scalar = null | boolean | number | string;
 
 export type ReferenceSource = "input" | "steps";
+
 export type Reference<T = unknown> = {
   readonly $ref: { readonly source: ReferenceSource; readonly path: readonly string[] };
   readonly __type?: T;
@@ -19,6 +21,7 @@ export type Operator =
   | "not"
   | "contains"
   | "concat";
+
 export type Expression<T = unknown> = {
   readonly $op: Operator;
   readonly args: readonly unknown[];
@@ -26,6 +29,7 @@ export type Expression<T = unknown> = {
 };
 
 export type FilePath = { readonly $file: string };
+
 export type Value<T> = T | Reference<T> | Expression<T> | (T extends string ? FilePath : never);
 
 /** A check applied to one resolved argv entry before the command launches. */
@@ -41,11 +45,13 @@ export type Command = {
   timeoutMs?: number;
   maxOutputBytes?: number;
 };
+
 export type ResolvedCommand = Omit<Command, "args" | "stdin" | "env"> & {
   args: string[];
   stdin?: string;
   env?: Record<string, string>;
 };
+
 export type CommandOutput = {
   stdout: string;
   stderr: string;
@@ -54,6 +60,7 @@ export type CommandOutput = {
 };
 
 export type CommandNode = { id: string; kind: "command"; command: Command };
+
 export type ConditionNode = {
   id: string;
   kind: "condition";
@@ -61,8 +68,11 @@ export type ConditionNode = {
   then: WorkflowNode[];
   else: WorkflowNode[];
 };
+
 export type WorkflowNode = CommandNode | ConditionNode;
+
 export type WorkflowConfig = { scope: "project" | "global" };
+
 export type Workflow = {
   version: 1;
   slug: string;
@@ -72,9 +82,12 @@ export type Workflow = {
 };
 
 export type ExecutionMode = "sandbox" | "full";
+
 export type Workspace = { kind: "local"; path: string } | { kind: "managed"; id: string };
+
 /** References only. Values are loaded by the local adapter at command launch. */
 export type SecretBindings = { ownerId: string; env: Record<string, string> };
+
 export type RunOptions = {
   workspace: Workspace;
   mode: ExecutionMode;
@@ -82,6 +95,7 @@ export type RunOptions = {
 };
 
 export type RunStatus = "pending" | "running" | "succeeded" | "failed" | "interrupted";
+
 export type RunRecord = {
   id: string;
   slug: string;
@@ -96,6 +110,7 @@ export type RunRecord = {
 };
 
 export type AttemptStatus = "running" | "succeeded" | "failed" | "uncertain" | "cancelled";
+
 export type AttemptRecord = {
   id: string;
   runId: string;
@@ -118,6 +133,7 @@ export type RunEventType =
   | `run.${RunStatus}`
   | "node.started"
   | `node.${Exclude<AttemptStatus, "running">}`;
+
 export type RunEvent = {
   sequence: number;
   runId: string;
@@ -147,3 +163,5 @@ export type ExecuteCommand = (
     signal?: AbortSignal;
   },
 ) => Promise<CommandOutput>;
+
+export type RunDetail = { run: RunRecord; attempts: AttemptRecord[]; events: RunEvent[] };

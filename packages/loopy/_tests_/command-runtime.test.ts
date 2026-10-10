@@ -34,15 +34,19 @@ const workflow = trigger<{
 test("serialized CLI constraints reject invalid run input before invoking the tool", async () => {
   const home = mkdtempSync(join(tmpdir(), "loopy-command-"));
   const calls: string[][] = [];
+
   const local = createLocalRuntime({
     home,
     executor: async (command) => {
       calls.push(command.args);
+
       return { stdout: "ok", stderr: "", exitCode: 0, durationMs: 1 };
     },
   });
+
   const { runtime } = local;
   const base = { mode: "safe", timeout: 3, inspect: 9229, target: "-needle" };
+
   try {
     for (const [input, expectedError] of [
       [{ ...base, mode: "unsafe" }, "safe, fast"],
@@ -57,6 +61,7 @@ test("serialized CLI constraints reject invalid run input before invoking the to
       expect(result.error).toContain(expectedError);
       expect((await runtime.getAttempts(run.id))[0]?.status).toBe("failed");
     }
+
     expect(calls).toHaveLength(0);
 
     const run = await runtime.createRun(workflow, base, localRunOptions(home, "full"));

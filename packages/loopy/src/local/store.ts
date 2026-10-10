@@ -31,8 +31,10 @@ function ownerAlive(row: RunRow): boolean {
   if (!row.owner_token || !row.owner_pid || row.owner_host !== hostname()) {
     return false;
   }
+
   try {
     process.kill(row.owner_pid, 0);
+
     return true;
   } catch (error) {
     return errnoCode(error) === "EPERM";
@@ -56,13 +58,16 @@ export class SqliteRunStore implements RunRepository {
     this.db.exec(
       "PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON",
     );
+
     const version = this.db
       .query<{ user_version: number }, []>("PRAGMA user_version")
       .get()?.user_version;
+
     if (version !== 0 && version !== SCHEMA_VERSION) {
       this.db.close();
       throw new Error(`Run database version ${version} is unsupported.`);
     }
+
     this.db.exec(SCHEMA);
     this.db.exec(`PRAGMA user_version=${SCHEMA_VERSION}`);
     this.recoverOrphans();
@@ -74,9 +79,11 @@ export class SqliteRunStore implements RunRepository {
 
   private requireRow(runId: string): RunRow {
     const row = this.row(runId);
+
     if (!row) {
       throw new Error(`Run ${runId} does not exist.`);
     }
+
     return row;
   }
 
@@ -87,6 +94,7 @@ export class SqliteRunStore implements RunRepository {
           "SELECT COALESCE(MAX(sequence), -1) + 1 AS sequence FROM events WHERE run_id=?",
         )
         .get(runId)?.sequence ?? 0;
+
     this.db.run(
       "INSERT INTO events(run_id,sequence,node_id,type,data_json,created_at) VALUES (?,?,?,?,?,?)",
       [runId, next, nodeId ?? null, type, encode(data), now()],
@@ -98,6 +106,7 @@ export class SqliteRunStore implements RunRepository {
     const attempts = this.db
       .query<AttemptRow, [string]>("SELECT * FROM attempts WHERE run_id=? AND status='running'")
       .all(runId);
+
     for (const attempt of attempts) {
       this.db.run("UPDATE attempts SET status='uncertain',error=?,ended_at=? WHERE id=?", [
         reason,
@@ -106,6 +115,7 @@ export class SqliteRunStore implements RunRepository {
       ]);
       this.event(runId, "node.uncertain", { attemptId: attempt.id }, attempt.node_id);
     }
+
     return attempts.length;
   }
 
@@ -131,12 +141,15 @@ export class SqliteRunStore implements RunRepository {
   recoverOrphans(): void {
     const reason = "Execution owner stopped before recording a result";
     const rows = this.db.query<RunRow, []>("SELECT * FROM runs WHERE status='running'").all();
+
     for (const row of rows) {
       if (ownerActive(row)) {
         continue;
       }
+
       this.db.transaction(() => {
         const current = this.row(row.id);
+
         if (
           !current ||
           current.status !== "running" ||
@@ -145,6 +158,7 @@ export class SqliteRunStore implements RunRepository {
         ) {
           return;
         }
+
         const uncertainAttempts = this.abandonAttempts(row.id, reason);
         this.clearOwner(row.id, row.owner_token, "interrupted", reason);
         this.event(row.id, "run.interrupted", { uncertainAttempts });
@@ -155,24 +169,31 @@ export class SqliteRunStore implements RunRepository {
   /** Fences an owner on another host, whose liveness cannot be checked from here. */
   recoverOwner(runId: string): RunRecord {
     this.recoverOrphans();
+
     return this.db.transaction(() => {
       const row = this.requireRow(runId);
+
       if (!row.owner_token) {
         if (row.status === "interrupted") {
           return runFromRow(row);
         }
+
         throw new Error(`Run ${runId} has no owner to recover.`);
       }
+
       if (!row.owner_host || row.owner_host === hostname()) {
         if (ownerAlive(row)) {
           throw new RunBusyError(runId);
         }
+
         throw new Error(`Run ${runId} has no foreign owner to recover.`);
       }
+
       const uncertainAttempts = this.abandonAttempts(
         runId,
         "Foreign execution owner was explicitly recovered before recording a result",
       );
+
       const status = row.status === "succeeded" ? "succeeded" : "interrupted";
       this.clearOwner(
         runId,
@@ -186,9 +207,11 @@ export class SqliteRunStore implements RunRepository {
         previousStatus: row.status,
         uncertainAttempts,
       });
+
       if (row.status === "running") {
         this.event(runId, "run.interrupted", { uncertainAttempts });
       }
+
       return runFromRow(this.requireRow(runId));
     })();
   }
@@ -200,10 +223,10 @@ export class SqliteRunStore implements RunRepository {
         [
           run.id,
           run.slug,
-          encode(run.workflow as Json),
+          encode(run.workflow),
           run.workflowHash,
           encode(run.input),
-          encode(run.options as Json),
+          encode(run.options),
           run.status,
           run.createdAt,
           run.updatedAt,
@@ -216,11 +239,13 @@ export class SqliteRunStore implements RunRepository {
   async getRun(id: string): Promise<RunRecord | undefined> {
     this.recoverOrphans();
     const row = this.row(id);
+
     return row ? runFromRow(row) : undefined;
   }
 
   async listRuns(slug?: string): Promise<RunRecord[]> {
     this.recoverOrphans();
+
     const rows = slug
       ? this.db
           .query<RunRow, [string]>(
@@ -228,6 +253,7 @@ export class SqliteRunStore implements RunRepository {
           )
           .all(slug)
       : this.db.query<RunRow, []>("SELECT * FROM runs ORDER BY created_at DESC,id DESC").all();
+
     return rows.map(runFromRow);
   }
 
@@ -256,21 +282,27 @@ export class SqliteRunStore implements RunRepository {
     return this.db.transaction(() => {
       const row = this.requireRow(runId);
       const terminal = row.status === "failed" || row.status === "interrupted";
+
       if (row.status === "succeeded" || (options.resume === false && terminal)) {
         return runFromRow(row);
       }
+
       if (ownerActive(row)) {
         throw new RunBusyError(runId);
       }
+
       const claimed = this.db.run(
         "UPDATE runs SET owner_token=?,owner_pid=?,owner_host=?,heartbeat_at=?,status='running',error=NULL,updated_at=? WHERE id=? AND owner_token IS ?",
         [token, process.pid, hostname(), now(), now(), runId, row.owner_token],
       );
+
       if (claimed.changes !== 1) {
         throw new RunBusyError(runId);
       }
+
       this.abandonAttempts(runId, "Previous process stopped before recording a result");
       this.event(runId, row.status === "pending" ? "run.started" : "run.resumed", {});
+
       return runFromRow(this.requireRow(runId));
     })();
   }
@@ -292,12 +324,14 @@ export class SqliteRunStore implements RunRepository {
   ): Promise<AttemptRecord> {
     return this.db.transaction(() => {
       this.assertOwner(runId, token);
+
       const number =
         this.db
           .query<{ number: number }, [string, string]>(
             "SELECT COALESCE(MAX(number),0)+1 AS number FROM attempts WHERE run_id=? AND node_id=?",
           )
           .get(runId, nodeId)?.number ?? 1;
+
       const attempt: AttemptRecord = {
         id: randomUUID(),
         runId,
@@ -307,11 +341,13 @@ export class SqliteRunStore implements RunRepository {
         input,
         startedAt: now(),
       };
+
       this.db.run(
         "INSERT INTO attempts(id,run_id,node_id,number,status,input_json,started_at) VALUES (?,?,?,?,?,?,?)",
         [attempt.id, runId, nodeId, number, attempt.status, encode(input), attempt.startedAt],
       );
       this.event(runId, "node.started", { attemptId: attempt.id, number }, nodeId);
+
       return attempt;
     })();
   }
@@ -326,12 +362,15 @@ export class SqliteRunStore implements RunRepository {
   ): Promise<AttemptRecord> {
     return this.db.transaction(() => {
       this.assertOwner(runId, token);
+
       const row = this.db
         .query<AttemptRow, [string, string]>("SELECT * FROM attempts WHERE id=? AND run_id=?")
         .get(attemptId, runId);
+
       if (!row || row.status !== "running") {
         throw new Error(`Attempt ${attemptId} is not running.`);
       }
+
       const finished: AttemptRow = {
         ...row,
         status,
@@ -339,6 +378,7 @@ export class SqliteRunStore implements RunRepository {
         error: error ?? null,
         ended_at: now(),
       };
+
       this.db.run("UPDATE attempts SET status=?,output_json=?,error=?,ended_at=? WHERE id=?", [
         finished.status,
         finished.output_json,
@@ -346,7 +386,14 @@ export class SqliteRunStore implements RunRepository {
         finished.ended_at,
         attemptId,
       ]);
-      this.event(runId, `node.${status}`, { attemptId, ...(error ? { error } : {}) }, row.node_id);
+      const data: RunEvent["data"] = { attemptId };
+
+      if (error) {
+        data.error = error;
+      }
+
+      this.event(runId, `node.${status}`, data, row.node_id);
+
       return attemptFromRow(finished);
     })();
   }
@@ -366,6 +413,7 @@ export class SqliteRunStore implements RunRepository {
         runId,
       ]);
       this.event(runId, `run.${status}`, error ? { error } : {});
+
       return runFromRow(this.requireRow(runId));
     })();
   }

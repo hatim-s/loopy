@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { ENV_EXEC, envArgs, executable, packageDirectory, within } from "./paths.js";
 
 const SANDBOX_EXEC = "/usr/bin/sandbox-exec";
+
 const CONTROL_CHARACTERS = /[\0\n\r]/;
 
 /** Quotes a path for a Sandbox Profile Language literal. */
@@ -10,6 +11,7 @@ function sbpl(path: string): string {
   if (CONTROL_CHARACTERS.test(path)) {
     throw new Error("Paths with control characters cannot be sandboxed.");
   }
+
   return JSON.stringify(path);
 }
 
@@ -26,10 +28,13 @@ export async function macSandbox(
   if (!(await executable(SANDBOX_EXEC))) {
     throw new Error("Sandbox mode requires /usr/bin/sandbox-exec on macOS.");
   }
+
   const home = await realpath(homedir());
+
   const allowedPackage = within(workspace, program)
     ? undefined
     : await packageDirectory(program, home);
+
   const profile = [
     "(version 1)",
     "(deny default)",
@@ -45,5 +50,6 @@ export async function macSandbox(
     `(allow file-write* (subpath ${sbpl(workspace)}))`,
     "(deny network*)",
   ].join("\n");
+
   return [SANDBOX_EXEC, ["-p", profile, ENV_EXEC, "-i", "--", ...envArgs(env), helper ?? program]];
 }

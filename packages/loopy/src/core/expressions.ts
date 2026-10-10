@@ -53,5 +53,6 @@ export function file(path: string): FilePath {
   if (!path.trim()) {
     throw new Error("A file path is required.");
   }
+
   return { $file: path };
 }

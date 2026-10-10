@@ -10,6 +10,7 @@ export type ErrorReporter = {
 /** One banner for the whole app; the newest failure replaces the previous one. */
 export function useErrorReporter(): ErrorReporter {
   const [message, setMessage] = useState<string | null>(null);
+
   const actions = useMemo(
     () => ({
       report: (cause: unknown) => setMessage(errorMessage(cause)),
@@ -17,5 +18,6 @@ export function useErrorReporter(): ErrorReporter {
     }),
     [],
   );
+
   return { message, ...actions };
 }

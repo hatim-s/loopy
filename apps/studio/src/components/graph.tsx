@@ -21,6 +21,7 @@ type GraphProps = {
 export function Graph({ workflow, detail, selectedId, onSelect, onSavedDefinition }: GraphProps) {
   const attempts = useMemo(() => latestAttempts(detail?.attempts ?? []), [detail]);
   const status = detail?.run.status;
+
   return (
     <section className="graph-pane" aria-label="Workflow graph">
       <div className="pane-heading">

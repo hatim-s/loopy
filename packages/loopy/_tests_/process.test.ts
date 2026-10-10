@@ -16,9 +16,11 @@ import { executeLocalCommand } from "../src/local/process.js";
 import { CommandExecutionError } from "../src/runtime/errors.js";
 
 const workspaces: string[] = [];
+
 function workspace(): string {
   const path = mkdtempSync(join(tmpdir(), "loopy-process-"));
   workspaces.push(path);
+
   return path;
 }
 
@@ -34,10 +36,12 @@ const hasBubblewrap =
 describe("process executor", () => {
   test("passes arguments literally and preserves a failing exit code", async () => {
     const cwd = workspace();
+
     const output = await executeLocalCommand(
       { program: "/bin/echo", args: ["$(touch injected)", "; exit 2"] },
       { workspace: { kind: "local", path: cwd }, mode: "full" },
     );
+
     expect(output.stdout).toBe("$(touch injected) ; exit 2\n");
     expect(existsSync(join(cwd, "injected"))).toBe(false);
 
@@ -45,6 +49,7 @@ describe("process executor", () => {
       { program: process.execPath, args: ["-e", "process.exit(7)"] },
       { workspace: { kind: "local", path: cwd }, mode: "full" },
     );
+
     expect(failed.exitCode).toBe(7);
   });
 
@@ -59,6 +64,7 @@ describe("process executor", () => {
       { program: "probe-cmd", args: [], env: { PATH: "tools" } },
       { workspace: { kind: "local", path: cwd }, mode: "full" },
     );
+
     expect(output.stdout).toBe("expected\n");
   });
 
@@ -78,7 +84,12 @@ describe("process executor", () => {
       throw new Error("Expected output limit to stop the command");
     } catch (error) {
       expect(error).toBeInstanceOf(CommandExecutionError);
-      const failure = error as CommandExecutionError;
+
+      if (!(error instanceof CommandExecutionError)) {
+        throw error;
+      }
+
+      const failure = error;
       expect(failure.message).toContain("output exceeded 100 bytes");
       expect(failure.started).toBe(true);
       expect(
@@ -97,6 +108,7 @@ describe("process executor", () => {
       },
       { workspace: { kind: "local", path: workspace() }, mode: "full" },
     );
+
     expect(output.stdout).toBe("input:hello\n");
   });
 
@@ -118,10 +130,12 @@ describe("process executor", () => {
 
   test("stops background children after a successful parent exit", async () => {
     const cwd = workspace();
+
     const output = await executeLocalCommand(
       { program: "/bin/sh", args: ["-c", "(sleep 0.5; touch orphan) & exit 0"] },
       { workspace: { kind: "local", path: cwd }, mode: "full" },
     );
+
     expect(output.exitCode).toBe(0);
     await Bun.sleep(700);
     expect(existsSync(join(cwd, "orphan"))).toBe(false);
@@ -130,6 +144,7 @@ describe("process executor", () => {
   test("settles when a separate session inherits output pipes", async () => {
     const cwd = workspace();
     const started = Date.now();
+
     const source = `
       const { spawn } = require("node:child_process");
       const child = spawn("/bin/sh", ["-c", "sleep 2"], {
@@ -138,6 +153,7 @@ describe("process executor", () => {
       });
       child.unref();
     `;
+
     await expect(
       executeLocalCommand(
         { program: process.execPath, args: ["-e", source], timeoutMs: 100 },
@@ -183,6 +199,7 @@ describe("process executor", () => {
     async () => {
       const cwd = workspace();
       const outside = workspace();
+
       const direct = await executeLocalCommand(
         {
           program: process.execPath,
@@ -191,6 +208,7 @@ describe("process executor", () => {
         },
         { workspace: { kind: "local", path: cwd }, mode: "sandbox" },
       );
+
       expect(direct.exitCode).toBe(0);
       expect(readFileSync(join(cwd, "inside"), "utf8")).toBe("ok");
 
@@ -205,10 +223,12 @@ describe("process executor", () => {
         },
         { workspace: { kind: "local", path: cwd }, mode: "sandbox" },
       );
+
       expect(denied.exitCode).not.toBe(0);
       expect(existsSync(join(outside, "escaped"))).toBe(false);
 
       symlinkSync(join(outside, "linked-escape"), join(cwd, "file-link"));
+
       const linked = await executeLocalCommand(
         {
           program: process.execPath,
@@ -216,6 +236,7 @@ describe("process executor", () => {
         },
         { workspace: { kind: "local", path: cwd }, mode: "sandbox" },
       );
+
       expect(linked.exitCode).not.toBe(0);
       expect(existsSync(join(outside, "linked-escape"))).toBe(false);
 
@@ -232,12 +253,14 @@ describe("process executor", () => {
   test.skipIf(process.platform !== "darwin")("sandbox denies network access", async () => {
     const cwd = workspace();
     const server = Bun.serve({ port: 0, fetch: () => new Response("reachable") });
+
     try {
       const command = {
         program: process.execPath,
         args: ["-e", `console.log(await (await fetch('http://127.0.0.1:${server.port}')).text())`],
         timeoutMs: 5_000,
       };
+
       expect(
         (
           await executeLocalCommand(command, {
@@ -246,10 +269,12 @@ describe("process executor", () => {
           })
         ).stdout,
       ).toContain("reachable");
+
       const denied = await executeLocalCommand(command, {
         workspace: { kind: "local", path: cwd },
         mode: "sandbox",
       });
+
       expect(denied.exitCode).not.toBe(0);
     } finally {
       server.stop(true);
@@ -260,6 +285,7 @@ describe("process executor", () => {
     "sandbox denies reads from the user's home outside the workspace",
     async () => {
       const cwd = workspace();
+
       const command = {
         program: process.execPath,
         args: [
@@ -268,6 +294,7 @@ describe("process executor", () => {
           join(homedir(), ".zshrc"),
         ],
       };
+
       expect(
         (
           await executeLocalCommand(command, {
@@ -276,10 +303,12 @@ describe("process executor", () => {
           })
         ).stdout,
       ).toContain("read");
+
       const denied = await executeLocalCommand(command, {
         workspace: { kind: "local", path: cwd },
         mode: "sandbox",
       });
+
       expect(denied.exitCode).not.toBe(0);
     },
   );
@@ -288,6 +317,7 @@ describe("process executor", () => {
     const cwd = mkdtempSync("/tmp/loopy-process-");
     const outside = mkdtempSync("/tmp/loopy-process-");
     workspaces.push(cwd, outside);
+
     const inside = await executeLocalCommand(
       {
         program: process.execPath,
@@ -296,11 +326,13 @@ describe("process executor", () => {
       },
       { workspace: { kind: "local", path: cwd }, mode: "sandbox" },
     );
+
     if (inside.exitCode !== 0) {
       throw new Error(
         `Linux sandbox exited ${inside.exitCode}: stdout=${JSON.stringify(inside.stdout)} stderr=${JSON.stringify(inside.stderr)}`,
       );
     }
+
     expect(readFileSync(join(cwd, "inside"), "utf8")).toBe("ok");
 
     const denied = await executeLocalCommand(
@@ -314,15 +346,18 @@ describe("process executor", () => {
       },
       { workspace: { kind: "local", path: cwd }, mode: "sandbox" },
     );
+
     expect(denied.exitCode).not.toBe(0);
     expect(existsSync(join(outside, "escape"))).toBe(false);
 
     const server = Bun.serve({ port: 0, fetch: () => new Response("reachable") });
+
     try {
       const network = {
         program: process.execPath,
         args: ["-e", `console.log(await (await fetch('http://127.0.0.1:${server.port}')).text())`],
       };
+
       expect(
         (
           await executeLocalCommand(network, {
@@ -365,9 +400,11 @@ __attribute__((constructor)) static void mark(void) {
 }
 `,
       );
+
       const compiled = spawnSync("/usr/bin/cc", ["-shared", "-fPIC", source, "-o", library], {
         encoding: "utf8",
       });
+
       if (compiled.status !== 0) {
         throw new Error(`Could not compile preload: ${compiled.stderr}`);
       }
@@ -376,9 +413,11 @@ __attribute__((constructor)) static void mark(void) {
         { program: "/bin/echo", args: ["inside"], env: { LD_PRELOAD: library } },
         { workspace: { kind: "local", path: cwd }, mode: "sandbox" },
       );
+
       if (output.exitCode !== 0) {
         throw new Error(`Sandbox failed: ${output.stderr}`);
       }
+
       expect(output.stdout).toBe("inside\n");
       expect(existsSync(insideMarker)).toBe(true);
       expect(existsSync(outsideMarker)).toBe(false);

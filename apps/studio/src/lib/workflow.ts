@@ -1,18 +1,27 @@
-import type { AttemptRecord, Json, WorkflowNode } from "loopy";
-import { isRecord } from "loopy";
+import type { AttemptRecord, Json, Scalar, Value, WorkflowNode } from "loopy";
+import { isRecord, isString } from "loopy";
 
 /** Renders a persisted value the way an author would write it. */
-export function describe(value: unknown): string {
+export function describe(value: Value<Scalar> | undefined): string {
   if (!isRecord(value)) {
-    return typeof value === "string" ? value : JSON.stringify(value);
+    return isString(value) ? value : JSON.stringify(value);
   }
-  const { $ref, $op, args } = value;
+
+  const $ref = "$ref" in value ? value.$ref : undefined;
+  const $op = "$op" in value ? value.$op : undefined;
+  const args = "args" in value ? value.args : undefined;
+
   if (isRecord($ref) && Array.isArray($ref.path)) {
     return `${String($ref.source)}.${$ref.path.map(String).join(".")}`;
   }
-  if (typeof $op === "string" && Array.isArray(args)) {
-    return `${$op}(${args.map(describe).join(", ")})`;
+
+  if (isString($op) && Array.isArray(args)) {
+    // SAFETY: Imported graphs validate expression operands before Studio receives them.
+    const operands = args as Value<Scalar>[];
+
+    return `${$op}(${operands.map(describe).join(", ")})`;
   }
+
   return JSON.stringify(value);
 }
 
@@ -22,8 +31,10 @@ export function findNode(nodes: WorkflowNode[], id: string): WorkflowNode | unde
     if (node.id === id) {
       return node;
     }
+
     if (node.kind === "condition") {
       const child = findNode(node.then, id) ?? findNode(node.else, id);
+
       if (child) {
         return child;
       }
@@ -36,7 +47,9 @@ export function selectedBranch(attempt?: AttemptRecord): "then" | "else" | undef
   if (attempt?.status !== "succeeded" || !isRecord(attempt.output)) {
     return;
   }
+
   const branch = attempt.output.branch;
+
   return branch === "then" || branch === "else" ? branch : undefined;
 }
 
@@ -44,6 +57,8 @@ export function outputText(output: Json | undefined, key: "stdout" | "stderr"): 
   if (!isRecord(output)) {
     return;
   }
+
   const value = output[key];
-  return typeof value === "string" ? value : undefined;
+
+  return isString(value) ? value : undefined;
 }

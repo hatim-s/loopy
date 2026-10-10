@@ -1,5 +1,5 @@
 import type { SecretBindings, Workflow, WorkflowNode } from "../../core/index.js";
-import { isRecord } from "../../core/index.js";
+import { isRecord, isString } from "../../core/index.js";
 
 export type SavedWorkflow = {
   workflow: Workflow;
@@ -7,6 +7,7 @@ export type SavedWorkflow = {
   updatedAt: string;
   secretBindings?: SecretBindings;
 };
+
 export type SaveOptions = { replace?: boolean };
 
 /** The on-disk shape before the workflow and bindings have been validated. */
@@ -19,10 +20,7 @@ export type SavedFile = {
 
 export function isSavedFile(value: unknown): value is SavedFile {
   return (
-    isRecord(value) &&
-    "workflow" in value &&
-    typeof value.source === "string" &&
-    typeof value.updatedAt === "string"
+    isRecord(value) && "workflow" in value && isString(value.source) && isString(value.updatedAt)
   );
 }
 

@@ -16,6 +16,7 @@ type BranchArmProps = GraphSequenceProps & {
 
 function BranchArm({ label, taken, ...sequence }: BranchArmProps) {
   const state = taken === true ? " taken" : taken === false ? " skipped" : "";
+
   return (
     <div className={`branch-arm${state}`}>
       <div className="branch-label">
@@ -31,6 +32,7 @@ function nodeSummary(node: WorkflowNode): string {
   if (node.kind === "condition") {
     return describe(node.test);
   }
+
   return `${node.command.program} ${node.command.args.map(describe).join(" ")}`;
 }
 
@@ -44,6 +46,7 @@ export function GraphSequence({
   if (nodes.length === 0) {
     return <div className="graph-empty">No steps</div>;
   }
+
   return (
     <div className={`graph-sequence${inactive ? " graph-sequence-inactive" : ""}`}>
       {nodes.map((node, index) => {
@@ -51,6 +54,7 @@ export function GraphSequence({
         const branch = node.kind === "condition" ? selectedBranch(attempt) : undefined;
         const selected = selectedId === node.id;
         const arm = { attempts, selectedId, onSelect };
+
         return (
           <div className="graph-step" key={node.id}>
             <button

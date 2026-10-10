@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { command, trigger } from "../src/core/index.js";
-import type { ExecuteCommand, ExecutionMode } from "../src/core/model.js";
+import type { ExecuteCommand } from "../src/core/model.js";
 import { localRunOptions } from "../src/local/process.js";
 import { Registry } from "../src/local/registry/registry.js";
 import { createLocalRuntime } from "../src/local/runtime.js";
@@ -13,6 +13,7 @@ import { SecretStore } from "../src/local/secrets.js";
 import { CommandExecutionError } from "../src/runtime/errors.js";
 
 const directories: string[] = [];
+
 function setup() {
   const directory = mkdtempSync(join(tmpdir(), "loopy-bindings-"));
   directories.push(directory);
@@ -22,17 +23,22 @@ function setup() {
   const registry = new Registry(home, cwd);
   const secrets = new SecretStore(home);
   secrets.set("shared-cookie", "private-cookie-first");
+
   const workflow = trigger("secret-probe")
     .config({ scope: "global" })
     .node("probe", command(process.execPath, "-e", "console.log(process.env.LOOPY_BOUND_COOKIE)"))
     .build();
+
   const source = join(directory, "source.loopy.ts");
   registry.save(workflow, source);
   registry.bindSecret(workflow.slug, "LOOPY_BOUND_COOKIE", "shared-cookie");
+
   return { directory, home, cwd, registry, secrets, workflow, source };
 }
+
 afterEach(() => {
   delete process.env.LOOPY_BOUND_COOKIE;
+
   for (const directory of directories.splice(0)) {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -66,21 +72,26 @@ test("binding edits share the workflow save lock", () => {
 test("a bound secret reaches commands but never run checkpoints or events", async () => {
   const { home, cwd, registry, workflow } = setup();
   const local = createLocalRuntime({ home });
+
   try {
     const saved = registry.get(workflow.slug);
+
     const run = await local.runtime.createRun(
       saved.workflow,
       {},
       { ...localRunOptions(cwd, "full"), secretBindings: saved.secretBindings },
     );
+
     expect((await local.runtime.execute(run.id)).status).toBe("succeeded");
     const attempts = await local.runtime.getAttempts(run.id);
     expect(attempts[0]?.output).toMatchObject({ stdout: "[redacted]\n" });
+
     const checkpoint = JSON.stringify({
       run: await local.runtime.getRun(run.id),
       attempts,
       events: await local.runtime.getEvents(run.id),
     });
+
     expect(checkpoint).not.toContain("private-cookie-first");
     expect(checkpoint).toContain("shared-cookie");
     expect(attempts[0]?.input).not.toHaveProperty("env");
@@ -92,8 +103,10 @@ test("a bound secret reaches commands but never run checkpoints or events", asyn
 test("resume rereads a rotated secret and skips successful steps", async () => {
   const { home, cwd, registry, secrets, workflow, source } = setup();
   const seen: string[] = [];
+
   const executor: ExecuteCommand = async (cmd) => {
     seen.push(cmd.env?.LOOPY_BOUND_COOKIE ?? "missing");
+
     return {
       stdout: cmd.env?.LOOPY_BOUND_COOKIE ?? "",
       stderr: "",
@@ -101,7 +114,9 @@ test("resume rereads a rotated secret and skips successful steps", async () => {
       durationMs: 0,
     };
   };
+
   const local = createLocalRuntime({ home, executor });
+
   try {
     const twoSteps = {
       ...workflow,
@@ -110,13 +125,16 @@ test("resume rereads a rotated secret and skips successful steps", async () => {
         { id: "second", kind: "command" as const, command: command("echo", "second") },
       ],
     };
+
     registry.save(twoSteps, source);
     const saved = registry.get(workflow.slug);
+
     const run = await local.runtime.createRun(
       saved.workflow,
       {},
       { ...localRunOptions(cwd, "full"), secretBindings: saved.secretBindings },
     );
+
     expect((await local.runtime.execute(run.id)).status).toBe("failed");
     secrets.set("shared-cookie", "private-cookie-rotated");
     expect((await local.runtime.execute(run.id)).status).toBe("succeeded");
@@ -138,14 +156,17 @@ test("resume rereads a rotated secret and skips successful steps", async () => {
 test("environment overrides are injected and redacted, and missing values fail before launch", async () => {
   const { home, cwd, registry, secrets, workflow } = setup();
   let calls = 0;
+
   const local = createLocalRuntime({
     home,
     executor: async (cmd) => {
       calls++;
       expect(cmd.env?.LOOPY_BOUND_COOKIE).toBe("explicit-cookie");
+
       return { stdout: cmd.env?.LOOPY_BOUND_COOKIE ?? "", stderr: "", exitCode: 0, durationMs: 0 };
     },
   });
+
   try {
     const saved = registry.get(workflow.slug);
     const options = { ...localRunOptions(cwd, "sandbox"), secretBindings: saved.secretBindings };
@@ -169,6 +190,7 @@ test("environment overrides are injected and redacted, and missing values fail b
 test("revocation and replacement prevent existing runs from using old grants", async () => {
   const { home, cwd, registry, workflow, directory } = setup();
   let calls = 0;
+
   const local = createLocalRuntime({
     home,
     executor: async () => {
@@ -176,6 +198,7 @@ test("revocation and replacement prevent existing runs from using old grants", a
       throw new Error("Should never launch");
     },
   });
+
   try {
     const saved = registry.get(workflow.slug);
     const options = { ...localRunOptions(cwd, "full"), secretBindings: saved.secretBindings };
@@ -195,6 +218,7 @@ test("revocation and replacement prevent existing runs from using old grants", a
 
 test("executor failures retain uncertainty while masking values and partial output", async () => {
   const { home, cwd, registry, workflow } = setup();
+
   const local = createLocalRuntime({
     home,
     executor: async (cmd) => {
@@ -210,13 +234,16 @@ test("executor failures retain uncertainty while masking values and partial outp
       );
     },
   });
+
   try {
     const saved = registry.get(workflow.slug);
+
     const run = await local.runtime.createRun(
       saved.workflow,
       {},
       { ...localRunOptions(cwd, "full"), secretBindings: saved.secretBindings },
     );
+
     expect((await local.runtime.execute(run.id)).status).toBe("interrupted");
     const attempt = (await local.runtime.getAttempts(run.id))[0];
     expect(attempt?.status).toBe("uncertain");
@@ -234,13 +261,14 @@ test("redaction handles overlapping values and regex punctuation", () => {
   expect(secretRedactor(["abcdef"])("prefix abc", true)).toBe("prefix [redacted]");
 });
 
-for (const mode of ["full", "sandbox"] as ExecutionMode[]) {
+for (const mode of ["full", "sandbox"] as const) {
   test.skipIf(
     mode === "sandbox" &&
       process.platform !== "darwin" &&
       !(process.platform === "linux" && existsSync("/usr/bin/bwrap")),
   )(`real ${mode} process receives the secret and stdin without persisting it`, async () => {
     const { home, cwd, registry, workflow, source } = setup();
+
     const probe = trigger(workflow.slug)
       .config({ scope: "global" })
       .node("probe", {
@@ -252,19 +280,24 @@ for (const mode of ["full", "sandbox"] as ExecutionMode[]) {
         stdin: "ordinary input",
       })
       .build();
+
     registry.save(probe, source);
     const saved = registry.get(workflow.slug);
     const local = createLocalRuntime({ home });
+
     try {
       const run = await local.runtime.createRun(
         saved.workflow,
         {},
         { ...localRunOptions(cwd, mode), secretBindings: saved.secretBindings },
       );
+
       const finished = await local.runtime.execute(run.id);
+
       if (finished.status !== "succeeded") {
         throw new Error(JSON.stringify(await local.runtime.getAttempts(run.id)));
       }
+
       expect((await local.runtime.getAttempts(run.id))[0]?.output).toMatchObject({
         stdout: `${digest("private-cookie-first")}\nordinary input\n`,
         stderr: "[redacted]\n",
@@ -278,18 +311,22 @@ for (const mode of ["full", "sandbox"] as ExecutionMode[]) {
 test("CLI binding commands store references and run from a different directory", async () => {
   const { home, cwd, workflow, directory } = setup();
   const cli = [process.execPath, join(import.meta.dir, "../src/cli/index.ts")];
+
   async function invoke(args: string[]) {
     const child = Bun.spawn([...cli, ...args, "--home", home], {
       cwd: directory,
       stdout: "pipe",
       stderr: "pipe",
     });
+
     const stdout = await new Response(child.stdout).text();
     const stderr = await new Response(child.stderr).text();
     expect(stdout + stderr).not.toContain("private-cookie-first");
     expect(await child.exited).toBe(0);
+
     return JSON.parse(stdout);
   }
+
   await invoke(["secrets", "bind", workflow.slug, "LOOPY_BOUND_COOKIE", "shared-cookie"]);
   expect(await invoke(["secrets", "bindings", workflow.slug])).toEqual({
     slug: workflow.slug,
@@ -314,21 +351,26 @@ for (const key of ["toString", "constructor", "__proto__"]) {
     registry.unbindSecret(workflow.slug, "LOOPY_BOUND_COOKIE");
     registry.bindSecret(workflow.slug, key, "shared-cookie");
     let calls = 0;
+
     const local = createLocalRuntime({
       home,
       executor: async (cmd) => {
         calls++;
         expect(cmd.env?.[key]).toBe("private-cookie-first");
+
         return { stdout: "", stderr: "", exitCode: 0, durationMs: 0 };
       },
     });
+
     try {
       const saved = registry.get(workflow.slug);
+
       const run = await local.runtime.createRun(
         saved.workflow,
         {},
         { ...localRunOptions(cwd, "full"), secretBindings: saved.secretBindings },
       );
+
       expect((await local.runtime.execute(run.id)).status).toBe("succeeded");
       expect(calls).toBe(1);
     } finally {
@@ -344,6 +386,7 @@ for (const [value, limit] of [
   test(`UTF-8 output limit ${limit} preserves secret prefixes for redaction`, async () => {
     const { home, cwd, registry, workflow, source, secrets } = setup();
     secrets.set("shared-cookie", value);
+
     const limited = trigger(workflow.slug)
       .config({ scope: "global" })
       .node("probe", {
@@ -352,15 +395,19 @@ for (const [value, limit] of [
         maxOutputBytes: limit,
       })
       .build();
+
     registry.save(limited, source);
     const local = createLocalRuntime({ home });
+
     try {
       const saved = registry.get(workflow.slug);
+
       const run = await local.runtime.createRun(
         saved.workflow,
         {},
         { ...localRunOptions(cwd, "full"), secretBindings: saved.secretBindings },
       );
+
       expect((await local.runtime.execute(run.id)).status).toBe("interrupted");
       const attempt = (await local.runtime.getAttempts(run.id))[0];
       expect(attempt?.output).toMatchObject({ stdout: "[redacted]" });

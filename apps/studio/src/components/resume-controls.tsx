@@ -8,6 +8,7 @@ type ResumeControlsProps = {
 
 export function ResumeControls({ uncertainCount, busy, onResume }: ResumeControlsProps) {
   const [retryUncertain, setRetryUncertain] = useState(false);
+
   return (
     <div className="resume-controls">
       {uncertainCount > 0 && (

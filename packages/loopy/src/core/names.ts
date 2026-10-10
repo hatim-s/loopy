@@ -1,10 +1,16 @@
 /** Identifier formats shared by authoring, validation, storage and the CLI. */
 export const SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,79}$/;
+
 export const NODE_ID_PATTERN = /^[a-z][a-z0-9_-]*$/;
+
 export const ENVIRONMENT_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
 export const SECRET_NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/;
+
 export const UUID_PATTERN = /^[a-f0-9-]{36}$/;
+
 export const ARRAY_INDEX_PATTERN = /^(0|[1-9][0-9]*)$/;
+
 /** The long-flag spelling a command descriptor may declare, such as `--dry-run`. */
 export const FLAG_CLI_PATTERN = /^--[a-zA-Z0-9][a-zA-Z0-9-]*$/;
 

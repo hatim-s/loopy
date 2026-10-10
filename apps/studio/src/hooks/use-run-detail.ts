@@ -24,9 +24,11 @@ export function useRunDetail({ slug, loaded, runs, putRun, errors }: Options) {
   // Undefined means nothing chosen yet; null means the saved definition. The newest run is
   // pinned once per workflow so a later refresh does not move the selection.
   const [chosen, selectRun] = useScopedState<string | null | undefined>(slug, undefined);
+
   if (loaded && chosen === undefined) {
     selectRun(runs[0]?.id ?? null);
   }
+
   const selectedRunId = chosen ?? null;
   const [detail, setDetail] = useScopedState<RunDetail | null>(selectedRunId, null);
   const [busy, setBusy] = useState(false);
@@ -49,6 +51,7 @@ export function useRunDetail({ slug, loaded, runs, putRun, errors }: Options) {
     apply: (next) => {
       putRun(next.run);
       setDetail(next);
+
       if (baseline?.id === next.run.id && next.run.updatedAt !== baseline.updatedAt) {
         setBaseline(null);
       }
@@ -60,8 +63,10 @@ export function useRunDetail({ slug, loaded, runs, putRun, errors }: Options) {
     if (!slug) {
       return;
     }
+
     setBusy(true);
     errors.clear();
+
     try {
       const run = await endpoints.start(slug, input, mode);
       putRun(run);
@@ -77,8 +82,10 @@ export function useRunDetail({ slug, loaded, runs, putRun, errors }: Options) {
     if (!selectedRunId || !detail) {
       return;
     }
+
     setBusy(true);
     errors.clear();
+
     try {
       const run = await endpoints.resume(selectedRunId, retryUncertain);
       putRun(run);

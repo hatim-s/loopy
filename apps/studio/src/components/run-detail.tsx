@@ -12,11 +12,14 @@ type RunDetailViewProps = {
 
 export function RunDetailView({ detail, busy, onResume }: RunDetailViewProps) {
   const { run, attempts, events } = detail;
+
   const uncertainCount = [...latestAttempts(attempts).values()].filter(
     (attempt) => attempt.status === "uncertain",
   ).length;
+
   const resumable = run.status === "failed" || run.status === "interrupted";
   const directory = workspaceName(run.options.workspace);
+
   return (
     <div className="run-detail">
       <div className="run-detail-head">

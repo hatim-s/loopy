@@ -13,12 +13,17 @@ import { compileWorkflow } from "./workflow-validation.js";
 
 /** A literal value, or a callback that builds one from typed references. */
 type Author<Input, Steps, T> = T | ((context: WorkflowContext<Input, Steps>) => T);
+
 type Branch = WorkflowNode | readonly WorkflowNode[];
 
+function isAuthorCallback<Input, Steps, T>(
+  value: Author<Input, Steps, T>,
+): value is (context: WorkflowContext<Input, Steps>) => T {
+  return typeof value === "function";
+}
+
 function author<Input, Steps, T>(value: Author<Input, Steps, T>): T {
-  return typeof value === "function"
-    ? (value as (context: WorkflowContext<Input, Steps>) => T)(context())
-    : value;
+  return isAuthorCallback(value) ? value(context()) : value;
 }
 
 function nodeList(branch: Branch): WorkflowNode[] {
@@ -71,6 +76,7 @@ export class WorkflowBuilder<Input, Steps = Record<never, never>> {
       then: nodeList(author(thenBranch)),
       else: nodeList(author(elseBranch)),
     };
+
     return new WorkflowBuilder(this.slug, [...this.nodes, condition], this.summary, this.settings);
   }
 

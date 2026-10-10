@@ -1,4 +1,5 @@
 const IDENTIFIER_PATTERN = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+
 const RESERVED_WORDS = new Set(
   "await break case catch class const continue debugger default delete do else enum export extends false finally for function if import in instanceof new null return super switch this throw true try typeof var void while with yield".split(
     " ",
@@ -11,6 +12,7 @@ export function identifier(value: string): string {
     .replace(/^--?/, "")
     .split(/[^a-zA-Z0-9]+/)
     .filter(Boolean);
+
   return words
     .map((word, index) =>
       index === 0 ? word.toLowerCase() : word[0]?.toUpperCase() + word.slice(1).toLowerCase(),

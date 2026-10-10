@@ -17,12 +17,16 @@
     "install:global": "bun scripts/install-global.ts",
     "fmt": "biome format --write .",
     "fmt:check": "biome format .",
-    "lint": "biome check ."
+    "lint": "biome check . && eslint ."
   },
   "devDependencies": {
     "@biomejs/biome": "2.2.2",
     "bun-types": "1.4.0",
+    "eslint": "10.8.1",
+    "eslint-plugin-sonarjs": "4.2.2",
+    "eslint-plugin-unicorn": "77.0.0",
     "loopy": "workspace:*",
-    "typescript": "5.9.2"
+    "typescript": "5.9.2",
+    "typescript-eslint": "8.66.0"
   }
 }

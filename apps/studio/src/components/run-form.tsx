@@ -23,13 +23,16 @@ export function RunForm({ slug, onRun, busy }: RunFormProps) {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     let value: Json;
+
     try {
       // JSON.parse returns any; the server validates the shape, this only checks syntax.
       value = JSON.parse(input);
     } catch {
       setInputError("Input must be valid JSON.");
+
       return;
     }
+
     setInputError(null);
     await onRun(value, mode);
   }

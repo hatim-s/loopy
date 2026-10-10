@@ -16,6 +16,7 @@ export function useRequest<T>({ load, apply, onError }: Request<T>, deps: Depend
     if (!load) {
       return;
     }
+
     let stale = false;
     load()
       .then((value) => {
@@ -28,6 +29,7 @@ export function useRequest<T>({ load, apply, onError }: Request<T>, deps: Depend
           onError(cause);
         }
       });
+
     return () => {
       stale = true;
     };

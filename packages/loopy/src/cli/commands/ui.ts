@@ -5,9 +5,11 @@ import { onTermination } from "../signals.js";
 
 function parsePort(value: string | undefined): number {
   const port = value === undefined ? DEFAULT_PORT : Number(value);
+
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
     throw new Error("Port must be an integer from 0 to 65535.");
   }
+
   return port;
 }
 

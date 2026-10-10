@@ -12,8 +12,10 @@ export async function sandboxLauncher(
   if (process.platform === "darwin") {
     return macSandbox(program, workspace, env, helper);
   }
+
   if (process.platform === "linux") {
     return linuxSandbox(program, workspace, cwd, env, helper);
   }
+
   throw new Error(`Sandbox mode is unavailable on ${process.platform}.`);
 }

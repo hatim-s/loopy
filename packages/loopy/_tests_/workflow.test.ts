@@ -37,12 +37,13 @@ describe("TypeScript workflow authoring", () => {
       },
     });
     expect(JSON.parse(JSON.stringify(compiled))).toEqual(compiled);
+    // SAFETY: The graph constructed above places a command at node 2.
     expect((compiled.nodes[2] as { command: { args: unknown[] } }).command.args[0]).toEqual({
       $ref: { source: "input", path: ["settings", "label"] },
     });
+    // SAFETY: The graph constructed above places a condition at node 1 and a command in its then branch.
     expect(
-      (compiled.nodes[1] as { then: Array<{ command: { args: unknown[] } }> }).then[0]?.command
-        .args[1],
+      (compiled.nodes[1] as { then: { command: { args: unknown[] } }[] }).then[0]?.command.args[1],
     ).toEqual({
       $ref: { source: "input", path: ["prompt"] },
     });
@@ -59,6 +60,8 @@ describe("TypeScript workflow authoring", () => {
     const graph = trigger<{ files: string[] }>("array-ref")
       .node("show", ({ input }) => command("echo", at(input.files, 0)))
       .build();
+
+    // SAFETY: This graph consists of the command constructed above.
     expect((graph.nodes[0] as { command: { args: unknown[] } }).command.args[0]).toEqual({
       $ref: { source: "input", path: ["files", "0"] },
     });
@@ -76,6 +79,7 @@ describe("TypeScript workflow authoring", () => {
         node("same", command("git", "diff")),
         node("other", command("git", "log")),
       );
+
     expect(() => duplicate.build()).toThrow("Duplicate workflow node id 'same'");
     expect(() =>
       validateWorkflow({
@@ -95,7 +99,9 @@ describe("TypeScript workflow authoring", () => {
         node("later", command("echo", "done")),
       ],
     };
+
     expect(() => validateWorkflow(future)).toThrow("not available yet");
+
     const branch = trigger("branch")
       .condition(
         "route",
@@ -104,6 +110,7 @@ describe("TypeScript workflow authoring", () => {
         node("no", command("echo", "no")),
       )
       .node("after", command("echo", { $ref: { source: "steps", path: ["yes", "stdout"] } }));
+
     expect(() => branch.build()).toThrow("not available yet");
   });
 
@@ -115,7 +122,9 @@ describe("TypeScript workflow authoring", () => {
         { id: "run", kind: "command", command: { program: "echo", args: ["ok"], hidden: () => 1 } },
       ],
     };
+
     expect(() => validateWorkflow(invalid)).toThrow("unsupported field 'hidden'");
+
     const badConstraint = {
       version: 1,
       slug: "bad-constraint",
@@ -131,6 +140,7 @@ describe("TypeScript workflow authoring", () => {
         },
       ],
     };
+
     expect(() => validateWorkflow(badConstraint)).toThrow("has no matching value");
   });
 });

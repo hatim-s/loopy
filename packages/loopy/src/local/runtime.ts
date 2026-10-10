@@ -9,6 +9,7 @@ export function createLocalRuntime(options: { home?: string; executor?: ExecuteC
   const home = options.home ?? defaultHome();
   const store = new SqliteRunStore(home);
   const runtime = new Runtime({ store, executor: secretExecutor(home, store, options.executor) });
+
   return {
     runtime,
     recoverOwner: (id: string) => store.recoverOwner(id),

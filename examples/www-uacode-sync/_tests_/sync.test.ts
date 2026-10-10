@@ -12,17 +12,32 @@ import {
   syncCommitMessage,
   verifyGeneratedCommit,
 } from "../sync";
+import type { JsonValue } from "../sync.ts";
 
 const root = "/tmp/www-uacode-sync-core-test";
+
 const assetRoot = "configs/platform-features/ai-agents/asset-repository";
-const agentIds = ["e_6aa19955aeb9ea1371af57c7", "e_6a801aea757839657bbec2a1", "e_ai_fde_agent"];
+
+const agentIds = [
+  "e_6aa19955aeb9ea1371af57c7",
+  "e_6a801aea757839657bbec2a1",
+  "e_ai_fde_agent",
+] as const;
+
 const workflowAgentId = "e_6aa19955aeb9ea1371af57c7";
+
 const plannerAgentId = "e_6a801aea757839657bbec2a1";
+
 const firstSkillName = "external-data-inspection";
+
 const firstSkillId = "e_6ab1053b200bf5533fd0ad0b";
+
 const lastSkillId = "e_6a5f2c12f62c9924bb176689";
+
 const sourceSha = "abcdef1234567890abcdef1234567890abcdef12";
+
 const releasePath = join(root, assetRoot, "ENTITY_TYPE/ai_sdlc_feature_release.jsonl");
+
 const skills = [
   ["external-data-inspection", "e_6ab1053b200bf5533fd0ad0b"],
   ["automation-run-debugging", "e_6aa851442b4d71304f6477b1"],
@@ -35,13 +50,14 @@ const skills = [
   ["performance", "e_6a5f2c12f62c9924bb176689"],
 ] as const;
 
-async function writeJson(path: string, value: unknown) {
+async function writeJson(path: string, value: JsonValue) {
   await mkdir(join(path, ".."), { recursive: true });
   await writeFile(path, JSON.stringify(value, null, 2));
 }
 
 async function makeFixture(versionMismatch = false) {
   const content = new Map<string, string>();
+
   const embeddedSkills = skills.slice(0, 9).map(([name, id]) => ({
     skillEntity: {
       id,
@@ -49,11 +65,13 @@ async function makeFixture(versionMismatch = false) {
       properties: { skill: `old ${name}` },
     },
   }));
+
   for (const id of agentIds) {
     const prompt =
       id === agentIds[1]
         ? "---\nname: Solution Planner\ndescription: source header\n---\n# New planner body\n"
         : `new ${id}`;
+
     content.set(id, prompt);
     await writeJson(join(root, assetRoot, "ai_agent", `${id}.json`), {
       aiAgentEntity: {
@@ -70,6 +88,7 @@ async function makeFixture(versionMismatch = false) {
       name: "preserve this field",
     });
   }
+
   for (const [name, id] of skills) {
     content.set(name, `new ${name}`);
     await writeJson(join(root, assetRoot, "e_skill_ai_agent", `${id}.json`), {
@@ -78,6 +97,7 @@ async function makeFixture(versionMismatch = false) {
       tags: ["keep compact formatting"],
       version: 4,
     });
+
     if (name === firstSkillName) {
       const path = join(root, assetRoot, "e_skill_ai_agent", `${id}.json`);
       const json = await readFile(path, "utf8");
@@ -90,6 +110,7 @@ async function makeFixture(versionMismatch = false) {
       );
     }
   }
+
   const manifestRoot = join(root, "configs/platform-features/ai-agents/platform/ai-sdlc");
   await writeJson(join(manifestRoot, "text-to-workflow-assets.json"), {
     assetClassVsAssetDetails: {
@@ -117,6 +138,7 @@ async function makeFixture(versionMismatch = false) {
       .map((record) => JSON.stringify(record))
       .join("\n")}\n`,
   );
+
   return content;
 }
 
@@ -124,6 +146,7 @@ beforeEach(async () => {
   await rm(root, { recursive: true, force: true });
   await mkdir(root, { recursive: true });
 });
+
 afterEach(async () => rm(root, { recursive: true, force: true }));
 
 describe("www to uacode asset mapping", () => {
@@ -152,6 +175,7 @@ describe("www to uacode asset mapping", () => {
       url: "https://github.com/unify-apps/uacode/pull/48961",
       headRefName: "chore/www-agent-assets-ed6ab8d6-main",
     };
+
     const candidates = [
       mainCandidate,
       {
@@ -163,6 +187,7 @@ describe("www to uacode asset mapping", () => {
         headRefName: "chore/www-agent-assets-ed6ab8d6-uat",
       },
     ];
+
     expect(selectSyncPullRequest(candidates, "main")).toEqual(candidates[0]);
     expect(selectSyncPullRequest(candidates, "uat")).toEqual(candidates[2]);
     expect(selectSyncPullRequest(candidates, "release/1")).toBeUndefined();
@@ -178,6 +203,7 @@ describe("www to uacode asset mapping", () => {
     const content = await makeFixture();
     const workflowAgentPath = join(root, assetRoot, "ai_agent", `${agentIds[0]}.json`);
     const compactSkillPath = join(root, assetRoot, "e_skill_ai_agent", `${firstSkillId}.json`);
+
     const originalManifest = await readFile(
       join(
         root,
@@ -185,6 +211,7 @@ describe("www to uacode asset mapping", () => {
       ),
       "utf8",
     );
+
     const manifestPath = join(
       root,
       "configs/platform-features/ai-agents/platform/ai-sdlc/text-to-workflow-assets.json",
@@ -202,9 +229,11 @@ describe("www to uacode asset mapping", () => {
     expect(workflowAgent.aiAgentEntity.properties.instructions).toBe(content.get(workflowAgentId));
     expect(workflowAgent.aiAgentEntity.version).toBe(19);
     expect(workflowAgent.aiAgentEntity.properties.leaveAlone).toBe(true);
+
     const planner = JSON.parse(
       await readFile(join(root, assetRoot, "ai_agent", `${plannerAgentId}.json`), "utf8"),
     );
+
     expect(planner.aiAgentEntity.properties.instructions).toBe(
       "---\nname: ai-fde-solution-planner\ndescription: source header\n---\n# New planner body\n",
     );
@@ -237,6 +266,7 @@ describe("www to uacode asset mapping", () => {
     content.set(workflowAgentId, "updated Workflow Agent prompt\n");
 
     const changes = await applyAssetSync(root, content, sourceSha);
+
     const releases = (await readFile(releasePath, "utf8"))
       .trim()
       .split("\n")
@@ -259,10 +289,12 @@ describe("www to uacode asset mapping", () => {
 
   test("adds a missing skill registration to the manifest without rewriting other registration data", async () => {
     const content = await makeFixture();
+
     const manifestPath = join(
       root,
       "configs/platform-features/ai-agents/platform/ai-sdlc/text-to-workflow-assets.json",
     );
+
     const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
     manifest.assetClassVsAssetDetails.e_skill_ai_agent =
       manifest.assetClassVsAssetDetails.e_skill_ai_agent.filter(
@@ -323,11 +355,14 @@ describe("publication safety", () => {
   test("recognizes only a reconstructed generated tree", async () => {
     const base = "1".repeat(40);
     const commit = { message: syncCommitMessage(sourceSha, base), tree: { sha: "generated-tree" } };
+
     const reconstruct = async (source: string, recordedBase: string) => {
       expect(source).toBe(sourceSha);
       expect(recordedBase).toBe(base);
+
       return "generated-tree";
     };
+
     await verifyGeneratedCommit(commit, reconstruct);
     await expect(
       verifyGeneratedCommit({ ...commit, tree: { sha: "manual-tree" } }, reconstruct),
@@ -338,18 +373,23 @@ describe("publication safety", () => {
   });
   test("refuses a concurrent update through a non-force PATCH and propagates rejection", async () => {
     let branchHead = "observed-head";
+
     const execute = async (program: string, args: string[]) => {
       expect(program).toBe("gh");
       expect(args.slice(0, 3)).toEqual(["api", "--method", "PATCH"]);
       const request = JSON.parse(await readFile(args[args.length - 1] ?? "", "utf8"));
       expect(request).toEqual({ sha: "new-descendant-of-observed-head", force: false });
+
       // GitHub rejects a commit whose parent was superseded by a parallel push.
       if (branchHead !== "observed-head") {
         throw new Error("HTTP 422: Update is not a fast forward");
       }
+
       branchHead = request.sha;
+
       return "";
     };
+
     await publishSyncRef(
       "chore/sync",
       "new-descendant-of-observed-head",

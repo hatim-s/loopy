@@ -26,34 +26,39 @@ export class Lease {
     if (this.inFlight) {
       return this.inFlight;
     }
+
     this.inFlight = Promise.resolve()
       .then(this.beat)
       .then((owned) => {
         if (!owned) {
           this.fail(new Error(OWNERSHIP_LOST));
         }
+
         return owned;
       })
-      .catch((error: unknown) => {
-        this.fail(error);
+      .catch((cause: unknown) => {
+        this.fail(cause);
+
         return false;
       })
       .finally(() => {
         this.inFlight = undefined;
       });
+
     return this.inFlight;
   }
 
-  private fail(error: unknown): void {
+  private fail(cause: unknown): void {
     this.failed = true;
-    this.error = error;
-    this.controller.abort(error);
+    this.error = cause;
+    this.controller.abort(cause);
   }
 
   /** Stops the timer and drains any heartbeat still in flight. */
   async stop(): Promise<void> {
     clearInterval(this.timer);
     this.timer = undefined;
+
     if (this.inFlight) {
       await this.inFlight;
     }

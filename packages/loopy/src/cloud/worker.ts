@@ -9,9 +9,11 @@ export type CloudWorkOutcome =
 
 type WorkerRuntime = Pick<Runtime, "getRun" | "execute">;
 
+// BOUNDARY: Host queue payloads must contain only a nonempty runId before the worker loads durable state.
 function parseMessage(value: unknown): CloudWorkMessage {
   const message = requireRecord(value, "Cloud work message");
   allowKeys(message, "Cloud work message", ["runId"]);
+
   return { runId: requireNonEmptyString(message.runId, "Cloud work message.runId") };
 }
 
@@ -24,38 +26,49 @@ function parseMessage(value: unknown): CloudWorkMessage {
 export class CloudWorker {
   constructor(private readonly runtime: WorkerRuntime) {}
 
+  // BOUNDARY: Host queue messages are parsed for runId, then the loaded run is checked for a managed workspace.
   async handle(
     message: unknown,
     options: { signal?: AbortSignal } = {},
   ): Promise<CloudWorkOutcome> {
     const { runId } = parseMessage(message);
     const run = await this.runtime.getRun(runId);
+
     if (!run) {
       throw new Error(`Unknown run ${runId}.`);
     }
+
     if (run.options.workspace.kind !== "managed") {
       throw new Error(`Run ${runId} uses a local workspace, which a cloud worker cannot execute.`);
     }
+
     if (options.signal?.aborted && (run.status === "pending" || run.status === "running")) {
       return { disposition: "retry", reason: "cancelled", runId };
     }
 
     try {
-      const result = await this.runtime.execute(runId, {
-        resume: false,
-        ...(options.signal ? { signal: options.signal } : {}),
-      });
+      const execution: Parameters<Runtime["execute"]>[1] = { resume: false };
+
+      if (options.signal) {
+        execution.signal = options.signal;
+      }
+
+      const result = await this.runtime.execute(runId, execution);
+
       if (result.status === "pending") {
         return { disposition: "retry", reason: "cancelled", runId };
       }
+
       if (result.status === "running") {
         throw new Error(`Run ${runId} did not settle.`);
       }
+
       return { disposition: "ack", run: result };
     } catch (error) {
       if (error instanceof RunBusyError) {
         return { disposition: "retry", reason: "busy", runId };
       }
+
       throw error;
     }
   }

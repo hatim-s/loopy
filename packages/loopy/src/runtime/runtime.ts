@@ -1,6 +1,7 @@
 import {
   type AttemptRecord,
   type ExecuteCommand,
+  isString,
   type Json,
   type RunEvent,
   type RunOptions,
@@ -20,6 +21,7 @@ const DEFAULT_HEARTBEAT_MS = 3_000;
 
 export async function sha256(text: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
@@ -28,23 +30,30 @@ export function checkRunOptions(options: RunOptions): RunOptions {
   if (options.mode !== "sandbox" && options.mode !== "full") {
     throw new Error(`Execution mode must be sandbox or full, not ${String(options.mode)}.`);
   }
+
   const workspace = options.workspace;
+
   if (options.secretBindings !== undefined) {
     validateSecretBindings(options.secretBindings);
+
     if (workspace?.kind !== "local") {
       throw new Error("Secret bindings require a local workspace.");
     }
   }
+
   const bindings =
     options.secretBindings === undefined
       ? {}
       : { secretBindings: structuredClone(options.secretBindings) };
-  if (workspace?.kind === "local" && typeof workspace.path === "string" && workspace.path) {
+
+  if (workspace?.kind === "local" && isString(workspace.path) && workspace.path) {
     return { workspace: { kind: "local", path: workspace.path }, mode: options.mode, ...bindings };
   }
-  if (workspace?.kind === "managed" && typeof workspace.id === "string" && workspace.id) {
+
+  if (workspace?.kind === "managed" && isString(workspace.id) && workspace.id) {
     return { workspace: { kind: "managed", id: workspace.id }, mode: options.mode };
   }
+
   throw new Error("A run needs a local workspace path or a managed workspace id.");
 }
 
@@ -61,6 +70,7 @@ export class Runtime {
     this.store = options.store;
     this.executor = options.executor;
     this.heartbeatIntervalMs = options.heartbeatIntervalMs ?? DEFAULT_HEARTBEAT_MS;
+
     if (!Number.isSafeInteger(this.heartbeatIntervalMs) || this.heartbeatIntervalMs <= 0) {
       throw new Error("heartbeatIntervalMs must be a positive integer.");
     }
@@ -70,14 +80,18 @@ export class Runtime {
   async createRun(workflow: Workflow, input: Json, options: RunOptions): Promise<RunRecord> {
     validateWorkflow(workflow);
     assertJson(input);
-    const savedInput = JSON.parse(JSON.stringify(input)) as Json;
+    const savedInput: unknown = JSON.parse(JSON.stringify(input));
+    assertJson(savedInput);
     const savedOptions = checkRunOptions(options);
     const snapshot = JSON.stringify(workflow);
+    const savedWorkflow: unknown = JSON.parse(snapshot);
+    validateWorkflow(savedWorkflow);
     const createdAt = new Date().toISOString();
+
     const run: RunRecord = {
       id: crypto.randomUUID(),
       slug: workflow.slug,
-      workflow: JSON.parse(snapshot) as Workflow,
+      workflow: savedWorkflow,
       workflowHash: await sha256(snapshot),
       input: savedInput,
       options: savedOptions,
@@ -85,7 +99,9 @@ export class Runtime {
       createdAt,
       updatedAt: createdAt,
     };
+
     await this.store.createRun(run);
+
     return run;
   }
 
@@ -113,6 +129,7 @@ export class Runtime {
   async execute(id: string, options: ExecuteOptions = {}): Promise<RunRecord> {
     const token = crypto.randomUUID();
     const run = await this.store.claim(id, token, { resume: options.resume });
+
     if (run.status !== "running") {
       return run;
     }
@@ -120,9 +137,11 @@ export class Runtime {
     const controller = new AbortController();
     const forwardAbort = () => controller.abort(options.signal?.reason);
     options.signal?.addEventListener("abort", forwardAbort, { once: true });
+
     if (options.signal?.aborted) {
       forwardAbort();
     }
+
     const lease = new Lease(
       () => this.store.heartbeat(id, token),
       controller,
@@ -130,6 +149,7 @@ export class Runtime {
     );
 
     let outcome: { run: RunRecord } | { error: unknown };
+
     try {
       const execution = new Execution(
         this.store,
@@ -141,18 +161,23 @@ export class Runtime {
         { resume: options.resume !== false, retryUncertain: Boolean(options.retryUncertain) },
         await this.store.getAttempts(id),
       );
+
       const result = await execution.nodes(run.workflow.nodes);
       // Drain heartbeats first: one landing after the final write would read as lost ownership.
       await lease.stop();
+
       if (lease.lost) {
         throw lease.error;
       }
+
       outcome = { run: await this.store.finishRun(id, token, result.status, result.error) };
     } catch (error) {
       outcome = { error };
     }
+
     await lease.stop();
     options.signal?.removeEventListener("abort", forwardAbort);
+
     try {
       await this.store.release(id, token);
     } catch (error) {
@@ -160,9 +185,11 @@ export class Runtime {
         outcome = { error };
       }
     }
+
     if ("error" in outcome) {
       throw outcome.error;
     }
+
     return outcome.run;
   }
 }

@@ -10,6 +10,7 @@ import type { Launch, Limits } from "./spawn.js";
 import { emptyOutput, spawnCaptured, unstarted } from "./spawn.js";
 
 const DEFAULT_TIMEOUT_MS = 5 * 60_000;
+
 const DEFAULT_MAX_OUTPUT_BYTES = 8 * 1024 * 1024;
 
 export type LocalExecutionOptions = RunOptions & {
@@ -30,9 +31,11 @@ process.exit(await child.exited);
 
 export function localRunOptions(cwd: string, mode: ExecutionMode): RunOptions {
   const path = realpathSync(cwd);
+
   if (!statSync(path).isDirectory()) {
     throw new Error(`Workspace '${cwd}' is not a directory.`);
   }
+
   return { workspace: { kind: "local", path }, mode };
 }
 
@@ -54,6 +57,7 @@ function launchEnvironment(
   if (mode === "full") {
     return { ...process.env, ...command.env };
   }
+
   return {
     PATH: process.env.PATH ?? "/usr/bin:/bin",
     HOME: workspace,
@@ -77,21 +81,26 @@ async function sandboxLaunch(
 ): Promise<Launch> {
   const privateEnvironment = sensitiveEnv !== undefined && Object.keys(sensitiveEnv).length > 0;
   const helper = privateEnvironment ? await realpath(process.execPath) : undefined;
+
   if (privateEnvironment) {
     for (const key of Object.keys(sensitiveEnv)) {
       delete env[key];
     }
   }
+
   const [launcher, prefix] = await sandboxLauncher(program, workspace, cwd, env, helper);
+
   const launch: Launch = {
     cwd,
     env: { PATH: "/usr/bin:/bin", LANG: "C" },
     program: launcher,
     args: [],
   };
+
   if (!privateEnvironment) {
     return { ...launch, args: [...prefix, ...command.args], stdin: command.stdin };
   }
+
   return {
     ...launch,
     args: [...prefix, "-e", PRIVATE_ENV_LAUNCHER],
@@ -111,25 +120,32 @@ export async function prepareLaunch(
   if (options.workspace.kind !== "local") {
     throw new Error("The local command executor requires a local workspace.");
   }
+
   const workspace = await realpath(options.workspace.path);
   const cwd = await realpath(resolve(workspace, command.cwd ?? "."));
+
   if (options.mode === "sandbox" && !within(workspace, cwd)) {
     throw new Error(`Command directory '${command.cwd}' is outside the sandbox workspace.`);
   }
+
   if (!(await stat(cwd)).isDirectory()) {
     throw new Error(`Command directory '${cwd}' is not a directory.`);
   }
+
   const env = launchEnvironment(command, options.mode, workspace);
   const effectiveEnv = { ...env, ...options.sensitiveEnv };
   // Validate without putting sensitive values into launcher arguments.
   envArgs(options.sensitiveEnv ?? {});
   const program = await resolveProgram(command.program, cwd, effectiveEnv.PATH ?? "");
+
   if (options.mode === "full") {
     return { cwd, env: effectiveEnv, program, args: command.args, stdin: command.stdin };
   }
+
   if (options.mode !== "sandbox") {
     throw new Error(`Execution mode '${options.mode}' is unknown.`);
   }
+
   return sandboxLaunch(command, program, workspace, cwd, env, options.sensitiveEnv);
 }
 
@@ -141,19 +157,24 @@ export async function executeLocalCommand(
     new CommandExecutionError("Command aborted.", emptyOutput(), false, {
       cause: options.signal?.reason,
     });
+
   if (options.signal?.aborted) {
     throw aborted();
   }
+
   let launch: Launch;
   let limits: Limits;
+
   try {
     limits = commandLimits(command);
     launch = await prepareLaunch(command, options);
   } catch (error) {
     throw unstarted(error);
   }
+
   if (options.signal?.aborted) {
     throw aborted();
   }
+
   return spawnCaptured(launch, limits, options.signal, performance.now());
 }

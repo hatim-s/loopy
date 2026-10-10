@@ -15,6 +15,7 @@ test("named input preserves strings, equals signs, empty values, and own propert
     "--__proto__=safe",
     "--url=a=b",
   ]);
+
   expect(parsed.triggerInput).toEqual(
     JSON.parse(
       '{"message":"hello world","code":"001","empty":"","negative":"-2","dash":"--text","__proto__":"safe","url":"a=b"}',
@@ -35,6 +36,7 @@ test("reserved options stay separate and separator allows colliding input keys",
     "--input",
     "text",
   ]);
+
   expect(parsed.values.full).toBe(true);
   expect(parsed.triggerInput).toEqual({ full: "false", input: "text" });
   expect(parseCliArgs(["types", "tool", "--", "--help"]).positionals).toEqual([

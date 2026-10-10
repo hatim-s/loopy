@@ -1,12 +1,13 @@
-import type { Workspace } from "loopy";
+import type { Command, Json, Workspace } from "loopy";
 
 /** Pretty JSON, falling back to String() for values JSON cannot represent. */
-export function formatted(value: unknown): string {
+export function formatted(value: Json | Command["env"] | undefined): string {
   return JSON.stringify(value, null, 2) ?? String(value);
 }
 
 export function shortDate(value: string): string {
   const date = new Date(value);
+
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 

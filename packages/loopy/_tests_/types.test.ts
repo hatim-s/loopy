@@ -12,11 +12,13 @@ const codexExec = defineCommand({
     sandbox: { cli: "--sandbox", kind: "string", choices: ["read-only", "workspace-write"] },
   },
 });
+
 const noArgs = defineCommand({ program: "git", path: ["status"], positionals: [] });
 
 test("generated command signatures accept workflow references", () => {
   expect(codexExec().args).toEqual(["exec"]);
   expect(noArgs().args).toEqual(["status"]);
+
   const workflow = trigger<{ prompt: string }>("typed")
     .node("first", ({ input }) => codexExec({ args: [input.prompt], flags: { json: true } }))
     .condition(
@@ -25,6 +27,7 @@ test("generated command signatures accept workflow references", () => {
       node("yes", codexExec({ args: ["yes"] })),
       node("no", codexExec({ args: ["no"] })),
     );
+
   expect(workflow.build().nodes).toHaveLength(2);
 });
 
@@ -42,4 +45,5 @@ function compileOnlyChecks() {
   // @ts-expect-error Object comparisons are not supported by serializable expressions.
   eq({ label: "a" }, { label: "b" });
 }
+
 void compileOnlyChecks;

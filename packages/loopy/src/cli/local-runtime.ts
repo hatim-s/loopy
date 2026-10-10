@@ -8,6 +8,7 @@ export async function withLocalRuntime<T>(
   work: (local: LocalRuntime) => Promise<T>,
 ): Promise<T> {
   const local = createLocalRuntime({ home });
+
   try {
     return await work(local);
   } finally {

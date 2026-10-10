@@ -13,31 +13,39 @@ import { command, trigger } from "../src/core/index.ts";
 import { Registry, startServer } from "../src/local/index.ts";
 
 const temporary: string[] = [];
+
 const servers: ReturnType<typeof startServer>[] = [];
+
 function directory() {
   const path = mkdtempSync(join(tmpdir(), "loopy-product-"));
   temporary.push(path);
+
   return path;
 }
+
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => server.stop()));
+
   for (const path of temporary.splice(0)) {
     rmSync(path, { recursive: true, force: true });
   }
 });
 
 const cliPath = join(import.meta.dir, "../src/cli/index.ts");
+
 async function cli(home: string, cwd: string, ...args: string[]) {
   const child = Bun.spawn([process.execPath, cliPath, "--home", home, ...args], {
     cwd,
     stdout: "pipe",
     stderr: "pipe",
   });
+
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(child.stdout).text(),
     new Response(child.stderr).text(),
     child.exited,
   ]);
+
   return { stdout, stderr, exitCode };
 }
 
@@ -77,9 +85,9 @@ export default trigger('checkpoint')
     "succeeded",
   ]);
   expect(detail.attempts[2].output.stdout).toBe("done\n");
-  expect(detail.events.map((event: { sequence: number }) => event.sequence)).toEqual(
-    detail.events.map((_: unknown, index: number) => index),
-  );
+  expect(detail.events.map((event: { sequence: number }) => event.sequence)).toEqual([
+    ...Array.from({ length: detail.events.length }).keys(),
+  ]);
 });
 
 test("local API requires authorization and origin checks, runs saved workflows, and has no edit endpoint", async () => {
@@ -114,25 +122,34 @@ test("local API requires authorization and origin checks, runs saved workflows, 
     (await fetch(endpoint("/workflows/hello/patch"), { method: "POST", headers, body: "{}" }))
       .status,
   ).toBe(404);
+
   const started = await fetch(endpoint("/runs"), {
     method: "POST",
     headers,
     body: JSON.stringify({ slug: "hello", input: null, mode: "full" }),
   });
+
   expect(started.status).toBe(202);
+  // SAFETY: This authorized request uses the server route whose successful response is a RunRecord.
   const run = (await started.json()) as { id: string };
+
   let detail:
     | { run: { status: string; input: unknown }; attempts: { output?: { stdout: string } }[] }
     | undefined;
+
   for (let i = 0; i < 100; i++) {
+    // SAFETY: The authenticated run-detail endpoint returns its typed run and attempt records.
     detail = (await (
       await fetch(endpoint(`/runs/${run.id}`), { headers })
     ).json()) as typeof detail;
+
     if (detail?.run.status === "succeeded") {
       break;
     }
+
     await Bun.sleep(10);
   }
+
   expect(detail?.run.status).toBe("succeeded");
   expect(detail?.run.input).toBeNull();
   expect(detail?.attempts[0]?.output?.stdout).toBe("hello\n");
@@ -155,9 +172,11 @@ export default trigger('global-tool').config({ scope: 'global' })
   rmSync(source);
   const result = await cli(home, caller, "run", "global-tool", "--full");
   expect(result.exitCode).toBe(0);
+
   const detail = JSON.parse(
     (await cli(home, caller, "inspect", JSON.parse(result.stdout).id)).stdout,
   );
+
   expect(detail.attempts[0].output.stdout.trim()).toBe(realpathSync(caller));
   expect(detail.attempts[0].input.args).toContain(join(realpathSync(sourceProject), "script.ts"));
 });
@@ -174,6 +193,7 @@ test("CLI passes named and JSON file trigger inputs into the saved run", async (
       .build(),
     source,
   );
+
   const named = await cli(
     home,
     cwd,
@@ -187,6 +207,7 @@ test("CLI passes named and JSON file trigger inputs into the saved run", async (
     "--args",
     "literal",
   );
+
   expect(named.exitCode).toBe(0);
   expect(JSON.parse(named.stdout).input).toEqual({
     message: "hello world",
@@ -206,6 +227,7 @@ test("CLI passes named and JSON file trigger inputs into the saved run", async (
     nested: { count: 2 },
     enabled: false,
   });
+
   const invalid = await cli(
     home,
     cwd,
@@ -216,6 +238,7 @@ test("CLI passes named and JSON file trigger inputs into the saved run", async (
     "--message",
     "mixed",
   );
+
   expect(invalid.exitCode).toBe(1);
   expect(invalid.stderr).toContain("Choose one input source");
   expect(JSON.parse((await cli(home, cwd, "runs")).stdout)).toHaveLength(2);

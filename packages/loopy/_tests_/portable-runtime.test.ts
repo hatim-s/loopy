@@ -16,17 +16,21 @@ const workflow = {
   slug: "portable",
   nodes: [{ id: "effect", kind: "command" as const, command: { program: "tool", args: [] } }],
 };
+
 const runOptions = {
   workspace: { kind: "managed" as const, id: "workspace-1" },
   mode: "full" as const,
 };
+
 const output = { stdout: "ok", stderr: "", exitCode: 0, durationMs: 1 };
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
+
   const promise = new Promise<T>((done) => {
     resolve = done;
   });
+
   return { promise, resolve };
 }
 
@@ -65,6 +69,7 @@ class MemoryRepository implements RunRepository {
     if (!this.run || this.run.id !== runId) {
       throw new Error("Unknown run");
     }
+
     if (
       this.run.status === "succeeded" ||
       (options?.resume === false &&
@@ -72,19 +77,24 @@ class MemoryRepository implements RunRepository {
     ) {
       return this.run;
     }
+
     if (this.owner) {
       throw new Error("Busy");
     }
+
     this.owner = token;
     this.run = { ...this.run, status: "running" };
+
     return this.run;
   }
-  async heartbeat(_runId: string, token: string): Promise<boolean> {
+  async heartbeat(...[, token]: Parameters<RunRepository["heartbeat"]>): Promise<boolean> {
     this.heartbeatCalls += 1;
     this.heartbeatConcurrent += 1;
     this.maxHeartbeatConcurrent = Math.max(this.maxHeartbeatConcurrent, this.heartbeatConcurrent);
+
     try {
       await this.beforeHeartbeat?.();
+
       return this.owner === token && this.run?.status === "running";
     } finally {
       this.heartbeatConcurrent -= 1;
@@ -97,9 +107,11 @@ class MemoryRepository implements RunRepository {
     input: Json,
   ): Promise<AttemptRecord> {
     await this.beforeStart?.();
+
     if (this.owner !== token) {
       throw new Error("Lost owner");
     }
+
     const attempt: AttemptRecord = {
       id: `attempt-${this.attempts.length + 1}`,
       runId,
@@ -109,11 +121,13 @@ class MemoryRepository implements RunRepository {
       status: "running",
       startedAt: new Date().toISOString(),
     };
+
     this.attempts.push(attempt);
+
     return attempt;
   }
   async finishAttempt(
-    _runId: string,
+    runId: string,
     token: string,
     attemptId: string,
     status: Exclude<AttemptRecord["status"], "running">,
@@ -122,34 +136,42 @@ class MemoryRepository implements RunRepository {
   ): Promise<AttemptRecord> {
     this.finishAttemptCalls += 1;
     await this.beforeFinishAttempt?.();
-    if (this.owner !== token) {
+
+    if (this.owner !== token || this.run?.id !== runId) {
       throw new Error("Lost owner");
     }
+
     const index = this.attempts.findIndex((attempt) => attempt.id === attemptId);
     const prior = this.attempts[index];
+
     if (!prior) {
       throw new Error("Unknown attempt");
     }
+
     const next = { ...prior, status, output, error, endedAt: new Date().toISOString() };
     this.attempts[index] = next;
     await this.afterFinishAttempt?.();
+
     return next;
   }
   async finishRun(
-    _runId: string,
+    runId: string,
     token: string,
     status: RunStatus,
     error?: string,
   ): Promise<RunRecord> {
-    if (this.owner !== token || !this.run) {
+    if (this.owner !== token || !this.run || this.run.id !== runId) {
       throw new Error("Lost owner");
     }
+
     this.run = { ...this.run, status, error };
     await this.afterFinishRun?.();
+
     return this.run;
   }
-  async release(_runId: string, token: string): Promise<void> {
+  async release(...[, token]: Parameters<RunRepository["release"]>): Promise<void> {
     this.releases += 1;
+
     if (this.owner === token) {
       this.owner = undefined;
     }
@@ -162,17 +184,22 @@ test("waits for a delayed attempt write and checks ownership before command laun
   const entered = deferred<void>();
   store.beforeStart = () => {
     entered.resolve();
+
     return gate.promise;
   };
+
   const aborter = new AbortController();
   let launches = 0;
+
   const runtime = new Runtime({
     store,
     executor: async () => {
       launches += 1;
+
       return output;
     },
   });
+
   const run = await runtime.createRun(workflow, {}, runOptions);
   const execution = runtime.execute(run.id, { signal: aborter.signal });
   await entered.promise;
@@ -191,17 +218,22 @@ test("an initial delivery cancelled after attempt creation remains pending for r
   store.beforeStart = () => {
     store.beforeStart = undefined;
     entered.resolve();
+
     return gate.promise;
   };
+
   const aborter = new AbortController();
   let launches = 0;
+
   const runtime = new Runtime({
     store,
     executor: async () => {
       launches += 1;
+
       return output;
     },
   });
+
   const run = await runtime.createRun(workflow, {}, runOptions);
   const first = runtime.execute(run.id, { resume: false, signal: aborter.signal });
   await entered.promise;
@@ -220,17 +252,21 @@ test("an executor that proves it never started can retry after worker cancellati
   const store = new MemoryRepository();
   const aborter = new AbortController();
   let calls = 0;
+
   const runtime = new Runtime({
     store,
     executor: async () => {
       calls += 1;
+
       if (calls === 1) {
         aborter.abort();
         throw new CommandExecutionError("Worker cancelled", output, false);
       }
+
       return output;
     },
   });
+
   const run = await runtime.createRun(workflow, {}, runOptions);
 
   expect((await runtime.execute(run.id, { resume: false, signal: aborter.signal })).status).toBe(
@@ -245,6 +281,7 @@ test("worker cancellation cannot redeliver a command that may have started", asy
   const store = new MemoryRepository();
   const aborter = new AbortController();
   let calls = 0;
+
   const runtime = new Runtime({
     store,
     executor: async () => {
@@ -253,6 +290,7 @@ test("worker cancellation cannot redeliver a command that may have started", asy
       throw new CommandExecutionError("Worker cancelled", output, true);
     },
   });
+
   const run = await runtime.createRun(workflow, {}, runOptions);
 
   expect((await runtime.execute(run.id, { resume: false, signal: aborter.signal })).status).toBe(
@@ -266,13 +304,16 @@ test("worker cancellation cannot redeliver a command that may have started", asy
 test("a duplicate delivery cannot resume a terminal failure", async () => {
   const store = new MemoryRepository();
   let launches = 0;
+
   const runtime = new Runtime({
     store,
     executor: async () => {
       launches += 1;
+
       return { ...output, exitCode: 2 };
     },
   });
+
   const run = await runtime.createRun(workflow, {}, runOptions);
   expect((await runtime.execute(run.id, { resume: false })).status).toBe("failed");
   expect((await runtime.execute(run.id, { resume: false })).status).toBe("failed");
@@ -283,13 +324,15 @@ test("a duplicate delivery cannot resume a terminal failure", async () => {
 test("marks an unknown executor failure uncertain and supplies stable command IDs", async () => {
   const store = new MemoryRepository();
   let context: { runId: string; nodeId: string; attemptId: string; ownerToken: string } | undefined;
+
   const runtime = new Runtime({
     store,
-    executor: async (_command, options) => {
+    executor: async (...[, options]) => {
       context = options;
       throw new Error("Transport disconnected");
     },
   });
+
   const run = await runtime.createRun(workflow, {}, runOptions);
   expect((await runtime.execute(run.id)).status).toBe("interrupted");
   expect(store.attempts[0]?.status).toBe("uncertain");
@@ -299,12 +342,14 @@ test("marks an unknown executor failure uncertain and supplies stable command ID
 
 test("records a command that never started as failed", async () => {
   const store = new MemoryRepository();
+
   const runtime = new Runtime({
     store,
     executor: async () => {
       throw new CommandExecutionError("Program missing", output, false);
     },
   });
+
   const run = await runtime.createRun(workflow, {}, runOptions);
   expect((await runtime.execute(run.id)).status).toBe("failed");
   expect(store.attempts[0]?.status).toBe("failed");
@@ -317,6 +362,7 @@ test("propagates a delayed storage commit failure without recording a second res
     await gate.promise;
     throw new Error("Commit unavailable");
   };
+
   const runtime = new Runtime({ store, executor: async () => output });
   const run = await runtime.createRun(workflow, {}, runOptions);
   const execution = runtime.execute(run.id);
@@ -335,13 +381,16 @@ test("a lost failed-attempt acknowledgement cannot replay a command on initial r
     store.afterFinishAttempt = undefined;
     throw new Error("Commit acknowledgement lost");
   };
+
   const runtime = new Runtime({
     store,
     executor: async () => {
       launches += 1;
+
       return { ...output, exitCode: 2 };
     },
   });
+
   const run = await runtime.createRun(workflow, {}, runOptions);
   await expect(runtime.execute(run.id, { resume: false })).rejects.toThrow(
     "Commit acknowledgement lost",
@@ -360,8 +409,10 @@ test("heartbeats are single flight and finish before release", async () => {
   const entered = deferred<void>();
   store.beforeHeartbeat = () => {
     entered.resolve();
+
     return heartbeatGate.promise;
   };
+
   const runtime = new Runtime({ store, executor: async () => output, heartbeatIntervalMs: 1 });
   const run = await runtime.createRun(workflow, {}, runOptions);
   const execution = runtime.execute(run.id);
@@ -380,14 +431,18 @@ test("a lost lease after attempt creation prevents command launch", async () => 
   store.beforeHeartbeat = async () => {
     store.owner = undefined;
   };
+
   let launches = 0;
+
   const runtime = new Runtime({
     store,
     executor: async () => {
       launches += 1;
+
       return output;
     },
   });
+
   const run = await runtime.createRun(workflow, {}, runOptions);
   await expect(runtime.execute(run.id)).rejects.toThrow("Run ownership lost");
   expect(launches).toBe(0);
@@ -408,10 +463,12 @@ test("createRun snapshots caller input and options before yielding", async () =>
   const store = new MemoryRepository();
   const runtime = new Runtime({ store, executor: async () => output });
   const input = { nested: { value: "original" } };
-  const options = {
-    workspace: { kind: "managed" as const, id: "original-workspace" },
-    mode: "sandbox" as RunOptions["mode"],
+
+  const options: RunOptions & { workspace: { kind: "managed"; id: string } } = {
+    workspace: { kind: "managed", id: "original-workspace" },
+    mode: "sandbox",
   };
+
   const creation = runtime.createRun(workflow, input, options);
   input.nested.value = "changed";
   options.workspace.id = "changed-workspace";
@@ -425,29 +482,42 @@ test("createRun snapshots caller input and options before yielding", async () =>
   expect(store.run).toEqual(run);
 });
 
+/** A dependency may throw any cause, including undefined. The lease must still fence the run. */
+function throwingHeartbeat(cause: unknown): () => never {
+  return () => {
+    throw cause;
+  };
+}
+
 for (const failure of ["reject", "throw"] as const) {
   test(`a heartbeat that ${failure}s undefined rejects execution without finishing the run`, async () => {
     const store = new MemoryRepository();
     store.beforeHeartbeat = () => {
       if (failure === "throw") {
-        // biome-ignore lint/style/useThrowOnlyError: the lease must survive a non-Error rejection.
-        throw undefined;
+        return throwingHeartbeat(undefined)();
       }
+
       return Promise.reject();
     };
+
     let launches = 0;
+
     const runtime = new Runtime({
       store,
       executor: async () => {
         launches += 1;
+
         return output;
       },
     });
+
     const run = await runtime.createRun(workflow, {}, runOptions);
+
     const outcome = await runtime.execute(run.id, { resume: false }).then(
       (value) => ({ resolved: true, value }),
-      (error: unknown) => ({ resolved: false, error }),
+      (cause: unknown) => ({ resolved: false, error: cause }),
     );
+
     expect(outcome).toEqual({ resolved: false, error: undefined });
     expect(store.run?.status).toBe("running");
     expect(launches).toBe(0);

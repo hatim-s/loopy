@@ -23,10 +23,12 @@ const managedRun = (status: RunRecord["status"] = "pending"): RunRecord => ({
 describe("cloud worker", () => {
   test("dispatches a managed run without resume permission", async () => {
     const calls: unknown[] = [];
+
     const worker = new CloudWorker({
       getRun: async () => managedRun(),
       execute: async (id, options) => {
         calls.push([id, options]);
+
         return managedRun("succeeded");
       },
     });
@@ -41,14 +43,17 @@ describe("cloud worker", () => {
   test("acknowledges terminal runs through the atomic claim", async () => {
     for (const status of ["succeeded", "failed", "interrupted"] as const) {
       let called = false;
+
       const worker = new CloudWorker({
         getRun: async () => managedRun(status),
-        execute: async (_id, options) => {
+        execute: async (...[, options]) => {
           expect(options?.resume).toBe(false);
           called = true;
+
           return managedRun(status);
         },
       });
+
       expect(await worker.handle({ runId: "run-1" })).toEqual({
         disposition: "ack",
         run: managedRun(status),
@@ -59,10 +64,12 @@ describe("cloud worker", () => {
 
   test("redelivery cannot grant permission to replay uncertain work", async () => {
     const options: unknown[] = [];
+
     const worker = new CloudWorker({
       getRun: async () => managedRun(),
-      execute: async (_id, input) => {
+      execute: async (...[, input]) => {
         options.push(input);
+
         return managedRun("interrupted");
       },
     });
@@ -79,6 +86,7 @@ describe("cloud worker", () => {
         throw new RunBusyError("run-1");
       },
     });
+
     expect(await busy.handle({ runId: "run-1" })).toEqual({
       disposition: "retry",
       reason: "busy",
@@ -86,12 +94,14 @@ describe("cloud worker", () => {
     });
 
     const unavailable = new Error("repository unavailable");
+
     const broken = new CloudWorker({
       getRun: async () => {
         throw unavailable;
       },
       execute: async () => managedRun("succeeded"),
     });
+
     await expect(broken.handle({ runId: "run-1" })).rejects.toBe(unavailable);
 
     const failedExecution = new CloudWorker({
@@ -100,6 +110,7 @@ describe("cloud worker", () => {
         throw unavailable;
       },
     });
+
     await expect(failedExecution.handle({ runId: "run-1" })).rejects.toBe(unavailable);
   });
 
@@ -107,10 +118,12 @@ describe("cloud worker", () => {
     const controller = new AbortController();
     controller.abort();
     let executions = 0;
+
     const worker = new CloudWorker({
       getRun: async () => managedRun(),
       execute: async () => {
         executions += 1;
+
         return managedRun("succeeded");
       },
     });
@@ -126,8 +139,9 @@ describe("cloud worker", () => {
   test("retries a pending result after cancellation during initial execution", async () => {
     const worker = new CloudWorker({
       getRun: async () => managedRun(),
-      execute: async (_id, options) => {
+      execute: async (...[, options]) => {
         expect(options?.resume).toBe(false);
+
         return managedRun("pending");
       },
     });
@@ -152,21 +166,26 @@ describe("cloud worker", () => {
         const attempt = await super.startAttempt(runId, token, nodeId, input);
         this.abortAfterStart?.();
         this.abortAfterStart = undefined;
+
         return attempt;
       }
     }
 
     const home = mkdtempSync(join(tmpdir(), "loopy-cloud-cancel-"));
     const store = new AbortingStore(home);
+
     try {
       let launches = 0;
+
       const runtime = new Runtime({
         store,
         executor: async () => {
           launches += 1;
+
           return { stdout: "ok", stderr: "", exitCode: 0, durationMs: 1 };
         },
       });
+
       const run = await runtime.createRun(
         {
           version: 1,
@@ -176,6 +195,7 @@ describe("cloud worker", () => {
         {},
         { workspace: { kind: "managed", id: "workspace-1" }, mode: "full" },
       );
+
       const controller = new AbortController();
       store.abortAfterStart = () => controller.abort();
       const worker = new CloudWorker(runtime);
@@ -204,15 +224,17 @@ describe("cloud worker", () => {
         if (id === "missing") {
           return undefined;
         }
+
         return {
           ...managedRun(),
           options: { workspace: { kind: "local", path: "/tmp/work" }, mode: "full" },
-        } as RunRecord;
+        };
       },
       execute: async () => {
         throw new Error("must not execute invalid work");
       },
     });
+
     for (const message of [
       null,
       [],
@@ -223,6 +245,7 @@ describe("cloud worker", () => {
     ]) {
       await expect(worker.handle(message)).rejects.toThrow();
     }
+
     await expect(worker.handle({ runId: "missing" })).rejects.toThrow("Unknown run");
     await expect(worker.handle({ runId: "run-1" })).rejects.toThrow("local workspace");
   });

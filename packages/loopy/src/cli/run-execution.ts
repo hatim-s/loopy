@@ -11,6 +11,7 @@ export async function executeRun(
   report(`Run ${id}`);
   const run = await untilSignalled((signal) => runtime.execute(id, { retryUncertain, signal }));
   printJson(run);
+
   if (run.status !== "succeeded") {
     process.exitCode = 1;
   }

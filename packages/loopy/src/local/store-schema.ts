@@ -4,11 +4,14 @@ import type {
   Json,
   RunEvent,
   RunEventType,
+  RunOptions,
   RunRecord,
   RunStatus,
+  Workflow,
 } from "../core/index.js";
 
 export const SCHEMA_VERSION = 2;
+
 export const SCHEMA = `
   CREATE TABLE IF NOT EXISTS runs (
     id TEXT PRIMARY KEY,
@@ -95,11 +98,12 @@ export function now(): string {
   return new Date().toISOString();
 }
 
-export function encode(value: Json): string {
+export function encode(value: Json | Workflow | RunOptions): string {
   return JSON.stringify(value);
 }
 
 export function decode<T>(value: string): T {
+  // SAFETY: Each caller pairs this codec with a row written from its corresponding typed domain field.
   return JSON.parse(value) as T;
 }
 

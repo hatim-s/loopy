@@ -9,10 +9,13 @@ async function projectRoot(context: CliContext, source: string, isDirectory: boo
   if (context.values.cwd) {
     return context.cwd;
   }
+
   const fromCwd = relative(context.cwd, source);
+
   if (fromCwd !== ".." && !fromCwd.startsWith("../")) {
     return context.cwd;
   }
+
   return isDirectory ? source : dirname(source);
 }
 

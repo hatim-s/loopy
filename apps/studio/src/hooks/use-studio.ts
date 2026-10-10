@@ -8,6 +8,7 @@ import { useWorkflows } from "./use-workflows.ts";
 export function useStudio() {
   const errors = useErrorReporter();
   const library = useWorkflows(errors);
+
   const run = useRunDetail({
     slug: library.slug,
     loaded: library.workflow !== null,
@@ -15,11 +16,13 @@ export function useStudio() {
     putRun: library.putRun,
     errors,
   });
+
   const [selectedNodeId, selectNode] = useScopedState<string | null>(library.slug, null);
 
   // With a run selected the graph shows that run's snapshot of the workflow,
   // which may differ from the saved definition.
   const viewedWorkflow = run.selectedRunId ? run.detail?.run.workflow : library.workflow;
+
   const node =
     viewedWorkflow && selectedNodeId ? findNode(viewedWorkflow.nodes, selectedNodeId) : undefined;
 

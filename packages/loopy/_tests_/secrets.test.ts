@@ -15,11 +15,14 @@ import { join } from "node:path";
 import { SecretStore } from "../src/local/secrets.js";
 
 const directories: string[] = [];
+
 function setup() {
   const directory = mkdtempSync(join(tmpdir(), "loopy-secrets-"));
   directories.push(directory);
+
   return { directory, store: new SecretStore(join(directory, "home")) };
 }
+
 afterEach(() => {
   for (const directory of directories.splice(0)) {
     rmSync(directory, { recursive: true, force: true });
@@ -89,20 +92,24 @@ test("malformed stores and invalid values never echo secret contents", () => {
 test("CLI stdin entry and name-only listing do not disclose values", async () => {
   const { store } = setup();
   const command = [process.execPath, "packages/loopy/src/cli/index.ts"];
+
   const child = Bun.spawn(
     [...command, "secrets", "set", "orbit-cookie", "--stdin", "--home", store.directory],
     { stdin: "pipe", stdout: "pipe", stderr: "pipe" },
   );
+
   child.stdin.write("sensitive-marker\n");
   child.stdin.end();
   expect(await child.exited).toBe(0);
   expect(await new Response(child.stdout).text()).not.toContain("sensitive-marker");
   expect(await new Response(child.stderr).text()).not.toContain("sensitive-marker");
   expect(store.get("orbit-cookie")).toBe("sensitive-marker");
+
   const listed = Bun.spawn([...command, "secrets", "list", "--home", store.directory], {
     stdout: "pipe",
     stderr: "pipe",
   });
+
   expect(await listed.exited).toBe(0);
   expect(JSON.parse(await new Response(listed.stdout).text())).toEqual(["orbit-cookie"]);
 });

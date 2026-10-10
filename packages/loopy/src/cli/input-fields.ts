@@ -1,7 +1,8 @@
 import type { ArgConstraint, UnknownRecord, Workflow, WorkflowNode } from "../core/index.js";
-import { isRecord, requireString } from "../core/index.js";
+import { isBoolean, isNumber, isRecord, isString, requireString } from "../core/index.js";
 
 export type InputKind = "string" | "number" | "boolean";
+
 export type InputField = { path: readonly string[]; kind?: InputKind; choices?: string[] };
 
 type Evidence = {
@@ -10,7 +11,9 @@ type Evidence = {
   hints: Set<InputKind>;
   choices: string[] | undefined;
 };
+
 type EvidenceMap = Map<string, Evidence>;
+
 type OperandKind = { kind: InputKind | undefined; hint: boolean };
 
 const OPERAND_KINDS = new Map<string, InputKind>([
@@ -26,10 +29,11 @@ const OPERAND_KINDS = new Map<string, InputKind>([
 
 function literalKind(args: unknown[]): InputKind | undefined {
   for (const arg of args) {
-    if (typeof arg === "string" || typeof arg === "number" || typeof arg === "boolean") {
-      return typeof arg === "string" ? "string" : typeof arg === "number" ? "number" : "boolean";
+    if (isString(arg) || isNumber(arg) || isBoolean(arg)) {
+      return isString(arg) ? "string" : isNumber(arg) ? "number" : "boolean";
     }
   }
+
   return undefined;
 }
 
@@ -38,14 +42,17 @@ function operandKind(operator: string, args: unknown[]): OperandKind {
   if (operator === "eq" || operator === "ne") {
     return { kind: literalKind(args), hint: true };
   }
+
   return { kind: OPERAND_KINDS.get(operator), hint: false };
 }
 
 function inputReferencePath(value: UnknownRecord): string[] | undefined {
   const ref = value.$ref;
+
   if (!isRecord(ref) || ref.source !== "input" || !Array.isArray(ref.path)) {
     return undefined;
   }
+
   return ref.path.map((key, index) => requireString(key, `Input reference path[${index}]`));
 }
 
@@ -59,17 +66,21 @@ function recordReference(
   const key = JSON.stringify(path);
   const existing = evidence.get(key);
   const entry = existing ?? { path, required: new Set(), hints: new Set(), choices };
+
   if (existing) {
     // Choices survive only when every reference constrains them; otherwise any text is valid.
     entry.choices =
       existing.choices && choices ? [...new Set([...existing.choices, ...choices])] : undefined;
   }
+
   if (kind) {
     (hint ? entry.hints : entry.required).add(kind);
   }
+
   evidence.set(key, entry);
 }
 
+// BOUNDARY: Persisted workflow operands are inspected for input-reference paths and expression metadata before prompt fields are inferred.
 function visitValue(
   evidence: EvidenceMap,
   value: unknown,
@@ -80,25 +91,34 @@ function visitValue(
   if (!isRecord(value)) {
     return;
   }
+
   const path = inputReferencePath(value);
+
   if (path) {
     recordReference(evidence, path, kind, choices, hint);
+
     return;
   }
-  if (typeof value.$op !== "string" || !Array.isArray(value.args)) {
+
+  if (!isString(value.$op) || !Array.isArray(value.args)) {
     return;
   }
+
   const operand = operandKind(value.$op, value.args);
+
   for (const arg of value.args) {
     visitValue(evidence, arg, operand.kind, undefined, operand.hint);
   }
 }
 
+// BOUNDARY: Persisted workflow operands are inspected for input-reference paths and expression metadata before prompt fields are inferred.
 function visitArgument(evidence: EvidenceMap, arg: unknown, constraint?: ArgConstraint): void {
   if (constraint?.prefix === undefined) {
     visitValue(evidence, arg, constraint?.kind, constraint?.choices);
+
     return;
   }
+
   // A prefixed argument is concat(prefix, value); the constraint describes the value.
   if (isRecord(arg) && Array.isArray(arg.args)) {
     visitValue(evidence, arg.args[1], constraint.kind, constraint.choices);
@@ -113,10 +133,13 @@ function walkNodes(evidence: EvidenceMap, nodes: WorkflowNode[]): void {
       walkNodes(evidence, node.else);
       continue;
     }
+
     for (const [index, arg] of node.command.args.entries()) {
       visitArgument(evidence, arg, node.command.argConstraints?.[index]);
     }
+
     visitValue(evidence, node.command.stdin);
+
     for (const value of Object.values(node.command.env ?? {})) {
       visitValue(evidence, value);
     }
@@ -125,6 +148,7 @@ function walkNodes(evidence: EvidenceMap, nodes: WorkflowNode[]): void {
 
 function toField(entry: Evidence): InputField {
   const candidates = new Set([...entry.required, ...entry.hints]);
+
   return {
     path: entry.path,
     kind: candidates.size === 1 ? [...candidates][0] : undefined,
@@ -136,5 +160,6 @@ function toField(entry: Evidence): InputField {
 export function workflowInputs(workflow: Workflow): InputField[] {
   const evidence: EvidenceMap = new Map();
   walkNodes(evidence, workflow.nodes);
+
   return [...evidence.values()].map(toField);
 }

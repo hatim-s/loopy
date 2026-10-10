@@ -7,6 +7,7 @@ import { App } from "./app.tsx";
 import "./style.css";
 
 const root = document.getElementById("root");
+
 if (!root) {
   throw new Error("Studio root element is missing.");
 }

@@ -12,6 +12,7 @@ export function Attempt({ attempt }: AttemptProps) {
   const branch = selectedBranch(attempt);
   // Command output is shown as streams; anything else falls back to raw JSON.
   const rawOutput = !stdout && !stderr && !branch && attempt.output !== undefined;
+
   return (
     <div className="attempt">
       <div className="attempt-head">

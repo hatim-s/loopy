@@ -14,6 +14,7 @@ async function findBwrap(): Promise<string> {
       return candidate;
     }
   }
+
   throw new Error("Sandbox mode requires bubblewrap on Linux.");
 }
 
@@ -33,11 +34,14 @@ function tmpfsOver(plan: MountPlan, path: string): string | undefined {
 function planDirectories(plan: MountPlan, base: string, target: string, includeTarget: boolean) {
   const parts = relative(base, target).split(sep).filter(Boolean);
   let path = base;
+
   for (const part of includeTarget ? parts : parts.slice(0, -1)) {
     path = join(path, part);
+
     if (plan.created.has(path)) {
       continue;
     }
+
     plan.args.push("--dir", path);
     plan.created.add(path);
   }
@@ -46,10 +50,13 @@ function planDirectories(plan: MountPlan, base: string, target: string, includeT
 /** Creates the directories for `target` when a tmpfs hides it. True when one does. */
 function prepareUnderTmpfs(plan: MountPlan, target: string, includeTarget: boolean): boolean {
   const mask = tmpfsOver(plan, target);
+
   if (!mask) {
     return false;
   }
+
   planDirectories(plan, mask, target, includeTarget);
+
   return true;
 }
 
@@ -57,6 +64,7 @@ function hideHome(plan: MountPlan, home: string): void {
   if (plan.tmpfs.includes(home)) {
     return;
   }
+
   prepareUnderTmpfs(plan, home, true);
   plan.args.push("--tmpfs", home);
   // Home goes first so a workspace under it is created relative to the home tmpfs.
@@ -71,6 +79,7 @@ async function programMountOf(
   if (within(workspace, program) || !within(home, program)) {
     return undefined;
   }
+
   return (await packageDirectory(program, home)) ?? program;
 }
 
@@ -87,31 +96,39 @@ export async function linuxSandbox(
 ): Promise<[string, string[]]> {
   const bwrap = await findBwrap();
   const home = await realpath(homedir());
+
   if (home === "/") {
     throw new Error("Sandbox mode requires a private home directory.");
   }
 
   const args = ["--die-with-parent", "--new-session", "--unshare-all", "--ro-bind", "/", "/"];
   args.push("--tmpfs", "/tmp", "--proc", "/proc", "--dev", "/dev");
+
   // Some Linux environments have no /run mount.
   if (await isDirectory("/run")) {
     args.push("--tmpfs", "/run");
   }
+
   const plan: MountPlan = { args, tmpfs: ["/tmp", "/run"], created: new Set() };
   hideHome(plan, home);
 
   const programMount = await programMountOf(program, workspace, home);
   prepareUnderTmpfs(plan, workspace, true);
+
   if (programMount) {
     prepareUnderTmpfs(plan, programMount, await isDirectory(programMount));
     args.push("--ro-bind", programMount, programMount);
   }
+
   const helperCovered =
     !helper || within(workspace, helper) || Boolean(programMount && within(programMount, helper));
+
   if (helper && !helperCovered && prepareUnderTmpfs(plan, helper, false)) {
     args.push("--ro-bind", helper, helper);
   }
+
   args.push("--bind", workspace, workspace);
   args.push("--chdir", cwd, "--", ENV_EXEC, "-i", "--", ...envArgs(env), helper ?? program);
+
   return [bwrap, args];
 }

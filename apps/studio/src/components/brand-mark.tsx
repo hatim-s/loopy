@@ -2,6 +2,7 @@ import { useId } from "react";
 
 export function BrandMark() {
   const gradient = `brand-${useId().replaceAll(":", "")}`;
+
   return (
     <svg viewBox="0 0 40 40" fill="none" aria-hidden="true">
       <defs>

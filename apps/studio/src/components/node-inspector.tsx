@@ -84,7 +84,9 @@ export function NodeInspector({ node, detail }: NodeInspectorProps) {
       </section>
     );
   }
+
   const attempts = detail?.attempts.filter((attempt) => attempt.nodeId === node.id) ?? [];
+
   return (
     <section className="inspector-section">
       <div className="section-heading">
