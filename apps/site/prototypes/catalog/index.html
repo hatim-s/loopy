@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Loopy landing catalog</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #ecebe7; color: #161616; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 16px; line-height: 1.5; }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid #2334ff; outline-offset: 3px; }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 40px clamp(16px, 4vw, 40px) 60px; }
+  header { display: flex; justify-content: space-between; align-items: end; gap: 20px; flex-wrap: wrap; margin-bottom: 32px; }
+  h1 { font-size: clamp(28px, 4vw, 44px); letter-spacing: -.02em; line-height: 1.1; }
+  header p { color: #555; margin-top: 8px; max-width: 46em; }
+  .old { font-size: 15px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 20px; }
+  .card { background: #fff; border-radius: 12px; overflow: hidden; text-decoration: none; display: flex; flex-direction: column; box-shadow: 0 0 0 1px rgba(0,0,0,.08); transition: box-shadow .2s, transform .2s; }
+  .card:hover { box-shadow: 0 0 0 2px #161616; transform: translateY(-2px); }
+  .thumb { position: relative; aspect-ratio: 16 / 10; overflow: hidden; background: #ddd; }
+  .thumb iframe { position: absolute; left: 0; top: 0; width: 1440px; height: 900px; border: 0; transform-origin: 0 0; pointer-events: none; }
+  .meta { padding: 16px 18px 18px; display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; }
+  .meta .file { grid-row: span 2; font-family: ui-monospace, monospace; font-size: 13px; color: #777; padding-top: 3px; }
+  .meta h2 { font-size: 19px; }
+  .meta p { color: #444; font-size: 15px; }
+  .sw { display: flex; height: 6px; }
+  .sw i { flex: 1; }
+  footer { margin-top: 40px; color: #666; font-size: 14px; }
+  @media (max-width: 420px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Loopy landing catalog</h1>
+      <p>Seven directions for the landing page. Each one is a single HTML file with its own palette, type and layout, and one interactive piece tied to the product.</p>
+    </div>
+    <a class="old" href="../variants/">Older catalog in variants</a>
+  </header>
+
+  <main class="grid" id="grid">
+    <a class="card" href="c1.html">
+      <div class="thumb"><iframe src="c1.html" title="c1 preview" loading="lazy" tabindex="-1"></iframe></div>
+      <div class="sw"><i style="background:#f3f2ee"></i><i style="background:#000"></i><i style="background:#e4002b"></i></div>
+      <div class="meta"><span class="file">c1</span><h2>Poster</h2><p>Swiss poster in condensed Archivo, black and one red on off-white. A ring of step kinds turns behind the headline.</p></div>
+    </a>
+    <a class="card" href="c2.html">
+      <div class="thumb"><iframe src="c2.html" title="c2 preview" loading="lazy" tabindex="-1"></iframe></div>
+      <div class="sw"><i style="background:#e9ece3"></i><i style="background:#ff48b0"></i><i style="background:#3255a4"></i><i style="background:#ffe800"></i></div>
+      <div class="meta"><span class="file">c2</span><h2>Zine</h2><p>Risograph zine with pink and blue overprint. Trace lines on a receipt fly off and land as graph nodes. The run plays as a board game.</p></div>
+    </a>
+    <a class="card" href="c3.html">
+      <div class="thumb"><iframe src="c3.html" title="c3 preview" loading="lazy" tabindex="-1"></iframe></div>
+      <div class="sw"><i style="background:#150d03"></i><i style="background:#ffb000"></i><i style="background:#ffd98a"></i></div>
+      <div class="meta"><span class="file">c3</span><h2>Phosphor</h2><p>Amber CRT terminal with scanlines. A fake shell you can type loopy commands into, with a live run and key controls.</p></div>
+    </a>
+    <a class="card" href="c4.html">
+      <div class="thumb"><iframe src="c4.html" title="c4 preview" loading="lazy" tabindex="-1"></iframe></div>
+      <div class="sw"><i style="background:#2334ff"></i><i style="background:#0c1470"></i><i style="background:#ffd23f"></i><i style="background:#3ef0b0"></i><i style="background:#ff5c7a"></i></div>
+      <div class="meta"><span class="file">c4</span><h2>Isometric</h2><p>Saturated cobalt bento in Unbounded. The graph is built from CSS 3D blocks you can drag to turn, and nodes rise as the run reaches them.</p></div>
+    </a>
+    <a class="card" href="c5.html">
+      <div class="thumb"><iframe src="c5.html" title="c5 preview" loading="lazy" tabindex="-1"></iframe></div>
+      <div class="sw"><i style="background:#f3f4f0"></i><i style="background:#1c1c1a"></i><i style="background:#d0391c"></i></div>
+      <div class="meta"><span class="file">c5</span><h2>Ensō</h2><p>Japanese minimal long-form in Shippori Mincho. A brushed ensō is the loop, and the run waits in its gap until you press the seal.</p></div>
+    </a>
+    <a class="card" href="c6.html">
+      <div class="thumb"><iframe src="c6.html" title="c6 preview" loading="lazy" tabindex="-1"></iframe></div>
+      <div class="sw"><i style="background:#1a0633"></i><i style="background:#6a1bff"></i><i style="background:#ff2fa8"></i><i style="background:#ff8a3d"></i><i style="background:#22e6ff"></i></div>
+      <div class="meta"><span class="file">c6</span><h2>Sundown</h2><p>Vaporwave split screen in chrome Michroma. A sticky sunset scene follows your scroll from trace, to nodes, to a run you can control.</p></div>
+    </a>
+    <a class="card" href="c7.html">
+      <div class="thumb"><iframe src="c7.html" title="c7 preview" loading="lazy" tabindex="-1"></iframe></div>
+      <div class="sw"><i style="background:#1a1310"></i><i style="background:#c9a45c"></i><i style="background:#efe7d6"></i><i style="background:#8c2a35"></i></div>
+      <div class="meta"><span class="file">c7</span><h2>Chronograph</h2><p>Dark luxury magazine in Bodoni Moda and brass. The graph sits on a watch dial, and the crown and pushers start, approve and fork the run.</p></div>
+    </a>
+  </main>
+
+  <footer>Previews are live pages scaled down. Open a card for the full page.</footer>
+</div>
+<script>
+  const fit = () => document.querySelectorAll('.thumb').forEach(t => { t.querySelector('iframe').style.transform = `scale(${t.clientWidth / 1440})`; });
+  addEventListener('resize', fit); fit();
+</script>
+</body>
+</html>

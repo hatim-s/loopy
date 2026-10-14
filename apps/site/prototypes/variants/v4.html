@@ -1,0 +1,747 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loopy. Do the work once, run it with control.</title>
+<meta name="description" content="Loopy is a local-first graph harness for coding agents. Do a task once in your agent CLI, extract a graph from the trace, and run it on your machine.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#E6EAF0;--paper-hi:#EEF1F5;--ink:#0D1014;--ink-2:#323B46;--ink-3:#5B6470;--ink-4:#6A7480;
+  --rule:rgba(13,16,20,.13);--rule-soft:rgba(13,16,20,.07);
+  --accent:#8FA8FF;--accent-strong:#B7C6FF;--accent-ink:#0B1330;--aqua:#6EE0D2;
+  --ok:#5CD39B;--ok-ink:#1F7A52;--run:#8FA8FF;--wait:#F0C46C;--wait-ink:#8A6414;--fail:#F2877E;--pend:#6A7480;
+  --accent-soft:rgba(143,168,255,.16);
+  --ease:cubic-bezier(.2,.8,.2,1);
+  --focus:0 0 0 2px #E6EAF0,0 0 0 4px #8FA8FF;
+  --sans:"Geist",ui-sans-serif,system-ui,sans-serif;
+  --mono:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --pad:56px;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font:400 17px/1.6 var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden;position:relative}
+::selection{background:rgba(143,168,255,.4)}
+a{color:inherit;text-decoration:none}
+a:focus-visible,button:focus-visible{outline:none;box-shadow:var(--focus);border-radius:6px}
+code{font-family:var(--mono);font-size:.9em}
+h1,h2,h3,p,ol,ul,dl,dd{margin:0}
+ol,ul{padding:0;list-style:none}
+.skip{position:absolute;left:-9999px}.skip:focus{left:16px;top:16px;z-index:100;background:var(--paper-hi);padding:8px 12px}
+
+.wrap{max-width:1296px;margin:0 auto;padding:0 var(--pad)}
+.grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:32px}
+
+/* the thread */
+#thread{position:absolute;left:0;top:0;width:100%;pointer-events:none;z-index:0;overflow:visible}
+#thread .guide{fill:none;stroke:rgba(13,16,20,.1);stroke-width:1;stroke-dasharray:1 7;stroke-linecap:round}
+#thread .line{fill:none;stroke:url(#tg);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+#thread .head{transition:opacity 400ms var(--ease)}
+main,header,footer{position:relative;z-index:1}
+
+/* nav */
+.nav{position:fixed;top:0;left:0;right:0;z-index:50;background:rgba(230,234,240,.78);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid transparent;transition:border-color 220ms var(--ease)}
+.nav.scrolled{border-bottom-color:var(--rule)}
+.nav .wrap{display:flex;align-items:center;gap:32px;height:64px}
+.mark{display:flex;align-items:center;gap:9px;font-weight:600;font-size:18px;letter-spacing:-.025em}
+.nav-links{display:flex;gap:28px;margin-left:auto;font-size:15px;color:var(--ink-2)}
+.nav-links a{transition:color 160ms var(--ease)}
+.nav-links a:hover{color:var(--ink)}
+.btn{display:inline-flex;align-items:center;height:36px;padding:0 14px;border-radius:6px;font:500 14px/1 var(--sans);border:1px solid var(--rule);background:transparent;color:var(--ink);cursor:pointer;transition:background 160ms var(--ease),border-color 160ms var(--ease)}
+.btn:hover{background:rgba(13,16,20,.04);border-color:rgba(13,16,20,.22)}
+.btn-accent{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn-accent:hover{background:var(--accent-strong);border-color:var(--accent-strong)}
+
+/* type */
+h1{font-size:clamp(46px,8vw,116px);line-height:.93;letter-spacing:-.035em;font-weight:600}
+h1 .ln{display:block}
+h2{font-size:clamp(36px,4.6vw,64px);line-height:1;letter-spacing:-.035em;font-weight:600;text-wrap:balance}
+h3{font-weight:600;letter-spacing:-.02em}
+.sub{color:var(--ink-2);font-size:19px;line-height:1.55;max-width:34em;text-wrap:pretty}
+.muted{color:var(--ink-3)}
+
+/* hero */
+.hero{padding:228px 0 0}
+.hero h1{grid-column:2 / 13}
+.hero-body{grid-column:7 / 12;margin-top:150px}
+.hero-body .sub{font-size:20px}
+.install{margin-top:36px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.cmd{display:inline-flex;align-items:center;gap:14px;font:400 17px/1 var(--mono);padding:0 0 10px;border-bottom:1px solid var(--ink)}
+.cmd .p{color:var(--ink-4)}
+.copy{font:500 13px/1 var(--sans);color:var(--ink-2);background:none;border:1px solid var(--rule);border-radius:6px;height:28px;padding:0 10px;cursor:pointer;transition:background 160ms var(--ease),color 160ms var(--ease)}
+.copy:hover{background:rgba(13,16,20,.05);color:var(--ink)}
+.copy[data-copied]{color:var(--ok-ink)}
+.then{font-size:15px;color:var(--ink-3)}
+.then code{color:var(--ink)}
+
+section{padding:200px 0 0}
+
+/* flow */
+.flow h2{grid-column:2 / 9}
+.flow .sub{grid-column:2 / 8;margin-top:28px}
+.steps{grid-column:1 / 13;margin-top:96px}
+.step{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:32px;padding:44px 0 52px;border-top:1px solid var(--rule)}
+.step:last-child{border-bottom:1px solid var(--rule)}
+.step h3{grid-column:2 / 6;font-size:clamp(32px,3.4vw,44px);line-height:1;letter-spacing:-.035em;color:var(--ink-4);transition:color 600ms var(--ease)}
+.step.lit h3{color:var(--ink)}
+.step .body{grid-column:6 / 12}
+.step p{color:var(--ink-2);max-width:32em}
+.step .c{display:block;margin-top:18px;font:400 14.5px/1.7 var(--mono);color:var(--ink)}
+.step .c span{color:var(--ink-4)}
+
+/* runtime */
+.rt h2{grid-column:2 / 10}
+.rt .sub{grid-column:2 / 8;margin-top:28px}
+.rules{grid-column:2 / 11;margin-top:80px}
+.rule{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);column-gap:32px;padding:22px 0;border-top:1px solid var(--rule)}
+.rule:last-child{border-bottom:1px solid var(--rule)}
+.rule dt{font-weight:500;font-size:19px;letter-spacing:-.01em}
+.rule dd{color:var(--ink-2)}
+
+/* providers */
+.pv h2{grid-column:2 / 9}
+.pv .sub{grid-column:2 / 8;margin-top:28px}
+.plist{grid-column:2 / 12;margin-top:88px;display:flex;justify-content:space-between;gap:32px}
+.plist li{white-space:nowrap;font-size:clamp(28px,3.4vw,44px);font-weight:600;letter-spacing:-.035em;line-height:1}
+.plist code{display:block;margin-top:14px;font-size:14px;letter-spacing:0;font-weight:400;color:var(--ink-3)}
+
+/* local */
+.local h2{grid-column:2 / 7}
+.local .facts{grid-column:7 / 12;margin-top:6px}
+.facts li{padding:18px 0;border-top:1px solid var(--rule);color:var(--ink-2)}
+.facts li:last-child{border-bottom:1px solid var(--rule)}
+.facts code{display:block;margin-top:6px;color:var(--ink);font-size:14px}
+.local .sub{margin-top:28px}
+
+/* example */
+.ex-text{grid-column:2 / 7}
+.ex-text .sub{margin-top:28px}
+.trace{margin-top:56px;font:400 14px/1.5 var(--mono)}
+.trace li{display:grid;grid-template-columns:36px minmax(0,1fr);padding:9px 0 9px 12px;border-top:1px solid var(--rule-soft);color:var(--ink-3);position:relative;transition:color 300ms var(--ease)}
+.trace li::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:2px;border-radius:2px;background:var(--accent);transform:scaleY(0);transition:transform 300ms var(--ease)}
+.trace li.on{color:var(--ink)}
+.trace li.on::before{transform:none}
+.trace li.said{font-family:var(--sans);font-size:15px}
+.trace .i{color:var(--ink-4)}
+.trace .out{color:inherit;opacity:.75}
+.aside{margin-top:64px;padding-top:24px;border-top:1px solid var(--rule)}
+.aside h3{font-size:19px;font-weight:500;letter-spacing:-.01em}
+.aside p{color:var(--ink-2);margin-top:8px;max-width:30em}
+.aside code{display:block;margin-top:12px;color:var(--ink);font-size:14px}
+.aside code.nw{display:inline;margin:0;white-space:nowrap;font-size:.9em}
+
+.graph{grid-column:8 / 13;padding-top:8px}
+.node{position:relative;padding:0 0 60px 48px}
+.node:last-child{padding-bottom:0}
+.dot{position:absolute;left:0;top:2px;width:20px;height:20px;display:grid;place-items:center}
+.st{position:relative;width:14px;height:14px;border-radius:50%;border:2px solid var(--pend);background:var(--paper);transition:border-color 300ms var(--ease),background 300ms var(--ease),transform 300ms var(--ease)}
+.st::after{content:"";position:absolute;inset:-6px;border-radius:50%;border:2px solid var(--run);opacity:0}
+.st::before{content:"";position:absolute;inset:0;margin:auto;width:10px;height:2px;background:transparent}
+[data-s="running"] .st{border-color:var(--run);background:var(--paper)}
+[data-s="running"] .st::after{animation:pulse 1.4s var(--ease) infinite}
+[data-s="waiting"] .st{border-color:var(--wait);border-width:3px;background:var(--paper)}
+[data-s="succeeded"] .st{border-color:var(--ok);background:var(--ok);transform:scale(.86)}
+@keyframes pulse{0%{transform:scale(.6);opacity:.9}100%{transform:scale(1.35);opacity:0}}
+.nk{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--ink-3)}
+.nk svg{width:15px;height:15px;color:var(--ink-2)}
+.node h3{font-size:22px;line-height:1.2;margin-top:6px}
+.meta{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:8px;font-size:14px;color:var(--ink-3)}
+.meta code{font-size:13px}
+.sw{font-weight:500}
+[data-s="running"] .sw{color:#3F5BC4}
+[data-s="waiting"] .sw{color:var(--wait-ink)}
+[data-s="succeeded"] .sw{color:var(--ok-ink)}
+.branch{margin-top:12px;font-size:15px;color:var(--ink-3);max-width:24em;padding-left:14px;border-left:1px solid var(--rule)}
+
+/* start */
+.start h2{grid-column:2 / 10;font-size:clamp(44px,6.4vw,88px);line-height:.95}
+.start .cmds{grid-column:2 / 9;margin-top:64px;font:400 15.5px/1 var(--mono)}
+.cmds li{display:flex;align-items:center;gap:16px;padding:16px 0;border-top:1px solid var(--rule)}
+.cmds li:last-child{border-bottom:1px solid var(--rule)}
+.cmds .p{color:var(--ink-4)}
+.cmds .n{margin-left:auto;font:400 14px/1.3 var(--sans);color:var(--ink-3);text-align:right}
+.start .links{grid-column:2 / 9;margin-top:32px;display:flex;gap:12px;flex-wrap:wrap}
+
+/* footer */
+footer{padding:200px 0 56px}
+.inf-slot{height:230px;margin:0 auto;max-width:520px}
+.foot{display:flex;align-items:center;gap:32px;margin-top:72px;padding-top:24px;border-top:1px solid var(--rule);font-size:15px;color:var(--ink-2)}
+.foot nav{display:flex;gap:24px;margin-left:auto}
+.foot nav a:hover{color:var(--ink)}
+
+@media (max-width:1100px){
+  .hero-body{grid-column:6 / 13}
+  .step h3{grid-column:2 / 6}.step .body{grid-column:6 / 13}
+  .graph{grid-column:8 / 13}
+}
+@media (max-width:760px){
+  :root{--pad:20px}
+  body{font-size:16px}
+  .wrap{padding-left:52px}
+  .grid,.step{display:block}
+  .nav .wrap{padding-left:20px;gap:18px}
+  .nav-links{gap:18px}.nav-links .hide-sm{display:none}
+  .hero{padding-top:132px}
+  .hero-body{margin-top:48px}
+  .hero-body .sub,.sub{font-size:17px}
+  .cmd{font-size:15px}
+  section{padding-top:128px}
+  .steps{margin-top:56px}
+  .step{padding:32px 0 36px}
+  .step .body{margin-top:14px}
+  .step .c{font-size:13px;overflow-wrap:anywhere}
+  .rules{margin-top:48px}
+  .rule{display:block;padding:18px 0}
+  .rule dd{margin-top:4px}
+  .plist{display:grid;grid-template-columns:1fr 1fr;gap:36px 20px;margin-top:48px}
+  .plist li{font-size:28px}
+  .local .facts{margin-top:40px}
+  .graph{margin-top:64px;padding-top:0}
+  .node{padding-left:0;padding-bottom:44px}
+  .dot{left:-42px}
+  .trace{margin-top:48px;font-size:13px}
+  .ex .wrap{display:flex;flex-direction:column}
+  .ex-text{display:contents}
+  .ex-text h2{order:1}.ex-text .sub{order:2}.graph{order:3}.trace{order:4}.aside{order:5}
+  .aside code,.facts code{font-size:12.5px;white-space:nowrap}
+  .start .cmds{margin-top:40px;font-size:13.5px}
+  .cmds li{flex-wrap:wrap;gap:4px 12px}
+  .cmds .n{margin-left:0;flex-basis:100%;text-align:left}
+  footer{padding-top:112px}
+  .inf-slot{height:150px}
+  .foot{flex-wrap:wrap;gap:16px 24px}
+  .foot nav{margin-left:0}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8FA8FF"/><stop offset="1" stop-color="#6EE0D2"/></linearGradient>
+    <symbol id="g-agent" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="2" fill="currentColor"/></symbol>
+    <symbol id="g-shell" viewBox="0 0 16 16"><path d="M3 4.5 6.5 8 3 11.5M8.5 12h5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="g-cond" viewBox="0 0 16 16"><path d="M8 2.5 13.5 8 8 13.5 2.5 8Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+    <symbol id="g-verify" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="m5.6 8.2 1.7 1.7 3.2-3.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="g-approve" viewBox="0 0 16 16"><path d="M4 13V3M12 13V3M4 7h8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+    <symbol id="g-mark" viewBox="0 0 24 24"><path d="M6.5 7.5c-2.8 0-4.5 2-4.5 4.5s1.7 4.5 4.5 4.5c4 0 7-9 11-9 2.8 0 4.5 2 4.5 4.5s-1.7 4.5-4.5 4.5c-4 0-7-9-11-9Z" fill="none" stroke="url(#brand)" stroke-width="2.2" stroke-linejoin="round"/></symbol>
+  </defs>
+</svg>
+
+<svg id="thread" aria-hidden="true">
+  <defs>
+    <linearGradient id="tg" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="900" y2="900" spreadMethod="reflect">
+      <stop offset="0" stop-color="#8FA8FF"/><stop offset=".62" stop-color="#8FA8FF"/><stop offset="1" stop-color="#6EE0D2"/>
+    </linearGradient>
+    <radialGradient id="halo"><stop offset="0" stop-color="#8FA8FF" stop-opacity=".55"/><stop offset=".45" stop-color="#8FA8FF" stop-opacity=".18"/><stop offset="1" stop-color="#8FA8FF" stop-opacity="0"/></radialGradient>
+  </defs>
+  <path class="guide" id="guide"/>
+  <path class="line" id="line"/>
+  <g class="head" id="head" style="opacity:0">
+    <circle r="22" fill="url(#halo)"/>
+    <circle r="4.5" fill="#fff" stroke="#8FA8FF" stroke-width="2"/>
+  </g>
+</svg>
+
+<header class="nav" id="nav">
+  <div class="wrap">
+    <a class="mark" href="#top" aria-label="Loopy home"><svg width="26" height="26" aria-hidden="true"><use href="#g-mark"/></svg>loopy</a>
+    <nav class="nav-links" aria-label="Primary">
+      <a href="#docs">Docs</a>
+      <a href="#example" class="hide-sm">Examples</a>
+      <a href="#github">GitHub</a>
+    </nav>
+    <a class="btn btn-accent" href="#start">Install</a>
+  </div>
+</header>
+
+<main id="main">
+<section class="hero" id="top">
+  <div class="wrap grid">
+    <h1 id="headline"><span class="ln">Do the work once.</span><span class="ln">Extract the graph.</span><span class="ln">Run it with control.</span></h1>
+    <div class="hero-body">
+      <p class="sub">Loopy is a local-first graph harness for coding agents. Finish a task once in your agent CLI. Loopy turns that session into a graph you can read, edit and run again on your own machine.</p>
+      <div class="install">
+        <span class="cmd"><span><span class="p">$ </span>bun add -g loopy</span></span>
+        <button class="copy" type="button" data-copy="bun add -g loopy">Copy</button>
+      </div>
+      <p class="then" style="margin-top:14px">Then open <code>loopy studio</code> and point it at a session.</p>
+    </div>
+  </div>
+</section>
+
+<section class="flow" id="how" aria-labelledby="flow-h">
+  <div class="wrap grid">
+    <h2 id="flow-h">A session goes in. A graph comes out.</h2>
+    <p class="sub">You already know how to get the task done. Loopy keeps the shape of what you did and drops the rest.</p>
+    <ol class="steps">
+      <li class="step" data-knot>
+        <h3>Capture</h3>
+        <div class="body">
+          <p>Do the task once in Codex, Claude Code, OpenCode or Pi, the way you would anyway. Loopy records the session as a trace, or imports one you ran last week.</p>
+          <code class="c"><span>$ </span>loopy import session.json --provider codex</code>
+        </div>
+      </li>
+      <li class="step" data-knot>
+        <h3>Extract</h3>
+        <div class="body">
+          <p>A deterministic extractor reads the trace and proposes a graph. It makes no model calls, so the same trace gives the same graph. Every node links back to the trace events that justify it. You edit what you disagree with, then approve.</p>
+          <code class="c"><span>$ </span>loopy extract --import &lt;id&gt;<br><span>$ </span>loopy approve &lt;id&gt;</code>
+        </div>
+      </li>
+      <li class="step" data-knot>
+        <h3>Run</h3>
+        <div class="body">
+          <p>The graph runs on your machine through the same CLIs you used. The agent does the work inside each node. Loopy decides what happens between them.</p>
+          <code class="c"><span>$ </span>loopy run</code>
+        </div>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<section class="rt" id="runtime" aria-labelledby="rt-h">
+  <div class="wrap grid">
+    <h2 id="rt-h">Between nodes, the rules are yours to read.</h2>
+    <p class="sub">Inside a node the agent can loop as long as it needs. Out here, the runtime follows the graph and writes down every step.</p>
+    <dl class="rules">
+      <div class="rule"><dt>Branching</dt><dd>A condition node reads real output and sends the run down one edge.</dd></div>
+      <div class="rule"><dt>Parallel joins</dt><dd>Fan out to several nodes and wait for all of them before moving on.</dd></div>
+      <div class="rule" id="rule-retry"><dt>Retries</dt><dd>A failed node goes round again within the limit you set, then stops with the error on record.</dd></div>
+      <div class="rule"><dt>Approvals</dt><dd>The run holds at an approval node until a person says yes.</dd></div>
+      <div class="rule"><dt>Pause, resume, cancel</dt><dd>Stop between nodes, come back tomorrow, or end the run cleanly.</dd></div>
+      <div class="rule"><dt>Replay</dt><dd>Run a finished graph again from its recorded inputs.</dd></div>
+      <div class="rule"><dt>Checkpoint forks</dt><dd>Start a new run from any checkpoint instead of from the top.</dd></div>
+      <div class="rule"><dt>Schedules</dt><dd>Put a loopy on cron and it runs while you sleep.</dd></div>
+    </dl>
+  </div>
+</section>
+
+<section class="pv" id="providers" aria-labelledby="pv-h">
+  <div class="wrap grid">
+    <h2 id="pv-h">Keep the agent you already use.</h2>
+    <p class="sub">Loopy calls the CLI you have installed, with your login and your settings. One graph can mix them.</p>
+    <ul class="plist" id="plist">
+      <li>Codex<code>codex</code></li>
+      <li>Claude Code<code>claude</code></li>
+      <li>OpenCode<code>opencode</code></li>
+      <li>Pi<code>pi</code></li>
+    </ul>
+  </div>
+</section>
+
+<section class="local" id="local" aria-labelledby="local-h">
+  <div class="wrap grid">
+    <div style="grid-column:2 / 7">
+      <h2 id="local-h">No hosted compute. Your laptop does the work.</h2>
+      <p class="sub">Loopy is a process on your machine that starts other processes on your machine.</p>
+    </div>
+    <ul class="facts">
+      <li>Source, credentials, subprocesses and traces stay local.</li>
+      <li>Run state lives in SQLite on disk.</li>
+      <li>Traces export as JSONL, so any tool can read them.</li>
+      <li>Schedules run on cron.<code>loopy schedule create --cron '0 9 * * *'</code></li>
+      <li>Open source under Apache-2.0.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="ex" id="example" aria-labelledby="ex-h">
+  <div class="wrap grid">
+    <div class="ex-text">
+      <h2 id="ex-h">Patch critical dependency CVEs.</h2>
+      <p class="sub">We fixed a lodash advisory in Codex once. This is the graph Loopy extracted from that session. Each node lists the trace events it came from.</p>
+      <ol class="trace" id="trace" aria-label="Trace from the Codex session">
+        <li data-e="1"><span class="i">e1</span><span>bun audit --json</span></li>
+        <li data-e="2"><span class="i">e2</span><span>npm view lodash versions</span></li>
+        <li data-e="3"><span class="i">e3</span><span class="out">4.17.21 fixes CVE-2021-23337</span></li>
+        <li data-e="4"><span class="i">e4</span><span>edit package.json lodash ^4.17.21</span></li>
+        <li data-e="5"><span class="i">e5</span><span>bun install</span></li>
+        <li data-e="6"><span class="i">e6</span><span>bun run check <span class="out">412 passed</span></span></li>
+        <li data-e="7" class="said"><span class="i">e7</span><span>"diff looks right, push it"</span></li>
+        <li data-e="8"><span class="i">e8</span><span>git push</span></li>
+        <li data-e="9"><span class="i">e9</span><span>gh pr create --fill</span></li>
+      </ol>
+      <div class="aside">
+        <h3>Keep open pull requests rebased</h3>
+        <p>Our other daily loopy. At nine it lists open PRs, has an agent rebase each onto main, runs a focused check and pushes with <code class="nw">--force-with-lease</code>. Conflicts get skipped.</p>
+        <code>loopy schedule create --cron '0 9 * * *'</code>
+      </div>
+    </div>
+    <ol class="graph" id="graph" aria-label="Graph extracted from the session">
+      <li class="node" data-s="pending" data-ev="1" data-done="Succeeded">
+        <span class="dot"><span class="st"></span></span>
+        <div class="nk"><svg aria-hidden="true"><use href="#g-shell"/></svg>Shell module</div>
+        <h3>Audit dependencies</h3>
+        <div class="meta"><span class="sw">Pending</span><code>e1</code></div>
+      </li>
+      <li class="node" data-s="pending" data-ev="2 3" data-done="Succeeded, release found">
+        <span class="dot"><span class="st"></span></span>
+        <div class="nk"><svg aria-hidden="true"><use href="#g-cond"/></svg>Condition</div>
+        <h3>Is there a patched release?</h3>
+        <div class="meta"><span class="sw">Pending</span><code>e2 e3</code></div>
+        <p class="branch">If not, the run stops here and leaves a note.</p>
+      </li>
+      <li class="node" data-s="pending" data-ev="4 5" data-done="Succeeded">
+        <span class="dot"><span class="st"></span></span>
+        <div class="nk"><svg aria-hidden="true"><use href="#g-agent"/></svg>Agent call</div>
+        <h3>Apply the smallest bump</h3>
+        <div class="meta"><span class="sw">Pending</span><code>e4 e5</code></div>
+      </li>
+      <li class="node" data-s="pending" data-ev="6" data-done="Succeeded, 412 passed">
+        <span class="dot"><span class="st"></span></span>
+        <div class="nk"><svg aria-hidden="true"><use href="#g-verify"/></svg>Verification</div>
+        <h3>Run checks</h3>
+        <div class="meta"><span class="sw">Pending</span><code>e6</code></div>
+      </li>
+      <li class="node" data-s="pending" data-ev="7" data-gate data-done="Approved">
+        <span class="dot"><span class="st"></span></span>
+        <div class="nk"><svg aria-hidden="true"><use href="#g-approve"/></svg>Approval</div>
+        <h3>Approve before push</h3>
+        <div class="meta"><span class="sw">Pending</span><code>e7</code></div>
+      </li>
+      <li class="node" data-s="pending" data-ev="8 9" data-done="Succeeded">
+        <span class="dot"><span class="st"></span></span>
+        <div class="nk"><svg aria-hidden="true"><use href="#g-shell"/></svg>Shell module</div>
+        <h3>Open a pull request</h3>
+        <div class="meta"><span class="sw">Pending</span><code>e8 e9</code></div>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<section class="start" id="start" aria-labelledby="start-h">
+  <div class="wrap grid">
+    <h2 id="start-h">Pick one task you did this week.</h2>
+    <ol class="cmds" id="docs">
+      <li><span><span class="p">$ </span>bun add -g loopy</span><button class="copy" type="button" data-copy="bun add -g loopy">Copy</button><span class="n">Install the CLI</span></li>
+      <li><span><span class="p">$ </span>loopy import session.json --provider codex</span><span class="n">Bring in the session</span></li>
+      <li><span><span class="p">$ </span>loopy extract --import &lt;id&gt;</span><span class="n">Get a graph back</span></li>
+      <li><span><span class="p">$ </span>loopy studio</span><span class="n">Read it, edit it, run it</span></li>
+    </ol>
+    <div class="links">
+      <a class="btn btn-accent" href="#docs">Read the docs</a>
+      <a class="btn" href="#github">View on GitHub</a>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer id="github">
+  <div class="wrap">
+    <div class="inf-slot" id="inf" role="img" aria-label="The Loopy mark"></div>
+    <div class="foot">
+      <a class="mark" href="#top"><svg width="22" height="22" aria-hidden="true"><use href="#g-mark"/></svg>loopy</a>
+      <span>Apache-2.0</span>
+      <nav aria-label="Footer"><a href="#github">GitHub</a><a href="#docs">Docs</a><a href="#example">Examples</a></nav>
+    </div>
+  </div>
+</footer>
+
+<script>
+(() => {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+
+  const nav = $('#nav');
+  addEventListener('scroll', () => nav.classList.toggle('scrolled', scrollY > 8), { passive: true });
+
+  $$('[data-copy]').forEach(b => b.addEventListener('click', async () => {
+    const text = b.dataset.copy;
+    try { await navigator.clipboard.writeText(text); } catch {
+      const ta = Object.assign(document.createElement('textarea'), { value: text });
+      document.body.append(ta); ta.select(); document.execCommand('copy'); ta.remove();
+    }
+    b.textContent = 'Copied'; b.dataset.copied = '';
+    setTimeout(() => { b.textContent = 'Copy'; delete b.dataset.copied; }, 1600);
+  }));
+
+  // The thread: one path built from page anchors, drawn by scroll.
+  const svg = $('#thread'), line = $('#line'), guide = $('#guide'), head = $('#head');
+  const steps = $$('.step'), nodes = $$('.node'), traceRows = $$('#trace li');
+
+  const box = el => {
+    const r = el.getBoundingClientRect();
+    return { x: r.left + scrollX, y: r.top + scrollY, w: r.width, h: r.height, r: r.right + scrollX, b: r.bottom + scrollY };
+  };
+  const textBox = el => {
+    const rs = [...el.querySelectorAll('.ln')].flatMap(ln => {
+      const rg = document.createRange(); rg.selectNodeContents(ln.firstChild);
+      return [...rg.getClientRects()];
+    });
+    const l = Math.min(...rs.map(r => r.left)), t = Math.min(...rs.map(r => r.top));
+    const r = Math.max(...rs.map(r => r.right)), b = Math.max(...rs.map(r => r.bottom));
+    return { x: l + scrollX, y: t + scrollY, w: r - l, h: b - t, r: r + scrollX, b: b + scrollY };
+  };
+
+  // Centripetal Catmull-Rom through points, as cubic Beziers. Centripetal keeps
+  // uneven spacing from overshooting into hooks.
+  const toPath = P => {
+    const f = v => v.toFixed(1);
+    let d = `M${f(P[0][0])} ${f(P[0][1])}`;
+    const dist = (a, b) => Math.sqrt(Math.hypot(a[0] - b[0], a[1] - b[1])) || 1e-4;
+    for (let i = 0; i < P.length - 1; i++) {
+      const p0 = P[i - 1] || P[i], p1 = P[i], p2 = P[i + 1], p3 = P[i + 2] || p2;
+      const d1 = i ? dist(p0, p1) : 0, d2 = dist(p1, p2), d3 = P[i + 2] ? dist(p2, p3) : 0;
+      const c1 = d1 ? [0, 1].map(k => (d1 * d1 * p2[k] - d2 * d2 * p0[k] + (2 * d1 * d1 + 3 * d1 * d2 + d2 * d2) * p1[k]) / (3 * d1 * (d1 + d2))) : p1;
+      const c2 = d3 ? [0, 1].map(k => (d3 * d3 * p1[k] - d2 * d2 * p3[k] + (2 * d3 * d3 + 3 * d3 * d2 + d2 * d2) * p2[k]) / (3 * d3 * (d3 + d2))) : p2;
+      d += `C${f(c1[0])} ${f(c1[1])} ${f(c2[0])} ${f(c2[1])} ${f(p2[0])} ${f(p2[1])}`;
+    }
+    return d;
+  };
+
+  // A curl knot on a vertical run: a prolate cycloid that loops once and continues down.
+  const knot = (P, x, y, b, a, side = 1) => {
+    const n = 22;
+    for (let k = 0; k <= n; k++) {
+      const t = -Math.PI + (2 * Math.PI * k) / n;
+      P.push([x - side * (b + b * Math.cos(t)), y - a * Math.PI + a * (t + Math.PI) - b * Math.sin(t)]);
+    }
+  };
+
+  // An S-curve across a gap, leaving and arriving vertically.
+  const sweep = (P, x1, y1, x2, y2) => {
+    const dy = y2 - y1, dx = x2 - x1;
+    const n = 6;
+    for (let k = 0; k <= n; k++) {
+      const u = k / n, e = u * u * (3 - 2 * u);
+      P.push([x1 + dx * e, y1 + dy * u]);
+    }
+  };
+
+  let S = null; // samples and markers
+  let shown = 0, target = 0, introDone = false, raf = 0, idleT = 0;
+
+  function build() {
+    const W = document.documentElement.clientWidth;
+    const H = document.documentElement.scrollHeight;
+    svg.setAttribute('width', W); svg.setAttribute('height', H);
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.style.height = H + 'px';
+    const mobile = W < 760;
+    const wrap = box($('.hero .wrap'));
+    const pad = parseFloat(getComputedStyle($('.hero .wrap')).paddingLeft);
+    const cL = wrap.x + pad, cR = wrap.r - (mobile ? 20 : pad);
+    const colW = (cR - cL - 11 * 32) / 12;
+    const laneL = mobile ? 20 : cL + colW / 2;
+    const laneR = cR - colW / 2;
+    const P = [], marks = {};
+    const mark = name => { marks[name] = P.length - 1; };
+
+    const h1 = textBox($('#headline'));
+    const stepsB = steps.map(s => box(s.querySelector('h3')));
+    const rt = box($('#runtime')), retry = box($('#rule-retry'));
+    const pv = box($('#providers')), plist = box($('#plist'));
+    const pItems = $$('#plist li').map(box);
+    const local = box($('#local'));
+    const ex = box($('#example'));
+    const dots = nodes.map(n => { const b = box(n.querySelector('.dot')); return [b.x + b.w / 2, b.y + b.h / 2]; });
+    const start = box($('#start'));
+    const stepsL = box($('.steps')), rtH2 = box($('#rt-h')), lh2 = box($('#local-h')), exH2 = box($('#ex-h')), startH2 = box($('#start-h'));
+    const inf = box($('#inf'));
+
+    if (!mobile) {
+      // hero: come in from the top edge, lasso the headline, tie it off on the left
+      const cx = h1.x + h1.w / 2, cy = h1.y + h1.h / 2;
+      const rx = h1.w / 2 * 1.26, ry = h1.h / 2 * 1.56;
+      const rot = -2.5 * Math.PI / 180, cr = Math.cos(rot), sr = Math.sin(rot);
+      const a0 = 208 * Math.PI / 180, turn = (360 + 28) * Math.PI / 180;
+      const e = (a, s) => {
+        const x = rx * s * Math.cos(a), y = ry * s * Math.sin(a);
+        return [cx + x * cr - y * sr, cy + x * sr + y * cr];
+      };
+      const first = e(a0, 1);
+      P.push([first[0] + 150, -40]);
+      P.push([first[0] + 70, first[1] - 120]);
+      const n = 44;
+      for (let k = 0; k <= n; k++) {
+        const u = k / n;
+        P.push(e(a0 - turn * u, 1 + 0.06 * u));
+      }
+      mark('lasso');
+      const ex0 = P[P.length - 1];
+      P.push([ex0[0] + 14, ex0[1] + 80]);
+      P.push([laneL, ex0[1] + 240]);
+      stepsB.forEach((b, i) => {
+        P.push([laneL, b.y + b.h / 2 - 140]);
+        knot(P, laneL, b.y + b.h / 2, 24, 7);
+        mark('step' + i);
+        P.push([laneL, b.y + b.h / 2 + 90]);
+      });
+      // sweep across the gap to the right margin
+      sweep(P, laneL, stepsL.b + 30, laneR, rtH2.y - 30);
+      P.push([laneR, rtH2.b + 40]);
+      P.push([laneR, retry.y - 70]);
+      knot(P, laneR, retry.y + retry.h / 2, 26, 8);
+      mark('retry');
+      P.push([laneR, retry.b + 90]);
+      // down past the provider heading, then a wave under the provider names, right to left
+      const waveY = plist.b + 64;
+      P.push([laneR, plist.y + 20]);
+      P.push([laneR - 20, waveY - 34]);
+      pItems.slice().reverse().forEach((it, i) => {
+        P.push([it.x + Math.min(it.w, 200) * 0.5, waveY + (i % 2 ? -12 : 12)]);
+      });
+      P.push([laneL + 24, waveY + 24]);
+      // local: stay in the left margin
+      P.push([laneL, lh2.y + lh2.h * 0.5]);
+      // cross to the graph column and pass through every node
+      const gx = dots[0][0];
+      sweep(P, laneL, local.b + 10, gx, exH2.y - 20);
+      dots.forEach((d, i) => {
+        P.push(d); mark('node' + i);
+        if (i < dots.length - 1) {
+          const ny = dots[i + 1][1];
+          P.push([d[0] + (i % 2 ? -18 : 18), (d[1] + ny) / 2]);
+        }
+      });
+      // down the graph column, then back to the left margin below the example
+      P.push([gx, ex.b - 60]);
+      sweep(P, gx, ex.b + 10, laneL, startH2.y - 20);
+      P.push([laneL, startH2.b + 40]);
+    } else {
+      // mobile: a quiet vertical line with small loops
+      P.push([laneL, -20]);
+      P.push([laneL, h1.y - 40]);
+      knot(P, laneL, h1.y + 40, 9, 4, -1);
+      mark('lasso');
+      stepsB.forEach((b, i) => {
+        P.push([laneL, b.y + b.h / 2 - 90]);
+        knot(P, laneL, b.y + b.h / 2, 9, 4, -1);
+        mark('step' + i);
+        P.push([laneL, b.y + b.h / 2 + 60]);
+      });
+      P.push([laneL, retry.y - 60]);
+      knot(P, laneL, retry.y + 28, 9, 4, -1);
+      mark('retry');
+      P.push([laneL, retry.b + 60]);
+      P.push([laneL, ex.y + 40]);
+      dots.forEach((d, i) => {
+        P.push([laneL, d[1] - 50]);
+        P.push([laneL, d[1]]); mark('node' + i);
+      });
+      P.push([laneL, start.b - 60]);
+    }
+    // footer: close into the infinity mark, entering along its own tangent at the crossing
+    const fx = mobile ? W / 2 : inf.x + inf.w / 2, fy = inf.y + inf.h / 2;
+    const A = mobile ? Math.min(W * 0.36, 150) : Math.min(inf.w * 0.46, 230), yk = 1.25;
+    const lem = t => [fx + A * Math.cos(t) / (1 + Math.sin(t) ** 2), fy + yk * A * Math.sin(t) * Math.cos(t) / (1 + Math.sin(t) ** 2)];
+    // come down into the left end of the mark, where its tangent is vertical, and go round once
+    sweep(P, laneL, start.b - 10, fx - A, fy - 40);
+    const nL = 72;
+    for (let k = 0; k <= nL; k++) {
+      P.push(lem(Math.PI + 2 * Math.PI * (k / nL)));
+      if (k === 0) mark('inf');
+    }
+
+    const d = toPath(P);
+    line.setAttribute('d', d); guide.setAttribute('d', d);
+    const T = line.getTotalLength();
+    const step = 5, N = Math.ceil(T / step);
+    const xs = new Float32Array(N + 1), ys = new Float32Array(N + 1), maxY = new Float32Array(N + 1);
+    let m = -1e9;
+    for (let i = 0; i <= N; i++) {
+      const p = line.getPointAtLength(Math.min(T, i * step));
+      xs[i] = p.x; ys[i] = p.y; m = Math.max(m, p.y); maxY[i] = m;
+    }
+    // path length at each marked point: nearest sample, searched forward
+    const L = {}; let from = 0;
+    for (const [k, idx] of Object.entries(marks).sort((a, b) => a[1] - b[1])) {
+      const [px, py] = P[idx]; let best = from, bd = 1e12;
+      for (let i = from; i <= N; i++) {
+        const dd = (xs[i] - px) ** 2 + (ys[i] - py) ** 2;
+        if (dd < bd) { bd = dd; best = i; }
+        if (dd > bd + 4e6 && bd < 100) break;
+      }
+      L[k] = best * step; from = best;
+    }
+    line.style.strokeDasharray = `${T} ${T + 10}`;
+    S = { T, N, step, xs, ys, maxY, L, H, mobile };
+    if (reduce) shown = T;
+    frame();
+  }
+
+  const lenForY = y => {
+    const { maxY, N, step } = S;
+    let lo = 0, hi = N;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (maxY[mid] < y) lo = mid + 1; else hi = mid; }
+    return lo * step;
+  };
+  const pointAt = len => {
+    const { xs, ys, step, N } = S;
+    const f = Math.max(0, Math.min(N, len / step)), i = Math.floor(f), u = f - i, j = Math.min(N, i + 1);
+    return [xs[i] + (xs[j] - xs[i]) * u, ys[i] + (ys[j] - ys[i]) * u];
+  };
+
+  function computeTarget() {
+    const vh = innerHeight, max = S.H - vh;
+    const k = Math.max(0, Math.min(1, (scrollY - (max - vh * 0.9)) / (vh * 0.9)));
+    const y = scrollY + vh * (0.62 + 0.38 * k) + k * 40;
+    let t = scrollY >= max - 2 ? S.T : lenForY(y);
+    return Math.max(t, S.L.lasso || 0);
+  }
+
+  function paint(len) {
+    const { T, L } = S;
+    line.style.strokeDashoffset = T - len;
+    // steps and runtime
+    steps.forEach((s, i) => s.classList.toggle('lit', len >= L['step' + i] - 20));
+    // graph nodes
+    const on = new Set();
+    nodes.forEach((n, i) => {
+      const at = L['node' + i], next = L['node' + (i + 1)] ?? at + 400;
+      const gate = n.hasAttribute('data-gate');
+      let s = 'pending';
+      if (len >= at - 6) s = len < at + (next - at) * (gate ? 0.8 : 0.55) ? (gate ? 'waiting' : 'running') : 'succeeded';
+      if (n.dataset.s !== s) {
+        n.dataset.s = s;
+        n.querySelector('.sw').textContent = s === 'pending' ? 'Pending' : s === 'running' ? 'Running' : s === 'waiting' ? 'Waiting for you' : n.dataset.done;
+      }
+      if (s === 'running' || s === 'waiting') n.dataset.ev.split(' ').forEach(e => on.add(e));
+    });
+    traceRows.forEach(r => r.classList.toggle('on', on.has(r.dataset.e)));
+  }
+
+  function frame() {
+    raf = 0;
+    if (!S) return;
+    if (reduce) { shown = S.T; paint(S.T); head.style.opacity = 0; return; }
+    target = computeTarget();
+    const k = introDone ? 0.16 : 0.045;
+    shown += (target - shown) * k;
+    if (Math.abs(target - shown) < 0.5) { shown = target; introDone = true; }
+    paint(shown);
+    // the token rides the drawing head; at the end it keeps circling the mark
+    let hp;
+    const done = shown >= S.T - 1;
+    if (done) {
+      const a = S.L.inf, span = S.T - a;
+      idleT = (idleT + 2.2) % span;
+      hp = pointAt(a + idleT);
+    } else { idleT = 0; hp = pointAt(shown); }
+    head.setAttribute('transform', `translate(${hp[0].toFixed(1)} ${hp[1].toFixed(1)})`);
+    head.style.opacity = 1;
+    const footerVisible = done && inf.getBoundingClientRect().top < innerHeight;
+    if (shown !== target || footerVisible) raf = requestAnimationFrame(frame);
+  }
+  const inf = $('#inf');
+  const kick = () => { if (!raf && S) raf = requestAnimationFrame(frame); };
+  addEventListener('scroll', kick, { passive: true });
+
+  let rt;
+  const rebuild = () => { clearTimeout(rt); rt = setTimeout(build, 120); };
+  addEventListener('resize', rebuild);
+  new ResizeObserver(rebuild).observe($('main'));
+  (document.fonts ? document.fonts.ready : Promise.resolve()).then(build);
+})();
+</script>
+</body>
+</html>

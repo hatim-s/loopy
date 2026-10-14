@@ -1,0 +1,776 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loopy animation layouts</title>
+<meta name="description" content="Six layouts for one animation: a session gets captured, a graph gets extracted, the graph runs.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0D1014;--bg-raised:#11151A;--surface:#161B21;--surface-hover:#1C2229;--surface-active:#232A33;
+  --line:#222931;--line-strong:#323B46;--text:#E6EAF0;--text-muted:#98A2AE;--text-subtle:#6A7480;
+  --accent:#8FA8FF;--accent-strong:#B7C6FF;--accent-ink:#0B1330;--aqua:#6EE0D2;
+  --ok:#5CD39B;--run:#8FA8FF;--wait:#F0C46C;--fail:#F2877E;--pend:#6A7480;
+  --accent-soft:rgba(143,168,255,.12);--accent-border:rgba(143,168,255,.35);
+  --ease:cubic-bezier(.2,.8,.2,1);
+  --sans:"Geist",ui-sans-serif,system-ui,sans-serif;
+  --mono:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:72px}
+body{margin:0;background:var(--bg);color:var(--text);font:400 16px/1.55 var(--sans);-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit}
+a:focus-visible,button:focus-visible{outline:none;box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--accent)}
+.wrap{max-width:1240px;margin:0 auto;padding:0 32px}
+
+/* top */
+.top{position:sticky;top:0;z-index:5;background:rgba(13,16,20,.86);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+.top .wrap{display:flex;align-items:center;gap:18px;height:56px}
+.top .brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:15px;margin-right:auto}
+.top .brand svg{width:22px;height:22px}
+.jump{display:flex;gap:6px}
+.jump a{font-size:13px;color:var(--text-muted);padding:6px 10px;border-radius:6px;border:1px solid transparent}
+.jump a:hover{color:var(--text);background:var(--surface)}
+.jump a b{font-weight:600;color:var(--text);margin-right:5px}
+@media (max-width:900px){.jump a span{display:none}}
+
+.intro{padding:72px 0 48px}
+h1{font-size:clamp(34px,4.6vw,56px);line-height:1.04;letter-spacing:-.035em;font-weight:600;margin:0 0 20px;max-width:14em}
+.intro p{font-size:17px;color:var(--text-muted);max-width:38em;margin:0 0 10px}
+.intro code{font-family:var(--mono);font-size:.92em;color:var(--text)}
+
+/* layout cards */
+.opt{border:1px solid var(--line);border-radius:14px;background:var(--bg-raised);margin:0 0 40px;overflow:hidden}
+.opt-head{display:flex;align-items:baseline;gap:16px;padding:22px 24px 18px;flex-wrap:wrap}
+.opt-head h2{margin:0;font-size:22px;font-weight:600;letter-spacing:-.02em}
+.opt-head h2 b{font-weight:600;color:var(--accent);margin-right:8px}
+.opt-head p{margin:0;color:var(--text-muted);font-size:15px;flex:1 1 30em}
+.opt-head small{color:var(--text-subtle);font-size:13px;white-space:nowrap}
+.stage{background:var(--bg);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.stage svg{display:block;width:100%;height:auto;overflow:visible}
+.stage.narrow svg{max-width:720px;margin:0 auto}
+@media (max-width:800px){.stage{overflow-x:auto}.stage svg{min-width:760px}.stage.narrow svg{min-width:560px}}
+.bar{display:flex;align-items:center;gap:20px;padding:14px 24px;flex-wrap:wrap}
+.phases{display:flex;gap:22px;flex:1}
+.ph{position:relative;padding-bottom:8px;color:var(--text-subtle);font-size:13px;display:flex;gap:8px;align-items:baseline;transition:color 160ms var(--ease)}
+.ph code{font-family:var(--mono);font-size:12px;color:var(--text-subtle)}
+.ph::before{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;background:var(--line);border-radius:2px}
+.ph i{position:absolute;left:0;bottom:0;height:2px;width:100%;background:var(--accent);border-radius:2px;transform:scaleX(0);transform-origin:left}
+.ph.on{color:var(--text)}
+.ctrl{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.btn{border:1px solid var(--line-strong);background:var(--surface);border-radius:6px;padding:7px 12px;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{background:var(--surface-hover)}
+.btn svg{width:12px;height:12px}
+.seg{display:inline-flex;align-items:center;gap:8px;margin-right:8px;font-size:13px;color:var(--text-subtle)}
+.seg div{display:inline-flex;border:1px solid var(--line-strong);border-radius:6px;overflow:hidden}
+.seg button{border:0;background:var(--surface);padding:7px 10px;font-size:13px;cursor:pointer;color:var(--text-muted)}
+.seg button+button{border-left:1px solid var(--line-strong)}
+.seg button:hover{background:var(--surface-hover)}
+.seg button[aria-checked="true"]{background:var(--surface-active);color:var(--text)}
+.seg button:focus-visible{box-shadow:inset 0 0 0 2px var(--accent)}
+@media (max-width:640px){.wrap{padding:0 16px}.ph code{display:none}.opt-head{padding:18px 16px 14px}.bar{padding:12px 16px}.seg span{display:none}}
+
+/* shared svg pieces */
+svg text{font-family:var(--sans);fill:var(--text);user-select:none}
+.ln text{font:13px var(--mono);fill:var(--text-muted)}
+.ln .ln-t,.ln .ln-k{fill:var(--text-subtle)}
+.ln.ev .ln-b{fill:var(--text)}
+.card-bg{fill:var(--surface);stroke:var(--line);transition:stroke 160ms var(--ease)}
+.card[data-s="running"] .card-bg{stroke:var(--accent-border)}
+.card[data-s="waiting"] .card-bg{stroke:rgba(240,196,108,.5)}
+.card[data-s="failed"] .card-bg{stroke:rgba(242,135,126,.5)}
+.card-name{font-size:14px;font-weight:500}
+.card-st{font-size:12px;fill:var(--text-subtle)}
+.card.sm .card-name{font-size:12.5px}
+.card.sm .card-st{font-size:10.5px}
+.card[data-s="running"] .card-st{fill:var(--run)}
+.card[data-s="waiting"] .card-st{fill:var(--wait)}
+.card[data-s="failed"] .card-st{fill:var(--fail)}
+.card[data-s="succeeded"] .card-st{fill:var(--ok)}
+.dot{fill:none;stroke:var(--pend);stroke-width:1.5}
+.card[data-s="running"] .dot{stroke:var(--run);animation:ring 1s var(--ease) infinite}
+.card[data-s="waiting"] .dot{stroke:var(--wait);stroke-width:2.5;animation:ring 1.4s var(--ease) infinite}
+.card[data-s="succeeded"] .dot{fill:var(--ok);stroke:var(--ok)}
+.card[data-s="failed"] .dot{stroke:var(--fail)}
+.xx{stroke:var(--fail);stroke-width:1.5;stroke-linecap:round;display:none}
+.card[data-s="failed"] .xx{display:block}
+@keyframes ring{50%{stroke-opacity:.3}}
+.wire{fill:none;stroke:var(--line-strong);stroke-width:1.5}
+.wire.lit{stroke:url(#wg)}
+.wire.side{stroke-dasharray:3 4}
+.thread{fill:none;stroke:var(--accent);stroke-width:1;stroke-dasharray:2 4;opacity:0}
+.tok{fill:var(--aqua);filter:drop-shadow(0 0 6px rgba(110,224,210,.9))}
+.elabel{font-size:11px;font-weight:500;fill:var(--text-subtle)}
+.tag{font-size:11.5px;font-weight:500}
+.mono{font-family:var(--mono)}
+.chip rect{fill:var(--surface);stroke:var(--line)}
+.chip text{font:11px var(--mono);fill:var(--text-subtle)}
+.chip.ev rect{stroke:var(--line-strong)}
+.chip.ev text{fill:var(--text)}
+.ring-t{font:11px var(--mono);fill:var(--text-subtle)}
+.ring-t.ev{fill:var(--text-muted)}
+.paused *{animation-play-state:paused!important}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8FA8FF"/><stop offset="1" stop-color="#6EE0D2"/></linearGradient>
+    <linearGradient id="wg" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1200" y2="600"><stop offset="0" stop-color="#8FA8FF"/><stop offset="1" stop-color="#6EE0D2"/></linearGradient>
+    <linearGradient id="wg-loop" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="350" y2="180"><stop offset="0" stop-color="#8FA8FF"/><stop offset="1" stop-color="#6EE0D2"/></linearGradient>
+    <symbol id="g-agent" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="2" fill="currentColor"/></symbol>
+    <symbol id="g-shell" viewBox="0 0 16 16"><path d="M3 4.5 6.5 8 3 11.5M8.5 12h5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="g-route" viewBox="0 0 16 16"><path d="M8 2.5 13.5 8 8 13.5 2.5 8Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+    <symbol id="g-verify" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="m5.6 8.2 1.7 1.7 3.2-3.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="g-approval" viewBox="0 0 16 16"><path d="M4 13V3M12 13V3M4 7h8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+    <symbol id="g-join" viewBox="0 0 16 16"><path d="M3 3v3a4 4 0 0 0 4 4h2M13 3v3a4 4 0 0 1-4 4H7M8 10v3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="g-transform" viewBox="0 0 16 16"><path d="M3 5h7l-2-2M13 11H6l2 2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="g-mark" viewBox="0 0 24 24"><path d="M6.5 7.5c-2.8 0-4.5 2-4.5 4.5s1.7 4.5 4.5 4.5c4 0 7-9 11-9 2.8 0 4.5 2 4.5 4.5s-1.7 4.5-4.5 4.5c-4 0-7-9-11-9Z" fill="none" stroke="url(#brand)" stroke-width="2.2" stroke-linejoin="round"/></symbol>
+  </defs>
+</svg>
+
+<div class="top">
+  <div class="wrap">
+    <a class="brand" href="#"><svg><use href="#g-mark"/></svg>Loopy</a>
+    <nav class="jump" aria-label="Jump to a layout">
+      <a href="#opt-l1"><b>L1</b><span>Terminal and canvas</span></a>
+      <a href="#opt-l2"><b>L2</b><span>Trace above</span></a>
+      <a href="#opt-l3"><b>L3</b><span>Flow only</span></a>
+      <a href="#opt-l4"><b>L4</b><span>Layered DAG</span></a>
+      <a href="#opt-l5"><b>L5</b><span>Vertical timeline</span></a>
+      <a href="#opt-l6"><b>L6</b><span>Radial loop</span></a>
+    </nav>
+  </div>
+</div>
+
+<main class="wrap">
+  <header class="intro">
+    <h1>How a loopy gets made and run</h1>
+    <p>Six layouts, one story. You patch a lodash CVE once in Codex (<code>loopy import</code>), Loopy pulls six nodes out of the fifteen trace events (<code>loopy extract</code>), then the graph runs on your machine (<code>loopy run</code>). The checks fail once and retry. The push waits for your approval.</p>
+    <p>Same trace, same nodes, same 18 second clock. What changes is where the trace lives and how the nodes arrange themselves. Each card has a switch for how nodes enter: outline draws the border first, morph grows the trace line into the card, drift fades the card in with a small lift.</p>
+  </header>
+  <div id="options"></div>
+</main>
+
+<script>
+(() => {
+'use strict';
+const NS = 'http://www.w3.org/2000/svg';
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// ---------- shared data ----------
+const TRACE = [
+  ['09:12:03', 'start', 'codex session in ~/work/api'],
+  ['09:12:04', 'user', '"patch the critical CVEs in our deps"'],
+  ['09:12:06', 'exec', 'bun audit --json', 0],
+  ['09:12:09', 'read', 'package.json'],
+  ['09:12:11', 'think', '1 critical: lodash 4.17.20'],
+  ['09:12:12', 'exec', 'npm view lodash versions', 1],
+  ['09:12:15', 'note', '4.17.21 fixes CVE-2021-23337'],
+  ['09:12:18', 'edit', 'package.json  lodash ^4.17.21', 2],
+  ['09:12:19', 'exec', 'bun install'],
+  ['09:12:31', 'exec', 'bun run check', 3],
+  ['09:12:58', 'out', '412 passed, 0 failed'],
+  ['09:13:02', 'user', '"diff looks right, push it"', 4],
+  ['09:13:04', 'exec', 'git push -u origin fix/lodash'],
+  ['09:13:07', 'exec', 'gh pr create --fill', 5],
+  ['09:13:09', 'end', 'session saved'],
+];
+const NODES = [
+  { id: 'audit-deps', kind: 'shell', name: 'Audit dependencies', src: 2 },
+  { id: 'patched', kind: 'route', name: 'Patched release?', src: 5 },
+  { id: 'bump', kind: 'agent', name: 'Apply smallest bump', src: 7 },
+  { id: 'checks', kind: 'verify', name: 'Run checks', src: 9 },
+  { id: 'approve', kind: 'approval', name: 'Approve before push', src: 11 },
+  { id: 'open-pr', kind: 'shell', name: 'Open pull request', src: 13 },
+];
+const HUE = { agent: '#8fa8ff', shell: '#6ee0d2', route: '#c7a4ff', verify: '#9fd68c', approval: '#f0c46c', join: '#f2a7c3', transform: '#7fc8f8' };
+const KIND = { agent: 'Agent', shell: 'Shell', route: 'Route', verify: 'Verify', approval: 'Approval', join: 'Join', transform: 'Transform' };
+const EDGE_LABEL = { 1: 'yes', 3: 'pass' };
+
+// ---------- one clock for every layout ----------
+// capture 0 to 3.6, extract 3.6 to 7.9, run 7.9 to 17.5, then the stage fades and the 18s cycle restarts
+const T = { line0: 1.2, lineStep: .11, fade0: 4.4, fade1: 5.0, E0: 4.5, STEP: .28, DUR: .6, EDGE0: 6.4, EDGESTEP: .12, RUN0: 7.9, CYCLE: 18, phases: [3.6, 7.9, 17.5] };
+
+// the run as a fixed schedule in seconds; the retry and the approval get real screen time
+const RUN = (() => {
+  const ev = [], tok = []; let t = 0;
+  const push = (n, s, text, log) => ev.push({ t, n, s, text, log });
+  const edge = (e) => { tok.push({ e, t0: t, t1: t + .25 }); t += .25; };
+  push(0, 'running', 'Running'); t += .45; push(0, 'succeeded', 'Succeeded', ['audit-deps', '1 critical, lodash 4.17.20']); edge(0);
+  push(1, 'running', 'Running'); t += .4; const routed = t; push(1, 'succeeded', 'Succeeded', ['patched', 'yes, 4.17.21']); edge(1);
+  push(2, 'running', 'Running'); t += .6; push(2, 'succeeded', 'Succeeded', ['bump', '1 file changed']); edge(2);
+  push(3, 'running', 'Running'); t += .5;
+  const fail = t; push(3, 'failed', 'Failed', ['checks', 'verify failed, attempt 1 of 3']); t += 1.4;
+  const retry = t; push(3, 'running', 'Running, attempt 2'); t += 1.1;
+  const pass = t; push(3, 'succeeded', 'Succeeded', ['checks', 'verify succeeded, attempt 2']); edge(3);
+  push(4, 'running', 'Running'); t += .25;
+  const wait = t; push(4, 'waiting', 'Waiting for you', ['approve', 'waiting for you']); t += 2.5;
+  const ok = t; push(4, 'succeeded', 'Approved', ['approve', 'approval granted']); t += .6; edge(4);
+  push(5, 'running', 'Running'); t += .4; push(5, 'succeeded', 'Succeeded', ['open-pr', 'PR #433 opened']);
+  return { ev, tok, total: t, routed, fail, retry, pass, wait, ok };
+})();
+function runState(u) {
+  const st = NODES.map(n => ({ s: 'pending', text: KIND[n.kind] }));
+  let cur = -1;
+  for (const e of RUN.ev) if (e.t <= u) { st[e.n] = { s: e.s, text: e.text }; cur = e.n; }
+  let token = null;
+  for (const k of RUN.tok) if (u >= k.t0 && u < k.t1) token = { e: k.e, p: (u - k.t0) / (k.t1 - k.t0) };
+  const lit = RUN.tok.map(k => u < k.t0 ? 0 : u >= k.t1 ? 1 : (u - k.t0) / (k.t1 - k.t0));
+  return { st, token, lit, cur, done: u >= RUN.total };
+}
+// 0..1 while the verify card is failed or retrying, and while the approval waits; focus is the card that stays bright
+function holdOf(u) {
+  const h1 = ss(RUN.fail, RUN.fail + .35, u) - ss(RUN.pass, RUN.pass + .35, u);
+  const h2 = ss(RUN.wait, RUN.wait + .35, u) - ss(RUN.ok + .35, RUN.ok + .7, u);
+  return { hold: clamp(h1 + h2), focus: h1 > h2 ? 3 : 4 };
+}
+
+// ---------- helpers ----------
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const ss = (a, b, v) => { const t = clamp((v - a) / (b - a)); return t * t * (3 - 2 * t); };
+const eo = (a, b, v) => { const t = clamp((v - a) / (b - a)); return 1 - Math.pow(1 - t, 3); };
+// css cubic-bezier(x1,y1,x2,y2) as a function of progress, so svg motion can share the page ease
+function bezier(x1, y1, x2, y2) {
+  const A = (a, b) => 1 - 3 * b + 3 * a, B = (a, b) => 3 * b - 6 * a, C = a => 3 * a;
+  const at = (t, a, b) => ((A(a, b) * t + B(a, b)) * t + C(a)) * t, slope = (t, a, b) => 3 * A(a, b) * t * t + 2 * B(a, b) * t + C(a);
+  return x => { if (x <= 0) return 0; if (x >= 1) return 1; let t = x; for (let i = 0; i < 6; i++) { const s = slope(t, x1, x2); if (!s) break; t -= (at(t, x1, x2) - x) / s; } return at(t, y1, y2); };
+}
+const EASE = bezier(.2, .8, .2, 1);
+const trunc = (s, n) => s.length > n ? s.slice(0, n - 1) + '…' : s;
+function el(tag, attrs = {}, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.append(e); return e; }
+function txt(parent, x, y, s, cls, attrs = {}) { const t = el('text', { x, y, class: cls || '', ...attrs }, parent); t.textContent = s; return t; }
+const tf = (n, x, y, s = 1) => n.setAttribute('transform', `translate(${x} ${y})${s === 1 ? '' : ` scale(${s})`}`);
+const curveV = (ax, ay, bx, by) => `M${ax} ${ay} C${ax} ${(ay + by) / 2} ${bx} ${(ay + by) / 2} ${bx} ${by}`;
+const curveH = (ax, ay, bx, by) => `M${ax} ${ay} C${(ax + bx) / 2} ${ay} ${(ax + bx) / 2} ${by} ${bx} ${by}`;
+const rectOf = (p, w, h) => ({ x: p.x, y: p.y, w, h });
+const captureK = (t, i) => eo(0, .35, t - (T.line0 + i * T.lineStep));
+const quietFade = t => ss(T.fade0, T.fade1, t);
+
+// ---------- trace log ----------
+function traceLine(parent, r, x, y, o = {}) {
+  const { font = 13, kx = 74, bx = 128, max = 0 } = o;
+  const g = el('g', { class: 'ln' + (r[3] != null ? ' ev' : ''), transform: `translate(${x} ${y})` }, parent);
+  const parts = [txt(g, 0, 0, r[0], 'ln-t'), txt(g, kx, 0, r[1], 'ln-k'), txt(g, bx, 0, max ? trunc(r[2], max) : r[2], 'ln-b')];
+  if (font !== 13) parts.forEach(p => p.style.fontSize = font + 'px');
+  return g;
+}
+// all fifteen lines, laid out in columns; each line knows the rect a morph starts from
+function traceLog(parent, o) {
+  const { x, y, lh, rows = 15, colW = 0, width = 380, ...rest } = o;
+  return TRACE.map((r, i) => {
+    const lx = x + Math.floor(i / rows) * colW, ly = y + (i % rows) * lh;
+    const g = traceLine(parent, r, lx, ly, rest); g.style.opacity = 0;
+    return { g, x: lx, y: ly, ev: r[3], from: { x: lx - 8, y: ly - 15, w: width, h: 22 } };
+  });
+}
+
+// ---------- node card: icon tile, name, status line, status dot ----------
+function makeCard(parent, node, w = 200, h = 56, small = false) {
+  const g = el('g', { class: 'card' + (small ? ' sm' : ''), 'data-s': 'pending' }, parent);
+  el('rect', { width: w, height: h, rx: small ? 8 : 10, class: 'card-bg' }, g);
+  const ts = small ? 22 : 28, tx = small ? 9 : 12, ty = (h - ts) / 2;
+  el('rect', { x: tx, y: ty, width: ts, height: ts, rx: 6, fill: HUE[node.kind], 'fill-opacity': .16 }, g);
+  el('use', { href: '#g-' + node.kind, x: tx + ts / 2 - 7, y: ty + ts / 2 - 7, width: 14, height: 14, style: `color:${HUE[node.kind]}` }, g);
+  const nx = tx + ts + (small ? 8 : 10);
+  txt(g, nx, h / 2 - (small ? 3 : 4), node.name, 'card-name');
+  const st = txt(g, nx, h / 2 + (small ? 11 : 13), KIND[node.kind], 'card-st');
+  const dx = w - (small ? 12 : 15), dy = h - (small ? 11 : 15);
+  el('circle', { cx: dx, cy: dy, r: small ? 3.5 : 4.5, class: 'dot' }, g);
+  el('path', { d: `M${dx - 2.5} ${dy - 2.5}l5 5m0-5l-5 5`, class: 'xx' }, g);
+  g.style.opacity = 0;
+  return {
+    g, w, h, small,
+    set(s, text) { if (g.dataset.s !== s) g.dataset.s = s; if (st.textContent !== text) st.textContent = text; },
+    move(x, y, s = 1, o = 1) { tf(g, x, y, s); g.style.opacity = o; },
+  };
+}
+
+// ---------- edges ----------
+// a path that draws itself (extract), lights up with the brand gradient (run) and can place the token along its length
+function makeEdge(parent, d, label, lab = {}, side = false) {
+  const p = el('path', { d, class: 'wire' + (side ? ' side' : '') }, parent); const len = p.getTotalLength();
+  p.style.strokeDasharray = side ? '' : len; p.style.strokeDashoffset = len; if (side) p.style.opacity = 0;
+  const lit = el('path', { d, class: 'wire lit' }, parent); lit.style.strokeDasharray = len; lit.style.strokeDashoffset = len;
+  let lt = null;
+  if (label) { lt = txt(parent, lab.x, lab.y, label, 'elabel', lab.anchor ? { 'text-anchor': lab.anchor } : {}); lt.style.opacity = 0; }
+  return {
+    p, lit, len,
+    draw(k) { if (side) p.style.opacity = k; else p.style.strokeDashoffset = len * (1 - k); if (lt) lt.style.opacity = k; },
+    light(k) { lit.style.strokeDashoffset = len * (1 - k); },
+    at(t) { return p.getPointAtLength(len * clamp(t)); },
+  };
+}
+// two edges that the run treats as one hop (through a join node)
+function chainEdges(a, b) {
+  const split = a.len / (a.len + b.len);
+  return {
+    len: a.len + b.len,
+    draw(k) { a.draw(k); b.draw(k); },
+    light(k) { a.light(clamp(k / split)); b.light(clamp((k - split) / (1 - split))); },
+    at(t) { return t < split ? a.at(t / split) : b.at((t - split) / (1 - split)); },
+  };
+}
+// edges for the 3 by 2 snake used by the terminal layout
+function snakeEdges(parent, pos, cw, ch) {
+  return [0, 1, 2, 3, 4].map(i => {
+    const A = pos[i], B = pos[i + 1]; let d, lab;
+    if (Math.abs(A.y - B.y) < 1) {
+      const fwd = B.x > A.x;
+      d = fwd ? `M${A.x + cw} ${A.y + ch / 2} L${B.x} ${B.y + ch / 2}` : `M${A.x} ${A.y + ch / 2} L${B.x + cw} ${B.y + ch / 2}`;
+      lab = { x: fwd ? (A.x + cw + B.x) / 2 : (B.x + cw + A.x) / 2, y: A.y + ch / 2 - 7, anchor: 'middle' };
+    } else { d = `M${A.x + cw / 2} ${A.y + ch} L${B.x + cw / 2} ${B.y}`; lab = { x: A.x + cw / 2 + 10, y: (A.y + ch + B.y) / 2 + 4 }; }
+    return makeEdge(parent, d, EDGE_LABEL[i], lab);
+  });
+}
+const snakePos = (cols, rows) => [[0, 0], [1, 0], [2, 0], [2, 1], [1, 1], [0, 1]].map(([c, r]) => ({ x: cols[c], y: rows[r] }));
+
+// ---------- entrance: how a trace line becomes a card ----------
+// outline draws the card border first, morph grows the line's rect into the card, drift fades the card in with a small lift
+function makeEntrance(kind, parent, n = NODES.length) {
+  // the morph body sits under the cards; the outline is stroke only, so it goes on top where the card fill cannot hide it
+  const layer = kind === 'outline' ? el('g', {}, parent.ownerSVGElement) : parent;
+  const ghosts = Array.from({ length: n }, () => {
+    const r = el('rect', { rx: 10, fill: kind === 'morph' ? 'var(--surface)' : 'none', stroke: 'var(--accent-border)', 'stroke-width': 1 }, layer);
+    r.style.opacity = 0; return r;
+  });
+  const m = (t, i) => EASE(clamp((t - (T.E0 + i * T.STEP)) / T.DUR));
+  return {
+    kind, m,
+    // from is the source rect, or null when a node has no trace line and just drifts in
+    place(i, t, from, to, card, dim = 1) {
+      const k = m(t, i), gh = ghosts[i], { w, h } = card; let cy = to.y, o = k;
+      if (kind === 'morph' && from) {
+        gh.setAttribute('x', lerp(from.x, to.x, k)); gh.setAttribute('y', lerp(from.y, to.y, k));
+        gh.setAttribute('width', lerp(from.w, w, k)); gh.setAttribute('height', lerp(from.h, h, k)); gh.setAttribute('rx', lerp(from.rx ?? 6, 10, k));
+        gh.style.opacity = ss(0, .12, k) * (1 - ss(.88, 1, k));
+        o = ss(.55, 1, k);
+      } else if (kind === 'outline' && from) {
+        const perim = 2 * (w + h);
+        gh.setAttribute('x', to.x); gh.setAttribute('y', to.y); gh.setAttribute('width', w); gh.setAttribute('height', h);
+        gh.style.strokeDasharray = perim; gh.style.strokeDashoffset = perim * (1 - ss(0, .7, k));
+        gh.style.opacity = k > 0 ? 1 - ss(.85, 1, k) : 0;
+        o = ss(.4, 1, k);
+      } else cy = to.y + (1 - k) * 12;
+      card.move(to.x, cy, 1, o * dim);
+      return k;
+    },
+    // the source line fades in place, or rides inside the morph body toward the card
+    line(g, k, m, base, target) {
+      if (kind === 'morph') { g.style.opacity = k * (1 - ss(0, .5, m)); tf(g, lerp(base.x + (1 - k) * 6, target.x, m), lerp(base.y, target.y, m)); }
+      else { g.style.opacity = k * (1 - ss(0, .45, m)); tf(g, base.x + (1 - k) * 6, base.y); }
+    },
+  };
+}
+
+// ---------- run layer: states, token, retry back-up, approval stop, hold outlines and labels ----------
+// edges are the five hops in run order. holds gives the two outlined rects and where their labels sit.
+function makeRun(parent, cards, edges, holds) {
+  const gH = el('g', {}, parent), tok = el('circle', { r: 4.5, class: 'tok' }, parent); tok.style.opacity = 0;
+  const rect = (r, stroke, sw) => { const e = el('rect', { x: r.x, y: r.y, width: r.w, height: r.h, rx: r.rx ?? 10, fill: 'none', stroke, 'stroke-width': sw }, gH); e.style.opacity = 0; return e; };
+  const anchor = l => l.anchor ? { 'text-anchor': l.anchor } : {};
+  const failRect = rect(holds.fail, 'var(--fail)', 1);
+  const failT = txt(gH, holds.failLabel.x, holds.failLabel.y, 'Failed, retrying 1 of 3', 'tag', anchor(holds.failLabel)); failT.style.fill = 'var(--fail)'; failT.style.opacity = 0;
+  const waitRect = rect(holds.wait, 'var(--wait)', 1.5);
+  const okG = el('g', { transform: `translate(${holds.okLabel.x} ${holds.okLabel.y})` }, gH); okG.style.opacity = 0;
+  const check = el('path', { d: 'M1 -4.5l3 3l6.5 -7', fill: 'none', stroke: 'var(--ok)', 'stroke-width': 1.6, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, okG);
+  const CK = check.getTotalLength(); check.style.strokeDasharray = CK;
+  const okT = txt(okG, 17, 0, 'Approved by you', 'tag'); okT.style.fill = 'var(--ok)';
+  const R = RUN;
+  const place = pt => { tok.setAttribute('cx', pt.x); tok.setAttribute('cy', pt.y); tok.style.opacity = 1; };
+  return function apply(u) {
+    const S = runState(u);
+    S.st.forEach((s, i) => cards[i].set(s.s, s.text));
+    edges.forEach((e, i) => e.light(S.lit[i]));
+    if (S.token) place(edges[S.token.e].at(S.token.p)); else tok.style.opacity = 0;
+    // retry: the token backs up a third of the way along the edge it came in on, then comes forward again
+    const bk = ss(R.fail, R.fail + .5, u) - ss(R.retry, R.retry + .5, u);
+    if (bk > 0) { place(edges[2].at(1 - .3 * bk)); edges[2].light(1 - .3 * bk); }
+    // approval: the token stops at the card until the approval lands
+    else if (u >= R.wait && u < R.ok + .6) place(edges[3].at(1));
+    failRect.style.opacity = ss(R.fail, R.fail + .3, u) - ss(R.retry, R.retry + .3, u);
+    failT.style.opacity = ss(R.fail + .15, R.fail + .5, u) - ss(R.retry, R.retry + .3, u);
+    const br = ss(R.wait, R.wait + .4, u) - ss(R.ok, R.ok + .3, u);
+    waitRect.style.opacity = br * (.25 + .45 * (.5 - .5 * Math.cos(2 * Math.PI * (u - R.wait) / 1.8)));
+    okG.style.opacity = ss(R.ok, R.ok + .3, u);
+    check.style.strokeDashoffset = CK * (1 - ss(R.ok + .1, R.ok + .45, u));
+    return S;
+  };
+}
+// hold rects around cards 3 and 4 with labels under them
+const holdsBelow = (pos, cw, ch, rx = 10) => ({
+  fail: { ...rectOf(pos[3], cw, ch), rx }, failLabel: { x: pos[3].x, y: pos[3].y + ch + 20 },
+  wait: { ...rectOf(pos[4], cw, ch), rx }, okLabel: { x: pos[4].x, y: pos[4].y + ch + 20 },
+});
+const drawEdges = (edges, t) => edges.forEach((e, i) => e.draw(ss(T.EDGE0 + i * T.EDGESTEP, T.EDGE0 + .5 + i * T.EDGESTEP, t)));
+
+// ---------- terminal: the three commands and what they print ----------
+function terminal(parent, x0, y0) {
+  const R = RUN, RUN0 = T.RUN0;
+  const TL = [
+    [.2, 'cmd', 'loopy import --from codex', .8],
+    [1.1, 'out', 'Recording session in ~/work/api'],
+    [3.2, 'out', '15 events, 66 seconds'],
+    [3.4, 'out', 'Saved trace imp_7f2c'],
+    [3.7, 'cmd', 'loopy extract imp_7f2c', .6],
+    [6.6, 'out', '6 nodes, 5 edges'],
+    [6.8, 'out', 'Every node points at its events'],
+    [7.0, 'out', 'Saved graph cve-patch'],
+    [7.2, 'cmd', 'loopy run cve-patch', .6],
+    ...R.ev.filter(e => e.log).map(e => [RUN0 + e.t, 'log', e.log, e.s]),
+    [RUN0 + R.total + .15, 'out', 'Run #41 succeeded'],
+  ];
+  const lh = 22; let y = y0;
+  const rows = TL.map((r, i) => {
+    if (r[1] === 'cmd' && i) y += lh;
+    const g = el('g', { transform: `translate(${x0} ${y})`, class: 'mono' }, parent); g.style.opacity = 0;
+    const a = txt(g, 0, 0, '', 'mono'); a.style.fontSize = '13px';
+    if (r[1] === 'cmd') a.style.fill = 'var(--text)';
+    else if (r[1] === 'out') a.style.fill = 'var(--text-muted)';
+    else { a.style.fill = 'var(--text-subtle)'; const b = txt(g, 118, 0, r[2][1], 'mono'); b.style.fontSize = '13px'; b.style.fill = { succeeded: 'var(--ok)', failed: 'var(--fail)', waiting: 'var(--wait)', running: 'var(--run)' }[r[3]]; }
+    y += lh; return { g, a, r };
+  });
+  const cursor = el('rect', { width: 7, height: 15, y: -12, fill: 'var(--accent)' }, parent); cursor.style.opacity = 0;
+  return function (t) {
+    let curRow = null;
+    rows.forEach(row => {
+      const [t0, kind, text, extra] = row.r;
+      if (t < t0) { row.g.style.opacity = 0; return; }
+      row.g.style.opacity = 1;
+      if (kind === 'cmd') { const n = Math.floor(clamp((t - t0) / extra) * text.length); row.a.textContent = '$ ' + text.slice(0, n); if (t < t0 + extra + .3) curRow = row; }
+      else if (kind === 'out') row.a.textContent = text;
+      else row.a.textContent = text[0];
+    });
+    if (curRow) { cursor.style.opacity = 1; cursor.setAttribute('transform', curRow.g.getAttribute('transform')); cursor.setAttribute('x', curRow.a.getComputedTextLength() + 2); }
+    else cursor.style.opacity = 0;
+  };
+}
+
+// ---------- L1: terminal and canvas ----------
+function layoutTerminal(svg, entrance) {
+  const cw = 204, ch = 56, LX = 472;
+  const pos = snakePos([484, 722, 960], [150, 400]);
+  el('rect', { x: 24, y: 24, width: 400, height: 552, rx: 14, fill: 'var(--bg-raised)', stroke: 'var(--line)' }, svg);
+  el('rect', { x: 448, y: 24, width: 728, height: 552, rx: 14, fill: 'none', stroke: 'var(--line)' }, svg);
+  const gLn = el('g', {}, svg), gEd = el('g', {}, svg), gGh = el('g', {}, svg), gCd = el('g', {}, svg), gRun = el('g', {}, svg), gTerm = el('g', {}, svg);
+  const heads = ['Trace imp_7f2c', 'Graph cve-patch', 'Run #41'].map(s => { const h = txt(svg, LX, 62, s, 'tag'); h.style.fontSize = '13px'; h.style.fill = 'var(--text-muted)'; h.style.opacity = 0; return h; });
+  const lines = traceLog(gLn, { x: LX, y: 106, lh: 24 });
+  const cards = NODES.map(n => makeCard(gCd, n, cw, ch));
+  const edges = snakeEdges(gEd, pos, cw, ch);
+  const ent = makeEntrance(entrance, gGh);
+  const run = makeRun(gRun, cards, edges, holdsBelow(pos, cw, ch));
+  const term = terminal(gTerm, 46, 66);
+  return function render(t) {
+    term(t);
+    const phase = t < 1.1 ? -1 : t < 4.4 ? 0 : t < T.RUN0 ? 1 : 2;
+    heads.forEach((h, i) => h.style.opacity = i === phase ? 1 : 0);
+    const u = t - T.RUN0, { hold, focus } = holdOf(u);
+    gEd.style.opacity = 1 - .35 * hold;
+    lines.forEach((l, i) => {
+      const k = captureK(t, i);
+      if (l.ev == null) { l.g.style.opacity = k * (1 - quietFade(t)); tf(l.g, l.x + (1 - k) * 6, l.y); return; }
+      const to = pos[l.ev]; ent.line(l.g, k, ent.m(t, l.ev), l, { x: to.x + 50, y: to.y + ch / 2 + 4 });
+    });
+    cards.forEach((c, i) => ent.place(i, t, lines[NODES[i].src].from, pos[i], c, i === focus ? 1 : 1 - .4 * hold));
+    drawEdges(edges, t);
+    run(u);
+  };
+}
+
+// ---------- L2: trace above, graph below ----------
+function layoutStrip(svg, entrance) {
+  const cw = 176, ch = 48;
+  const pos = NODES.map((_, i) => ({ x: 40 + i * 186, y: i % 2 ? 350 : 220 }));
+  const gLn = el('g', {}, svg), gEd = el('g', {}, svg), gGh = el('g', {}, svg), gCd = el('g', {}, svg), gRun = el('g', {}, svg);
+  const lines = traceLog(gLn, { x: 40, y: 56, lh: 22, rows: 5, colW: 380, width: 372, font: 11.5, kx: 62, bx: 100 });
+  const cap = txt(svg, 600, 120, '6 of 15 events became steps', 'tag', { 'text-anchor': 'middle' }); cap.style.fontSize = '13px'; cap.style.fill = 'var(--text-muted)'; cap.style.opacity = 0;
+  const cards = NODES.map(n => makeCard(gCd, n, cw, ch, true));
+  const edges = [0, 1, 2, 3, 4].map(i => {
+    const A = pos[i], B = pos[i + 1], down = B.y > A.y;
+    const ax = A.x + cw * .72, ay = down ? A.y + ch : A.y, bx = B.x + cw * .28, by = down ? B.y : B.y + ch;
+    return makeEdge(gEd, curveV(ax, ay, bx, by), EDGE_LABEL[i], { x: (ax + bx) / 2 + 12, y: (ay + by) / 2 + 4 });
+  });
+  const ent = makeEntrance(entrance, gGh);
+  const holds = holdsBelow(pos, cw, ch, 8); holds.okLabel = { x: pos[4].x, y: pos[4].y - 12 };
+  const run = makeRun(gRun, cards, edges, holds);
+  return function render(t) {
+    const u = t - T.RUN0, { hold, focus } = holdOf(u);
+    gEd.style.opacity = 1 - .35 * hold;
+    lines.forEach((l, i) => {
+      const k = captureK(t, i);
+      if (l.ev == null) { l.g.style.opacity = k * (1 - quietFade(t)); tf(l.g, l.x + (1 - k) * 6, l.y); return; }
+      const to = pos[l.ev]; ent.line(l.g, k, ent.m(t, l.ev), l, { x: to.x + 40, y: to.y + ch / 2 + 4 });
+    });
+    cards.forEach((c, i) => ent.place(i, t, lines[NODES[i].src].from, pos[i], c, i === focus ? 1 : 1 - .4 * hold));
+    cap.style.opacity = ss(5.6, 6.2, t);
+    drawEdges(edges, t);
+    run(u);
+  };
+}
+
+// ---------- L3: flow only ----------
+function layoutLane(svg, entrance) {
+  const cw = 168, ch = 44, Y0 = 200, AMP = 34;
+  const lane = x => Y0 + AMP * Math.sin((x - 60) / 1080 * Math.PI * 2.5);
+  const samp = (x0, x1) => { const n = Math.max(2, Math.round((x1 - x0) / 12)); let d = ''; for (let i = 0; i <= n; i++) { const x = lerp(x0, x1, i / n); d += (i ? 'L' : 'M') + x.toFixed(1) + ' ' + lane(x).toFixed(1); } return d; };
+  el('path', { d: samp(30, 1170), fill: 'none', stroke: 'var(--line)', 'stroke-width': 1 }, svg);
+  const gEd = el('g', {}, svg), gCh = el('g', {}, svg), gGh = el('g', {}, svg), gCd = el('g', {}, svg), gRun = el('g', {}, svg);
+  const chipX = TRACE.map((_, i) => 60 + i * 77);
+  const cx = NODES.map((_, i) => 104 + i * 200);
+  const pos = cx.map(x => ({ x: x - cw / 2, y: lane(x) - ch / 2 }));
+  const chips = TRACE.map((r, i) => {
+    const x = chipX[i] - 25, y = lane(chipX[i]) - 11;
+    const g = el('g', { class: 'chip' + (r[3] != null ? ' ev' : ''), transform: `translate(${x} ${y})` }, gCh); g.style.opacity = 0;
+    el('rect', { width: 50, height: 22, rx: 6 }, g); txt(g, 25, 15, r[1], '', { 'text-anchor': 'middle' });
+    return { g, x, y, ev: r[3], from: { x, y, w: 50, h: 22 } };
+  });
+  const cap = txt(svg, 600, 356, '', 'mono', { 'text-anchor': 'middle' }); cap.style.fontSize = '12px'; cap.style.fill = 'var(--text-muted)';
+  const cards = NODES.map(n => makeCard(gCd, n, cw, ch, true));
+  const edges = [0, 1, 2, 3, 4].map(i => { const mx = (cx[i] + cx[i + 1]) / 2; return makeEdge(gEd, samp(cx[i] + cw / 2, cx[i + 1] - cw / 2), EDGE_LABEL[i], { x: mx, y: lane(mx) - 16, anchor: 'middle' }); });
+  const ent = makeEntrance(entrance, gGh);
+  const run = makeRun(gRun, cards, edges, holdsBelow(pos, cw, ch, 8));
+  return function render(t) {
+    const u = t - T.RUN0, { hold, focus } = holdOf(u);
+    gEd.style.opacity = 1 - .35 * hold;
+    let capText = '';
+    chips.forEach((c, i) => {
+      const k = captureK(t, i);
+      if (k > 0 && k < 1 && t < 3.6) capText = `${TRACE[i][0]}  ${TRACE[i][1]}  ${TRACE[i][2]}`;
+      if (c.ev == null) { c.g.style.opacity = k * (1 - quietFade(t)); tf(c.g, c.x + (1 - k) * 6, c.y); return; }
+      const to = pos[c.ev]; ent.line(c.g, k, ent.m(t, c.ev), c, { x: to.x + cw / 2 - 25, y: to.y + ch / 2 - 11 });
+    });
+    if (t >= 5.6 && t < T.RUN0) capText = '6 of 15 events became steps';
+    cap.textContent = capText;
+    cards.forEach((c, i) => ent.place(i, t, chips[NODES[i].src].from, pos[i], c, i === focus ? 1 : 1 - .4 * hold));
+    drawEdges(edges, t);
+    run(u);
+  };
+}
+
+// ---------- L4: layered DAG ----------
+// the Studio layout on its side: rows by depth, so six depths and a branch fit beside the log
+function layoutDag(svg, entrance) {
+  const cw = 172, ch = 44, CX = 760, rowY = r => 40 + r * 82;
+  const pos = [0, 1, null, 4, 5, 6].map(r => ({ x: CX - cw / 2, y: r == null ? rowY(2) : rowY(r) })); pos[2].x = CX - cw / 2 - 120;
+  const skipPos = { x: CX - cw / 2 + 120, y: rowY(2) }, joinW = 96, joinH = 32, joinPos = { x: CX - joinW / 2, y: rowY(3) + 6 };
+  const gLn = el('g', {}, svg), gTk = el('g', {}, svg), gTh = el('g', {}, svg), gEd = el('g', {}, svg), gGh = el('g', {}, svg), gCd = el('g', {}, svg), gRun = el('g', {}, svg);
+  const lines = traceLog(gLn, { x: 40, y: 60, lh: 24 });
+  const ticks = TRACE.map((r, i) => { const k = el('rect', { x: 40, y: lines[i].y - 6, width: 10, height: 2, rx: 1, fill: r[3] != null ? HUE[NODES[r[3]].kind] : 'var(--text-subtle)' }, gTk); k.style.opacity = 0; return k; });
+  const cards = NODES.map(n => makeCard(gCd, n, cw, ch, true));
+  const skip = makeCard(gCd, { kind: 'transform', name: 'Skip, already patched' }, cw, ch, true);
+  const join = makeCard(gCd, { kind: 'join', name: 'Join' }, joinW, joinH, true);
+  const threads = NODES.map((n, i) => { const y = lines[n.src].y - 5; return el('path', { d: curveH(54, y, pos[i].x, pos[i].y + ch / 2), class: 'thread' }, gTh); });
+  const bx = pos[2].x + cw / 2, sx = skipPos.x + cw / 2, jy = joinPos.y, jb = joinPos.y + joinH;
+  const eAR = makeEdge(gEd, `M${CX} ${pos[0].y + ch} L${CX} ${pos[1].y}`);
+  const eRB = makeEdge(gEd, curveV(CX - 30, pos[1].y + ch, bx, pos[2].y), 'yes', { x: lerp(CX - 30, bx, .5) - 8, y: (pos[1].y + ch + pos[2].y) / 2 + 4, anchor: 'end' });
+  const eRS = makeEdge(gEd, curveV(CX + 30, pos[1].y + ch, sx, skipPos.y), 'no', { x: lerp(CX + 30, sx, .5) + 8, y: (pos[1].y + ch + skipPos.y) / 2 + 4 }, true);
+  const eBJ = makeEdge(gEd, curveV(bx, pos[2].y + ch, CX - 24, jy));
+  const eSJ = makeEdge(gEd, curveV(sx, skipPos.y + ch, CX + 24, jy), null, {}, true);
+  const eJV = makeEdge(gEd, `M${CX} ${jb} L${CX} ${pos[3].y}`);
+  const eVA = makeEdge(gEd, `M${CX} ${pos[3].y + ch} L${CX} ${pos[4].y}`, 'pass', { x: CX + 10, y: (pos[3].y + ch + pos[4].y) / 2 + 4 });
+  const eAP = makeEdge(gEd, `M${CX} ${pos[4].y + ch} L${CX} ${pos[5].y}`);
+  const drawOrder = [eAR, eRB, eRS, eBJ, eSJ, eJV, eVA, eAP];
+  const edges = [eAR, eRB, chainEdges(eBJ, eJV), eVA, eAP];
+  const ent = makeEntrance(entrance, gGh, 8);
+  const beside = i => ({ x: pos[i].x + cw + 14, y: pos[i].y + ch / 2 + 4 });
+  const run = makeRun(gRun, cards, edges, { ...holdsBelow(pos, cw, ch, 8), failLabel: beside(3), okLabel: beside(4) });
+  return function render(t) {
+    const u = t - T.RUN0, { hold, focus } = holdOf(u);
+    gEd.style.opacity = 1 - .35 * hold;
+    lines.forEach((l, i) => {
+      const k = captureK(t, i);
+      if (l.ev == null) { l.g.style.opacity = k * (1 - quietFade(t)); tf(l.g, l.x + (1 - k) * 6, l.y); ticks[i].style.opacity = quietFade(t); return; }
+      const m = ent.m(t, l.ev), to = pos[l.ev];
+      ent.line(l.g, k, m, l, { x: to.x + 40, y: to.y + ch / 2 + 4 }); ticks[i].style.opacity = ss(.4, .9, m);
+    });
+    cards.forEach((c, i) => {
+      const s = T.E0 + i * T.STEP;
+      ent.place(i, t, lines[NODES[i].src].from, pos[i], c, i === focus ? 1 : 1 - .4 * hold);
+      threads[i].style.opacity = ss(s + .6, s + 1.1, t) * lerp(.6, .25, ss(T.RUN0, T.RUN0 + .6, t)) * (1 - .5 * hold);
+    });
+    const taken = ss(RUN.routed, RUN.routed + .4, u);
+    ent.place(6, t, null, skipPos, skip, (1 - .45 * taken) * (1 - .4 * hold));
+    ent.place(7, t, null, joinPos, join, 1 - .4 * hold);
+    drawEdges(drawOrder, t);
+    const S = run(u);
+    skip.set('pending', taken > .5 ? 'Not taken' : 'Transform');
+    join.set(S.lit[2] > .5 ? 'succeeded' : 'pending', S.lit[2] > .5 ? 'Merged' : 'Join');
+  };
+}
+
+// ---------- L5: vertical timeline ----------
+function layoutTimeline(svg, entrance) {
+  const cw = 176, ch = 48, AX = 150, NX = 440, lh = 40, y0 = 70;
+  const gAx = el('g', {}, svg), gLn = el('g', {}, svg), gEd = el('g', {}, svg), gGh = el('g', {}, svg), gCd = el('g', {}, svg), gRun = el('g', {}, svg);
+  const axis = el('line', { x1: AX, y1: y0 - 24, x2: AX, y2: y0 - 24, stroke: 'var(--line-strong)', 'stroke-width': 1.5 }, gAx);
+  const lines = traceLog(gLn, { x: 40, y: y0, lh, width: 250, font: 12, kx: 126, bx: 174, max: 26 }).map(l => { l.from.x = 40 + 118; return l; });
+  const dots = TRACE.map((r, i) => { const d = el('circle', { cx: AX, cy: lines[i].y - 4, r: r[3] != null ? 4 : 2.5, fill: r[3] != null ? HUE[NODES[r[3]].kind] : 'var(--text-subtle)' }, gAx); d.style.opacity = 0; return d; });
+  const pos = NODES.map(n => ({ x: NX, y: lines[n.src].y - 4 - ch / 2 }));
+  const cards = NODES.map(n => makeCard(gCd, n, cw, ch, true));
+  const mx = NX + cw / 2;
+  const edges = [0, 1, 2, 3, 4].map(i => makeEdge(gEd, `M${mx} ${pos[i].y + ch} L${mx} ${pos[i + 1].y}`, EDGE_LABEL[i], { x: mx - 10, y: (pos[i].y + ch + pos[i + 1].y) / 2 + 4, anchor: 'end' }));
+  const ry = pos[1].y + ch / 2, vy = pos[3].y + ch / 2;
+  const bypass = makeEdge(gEd, `M${NX + cw} ${ry} C${NX + cw + 90} ${ry} ${NX + cw + 90} ${vy} ${NX + cw} ${vy}`, 'no', { x: NX + cw + 78, y: (ry + vy) / 2 + 4 }, true);
+  const ent = makeEntrance(entrance, gGh);
+  const run = makeRun(gRun, cards, edges, holdsBelow(pos, cw, ch, 8));
+  return function render(t) {
+    const u = t - T.RUN0, { hold, focus } = holdOf(u);
+    gEd.style.opacity = 1 - .35 * hold;
+    const last = clamp((t - T.line0) / (T.lineStep * 14));
+    axis.setAttribute('y2', lerp(y0 - 24, lines[14].y + 8, eo(0, 1, last)));
+    lines.forEach((l, i) => {
+      const k = captureK(t, i); dots[i].style.opacity = k;
+      if (l.ev == null) { l.g.style.opacity = k * (1 - .65 * quietFade(t)); tf(l.g, l.x + (1 - k) * 6, l.y); return; }
+      const to = pos[l.ev]; ent.line(l.g, k, ent.m(t, l.ev), l, { x: to.x - 78, y: to.y + ch / 2 + 4 });
+    });
+    cards.forEach((c, i) => ent.place(i, t, lines[NODES[i].src].from, pos[i], c, i === focus ? 1 : 1 - .4 * hold));
+    drawEdges([...edges, bypass], t);
+    run(u);
+  };
+}
+
+// ---------- L6: radial loop ----------
+function layoutLoop(svg, entrance, uid) {
+  const S = 2.2, TX = 215, TY = 170, cw = 172, ch = 44, C = { x: 600, y: 370 };
+  const D = 'M90 30c-40 0-65 27-65 60s25 60 65 60c70 0 100-120 170-120 40 0 65 27 65 60s-25 60-65 60c-70 0-100-120-170-120Z';
+  const gRing = el('g', {}, svg), gP = el('g', { transform: `translate(${TX} ${TY}) scale(${S})` }, svg);
+  const gTh = el('g', {}, svg), gGh = el('g', {}, svg), gCd = el('g', {}, svg), gRun = el('g', {}, svg);
+  const guide = el('path', { d: D, fill: 'none', stroke: 'var(--line)', 'stroke-width': 1 / S }, gP);
+  const closed = el('path', { d: D, fill: 'none', stroke: 'url(#brand)', 'stroke-width': 1.5 / S, 'stroke-linejoin': 'round' }, gP); closed.style.opacity = 0;
+  const L = guide.getTotalLength();
+  const pt = f => { const p = guide.getPointAtLength(((f % 1) + 1) % 1 * L); return { x: p.x * S + TX, y: p.y * S + TY }; };
+  const normal = f => { const a = pt(f - .004), b = pt(f + .004), p = pt(f); let nx = -(b.y - a.y), ny = b.x - a.x; const n = Math.hypot(nx, ny) || 1; nx /= n; ny /= n; if (nx * (p.x - C.x) + ny * (p.y - C.y) < 0) { nx = -nx; ny = -ny; } return { nx, ny }; };
+  // the path runs round the left lobe (0 to .21), across the middle (.21 to .5), round the right lobe (.5 to .71) and back across
+  const F = [.04, .105, .17, .54, .605, .67];
+  // push each card out along the normal far enough that its own edge clears the port
+  const pos = F.map(f => { const p = pt(f), n = normal(f), off = 16 + Math.abs(n.nx) * cw / 2 + Math.abs(n.ny) * ch / 2; return { x: p.x + n.nx * off - cw / 2, y: p.y + n.ny * off - ch / 2 }; });
+  // the trace as two arcs of dim text, top reads left to right, so does the bottom
+  const top = el('path', { id: `${uid}-top`, d: 'M45 370 A555 330 0 0 1 1155 370', fill: 'none' }, gRing);
+  const bot = el('path', { id: `${uid}-bot`, d: 'M45 370 A555 330 0 0 0 1155 370', fill: 'none' }, gRing);
+  const lines = TRACE.map((r, i) => {
+    const onTop = i < 8, idx = onTop ? i : i - 8;
+    const tx = el('text', { class: 'ring-t' + (r[3] != null ? ' ev' : '') }, gRing); tx.style.opacity = 0;
+    const tp = el('textPath', { href: `#${uid}-${onTop ? 'top' : 'bot'}`, startOffset: `${(onTop ? 1.5 + idx * 12.3 : 4 + idx * 13.6)}%` }, tx);
+    tp.textContent = `${r[1]} ${trunc(r[2], 18)}`;
+    return { g: tx, ev: r[3], bb: null };
+  });
+  const cards = NODES.map(n => makeCard(gCd, n, cw, ch, true));
+  const ports = F.map((f, i) => { const p = pt(f); const c = el('circle', { cx: p.x, cy: p.y, r: 3, fill: HUE[NODES[i].kind] }, gTh); c.style.opacity = 0; return c; });
+  const threads = F.map((f, i) => { const p = pt(f); return el('line', { x1: p.x, y1: p.y, x2: pos[i].x + cw / 2, y2: pos[i].y + ch / 2, class: 'thread' }, gTh); });
+  const seg = (f0, f1, cls, sw, stroke) => {
+    const p = el('path', { d: D, fill: 'none', class: cls }, gP); p.style.strokeWidth = sw / S; if (stroke) p.style.stroke = stroke;
+    p.style.strokeDasharray = `0 ${L}`; p.style.strokeDashoffset = -f0 * L;
+    return k => { p.style.strokeDasharray = `${(f1 - f0) * L * k} ${L}`; };
+  };
+  const edges = [0, 1, 2, 3, 4].map(i => {
+    const f0 = F[i], f1 = F[i + 1], dim = seg(f0, f1, 'wire', 1.5), lit = seg(f0, f1, 'wire lit', 1.5, 'url(#wg-loop)');
+    let lt = null;
+    if (EDGE_LABEL[i]) { const fm = (f0 + f1) / 2, p = pt(fm), n = normal(fm); lt = txt(svg, p.x - n.nx * 14, p.y - n.ny * 14 + 4, EDGE_LABEL[i], 'elabel', { 'text-anchor': 'middle' }); lt.style.opacity = 0; }
+    return { len: (f1 - f0) * L, draw(k) { dim(k); if (lt) lt.style.opacity = k; }, light: lit, at(p) { return pt(lerp(f0, f1, clamp(p))); } };
+  });
+  const ent = makeEntrance(entrance, gGh);
+  const run = makeRun(gRun, cards, edges, { ...holdsBelow(pos, cw, ch, 8), okLabel: { x: pos[4].x + 40, y: pos[4].y + ch + 20 } });
+  const tail = el('circle', { r: 4.5, class: 'tok' }, gRun); tail.style.opacity = 0;
+  return function render(t) {
+    const u = t - T.RUN0, { hold, focus } = holdOf(u);
+    gP.style.opacity = 1 - .35 * hold;
+    lines.forEach((l, i) => {
+      const k = captureK(t, i);
+      if (l.ev == null) { l.g.style.opacity = k * (1 - quietFade(t)); return; }
+      if (!l.bb || !l.bb.w) { const b = l.g.getBBox(); l.bb = { x: b.x, y: b.y, w: b.width, h: b.height, rx: 4 }; }
+      const to = pos[l.ev], m = ent.m(t, l.ev);
+      ent.line(l.g, k, m, { x: 0, y: 0 }, { x: to.x + cw / 2 - (l.bb.x + l.bb.w / 2), y: to.y + ch / 2 - (l.bb.y + l.bb.h / 2) });
+    });
+    cards.forEach((c, i) => {
+      const s = T.E0 + i * T.STEP, bb = lines[NODES[i].src].bb;
+      ent.place(i, t, bb && bb.w ? bb : null, pos[i], c, i === focus ? 1 : 1 - .4 * hold);
+      const a = ss(s + .5, s + .9, t); ports[i].style.opacity = a; threads[i].style.opacity = a * .6;
+    });
+    drawEdges(edges, t);
+    const S = run(u);
+    // once the run is done, the token carries on round the loop and the brand gradient closes it
+    const fin = eo(RUN.total, RUN.total + .9, u);
+    if (S.done && fin < 1) { const p = pt(lerp(F[5], 1.05, fin)); tail.setAttribute('cx', p.x); tail.setAttribute('cy', p.y); tail.style.opacity = 1 - ss(.8, 1, fin); }
+    else tail.style.opacity = 0;
+    closed.style.opacity = ss(RUN.total + .3, RUN.total + 1, u);
+  };
+}
+
+// ---------- page ----------
+const LAYOUTS = [
+  { id: 'l1', n: 'L1', title: 'Terminal and canvas', desc: 'The baseline. A terminal on the left types the three commands and the canvas on the right answers each one.', h: 600, build: layoutTerminal },
+  { id: 'l2', n: 'L2', title: 'Trace above, graph below', desc: 'No terminal. The log types in as a strip across the top, its six lines drop into a left to right flow, and the strip becomes a one line caption.', h: 450, build: layoutStrip },
+  { id: 'l3', n: 'L3', title: 'Flow only', desc: 'No log at all. Events flow along one lane as chips, the six that matter grow into cards where they sit, and the lane is the run path.', h: 400, build: layoutLane },
+  { id: 'l4', n: 'L4', title: 'Layered DAG', desc: 'Rows by depth with a real branch: route splits into apply bump and skip, a join merges them before verify. The log on the left shrinks to a column of ticks, each tied to its node.', h: 620, build: layoutDag },
+  { id: 'l5', n: 'L5', title: 'Vertical timeline', desc: 'Portrait. Timestamps and events run down the left, each node settles on the right at the height of the line it came from, and one bypass edge carries the no branch.', w: 720, h: 700, narrow: true, build: layoutTimeline },
+  { id: 'l6', n: 'L6', title: 'Radial loop', desc: 'Nodes sit around the brand loop, the log is a dim ring of text outside it, and the run token goes round the loop through the retry and the approval.', h: 740, build: layoutLoop },
+];
+const ENTRANCES = ['outline', 'morph', 'drift'];
+
+const root = document.getElementById('options');
+const ICON_PAUSE = '<svg viewBox="0 0 12 12"><path d="M3 2h2v8H3zM7 2h2v8H7z" fill="currentColor"/></svg>';
+const ICON_PLAY = '<svg viewBox="0 0 12 12"><path d="M3 2l7 4-7 4z" fill="currentColor"/></svg>';
+const ICON_RESTART = '<svg viewBox="0 0 12 12"><path d="M2.5 6a3.5 3.5 0 1 0 1-2.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M2 2v2.5h2.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+window.__anim = {};
+let builds = 0;
+
+LAYOUTS.forEach(o => {
+  const art = document.createElement('article'); art.className = 'opt'; art.id = 'opt-' + o.id;
+  art.innerHTML = `
+    <div class="opt-head"><h2><b>${o.n}</b>${o.title}</h2><p>${o.desc}</p><small>${T.CYCLE}s cycle</small></div>
+    <div class="stage${o.narrow ? ' narrow' : ''}"><svg viewBox="0 0 ${o.w || 1200} ${o.h}" role="img" aria-label="${o.title}: a session is captured, a graph is extracted, the graph runs"></svg></div>
+    <div class="bar">
+      <div class="phases">
+        <div class="ph"><span>Capture</span><code>loopy import</code><i></i></div>
+        <div class="ph"><span>Extract</span><code>loopy extract</code><i></i></div>
+        <div class="ph"><span>Run</span><code>loopy run</code><i></i></div>
+      </div>
+      <div class="ctrl">
+        <div class="seg"><span>Entrance</span><div role="radiogroup" aria-label="Entrance style">${ENTRANCES.map(e => `<button type="button" role="radio" data-entrance="${e}" aria-checked="${e === 'morph'}">${e}</button>`).join('')}</div></div>
+        <button class="btn" type="button" data-restart>${ICON_RESTART}Restart</button>
+        <button class="btn" type="button" data-pause aria-pressed="false">${ICON_PAUSE}Pause</button>
+      </div>
+    </div>`;
+  root.append(art);
+  const svg = art.querySelector('svg'), stage = art.querySelector('.stage');
+  const phs = [...art.querySelectorAll('.ph')];
+  const bounds = [0, ...T.phases];
+  let entrance = 'morph', render;
+  const build = () => { svg.replaceChildren(); render = o.build(svg, entrance, `${o.id}-${++builds}`); };
+  build();
+  function frame(t) {
+    render(t);
+    svg.style.opacity = Math.min(1, t / .25, (T.CYCLE - t) / .4, 1);
+    const cur = t < T.phases[0] ? 0 : t < T.phases[1] ? 1 : 2;
+    phs.forEach((p, i) => { p.classList.toggle('on', i === cur); const f = i < cur ? 1 : i > cur ? 0 : clamp((t - bounds[i]) / (bounds[i + 1] - bounds[i])); p.lastElementChild.style.transform = `scaleX(${f})`; });
+  }
+  let t = 0, paused = false, last = 0;
+  const FINAL = T.CYCLE - .5;
+  if (reduce) { frame(FINAL); }
+  else {
+    last = performance.now();
+    const tick = now => {
+      if (!paused) { t += Math.min(.1, (now - last) / 1000); if (t >= T.CYCLE) t -= T.CYCLE; frame(t); }
+      last = now; requestAnimationFrame(tick);
+    };
+    frame(0); requestAnimationFrame(tick);
+  }
+  const bPause = art.querySelector('[data-pause]');
+  const setPaused = v => { paused = v; stage.classList.toggle('paused', v); bPause.setAttribute('aria-pressed', String(v)); bPause.innerHTML = (v ? ICON_PLAY : ICON_PAUSE) + (v ? 'Play' : 'Pause'); };
+  bPause.addEventListener('click', () => setPaused(!paused));
+  art.querySelector('[data-restart]').addEventListener('click', () => { t = 0; frame(reduce ? FINAL : 0); });
+  const segs = [...art.querySelectorAll('[data-entrance]')];
+  const setEntrance = v => { if (!ENTRANCES.includes(v) || v === entrance) return; entrance = v; segs.forEach(b => b.setAttribute('aria-checked', String(b.dataset.entrance === v))); build(); frame(reduce ? FINAL : t); };
+  segs.forEach(b => b.addEventListener('click', () => setEntrance(b.dataset.entrance)));
+  window.__anim[o.id] = { seek(v) { t = v; frame(v); }, pause(v = true) { setPaused(v); }, entrance: setEntrance, dur: T.CYCLE };
+});
+})();
+</script>
+</body>
+</html>

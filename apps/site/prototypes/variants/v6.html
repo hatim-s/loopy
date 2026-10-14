@@ -1,0 +1,795 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loopy. Do the work once. Extract the graph. Run it with control.</title>
+<meta name="description" content="Loopy is a local-first graph harness for coding agents. Do a task once, extract an execution graph from the trace, run it on your machine.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0D1014;--bg-raised:#11151A;--surface:#161B21;--surface-hover:#1C2229;--surface-active:#232A33;
+  --line:#222931;--rule:#323B46;--text:#E6EAF0;--muted:#98A2AE;--subtle:#6A7480;
+  --accent:#8FA8FF;--accent-strong:#B7C6FF;--ink:#0B1330;--aqua:#6EE0D2;
+  --ok:#5CD39B;--run:#8FA8FF;--wait:#F0C46C;--fail:#F2877E;--pend:#6A7480;
+  --ease:cubic-bezier(.2,.8,.2,1);
+  --snap:cubic-bezier(.3,1.5,.45,1);
+  --focus:0 0 0 2px #0D1014,0 0 0 4px #8FA8FF;
+  --sans:"Geist",ui-sans-serif,system-ui,sans-serif;
+  --mono:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --nav:56px;
+  --gut:24px;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:400 16px/1.55 var(--sans);-webkit-font-smoothing:antialiased;padding:0 var(--gut);overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+a:focus-visible,button:focus-visible,[tabindex]:focus-visible{outline:none;box-shadow:var(--focus);border-radius:4px}
+code,.mono{font-family:var(--mono);font-weight:400}
+h1,h2,h3,p{margin:0}
+.skip{position:absolute;left:-9999px}.skip:focus{left:16px;top:16px;z-index:100;background:var(--surface);padding:8px 12px}
+@media (max-width:720px){:root{--gut:10px}}
+
+/* the frame: every section is a grid whose 1px gaps are the visible rules */
+.frame{border-left:1px solid var(--rule);border-right:1px solid var(--rule)}
+.g{display:grid;gap:1px;background:var(--rule);border-bottom:1px solid var(--rule)}
+.c{background:var(--bg);min-width:0;position:relative}
+.pad{padding:32px}
+@media (max-width:720px){.pad{padding:22px 18px}}
+
+/* nav */
+.nav{position:sticky;top:0;z-index:60;height:var(--nav);grid-template-columns:auto 1fr auto auto auto auto;border-top:0}
+.nav .c{display:flex;align-items:center;padding:0 22px;font-size:14px;color:var(--muted);transition:background 160ms var(--ease),color 160ms var(--ease)}
+.nav a.c:hover{background:var(--surface-hover);color:var(--text)}
+.nav a.c:focus-visible{box-shadow:inset 0 0 0 2px var(--accent);border-radius:0}
+.brand{gap:10px;color:var(--text)!important;font-weight:600;font-size:17px!important;letter-spacing:-.02em}
+.nav .install-cell{background:var(--accent);color:var(--ink);font-weight:500}
+.nav a.install-cell:hover{background:var(--accent-strong);color:var(--ink)}
+.nav a.install-cell:focus-visible{box-shadow:inset 0 0 0 2px var(--ink)}
+@media (max-width:720px){.nav{grid-template-columns:auto 1fr auto auto}.nav .hide-sm{display:none}.nav .c{padding:0 14px}}
+
+/* hero */
+.hero{position:relative}
+.wm-cell{padding:0 20px 0;overflow:hidden}
+.wm{margin-top:-.06em;padding-bottom:.035em}
+.wm{display:flex;align-items:baseline;white-space:nowrap;font-weight:600;letter-spacing:-.045em;line-height:.98;font-size:calc((100vw - 2 * var(--gut) - 44px) / 2.42);color:var(--text);user-select:none}
+.wm .oo{display:inline-block;width:1.13em;height:.545em;margin:0 .01em 0 .035em}
+.wm-note{position:absolute;right:24px;top:22px;max-width:19em;text-align:right;font-size:14px;line-height:1.45;color:var(--muted)}
+.hero-svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:5}
+.hl{grid-template-columns:1fr 1fr}
+.hl-a{background:var(--accent);color:var(--ink);padding:34px 32px 36px}
+.hl-a h1{font-size:clamp(40px,4.4vw,64px);line-height:1;letter-spacing:-.035em;font-weight:600}
+.hl-a h1 span{display:block}
+.hl-b{display:flex;flex-direction:column;justify-content:space-between;gap:28px;padding:34px 32px 30px}
+.lede{font-size:18px;line-height:1.5;color:var(--muted);max-width:30em}
+.lede b{color:var(--text);font-weight:500}
+.cmdrow{display:flex;flex-wrap:wrap;align-items:center;gap:14px 18px}
+.cmd{display:inline-flex;align-items:center;height:46px;border:1px solid var(--rule);background:var(--bg-raised);font:400 15px var(--mono)}
+.cmd span{padding:0 16px}
+.cmd .p{color:var(--subtle);padding:0}
+.cmd button{height:100%;padding:0 16px;border:0;border-left:1px solid var(--rule);background:transparent;color:var(--muted);font:500 13px var(--sans);cursor:pointer;transition:background 160ms var(--ease),color 160ms var(--ease)}
+.cmd button:hover{background:var(--surface-hover);color:var(--text)}
+.cmd button:focus-visible{border-radius:0}
+.cmd button[data-copied]{color:var(--ok)}
+.note{font-size:14px;color:var(--subtle)}
+.note code{color:var(--muted)}
+@media (max-width:900px){.hl{grid-template-columns:1fr}.wm-note{display:none}}
+@media (max-width:720px){.wm-cell{padding:6px 12px 0}.wm{font-size:calc((100vw - 2 * var(--gut) - 26px) / 2.42)}.hl-a,.hl-b{padding:26px 18px}.lede{font-size:16px}}
+
+/* stage: pinned graph */
+.pin{height:calc(100vh + 2600px);position:relative}
+.stage{position:sticky;top:var(--nav);height:calc(100vh - var(--nav));min-height:560px}
+.graph{height:100%;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(3,1fr);border-bottom:1px solid var(--rule)}
+.gsvg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:5}
+.gtitle{grid-column:1/3;grid-row:1;display:flex;flex-direction:column;justify-content:space-between;padding:28px 32px}
+.gtitle h2{font-size:clamp(28px,2.9vw,44px);line-height:1.02;letter-spacing:-.035em;font-weight:600;max-width:12em}
+.gtitle p{color:var(--muted);font-size:15px;max-width:34em;margin-top:auto;margin-bottom:18px}
+.legend{display:flex;flex-wrap:wrap;gap:8px 20px;padding-top:16px;border-top:1px solid var(--line)}
+.legend .st,.legend .st[data-s]{color:var(--subtle)}
+.glog{grid-column:1/3;grid-row:2/4;display:flex;flex-direction:column;background:var(--bg-raised)}
+.glog-top{display:flex;align-items:center;gap:12px;padding:14px 32px;border-bottom:1px solid var(--line);font-size:14px;color:var(--muted)}
+.glog-top .tag{margin-left:auto}
+.log{flex:1;display:flex;flex-direction:column;justify-content:flex-start;overflow:hidden;padding:18px 32px 22px;font:400 13px/1.95 var(--mono);color:var(--muted)}
+.log div{display:flex;gap:16px;white-space:nowrap;animation:logIn 220ms var(--ease)}
+.log .id{width:13ch;flex:none;color:var(--subtle)}
+.log .m{overflow:hidden;text-overflow:ellipsis}
+.log .ok{color:var(--ok)}.log .wt{color:var(--wait)}.log .rn{color:var(--accent)}.log .cmdl{color:var(--text)}
+@keyframes logIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+.node{padding:26px 26px 22px;transition:background 220ms var(--ease),color 220ms var(--ease)}
+.n0{grid-column:3;grid-row:1}.n1{grid-column:4;grid-row:1}.n2{grid-column:4;grid-row:2}.n3{grid-column:3;grid-row:2}.n4{grid-column:3;grid-row:3}.n5{grid-column:4;grid-row:3}
+.card{height:100%;display:flex;flex-direction:column;gap:8px;opacity:0;transform:translate(-22px,-22px) scale(.96);transition:opacity 160ms var(--ease),transform 260ms var(--snap)}
+.n2 .card,.n3 .card{transform:translate(22px,-22px) scale(.96)}
+.node.in .card{opacity:1;transform:none}
+.k{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.k svg{width:16px;height:16px;flex:none}
+.t{font-size:clamp(18px,1.55vw,23px);line-height:1.15;letter-spacing:-.02em;font-weight:600;margin-top:4px}
+.d{font:400 13px/1.4 var(--mono);color:var(--muted)}
+.d.plain{font-family:var(--sans);font-size:14px}
+.alt{font-size:13px;color:var(--subtle)}
+.foot{margin-top:auto;display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px}
+.ev{color:var(--subtle)}
+.node.run{background:var(--accent);color:var(--ink)}
+.node.run .k,.node.run .d,.node.run .ev,.node.run .alt{color:rgba(11,19,48,.72)}
+
+/* status: color plus shape */
+.st{display:inline-flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;white-space:nowrap}
+.st i{width:10px;height:10px;border-radius:50%;flex:none;border:1.5px solid var(--pend);position:relative}
+.st[data-s=running] i{border-color:var(--run)}
+.st[data-s=running] i::after{content:"";position:absolute;inset:-1.5px;border-radius:50%;border:1.5px solid var(--run);animation:ping 1.3s var(--ease) infinite}
+.st[data-s=waiting] i{border-color:var(--wait);border-width:2px}
+.st[data-s=waiting]{color:var(--wait)}
+.st[data-s=succeeded] i{background:var(--ok);border-color:var(--ok)}
+.st[data-s=succeeded]{color:var(--text)}
+.st[data-s=failed] i{border:0;border-radius:0;background:linear-gradient(45deg,transparent 42%,var(--fail) 42% 58%,transparent 58%),linear-gradient(-45deg,transparent 42%,var(--fail) 42% 58%,transparent 58%)}
+.node.run .st{color:var(--ink)}
+.node.run .st[data-s=running] i,.node.run .st[data-s=running] i::after{border-color:var(--ink)}
+@keyframes ping{0%{transform:scale(1);opacity:.9}100%{transform:scale(2.3);opacity:0}}
+
+@media (max-width:720px){
+  .pin{height:calc(100vh + 2300px)}
+  .graph{grid-template-columns:1fr 1fr;grid-template-rows:150px repeat(3,1fr)}
+  .gtitle{display:none}
+  .glog{grid-column:1/3;grid-row:1}
+  .glog-top{padding:10px 16px;font-size:13px}
+  .glog-top .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .log{padding:6px 16px 10px;font-size:11px;line-height:1.8}
+  .log .id{width:12ch}
+  .n0{grid-column:1;grid-row:2}.n1{grid-column:2;grid-row:2}.n2{grid-column:2;grid-row:3}.n3{grid-column:1;grid-row:3}.n4{grid-column:1;grid-row:4}.n5{grid-column:2;grid-row:4}
+  .node{padding:18px 14px 14px}
+  .card{gap:5px}
+  .t{font-size:16px}
+  .d{font-size:11px}.d.plain{font-size:12px}
+  .ev,.alt{display:none}
+  .k{font-size:12px}
+}
+
+/* marquee */
+.band{overflow:hidden;height:64px;display:flex;align-items:center;background:var(--bg-raised)}
+.band-track{display:flex;flex:none;animation:slide 70s linear infinite;will-change:transform}
+.band:hover .band-track,.band:focus-within .band-track{animation-play-state:paused}
+.band-track > span{display:inline-flex;align-items:center;gap:22px;padding-right:22px;font:400 15px var(--mono);color:var(--muted);white-space:nowrap}
+.band-track > span::after{content:"";width:7px;height:7px;background:var(--rule)}
+.band-track .hi{color:var(--text)}
+.band-track .aq{color:var(--aqua)}
+.band-track .p{color:var(--subtle)}
+@keyframes slide{to{transform:translateX(-50%)}}
+
+/* section heads */
+.sh{grid-template-columns:1fr 1fr}
+.sh h2{font-size:clamp(34px,3.9vw,56px);line-height:1.02;letter-spacing:-.035em;font-weight:600;max-width:13em}
+.sh p{color:var(--muted);font-size:17px;max-width:32em;align-self:end}
+.sh .c{display:flex;align-items:flex-end}
+@media (max-width:900px){.sh{grid-template-columns:1fr}}
+
+/* flow */
+.flow{grid-template-columns:repeat(3,1fr)}
+.step{display:flex;flex-direction:column;gap:16px;min-height:340px}
+.step .num{font-size:88px;line-height:.8;letter-spacing:-.05em;font-weight:600;color:var(--surface-active);transition:color 220ms var(--ease)}
+.step:hover .num{color:var(--accent)}
+.step h3{font-size:26px;letter-spacing:-.025em;font-weight:600;margin-top:28px}
+.step p{color:var(--muted);max-width:28em}
+.step p+code{margin-top:auto}
+.step code{display:block;max-width:100%;font-size:13px;color:var(--text);background:var(--bg-raised);border:1px solid var(--line);padding:10px 12px;overflow-x:auto;white-space:nowrap}
+.step code+code{margin-top:-9px}
+@media (max-width:900px){.flow{grid-template-columns:1fr}.step{min-height:0}.step .num{font-size:64px}}
+@media (max-width:480px){.step code{font-size:11.5px;padding:10px}}
+
+/* runtime controls */
+.ctl{grid-template-columns:repeat(4,1fr)}
+.ctl .c{display:flex;flex-direction:column;gap:10px;min-height:220px;transition:background 160ms var(--ease)}
+.ctl .c:hover{background:var(--bg-raised)}
+.ctl svg{width:96px;height:40px;margin-bottom:auto;overflow:visible}
+.ctl h3{font-size:18px;letter-spacing:-.015em;font-weight:600;margin-top:22px}
+.ctl p{color:var(--muted);font-size:15px}
+.ctl code{color:var(--text);font-size:14px}
+.r{fill:none;stroke:var(--rule);stroke-width:2}
+.a{fill:none;stroke:var(--accent);stroke-width:2}
+.sq{fill:var(--bg);stroke:var(--accent);stroke-width:2}
+@media (max-width:1100px){.ctl{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:520px){.ctl{grid-template-columns:1fr}.ctl .c{min-height:0}}
+
+/* providers */
+.prov{grid-template-columns:repeat(4,1fr)}
+.prov .c{display:flex;flex-direction:column;justify-content:space-between;gap:40px;min-height:200px}
+.prov b{font-size:clamp(28px,3.2vw,44px);letter-spacing:-.035em;font-weight:600;line-height:1}
+.prov span{color:var(--subtle);font-size:14px}
+@media (max-width:900px){.prov{grid-template-columns:1fr 1fr}.prov .c{min-height:140px}}
+
+/* local */
+.local{grid-template-columns:1fr 1fr}
+.facts{display:grid;grid-template-columns:9em 1fr;gap:1px;background:var(--rule)}
+.facts > *{background:var(--bg);padding:22px 32px}
+.facts dt{color:var(--text);font-weight:500}
+.facts dd{margin:0;color:var(--muted)}
+.facts code{color:var(--text);font-size:14px;white-space:nowrap}
+.local-a{display:flex;flex-direction:column;justify-content:space-between;gap:40px}
+.local-a h2{font-size:clamp(34px,4.4vw,64px);line-height:1;letter-spacing:-.035em;font-weight:600}
+.local-a p{color:var(--muted);max-width:30em}
+@media (max-width:900px){.local{grid-template-columns:1fr}}
+@media (max-width:520px){.facts{grid-template-columns:1fr;gap:0}.facts dt{border-top:1px solid var(--rule)}.facts dt:first-child{border-top:0}.facts code{font-size:12.5px}.facts dt{padding-bottom:4px}.facts dd{padding-top:0}.facts > *{padding:16px 18px}.facts dd{padding-bottom:18px}}
+
+/* worked example */
+.ex{grid-template-columns:1fr 1fr}
+.trace{background:var(--bg-raised);padding:26px 0;font:400 13.5px/1 var(--mono)}
+.trace-h{padding:0 32px 18px;font:400 14px var(--sans);color:var(--muted);display:flex;justify-content:space-between;gap:12px}
+.trace ol{list-style:none;margin:0;padding:0;counter-reset:l}
+.trace li{counter-increment:l;display:flex;gap:18px;padding:9px 32px;color:var(--muted);transition:background 160ms var(--ease),color 160ms var(--ease);white-space:nowrap;overflow:hidden}
+.trace li::before{content:counter(l);width:2ch;text-align:right;color:var(--subtle);flex:none}
+.trace li .kd{width:5ch;flex:none;color:var(--subtle)}
+.trace li .v{overflow:hidden;text-overflow:ellipsis}
+.trace li.on{background:var(--accent);color:var(--ink)}
+.trace li.on::before,.trace li.on .kd{color:rgba(11,19,48,.6)}
+.map{display:flex;flex-direction:column}
+.map button{all:unset;box-sizing:border-box;display:grid;grid-template-columns:22px 1fr auto;align-items:center;gap:12px;padding:0 28px;flex:1;min-height:58px;border-bottom:1px solid var(--rule);cursor:default;transition:background 160ms var(--ease)}
+.map button:last-child{border-bottom:0}
+.map button svg{width:16px;height:16px;color:var(--muted)}
+.map button b{font-weight:500}
+.map button small{font-size:13px;color:var(--subtle)}
+.map button:hover,.map button:focus-visible,.map button.on{background:var(--surface-hover)}
+.map button:focus-visible{box-shadow:inset 0 0 0 2px var(--accent)}
+@media (max-width:900px){.ex{grid-template-columns:1fr}.trace li{padding:9px 18px}.trace-h{padding:0 18px 16px}.map button{padding:0 18px}}
+
+.cron{grid-template-columns:1fr 2fr}
+.cron-a{display:flex;flex-direction:column;gap:14px}
+.cron-a .big{font:500 clamp(40px,5vw,72px)/1 var(--mono);letter-spacing:-.04em;color:var(--aqua)}
+.cron-a p{color:var(--muted);font-size:15px}
+.cron-a code{font-size:13px;color:var(--text)}
+.steps{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--rule)}
+.steps div{background:var(--bg);padding:24px 20px;display:flex;flex-direction:column;gap:10px;font-size:15px}
+.steps div span{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--subtle)}
+.steps svg{width:16px;height:16px}
+.steps code{font-size:13px}
+@media (max-width:1100px){.cron{grid-template-columns:1fr}}
+@media (max-width:720px){.steps{grid-template-columns:1fr}.steps div{padding:16px 18px}}
+
+/* cta */
+.cta{grid-template-columns:1.4fr 1fr}
+.cta-a{background:var(--accent);color:var(--ink);padding:48px 32px 40px;min-height:360px;display:flex;flex-direction:column;justify-content:space-between;gap:48px}
+.cta-a h2{font-size:clamp(48px,7.4vw,112px);line-height:.92;letter-spacing:-.045em;font-weight:600}
+.cta-a p{font-size:17px;max-width:30em;color:rgba(11,19,48,.78)}
+.cta-b{display:flex;flex-direction:column;justify-content:center;gap:18px}
+.cta-b .cmd{height:56px;font-size:17px;width:fit-content}
+@media (max-width:900px){.cta{grid-template-columns:1fr}.cta-a{min-height:0;padding:36px 18px}}
+
+footer.g{grid-template-columns:auto 1fr auto auto auto}
+footer .c{display:flex;align-items:center;padding:22px 24px;font-size:14px;color:var(--muted)}
+footer a.c:hover{background:var(--surface-hover);color:var(--text)}
+footer a.c:focus-visible{box-shadow:inset 0 0 0 2px var(--accent);border-radius:0}
+@media (max-width:720px){footer.g{grid-template-columns:1fr 1fr 1fr}footer .fb{grid-column:1/-1}footer .sp{display:none}footer .c{padding:16px 18px}}
+.bottom-gap{height:40px}
+
+@media (prefers-reduced-motion:reduce){
+  .pin{height:auto}
+  .stage{position:relative;top:0;height:880px}
+  .band-track{animation:none}
+  .card{transition:none}
+  .log div{animation:none}
+  .st i::after{animation:none!important;display:none}
+}
+@media (prefers-reduced-motion:reduce) and (max-width:720px){.stage{height:860px}}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8FA8FF"/><stop offset="1" stop-color="#6EE0D2"/></linearGradient>
+    <symbol id="g-agent" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="2" fill="currentColor"/></symbol>
+    <symbol id="g-shell" viewBox="0 0 16 16"><path d="M3 4.5 6.5 8 3 11.5M8.5 12h5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="g-cond" viewBox="0 0 16 16"><path d="M8 2.5 13.5 8 8 13.5 2.5 8Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+    <symbol id="g-verify" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="m5.6 8.2 1.7 1.7 3.2-3.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="g-approve" viewBox="0 0 16 16"><path d="M4 13V3M12 13V3M4 7h8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+    <symbol id="g-join" viewBox="0 0 16 16"><path d="M3 3c0 4 5 4 5 7v3M13 3c0 4-5 4-5 7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+    <symbol id="g-transform" viewBox="0 0 16 16"><path d="M3 5.5h9l-2-2M13 10.5H4l2 2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="g-mark" viewBox="0 0 24 24"><path d="M6.5 7.5c-2.8 0-4.5 2-4.5 4.5s1.7 4.5 4.5 4.5c4 0 7-9 11-9 2.8 0 4.5 2 4.5 4.5s-1.7 4.5-4.5 4.5c-4 0-7-9-11-9Z" fill="none" stroke="url(#brand)" stroke-width="2.2" stroke-linejoin="round"/></symbol>
+  </defs>
+</svg>
+
+<div class="frame">
+<header class="nav g" id="top">
+  <a class="c brand" href="#top" aria-label="Loopy home"><svg width="26" height="26" aria-hidden="true"><use href="#g-mark"/></svg>loopy</a>
+  <div class="c" aria-hidden="true"></div>
+  <a class="c" href="#docs">Docs</a>
+  <a class="c hide-sm" href="#example">Examples</a>
+  <a class="c hide-sm" href="#github">GitHub</a>
+  <a class="c install-cell" href="#install">Install</a>
+</header>
+
+<main id="main">
+<section class="hero" id="hero">
+  <div class="g"><div class="c wm-cell">
+    <div class="wm" id="wm" role="img" aria-label="loopy"><span aria-hidden="true">l</span><span class="oo" id="oo" aria-hidden="true"></span><span aria-hidden="true">py</span></div>
+    <p class="wm-note">A local-first graph harness for coding agents. Open source, Apache-2.0.</p>
+  </div></div>
+  <div class="g hl">
+    <div class="c hl-a"><h1><span>Do the work once.</span><span>Extract the graph.</span><span>Run it with control.</span></h1></div>
+    <div class="c hl-b" id="install">
+      <p class="lede">Finish a task once with your coding agent. <b>Loopy reads the session, proposes a graph of what happened, and runs that graph again on your machine</b> whenever you need it.</p>
+      <div class="cmdrow">
+        <div class="cmd"><span><span class="p">$ </span>bun add -g loopy</span><button type="button" data-copy="bun add -g loopy">Copy</button></div>
+        <span class="note">Then <code>loopy studio</code> opens the editor.</span>
+      </div>
+    </div>
+  </div>
+  <svg class="hero-svg" id="hsvg" aria-hidden="true">
+    <path id="hGhost" fill="none" stroke="#1C2229" stroke-linejoin="round"/>
+    <path id="hDrop" fill="none" stroke="#8FA8FF" stroke-width="2" stroke-linejoin="miter"/>
+    <path id="hLoop" fill="none" stroke="#8FA8FF" stroke-linejoin="round"/>
+    <g id="hToks"></g>
+    <path id="hMarkTmp" d="M6.5 7.5c-2.8 0-4.5 2-4.5 4.5s1.7 4.5 4.5 4.5c4 0 7-9 11-9 2.8 0 4.5 2 4.5 4.5s-1.7 4.5-4.5 4.5c-4 0-7-9-11-9Z" fill="none" stroke="none"/>
+  </svg>
+</section>
+
+<section class="pin" id="pin" aria-label="A loopy that patches dependency CVEs, running">
+  <div class="stage" id="stage">
+    <div class="g graph" id="graph">
+      <div class="c gtitle">
+        <h2>Patch critical dependency CVEs</h2>
+        <p>Extracted from one Codex session. Six nodes, one approval, and it runs on your laptop. Keep scrolling to run it.</p>
+        <div class="legend" aria-label="Status key"><span class="st" data-s="pending"><i></i>Pending</span><span class="st" data-s="running"><i></i>Running</span><span class="st" data-s="waiting"><i></i>Waiting</span><span class="st" data-s="succeeded"><i></i>Succeeded</span><span class="st" data-s="failed"><i></i>Failed</span></div>
+      </div>
+      <div class="c glog">
+        <div class="glog-top"><span class="nm">loopy run</span><span class="tag st" id="runTag" data-s="pending"><i></i><b id="runTxt">Pending</b></span></div>
+        <div class="log" id="log" aria-live="off"></div>
+      </div>
+    </div>
+    <svg class="gsvg" id="gsvg" aria-hidden="true">
+      <path id="gRail" fill="none" stroke="#323B46" stroke-width="1"/>
+      <path id="gLit" fill="none" stroke="#8FA8FF" stroke-width="2" stroke-linejoin="miter"/>
+      <g id="gPads"></g>
+      <g id="gToks"></g>
+    </svg>
+  </div>
+</section>
+
+<div class="g"><div class="c band" aria-label="Loopy commands and trace events">
+  <div class="band-track" id="band"></div>
+</div></div>
+
+<section id="docs" aria-labelledby="flow-h">
+  <div class="g sh">
+    <div class="c pad"><h2 id="flow-h">From one session to a loopy</h2></div>
+    <div class="c pad"><p>A loopy is a saved graph. You make one by doing the task for real, once, and letting Loopy read what happened.</p></div>
+  </div>
+  <div class="g flow">
+    <div class="c pad step"><span class="num" aria-hidden="true">1</span><h3>Capture</h3><p>Work through the task in Codex, Claude Code, OpenCode, or Pi the way you normally would. Loopy records the session as a trace, or imports one you already have.</p><code>loopy import session.json --provider codex</code></div>
+    <div class="c pad step"><span class="num" aria-hidden="true">2</span><h3>Extract</h3><p>The extractor reads the trace and proposes a graph. It makes no model calls. Each node links to the trace events behind it, and nothing runs until you approve.</p><code>loopy extract --import &lt;id&gt;</code><code>loopy approve &lt;id&gt;</code></div>
+    <div class="c pad step"><span class="num" aria-hidden="true">3</span><h3>Run</h3><p>The graph runs on your machine through the same CLIs you captured with. State goes into local SQLite, and cron can run it every morning.</p><code>loopy run</code></div>
+  </div>
+</section>
+
+<section aria-labelledby="ctl-h">
+  <div class="g sh">
+    <div class="c pad"><h2 id="ctl-h">Agents do the work. The runtime decides what runs next.</h2></div>
+    <div class="c pad"><p>Agents work inside nodes. Everything between the nodes belongs to the runtime, so a flaky step retries instead of improvising.</p></div>
+  </div>
+  <div class="g ctl">
+    <div class="c pad"><svg viewBox="0 0 96 40"><path class="r" d="M0 20h30"/><path class="a" d="M30 20V6h66"/><path class="r" d="M30 20v14h66"/><rect class="sq" x="25" y="15" width="10" height="10" transform="rotate(45 30 20)"/></svg><h3>Branching</h3><p>A condition node reads real output and picks the edge.</p></div>
+    <div class="c pad"><svg viewBox="0 0 96 40"><path class="a" d="M0 6h56v14M0 34h56V20"/><path class="r" d="M56 20h40"/><rect class="sq" x="51" y="15" width="10" height="10"/></svg><h3>Parallel joins</h3><p>Fan out to several nodes. The join waits for all of them.</p></div>
+    <div class="c pad"><svg viewBox="0 0 96 40"><path class="r" d="M0 20h96"/><path class="a" d="M30 20V6h28v14"/><path d="M25 15l10 10M35 15 25 25" stroke="#F2877E" stroke-width="2"/><circle cx="58" cy="20" r="5" fill="#5CD39B"/></svg><h3>Retries</h3><p>A failed node retries up to your limit, then stops with the error on record.</p></div>
+    <div class="c pad"><svg viewBox="0 0 96 40"><path class="a" d="M0 20h38"/><path class="r" d="M58 20h38"/><circle cx="48" cy="20" r="8" fill="none" stroke="#F0C46C" stroke-width="2"/></svg><h3>Approvals</h3><p>The run parks at an approval node until a person says yes.</p></div>
+    <div class="c pad"><svg viewBox="0 0 96 40"><path class="a" d="M0 20h36"/><path class="r" d="M60 20h36"/><rect x="41" y="10" width="4" height="20" fill="#8FA8FF"/><rect x="51" y="10" width="4" height="20" fill="#8FA8FF"/></svg><h3>Pause, resume, cancel</h3><p>Stop between nodes. Pick it up tomorrow, or end it cleanly.</p></div>
+    <div class="c pad"><svg viewBox="0 0 96 40"><path class="r" d="M0 30h96"/><path class="a" d="M74 30V8H20v22"/><path class="a" d="m14 24 6 6 6-6"/></svg><h3>Replay</h3><p>Run a finished graph again from its recorded inputs and compare.</p></div>
+    <div class="c pad"><svg viewBox="0 0 96 40"><path class="r" d="M0 30h96"/><path class="a" d="M36 30V10h60"/><rect class="sq" x="31" y="25" width="10" height="10"/></svg><h3>Checkpoint forks</h3><p>Start a new run from any checkpoint without redoing the early nodes.</p></div>
+    <div class="c pad"><svg viewBox="0 0 96 40"><path class="r" d="M0 20h96M8 14v12M24 14v12M40 14v12M72 14v12M88 14v12"/><path d="M56 8v24" stroke="#8FA8FF" stroke-width="3"/></svg><h3>Schedules</h3><p><code>0 9 * * *</code> runs it every morning at nine.</p></div>
+  </div>
+</section>
+
+<section aria-labelledby="prov-h">
+  <div class="g sh">
+    <div class="c pad"><h2 id="prov-h">Keep the agent you already use</h2></div>
+    <div class="c pad"><p>Loopy calls each one through its own CLI, on your machine. Capture with one provider and run agent nodes with the same one.</p></div>
+  </div>
+  <div class="g prov">
+    <div class="c pad"><b>Codex</b><span>Agent call nodes</span></div>
+    <div class="c pad"><b>Claude Code</b><span>Agent call nodes</span></div>
+    <div class="c pad"><b>OpenCode</b><span>Agent call nodes</span></div>
+    <div class="c pad"><b>Pi</b><span>Agent call nodes</span></div>
+  </div>
+</section>
+
+<section aria-labelledby="local-h">
+  <div class="g local">
+    <div class="c pad local-a">
+      <h2 id="local-h">Your laptop is the server</h2>
+      <p>Loopy has no hosted compute. Source, credentials, subprocesses and traces stay on the machine that ran them.</p>
+    </div>
+    <dl class="c facts" style="margin:0">
+      <dt>Compute</dt><dd>Every node is a local subprocess. Nothing is uploaded to run.</dd>
+      <dt>State</dt><dd>Runs, checkpoints and approvals live in local SQLite.</dd>
+      <dt>Traces</dt><dd>Export any trace as JSONL and read it with whatever you like.</dd>
+      <dt>Schedules</dt><dd><code>loopy schedule create --cron '0 9 * * *'</code></dd>
+      <dt>License</dt><dd>Apache-2.0. Read the runtime before you trust it.</dd>
+    </dl>
+  </div>
+</section>
+
+<section id="example" aria-labelledby="ex-h">
+  <div class="g sh">
+    <div class="c pad"><h2 id="ex-h">Every node shows where it came from</h2></div>
+    <div class="c pad"><p>This is the Codex session behind the CVE loopy above. Point at a node to see the trace lines that justify it. Same trace in, same graph out.</p></div>
+  </div>
+  <div class="g ex">
+    <div class="c trace">
+      <div class="trace-h"><span>session.json</span><span>codex, 10 events</span></div>
+      <ol id="trace">
+        <li><span class="kd">exec</span><span class="v">bun audit --json</span></li>
+        <li><span class="kd">exec</span><span class="v">npm view lodash versions</span></li>
+        <li><span class="kd">note</span><span class="v">4.17.21 fixes CVE-2021-23337</span></li>
+        <li><span class="kd">edit</span><span class="v">package.json lodash ^4.17.21</span></li>
+        <li><span class="kd">exec</span><span class="v">bun install</span></li>
+        <li><span class="kd">exec</span><span class="v">bun run check</span></li>
+        <li><span class="kd">out</span><span class="v">412 passed</span></li>
+        <li><span class="kd">user</span><span class="v">"diff looks right, push it"</span></li>
+        <li><span class="kd">exec</span><span class="v">git push</span></li>
+        <li><span class="kd">exec</span><span class="v">gh pr create --fill</span></li>
+      </ol>
+    </div>
+    <div class="c map" id="map">
+      <button type="button" data-l="1"><svg><use href="#g-shell"/></svg><b>Audit dependencies</b><small>line 1</small></button>
+      <button type="button" data-l="2,3"><svg><use href="#g-cond"/></svg><b>Is there a patched release?</b><small>lines 2, 3</small></button>
+      <button type="button" data-l="4,5"><svg><use href="#g-agent"/></svg><b>Apply the smallest bump</b><small>lines 4, 5</small></button>
+      <button type="button" data-l="6,7"><svg><use href="#g-verify"/></svg><b>Run the checks</b><small>lines 6, 7</small></button>
+      <button type="button" data-l="8"><svg><use href="#g-approve"/></svg><b>Approve before push</b><small>line 8</small></button>
+      <button type="button" data-l="9,10"><svg><use href="#g-shell"/></svg><b>Open the pull request</b><small>lines 9, 10</small></button>
+    </div>
+  </div>
+  <div class="g cron">
+    <div class="c pad cron-a">
+      <span class="big">0 9 * * *</span>
+      <p>Keep open pull requests rebased. Every day at nine, before you open your laptop.</p>
+      <code>loopy schedule create --cron '0 9 * * *'</code>
+    </div>
+    <div class="steps">
+      <div><span><svg><use href="#g-shell"/></svg>Shell module</span>List open pull requests</div>
+      <div><span><svg><use href="#g-agent"/></svg>Agent call</span>Rebase each one onto main</div>
+      <div><span><svg><use href="#g-verify"/></svg>Verification</span>Run a focused check</div>
+      <div><span><svg><use href="#g-shell"/></svg>Shell module</span><code>git push --force-with-lease</code></div>
+      <div><span><svg><use href="#g-cond"/></svg>Condition</span>Conflicts get skipped and reported</div>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="cta-h">
+  <div class="g cta">
+    <div class="c cta-a">
+      <h2 id="cta-h">Do the work once.</h2>
+      <p>Install the CLI, import a session you already ran, and read the graph Loopy proposes. It takes about as long as this page did.</p>
+    </div>
+    <div class="c pad cta-b">
+      <div class="cmd"><span><span class="p">$ </span>bun add -g loopy</span><button type="button" data-copy="bun add -g loopy">Copy</button></div>
+      <div class="cmd"><span><span class="p">$ </span>loopy studio</span><button type="button" data-copy="loopy studio">Copy</button></div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer class="g">
+  <a class="c fb brand" href="#top"><svg width="22" height="22" aria-hidden="true"><use href="#g-mark"/></svg>loopy</a>
+  <div class="c sp">Apache-2.0</div>
+  <a class="c" id="github" href="#github">GitHub</a>
+  <a class="c" href="#docs">Docs</a>
+  <a class="c" href="#example">Examples</a>
+</footer>
+</div>
+<div class="bottom-gap"></div>
+
+<script>
+(() => {
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const $ = (s) => document.querySelector(s);
+const NS = 'http://www.w3.org/2000/svg';
+const el = (tag, attrs, parent) => { const n = document.createElementNS(NS, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); parent?.appendChild(n); return n; };
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+
+// polyline with arc-length lookup
+const poly = (pts) => {
+  const c = [0];
+  for (let i = 1; i < pts.length; i++) c.push(c[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  const L = c[c.length - 1];
+  const at = (s) => {
+    s = clamp(s, 0, L);
+    let lo = 0, hi = c.length - 1;
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; c[m] <= s ? lo = m : hi = m; }
+    const t = (s - c[lo]) / ((c[hi] - c[lo]) || 1);
+    return [pts[lo][0] + (pts[hi][0] - pts[lo][0]) * t, pts[lo][1] + (pts[hi][1] - pts[lo][1]) * t];
+  };
+  const d = 'M' + pts.map(p => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join('L');
+  return { pts, c, L, at, d };
+};
+
+// copy buttons
+document.querySelectorAll('[data-copy]').forEach(b => b.addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText(b.dataset.copy); } catch {}
+  b.textContent = 'Copied'; b.setAttribute('data-copied', '');
+  setTimeout(() => { b.textContent = 'Copy'; b.removeAttribute('data-copied'); }, 1400);
+}));
+
+// marquee
+const bandItems = [
+  ['hi', '<span class="p">$ </span>loopy import session.json --provider codex'],
+  ['', 'imported 10 events'],
+  ['hi', '<span class="p">$ </span>loopy extract --import &lt;id&gt;'],
+  ['', 'proposed 6 nodes, 1 approval'],
+  ['hi', '<span class="p">$ </span>loopy approve &lt;id&gt;'],
+  ['hi', '<span class="p">$ </span>loopy run'],
+  ['', 'bun audit --json'],
+  ['', '4.17.21 fixes CVE-2021-23337'],
+  ['', 'bun run check'],
+  ['aq', '412 passed'],
+  ['', 'waiting for approval'],
+  ['', 'gh pr create --fill'],
+  ['hi', "<span class=\"p\">$ </span>loopy schedule create --cron '0 9 * * *'"],
+  ['hi', '<span class="p">$ </span>loopy studio'],
+];
+const bandHTML = bandItems.map(([c, t]) => `<span class="${c}">${t}</span>`).join('');
+$('#band').innerHTML = bandHTML + bandHTML.replace(/<span class="/g, '<span aria-hidden="true" class="');
+
+// graph data
+const nodes = [
+  { kind: 'shell', label: 'Shell module', title: 'Audit dependencies', d: 'bun audit --json', ev: 'Trace line 1', id: 'audit-deps', done: '1 critical: lodash, CVE-2021-23337' },
+  { kind: 'cond', label: 'Condition', title: 'Is there a patched release?', d: 'npm view lodash versions', alt: 'If not, stop and report.', ev: 'Trace lines 2, 3', id: 'has-patch', done: 'yes, 4.17.21' },
+  { kind: 'agent', label: 'Agent call', title: 'Apply the smallest bump', d: 'Codex edits package.json', plain: true, ev: 'Trace lines 4, 5', id: 'apply-bump', done: 'lodash ^4.17.21, bun install ok' },
+  { kind: 'verify', label: 'Verification', title: 'Run the checks', d: 'bun run check', ev: 'Trace lines 6, 7', id: 'run-checks', done: '412 passed' },
+  { kind: 'approve', label: 'Approval', title: 'Approve before push', d: 'Waits for a person', plain: true, ev: 'Trace line 8', id: 'approve-push', done: 'approved' },
+  { kind: 'shell', label: 'Shell module', title: 'Open the pull request', d: 'git push, gh pr create --fill', ev: 'Trace lines 9, 10', id: 'open-pr', done: 'pull request opened' },
+];
+const graph = $('#graph');
+const nodeEls = nodes.map((n, i) => {
+  const c = document.createElement('div');
+  c.className = `c node n${i}`;
+  c.innerHTML = `<div class="card"><span class="k"><svg aria-hidden="true"><use href="#g-${n.kind}"/></svg>${n.label}</span><span class="t">${n.title}</span><span class="d${n.plain ? ' plain' : ''}">${n.d}</span>${n.alt ? `<span class="alt">${n.alt}</span>` : ''}<span class="foot"><span class="st" data-s="pending"><i></i><b>Pending</b></span><span class="ev">${n.ev}</span></span></div>`;
+  graph.appendChild(c);
+  return c;
+});
+const corner = ['tl', 'tl', 'tr', 'tr', 'tl', 'tl'];
+
+// timeline in abstract units
+const TRAVEL = 1, DWELL = 0.8, APPROVE = 2.0, APPROVE_AT = 1.3, TAIL = 1.4;
+const T = []; let u0 = 0.4;
+nodes.forEach((n, i) => {
+  const arr = u0 + TRAVEL, dw = n.kind === 'approve' ? APPROVE : DWELL;
+  T.push({ start: u0, arr, end: arr + dw });
+  u0 = arr + dw;
+});
+const TOTAL = u0 + TAIL;
+const logEvents = [{ u: 0.12, h: '<span class="cmdl"><span style="color:#6A7480">$ </span>loopy run</span>' }];
+nodes.forEach((n, i) => {
+  const t = T[i];
+  if (n.kind === 'approve') {
+    logEvents.push({ u: t.arr, h: `<span class="id">${n.id}</span><span class="m wt">waiting for you</span>` });
+    logEvents.push({ u: t.arr + APPROVE_AT, h: `<span class="id">${n.id}</span><span class="m ok">approved by you</span>` });
+  } else {
+    logEvents.push({ u: t.arr, h: `<span class="id">${n.id}</span><span class="m rn">running</span>` });
+    logEvents.push({ u: t.end, h: `<span class="id">${n.id}</span><span class="m ok">${n.done}</span>` });
+  }
+});
+logEvents.push({ u: T[5].end + 0.3, h: '<span class="id">run</span><span class="m cmdl">finished, 6 of 6 succeeded</span>' });
+
+// geometry
+const hero = $('#hero'), hsvg = $('#hsvg'), stage = $('#stage'), gsvg = $('#gsvg'), pin = $('#pin');
+const G = { loop: null, drop: null, path: null, pins: [], sw: 10 };
+
+function fitWordmark() {
+  const wm = $('#wm');
+  wm.style.fontSize = '';
+  const cell = wm.parentElement, cs = getComputedStyle(cell);
+  const avail = cell.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const fs = parseFloat(getComputedStyle(wm).fontSize);
+  wm.style.fontSize = (fs * avail / wm.scrollWidth).toFixed(2) + 'px';
+}
+
+function build() {
+  fitWordmark();
+  // graph pins, in stage coordinates
+  const sr = stage.getBoundingClientRect();
+  gsvg.setAttribute('viewBox', `0 0 ${sr.width} ${sr.height}`);
+  G.pins = nodeEls.map((n, i) => {
+    const r = n.getBoundingClientRect();
+    const y = r.top - sr.top - 0.5;
+    return corner[i] === 'tl' ? [r.left - sr.left - 0.5, y] : [r.right - sr.left + 0.5, y];
+  });
+  const gp = [[G.pins[0][0], -0.5]];
+  G.pinS = [];
+  G.pins.forEach((p, i) => {
+    const last = gp[gp.length - 1];
+    if (Math.abs(last[0] - p[0]) > 0.1 && Math.abs(last[1] - p[1]) > 0.1) gp.push([p[0], last[1]]);
+    gp.push(p);
+  });
+  // dedupe consecutive duplicates
+  const gpu = gp.filter((p, i) => i === 0 || Math.hypot(p[0] - gp[i - 1][0], p[1] - gp[i - 1][1]) > 0.1);
+  G.path = poly(gpu);
+  G.pinS = G.pins.map(p => { let best = 0, bd = 1e9; for (let i = 0; i < gpu.length; i++) { const d = Math.hypot(gpu[i][0] - p[0], gpu[i][1] - p[1]); if (d < bd) { bd = d; best = i; } } return G.path.c[best]; });
+  $('#gRail').setAttribute('d', G.path.d);
+  $('#gLit').setAttribute('d', G.path.d);
+  const pads = $('#gPads'); pads.innerHTML = '';
+  G.padEls = G.pins.map(p => el('rect', { x: p[0] - 5, y: p[1] - 5, width: 10, height: 10, fill: '#0D1014', stroke: '#323B46', 'stroke-width': 1.5 }, pads));
+
+  // hero loop in hero coordinates
+  const hr = hero.getBoundingClientRect();
+  hsvg.setAttribute('viewBox', `0 0 ${hr.width} ${hr.height}`);
+  const oo = $('#oo').getBoundingClientRect();
+  const fs = parseFloat($('#wm').style.fontSize);
+  const sw = G.sw = fs * 0.112;
+  const bx = oo.left - hr.left, by = oo.top - hr.top, bw = oo.width, bh = oo.height;
+  const tmp = $('#hMarkTmp'), tl = tmp.getTotalLength(), N = 360, raw = [];
+  for (let i = 0; i < N; i++) {
+    const p = tmp.getPointAtLength(tl * i / N);
+    raw.push([bx + sw / 2 + (p.x - 2) / 20 * (bw - sw), by + sw / 2 + (p.y - 7.5) / 9 * (bh - sw)]);
+  }
+  // start the loop at the crossing
+  const cx = bx + bw / 2, cy = by + bh / 2;
+  let k = 0, kd = 1e9;
+  raw.forEach((p, i) => { const d = Math.hypot(p[0] - cx, p[1] - cy); if (d < kd) { kd = d; k = i; } });
+  const lp = raw.slice(k).concat(raw.slice(0, k)); lp.push(lp[0]);
+  G.loop = poly(lp);
+  G.cross = [cx, cy];
+  const wmRow = $('.wm-cell').getBoundingClientRect();
+  const ruleY = wmRow.bottom - hr.top + 0.5;
+  const X = G.pins[0][0] + (sr.left - hr.left);
+  const dp = [[cx, cy], [cx, ruleY]];
+  if (Math.abs(X - cx) > 0.5) dp.push([X, ruleY]);
+  dp.push([X, hr.height + 0.5]);
+  G.drop = poly(dp);
+  for (const id of ['hGhost', 'hLoop']) { const p = $('#' + id); p.setAttribute('d', G.loop.d + 'Z'); p.setAttribute('stroke-width', sw.toFixed(2)); }
+  $('#hDrop').setAttribute('d', G.drop.d);
+  // tokens
+  const ht = $('#hToks'); ht.innerHTML = '';
+  G.hTok = [0, 0.19, 0.41, 0.58, 0.8].map((o, i) => ({ o, e: el('circle', { r: (sw * (i === 2 ? 0.2 : 0.16)).toFixed(1), fill: i === 2 ? '#6EE0D2' : '#0B1330' }, ht) }));
+  const gt = $('#gToks'); gt.innerHTML = '';
+  G.gTok = [0, 0.25, 0.5, 0.75].map((o, i) => ({ o, e: el('rect', { width: 6, height: 6, x: -3, y: -3, fill: i === 1 ? '#6EE0D2' : '#B7C6FF' }, gt) }));
+  lastU = -1; lastA = -1; logCount = -1; nodeState.fill('');
+  render(performance.now(), true);
+}
+
+// state
+let lastU = -1, lastA = -1, logCount = -1;
+const nodeState = nodes.map(() => '');
+
+function uToHead(u) {
+  for (let i = 0; i < T.length; i++) {
+    const t = T[i], s0 = i ? G.pinS[i - 1] : 0, s1 = G.pinS[i];
+    if (u < t.start) return s0;
+    if (u < t.arr) return s0 + (s1 - s0) * ((u - t.start) / TRAVEL);
+    if (u < t.end) return s1;
+  }
+  return G.pinS[G.pinS.length - 1];
+}
+
+const LABEL = { pending: 'Pending', running: 'Running', waiting: 'Waiting for you', succeeded: 'Succeeded' };
+function setStatus(i, s, inCell) {
+  const key = s + inCell;
+  if (nodeState[i] === key) return;
+  nodeState[i] = key;
+  const n = nodeEls[i];
+  n.classList.toggle('in', inCell);
+  n.classList.toggle('run', s === 'running');
+  const st = n.querySelector('.st'); st.dataset.s = s; st.querySelector('b').textContent = LABEL[s];
+  const pad = G.padEls[i];
+  pad.setAttribute('fill', s === 'pending' ? '#0D1014' : s === 'waiting' ? '#F0C46C' : '#8FA8FF');
+  pad.setAttribute('stroke', s === 'pending' ? '#323B46' : s === 'waiting' ? '#F0C46C' : '#8FA8FF');
+}
+
+function applyU(u) {
+  const head = uToHead(u);
+  const lit = $('#gLit');
+  lit.setAttribute('stroke-dasharray', `${head.toFixed(1)} ${G.path.L + 10}`);
+  G.head = head;
+  let tag = 'pending', txt = 'Pending';
+  nodes.forEach((n, i) => {
+    const t = T[i];
+    let s = 'pending';
+    if (u >= t.end) s = 'succeeded';
+    else if (u >= t.arr) {
+      s = n.kind === 'approve' && u < t.arr + APPROVE_AT ? 'waiting' : 'running';
+      tag = s; txt = s === 'waiting' ? 'Waiting for you' : `Running ${i + 1} of 6`;
+    } else if (u > t.start && i === 0) { tag = 'running'; txt = 'Starting'; }
+    if (u >= t.start && u < t.arr && i > 0) { tag = 'running'; txt = `Running ${i + 1} of 6`; }
+    setStatus(i, s, u >= t.arr - 0.25);
+  });
+  if (u >= T[5].end) { tag = 'succeeded'; txt = 'Succeeded'; }
+  const rt = $('#runTag');
+  if (rt.dataset.s !== tag) rt.dataset.s = tag;
+  $('#runTxt').textContent = txt;
+  const count = logEvents.filter(e => e.u <= u).length;
+  if (count !== logCount) {
+    logCount = count;
+    const log = $('#log');
+    log.innerHTML = logEvents.slice(0, count).map(e => `<div>${e.h}</div>`).join('');
+    log.style.justifyContent = log.scrollHeight > log.clientHeight + 1 ? 'flex-end' : 'flex-start';
+  }
+}
+
+function applyA(a) {
+  const L = G.loop.L;
+  const tail = clamp(a * 1.25) * L;
+  G.tail = tail;
+  const loop = $('#hLoop');
+  if (tail < 0.5) loop.removeAttribute('stroke-dasharray');
+  else loop.setAttribute('stroke-dasharray', `0 ${tail.toFixed(1)} ${(L - tail).toFixed(1)} ${L + 10}`);
+  const drop = $('#hDrop');
+  drop.setAttribute('stroke-dasharray', `${(a * G.drop.L).toFixed(1)} ${G.drop.L + 10}`);
+}
+
+function metrics() {
+  const nav = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--nav')) || 56;
+  const pinTop = pin.getBoundingClientRect().top + scrollY;
+  const pinStart = pinTop - nav;
+  const range = pin.offsetHeight - stage.offsetHeight;
+  return { pinStart, range };
+}
+
+let M = null, heroVis = true, stageVis = false;
+function render(now, force) {
+  if (!G.path) return;
+  if (reduce) {
+    applyA(0); $('#hDrop').setAttribute('stroke-dasharray', 'none');
+    applyU(TOTAL);
+    G.hTok.forEach((t) => { const [x, y] = G.loop.at(t.o * G.loop.L); t.e.setAttribute('cx', x); t.e.setAttribute('cy', y); });
+    G.gTok.forEach((t) => { const [x, y] = G.path.at(t.o * G.path.L); t.e.setAttribute('transform', `translate(${x} ${y})`); });
+    return;
+  }
+  M = M || metrics();
+  const y = scrollY;
+  const a = clamp(y / Math.max(1, M.pinStart));
+  const b = clamp((y - M.pinStart) / Math.max(1, M.range));
+  if (force || a !== lastA) { applyA(a); lastA = a; }
+  const u = b * TOTAL;
+  if (force || u !== lastU) { applyU(u); lastU = u; }
+  const sec = now / 1000;
+  if (heroVis || force) {
+    const L = G.loop.L;
+    G.hTok.forEach((t, i) => {
+      const s = ((t.o + sec * (i === 2 ? 0.15 : 0.11)) % 1) * L;
+      const on = s >= G.tail + 2;
+      t.e.style.opacity = on ? 1 : 0;
+      if (on) { const [x, yy] = G.loop.at(s); t.e.setAttribute('cx', x.toFixed(1)); t.e.setAttribute('cy', yy.toFixed(1)); }
+    });
+  }
+  if (stageVis || force) {
+    const H = G.head;
+    G.gTok.forEach((t, i) => {
+      const on = H > 40;
+      t.e.style.opacity = on ? 1 : 0;
+      if (!on) return;
+      const s = ((t.o + sec * 170 / Math.max(H, 200)) % 1) * H;
+      const [x, yy] = G.path.at(s);
+      t.e.setAttribute('transform', `translate(${x.toFixed(1)} ${yy.toFixed(1)})`);
+    });
+  }
+}
+
+let raf = 0;
+const loop = (now) => { render(now); raf = (heroVis || stageVis) ? requestAnimationFrame(loop) : 0; };
+const kick = () => { if (!raf && !reduce) raf = requestAnimationFrame(loop); };
+addEventListener('scroll', () => { if (!raf && !reduce) render(performance.now()); }, { passive: true });
+const io = new IntersectionObserver((es) => {
+  es.forEach(e => { if (e.target === hero) heroVis = e.isIntersecting; else stageVis = e.isIntersecting; });
+  kick();
+});
+io.observe(hero); io.observe(pin);
+
+let rt;
+addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { M = null; build(); }, 120); });
+build(); kick();
+document.fonts?.ready.then(() => { M = null; build(); });
+
+// trace mapping in the worked example
+const lines = [...document.querySelectorAll('#trace li')];
+const btns = [...document.querySelectorAll('#map button')];
+const show = (b) => {
+  btns.forEach(x => x.classList.toggle('on', x === b));
+  const on = b ? b.dataset.l.split(',').map(Number) : [];
+  lines.forEach((l, i) => l.classList.toggle('on', on.includes(i + 1)));
+};
+btns.forEach(b => { b.addEventListener('mouseenter', () => show(b)); b.addEventListener('focus', () => show(b)); });
+$('#map').addEventListener('mouseleave', () => show(btns[0]));
+show(btns[0]);
+})();
+</script>
+</body>
+</html>

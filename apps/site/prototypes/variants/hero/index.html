@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loopy hero variants</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0D1014;--line:#222931;--line-strong:#323B46;--text:#E6EAF0;--muted:#98A2AE;--subtle:#6A7480;--accent:#8FA8FF;--aqua:#6EE0D2;--ease:cubic-bezier(.2,.8,.2,1);--sans:"Geist",ui-sans-serif,system-ui,sans-serif;--mono:"Geist Mono",ui-monospace,Menlo,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:400 16px/1.6 var(--sans);-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:760px;margin:0 auto;padding:96px 24px 120px}
+h1{font-size:34px;font-weight:500;letter-spacing:-.025em;line-height:1.15;margin:0}
+.lead{color:var(--muted);margin:16px 0 0;max-width:40em}
+.lead a{color:var(--text);border-bottom:1px solid var(--line-strong)}
+ol{list-style:none;padding:0;margin:48px 0 0}
+li{border-top:1px solid var(--line)}
+li:last-child{border-bottom:1px solid var(--line)}
+li a{display:grid;grid-template-columns:56px 1fr;gap:16px;padding:20px 0;transition:background 160ms var(--ease)}
+li a:hover{background:rgba(255,255,255,.025)}
+.id{font:500 13px/1.5 var(--mono);color:var(--subtle);padding-top:3px}
+.name{font-weight:500;letter-spacing:-.01em}
+.desc{color:var(--muted);font-size:15px;margin:2px 0 0}
+.type{color:var(--subtle);font-size:13px;margin:6px 0 0}
+.note{color:var(--subtle);font-size:14px;margin:40px 0 0;max-width:44em}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Hero variants</h1>
+  <p class="lead">Five takes on the <a href="../v7.html">v7</a> hero. Same copy, same nav, same reveal timing. What changes is the background behind the text and how bold the headline is set. Each page is one viewport tall; use the switcher in the bottom right corner to flip between them.</p>
+  <ol>
+    <li><a href="h1.html"><span class="id">h1</span><span><span class="name">Flickering dot grid</span><p class="desc">A 28px grid of dots that each pick a new brightness on their own slow schedule. The pointer lifts the dots near it. The grid fades at the viewport edges and under the text.</p><p class="type">Type: weight 600, up to 76px, third line in the brand gradient.</p></span></a></li>
+    <li><a href="h2.html"><span class="id">h2</span><span><span class="name">Drifting constellation</span><p class="desc">Sparse points drifting slowly, with thin lines joining any two within reach, so small graphs form and dissolve. The pointer pushes points away.</p><p class="type">Type: weight 500 kept from v7 but set larger with line-height 1.0, gradient on the word control only.</p></span></a></li>
+    <li><a href="h3.html"><span class="id">h3</span><span><span class="name">Aurora mesh with grain</span><p class="desc">Three soft blobs in accent and aqua, low saturation, each on a 23 to 33 second loop, with a grain tile on top. No dots.</p><p class="type">Type: weight 600, with a thin gradient rule drawn under the second line once it lands.</p></span></a></li>
+    <li><a href="h4.html"><span class="id">h4</span><span><span class="name">Glyph field with a sweeping band</span><p class="desc">A grid of tiny mono glyphs that swap now and then. A diagonal band sweeps across every 12 seconds and brightens what it passes, tinted from accent to aqua left to right.</p><p class="type">Type: weight 600, line-height 1.0, lines rise out of a clipped box, no gradient text.</p></span></a></li>
+    <li><a href="h5.html"><span class="id">h5</span><span><span class="name">Line topology with travelling beads</span><p class="desc">Thin horizontal lines that bend away from the pointer like a field, with a few bright beads running along them, the same token that marks a running node in the studio.</p><p class="type">Type: weight 600, mask reveal, gradient on the word control.</p></span></a></li>
+  </ol>
+  <p class="note">All five run on one canvas with requestAnimationFrame, cap the pixel ratio at 2, pause when the tab is hidden, and draw a single still frame when the visitor prefers reduced motion.</p>
+</div>
+</body>
+</html>

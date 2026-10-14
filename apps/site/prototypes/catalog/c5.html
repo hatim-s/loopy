@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Loopy. Do the work once, then run it again.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;500;700&family=Zen+Kaku+Gothic+New:wght@400;500&family=M+PLUS+1+Code:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --washi: #f3f4f0;
+    --sumi: #1c1c1a;
+    --usu: #8e8d86;
+    --line: #d7d8d1;
+    --shu: #d0391c;
+    --ai: #2f4a5c;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--washi);
+    color: var(--sumi);
+    font-family: "Zen Kaku Gothic New", system-ui, sans-serif;
+    font-size: 17px; line-height: 1.9;
+    letter-spacing: .01em;
+    overflow-x: hidden;
+  }
+  a { color: inherit; text-decoration-thickness: 1px; text-underline-offset: 4px; }
+  :focus-visible { outline: 1px solid var(--shu); outline-offset: 4px; }
+  .serif { font-family: "Shippori Mincho", serif; }
+  code, pre { font-family: "M PLUS 1 Code", ui-monospace, monospace; font-size: .92em; }
+
+  header { display: flex; justify-content: space-between; align-items: baseline; padding: 36px clamp(20px, 6vw, 88px); }
+  .mark { font-family: "Shippori Mincho", serif; font-size: 22px; font-weight: 500; text-decoration: none; letter-spacing: .06em; }
+  header nav { display: flex; gap: 28px; font-size: 14px; color: var(--usu); }
+  header nav a { text-decoration: none; }
+  header nav a:hover { color: var(--sumi); }
+
+  /* hero */
+  .hero { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: clamp(20px, 4vw, 60px); align-items: center; padding: clamp(20px, 4vw, 60px) clamp(20px, 6vw, 88px) clamp(80px, 10vw, 150px); min-height: 78vh; }
+  .hero h1 { font-family: "Shippori Mincho", serif; font-weight: 500; font-size: clamp(34px, 3.7vw, 56px); line-height: 1.4; letter-spacing: .02em; }
+  .hero p { margin-top: 30px; max-width: 30em; color: #3d3d39; }
+  .hero .go { margin-top: 36px; display: flex; gap: 28px; font-size: 15px; }
+  .hero .go a { text-decoration: none; border-bottom: 1px solid var(--sumi); padding-bottom: 2px; }
+  .hero .go a.q { color: var(--usu); border-color: var(--line); }
+
+  .enso-wrap { position: relative; width: 100%; max-width: 640px; justify-self: center; }
+  .enso-wrap svg { width: 100%; height: auto; display: block; overflow: visible; }
+  .brush { fill: none; stroke: var(--sumi); stroke-linecap: round; }
+  .gap { fill: none; stroke: var(--usu); stroke-width: 1.2; stroke-dasharray: 2 7; opacity: .7; }
+  .nd circle { fill: var(--washi); stroke: var(--sumi); stroke-width: 1.4; transition: fill .6s; }
+  .nd text { font-family: "Zen Kaku Gothic New", sans-serif; font-size: 15px; fill: var(--usu); transition: fill .6s; }
+  .nd.on circle { fill: var(--sumi); }
+  .nd.on text { fill: var(--sumi); }
+  .nd.wait circle { fill: var(--shu); stroke: var(--shu); }
+  .nd.wait text { fill: var(--shu); }
+  .bead { fill: var(--shu); }
+  .enso-meta { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 8px; font-size: 14px; color: var(--usu); }
+  .seal {
+    width: 74px; height: 74px; flex: none; border: 0; cursor: pointer; background: var(--shu); color: var(--washi);
+    font-family: "Shippori Mincho", serif; font-size: 15px; line-height: 1.1; border-radius: 6px;
+    display: grid; place-items: center; transform: rotate(-4deg); transition: transform .2s, opacity .3s, filter .3s; opacity: .25; pointer-events: none;
+    box-shadow: inset 0 0 0 3px var(--washi), inset 0 0 0 5px var(--shu);
+  }
+  .seal.ready { opacity: 1; pointer-events: auto; }
+  .seal.ready:hover { transform: rotate(-4deg) scale(1.05); }
+  .seal span { display: block; font-size: 11px; font-family: "Zen Kaku Gothic New", sans-serif; }
+  .enso-meta .t b { color: var(--sumi); font-weight: 500; }
+  .quiet { background: none; border: 0; font: inherit; color: var(--usu); cursor: pointer; text-decoration: underline; text-underline-offset: 4px; }
+  .quiet:hover { color: var(--sumi); }
+
+  /* essay */
+  .essay { padding: 0 clamp(20px, 6vw, 88px); }
+  .chapter { display: grid; grid-template-columns: 120px minmax(0, 640px) 1fr; gap: clamp(16px, 4vw, 60px); padding: clamp(70px, 9vw, 130px) 0; border-top: 1px solid var(--line); }
+  .v { writing-mode: vertical-rl; font-family: "Shippori Mincho", serif; font-size: 40px; letter-spacing: .3em; color: var(--sumi); justify-self: center; line-height: 1; }
+  .v small { font-family: "Zen Kaku Gothic New", sans-serif; font-size: 13px; letter-spacing: .15em; color: var(--usu); margin-top: 18px; writing-mode: vertical-rl; }
+  .chapter h2 { font-family: "Shippori Mincho", serif; font-weight: 500; font-size: clamp(28px, 3vw, 40px); line-height: 1.45; margin-bottom: 26px; }
+  .chapter p + p { margin-top: 1.2em; }
+  .chapter .aside { font-size: 14px; color: var(--usu); line-height: 1.8; align-self: end; max-width: 24em; }
+  .chapter .aside code { color: var(--sumi); }
+
+  .steps { list-style: none; margin-top: 30px; }
+  .steps li { display: grid; grid-template-columns: 5.5em 1fr; gap: 16px; padding: 22px 0; border-top: 1px solid var(--line); }
+  .steps li:last-child { border-bottom: 1px solid var(--line); }
+  .steps .jp { font-family: "Shippori Mincho", serif; font-size: 22px; line-height: 1.4; }
+  .steps .jp small { display: block; font-family: "Zen Kaku Gothic New", sans-serif; font-size: 13px; color: var(--usu); }
+  .steps h3 { font-family: "Shippori Mincho", serif; font-weight: 500; font-size: 21px; }
+  .steps code { color: var(--shu); }
+
+  .scroll { margin-top: 34px; border-left: 1px solid var(--sumi); padding-left: 22px; font-family: "M PLUS 1 Code", monospace; font-size: 14px; line-height: 2.1; color: var(--usu); }
+  .scroll div { display: flex; justify-content: space-between; gap: 16px; position: relative; }
+  .scroll div.k { color: var(--sumi); }
+  .scroll div.k::before { content: ""; width: 7px; height: 7px; background: var(--shu); border-radius: 50%; position: absolute; left: -26px; top: 50%; margin-top: -3.5px; }
+  .scroll div span:last-child { font-family: "Zen Kaku Gothic New", sans-serif; font-size: 13px; white-space: nowrap; }
+
+  .controls { margin-top: 30px; display: grid; grid-template-columns: 1fr 1fr; gap: 0 40px; }
+  .controls div { padding: 18px 0; border-top: 1px solid var(--line); }
+  .controls b { font-family: "Shippori Mincho", serif; font-weight: 500; font-size: 20px; display: block; }
+  .controls span { font-size: 15px; color: #4a4a45; }
+
+  .kinds { margin-top: 30px; display: flex; flex-wrap: wrap; gap: 10px 26px; font-family: "Shippori Mincho", serif; font-size: 20px; }
+  .kinds span { border-bottom: 1px solid var(--line); padding-bottom: 2px; }
+
+  .qs { margin-top: 30px; border: 1px solid var(--sumi); padding: 28px 30px; position: relative; }
+  .qs pre { white-space: pre; overflow-x: auto; line-height: 2.1; font-size: 15px; }
+  .qs pre .c { color: var(--usu); }
+  .qs .stamp { position: absolute; right: -14px; top: -18px; width: 44px; height: 44px; background: var(--shu); color: var(--washi); font-family: "Shippori Mincho", serif; display: grid; place-items: center; font-size: 16px; transform: rotate(6deg); border-radius: 4px; box-shadow: inset 0 0 0 2px var(--washi), inset 0 0 0 3px var(--shu); }
+
+  footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 20px; padding: 60px clamp(20px, 6vw, 88px) 50px; border-top: 1px solid var(--line); color: var(--usu); font-size: 14px; }
+  footer nav { display: flex; gap: 24px; }
+
+  @media (max-width: 900px) {
+    .hero { grid-template-columns: 1fr; min-height: 0; }
+    .enso-wrap { max-width: 520px; margin-top: 30px; }
+    .chapter { grid-template-columns: 56px minmax(0, 1fr); }
+    .chapter .aside { grid-column: 2; }
+    .v { font-size: 28px; }
+  }
+  @media (max-width: 560px) {
+    header nav { gap: 16px; }
+    header nav a:nth-child(2) { display: none; }
+    .chapter { grid-template-columns: minmax(0, 1fr); }
+    .v { writing-mode: horizontal-tb; justify-self: start; font-size: 26px; letter-spacing: .2em; }
+    .v small { writing-mode: horizontal-tb; margin: 0 0 0 12px; }
+    .chapter .aside { grid-column: 1; }
+    .controls { grid-template-columns: 1fr; }
+    .steps li { grid-template-columns: 1fr; gap: 4px; }
+    .scroll div span:last-child { display: none; }
+    .qs { padding: 22px 18px; }
+    .qs pre { font-size: 13px; }
+    .qs .stamp { right: 8px; }
+    .nd text { font-size: 26px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .nd circle, .nd text { transition: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <a class="mark" href="#">loopy</a>
+  <nav><a href="#how">How it works</a><a href="#controls">Controls</a><a href="#start">Start</a></nav>
+</header>
+
+<section class="hero">
+  <div>
+    <h1>Do the work once.<br>Then run it again.</h1>
+    <p>Loopy is a local graph harness for coding agents. You finish a task with Codex or Claude Code. Loopy reads the recorded session, draws out the steps as an execution graph, and runs that graph on your own machine. It stops where a person should decide.</p>
+    <div class="go"><a href="#start">Quick start</a><a class="q" href="#how">Read how it works</a></div>
+  </div>
+  <div class="enso-wrap">
+    <svg viewBox="-60 -20 720 640" id="enso" role="img" aria-label="A brushed circle with seven steps around it. A red bead moves through the steps and waits at approval.">
+      <defs>
+        <filter id="ink" x="-10%" y="-10%" width="120%" height="120%">
+          <feTurbulence type="fractalNoise" baseFrequency=".035" numOctaves="3" seed="4" result="n"/>
+          <feDisplacementMap in="SourceGraphic" in2="n" scale="9"/>
+        </filter>
+        <filter id="dry"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="1" seed="2" result="g"/><feColorMatrix in="g" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -2.2 1.4" result="m"/><feComposite in="SourceGraphic" in2="m" operator="in"/></filter>
+      </defs>
+      <path class="gap" id="gapPath" d=""/>
+      <g filter="url(#ink)">
+        <path class="brush" id="b1" stroke-width="30" d=""/>
+        <path class="brush" id="b2" stroke-width="12" d="" opacity=".55" filter="url(#dry)"/>
+      </g>
+      <g id="nodes"></g>
+      <circle class="bead" id="bead" r="9" cx="-40" cy="-40"/>
+    </svg>
+    <div class="enso-meta">
+      <p class="t" id="enT" aria-live="polite">Run <b>1</b>. Starting.</p>
+      <button class="quiet" id="enPause" type="button">Pause</button>
+      <button class="seal" id="seal" type="button" aria-label="Approve">承認<span>approve</span></button>
+    </div>
+  </div>
+</section>
+
+<main class="essay">
+  <section class="chapter" id="how">
+    <div class="v" aria-hidden="true">記録<small>record</small></div>
+    <div>
+      <h2>A session is already a plan. It just isn't written down.</h2>
+      <p>When an agent fixes something for you, the session trace holds every command, every edit, every check and the moment you said yes. Loopy imports that trace and keeps it.</p>
+      <p>Then the extractor reads it. It is deterministic and makes no model calls. It proposes a graph, and each node points back to the trace events it came from. You review the proposal and approve it.</p>
+      <div class="scroll" aria-label="Trace lines, with the ones that become nodes marked">
+        <div class="k"><span>exec  bun audit --json</span><span>shell</span></div>
+        <div class="k"><span>think 1 critical: lodash 4.17.20</span><span>transform</span></div>
+        <div class="k"><span>edit  package.json</span><span>agent</span></div>
+        <div><span>exec  bun install</span><span></span></div>
+        <div class="k"><span>exec  bun run check</span><span>verify</span></div>
+        <div class="k"><span>user  "diff looks right, push it"</span><span>approval</span></div>
+        <div class="k"><span>exec  gh pr create --fill</span><span>shell</span></div>
+      </div>
+      <ol class="steps">
+        <li><span class="jp">記録<small>record</small></span><div><h3>Record</h3><p>Work with your agent the way you already do. Import the session with <code>loopy import</code>.</p></div></li>
+        <li><span class="jp">抽出<small>extract</small></span><div><h3>Extract</h3><p>Turn the trace into a proposed graph with <code>loopy extract</code>. Approve it when it reads right.</p></div></li>
+        <li><span class="jp">実行<small>run</small></span><div><h3>Run</h3><p>Run the graph with <code>loopy run</code>. The agent still does the open-ended work inside its nodes.</p></div></li>
+      </ol>
+    </div>
+    <p class="aside">Not every trace line becomes a node. <code>bun install</code> stays in the trace. Each node cites the lines behind it, so you can check why it exists.</p>
+  </section>
+
+  <section class="chapter" id="controls">
+    <div class="v" aria-hidden="true">制御<small>control</small></div>
+    <div>
+      <h2>A run can wait. It can also be stopped, retried or forked.</h2>
+      <p>Every attempt and checkpoint is written to a SQLite file in your project as it happens. So a run is something you can put down and pick up again.</p>
+      <div class="controls">
+        <div><b>Pause and resume</b><span>The run stops between nodes and continues from the last checkpoint.</span></div>
+        <div><b>Retry</b><span>A node runs again within its limit. Each attempt stays on record.</span></div>
+        <div><b>Fork</b><span>A new run starts from any checkpoint of an old one.</span></div>
+        <div><b>Cancel</b><span>The run ends and its history stays.</span></div>
+        <div><b>Approval</b><span>The graph waits for a person before it pushes.</span></div>
+        <div><b>Schedule</b><span>A cron schedule starts the graph on your machine.</span></div>
+      </div>
+      <p style="margin-top:40px">Seven kinds of step make up a graph. Only the agent step calls a model.</p>
+      <div class="kinds"><span>agent</span><span>shell</span><span>route</span><span>verify</span><span>approval</span><span>join</span><span>transform</span></div>
+    </div>
+  </section>
+
+  <section class="chapter">
+    <div class="v" aria-hidden="true">手元<small>at hand</small></div>
+    <div>
+      <h2>Nothing is hosted. The graph runs where your code is.</h2>
+      <p>Loopy runs on Bun. It starts the agent CLIs you already installed, with your login and your settings. Source, credentials and traces stay on your disk.</p>
+      <p>State lives in <code>.loopy/loopy.db</code>. To look at a graph, open the local Studio with <code>loopy ui</code> and edit nodes and edges in the browser.</p>
+    </div>
+  </section>
+
+  <section class="chapter" id="start">
+    <div class="v" aria-hidden="true">始め<small>begin</small></div>
+    <div>
+      <h2>Begin with a session you already ran.</h2>
+      <div class="qs">
+        <span class="stamp" aria-hidden="true">始</span>
+<pre>bun add -g loopy
+loopy init
+loopy import session.jsonl --provider codex
+loopy extract --import &lt;import-id&gt;
+loopy approve &lt;proposal-id&gt;
+loopy run &lt;workflow-id&gt;
+<span class="c">loopy ui   # optional, opens Studio</span></pre>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <span>loopy. Apache-2.0.</span>
+  <nav><a href="#">GitHub</a><a href="#">Docs</a><a href="index.html">Catalog</a></nav>
+</footer>
+
+<script>
+(() => {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cx = 300, cy = 300, R = 220;
+  const A0 = -58, A1 = 262; // drawn arc in degrees, gap near the top right
+  const pt = (deg, r = R) => { const a = deg * Math.PI / 180; return [cx + r * Math.cos(a), cy + r * Math.sin(a)]; };
+  const arc = (a, b, r = R, wob = 0) => {
+    const steps = 80; let d = '';
+    for (let i = 0; i <= steps; i++) { const t = a + (b - a) * i / steps; const rr = r + Math.sin(i * .21) * wob; const [x, y] = pt(t, rr); d += (i ? 'L' : 'M') + x.toFixed(1) + ',' + y.toFixed(1); }
+    return d;
+  };
+  const b1 = document.getElementById('b1'), b2 = document.getElementById('b2'), gapPath = document.getElementById('gapPath');
+  b1.setAttribute('d', arc(A0, A1, R, 3));
+  b2.setAttribute('d', arc(A0 + 8, A1 - 4, R - 9, 4));
+  gapPath.setAttribute('d', arc(A1 + 6, A0 + 360 - 6, R));
+  const KINDS = ['shell', 'transform', 'agent', 'verify', 'join', 'route', 'approval'];
+  const g = document.getElementById('nodes');
+  const nodeAng = KINDS.map((_, i) => A0 + 22 + i * ((A1 - A0 - 44) / (KINDS.length - 1)));
+  const nodeEls = KINDS.map((k, i) => {
+    const [x, y] = pt(nodeAng[i], R + 34); const [lx, ly] = pt(nodeAng[i], R + 60);
+    const e = document.createElementNS('http://www.w3.org/2000/svg', 'g'); e.setAttribute('class', 'nd');
+    const anchor = lx < cx - 20 ? 'end' : lx > cx + 20 ? 'start' : 'middle';
+    e.innerHTML = `<circle cx="${x}" cy="${y}" r="6"/><text x="${lx}" y="${ly + 5}" text-anchor="${anchor}">${k}</text>`;
+    g.appendChild(e); return e;
+  });
+
+  // draw the brush once
+  if (!reduce) {
+    [b1, b2].forEach((p, i) => { const L = p.getTotalLength(); p.style.strokeDasharray = L; p.style.strokeDashoffset = L; p.animate([{ strokeDashoffset: L }, { strokeDashoffset: 0 }], { duration: 1800, delay: i * 160, easing: 'cubic-bezier(.6,.05,.25,1)', fill: 'forwards' }); });
+  }
+
+  const bead = document.getElementById('bead'), seal = document.getElementById('seal'), T = document.getElementById('enT'), pauseBtn = document.getElementById('enPause');
+  let ang = A0, run = 1, state = 'moving', paused = false, last = 0, hold = 0, nextNode = 0;
+  const SPEED = 38; // degrees per second
+  const place = a => { const [x, y] = pt(a); bead.setAttribute('cx', x); bead.setAttribute('cy', y); };
+  const say = h => T.innerHTML = `Run <b>${run}</b>. ${h}`;
+  function frame(ts) {
+    const dt = Math.min(.05, (ts - (last || ts)) / 1000); last = ts;
+    if (!paused) {
+      if (hold > 0) hold -= dt;
+      else if (state === 'moving') {
+        ang += SPEED * dt;
+        if (nextNode < KINDS.length && ang >= nodeAng[nextNode]) {
+          ang = nodeAng[nextNode]; const k = KINDS[nextNode];
+          if (k === 'approval') { state = 'waiting'; nodeEls[nextNode].classList.add('wait'); seal.classList.add('ready'); say('Waiting at approval. Press the seal.'); }
+          else { nodeEls[nextNode].classList.add('on'); say(`${k} done.`); hold = .45; nextNode++; }
+        }
+      } else if (state === 'closing') {
+        ang += SPEED * 1.6 * dt;
+        if (ang >= A0 + 360) { ang = A0; run++; nextNode = 0; state = 'moving'; nodeEls.forEach(n => n.classList.remove('on', 'wait')); say('Starting again.'); hold = .6; }
+      }
+      place(ang);
+    }
+    requestAnimationFrame(frame);
+  }
+  seal.addEventListener('click', () => {
+    if (state !== 'waiting') return;
+    nodeEls[nextNode].classList.remove('wait'); nodeEls[nextNode].classList.add('on'); nextNode++;
+    seal.classList.remove('ready'); state = 'closing'; say('Approved. The loop closes.');
+  });
+  pauseBtn.addEventListener('click', () => { paused = !paused; pauseBtn.textContent = paused ? 'Resume' : 'Pause'; if (paused) say('Paused between steps.'); });
+
+  if (reduce) {
+    // static: show a run waiting at approval
+    nodeEls.slice(0, 6).forEach(n => n.classList.add('on')); nodeEls[6].classList.add('wait'); ang = nodeAng[6]; nextNode = 6; state = 'waiting'; seal.classList.add('ready'); place(ang); say('Waiting at approval. Press the seal.');
+    seal.addEventListener('click', () => { nodeEls.forEach(n => n.classList.remove('on', 'wait')); place(A0); ang = A0; nextNode = 0; run++; say('Approved. Run finished.'); });
+  } else {
+    place(ang); setTimeout(() => requestAnimationFrame(frame), 1600);
+  }
+})();
+</script>
+</body>
+</html>

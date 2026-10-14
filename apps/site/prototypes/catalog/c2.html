@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Loopy zine, issue 1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,300..800&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #e9ece3;
+    --sheet: #f6f7f1;
+    --pink: #ff48b0;
+    --blue: #3255a4;
+    --yellow: #ffe800;
+    --ink: #22201f;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Bricolage Grotesque", system-ui, sans-serif;
+    font-size: 18px; line-height: 1.5;
+    overflow-x: hidden;
+  }
+  /* photocopier grain */
+  body::before {
+    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 50; opacity: .35; mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.1  0 0 0 0 0.1  0 0 0 0 0.1  0 0 0 .35 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  }
+  a { color: inherit; }
+  :focus-visible { outline: 3px dashed var(--blue); outline-offset: 3px; }
+  .mono { font-family: "Courier Prime", ui-monospace, monospace; }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 0 clamp(16px, 4vw, 48px); overflow-x: clip; }
+
+  .masthead { display: flex; justify-content: space-between; align-items: center; padding: 22px 0; gap: 16px; }
+  .logo { font-weight: 800; font-size: 26px; font-variation-settings: "wdth" 75; text-decoration: none; position: relative; }
+  .logo::after { content: "loopy"; position: absolute; left: 3px; top: 2px; color: var(--pink); mix-blend-mode: multiply; z-index: -1; }
+  .masthead nav { display: flex; gap: 20px; font-family: "Courier Prime", monospace; font-size: 15px; }
+  .masthead nav a { text-decoration: none; border-bottom: 2px solid var(--pink); }
+
+  /* hero */
+  .hero { position: relative; padding: clamp(24px, 5vw, 64px) 0 clamp(60px, 8vw, 120px); }
+  .issue { font-family: "Courier Prime", monospace; font-size: 15px; transform: rotate(-2deg); display: inline-block; background: var(--yellow); padding: 4px 10px; margin-bottom: 18px; }
+  .hero h1 {
+    font-size: clamp(64px, 12vw, 176px);
+    font-variation-settings: "wdth" 75, "opsz" 96;
+    font-weight: 800; line-height: .86; letter-spacing: -.02em;
+    position: relative; max-width: 11ch;
+  }
+  .hero h1 .ov { position: absolute; inset: 0; color: var(--pink); mix-blend-mode: multiply; transform: translate(6px, 5px); pointer-events: none; }
+  .hero h1 .base { color: var(--blue); position: relative; mix-blend-mode: multiply; }
+  .hero-row { display: grid; grid-template-columns: 1.1fr .9fr; gap: 40px; align-items: end; margin-top: 36px; }
+  .hero p.lede { font-size: 21px; max-width: 34ch; }
+  .sticker {
+    justify-self: end; width: 230px; aspect-ratio: 1; border-radius: 50%; background: var(--pink); color: var(--ink);
+    display: grid; place-items: center; text-align: center; padding: 30px; font-weight: 700; font-size: 20px; line-height: 1.15;
+    transform: rotate(12deg); mix-blend-mode: multiply;
+    background-image: radial-gradient(rgba(0,0,0,.18) 1.2px, transparent 1.4px); background-size: 7px 7px;
+  }
+  .sticker small { display: block; font-family: "Courier Prime", monospace; font-weight: 400; font-size: 14px; margin-top: 6px; }
+  .halftone {
+    position: absolute; right: -6vw; top: 10px; width: 44vw; max-width: 560px; aspect-ratio: 1; border-radius: 50%; z-index: -1;
+    background-image: radial-gradient(var(--yellow) 38%, transparent 40%); background-size: 14px 14px;
+    -webkit-mask: radial-gradient(circle, #000 20%, transparent 70%); mask: radial-gradient(circle, #000 20%, transparent 70%);
+  }
+
+  /* spread headings */
+  .spread { padding: clamp(56px, 8vw, 110px) 0; position: relative; }
+  .spread h2 { font-size: clamp(40px, 6vw, 84px); font-variation-settings: "wdth" 75, "opsz" 96; font-weight: 800; line-height: .92; letter-spacing: -.015em; max-width: 14ch; }
+  .spread h2.blue { color: var(--blue); }
+  .spread .kicker { font-family: "Courier Prime", monospace; font-size: 16px; margin-top: 16px; max-width: 56ch; }
+
+  /* how it works */
+  .panels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; margin-top: 48px; }
+  .panel { background: var(--sheet); padding: 26px 24px 28px; position: relative; box-shadow: 0 1px 0 rgba(0,0,0,.08); }
+  .panel:nth-child(1) { transform: rotate(-1.4deg); }
+  .panel:nth-child(2) { transform: rotate(1deg) translateY(22px); }
+  .panel:nth-child(3) { transform: rotate(-.6deg); }
+  .panel::before { content: ""; position: absolute; top: -12px; left: 50%; width: 96px; height: 26px; transform: translateX(-50%) rotate(-3deg); background: rgba(255,232,0,.75); mix-blend-mode: multiply; }
+  .panel .no { font-size: 76px; font-weight: 800; line-height: 1; color: var(--pink); mix-blend-mode: multiply; font-variation-settings: "wdth" 75; }
+  .panel h3 { font-size: 32px; font-weight: 800; font-variation-settings: "wdth" 80; margin: 6px 0 8px; }
+  .panel code { font-family: "Courier Prime", monospace; background: var(--ink); color: var(--sheet); padding: 2px 8px; font-size: 15px; display: inline-block; margin-top: 12px; }
+
+  /* extract machine */
+  .machine { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(20px, 4vw, 60px); margin-top: 48px; align-items: start; }
+  .receipt {
+    background: #fff; padding: 22px 20px 30px; font-family: "Courier Prime", monospace; font-size: 14.5px; line-height: 1.55;
+    transform: rotate(-1.2deg); position: relative;
+    -webkit-mask: linear-gradient(#000 0 0) top/100% calc(100% - 10px) no-repeat, conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom/16px 10px repeat-x;
+            mask: linear-gradient(#000 0 0) top/100% calc(100% - 10px) no-repeat, conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom/16px 10px repeat-x;
+  }
+  .receipt .rh { text-align: center; border-bottom: 1px dashed #999; padding-bottom: 10px; margin-bottom: 10px; }
+  .tl { display: grid; grid-template-columns: 70px 52px 1fr; gap: 6px; padding: 1px 4px; position: relative; transition: opacity .4s; }
+  .tl .ev { color: #777; }
+  .tl.hit::before { content: ""; position: absolute; inset: 1px 0; background: var(--pink); opacity: .0; transform-origin: left; transform: scaleX(0); transition: transform .35s, opacity .2s; mix-blend-mode: multiply; z-index: 0; }
+  .tl > * { position: relative; z-index: 1; }
+  .receipt.marked .tl.hit::before { transform: scaleX(1); opacity: .45; }
+  .receipt.marked .tl:not(.hit) { opacity: .35; }
+  .tl span:last-child { overflow-wrap: anywhere; }
+
+  .board { background: var(--sheet); min-height: 560px; position: relative; padding: 18px; transform: rotate(.8deg); }
+  .board .bh { font-family: "Courier Prime", monospace; font-size: 14px; display: flex; justify-content: space-between; }
+  .board svg.edges { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+  .board svg path { fill: none; stroke: var(--blue); stroke-width: 2.4; stroke-linecap: round; }
+  .board svg path.back { stroke: var(--pink); stroke-dasharray: 6 7; }
+  .board .empty { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-family: "Courier Prime", monospace; font-size: 15px; color: #888; text-align: center; transition: opacity .3s; }
+  .board.filled .empty { opacity: 0; }
+  .gnodes { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 26px 20px; margin-top: 22px; }
+  .gn { background: #fff; border: 2.5px solid var(--ink); padding: 10px 12px; position: relative; opacity: 0; transform: scale(.9) rotate(var(--r, 0deg)); transition: opacity .2s, transform .3s cubic-bezier(.3, 1.6, .5, 1); }
+  .gn.on { opacity: 1; transform: scale(1) rotate(var(--r, 0deg)); }
+  .gn:nth-child(odd) { --r: -1.5deg; }
+  .gn:nth-child(even) { --r: 1.2deg; margin-top: 34px; }
+  .gn b { display: block; font-size: 19px; font-variation-settings: "wdth" 80; line-height: 1.15; }
+  .gn .k { font-family: "Courier Prime", monospace; font-size: 13px; display: inline-block; padding: 0 6px; margin-bottom: 4px; }
+  .k.agent { background: var(--pink); } .k.shell { background: var(--yellow); } .k.transform { background: #bfe3c9; }
+  .k.verify { background: var(--blue); color: #fff; } .k.route { background: var(--ink); color: #fff; } .k.approval { background: #ffb38a; } .k.join { background: #d6c8ff; }
+  .gn .src { font-family: "Courier Prime", monospace; font-size: 12px; color: #666; display: block; margin-top: 4px; overflow-wrap: anywhere; }
+  .flyer { position: fixed; z-index: 40; font-family: "Courier Prime", monospace; font-size: 14px; background: var(--pink); color: var(--ink); padding: 2px 8px; pointer-events: none; white-space: nowrap; mix-blend-mode: multiply; }
+  .mctl { display: flex; gap: 12px; margin-top: 26px; flex-wrap: wrap; align-items: center; }
+  .btn {
+    font: inherit; font-weight: 700; font-size: 17px; border: 2.5px solid var(--ink); background: var(--yellow); padding: 10px 18px; cursor: pointer;
+    box-shadow: 4px 4px 0 var(--ink); transition: transform .1s, box-shadow .1s; text-decoration: none; display: inline-block; color: var(--ink);
+  }
+  .btn:active { transform: translate(3px, 3px); box-shadow: 1px 1px 0 var(--ink); }
+  .btn.alt { background: #fff; }
+  .btn[disabled] { opacity: .4; cursor: default; }
+  .note { font-family: "Courier Prime", monospace; font-size: 14px; }
+
+  /* runtime board game */
+  .game { margin-top: 48px; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 40px; align-items: start; }
+  .track { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; position: relative; }
+  .sq { background: var(--sheet); border: 2.5px solid var(--ink); aspect-ratio: 1.15; padding: 10px; position: relative; display: flex; flex-direction: column; justify-content: space-between; }
+  .sq:nth-child(5) { grid-column: 4; grid-row: 2; } .sq:nth-child(6) { grid-column: 3; grid-row: 2; } .sq:nth-child(7) { grid-column: 2; grid-row: 2; } .sq:nth-child(8) { grid-column: 1; grid-row: 2; }
+  .sq b { font-size: 17px; line-height: 1.1; font-variation-settings: "wdth" 80; }
+  .sq .k { font-family: "Courier Prime", monospace; font-size: 12px; align-self: flex-start; padding: 0 5px; }
+  .sq.done { background: repeating-linear-gradient(45deg, #fff 0 6px, #e7f5ea 6px 12px); }
+  .sq.fail { background: var(--pink); }
+  .sq.wait { background: var(--yellow); }
+  .sq .stamp { position: absolute; right: 6px; bottom: 6px; font-family: "Courier Prime", monospace; font-weight: 700; font-size: 12px; color: var(--blue); border: 2px solid var(--blue); padding: 0 4px; transform: rotate(-8deg); opacity: 0; }
+  .sq.done .stamp, .sq.fail .stamp, .sq.wait .stamp { opacity: 1; }
+  .sq.fail .stamp { color: var(--ink); border-color: var(--ink); }
+  .pawn { position: absolute; width: 30px; height: 30px; border-radius: 50%; background: var(--blue); border: 3px solid var(--ink); z-index: 3; transition: left .45s cubic-bezier(.4, 1.5, .5, 1), top .45s cubic-bezier(.4, 1.5, .5, 1); box-shadow: 3px 3px 0 var(--ink); }
+  .pawn.ghost { background: var(--pink); }
+  .retry-arrow { font-family: "Courier Prime", monospace; font-size: 14px; margin-top: 14px; }
+  .card { background: #fff; padding: 20px; transform: rotate(-.8deg); border: 2.5px solid var(--ink); }
+  .card h3 { font-size: 24px; font-variation-settings: "wdth" 80; margin-bottom: 6px; }
+  .card .ctl { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0; }
+  .card .ctl .btn { font-size: 15px; padding: 8px 12px; box-shadow: 3px 3px 0 var(--ink); }
+  .card .status { font-family: "Courier Prime", monospace; font-size: 14px; min-height: 5.2em; border-top: 1px dashed #999; padding-top: 10px; }
+  .facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; margin-top: 56px; }
+  .facts div { border-top: 3px solid var(--ink); padding-top: 8px; }
+  .facts b { display: block; font-size: 20px; font-variation-settings: "wdth" 80; }
+  .facts p { font-size: 16px; }
+
+  /* local */
+  .local { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; }
+  .dbfile { background: var(--blue); color: #fff; padding: 34px; transform: rotate(-2deg); font-family: "Courier Prime", monospace; position: relative; }
+  .dbfile big { display: block; font-size: clamp(28px, 4vw, 48px); font-family: "Bricolage Grotesque", sans-serif; font-weight: 800; line-height: 1; margin-bottom: 18px; overflow-wrap: anywhere; }
+  .dbfile ul { list-style: none; }
+  .dbfile li::before { content: "+ "; color: var(--yellow); }
+
+  /* quick start */
+  .qs { background: var(--ink); color: var(--sheet); padding: clamp(28px, 4vw, 48px); transform: rotate(.5deg); position: relative; margin-top: 40px; }
+  .qs pre { font-family: "Courier Prime", monospace; font-size: clamp(14px, 1.6vw, 18px); line-height: 1.9; overflow-x: auto; white-space: pre; }
+  .qs pre .c { color: #9a9a93; }
+  .qs pre .p { color: var(--pink); }
+  .qs .staple { position: absolute; top: -8px; width: 44px; height: 8px; border: 2px solid #999; border-bottom: 0; }
+  .qs .staple.l { left: 30px; } .qs .staple.r { right: 30px; }
+
+  footer { padding: 70px 0 48px; display: flex; justify-content: space-between; align-items: end; gap: 20px; flex-wrap: wrap; }
+  footer .big { font-size: clamp(56px, 10vw, 140px); font-weight: 800; font-variation-settings: "wdth" 75; line-height: .8; color: var(--pink); mix-blend-mode: multiply; }
+  footer .links { font-family: "Courier Prime", monospace; font-size: 15px; display: flex; gap: 18px; flex-wrap: wrap; }
+
+  @media (max-width: 860px) {
+    .hero-row, .machine, .game, .local { grid-template-columns: 1fr; }
+    .sticker { justify-self: start; width: 190px; font-size: 17px; }
+    .panels { grid-template-columns: 1fr; }
+    .panel:nth-child(2) { transform: rotate(1deg); }
+    .facts { grid-template-columns: 1fr 1fr; }
+    .board { min-height: 0; }
+  }
+  @media (max-width: 480px) {
+    .masthead nav a:nth-child(2) { display: none; }
+    .tl { grid-template-columns: 70px 1fr; font-size: 13px; }
+    .receipt { padding: 18px 12px 26px; }
+    .tl .ev { display: none; }
+    .track { gap: 6px; }
+    .sq { padding: 6px; aspect-ratio: .8; }
+    .sq b { font-size: 13px; }
+    .sq .k { font-size: 10px; }
+    .pawn { width: 22px; height: 22px; }
+    .facts { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .gn, .tl, .tl.hit::before, .pawn { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="masthead">
+    <a class="logo" href="#">loopy</a>
+    <nav><a href="#how">how</a><a href="#extract">extract</a><a href="#start">start</a></nav>
+  </header>
+
+  <section class="hero">
+    <div class="halftone" aria-hidden="true"></div>
+    <span class="issue">Issue 1. Graphs from agent sessions.</span>
+    <h1><span class="base">You did it once. Keep the graph.</span><span class="ov" aria-hidden="true">You did it once. Keep the graph.</span></h1>
+    <div class="hero-row">
+      <p class="lede">Loopy reads a finished Codex or Claude Code session and turns it into a graph of steps. Then it runs that graph on your laptop, and you can pause it, retry a step, fork it, or make it wait for your OK.</p>
+      <div class="sticker" aria-hidden="true"><div>Runs on your machine<small>state in .loopy/loopy.db</small></div></div>
+    </div>
+  </section>
+
+  <section class="spread" id="how">
+    <h2>Three moves, in this order.</h2>
+    <div class="panels">
+      <article class="panel">
+        <div class="no">1</div><h3>Record</h3>
+        <p>Do the task with your agent like you always do. Loopy imports the session trace, every command and edit in order.</p>
+        <code>loopy import</code>
+      </article>
+      <article class="panel">
+        <div class="no">2</div><h3>Extract</h3>
+        <p>The extractor reads the trace and proposes a graph. It makes no model calls. Each node cites the trace lines it came from.</p>
+        <code>loopy extract</code>
+      </article>
+      <article class="panel">
+        <div class="no">3</div><h3>Run</h3>
+        <p>Loopy runs the graph through the agent CLIs you already have installed, with checks and approvals between the steps.</p>
+        <code>loopy run</code>
+      </article>
+    </div>
+  </section>
+
+  <section class="spread" id="extract">
+    <h2 class="blue">Cut the trace into steps.</h2>
+    <p class="kicker">Here is a real-shaped session: patch a lodash CVE. Press extract and watch the lines that matter become nodes. The rest was the agent thinking out loud.</p>
+    <div class="machine">
+      <div class="receipt" id="receipt">
+        <div class="rh">codex session ~/work/api<br>trace.jsonl</div>
+        <div id="lines"></div>
+      </div>
+      <div class="board" id="board">
+        <div class="bh"><span>proposed graph</span><span id="count">0 nodes</span></div>
+        <svg class="edges" id="edges" aria-hidden="true"></svg>
+        <p class="empty">Nothing yet.<br>The graph lands here.</p>
+        <div class="gnodes" id="gnodes"></div>
+      </div>
+    </div>
+    <div class="mctl">
+      <button class="btn" id="extractBtn" type="button">Extract the graph</button>
+      <button class="btn alt" id="undoBtn" type="button" disabled>Put it back</button>
+      <span class="note">Same result every time. The extractor is deterministic.</span>
+    </div>
+  </section>
+
+  <section class="spread" id="run">
+    <h2>Play a run. You roll for it.</h2>
+    <p class="kicker">Each square is a node. The tests fail once so you can watch the pawn go back for a retry. It stops on approval until you press approve.</p>
+    <div class="game">
+      <div>
+        <div class="track" id="track"></div>
+        <p class="retry-arrow">Failed verify sends the pawn back to patch. Three attempts max.</p>
+      </div>
+      <div class="card">
+        <h3 id="runTitle">run #41</h3>
+        <p class="note" id="runState">ready</p>
+        <div class="ctl">
+          <button class="btn" data-a="start" type="button">Start</button>
+          <button class="btn alt" data-a="pause" type="button">Pause</button>
+          <button class="btn alt" data-a="approve" type="button">Approve</button>
+          <button class="btn alt" data-a="fork" type="button">Fork</button>
+          <button class="btn alt" data-a="cancel" type="button">Cancel</button>
+        </div>
+        <div class="status" id="status" aria-live="polite"></div>
+      </div>
+    </div>
+    <div class="facts">
+      <div><b>Pause and resume</b><p>Stops between nodes. Pick it up later.</p></div>
+      <div><b>Fork</b><p>Start a new run from any checkpoint.</p></div>
+      <div><b>Approvals</b><p>A person says yes before the push.</p></div>
+      <div><b>Cron</b><p>Schedule it to run at 09:00 every weekday.</p></div>
+    </div>
+  </section>
+
+  <section class="spread">
+    <div class="local">
+      <div>
+        <h2>No cloud in this zine.</h2>
+        <p class="kicker">Loopy runs on Bun and calls the agent CLIs already on your machine. There is a local Studio too. Run loopy ui and edit nodes and edges in the browser.</p>
+      </div>
+      <div class="dbfile">
+        <big>.loopy/loopy.db</big>
+        <ul><li>runs and checkpoints</li><li>approvals and schedules</li><li>imported traces</li><li>one SQLite file per project</li></ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="spread" id="start">
+    <h2 class="blue">Cut out and keep.</h2>
+    <div class="qs">
+      <span class="staple l"></span><span class="staple r"></span>
+<pre><span class="c"># install</span>
+<span class="p">$</span> bun add -g loopy
+<span class="p">$</span> loopy init
+
+<span class="c"># bring in a session you already ran</span>
+<span class="p">$</span> loopy import session.jsonl --provider claude-code
+<span class="p">$</span> loopy extract --import &lt;import-id&gt;
+<span class="p">$</span> loopy approve &lt;proposal-id&gt;
+
+<span class="c"># run it, then look at it</span>
+<span class="p">$</span> loopy run &lt;workflow-id&gt;
+<span class="p">$</span> loopy ui</pre>
+    </div>
+  </section>
+
+  <footer>
+    <div class="big">loopy</div>
+    <div class="links"><a href="#">github</a><a href="#">docs</a><a href="index.html">catalog</a><span>Apache-2.0</span></div>
+  </footer>
+</div>
+
+<script>
+(() => {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const TRACE = [
+    ['09:12:03', 'start', 'codex session in ~/work/api'],
+    ['09:12:04', 'user', '"patch the critical CVEs"'],
+    ['09:12:06', 'exec', 'bun audit --json', 'audit'],
+    ['09:12:09', 'read', 'package.json'],
+    ['09:12:11', 'think', '1 critical: lodash 4.17.20', 'parse'],
+    ['09:12:12', 'exec', 'npm view lodash versions'],
+    ['09:12:18', 'edit', 'lodash ^4.17.21', 'patch'],
+    ['09:12:19', 'exec', 'bun install'],
+    ['09:12:31', 'exec', 'bun run check', 'check'],
+    ['09:12:58', 'out', '412 passed, 0 failed', 'route'],
+    ['09:13:02', 'user', '"diff looks right, push it"', 'review'],
+    ['09:13:07', 'exec', 'gh pr create --fill', 'push'],
+    ['09:13:09', 'end', 'session saved'],
+  ];
+  const GN = {
+    audit: ['shell', 'Audit deps'], parse: ['transform', 'List critical CVEs'], patch: ['agent', 'Bump the version'],
+    check: ['verify', 'bun run check'], route: ['route', 'Pass or retry'], review: ['approval', 'Review the diff'], push: ['shell', 'Open the PR'],
+  };
+  const EDGES = [['audit', 'parse'], ['parse', 'patch'], ['patch', 'check'], ['check', 'route'], ['route', 'review'], ['review', 'push'], ['route', 'patch', 'back']];
+  const lines = document.getElementById('lines'), gnodes = document.getElementById('gnodes'), receipt = document.getElementById('receipt');
+  const lineEl = {}, nodeEl = {};
+  TRACE.forEach(([t, ev, txt, node]) => {
+    const d = document.createElement('div'); d.className = 'tl' + (node ? ' hit' : '');
+    d.innerHTML = `<span>${t}</span><span class="ev">${ev}</span><span>${txt}</span>`;
+    lines.appendChild(d); if (node) lineEl[node] = d;
+  });
+  Object.entries(GN).forEach(([id, [k, name]]) => {
+    const d = document.createElement('div'); d.className = 'gn';
+    const src = TRACE.find(r => r[3] === id);
+    d.innerHTML = `<span class="k ${k}">${k}</span><b>${name}</b><span class="src">from ${src[0]} ${src[1]}</span>`;
+    gnodes.appendChild(d); nodeEl[id] = d;
+  });
+  const svg = document.getElementById('edges'), board = document.getElementById('board'), count = document.getElementById('count');
+  function drawEdges() {
+    const b = board.getBoundingClientRect();
+    const scale = board.offsetWidth / b.width || 1;
+    svg.innerHTML = '';
+    EDGES.forEach(([a, z, cls]) => {
+      if (!nodeEl[a].classList.contains('on') || !nodeEl[z].classList.contains('on')) return;
+      const A = nodeEl[a], Z = nodeEl[z];
+      const ax = A.offsetLeft + gnodes.offsetLeft + A.offsetWidth / 2, ay = A.offsetTop + gnodes.offsetTop + A.offsetHeight;
+      const zx = Z.offsetLeft + gnodes.offsetLeft + Z.offsetWidth / 2, zy = Z.offsetTop + gnodes.offsetTop;
+      const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      let d;
+      if (cls === 'back') {
+        const ay2 = A.offsetTop + gnodes.offsetTop + A.offsetHeight / 2, zy2 = Z.offsetTop + gnodes.offsetTop + Z.offsetHeight / 2;
+        const ex = A.offsetLeft + gnodes.offsetLeft + A.offsetWidth, zx2 = Z.offsetLeft + gnodes.offsetLeft + Z.offsetWidth;
+        const out = Math.max(ex, zx2) + 16;
+        d = `M${ex},${ay2} C${out},${ay2} ${out},${zy2} ${zx2},${zy2}`;
+      } else if (A.offsetLeft < Z.offsetLeft) {
+        const x1 = A.offsetLeft + gnodes.offsetLeft + A.offsetWidth, y1 = A.offsetTop + gnodes.offsetTop + A.offsetHeight * .6;
+        const x2 = Z.offsetLeft + gnodes.offsetLeft, y2 = Z.offsetTop + gnodes.offsetTop + Z.offsetHeight * .4;
+        d = `M${x1},${y1} C${x1 + 14},${y1 + 4} ${x2 - 14},${y2 - 6} ${x2},${y2}`;
+      } else {
+        const x1 = A.offsetLeft + gnodes.offsetLeft + A.offsetWidth * .3;
+        const x2 = Z.offsetLeft + gnodes.offsetLeft + Z.offsetWidth * .7;
+        d = `M${x1},${ay} C${x1 - 30},${ay + 50} ${x2 + 40},${zy - 40} ${x2},${zy}`;
+      }
+      p.setAttribute('d', d); if (cls) p.setAttribute('class', cls);
+      svg.appendChild(p);
+      if (!reduce && !p.dataset.drawn) {
+        const L = p.getTotalLength(); p.style.strokeDasharray = cls ? '6 7' : L; if (!cls) { p.style.strokeDashoffset = L; p.animate([{ strokeDashoffset: L }, { strokeDashoffset: 0 }], { duration: 500, fill: 'forwards' }); }
+      }
+    });
+    count.textContent = gnodes.querySelectorAll('.gn.on').length + ' nodes';
+  }
+  let busy = false;
+  const extractBtn = document.getElementById('extractBtn'), undoBtn = document.getElementById('undoBtn');
+  const runExtract = async () => {
+    if (busy) return; busy = true; extractBtn.disabled = true; board.classList.add('filled');
+    receipt.classList.add('marked');
+    const ids = Object.keys(GN);
+    for (const id of ids) {
+      if (!reduce) {
+        await new Promise(r => setTimeout(r, 260));
+        const from = lineEl[id].getBoundingClientRect(), to = nodeEl[id].getBoundingClientRect();
+        const f = document.createElement('div'); f.className = 'flyer'; f.textContent = lineEl[id].lastChild.textContent;
+        f.style.left = from.left + 'px'; f.style.top = from.top + 'px'; document.body.appendChild(f);
+        const dx = to.left - from.left, dy = to.top - from.top;
+        await f.animate([{ transform: 'translate(0,0) rotate(0)' }, { transform: `translate(${dx * .5}px, ${dy * .5 - 40}px) rotate(-6deg)`, offset: .5 }, { transform: `translate(${dx}px, ${dy}px) rotate(0)`, opacity: .2 }], { duration: 650, easing: 'cubic-bezier(.5,0,.3,1)' }).finished;
+        f.remove();
+      }
+      nodeEl[id].classList.add('on'); drawEdges();
+    }
+    busy = false; undoBtn.disabled = false;
+  };
+  extractBtn.addEventListener('click', runExtract);
+  const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { io.disconnect(); setTimeout(runExtract, 400); } }, { threshold: .3 });
+  io.observe(document.querySelector('.machine'));
+  undoBtn.addEventListener('click', () => {
+    receipt.classList.remove('marked'); board.classList.remove('filled'); Object.values(nodeEl).forEach(n => n.classList.remove('on')); drawEdges();
+    undoBtn.disabled = true; extractBtn.disabled = false;
+  });
+  addEventListener('resize', drawEdges);
+
+  // board game run
+  const SQ = [['audit', 'shell', 'Audit deps'], ['parse', 'transform', 'List CVEs'], ['patch', 'agent', 'Bump version'], ['tests', 'verify', 'bun test'],
+    ['join', 'join', 'Tests and types'], ['route', 'route', 'Pass or retry'], ['review', 'approval', 'Review diff'], ['push', 'shell', 'Open PR']];
+  const track = document.getElementById('track'), sqEl = [];
+  SQ.forEach(([id, k, name]) => { const d = document.createElement('div'); d.className = 'sq'; d.innerHTML = `<span class="k ${k}">${k}</span><b>${name}</b><span class="stamp">ok</span>`; track.appendChild(d); sqEl.push(d); });
+  const pawn = document.createElement('div'); pawn.className = 'pawn'; track.appendChild(pawn);
+  const statusEl = document.getElementById('status'), stateEl = document.getElementById('runState'), titleEl = document.getElementById('runTitle');
+  const b = a => document.querySelector(`.card [data-a="${a}"]`);
+  let S;
+  const place = i => { const s = sqEl[Math.max(0, Math.min(i, 7))]; pawn.style.left = (s.offsetLeft + s.offsetWidth - pawn.offsetWidth - 8) + 'px'; pawn.style.top = (s.offsetTop + 8) + 'px'; };
+  const say = m => { statusEl.textContent = m; };
+  function ui() {
+    stateEl.textContent = S.state;
+    b('start').disabled = !['ready', 'paused'].includes(S.state); b('start').textContent = S.state === 'paused' ? 'Resume' : 'Start';
+    b('pause').disabled = S.state !== 'running'; b('approve').disabled = S.state !== 'waiting';
+    b('fork').disabled = S.i < 1 || S.state === 'running'; b('cancel').disabled = !['running', 'paused', 'waiting'].includes(S.state);
+  }
+  function step() {
+    if (S.state !== 'running') return;
+    S.timer = setTimeout(() => {
+      if (S.state !== 'running') return;
+      const [id] = SQ[S.i];
+      if (id === 'route' && !S.failed) {
+        S.failed = true; sqEl[3].className = 'sq fail'; sqEl[3].querySelector('.stamp').textContent = 'failed';
+        say('bun test failed 2 of 412. Route sends it back to patch, attempt 2 of 3.');
+        [2, 3, 4].forEach(j => { if (j !== 3) sqEl[j].className = 'sq'; });
+        S.i = 2; place(2); ui(); step(); return;
+      }
+      if (id === 'review' && !S.approved) { sqEl[S.i].className = 'sq wait'; sqEl[S.i].querySelector('.stamp').textContent = 'waiting'; S.state = 'waiting'; say('Waiting at the approval square. Your move.'); ui(); return; }
+      sqEl[S.i].className = 'sq done'; sqEl[S.i].querySelector('.stamp').textContent = 'ok';
+      say(`${SQ[S.i][2]} done.`);
+      S.i += 1;
+      if (S.i >= SQ.length) { S.state = 'succeeded'; say('Run succeeded. PR opened.'); ui(); return; }
+      place(S.i); ui(); step();
+    }, reduce ? 300 : 850);
+  }
+  function reset(title = 'run #41') {
+    clearTimeout(S?.timer); S = { i: 0, state: 'ready', failed: false, approved: false, timer: 0 };
+    sqEl.forEach(s => s.className = 'sq'); pawn.classList.remove('ghost'); titleEl.textContent = title; place(0); say('Press start.'); ui();
+  }
+  document.querySelector('.card .ctl').addEventListener('click', e => {
+    const a = e.target.closest('button')?.dataset.a; if (!a) return;
+    if (a === 'start') { S.state = 'running'; say(S.i ? 'Resumed.' : 'Rolling.'); ui(); step(); }
+    if (a === 'pause') { clearTimeout(S.timer); S.state = 'paused'; say(`Paused before ${SQ[S.i][2]}.`); ui(); }
+    if (a === 'approve') { S.approved = true; S.state = 'running'; sqEl[S.i].className = 'sq'; say('Approved.'); ui(); step(); }
+    if (a === 'cancel') { clearTimeout(S.timer); S.state = 'cancelled'; say('Cancelled. History kept in loopy.db.'); ui(); }
+    if (a === 'fork') {
+      const at = S.i, failed = S.failed; reset('run #42, forked'); S.i = at; S.failed = failed;
+      for (let j = 0; j < at; j++) sqEl[j].className = 'sq done';
+      pawn.classList.add('ghost'); place(at); S.state = 'paused'; say(`Forked from the checkpoint before ${SQ[at][2]}. Press resume.`); ui();
+    }
+  });
+  addEventListener('resize', () => place(S.i));
+  reset();
+})();
+</script>
+</body>
+</html>
