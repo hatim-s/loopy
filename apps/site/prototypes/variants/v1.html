@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loopy. Do the work once, run it with control.</title>
+<meta name="description" content="Loopy is a local-first graph harness for coding agents. Do a task once, extract an execution graph from the trace, run it on your machine.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0D1014;--bg-raised:#11151A;--surface:#161B21;--surface-hover:#1C2229;--surface-active:#232A33;
+  --line:#222931;--line-strong:#323B46;--text:#E6EAF0;--text-muted:#98A2AE;--text-subtle:#6A7480;
+  --accent:#8FA8FF;--accent-strong:#B7C6FF;--accent-ink:#0B1330;--aqua:#6EE0D2;
+  --ok:#5CD39B;--run:#8FA8FF;--wait:#F0C46C;--fail:#F2877E;--pend:#6A7480;
+  --accent-soft:rgba(143,168,255,.12);--accent-border:rgba(143,168,255,.35);
+  --grad:linear-gradient(135deg,#8FA8FF 0%,#6EE0D2 100%);
+  --ease:cubic-bezier(.2,.8,.2,1);
+  --focus:0 0 0 2px #0D1014,0 0 0 4px #8FA8FF;
+  --sans:"Geist",ui-sans-serif,system-ui,sans-serif;
+  --mono:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --wrap:1200px;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:400 16px/1.55 var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+a:focus-visible,button:focus-visible{outline:none;box-shadow:var(--focus);border-radius:6px}
+code,kbd,.mono{font-family:var(--mono)}
+.wrap{max-width:var(--wrap);margin:0 auto;padding:0 32px}
+@media (max-width:640px){.wrap{padding:0 20px}}
+.skip{position:absolute;left:-9999px}.skip:focus{left:16px;top:16px;z-index:100;background:var(--surface);padding:8px 12px}
+
+/* nav */
+.nav{position:sticky;top:0;z-index:50;background:rgba(13,16,20,.72);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid transparent;transition:border-color 220ms var(--ease)}
+.nav.scrolled{border-bottom-color:var(--line)}
+.nav .wrap{display:flex;align-items:center;gap:28px;height:60px}
+.mark{display:flex;align-items:center;gap:10px;font-weight:600;font-size:17px;letter-spacing:-.02em}
+.nav-links{display:flex;gap:24px;margin-left:auto;font-size:14px;color:var(--text-muted)}
+.nav-links a{transition:color 160ms var(--ease)}
+.nav-links a:hover{color:var(--text)}
+.btn{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 14px;border-radius:6px;font:500 14px/1 var(--sans);border:1px solid var(--line-strong);background:var(--surface);color:var(--text);cursor:pointer;transition:background 160ms var(--ease),border-color 160ms var(--ease)}
+.btn:hover{background:var(--surface-hover)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn-primary:hover{background:var(--accent-strong);border-color:var(--accent-strong)}
+@media (max-width:640px){.nav-links a.hide-sm{display:none}.nav .wrap{gap:16px}.nav-links{gap:16px}}
+
+/* hero */
+.hero{padding:96px 0 120px;position:relative}
+.hero-grid{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:64px;align-items:start;margin-top:56px}
+h1{font-size:clamp(44px,6.6vw,88px);line-height:.98;letter-spacing:-.035em;font-weight:600;margin:0}
+h1 span{display:block;opacity:0;transform:translateY(14px);animation:rise 900ms var(--ease) forwards}
+h1 span:nth-child(2){animation-delay:140ms;color:var(--text-muted)}
+h1 span:nth-child(3){animation-delay:280ms;color:var(--text-muted)}
+@keyframes rise{to{opacity:1;transform:none}}
+.lede{font-size:18px;color:var(--text-muted);max-width:30em;margin:0 0 36px;opacity:0;animation:rise 900ms 420ms var(--ease) forwards}
+.install{display:flex;flex-wrap:wrap;gap:12px;align-items:center;opacity:0;animation:rise 900ms 520ms var(--ease) forwards}
+.cmd{display:inline-flex;align-items:center;gap:12px;height:44px;padding:0 6px 0 16px;border:1px solid var(--line-strong);background:var(--surface);border-radius:10px;font:400 14px var(--mono)}
+.cmd .prompt{color:var(--text-subtle)}
+.cmd button{height:32px;padding:0 10px;border-radius:6px;border:0;background:var(--surface-active);color:var(--text-muted);font:500 13px var(--sans);cursor:pointer;transition:color 160ms var(--ease),background 160ms var(--ease)}
+.cmd button:hover{color:var(--text);background:var(--line-strong)}
+.cmd button[data-copied]{color:var(--ok)}
+.hero-note{font-size:14px;color:var(--text-subtle)}
+.hero-note a{color:var(--text-muted);border-bottom:1px solid var(--line-strong)}
+
+.term{border:1px solid var(--line);background:var(--bg-raised);border-radius:14px;overflow:hidden;opacity:0;animation:rise 900ms 300ms var(--ease) forwards}
+.term-top{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);font-size:13px;color:var(--text-muted)}
+.rec{width:8px;height:8px;border-radius:50%;background:var(--fail);box-shadow:0 0 0 0 rgba(242,135,126,.5);animation:rec 1.6s infinite}
+@keyframes rec{0%{box-shadow:0 0 0 0 rgba(242,135,126,.45)}70%{box-shadow:0 0 0 8px rgba(242,135,126,0)}100%{box-shadow:0 0 0 0 rgba(242,135,126,0)}}
+.term-top .who{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--text-subtle)}
+.term-body{padding:16px 18px;font:400 13px/1.85 var(--mono);height:300px;overflow:hidden;position:relative}
+.term-body::after{content:"";position:absolute;inset:auto 0 0 0;height:40px;background:linear-gradient(transparent,var(--bg-raised))}
+.tl{display:flex;gap:14px;white-space:nowrap;opacity:0;transform:translateY(4px);transition:opacity 260ms var(--ease),transform 260ms var(--ease)}
+.tl.in{opacity:1;transform:none}
+.tl .t{color:var(--text-subtle)}
+.tl .k{width:52px;flex:none;color:var(--text-muted)}
+.tl .v{color:var(--text);overflow:hidden;text-overflow:ellipsis}
+.tl .v.u{color:var(--accent-strong)}
+.caret{display:inline-block;width:7px;height:15px;background:var(--accent);vertical-align:-2px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+@media (max-width:900px){.hero-grid{grid-template-columns:1fr}.hero{padding:64px 0 88px}.term-body{height:300px;font-size:12px}}
+
+/* pinned snap */
+.snap{position:relative;height:420vh;border-top:1px solid var(--line)}
+.snap-sticky{position:sticky;top:60px;height:calc(100vh - 60px);display:flex;flex-direction:column;overflow:hidden}
+.snap-head{display:grid;grid-template-columns:repeat(3,1fr);gap:32px;padding-top:36px}
+.step{position:relative;padding-top:16px;color:var(--text-subtle);transition:color 220ms var(--ease)}
+.step::before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:var(--line)}
+.step i{position:absolute;left:0;top:0;height:2px;width:100%;background:var(--grad);transform-origin:left;transform:scaleX(0)}
+.step h3{margin:0 0 6px;font-size:20px;font-weight:600;letter-spacing:-.02em;display:flex;gap:10px;align-items:baseline}
+.step h3 small{font:400 12px var(--mono);color:var(--text-subtle)}
+.step p{margin:0;font-size:14px;line-height:1.5;max-width:30em}
+.step.on{color:var(--text-muted)}.step.on h3{color:var(--text)}
+.stage{position:relative;flex:1;margin:12px auto 28px;width:100%}
+.stage svg.wires{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}
+.ln,.ev{position:absolute;left:0;top:0;will-change:transform,opacity}
+.ln{font:400 13px/1 var(--mono);color:var(--text-muted);white-space:nowrap;transform-origin:0 50%}
+.ln .t{color:var(--text-subtle);margin-right:14px}
+.ln .k{display:inline-block;width:52px;color:var(--text-subtle)}
+.ln.hit{color:var(--text)}
+.ln .hl{position:absolute;inset:-5px -8px;border-radius:6px;background:var(--accent-soft);border:1px solid var(--accent-border);opacity:0}
+.ev{width:var(--cw,200px)}
+@media (max-width:640px){.ln{font-size:11px}.ln .t{margin-right:8px}.ln .k{width:40px}}
+.card{position:absolute;left:0;top:0;width:100%;height:var(--ch,64px);border:1px solid var(--line-strong);background:var(--surface);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;justify-content:center;gap:4px;opacity:0;line-height:1.25}
+.card .kind{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted)}
+.card .kind svg{width:14px;height:14px;color:var(--accent)}
+.card .ttl{font-size:14px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .st{position:absolute;right:12px;top:12px;width:10px;height:10px;border-radius:50%;border:1.5px solid var(--pend)}
+.card[data-s="running"]{border-color:var(--accent-border)}
+.card[data-s="running"] .st{border-color:var(--run);animation:pulse 1s var(--ease) infinite}
+.card[data-s="waiting"]{border-color:rgba(240,196,108,.45)}
+.card[data-s="waiting"] .st{border-color:var(--wait);border-width:2px;background:transparent}
+.card[data-s="succeeded"] .st{background:var(--ok);border-color:var(--ok)}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(143,168,255,.6)}100%{box-shadow:0 0 0 7px rgba(143,168,255,0)}}
+.card .gate{position:absolute;right:10px;bottom:9px;font-size:11px;color:var(--wait);opacity:0;transition:opacity 160ms var(--ease)}
+.card[data-s="waiting"] .gate{opacity:1}
+.wire{fill:none;stroke:var(--line-strong);stroke-width:1.5}
+.wire.lit{stroke:url(#wg)}
+.thread{fill:none;stroke:var(--accent);stroke-width:1;stroke-dasharray:2 4}
+.tok{fill:var(--aqua);filter:drop-shadow(0 0 6px rgba(110,224,210,.9))}
+.elabel{font:500 11px var(--sans);fill:var(--text-subtle)}
+@media (max-width:760px){.snap-head{grid-template-columns:1fr;gap:0;padding-top:20px}.step{display:none}.step.on{display:block}.step p{font-size:13px}}
+
+/* sections */
+section.block{padding:128px 0;border-top:1px solid var(--line)}
+h2{font-size:clamp(32px,4.6vw,64px);line-height:1.02;letter-spacing:-.035em;font-weight:600;margin:0 0 20px;max-width:14em}
+.sub{font-size:18px;color:var(--text-muted);max-width:34em;margin:0}
+@media (max-width:640px){section.block{padding:88px 0}}
+
+.controls{margin-top:64px;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));border-top:1px solid var(--line);border-left:1px solid var(--line)}
+.ctl{padding:24px 24px 28px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);position:relative}
+.ctl svg{width:44px;height:28px;display:block;margin-bottom:18px;overflow:visible}
+.ctl h3{margin:0 0 6px;font-size:16px;font-weight:600;letter-spacing:-.01em}
+.ctl p{margin:0;font-size:14px;color:var(--text-muted)}
+.ctl svg .s{stroke:var(--line-strong);stroke-width:1.5;fill:none}
+.ctl svg .a{stroke:var(--accent);stroke-width:1.5;fill:none}
+.ctl svg .d{fill:var(--accent)}
+.ctl svg .g{fill:var(--ok)}
+.ctl svg .w{stroke:var(--wait);stroke-width:1.5;fill:none}
+
+.providers{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:64px;align-items:start}
+.plist{list-style:none;margin:0;padding:0}
+.plist li{display:flex;align-items:baseline;justify-content:space-between;gap:16px;padding:18px 0;border-bottom:1px solid var(--line);font-size:clamp(28px,3.6vw,44px);font-weight:600;letter-spacing:-.03em}
+.plist li:first-child{border-top:1px solid var(--line)}
+.plist code{font-size:14px;color:var(--text-subtle);font-weight:400;letter-spacing:0}
+@media (max-width:900px){.providers{grid-template-columns:1fr;gap:40px}}
+
+.local{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:64px;align-items:center}
+.machine{border:1px solid var(--line-strong);border-radius:14px;padding:22px;position:relative;background:var(--bg-raised)}
+.machine-top{display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);margin-bottom:18px}
+.machine-top code{color:var(--text-subtle)}
+.mgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mcell{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:14px}
+.mcell b{display:block;font-weight:500;font-size:14px}
+.mcell span{font-size:13px;color:var(--text-muted)}
+.mcell code{font-size:12px;color:var(--text-subtle)}
+.outside{margin-top:18px;display:flex;align-items:center;gap:12px;font-size:13px;color:var(--text-subtle)}
+.outside::before{content:"";flex:1;height:1px;background:repeating-linear-gradient(90deg,var(--line-strong) 0 4px,transparent 4px 8px)}
+.facts{list-style:none;margin:32px 0 0;padding:0;display:grid;gap:14px}
+.facts li{display:flex;gap:12px;color:var(--text-muted);font-size:16px}
+.facts li::before{content:"";flex:none;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-top:10px}
+@media (max-width:900px){.local{grid-template-columns:1fr}}
+
+.example{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:56px;margin-top:64px}
+.tabs{display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap}
+.tab{height:34px;padding:0 12px;border-radius:6px;border:1px solid var(--line);background:transparent;color:var(--text-muted);font:500 14px var(--sans);cursor:pointer;transition:all 160ms var(--ease)}
+.tab[aria-selected="true"]{background:var(--surface-active);border-color:var(--line-strong);color:var(--text)}
+.steps{list-style:none;margin:0;padding:0;counter-reset:s}
+.steps li{display:grid;grid-template-columns:28px 1fr;gap:12px;padding:14px 0;border-bottom:1px solid var(--line)}
+.steps li::before{counter-increment:s;content:counter(s);font-size:13px;color:var(--text-subtle);padding-top:2px}
+.steps b{font-weight:500}
+.steps span{display:block;font-size:14px;color:var(--text-muted)}
+.steps .kind{display:inline-block;font-size:12px;color:var(--accent-strong);margin-left:8px;font-weight:400}
+.code{border:1px solid var(--line);background:var(--bg-raised);border-radius:14px;padding:22px 24px;font:400 13.5px/1.9 var(--mono);overflow-x:auto;white-space:pre;color:var(--text)}
+.code .c{color:var(--text-subtle)}
+.code .p{color:var(--text-subtle);user-select:none}
+.code .s{color:var(--aqua)}
+@media (max-width:900px){.example{grid-template-columns:1fr}}
+
+.final{text-align:left;padding:160px 0}
+.final h2{font-size:clamp(40px,6.6vw,88px);max-width:none}
+.final .install{opacity:1;animation:none;margin-top:36px}
+
+footer{border-top:1px solid var(--line);padding:40px 0 56px;color:var(--text-subtle);font-size:14px}
+footer .wrap{display:flex;flex-wrap:wrap;gap:24px;align-items:center}
+footer nav{display:flex;gap:20px;margin-left:auto}
+footer a:hover{color:var(--text)}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:1ms!important;animation-iteration-count:1!important;transition-duration:1ms!important}
+  h1 span,.lede,.install,.term{opacity:1;transform:none;animation:none}
+  .tl{opacity:1;transform:none}
+  .snap{height:auto}
+  .snap-sticky{position:relative;top:0;height:auto;min-height:760px}
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8FA8FF"/><stop offset="1" stop-color="#6EE0D2"/></linearGradient>
+    <symbol id="g-agent" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="2" fill="currentColor"/></symbol>
+    <symbol id="g-shell" viewBox="0 0 16 16"><path d="M3 4.5 6.5 8 3 11.5M8.5 12h5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="g-cond" viewBox="0 0 16 16"><path d="M8 2.5 13.5 8 8 13.5 2.5 8Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+    <symbol id="g-verify" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="m5.6 8.2 1.7 1.7 3.2-3.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="g-approve" viewBox="0 0 16 16"><path d="M4 13V3M12 13V3M4 7h8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+    <symbol id="g-join" viewBox="0 0 16 16"><path d="M3 3c0 4 5 4 5 7v3M13 3c0 4-5 4-5 7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+    <symbol id="g-transform" viewBox="0 0 16 16"><path d="M3 5.5h9l-2-2M13 10.5H4l2 2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="g-mark" viewBox="0 0 24 24"><path d="M6.5 7.5c-2.8 0-4.5 2-4.5 4.5s1.7 4.5 4.5 4.5c4 0 7-9 11-9 2.8 0 4.5 2 4.5 4.5s-1.7 4.5-4.5 4.5c-4 0-7-9-11-9Z" fill="none" stroke="url(#brand)" stroke-width="2.2" stroke-linejoin="round"/></symbol>
+  </defs>
+</svg>
+
+<header class="nav" id="nav">
+  <div class="wrap">
+    <a class="mark" href="#top" aria-label="Loopy home"><svg width="26" height="26" aria-hidden="true"><use href="#g-mark"/></svg>loopy</a>
+    <nav class="nav-links" aria-label="Primary">
+      <a href="#docs">Docs</a>
+      <a href="#example" class="hide-sm">Examples</a>
+      <a href="#github" class="hide-sm">GitHub</a>
+    </nav>
+    <a class="btn btn-primary" href="#install">Install</a>
+  </div>
+</header>
+
+<main id="main">
+<section class="hero" id="top">
+  <div class="wrap">
+  <h1><span>Do the work once.</span><span>Extract the graph.</span><span>Run it with control.</span></h1>
+  <div class="hero-grid">
+    <div>
+      <p class="lede">Loopy watches you finish a task with a coding agent, turns that session into a graph you can read and edit, then runs the graph again on your machine.</p>
+      <div class="install" id="install">
+        <div class="cmd"><span><span class="prompt">$ </span>bun add -g loopy</span><button type="button" data-copy="bun add -g loopy">Copy</button></div>
+        <span class="hero-note">Then run <a href="#docs"><code>loopy studio</code></a></span>
+      </div>
+    </div>
+    <div class="term" aria-label="A recorded Codex session">
+      <div class="term-top"><span class="rec" aria-hidden="true"></span>Recording session<span class="who">codex ~/work/api</span></div>
+      <div class="term-body" id="term" aria-hidden="true"></div>
+    </div>
+  </div>
+  </div>
+</section>
+
+<section class="snap" id="snap" aria-label="How a session becomes a graph">
+  <div class="snap-sticky">
+    <div class="wrap snap-head">
+      <div class="step" data-step="0"><i></i><h3>Capture <small>loopy import</small></h3><p>Do the task once in Codex, Claude Code, OpenCode or Pi. Loopy records the session, or imports one you already ran, as a trace.</p></div>
+      <div class="step" data-step="1"><i></i><h3>Extract <small>loopy extract</small></h3><p>A deterministic extractor proposes a graph. No model calls. Every node points back to the trace events behind it. You review, edit and approve.</p></div>
+      <div class="step" data-step="2"><i></i><h3>Run <small>loopy run</small></h3><p>The graph runs on your machine through the same CLIs. Loopy owns the order, the checks and the approvals. State lives in local SQLite.</p></div>
+    </div>
+    <div class="wrap stage" id="stage">
+      <svg class="wires" id="wires" aria-hidden="true">
+        <defs><linearGradient id="wg" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1200" y2="600"><stop offset="0" stop-color="#8FA8FF"/><stop offset="1" stop-color="#6EE0D2"/></linearGradient></defs>
+        <g id="threads"></g><g id="edges"></g><g id="toks"></g>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="runtime">
+  <div class="wrap">
+    <h2>The agent does the work. The graph decides what happens next.</h2>
+    <p class="sub">Inside a node, the agent loops as long as it needs. Between nodes, Loopy runs plain rules you can read. Here is what the runtime handles for you.</p>
+    <div class="controls">
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="s" d="M2 14h12"/><path class="a" d="M14 14c8 0 8-10 16-10h12"/><path class="s" d="M14 14c8 0 8 10 16 10h12"/><circle class="d" cx="14" cy="14" r="3"/></svg><h3>Branching</h3><p>Conditions route the run down one edge or another based on real output.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="a" d="M2 4h12c8 0 8 10 16 10h12"/><path class="a" d="M2 24h12c8 0 8-10 16-10"/><circle class="d" cx="30" cy="14" r="3"/></svg><h3>Parallel joins</h3><p>Fan out to several nodes at once and wait for all of them before moving on.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="s" d="M4 14h36"/><path class="a" d="M14 14c0-10 16-10 16 0"/><circle cx="14" cy="14" r="3" fill="#F2877E"/><circle class="g" cx="30" cy="14" r="3"/></svg><h3>Retries</h3><p>Failed nodes retry within the limits you set, then stop with the error on record.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="s" d="M2 14h14M28 14h14"/><circle class="w" cx="22" cy="14" r="6"/></svg><h3>Approvals</h3><p>The run waits at an approval node until a person says yes. Nothing gets pushed before that.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="s" d="M2 14h40"/><rect class="d" x="16" y="7" width="3" height="14" rx="1"/><rect class="d" x="24" y="7" width="3" height="14" rx="1"/></svg><h3>Pause, resume, cancel</h3><p>Stop a run between nodes and pick it up later, or end it cleanly.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="s" d="M2 20h40"/><path class="a" d="M8 20c0-12 14-12 14-4"/><path class="a" d="m19 13 3 3 3-3"/></svg><h3>Replay</h3><p>Run a finished graph again from its recorded inputs to see what changed.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="s" d="M2 18h40"/><path class="a" d="M18 18c6 0 6-12 12-12h12"/><circle class="d" cx="18" cy="18" r="3"/></svg><h3>Checkpoint forks</h3><p>Branch a new run from any checkpoint without starting over.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><circle class="s" cx="22" cy="14" r="11"/><path class="a" d="M22 14V7M22 14l5 3"/></svg><h3>Schedules</h3><p>Put a loopy on cron. <code>0 9 * * *</code> runs it every morning at nine.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="providers">
+  <div class="wrap providers">
+    <div>
+      <h2>Keep the agent you already use.</h2>
+      <p class="sub">Loopy calls the CLI you have installed. Your login, your model settings and your config stay as they are. Mix providers inside one graph if you like.</p>
+    </div>
+    <ul class="plist">
+      <li>Codex <code>codex</code></li>
+      <li>Claude Code <code>claude</code></li>
+      <li>OpenCode <code>opencode</code></li>
+      <li>Pi <code>pi</code></li>
+    </ul>
+  </div>
+</section>
+
+<section class="block" id="local">
+  <div class="wrap local">
+    <div>
+      <h2>It all runs on your machine.</h2>
+      <p class="sub">There is no hosted compute. Loopy is a process on your laptop that starts other processes on your laptop.</p>
+      <ul class="facts">
+        <li>Source, credentials, subprocesses and traces stay local.</li>
+        <li>Run state lives in a SQLite file inside your project.</li>
+        <li>Traces export as JSONL, so you can read them with any tool.</li>
+        <li>Open source under Apache-2.0.</li>
+      </ul>
+    </div>
+    <div class="machine" aria-label="What lives on your machine">
+      <div class="machine-top"><span>Your machine</span><code>~/work/api</code></div>
+      <div class="mgrid">
+        <div class="mcell"><b>Source</b><span>Your repo and worktrees</span></div>
+        <div class="mcell"><b>Credentials</b><span>Your CLI logins and keys</span></div>
+        <div class="mcell"><b>Subprocesses</b><span>Agent CLIs, shell steps</span></div>
+        <div class="mcell"><b>State</b><code>.loopy/loopy.db</code></div>
+        <div class="mcell"><b>Traces</b><code>trace.jsonl</code></div>
+        <div class="mcell"><b>Schedules</b><code>0 9 * * *</code></div>
+      </div>
+      <div class="outside">Loopy servers: none</div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="example">
+  <div class="wrap">
+    <h2>Two loopies we run every week.</h2>
+    <p class="sub">Each one started as a single session in an agent CLI. Now each is a graph with checks and a person in the loop where it matters.</p>
+    <div class="example">
+      <div>
+        <div class="tabs" role="tablist" aria-label="Examples">
+          <button class="tab" role="tab" aria-selected="true" aria-controls="ex-cve" id="t-cve">Patch critical CVEs</button>
+          <button class="tab" role="tab" aria-selected="false" aria-controls="ex-rebase" id="t-rebase">Keep PRs rebased</button>
+        </div>
+        <ol class="steps" id="ex-cve" role="tabpanel" aria-labelledby="t-cve">
+          <li><div><b>Audit dependencies</b><span class="kind">Shell module</span><span>List advisories marked critical.</span></div></li>
+          <li><div><b>Is there a patched release?</b><span class="kind">Condition</span><span>If not, the run stops here with a note.</span></div></li>
+          <li><div><b>Apply the smallest bump</b><span class="kind">Agent call</span><span>The agent picks the lowest version that fixes the advisory.</span></div></li>
+          <li><div><b>Run checks</b><span class="kind">Verification</span><span>Tests and typecheck must pass.</span></div></li>
+          <li><div><b>Approve before push</b><span class="kind">Approval</span><span>A person reviews the diff.</span></div></li>
+          <li><div><b>Open a pull request</b><span class="kind">Shell module</span><span>One focused PR per fix.</span></div></li>
+        </ol>
+        <ol class="steps" id="ex-rebase" role="tabpanel" aria-labelledby="t-rebase" hidden>
+          <li><div><b>Every day at 09:00</b><span class="kind">Schedule</span><span>Cron <code>0 9 * * *</code> starts the run.</span></div></li>
+          <li><div><b>List open pull requests</b><span class="kind">Shell module</span><span>Non-draft PRs only.</span></div></li>
+          <li><div><b>Rebase each onto main</b><span class="kind">Agent call</span><span>One agent call per PR, in parallel.</span></div></li>
+          <li><div><b>Run a focused check</b><span class="kind">Verification</span><span>Only the checks that touch the change.</span></div></li>
+          <li><div><b>Push with <code>--force-with-lease</code></b><span class="kind">Shell module</span><span>Never overwrites someone else's push.</span></div></li>
+          <li><div><b>Skip conflicts</b><span class="kind">Condition</span><span>Conflicted PRs are left alone and reported.</span></div></li>
+        </ol>
+      </div>
+      <div class="code" id="ex-code" aria-label="Commands"></div>
+    </div>
+  </div>
+</section>
+
+<section class="final" id="docs">
+  <div class="wrap">
+    <h2>Do it once. Then let it loop.</h2>
+    <p class="sub">Install the CLI, run one task the way you normally would, and open Studio to see the graph it leaves behind.</p>
+    <div class="install">
+      <div class="cmd"><span><span class="prompt">$ </span>bun add -g loopy</span><button type="button" data-copy="bun add -g loopy">Copy</button></div>
+      <a class="btn" href="#docs">Read the docs</a>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer id="github">
+  <div class="wrap">
+    <a class="mark" href="#top"><svg width="22" height="22" aria-hidden="true"><use href="#g-mark"/></svg>loopy</a>
+    <span>Apache-2.0</span>
+    <nav aria-label="Footer"><a href="#github">GitHub</a><a href="#docs">Docs</a><a href="#example">Examples</a></nav>
+  </div>
+</footer>
+
+<script>
+(() => {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const $ = (s, r = document) => r.querySelector(s);
+
+  // nav border
+  const nav = $('#nav');
+  addEventListener('scroll', () => nav.classList.toggle('scrolled', scrollY > 8), { passive: true });
+
+  // copy buttons
+  document.querySelectorAll('[data-copy]').forEach(b => b.addEventListener('click', async () => {
+    const text = b.dataset.copy;
+    try { await navigator.clipboard.writeText(text); } catch {
+      const ta = Object.assign(document.createElement('textarea'), { value: text });
+      document.body.append(ta); ta.select(); document.execCommand('copy'); ta.remove();
+    }
+    b.textContent = 'Copied'; b.dataset.copied = '';
+    setTimeout(() => { b.textContent = 'Copy'; delete b.dataset.copied; }, 1600);
+  }));
+
+  // the session, used by the hero terminal and the snap stage
+  const TRACE = [
+    ['09:12:03', 'start', 'codex session in ~/work/api'],
+    ['09:12:04', 'user', '"patch the critical CVEs in our deps"', 'u'],
+    ['09:12:06', 'exec', 'bun audit --json', 0],
+    ['09:12:09', 'read', 'package.json'],
+    ['09:12:11', 'think', '1 critical: lodash 4.17.20'],
+    ['09:12:12', 'exec', 'npm view lodash versions', 1],
+    ['09:12:15', 'note', '4.17.21 fixes CVE-2021-23337'],
+    ['09:12:18', 'edit', 'package.json  lodash ^4.17.21', 2],
+    ['09:12:19', 'exec', 'bun install'],
+    ['09:12:31', 'exec', 'bun run check', 3],
+    ['09:12:58', 'out', '412 passed, 0 failed'],
+    ['09:13:02', 'user', '"diff looks right, push it"', 4],
+    ['09:13:04', 'exec', 'git push -u origin fix/lodash'],
+    ['09:13:07', 'exec', 'gh pr create --fill', 5],
+    ['09:13:09', 'end', 'session saved'],
+  ];
+  const NODES = [
+    { kind: 'shell', label: 'Shell module', title: 'Audit dependencies' },
+    { kind: 'cond', label: 'Condition', title: 'Patched release?' },
+    { kind: 'agent', label: 'Agent call', title: 'Apply smallest bump' },
+    { kind: 'verify', label: 'Verification', title: 'Run checks' },
+    { kind: 'approve', label: 'Approval', title: 'Approve before push' },
+    { kind: 'shell', label: 'Shell module', title: 'Open pull request' },
+  ];
+
+  // hero terminal
+  const term = $('#term');
+  const lineHTML = r => `<span class="t">${r[0]}</span><span class="k">${r[1]}</span><span class="v${r[3] === 'u' ? ' u' : ''}">${r[2]}</span>`;
+  if (reduce) {
+    term.innerHTML = TRACE.slice(0, 11).map(r => `<div class="tl in">${lineHTML(r)}</div>`).join('');
+  } else {
+    let i = 0;
+    for (; i < 4; i++) term.insertAdjacentHTML('beforeend', `<div class="tl in">${lineHTML(TRACE[i])}</div>`);
+    const tick = () => {
+      if (i >= TRACE.length) { setTimeout(() => { term.innerHTML = ''; i = 0; tick(); }, 2600); return; }
+      const d = document.createElement('div'); d.className = 'tl'; d.innerHTML = lineHTML(TRACE[i]);
+      term.append(d); requestAnimationFrame(() => d.classList.add('in'));
+      const rows = term.children; if (rows.length > 11) rows[0].remove();
+      i++; setTimeout(tick, TRACE[i - 1][1] === 'user' ? 1100 : 420 + Math.random() * 380);
+    };
+    setTimeout(tick, 700);
+  }
+
+  // snap stage
+  const stage = $('#stage'), snap = $('#snap'), svgNS = 'http://www.w3.org/2000/svg';
+  const gThreads = $('#threads'), gEdges = $('#edges'), gToks = $('#toks');
+  const steps = [...document.querySelectorAll('.step')];
+  const lines = TRACE.map(r => {
+    const el = document.createElement('div');
+    el.className = 'ln' + (typeof r[3] === 'number' ? ' hit' : '');
+    el.innerHTML = `<span class="hl"></span><span class="t">${r[0]}</span><span class="k">${r[1]}</span>${r[2]}`;
+    stage.append(el); return { el, hl: el.firstChild, ev: typeof r[3] === 'number' ? r[3] : -1 };
+  });
+  const cards = NODES.map((n, i) => {
+    const el = document.createElement('div'); el.className = 'ev';
+    el.innerHTML = `<div class="card" data-s="pending"><span class="kind"><svg><use href="#g-${n.kind}"/></svg>${n.label}</span><span class="ttl">${n.title}</span><span class="st"></span>${n.kind === 'approve' ? '<span class="gate">Waiting for you</span>' : ''}</div>`;
+    stage.append(el); return { el, card: el.firstChild, src: TRACE.findIndex(r => r[3] === i) };
+  });
+  const threads = cards.map(() => { const p = document.createElementNS(svgNS, 'path'); p.setAttribute('class', 'thread'); gThreads.append(p); return p; });
+  const EDGES = [[0, 1], [1, 2, 'yes'], [2, 3], [3, 4, 'pass'], [4, 5]];
+  const edges = EDGES.map(([a, b, t]) => {
+    const p = document.createElementNS(svgNS, 'path'); p.setAttribute('class', 'wire'); gEdges.append(p);
+    let label = null;
+    if (t) { label = document.createElementNS(svgNS, 'text'); label.setAttribute('class', 'elabel'); label.textContent = t; gEdges.append(label); }
+    return { a, b, p, label, len: 0 };
+  });
+  const tok = document.createElementNS(svgNS, 'circle'); tok.setAttribute('r', 4); tok.setAttribute('class', 'tok'); tok.style.opacity = 0; gToks.append(tok);
+
+  let L = {};
+  function layout() {
+    const W = stage.clientWidth - (innerWidth <= 640 ? 40 : 64), H = stage.clientHeight;
+    const pad = innerWidth <= 640 ? 20 : 32;
+    const mobile = W < 720;
+    const lh = mobile ? 20 : 24;
+    const logW = mobile ? W : 440;
+    const logX = pad + (mobile ? 0 : (W - logW) / 2), logY = Math.max(0, (H - TRACE.length * lh) / 2);
+    const railX = pad, railScale = mobile ? 1 : 0.78;
+    const logPos = TRACE.map((_, i) => ({ x: logX, y: logY + i * lh }));
+    const railPos = TRACE.map((_, i) => ({ x: railX, y: logY + i * lh }));
+    let cw, ch, nodePos;
+    if (mobile) {
+      cw = Math.min(260, W); ch = 58;
+      const gap = Math.min(28, (H - 6 * ch) / 5);
+      const top = Math.max(0, (H - (6 * ch + 5 * gap)) / 2);
+      nodePos = NODES.map((_, i) => ({ x: pad + (W - cw) / 2, y: top + i * (ch + gap) }));
+    } else {
+      const gx0 = pad + 370, gw = W + pad - gx0 - 64;
+      cw = Math.min(210, (gw - 120) / 3); ch = 64;
+      const colX = [0, 1, 2].map(c => gx0 + c * (cw + (gw - 3 * cw) / 2));
+      const r1 = H * 0.26 - ch / 2, r2 = H * 0.7 - ch / 2;
+      nodePos = [{ x: colX[0], y: r1 }, { x: colX[1], y: r1 }, { x: colX[2], y: r1 }, { x: colX[2], y: r2 }, { x: colX[1], y: r2 }, { x: colX[0], y: r2 }];
+    }
+    stage.style.setProperty('--cw', cw + 'px'); stage.style.setProperty('--ch', ch + 'px');
+    L = { W, H, mobile, lh, logPos, railPos, railScale, nodePos, cw, ch };
+    // edges
+    edges.forEach(e => {
+      const A = nodePos[e.a], B = nodePos[e.b]; let d, lx, ly;
+      if (mobile || Math.abs(A.x - B.x) < 2) {
+        const x1 = A.x + cw / 2, y1 = A.y + ch, x2 = B.x + cw / 2, y2 = B.y;
+        if (mobile) d = `M${x1} ${y1} L${x2} ${y2}`;
+        else d = `M${A.x + cw} ${A.y + ch / 2} C${A.x + cw + 70} ${A.y + ch / 2} ${B.x + cw + 70} ${B.y + ch / 2} ${B.x + cw} ${B.y + ch / 2}`;
+        lx = x1 + 12; ly = (y1 + y2) / 2 + 4;
+      } else if (B.x > A.x) {
+        const x1 = A.x + cw, y = A.y + ch / 2, x2 = B.x; d = `M${x1} ${y} L${x2} ${y}`; lx = x1 + 10; ly = y - 10;
+      } else {
+        const x1 = A.x, y = A.y + ch / 2, x2 = B.x + cw; d = `M${x1} ${y} L${x2} ${y}`; lx = x2 + 10; ly = y - 10;
+      }
+      e.p.setAttribute('d', d); e.len = e.p.getTotalLength(); e.p.style.strokeDasharray = e.len;
+      if (e.label) { e.label.setAttribute('x', lx); e.label.setAttribute('y', ly); e.label.style.display = mobile ? 'none' : ''; }
+    });
+    render(true);
+  }
+
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const ss = (a, b, v) => { const t = clamp((v - a) / (b - a)); return t * t * (3 - 2 * t); };
+  const lerp = (a, b, t) => a + (b - a) * t;
+  let P = reduce ? 1 : 0, lastP = -1;
+
+  function render(force) {
+    if (!L.nodePos || (!force && P === lastP)) return; lastP = P;
+    const p = P;
+    const hi = ss(0.1, 0.24, p);            // highlight evidence
+    const toRail = ss(0.26, 0.46, p);       // log slides to the rail
+    // steps
+    const active = p < 0.27 ? 0 : p < 0.62 ? 1 : 2;
+    steps.forEach((s, i) => {
+      s.classList.toggle('on', i === active);
+      s.firstChild.style.transform = `scaleX(${clamp(i === 0 ? p / 0.27 : i === 1 ? (p - 0.27) / 0.35 : (p - 0.62) / 0.3)})`;
+    });
+    lines.forEach((l, i) => {
+      const a = L.logPos[i], b = L.railPos[i];
+      const x = L.mobile ? a.x : lerp(a.x, b.x, toRail), y = a.y;
+      const s = L.mobile ? 1 : lerp(1, L.railScale, toRail);
+      l.el.style.transform = `translate(${x}px,${y}px) scale(${s})`;
+      const base = l.ev >= 0 ? 1 : 1 - hi * 0.55;
+      l.el.style.opacity = L.mobile ? base * (1 - toRail) : base * (1 - toRail * (l.ev >= 0 ? 0.35 : 0.3));
+      l.hl.style.opacity = l.ev >= 0 ? hi * (1 - toRail * 0.5) : 0;
+    });
+    cards.forEach((c, i) => {
+      const k = ss(0.3 + i * 0.035, 0.5 + i * 0.035, p);
+      const from = L.mobile ? L.logPos[c.src] : { x: L.railPos[c.src].x + 180, y: L.railPos[c.src].y - L.ch / 2 };
+      const to = L.nodePos[i];
+      const x = lerp(from.x, to.x, k), y = lerp(from.y, to.y, k), sc = lerp(0.6, 1, k);
+      c.el.style.transform = `translate(${x}px,${y}px) scale(${sc})`;
+      c.card.style.opacity = ss(0, 0.35, k);
+      const th = threads[i];
+      if (L.mobile) { th.style.opacity = 0; }
+      else {
+        const sx = L.railPos[c.src].x + 330 * L.railScale, sy = L.railPos[c.src].y + 6;
+        th.setAttribute('d', `M${sx} ${sy} C${sx + 80} ${sy} ${x - 80} ${y + L.ch / 2} ${x} ${y + L.ch / 2}`);
+        th.style.opacity = k * lerp(0.7, 0.28, ss(0.62, 0.8, p));
+      }
+    });
+    edges.forEach((e, i) => {
+      const k = ss(0.52 + i * 0.03, 0.66 + i * 0.03, p);
+      e.p.style.strokeDashoffset = e.len * (1 - k);
+      if (e.label) e.label.style.opacity = k;
+    });
+    if (p > 0.74 && !reduce) startRun(); else if (p < 0.7) stopRun();
+    if (reduce) cards.forEach(c => c.card.dataset.s = 'succeeded');
+  }
+
+  // run loop
+  let runTimer = null, running = false, tokAnim = 0;
+  const setS = (i, s) => cards[i].card.dataset.s = s;
+  function moveTok(e, ms) {
+    return new Promise(res => {
+      const t0 = performance.now(); tok.style.opacity = 1; e.p.classList.add('lit');
+      const f = now => {
+        if (!running) return res();
+        const t = clamp((now - t0) / ms); const pt = e.p.getPointAtLength(e.len * t);
+        tok.setAttribute('cx', pt.x); tok.setAttribute('cy', pt.y);
+        if (t < 1) tokAnim = requestAnimationFrame(f); else { tok.style.opacity = 0; res(); }
+      }; tokAnim = requestAnimationFrame(f);
+    });
+  }
+  const wait = ms => new Promise(r => { runTimer = setTimeout(r, ms); });
+  async function startRun() {
+    if (running) return; running = true;
+    while (running) {
+      cards.forEach((_, i) => setS(i, 'pending')); edges.forEach(e => e.p.classList.remove('lit'));
+      for (let i = 0; i < NODES.length && running; i++) {
+        setS(i, 'running'); await wait(NODES[i].kind === 'agent' ? 1300 : 700); if (!running) break;
+        if (NODES[i].kind === 'approve') { setS(i, 'waiting'); await wait(1500); if (!running) break; }
+        setS(i, 'succeeded');
+        if (i < edges.length) await moveTok(edges[i], 520);
+      }
+      if (running) await wait(2400);
+    }
+  }
+  function stopRun() {
+    if (!running) return; running = false; clearTimeout(runTimer); cancelAnimationFrame(tokAnim);
+    tok.style.opacity = 0; cards.forEach((_, i) => setS(i, 'pending')); edges.forEach(e => e.p.classList.remove('lit'));
+  }
+
+  if (!reduce) {
+    let visible = false, raf = 0;
+    const read = () => {
+      const r = snap.getBoundingClientRect(), total = r.height - (innerHeight - 60);
+      P = clamp(-r.top / total); render(); raf = visible ? requestAnimationFrame(read) : 0;
+    };
+    new IntersectionObserver(([en]) => {
+      visible = en.isIntersecting;
+      if (visible && !raf) raf = requestAnimationFrame(read);
+      if (!visible) stopRun();
+    }).observe(snap);
+  }
+  addEventListener('resize', () => layout());
+  document.fonts?.ready.then(layout); layout();
+
+  // example tabs and code
+  const CODE = {
+    cve: `<span class="c"># 1. do it once, in the agent you already use</span>
+<span class="p">$ </span>codex <span class="s">"patch the critical CVEs in our deps"</span>
+
+<span class="c"># 2. import the session and extract a graph</span>
+<span class="p">$ </span>loopy import session.json --provider codex
+<span class="p">$ </span>loopy extract --import imp_7f2c
+<span class="p">$ </span>loopy approve prop_91ad
+
+<span class="c"># 3. run it, and look at it</span>
+<span class="p">$ </span>loopy run patch-critical-cves
+<span class="p">$ </span>loopy studio`,
+    rebase: `<span class="c"># every morning at nine</span>
+<span class="p">$ </span>loopy schedule create \\
+    --workflow keep-prs-rebased \\
+    --cron <span class="s">'0 9 * * *'</span>
+
+<span class="c"># runs, joins and approvals land in SQLite</span>
+<span class="p">$ </span>loopy studio`
+  };
+  const code = $('#ex-code');
+  const tabs = [...document.querySelectorAll('.tab')];
+  const show = id => {
+    tabs.forEach(t => { const on = t.getAttribute('aria-controls') === 'ex-' + id; t.setAttribute('aria-selected', on); t.tabIndex = on ? 0 : -1; $('#' + t.getAttribute('aria-controls')).hidden = !on; });
+    code.innerHTML = CODE[id];
+  };
+  tabs.forEach((t, i) => {
+    t.addEventListener('click', () => show(t.getAttribute('aria-controls').slice(3)));
+    t.addEventListener('keydown', e => { if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { const n = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length]; n.focus(); n.click(); } });
+  });
+  show('cve');
+})();
+</script>
+</body>
+</html>

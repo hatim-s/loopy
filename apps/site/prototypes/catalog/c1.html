@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Loopy. Do it once, run it again.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,300..900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f3f2ee;
+    --ink: #000;
+    --red: #e4002b;
+    --grey: #8a8984;
+    --rule: #000;
+    --pad: clamp(16px, 3vw, 40px);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-variation-settings: "wdth" 100;
+    font-size: 17px;
+    line-height: 1.45;
+    overflow-x: hidden;
+  }
+  a { color: inherit; }
+  :focus-visible { outline: 3px solid var(--red); outline-offset: 3px; }
+  code, .cmd { font-family: "Archivo", sans-serif; font-variation-settings: "wdth" 62; font-weight: 500; letter-spacing: .01em; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    column-gap: clamp(12px, 1.6vw, 24px);
+    padding: 0 var(--pad);
+  }
+
+  /* header */
+  header.top {
+    border-bottom: 2px solid var(--ink);
+    padding-top: 14px; padding-bottom: 12px;
+    align-items: baseline;
+    position: relative; z-index: 3;
+  }
+  .wordmark { grid-column: 1 / 4; font-weight: 900; font-size: 22px; font-variation-settings: "wdth" 125; letter-spacing: -.02em; text-decoration: none; }
+  .top nav { grid-column: 4 / 13; display: flex; gap: 28px; justify-content: flex-end; font-size: 15px; }
+  .top nav a { text-decoration: none; }
+  .top nav a:hover { color: var(--red); }
+
+  /* hero poster */
+  .hero { position: relative; min-height: min(100vh, 980px); padding-top: clamp(24px, 4vw, 56px); padding-bottom: 40px; overflow: hidden; }
+  .hero h1 {
+    grid-column: 1 / 13;
+    font-weight: 850;
+    font-variation-settings: "wdth" 62;
+    font-size: clamp(76px, 15.5vw, 250px);
+    line-height: .84;
+    letter-spacing: -.035em;
+    position: relative; z-index: 2;
+    mix-blend-mode: multiply;
+  }
+  .hero h1 span { display: block; }
+  .hero h1 .r { padding-left: 0; }
+  .hero .lede {
+    grid-column: 1 / 5;
+    margin-top: 48px;
+    font-size: 19px; line-height: 1.4;
+    position: relative; z-index: 2;
+  }
+  .hero .meta {
+    grid-column: 1 / 5; margin-top: 28px; display: flex; gap: 12px; flex-wrap: wrap; position: relative; z-index: 2;
+  }
+  .btn {
+    display: inline-flex; align-items: center; gap: 10px;
+    border: 2px solid var(--ink); background: var(--ink); color: var(--paper);
+    padding: 12px 18px; font: inherit; font-weight: 600; font-size: 15px; cursor: pointer; text-decoration: none;
+  }
+  .btn.ghost { background: transparent; color: var(--ink); }
+  .btn:hover { background: var(--red); border-color: var(--red); color: #fff; }
+  .btn[disabled] { opacity: .3; pointer-events: none; }
+
+  .ring-wrap {
+    position: absolute; z-index: 1;
+    right: -5vw;
+    top: 40px;
+    width: min(60vw, 920px); aspect-ratio: 1;
+  }
+  .ring-wrap svg { width: 100%; height: 100%; overflow: visible; }
+  .ring-rot { transform-origin: 500px 500px; animation: spin 48s linear infinite; }
+  .ring-rot.paused, .dot-rot.paused { animation-play-state: paused; }
+  .dot-rot { transform-origin: 500px 500px; animation: spin 7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .ring-text { font-family: Archivo, sans-serif; font-weight: 800; font-variation-settings: "wdth" 125; font-size: 58px; letter-spacing: 2px; fill: var(--ink); }
+  .ring-text .k { fill: var(--red); }
+  .ring-caption { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center; font-size: 14px; width: 42%; }
+  .ring-caption b { display: block; font-size: clamp(28px, 4vw, 54px); font-variation-settings: "wdth" 62; font-weight: 800; line-height: 1; margin-bottom: 8px; }
+  .ring-toggle { position: absolute; left: 50%; top: calc(50% + 70px); transform: translateX(-50%); background: none; border: 2px solid var(--ink); font: inherit; font-weight: 600; font-size: 13px; padding: 6px 12px; cursor: pointer; }
+  .ring-toggle:hover { background: var(--ink); color: var(--paper); }
+
+  /* section frame */
+  section.band { border-top: 2px solid var(--ink); padding-top: 18px; padding-bottom: clamp(64px, 9vw, 140px); }
+  .band > h2 {
+    grid-column: 1 / 5;
+    font-size: clamp(34px, 4.2vw, 64px);
+    font-variation-settings: "wdth" 62; font-weight: 800; line-height: .95; letter-spacing: -.02em;
+  }
+  .band > .intro { grid-column: 5 / 10; font-size: 19px; }
+
+  /* how it works */
+  .steps { grid-column: 1 / 13; display: grid; grid-template-columns: repeat(3, 1fr); column-gap: clamp(12px, 1.6vw, 24px); margin-top: 72px; }
+  .step { border-top: 8px solid var(--ink); padding-top: 14px; }
+  .step:nth-child(2) { border-color: var(--red); }
+  .step .n { font-size: clamp(120px, 14vw, 220px); font-weight: 900; font-variation-settings: "wdth" 62; line-height: .8; letter-spacing: -.05em; }
+  .step:nth-child(2) .n { color: var(--red); }
+  .step h3 { font-size: 30px; font-weight: 800; margin: 20px 0 8px; font-variation-settings: "wdth" 80; }
+  .step p { max-width: 34ch; }
+  .step code { display: inline-block; margin-top: 14px; font-size: 20px; border-bottom: 2px solid currentColor; }
+
+  /* kinds strip */
+  .kinds { grid-column: 1 / 13; margin-top: 72px; display: grid; grid-template-columns: repeat(7, 1fr); border-top: 2px solid var(--ink); border-bottom: 2px solid var(--ink); }
+  .kind { padding: 16px 12px 18px 0; border-right: 1px solid var(--ink); }
+  .kind + .kind { padding-left: 12px; }
+  .kind:last-child { border-right: 0; }
+  .kind b { display: block; font-size: 22px; font-weight: 800; font-variation-settings: "wdth" 80; }
+  .kind span { font-size: 14px; color: #3a3a37; }
+
+  /* runtime */
+  .runner { grid-column: 1 / 13; margin-top: 64px; display: grid; grid-template-columns: 1fr 320px; gap: 40px; align-items: start; }
+  .track { position: relative; }
+  .node-row { display: grid; grid-template-columns: repeat(8, 1fr); gap: 0; border-left: 2px solid var(--ink); }
+  .nd { border-right: 2px solid var(--ink); padding: 10px 10px 14px; min-height: 180px; position: relative; display: flex; flex-direction: column; justify-content: space-between; transition: background .25s, color .25s; }
+  .nd .kd { font-size: 13px; color: var(--grey); }
+  .nd .nm { font-size: clamp(16px, 1.5vw, 22px); font-weight: 800; font-variation-settings: "wdth" 70; line-height: 1.05; }
+  .nd .st { font-size: 13px; font-weight: 600; }
+  .nd.running { background: var(--ink); color: var(--paper); }
+  .nd.running .kd { color: #bbb; }
+  .nd.done { background: #fff; }
+  .nd.failed { background: var(--red); color: #fff; }
+  .nd.failed .kd { color: #ffd; }
+  .nd.waiting { background: repeating-linear-gradient(-45deg, var(--paper) 0 8px, #e5e3dc 8px 16px); outline: 3px solid var(--red); outline-offset: -3px; }
+  .nd.fork { box-shadow: inset 0 -8px 0 var(--red); }
+  .par { display: flex; flex-direction: column; }
+  .par .nd { min-height: 90px; border-right: 0; }
+  .par .nd + .nd { border-top: 2px solid var(--ink); }
+  .par { border-right: 2px solid var(--ink); }
+  .bar { height: 8px; background: #d8d6cf; margin-top: 0; }
+  .bar i { display: block; height: 100%; width: 0; background: var(--red); transition: width .35s; }
+  .console { border: 2px solid var(--ink); }
+  .console .hd { display: flex; justify-content: space-between; padding: 10px 12px; border-bottom: 2px solid var(--ink); font-weight: 700; }
+  .console .hd em { font-style: normal; color: var(--red); }
+  .ctrls { display: grid; grid-template-columns: 1fr 1fr; }
+  .ctrls button { border: 0; border-bottom: 1px solid var(--ink); border-right: 1px solid var(--ink); background: none; font: inherit; font-weight: 600; padding: 14px 12px; text-align: left; cursor: pointer; }
+  .ctrls button:nth-child(2n) { border-right: 0; }
+  .ctrls button:hover:not([disabled]) { background: var(--ink); color: var(--paper); }
+  .ctrls button[disabled] { color: #b5b3ad; cursor: default; }
+  .ctrls button.hot { background: var(--red); color: #fff; }
+  .log { height: 170px; overflow: auto; padding: 10px 12px; font-size: 13px; line-height: 1.5; font-variation-settings: "wdth" 70; }
+  .log div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .log .t { color: var(--grey); margin-right: 8px; }
+  .fine { grid-column: 1 / 13; margin-top: 56px; display: grid; grid-template-columns: repeat(4, 1fr); column-gap: clamp(12px, 1.6vw, 24px); }
+  .fine div { border-top: 2px solid var(--ink); padding-top: 10px; }
+  .fine b { display: block; font-weight: 800; margin-bottom: 4px; }
+  .fine p { font-size: 15px; }
+
+  /* local */
+  .local .big { grid-column: 1 / 13; font-size: clamp(48px, 9vw, 150px); font-weight: 850; font-variation-settings: "wdth" 62; line-height: .9; letter-spacing: -.03em; margin-top: 40px; word-break: break-all; }
+  .local .big span { color: var(--red); }
+  .local .cols { grid-column: 1 / 13; margin-top: 40px; display: grid; grid-template-columns: repeat(3, 1fr); column-gap: clamp(12px, 1.6vw, 24px); }
+  .local .cols p { max-width: 36ch; }
+
+  /* quick start */
+  .qs { background: var(--ink); color: var(--paper); border-top: 0; }
+  .qs > h2 { color: var(--paper); }
+  .qs .intro { color: #cfcdc6; }
+  .cli { grid-column: 1 / 13; margin-top: 56px; list-style: none; counter-reset: c; }
+  .cli li { counter-increment: c; display: grid; grid-template-columns: 80px minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: baseline; border-top: 1px solid #444; padding: 16px 0; }
+  .cli li::before { content: counter(c); font-weight: 800; color: var(--red); font-size: 22px; }
+  .cli code { font-size: clamp(18px, 2.2vw, 30px); color: #fff; overflow-wrap: anywhere; }
+  .cli span { color: #aaa8a1; font-size: 15px; }
+  .copy { grid-column: 1 / 13; margin-top: 28px; }
+  .qs .btn { background: var(--paper); color: var(--ink); border-color: var(--paper); }
+  .qs .btn:hover { background: var(--red); border-color: var(--red); color: #fff; }
+
+  footer { padding-top: 24px; padding-bottom: 48px; border-top: 2px solid var(--ink); align-items: end; }
+  footer .fw { grid-column: 1 / 7; font-size: clamp(64px, 12vw, 190px); font-weight: 900; font-variation-settings: "wdth" 125; letter-spacing: -.05em; line-height: .8; }
+  footer .fl { grid-column: 7 / 13; display: flex; gap: 24px; justify-content: flex-end; flex-wrap: wrap; font-size: 15px; }
+
+  @media (max-width: 1000px) {
+    .runner { grid-template-columns: 1fr; }
+    .hero .lede, .hero .meta { grid-column: 1 / 8; }
+  }
+  @media (max-width: 760px) {
+    .top nav { gap: 16px; font-size: 14px; }
+    .top nav a.hide-s { display: none; }
+    .wordmark { grid-column: 1 / 5; }
+    .top nav { grid-column: 5 / 13; }
+    .hero { min-height: 0; }
+    .hero h1 .r { padding-left: 12%; }
+    .ring-wrap { position: relative; right: auto; top: auto; grid-column: 1 / 13; width: 108%; margin: 8px -4% 0; }
+    .hero .lede, .hero .meta { grid-column: 1 / 13; }
+    .hero .lede { margin-top: 12px; }
+    .band > h2, .band > .intro { grid-column: 1 / 13; }
+    .band > .intro { margin-top: 16px; }
+    .steps { grid-template-columns: 1fr; row-gap: 48px; margin-top: 48px; }
+    .kinds { grid-template-columns: repeat(2, 1fr); }
+    .kind { border-bottom: 1px solid var(--ink); padding-left: 12px !important; }
+    .node-row { grid-template-columns: repeat(2, 1fr); border-top: 2px solid var(--ink); }
+    .nd { min-height: 96px; border-bottom: 2px solid var(--ink); }
+    .par { border-bottom: 0; }
+    .fine { grid-template-columns: 1fr 1fr; row-gap: 20px; }
+    .local .cols { grid-template-columns: 1fr; row-gap: 20px; }
+    .cli li { grid-template-columns: 36px 1fr; }
+    .cli span { grid-column: 2; }
+    footer .fw, footer .fl { grid-column: 1 / 13; justify-content: flex-start; }
+    footer .fl { margin-top: 20px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ring-rot, .dot-rot { animation: none; }
+    .bar i, .nd { transition: none; }
+  }
+</style>
+</head>
+<body>
+<header class="top grid">
+  <a class="wordmark" href="#">loopy</a>
+  <nav>
+    <a href="#how">How it works</a>
+    <a href="#run" class="hide-s">Runtime</a>
+    <a href="#start">Quick start</a>
+  </nav>
+</header>
+
+<main>
+<section class="hero grid">
+  <h1><span>Do it</span><span>once.</span><span class="r">Run it</span><span class="r">again.</span></h1>
+  <div class="ring-wrap" aria-hidden="false">
+    <svg viewBox="0 0 1000 1000" role="img" aria-label="A loop of the seven step kinds: agent, shell, route, verify, approval, join, transform">
+      <defs><path id="circ" d="M500,500 m-400,0 a400,400 0 1,1 800,0 a400,400 0 1,1 -800,0"/></defs>
+      <g class="ring-rot" id="ringRot">
+        <circle cx="500" cy="500" r="455" fill="none" stroke="#000" stroke-width="2"/>
+        <circle cx="500" cy="500" r="340" fill="none" stroke="#000" stroke-width="2"/>
+        <text class="ring-text"><textPath href="#circ" textLength="2500">agent <tspan class="k">/</tspan> shell <tspan class="k">/</tspan> route <tspan class="k">/</tspan> verify <tspan class="k">/</tspan> approval <tspan class="k">/</tspan> join <tspan class="k">/</tspan> transform <tspan class="k">/</tspan></textPath></text>
+      </g>
+      <g class="dot-rot" id="dotRot"><circle cx="500" cy="45" r="26" fill="#e4002b"/></g>
+    </svg>
+    <p class="ring-caption"><b>A loop you can stop.</b>Seven step kinds. One run moving through them.</p>
+    <button class="ring-toggle" id="ringToggle" type="button">Pause</button>
+  </div>
+  <p class="lede">Loopy is a local graph harness for Codex and Claude Code. Finish a task with your agent once. Loopy reads the session trace, extracts an execution graph, and runs that graph on your machine with pause, retry, fork and approvals.</p>
+  <div class="meta">
+    <a class="btn" href="#start">Quick start</a>
+    <a class="btn ghost" href="#how">How it works</a>
+  </div>
+</section>
+
+<section class="band grid" id="how">
+  <h2>Record. Extract. Run.</h2>
+  <p class="intro">The agent still does the work inside each node. The graph decides what happens next, and you can read every edge.</p>
+  <div class="steps">
+    <article class="step">
+      <div class="n">1</div>
+      <h3>Record</h3>
+      <p>Do the task once in Codex or Claude Code. Loopy imports the recorded session as a trace, one event per line.</p>
+      <code>loopy import</code>
+    </article>
+    <article class="step">
+      <div class="n">2</div>
+      <h3>Extract</h3>
+      <p>A deterministic extractor proposes a graph. No model calls. Every node points back to the trace events behind it. You review and approve.</p>
+      <code>loopy extract</code>
+    </article>
+    <article class="step">
+      <div class="n">3</div>
+      <h3>Run</h3>
+      <p>The graph runs through the same agent CLIs on your machine. Loopy owns the order, the checks and the approvals.</p>
+      <code>loopy run</code>
+    </article>
+  </div>
+  <div class="kinds" aria-label="Step kinds">
+    <div class="kind"><b>agent</b><span>Open-ended work in Codex or Claude Code</span></div>
+    <div class="kind"><b>shell</b><span>A command with an exit code</span></div>
+    <div class="kind"><b>route</b><span>Pick the next edge from output</span></div>
+    <div class="kind"><b>verify</b><span>A check that passes or fails</span></div>
+    <div class="kind"><b>approval</b><span>Wait for a person</span></div>
+    <div class="kind"><b>join</b><span>Wait for every branch</span></div>
+    <div class="kind"><b>transform</b><span>Reshape data between steps</span></div>
+  </div>
+</section>
+
+<section class="band grid" id="run">
+  <h2>You hold the controls.</h2>
+  <p class="intro">This graph patches a critical dependency CVE. Start it, pause it between nodes, fork from a checkpoint. The tests fail once on purpose so you can watch a retry. The run stops at approval until you press approve.</p>
+  <div class="runner">
+    <div class="track">
+      <div class="node-row" id="nodes"></div>
+      <div class="bar"><i id="bar"></i></div>
+    </div>
+    <div class="console">
+      <div class="hd"><span>run #41</span><em id="status">Ready</em></div>
+      <div class="ctrls">
+        <button type="button" data-a="start">Start</button>
+        <button type="button" data-a="pause">Pause</button>
+        <button type="button" data-a="approve">Approve</button>
+        <button type="button" data-a="cancel">Cancel</button>
+        <button type="button" data-a="fork">Fork from checkpoint</button>
+        <button type="button" data-a="reset">Reset</button>
+      </div>
+      <div class="log" id="log" aria-live="polite"></div>
+    </div>
+  </div>
+  <div class="fine">
+    <div><b>Retry</b><p>Bounded attempts per node, each one on record.</p></div>
+    <div><b>Fork</b><p>Branch a new run from any checkpoint.</p></div>
+    <div><b>Approvals</b><p>An approval node waits for a person.</p></div>
+    <div><b>Schedules</b><p>Cron schedules run the graph on your machine.</p></div>
+  </div>
+</section>
+
+<section class="band grid local">
+  <h2>Nothing leaves your laptop.</h2>
+  <p class="intro">Loopy runs on Bun. It starts the agent CLIs you already installed, with your login and your settings.</p>
+  <p class="big">.loopy/<span>loopy.db</span></p>
+  <div class="cols">
+    <p>Runs, checkpoints, approvals and schedules live in one SQLite file inside your project.</p>
+    <p>Traces export as portable JSONL, one event per line.</p>
+    <p>Open the local Studio with <code>loopy ui</code> to read and edit nodes, edges and policies.</p>
+  </div>
+</section>
+
+<section class="band grid qs" id="start">
+  <h2>Quick start</h2>
+  <p class="intro">Install with Bun, import a session you already ran, and run the graph it leaves behind.</p>
+  <ol class="cli">
+    <li><code>bun add -g loopy</code><span>Install the CLI</span></li>
+    <li><code>loopy init</code><span>Create .loopy/loopy.db in this project</span></li>
+    <li><code>loopy import session.jsonl --provider codex</code><span>Bring in a finished session</span></li>
+    <li><code>loopy extract --import &lt;import-id&gt;</code><span>Propose a graph, then approve it</span></li>
+    <li><code>loopy run &lt;workflow-id&gt;</code><span>Run it locally</span></li>
+    <li><code>loopy ui</code><span>Open Studio</span></li>
+  </ol>
+  <div class="copy"><button class="btn" id="copyBtn" type="button">Copy install command</button></div>
+</section>
+</main>
+
+<footer class="grid">
+  <div class="fw">loopy</div>
+  <div class="fl"><a href="#">GitHub</a><a href="#">Docs</a><a href="index.html">Catalog</a><span>Apache-2.0</span></div>
+</footer>
+
+<script>
+(() => {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // hero ring toggle
+  const ring = document.getElementById('ringRot'), dot = document.getElementById('dotRot'), tg = document.getElementById('ringToggle');
+  tg.addEventListener('click', () => {
+    const p = ring.classList.toggle('paused'); dot.classList.toggle('paused', p);
+    tg.textContent = p ? 'Resume' : 'Pause';
+  });
+  if (reduce) tg.hidden = true;
+
+  // run simulator
+  const NODES = [
+    { id: 'audit', kind: 'shell', name: 'bun audit' },
+    { id: 'parse', kind: 'transform', name: 'List critical CVEs' },
+    { id: 'patch', kind: 'agent', name: 'Bump versions' },
+    { par: [{ id: 'tests', kind: 'verify', name: 'bun test' }, { id: 'types', kind: 'verify', name: 'typecheck' }] },
+    { id: 'join', kind: 'join', name: 'Both pass' },
+    { id: 'route', kind: 'route', name: 'Pass or retry' },
+    { id: 'review', kind: 'approval', name: 'Review diff' },
+    { id: 'push', kind: 'shell', name: 'gh pr create' },
+  ];
+  const row = document.getElementById('nodes');
+  const el = {};
+  const cell = n => { const d = document.createElement('div'); d.className = 'nd'; d.innerHTML = `<span class="kd">${n.kind}</span><span class="nm">${n.name}</span><span class="st">queued</span>`; el[n.id] = d; return d; };
+  NODES.forEach(n => {
+    if (n.par) { const p = document.createElement('div'); p.className = 'par'; n.par.forEach(c => p.appendChild(cell(c))); row.appendChild(p); }
+    else row.appendChild(cell(n));
+  });
+  const ORDER = ['audit', 'parse', 'patch', ['tests', 'types'], 'join', 'route', 'review', 'push'];
+  const logEl = document.getElementById('log'), statusEl = document.getElementById('status'), bar = document.getElementById('bar');
+  const btn = a => document.querySelector(`[data-a="${a}"]`);
+  let s;
+  const fresh = () => ({ i: 0, state: 'ready', failedOnce: false, timer: null, t: 0, checkpoint: -1 });
+  const log = msg => { const d = document.createElement('div'); s.t += 1; d.innerHTML = `<span class="t">${String(s.t).padStart(2, '0')}</span>${msg}`; logEl.appendChild(d); logEl.scrollTop = logEl.scrollHeight; };
+  const set = (id, cls, st) => { const d = el[id]; d.className = 'nd ' + (cls || ''); d.querySelector('.st').textContent = st; };
+  const ids = step => Array.isArray(step) ? step : [step];
+  function ui() {
+    statusEl.textContent = { ready: 'Ready', running: 'Running', paused: 'Paused', waiting: 'Waiting for approval', done: 'Succeeded', cancelled: 'Cancelled' }[s.state];
+    btn('start').disabled = !['ready', 'paused'].includes(s.state);
+    btn('start').textContent = s.state === 'paused' ? 'Resume' : 'Start';
+    btn('pause').disabled = s.state !== 'running';
+    btn('approve').disabled = s.state !== 'waiting';
+    btn('approve').classList.toggle('hot', s.state === 'waiting');
+    btn('cancel').disabled = !['running', 'paused', 'waiting'].includes(s.state);
+    btn('fork').disabled = s.checkpoint < 0 || s.state === 'running';
+    bar.style.width = (s.i / ORDER.length * 100) + '%';
+  }
+  function tick() {
+    if (s.state !== 'running') return;
+    const step = ORDER[s.i];
+    if (!step) { s.state = 'done'; log('run succeeded'); ui(); return; }
+    ids(step).forEach(id => set(id, 'running', 'running'));
+    s.timer = setTimeout(() => {
+      if (s.state !== 'running') return;
+      if (step === 'review') { set('review', 'waiting', 'waiting'); s.state = 'waiting'; log('approval: waiting for a person'); ui(); return; }
+      if (Array.isArray(step) && !s.failedOnce) {
+        s.failedOnce = true; set('tests', 'failed', 'failed'); set('types', 'done', 'passed');
+        log('verify bun test: 2 failed, retrying (attempt 2 of 3)');
+        s.timer = setTimeout(() => { if (s.state === 'running') { set('tests', 'running', 'attempt 2'); s.timer = setTimeout(() => { if (s.state !== 'running') return; set('tests', 'done', 'passed'); log('verify bun test: passed on attempt 2'); advance(); }, 900); } }, 900);
+        return;
+      }
+      ids(step).forEach(id => set(id, 'done', 'done'));
+      log(`${ids(step).join(' + ')} done`);
+      advance();
+    }, reduce ? 250 : 800);
+  }
+  function advance() { s.checkpoint = s.i; s.i += 1; ui(); tick(); }
+  function reset() { clearTimeout(s?.timer); s = fresh(); logEl.innerHTML = ''; Object.keys(el).forEach(id => set(id, '', 'queued')); log('run #41 ready'); ui(); }
+  document.querySelector('.ctrls').addEventListener('click', e => {
+    const a = e.target.closest('button')?.dataset.a; if (!a) return;
+    if (a === 'start') { log(s.state === 'paused' ? 'resumed' : 'run started'); s.state = 'running'; ui(); tick(); }
+    if (a === 'pause') { clearTimeout(s.timer); s.state = 'paused'; ids(ORDER[s.i]).forEach(id => { if (el[id].classList.contains('running')) set(id, '', 'queued'); }); log(`paused before ${ids(ORDER[s.i]).join(' + ')}`); ui(); }
+    if (a === 'approve') { set('review', 'done', 'approved'); log('approval: approved'); s.state = 'running'; advance(); }
+    if (a === 'cancel') { clearTimeout(s.timer); s.state = 'cancelled'; log('cancelled, history kept'); ui(); }
+    if (a === 'fork') {
+      const cp = s.checkpoint; clearTimeout(s.timer);
+      const keep = ORDER.slice(0, cp + 1).flatMap(ids);
+      Object.keys(el).forEach(id => set(id, keep.includes(id) ? 'done fork' : '', keep.includes(id) ? 'from checkpoint' : 'queued'));
+      s.i = cp + 1; s.state = 'paused'; log(`forked run #42 from checkpoint after ${ids(ORDER[cp]).join(' + ')}`);
+      document.querySelector('.console .hd span').textContent = 'run #42';
+      ui();
+    }
+    if (a === 'reset') { document.querySelector('.console .hd span').textContent = 'run #41'; reset(); }
+  });
+  reset();
+
+  document.getElementById('copyBtn').addEventListener('click', e => {
+    navigator.clipboard?.writeText('bun add -g loopy').catch(() => {});
+    e.target.textContent = 'Copied'; setTimeout(() => e.target.textContent = 'Copy install command', 1600);
+  });
+})();
+</script>
+</body>
+</html>

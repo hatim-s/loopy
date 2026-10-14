@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0d1014" />
+    <script>
+      // Set the theme before first paint so a light-mode visitor never sees a dark flash.
+      (function () {
+        var saved = localStorage.getItem("loopy-theme");
+        var light = saved ? saved === "light" : matchMedia("(prefers-color-scheme: light)").matches;
+        if (light) {
+          document.documentElement.dataset.theme = "light";
+          document.querySelector('meta[name="theme-color"]').content = "#f7f8fa";
+        }
+      })();
+    </script>
+    <title>Loopy. Do the work once, run it with control.</title>
+    <meta
+      name="description"
+      content="Loopy is a local-first graph harness for coding agents. Do a task once in your agent CLI, extract a graph from the trace, and run it on your machine."
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

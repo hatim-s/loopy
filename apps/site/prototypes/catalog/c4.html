@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Loopy. One session in, a runnable graph out.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;900&family=Figtree:wght@400;500;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cobalt: #2334ff;
+    --deep: #1422b8;
+    --night: #0c1470;
+    --sun: #ffd23f;
+    --mint: #3ef0b0;
+    --coral: #ff5c7a;
+    --white: #ffffff;
+    --pale: #dfe4ff;
+    --r: 22px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--cobalt);
+    color: var(--white);
+    font-family: "Figtree", system-ui, sans-serif;
+    font-size: 17px; line-height: 1.5;
+    overflow-x: hidden;
+  }
+  a { color: inherit; }
+  :focus-visible { outline: 3px solid var(--sun); outline-offset: 3px; }
+  code, pre { font-family: "Fira Code", ui-monospace, monospace; }
+  .display { font-family: "Unbounded", sans-serif; }
+
+  .wrap { max-width: 1320px; margin: 0 auto; padding: 18px clamp(12px, 2.4vw, 28px) 40px; }
+  .top { display: flex; justify-content: space-between; align-items: center; padding: 6px 4px 18px; }
+  .brand { font-family: "Unbounded", sans-serif; font-weight: 900; font-size: 22px; text-decoration: none; display: flex; align-items: center; gap: 10px; }
+  .brand i { width: 22px; height: 22px; border: 5px solid var(--sun); border-radius: 50%; display: inline-block; }
+  .top nav { display: flex; gap: 8px; }
+  .top nav a { text-decoration: none; font-weight: 700; font-size: 15px; padding: 8px 14px; border-radius: 99px; background: var(--deep); }
+  .top nav a:hover { background: var(--sun); color: var(--night); }
+
+  .bento { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
+  .tile { background: var(--deep); border-radius: var(--r); padding: clamp(18px, 2.2vw, 30px); position: relative; overflow: hidden; }
+  .tile.white { background: var(--white); color: var(--night); }
+  .tile.sun { background: var(--sun); color: var(--night); }
+  .tile.night { background: var(--night); }
+  .tile.mint { background: var(--mint); color: var(--night); }
+  .tile h2 { font-family: "Unbounded", sans-serif; font-weight: 700; font-size: clamp(22px, 2.2vw, 30px); line-height: 1.12; margin-bottom: 10px; letter-spacing: -.01em; }
+  .tile p { max-width: 46ch; }
+
+  /* hero */
+  .hero { grid-column: 1 / 7; display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 20px; padding: 0; background: var(--night); min-height: 640px; }
+  .hero .copy { padding: clamp(24px, 3.5vw, 52px); display: flex; flex-direction: column; justify-content: space-between; gap: 30px; }
+  .hero h1 { font-family: "Unbounded", sans-serif; font-weight: 900; font-size: clamp(38px, 4.4vw, 64px); line-height: 1.02; letter-spacing: -.03em; }
+  .hero .lede { font-size: 19px; color: var(--pale); max-width: 40ch; margin-top: 22px; }
+  .cta { display: flex; gap: 10px; flex-wrap: wrap; }
+  .btn { font: inherit; font-weight: 700; font-size: 16px; border: 0; border-radius: 99px; padding: 12px 20px; cursor: pointer; text-decoration: none; background: var(--sun); color: var(--night); display: inline-flex; align-items: center; gap: 8px; }
+  .btn.ghost { background: transparent; color: var(--white); box-shadow: inset 0 0 0 2px rgba(255,255,255,.35); }
+  .btn:hover { filter: brightness(1.06); }
+  .btn[disabled] { opacity: .35; cursor: default; }
+
+  /* isometric stage */
+  .stage { position: relative; min-width: 0; min-height: 560px; display: grid; place-items: center; cursor: grab; touch-action: pan-y; user-select: none; }
+  .stage:active { cursor: grabbing; }
+  .fit { position: relative; width: 100%; height: 500px; }
+  .fit .board { position: absolute; left: 50%; top: 50%; margin: -225px 0 0 -270px; }
+  .board {
+    --rz: -38deg;
+    width: 540px; height: 450px;
+    transform-style: preserve-3d;
+    transform: scale(var(--s, 1)) rotateX(54deg) rotateZ(var(--rz));
+    flex: none;
+    background:
+      linear-gradient(rgba(255,255,255,.08) 1px, transparent 1px) 0 0 / 90px 90px,
+      linear-gradient(90deg, rgba(255,255,255,.08) 1px, transparent 1px) 0 0 / 90px 90px,
+      #1a28d6;
+    border-radius: 18px;
+    box-shadow: 0 0 0 2px rgba(255,255,255,.12), 30px 40px 0 #0a105a;
+  }
+  .edge { position: absolute; background: rgba(255,255,255,.35); border-radius: 4px; transition: background .3s; }
+  .edge.lit { background: var(--sun); box-shadow: 0 0 12px var(--sun); }
+  .cube { --z: 0px; --h: 26px; position: absolute; width: 58px; height: 58px; transform-style: preserve-3d; transform: translateZ(var(--z)); transition: transform .45s cubic-bezier(.3, 1.6, .5, 1); }
+  .cube .t, .cube .s, .cube .e { position: absolute; }
+  .cube .t { inset: 0; transform: translateZ(var(--h)); background: var(--white); color: var(--night); border-radius: 6px; display: grid; place-items: center; font-family: "Unbounded", sans-serif; font-weight: 700; font-size: 9.5px; text-align: center; line-height: 1.1; transition: background .3s; }
+  .cube .s { left: 0; top: 100%; width: 100%; height: var(--h); background: #aab5ff; transform-origin: top; transform: rotateX(90deg); border-radius: 0 0 6px 6px; transition: background .3s; }
+  .cube .e { top: 0; left: 100%; width: var(--h); height: 100%; background: #7d8cff; transform-origin: left; transform: rotateY(-90deg); border-radius: 0 6px 6px 0; transition: background .3s; }
+  .cube .shadow { position: absolute; inset: 4px; background: rgba(5,10,70,.5); border-radius: 8px; transform: translateZ(calc(-1 * var(--z))); filter: blur(4px); opacity: 0; transition: opacity .3s; }
+  .cube.running { --z: 30px; }
+  .cube.running .shadow, .cube.wait .shadow { opacity: 1; }
+  .cube.running .t { background: var(--sun); }
+  .cube.running .s { background: #e0b01e; } .cube.running .e { background: #c89a10; }
+  .cube.done .t { background: var(--mint); }
+  .cube.done .s { background: #25c790; } .cube.done .e { background: #1aa877; }
+  .cube.fail .t { background: var(--coral); color: #fff; }
+  .cube.fail .s { background: #e0405e; } .cube.fail .e { background: #c32e4b; }
+  .cube.wait { --z: 18px; }
+  .cube.wait .t { background: #fff; outline: 4px solid var(--sun); animation: throb 1s ease-in-out infinite alternate; }
+  @keyframes throb { to { outline-color: transparent; } }
+  .cube.forked .t { background: #c7f9e5; }
+  .token { position: absolute; width: 20px; height: 20px; margin: -10px 0 0 -10px; border-radius: 50%; background: var(--sun); box-shadow: 0 0 0 6px rgba(255,210,63,.3), 0 0 22px var(--sun); transform-style: preserve-3d; transform: translateZ(8px); transition: left .5s ease-in-out, top .5s ease-in-out, transform .5s; z-index: 5; }
+  .token.hop { transform: translateZ(120px); }
+  .stage-hud { position: absolute; left: 18px; right: 18px; bottom: 16px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+  .ctl { display: flex; gap: 6px; flex-wrap: wrap; }
+  .ctl .btn { padding: 8px 14px; font-size: 14px; }
+  .ctl .btn.ghost.hot { background: var(--sun); color: var(--night); box-shadow: none; }
+  .readout { font-family: "Fira Code", monospace; font-size: 13px; color: var(--pale); background: rgba(0,0,0,.25); padding: 6px 10px; border-radius: 10px; max-width: 100%; }
+  .hint { position: absolute; top: 18px; right: 20px; font-size: 13px; color: var(--pale); opacity: .8; }
+
+  /* how tiles */
+  .how { grid-column: span 2; min-height: 290px; display: flex; flex-direction: column; }
+  .how .num { font-family: "Unbounded", sans-serif; font-weight: 900; font-size: 64px; line-height: 1; margin-bottom: auto; }
+  .how code { margin-top: 18px; display: inline-block; font-size: 14px; padding: 5px 10px; border-radius: 8px; background: rgba(12,20,112,.1); align-self: flex-start; }
+  .how.night code { background: rgba(255,255,255,.12); }
+  .mini { display: flex; gap: 6px; margin: 14px 0 18px; }
+  .mini i { width: 26px; height: 26px; border-radius: 6px; background: currentColor; opacity: .15; }
+  .mini i.on { opacity: 1; }
+  .how:hover .mini i { animation: pop .8s calc(var(--d) * 90ms) both; }
+  @keyframes pop { 40% { transform: translateY(-8px); opacity: 1; } }
+
+  .controls { grid-column: span 4; }
+  .clist { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 18px; }
+  .clist div { background: rgba(255,255,255,.08); border-radius: 14px; padding: 14px; }
+  .clist b { display: block; font-family: "Unbounded", sans-serif; font-weight: 500; font-size: 15px; margin-bottom: 4px; }
+  .clist span { font-size: 15px; color: var(--pale); }
+  .kinds { grid-column: span 2; }
+  .kinds ul { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .kinds li { background: var(--night); color: #fff; border-radius: 99px; padding: 6px 12px; font-weight: 700; font-size: 14px; }
+  .kinds li:nth-child(3n+1) { background: var(--cobalt); }
+  .kinds li:nth-child(3n+2) { background: var(--coral); }
+
+  .local { grid-column: span 3; }
+  .dbstack { margin-top: 18px; display: grid; gap: 6px; }
+  .dbstack div { background: var(--cobalt); color: #fff; border-radius: 12px; padding: 10px 14px; display: flex; justify-content: space-between; gap: 10px; font-size: 15px; }
+  .dbstack div span:last-child { font-family: "Fira Code", monospace; font-size: 13px; opacity: .8; }
+  .studio { grid-column: span 3; }
+  .studio .shot { margin-top: 18px; background: #fff; color: var(--night); border-radius: 14px; padding: 14px; display: grid; grid-template-columns: 110px 1fr; gap: 12px; min-height: 180px; }
+  .studio .side { display: grid; gap: 6px; align-content: start; font-size: 13px; }
+  .studio .side span { background: var(--pale); border-radius: 6px; padding: 4px 8px; }
+  .studio .canvas { background: radial-gradient(circle, #c9d0ff 1px, transparent 1.5px) 0 0 / 14px 14px; border-radius: 10px; position: relative; }
+  .studio .canvas i { position: absolute; width: 58px; height: 26px; border-radius: 6px; background: var(--cobalt); }
+  .studio .canvas i:nth-child(2) { background: var(--coral); } .studio .canvas i:nth-child(4) { background: var(--mint); }
+
+  .qs { grid-column: 1 / 7; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 30px; align-items: center; }
+  .qs h2 { font-size: clamp(30px, 3.6vw, 52px); font-weight: 900; }
+  .qs pre { background: var(--night); color: #fff; border-radius: 16px; padding: 22px; font-size: clamp(13px, 1.3vw, 16px); line-height: 1.9; overflow-x: auto; }
+  .qs pre .c { color: #8e99ff; }
+  .qs pre .y { color: var(--sun); }
+
+  footer { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 26px 4px 0; font-weight: 700; }
+  footer nav { display: flex; gap: 18px; }
+
+  @media (max-width: 1080px) {
+    .hero { grid-template-columns: minmax(0, 1fr); }
+    .stage { min-height: 520px; }
+    .how { grid-column: span 3; }
+    .how:nth-child(4) { grid-column: span 6; min-height: 0; }
+    .controls, .kinds { grid-column: span 6; }
+    .local, .studio { grid-column: span 6; }
+    .qs { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 640px) {
+    .bento { grid-template-columns: 1fr; }
+    .bento > * { grid-column: 1 / -1 !important; }
+    .top nav a:not(:last-child) { display: none; }
+    .stage { min-height: 460px; }
+    .how { min-height: 0; }
+    .how .num { font-size: 44px; margin-bottom: 12px; }
+    .clist { grid-template-columns: 1fr 1fr; }
+    .hint { display: none; }
+    .stage { display: flex; flex-direction: column; min-height: 0; padding: 10px 0 16px; }
+    .fit { height: 290px; overflow: visible; }
+    .stage-hud { position: static; flex-direction: column; align-items: stretch; padding: 0 14px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cube, .cube .t, .token, .edge { transition: none; }
+    .cube.wait .t, .how:hover .mini i { animation: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="#"><i aria-hidden="true"></i>loopy</a>
+    <nav><a href="#how">How it works</a><a href="#controls">Controls</a><a href="#start">Quick start</a></nav>
+  </header>
+
+  <main class="bento">
+    <section class="tile hero">
+      <div class="copy">
+        <div>
+          <h1>One session in. A runnable graph out.</h1>
+          <p class="lede">Loopy is a local graph harness for Codex and Claude Code. It turns a recorded agent session into an execution graph, then runs it on your machine with pause, retry, fork and approvals.</p>
+        </div>
+        <div class="cta"><a class="btn" href="#start">Quick start</a><a class="btn ghost" href="#how">How it works</a></div>
+      </div>
+      <div class="stage" id="stage" aria-label="Isometric execution graph. Drag sideways to turn it.">
+        <span class="hint">Drag to turn</span>
+        <div class="fit" id="fit"><div class="board" id="board"></div></div>
+        <div class="stage-hud">
+          <div class="ctl">
+            <button class="btn" data-a="start" type="button">Run</button>
+            <button class="btn ghost" data-a="pause" type="button">Pause</button>
+            <button class="btn ghost" data-a="approve" type="button">Approve</button>
+            <button class="btn ghost" data-a="fork" type="button">Fork</button>
+            <button class="btn ghost" data-a="cancel" type="button">Cancel</button>
+          </div>
+          <div class="readout" id="readout" aria-live="polite">run #41 ready</div>
+        </div>
+      </div>
+    </section>
+
+    <article class="tile how white" id="how">
+      <div class="num">1</div>
+      <div class="mini" aria-hidden="true"><i class="on" style="--d:0"></i><i style="--d:1"></i><i style="--d:2"></i></div>
+      <h2>Record</h2>
+      <p>Do the task once in Codex or Claude Code. Loopy imports the recorded session trace.</p>
+      <code>loopy import</code>
+    </article>
+    <article class="tile how sun">
+      <div class="num">2</div>
+      <div class="mini" aria-hidden="true"><i class="on" style="--d:0"></i><i class="on" style="--d:1"></i><i style="--d:2"></i></div>
+      <h2>Extract</h2>
+      <p>A deterministic extractor proposes a graph with no model calls. Every node links back to the trace events behind it.</p>
+      <code>loopy extract</code>
+    </article>
+    <article class="tile how night">
+      <div class="num">3</div>
+      <div class="mini" aria-hidden="true"><i class="on" style="--d:0"></i><i class="on" style="--d:1"></i><i class="on" style="--d:2"></i></div>
+      <h2>Run</h2>
+      <p>Approve the graph and run it locally. Loopy owns the order, the checks and the approvals. The agent does the work inside nodes.</p>
+      <code>loopy run</code>
+    </article>
+
+    <section class="tile controls" id="controls">
+      <h2>Runtime controls</h2>
+      <p>Runs are durable. Every attempt and checkpoint is written to SQLite as it happens.</p>
+      <div class="clist">
+        <div><b>Pause</b><span>Stop between nodes and resume later.</span></div>
+        <div><b>Retry</b><span>Bounded attempts, all on record.</span></div>
+        <div><b>Fork</b><span>New run from any checkpoint.</span></div>
+        <div><b>Approve</b><span>An approval node waits for you.</span></div>
+        <div><b>Cancel</b><span>End a run, keep its history.</span></div>
+        <div><b>Schedule</b><span>Cron schedules on your machine.</span></div>
+      </div>
+    </section>
+    <section class="tile kinds mint">
+      <h2>Seven step kinds</h2>
+      <p>Only agent nodes call a model. The rest are plain and predictable.</p>
+      <ul><li>agent</li><li>shell</li><li>route</li><li>verify</li><li>approval</li><li>join</li><li>transform</li></ul>
+    </section>
+
+    <section class="tile local white">
+      <h2>State stays in your repo</h2>
+      <p>Loopy runs on Bun and calls the agent CLIs you already have, with your login. No hosted compute.</p>
+      <div class="dbstack">
+        <div><span>Runs and attempts</span><span>.loopy/loopy.db</span></div>
+        <div><span>Checkpoints</span><span>.loopy/loopy.db</span></div>
+        <div><span>Approvals and schedules</span><span>.loopy/loopy.db</span></div>
+      </div>
+    </section>
+    <section class="tile studio">
+      <h2>Studio, on localhost</h2>
+      <p>Run <code>loopy ui</code> to open a local Studio. Read the graph, edit nodes and edges, and watch runs.</p>
+      <div class="shot" aria-hidden="true">
+        <div class="side"><span>cve-patch</span><span>rebase-prs</span><span>runs</span><span>schedules</span></div>
+        <div class="canvas"><i style="left:8%;top:18%"></i><i style="left:40%;top:18%"></i><i style="left:40%;top:58%"></i><i style="left:72%;top:38%"></i></div>
+      </div>
+    </section>
+
+    <section class="tile qs sun" id="start">
+      <div>
+        <h2>Quick start</h2>
+        <p>Install with Bun. Import a session you already ran. Run what comes out.</p>
+      </div>
+<pre><span class="c"># install and set up</span>
+<span class="y">bun</span> add -g loopy
+<span class="y">loopy</span> init
+<span class="c"># session to graph</span>
+<span class="y">loopy</span> import session.jsonl --provider codex
+<span class="y">loopy</span> extract --import &lt;import-id&gt;
+<span class="y">loopy</span> approve &lt;proposal-id&gt;
+<span class="c"># run it</span>
+<span class="y">loopy</span> run &lt;workflow-id&gt;
+<span class="y">loopy</span> ui</pre>
+    </section>
+  </main>
+
+  <footer>
+    <span>loopy, Apache-2.0</span>
+    <nav><a href="#">GitHub</a><a href="#">Docs</a><a href="index.html">Catalog</a></nav>
+  </footer>
+</div>
+
+<script>
+(() => {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const C = 90, OFF = 45;
+  const N = {
+    audit: [0, 2, 'shell'], parse: [1, 2, 'trans\nform'], patch: [2, 2, 'agent'],
+    tests: [3, 1, 'verify\ntests'], types: [3, 3, 'verify\ntypes'], join: [4, 2, 'join'],
+    route: [5, 2, 'route'], review: [5, 4, 'appr\noval'], push: [4, 4, 'shell\npush'],
+  };
+  const E = [['audit', 'parse'], ['parse', 'patch'], ['patch', 'tests'], ['patch', 'types'], ['tests', 'join'], ['types', 'join'], ['join', 'route'], ['route', 'review'], ['review', 'push']];
+  const board = document.getElementById('board');
+  board.style.height = (5 * C) + 'px';
+  const center = id => [N[id][0] * C + OFF, N[id][1] * C + OFF];
+  const edgeEls = {};
+  E.forEach(([a, b]) => {
+    const [ax, ay] = center(a), [bx, by] = center(b);
+    const segs = ay === by || ax === bx ? [[ax, ay, bx, by]] : [[ax, ay, bx, ay], [bx, ay, bx, by]];
+    edgeEls[a + '>' + b] = segs.map(([x1, y1, x2, y2]) => {
+      const d = document.createElement('div'); d.className = 'edge';
+      const w = Math.abs(x2 - x1), h = Math.abs(y2 - y1);
+      Object.assign(d.style, { left: Math.min(x1, x2) - 3 + 'px', top: Math.min(y1, y2) - 3 + 'px', width: w + 6 + 'px', height: h + 6 + 'px' });
+      board.appendChild(d); return d;
+    });
+  });
+  const cubes = {};
+  Object.entries(N).forEach(([id, [x, y, label]]) => {
+    const c = document.createElement('div'); c.className = 'cube';
+    c.style.left = x * C + OFF - 29 + 'px'; c.style.top = y * C + OFF - 29 + 'px';
+    c.innerHTML = `<div class="shadow"></div><div class="s"></div><div class="e"></div><div class="t">${label.replace('\n', '<br>')}</div>`;
+    board.appendChild(c); cubes[id] = c;
+  });
+  const token = document.createElement('div'); token.className = 'token'; board.appendChild(token);
+  const moveToken = id => { const [x, y] = center(id); token.style.left = x + 'px'; token.style.top = y + 'px'; };
+
+  // fit to container
+  const fit = document.getElementById('fit'), stage = document.getElementById('stage');
+  const doFit = () => { const s = Math.min(1, (stage.clientWidth - 10) / 820); board.style.setProperty('--s', s); };
+  addEventListener('resize', doFit); doFit();
+
+  // drag to turn
+  let dragging = false, sx = 0, rz = -38;
+  stage.addEventListener('pointerdown', e => { if (e.target.closest('button')) return; dragging = true; sx = e.clientX; });
+  addEventListener('pointerup', () => dragging = false);
+  addEventListener('pointermove', e => {
+    if (!dragging) return; const d = (e.clientX - sx) * .25; sx = e.clientX;
+    rz = Math.max(-80, Math.min(0, rz + d)); board.style.setProperty('--rz', rz + 'deg');
+  });
+
+  // run engine
+  const ORDER = [['audit'], ['parse'], ['patch'], ['tests', 'types'], ['join'], ['route'], ['review'], ['push']];
+  const readout = document.getElementById('readout');
+  const b = a => document.querySelector(`.ctl [data-a="${a}"]`);
+  let S;
+  const T = ms => reduce ? 200 : ms;
+  const setC = (id, cls) => { cubes[id].className = 'cube ' + (cls || ''); };
+  const light = (a, z, on = true) => (edgeEls[a + '>' + z] || []).forEach(el => el.classList.toggle('lit', on));
+  function ui(msg) {
+    if (msg) readout.textContent = `${S.name}: ${msg}`;
+    b('start').disabled = !['ready', 'paused', 'done', 'cancelled'].includes(S.state);
+    b('start').textContent = S.state === 'paused' ? 'Resume' : S.state === 'done' || S.state === 'cancelled' ? 'Run again' : 'Run';
+    b('pause').disabled = S.state !== 'running';
+    b('approve').disabled = S.state !== 'waiting'; b('approve').classList.toggle('hot', S.state === 'waiting');
+    b('fork').disabled = S.cp < 0 || S.state === 'running';
+    b('cancel').disabled = !['running', 'paused', 'waiting'].includes(S.state);
+  }
+  function reset(name = 'run #41') {
+    clearTimeout(S?.t); S = { i: 0, state: 'ready', failed: false, cp: -1, t: 0, name };
+    Object.keys(cubes).forEach(id => setC(id)); Object.values(edgeEls).flat().forEach(e => e.classList.remove('lit'));
+    token.classList.remove('hop'); moveToken('audit'); ui('ready');
+  }
+  function tick() {
+    if (S.state !== 'running') return;
+    const g = ORDER[S.i];
+    if (!g) { S.state = 'done'; ui('succeeded, PR opened'); return; }
+    g.forEach(id => setC(id, 'running')); moveToken(g[0]);
+    if (S.i > 0) ORDER[S.i - 1].forEach(p => g.forEach(n => light(p, n)));
+    ui(`running ${g.join(' + ')}`);
+    S.t = setTimeout(() => {
+      if (S.state !== 'running') return;
+      if (g[0] === 'review') { setC('review', 'wait'); S.state = 'waiting'; ui('waiting for approval'); return; }
+      if (g[0] === 'tests' && !S.failed) {
+        S.failed = true; setC('tests', 'fail'); setC('types', 'done'); ui('tests failed, route sends it back to patch');
+        S.t = setTimeout(() => {
+          if (S.state !== 'running') return;
+          token.classList.add('hop'); moveToken('patch'); setC('patch', 'running');
+          S.t = setTimeout(() => {
+            token.classList.remove('hop'); if (S.state !== 'running') return;
+            ui('patch attempt 2'); S.t = setTimeout(() => { if (S.state !== 'running') return; setC('patch', 'done'); setC('tests', 'running'); moveToken('tests'); ui('tests attempt 2');
+              S.t = setTimeout(() => { if (S.state !== 'running') return; setC('tests', 'done'); S.cp = S.i; S.i++; tick(); }, T(900)); }, T(700));
+          }, T(600));
+        }, T(900));
+        return;
+      }
+      g.forEach(id => setC(id, 'done')); S.cp = S.i; S.i++; tick();
+    }, T(900));
+  }
+  document.querySelector('.ctl').addEventListener('click', e => {
+    const a = e.target.closest('button')?.dataset.a; if (!a) return;
+    if (a === 'start') { if (S.state === 'done' || S.state === 'cancelled') reset(); S.state = 'running'; tick(); }
+    if (a === 'pause') { clearTimeout(S.t); token.classList.remove('hop'); S.state = 'paused'; ORDER[S.i].forEach(id => { if (cubes[id].classList.contains('running')) setC(id); }); ui(`paused before ${ORDER[S.i].join(' + ')}`); }
+    if (a === 'approve') { setC('review', 'done'); S.cp = S.i; S.i++; S.state = 'running'; tick(); }
+    if (a === 'cancel') { clearTimeout(S.t); S.state = 'cancelled'; ui('cancelled, history kept'); }
+    if (a === 'fork') {
+      const cp = S.cp; reset('run #42'); S.failed = true;
+      ORDER.slice(0, cp + 1).flat().forEach(id => setC(id, 'forked'));
+      S.i = cp + 1; S.cp = cp; S.state = 'paused'; moveToken(ORDER[S.i][0]); ui(`forked from checkpoint after ${ORDER[cp].join(' + ')}`);
+    }
+  });
+  reset();
+  // start once the hero is on screen
+  setTimeout(() => { if (S.state === 'ready') { S.state = 'running'; tick(); } }, 1200);
+})();
+</script>
+</body>
+</html>

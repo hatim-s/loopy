@@ -1,0 +1,877 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loopy. Do the work once, run it with control.</title>
+<meta name="description" content="Loopy is a local-first graph harness for coding agents. Do a task once, extract an execution graph from the trace, run it on your machine.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0D1014;--bg-raised:#11151A;--surface:#161B21;--surface-hover:#1C2229;--surface-active:#232A33;
+  --line:#222931;--line-strong:#323B46;--text:#E6EAF0;--text-muted:#98A2AE;--text-subtle:#6A7480;
+  --accent:#8FA8FF;--accent-strong:#B7C6FF;--accent-ink:#0B1330;--aqua:#6EE0D2;
+  --ok:#5CD39B;--run:#8FA8FF;--wait:#F0C46C;--fail:#F2877E;--idle:#6A7480;
+  --accent-soft:rgba(143,168,255,.12);--accent-line:rgba(143,168,255,.35);
+  --wait-soft:rgba(240,196,108,.12);
+  --grad:linear-gradient(135deg,#8FA8FF 0%,#6EE0D2 100%);
+  --ease:cubic-bezier(.2,.8,.2,1);
+  --focus:0 0 0 2px #0D1014,0 0 0 4px #8FA8FF;
+  --float:0 12px 32px -8px rgba(0,0,0,.55),0 0 0 1px #222931;
+  --sans:"Geist",ui-sans-serif,system-ui,sans-serif;
+  --mono:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:72px}
+body{margin:0;background:var(--bg);color:var(--text);font:400 16px/1.55 var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+:focus-visible{outline:none;box-shadow:var(--focus);border-radius:6px}
+code{font-family:var(--mono);font-size:.9em}
+p code{color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:5px;padding:1px 5px;white-space:nowrap}
+.wrap{max-width:1200px;margin:0 auto;padding:0 32px}
+@media (max-width:640px){.wrap{padding:0 20px}}
+.skip{position:absolute;left:-9999px}.skip:focus{left:16px;top:16px;z-index:100;background:var(--surface);padding:8px 12px}
+
+/* nav */
+.nav{position:sticky;top:0;z-index:50;background:rgba(13,16,20,.72);backdrop-filter:blur(14px) saturate(140%);-webkit-backdrop-filter:blur(14px) saturate(140%);border-bottom:1px solid rgba(34,41,49,.7)}
+.nav .wrap{display:flex;align-items:center;gap:32px;height:60px}
+.brand{display:flex;align-items:center;gap:9px;font-weight:600;font-size:16px;letter-spacing:-.02em}
+.brand svg{width:24px;height:24px}
+.nav-links{display:flex;gap:26px;font-size:14px;color:var(--text-muted)}
+.nav-links a:hover{color:var(--text)}
+.nav-end{margin-left:auto;display:flex;gap:10px;align-items:center}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:6px;font:500 14px/1 var(--sans);border:1px solid var(--line-strong);background:var(--surface);color:var(--text);cursor:pointer;white-space:nowrap;transition:background 160ms var(--ease),border-color 160ms var(--ease)}
+.btn:hover{background:var(--surface-hover);border-color:#3d4754}
+.btn svg{width:16px;height:16px}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn-primary:hover{background:var(--accent-strong);border-color:var(--accent-strong)}
+.btn-lg{height:44px;padding:0 18px;font-size:15px}
+.btn-ghost{background:transparent;border-color:transparent;color:var(--text-muted)}
+.btn-ghost:hover{background:var(--surface);border-color:transparent;color:var(--text)}
+@media (max-width:760px){.nav-links{display:none}.nav .wrap{gap:16px}.hide-sm{display:none}}
+
+/* hero */
+.hero{position:relative;padding:76px 0 0;text-align:center}
+.hero::before{content:"";position:absolute;inset:0 0 auto;height:1000px;pointer-events:none;background:radial-gradient(50% 40% at 50% 62%,rgba(143,168,255,.10),transparent 70%),radial-gradient(40% 30% at 70% 70%,rgba(110,224,210,.05),transparent 70%)}
+h1{font-size:clamp(40px,6vw,76px);line-height:1;letter-spacing:-.045em;font-weight:600;margin:0}
+h1 span{display:block}
+.lede{font-size:18px;line-height:1.55;color:var(--text-muted);max-width:34em;margin:26px auto 0;text-wrap:pretty}
+.cta{display:flex;gap:12px;justify-content:center;align-items:center;flex-wrap:wrap;margin-top:34px}
+.cmd{display:inline-flex;align-items:center;gap:12px;height:44px;padding:0 5px 0 14px;border:1px solid var(--line-strong);background:rgba(17,21,26,.8);border-radius:8px;font:400 14px var(--mono)}
+.cmd .p{color:var(--text-subtle)}
+.cmd button{height:32px;padding:0 10px;border-radius:5px;border:0;background:var(--surface-active);color:var(--text-muted);font:500 12px var(--sans);cursor:pointer}
+.cmd button:hover{color:var(--text);background:var(--line-strong)}
+.cmd button[data-copied]{color:var(--ok)}
+
+/* loop panel */
+.panel{position:relative;margin:60px auto 0;border-radius:20px;padding:1px;background:linear-gradient(180deg,rgba(183,198,255,.28),rgba(34,41,49,.8) 30%,rgba(34,41,49,.5));box-shadow:0 50px 100px -40px rgba(0,0,0,.9)}
+.panel-in{position:relative;border-radius:19px;background:radial-gradient(60% 70% at 50% 50%,rgba(143,168,255,.07),transparent 70%),rgba(17,21,26,.92);overflow:hidden}
+.panel-bar{display:flex;align-items:center;gap:10px;height:46px;padding:0 18px;border-bottom:1px solid var(--line);font-size:13px;color:var(--text-muted);text-align:left}
+.panel-bar b{color:var(--text);font-weight:500}
+.panel-bar code{color:var(--text-subtle);font-size:12px}
+.panel-bar .right{margin-left:auto;display:flex;gap:14px;align-items:center}
+.loop{position:relative;height:420px}
+.loop svg.track{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.t-base{fill:none;stroke:var(--line-strong);stroke-width:1.5}
+.t-glow{fill:none;stroke:url(#brandU);stroke-width:1.5;opacity:.5}
+.t-wide{fill:none;stroke:url(#brandU);stroke-width:14;opacity:.07;filter:blur(8px)}
+.t-comet{fill:none;stroke:url(#brandU);stroke-width:3;stroke-linecap:round}
+.t-head{fill:#DDF8F4;filter:drop-shadow(0 0 8px rgba(110,224,210,.95))}
+.loop .cn{transform:translate(-50%,-50%);box-shadow:0 18px 40px -18px rgba(0,0,0,.9)}
+.loop .cn.m{transform:translate(0,-50%)}
+.sum{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(420px,40%);text-align:left;display:grid;gap:12px}
+.sum-top{display:flex;align-items:center;gap:10px;font-size:14px}
+.sum-top b{font-weight:600;font-size:15px}
+.badge{display:inline-flex;align-items:center;gap:7px;height:24px;padding:0 9px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:12px;color:var(--text-muted);margin-left:auto}
+.segs{display:grid;grid-template-columns:repeat(6,1fr);gap:4px}
+.segs i{height:4px;border-radius:2px;background:var(--line-strong);transition:background 300ms var(--ease)}
+.segs i[data-s="running"]{background:var(--run)}
+.segs i[data-s="succeeded"]{background:var(--ok)}
+.segs i[data-s="blocked_approval"]{background:var(--wait)}
+.sum-meta{display:flex;gap:18px;font-size:12px;color:var(--text-subtle)}
+.sum-meta span b{color:var(--text-muted);font-weight:500;font-family:var(--mono)}
+.sum-ev{font:400 12px var(--mono);color:var(--text-muted);height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sum-ev .ok{color:var(--ok)}.sum-ev .w{color:var(--wait)}
+@media (max-width:760px){.sum{display:none}.panel{margin-top:48px}}
+
+/* node card, as in builder.css */
+[data-kind="agent"]{--na:#8fa8ff}[data-kind="shell"]{--na:#6ee0d2}[data-kind="route"]{--na:#c7a4ff}[data-kind="verify"]{--na:#9fd68c}[data-kind="approval"]{--na:#f0c46c}[data-kind="join"]{--na:#f2a7c3}[data-kind="transform"]{--na:#7fc8f8}
+.kt{display:grid;place-items:center;flex:0 0 28px;width:28px;height:28px;border-radius:7px;color:var(--na);background:color-mix(in srgb,var(--na) 14%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--na) 22%,transparent)}
+.kt svg{width:15px;height:15px}
+.cn{position:absolute;left:0;top:0;display:flex;align-items:center;gap:10px;width:var(--cw,224px);height:56px;padding:0 12px 0 10px;border:1px solid var(--line-strong);border-radius:10px;background:var(--surface);text-align:left;font-size:13px;line-height:1.3;transition:border-color 160ms var(--ease),box-shadow 160ms var(--ease)}
+.cn .tt{display:grid;min-width:0;flex:1;gap:1px}
+.cn strong{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cn small{font-size:11px;color:var(--text-subtle);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cn[data-status="succeeded"]{border-color:rgba(92,211,155,.4)}
+.cn[data-status="succeeded"] small{color:var(--ok)}
+.cn[data-status="running"]{border-color:var(--accent-line)}
+.cn[data-status="running"] small{color:var(--run)}
+.cn[data-status="blocked_approval"]{border-color:rgba(240,196,108,.6);box-shadow:0 0 0 3px var(--wait-soft)}
+.cn[data-status="blocked_approval"] small{color:var(--wait)}
+@property --spin{syntax:"<angle>";inherits:false;initial-value:0deg}
+.cn[data-status="running"]::after{content:"";position:absolute;inset:-1px;border-radius:inherit;padding:1px;background:conic-gradient(from var(--spin,0deg),transparent 70%,var(--accent),var(--aqua));-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0);animation:spin 1.8s linear infinite;pointer-events:none}
+@keyframes spin{to{--spin:360deg}}
+.ns{position:absolute;top:-4px;right:-4px;width:12px;height:12px;border:2px solid var(--bg);border-radius:50%;background:var(--idle);display:none}
+.cn[data-status] .ns{display:block}
+.cn[data-status="succeeded"] .ns{background:var(--ok)}
+.cn[data-status="running"] .ns{background:var(--run)}
+.cn[data-status="blocked_approval"] .ns{background:var(--wait)}
+.sd{position:relative;display:inline-block;width:8px;height:8px;flex-shrink:0;border:1.5px solid var(--idle);border-radius:50%}
+.sd[data-status="succeeded"]{border-color:var(--ok);background:var(--ok)}
+.sd[data-status="running"]{border-color:var(--run);background:var(--run);box-shadow:0 0 0 3px var(--accent-soft);animation:sp 1.6s var(--ease) infinite}
+.sd[data-status="blocked_approval"]{border-color:var(--wait);background:linear-gradient(90deg,var(--wait) 50%,transparent 50%)}
+@keyframes sp{50%{box-shadow:0 0 0 5px transparent}}
+
+/* strip */
+.strip{padding:80px 0 0;text-align:center}
+.strip p{margin:0;font-size:14px;color:var(--text-subtle)}
+.marks{display:flex;justify-content:center;align-items:center;gap:56px;margin-top:20px;flex-wrap:wrap}
+.wm{font-size:22px;font-weight:600;letter-spacing:-.03em;color:#AEB6C1}
+.dotsep{width:1px;height:24px;background:var(--line)}
+@media (max-width:640px){.marks{gap:24px}}
+
+/* scroll story */
+.story{position:relative;height:420vh;margin-top:140px;border-top:1px solid var(--line)}
+.story-sticky{position:sticky;top:60px;height:calc(100vh - 60px);display:flex;flex-direction:column;overflow:hidden}
+.story-head{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.6fr);gap:48px;align-items:end;padding-top:40px}
+.story-head h2{font-size:clamp(28px,3.2vw,40px)}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+.step{position:relative;padding-top:14px;color:var(--text-subtle);transition:color 220ms var(--ease)}
+.step::before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:var(--line)}
+.step i{position:absolute;left:0;top:0;height:2px;width:100%;background:var(--grad);transform-origin:left;transform:scaleX(0)}
+.step h3{margin:0 0 4px;font-size:16px;font-weight:600;letter-spacing:-.01em;display:flex;gap:10px;align-items:baseline}
+.step h3 code{font-size:12px;font-weight:400;color:var(--text-subtle)}
+.step p{margin:0;font-size:13.5px;line-height:1.5}
+.step.on{color:var(--text-muted)}.step.on h3{color:var(--text)}
+.stage{position:relative;flex:1;margin:16px auto 24px;width:100%}
+.stage svg.wires{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}
+.ln{position:absolute;left:0;top:0;font:400 13px/1 var(--mono);color:var(--text-muted);white-space:nowrap;transform-origin:0 50%;will-change:transform,opacity}
+.ln .t{color:var(--text-subtle);margin-right:14px}
+.ln .k{display:inline-block;width:52px;color:var(--text-subtle)}
+.ln.hit{color:var(--text)}
+.ln .hl{position:absolute;inset:-5px -8px;border-radius:6px;background:var(--accent-soft);border:1px solid var(--accent-line);opacity:0}
+.ev{position:absolute;left:0;top:0;will-change:transform}
+.ev .cn{position:relative;opacity:0}
+.wire{fill:none;stroke:#3a4450;stroke-width:1.5}
+.wire.lit{stroke:url(#wg);stroke-width:1.75}
+.thread{fill:none;stroke:var(--accent);stroke-width:1;stroke-dasharray:2 4}
+.tok{fill:#DDF8F4;filter:drop-shadow(0 0 6px rgba(110,224,210,.9))}
+.elabel{font:500 11px var(--sans);fill:var(--text-muted)}
+@media (max-width:900px){.story-head{grid-template-columns:1fr;gap:18px;padding-top:24px}.story-head h2{display:none}.steps{grid-template-columns:1fr}.step{display:none}.step.on{display:block}.ln{font-size:11px}.ln .t{margin-right:8px}.ln .k{width:40px}}
+
+/* sections */
+section.blk{padding:140px 0 0}
+.sh{max-width:720px}
+.sh.c{margin:0 auto;text-align:center}
+h2{font-size:clamp(32px,4.2vw,48px);line-height:1.06;letter-spacing:-.035em;font-weight:600;margin:0;text-wrap:balance}
+.sh p{font-size:18px;color:var(--text-muted);margin:18px 0 0;max-width:36em}
+.sh.c p{margin-left:auto;margin-right:auto}
+@media (max-width:640px){section.blk{padding:96px 0 0}}
+
+/* bento */
+.bento{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:56px}
+.bc{position:relative;border-radius:16px;border:1px solid var(--line);background:linear-gradient(180deg,rgba(22,27,33,.9),rgba(17,21,26,.9));overflow:hidden;display:flex;flex-direction:column;min-height:380px}
+.bc::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;background:linear-gradient(180deg,rgba(230,234,240,.09),transparent 40%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0);pointer-events:none}
+.bc .ill{position:relative;flex:1;min-height:220px}
+.bc .tx{padding:0 28px 26px}
+.bc h3{margin:0;font-size:17px;font-weight:600;letter-spacing:-.015em}
+.bc .tx p{margin:6px 0 0;font-size:15px;color:var(--text-muted);max-width:34em}
+.s2{grid-column:span 2}.s3{grid-column:span 3}
+.bc.row{flex-direction:row;align-items:stretch;min-height:300px}
+.bc.row .tx{padding:36px;width:40%;display:flex;flex-direction:column;justify-content:center}
+.bc.row .ill{order:2}
+@media (max-width:980px){.bento{grid-template-columns:1fr 1fr}.s3{grid-column:span 2}}
+@media (max-width:640px){.bento{grid-template-columns:1fr}.s2,.s3{grid-column:span 1}.bc{min-height:0}.bc .tx{padding:0 22px 22px}.bc.row{flex-direction:column}.bc.row .tx{width:auto;padding:0 22px 22px;order:3}}
+
+/* studio card: add-step library over a dotted canvas */
+.stu{position:absolute;inset:0;background-image:radial-gradient(circle,#2a323c 1px,transparent 1.2px);background-size:20px 20px;-webkit-mask:linear-gradient(#000 70%,transparent);mask:linear-gradient(#000 70%,transparent)}
+.lib{position:absolute;left:28px;top:28px;width:272px;border-radius:14px;background:var(--surface);box-shadow:var(--float)}
+.lib .srch{margin:8px 8px 4px;height:32px;border-radius:6px;background:var(--bg);display:flex;align-items:center;padding:0 10px;font-size:13px;color:var(--text-subtle)}
+.lib .items{display:grid;gap:1px;padding:4px}
+.lib .it{display:flex;gap:12px;align-items:center;padding:7px 8px;border-radius:6px;transition:background 200ms var(--ease)}
+.lib .it.on{background:var(--surface-hover)}
+.lib .it strong{display:block;font-size:13px;font-weight:500}
+.lib .it small{display:block;font-size:12px;color:var(--text-subtle);line-height:1.35}
+.lib footer{padding:8px 12px 10px;border-top:1px solid var(--line);font-size:11px;color:var(--text-subtle)}
+.drop{position:absolute;left:340px;right:28px;top:60px;bottom:40px}
+.bc.stuc .ill{min-height:500px}
+.drop .cn{position:absolute}
+.drop > svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.ghost{opacity:0;transition:opacity 300ms var(--ease),transform 600ms var(--ease)}
+.ghost.on{opacity:1}
+@media (max-width:980px){.drop{display:none}}
+@media (max-width:640px){.lib{position:relative;left:auto;top:auto;margin:22px;width:auto}.lib .it:nth-child(n+5){display:none}.stu{display:none}.bc.stuc .ill{min-height:0}}
+
+/* evidence card */
+.evd{position:absolute;inset:28px 24px 8px;display:grid;align-content:center;gap:0;justify-items:center}
+.evd .cn{position:relative}
+.evd .pop{margin-top:14px;width:100%;max-width:300px;border-radius:12px;background:var(--surface);box-shadow:var(--float);padding:10px 12px;font:400 11.5px/1.5 var(--mono);color:var(--text-muted)}
+.evd .pop div{display:flex;gap:10px;padding:3px 4px;border-radius:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.evd .pop div b{font-weight:400;color:var(--text-subtle)}
+.evd .pop div.hit{background:var(--accent-soft);color:var(--text)}
+.evd .pop p{margin:0 0 6px;font:500 12px var(--sans);color:var(--text-subtle)}
+.evd .vline{width:1px;height:14px;background:repeating-linear-gradient(var(--accent) 0 2px,transparent 2px 5px);margin-top:14px;margin-bottom:-14px}
+
+/* approval card */
+.apc{position:absolute;inset:0;display:grid;place-items:center;padding:24px}
+.apc-in{position:relative;width:100%;max-width:300px;border-radius:12px;border:1px solid var(--line);background:var(--bg-raised);font-size:12px;overflow:hidden}
+.apc-in header{display:flex;align-items:center;gap:8px;height:38px;padding:0 12px;border-bottom:1px solid var(--line)}
+.apc-in header b{font-weight:600}
+.apc-in header code{color:var(--text-subtle);font-size:11px}
+.apc-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:10px;padding:10px;border:1px solid rgba(240,196,108,.3);border-radius:10px;background:var(--wait-soft);transition:opacity 300ms var(--ease)}
+.apc-bar strong{flex:1 1 100%;font-weight:500;font-size:12.5px}
+.apc-bar.gone{display:none}
+.mb{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border:1px solid var(--line-strong);border-radius:6px;background:var(--surface);font-weight:500;font-size:12px;white-space:nowrap}
+.mb.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);transition:background 120ms}
+.apc-rows div{display:flex;align-items:center;gap:10px;padding:6px 12px;border-top:1px solid var(--line)}
+.apc-rows code{font-size:11px;width:56px}
+.apc-rows span:last-child{color:var(--text-muted)}
+.cur{position:absolute;width:16px;height:16px;left:0;top:0;opacity:0;transition:transform 800ms var(--ease),opacity 300ms;filter:drop-shadow(0 2px 4px rgba(0,0,0,.6));pointer-events:none}
+
+/* fork */
+.fk{position:absolute;inset:28px 24px 0}
+.fk svg{width:100%;height:100%;overflow:visible}
+.fk .rail{stroke:var(--line-strong);stroke-width:2;fill:none}
+.fk .fill{stroke:url(#brandH);stroke-width:2;fill:none;stroke-linecap:round}
+.fk .cp{fill:var(--bg);stroke:var(--line-strong);stroke-width:1.5}
+.fk .cp.on{stroke:var(--ok);fill:var(--ok)}
+.fk text{font:500 11px var(--sans);fill:var(--text-subtle)}
+.fk .pz{fill:var(--wait);opacity:0;transition:opacity 200ms}
+
+/* cron */
+.cr{position:absolute;inset:18px 0 0;display:grid;place-items:center}
+.cr svg{width:190px;height:190px;overflow:visible}
+.cr .tick{stroke:var(--line-strong);stroke-width:1.5}
+.cr .tick.big{stroke:var(--text-subtle)}
+.cr .nine{stroke:var(--accent);stroke-width:2.5}
+.cr text{font:500 10px var(--sans);fill:var(--text-subtle)}
+.cr .hand{stroke:var(--accent);stroke-width:2;stroke-linecap:round;transform-origin:0 0;animation:hand 12s linear infinite}
+@keyframes hand{to{transform:rotate(360deg)}}
+.cr .ping{fill:none;stroke:var(--aqua);stroke-width:1.5;opacity:0;animation:ping 12s linear infinite}
+@keyframes ping{0%,37.4%{opacity:0;r:4}37.5%{opacity:.9;r:4}46%{opacity:0;r:30}100%{opacity:0;r:30}}
+.cr .expr{position:absolute;left:50%;bottom:6px;transform:translateX(-50%);font:400 12px var(--mono);color:var(--text-muted);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:4px 8px;white-space:nowrap}
+
+/* local table */
+.tbl{position:absolute;inset:36px 36px 36px 0;border-radius:12px;border:1px solid var(--line);background:var(--bg-raised);overflow:hidden;font-size:12.5px}
+.tbl header{display:flex;align-items:center;gap:8px;height:40px;padding:0 14px;border-bottom:1px solid var(--line);color:var(--text-muted)}
+.tbl header code{color:var(--text)}
+.tbl header .tabs{margin-left:auto;display:flex;gap:4px}
+.tbl header .tabs span{padding:3px 8px;border-radius:5px;font-size:12px}
+.tbl header .tabs span.on{background:var(--surface-active);color:var(--text)}
+.tbl .r{display:grid;grid-template-columns:110px minmax(0,1fr) 130px 70px;gap:12px;align-items:center;padding:0 14px;height:36px;border-bottom:1px solid var(--line)}
+.tbl .r.h{color:var(--text-subtle);font-size:11.5px;height:30px}
+.tbl .r code{font-size:11.5px;color:var(--text-muted)}
+.tbl .r .s{display:flex;gap:8px;align-items:center;color:var(--text-muted)}
+.tbl .r .tm{color:var(--text-subtle);text-align:right;font-family:var(--mono);font-size:11.5px}
+.tbl .r.new{animation:rowin 500ms var(--ease)}
+@keyframes rowin{from{background:var(--accent-soft);opacity:0}}
+@media (max-width:640px){.tbl{position:relative;inset:auto;margin:22px 22px 18px}.tbl .r{grid-template-columns:90px minmax(0,1fr) 80px}.tbl .r .tm{display:none}}
+
+/* quick start */
+.qs{max-width:760px;margin:48px auto 0}
+.tabsbar{display:flex;gap:4px;padding:4px;border-radius:8px;background:var(--bg-raised);border:1px solid var(--line);width:max-content;margin:0 auto 16px}
+.tabsbar button{height:30px;padding:0 14px;border:0;border-radius:6px;background:none;color:var(--text-muted);font:500 13px var(--sans);cursor:pointer}
+.tabsbar button[aria-selected="true"]{background:var(--surface-active);color:var(--text)}
+.code{border-radius:14px;border:1px solid var(--line);background:var(--bg-raised);overflow:hidden;box-shadow:0 30px 60px -30px rgba(0,0,0,.8);text-align:left}
+.code header{display:flex;align-items:center;gap:10px;height:44px;padding:0 8px 0 16px;border-bottom:1px solid var(--line);font-size:13px;color:var(--text-muted)}
+.code header button{margin-left:auto;display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;border:1px solid var(--line-strong);background:var(--surface);color:var(--text-muted);font:500 12px var(--sans);cursor:pointer}
+.code header button:hover{color:var(--text);background:var(--surface-hover)}
+.code header button[data-copied]{color:var(--ok)}
+.code header button svg{width:13px;height:13px}
+.code pre{margin:0;padding:20px 22px 24px;font:400 13.5px/1.9 var(--mono);color:var(--text);overflow-x:auto}
+.code .cm{color:var(--text-subtle)}
+.code .pr{color:#4d5663;user-select:none}
+.code .ar{color:var(--accent-strong)}
+.qs-note{text-align:center;color:var(--text-subtle);font-size:14px;margin-top:16px}
+
+/* closing */
+.final{position:relative;margin-top:160px;padding:120px 0 130px;text-align:center;border-top:1px solid var(--line);overflow:hidden}
+.final svg.fl{position:absolute;left:50%;top:50%;width:1100px;max-width:none;transform:translate(-50%,-50%);pointer-events:none;overflow:visible}
+.fl path{fill:none;stroke:url(#brandU);stroke-width:1.2;opacity:.25}
+.fl circle{fill:#DDF8F4;filter:drop-shadow(0 0 6px rgba(110,224,210,.9))}
+.final h2{font-size:clamp(36px,5.4vw,68px);position:relative}
+.final p{position:relative;margin:18px auto 0;color:var(--text-muted);font-size:18px;max-width:30em}
+.final .cta{position:relative}
+footer{border-top:1px solid var(--line);padding:36px 0 56px;color:var(--text-subtle);font-size:14px}
+footer .wrap{display:flex;flex-wrap:wrap;gap:24px;align-items:center}
+footer nav{display:flex;gap:22px;margin-left:auto}
+footer a:hover{color:var(--text)}
+footer .brand{color:var(--text)}
+
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .story{height:auto}
+  .story-sticky{position:relative;top:0;height:auto;min-height:760px}
+  *,*::before,*::after{animation-duration:1ms!important;animation-iteration-count:1!important;transition-duration:1ms!important}
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="brand" x1="4" y1="6" x2="36" y2="34" gradientUnits="userSpaceOnUse"><stop stop-color="#8FA8FF"/><stop offset="1" stop-color="#6EE0D2"/></linearGradient>
+    <linearGradient id="brandH" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#8FA8FF"/><stop offset="1" stop-color="#6EE0D2"/></linearGradient>
+    <symbol id="i-mark" viewBox="0 0 40 40"><path d="M20 20c-4.5-7-8-10-11.5-10C5.5 10 3 12.7 3 16.5v7C3 27.3 5.5 30 8.5 30 12 30 15.5 27 20 20Zm0 0c4.5 7 8 10 11.5 10 3 0 5.5-2.7 5.5-6.5v-7C37 12.7 34.5 10 31.5 10 28 10 24.5 13 20 20Z" fill="none" stroke="url(#brand)" stroke-width="3" stroke-linejoin="round"/></symbol>
+    <symbol id="k-agent" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="11" height="8" rx="2"/><path d="M8 5V2.5"/></g><circle cx="6" cy="9" r="1" fill="currentColor"/><circle cx="10" cy="9" r="1" fill="currentColor"/></symbol>
+    <symbol id="k-shell" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="1.8" y="2.8" width="12.4" height="10.4" rx="1.6"/><path d="m4.8 6.6 2 1.6-2 1.6M8.6 10h2.6"/></g></symbol>
+    <symbol id="k-route" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="4" cy="3.5" r="1.6"/><circle cx="4" cy="12.5" r="1.6"/><circle cx="12" cy="5" r="1.6"/><path d="M4 5.1v5.8M12 6.6c0 3.2-8 1.8-8 4.3"/></g></symbol>
+    <symbol id="k-verify" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="m5.4 8.2 1.8 1.8 3.4-3.6"/></g></symbol>
+    <symbol id="k-approval" viewBox="0 0 16 16"><path d="M5.2 8.6V4a1 1 0 0 1 2 0v3.4M7.2 7V2.8a1 1 0 0 1 2 0v4.4M9.2 7.2V3.8a1 1 0 0 1 2 0v5.4c0 2.9-1.6 4.8-4 4.8-1.8 0-2.8-.8-3.8-2.6L2.6 9.3a1 1 0 0 1 1.7-1l.9 1.1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="k-join" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="6" cy="8" r="4.2"/><circle cx="10" cy="8" r="4.2"/></g></symbol>
+    <symbol id="k-transform" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="1.8" y="6" width="4" height="4" rx=".8"/><rect x="10.2" y="2.2" width="4" height="4" rx=".8"/><rect x="10.2" y="9.8" width="4" height="4" rx=".8"/><path d="M5.8 8h2.2M8 4.2v7.6M8 4.2h2.2M8 11.8h2.2"/></g></symbol>
+    <symbol id="u-back" viewBox="0 0 16 16"><path d="M13 8H3m4-4L3 8l4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="u-undo" viewBox="0 0 16 16"><path d="M4.5 6.5h6a3 3 0 0 1 0 6H6M4.5 6.5 7 4M4.5 6.5 7 9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="u-redo" viewBox="0 0 16 16"><path d="M11.5 6.5h-6a3 3 0 0 0 0 6H10M11.5 6.5 9 4M11.5 6.5 9 9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="u-dots" viewBox="0 0 16 16"><g fill="currentColor"><circle cx="3.5" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="12.5" cy="8" r="1.3"/></g></symbol>
+    <symbol id="u-side" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M10 3v10"/></g></symbol>
+    <symbol id="u-play" viewBox="0 0 16 16"><path d="M4.5 3.2v9.6a.6.6 0 0 0 .9.5l7.6-4.8a.6.6 0 0 0 0-1L5.4 2.7a.6.6 0 0 0-.9.5Z" fill="currentColor"/></symbol>
+    <symbol id="u-plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="u-minus" viewBox="0 0 16 16"><path d="M3 8h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="u-fit" viewBox="0 0 16 16"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="u-caret" viewBox="0 0 16 16"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="u-warn" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="M8 4.5v4" stroke="#1a1408" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="11.2" r="1" fill="#1a1408"/></symbol>
+    <symbol id="u-copy" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4"><rect x="5" y="5" width="8.5" height="8.5" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></g></symbol>
+    <symbol id="u-gh" viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></symbol>
+    <symbol id="u-cursor" viewBox="0 0 18 18"><path d="M2 1.5v13.2l3.6-3.4 2.3 5.2 2.3-1-2.3-5.1h5L2 1.5Z" fill="#E6EAF0" stroke="#0D1014" stroke-width="1.2" stroke-linejoin="round"/></symbol>
+  </defs>
+</svg>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="brandU" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1200" y2="460"><stop stop-color="#8FA8FF"/><stop offset="1" stop-color="#6EE0D2"/></linearGradient></defs></svg>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="Loopy home"><svg aria-hidden="true"><use href="#i-mark"/></svg>Loopy</a>
+    <nav class="nav-links" aria-label="Primary">
+      <a href="#how">How it works</a>
+      <a href="#features">Features</a>
+      <a href="#quickstart">Quick start</a>
+      <a href="https://github.com/hatim-s/loopy#readme">Docs</a>
+    </nav>
+    <div class="nav-end">
+      <a class="btn btn-ghost hide-sm" href="https://github.com/hatim-s/loopy"><svg aria-hidden="true"><use href="#u-gh"/></svg>GitHub</a>
+      <a class="btn btn-primary" href="#quickstart">Install</a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+<section class="hero" id="top">
+  <div class="wrap">
+    <h1><span>Do the work once.</span><span>Extract the graph.</span><span>Run it with control.</span></h1>
+    <p class="lede">Loopy turns one Codex or Claude Code session into a graph you can read, edit and run again on your own machine. The agent still does the work. The graph decides what happens next.</p>
+    <div class="cta">
+      <div class="cmd"><span><span class="p">$ </span>bun add -g loopy</span><button type="button" data-copy="bun add -g loopy">Copy</button></div>
+      <a class="btn btn-lg" href="https://github.com/hatim-s/loopy"><svg aria-hidden="true"><use href="#u-gh"/></svg>View on GitHub</a>
+    </div>
+
+    <div class="panel"><div class="panel-in">
+      <div class="panel-bar"><span class="sd" id="barDot" data-status="running"></span><b>Patch dependency CVEs</b><code>loopy run patch-cves</code><span class="right hide-sm"><span>Runs on this machine</span></span></div>
+      <div class="loop" id="loop" role="img" aria-label="A six step graph running in a loop: audit dependencies, check for a patched release, apply the bump with Codex, run checks, wait for approval, open a pull request.">
+        <svg class="track" aria-hidden="true"><path class="t-base" id="tBase"/><path class="t-wide" id="tWide"/><path class="t-glow" id="tGlow"/><path class="t-comet" id="tComet"/><circle class="t-head" id="tHead" r="3.5" opacity="0"/></svg>
+        <div class="sum" aria-hidden="true">
+          <div class="sum-top"><b>Run 41</b><span class="badge"><span class="sd" id="sumDot"></span><span id="sumState">Starting</span></span></div>
+          <div class="segs" id="segs"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="sum-meta"><span>Steps <b id="sumSteps">0 of 6</b></span><span>Elapsed <b id="sumTime">00:00.0</b></span><span>Retries <b>0</b></span></div>
+          <div class="sum-ev" id="sumEv">waiting for the first step</div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+</section>
+
+<section class="strip" aria-label="Works with">
+  <div class="wrap">
+    <p>Works with the agent CLI you already use</p>
+    <div class="marks"><span class="wm">Codex</span><span class="dotsep" aria-hidden="true"></span><span class="wm">Claude Code</span></div>
+  </div>
+</section>
+
+<section class="story" id="how" aria-label="How a session becomes a graph">
+  <div class="story-sticky">
+    <div class="wrap story-head">
+      <h2>How a session becomes a graph</h2>
+      <div class="steps">
+        <div class="step"><i></i><h3>Record <code>loopy import</code></h3><p>Do the task once in Codex or Claude Code. Loopy imports the session as a trace.</p></div>
+        <div class="step"><i></i><h3>Extract <code>loopy extract</code></h3><p>The extractor proposes nodes and edges. No model calls. Each node links to its evidence.</p></div>
+        <div class="step"><i></i><h3>Run <code>loopy run</code></h3><p>The graph runs through the same CLI. Loopy owns the order, checks and approvals.</p></div>
+      </div>
+    </div>
+    <div class="wrap stage" id="stage">
+      <svg class="wires" aria-hidden="true">
+        <defs><linearGradient id="wg" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1200" y2="600"><stop offset="0" stop-color="#8FA8FF"/><stop offset="1" stop-color="#6EE0D2"/></linearGradient></defs>
+        <g id="threads"></g><g id="edges"></g><g id="toks"></g>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<section class="blk" id="features">
+  <div class="wrap">
+    <div class="sh">
+      <h2>What the graph gives you that a chat session can't</h2>
+      <p>A session happens once. A graph keeps the steps, the gates and the history, so you can run it again tomorrow and see exactly what happened.</p>
+    </div>
+    <div class="bento">
+      <article class="bc s2 stuc">
+        <div class="ill">
+          <div class="stu" aria-hidden="true"></div>
+          <div class="lib" aria-hidden="true">
+            <div class="srch">Search steps</div>
+            <div class="items" id="libItems"></div>
+            <footer>Drag a step onto the canvas</footer>
+          </div>
+          <div class="drop" aria-hidden="true">
+            <svg><path id="dropEdge" fill="none" stroke="#3a4450" stroke-width="1.5"/></svg>
+            <div class="cn" data-kind="agent" style="left:0;top:40px"><span class="kt"><svg><use href="#k-agent"/></svg></span><span class="tt"><strong>Apply smallest bump</strong><small>codex</small></span></div>
+            <div class="cn ghost" id="ghost" data-kind="verify" style="left:calc(100% - 224px);top:150px"><span class="kt" id="ghostKt"><svg><use href="#k-verify"/></svg></span><span class="tt"><strong id="ghostName">Verification</strong><small>New step</small></span></div>
+          </div>
+        </div>
+        <div class="tx"><h3>Studio, a local graph editor</h3><p><code>loopy ui</code> opens the editor in your browser. Add steps from seven kinds, wire them up, save a version, and run it with a console that shows each attempt.</p></div>
+      </article>
+      <article class="bc">
+        <div class="ill" id="apIll">
+          <div class="apc" aria-hidden="true"><div class="apc-in">
+            <header><span class="sd" id="apDot" data-status="blocked_approval"></span><b id="apState">Waiting</b><code>run_7f3a91c2</code></header>
+            <div class="apc-bar" id="apBar"><strong>Review the diff before it is pushed</strong><span class="mb pri" id="apBtn">Approve step</span><span class="mb">Reject step</span></div>
+            <div class="apc-rows"><div><span class="sd" data-status="succeeded"></span><code>checks</code><span>succeeded, attempt 2</span></div><div><span class="sd" id="apRowDot" data-status="blocked_approval"></span><code>approve</code><span id="apRow">waiting for approval</span></div></div>
+            <svg class="cur" id="apCur"><use href="#u-cursor"/></svg>
+          </div></div>
+        </div>
+        <div class="tx"><h3>Approvals before anything risky</h3><p>An approval node holds the run until a person decides. Nothing downstream starts before that.</p></div>
+      </article>
+      <article class="bc">
+        <div class="ill">
+          <div class="evd" aria-hidden="true">
+            <div class="cn" data-kind="verify" data-status="succeeded"><span class="kt"><svg><use href="#k-verify"/></svg></span><span class="tt"><strong>Run checks</strong><small>Succeeded</small></span><span class="ns"></span></div>
+            <span class="vline"></span>
+            <div class="pop" id="evPop"><p>Evidence from the trace</p><div><b>#031</b>exec bun run check</div><div><b>#032</b>out 412 passed, 0 failed</div><div><b>#033</b>user "diff looks right"</div></div>
+          </div>
+        </div>
+        <div class="tx"><h3>Every node has evidence</h3><p>Extraction is deterministic. Each node points at the trace events it came from, so you can check why it exists.</p></div>
+      </article>
+      <article class="bc">
+        <div class="ill">
+          <div class="fk" aria-hidden="true">
+            <svg viewBox="0 0 300 150" preserveAspectRatio="xMidYMid meet">
+              <text x="0" y="14">Run 41</text>
+              <path class="rail" d="M8 40 H292"/><path class="fill" id="fkMain" d="M8 40 H292"/>
+              <text x="54" y="138">Run 42, forked</text>
+              <path class="rail" d="M120 40 C150 40 150 110 180 110 H292"/><path class="fill" id="fkFork" d="M120 40 C150 40 150 110 180 110 H292"/>
+              <g id="fkCps"></g>
+              <g id="fkPause" class="pz"><rect x="175" y="22" width="3" height="9" rx="1"/><rect x="181" y="22" width="3" height="9" rx="1"/></g>
+            </svg>
+          </div>
+        </div>
+        <div class="tx"><h3>Pause, resume, fork</h3><p>Pause between nodes and resume later. <code>loopy fork</code> starts a new run from a completed node.</p></div>
+      </article>
+      <article class="bc">
+        <div class="ill"><div class="cr" aria-hidden="true"><svg viewBox="-100 -100 200 200" id="dial"></svg><span class="expr">0 9 * * *</span></div></div>
+        <div class="tx"><h3>Cron, on your laptop</h3><p>Schedule a graph with a cron expression. It runs locally with your Git credentials, no hosted runner.</p></div>
+      </article>
+      <article class="bc s3 row">
+        <div class="tx"><h3>All state in one local file</h3><p>Runs, checkpoints, approvals and schedules live in <code>.loopy/loopy.db</code>. There is no hosted compute. Export any run as JSONL with <code>loopy trace export</code>.</p></div>
+        <div class="ill">
+          <div class="tbl" aria-hidden="true">
+            <header><code>.loopy/loopy.db</code><span class="tabs"><span class="on">runs</span><span>checkpoints</span><span>approvals</span></span></header>
+            <div class="r h"><span>id</span><span>graph</span><span>status</span><span class="tm">took</span></div>
+            <div id="rows"></div>
+          </div>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="blk" id="quickstart">
+  <div class="wrap">
+    <div class="sh c"><h2>Start with a session you already have</h2><p>Pick the agent you recorded with. The rest of the flow is the same.</p></div>
+    <div class="qs">
+      <div class="tabsbar" role="tablist" aria-label="Provider"><button role="tab" aria-selected="true" data-p="codex" type="button">Codex</button><button role="tab" aria-selected="false" data-p="claude" type="button">Claude Code</button></div>
+      <div class="code">
+        <header><span>Terminal</span><button type="button" id="qsCopy"><svg aria-hidden="true"><use href="#u-copy"/></svg>Copy</button></header>
+<pre id="qsPre"><span class="cm"># install and set up .loopy/ in your repo</span>
+<span class="pr">$ </span>bun add -g loopy
+<span class="pr">$ </span>loopy init
+
+<span class="cm"># import the session and extract a graph</span>
+<span class="pr">$ </span>loopy import trace.jsonl <span class="ar">--provider <span id="prov">codex</span></span>
+<span class="pr">$ </span>loopy extract <span class="ar">--import &lt;import-id&gt;</span>
+<span class="pr">$ </span>loopy approve <span class="ar">&lt;proposal-id&gt;</span>
+
+<span class="cm"># run it and watch it in Studio</span>
+<span class="pr">$ </span>loopy run <span class="ar">&lt;workflow-id&gt;</span>
+<span class="pr">$ </span>loopy ui</pre>
+      </div>
+      <p class="qs-note">Needs Bun and a signed-in agent CLI. Loopy calls it with your login and settings.</p>
+    </div>
+  </div>
+</section>
+
+<section class="final" aria-label="Get started">
+  <svg class="fl" viewBox="0 0 1100 360" aria-hidden="true"><path id="finalLoop" d="M550 180C470 60 380 20 280 20 170 20 90 90 90 180s80 160 190 160c100 0 190-40 270-160Zm0 0c80 120 170 160 270 160 110 0 190-70 190-160S930 20 820 20C720 20 630 60 550 180Z"/><circle r="3.5"><animateMotion dur="16s" repeatCount="indefinite"><mpath href="#finalLoop"/></animateMotion></circle></svg>
+  <div class="wrap">
+    <h2>Do it once. Then let it loop.</h2>
+    <p>Install the CLI, finish one task the way you normally would, and open Studio to see the graph it leaves behind.</p>
+    <div class="cta">
+      <div class="cmd"><span><span class="p">$ </span>bun add -g loopy</span><button type="button" data-copy="bun add -g loopy">Copy</button></div>
+      <a class="btn btn-lg" href="https://github.com/hatim-s/loopy"><svg aria-hidden="true"><use href="#u-gh"/></svg>View on GitHub</a>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <a class="brand" href="#top"><svg aria-hidden="true"><use href="#i-mark"/></svg>Loopy</a>
+    <span>Apache-2.0</span>
+    <nav aria-label="Footer"><a href="https://github.com/hatim-s/loopy">GitHub</a><a href="https://github.com/hatim-s/loopy#readme">Docs</a><a href="https://github.com/hatim-s/loopy/tree/main/examples">Examples</a></nav>
+  </div>
+</footer>
+
+<script>
+(() => {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const $ = s => document.querySelector(s), NS = 'http://www.w3.org/2000/svg';
+  const svgEl = (tag, attrs = {}) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+  if (reduce) document.querySelectorAll('animateMotion').forEach(a => a.parentNode.remove());
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const LABEL = { succeeded: 'Succeeded', running: 'Running', blocked_approval: 'Waiting for you' };
+  const card = (n, extra = '') => `<span class="kt"><svg><use href="#k-${n.kind}"/></svg></span><span class="tt"><strong>${n.name}</strong><small>${n.sub}</small></span><span class="ns"></span>${extra}`;
+  const setCard = (el, n, s) => { if (s) el.dataset.status = s; else delete el.dataset.status; el.querySelector('small').textContent = s ? LABEL[s] : n.sub; };
+
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); } catch {
+      const ta = Object.assign(document.createElement('textarea'), { value: text }); document.body.append(ta); ta.select(); document.execCommand('copy'); ta.remove();
+    }
+  }
+  function flash(b) { const t = [...b.childNodes].find(n => n.nodeType === 3 && n.textContent.trim()); const prev = t.textContent; t.textContent = 'Copied'; b.dataset.copied = ''; setTimeout(() => { t.textContent = prev; delete b.dataset.copied; }, 1600); }
+  document.querySelectorAll('[data-copy]').forEach(b => b.addEventListener('click', async () => { await copyText(b.dataset.copy); flash(b); }));
+
+  function region(el) {
+    const c = { on: false };
+    new IntersectionObserver(([e]) => { c.on = e.isIntersecting; }, { rootMargin: '80px' }).observe(el);
+    c.sleep = ms => new Promise(res => {
+      let left = ms, last = performance.now();
+      const tick = () => { const now = performance.now(); if (c.on && !document.hidden) left -= now - last; last = now; left <= 0 ? res() : setTimeout(tick, 40); };
+      tick();
+    });
+    return c;
+  }
+
+  // ---------- hero loop ----------
+  const LOOP = [
+    { kind: 'shell', name: 'Audit dependencies', sub: '2 Bash stages', hold: .7, ev: 'Audit dependencies: 1 critical in lodash' },
+    { kind: 'route', name: 'Patched release?', sub: 'Branches on a condition', hold: .5, ev: 'Patched release?: true, 4.17.21' },
+    { kind: 'agent', name: 'Apply smallest bump', sub: 'codex', hold: 1.6, ev: 'Apply smallest bump: 1 file changed' },
+    { kind: 'verify', name: 'Run checks', sub: '2 commands', hold: 1, ev: 'Run checks: 412 passed' },
+    { kind: 'approval', name: 'Approve before push', sub: 'Waits for a person', hold: 1.8, gate: true, ev: 'Approve before push: approved' },
+    { kind: 'shell', name: 'Open pull request', sub: '1 Bash stage', hold: .7, ev: 'Open pull request: #433 opened' },
+  ];
+  const loopEl = $('#loop'), paths = ['#tBase', '#tWide', '#tGlow'].map(s => $(s)), comet = $('#tComet'), head = $('#tHead');
+  const segs = [...document.querySelectorAll('#segs i')], sumDot = $('#sumDot'), sumState = $('#sumState'), sumSteps = $('#sumSteps'), sumTime = $('#sumTime'), sumEv = $('#sumEv'), barDot = $('#barDot');
+  LOOP.forEach(n => { const el = document.createElement('div'); el.className = 'cn'; el.dataset.kind = n.kind; el.innerHTML = card(n); loopEl.append(el); n.el = el; });
+  let len = 0, mobile = false;
+  function buildLoop() {
+    const w = loopEl.clientWidth; mobile = w < 700;
+    let d;
+    if (!mobile) {
+      loopEl.style.height = "420px";
+      const h = 420, x0 = 40, x1 = w - 40, y0 = 58, y1 = h - 58, r = (y1 - y0) / 2, a = x0 + r, b = x1 - r;
+      d = `M${a} ${y0} H${b} A${r} ${r} 0 0 1 ${b} ${y1} H${a} A${r} ${r} 0 0 1 ${a} ${y0} Z`;
+      const top = b - a, xs = [a + 30, (a + b) / 2, b - 30];
+      LOOP.forEach((n, i) => {
+        const x = i < 3 ? xs[i] : xs[5 - i], y = i < 3 ? y0 : y1;
+        n.s = i < 3 ? x - a : top + Math.PI * r + (b - x);
+        n.el.classList.remove('m'); n.el.style.left = x + 'px'; n.el.style.top = y + 'px'; n.el.style.setProperty('--cw', '224px');
+      });
+    } else {
+      const gap = 76, h = LOOP.length * gap + 60; loopEl.style.height = h + 'px';
+      const x0 = 22, x1 = w - 14, y0 = 24, y1 = h - 24, r = 16;
+      d = `M${x0} ${y0 + r} V${y1 - r} A${r} ${r} 0 0 0 ${x0 + r} ${y1} H${x1 - r} A${r} ${r} 0 0 0 ${x1} ${y1 - r} V${y0 + r} A${r} ${r} 0 0 0 ${x1 - r} ${y0} H${x0 + r} A${r} ${r} 0 0 0 ${x0} ${y0 + r} Z`;
+      LOOP.forEach((n, i) => {
+        const y = y0 + 30 + i * gap + gap / 2 - 8; n.s = y - (y0 + r);
+        n.el.classList.add('m'); n.el.style.left = (x0 + 14) + 'px'; n.el.style.top = y + 'px'; n.el.style.setProperty('--cw', (w - x0 - 44) + 'px');
+      });
+    }
+    paths.concat(comet).forEach(p => p.setAttribute('d', d));
+    len = paths[0].getTotalLength(); comet.style.strokeDasharray = `110 ${len}`;
+  }
+  buildLoop(); addEventListener('resize', buildLoop);
+  const hero = region(loopEl);
+  let tStart = 0, pos = 0, clockOn = false;
+  const fmt = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${(s % 60).toFixed(1).padStart(4, '0')}`;
+  function stateOf(s, text) { sumDot.dataset.status = s; barDot.dataset.status = s; sumState.textContent = text; }
+  function resetLoop() { LOOP.forEach(n => setCard(n.el, n, null)); segs.forEach(s => delete s.dataset.s); sumSteps.textContent = '0 of 6'; stateOf('running', 'Running'); tStart = performance.now(); sumEv.innerHTML = 'run started'; }
+  function place(s) { const p = paths[0].getPointAtLength(s); head.setAttribute('cx', p.x); head.setAttribute('cy', p.y); comet.style.strokeDashoffset = 110 - s; }
+  async function heroLoop() {
+    const glow = paths.slice(1);
+    glow.forEach(p => { p.style.strokeDasharray = len; p.style.strokeDashoffset = len; });
+    const t0 = performance.now();
+    await new Promise(res => { const f = now => { const k = Math.min(1, (now - t0) / 1800), e = 1 - Math.pow(1 - k, 3); glow.forEach(p => p.style.strokeDashoffset = len * (1 - e)); k < 1 ? requestAnimationFrame(f) : res(); }; requestAnimationFrame(f); });
+    glow.forEach(p => p.style.strokeDasharray = 'none');
+    head.setAttribute('opacity', 1);
+    const SPEED = 170;
+    const moveTo = target => new Promise(res => {
+      let last = 0;
+      const f = now => {
+        const dt = last ? Math.min(.05, (now - last) / 1000) : 0; last = now;
+        if (hero.on && !document.hidden) pos += SPEED * dt;
+        if (pos >= target) { pos = target; place(pos % len); return res(); }
+        place(pos % len); requestAnimationFrame(f);
+      }; requestAnimationFrame(f);
+    });
+    const tick = () => { if (clockOn) sumTime.textContent = fmt((performance.now() - tStart) / 1000); requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+    pos = LOOP[0].s - 60;
+    while (true) {
+      resetLoop(); clockOn = true;
+      const lap = Math.floor(pos / len) * len;
+      for (let i = 0; i < LOOP.length; i++) {
+        const n = LOOP[i];
+        await moveTo(lap + n.s);
+        setCard(n.el, n, n.gate ? 'blocked_approval' : 'running'); segs[i].dataset.s = n.gate ? 'blocked_approval' : 'running';
+        if (n.gate) { stateOf('blocked_approval', 'Waiting for approval'); sumEv.innerHTML = '<span class="w">waiting for approval</span>'; }
+        await hero.sleep(n.hold * 1000);
+        setCard(n.el, n, 'succeeded'); segs[i].dataset.s = 'succeeded'; sumSteps.textContent = `${i + 1} of 6`;
+        if (n.gate) stateOf('running', 'Running');
+        sumEv.innerHTML = `<span class="ok">ok</span> ${n.ev}`;
+      }
+      stateOf('succeeded', 'Succeeded'); clockOn = false;
+      await moveTo(lap + len + LOOP[0].s - 40);
+      await hero.sleep(500);
+    }
+  }
+  function heroStill() {
+    LOOP.forEach((n, i) => { setCard(n.el, n, i < 4 ? 'succeeded' : i === 4 ? 'blocked_approval' : null); segs[i].dataset.s = i < 4 ? 'succeeded' : i === 4 ? 'blocked_approval' : ''; });
+    stateOf('blocked_approval', 'Waiting for approval'); sumSteps.textContent = '4 of 6'; sumTime.textContent = '00:07.4'; sumEv.innerHTML = '<span class="w">waiting for approval</span>';
+  }
+  (document.fonts ? document.fonts.ready : Promise.resolve()).then(() => { buildLoop(); reduce ? heroStill() : heroLoop(); });
+
+  // ---------- scroll story ----------
+  {
+    const TRACE = [
+      ['09:12:03', 'start', 'codex session in ~/work/api'],
+      ['09:12:04', 'user', '"patch the critical CVEs in our deps"'],
+      ['09:12:06', 'exec', 'bun audit --json', 0],
+      ['09:12:09', 'read', 'package.json'],
+      ['09:12:11', 'think', '1 critical: lodash 4.17.20'],
+      ['09:12:12', 'exec', 'npm view lodash versions', 1],
+      ['09:12:15', 'note', '4.17.21 fixes CVE-2021-23337'],
+      ['09:12:18', 'edit', 'package.json  lodash ^4.17.21', 2],
+      ['09:12:19', 'exec', 'bun install'],
+      ['09:12:31', 'exec', 'bun run check', 3],
+      ['09:12:58', 'out', '412 passed, 0 failed'],
+      ['09:13:02', 'user', '"diff looks right, push it"', 4],
+      ['09:13:04', 'exec', 'git push -u origin fix/lodash'],
+      ['09:13:07', 'exec', 'gh pr create --fill', 5],
+      ['09:13:09', 'end', 'session saved'],
+    ];
+    const NODES = LOOP.map(n => ({ kind: n.kind, name: n.name, sub: n.sub }));
+    const stage = $('#stage'), story = $('#how');
+    const gThreads = $('#threads'), gEdges = $('#edges'), gToks = $('#toks');
+    const steps = [...document.querySelectorAll('.step')];
+    const lines = TRACE.map(r => {
+      const el = document.createElement('div'); el.className = 'ln' + (typeof r[3] === 'number' ? ' hit' : '');
+      el.innerHTML = `<span class="hl"></span><span class="t">${r[0]}</span><span class="k">${r[1]}</span>${r[2]}`;
+      stage.append(el); return { el, hl: el.firstChild, ev: typeof r[3] === 'number' ? r[3] : -1 };
+    });
+    const cards = NODES.map((n, i) => {
+      const el = document.createElement('div'); el.className = 'ev';
+      el.innerHTML = `<div class="cn" data-kind="${n.kind}">${card(n)}</div>`;
+      stage.append(el); return { el, card: el.firstChild, n, src: TRACE.findIndex(r => r[3] === i) };
+    });
+    const threads = cards.map(() => { const p = svgEl('path', { class: 'thread' }); gThreads.append(p); return p; });
+    const EDGES = [[0, 1], [1, 2, 'true'], [2, 3], [3, 4, 'pass'], [4, 5]];
+    const edges = EDGES.map(([a, b, t]) => {
+      const p = svgEl('path', { class: 'wire' }); gEdges.append(p);
+      let label = null; if (t) { label = svgEl('text', { class: 'elabel' }); label.textContent = t; gEdges.append(label); }
+      return { a, b, p, label, len: 0 };
+    });
+    const tok = svgEl('circle', { r: 4, class: 'tok' }); tok.style.opacity = 0; gToks.append(tok);
+    let L = {};
+    function layout() {
+      const pad = innerWidth <= 640 ? 20 : 32, W = stage.clientWidth - 2 * pad, H = stage.clientHeight;
+      const mobile = W < 720, lh = mobile ? 20 : 24, logW = mobile ? W : 440;
+      const logX = pad + (mobile ? 0 : (W - logW) / 2), logY = Math.max(0, (H - TRACE.length * lh) / 2);
+      const logPos = TRACE.map((_, i) => ({ x: logX, y: logY + i * lh })), railPos = TRACE.map((_, i) => ({ x: pad, y: logY + i * lh }));
+      let cw, ch = 56, nodePos;
+      if (mobile) {
+        cw = Math.min(260, W); const gap = Math.min(26, (H - 6 * ch) / 5), top = Math.max(0, (H - (6 * ch + 5 * gap)) / 2);
+        nodePos = NODES.map((_, i) => ({ x: pad + (W - cw) / 2, y: top + i * (ch + gap) }));
+      } else {
+        const gx0 = pad + 380, gw = W + pad - gx0 - 64; cw = Math.min(224, (gw - 120) / 3);
+        const colX = [0, 1, 2].map(c => gx0 + c * (cw + (gw - 3 * cw) / 2)), r1 = H * .26 - ch / 2, r2 = H * .7 - ch / 2;
+        nodePos = [{ x: colX[0], y: r1 }, { x: colX[1], y: r1 }, { x: colX[2], y: r1 }, { x: colX[2], y: r2 }, { x: colX[1], y: r2 }, { x: colX[0], y: r2 }];
+      }
+      stage.style.setProperty('--cw', cw + 'px');
+      L = { W, H, mobile, logPos, railPos, railScale: mobile ? 1 : .78, nodePos, cw, ch };
+      edges.forEach(e => {
+        const A = nodePos[e.a], B = nodePos[e.b]; let d, lx, ly;
+        if (mobile) { d = `M${A.x + cw / 2} ${A.y + ch} L${B.x + cw / 2} ${B.y}`; lx = ly = 0; }
+        else if (Math.abs(A.x - B.x) < 2) { d = `M${A.x + cw} ${A.y + ch / 2} C${A.x + cw + 70} ${A.y + ch / 2} ${B.x + cw + 70} ${B.y + ch / 2} ${B.x + cw} ${B.y + ch / 2}`; lx = A.x + cw + 60; ly = (A.y + B.y + ch) / 2 + 4; }
+        else if (B.x > A.x) { const y = A.y + ch / 2; d = `M${A.x + cw} ${y} L${B.x} ${y}`; lx = A.x + cw + 10; ly = y - 10; }
+        else { const y = A.y + ch / 2; d = `M${A.x} ${y} L${B.x + cw} ${y}`; lx = B.x + cw + 10; ly = y - 10; }
+        e.p.setAttribute('d', d); e.len = e.p.getTotalLength(); e.p.style.strokeDasharray = e.len;
+        if (e.label) { e.label.setAttribute('x', lx); e.label.setAttribute('y', ly); e.label.style.display = mobile ? 'none' : ''; }
+      });
+      render(true);
+    }
+    const ss = (a, b, v) => { const t = clamp((v - a) / (b - a)); return t * t * (3 - 2 * t); };
+    const lerp = (a, b, t) => a + (b - a) * t;
+    let P = reduce ? 1 : 0, lastP = -1;
+    function render(force) {
+      if (!L.nodePos || (!force && P === lastP)) return; lastP = P;
+      const p = P, hi = ss(.1, .24, p), toRail = ss(.26, .46, p), active = p < .27 ? 0 : p < .62 ? 1 : 2;
+      steps.forEach((s, i) => { s.classList.toggle('on', i === active); s.firstChild.style.transform = `scaleX(${clamp(i === 0 ? p / .27 : i === 1 ? (p - .27) / .35 : (p - .62) / .3)})`; });
+      lines.forEach((l, i) => {
+        const a = L.logPos[i], b = L.railPos[i], x = L.mobile ? a.x : lerp(a.x, b.x, toRail), s = L.mobile ? 1 : lerp(1, L.railScale, toRail);
+        l.el.style.transform = `translate(${x}px,${a.y}px) scale(${s})`;
+        const base = l.ev >= 0 ? 1 : 1 - hi * .55;
+        l.el.style.opacity = L.mobile ? base * (1 - toRail) : base * (1 - toRail * .32);
+        l.hl.style.opacity = l.ev >= 0 ? hi * (1 - toRail * .5) : 0;
+      });
+      cards.forEach((c, i) => {
+        const k = ss(.3 + i * .035, .5 + i * .035, p);
+        const from = L.mobile ? L.logPos[c.src] : { x: L.railPos[c.src].x + 180, y: L.railPos[c.src].y - L.ch / 2 }, to = L.nodePos[i];
+        const x = lerp(from.x, to.x, k), y = lerp(from.y, to.y, k), sc = lerp(.6, 1, k);
+        c.el.style.transform = `translate(${x}px,${y}px) scale(${sc})`; c.card.style.opacity = ss(0, .35, k);
+        const th = threads[i];
+        if (L.mobile) th.style.opacity = 0;
+        else { const sx = L.railPos[c.src].x + 330 * L.railScale, sy = L.railPos[c.src].y + 6; th.setAttribute('d', `M${sx} ${sy} C${sx + 80} ${sy} ${x - 80} ${y + L.ch / 2} ${x} ${y + L.ch / 2}`); th.style.opacity = k * lerp(.7, .28, ss(.62, .8, p)); }
+      });
+      edges.forEach((e, i) => { const k = ss(.52 + i * .03, .66 + i * .03, p); e.p.style.strokeDashoffset = e.len * (1 - k); if (e.label) e.label.style.opacity = k; });
+      if (p > .74 && !reduce) startRun(); else if (p < .7) stopRun();
+      if (reduce) cards.forEach(c => setCard(c.card, c.n, 'succeeded'));
+    }
+    let runTimer = null, running = false, tokAnim = 0;
+    const setS = (i, s) => setCard(cards[i].card, cards[i].n, s);
+    const moveTok = (e, ms) => new Promise(res => {
+      const t0 = performance.now(); tok.style.opacity = 1; e.p.classList.add('lit');
+      const f = now => { if (!running) return res(); const t = clamp((now - t0) / ms), pt = e.p.getPointAtLength(e.len * t); tok.setAttribute('cx', pt.x); tok.setAttribute('cy', pt.y); if (t < 1) tokAnim = requestAnimationFrame(f); else { tok.style.opacity = 0; res(); } };
+      tokAnim = requestAnimationFrame(f);
+    });
+    const wait = ms => new Promise(r => { runTimer = setTimeout(r, ms); });
+    async function startRun() {
+      if (running) return; running = true;
+      while (running) {
+        cards.forEach((_, i) => setS(i, null)); edges.forEach(e => e.p.classList.remove('lit'));
+        for (let i = 0; i < NODES.length && running; i++) {
+          setS(i, 'running'); await wait(NODES[i].kind === 'agent' ? 1300 : 700); if (!running) break;
+          if (NODES[i].kind === 'approval') { setS(i, 'blocked_approval'); await wait(1500); if (!running) break; }
+          setS(i, 'succeeded'); if (i < edges.length) await moveTok(edges[i], 520);
+        }
+        if (running) await wait(2400);
+      }
+    }
+    function stopRun() { if (!running) return; running = false; clearTimeout(runTimer); cancelAnimationFrame(tokAnim); tok.style.opacity = 0; cards.forEach((_, i) => setS(i, null)); edges.forEach(e => e.p.classList.remove('lit')); }
+    if (!reduce) {
+      let visible = false, raf = 0;
+      const read = () => { const r = story.getBoundingClientRect(), total = r.height - (innerHeight - 60); P = clamp(-r.top / total); render(); raf = visible ? requestAnimationFrame(read) : 0; };
+      new IntersectionObserver(([en]) => { visible = en.isIntersecting; if (visible && !raf) raf = requestAnimationFrame(read); if (!visible) stopRun(); }).observe(story);
+    }
+    addEventListener('resize', layout); document.fonts?.ready.then(layout); layout();
+  }
+
+  // ---------- studio library card ----------
+  {
+    const STEPS = [['agent', 'Agent call', 'Give an installed agent a task'], ['shell', 'Shell module', 'Pipe Bash commands together'], ['route', 'Condition', 'Choose a branch from a result'], ['verify', 'Verification', 'Check the work with commands'], ['approval', 'Approval', 'Wait for a human decision'], ['join', 'Join', 'Collect completed branches'], ['transform', 'Transform', 'Map values between steps']];
+    const box = $('#libItems');
+    const items = STEPS.map(([k, t, d]) => { const el = document.createElement('div'); el.className = 'it'; el.dataset.kind = k; el.innerHTML = `<span class="kt"><svg><use href="#k-${k}"/></svg></span><span><strong>${t}</strong><small>${d}</small></span>`; box.append(el); return el; });
+    const ghost = $('#ghost'), gName = $('#ghostName'), gUse = ghost.querySelector('use'), edge = $('#dropEdge'), drop = ghost.parentNode;
+    const wire = () => { const gx = drop.clientWidth - 224; edge.setAttribute("d", `M224 68 C${224 + 50} 68 ${gx - 50} 178 ${gx} 178`); };
+    addEventListener('resize', wire); wire();
+    const R = region(box);
+    if (reduce) { items[3].classList.add('on'); ghost.classList.add('on'); }
+    else (async () => {
+      let i = 3;
+      while (true) {
+        items.forEach((el, j) => el.classList.toggle('on', j === i)); ghost.classList.remove('on'); edge.style.opacity = 0;
+        await R.sleep(900);
+        ghost.dataset.kind = STEPS[i][0]; gName.textContent = STEPS[i][1]; gUse.setAttribute('href', `#k-${STEPS[i][0]}`);
+        ghost.classList.add('on'); await R.sleep(500); edge.style.opacity = 1;
+        await R.sleep(2200); i = (i + 1) % STEPS.length;
+      }
+    })();
+  }
+
+  // ---------- approval card ----------
+  {
+    const bar = $('#apBar'), btn = $('#apBtn'), cur = $('#apCur'), dot = $('#apDot'), st = $('#apState'), rd = $('#apRowDot'), row = $('#apRow'), box = cur.parentNode, R = region($('#apIll'));
+    if (!reduce) (async () => {
+      while (true) {
+        dot.dataset.status = rd.dataset.status = 'blocked_approval'; st.textContent = 'Waiting'; row.textContent = 'waiting for approval'; bar.classList.remove('gone');
+        cur.style.transition = 'none'; cur.style.transform = `translate(${box.clientWidth - 30}px,${box.clientHeight - 10}px)`; cur.style.opacity = 0; void cur.offsetWidth; cur.style.transition = '';
+        await R.sleep(1300); cur.style.opacity = 1;
+        cur.style.transform = `translate(${btn.offsetLeft + 36}px,${btn.offsetTop + 14}px)`;
+        await R.sleep(1000); btn.style.background = 'var(--accent-strong)'; await R.sleep(160); btn.style.background = '';
+        bar.classList.add('gone'); cur.style.opacity = 0;
+        dot.dataset.status = rd.dataset.status = 'succeeded'; st.textContent = 'Running'; row.textContent = 'approved, attempt 1';
+        await R.sleep(2600);
+      }
+    })();
+  }
+
+  // ---------- evidence card ----------
+  {
+    const rows = [...document.querySelectorAll('#evPop div')], R = region($('#evPop'));
+    if (!reduce) (async () => { let i = 0; while (true) { rows.forEach((r, j) => r.classList.toggle('hit', j === i)); i = (i + 1) % 2; await R.sleep(1600); } })();
+    else rows[0].classList.add('hit');
+  }
+
+  // ---------- fork card ----------
+  {
+    const main = $('#fkMain'), fork = $('#fkFork'), cps = $('#fkCps'), pz = $('#fkPause');
+    const X = [8, 64, 120, 176, 232, 292];
+    const dots = X.map(x => { const c = svgEl('circle', { class: 'cp', cx: x, cy: 40, r: 5 }); cps.append(c); return c; });
+    const fdots = [236, 292].map(x => { const c = svgEl('circle', { class: 'cp', cx: x, cy: 110, r: 5 }); cps.append(c); return c; });
+    const Lm = main.getTotalLength(), Lf = fork.getTotalLength();
+    main.style.strokeDasharray = Lm; fork.style.strokeDasharray = Lf;
+    const R = region(main.closest('.bc'));
+    const setM = k => { main.style.strokeDashoffset = Lm * (1 - k); dots.forEach((d, i) => d.classList.toggle('on', (X[i] - 8) / 284 <= k + .001)); };
+    const setF = k => { fork.style.strokeDashoffset = Lf * (1 - k); fdots.forEach((d, i) => d.classList.toggle('on', k >= (i ? 1 : .68))); };
+    const tween = (fn, from, to, ms) => new Promise(res => { let t = 0; const f = async () => { t += 16; fn(from + (to - from) * Math.min(1, t / ms)); if (t < ms) { await R.sleep(16); f(); } else res(); }; f(); });
+    if (reduce) { setM(1); setF(1); }
+    else (async () => { while (true) { setM(0); setF(0); pz.style.opacity = 0; await R.sleep(600); await tween(setM, 0, .59, 1600); pz.style.opacity = 1; await R.sleep(1300); pz.style.opacity = 0; await tween(setM, .59, 1, 1000); await R.sleep(500); await tween(setF, 0, 1, 1500); await R.sleep(2400); } })();
+  }
+
+  // ---------- cron dial ----------
+  {
+    let g = '<circle r="92" fill="none" stroke="#222931"/>';
+    for (let h = 0; h < 24; h++) {
+      const a = h / 24 * Math.PI * 2 - Math.PI / 2, big = h % 6 === 0, r1 = big ? 80 : 85;
+      g += `<line class="tick${big ? ' big' : ''}${h === 9 ? ' nine' : ''}" x1="${Math.cos(a) * r1}" y1="${Math.sin(a) * r1}" x2="${Math.cos(a) * 91}" y2="${Math.sin(a) * 91}"/>`;
+      if (big || h === 9) g += `<text x="${Math.cos(a) * 62}" y="${Math.sin(a) * 62 + 3.5}" text-anchor="middle"${h === 9 ? ' style="fill:#B7C6FF"' : ''}>${String(h).padStart(2, '0')}:00</text>`;
+    }
+    const a9 = 9 / 24 * Math.PI * 2 - Math.PI / 2;
+    g += `<circle class="ping" cx="${Math.cos(a9) * 91}" cy="${Math.sin(a9) * 91}" r="4"/><line class="hand" x1="0" y1="0" x2="0" y2="-88"${reduce ? ' style="transform:rotate(135deg)"' : ''}/><circle r="3.5" fill="#8FA8FF"/>`;
+    $('#dial').innerHTML = g;
+  }
+
+  // ---------- local table ----------
+  {
+    const box = $('#rows'), R = region(box);
+    const G = [['patch-cves', 'succeeded', '1m 12s'], ['rebase-prs', 'succeeded', '3m 40s'], ['patch-cves', 'blocked_approval', '0m 48s'], ['triage-flaky', 'succeeded', '2m 05s'], ['rebase-prs', 'running', '']];
+    let n = 38;
+    const add = (g, animate) => {
+      const [name, s, took] = g, r = document.createElement('div'); r.className = 'r' + (animate ? ' new' : '');
+      r.innerHTML = `<code>run_${(n++).toString(16).padStart(2, '0')}a9f</code><span>${name}</span><span class="s"><span class="sd" data-status="${s}"></span>${s === 'blocked_approval' ? 'waiting' : s}</span><span class="tm">${took}</span>`;
+      box.prepend(r); while (box.children.length > 5) box.lastChild.remove();
+    };
+    G.slice(0, 4).forEach(g => add(g));
+    if (!reduce) (async () => { let i = 4; while (true) { await R.sleep(2600); add(G[i % G.length], true); i++; } })();
+  }
+
+  // ---------- quick start tabs ----------
+  {
+    const prov = $('#prov'), tabs = [...document.querySelectorAll('.tabsbar button')];
+    tabs.forEach(t => t.addEventListener('click', () => { tabs.forEach(x => x.setAttribute('aria-selected', x === t)); prov.textContent = t.dataset.p; }));
+    const btn = $('#qsCopy');
+    btn.addEventListener('click', async () => { await copyText($('#qsPre').innerText.split('\n').filter(l => l.startsWith('$ ')).map(l => l.slice(2)).join('\n')); flash(btn); });
+  }
+})();
+</script>
+</body>
+</html>

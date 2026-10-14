@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>loopy(1)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=IBM+Plex+Mono:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #150d03;
+    --glass: #1c1204;
+    --amber: #ffb000;
+    --hot: #ffd98a;
+    --dim: #a06e0a;
+    --faint: #5c3e06;
+    --err: #ff6a3d;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { background: #0b0702; }
+  body {
+    color: var(--amber);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 16px; line-height: 1.6;
+    background: radial-gradient(ellipse at 50% 0%, #2a1a05 0%, #0b0702 70%);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  ::selection { background: var(--amber); color: var(--bg); }
+  a { color: var(--hot); }
+  :focus-visible { outline: 2px solid var(--hot); outline-offset: 2px; }
+
+  /* the tube */
+  .tube {
+    position: relative;
+    max-width: 1180px;
+    margin: clamp(10px, 3vw, 36px) auto;
+    background: var(--glass);
+    border-radius: 28px;
+    padding: clamp(18px, 3.4vw, 48px);
+    box-shadow:
+      0 0 0 10px #241807,
+      0 0 0 12px #3a2708,
+      0 30px 80px rgba(0,0,0,.7),
+      inset 0 0 120px rgba(0,0,0,.85),
+      inset 0 0 18px rgba(255,176,0,.08);
+    text-shadow: 0 0 2px rgba(255,176,0,.75), 0 0 12px rgba(255,140,0,.35);
+    overflow: hidden;
+  }
+  .tube::before { /* scanlines */
+    content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 5;
+    background: repeating-linear-gradient(to bottom, rgba(0,0,0,0) 0 2px, rgba(0,0,0,.28) 2px 3px);
+  }
+  .tube::after { /* glare and slow roll bar */
+    content: ""; position: absolute; left: 0; right: 0; height: 180px; top: -200px; pointer-events: none; z-index: 6;
+    background: linear-gradient(to bottom, transparent, rgba(255,200,90,.05), transparent);
+    animation: roll 9s linear infinite;
+  }
+  @keyframes roll { to { top: 110%; } }
+  .flicker { animation: flicker 5s infinite steps(1); }
+  @keyframes flicker { 0%, 100% { opacity: 1; } 47% { opacity: .96; } 48% { opacity: 1; } 83% { opacity: .98; } }
+
+  .bar { display: flex; justify-content: space-between; gap: 12px; color: var(--dim); font-size: 14px; border-bottom: 1px dashed var(--faint); padding-bottom: 10px; flex-wrap: wrap; }
+  .bar nav { display: flex; gap: 18px; }
+  .bar a { color: var(--dim); text-decoration: none; }
+  .bar a:hover { color: var(--hot); }
+
+  h1, h2, .vt { font-family: "VT323", monospace; font-weight: 400; }
+  h1 { font-size: clamp(56px, 9.5vw, 128px); line-height: .9; color: var(--hot); margin: 40px 0 18px; }
+  h1 .cur { display: inline-block; width: .5em; height: .82em; background: var(--amber); vertical-align: -.06em; margin-left: .08em; animation: blink 1.05s steps(1) infinite; box-shadow: 0 0 12px rgba(255,176,0,.6); }
+  @keyframes blink { 50% { opacity: 0; } }
+  .lede { max-width: 62ch; color: var(--amber); }
+  .lede b { color: var(--hot); font-weight: 600; }
+
+  /* shell */
+  .shell { margin-top: 34px; border: 1px solid var(--faint); background: rgba(0,0,0,.25); position: relative; }
+  .shell .tabs { display: flex; justify-content: space-between; font-size: 13px; color: var(--dim); padding: 6px 12px; border-bottom: 1px solid var(--faint); }
+  .screen { height: 440px; overflow-y: auto; padding: 14px 16px 8px; font-size: 15px; line-height: 1.55; scrollbar-width: thin; scrollbar-color: var(--faint) transparent; }
+  .screen .ln { white-space: pre-wrap; word-break: break-word; min-height: 1.55em; }
+  .screen .d { color: var(--dim); }
+  .screen .h { color: var(--hot); }
+  .screen .e { color: var(--err); }
+  .screen .inv { background: var(--amber); color: var(--bg); text-shadow: none; padding: 0 4px; }
+  .screen pre { font: inherit; white-space: pre; overflow-x: auto; }
+  .prompt { display: flex; gap: 8px; align-items: center; padding: 4px 16px 14px; font-size: 15px; }
+  .prompt span { color: var(--hot); flex: none; }
+  .prompt input { flex: 1; min-width: 0; background: transparent; border: 0; color: var(--hot); font: inherit; caret-color: var(--amber); text-shadow: inherit; outline: none; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--faint); }
+  .chips button { background: transparent; color: var(--amber); border: 1px solid var(--dim); font: inherit; font-size: 13px; padding: 3px 9px; cursor: pointer; text-shadow: inherit; }
+  .chips button:hover, .chips button.live { background: var(--amber); color: var(--bg); text-shadow: none; }
+  .chips .sep { flex-basis: 100%; height: 0; }
+  .chips .keys button { border-style: dashed; }
+
+  section { margin-top: clamp(64px, 9vw, 110px); }
+  h2 { font-size: clamp(40px, 5.5vw, 68px); line-height: 1; color: var(--hot); }
+  h2::before { content: "## "; color: var(--faint); }
+  .sub { color: var(--dim); max-width: 64ch; margin-top: 8px; }
+
+  /* how: tmux panes */
+  .panes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 28px; border: 1px solid var(--faint); }
+  .pane { padding: 16px; min-height: 290px; position: relative; }
+  .pane + .pane { border-left: 1px solid var(--faint); }
+  .pane .pt { font-size: 13px; color: var(--bg); background: var(--dim); display: inline-block; padding: 0 8px; text-shadow: none; }
+  .pane.act .pt { background: var(--amber); }
+  .pane h3 { font-family: "VT323", monospace; font-weight: 400; font-size: 38px; line-height: 1; margin: 14px 0 8px; color: var(--hot); }
+  .pane p { font-size: 14.5px; }
+  .pane pre { font: inherit; font-size: 13.5px; margin-top: 14px; color: var(--dim); white-space: pre-wrap; }
+  .pane pre b { color: var(--hot); font-weight: 400; }
+  .tmux { display: flex; justify-content: space-between; background: var(--amber); color: var(--bg); text-shadow: none; font-size: 13px; padding: 1px 10px; }
+
+  /* controls table */
+  .keys-table { width: 100%; border-collapse: collapse; margin-top: 26px; font-size: 15px; }
+  .keys-table td { padding: 10px 12px; border-top: 1px dashed var(--faint); vertical-align: top; }
+  .keys-table td:first-child { width: 42%; color: var(--hot); white-space: nowrap; }
+  .kinds { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
+  .kinds span { border: 1px solid var(--dim); padding: 2px 10px; font-size: 14px; }
+  .kinds span b { color: var(--hot); font-weight: 400; }
+
+  .local { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 26px; align-items: start; }
+  .local pre { font: inherit; font-size: 14.5px; border: 1px solid var(--faint); padding: 16px; white-space: pre; overflow-x: auto; }
+  .local pre .d { color: var(--dim); }
+
+  .qs { border: 1px solid var(--amber); margin-top: 26px; position: relative; }
+  .qs pre { font: inherit; font-size: clamp(14px, 1.8vw, 17px); padding: 20px 18px; white-space: pre; overflow-x: auto; line-height: 1.8; }
+  .qs pre .c { color: var(--dim); }
+  .qs button { position: absolute; top: 10px; right: 10px; background: var(--amber); color: var(--bg); border: 0; font: inherit; font-size: 13px; padding: 4px 10px; cursor: pointer; text-shadow: none; }
+
+  footer { margin-top: 90px; }
+  .status { display: flex; justify-content: space-between; gap: 10px; background: var(--amber); color: var(--bg); text-shadow: none; font-size: 14px; padding: 2px 10px; flex-wrap: wrap; }
+  .status a { color: var(--bg); }
+  .fnote { color: var(--dim); font-size: 13px; margin-top: 10px; }
+
+  @media (max-width: 820px) {
+    .panes { grid-template-columns: 1fr; }
+    .pane + .pane { border-left: 0; border-top: 1px solid var(--faint); }
+    .pane { min-height: 0; }
+    .local { grid-template-columns: 1fr; }
+    .keys-table td:first-child { width: auto; white-space: normal; }
+    .keys-table tr { display: grid; }
+    .keys-table td + td { border-top: 0; padding-top: 0; color: var(--amber); }
+  }
+  @media (max-width: 520px) {
+    body { font-size: 15px; }
+    .tube { border-radius: 16px; margin: 8px; }
+    .screen { height: 400px; font-size: 13px; padding: 10px; }
+    .prompt { font-size: 13px; padding: 4px 10px 12px; }
+    .bar nav { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .tube::after, .flicker, h1 .cur { animation: none; }
+  }
+</style>
+</head>
+<body>
+<div class="tube flicker">
+  <header class="bar">
+    <span>loopy(1)</span>
+    <nav><a href="#how">how</a><a href="#controls">controls</a><a href="#start">quick start</a></nav>
+    <span>tty1</span>
+  </header>
+
+  <h1>Do it once. Run it as a graph.<span class="cur" aria-hidden="true"></span></h1>
+  <p class="lede"><b>loopy</b> is a local graph harness for coding agents. Finish a task in Codex or Claude Code, import the session trace, and Loopy extracts an execution graph you can run again on your own machine. Pause it, retry a node, fork from a checkpoint, or make it wait for your approval.</p>
+
+  <div class="shell" id="shell">
+    <div class="tabs"><span>~/work/api</span><span>bun</span></div>
+    <div class="screen" id="screen" aria-live="polite"></div>
+    <label class="prompt" for="cmd"><span>~/work/api $</span><input id="cmd" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Type a loopy command"></label>
+    <div class="chips" id="chips">
+      <button type="button" data-cmd="help">help</button>
+      <button type="button" data-cmd="loopy import session.jsonl --provider codex">loopy import</button>
+      <button type="button" data-cmd="loopy extract --import imp_7f3a">loopy extract</button>
+      <button type="button" data-cmd="loopy run cve-patch">loopy run</button>
+      <button type="button" data-cmd="loopy ui">loopy ui</button>
+      <button type="button" data-cmd="clear">clear</button>
+      <span class="sep"></span>
+      <span class="keys" style="display:contents">
+        <button type="button" data-key="p">p pause</button>
+        <button type="button" data-key="r">r resume</button>
+        <button type="button" data-key="a">a approve</button>
+        <button type="button" data-key="f">f fork</button>
+        <button type="button" data-key="c">c cancel</button>
+      </span>
+    </div>
+  </div>
+
+  <section id="how">
+    <h2>How it works</h2>
+    <p class="sub">Three commands. The agent does the open-ended work inside nodes. The graph around it is plain data you can read.</p>
+    <div class="panes">
+      <div class="pane">
+        <span class="pt">0:record</span>
+        <h3>Record</h3>
+        <p>Do the task once with your agent. Loopy imports the session trace.</p>
+<pre>$ <b>loopy import</b> s.jsonl \
+    --provider codex
+214 events
+import imp_7f3a</pre>
+      </div>
+      <div class="pane act">
+        <span class="pt">1:extract</span>
+        <h3>Extract</h3>
+        <p>A deterministic extractor proposes a graph. No model calls. Every node cites its trace events.</p>
+<pre>$ <b>loopy extract</b> \
+    --import imp_7f3a
+9 nodes, 10 edges
+proposal prp_19c2</pre>
+      </div>
+      <div class="pane">
+        <span class="pt">2:run</span>
+        <h3>Run</h3>
+        <p>Run the approved graph locally through the same agent CLIs, with checks and approvals between steps.</p>
+<pre>$ <b>loopy run</b> cve-patch
+run r_41 started
+state .loopy/loopy.db</pre>
+      </div>
+    </div>
+    <div class="tmux"><span>[loopy] 0:record 1:extract* 2:run</span><span>local</span></div>
+  </section>
+
+  <section id="controls">
+    <h2>Runtime controls</h2>
+    <p class="sub">A run is durable. Every node attempt and checkpoint lands in SQLite, so you can stop it and pick it up later.</p>
+    <table class="keys-table">
+      <tr><td>loopy pause &lt;run-id&gt;</td><td>Stop between nodes. Nothing in flight gets killed.</td></tr>
+      <tr><td>loopy resume &lt;run-id&gt;</td><td>Continue from the last checkpoint.</td></tr>
+      <tr><td>loopy retry &lt;run-id&gt; --node &lt;id&gt;</td><td>Run one node again. Attempts are bounded and each one is kept.</td></tr>
+      <tr><td>loopy fork</td><td>Start a new run from any checkpoint of an old one.</td></tr>
+      <tr><td>loopy cancel &lt;run-id&gt;</td><td>End the run and keep its history.</td></tr>
+      <tr><td>loopy approve</td><td>Approval nodes wait here for a person.</td></tr>
+      <tr><td>loopy schedule create --cron '0 9 * * *'</td><td>Run the graph on a cron schedule, on your machine.</td></tr>
+    </table>
+    <div class="kinds" aria-label="Step kinds">
+      <span><b>agent</b> open-ended work</span><span><b>shell</b> a command</span><span><b>route</b> pick an edge</span><span><b>verify</b> pass or fail</span><span><b>approval</b> wait for a person</span><span><b>join</b> wait for branches</span><span><b>transform</b> reshape data</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>Local by default</h2>
+    <p class="sub">Loopy runs on Bun. It calls the agent CLIs you already installed, with your login. Source, credentials and traces stay on your disk.</p>
+    <div class="local">
+<pre><span class="d">$ tree .loopy</span>
+.loopy
+└── loopy.db   <span class="d"># runs, checkpoints,</span>
+               <span class="d"># approvals, schedules</span></pre>
+<pre><span class="d">$ loopy ui</span>
+studio: serving on 127.0.0.1
+<span class="d">read and edit nodes, edges</span>
+<span class="d">and policies in the browser</span></pre>
+    </div>
+  </section>
+
+  <section id="start">
+    <h2>Quick start</h2>
+    <div class="qs">
+      <button type="button" id="copy">copy</button>
+<pre><span class="c"># needs bun</span>
+bun add -g loopy
+loopy init
+loopy import session.jsonl --provider codex
+loopy extract --import &lt;import-id&gt;
+loopy approve &lt;proposal-id&gt;
+loopy run &lt;workflow-id&gt;
+loopy ui</pre>
+    </div>
+  </section>
+
+  <footer>
+    <div class="status"><span>-- NORMAL -- loopy</span><span><a href="#">github</a> <a href="#">docs</a> <a href="index.html">catalog</a></span><span>Apache-2.0</span></div>
+    <p class="fnote">Everything above runs locally. There is no hosted Loopy service.</p>
+  </footer>
+</div>
+
+<script>
+(() => {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const screen = document.getElementById('screen'), input = document.getElementById('cmd');
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const out = (html, cls = '') => { const d = document.createElement('div'); d.className = 'ln ' + cls; d.innerHTML = html; screen.appendChild(d); screen.scrollTop = screen.scrollHeight; return d; };
+  const sleep = ms => new Promise(r => setTimeout(r, reduce ? Math.min(ms, 60) : ms));
+  let busy = false, userTouched = false;
+
+  const NODES = [
+    ['audit', 'shell', 'bun audit --json'],
+    ['parse', 'transform', 'critical CVEs to list'],
+    ['patch', 'agent', 'codex: bump lodash'],
+    ['tests', 'verify', 'bun test'],
+    ['types', 'verify', 'bun run typecheck'],
+    ['join', 'join', 'tests + types'],
+    ['route', 'route', 'pass or retry'],
+    ['review', 'approval', 'diff for a person'],
+    ['push', 'shell', 'gh pr create --fill'],
+  ];
+  let run = null;
+
+  function drawRun() {
+    const narrow = screen.clientWidth < 520;
+    const W = narrow ? 8 : 12;
+    const rows = NODES.map(([id, kind, what], i) => {
+      const st = run.st[id];
+      const mark = { queued: '  ', run: '> ', ok: 'ok', fail: '!!', wait: '..', fork: 'ok' }[st];
+      let bar = '';
+      if (st === 'run') { const n = run.frame % (W + 1); bar = '[' + '#'.repeat(n) + '.'.repeat(W - n) + ']'; }
+      else if (st === 'ok' || st === 'fork') bar = '[' + '#'.repeat(W) + ']';
+      else if (st === 'fail') bar = '[' + 'failed'.padEnd(W) + ']';
+      else if (st === 'wait') bar = '[' + 'waiting'.padEnd(W) + ']';
+      else bar = '[' + '.'.repeat(W) + ']';
+      const line = `${mark} ${id.padEnd(7)}${kind.padEnd(10)}${bar}` + (narrow ? '' : `  ${what}`);
+      const cls = st === 'run' ? 'h' : st === 'fail' ? 'e' : st === 'wait' ? 'inv' : st === 'queued' ? 'd' : '';
+      return `<span class="${cls}">${esc(line)}</span>`;
+    });
+    run.el.innerHTML = `<pre>${rows.join('\n')}</pre>`;
+    screen.scrollTop = screen.scrollHeight;
+  }
+  const ORDER = [['audit'], ['parse'], ['patch'], ['tests', 'types'], ['join'], ['route'], ['review'], ['push']];
+
+  async function runLoop() {
+    while (run && run.state === 'running') {
+      const group = ORDER[run.i];
+      if (!group) { run.state = 'done'; out(`run ${run.id} <span class="h">succeeded</span>. pr opened.`); endRun(); return; }
+      group.forEach(id => run.st[id] = 'run');
+      for (let k = 0; k < 8; k++) { if (run?.state !== 'running') return; run.frame = k + 5; drawRun(); await sleep(110); }
+      if (run?.state !== 'running') return;
+      if (group.includes('review')) { run.st.review = 'wait'; run.state = 'waiting'; drawRun(); out('approval: waiting for a person. press <span class="h">a</span> to approve.', 'h'); keysLive(); return; }
+      if (group.includes('tests') && !run.failed) {
+        run.failed = true; run.st.tests = 'fail'; run.st.types = 'ok'; drawRun();
+        out('verify tests: 2 failed. retry 2 of 3', 'e'); await sleep(700);
+        if (run?.state !== 'running') return;
+        run.st.tests = 'run'; for (let k = 0; k < 8; k++) { if (run?.state !== 'running') return; run.frame = k + 5; drawRun(); await sleep(110); }
+      }
+      group.forEach(id => run.st[id] = 'ok'); run.checkpoint = run.i; run.i += 1; drawRun();
+    }
+  }
+  function endRun() { run = null; busy = false; keysLive(); }
+  function keysLive() { document.querySelectorAll('[data-key]').forEach(b => b.classList.toggle('live', !!run && ((b.dataset.key === 'a' && run.state === 'waiting') || (b.dataset.key === 'r' && run.state === 'paused') || (b.dataset.key === 'p' && run.state === 'running')))); }
+  function startRun(id = 'r_41', from = null) {
+    busy = true;
+    run = { id, i: 0, state: 'running', failed: false, frame: 0, st: Object.fromEntries(NODES.map(n => [n[0], 'queued'])), checkpoint: -1 };
+    if (from) { run.i = from.checkpoint + 1; run.failed = true; ORDER.slice(0, run.i).flat().forEach(n => run.st[n] = 'fork'); run.checkpoint = from.checkpoint; }
+    out(`run ${id} started. state in .loopy/loopy.db`, 'd');
+    out('keys: p pause, r resume, a approve, f fork, c cancel', 'd');
+    run.el = out(''); drawRun(); keysLive(); runLoop();
+  }
+  function key(k) {
+    if (!run) return false;
+    if (k === 'p' && run.state === 'running') { run.state = 'paused'; ORDER[run.i]?.forEach(id => { if (run.st[id] === 'run') run.st[id] = 'queued'; }); drawRun(); out(`paused ${run.id} before ${ORDER[run.i].join(' + ')}`); }
+    else if (k === 'r' && run.state === 'paused') { run.state = 'running'; out(`resumed ${run.id}`); runLoop(); }
+    else if (k === 'a' && run.state === 'waiting') { run.st.review = 'ok'; run.checkpoint = run.i; run.i += 1; run.state = 'running'; out('approval: approved by you'); drawRun(); runLoop(); }
+    else if (k === 'c' && ['running', 'paused', 'waiting'].includes(run.state)) { run.state = 'cancelled'; out(`cancelled ${run.id}. history kept.`, 'e'); endRun(); }
+    else if (k === 'f' && run.checkpoint >= 0 && run.state !== 'running') {
+      const from = { checkpoint: run.checkpoint }; const old = run.id; run.state = 'forked';
+      out(`fork ${old} at checkpoint ${ORDER[from.checkpoint].join(' + ')} as r_42`); run = null;
+      startRun('r_42', from);
+    } else return false;
+    keysLive(); return true;
+  }
+
+  const CMDS = {
+    help: () => {
+      out('commands you can try here:', 'h');
+      out('  loopy init              create .loopy/loopy.db');
+      out('  loopy import &lt;file&gt;     import a session trace');
+      out('  loopy extract           propose a graph from the trace');
+      out('  loopy approve &lt;id&gt;      accept the proposal');
+      out('  loopy run cve-patch     run the graph');
+      out('  loopy ui                open the local Studio');
+      out('  clear');
+    },
+    clear: () => { screen.innerHTML = ''; },
+    'loopy init': () => { out('created .loopy/loopy.db'); out('project ~/work/api ready', 'd'); },
+    'loopy import': async () => { out('reading session.jsonl', 'd'); await sleep(350); out('214 events, provider codex'); out('import <span class="h">imp_7f3a</span>'); },
+    'loopy extract': async () => {
+      out('extractor: deterministic, no model calls', 'd'); await sleep(300);
+      const ev = [['audit', 'shell', '#12 exec bun audit --json'], ['parse', 'transform', '#19 think 1 critical'], ['patch', 'agent', '#31 edit package.json'], ['tests', 'verify', '#44 exec bun test'], ['types', 'verify', '#45 exec typecheck'], ['join', 'join', '#44,#45'], ['route', 'route', '#58 out 412 passed'], ['review', 'approval', '#61 user "push it"'], ['push', 'shell', '#70 exec gh pr create']];
+      for (const [id, k, e] of ev) { out(`  + ${id.padEnd(7)}${k.padEnd(10)}<span class="d">from ${esc(e)}</span>`); await sleep(120); }
+      out('9 nodes, 10 edges. proposal <span class="h">prp_19c2</span>');
+      out('next: loopy approve prp_19c2', 'd');
+    },
+    'loopy approve': () => { out('workflow <span class="h">cve-patch</span> v1 approved'); },
+    'loopy run': () => startRun(),
+    'loopy ui': () => { out('studio: serving on 127.0.0.1'); out('open the printed url to edit nodes and edges', 'd'); },
+  };
+  async function exec(raw) {
+    const line = raw.trim(); if (!line) return;
+    out(`<span class="h">~/work/api $</span> ${esc(line)}`);
+    if (busy && line.length === 1 && key(line)) return;
+    if (busy) { out('a run is active. use p, r, a, f or c.', 'd'); return; }
+    const name = Object.keys(CMDS).sort((a, b) => b.length - a.length).find(k => line === k || line.startsWith(k + ' '));
+    if (!name) { out(`${esc(line.split(' ')[0])}: try "help"`, 'e'); return; }
+    await CMDS[name]();
+  }
+  async function typeIn(text) {
+    for (const ch of text) { input.value += ch; await sleep(38 + Math.random() * 40); }
+    await sleep(250); const v = input.value; input.value = ''; await exec(v);
+  }
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { userTouched = true; const v = input.value; input.value = ''; exec(v); }
+  });
+  input.addEventListener('input', () => { userTouched = true; if (busy && input.value.length === 1 && 'prafc'.includes(input.value)) { const k = input.value; input.value = ''; out(`<span class="d">[${k}]</span>`); key(k); } });
+  document.getElementById('chips').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return; userTouched = true;
+    if (b.dataset.key) { out(`<span class="d">[${b.dataset.key}]</span>`); if (!key(b.dataset.key)) out('nothing to do for that key right now', 'd'); }
+    else exec(b.dataset.cmd);
+  });
+
+  // boot
+  (async () => {
+    const boot = ['loopy 0.x on bun', 'checking codex ... found', 'checking claude ... found', 'opening .loopy/loopy.db ... ok'];
+    for (const l of boot) { out(l, 'd'); await sleep(260); }
+    out('type <span class="h">help</span>, or tap a command below.');
+    await sleep(900);
+    if (!userTouched) await typeIn('loopy extract --import imp_7f3a');
+    await sleep(900);
+    if (!userTouched) await typeIn('loopy run cve-patch');
+  })();
+
+  document.getElementById('copy').addEventListener('click', e => {
+    navigator.clipboard?.writeText('bun add -g loopy\nloopy init').catch(() => {});
+    e.target.textContent = 'copied'; setTimeout(() => e.target.textContent = 'copy', 1500);
+  });
+})();
+</script>
+</body>
+</html>

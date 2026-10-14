@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Loopy. Run the loop after sundown.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Michroma&family=Sora:wght@300;400;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --plum: #1a0633;
+    --violet: #6a1bff;
+    --magenta: #ff2fa8;
+    --orange: #ff8a3d;
+    --cyan: #22e6ff;
+    --cream: #fff1fb;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--plum);
+    color: var(--cream);
+    font-family: "Sora", system-ui, sans-serif;
+    font-size: 17px; line-height: 1.6; font-weight: 300;
+  }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+  code, pre { font-family: "Space Mono", ui-monospace, monospace; }
+
+  .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+
+  /* left: the sunset machine */
+  .scene { position: sticky; top: 0; height: 100vh; overflow: hidden; background: linear-gradient(180deg, #12032a 0%, #3a0a78 30%, #a01ea8 52%, #ff4f8b 60%, #ff9a4a 63%, #1a0633 63.2%); }
+  .stars { position: absolute; inset: 0 0 40% 0; background-image: radial-gradient(1px 1px at 20% 30%, #fff, transparent), radial-gradient(1px 1px at 70% 12%, #fff, transparent), radial-gradient(1.4px 1.4px at 40% 20%, #ffd4f0, transparent), radial-gradient(1px 1px at 85% 40%, #fff, transparent), radial-gradient(1px 1px at 10% 8%, #fff, transparent), radial-gradient(1.2px 1.2px at 58% 34%, #fff, transparent); opacity: .7; }
+  .floor { position: absolute; left: -50%; right: -50%; top: 63%; height: 70%; perspective: 260px; perspective-origin: 50% 0%; }
+  .floor::before {
+    content: ""; position: absolute; inset: 0;
+    background:
+      linear-gradient(var(--magenta) 2px, transparent 2px) 0 0 / 100% 60px,
+      linear-gradient(90deg, var(--magenta) 2px, transparent 2px) 0 0 / 60px 100%;
+    transform: rotateX(62deg); transform-origin: top;
+    animation: drive 1.6s linear infinite;
+    box-shadow: inset 0 40px 60px var(--plum);
+    opacity: .85;
+  }
+  .floor::after { content: ""; position: absolute; inset: 0; background: linear-gradient(var(--plum) 0%, transparent 30%); }
+  @keyframes drive { to { background-position: 0 60px, 0 0; } }
+
+  .ringbox { position: absolute; left: 50%; top: 40%; width: min(66vh, 84%); aspect-ratio: 1; transform: translate(-50%, -50%); }
+  .ringbox svg { width: 100%; height: 100%; overflow: visible; }
+  .sun { fill: url(#sunG); }
+  .sunmask rect { fill: #000; }
+  .ring { fill: none; stroke: var(--cyan); stroke-width: 2.5; filter: drop-shadow(0 0 6px var(--cyan)); stroke-dasharray: 6 10; animation: spin 30s linear infinite; transform-origin: 300px 300px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .arc { fill: none; stroke: var(--cyan); stroke-width: 5; stroke-linecap: round; filter: drop-shadow(0 0 10px var(--cyan)); transition: stroke-dashoffset .6s ease; }
+  .nd { opacity: 0; transform-box: fill-box; transform-origin: center; transform: scale(.4); transition: opacity .4s, transform .5s cubic-bezier(.3, 1.8, .5, 1); }
+  .nd circle { fill: var(--plum); stroke: var(--cream); stroke-width: 2.5; transition: fill .3s, stroke .3s; }
+  .nd text { fill: var(--cream); font-family: "Space Mono", monospace; font-size: 15px; }
+  .nd.on circle { fill: var(--cyan); stroke: var(--cyan); }
+  .nd.run circle { fill: var(--orange); stroke: #fff; }
+  .nd.fail circle { fill: var(--magenta); stroke: #fff; }
+  .nd.wait circle { fill: #fff; stroke: var(--orange); stroke-width: 5; }
+  [data-state="extract"] .nd, [data-state="run"] .nd, [data-state="controls"] .nd, [data-state="start"] .nd { opacity: 1; transform: scale(1); }
+  .token { fill: #fff; filter: drop-shadow(0 0 8px #fff); opacity: 0; transition: opacity .3s; }
+  [data-state="run"] .token, [data-state="controls"] .token { opacity: 1; }
+
+  .trace { position: absolute; left: 50%; bottom: 7%; width: min(420px, 84%); transform: translateX(-50%); height: 150px; overflow: hidden; font-family: "Space Mono", monospace; font-size: 13px; color: var(--cream); background: rgba(26,6,51,.72); border: 1px solid rgba(34,230,255,.5); padding: 10px 12px; opacity: 0; transition: opacity .4s; -webkit-mask: linear-gradient(transparent, #000 30%); mask: linear-gradient(transparent, #000 30%); }
+  .trace .rows { animation: feed 9s linear infinite; }
+  .trace .rows div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .trace .rows b { color: var(--cyan); font-weight: 400; }
+  @keyframes feed { to { transform: translateY(-50%); } }
+  [data-state="record"] .trace { opacity: 1; }
+  .caption { position: absolute; left: 22px; top: 18px; right: 22px; display: flex; justify-content: space-between; font-family: "Space Mono", monospace; font-size: 13px; color: rgba(255,241,251,.8); }
+  .caption b { color: var(--cyan); font-weight: 400; }
+
+  /* right: content */
+  .content { position: relative; background: linear-gradient(180deg, #1a0633, #240846 40%, #1a0633); }
+  .nav { position: sticky; top: 0; z-index: 3; display: flex; justify-content: space-between; align-items: center; padding: 18px clamp(20px, 4vw, 56px); background: rgba(26,6,51,.8); backdrop-filter: blur(8px); }
+  .logo { font-family: "Michroma", sans-serif; font-size: 18px; text-decoration: none; background: linear-gradient(90deg, var(--cyan), var(--magenta)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .nav nav { display: flex; gap: 20px; font-size: 14px; }
+  .nav nav a { text-decoration: none; opacity: .8; }
+  .nav nav a:hover { opacity: 1; color: var(--cyan); }
+  .panel { min-height: 92vh; padding: clamp(50px, 8vh, 90px) clamp(20px, 4vw, 56px); display: flex; flex-direction: column; justify-content: center; }
+  .chrome {
+    font-family: "Michroma", sans-serif; font-weight: 400; line-height: 1.12; letter-spacing: -.01em;
+    background: linear-gradient(180deg, #ffffff 0%, #ffd6f3 40%, #7a3dff 50%, #ff66c4 62%, #ffe3a8 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 3px 0 rgba(255,47,168,.45));
+  }
+  h1.chrome { font-size: clamp(34px, 4vw, 60px); }
+  h2.chrome { font-size: clamp(26px, 2.8vw, 40px); margin-bottom: 18px; }
+  .panel p { max-width: 36em; color: #f3dcef; }
+  .panel p + p { margin-top: 1em; }
+  .lede { font-size: 19px; margin-top: 24px; }
+  .cta { display: flex; gap: 12px; margin-top: 34px; flex-wrap: wrap; }
+  .btn { font: inherit; font-weight: 600; font-size: 15px; padding: 12px 20px; border: 0; cursor: pointer; text-decoration: none; color: var(--plum); background: linear-gradient(90deg, var(--cyan), #b2f7ff); box-shadow: 4px 4px 0 var(--magenta); display: inline-block; }
+  .btn.alt { background: transparent; color: var(--cream); box-shadow: inset 0 0 0 1.5px var(--cream); }
+  .btn:hover { transform: translate(-1px, -1px); box-shadow: 5px 5px 0 var(--magenta); }
+  .btn.alt:hover { box-shadow: inset 0 0 0 1.5px var(--cyan); color: var(--cyan); }
+  .btn[disabled] { opacity: .35; cursor: default; transform: none; }
+  .step-no { font-family: "Space Mono", monospace; font-size: 14px; color: var(--cyan); margin-bottom: 14px; }
+  .panel code.inline { color: var(--cyan); font-size: .92em; }
+  .kv { margin-top: 26px; display: grid; grid-template-columns: max-content 1fr; gap: 8px 18px; font-size: 15px; }
+  .kv code { color: var(--orange); }
+
+  .ctl { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 26px; }
+  .ctl .btn { padding: 10px 16px; font-size: 14px; }
+  .ctl .btn.hot { background: linear-gradient(90deg, var(--orange), #ffd08a); }
+  .readout { margin-top: 18px; font-family: "Space Mono", monospace; font-size: 14px; color: var(--cyan); min-height: 1.6em; }
+  .grid4 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 26px; margin-top: 30px; }
+  .grid4 b { display: block; font-weight: 600; color: #fff; }
+  .grid4 span { font-size: 15px; color: #e6c9e0; }
+  .kinds { margin-top: 26px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .kinds span { font-family: "Space Mono", monospace; font-size: 13px; padding: 4px 10px; border: 1px solid rgba(34,230,255,.55); color: var(--cyan); }
+
+  .qs pre { margin-top: 20px; background: rgba(0,0,0,.35); border-left: 3px solid var(--magenta); padding: 20px; font-size: clamp(13px, 1.1vw, 15px); line-height: 1.95; overflow-x: auto; white-space: pre; }
+  .qs pre .c { color: #b58ad0; }
+  .qs pre .p { color: var(--magenta); }
+
+  footer { padding: 40px clamp(20px, 4vw, 56px) 50px; border-top: 1px solid rgba(255,47,168,.3); display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; font-size: 14px; }
+  footer nav { display: flex; gap: 18px; }
+
+  @media (max-width: 900px) {
+    .split { grid-template-columns: minmax(0, 1fr); }
+    .scene { height: 44vh; z-index: 2; }
+    .ringbox { top: 42%; width: min(38vh, 80%); }
+    .nav { position: relative; }
+    .panel { min-height: 0; padding-top: 56px; padding-bottom: 56px; }
+    .caption { font-size: 11px; left: 12px; right: 12px; top: 10px; }
+    .trace { height: 90px; font-size: 11px; bottom: 5%; }
+    .nd text { font-size: 22px; }
+  }
+  @media (max-width: 480px) {
+    .grid4 { grid-template-columns: 1fr; }
+    .nav nav a:not(:last-child) { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .floor::before, .ring, .trace .rows { animation: none; }
+    .nd, .arc { transition: none; }
+  }
+</style>
+</head>
+<body data-state="hero">
+<div class="split">
+  <aside class="scene" aria-label="A neon loop over a sunset. It changes as you scroll: trace lines, then nodes, then a run.">
+    <div class="stars"></div>
+    <div class="floor"></div>
+    <div class="caption"><span>loopy <b id="capState">idle</b></span><span id="capRun">run #41</span></div>
+    <div class="ringbox">
+      <svg viewBox="0 0 600 600" id="ringSvg">
+        <defs>
+          <linearGradient id="sunG" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#ffe86b"/><stop offset=".5" stop-color="#ff8a3d"/><stop offset="1" stop-color="#ff2fa8"/></linearGradient>
+          <mask id="cuts"><rect x="0" y="0" width="600" height="600" fill="#fff"/><g fill="#000"><rect x="0" y="318" width="600" height="5"/><rect x="0" y="338" width="600" height="8"/><rect x="0" y="360" width="600" height="11"/><rect x="0" y="384" width="600" height="14"/></g></mask>
+        </defs>
+        <circle class="sun" cx="300" cy="300" r="118" mask="url(#cuts)"/>
+        <circle class="ring" cx="300" cy="300" r="200"/>
+        <path class="arc" id="arc" d=""/>
+        <g id="nodes"></g>
+        <circle class="token" id="token" r="9" cx="300" cy="100"/>
+      </svg>
+    </div>
+    <div class="trace" aria-hidden="true"><div class="rows" id="rows"></div></div>
+  </aside>
+
+  <div class="content">
+    <header class="nav">
+      <a class="logo" href="#">loopy</a>
+      <nav><a href="#how">How it works</a><a href="#controls">Controls</a><a href="#start">Quick start</a></nav>
+    </header>
+
+    <section class="panel" data-state="hero">
+      <h1 class="chrome">Do it once with your agent. Let the graph run it after.</h1>
+      <p class="lede">Loopy is a local graph harness for Codex and Claude Code. It reads a recorded session, extracts an execution graph, and runs that graph on your machine. You can pause it, retry a step, fork from a checkpoint, and approve before anything ships.</p>
+      <div class="cta"><a class="btn" href="#start">Quick start</a><a class="btn alt" href="#how">Scroll through it</a></div>
+    </section>
+
+    <section class="panel" id="how" data-state="record">
+      <div class="step-no">1 of 3</div>
+      <h2 class="chrome">Record</h2>
+      <p>Do the task once with your agent. Loopy imports the session trace, every command, edit and check in the order they happened.</p>
+      <p>Run <code class="inline">loopy import session.jsonl --provider codex</code> for a session you already have.</p>
+    </section>
+
+    <section class="panel" data-state="extract">
+      <div class="step-no">2 of 3</div>
+      <h2 class="chrome">Extract</h2>
+      <p>The extractor turns the trace into a proposed graph. It is deterministic and makes no model calls. Each node on the ring points back to the trace events that produced it.</p>
+      <div class="kv">
+        <code>shell</code><span>bun audit, gh pr create</span>
+        <code>transform</code><span>list the critical CVEs</span>
+        <code>agent</code><span>bump the version</span>
+        <code>verify</code><span>bun test</span>
+        <code>route</code><span>pass goes on, fail goes back</span>
+        <code>approval</code><span>you read the diff</span>
+      </div>
+    </section>
+
+    <section class="panel" data-state="run">
+      <div class="step-no">3 of 3</div>
+      <h2 class="chrome">Run</h2>
+      <p>Approve the proposal and run it with <code class="inline">loopy run</code>. The graph goes through the same agent CLIs on your machine. Loopy decides the order, runs the checks and stops at approvals.</p>
+      <p>The tests fail once in this demo, so you can see the route send the run back to the agent step.</p>
+    </section>
+
+    <section class="panel" id="controls" data-state="controls">
+      <h2 class="chrome">Runtime controls</h2>
+      <p>These buttons drive the ring. Runs are durable, so every attempt and checkpoint is saved to SQLite as it happens.</p>
+      <div class="ctl">
+        <button class="btn" data-a="pause" type="button">Pause</button>
+        <button class="btn alt" data-a="approve" type="button">Approve</button>
+        <button class="btn alt" data-a="fork" type="button">Fork from checkpoint</button>
+        <button class="btn alt" data-a="cancel" type="button">Cancel</button>
+      </div>
+      <p class="readout" id="readout" aria-live="polite"></p>
+      <div class="grid4">
+        <div><b>Pause and resume</b><span>Stops between nodes.</span></div>
+        <div><b>Retry</b><span>Bounded, every attempt kept.</span></div>
+        <div><b>Fork</b><span>A new run from any checkpoint.</span></div>
+        <div><b>Schedules</b><span>Cron, on your machine.</span></div>
+      </div>
+      <div class="kinds" aria-label="Step kinds"><span>agent</span><span>shell</span><span>route</span><span>verify</span><span>approval</span><span>join</span><span>transform</span></div>
+    </section>
+
+    <section class="panel qs" id="start" data-state="start">
+      <h2 class="chrome">Quick start</h2>
+      <p>Loopy runs on Bun. State lives in <code class="inline">.loopy/loopy.db</code>. Open the local Studio with <code class="inline">loopy ui</code>.</p>
+<pre><span class="c"># install</span>
+<span class="p">$</span> bun add -g loopy
+<span class="p">$</span> loopy init
+<span class="c"># session to graph</span>
+<span class="p">$</span> loopy import session.jsonl --provider codex
+<span class="p">$</span> loopy extract --import &lt;import-id&gt;
+<span class="p">$</span> loopy approve &lt;proposal-id&gt;
+<span class="c"># run and look</span>
+<span class="p">$</span> loopy run &lt;workflow-id&gt;
+<span class="p">$</span> loopy ui</pre>
+    </section>
+
+    <footer>
+      <span>loopy. Local. Apache-2.0.</span>
+      <nav><a href="#">GitHub</a><a href="#">Docs</a><a href="index.html">Catalog</a></nav>
+    </footer>
+  </div>
+</div>
+
+<script>
+(() => {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cx = 300, cy = 300, R = 200;
+  const N = [['audit', 'shell'], ['parse', 'transform'], ['patch', 'agent'], ['tests', 'verify'], ['join', 'join'], ['route', 'route'], ['review', 'approval'], ['push', 'shell']];
+  const angOf = i => -90 + i * 360 / N.length;
+  const pt = (deg, r = R) => { const a = deg * Math.PI / 180; return [cx + r * Math.cos(a), cy + r * Math.sin(a)]; };
+  const nodesG = document.getElementById('nodes');
+  const nodeEls = N.map(([id, kind], i) => {
+    const [x, y] = pt(angOf(i)); const [lx, ly] = pt(angOf(i), R + 40);
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g'); g.setAttribute('class', 'nd');
+    g.style.transitionDelay = (i * 90) + 'ms';
+    const anchor = Math.abs(lx - cx) < 20 ? 'middle' : lx < cx ? 'end' : 'start';
+    g.innerHTML = `<circle cx="${x}" cy="${y}" r="13"/><text x="${lx}" y="${ly + 5}" text-anchor="${anchor}">${kind}</text>`;
+    nodesG.appendChild(g); return g;
+  });
+  const token = document.getElementById('token'), arc = document.getElementById('arc');
+  const arcPath = (a0, a1) => { if (a1 - a0 < .5) return ''; const [x0, y0] = pt(a0), [x1, y1] = pt(a1); return `M${x0},${y0} A${R},${R} 0 ${a1 - a0 > 180 ? 1 : 0} 1 ${x1},${y1}`; };
+
+  // trace feed
+  const TRACE = [['exec', 'bun audit --json'], ['read', 'package.json'], ['think', '1 critical: lodash 4.17.20'], ['exec', 'npm view lodash versions'], ['edit', 'lodash ^4.17.21'], ['exec', 'bun install'], ['exec', 'bun test'], ['out', '412 passed, 0 failed'], ['user', '"diff looks right, push it"'], ['exec', 'gh pr create --fill']];
+  document.getElementById('rows').innerHTML = [...TRACE, ...TRACE].map(([e, t]) => `<div><b>${e.padEnd(6)}</b>${t}</div>`).join('');
+
+  // scroll state
+  const capState = document.getElementById('capState');
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { const st = e.target.dataset.state; document.body.dataset.state = st; capState.textContent = { hero: 'idle', record: 'importing trace', extract: 'proposal ready', run: 'running', controls: 'running', start: 'ready' }[st]; if ((st === 'run' || st === 'controls') && S.state === 'idle') start(); if (st === 'start') finishView(); } });
+  }, { rootMargin: '-45% 0px -45% 0px' });
+  document.querySelectorAll('.panel[data-state]').forEach(p => io.observe(p));
+
+  // run engine around the ring
+  let S = { state: 'idle' };
+  const readout = document.getElementById('readout'), capRun = document.getElementById('capRun');
+  const b = a => document.querySelector(`.ctl [data-a="${a}"]`);
+  const set = (i, cls) => nodeEls[i].setAttribute('class', 'nd ' + (cls || ''));
+  function ui(msg) {
+    if (msg) readout.textContent = `${S.name}: ${msg}`;
+    capRun.textContent = S.name || 'run #41';
+    b('pause').disabled = !['running', 'paused'].includes(S.state);
+    b('pause').textContent = S.state === 'paused' ? 'Resume' : 'Pause';
+    b('approve').disabled = S.state !== 'waiting'; b('approve').classList.toggle('hot', S.state === 'waiting');
+    b('fork').disabled = !(S.cp >= 0) || S.state === 'running';
+    b('cancel').disabled = !['running', 'paused', 'waiting'].includes(S.state);
+  }
+  function start(name = 'run #41', from = -1) {
+    cancelAnimationFrame(S.raf);
+    S = { state: 'running', name, i: from + 1, ang: angOf(from + 1), failed: from >= 3, cp: from, hold: 0, raf: 0, last: 0, base: angOf(0) };
+    N.forEach((_, j) => set(j, j <= from ? 'on' : ''));
+    ui(from >= 0 ? `forked at ${N[from][0]}` : 'started'); S.raf = requestAnimationFrame(frame);
+  }
+  function frame(ts) {
+    const dt = Math.min(.05, (ts - (S.last || ts)) / 1000); S.last = ts;
+    if (S.state === 'running') {
+      if (S.hold > 0) { S.hold -= dt; }
+      else {
+        const target = angOf(S.i);
+        S.ang = Math.min(target, S.ang + (reduce ? 400 : 70) * dt);
+        if (S.ang >= target) {
+          const [id, kind] = N[S.i];
+          if (!S.arrived) { S.arrived = true; set(S.i, 'run'); S.hold = reduce ? .1 : .7; ui(`running ${id}`); }
+          else {
+            S.arrived = false;
+            if (id === 'review') { set(S.i, 'wait'); S.state = 'waiting'; ui('waiting for approval'); }
+            else if (id === 'route' && !S.failed) { S.failed = true; set(3, 'fail'); set(5, ''); set(4, ''); ui('tests failed, route sends it back to the agent'); S.i = 2; S.ang = angOf(2) - 0.01; set(2, ''); S.hold = .9; }
+            else { set(S.i, 'on'); S.cp = S.i; S.i++; if (S.i >= N.length) { S.state = 'done'; ui('succeeded, PR opened. Starting again soon.'); setTimeout(() => { if (S.state === 'done') start(); }, 3000); } }
+          }
+        }
+      }
+    }
+    const [tx, ty] = pt(S.ang ?? angOf(0)); token.setAttribute('cx', tx); token.setAttribute('cy', ty);
+    arc.setAttribute('d', arcPath(angOf(0), S.ang ?? angOf(0)));
+    S.raf = requestAnimationFrame(frame);
+  }
+  function finishView() { if (S.state === 'idle') { N.forEach((_, j) => set(j, 'on')); } }
+  document.querySelector('.ctl').addEventListener('click', e => {
+    const a = e.target.closest('button')?.dataset.a; if (!a) return;
+    if (a === 'pause') { if (S.state === 'running') { S.state = 'paused'; ui(`paused before ${N[S.i][0]}`); } else if (S.state === 'paused') { S.state = 'running'; ui('resumed'); } }
+    if (a === 'approve' && S.state === 'waiting') { set(S.i, 'on'); S.cp = S.i; S.i++; S.state = 'running'; ui('approved'); }
+    if (a === 'cancel') { S.state = 'cancelled'; ui('cancelled, history kept'); }
+    if (a === 'fork' && S.cp >= 0) { start('run #42', S.cp); }
+    ui();
+  });
+  ui();
+})();
+</script>
+</body>
+</html>

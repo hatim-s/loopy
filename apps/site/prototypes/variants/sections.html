@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loopy section variants. Steps row and runtime grid.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* tokens copied from v7 */
+:root{
+  --bg:#0D1014;--bg-raised:#11151A;--surface:#161B21;--surface-hover:#1C2229;--surface-active:#232A33;
+  --line:#222931;--line-strong:#323B46;--text:#E6EAF0;--muted:#98A2AE;--subtle:#6A7480;
+  --accent:#8FA8FF;--accent-strong:#B7C6FF;--accent-ink:#0B1330;--aqua:#6EE0D2;
+  --ok:#5CD39B;--run:#8FA8FF;--wait:#F0C46C;--fail:#F2877E;--pend:#6A7480;
+  --accent-soft:rgba(143,168,255,.12);--accent-border:rgba(143,168,255,.35);
+  --grad:linear-gradient(135deg,#8FA8FF 0%,#6EE0D2 100%);
+  --ease:cubic-bezier(.2,.8,.2,1);
+  --focus:0 0 0 2px #0D1014,0 0 0 4px #8FA8FF;
+  --sans:"Geist",ui-sans-serif,system-ui,sans-serif;
+  --mono:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --pad:56px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:400 16px/1.6 var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+::selection{background:rgba(143,168,255,.35)}
+code{font-family:var(--mono);font-size:13px}
+h1,h2,h3,p,ol,ul{margin:0}
+ol,ul{padding:0;list-style:none}
+.wrap{max-width:1296px;margin:0 auto;padding:0 var(--pad)}
+.grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:32px}
+h2{font-size:clamp(28px,2.6vw,34px);line-height:1.15;letter-spacing:-.025em;font-weight:500;text-wrap:balance;grid-column:2 / 9}
+h3{font-size:16px;font-weight:500;letter-spacing:-.01em;line-height:1.35}
+.sub{color:var(--muted);font-size:16px;line-height:1.6;max-width:36em;text-wrap:pretty;grid-column:2 / 8;margin-top:20px}
+
+/* page chrome: one block per variant, a mono label in the corner so each can be named */
+.intro{padding:96px 0 24px}
+.intro h1{font-size:clamp(28px,2.6vw,34px);line-height:1.15;letter-spacing:-.025em;font-weight:500}
+.intro p{color:var(--muted);margin-top:12px;max-width:40em}
+.blk{position:relative;border-top:1px solid var(--line);padding:88px 0 96px}
+.blk .lab{position:absolute;top:16px;left:var(--pad);font:400 12px/1 var(--mono);color:var(--subtle)}
+.blk .lab b{color:var(--muted);font-weight:500}
+.part{border-top:1px solid var(--line-strong);padding:72px 0 0}
+.part .wrap{display:flex;align-items:baseline;gap:20px}
+.part h2{grid-column:auto;font-size:22px}
+.part p{color:var(--subtle);font-size:14px}
+
+/* the stage, stood in for by a dashed box */
+.stagebox{grid-column:1 / 13;margin-top:40px;height:240px;border:1px dashed var(--line-strong);border-radius:14px;display:grid;place-items:center;font:400 13px/1 var(--mono);color:var(--subtle)}
+
+/* shared base for the steps rows: the v7 copy and the hover lift */
+.steps{grid-column:2 / 12;margin-top:56px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:32px}
+.step h3{display:flex;gap:10px;align-items:baseline;color:var(--muted);transition:color 160ms var(--ease)}
+.step h3 code{color:var(--subtle);font-size:12px}
+.step p{margin-top:6px;font-size:14px;line-height:1.55;color:var(--subtle);max-width:30em;transition:color 160ms var(--ease)}
+.step.on h3,.step:hover h3{color:var(--text)}
+.step.on p,.step:hover p{color:var(--muted)}
+
+/* S1 numbered rails: big mono counters, a rule that fills with the gradient phase by phase */
+.s1 .step{position:relative;padding-top:18px}
+.s1 .rail{position:absolute;left:0;right:0;top:0;height:1px;background:var(--line)}
+.s1 .rail i{position:absolute;inset:0;background:var(--grad);transform-origin:left;transform:scaleX(var(--k,0))}
+.s1 .num{display:flex;align-items:center;justify-content:space-between;font:500 24px/1 var(--mono);letter-spacing:-.02em;color:var(--line-strong);transition:color 220ms var(--ease);margin-bottom:22px}
+.s1 .num svg{width:14px;height:14px;overflow:visible;color:var(--subtle);transition:color 220ms var(--ease)}
+.s1 .step.on .num,.s1 .step:hover .num{color:var(--muted)}
+.s1 .step.on .num svg{color:var(--aqua)}
+.s1 .step:hover .num svg{color:var(--text)}
+
+/* S2 connected cards: raised surfaces on one wire, a bead parks at each card in turn */
+.s2 .steps{position:relative}
+.s2 .step{position:relative;z-index:1;padding:22px 24px 24px;background:var(--surface);border:1px solid var(--line);border-radius:10px;transition:border-color 220ms var(--ease),background 160ms var(--ease)}
+.s2 .step.on{border-color:var(--accent-border)}
+.s2 .step:hover{background:var(--surface-hover)}
+.s2 .wire-svg{position:absolute;left:0;top:0;width:100%;height:100%;overflow:visible;z-index:0;pointer-events:none}
+.s2 .wire{fill:none;stroke:var(--line-strong);stroke-width:1.5}
+.s2 .wire.lit{stroke:url(#s2g)}
+.s2 .tok{fill:var(--aqua);filter:drop-shadow(0 0 6px rgba(110,224,210,.9))}
+
+/* S3 terminal strip: the command sits in a small pill, a cursor marks the active step */
+.s3 .step{padding-top:0}
+.s3 .pill{display:inline-flex;align-items:center;gap:0;height:30px;padding:0 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg-raised);font:400 13px/1 var(--mono);color:var(--muted);transition:color 160ms var(--ease),border-color 160ms var(--ease)}
+.s3 .pill .p{color:var(--subtle);margin-right:.6ch}
+.s3 .pill .cur{display:inline-block;width:7px;height:14px;margin-left:3px;background:var(--accent);opacity:0;transition:opacity 160ms var(--ease)}
+.s3 .step.on .pill{color:var(--text);border-color:var(--accent-border)}
+.s3 .step.on .pill .cur{opacity:1;animation:blink 1s steps(2,start) infinite}
+.s3 .step:hover .pill{color:var(--text);border-color:var(--line-strong)}
+.s3 .step h3{margin-top:16px}
+.s3 .step h3 code{display:none}
+@keyframes blink{50%{opacity:0}}
+
+/* S4 timeline ladder: steps stacked beside the stage, dots on a vertical rule */
+.s4 .ladder{grid-column:2 / 6;margin-top:56px;position:relative;padding-left:28px;align-self:start}
+.s4 .ladder::before{content:"";position:absolute;left:6px;top:10px;bottom:10px;width:1px;background:var(--line)}
+.s4 .fill{position:absolute;left:6px;top:10px;width:1px;height:0;background:var(--grad);transition:height 420ms var(--ease)}
+.s4 .step{position:relative;padding:0 0 36px}
+.s4 .step:last-child{padding-bottom:0}
+.s4 .dot{position:absolute;left:-28px;top:6px;width:13px;height:13px;border-radius:50%;border:1.5px solid var(--line-strong);background:var(--bg);transition:border-color 220ms var(--ease),background 220ms var(--ease)}
+.s4 .step.done .dot{border-color:var(--accent-border)}
+.s4 .step.on .dot{background:var(--grad);border-color:transparent}
+.s4 .step:hover .dot{border-color:var(--accent)}
+.s4 .stagebox{grid-column:6 / 13;margin-top:56px;height:auto;min-height:240px}
+
+/* the runtime grid, copied from v7 */
+.controls{grid-column:2 / 12;margin-top:56px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:1px solid var(--line);border-left:1px solid var(--line)}
+.ctl{position:relative;padding:24px 24px 26px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+.ctl svg{width:44px;height:28px;display:block;margin-bottom:18px;overflow:visible;position:relative;z-index:1}
+.ctl h3{margin:0 0 6px;position:relative;z-index:1}
+.ctl p{font-size:14px;line-height:1.55;color:var(--muted);position:relative;z-index:1}
+.ctl code{white-space:nowrap}
+.ctl svg .s{stroke:var(--line-strong);stroke-width:1.5;fill:none}
+.ctl svg .a{stroke:var(--accent);stroke-width:1.5;fill:none;transition:stroke 200ms var(--ease)}
+.ctl svg .d{fill:var(--accent);transition:fill 200ms var(--ease)}
+.ctl svg .g{fill:var(--ok)}
+.ctl svg .w{stroke:var(--wait);stroke-width:1.5;fill:none}
+/* the square's own border is shared with its neighbours, so a hover ring sits on a pseudo element over all four edges */
+.ctl::after{content:"";position:absolute;inset:-1px 0 0 -1px;pointer-events:none;transition:box-shadow 200ms var(--ease),opacity 200ms var(--ease)}
+
+/* G1 pointer spotlight: a radial wash at the pointer, ring to accent-border */
+.g1 .ctl::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity 200ms var(--ease);
+  background:radial-gradient(220px circle at var(--mx,50%) var(--my,50%),rgba(143,168,255,.10),transparent 70%)}
+.g1 .ctl:hover::before{opacity:1}
+.g1 .ctl:hover::after{box-shadow:inset 0 0 0 1px var(--accent-border)}
+.g1 .ctl:hover{z-index:2}
+
+/* G2 border glow: a masked gradient ring and a soft outer halo, icon strokes to white */
+.g2 .ctl::after{padding:1px;background:var(--grad);opacity:0;
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude}
+.g2 .ctl::before{content:"";position:absolute;inset:-1px 0 0 -1px;pointer-events:none;opacity:0;box-shadow:0 0 12px rgba(143,168,255,.22);transition:opacity 200ms var(--ease)}
+.g2 .ctl:hover{z-index:2}
+.g2 .ctl:hover::after,.g2 .ctl:hover::before{opacity:1}
+.g2 .ctl:hover svg .a{stroke:#fff}
+.g2 .ctl:hover svg .d{fill:#fff}
+
+/* G3 fill lift: the square rises, and each icon plays its own small move once per hover */
+.g3 .ctl{transition:background 200ms var(--ease),transform 200ms var(--ease)}
+.g3 .ctl:hover{background:var(--surface-hover);transform:translateY(-2px);z-index:2}
+.g3 .ctl:hover::after{box-shadow:inset 0 0 0 1px var(--line-strong)}
+.g3 .ctl svg *{transform-box:fill-box;transform-origin:center}
+.g3 .ctl:hover [data-fx="slide"]{animation:fx-slide 700ms var(--ease) 1 both}
+.g3 .ctl:hover [data-fx="join"]{animation:fx-pop 600ms var(--ease) 1 both}
+.g3 .ctl:hover [data-fx="draw"]{stroke-dasharray:var(--len);animation:fx-draw 700ms var(--ease) 1 both}
+.g3 .ctl:hover [data-fx="pulse"]{animation:fx-pulse 800ms var(--ease) 1 both}
+.g3 .ctl:hover [data-fx="bar-l"]{animation:fx-bar-l 500ms var(--ease) 1 both}
+.g3 .ctl:hover [data-fx="bar-r"]{animation:fx-bar-r 500ms var(--ease) 1 both}
+.g3 .ctl:hover [data-fx="fork"]{animation:fx-fork 700ms var(--ease) 1 both}
+.g3 .ctl:hover [data-fx="hand"]{animation:fx-hand 900ms var(--ease) 1 both}
+/* the branching dot follows the upper edge: M14 14 c8 0 8-10 16-10 h12 */
+@keyframes fx-slide{0%{transform:translate(0,0)}35%{transform:translate(8px,-2px)}65%{transform:translate(16px,-10px)}100%{transform:translate(28px,-10px)}}
+@keyframes fx-pop{0%{transform:scale(1)}40%{transform:scale(1.5)}100%{transform:scale(1)}}
+@keyframes fx-draw{0%{stroke-dashoffset:var(--len)}100%{stroke-dashoffset:0}}
+@keyframes fx-pulse{0%{transform:scale(1);opacity:1}50%{transform:scale(1.3);opacity:.6}100%{transform:scale(1);opacity:1}}
+@keyframes fx-bar-l{50%{transform:translateX(-3px)}}
+@keyframes fx-bar-r{50%{transform:translateX(3px)}}
+/* the checkpoint dot climbs the fork: M18 18 c6 0 6-12 12-12 h12 */
+@keyframes fx-fork{0%{transform:translate(0,0)}40%{transform:translate(6px,-3px)}70%{transform:translate(12px,-12px)}100%{transform:translate(24px,-12px)}}
+@keyframes fx-hand{0%{transform:rotate(0)}100%{transform:rotate(360deg)}}
+
+/* G4 neighbour aware: inner glow on the hovered square, the squares next to it drop to 70% */
+.g4 .ctl{transition:opacity 220ms var(--ease)}
+.g4 .ctl:hover::after{box-shadow:inset 0 0 0 1px var(--accent-border),inset 0 0 28px rgba(143,168,255,.10)}
+.g4 .ctl.dim{opacity:.7}
+
+@media (max-width:1100px){
+  .controls{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .s4 .ladder{grid-column:2 / 7}
+  .s4 .stagebox{grid-column:7 / 13}
+}
+@media (max-width:760px){
+  :root{--pad:20px}
+  .grid{display:block}
+  .steps{margin-top:40px;grid-template-columns:1fr;gap:20px}
+  .controls{margin-top:40px;grid-template-columns:1fr}
+  .s2 .wire-svg{display:none}
+  .s4 .stagebox{margin-top:32px}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="s2g" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1000" y2="0"><stop offset="0" stop-color="#8FA8FF"/><stop offset="1" stop-color="#6EE0D2"/></linearGradient>
+  </defs>
+</svg>
+
+<header class="intro">
+  <div class="wrap">
+    <h1>Section variants</h1>
+    <p>Part A tries four treatments for the how-it-works row. Part B tries four hover treatments for the runtime grid. Labels in each corner name the variant.</p>
+  </div>
+</header>
+
+<div class="part"><div class="wrap"><h2>Part A. The steps row</h2><p>Copy from v7. The stage is a placeholder.</p></div></div>
+
+<!-- S1 -->
+<section id="s" class="blk s1" data-cycle="8">
+  <span class="lab"><b>S1</b> Numbered rails</span>
+  <div class="wrap grid">
+    <h2>A session goes in. A graph comes out.</h2>
+    <p class="sub">Loopy keeps the shape of what you did and drops the rest.</p>
+    <ol class="steps">
+      <li class="step"><span class="rail"><i></i></span><div class="num"><span>01</span><svg viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></div><h3>Capture <code>loopy import</code></h3><p>Do the task once in Codex, Claude Code, OpenCode or Pi. Loopy records the session as a trace.</p></li>
+      <li class="step"><span class="rail"><i></i></span><div class="num"><span>02</span><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1.5 12.5 7 7 12.5 1.5 7Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></div><h3>Extract <code>loopy extract</code></h3><p>A deterministic extractor proposes a graph, no model calls. Every node points back to its trace events.</p></li>
+      <li class="step"><span class="rail"><i></i></span><div class="num"><span>03</span><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M3.5 2.2v9.6L11.5 7Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></div><h3>Run <code>loopy run</code></h3><p>The graph runs on your machine through the same CLIs. Loopy owns the order, the checks and the approvals.</p></li>
+    </ol>
+    <div class="stagebox">stage</div>
+  </div>
+</section>
+
+<!-- S2 -->
+<section class="blk s2" data-cycle="8">
+  <span class="lab"><b>S2</b> Connected cards</span>
+  <div class="wrap grid">
+    <h2>A session goes in. A graph comes out.</h2>
+    <p class="sub">Loopy keeps the shape of what you did and drops the rest.</p>
+    <ol class="steps" id="s2steps">
+      <svg class="wire-svg" aria-hidden="true"><path class="wire" id="s2wire"/><path class="wire lit" id="s2lit"/><circle class="tok" id="s2tok" r="4.5"/></svg>
+      <li class="step"><h3>Capture <code>loopy import</code></h3><p>Do the task once in Codex, Claude Code, OpenCode or Pi. Loopy records the session as a trace.</p></li>
+      <li class="step"><h3>Extract <code>loopy extract</code></h3><p>A deterministic extractor proposes a graph, no model calls. Every node points back to its trace events.</p></li>
+      <li class="step"><h3>Run <code>loopy run</code></h3><p>The graph runs on your machine through the same CLIs. Loopy owns the order, the checks and the approvals.</p></li>
+    </ol>
+    <div class="stagebox">stage</div>
+  </div>
+</section>
+
+<!-- S3 -->
+<section class="blk s3" data-cycle="9">
+  <span class="lab"><b>S3</b> Terminal strip</span>
+  <div class="wrap grid">
+    <h2>A session goes in. A graph comes out.</h2>
+    <p class="sub">Loopy keeps the shape of what you did and drops the rest.</p>
+    <ol class="steps">
+      <li class="step"><span class="pill"><span class="p">$</span>loopy import<span class="cur"></span></span><h3>Capture <code>loopy import</code></h3><p>Do the task once in Codex, Claude Code, OpenCode or Pi. Loopy records the session as a trace.</p></li>
+      <li class="step"><span class="pill"><span class="p">$</span>loopy extract<span class="cur"></span></span><h3>Extract <code>loopy extract</code></h3><p>A deterministic extractor proposes a graph, no model calls. Every node points back to its trace events.</p></li>
+      <li class="step"><span class="pill"><span class="p">$</span>loopy run<span class="cur"></span></span><h3>Run <code>loopy run</code></h3><p>The graph runs on your machine through the same CLIs. Loopy owns the order, the checks and the approvals.</p></li>
+    </ol>
+    <div class="stagebox">stage</div>
+  </div>
+</section>
+
+<!-- S4 -->
+<section class="blk s4" data-cycle="8">
+  <span class="lab"><b>S4</b> Timeline ladder</span>
+  <div class="wrap grid">
+    <h2>A session goes in. A graph comes out.</h2>
+    <p class="sub">Loopy keeps the shape of what you did and drops the rest.</p>
+    <ol class="ladder" id="s4ladder">
+      <span class="fill" id="s4fill"></span>
+      <li class="step"><span class="dot"></span><h3>Capture <code>loopy import</code></h3><p>Do the task once in Codex, Claude Code, OpenCode or Pi. Loopy records the session as a trace.</p></li>
+      <li class="step"><span class="dot"></span><h3>Extract <code>loopy extract</code></h3><p>A deterministic extractor proposes a graph, no model calls. Every node points back to its trace events.</p></li>
+      <li class="step"><span class="dot"></span><h3>Run <code>loopy run</code></h3><p>The graph runs on your machine through the same CLIs. Loopy owns the order, the checks and the approvals.</p></li>
+    </ol>
+    <div class="stagebox">stage</div>
+  </div>
+</section>
+
+<div class="part"><div class="wrap"><h2>Part B. The runtime grid</h2><p>Markup and icons from v7. Hover a square.</p></div></div>
+
+<!-- G1 -->
+<section id="g" class="blk g1">
+  <span class="lab"><b>G1</b> Pointer spotlight</span>
+  <div class="wrap grid">
+    <h2>The agent does the work. The graph decides what happens next.</h2>
+    <p class="sub">Inside a node the agent loops as long as it needs. Between nodes, Loopy runs plain rules you can read.</p>
+    <div class="controls">
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="s" d="M2 14h12"/><path class="a" d="M14 14c8 0 8-10 16-10h12"/><path class="s" d="M14 14c8 0 8 10 16 10h12"/><circle class="d" cx="14" cy="14" r="3"/></svg><h3>Branching</h3><p>Conditions route the run down one edge or another.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="a" d="M2 4h12c8 0 8 10 16 10h12"/><path class="a" d="M2 24h12c8 0 8-10 16-10"/><circle class="d" cx="30" cy="14" r="3"/></svg><h3>Parallel joins</h3><p>Fan out to several nodes and wait for all of them.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="s" d="M4 14h36"/><path class="a" d="M14 14c0-10 16-10 16 0"/><circle cx="14" cy="14" r="3" fill="#F2877E"/><circle class="g" cx="30" cy="14" r="3"/></svg><h3>Retries</h3><p>Failed nodes retry within your limits, then stop with the error on record.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="s" d="M2 14h14M28 14h14"/><circle class="w" cx="22" cy="14" r="6"/></svg><h3>Approvals</h3><p>The run waits until a person says yes.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="s" d="M2 14h40"/><rect class="d" x="16" y="7" width="3" height="14" rx="1"/><rect class="d" x="24" y="7" width="3" height="14" rx="1"/></svg><h3>Pause, resume, cancel</h3><p>Stop a run between nodes and pick it up later.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="s" d="M2 20h40"/><path class="a" d="M8 20c0-12 14-12 14-4"/><path class="a" d="m19 13 3 3 3-3"/></svg><h3>Replay</h3><p>Run a finished graph again from its recorded inputs.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="s" d="M2 18h40"/><path class="a" d="M18 18c6 0 6-12 12-12h12"/><circle class="d" cx="18" cy="18" r="3"/></svg><h3>Checkpoint forks</h3><p>Branch a new run from any checkpoint.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><circle class="s" cx="22" cy="14" r="11"/><path class="a" d="M22 14V7M22 14l5 3"/></svg><h3>Schedules</h3><p>Put a loopy on cron. <code>0 9 * * *</code> runs it every morning.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- G2 -->
+<section class="blk g2">
+  <span class="lab"><b>G2</b> Border glow</span>
+  <div class="wrap grid">
+    <h2>The agent does the work. The graph decides what happens next.</h2>
+    <p class="sub">Inside a node the agent loops as long as it needs. Between nodes, Loopy runs plain rules you can read.</p>
+    <div class="controls">
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="s" d="M2 14h12"/><path class="a" d="M14 14c8 0 8-10 16-10h12"/><path class="s" d="M14 14c8 0 8 10 16 10h12"/><circle class="d" cx="14" cy="14" r="3"/></svg><h3>Branching</h3><p>Conditions route the run down one edge or another.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="a" d="M2 4h12c8 0 8 10 16 10h12"/><path class="a" d="M2 24h12c8 0 8-10 16-10"/><circle class="d" cx="30" cy="14" r="3"/></svg><h3>Parallel joins</h3><p>Fan out to several nodes and wait for all of them.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="s" d="M4 14h36"/><path class="a" d="M14 14c0-10 16-10 16 0"/><circle cx="14" cy="14" r="3" fill="#F2877E"/><circle class="g" cx="30" cy="14" r="3"/></svg><h3>Retries</h3><p>Failed nodes retry within your limits, then stop with the error on record.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="s" d="M2 14h14M28 14h14"/><circle class="w" cx="22" cy="14" r="6"/></svg><h3>Approvals</h3><p>The run waits until a person says yes.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="s" d="M2 14h40"/><rect class="d" x="16" y="7" width="3" height="14" rx="1"/><rect class="d" x="24" y="7" width="3" height="14" rx="1"/></svg><h3>Pause, resume, cancel</h3><p>Stop a run between nodes and pick it up later.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="s" d="M2 20h40"/><path class="a" d="M8 20c0-12 14-12 14-4"/><path class="a" d="m19 13 3 3 3-3"/></svg><h3>Replay</h3><p>Run a finished graph again from its recorded inputs.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="s" d="M2 18h40"/><path class="a" d="M18 18c6 0 6-12 12-12h12"/><circle class="d" cx="18" cy="18" r="3"/></svg><h3>Checkpoint forks</h3><p>Branch a new run from any checkpoint.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><circle class="s" cx="22" cy="14" r="11"/><path class="a" d="M22 14V7M22 14l5 3"/></svg><h3>Schedules</h3><p>Put a loopy on cron. <code>0 9 * * *</code> runs it every morning.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- G3: same markup, plus data-fx hooks on the parts that move -->
+<section class="blk g3">
+  <span class="lab"><b>G3</b> Fill lift</span>
+  <div class="wrap grid">
+    <h2>The agent does the work. The graph decides what happens next.</h2>
+    <p class="sub">Inside a node the agent loops as long as it needs. Between nodes, Loopy runs plain rules you can read.</p>
+    <div class="controls">
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="s" d="M2 14h12"/><path class="a" d="M14 14c8 0 8-10 16-10h12"/><path class="s" d="M14 14c8 0 8 10 16 10h12"/><circle class="d" cx="14" cy="14" r="3" data-fx="slide"/></svg><h3>Branching</h3><p>Conditions route the run down one edge or another.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="a" d="M2 4h12c8 0 8 10 16 10h12"/><path class="a" d="M2 24h12c8 0 8-10 16-10"/><circle class="d" cx="30" cy="14" r="3" data-fx="join"/></svg><h3>Parallel joins</h3><p>Fan out to several nodes and wait for all of them.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="s" d="M4 14h36"/><path class="a" d="M14 14c0-10 16-10 16 0" data-fx="draw"/><circle cx="14" cy="14" r="3" fill="#F2877E"/><circle class="g" cx="30" cy="14" r="3"/></svg><h3>Retries</h3><p>Failed nodes retry within your limits, then stop with the error on record.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="s" d="M2 14h14M28 14h14"/><circle class="w" cx="22" cy="14" r="6" data-fx="pulse"/></svg><h3>Approvals</h3><p>The run waits until a person says yes.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="s" d="M2 14h40"/><rect class="d" x="16" y="7" width="3" height="14" rx="1" data-fx="bar-l"/><rect class="d" x="24" y="7" width="3" height="14" rx="1" data-fx="bar-r"/></svg><h3>Pause, resume, cancel</h3><p>Stop a run between nodes and pick it up later.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="s" d="M2 20h40"/><path class="a" d="M8 20c0-12 14-12 14-4" data-fx="draw"/><path class="a" d="m19 13 3 3 3-3"/></svg><h3>Replay</h3><p>Run a finished graph again from its recorded inputs.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="s" d="M2 18h40"/><path class="a" d="M18 18c6 0 6-12 12-12h12"/><circle class="d" cx="18" cy="18" r="3" data-fx="fork"/></svg><h3>Checkpoint forks</h3><p>Branch a new run from any checkpoint.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><circle class="s" cx="22" cy="14" r="11"/><path class="a" d="M22 14V7M22 14l5 3" data-fx="hand" style="transform-origin:22px 14px;transform-box:view-box"/></svg><h3>Schedules</h3><p>Put a loopy on cron. <code>0 9 * * *</code> runs it every morning.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- G4 -->
+<section class="blk g4">
+  <span class="lab"><b>G4</b> Neighbour aware</span>
+  <div class="wrap grid">
+    <h2>The agent does the work. The graph decides what happens next.</h2>
+    <p class="sub">Inside a node the agent loops as long as it needs. Between nodes, Loopy runs plain rules you can read.</p>
+    <div class="controls" id="g4grid">
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="s" d="M2 14h12"/><path class="a" d="M14 14c8 0 8-10 16-10h12"/><path class="s" d="M14 14c8 0 8 10 16 10h12"/><circle class="d" cx="14" cy="14" r="3"/></svg><h3>Branching</h3><p>Conditions route the run down one edge or another.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="a" d="M2 4h12c8 0 8 10 16 10h12"/><path class="a" d="M2 24h12c8 0 8-10 16-10"/><circle class="d" cx="30" cy="14" r="3"/></svg><h3>Parallel joins</h3><p>Fan out to several nodes and wait for all of them.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="s" d="M4 14h36"/><path class="a" d="M14 14c0-10 16-10 16 0"/><circle cx="14" cy="14" r="3" fill="#F2877E"/><circle class="g" cx="30" cy="14" r="3"/></svg><h3>Retries</h3><p>Failed nodes retry within your limits, then stop with the error on record.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="s" d="M2 14h14M28 14h14"/><circle class="w" cx="22" cy="14" r="6"/></svg><h3>Approvals</h3><p>The run waits until a person says yes.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="s" d="M2 14h40"/><rect class="d" x="16" y="7" width="3" height="14" rx="1"/><rect class="d" x="24" y="7" width="3" height="14" rx="1"/></svg><h3>Pause, resume, cancel</h3><p>Stop a run between nodes and pick it up later.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="s" d="M2 20h40"/><path class="a" d="M8 20c0-12 14-12 14-4"/><path class="a" d="m19 13 3 3 3-3"/></svg><h3>Replay</h3><p>Run a finished graph again from its recorded inputs.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><path class="s" d="M2 18h40"/><path class="a" d="M18 18c6 0 6-12 12-12h12"/><circle class="d" cx="18" cy="18" r="3"/></svg><h3>Checkpoint forks</h3><p>Branch a new run from any checkpoint.</p></div>
+      <div class="ctl"><svg viewBox="0 0 44 28"><circle class="s" cx="22" cy="14" r="11"/><path class="a" d="M22 14V7M22 14l5 3"/></svg><h3>Schedules</h3><p>Put a loopy on cron. <code>0 9 * * *</code> runs it every morning.</p></div>
+    </div>
+  </div>
+</section>
+
+<script>
+(() => {
+  'use strict';
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const ss = (a, b, v) => { const t = clamp((v - a) / (b - a)); return t * t * (3 - 2 * t); };
+
+  // ---------- Part A: one clock, each block reads its own cycle length ----------
+  const s1 = $$('.s1 .step'), s1rails = $$('.s1 .rail i');
+  const s2 = $$('.s2 .step'), s2steps = $('#s2steps'), s2wire = $('#s2wire'), s2lit = $('#s2lit'), s2tok = $('#s2tok');
+  const s3 = $$('.s3 .step');
+  const s4 = $$('.s4 .step'), s4fill = $('#s4fill'), s4ladder = $('#s4ladder');
+
+  // S1: rail i fills during the first 40% of its phase and stays lit; everything fades out at the end of the cycle
+  function frameS1(t) {
+    const P = 8 / 3, cur = Math.min(2, Math.floor(t / P));
+    const out = 1 - ss(7.6, 8, t);
+    s1rails.forEach((r, i) => { r.style.setProperty('--k', (ss(i * P, i * P + P * .4, t) * out).toFixed(3)); });
+    s1.forEach((s, i) => s.classList.toggle('on', i === cur));
+  }
+
+  // S2: the bead parks 7px before each card's left edge, then crosses to the next card in 0.45s.
+  // The wire runs behind the cards, so the bead is out of sight while it is "inside" one.
+  let s2geo = null;
+  function layoutS2() {
+    const box = s2steps.getBoundingClientRect();
+    const stops = s2.map(s => { const r = s.getBoundingClientRect(); return r.left - box.left - 7; });
+    const y = s2[0].getBoundingClientRect().height / 2;
+    const x0 = -48, x1 = box.width + 48;
+    s2wire.setAttribute('d', `M${x0} ${y}H${x1}`); s2lit.setAttribute('d', `M${x0} ${y}H${x1}`);
+    const len = x1 - x0;
+    s2lit.style.strokeDasharray = len;
+    $('#s2g').setAttribute('x2', box.width);
+    s2tok.setAttribute('cy', y);
+    s2geo = { stops, x0, len };
+  }
+  function frameS2(t) {
+    if (!s2geo) layoutS2();
+    const { stops, x0, len } = s2geo;
+    const P = 8 / 3, seg = [[0, .3, x0, stops[0]], [P - .45, P, stops[0], stops[1]], [2 * P - .45, 2 * P, stops[1], stops[2]]];
+    let x = stops[2], cur = 2;
+    for (let i = 0; i < 3; i++) {
+      const [a, b, from, to] = seg[i];
+      if (t < a) { x = from; cur = i - 1; break; }
+      if (t < b) { x = from + (to - from) * ss(a, b, t); cur = i - 1; break; }
+      x = to; cur = i;
+    }
+    if (t < .3) cur = 0;
+    const out = 1 - ss(7.6, 8, t);
+    s2tok.setAttribute('cx', x); s2tok.style.opacity = out;
+    s2lit.style.strokeDashoffset = len - (x - x0);
+    s2lit.style.opacity = out;
+    s2.forEach((s, i) => s.classList.toggle('on', i === cur && out > .5));
+  }
+
+  // S3: three second holds
+  function frameS3(t) {
+    const cur = Math.min(2, Math.floor(t / 3));
+    s3.forEach((s, i) => s.classList.toggle('on', i === cur));
+  }
+
+  // S4: the dot fills, and the rule behind it fills down to the active dot
+  function frameS4(t) {
+    const cur = Math.min(2, Math.floor(t / (8 / 3)));
+    s4.forEach((s, i) => { s.classList.toggle('on', i === cur); s.classList.toggle('done', i < cur); });
+    const dot = $('.dot', s4[cur]);
+    const top = dot.getBoundingClientRect().top - s4ladder.getBoundingClientRect().top + 6.5;
+    s4fill.style.height = Math.max(0, top - 10) + 'px';
+  }
+
+  const blocks = [[$('.s1'), 8, frameS1], [$('.s2'), 8, frameS2], [$('.s3'), 9, frameS3], [$('.s4'), 8, frameS4]];
+  if (reduce) {
+    // no clock: show the row as it looks on the last phase
+    frameS1(7); frameS2(7); frameS3(8); frameS4(7);
+  } else {
+    const t0 = performance.now();
+    const tick = now => {
+      const el = (now - t0) / 1000;
+      for (const [, cycle, fn] of blocks) fn(el % cycle);
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+  addEventListener('resize', () => { s2geo = null; });
+
+  // ---------- Part B ----------
+  // G1: the spotlight centre follows the pointer, as a pair of vars on the square
+  $$('.g1 .ctl').forEach(c => c.addEventListener('pointermove', e => {
+    const r = c.getBoundingClientRect();
+    c.style.setProperty('--mx', (e.clientX - r.left) + 'px');
+    c.style.setProperty('--my', (e.clientY - r.top) + 'px');
+  }));
+
+  // G3: the arcs that redraw need their own length
+  $$('.g3 [data-fx="draw"]').forEach(p => p.style.setProperty('--len', p.getTotalLength().toFixed(1)));
+
+  // G4: dim the squares that share an edge with the hovered one. Column count comes from the live grid.
+  const g4 = $('#g4grid'), g4cells = $$('.ctl', g4);
+  const cols = () => getComputedStyle(g4).gridTemplateColumns.split(' ').length;
+  g4cells.forEach((c, i) => {
+    c.addEventListener('pointerenter', () => {
+      const n = cols(), row = Math.floor(i / n), col = i % n;
+      g4cells.forEach((o, j) => {
+        const r = Math.floor(j / n), k = j % n;
+        const adj = (r === row && Math.abs(k - col) === 1) || (k === col && Math.abs(r - row) === 1);
+        o.classList.toggle('dim', adj);
+      });
+    });
+    c.addEventListener('pointerleave', () => g4cells.forEach(o => o.classList.remove('dim')));
+  });
+})();
+</script>
+</body>
+</html>

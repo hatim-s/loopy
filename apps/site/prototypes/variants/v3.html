@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loopy. Do the work once, run it with control.</title>
+<meta name="description" content="Loopy is a local-first graph harness for coding agents. Do a task once, extract an execution graph from the trace, run it on your machine.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0D1014;--bg-raised:#11151A;--surface:#161B21;--surface-hover:#1C2229;--surface-active:#232A33;
+  --line:#222931;--line-strong:#323B46;--text:#E6EAF0;--text-muted:#98A2AE;--text-subtle:#6A7480;
+  --accent:#8FA8FF;--accent-strong:#B7C6FF;--accent-ink:#0B1330;--aqua:#6EE0D2;
+  --ok:#5CD39B;--run:#8FA8FF;--wait:#F0C46C;--fail:#F2877E;--pend:#6A7480;
+  --accent-soft:rgba(143,168,255,.12);--accent-border:rgba(143,168,255,.35);
+  --ease:cubic-bezier(.2,.8,.2,1);
+  --focus:0 0 0 2px #0D1014,0 0 0 4px #8FA8FF;
+  --sans:"Geist",ui-sans-serif,system-ui,sans-serif;
+  --mono:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --cell:24px;
+}
+*{box-sizing:border-box}
+body{margin:0;color:var(--text);font:400 15px/1.55 var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden;
+  background-color:var(--bg);
+  background-image:linear-gradient(rgba(34,41,49,.55) 1px,transparent 1px),linear-gradient(90deg,rgba(34,41,49,.55) 1px,transparent 1px);
+  background-size:var(--cell) var(--cell)}
+a{color:inherit;text-decoration:none}
+a:focus-visible,button:focus-visible{outline:none;box-shadow:var(--focus);border-radius:6px}
+code,.mono{font-family:var(--mono)}
+.frame{max-width:1320px;margin:0 auto;border-left:1px solid var(--line-strong);border-right:1px solid var(--line-strong);background:rgba(13,16,20,.72)}
+.skip{position:absolute;left:-9999px}.skip:focus{left:16px;top:16px;z-index:100;background:var(--surface);padding:8px 12px}
+
+/* nav */
+.nav{position:sticky;top:0;z-index:40;background:rgba(13,16,20,.92);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line-strong)}
+.nav-in{max-width:1320px;margin:0 auto;display:grid;grid-template-columns:auto 1fr auto;align-items:stretch;height:48px;border-left:1px solid var(--line-strong);border-right:1px solid var(--line-strong)}
+.mark{display:flex;align-items:center;gap:10px;padding:0 20px;font-weight:600;font-size:16px;letter-spacing:-.02em;border-right:1px solid var(--line-strong)}
+.path{display:flex;align-items:center;padding:0 16px;font:400 12px var(--mono);color:var(--text-subtle);overflow:hidden;white-space:nowrap}
+.nav-links{display:flex;align-items:stretch}
+.nav-links a{display:flex;align-items:center;padding:0 18px;font-size:13px;color:var(--text-muted);border-left:1px solid var(--line-strong);transition:color 160ms var(--ease),background 160ms var(--ease)}
+.nav-links a:hover{color:var(--text);background:var(--surface)}
+.nav-links a.install-link{color:var(--accent-ink);background:var(--accent);font-weight:500}
+.nav-links a.install-link:hover{background:var(--accent-strong)}
+@media (max-width:760px){.path,.nav-links .hide-sm{display:none}}
+
+/* hero */
+.hero{position:relative;height:calc(100vh - 48px);min-height:640px;max-height:980px;border-bottom:1px solid var(--line-strong);overflow:hidden}
+.hero canvas{position:absolute;inset:0;width:100%;height:100%}
+.labels{position:absolute;inset:0;pointer-events:none}
+.nlabel{position:absolute;font:400 11px/1.35 var(--mono);color:var(--text-muted);opacity:0;transition:opacity 500ms var(--ease);white-space:nowrap}
+.nlabel b{display:block;font:500 13px var(--sans);color:var(--text)}
+.nlabel.on{opacity:1}
+.nlabel .ev{color:var(--accent)}
+.hud{position:absolute;right:20px;bottom:20px;border:1px solid var(--line-strong);background:rgba(13,16,20,.85);font:400 12px/1.9 var(--mono);color:var(--text-muted);padding:10px 14px;min-width:230px}
+.hud div{display:flex;justify-content:space-between;gap:24px}
+.hud span:last-child{color:var(--text)}
+.hud .phase{color:var(--aqua)}
+.hero-copy{position:absolute;left:0;bottom:0;padding:32px 32px 36px;max-width:640px;background:linear-gradient(90deg,rgba(13,16,20,.94),rgba(13,16,20,.82) 75%,rgba(13,16,20,0));border-top:1px solid var(--line-strong)}
+h1{font-size:clamp(38px,4.8vw,64px);line-height:1.02;letter-spacing:-.035em;font-weight:600;margin:0}
+.lede{font-size:16px;color:var(--text-muted);margin:18px 0 24px;max-width:34em}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.cmd{display:inline-flex;align-items:center;gap:12px;height:40px;padding:0 4px 0 14px;border:1px solid var(--line-strong);background:var(--bg);font:400 13px var(--mono)}
+.cmd .p{color:var(--accent)}
+.cmd button{height:30px;padding:0 10px;border:1px solid var(--line-strong);border-radius:0;background:var(--surface);color:var(--text-muted);font:500 12px var(--sans);cursor:pointer}
+.cmd button:hover{color:var(--text)}
+.cmd button[data-copied]{color:var(--ok)}
+.btn{display:inline-flex;align-items:center;height:40px;padding:0 14px;border:1px solid var(--line-strong);font:500 13px var(--sans);color:var(--text-muted);background:var(--bg);cursor:pointer}
+.btn:hover{color:var(--text);background:var(--surface)}
+.hint{position:absolute;right:20px;top:16px;font:400 11px var(--mono);color:var(--text-subtle)}
+@media (max-width:760px){
+  .hero{height:auto;min-height:0;max-height:none;display:flex;flex-direction:column}
+  .hero canvas,.labels{position:absolute;inset:0 0 auto 0;height:440px}
+  .hud{display:none}
+  .hint{display:none}
+  .hero-copy{position:relative;margin-top:440px;padding:24px 20px 28px;border-right:0;background:var(--bg)}
+}
+
+/* sheet sections */
+.sec{border-bottom:1px solid var(--line-strong)}
+.sec-head{display:grid;grid-template-columns:200px 1fr;border-bottom:1px solid var(--line)}
+.sec-head .idx{padding:28px 20px;border-right:1px solid var(--line);font:400 12px var(--mono);color:var(--text-subtle)}
+.sec-head .idx b{display:block;color:var(--accent);font-weight:500}
+.sec-head .tt{padding:28px 32px}
+h2{font-size:clamp(28px,3.4vw,44px);line-height:1.05;letter-spacing:-.035em;font-weight:600;margin:0 0 10px;max-width:20em}
+.sub{color:var(--text-muted);margin:0;max-width:44em;font-size:16px}
+@media (max-width:760px){.sec-head{grid-template-columns:1fr}.sec-head .idx{border-right:0;border-bottom:1px solid var(--line);padding:14px 20px}.sec-head .tt{padding:24px 20px}}
+
+/* spec table */
+.spec{width:100%;border-collapse:collapse;font-size:14px}
+.spec th,.spec td{border-bottom:1px solid var(--line);border-right:1px solid var(--line);padding:14px 20px;text-align:left;vertical-align:top}
+.spec th{font-weight:500;color:var(--text-subtle);width:200px;font-size:13px}
+.spec thead th{color:var(--text);font-size:20px;font-weight:600;letter-spacing:-.02em;width:auto;padding:22px 20px}
+.spec thead th:first-child{color:var(--text-subtle);font-size:13px;font-weight:500}
+.spec thead th small{display:block;font:400 12px var(--mono);color:var(--accent);letter-spacing:0;margin-top:4px}
+.spec td:last-child,.spec th:last-child{border-right:0}
+.spec tr:last-child td,.spec tr:last-child th{border-bottom:0}
+.spec td{color:var(--text-muted)}
+.spec code{color:var(--text);font-size:13px}
+.spec .none{color:var(--ok)}
+.spec-wrap{overflow-x:auto}
+@media (max-width:760px){.spec{min-width:720px}}
+
+/* state machine */
+.sm{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)}
+.sm-fig{border-right:1px solid var(--line);padding:24px;position:relative}
+.sm-fig svg{width:100%;height:auto;display:block;overflow:visible}
+.sm-fig .st rect{fill:var(--bg);stroke:var(--line-strong)}
+.sm-fig .st text{font:500 13px var(--sans);fill:var(--text-muted)}
+.sm-fig .st.on rect{stroke:var(--accent)}
+.sm-fig .st.on text{fill:var(--text)}
+.sm-fig .tr{fill:none;stroke:var(--line-strong);stroke-width:1.2;marker-end:url(#arr)}
+.sm-fig .tr.on{stroke:var(--accent)}
+.sm-fig .tl{font:400 11px var(--mono);fill:var(--text-subtle)}
+.sm-fig .tok{fill:var(--aqua)}
+.sm-log{margin:0;padding:20px 24px;list-style:none;font:400 12.5px/2 var(--mono);color:var(--text-muted);display:flex;flex-direction:column;justify-content:flex-end;min-height:100%}
+.sm-log li{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-bottom:1px dashed var(--line)}
+.sm-log .t{color:var(--text-subtle);margin-right:12px}
+.sm-log .c{color:var(--accent)}
+.ctl-grid{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line)}
+.ctl-grid div{padding:16px 20px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+.ctl-grid div:nth-child(4n){border-right:0}
+.ctl-grid b{display:block;font-weight:500;font-size:14px}
+.ctl-grid span{font-size:13px;color:var(--text-muted)}
+@media (max-width:900px){.sm{grid-template-columns:minmax(0,1fr)}.sm-fig{border-right:0;border-bottom:1px solid var(--line)}.sm-log{min-height:0;height:220px}.ctl-grid{grid-template-columns:1fr 1fr}.ctl-grid div:nth-child(2n){border-right:0}}
+
+/* providers + local */
+.two{display:grid;grid-template-columns:1fr 1fr}
+.two>div{padding:28px 32px}
+.two>div+div{border-left:1px solid var(--line-strong)}
+.two h3{font-size:22px;letter-spacing:-.02em;margin:0 0 8px;font-weight:600}
+.two p{color:var(--text-muted);margin:0 0 20px}
+.ptab{width:100%;border-collapse:collapse;font-size:14px}
+.ptab td{padding:12px 0;border-top:1px solid var(--line)}
+.ptab td:first-child{font-weight:500;font-size:18px;letter-spacing:-.02em}
+.ptab td:last-child{text-align:right;color:var(--text-subtle)}
+.tree{margin:0;font:400 13px/1.9 var(--mono);color:var(--text-muted);white-space:pre;overflow-x:auto;border:1px solid var(--line);padding:16px 18px;background:var(--bg)}
+.tree .d{color:var(--text)}.tree .n{color:var(--text-subtle)}.tree .a{color:var(--accent)}
+.boundary{margin-top:16px;display:flex;gap:10px;align-items:center;font:400 12px var(--mono);color:var(--text-subtle)}
+.boundary::before{content:"";width:12px;height:12px;border:1.5px dashed var(--line-strong)}
+@media (max-width:900px){.two{grid-template-columns:minmax(0,1fr)}.two>div+div{border-left:0;border-top:1px solid var(--line-strong)}.two>div{padding:24px 20px}}
+
+/* example schematic */
+.schem{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr)}
+.two>div{min-width:0}
+.schem-fig{padding:24px;border-right:1px solid var(--line);overflow-x:auto}
+.schem-fig svg{width:100%;min-width:640px;height:auto;display:block}
+.schem-fig .nd rect{fill:var(--surface);stroke:var(--line-strong);cursor:pointer;transition:stroke 160ms var(--ease)}
+.schem-fig .nd:hover rect,.schem-fig .nd.sel rect{stroke:var(--accent)}
+.schem-fig .nd:focus{outline:none}
+.schem-fig .nd:focus-visible rect{stroke:var(--accent);stroke-width:2}
+.schem-fig .nd text{font:500 13px var(--sans);fill:var(--text)}
+.schem-fig .nd .k{font:400 11px var(--sans);fill:var(--text-muted)}
+.schem-fig .nd .e{font:400 10.5px var(--mono);fill:var(--accent)}
+.schem-fig .ed{fill:none;stroke:var(--line-strong);stroke-width:1.2;marker-end:url(#arr2)}
+.schem-fig .dim{stroke:var(--text-subtle);stroke-width:.8}
+.schem-fig .dimt{font:400 10.5px var(--mono);fill:var(--text-subtle)}
+.insp{padding:24px}
+.insp h3{margin:0 0 4px;font-size:20px;letter-spacing:-.02em;font-weight:600}
+.insp .kind{font-size:13px;color:var(--accent-strong)}
+.insp dl{display:grid;grid-template-columns:110px 1fr;gap:10px 16px;margin:20px 0 0;font-size:13px}
+.insp dt{color:var(--text-subtle)}
+.insp dd{margin:0;color:var(--text-muted)}
+.insp dd code{color:var(--text);font-size:12.5px}
+.insp .evs{margin:18px 0 0;padding:12px 14px;border:1px solid var(--line);background:var(--bg);font:400 12px/1.9 var(--mono);color:var(--text-muted);list-style:none}
+.insp .evs li{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.insp .evs .n{color:var(--accent);margin-right:10px}
+@media (max-width:900px){.schem{grid-template-columns:minmax(0,1fr)}.schem-fig{border-right:0;border-bottom:1px solid var(--line)}}
+
+.cta{display:grid;grid-template-columns:1fr auto;align-items:center;gap:24px;padding:48px 32px}
+.cta h2{margin:0}
+@media (max-width:760px){.cta{grid-template-columns:1fr;padding:36px 20px}}
+footer{max-width:1320px;margin:0 auto;border-left:1px solid var(--line-strong);border-right:1px solid var(--line-strong);border-bottom:1px solid var(--line-strong);display:flex;flex-wrap:wrap;background:rgba(13,16,20,.9);font-size:13px;color:var(--text-subtle)}
+footer>*{padding:18px 20px;border-right:1px solid var(--line)}
+footer a:hover{color:var(--text)}
+footer .grow{flex:1;border-right:0}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition-duration:1ms!important;animation-duration:1ms!important}}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8FA8FF"/><stop offset="1" stop-color="#6EE0D2"/></linearGradient>
+    <symbol id="g-mark" viewBox="0 0 24 24"><path d="M6.5 7.5c-2.8 0-4.5 2-4.5 4.5s1.7 4.5 4.5 4.5c4 0 7-9 11-9 2.8 0 4.5 2 4.5 4.5s-1.7 4.5-4.5 4.5c-4 0-7-9-11-9Z" fill="none" stroke="url(#brand)" stroke-width="2.2" stroke-linejoin="round"/></symbol>
+  </defs>
+</svg>
+
+<header class="nav">
+  <div class="nav-in">
+    <a class="mark" href="#top" aria-label="Loopy home"><svg width="24" height="24" aria-hidden="true"><use href="#g-mark"/></svg>loopy</a>
+    <div class="path" aria-hidden="true">~/work/api $ loopy studio</div>
+    <nav class="nav-links" aria-label="Primary">
+      <a href="#docs">Docs</a><a class="hide-sm" href="#example">Examples</a><a class="hide-sm" href="#github">GitHub</a><a class="install-link" href="#install">Install</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main" class="frame">
+<section class="hero" id="top">
+  <canvas id="field" aria-hidden="true"></canvas>
+  <div class="labels" id="labels" aria-hidden="true"></div>
+  <div class="hud" aria-hidden="true">
+    <div><span>phase</span><span class="phase" id="hudPhase">reading trace</span></div>
+    <div><span>trace events</span><span>14</span></div>
+    <div><span>graph</span><span id="hudGraph">0 nodes</span></div>
+    <div><span>model calls</span><span>0</span></div>
+  </div>
+  <div class="hero-copy">
+    <h1>Do the work once. Extract the graph. Run it with control.</h1>
+    <p class="lede">Loopy reads the session you already finished with a coding agent and draws the graph hiding inside it. Then it runs that graph on your machine, with checks and approvals where you want them.</p>
+    <div class="row" id="install">
+      <div class="cmd"><span><span class="p">$ </span>bun add -g loopy</span><button type="button" data-copy="bun add -g loopy">Copy</button></div>
+      <a class="btn" href="#pipeline">Read the spec</a>
+    </div>
+  </div>
+  <div class="hint" aria-hidden="true">move the cursor through the field</div>
+</section>
+
+<section class="sec" id="pipeline">
+  <div class="sec-head"><div class="idx"><b>Sheet 1</b>pipeline</div><div class="tt"><h2>Three commands from session to graph.</h2><p class="sub">Each step writes to disk and can be inspected before the next one runs.</p></div></div>
+  <div class="spec-wrap">
+  <table class="spec">
+    <thead><tr><th scope="col"></th><th scope="col">Capture<small>loopy import</small></th><th scope="col">Extract<small>loopy extract</small></th><th scope="col">Run<small>loopy run</small></th></tr></thead>
+    <tbody>
+      <tr><th scope="row">You do</th><td>Finish a task once in Codex, Claude Code, OpenCode or Pi.</td><td>Review the proposed graph. Edit it. Approve it.</td><td>Start it by hand, from Studio, or on cron.</td></tr>
+      <tr><th scope="row">Loopy does</th><td>Records the session, or imports one you already ran, as a trace.</td><td>Proposes nodes and edges. Every node links to the trace events behind it.</td><td>Calls the same CLIs, node by node, and owns branching, retries and approvals.</td></tr>
+      <tr><th scope="row">Model calls</th><td class="none">None</td><td class="none">None. The extractor is deterministic.</td><td>Only inside agent nodes, through your CLI.</td></tr>
+      <tr><th scope="row">Writes</th><td>A trace, exportable as <code>.jsonl</code></td><td>A graph proposal, then an approved loopy</td><td>Runs and checkpoints in local SQLite</td></tr>
+      <tr><th scope="row">Command</th><td><code>loopy import session.json --provider codex</code></td><td><code>loopy extract --import &lt;id&gt;</code><br><code>loopy approve &lt;id&gt;</code></td><td><code>loopy run</code></td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="sec" id="runtime">
+  <div class="sec-head"><div class="idx"><b>Sheet 2</b>runtime</div><div class="tt"><h2>Agents loop inside nodes. The graph owns everything between them.</h2><p class="sub">A node's state only changes through the transitions below. This one is running for real, on a loop.</p></div></div>
+  <div class="sm">
+    <div class="sm-fig">
+      <svg viewBox="0 0 640 360" id="smSvg" aria-label="Node state machine">
+        <defs><marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 8 4 0 8Z" fill="#323B46"/></marker></defs>
+      </svg>
+    </div>
+    <ol class="sm-log" id="smLog" aria-live="off"></ol>
+  </div>
+  <div class="ctl-grid">
+    <div><b>Branching</b><span>Conditions route on real output</span></div>
+    <div><b>Parallel joins</b><span>Fan out, wait for all</span></div>
+    <div><b>Retries</b><span>Bounded, each attempt kept</span></div>
+    <div><b>Approvals</b><span>The run waits for a person</span></div>
+    <div><b>Pause and resume</b><span>Between nodes, any time</span></div>
+    <div><b>Cancel</b><span>Ends cleanly, history kept</span></div>
+    <div><b>Replay</b><span>Same inputs, fresh run</span></div>
+    <div><b>Checkpoint forks</b><span>Branch from any checkpoint</span></div>
+  </div>
+</section>
+
+<section class="sec" id="local">
+  <div class="sec-head"><div class="idx"><b>Sheet 3</b>boundary</div><div class="tt"><h2>Everything runs inside this box.</h2><p class="sub">No hosted compute. Source, credentials, subprocesses and traces stay on your machine.</p></div></div>
+  <div class="two">
+    <div>
+      <h3>Providers</h3>
+      <p>Loopy starts the CLI you already have, with your login and settings. Each agent node picks its own.</p>
+      <table class="ptab"><tbody>
+        <tr><td>Codex</td><td><code>codex</code></td></tr>
+        <tr><td>Claude Code</td><td><code>claude</code></td></tr>
+        <tr><td>OpenCode</td><td><code>opencode</code></td></tr>
+        <tr><td>Pi</td><td><code>pi</code></td></tr>
+      </tbody></table>
+    </div>
+    <div>
+      <h3>State on disk</h3>
+      <p>Runs live in SQLite. Traces export as JSONL. Schedules run on cron. Apache-2.0.</p>
+<pre class="tree"><span class="d">~/work/api</span>
+├── <span class="d">.loopy/</span>
+│   ├── loopy.db      <span class="n">runs, checkpoints, approvals</span>
+│   └── <span class="d">traces/</span>
+│       └── session.jsonl <span class="n">one event per line</span>
+├── package.json
+└── src/</pre>
+      <div class="boundary">your machine, nothing crosses this line</div>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="example">
+  <div class="sec-head"><div class="idx"><b>Sheet 4</b>worked example</div><div class="tt"><h2>Patch critical dependency CVEs.</h2><p class="sub">The graph extracted from the session in the hero. Select a node to see the trace events that justify it.</p></div></div>
+  <div class="schem">
+    <div class="schem-fig"><svg viewBox="0 0 720 360" id="schem" role="group" aria-label="CVE loopy graph"></svg></div>
+    <div class="insp" id="insp" aria-live="polite"></div>
+  </div>
+</section>
+
+<section class="sec" id="docs">
+  <div class="cta">
+    <div><h2>Install it, then do one task.</h2><p class="sub">Open <code>loopy studio</code> afterwards and the graph is already waiting.</p></div>
+    <div class="row"><div class="cmd"><span><span class="p">$ </span>bun add -g loopy</span><button type="button" data-copy="bun add -g loopy">Copy</button></div></div>
+  </div>
+</section>
+</main>
+<footer id="github">
+  <a class="mark" href="#top" style="border-right:1px solid var(--line)"><svg width="20" height="20" aria-hidden="true"><use href="#g-mark"/></svg>loopy</a>
+  <span>Apache-2.0</span>
+  <span class="grow"></span>
+  <a href="#github">GitHub</a><a href="#docs">Docs</a><a href="#example" style="border-right:0">Examples</a>
+</footer>
+
+<script>
+(() => {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const $ = s => document.querySelector(s), NS = 'http://www.w3.org/2000/svg';
+  document.querySelectorAll('[data-copy]').forEach(b => b.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(b.dataset.copy); } catch { const ta = Object.assign(document.createElement('textarea'), { value: b.dataset.copy }); document.body.append(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
+    b.textContent = 'Copied'; b.dataset.copied = ''; setTimeout(() => { b.textContent = 'Copy'; delete b.dataset.copied; }, 1600);
+  }));
+
+  const NODES = [
+    { kind: 'Shell module', t: 'Audit dependencies', ev: [3] },
+    { kind: 'Condition', t: 'Patched release?', ev: [6, 7] },
+    { kind: 'Agent call', t: 'Apply smallest bump', ev: [8, 9] },
+    { kind: 'Verification', t: 'Run checks', ev: [10, 11] },
+    { kind: 'Approval', t: 'Approve before push', ev: [12] },
+    { kind: 'Shell module', t: 'Open pull request', ev: [13, 14] },
+  ];
+  const EDGES = [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5]];
+
+  // ---------- particle field ----------
+  const hero = $('#top'), cv = $('#field'), ctx = cv.getContext('2d'), labels = $('#labels');
+  const hudPhase = $('#hudPhase'), hudGraph = $('#hudGraph');
+  const lblEls = NODES.map(n => { const d = document.createElement('div'); d.className = 'nlabel'; d.innerHTML = `${n.kind}<b>${n.t}</b><span class="ev">ev ${n.ev.map(e => String(e).padStart(2, '0')).join(', ')}</span>`; labels.append(d); return d; });
+  let W = 0, H = 0, dpr = 1, P = [], rects = [], edgePaths = [], mouse = { x: -9999, y: -9999 }, t0 = 0, phase = 0;
+  const mobile = () => innerWidth <= 760;
+
+  function geometry() {
+    const r = cv.getBoundingClientRect(); W = r.width; H = r.height; dpr = Math.min(2, devicePixelRatio || 1);
+    cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const m = mobile();
+    const nw = m ? Math.min(150, (W - 60) / 2) : 212, nh = m ? 52 : 64;
+    if (m) {
+      const xs = [20, W - 20 - nw], ys = [40, 170, 300];
+      rects = [[0, 0], [1, 0], [1, 1], [0, 1], [0, 2], [1, 2]].map(([c, r]) => ({ x: xs[c], y: ys[r], w: nw, h: nh }));
+    } else {
+      const left = Math.max(W * 0.4, 500), right = W - 40, top = 100, gapX = (right - left - 3 * nw) / 2;
+      const xs = [0, 1, 2].map(i => left + i * (nw + gapX)), ys = [top, top + Math.min(240, H * 0.28)];
+      rects = [[0, 0], [1, 0], [2, 0], [2, 1], [1, 1], [0, 1]].map(([c, r]) => ({ x: xs[c], y: ys[r], w: nw, h: nh }));
+    }
+    edgePaths = EDGES.map(([a, b]) => {
+      const A = rects[a], B = rects[b];
+      if (Math.abs(A.y - B.y) < 1) { const dir = B.x > A.x ? 1 : -1; return [{ x: dir > 0 ? A.x + A.w : A.x, y: A.y + A.h / 2 }, { x: dir > 0 ? B.x : B.x + B.w, y: B.y + B.h / 2 }]; }
+      if (Math.abs(A.x - B.x) < 1) return [{ x: A.x + A.w / 2, y: A.y + A.h }, { x: B.x + B.w / 2, y: B.y }];
+      return [{ x: A.x + A.w / 2, y: A.y + A.h }, { x: A.x + A.w / 2, y: (A.y + A.h + B.y) / 2 }, { x: B.x + B.w / 2, y: (A.y + A.h + B.y) / 2 }, { x: B.x + B.w / 2, y: B.y }];
+    });
+    lblEls.forEach((el, i) => { const R = rects[i]; el.style.left = R.x + 12 + 'px'; el.style.top = R.y + (m ? 8 : 10) + 'px'; el.style.width = R.w - 24 + 'px'; });
+    if (m) lblEls.forEach(el => { el.querySelector('.ev').style.display = 'none'; });
+    build();
+  }
+  function perimeter(R, u) {
+    const p = 2 * (R.w + R.h); let d = u * p;
+    if (d < R.w) return { x: R.x + d, y: R.y }; d -= R.w;
+    if (d < R.h) return { x: R.x + R.w, y: R.y + d }; d -= R.h;
+    if (d < R.w) return { x: R.x + R.w - d, y: R.y + R.h }; d -= R.w;
+    return { x: R.x, y: R.y + R.h - d };
+  }
+  function along(path, u) {
+    const segs = []; let tot = 0;
+    for (let i = 1; i < path.length; i++) { const l = Math.hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y); segs.push(l); tot += l; }
+    let d = u * tot;
+    for (let i = 0; i < segs.length; i++) { if (d <= segs[i]) { const k = d / segs[i]; return { x: path[i].x + (path[i + 1].x - path[i].x) * k, y: path[i].y + (path[i + 1].y - path[i].y) * k }; } d -= segs[i]; }
+    return path[path.length - 1];
+  }
+  function build() {
+    const n = Math.round(Math.min(1800, Math.max(600, W * H / 560)));
+    const rows = Math.floor(H / 22);
+    const lines = Array.from({ length: rows }, () => ({ len: 0.2 + Math.random() * 0.55, indent: Math.random() < 0.3 ? 0.04 : 0 }));
+    P = Array.from({ length: n }, (_, i) => {
+      const row = i % rows, L = lines[row];
+      const lx = (L.indent + Math.random() * L.len) * W, ly = row * 22 + 14;
+      const role = i % 20 < 3 ? 'trace' : i % 20 < 13 ? 'node' : 'edge';
+      const p = P[i] || { x: lx, y: ly, vx: 0, vy: 0 };
+      return Object.assign(p, { lx, ly, role, node: i % NODES.length, u: Math.random(), edge: i % EDGES.length, speed: 0.08 + Math.random() * 0.1, delay: Math.random() * 0.9 });
+    });
+    if (reduce) { phase = 3; P.forEach(p => { const t = target(p, 1e9); p.x = t.x; p.y = t.y; }); draw(1e9); labelsOn(); }
+  }
+  function target(p, time) {
+    if (phase === 0 || time < p.delay) return { x: p.lx, y: p.ly };
+    if (p.role === 'trace') return mobile() ? { x: 20 + p.lx * 0.9, y: 400 + (p.ly / H) * 30 } : { x: 32 + p.lx * 0.3, y: 40 + p.ly * 0.42 };
+    if (p.role === 'node') return perimeter(rects[p.node], p.u);
+    const u = reduce ? p.u : (p.u + time * p.speed) % 1;
+    return along(edgePaths[p.edge], u);
+  }
+  function labelsOn() { lblEls.forEach((el, i) => setTimeout(() => el.classList.add('on'), reduce ? 0 : i * 120)); hudPhase.textContent = 'graph ready'; hudGraph.textContent = '6 nodes, 5 edges'; }
+  function draw(time) {
+    ctx.clearRect(0, 0, W, H);
+    // faint edge guides once formed
+    if (phase >= 2) {
+      ctx.strokeStyle = 'rgba(50,59,70,.9)'; ctx.lineWidth = 1;
+      edgePaths.forEach(path => { ctx.beginPath(); path.forEach((pt, i) => i ? ctx.lineTo(pt.x, pt.y) : ctx.moveTo(pt.x, pt.y)); ctx.stroke(); });
+    }
+    for (const p of P) {
+      const settled = phase > 0 && time > p.delay;
+      if (!settled) { ctx.fillStyle = 'rgba(152,162,174,.55)'; ctx.fillRect(p.x, p.y, 3, 1.4); continue; }
+      if (p.role === 'trace') { ctx.fillStyle = 'rgba(106,116,128,.5)'; ctx.fillRect(p.x, p.y, 2.4, 1.2); continue; }
+      ctx.fillStyle = p.role === 'node' ? 'rgba(143,168,255,.9)' : 'rgba(110,224,210,.95)';
+      const s = p.role === 'node' ? 1.6 : 2;
+      ctx.fillRect(p.x - s / 2, p.y - s / 2, s, s);
+    }
+  }
+  let raf = 0, running = false, last = 0;
+  function frame(now) {
+    const time = (now - t0) / 1000;
+    if (phase === 0 && time > 1.6) { phase = 1; hudPhase.textContent = 'extracting'; hudGraph.textContent = 'proposing'; }
+    const rel = time - 1.6;
+    if (phase === 1 && rel > 2.2) { phase = 2; labelsOn(); }
+    const k = phase === 0 ? 0.08 : 0.05, damp = 0.82;
+    for (const p of P) {
+      const t = target(p, phase ? rel : 0);
+      let ax = (t.x - p.x) * k, ay = (t.y - p.y) * k;
+      const dx = p.x - mouse.x, dy = p.y - mouse.y, d2 = dx * dx + dy * dy;
+      if (d2 < 9000) { const f = (1 - d2 / 9000) * 3.2 / Math.sqrt(d2 + 1); ax += dx * f; ay += dy * f; }
+      p.vx = (p.vx + ax) * damp; p.vy = (p.vy + ay) * damp; p.x += p.vx; p.y += p.vy;
+    }
+    draw(phase ? rel : 0);
+    raf = running ? requestAnimationFrame(frame) : 0;
+  }
+  hero.addEventListener('pointermove', e => { const r = cv.getBoundingClientRect(); mouse.x = e.clientX - r.left; mouse.y = e.clientY - r.top; });
+  hero.addEventListener('pointerleave', () => { mouse.x = mouse.y = -9999; });
+  let rs; addEventListener('resize', () => { clearTimeout(rs); rs = setTimeout(geometry, 120); });
+  (document.fonts ? document.fonts.ready : Promise.resolve()).then(() => {
+    geometry();
+    if (reduce) return;
+    t0 = performance.now();
+    new IntersectionObserver(([e]) => { running = e.isIntersecting; if (running && !raf) raf = requestAnimationFrame(frame); }).observe(hero);
+  });
+
+  // ---------- state machine ----------
+  const sm = $('#smSvg');
+  const S = { pending: [40, 140], running: [220, 140], waiting: [400, 40], paused: [400, 240], succeeded: [560, 140], failed: [220, 280], cancelled: [40, 280] };
+  const T = [
+    ['pending', 'running', 'start', 'M120 158 H212'],
+    ['running', 'waiting', 'approval', 'M300 140 C340 140 350 58 392 58'],
+    ['waiting', 'running', 'approve', 'M400 76 C360 100 330 120 300 150'],
+    ['running', 'paused', 'pause', 'M300 176 C340 176 350 258 392 258'],
+    ['paused', 'running', 'resume', 'M400 240 C360 214 330 196 300 168'],
+    ['running', 'succeeded', 'pass', 'M300 158 H552'],
+    ['running', 'failed', 'fail', 'M250 176 V272'],
+    ['failed', 'running', 'retry', 'M280 272 V184'],
+    ['paused', 'cancelled', 'cancel', 'M430 276 C430 340 120 340 82 320'],
+  ];
+  let smHtml = '';
+  T.forEach(([a, b, l, d], i) => { smHtml += `<path class="tr" id="tr${i}" d="${d}"/>`; });
+  const labelPos = [[140, 150], [312, 78], [336, 124], [354, 252], [352, 198], [470, 150], [200, 228], [288, 228], [250, 348]];
+  T.forEach(([, , l], i) => { smHtml += `<text class="tl" x="${labelPos[i][0]}" y="${labelPos[i][1]}">${l}</text>`; });
+  Object.entries(S).forEach(([k, [x, y]]) => { smHtml += `<g class="st" id="st-${k}"><rect x="${x}" y="${y}" width="80" height="36" rx="6"/><text x="${x + 40}" y="${y + 23}" text-anchor="middle">${k}</text></g>`; });
+  smHtml += `<circle class="tok" id="smTok" r="4" cx="-20" cy="-20"/>`;
+  sm.insertAdjacentHTML('beforeend', smHtml);
+  const smLog = $('#smLog'), tokEl = $('#smTok');
+  const SCRIPT = [
+    [null, 'pending', 'run #41 queued, node "Audit dependencies"'],
+    [0, 'running', 'loopy run patch-critical-cves'],
+    [5, 'succeeded', 'audit: 1 critical advisory'],
+    [null, 'pending', 'node "Run checks"'],
+    [0, 'running', 'bun run check'],
+    [6, 'failed', '2 tests failed'],
+    [7, 'running', 'retry 1 of 2'],
+    [5, 'succeeded', '412 passed'],
+    [null, 'pending', 'node "Approve before push"'],
+    [0, 'running', 'waiting on a person'],
+    [1, 'waiting', 'approval requested'],
+    [2, 'running', 'approved in loopy studio'],
+    [3, 'paused', 'paused by you at 09:14'],
+    [4, 'running', 'resumed at 09:20'],
+    [5, 'succeeded', 'gh pr create --fill'],
+  ];
+  let si = 0, smT = 0;
+  const tsBase = 9 * 3600 + 12 * 60;
+  function smStep() {
+    const [tr, st, msg] = SCRIPT[si];
+    document.querySelectorAll('.st').forEach(g => g.classList.toggle('on', g.id === 'st-' + st));
+    document.querySelectorAll('.tr').forEach(p => p.classList.remove('on'));
+    if (tr !== null) {
+      const path = $('#tr' + tr); path.classList.add('on');
+      if (!reduce) { const L = path.getTotalLength(), s0 = performance.now(); const mv = now => { const k = Math.min(1, (now - s0) / 600), pt = path.getPointAtLength(L * k); tokEl.setAttribute('cx', pt.x); tokEl.setAttribute('cy', pt.y); if (k < 1) requestAnimationFrame(mv); }; requestAnimationFrame(mv); }
+    }
+    const sec = tsBase + si * 7, li = document.createElement('li');
+    li.innerHTML = `<span class="t">${String(Math.floor(sec / 3600)).padStart(2, '0')}:${String(Math.floor(sec / 60) % 60).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}</span><span class="c">${st.padEnd(9, ' ')}</span> ${msg}`;
+    smLog.append(li); while (smLog.children.length > 9) smLog.firstChild.remove();
+    si = (si + 1) % SCRIPT.length;
+  }
+  if (reduce) { for (let i = 0; i < 9; i++) smStep(); }
+  else {
+    let on = false;
+    const loop = () => { if (on) { smStep(); smT = setTimeout(loop, 1300); } else smT = 0; };
+    new IntersectionObserver(([e]) => { on = e.isIntersecting; if (on && !smT) loop(); }).observe(sm);
+  }
+
+  // ---------- schematic ----------
+  const TRACE = ['start  codex session in ~/work/api', 'user   "patch the critical CVEs in our deps"', 'exec   bun audit --json', 'read   package.json', 'think  1 critical: lodash 4.17.20', 'exec   npm view lodash versions', 'note   4.17.21 fixes CVE-2021-23337', 'edit   package.json lodash ^4.17.21', 'exec   bun install', 'exec   bun run check', 'out    412 passed, 0 failed', 'user   "diff looks right, push it"', 'exec   git push -u origin fix/lodash', 'exec   gh pr create --fill'];
+  const DETAIL = [
+    { run: '<code>bun audit --json</code>', out: 'Critical advisories' },
+    { run: 'Is a fixed version published?', out: 'Yes goes on. No stops the run.' },
+    { run: 'Codex, smallest version bump', out: 'Edited <code>package.json</code>, lockfile' },
+    { run: '<code>bun run check</code>', out: 'Pass or fail, retries 2' },
+    { run: 'A person reviews the diff', out: 'Approved or rejected' },
+    { run: '<code>gh pr create --fill</code>', out: 'Pull request URL' },
+  ];
+  const schem = $('#schem');
+  const pos = [[20, 60], [260, 60], [500, 60], [500, 240], [260, 240], [20, 240]];
+  let sh = `<defs><marker id="arr2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 8 4 0 8Z" fill="#323B46"/></marker></defs>`;
+  sh += `<path class="ed" d="M220 96 H256"/><path class="ed" d="M460 96 H496"/><path class="ed" d="M600 132 V236"/><path class="ed" d="M500 276 H464"/><path class="ed" d="M260 276 H224"/>`;
+  sh += `<line class="dim" x1="20" y1="30" x2="700" y2="30"/><line class="dim" x1="20" y1="24" x2="20" y2="36"/><line class="dim" x1="700" y1="24" x2="700" y2="36"/><text class="dimt" x="360" y="22" text-anchor="middle">6 nodes, 5 edges, 0 model calls to extract</text>`;
+  sh += `<text class="dimt" x="608" y="190">checks pass</text><text class="dimt" x="466" y="88">yes</text>`;
+  NODES.forEach((n, i) => {
+    const [x, y] = pos[i];
+    sh += `<g class="nd" tabindex="0" role="button" data-i="${i}" aria-label="${n.t}, ${n.kind}"><rect x="${x}" y="${y}" width="200" height="72" rx="10"/><text class="k" x="${x + 14}" y="${y + 24}">${n.kind}</text><text x="${x + 14}" y="${y + 44}">${n.t}</text><text class="e" x="${x + 14}" y="${y + 62}">ev ${n.ev.map(e => String(e).padStart(2, '0')).join(', ')}</text></g>`;
+  });
+  schem.innerHTML = sh;
+  const insp = $('#insp');
+  function select(i) {
+    schem.querySelectorAll('.nd').forEach(g => g.classList.toggle('sel', +g.dataset.i === i));
+    const n = NODES[i], d = DETAIL[i];
+    insp.innerHTML = `<h3>${n.t}</h3><span class="kind">${n.kind}</span><dl><dt>Does</dt><dd>${d.run}</dd><dt>Produces</dt><dd>${d.out}</dd><dt>Evidence</dt><dd>${n.ev.length} trace event${n.ev.length > 1 ? 's' : ''}</dd></dl><ul class="evs">${n.ev.map(e => `<li><span class="n">${String(e).padStart(2, '0')}</span>${TRACE[e - 1]}</li>`).join('')}</ul>`;
+  }
+  schem.querySelectorAll('.nd').forEach(g => {
+    g.addEventListener('click', () => select(+g.dataset.i));
+    g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(+g.dataset.i); } });
+  });
+  select(2);
+})();
+</script>
+</body>
+</html>
