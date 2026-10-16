@@ -52,7 +52,7 @@ class DelayedStore extends MemoryRunStore {
       await delay(20);
     }
 
-    await super.putStep(runId, token, step);
+    return super.putStep(runId, token, step);
   }
 }
 

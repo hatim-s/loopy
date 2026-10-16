@@ -4,6 +4,7 @@ const OPTIONS = {
   "input-json": { type: "string" },
   "input-file": { type: "string" },
   detach: { type: "boolean" },
+  payload: { type: "string" },
   follow: { type: "boolean" },
   cron: { type: "string" },
   tz: { type: "string" },
@@ -26,6 +27,7 @@ const COMMAND_OPTIONS = new Map<string, readonly (keyof typeof OPTIONS)[]>(
   Object.entries({
     run: ["input-json", "input-file", "detach"],
     resume: [],
+    hook: ["payload"],
     schedule: ["cron", "tz", "off", "input-json"],
     logs: ["follow"],
     "daemon run": ["concurrency"],

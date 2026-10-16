@@ -13,7 +13,7 @@ export type { Duration, ResolvedCommand, RetryPolicy, StepOptions } from "../run
 
 export { map, parallel, race } from "../runtime/index.js";
 
-export { command, log, now, random, sleep, step, uuid } from "./ambient.js";
+export { command, hook, log, now, random, sleep, step, uuid } from "./ambient.js";
 
 export type { CommandDescriptor, CommandOptions } from "./define-command.js";
 

@@ -1,12 +1,12 @@
 import { requireNonEmptyString } from "../../core/index.js";
-import { runDetail } from "../../runtime/index.js";
+import { assertJson, runDetail } from "../../runtime/index.js";
 import type { Registry } from "../registry.js";
 import type { SqliteRunStore } from "../store.js";
 
 type RouteContext = { params: Record<string, string>; request: Request; url: URL };
 
 type Route = {
-  method: "GET";
+  method: "GET" | "POST";
   pattern: RegExp;
   handle: (context: RouteContext) => Promise<Response>;
 };
@@ -51,6 +51,12 @@ async function logs(store: SqliteRunStore, id: string, url: URL) {
 
 export function apiRoutes({ registry, getStore }: RouteDependencies): Route[] {
   return [
+    {
+      method: "POST",
+      pattern: /^\/api\/hooks\/(?<token>[^/]+)$/,
+      handle: async ({ params, request }) =>
+        resolveHook(getStore(), requireNonEmptyString(params.token, "token"), request),
+    },
     { method: "GET", pattern: /^\/api\/loopies$/, handle: async () => json(registry.list()) },
     {
       method: "GET",
@@ -87,4 +93,28 @@ export async function dispatch(routes: Route[], request: Request, url: URL, path
   }
 
   return json({ error: "Endpoint not found. Check the API path and method." }, 404);
+}
+
+async function resolveHook(
+  store: SqliteRunStore,
+  token: string,
+  request: Request,
+): Promise<Response> {
+  let payload: unknown;
+
+  try {
+    payload = await request.json();
+    assertJson(payload, "Hook payload");
+  } catch {
+    return json({ error: "Invalid hook payload. Send a JSON body." }, 400);
+  }
+
+  if (!(await store.resolveHook(token, payload))) {
+    return json(
+      { error: "Hook is not waiting. Run loopy inspect to find a waiting hook token." },
+      404,
+    );
+  }
+
+  return json({ resolved: true });
 }

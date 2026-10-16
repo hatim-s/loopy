@@ -14,7 +14,7 @@ export class StepFailedError extends Error {
   }
 }
 
-type Runner = {
+export type Runner = {
   rateLimit?: string;
   rateLimits?: RateLimits;
   record: StepBase;
@@ -30,14 +30,14 @@ type Runner = {
 
 async function put(options: Runner, step: StepRecord): Promise<void> {
   try {
-    await options.store.putStep(step.runId, options.token, step);
+    return await options.store.putStep(step.runId, options.token, step);
   } catch (cause) {
     options.activation.fail(new Error(errorMessage(cause), { cause }));
     throw cause;
   }
 }
 
-async function fail(options: Runner, cause: unknown): Promise<never> {
+export async function failStep(options: Runner, cause: unknown): Promise<never> {
   const { record, activation, clock } = options;
   const error = errorMessage(cause);
 
@@ -77,7 +77,7 @@ async function failAttempt(options: Runner, cause: unknown): Promise<{ wakeAt: s
   }
 
   if (record.attempt >= record.maxAttempts || !shouldRetry(cause, options.retry)) {
-    return fail(options, cause);
+    return failStep(options, cause);
   }
 
   const nextRetryAt = new Date(clock.now() + retryDelayMs(record.attempt)).toISOString();
@@ -120,7 +120,7 @@ async function acquireLimit(options: Runner): Promise<{ wakeAt: string } | undef
   const limit = Object.hasOwn(rateLimits ?? {}, key) ? rateLimits?.[key] : undefined;
 
   if (!limit) {
-    return fail(
+    return failStep(
       options,
       new Error(`Rate limit '${key}' is not configured. Add it to rateLimits in config.json.`),
     );
@@ -172,13 +172,13 @@ async function execute<T extends Json>(
   try {
     assertJson(output, `Output of step '${record.key}'`);
   } catch (cause) {
-    return fail(options, cause);
+    return failStep(options, cause);
   }
 
   return { output };
 }
 
-async function succeed<T extends Json>(options: Runner, output: T): Promise<T> {
+export async function succeed<T extends Json>(options: Runner, output: T): Promise<T> {
   const { record, activation, clock } = options;
 
   const order = await activation.terminal((finishOrder) =>

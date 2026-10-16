@@ -1,7 +1,24 @@
-import type { Json, LogRecord, RunRecord, Schedule, StepRecord } from "../core/index.js";
-import type { LogRow, RunRow, ScheduleRow, StepColumns, StepRow } from "./store-schema.js";
+import type {
+  HookRecord,
+  Json,
+  LogRecord,
+  RunRecord,
+  Schedule,
+  StepRecord,
+} from "../core/index.js";
+import type { HookRow, LogRow, RunRow, ScheduleRow, StepColumns, StepRow } from "./store-schema.js";
 
 export const SQL = {
+  hooks: "SELECT * FROM hooks WHERE run_id=? ORDER BY seq",
+  hook: "SELECT * FROM hooks WHERE token=?",
+  step: "SELECT * FROM steps WHERE run_id=? AND seq=?",
+  createHook: "INSERT INTO hooks(token,run_id,seq,name,created_at) VALUES (?,?,?,?,?)",
+  resolveHook: "UPDATE hooks SET payload_json=?,resolved_at=? WHERE token=?",
+  wakeHook: "UPDATE runs SET wake_at=?,updated_at=? WHERE id=?",
+  expireHook: "UPDATE hooks SET expired_at=? WHERE run_id=? AND seq=?",
+  unconsumedHook: `SELECT MIN(h.resolved_at) AS wake_at FROM hooks h JOIN steps s
+    ON s.run_id=h.run_id AND s.seq=h.seq
+    WHERE h.run_id=? AND h.resolved_at IS NOT NULL AND s.status='waiting'`,
   rateLimit: "SELECT window_start AS windowStart,count FROM rate_limits WHERE key=?",
   putRateLimit:
     "INSERT INTO rate_limits VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET window_start=excluded.window_start,count=excluded.count",
@@ -131,6 +148,8 @@ export function rowToStep(row: StepRow): StepRecord {
       };
     case "sleeping":
       return { ...base, status: row.status, wakeAt: row.wake_at };
+    case "waiting":
+      return { ...base, status: row.status, wakeAt: row.wake_at ?? undefined };
   }
 }
 
@@ -181,6 +200,12 @@ export function stepToRow(step: StepRecord): StepRow {
       };
     case "sleeping":
       return { ...base, status: step.status, wake_at: new Date(step.wakeAt).toISOString() };
+    case "waiting":
+      return {
+        ...base,
+        status: step.status,
+        wake_at: step.wakeAt === undefined ? null : new Date(step.wakeAt).toISOString(),
+      };
   }
 }
 
@@ -236,4 +261,25 @@ export function rowToSchedule(row: ScheduleRow): Schedule {
   }
 
   return schedule;
+}
+
+export function rowToHook(row: HookRow): HookRecord {
+  const hook: HookRecord = {
+    token: row.token,
+    runId: row.run_id,
+    seq: row.seq,
+    name: row.name,
+    createdAt: row.created_at,
+  };
+
+  if (row.resolved_at !== null && row.payload_json !== null) {
+    hook.resolvedAt = row.resolved_at;
+    hook.payload = decode(row.payload_json);
+  }
+
+  if (row.expired_at !== null) {
+    hook.expiredAt = row.expired_at;
+  }
+
+  return hook;
 }

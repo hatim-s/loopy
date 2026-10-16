@@ -29,7 +29,7 @@ function fixture(name: string, definition: string) {
   const file = join(root, `${name}.loopy.ts`);
   writeFileSync(
     file,
-    `import { loopy, step, sleep, command } from ${JSON.stringify(SDK)};
+    `import { loopy, step, sleep, hook, command } from ${JSON.stringify(SDK)};
 export default loopy({ name: ${JSON.stringify(name)}, ${definition} });`,
   );
 
@@ -709,3 +709,114 @@ test("CLI reads rate limit config at startup and rejects malformed limits", asyn
     `Invalid config file '${join(f.home, "config.json")}'. Fix or delete it.`,
   );
 });
+
+test("CLI suspends on a hook, resolves by name, and resumes with its payload", async () => {
+  const f = fixture("approval", `run: async () => hook("approve")`);
+  await save(f);
+  const initial = await cli(f, "run", "approval");
+  expect(initial.code).toBe(0);
+  const run = object(initial.stdout);
+  const id = String(run.id);
+  expect(run.status).toBe("suspended");
+  expect(run.wakeAt).toBeUndefined();
+  expect(initial.stderr).toContain(`Run ${id} is suspended on hooks: approve.`);
+  const inspected = object((await cli(f, "inspect", id)).stdout);
+  expect(inspected.hooks).toMatchObject([{ name: "approve", token: expect.any(String) }]);
+  const resolved = await cli(f, "hook", id, "approve", "--payload", '{"ok":true}');
+  expect(resolved.code).toBe(0);
+  expect(resolved.stdout).toContain(`Resolved hook 'approve' for run ${id}.`);
+  expect(resolved.stdout).not.toContain('"token"');
+  const resumed = await cli(f, "resume", id);
+  expect(resumed.code).toBe(0);
+  expect(object(resumed.stdout)).toMatchObject({ status: "succeeded", output: { ok: true } });
+  const duplicate = await cli(f, "hook", id, "approve");
+  expect(duplicate.code).toBe(1);
+  expect(duplicate.stderr).toContain("is not waiting");
+});
+
+test("CLI resolves the latest waiting hook with a shared name", async () => {
+  const f = fixture(
+    "two-hooks",
+    `run: async () => Promise.all([hook("approve"), hook("approve")])`,
+  );
+
+  await save(f);
+  const run = object((await cli(f, "run", "two-hooks")).stdout);
+  const id = String(run.id);
+  expect((await cli(f, "hook", id, "approve", "--payload", "2")).code).toBe(0);
+  expect((await cli(f, "hook", id, "approve", "--payload", "1")).code).toBe(0);
+  expect(object((await cli(f, "resume", id)).stdout)).toMatchObject({
+    status: "succeeded",
+    output: [1, 2],
+  });
+});
+
+test("hook API applies auth and origin checks and resolves JSON exactly once", async () => {
+  const f = fixture("api-hook", `run: async () => hook("approve")`);
+  await save(f);
+  const run = object((await cli(f, "run", "api-hook")).stdout);
+  const store = openRunStore(f.home);
+  const [hook] = await store.listHooks(String(run.id));
+  store.close();
+  const server = startServer({ home: f.home, cwd: f.cwd, port: 0 });
+  servers.push(server);
+  const url = new URL(server.url);
+  const token = new URLSearchParams(url.hash.slice(1)).get("token");
+  const endpoint = `${url.origin}/api/hooks/${hook?.token}`;
+  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+
+  const post = (body: string, requestHeaders: Record<string, string> = headers) =>
+    fetch(endpoint, { method: "POST", headers: requestHeaders, body });
+
+  expect((await post("{}", { ...headers, Authorization: "Bearer wrong" })).status).toBe(401);
+  expect((await post("{}", { ...headers, Origin: "https://untrusted.example" })).status).toBe(403);
+  expect((await post("invalid")).status).toBe(400);
+  expect(await (await post('{"ok":true}')).json()).toEqual({ resolved: true });
+  expect((await post("null")).status).toBe(404);
+  expect(object((await cli(f, "resume", String(run.id))).stdout)).toMatchObject({
+    status: "succeeded",
+    output: { ok: true },
+  });
+});
+
+test("inline runs notice resolved hooks before their timeout deadline", async () => {
+  const f = fixture("timed-hook", `run: async () => hook("approve", { timeout: "1h" })`);
+  await save(f);
+
+  const child = Bun.spawn([process.execPath, CLI, "--home", f.home, "run", "timed-hook"], {
+    cwd: f.cwd,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  const stdout = new Response(child.stdout).text();
+  const stderr = new Response(child.stderr).text();
+  const store = openRunStore(f.home);
+
+  try {
+    const hook = await waitForWaitingHook(store);
+    expect((await cli(f, "hook", hook.runId, "approve", "--payload", '"accepted"')).code).toBe(0);
+    expect(await child.exited).toBe(0);
+    expect(object(await stdout)).toMatchObject({ status: "succeeded", output: "accepted" });
+    expect(await stderr).toContain("wakes at");
+  } finally {
+    child.kill();
+    await child.exited;
+    store.close();
+  }
+}, 5000);
+
+async function waitForWaitingHook(store: ReturnType<typeof openRunStore>) {
+  for (let tries = 0; tries < 100; tries++) {
+    const [run] = await store.listRuns();
+    const [hook] = run ? await store.listHooks(run.id) : [];
+
+    if (hook && run?.status === "suspended") {
+      return hook;
+    }
+
+    await Bun.sleep(20);
+  }
+
+  throw new Error("CLI never suspended on its hook. Check its stderr.");
+}

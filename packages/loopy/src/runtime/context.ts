@@ -1,20 +1,15 @@
-import type {
-  CommandResult,
-  ExecutionMode,
-  Json,
-  RunRecord,
-  StepKind,
-  StepRecord,
-} from "../core/index.js";
+import type { CommandResult, ExecutionMode, Json, RunRecord, StepKind } from "../core/index.js";
 import type { Activation } from "./activation.js";
 import type { Clock } from "./clock.js";
 import { type Duration, durationMs } from "./duration.js";
 import { CommandExitError, type Executor, type ResolvedCommand } from "./executor.js";
+import { runHook } from "./hook.js";
 import type { StepJournal } from "./journal.js";
 import type { Logger } from "./logger.js";
 import type { RateLimits } from "./rate-limit.js";
+import { replayStep } from "./replay.js";
 import { type RetryPolicy, resolveRetry, StepParseError } from "./retry.js";
-import { runSleep, runStep, StepFailedError } from "./step-runner.js";
+import { type Runner, runSleep, runStep } from "./step-runner.js";
 import type { RunStore } from "./store.js";
 
 export type StepOptions = {
@@ -40,18 +35,30 @@ type ContextOptions = {
   wrap?: ActivationScope;
 };
 
-function replay(stored: Extract<StepRecord, { status: "succeeded" | "failed" }>): Json {
-  if (stored.status === "failed") {
-    throw new StepFailedError(stored.key, stored.error);
-  }
-
-  return structuredClone(stored.output);
-}
-
 export type StepContext = { log: Logger["log"]; attempt: number };
 
+function createRunner(
+  options: ContextOptions,
+  prepared: ReturnType<StepJournal["prepare"]>,
+  stepOptions: StepOptions,
+): Runner {
+  return {
+    record: prepared.record,
+    stored: prepared.stored,
+    rateLimit: stepOptions.rateLimit,
+    rateLimits: options.rateLimits,
+    activation: options.activation,
+    clock: options.clock,
+    retry: resolveRetry(stepOptions.retry),
+    store: options.store,
+    token: options.token,
+    signal: options.signal,
+    timeoutMs: stepOptions.timeout === undefined ? undefined : durationMs(stepOptions.timeout),
+  };
+}
+
 function createPerformer(options: ContextOptions) {
-  const { activation, journal, clock } = options;
+  const { activation, journal } = options;
 
   return async function perform<T extends Json>(
     key: string,
@@ -67,29 +74,17 @@ function createPerformer(options: ContextOptions) {
 
     if (stored?.status === "succeeded" || stored?.status === "failed") {
       // SAFETY: The journal key identifies the same typed call and JSON result on every replay.
-      return activation.queue(stored.finishOrder, "memoized", () => replay(stored)) as Promise<T>;
+      return activation.queue(stored.finishOrder, "memoized", () =>
+        replayStep(stored),
+      ) as Promise<T>;
     }
-
-    const runner = {
-      record,
-      stored,
-      rateLimit: stepOptions.rateLimit,
-      rateLimits: options.rateLimits,
-      activation,
-      clock,
-      retry,
-      store: options.store,
-      token: options.token,
-      signal: options.signal,
-      timeoutMs: stepOptions.timeout === undefined ? undefined : durationMs(stepOptions.timeout),
-    };
 
     const scope = {
       log: options.logger.scope(record.seq, record.attempt),
       attempt: record.attempt,
     };
 
-    return run(runner, () => {
+    return run(createRunner(options, { record, stored }, stepOptions), () => {
       const invoke = () => fn(scope);
 
       return options.wrap ? options.wrap.step(invoke, scope) : invoke();
@@ -170,6 +165,20 @@ function createCommand(options: ContextOptions, perform: ReturnType<typeof creat
   return command;
 }
 
+function createSleep(perform: ReturnType<typeof createPerformer>) {
+  return async (duration: Duration): Promise<void> => {
+    const milliseconds = durationMs(duration);
+    await perform(
+      "sleep",
+      "sleep",
+      milliseconds,
+      () => null,
+      {},
+      (runner) => runSleep(runner, milliseconds),
+    );
+  };
+}
+
 export function createContext(options: ContextOptions) {
   const perform = createPerformer(options);
 
@@ -182,17 +191,16 @@ export function createContext(options: ContextOptions) {
       stepOptions?: StepOptions,
     ) => perform(key, "function", null, fn, stepOptions),
     command: createCommand(options, perform),
-    sleep: async (duration: Duration): Promise<void> => {
-      const milliseconds = durationMs(duration);
-      await perform(
-        "sleep",
-        "sleep",
-        milliseconds,
+    hook: (name: string, hookOptions: { timeout?: Duration } = {}): Promise<Json> =>
+      perform(
+        `hook:${name}`,
+        "hook",
+        { name },
         () => null,
         {},
-        (runner) => runSleep(runner, milliseconds),
-      );
-    },
+        (runner) => runHook(runner, name, hookOptions.timeout),
+      ),
+    sleep: createSleep(perform),
     now: () => perform("now", "clock", null, options.clock.now),
     random: () => perform("random", "random", null, Math.random),
     uuid: () => perform("uuid", "random", null, () => crypto.randomUUID()),

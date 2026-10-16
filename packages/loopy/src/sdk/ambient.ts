@@ -10,6 +10,10 @@ export function step<T extends Json>(
   return workflowContext().step(key, fn, options);
 }
 
+export function hook(name: string, options?: { timeout?: Duration }): Promise<Json> {
+  return workflowContext().hook(name, options);
+}
+
 export function sleep(duration: Duration): Promise<void> {
   return workflowContext().sleep(duration);
 }

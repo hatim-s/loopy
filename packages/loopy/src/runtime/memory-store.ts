@@ -1,15 +1,108 @@
 import type {
+  HookRecord,
+  Json,
   LogRecord,
   RunOutcome,
   RunRecord,
   RunStatus,
   Schedule,
   StepRecord,
+  WaitingHookStep,
 } from "../core/index.js";
+import { canResolveHook, earliestWake } from "./hook-state.js";
 import { acquireWindow, type RateLimitResult, type RateLimitWindow } from "./rate-limit.js";
 import { OwnershipError, type RunStore } from "./store.js";
 
 export class MemoryRunStore implements RunStore {
+  private readonly hooks = new Map<string, HookRecord>();
+  private readonly hooksByRun = new Map<string, Map<number, HookRecord>>();
+
+  async createHook(runId: string, token: string, step: WaitingHookStep): Promise<void> {
+    this.requireRunning(this.owned(runId, token));
+
+    if (this.hooks.has(step.input.token) || this.steps.get(runId)?.has(step.seq)) {
+      throw new Error("Hook already exists. Resume the run to use its waiting hook.");
+    }
+
+    const steps = this.steps.get(runId) ?? new Map<number, StepRecord>();
+    steps.set(step.seq, structuredClone({ ...step, runId }));
+    this.steps.set(runId, steps);
+
+    const hook = {
+      ...step.input,
+      runId,
+      seq: step.seq,
+      createdAt: step.startedAt,
+    };
+
+    this.hooks.set(step.input.token, hook);
+    const hooks = this.hooksByRun.get(runId) ?? new Map<number, HookRecord>();
+    hooks.set(step.seq, hook);
+    this.hooksByRun.set(runId, hooks);
+  }
+
+  async resolveHook(token: string, payload: Json): Promise<boolean> {
+    const hook = this.hooks.get(token);
+    const run = hook ? this.runs.get(hook.runId) : undefined;
+    const steps = hook ? this.steps.get(hook.runId) : undefined;
+    const step = hook ? steps?.get(hook.seq) : undefined;
+
+    if (
+      !hook ||
+      hook.resolvedAt !== undefined ||
+      hook.expiredAt !== undefined ||
+      !run ||
+      !step ||
+      !canResolveHook(run, step, this.now())
+    ) {
+      return false;
+    }
+
+    const timestamp = this.timestamp();
+    hook.payload = structuredClone(payload);
+    hook.resolvedAt = timestamp;
+    run.wakeAt = timestamp;
+    run.updatedAt = timestamp;
+
+    return true;
+  }
+
+  async listHooks(runId: string): Promise<HookRecord[]> {
+    return structuredClone(
+      [...(this.hooksByRun.get(runId)?.values() ?? [])].sort((left, right) => left.seq - right.seq),
+    );
+  }
+
+  async listPendingHooks(runId: string, seqs: number[]): Promise<HookRecord[]> {
+    const hooks = seqs.flatMap((seq) => {
+      const hook = this.hooksByRun.get(runId)?.get(seq);
+
+      return hook ? [hook] : [];
+    });
+
+    return structuredClone(hooks);
+  }
+
+  async expireHook(runId: string, token: string, seq: number): Promise<string | undefined> {
+    this.requireRunning(this.owned(runId, token));
+    const hook = this.hooksByRun.get(runId)?.get(seq);
+    const step = this.steps.get(runId)?.get(seq);
+
+    if (
+      !hook ||
+      hook.resolvedAt !== undefined ||
+      step?.status !== "waiting" ||
+      step.wakeAt === undefined ||
+      Date.parse(step.wakeAt) > this.now()
+    ) {
+      return undefined;
+    }
+
+    hook.expiredAt = this.timestamp();
+
+    return step.wakeAt;
+  }
+
   private readonly limits = new Map<string, RateLimitWindow>();
 
   async acquireRateLimit(
@@ -110,10 +203,17 @@ export class MemoryRunStore implements RunStore {
     const run = this.owned(runId, token);
     this.requireRunning(run);
     run.status = "suspended";
+
+    const resolved = [...(this.hooksByRun.get(runId)?.values() ?? [])]
+      .filter((hook) => this.steps.get(runId)?.get(hook.seq)?.status === "waiting")
+      .flatMap((hook) => (hook.resolvedAt === undefined ? [] : [hook.resolvedAt]))
+      .sort()[0];
+
+    const wake = earliestWake(resolved, wakeAt);
     delete run.wakeAt;
 
-    if (wakeAt !== undefined) {
-      run.wakeAt = wakeAt;
+    if (wake !== undefined) {
+      run.wakeAt = wake;
     }
 
     run.updatedAt = this.timestamp();
@@ -159,7 +259,6 @@ export class MemoryRunStore implements RunStore {
 
   async putStep(runId: string, token: string, step: StepRecord): Promise<void> {
     this.owned(runId, token);
-
     const steps = this.steps.get(runId) ?? new Map<number, StepRecord>();
     steps.set(step.seq, structuredClone(step));
     this.steps.set(runId, steps);

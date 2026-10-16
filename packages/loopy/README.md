@@ -200,3 +200,20 @@ an attempt.
 ```ts
 await step("generate", () => generate(), { rateLimit: "codex" });
 ```
+
+## Hooks
+
+`hook()` suspends a run until an external signal supplies JSON. Without a timeout,
+inline `loopy run` prints the hook name and run ID and exits successfully with a
+suspended run. Resolve it, then continue with `loopy resume <run-id>`:
+
+```ts
+const approval = await hook("approve");
+// loopy hook <run-id> approve --payload '{"ok":true}'
+```
+
+Pass `{ timeout: "1h" }` to set a deadline. A timeout fails the step without retrying.
+`loopy inspect <run-id>` shows names and tokens. Local automation can POST a JSON
+body to `/api/hooks/<token>` on the `loopy ui` server with
+`Authorization: Bearer <viewer-token>`, using the token from the viewer URL. The same authentication and
+origin checks apply. This endpoint is for local automation, not public webhooks.

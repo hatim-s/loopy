@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import type { LogRecord, RunOutcome, Schedule, StepRecord } from "../src/core/index.js";
+import type {
+  LogRecord,
+  RunOutcome,
+  Schedule,
+  StepRecord,
+  WaitingHookStep,
+} from "../src/core/index.js";
 import { OwnershipError, type RunStore } from "../src/runtime/index.js";
 import { newRun } from "./fixture.js";
 
@@ -364,6 +370,9 @@ function staleTakeover(makeStore: StoreFactory): void {
 
 export function storeContract(name: string, makeStore: StoreFactory): void {
   describe(name, () => {
+    hooks(makeStore);
+    hookSignals(makeStore);
+    hookRejections(makeStore);
     rateLimits(makeStore);
     staleTakeover(makeStore);
     stateMachine(makeStore);
@@ -396,5 +405,102 @@ function rateLimits(makeStore: StoreFactory): void {
       retryAt,
     });
     expect(await store.acquireRateLimit("codex", 2, 60_000, retryAt)).toEqual({ ok: true });
+  });
+}
+
+function waitingHook(seq = 1): WaitingHookStep {
+  return {
+    ...STEP,
+    kind: "hook",
+    status: "waiting",
+    seq,
+    input: { name: "approve", token: `hook-${seq}` },
+    maxAttempts: 1,
+  };
+}
+
+async function hookStore(makeStore: StoreFactory, now = () => Date.parse(LOG.at)) {
+  const store = await makeStore({ now, leaseMs: 60_000 });
+  await store.createRun(newRun());
+  await store.claim("run", "owner");
+  await store.createHook("run", "owner", waitingHook());
+
+  return store;
+}
+
+function hooks(makeStore: StoreFactory): void {
+  test("hooks persist waiting steps atomically and isolate listed records", async () => {
+    const store = await hookStore(makeStore);
+    await expect(store.createHook("run", "owner", waitingHook())).rejects.toThrow(
+      "Hook already exists. Resume the run to use its waiting hook.",
+    );
+    await expect(store.createHook("run", "stale", waitingHook(2))).rejects.toBeInstanceOf(
+      OwnershipError,
+    );
+    const hook = { runId: "run", seq: 1, token: "hook-1", name: "approve", createdAt: LOG.at };
+    expect(await store.listHooks("run")).toEqual([hook]);
+    const [listed] = await store.listHooks("run");
+
+    if (listed) {
+      listed.name = "changed";
+    }
+
+    expect(await store.listHooks("run")).toEqual([hook]);
+    expect(await store.getSteps("run")).toEqual([waitingHook()]);
+    expect(await store.listHooks("missing")).toEqual([]);
+  });
+}
+
+function hookSignals(makeStore: StoreFactory): void {
+  test("resolving hooks wakes suspensions and preserves payloads without writing steps", async () => {
+    const store = await hookStore(makeStore);
+    await store.createHook("run", "owner", waitingHook(2));
+    const payload = { ok: true };
+    expect(await store.resolveHook("hook-2", payload)).toBe(true);
+    payload.ok = false;
+    await store.putStep("run", "owner", {
+      ...STEP,
+      seq: 3,
+      status: "succeeded",
+      output: 3,
+      endedAt: LOG.at,
+      finishOrder: 1,
+    });
+    await store.suspend("run", "owner", "2026-10-16T01:00:00.000Z");
+    await store.release("run", "owner");
+    expect((await store.getRun("run"))?.wakeAt).toBe(LOG.at);
+    expect(await store.resolveHook("hook-1", null)).toBe(true);
+    expect(await store.resolveHook("hook-2", "duplicate")).toBe(false);
+    expect(await store.getSteps("run")).toMatchObject([
+      { status: "waiting" },
+      { status: "waiting" },
+      { status: "succeeded", output: 3, finishOrder: 1 },
+    ]);
+    expect(await store.listHooks("run")).toMatchObject([
+      { payload: null, resolvedAt: LOG.at },
+      { payload: { ok: true }, resolvedAt: LOG.at },
+    ]);
+    expect((await store.dueRuns(LOG.at)).map((run) => run.id)).toEqual(["run"]);
+  });
+}
+
+function hookRejections(makeStore: StoreFactory): void {
+  test("expired and cancelled hooks reject signals without changing durable state", async () => {
+    let now = Date.parse(LOG.at);
+    const store = await hookStore(makeStore, () => now);
+    await store.createHook("run", "owner", {
+      ...waitingHook(2),
+      wakeAt: "2026-10-16T00:00:01.000Z",
+    });
+    now += 1000;
+    expect(await store.resolveHook("hook-2", 42)).toBe(false);
+    expect(await store.resolveHook("missing", 42)).toBe(false);
+    await store.finishRun("run", "owner", { status: "cancelled" });
+    await store.release("run", "owner");
+    expect(await store.resolveHook("hook-1", 42)).toBe(false);
+    expect((await store.listHooks("run")).every((hook) => hook.resolvedAt === undefined)).toBe(
+      true,
+    );
+    expect((await store.getSteps("run")).every((step) => step.status === "waiting")).toBe(true);
   });
 }

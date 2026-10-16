@@ -20,6 +20,8 @@ export type { Executor, ResolvedCommand } from "./executor.js";
 
 export { CommandExecutionError, CommandExitError } from "./executor.js";
 
+export { canResolveHook, earliestWake } from "./hook-state.js";
+
 export { NondeterminismError } from "./journal.js";
 
 export { assertJson } from "./json.js";

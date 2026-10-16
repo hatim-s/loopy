@@ -12,6 +12,7 @@ export function usage(): string {
   loopy runs [slug]                           List runs
   loopy inspect <run-id>                      Show the run, step trace and logs
   loopy logs <run-id> [--follow]              Print logs; follow emits NDJSON
+  loopy hook <run-id> <name> [--payload JSON] Resolve a waiting hook
   loopy resume <run-id>                       Continue a queued, suspended or abandoned run
   loopy cancel <run-id>                       Cancel a claimable run
   loopy schedule <slug> [--cron EXPR] [--tz ZONE] [--input-json JSON]

@@ -23,7 +23,7 @@ export type ActivationOptions = {
   wrap?: ActivationScope;
 };
 
-type ActivationOutcome = RunOutcome | { status: "suspended"; wakeAt: string };
+type ActivationOutcome = RunOutcome | { status: "suspended"; wakeAt?: string };
 
 function startWorkflow(
   activation: Activation,
@@ -74,6 +74,17 @@ function settledOutcome(
   return activation.outcome;
 }
 
+async function pollHooks(activation: Activation, options: ActivationOptions): Promise<void> {
+  const seqs = activation.hooksToPoll();
+
+  if (seqs.length > 0) {
+    activation.resolveHooks(
+      await options.store.listPendingHooks(options.runId, seqs),
+      (options.clock ?? SYSTEM_CLOCK).now(),
+    );
+  }
+}
+
 async function drainActivation(
   activation: Activation,
   context: WorkflowContext,
@@ -89,22 +100,19 @@ async function drainActivation(
       return outcome;
     }
 
+    await pollHooks(activation, options);
+
     if (activation.deliver()) {
       continue;
     }
 
-    if (
-      !activation.closed &&
-      activation.running === 0 &&
-      activation.blocked > 0 &&
-      activation.wakeAt !== undefined
-    ) {
+    if (!activation.closed && activation.running === 0 && activation.blocked > 0) {
       activation.close();
 
       return { status: "suspended", wakeAt: activation.wakeAt };
     }
 
-    await activation.changed;
+    await activation.waitForChange();
   }
 }
 

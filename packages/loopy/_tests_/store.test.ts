@@ -47,7 +47,9 @@ test("schema version mismatch recreates tables", async () => {
         expect(inspection.query("PRAGMA user_version").get()).toEqual({ user_version: 9 });
         expect(
           inspection.query("SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name").all(),
-        ).toEqual(["logs", "rate_limits", "runs", "schedules", "steps"].map((name) => ({ name })));
+        ).toEqual(
+          ["hooks", "logs", "rate_limits", "runs", "schedules", "steps"].map((name) => ({ name })),
+        );
       } finally {
         inspection.close();
       }
@@ -276,5 +278,49 @@ test("a live local PID remains owned after its heartbeat lease expires", async (
     expect((await store.getRun("run"))?.owner?.token).toBe("live");
   } finally {
     store.close();
+  }
+});
+
+test("rate windows and hook payloads survive reopening the SQLite file", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "loopy-hooks-reopen-"));
+  const file = join(directory, "runs.sqlite");
+  const store = new SqliteRunStore(file, clock);
+
+  try {
+    await store.createRun(newRun());
+    await store.claim("run", "owner");
+    await store.createHook("run", "owner", {
+      runId: "run",
+      seq: 1,
+      key: "hook:approve",
+      kind: "hook",
+      status: "waiting",
+      input: { name: "approve", token: "hook-token" },
+      attempt: 1,
+      maxAttempts: 1,
+      startedAt: newRun().createdAt,
+    });
+    await store.acquireRateLimit("codex", 1, 60_000, newRun().createdAt);
+    await store.suspend("run", "owner");
+    await store.release("run", "owner");
+  } finally {
+    store.close();
+  }
+
+  const reopened = new SqliteRunStore(file, clock);
+
+  try {
+    expect(await reopened.acquireRateLimit("codex", 1, 60_000, newRun().createdAt)).toEqual({
+      ok: false,
+      retryAt: "2026-10-16T00:01:00.000Z",
+    });
+    expect(await reopened.resolveHook("hook-token", { ok: true })).toBe(true);
+    expect(await reopened.getSteps("run")).toMatchObject([{ status: "waiting" }]);
+    expect(await reopened.listHooks("run")).toMatchObject([
+      { token: "hook-token", payload: { ok: true }, resolvedAt: newRun().createdAt },
+    ]);
+  } finally {
+    reopened.close();
+    rmSync(directory, { recursive: true, force: true });
   }
 });

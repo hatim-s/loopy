@@ -5,6 +5,7 @@ export { errorMessage } from "./errors.js";
 export type {
   CommandResult,
   ExecutionMode,
+  HookRecord,
   Json,
   LogLevel,
   LogPosition,
@@ -18,6 +19,7 @@ export type {
   StepBase,
   StepKind,
   StepRecord,
+  WaitingHookStep,
 } from "./model.js";
 
 export { isTerminalRun } from "./model.js";
