@@ -5,7 +5,7 @@ import { requireRun, withRunStore } from "../store.js";
 
 export async function runResume(context: CliContext): Promise<void> {
   const runId = requireTarget(context, "Run ID");
-  await withRunStore(context.home, async (store) => {
+  await withRunStore(context, async (store) => {
     const run = await requireRun(store, runId);
 
     const loopy = await loadRunLoopy(context.home, run);

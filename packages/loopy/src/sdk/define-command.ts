@@ -1,14 +1,15 @@
-import type {
-  CommandResult,
-  FlagDefinition as CoreFlag,
-  Json,
-  PositionalDefinition,
-} from "../core/index.js";
+import type { CommandResult, Json } from "../core/index.js";
 import type { StepOptions } from "../runtime/index.js";
 import { command } from "./ambient.js";
 import { type RenderInput, renderArgv } from "./render-argv.js";
 
-export type FlagDefinition = CoreFlag & {
+export type FlagDefinition = {
+  readonly cli: string;
+  readonly kind: "boolean" | "string" | "number";
+  readonly repeatable?: boolean;
+  readonly optionalValue?: boolean;
+  readonly choices?: readonly string[];
+
   readonly supported?: boolean;
   readonly style?: "equals" | "space" | "attached" | "positional";
   readonly position?: "before" | "after";
@@ -16,6 +17,12 @@ export type FlagDefinition = CoreFlag & {
   readonly prefix?: readonly string[];
   readonly pairs?: boolean;
   readonly terminator?: string;
+};
+
+export type PositionalDefinition = {
+  readonly name: string;
+  readonly optional?: boolean;
+  readonly variadic?: boolean;
 };
 
 export type CommandDefinition = {

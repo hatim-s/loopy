@@ -6,7 +6,7 @@ import { requireRun, withRunStore } from "../store.js";
 
 export async function runLogs(context: CliContext): Promise<void> {
   const id = requireTarget(context, "Run ID");
-  await withRunStore(context.home, async (store) => {
+  await withRunStore(context, async (store) => {
     let after = 0;
 
     while (true) {

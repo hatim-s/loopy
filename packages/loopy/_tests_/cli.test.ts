@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { afterEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -443,4 +444,96 @@ test("saved slugs require explicit replacement and project entries override glob
   expect(local.code).toBe(0);
   expect(object(local.stdout).output).toBe("project");
   expect(JSON.parse((await cli(f, "list")).stdout)).toHaveLength(1);
+});
+
+for (const signal of ["SIGKILL", "SIGTERM"] as const) {
+  test(`${signal} recovery retries a long step with the next attempt`, async () => {
+    const f = fixture(
+      "crash",
+      `mode: "full", run: () => step("long", async ({ attempt }) => {
+      if (attempt === 1) { await new Promise((resolve) => { setTimeout(resolve, 30_000).unref(); }); }
+      return attempt;
+    })`,
+    );
+
+    await save(f);
+
+    const child = Bun.spawn([process.execPath, CLI, "--home", f.home, "run", "crash"], {
+      cwd: f.cwd,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    const stdout = new Response(child.stdout).text();
+    const stderr = new Response(child.stderr).text();
+    const store = openRunStore(f.home);
+
+    try {
+      let id: string | undefined;
+
+      for (let tries = 0; tries < 100; tries++) {
+        const [run] = await store.listRuns();
+
+        if (run && (await store.getSteps(run.id))[0]?.status === "running") {
+          id = run.id;
+          break;
+        }
+
+        await Bun.sleep(20);
+      }
+
+      if (!id) {
+        throw new Error("CLI never started the long step.");
+      }
+
+      child.kill(signal);
+      await child.exited;
+      await stdout;
+      expect(await stderr).toBe("");
+
+      if (signal === "SIGKILL") {
+        const db = new Database(join(f.home, "runs.sqlite"));
+
+        try {
+          db.query("UPDATE runs SET owner_host=?,heartbeat_at=? WHERE id=?").run(
+            "other-host",
+            new Date().toISOString(),
+            id,
+          );
+        } finally {
+          db.close();
+        }
+
+        expect((await cli(f, "resume", id, "--lease-ms", "500")).code).toBe(1);
+        await Bun.sleep(510);
+      }
+
+      const resumed = await cli(f, "resume", id, "--lease-ms", "500");
+      expect(resumed.stderr).toBe("");
+      expect(resumed.code).toBe(0);
+      expect(object(resumed.stdout)).toMatchObject({ status: "succeeded", output: 2 });
+      expect(await store.getSteps(id)).toMatchObject([{ attempt: 2, status: "succeeded" }]);
+    } finally {
+      child.kill();
+      await child.exited;
+      store.close();
+    }
+  });
+}
+
+test("API distinguishes invalid cursors from registry failures", async () => {
+  const f = fixture("server-errors", "run: () => 1");
+  await save(f);
+  const run = object((await cli(f, "run", "server-errors")).stdout);
+  const server = startServer({ home: f.home, cwd: f.cwd, port: 0 });
+  servers.push(server);
+  const url = new URL(server.url);
+  const token = new URLSearchParams(url.hash.slice(1)).get("token");
+  const headers = { Authorization: `Bearer ${token}` };
+  expect((await fetch(`${url.origin}/api/runs/${run.id}/logs?after=bad`, { headers })).status).toBe(
+    400,
+  );
+  writeFileSync(join(f.cwd, ".loopy", "loopies", "server-errors.json"), "invalid JSON");
+  expect((await fetch(`${url.origin}/api/loopies`, { headers })).status).toBe(500);
+  expect((await fetch(`${url.origin}/api/config`, { headers })).status).toBe(404);
 });

@@ -1,5 +1,15 @@
 import type { CommandResult, ExecutionMode } from "../core/index.js";
-import { CommandExecutionError } from "./errors.js";
+
+export class CommandExecutionError extends Error {
+  constructor(
+    message: string,
+    readonly output: CommandResult,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = "CommandExecutionError";
+  }
+}
 
 export type ResolvedCommand = {
   program: string;
@@ -25,7 +35,7 @@ export class CommandExitError extends CommandExecutionError {
       ? `: ${stderr}. Inspect stderr and correct the command.`
       : ". Correct the command.";
 
-    super(`Command exited with code ${result.exitCode}${detail}`, result, true);
+    super(`Command exited with code ${result.exitCode}${detail}`, result);
     this.name = "CommandExitError";
   }
 }

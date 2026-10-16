@@ -11,7 +11,7 @@ type Route = {
   handle: (context: RouteContext) => Promise<Response>;
 };
 
-type RouteDependencies = { cwd: string; registry: Registry; getStore: () => SqliteRunStore };
+type RouteDependencies = { registry: Registry; getStore: () => SqliteRunStore };
 
 // BOUNDARY: Response serialization accepts validated route payloads and errors.
 export function json(data: unknown, status = 200): Response {
@@ -39,15 +39,14 @@ async function logs(store: SqliteRunStore, id: string, url: URL) {
   const after = Number(url.searchParams.get("after") ?? 0);
 
   if (!Number.isSafeInteger(after) || after < 0) {
-    throw new Error("Invalid log cursor. Supply a nonnegative integer after value.");
+    return json({ error: "Invalid log cursor. Supply a nonnegative integer after value." }, 400);
   }
 
   return json(await store.getLogs(id, after));
 }
 
-export function apiRoutes({ cwd, registry, getStore }: RouteDependencies): Route[] {
+export function apiRoutes({ registry, getStore }: RouteDependencies): Route[] {
   return [
-    { method: "GET", pattern: /^\/api\/config$/, handle: async () => json({ cwd }) },
     { method: "GET", pattern: /^\/api\/loopies$/, handle: async () => json(registry.list()) },
     {
       method: "GET",

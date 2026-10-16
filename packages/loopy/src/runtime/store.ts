@@ -31,6 +31,12 @@ export interface RunStore {
   nextWakeAt(): Promise<string | undefined>;
   putSchedule(schedule: Schedule): Promise<void>;
   listSchedules(): Promise<Schedule[]>;
-  deleteSchedule(slug: string): Promise<void>;
-  fireSchedule(slug: string, fireKey: string, run: RunRecord, nextFireAt: string): Promise<boolean>;
+  deleteSchedule(workspace: string, slug: string): Promise<void>;
+  fireSchedule(
+    workspace: string,
+    slug: string,
+    fireKey: string,
+    run: RunRecord,
+    nextFireAt: string,
+  ): Promise<boolean>;
 }

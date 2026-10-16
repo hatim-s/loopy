@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
-import { CommandExitError, type LoopyContext, MemoryRunStore } from "../src/runtime/index.js";
-import { fixture } from "./engine-fixture.js";
+import { CommandExitError, MemoryRunStore, type WorkflowContext } from "../src/runtime/index.js";
+import { fixture } from "./fixture.js";
 
 test("step logs retain each of three attempts and expose only scoped context", async () => {
   const f = await fixture();
 
-  const workflow = (ctx: LoopyContext) =>
+  const workflow = (ctx: WorkflowContext) =>
     ctx.step("retry", (scope) => {
       expect(Object.keys(scope).sort()).toEqual(["attempt", "log"]);
       scope.log.info("attempt", scope.attempt);
@@ -83,7 +83,7 @@ test("abort suspends an in-flight function step and retries it immediately on re
   const pending = Promise.withResolvers<number>();
   const controller = new AbortController();
 
-  const workflow = (ctx: LoopyContext) =>
+  const workflow = (ctx: WorkflowContext) =>
     ctx.step(
       "hold",
       ({ attempt }) => {

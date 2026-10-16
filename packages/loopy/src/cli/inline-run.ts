@@ -2,6 +2,7 @@ import { setTimeout } from "node:timers/promises";
 import type { LocalExecutor, SqliteRunStore } from "../local/index.js";
 import { activateLoopy, type Loopy } from "../sdk/host.js";
 import { printJson, report } from "./output.js";
+import { onTermination } from "./signals.js";
 import { requireRun } from "./store.js";
 
 type InlineOptions = {
@@ -14,8 +15,7 @@ type InlineOptions = {
 export async function inlineRun(options: InlineOptions) {
   const { store, runId } = options;
   const controller = new AbortController();
-  const interrupt = () => controller.abort();
-  process.once("SIGINT", interrupt);
+  const cleanup = onTermination(() => controller.abort());
 
   try {
     await runActivations(options, controller.signal);
@@ -26,7 +26,7 @@ export async function inlineRun(options: InlineOptions) {
       process.exitCode = 1;
     }
   } finally {
-    process.removeListener("SIGINT", interrupt);
+    cleanup();
   }
 }
 
@@ -34,7 +34,10 @@ async function runActivations(options: InlineOptions, signal: AbortSignal) {
   const { store, loopy, runId, executor } = options;
   let run = await requireRun(store, runId);
 
-  while (!signal.aborted && (run.status === "queued" || run.status === "suspended")) {
+  while (
+    !signal.aborted &&
+    (run.status === "queued" || run.status === "suspended" || run.status === "running")
+  ) {
     if (run.wakeAt && !(await waitForWake(runId, run.wakeAt, signal))) {
       return;
     }

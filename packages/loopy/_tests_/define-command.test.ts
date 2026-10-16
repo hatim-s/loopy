@@ -1,9 +1,8 @@
 import { expect, test } from "bun:test";
 import { MemoryRunStore } from "../src/runtime/index.js";
 import { defineCommand, type Json, loopy } from "../src/sdk/index.js";
-import { startLoopy } from "../src/sdk/run.js";
 import { base64Descriptor } from "../src/sdk/shell/text/format.js";
-import { FakeExecutor } from "./engine-fixture.js";
+import { FakeExecutor, startLoopy } from "./fixture.js";
 
 const probe = defineCommand({
   key: "test.probe",

@@ -48,6 +48,8 @@ export async function macSandbox(
     ...(helper ? [`(allow file-read* (literal ${sbpl(helper)}))`] : []),
     ...(allowedPackage ? [`(allow file-read* (subpath ${sbpl(allowedPackage)}))`] : []),
     `(allow file-write* (subpath ${sbpl(workspace)}))`,
+    '(allow file-write* (literal "/dev/null") (literal "/dev/tty"))',
+    '(allow file-read* (literal "/dev/null") (literal "/dev/zero") (literal "/dev/tty"))',
     "(deny network*)",
   ].join("\n");
 

@@ -3,12 +3,12 @@ import type { LogRow, RunRow, ScheduleRow, StepColumns, StepRow } from "./store-
 
 export const SQL = {
   schedules: "SELECT * FROM schedules ORDER BY rowid",
-  schedule: "SELECT * FROM schedules WHERE slug=?",
-  putSchedule: `INSERT INTO schedules VALUES (?,?,?,?,?,?,?) ON CONFLICT(slug) DO UPDATE SET
+  schedule: "SELECT * FROM schedules WHERE workspace=? AND slug=?",
+  putSchedule: `INSERT INTO schedules VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(workspace,slug) DO UPDATE SET
     cron=excluded.cron,tz=excluded.tz,input_json=excluded.input_json,enabled=excluded.enabled,
     last_fire_key=excluded.last_fire_key,next_fire_at=excluded.next_fire_at`,
-  deleteSchedule: "DELETE FROM schedules WHERE slug=?",
-  fireSchedule: "UPDATE schedules SET last_fire_key=?,next_fire_at=? WHERE slug=?",
+  deleteSchedule: "DELETE FROM schedules WHERE workspace=? AND slug=?",
+  fireSchedule: "UPDATE schedules SET last_fire_key=?,next_fire_at=? WHERE workspace=? AND slug=?",
   nextWakeAt:
     "SELECT MIN(wake_at) AS wake_at FROM runs WHERE status='suspended' AND owner_token IS NULL",
   run: "SELECT * FROM runs WHERE id=?",
@@ -35,8 +35,11 @@ export const SQL = {
   appendLog: "INSERT INTO logs VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
   logExists: "SELECT seq FROM logs WHERE run_id=? AND seq=?",
   logs: "SELECT * FROM logs WHERE run_id=? AND seq>? ORDER BY seq",
-  dueRuns: `SELECT * FROM runs WHERE owner_token IS NULL AND
-    (status='queued' OR (status='suspended' AND wake_at<=?)) ORDER BY created_at,rowid`,
+  dueRuns: `SELECT * FROM runs WHERE (owner_token IS NULL AND
+    (status='queued' OR (status='suspended' AND wake_at<=?))) OR
+    (owner_token IS NOT NULL AND status='running') ORDER BY created_at,rowid`,
+  recoverSteps: `UPDATE steps SET status='retrying',error='Runner lost ownership. Retrying unfinished step.',
+    next_retry_at=?,ended_at=? WHERE run_id=? AND status='running'`,
 };
 
 function decode(value: string): Json {
@@ -216,6 +219,7 @@ function rowToPosition(row: LogRow): LogRecord["position"] {
 
 export function rowToSchedule(row: ScheduleRow): Schedule {
   const schedule: Schedule = {
+    workspace: row.workspace,
     slug: row.slug,
     cron: row.cron,
     tz: row.tz,

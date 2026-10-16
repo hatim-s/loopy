@@ -84,7 +84,7 @@ function isBarrel(specifier: string): boolean {
   return /\/index(\.[jt]s)?$/.test(specifier);
 }
 
-test("authoring and runtime exports bundle without host dependencies", async () => {
+test("core and runtime exports bundle without host dependencies", async () => {
   const result = await Bun.build({
     entrypoints: ["core", "runtime"].map((name) => resolve(SOURCE, `${name}/index.ts`)),
     target: "browser",
@@ -108,6 +108,10 @@ test("layers import downward, and only through the target layer's index", () => 
       }
 
       if (!specifier.startsWith(".")) {
+        if (layer === "core" || layer === "runtime") {
+          violations.push(`${name} may only import relative specifiers (${specifier}).`);
+        }
+
         if (layer === "sdk" && !(name === "sdk/current.ts" && specifier === "node:async_hooks")) {
           violations.push(
             `${name} may only import core, runtime, or node:async_hooks (${specifier}).`,

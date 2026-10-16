@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
-import { FakeExecutor } from "../../../packages/loopy/_tests_/engine-fixture.js";
+import { FakeExecutor, startLoopy } from "../../../packages/loopy/_tests_/fixture.js";
 import { MemoryRunStore } from "../../../packages/loopy/src/runtime/index.js";
-import { startLoopy } from "../../../packages/loopy/src/sdk/host.js";
 import definition from "../asset-sync-pr.loopy.ts";
 
 test("asset sync snapshots a request and passes it to the runner as stdin", async () => {

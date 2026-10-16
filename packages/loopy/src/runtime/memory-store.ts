@@ -14,7 +14,10 @@ export class MemoryRunStore implements RunStore {
   private readonly steps = new Map<string, Map<number, StepRecord>>();
   private readonly logs = new Map<string, Map<number, LogRecord>>();
 
-  constructor(private readonly now: () => number = Date.now) {}
+  constructor(
+    private readonly now: () => number = Date.now,
+    private readonly leaseMs = 60_000,
+  ) {}
 
   async createRun(run: RunRecord): Promise<void> {
     if (this.runs.has(run.id)) {
@@ -41,17 +44,32 @@ export class MemoryRunStore implements RunStore {
   async claim(runId: string, token: string): Promise<RunRecord> {
     const run = this.requireRun(runId);
 
-    if (run.owner !== undefined) {
+    if (run.owner !== undefined && !this.stale(run, this.now())) {
       throw new OwnershipError(runId);
     }
 
-    if (run.status !== "queued" && run.status !== "suspended") {
+    if (run.status !== "queued" && run.status !== "suspended" && !this.stale(run, this.now())) {
       throw new Error(
         `Run '${runId}' cannot be claimed in status '${run.status}'. Activate a queued or suspended run.`,
       );
     }
 
     const timestamp = this.timestamp();
+
+    if (run.owner) {
+      for (const [seq, step] of this.steps.get(runId) ?? []) {
+        if (step.status === "running") {
+          this.steps.get(runId)?.set(seq, {
+            ...step,
+            status: "retrying",
+            error: "Runner lost ownership. Retrying unfinished step.",
+            nextRetryAt: timestamp,
+            endedAt: timestamp,
+          });
+        }
+      }
+    }
+
     run.owner = { token, pid: 0, host: "memory", heartbeatAt: timestamp };
     run.status = "running";
     run.updatedAt = timestamp;
@@ -158,11 +176,12 @@ export class MemoryRunStore implements RunStore {
     return structuredClone(
       [...this.runs.values()].filter(
         (run) =>
-          run.owner === undefined &&
-          (run.status === "queued" ||
-            (run.status === "suspended" &&
-              run.wakeAt !== undefined &&
-              Date.parse(run.wakeAt) <= Date.parse(now))),
+          this.stale(run, Date.parse(now)) ||
+          (run.owner === undefined &&
+            (run.status === "queued" ||
+              (run.status === "suspended" &&
+                run.wakeAt !== undefined &&
+                Date.parse(run.wakeAt) <= Date.parse(now)))),
       ),
     );
   }
@@ -179,7 +198,7 @@ export class MemoryRunStore implements RunStore {
 
   async putSchedule(schedule: Schedule): Promise<void> {
     this.schedules.set(
-      schedule.slug,
+      JSON.stringify([schedule.workspace, schedule.slug]),
       structuredClone({
         ...schedule,
         nextFireAt: new Date(schedule.nextFireAt).toISOString(),
@@ -191,17 +210,18 @@ export class MemoryRunStore implements RunStore {
     return structuredClone([...this.schedules.values()]);
   }
 
-  async deleteSchedule(slug: string): Promise<void> {
-    this.schedules.delete(slug);
+  async deleteSchedule(workspace: string, slug: string): Promise<void> {
+    this.schedules.delete(JSON.stringify([workspace, slug]));
   }
 
   async fireSchedule(
+    workspace: string,
     slug: string,
     fireKey: string,
     run: RunRecord,
     nextFireAt: string,
   ): Promise<boolean> {
-    const schedule = this.schedules.get(slug);
+    const schedule = this.schedules.get(JSON.stringify([workspace, slug]));
 
     if (!schedule) {
       throw new Error(`Schedule '${slug}' does not exist. Save the schedule before firing it.`);
@@ -222,6 +242,14 @@ export class MemoryRunStore implements RunStore {
     schedule.nextFireAt = next;
 
     return true;
+  }
+
+  private stale(run: RunRecord, now: number): boolean {
+    return (
+      run.status === "running" &&
+      run.owner !== undefined &&
+      now - Date.parse(run.owner.heartbeatAt) > this.leaseMs
+    );
   }
 
   private requireRunning(run: RunRecord): void {

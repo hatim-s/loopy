@@ -22,7 +22,7 @@ export function emptyOutput(): CommandResult {
 
 /** An error raised before the process spawned, so retrying it is safe. */
 export function unstarted(cause: unknown): CommandExecutionError {
-  return new CommandExecutionError(errorMessage(cause), emptyOutput(), false, { cause });
+  return new CommandExecutionError(errorMessage(cause), emptyOutput(), { cause });
 }
 
 function killTree(child: ChildProcessWithoutNullStreams, signal: NodeJS.Signals): void {
@@ -168,7 +168,7 @@ export function spawnCaptured(
 
       if (reason) {
         rejectOutput(
-          new CommandExecutionError(reason.message, output, child.pid !== undefined, {
+          new CommandExecutionError(reason.message, output, {
             cause: reason,
           }),
         );

@@ -1,14 +1,12 @@
 import { validateSecretName } from "../../core/index.js";
 import { SecretStore, validateSecretValue } from "../../local/index.js";
-import type { CliContext } from "../context.js";
+import { type CliContext, optionalTarget, requireHead } from "../context.js";
 import { printJson } from "../output.js";
 import { readSecret } from "../secret-entry.js";
 
-const STDIN_ONLY_FOR_SET = "--stdin is only supported by loopy secrets set.";
-
 async function storeSecret(context: CliContext, store: SecretStore, name: string | undefined) {
   if (!name) {
-    throw new Error("A secret name is required.");
+    throw new Error("Pass a secret name, e.g. loopy secrets set NPM_TOKEN.");
   }
 
   validateSecretName(name);
@@ -18,17 +16,12 @@ async function storeSecret(context: CliContext, store: SecretStore, name: string
   printJson({ name, saved: true });
 }
 
-async function manageStore(context: CliContext, action: string | undefined, args: string[]) {
-  const [name, ...rest] = args;
-
-  if (rest.length) {
-    throw new Error(
-      "Unexpected secret arguments. Values must be entered privately or supplied through --stdin.",
-    );
-  }
+export async function runSecrets(context: CliContext): Promise<void> {
+  const { head: action, rest } = requireHead(context, "Secret action");
+  const name = optionalTarget({ ...context, positionals: rest });
 
   if (context.values.stdin && action !== "set") {
-    throw new Error(STDIN_ONLY_FOR_SET);
+    throw new Error("--stdin is only supported by loopy secrets set.");
   }
 
   const store = new SecretStore(context.home);
@@ -48,7 +41,7 @@ async function manageStore(context: CliContext, action: string | undefined, args
       return;
     case "remove":
       if (!name) {
-        throw new Error("A secret name is required.");
+        throw new Error("Pass a secret name, e.g. loopy secrets set NPM_TOKEN.");
       }
 
       store.remove(name);
@@ -58,10 +51,4 @@ async function manageStore(context: CliContext, action: string | undefined, args
     default:
       throw new Error("Use loopy secrets set <name>, list, or remove <name>.");
   }
-}
-
-export async function runSecrets(context: CliContext): Promise<void> {
-  const [action, ...args] = context.positionals;
-
-  await manageStore(context, action, args);
 }

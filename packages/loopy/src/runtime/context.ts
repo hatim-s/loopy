@@ -190,9 +190,9 @@ export function createContext(options: ContextOptions) {
   };
 }
 
-export type LoopyContext = ReturnType<typeof createContext>;
+export type WorkflowContext = ReturnType<typeof createContext>;
 
 export type ActivationScope = {
-  workflow<T>(fn: () => T, context: LoopyContext, fail: (error: Error) => void): T;
+  workflow<T>(fn: () => T, context: WorkflowContext, fail: (error: Error) => void): T;
   step<T>(fn: () => T, context: StepContext): T;
 };

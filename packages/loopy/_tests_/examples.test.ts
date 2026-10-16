@@ -2,8 +2,7 @@ import { expect, test } from "bun:test";
 import hello from "../../../examples/hello.loopy.ts";
 import review from "../../../examples/review.loopy.ts";
 import { MemoryRunStore } from "../src/runtime/index.js";
-import { startLoopy } from "../src/sdk/host.js";
-import { FakeExecutor } from "./engine-fixture.js";
+import { FakeExecutor, startLoopy } from "./fixture.js";
 
 test("hello records a durable greeting and its log", async () => {
   const store = new MemoryRunStore();

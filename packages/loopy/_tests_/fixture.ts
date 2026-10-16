@@ -3,10 +3,11 @@ import {
   activate,
   type Clock,
   type Executor,
-  type LoopyContext,
   MemoryRunStore,
   type ResolvedCommand,
+  type WorkflowContext,
 } from "../src/runtime/index.js";
+import { activateLoopy, createLoopyRun } from "../src/sdk/host.js";
 
 export class FakeExecutor implements Executor {
   calls: ResolvedCommand[] = [];
@@ -76,7 +77,7 @@ export async function fixture(store = new MemoryRunStore()) {
   const executor = new FakeExecutor();
   await store.createRun(run);
 
-  function execute(workflow: (context: LoopyContext) => Promise<Json>, signal?: AbortSignal) {
+  function execute(workflow: (context: WorkflowContext) => Promise<Json>, signal?: AbortSignal) {
     return activate({
       runId: run.id,
       store,
@@ -96,4 +97,13 @@ export function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, milliseconds);
   });
+}
+
+export async function startLoopy<Input, Output extends Json>(
+  options: Parameters<typeof createLoopyRun<Input, Output>>[0] &
+    Pick<Parameters<typeof activateLoopy<Input, Output>>[0], "executor" | "signal">,
+) {
+  await createLoopyRun(options);
+
+  return activateLoopy(options);
 }

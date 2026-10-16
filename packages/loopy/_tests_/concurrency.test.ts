@@ -1,6 +1,6 @@
 import { expect, expectTypeOf, test } from "bun:test";
 import { map, parallel, race } from "../src/runtime/index.js";
-import { delay } from "./engine-fixture.js";
+import { delay } from "./fixture.js";
 
 test("parallel and race infer heterogeneous tuple results", async () => {
   const fns = [async () => "a", async () => 1] as const;

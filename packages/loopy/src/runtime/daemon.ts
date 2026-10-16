@@ -1,6 +1,6 @@
 import { errorMessage, type RunRecord, type Schedule } from "../core/index.js";
 import { type Clock, SYSTEM_CLOCK } from "./clock.js";
-import { fireKey, nextFire, parseCron } from "./cron.js";
+import { nextFire, parseCron } from "./cron.js";
 import { type ActivationOptions, activate } from "./engine.js";
 import { ActivationPool } from "./pool.js";
 import { OwnershipError, type RunStore } from "./store.js";
@@ -12,10 +12,9 @@ type DaemonOptions = {
   ) => Promise<
     Pick<ActivationOptions, "workflow" | "wrap" | "executor" | "mode" | "cwd" | "signal">
   >;
-  workspace: string;
   clock?: Clock;
   concurrency?: number;
-  bundleHashFor: (slug: string) => string | Promise<string>;
+  bundleHashFor: (schedule: Schedule) => string | Promise<string>;
   onError?: (error: Error, run?: RunRecord) => void;
   sleep?: (milliseconds: number, signal: AbortSignal) => Promise<void>;
 };
@@ -104,35 +103,34 @@ export class Daemon {
 
     while (!this.stopped) {
       try {
-        const fired = await this.dispatch();
+        const { fired, runs } = await this.dueWork();
+
+        for (const run of runs) {
+          this.pool.start(run);
+        }
+
         const progress = fired + this.pool.takeProgress();
-        await this.wait(progress > 0 ? 0 : delay);
+        await this.wait({ minimum: progress > 0 ? 0 : delay });
         delay = progress > 0 ? 1000 : Math.min(5000, delay * 2);
       } catch (error) {
         this.report(error);
-        await this.pause(5000);
+        await this.wait({ milliseconds: 5000 });
       }
     }
 
     await this.pool.drain();
   }
 
-  private async dispatch(): Promise<number> {
+  private async dueWork() {
     const now = new Date(this.clock.now()).toISOString();
     const fired = await this.fireSchedules(now);
     const runs = await this.options.store.dueRuns(now);
 
-    for (const run of runs) {
-      this.pool.start(run);
-    }
-
-    return fired;
+    return { fired, runs };
   }
 
   private async performTick(): Promise<TickResult> {
-    const now = new Date(this.clock.now()).toISOString();
-    const fired = await this.fireSchedules(now);
-    const runs = await this.options.store.dueRuns(now);
+    const { fired, runs } = await this.dueWork();
     const activated = await this.pool.activateAll(runs);
 
     return { fired, activated };
@@ -179,8 +177,8 @@ export class Daemon {
     const run: RunRecord = {
       id: crypto.randomUUID(),
       slug: schedule.slug,
-      bundleHash: await this.options.bundleHashFor(schedule.slug),
-      workspace: this.options.workspace,
+      bundleHash: await this.options.bundleHashFor(schedule),
+      workspace: schedule.workspace,
       input: schedule.input,
       status: "queued",
       createdAt: now,
@@ -188,8 +186,9 @@ export class Daemon {
     };
 
     return this.options.store.fireSchedule(
+      schedule.workspace,
       schedule.slug,
-      fireKey(schedule.slug, at),
+      `${schedule.slug}@${at.toISOString().slice(0, 16)}Z`,
       run,
       nextFire(parseCron(schedule.cron), at, schedule.tz).toISOString(),
     );
@@ -249,21 +248,7 @@ export class Daemon {
     this.options.onError?.(error, run);
   }
 
-  private async pause(milliseconds: number): Promise<void> {
-    const controller = new AbortController();
-    this.waiting = controller;
-
-    try {
-      if (!this.stopped) {
-        await (this.options.sleep ?? sleep)(milliseconds, controller.signal);
-      }
-    } finally {
-      this.waiting = undefined;
-      this.wakeRequested = false;
-    }
-  }
-
-  private async wait(minimum: number): Promise<void> {
+  private async wait(delay: { milliseconds: number } | { minimum: number }): Promise<void> {
     const controller = new AbortController();
     this.waiting = controller;
 
@@ -272,31 +257,36 @@ export class Daemon {
         return;
       }
 
-      const [wakeAt, schedules] = await Promise.all([
-        this.options.store.nextWakeAt(),
-        this.options.store.listSchedules(),
-      ]);
-
-      const deadlines = schedules
-        .filter((schedule) => schedule.enabled)
-        .map((schedule) => Date.parse(schedule.nextFireAt));
-
-      if (wakeAt !== undefined) {
-        deadlines.push(Date.parse(wakeAt));
-      }
-
-      const milliseconds = Math.max(
-        minimum,
-        Math.min(
-          this.pool.active > 0 && minimum > 0 ? minimum : 5000,
-          ...deadlines.map((at) => at - this.clock.now()),
-        ),
-      );
+      const milliseconds =
+        "milliseconds" in delay ? delay.milliseconds : await this.waitDuration(delay.minimum);
 
       await (this.options.sleep ?? sleep)(milliseconds, controller.signal);
     } finally {
       this.waiting = undefined;
       this.wakeRequested = false;
     }
+  }
+
+  private async waitDuration(minimum: number): Promise<number> {
+    const [wakeAt, schedules] = await Promise.all([
+      this.options.store.nextWakeAt(),
+      this.options.store.listSchedules(),
+    ]);
+
+    const deadlines = schedules
+      .filter((schedule) => schedule.enabled)
+      .map((schedule) => Date.parse(schedule.nextFireAt));
+
+    if (wakeAt !== undefined) {
+      deadlines.push(Date.parse(wakeAt));
+    }
+
+    return Math.max(
+      minimum,
+      Math.min(
+        this.pool.active > 0 && minimum > 0 ? minimum : 5000,
+        ...deadlines.map((at) => at - this.clock.now()),
+      ),
+    );
   }
 }

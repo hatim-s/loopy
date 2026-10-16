@@ -4,5 +4,5 @@ import { withRunStore } from "../store.js";
 
 export async function runRuns(context: CliContext): Promise<void> {
   const slug = optionalTarget(context);
-  printJson(await withRunStore(context.home, (store) => store.listRuns({ slug })));
+  printJson(await withRunStore(context, (store) => store.listRuns({ slug })));
 }

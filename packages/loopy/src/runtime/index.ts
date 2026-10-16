@@ -4,25 +4,21 @@ export { SYSTEM_CLOCK } from "./clock.js";
 
 export { map, parallel, race } from "./concurrency.js";
 
-export type { ActivationScope, LoopyContext, StepContext, StepOptions } from "./context.js";
+export type { ActivationScope, StepContext, StepOptions, WorkflowContext } from "./context.js";
 
-export type { CronSchedule } from "./cron.js";
-
-export { fireKey, nextFire, parseCron } from "./cron.js";
+export { nextFire, parseCron } from "./cron.js";
 
 export { Daemon } from "./daemon.js";
 
 export type { Duration } from "./duration.js";
 
-export type { ActivationOptions, ActivationOutcome } from "./engine.js";
+export type { ActivationOptions } from "./engine.js";
 
 export { activate } from "./engine.js";
 
-export { CommandExecutionError } from "./errors.js";
-
 export type { Executor, ResolvedCommand } from "./executor.js";
 
-export { CommandExitError } from "./executor.js";
+export { CommandExecutionError, CommandExitError } from "./executor.js";
 
 export { NondeterminismError } from "./journal.js";
 

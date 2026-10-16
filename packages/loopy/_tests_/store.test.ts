@@ -1,16 +1,16 @@
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { LogRecord, StepRecord } from "../src/core/index.js";
 import { SqliteRunStore } from "../src/local/index.js";
-import { newRun } from "./engine-fixture.js";
+import { newRun } from "./fixture.js";
 import { storeContract } from "./store-contract.js";
 
 const clock = () => Date.parse("2026-10-16T00:00:00.000Z");
 
-storeContract("SqliteRunStore", () => new SqliteRunStore(":memory:"));
+storeContract("SqliteRunStore", (options) => new SqliteRunStore(":memory:", options?.now, options));
 
 test("schema version mismatch recreates tables", async () => {
   const directory = mkdtempSync(join(tmpdir(), "loopy-engine-schema-"));
@@ -44,12 +44,10 @@ test("schema version mismatch recreates tables", async () => {
       const inspection = new Database(file);
 
       try {
-        expect(inspection.query("PRAGMA user_version").get()).toEqual({ user_version: 7 });
+        expect(inspection.query("PRAGMA user_version").get()).toEqual({ user_version: 8 });
         expect(
           inspection.query("SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name").all(),
-        ).toEqual(
-          ["hooks", "logs", "rate_limits", "runs", "schedules", "steps"].map((name) => ({ name })),
-        );
+        ).toEqual(["logs", "runs", "schedules", "steps"].map((name) => ({ name })));
       } finally {
         inspection.close();
       }
@@ -228,6 +226,33 @@ test("timestamp writes use UTC and due comparisons accept offsets", async () => 
     await store.release("run", "owner");
     expect((await store.getRun("run"))?.wakeAt).toBe(utc);
     expect((await store.dueRuns(offset)).map((run) => run.id)).toEqual(["run"]);
+  } finally {
+    store.close();
+  }
+});
+
+test("a dead same-host PID permits immediate takeover before lease expiry", async () => {
+  const child = Bun.spawn(["/bin/sleep", "30"], { stdout: "ignore", stderr: "ignore" });
+  child.kill("SIGKILL");
+  await child.exited;
+  const store = new SqliteRunStore(":memory:", clock);
+
+  try {
+    await store.createRun({
+      ...newRun(),
+      status: "running",
+      owner: {
+        token: "dead",
+        pid: child.pid,
+        host: hostname(),
+        heartbeatAt: newRun().createdAt,
+      },
+    });
+    expect((await store.dueRuns(newRun().createdAt)).map((run) => run.id)).toEqual(["run"]);
+    expect(await store.claim("run", "alive")).toMatchObject({
+      owner: { token: "alive", pid: process.pid },
+    });
+    expect(await store.heartbeat("run", "dead")).toBe(false);
   } finally {
     store.close();
   }

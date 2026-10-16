@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
-import { FakeExecutor } from "../../../packages/loopy/_tests_/engine-fixture.js";
+import { FakeExecutor, startLoopy } from "../../../packages/loopy/_tests_/fixture.js";
 import { MemoryRunStore } from "../../../packages/loopy/src/runtime/index.js";
-import { startLoopy } from "../../../packages/loopy/src/sdk/host.js";
 import definition from "../www-uacode-sync.loopy.ts";
 
 for (const dryRun of [true, false]) {

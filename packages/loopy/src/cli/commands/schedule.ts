@@ -1,8 +1,8 @@
 import { loadLoopy, Registry } from "../../local/index.js";
 import { assertJson, nextFire, parseCron } from "../../runtime/index.js";
 import { type CliContext, requireTarget } from "../context.js";
+import { jsonInput } from "../input.js";
 import { printJson } from "../output.js";
-import { jsonInput } from "../sdk-input.js";
 import { withRunStore } from "../store.js";
 
 export async function runSchedule(context: CliContext): Promise<void> {
@@ -14,9 +14,9 @@ export async function runSchedule(context: CliContext): Promise<void> {
     throw new Error("Choose --cron or --off. Provide only one schedule action.");
   }
 
-  await withRunStore(context.home, async (store) => {
+  await withRunStore(context, async (store) => {
     if (context.values.off) {
-      await store.deleteSchedule(slug);
+      await store.deleteSchedule(context.cwd, slug);
       printJson({ slug, scheduled: false });
 
       return;
@@ -34,6 +34,7 @@ export async function runSchedule(context: CliContext): Promise<void> {
     assertJson(input, "Schedule input");
 
     const schedule = {
+      workspace: context.cwd,
       slug,
       cron,
       tz,

@@ -1,7 +1,5 @@
 export { parseArgv } from "./argv.js";
 
-export type { FlagDefinition, PositionalDefinition } from "./command-types.js";
-
 export { errorMessage } from "./errors.js";
 
 export type {
@@ -13,7 +11,6 @@ export type {
   LogRecord,
   RunDetail,
   RunOutcome,
-  RunOwner,
   RunRecord,
   RunStatus,
   Schedule,
@@ -22,11 +19,9 @@ export type {
   StepRecord,
 } from "./model.js";
 
-export { isTerminalRun, TERMINAL_RUN_STATUSES } from "./model.js";
+export { isTerminalRun } from "./model.js";
 
-export { validateEnvironmentName, validateSecretName, validateSlug } from "./names.js";
-
-export type { UnknownRecord } from "./validation.js";
+export { validateSecretName, validateSlug } from "./names.js";
 
 export {
   allowKeys,

@@ -5,7 +5,7 @@ import { requireRun, withRunStore } from "../store.js";
 
 export async function runCancel(context: CliContext): Promise<void> {
   const id = requireTarget(context, "Run ID");
-  await withRunStore(context.home, async (store) => {
+  await withRunStore(context, async (store) => {
     await requireRun(store, id);
     const token = crypto.randomUUID();
 

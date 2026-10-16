@@ -7,7 +7,7 @@ import {
   MemoryRunStore,
   OwnershipError,
 } from "../src/runtime/index.js";
-import { FakeExecutor, newRun } from "./engine-fixture.js";
+import { FakeExecutor, newRun } from "./fixture.js";
 
 function fixture(
   options: Partial<ConstructorParameters<typeof Daemon>[0]> & {
@@ -29,7 +29,6 @@ function fixture(
   const daemon = new Daemon({
     store,
     clock,
-    workspace: "/workspace",
     bundleHashFor: () => "bundle",
     prepare: async (run) => ({
       workflow: options.workflowFor ? await options.workflowFor(run) : async (ctx) => ctx.input,
@@ -53,6 +52,7 @@ function fixture(
 
 function schedule(overrides: Partial<Schedule> = {}): Schedule {
   return {
+    workspace: "/workspace",
     slug: "test",
     cron: "* * * * *",
     tz: "UTC",

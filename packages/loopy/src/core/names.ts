@@ -1,19 +1,11 @@
 /** Identifier formats shared by authoring, validation, storage and the CLI. */
 export const SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,79}$/;
 
-export const ENVIRONMENT_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
-
 export const SECRET_NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/;
 
 export function validateSlug(slug: string): void {
   if (!SLUG_PATTERN.test(slug)) {
     throw new Error("A slug must contain 1-80 lowercase letters, numbers, or hyphens.");
-  }
-}
-
-export function validateEnvironmentName(name: string): void {
-  if (!ENVIRONMENT_NAME_PATTERN.test(name)) {
-    throw new Error(`'${name}' is not a valid environment variable name.`);
   }
 }
 

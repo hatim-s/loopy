@@ -4,7 +4,7 @@
  * location it is checking so an error tells the reader where the bad value is.
  */
 // BOUNDARY: JSON files, HTTP bodies and imported module fields remain untrusted until their domain validators check each field.
-export type UnknownRecord = Record<string, unknown>;
+type UnknownRecord = Record<string, unknown>;
 
 export function isRecord(value: unknown): value is UnknownRecord {
   return value !== null && typeof value === "object" && !Array.isArray(value);

@@ -1,9 +1,9 @@
 import { timingSafeEqual } from "node:crypto";
 import { resolve } from "node:path";
 import { errorMessage } from "../../core/index.js";
-import { openRunStore } from "../daemon.js";
 import { defaultHome } from "../home.js";
 import { Registry } from "../registry.js";
+import { openRunStore } from "../store.js";
 import { serveAsset, snapshotAssets } from "./assets.js";
 import { apiRoutes, dispatch, json } from "./routes.js";
 
@@ -55,7 +55,7 @@ export function startServer(options: ServerOptions = {}) {
     resolve(options.assets ?? resolve(import.meta.dir, "../../../dist/studio")),
   );
 
-  const routes = apiRoutes({ cwd, registry, getStore });
+  const routes = apiRoutes({ registry, getStore });
 
   const server = Bun.serve({
     hostname: "127.0.0.1",
@@ -82,7 +82,7 @@ export function startServer(options: ServerOptions = {}) {
 
         return await dispatch(routes, request, url, path);
       } catch (error) {
-        return json({ error: errorMessage(error) }, 400);
+        return json({ error: errorMessage(error) }, error instanceof URIError ? 400 : 500);
       }
     },
   });

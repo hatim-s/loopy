@@ -6,9 +6,8 @@ import ts from "typescript";
 import { parseCliHelp } from "../src/local/typegen/parse-help";
 import { renderCommandSource } from "../src/local/typegen/render";
 import { MemoryRunStore } from "../src/runtime/index.js";
-import { startLoopy } from "../src/sdk/host.js";
 import { defineCommand, loopy } from "../src/sdk/index.js";
-import { FakeExecutor } from "./engine-fixture.js";
+import { FakeExecutor, startLoopy } from "./fixture.js";
 
 const help = `Run Codex non-interactively
 

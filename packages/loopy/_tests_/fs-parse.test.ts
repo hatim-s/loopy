@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MemoryRunStore } from "../src/runtime/index.js";
 import { fs, loopy } from "../src/sdk/index.js";
-import { startLoopy } from "../src/sdk/run.js";
 import {
   parseDf,
   parseDu,
@@ -16,6 +15,7 @@ import {
   parseTree,
   parseWhich,
 } from "../src/sdk/shell/parse/fs.js";
+import { startLoopy } from "./fixture.js";
 import { fixture, result, SpawnExecutor } from "./shell-parse-fixture.js";
 
 test("find and ls preserve NUL-delimited paths and list basenames", async () => {

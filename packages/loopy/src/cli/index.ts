@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { resolve } from "node:path";
-import { errorMessage } from "../core/index.js";
+import { errorMessage, requirePositiveInteger } from "../core/index.js";
 import { defaultHome } from "../local/index.js";
 import { parseCliArgs } from "./args.js";
 import { runCancel } from "./commands/cancel.js";
@@ -23,18 +23,17 @@ import { usage } from "./usage.js";
 const COMMANDS = {
   cancel: runCancel,
   daemon: runDaemon,
-  logs: runLogs,
-  schedule: runSchedule,
-
-  save: runSave,
-  list: runList,
-  run: runRun,
-  resume: runResume,
-  runs: runRuns,
   inspect: runInspect,
+  list: runList,
+  logs: runLogs,
+  resume: runResume,
+  run: runRun,
+  runs: runRuns,
+  save: runSave,
+  schedule: runSchedule,
+  secrets: runSecrets,
   types: runTypes,
   ui: runUi,
-  secrets: runSecrets,
 } satisfies Record<string, (context: CliContext) => Promise<void>>;
 
 function isCommandName(value: string): value is keyof typeof COMMANDS {
@@ -42,7 +41,7 @@ function isCommandName(value: string): value is keyof typeof COMMANDS {
 }
 
 export async function main(args = process.argv.slice(2)): Promise<void> {
-  const { values, positionals, triggerInput } = parseCliArgs(args);
+  const { values, positionals, namedInput } = parseCliArgs(args);
   const [command, ...rest] = positionals;
 
   if (values.help || !command) {
@@ -59,10 +58,14 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
 
   await handler({
     home: resolve(values.home ?? defaultHome()),
+    leaseMs:
+      values["lease-ms"] === undefined
+        ? undefined
+        : requirePositiveInteger(Number(values["lease-ms"]), "--lease-ms"),
     cwd: resolve(values.cwd ?? process.cwd()),
     values,
     positionals: rest,
-    triggerInput,
+    namedInput,
   });
 }
 

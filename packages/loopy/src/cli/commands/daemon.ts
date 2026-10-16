@@ -1,6 +1,7 @@
 import { localDaemon } from "../../local/index.js";
 import { type CliContext, requireTarget } from "../context.js";
 import { report } from "../output.js";
+import { onTermination } from "../signals.js";
 import { withRunStore } from "../store.js";
 
 export async function runDaemon(context: CliContext): Promise<void> {
@@ -8,7 +9,7 @@ export async function runDaemon(context: CliContext): Promise<void> {
     throw new Error("Unknown daemon action. Use loopy daemon run.");
   }
 
-  await withRunStore(context.home, async (store) => {
+  await withRunStore(context, async (store) => {
     const daemon = localDaemon({
       ...context,
       store,
@@ -21,14 +22,12 @@ export async function runDaemon(context: CliContext): Promise<void> {
       void daemon.stop();
     };
 
-    process.once("SIGINT", stop);
-    process.once("SIGTERM", stop);
+    const cleanup = onTermination(stop);
 
     try {
       await daemon.run();
     } finally {
-      process.removeListener("SIGINT", stop);
-      process.removeListener("SIGTERM", stop);
+      cleanup();
       await daemon.stop();
     }
   });

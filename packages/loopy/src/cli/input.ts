@@ -43,7 +43,7 @@ type NamedInput = Record<string, string | number | boolean>;
 
 async function recordInput(spec: RecordSpec, context: CliContext) {
   const input: NamedInput = {};
-  Object.assign(input, context.triggerInput);
+  Object.assign(input, context.namedInput);
 
   const prompt =
     process.stdin.isTTY && process.stderr.isTTY
@@ -53,7 +53,7 @@ async function recordInput(spec: RecordSpec, context: CliContext) {
   try {
     for (const [field, kind] of Object.entries(spec)) {
       const key = field.replace(/\?$/, "");
-      const supplied = context.triggerInput?.[key];
+      const supplied = context.namedInput?.[key];
 
       const value =
         supplied ??

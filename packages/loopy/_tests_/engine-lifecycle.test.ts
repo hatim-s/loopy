@@ -1,7 +1,7 @@
 import { expect, spyOn, test } from "bun:test";
 import type { LogRecord, StepRecord } from "../src/core/index.js";
 import { MemoryRunStore, race } from "../src/runtime/index.js";
-import { delay, fixture } from "./engine-fixture.js";
+import { delay, fixture } from "./fixture.js";
 
 class ReadFailureStore extends MemoryRunStore {
   constructor(private readonly operation: "steps" | "logs") {

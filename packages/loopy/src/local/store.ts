@@ -1,5 +1,7 @@
 import { Database } from "bun:sqlite";
+import { mkdirSync } from "node:fs";
 import { hostname } from "node:os";
+import { join } from "node:path";
 import type {
   LogRecord,
   RunOutcome,
@@ -9,6 +11,7 @@ import type {
   StepRecord,
 } from "../core/index.js";
 import { OwnershipError, type RunStore } from "../runtime/index.js";
+import { errnoCode } from "./fs.js";
 import { rowToLog, rowToRun, rowToSchedule, rowToStep, SQL, stepToRow } from "./store-rows.js";
 import {
   type LogRow,
@@ -25,6 +28,7 @@ export class SqliteRunStore implements RunStore {
   constructor(
     file: string,
     private readonly now: () => number = Date.now,
+    private readonly options: { leaseMs?: number } = {},
   ) {
     this.db = new Database(file, { create: true });
     this.db.exec("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000");
@@ -101,6 +105,13 @@ export class SqliteRunStore implements RunStore {
     return this.db
       .transaction(() => {
         const timestamp = this.timestamp();
+
+        const previous = this.requireRow(runId);
+
+        if (this.stale(previous, this.now())) {
+          this.db.query(SQL.recoverSteps).run(timestamp, timestamp, runId);
+          this.db.query(SQL.release).run(timestamp, timestamp, runId, previous.owner_token);
+        }
 
         const result = this.db
           .query(SQL.claim)
@@ -253,6 +264,7 @@ export class SqliteRunStore implements RunStore {
     return this.db
       .query<RunRow, [string]>(SQL.dueRuns)
       .all(new Date(now).toISOString())
+      .filter((row) => row.owner_token === null || this.stale(row, Date.parse(now)))
       .map(rowToRun);
   }
 
@@ -266,6 +278,7 @@ export class SqliteRunStore implements RunStore {
     this.db
       .query(SQL.putSchedule)
       .run(
+        schedule.workspace,
         schedule.slug,
         schedule.cron,
         schedule.tz,
@@ -280,11 +293,12 @@ export class SqliteRunStore implements RunStore {
     return this.db.query<ScheduleRow, []>(SQL.schedules).all().map(rowToSchedule);
   }
 
-  async deleteSchedule(slug: string): Promise<void> {
-    this.db.query(SQL.deleteSchedule).run(slug);
+  async deleteSchedule(workspace: string, slug: string): Promise<void> {
+    this.db.query(SQL.deleteSchedule).run(workspace, slug);
   }
 
   async fireSchedule(
+    workspace: string,
     slug: string,
     fireKey: string,
     run: RunRecord,
@@ -292,7 +306,9 @@ export class SqliteRunStore implements RunStore {
   ): Promise<boolean> {
     return this.db
       .transaction(() => {
-        const schedule = this.db.query<ScheduleRow, [string]>(SQL.schedule).get(slug);
+        const schedule = this.db
+          .query<ScheduleRow, [string, string]>(SQL.schedule)
+          .get(workspace, slug);
 
         if (!schedule) {
           throw new Error(`Schedule '${slug}' does not exist. Save the schedule before firing it.`);
@@ -307,7 +323,9 @@ export class SqliteRunStore implements RunStore {
         }
 
         this.insertRun(run);
-        this.db.query(SQL.fireSchedule).run(fireKey, new Date(nextFireAt).toISOString(), slug);
+        this.db
+          .query(SQL.fireSchedule)
+          .run(fireKey, new Date(nextFireAt).toISOString(), workspace, slug);
 
         return true;
       })
@@ -316,6 +334,26 @@ export class SqliteRunStore implements RunStore {
 
   close(): void {
     this.db.close();
+  }
+
+  private stale(row: RunRow, now: number): boolean {
+    if (row.status !== "running" || row.owner_token === null || row.heartbeat_at === null) {
+      return false;
+    }
+
+    if (now - Date.parse(row.heartbeat_at) > (this.options.leaseMs ?? 60_000)) {
+      return true;
+    }
+
+    if (row.owner_host === hostname() && row.owner_pid !== null) {
+      try {
+        process.kill(row.owner_pid, 0);
+      } catch (error) {
+        return errnoCode(error) === "ESRCH";
+      }
+    }
+
+    return false;
   }
 
   private insertRun(run: RunRecord): void {
@@ -375,4 +413,10 @@ export class SqliteRunStore implements RunStore {
   private timestamp(): string {
     return new Date(this.now()).toISOString();
   }
+}
+
+export function openRunStore(home: string, options: { leaseMs?: number } = {}) {
+  mkdirSync(home, { recursive: true, mode: 0o700 });
+
+  return new SqliteRunStore(join(home, "runs.sqlite"), Date.now, options);
 }

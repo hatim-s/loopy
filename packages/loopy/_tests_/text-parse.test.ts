@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MemoryRunStore } from "../src/runtime/index.js";
 import { loopy, text } from "../src/sdk/index.js";
-import { startLoopy } from "../src/sdk/run.js";
 import {
   parseGrep,
   parseGrepCount,
@@ -13,6 +12,7 @@ import {
   parseUniqCount,
   parseWc,
 } from "../src/sdk/shell/parse/text.js";
+import { startLoopy } from "./fixture.js";
 import { fixture, result, SpawnExecutor } from "./shell-parse-fixture.js";
 
 test("wc drops only the aggregate row for multiple file operands", async () => {

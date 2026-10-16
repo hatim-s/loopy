@@ -1,5 +1,5 @@
 import { CommandExecutionError, type Executor, type ResolvedCommand } from "../runtime/index.js";
-import { executeLocalCommand, localRunOptions } from "./process.js";
+import { executeLocalCommand } from "./process.js";
 import { secretRedactor } from "./secret-redactor.js";
 import { SecretStore } from "./secrets.js";
 
@@ -23,7 +23,7 @@ export class LocalExecutor implements Executor {
           timeoutMs: options.timeoutMs,
         },
         {
-          ...localRunOptions(options.workspace, options.mode),
+          ...options,
           sensitiveEnv: this.sensitiveEnv,
           signal: options.signal,
         },
@@ -32,15 +32,11 @@ export class LocalExecutor implements Executor {
       return { ...result, stdout: redact(result.stdout), stderr: redact(result.stderr) };
     } catch (error) {
       if (error instanceof CommandExecutionError) {
-        throw new CommandExecutionError(
-          redact(error.message),
-          {
-            ...error.output,
-            stdout: redact(error.output.stdout, true),
-            stderr: redact(error.output.stderr, true),
-          },
-          error.started,
-        );
+        throw new CommandExecutionError(redact(error.message), {
+          ...error.output,
+          stdout: redact(error.output.stdout, true),
+          stderr: redact(error.output.stderr, true),
+        });
       }
 
       throw error;

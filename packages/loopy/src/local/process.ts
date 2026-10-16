@@ -1,4 +1,3 @@
-import { realpathSync, statSync } from "node:fs";
 import { realpath, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { CommandResult, ExecutionMode } from "../core/index.js";
@@ -16,7 +15,7 @@ const DEFAULT_TIMEOUT_MS = 5 * 60_000;
 const DEFAULT_MAX_OUTPUT_BYTES = 8 * 1024 * 1024;
 
 export type LocalExecutionOptions = {
-  workspace: { kind: "local"; path: string };
+  workspace: string;
   mode: ExecutionMode;
   signal?: AbortSignal;
   sensitiveEnv?: Record<string, string>;
@@ -32,16 +31,6 @@ const child = Bun.spawn([config.program, ...config.args], {
 });
 process.exit(await child.exited);
 `;
-
-export function localRunOptions(cwd: string, mode: ExecutionMode): LocalExecutionOptions {
-  const path = realpathSync(cwd);
-
-  if (!statSync(path).isDirectory()) {
-    throw new Error(`Workspace '${cwd}' is not a directory.`);
-  }
-
-  return { workspace: { kind: "local", path }, mode };
-}
 
 function commandLimits(command: ProcessCommand): Limits {
   return {
@@ -121,11 +110,7 @@ export async function prepareLaunch(
   command: ProcessCommand,
   options: LocalExecutionOptions,
 ): Promise<Launch> {
-  if (options.workspace.kind !== "local") {
-    throw new Error("The local command executor requires a local workspace.");
-  }
-
-  const workspace = await realpath(options.workspace.path);
+  const workspace = await realpath(options.workspace);
   const cwd = await realpath(resolve(workspace, command.cwd ?? "."));
 
   if (options.mode === "sandbox" && !within(workspace, cwd)) {
@@ -158,7 +143,7 @@ export async function executeLocalCommand(
   options: LocalExecutionOptions,
 ): Promise<CommandResult> {
   const aborted = () =>
-    new CommandExecutionError("Command aborted.", emptyOutput(), false, {
+    new CommandExecutionError("Command aborted.", emptyOutput(), {
       cause: options.signal?.reason,
     });
 

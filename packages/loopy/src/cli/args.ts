@@ -11,6 +11,7 @@ const OPTIONS = {
   concurrency: { type: "string" },
   help: { type: "boolean", short: "h" },
   home: { type: "string" },
+  "lease-ms": { type: "string" },
   cwd: { type: "string" },
   out: { type: "string" },
   name: { type: "string" },
@@ -19,7 +20,7 @@ const OPTIONS = {
   stdin: { type: "boolean" },
 } as const;
 
-const GLOBAL_OPTIONS = ["home", "cwd", "help"] as const;
+const GLOBAL_OPTIONS = ["home", "cwd", "help", "lease-ms"] as const;
 
 const COMMAND_OPTIONS = new Map<string, readonly (keyof typeof OPTIONS)[]>(
   Object.entries({
@@ -227,6 +228,6 @@ export function parseCliArgs(args: string[]) {
   return {
     values: parsed.values,
     positionals: parsed.positionals,
-    triggerInput: inputs.size ? Object.fromEntries(inputs) : undefined,
+    namedInput: inputs.size ? Object.fromEntries(inputs) : undefined,
   };
 }

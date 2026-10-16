@@ -1,6 +1,6 @@
 import type { LogRecord, RunRecord, StepKind } from "../core/index.js";
 
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 export const SCHEMA = `
   CREATE TABLE runs (
@@ -27,17 +27,9 @@ export const SCHEMA = `
     data_json TEXT, at TEXT NOT NULL, PRIMARY KEY (run_id, seq)
   );
   CREATE TABLE schedules (
-    slug TEXT PRIMARY KEY, cron TEXT NOT NULL, tz TEXT NOT NULL,
+    workspace TEXT NOT NULL, slug TEXT NOT NULL, cron TEXT NOT NULL, tz TEXT NOT NULL,
     input_json TEXT NOT NULL, enabled INTEGER NOT NULL,
-    last_fire_key TEXT, next_fire_at TEXT NOT NULL
-  );
-  CREATE TABLE rate_limits (
-    key TEXT PRIMARY KEY, window_start TEXT NOT NULL, count INTEGER NOT NULL
-  );
-  CREATE TABLE hooks (
-    token TEXT PRIMARY KEY, run_id TEXT NOT NULL, seq INTEGER NOT NULL,
-    name TEXT NOT NULL, payload_json TEXT, wake_at TEXT,
-    FOREIGN KEY (run_id, seq) REFERENCES steps(run_id, seq) ON DELETE CASCADE
+    last_fire_key TEXT, next_fire_at TEXT NOT NULL, PRIMARY KEY (workspace, slug)
   );
 `;
 
@@ -111,6 +103,7 @@ export type LogRow = {
 );
 
 export type ScheduleRow = {
+  workspace: string;
   slug: string;
   cron: string;
   tz: string;

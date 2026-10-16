@@ -15,7 +15,7 @@ export type StepKind = "command" | "function" | "sleep" | "hook" | "clock" | "ra
 
 export type LogLevel = "info" | "warn" | "error";
 
-export type RunOwner = { token: string; pid: number; host: string; heartbeatAt: string };
+type RunOwner = { token: string; pid: number; host: string; heartbeatAt: string };
 
 export type RunOutcome =
   | { status: "succeeded"; output: Json }
@@ -72,6 +72,7 @@ export type LogRecord = {
 };
 
 export type Schedule = {
+  workspace: string;
   slug: string;
   cron: string;
   tz: string;
@@ -83,7 +84,7 @@ export type Schedule = {
 
 export type RunDetail = { run: RunRecord; steps: StepRecord[]; logs: LogRecord[] };
 
-export const TERMINAL_RUN_STATUSES = [
+const TERMINAL_RUN_STATUSES = [
   "succeeded",
   "failed",
   "cancelled",

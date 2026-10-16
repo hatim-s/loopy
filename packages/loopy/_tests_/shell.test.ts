@@ -1,8 +1,7 @@
 import { expect, test } from "bun:test";
 import { MemoryRunStore } from "../src/runtime/index.js";
 import { archive, type CommandResult, fs, git, loopy, net, sh, text } from "../src/sdk/index.js";
-import { startLoopy } from "../src/sdk/run.js";
-import { FakeExecutor } from "./engine-fixture.js";
+import { FakeExecutor, startLoopy } from "./fixture.js";
 
 test("typed shell calls record exact argv and command step identities", async () => {
   const executor = new FakeExecutor();
