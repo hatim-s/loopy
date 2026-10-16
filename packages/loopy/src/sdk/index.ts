@@ -18,6 +18,8 @@ export { activateLoopy, loopyActivation, startLoopy } from "./run.js";
 
 export type { RecordSpec, StandardSchemaV1 } from "./schema.js";
 
+export { isStandardSchema } from "./schema.js";
+
 export { archive } from "./shell/archive.js";
 
 export { fs } from "./shell/fs.js";
@@ -29,5 +31,3 @@ export { net } from "./shell/net.js";
 export { sh } from "./shell/sh.js";
 
 export { text } from "./shell/text.js";
-
-export { isStandardSchema } from "./schema.js";
