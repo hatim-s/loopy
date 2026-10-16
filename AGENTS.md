@@ -18,6 +18,10 @@ packages/loopy/_tests_/   all tests. No tests next to source.
 ```
 
 Layers import downward only: `cli -> local -> runtime -> core`, `cloud -> runtime -> core`.
+The local bundle loader and activation adapter also import the SDK barrel.
+During slice 2b part 1, SDK runs use `engine.sqlite`; legacy runs keep `runs.sqlite`.
+Both databases open only when a command or route needs them.
+
 Cross-layer imports go through the target layer's `index.ts`. Same-layer imports use the
 file path. Studio imports the package only as `"loopy/core"` until slice 2b.
 

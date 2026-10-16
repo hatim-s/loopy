@@ -1,53 +1,40 @@
-import { resolve } from "node:path";
-import type { Json, Workflow } from "../../core/index.js";
-import { localRunOptions, Registry } from "../../local/index.js";
+import { LocalExecutor, Loopies, loadLoopy } from "../../local/index.js";
+import { startLoopy } from "../../sdk/index.js";
 import { type CliContext, requireTarget } from "../context.js";
-import { withLocalRuntime } from "../local-runtime.js";
-import { promptInputs } from "../prompt.js";
-import { executeRun } from "../run-execution.js";
-
-function parseJson(text: string): Json {
-  const value: Json = JSON.parse(text);
-
-  return value;
-}
-
-async function readJsonFile(path: string): Promise<Json> {
-  return parseJson(await Bun.file(resolve(path)).text());
-}
-
-/** Named flags, --args, --input, or an interactive prompt; args.ts guarantees at most one. */
-async function resolveInput(workflow: Workflow, context: CliContext): Promise<Json> {
-  const { values, triggerInput } = context;
-
-  if (values.args !== undefined) {
-    return readJsonFile(values.args);
-  }
-
-  if (values.input !== undefined) {
-    return values.input.startsWith("@")
-      ? readJsonFile(values.input.slice(1))
-      : parseJson(values.input);
-  }
-
-  const supplied = triggerInput ?? {};
-  const interactive = process.stdin.isTTY && process.stderr.isTTY;
-
-  return interactive ? promptInputs(workflow, supplied) : supplied;
-}
+import { withEngineStore } from "../engine-store.js";
+import { inlineRun } from "../inline-run.js";
+import { printJson } from "../output.js";
+import { sdkInput } from "../sdk-input.js";
+import { runRun as legacyRun } from "./legacy-run.js";
 
 export async function runRun(context: CliContext): Promise<void> {
-  const { home, cwd, values } = context;
-  const saved = new Registry(home, cwd).get(requireTarget(context, "Slug"));
-  const input = await resolveInput(saved.workflow, context);
+  const slug = requireTarget(context, "Slug");
+  const registry = new Loopies(context.home, context.cwd);
 
-  const options = {
-    ...localRunOptions(cwd, values.full ? "full" : "sandbox"),
-    secretBindings: saved.secretBindings,
-  };
+  if (!registry.has(slug)) {
+    return legacyRun(context);
+  }
 
-  await withLocalRuntime(home, async ({ runtime }) => {
-    const run = await runtime.createRun(saved.workflow, input, options);
-    await executeRun(runtime, run.id, values["retry-uncertain"]);
+  const saved = registry.get(slug);
+  const loopy = await loadLoopy(registry.bundlePath(saved.bundleHash));
+  const input = await sdkInput(loopy, context);
+  await withEngineStore(context.home, async (store) => {
+    const runId = crypto.randomUUID();
+    const options = { ...context, store, loopy, runId };
+    await startLoopy({
+      ...options,
+      input,
+      bundleHash: saved.bundleHash,
+      executor: new LocalExecutor(),
+      detach: true,
+    });
+
+    if (context.values.detach) {
+      printJson(await store.getRun(runId));
+
+      return;
+    }
+
+    await inlineRun(options);
   });
 }

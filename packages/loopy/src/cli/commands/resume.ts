@@ -1,16 +1,19 @@
+import { loadRunLoopy } from "../../local/index.js";
 import { type CliContext, requireTarget } from "../context.js";
-import { withLocalRuntime } from "../local-runtime.js";
-import { executeRun } from "../run-execution.js";
+import { withEngineStore } from "../engine-store.js";
+import { inlineRun } from "../inline-run.js";
+import { runResume as legacyResume } from "./legacy-resume.js";
 
 export async function runResume(context: CliContext): Promise<void> {
-  const { values } = context;
+  const runId = requireTarget(context, "Run ID");
+  await withEngineStore(context.home, async (store) => {
+    const run = await store.getRun(runId);
 
-  if (values.full || values.input || values.cwd) {
-    throw new Error("A resumed run keeps its original mode, input, and workspace.");
-  }
+    if (!run) {
+      return legacyResume(context);
+    }
 
-  const id = requireTarget(context, "Run ID");
-  await withLocalRuntime(context.home, ({ runtime }) =>
-    executeRun(runtime, id, values["retry-uncertain"]),
-  );
+    const loopy = await loadRunLoopy(context.home, context.cwd, run);
+    await inlineRun({ ...context, store, loopy, runId });
+  });
 }

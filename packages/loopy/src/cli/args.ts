@@ -1,6 +1,14 @@
 import { parseArgs } from "node:util";
 
 const OPTIONS = {
+  "input-json": { type: "string" },
+  "input-file": { type: "string" },
+  detach: { type: "boolean" },
+  follow: { type: "boolean" },
+  cron: { type: "string" },
+  tz: { type: "string" },
+  off: { type: "boolean" },
+  concurrency: { type: "string" },
   help: { type: "boolean", short: "h" },
   home: { type: "string" },
   cwd: { type: "string" },
@@ -154,11 +162,18 @@ function splitArguments(args: string[], acceptsInputs: boolean) {
 }
 
 export function parseCliArgs(args: string[]) {
-  const { cli, inputs } = splitArguments(args, findCommand(args) === "run");
+  const { cli, inputs } = splitArguments(
+    args,
+    ["run", "legacy:run"].includes(findCommand(args) ?? ""),
+  );
+
   const parsed = parseArgs({ args: cli, options: OPTIONS, allowPositionals: true, strict: true });
   const command = parsed.positionals[0];
 
-  if (command !== "run" && (inputs.size || parsed.values.args !== undefined)) {
+  if (
+    !["run", "legacy:run"].includes(command ?? "") &&
+    (inputs.size || parsed.values.args !== undefined)
+  ) {
     throw new Error("Trigger input flags and --args are only supported by loopy run.");
   }
 
@@ -169,10 +184,14 @@ export function parseCliArgs(args: string[]) {
   const sources =
     Number(inputs.size > 0) +
     Number(parsed.values.args !== undefined) +
-    Number(parsed.values.input !== undefined);
+    Number(parsed.values.input !== undefined) +
+    Number(parsed.values["input-json"] !== undefined) +
+    Number(parsed.values["input-file"] !== undefined);
 
   if (sources > 1) {
-    throw new Error("Choose one input source: named flags, --args, or --input.");
+    throw new Error(
+      "Choose one input source: named flags, --args, or --input. SDK runs also accept --input-json or --input-file.",
+    );
   }
 
   return {

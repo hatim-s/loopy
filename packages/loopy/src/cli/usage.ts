@@ -19,6 +19,15 @@ export function usage(): string {
   loopy run <slug> --full                       Run with your full host permissions
   loopy resume <run-id> [--retry-uncertain]      Continue from saved checkpoints
   loopy recover <run-id> --force               Release a run owned by another host
+  loopy run <slug> --input-json JSON [--detach] SDK JSON input; detach queues for the daemon
+  loopy run hello-sdk -- --name Hatim         Pass a field whose name is a reserved option
+  loopy run <slug> --input-file input.json     SDK input from a JSON file
+  loopy logs <run-id> [--follow]                Show engine logs
+  loopy cancel <run-id>                        Cancel a claimable engine run
+  loopy schedule <slug> --cron EXPR [--tz ZONE] Schedule an SDK loopy
+  loopy schedule <slug> --off                  Remove its schedule
+  loopy daemon run [--concurrency N]           Run the foreground daemon
+  loopy legacy:<command>                      Use the original graph command
   loopy runs [slug]                             List runs
   loopy inspect <run-id>                        Show inputs, attempts, outputs, and events
   loopy types <cli> [command...] --out file.ts   Generate a typed wrapper from CLI help
@@ -33,7 +42,9 @@ Run input: choose named flags, --args, or --input. Named values are strings.
 In a terminal, missing named inputs are prompted one at a time before running.
 Use --key=value for dash-prefixed values; use -- --key value for reserved names.
 
-Saved TypeScript is trusted code executed during save. Saved graphs contain only data.
+Saved TypeScript is trusted code executed during save and SDK activation.
+SDK definitions are bundled; legacy graphs contain only data.
+SDK named inputs coerce numbers and booleans from their record spec.
 Sandbox runs deny network and restrict writes to the workspace. No host fallback.
 Retrying an uncertain attempt can repeat a side effect from an interrupted command.
 `;

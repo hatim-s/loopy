@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { resolve } from "node:path";
 import type { RunRecord } from "../../core/index.js";
 import { errorMessage } from "../../core/index.js";
+import { openEngineStore } from "../engine-local.js";
 import { defaultHome } from "../home.js";
 import { Registry } from "../registry/registry.js";
 import { createLocalRuntime } from "../runtime.js";
@@ -51,8 +52,10 @@ export function startServer(options: ServerOptions = {}) {
   const cwd = resolve(options.cwd ?? process.cwd());
   const log = options.log ?? ((message) => process.stderr.write(`${message}\n`));
   const registry = new Registry(home, cwd);
-  const local = createLocalRuntime({ home });
-  const { runtime } = local;
+  let local: ReturnType<typeof createLocalRuntime> | undefined;
+  let engine: ReturnType<typeof openEngineStore> | undefined;
+  const runtime = () => (local ??= createLocalRuntime({ home })).runtime;
+  const engineStore = () => (engine ??= openEngineStore(home));
   const token = crypto.randomUUID();
 
   const assets = snapshotAssets(
@@ -71,7 +74,7 @@ export function startServer(options: ServerOptions = {}) {
     const controller = new AbortController();
     controllers.set(run.id, controller);
 
-    const job = runtime
+    const job = runtime()
       .execute(run.id, { retryUncertain, signal: controller.signal })
       .catch((cause: unknown) => log(`Run ${run.id} failed: ${errorMessage(cause)}`))
       .finally(() => {
@@ -82,7 +85,7 @@ export function startServer(options: ServerOptions = {}) {
     jobs.add(job);
   };
 
-  const routes = apiRoutes({ cwd, registry, runtime, launch });
+  const routes = apiRoutes({ cwd, registry, runtime, launch, home, engineStore });
 
   const server = Bun.serve({
     hostname: "127.0.0.1",
@@ -123,7 +126,8 @@ export function startServer(options: ServerOptions = {}) {
 
       await Promise.allSettled(jobs);
       await server.stop(true);
-      local.close();
+      local?.close();
+      engine?.close();
     },
   };
 }

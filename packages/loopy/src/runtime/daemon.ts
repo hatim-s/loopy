@@ -9,9 +9,18 @@ import { OwnershipError, type RunStore } from "./store.js";
 type DaemonOptions = {
   store: RunStore;
   executor: Executor;
-  loadWorkflow: (run: EngineRun) => Promise<ActivationOptions["workflow"]>;
+  loadWorkflow: (run: EngineRun) => Promise<
+    | ActivationOptions["workflow"]
+    | {
+        workflow: ActivationOptions["workflow"];
+        wrap?: ActivationOptions["wrap"];
+        executor?: Executor;
+        mode?: ExecutionMode;
+      }
+  >;
   clock?: Clock;
   concurrency?: number;
+  bundleHashFor?: (slug: string) => string | Promise<string>;
   cwdFor: (run: EngineRun) => string;
   modeFor: (run: EngineRun) => ExecutionMode;
   onError?: (error: Error, run?: EngineRun) => void;
@@ -177,7 +186,7 @@ export class Daemon {
     const run: EngineRun = {
       id: crypto.randomUUID(),
       slug: schedule.slug,
-      bundleHash: "",
+      bundleHash: (await this.options.bundleHashFor?.(schedule.slug)) ?? "",
       input: schedule.input,
       status: "queued",
       createdAt: now,
@@ -198,16 +207,17 @@ export class Daemon {
     }
 
     try {
-      const workflow = await this.options.loadWorkflow(run);
+      const loaded = await this.options.loadWorkflow(run);
+      const workflow = "workflow" in loaded ? loaded : { workflow: loaded };
 
       const outcome = await activate({
         runId: run.id,
         store: this.options.store,
         executor: this.options.executor,
-        workflow,
         cwd: this.options.cwdFor(run),
         mode: this.options.modeFor(run),
         clock: this.clock,
+        ...workflow,
       });
 
       return outcome.status !== "suspended" || Date.parse(outcome.wakeAt) > this.clock.now();

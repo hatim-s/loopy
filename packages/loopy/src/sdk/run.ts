@@ -1,10 +1,11 @@
-import type { Json } from "../core/index.js";
+import type { EngineRun, Json } from "../core/index.js";
 import {
   activate,
   assertJson,
   type Clock,
   type Executor,
   type RunStore,
+  type LoopyContext as RuntimeContext,
   SYSTEM_CLOCK,
 } from "../runtime/index.js";
 import { log, now, random, uuid } from "./ambient.js";
@@ -23,6 +24,7 @@ type ActivationOptions<Input, Output extends Json> = {
 type StartOptions<Input, Output extends Json> = ActivationOptions<Input, Output> & {
   input: unknown;
   bundleHash: string;
+  detach?: boolean;
 };
 
 // BOUNDARY: A CLI passes untyped input to a schema before it can create a durable run.
@@ -41,6 +43,10 @@ export async function startLoopy<Input, Output extends Json>(options: StartOptio
     updatedAt: at,
   });
 
+  if (options.detach) {
+    return { status: "queued" } satisfies Pick<EngineRun, "status">;
+  }
+
   return activateLoopy(options);
 }
 
@@ -56,12 +62,18 @@ export function activateLoopy<Input, Output extends Json>(
     cwd,
     clock,
     mode: loopy.mode,
-    workflow: (context) => {
+    ...loopyActivation(loopy),
+  });
+}
+
+export function loopyActivation<Input, Output extends Json>(loopy: Loopy<Input, Output>) {
+  return {
+    workflow: (context: RuntimeContext) => {
       // SAFETY: The stored run input was validated by this loopy before createRun.
       const input = context.input as Input;
 
       return loopy.run({ input, log, now, random, uuid });
     },
     wrap: { workflow: workflowScope, step: stepScope },
-  });
+  };
 }

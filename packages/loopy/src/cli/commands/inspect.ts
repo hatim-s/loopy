@@ -1,23 +1,17 @@
 import { type CliContext, requireTarget } from "../context.js";
-import { withLocalRuntime } from "../local-runtime.js";
+import { withEngineStore } from "../engine-store.js";
 import { printJson } from "../output.js";
+import { runInspect as legacyInspect } from "./legacy-inspect.js";
 
 export async function runInspect(context: CliContext): Promise<void> {
   const id = requireTarget(context, "Run ID");
-
-  const detail = await withLocalRuntime(context.home, async ({ runtime }) => {
-    const run = await runtime.getRun(id);
+  await withEngineStore(context.home, async (store) => {
+    const run = await store.getRun(id);
 
     if (!run) {
-      throw new Error(`Unknown run '${id}'.`);
+      return legacyInspect(context);
     }
 
-    return {
-      run,
-      attempts: await runtime.getAttempts(run.id),
-      events: await runtime.getEvents(run.id),
-    };
+    printJson({ run, steps: await store.getSteps(id) });
   });
-
-  printJson(detail);
 }

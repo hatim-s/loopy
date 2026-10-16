@@ -92,7 +92,7 @@ async function executeCommand(
   timeoutMs?: number,
 ) {
   const result = await options.executor.execute(command, {
-    cwd: command.cwd ?? options.cwd,
+    cwd: options.cwd,
     mode: options.mode,
     timeoutMs,
   });
