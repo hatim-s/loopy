@@ -5,6 +5,7 @@ import {
   type Clock,
   Daemon,
   MemoryRunStore,
+  OwnershipError,
 } from "../src/runtime/index.js";
 import { FakeExecutor, newRun } from "./engine-fixture.js";
 
@@ -313,7 +314,159 @@ test("wake interrupts an idle wait and activates new queued work", async () => {
   f.daemon.wake();
   await Promise.resolve();
   await sleeping.entered();
-  expect((await f.store.getRun("run"))?.status).toBe("succeeded");
+  await until(async () => (await f.store.getRun("run"))?.status === "succeeded");
   await f.daemon.stop();
   await running;
+});
+
+async function until(ready: () => boolean | Promise<boolean>): Promise<void> {
+  for (let attempt = 0; attempt < 500; attempt++) {
+    if (await ready()) {
+      return;
+    }
+
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  }
+
+  throw new Error("Daemon did not reach the expected state. Inspect the loop and pool.");
+}
+
+function steppingSleeper() {
+  const calls: { milliseconds: number; resume: () => void }[] = [];
+
+  const sleep = (milliseconds: number, signal: AbortSignal) => {
+    const gate = Promise.withResolvers<void>();
+    calls.push({ milliseconds, resume: () => gate.resolve() });
+
+    if (signal.aborted) {
+      gate.resolve();
+    } else {
+      signal.addEventListener("abort", () => gate.resolve(), { once: true });
+    }
+
+    return gate.promise;
+  };
+
+  return { calls, sleep };
+}
+
+test("a held activation leaves capacity for new work and overdue schedules", async () => {
+  const gate = Promise.withResolvers<void>();
+  const entered = Promise.withResolvers<void>();
+  const sleeping = steppingSleeper();
+
+  const f = fixture({
+    concurrency: 2,
+    sleep: sleeping.sleep,
+    loadWorkflow: async (run) => async () => {
+      if (run.id === "held") {
+        entered.resolve();
+        await gate.promise;
+      }
+
+      return "done";
+    },
+  });
+
+  await f.store.putSchedule(schedule({ nextFireAt: "2026-10-16T00:01:00.000Z" }));
+  await f.store.createRun({ ...newRun(), id: "held" });
+  const running = f.daemon.run();
+  await entered.promise;
+  f.advance(120_000);
+  await f.store.createRun(newRun());
+  f.daemon.wake();
+
+  try {
+    await until(async () => (await f.store.getRun("run"))?.status === "succeeded");
+    await until(async () => (await f.store.listRuns({ status: "succeeded" })).length >= 2);
+    expect((await f.store.getRun("held"))?.status).toBe("running");
+    expect((await f.store.listSchedules())[0]?.lastFireKey).toBe("test@2026-10-16T00:02Z");
+    expect(f.errors).toEqual([]);
+  } finally {
+    gate.resolve();
+    await f.daemon.stop();
+    await running;
+  }
+});
+
+test("a failed wake lookup reports once and retries after an abortable capped wait", async () => {
+  const failure = new Error("Wake lookup failed. Retry storage.");
+  let lookups = 0;
+
+  class FlakyWakeStore extends MemoryRunStore {
+    override async nextWakeAt() {
+      lookups++;
+
+      if (lookups === 1) {
+        throw failure;
+      }
+
+      return super.nextWakeAt();
+    }
+  }
+
+  const sleeping = steppingSleeper();
+  const f = fixture({ store: new FlakyWakeStore(), sleep: sleeping.sleep });
+  const running = f.daemon.run();
+
+  try {
+    await until(() => sleeping.calls.length === 1);
+    expect(sleeping.calls[0]?.milliseconds).toBe(5000);
+    expect(f.errors).toEqual([{ error: failure, run: undefined }]);
+    sleeping.calls[0]?.resume();
+    await until(() => lookups === 2 && sleeping.calls.length === 2);
+    expect(f.errors).toHaveLength(1);
+  } finally {
+    await f.daemon.stop();
+    await running;
+  }
+});
+
+test("failed activations back off from one second to the five second cap", async () => {
+  const failure = new Error("Journal lookup failed. Restore storage.");
+
+  class BrokenJournalStore extends MemoryRunStore {
+    override async getSteps(): Promise<never> {
+      throw failure;
+    }
+  }
+
+  const sleeping = steppingSleeper();
+
+  const f = fixture({
+    store: new BrokenJournalStore(() => Date.parse(newRun().createdAt)),
+    sleep: sleeping.sleep,
+  });
+
+  await f.store.createRun(newRun());
+  const running = f.daemon.run();
+
+  try {
+    for (let index = 0; index < 4; index++) {
+      await until(() => sleeping.calls.length === index + 1 && f.errors.length === index + 1);
+      expect(sleeping.calls[index]?.milliseconds).toBe([1000, 2000, 4000, 5000][index]);
+      expect(f.errors[index]?.error).toBe(failure);
+      expect((await f.store.getRun("run"))?.owner).toBeUndefined();
+
+      if (index < 3) {
+        sleeping.calls[index]?.resume();
+      }
+    }
+  } finally {
+    await f.daemon.stop();
+    await running;
+  }
+});
+
+test("claim contention does not report an activation error", async () => {
+  class ContendedStore extends MemoryRunStore {
+    override async claim(runId: string): Promise<EngineRun> {
+      throw new OwnershipError(runId);
+    }
+  }
+
+  const f = fixture({ store: new ContendedStore() });
+  await f.store.createRun(newRun());
+  expect(await f.daemon.tick()).toEqual({ fired: 0, activated: 0 });
+  expect(f.errors).toEqual([]);
 });

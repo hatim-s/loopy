@@ -1,6 +1,6 @@
 import type { EngineLog, EngineRun, StepKind } from "../core/index.js";
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export const SCHEMA = `
   CREATE TABLE runs (

@@ -1,5 +1,3 @@
-export type { Schedule } from "../core/index.js";
-
 export type { Clock } from "./clock.js";
 
 export { map, parallel, race } from "./concurrency.js";
