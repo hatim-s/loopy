@@ -5,7 +5,6 @@ import { join, resolve } from "node:path";
 import hello from "../../../examples/hello.loopy.ts";
 import review from "../../../examples/review.loopy.ts";
 import assetSync from "../../../examples/uacode-asset-sync/asset-sync-pr.loopy.ts";
-import { blobSha, hashTree, type TreeEntry } from "../../../examples/www-uacode-sync/git-tree.ts";
 import type { Files } from "../../../examples/www-uacode-sync/json-edit.ts";
 import {
   planSync,
@@ -13,12 +12,13 @@ import {
   syncCommitMessage,
   targetFiles,
 } from "../../../examples/www-uacode-sync/sync.ts";
+import { blobSha } from "../../../examples/www-uacode-sync/verify.ts";
 import wwwSync from "../../../examples/www-uacode-sync/www-uacode-sync.loopy.ts";
 import type { Executor, ResolvedCommand } from "../src/runtime/index.js";
 import { MemoryRunStore } from "../src/runtime/index.js";
 import type { Loopy } from "../src/sdk/index.js";
-import { makeFixture, sourceFixture } from "./examples-helpers.test.ts";
 import { FakeExecutor, startLoopy } from "./fixture.js";
+import { makeFixture, sourceFixture } from "./fixtures/examples.ts";
 
 test("hello records a durable greeting and its log", async () => {
   const store = new MemoryRunStore();
@@ -79,14 +79,24 @@ for (const changed of [false, true]) {
 
 // Command fixtures model the tools, while the definitions decide which effects to request.
 class RecordingExecutor extends FakeExecutor {
-  constructor(private output: (command: ResolvedCommand) => string) {
+  constructor(
+    private output: (
+      command: ResolvedCommand,
+    ) => string | { stdout: string; stderr: string; exitCode: number },
+  ) {
     super();
   }
+  // BOUNDARY: Recording command fixtures can supply stdout alone or a full exit result.
   override async execute(command: ResolvedCommand, options: Parameters<Executor["execute"]>[1]) {
     this.calls.push(command);
     this.options.push(options);
 
-    return { stdout: this.output(command), stderr: "", exitCode: 0, durationMs: 1 };
+    const output = this.output(command);
+
+    return {
+      ...(typeof output === "string" ? { stdout: output, stderr: "", exitCode: 0 } : output),
+      durationMs: 1,
+    };
   }
 }
 
@@ -114,7 +124,7 @@ function gitOutput(command: ResolvedCommand) {
   }
 
   if (name === "rev-parse") {
-    return command.args.includes("--show-toplevel") ? "/fixture/uacode\n" : `${baseSha}\n`;
+    return command.args.includes("--show-toplevel") ? `${command.cwd}\n` : `${baseSha}\n`;
   }
 
   return "";
@@ -155,7 +165,11 @@ function assetExecutor(dryRun: boolean, changed = true, fail = "") {
   });
 }
 
-async function runAsset(executor: Executor, dryRun: boolean, repository = "/fixture/uacode") {
+async function runAsset(
+  executor: Executor,
+  dryRun: boolean,
+  { repository = "/fixture/uacode", exportDirectory = "/fixture/export" } = {},
+) {
   const store = new MemoryRunStore();
 
   const result = await startLoopy({
@@ -163,7 +177,7 @@ async function runAsset(executor: Executor, dryRun: boolean, repository = "/fixt
     input: {
       repository,
       dryRun,
-      exportDirectory: "/fixture/export",
+      exportDirectory,
       assets: [{ assetClass: "WORKFLOW_DEFINITION", assetId: "fixture" }],
     },
     store,
@@ -333,7 +347,15 @@ test("asset sync skips publication without changes and cleans up a failed attemp
 });
 
 function wwwExecutor(
-  options: { changed?: boolean; existing?: boolean; failPush?: boolean; manualEdit?: boolean } = {},
+  options: {
+    changed?: boolean;
+    existing?: boolean;
+    branchWithoutPr?: boolean;
+    equalTree?: boolean;
+    failPush?: boolean;
+    manualEdit?: boolean;
+    compareMissing?: boolean;
+  } = {},
 ) {
   const { content, files } = makeFixture();
   const source = sourceFixture(content);
@@ -347,7 +369,9 @@ function wwwExecutor(
       return githubOutput(command.args, {
         source,
         target: options.changed === false ? desired : files,
-        existing: options.existing ? previous : null,
+        existing: options.existing || options.branchWithoutPr ? previous : null,
+        hasPr: options.existing ?? false,
+        compareMissing: options.compareMissing ?? false,
         manualEdit: options.manualEdit ?? false,
       });
     }
@@ -361,7 +385,7 @@ function wwwExecutor(
     }
 
     if (command.args[0] === "write-tree") {
-      return "desired-tree";
+      return options.equalTree ? "f".repeat(40) : "desired-tree";
     }
 
     return gitOutput(command);
@@ -370,13 +394,24 @@ function wwwExecutor(
   return { executor, changes, source, target: files, desired };
 }
 
-type GithubFixture = { source: Files; target: Files; existing: Files | null; manualEdit: boolean };
+type GithubFixture = {
+  source: Files;
+  target: Files;
+  existing: Files | null;
+  manualEdit: boolean;
+  hasPr: boolean;
+  compareMissing: boolean;
+};
 
 function githubOutput(args: string[], fixture: GithubFixture) {
   const { source, target, existing } = fixture;
   const endpoint = args.find((arg) => arg.startsWith("repos/")) ?? "";
 
   if (endpoint.includes("/git/ref/heads/")) {
+    if (endpoint.includes("chore") && !existing) {
+      return { stdout: "{}", stderr: "gh: Not Found (HTTP 404)", exitCode: 1 };
+    }
+
     return endpoint.includes("/www/")
       ? sourceSha
       : endpoint.includes("chore")
@@ -397,32 +432,30 @@ function githubOutput(args: string[], fixture: GithubFixture) {
 
 function githubMetadata(args: string[], fixture: GithubFixture) {
   const { target, existing } = fixture;
-  const baseTree = treeFixture(target);
-  const previousTree = existing ? treeFixture(existing) : null;
   const endpoint = args.find((arg) => arg.startsWith("repos/")) ?? "";
 
   if (endpoint.includes("/git/commits/")) {
     return JSON.stringify({
-      message: syncCommitMessage(endpoint.endsWith(baseSha) ? sourceSha : "d".repeat(40), baseSha),
-      tree: {
-        sha: endpoint.endsWith(baseSha)
-          ? baseTree.sha
-          : fixture.manualEdit
-            ? "e".repeat(40)
-            : previousTree?.sha,
-      },
+      message: syncCommitMessage("d".repeat(40), baseSha),
+      tree: { sha: "f".repeat(40) },
     });
   }
 
-  if (endpoint.includes("/git/trees/")) {
-    const sha = endpoint.split("/").at(-1) ?? "";
+  if (endpoint.includes("/compare/")) {
+    const files = Object.entries(existing ?? {})
+      .filter(([path, contents]) => contents !== target[path])
+      .map(([filename, contents]) => ({
+        filename,
+        sha: fixture.manualEdit ? "e".repeat(40) : blobSha(contents),
+        status: "modified",
+      }));
 
-    return baseTree.trees[sha] ?? "";
+    return JSON.stringify({ files: fixture.compareMissing ? files.slice(1) : files });
   }
 
   if (args[1] === "list") {
     return JSON.stringify(
-      existing
+      fixture.hasPr
         ? [{ url: prUrl, headRefName: `chore/www-agent-assets-${sourceSha.slice(0, 8)}-main` }]
         : [],
     );
@@ -431,34 +464,55 @@ function githubMetadata(args: string[], fixture: GithubFixture) {
   return prUrl;
 }
 
-async function runWww(executor: Executor, dryRun: boolean) {
+async function runWww(executor: RecordingExecutor, dryRun: boolean) {
   const store = new MemoryRunStore();
+  const root = await mkdtemp(join(tmpdir(), "loopy-www-recording-"));
 
-  const result = await startLoopy({
-    loopy: wwwSync,
-    input: { repository: "/fixture/uacode", dryRun, targetBranches: "main" },
-    store,
-    executor,
-    runId: "www",
-    bundleHash: "fixture",
-    workspace: "/unrelated cwd",
-  });
+  try {
+    const result = await startLoopy({
+      loopy: wwwSync,
+      input: { repository: join(root, "repository"), dryRun, targetBranches: "main" },
+      store,
+      executor,
+      runId: "www",
+      bundleHash: "fixture",
+      workspace: "/unrelated cwd",
+    });
 
-  return { store, result };
+    const steps = await store.getSteps("www");
+
+    const directory = executor.calls
+      .find((command) => command.args[0] === "worktree" && command.args[1] === "add")
+      ?.args.at(-2);
+
+    const written = directory
+      ? await Promise.all(
+          steps
+            .filter((step) => step.key.startsWith("write "))
+            .map((step) => Bun.file(join(directory, step.key.slice(6))).text()),
+        )
+      : [];
+
+    return { store, result, written };
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 }
 
 for (const dryRun of [true, false]) {
   test(`www sync records the ${dryRun ? "preview" : "publication"} sequence`, async () => {
     const { executor, changes } = wwwExecutor();
-    const { store, result } = await runWww(executor, dryRun);
+    const { store, result, written } = await runWww(executor, dryRun);
     expect(result).toMatchObject({
       status: "succeeded",
       output: { dryRun, results: [{ changed: changes.map(({ path }) => path) }] },
     });
-    expect((await store.getSteps("www")).map((step) => step.key)).toEqual(
-      wwwStepKeys(dryRun, changes.length),
-    );
-    expect(executor.calls.map(commandName)).toEqual(wwwCommandNames(dryRun, changes.length));
+    expect(
+      (await store.getSteps("www")).map((step) =>
+        step.key.startsWith("write ") ? "write" : step.key,
+      ),
+    ).toEqual(wwwStepKeys(dryRun, changes.length));
+    expect(executor.calls.map(commandName)).toEqual(wwwCommandNames(dryRun));
 
     const reads = executor.calls.filter((command) =>
       command.args.includes("Accept: application/vnd.github.raw+json"),
@@ -471,32 +525,27 @@ for (const dryRun of [true, false]) {
           command.args.at(-1)?.endsWith(sourceSha) || command.args.at(-1)?.endsWith(baseSha),
       ),
     ).toBe(true);
-    expect(
-      executor.calls.filter((command) => command.program === "tee").map((command) => command.stdin),
-    ).toEqual(dryRun ? [] : changes.map(({ contents }) => contents));
+    expect(written).toEqual(dryRun ? [] : changes.map(({ contents }) => contents));
   });
 }
 
 function wwwStepKeys(dryRun: boolean, count: number) {
   return [
-    "www-sync-options",
     "git.rev-parse",
-    "fs.stat",
     "git.remote",
-    "sh.exec",
+    "github.remote-sha",
     ...Array<string>(sourceFiles.length).fill("sh.exec"),
     "uuid",
-    "sh.exec",
+    "github.remote-sha",
     ...Array<string>(targetFiles.length).fill("sh.exec"),
-    "www-sync-plan",
     "sh.exec",
-    "www-sync-pr",
+    "github.remote-sha",
     ...(dryRun
       ? []
       : [
           "git.fetch",
           "git.worktree.add",
-          ...Array<string>(count).fill("sh.exec"),
+          ...Array<string>(count).fill("write"),
           "git.diff",
           "sh.exec",
           "git.add",
@@ -509,22 +558,21 @@ function wwwStepKeys(dryRun: boolean, count: number) {
   ];
 }
 
-function wwwCommandNames(dryRun: boolean, count: number) {
+function wwwCommandNames(dryRun: boolean) {
   return [
     "git rev-parse",
-    process.platform === "linux" ? "stat -c" : "stat -f",
     "git remote",
     "gh api repos/unify-apps/www/git/ref/heads/main",
     ...Array<string>(sourceFiles.length).fill("gh api -H"),
     "gh api repos/unify-apps/uacode/git/ref/heads/main",
     ...Array<string>(targetFiles.length).fill("gh api -H"),
     "gh pr list",
+    `gh api repos/unify-apps/uacode/git/ref/heads/chore%2Fwww-agent-assets-${sourceSha.slice(0, 8)}-main`,
     ...(dryRun
       ? []
       : [
           "git fetch",
           "git worktree add",
-          ...Array<string>(count).fill("tee --"),
           "git diff",
           "git diff",
           "git add",
@@ -541,7 +589,10 @@ test("www sync reuses a verified PR and publishes with a fast-forward push", asy
   const { executor } = wwwExecutor({ existing: true });
   const { result, store } = await runWww(executor, false);
   expect(result.status).toBe("succeeded");
-  expect((await store.getSteps("www")).some((step) => step.key === "www-sync-tree")).toBe(true);
+  expect((await store.getSteps("www")).some((step) => step.key === "www-sync-tree")).toBe(false);
+  expect(
+    executor.calls.some((command) => command.args.some((arg) => arg.includes("/compare/"))),
+  ).toBe(true);
   expect(executor.calls.find((command) => command.args[0] === "push")?.args).toEqual([
     "push",
     "origin",
@@ -559,7 +610,14 @@ test("www sync skips worktrees and publication when the snapshot is unchanged", 
     status: "succeeded",
     output: { results: [{ changed: [] }] },
   });
-  expect(executor.calls.some((command) => command.args[0] === "worktree")).toBe(false);
+  expect(
+    executor.calls.some(
+      (command) =>
+        command.args[0] === "worktree" ||
+        (command.program === "gh" && command.args[0] === "pr") ||
+        command.args.some((arg) => arg.includes("/compare/") || arg.includes("chore%2F")),
+    ),
+  ).toBe(false);
 });
 
 for (const example of ["asset", "www"] as const) {
@@ -578,7 +636,7 @@ for (const example of ["asset", "www"] as const) {
               exportDirectory: "/fixture/export",
               assets: [{ assetClass: "WORKFLOW_DEFINITION", assetId: "fixture" }],
             }
-          : { repository: "/fixture/uacode", dryRun: false, targetBranches: "main" };
+          : { repository: join(root, "repository"), dryRun: false, targetBranches: "main" };
 
       const result = await startLoopy({
         loopy,
@@ -647,33 +705,6 @@ test("asset prerequisite failures stop before worktree creation or Codex", async
   }
 });
 
-function treeFixture(files: Files) {
-  const trees: Record<string, string> = {};
-
-  const build = (prefix: string): string => {
-    const children = new Set(
-      Object.keys(files)
-        .filter((path) => path.startsWith(prefix))
-        .map((path) => path.slice(prefix.length).split("/")[0] ?? ""),
-    );
-
-    const entries: TreeEntry[] = [...children].map((path) => {
-      const contents = files[`${prefix}${path}`];
-
-      return contents === undefined
-        ? { path, mode: "040000", type: "tree", sha: build(`${prefix}${path}/`) }
-        : { path, mode: "100644", type: "blob", sha: blobSha(contents) };
-    });
-
-    const sha = hashTree(entries);
-    trees[sha] = JSON.stringify({ tree: entries, truncated: false });
-
-    return sha;
-  };
-
-  return { sha: build(""), trees };
-}
-
 function reviewExecutor(changed: boolean) {
   const executor = new FakeExecutor();
   executor.execute = async (command, options) => {
@@ -716,35 +747,6 @@ test("www sync rejects a generated branch whose exact tree was edited", async ()
   ).toBe(false);
 });
 
-test("tree reconstruction matches Git object hashing and retains file modes", async () => {
-  const root = await mkdtemp(join(tmpdir(), "loopy-example-tree-"));
-
-  try {
-    fixtureGit(root, ["init", "-q"]);
-    const blob = fixtureGit(root, ["hash-object", "-w", "--stdin"], "fixture\n").trim();
-    expect(blobSha("fixture\n")).toBe(blob);
-    const leaf = { path: "entry", mode: "100644", type: "blob", sha: blob };
-    const subtree = fixtureGit(root, ["mktree"], `100644 blob ${blob}\tentry\n`).trim();
-    expect(hashTree([leaf])).toBe(subtree);
-
-    const entries = [
-      { path: "a", mode: "040000", type: "tree", sha: subtree },
-      { path: "a.c", mode: "100755", type: "blob", sha: blob },
-    ];
-
-    const canonical = fixtureGit(
-      root,
-      ["mktree"],
-      `040000 tree ${subtree}\ta\n100755 blob ${blob}\ta.c\n`,
-    ).trim();
-
-    expect(hashTree(entries)).toBe(canonical);
-    expect(hashTree([leaf])).not.toBe(hashTree([{ ...leaf, mode: "100755" }]));
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
-});
-
 function fixtureGit(cwd: string, args: string[], stdin?: string) {
   const result = Bun.spawnSync(["git", ...args], {
     cwd,
@@ -758,47 +760,19 @@ function fixtureGit(cwd: string, args: string[], stdin?: string) {
   return result.stdout.toString();
 }
 
-test("updating a generated tree retains the observed head and current base as parents", async () => {
-  const root = await mkdtemp(join(tmpdir(), "loopy-example-parents-"));
-
-  try {
-    const { repository, observed, base } = await publicationFixture(root);
-    const worktree = join(root, "worktree");
-    fixtureGit(repository, ["worktree", "add", "--detach", worktree, observed]);
-    fixtureGit(worktree, ["merge", "--no-commit", "--no-ff", "-s", "ours", base]);
-    fixtureGit(worktree, ["read-tree", "--reset", "-u", base]);
-    await Bun.write(join(worktree, "asset.json"), "new generated content");
-    fixtureGit(worktree, ["add", "asset.json"]);
-    fixtureGit(worktree, ["commit", "-m", "sync update"]);
-    expect(fixtureGit(worktree, ["show", "-s", "--format=%P", "HEAD"]).trim().split(" ")).toEqual([
-      observed,
-      base,
-    ]);
-    expect(fixtureGit(worktree, ["show", "HEAD:base-update.txt"])).toBe("preserve current base\n");
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
+test("www publish retains the observed head and current base before a normal push", async () => {
+  const { executor } = wwwExecutor({ existing: true });
+  expect((await runWww(executor, false)).result.status).toBe("succeeded");
+  const commands = executor.calls.map((command) => command.args);
+  expect(commands.find((args) => args[0] === "worktree" && args[1] === "add")?.at(-1)).toBe(
+    "c".repeat(40),
+  );
+  const merge = commands.findIndex((args) => args[0] === "merge");
+  expect(commands[merge]).toEqual(["merge", "--no-commit", "--no-ff", "-s", "ours", baseSha]);
+  expect(commands[merge + 1]).toEqual(["read-tree", "--reset", "-u", baseSha]);
+  expect(commands.findIndex((args) => args[0] === "commit")).toBeGreaterThan(merge + 1);
+  expect(commands.find((args) => args[0] === "push")).not.toContain("--force");
 });
-
-async function publicationFixture(root: string) {
-  const repository = join(root, "repository");
-  fixtureGit(root, ["init", "-b", "main", repository]);
-  fixtureGit(repository, ["config", "user.name", "Fixture"]);
-  fixtureGit(repository, ["config", "user.email", "fixture@example.invalid"]);
-  await Bun.write(join(repository, "asset.json"), "base content");
-  fixtureGit(repository, ["add", "."]);
-  fixtureGit(repository, ["commit", "-m", "base"]);
-  fixtureGit(repository, ["checkout", "-b", "generated"]);
-  await Bun.write(join(repository, "asset.json"), "prior generated content");
-  fixtureGit(repository, ["commit", "-am", "generated"]);
-  const observed = fixtureGit(repository, ["rev-parse", "HEAD"]).trim();
-  fixtureGit(repository, ["checkout", "main"]);
-  await Bun.write(join(repository, "base-update.txt"), "preserve current base\n");
-  fixtureGit(repository, ["add", "."]);
-  fixtureGit(repository, ["commit", "-m", "advance base"]);
-
-  return { repository, observed, base: fixtureGit(repository, ["rev-parse", "HEAD"]).trim() };
-}
 
 test("asset sync preserves dirty source files and unregisters its disposable worktree", async () => {
   const root = await mkdtemp(join(tmpdir(), "loopy-asset-isolation-"));
@@ -828,7 +802,7 @@ test("asset sync preserves dirty source files and unregisters its disposable wor
       return command.program === "gh" ? prUrl : gitOutput(command);
     });
 
-    expect((await runAsset(executor, false, repository)).result.status).toBe("succeeded");
+    expect((await runAsset(executor, false, { repository })).result.status).toBe("succeeded");
     expect(fixtureGit(repository, ["status", "--porcelain"])).toBe(before);
     expect(await Bun.file(join(repository, "user.txt")).text()).toBe("keep this local edit\n");
     expect(
@@ -913,5 +887,89 @@ for (const violation of ["outside", "staged", "conflicted", "branch", "head", "p
     expect(
       executor.calls.some((command) => ["add", "commit", "push"].includes(command.args[0] ?? "")),
     ).toBe(false);
+  });
+}
+
+test("www sync recovers a verified branch that exists without an open PR", async () => {
+  const { executor } = wwwExecutor({ branchWithoutPr: true });
+  expect((await runWww(executor, false)).result).toMatchObject({
+    status: "succeeded",
+    output: { results: [{ pullRequest: prUrl }] },
+  });
+  expect(
+    executor.calls
+      .find((command) => command.args[0] === "worktree" && command.args[1] === "add")
+      ?.args.at(-1),
+  ).toBe("c".repeat(40));
+  expect(
+    executor.calls.some((command) => command.args.some((arg) => arg.includes("/compare/"))),
+  ).toBe(true);
+  expect(executor.calls.some((command) => command.args[1] === "create")).toBe(true);
+});
+
+test("www equal tree skips commit and push while refreshing the PR", async () => {
+  const { executor } = wwwExecutor({ existing: true, equalTree: true });
+  expect((await runWww(executor, false)).result.status).toBe("succeeded");
+  expect(executor.calls.some((command) => ["commit", "push"].includes(command.args[0] ?? ""))).toBe(
+    false,
+  );
+  expect(executor.calls.some((command) => command.args[1] === "edit")).toBe(true);
+});
+
+test("www comparison rejects a missing planned path", async () => {
+  const { executor } = wwwExecutor({ branchWithoutPr: true, compareMissing: true });
+  expect((await runWww(executor, false)).result).toMatchObject({
+    status: "failed",
+    error: expect.stringContaining("manual tree edits"),
+  });
+});
+
+test("asset webhook precheck stops before worktree creation without an inherited secret", async () => {
+  const executor = new RecordingExecutor((command) =>
+    command.program === "sh" ? { stdout: "", stderr: "", exitCode: 1 } : gitOutput(command),
+  );
+
+  const { result } = await runAsset(executor, false, { exportDirectory: "" });
+  expect(result.status).toBe("suspended");
+  expect(executor.calls.some((command) => command.args[0] === "worktree")).toBe(false);
+  expect(executor.calls.at(-1)?.args).toEqual(["-c", 'test -n "$UA_ASSET_EXPORT_WEBHOOK_URL"']);
+});
+
+for (const bundled of [false, true]) {
+  test(`www ${bundled ? "bundled" : "source"} ref lookup retries network failures`, async () => {
+    const root = await mkdtemp(join(tmpdir(), "loopy-www-network-"));
+
+    try {
+      const definition = bundled ? await bundleExample("www", root) : wwwSync;
+
+      const executor = new RecordingExecutor((command) =>
+        command.program === "gh"
+          ? { stdout: "", stderr: "error connecting to api.github.com", exitCode: 1 }
+          : gitOutput(command),
+      );
+
+      const store = new MemoryRunStore();
+
+      const result = await startLoopy({
+        loopy: definition,
+        input: { repository: root, dryRun: true },
+        executor,
+        store,
+        runId: "network",
+        bundleHash: "fixture",
+        workspace: root,
+      });
+
+      expect(result.status).toBe("suspended");
+      expect((await store.getSteps("network")).at(-1)).toMatchObject({
+        key: "github.remote-sha",
+        status: "retrying",
+        attempt: 1,
+        maxAttempts: 3,
+      });
+      expect(executor.options.at(-1)?.timeoutMs).toBe(120_000);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 }

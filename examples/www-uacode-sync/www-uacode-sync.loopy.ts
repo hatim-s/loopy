@@ -1,15 +1,18 @@
-import { fs, git, log, loopy, sh, step } from "loopy";
-import { parseTree, patchTree } from "./git-tree.ts";
-import { parseCommit, parsePullRequests, selectPullRequest, validateInput } from "./publication.ts";
+import { mkdir } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
+import { git, log, loopy, sh, step } from "loopy";
+import { readOptions, writeOptions } from "../options.ts";
+import { findPullRequest, readSnapshot, remoteSha } from "./github.ts";
+import { validateInput } from "./publication.ts";
 import {
   type Files,
   planSync,
   pullRequestBody,
   sourceFiles,
   syncCommitMessage,
-  syncMetadata,
   targetFiles,
 } from "./sync.ts";
+import { verifyExisting } from "./verify.ts";
 
 export default loopy({
   name: "www-uacode-sync",
@@ -21,25 +24,10 @@ export default loopy({
     "sourceRef?": "string",
     "targetBranches?": "string",
   },
-  run: async ({ input, log, uuid }) => {
-    const options = await step("www-sync-options", () => validateInput(input));
-    await git.revParse({ flags: { showToplevel: true } }, { cwd: options.repository });
-    await fs.stat({ args: [options.repository] });
-    const remotes = await git.remote(undefined, { cwd: options.repository });
-
-    if (
-      !remotes.some(
-        (remote) =>
-          remote.name === "origin" &&
-          /^(?:git@github\.com:|https:\/\/github\.com\/|ssh:\/\/git@github\.com\/)unify-apps\/uacode(?:\.git)?$/.test(
-            remote.fetch ?? "",
-          ),
-      )
-    ) {
-      throw new Error("Origin must be unify-apps/uacode on github.com.");
-    }
-
-    const sourceSha = await remoteSha("www", options.sourceRef);
+  run: async ({ input, uuid }) => {
+    const options = validateInput(input);
+    await prerequisites(options.repository);
+    const sourceSha = await requireRef("www", options.sourceRef);
     const source = await readSnapshot("www", sourceSha, sourceFiles);
     const id = await uuid();
     const results = [];
@@ -48,11 +36,35 @@ export default loopy({
       results.push(await syncBranch({ ...options, branch, sourceSha, source, id }));
     }
 
-    log.info("Prompt and skill synchronization completed.", { dryRun: input.dryRun });
+    log.info("Prompt and skill synchronization completed.", { dryRun: options.dryRun });
 
-    return { sourceSha, dryRun: input.dryRun, results };
+    return { sourceSha, dryRun: options.dryRun, results };
   },
 });
+
+async function prerequisites(cwd: string) {
+  const top = await git.revParse({ flags: { showToplevel: true } }, { ...readOptions, cwd });
+
+  if (resolve(top) !== resolve(cwd)) {
+    throw new Error(
+      "Repository must be the checkout root. Supply the path returned by git rev-parse --show-toplevel.",
+    );
+  }
+
+  const remotes = await git.remote(undefined, { ...readOptions, cwd });
+
+  if (
+    !remotes.some(
+      (remote) =>
+        remote.name === "origin" &&
+        /^(?:git@github\.com:|https:\/\/github\.com\/|ssh:\/\/git@github\.com\/)unify-apps\/uacode(?:\.git)?$/.test(
+          remote.fetch ?? "",
+        ),
+    )
+  ) {
+    throw new Error("Origin must be unify-apps/uacode on github.com. Use the correct checkout.");
+  }
+}
 
 type BranchOptions = ReturnType<typeof validateInput> & {
   branch: string;
@@ -60,96 +72,6 @@ type BranchOptions = ReturnType<typeof validateInput> & {
   source: Files;
   id: string;
 };
-
-async function remoteSha(repo: string, ref: string) {
-  const result = await sh.exec([
-    "gh",
-    "api",
-    `repos/unify-apps/${repo}/git/ref/heads/${encodeURIComponent(ref)}`,
-    "--jq",
-    ".object.sha",
-  ]);
-
-  const sha = result.stdout.trim();
-
-  if (!/^[0-9a-f]{40}$/.test(sha)) {
-    throw new Error("GitHub returned an invalid commit SHA.");
-  }
-
-  return sha;
-}
-
-async function readSnapshot(repo: string, sha: string, paths: string[]) {
-  const files: Files = {};
-
-  for (const path of paths) {
-    const result = await sh.exec([
-      "gh",
-      "api",
-      "-H",
-      "Accept: application/vnd.github.raw+json",
-      `repos/unify-apps/${repo}/contents/${path}?ref=${sha}`,
-    ]);
-
-    files[path] = result.stdout;
-  }
-
-  return files;
-}
-
-async function syncBranch(options: BranchOptions) {
-  const { branch, sourceSha, source, dryRun } = options;
-  const base = await remoteSha("uacode", branch);
-  const target = await readSnapshot("uacode", base, targetFiles);
-  const changes = await step("www-sync-plan", () => planSync(source, target, sourceSha));
-  const existing = await findPullRequest(branch);
-  const observed = existing ? await verifyExisting(existing.headRefName) : null;
-
-  const branchName =
-    existing?.headRefName ??
-    `chore/www-agent-assets-${sourceSha.slice(0, 8)}-${branch.replaceAll(/[^a-zA-Z0-9-]/g, "-")}`;
-
-  const result = {
-    branch,
-    branchName,
-    base,
-    changed: changes.map((change) => change.path),
-    pullRequest: existing?.url ?? null,
-  };
-
-  if (dryRun || !changes.length) {
-    if (dryRun) {
-      log.info(
-        "Dry run: skip fetch, worktree, file writes, staging, commit, push, PR and cleanup.",
-        { branch },
-      );
-    }
-
-    return result;
-  }
-
-  return publishBranch({ options, base, branchName, changes, observed, existing, result });
-}
-
-async function findPullRequest(branch: string) {
-  const listed = await sh.exec([
-    "gh",
-    "pr",
-    "list",
-    "--repo",
-    "unify-apps/uacode",
-    "--base",
-    branch,
-    "--state",
-    "open",
-    "--limit",
-    "500",
-    "--json",
-    "url,headRefName",
-  ]);
-
-  return step("www-sync-pr", () => selectPullRequest(parsePullRequests(listed.stdout), branch));
-}
 
 type BranchResult = {
   branch: string;
@@ -159,103 +81,156 @@ type BranchResult = {
   pullRequest: string | null;
 };
 
-async function publishBranch(input: Omit<Publication, "worktree"> & { result: BranchResult }) {
-  const { options, base, branchName, changes, observed, existing, result } = input;
-  const { repository, branch } = options;
-  const worktree = `${repository}-loopy-${options.id}-${branch.replaceAll("/", "-")}`;
-  await git.fetch({ args: ["origin", base] }, commandOptions(repository));
+async function requireRef(repo: string, ref: string) {
+  const sha = await remoteSha(repo, ref);
 
-  if (observed) {
-    await git.fetch({ args: ["origin", observed.sha] }, commandOptions(repository));
+  if (!sha) {
+    throw new Error(`Missing ${repo} branch ${ref}. Choose an existing source or target branch.`);
   }
 
-  await git.worktree.add(
-    { args: [worktree, observed?.sha ?? base], flags: { detach: true } },
-    commandOptions(repository),
-  );
-
-  try {
-    const pullRequest = await publish({
-      options,
-      worktree,
-      base,
-      branchName,
-      changes,
-      observed,
-      existing,
-    });
-
-    return { ...result, pullRequest };
-  } finally {
-    await git.worktree.remove(
-      { args: [worktree], flags: { force: true } },
-      commandOptions(repository),
-    );
-  }
+  return sha;
 }
 
-async function verifyExisting(branch: string) {
-  const sha = await remoteSha("uacode", branch);
-  const result = await sh.exec(["gh", "api", `repos/unify-apps/uacode/git/commits/${sha}`]);
-  const commit = await step("www-sync-commit", () => parseCommit(result.stdout));
-  const metadata = syncMetadata(commit.message);
-  const source = await readSnapshot("www", metadata.source, sourceFiles);
-  const target = await readSnapshot("uacode", metadata.base, targetFiles);
-  await verifyTree(metadata, commit.tree, source, target);
+async function syncBranch(options: BranchOptions) {
+  const { branch, sourceSha, source } = options;
+  const base = await requireRef("uacode", branch);
+  const target = await readSnapshot("uacode", base, targetFiles);
+  const changes = planSync(source, target, sourceSha);
+  const branchName = `chore/www-agent-assets-${sourceSha.slice(0, 8)}-${branch.replaceAll(/[^a-zA-Z0-9-]/g, "-")}`;
 
-  return { sha, tree: commit.tree };
+  const result: BranchResult = {
+    branch,
+    branchName,
+    base,
+    changed: changes.map((change) => change.path),
+    pullRequest: null,
+  };
+
+  if (!changes.length) {
+    log.info(`no changes on ${branch}`);
+
+    return result;
+  }
+
+  return syncChangedBranch(options, result, changes);
+}
+
+async function syncChangedBranch(
+  options: BranchOptions,
+  result: BranchResult,
+  changes: ReturnType<typeof planSync>,
+) {
+  const existing = await findPullRequest(options.branch);
+  const branchName = existing?.headRefName ?? result.branchName;
+  const sha = await remoteSha("uacode", branchName);
+  const observed = sha ? await verifyExisting(sha) : null;
+
+  if (existing && !observed) {
+    throw new Error(
+      "The open sync PR has no remote branch. Restore or close the PR before retrying.",
+    );
+  }
+
+  const next = { ...result, branchName, pullRequest: existing?.url ?? null };
+
+  if (options.dryRun) {
+    log.info("Dry run: skip fetch, worktree, file writes, staging, commit, push, PR and cleanup.", {
+      branch: options.branch,
+    });
+
+    return next;
+  }
+
+  return publishBranch({
+    options,
+    base: result.base,
+    branchName,
+    changes,
+    observed,
+    existing,
+    result: next,
+  });
 }
 
 type Publication = {
   options: BranchOptions;
-  worktree: string;
+  cwd: string;
   base: string;
   branchName: string;
   changes: ReturnType<typeof planSync>;
   observed: { sha: string; tree: string } | null;
-  existing: ReturnType<typeof selectPullRequest>;
+  existing: Awaited<ReturnType<typeof findPullRequest>>;
 };
 
-async function publish(publication: Publication) {
-  const { options, worktree: cwd, base, branchName, changes, observed } = publication;
+async function publishBranch(input: Omit<Publication, "cwd"> & { result: BranchResult }) {
+  const { options, base, observed, result } = input;
+  const { repository, branch } = options;
+  const cwd = `${repository}-loopy-${options.id}-${branch.replaceAll("/", "-")}`;
+  const commands = { ...writeOptions, cwd: repository };
+  await git.fetch({ args: ["origin", base] }, commands);
 
   if (observed) {
-    await sh.exec(
-      ["git", "merge", "--no-commit", "--no-ff", "-s", "ours", base],
-      commandOptions(cwd),
+    await git.fetch({ args: ["origin", observed.sha] }, commands);
+  }
+
+  await git.worktree.add({ args: [cwd, observed?.sha ?? base], flags: { detach: true } }, commands);
+
+  try {
+    return { ...result, pullRequest: await publish({ ...input, cwd }) };
+  } finally {
+    await git.worktree.remove({ args: [cwd], flags: { force: true } }, commands);
+  }
+}
+
+async function publish(publication: Publication) {
+  const { options, cwd, base, branchName, changes, observed } = publication;
+  const commands = { ...writeOptions, cwd };
+
+  if (observed) {
+    await sh.exec(["git", "merge", "--no-commit", "--no-ff", "-s", "ours", base], commands);
+    await sh.exec(["git", "read-tree", "--reset", "-u", base], commands);
+  }
+
+  for (const { path, contents } of changes) {
+    await step(
+      `write ${path}`,
+      async () => {
+        await mkdir(dirname(join(cwd, path)), { recursive: true });
+
+        return Bun.write(join(cwd, path), contents);
+      },
+      writeOptions,
     );
-    await sh.exec(["git", "read-tree", "--reset", "-u", base], commandOptions(cwd));
   }
 
-  for (const change of changes) {
-    await sh.exec(["tee", "--", change.path], { ...commandOptions(cwd), stdin: change.contents });
-  }
-
-  const diff = await git.diff({ revisions: [base] }, commandOptions(cwd));
-
-  const paths = diff.flatMap((file) => (file.from ? [file.from, file.path] : [file.path]));
-
-  if (paths.some((path) => !targetFiles.includes(path))) {
-    throw new Error("Sync changed an unapproved path.");
-  }
-
-  await sh.exec(["git", "diff", "--check", base], commandOptions(cwd));
-  await git.add({ args: targetFiles }, commandOptions(cwd));
-  const tree = (await sh.exec(["git", "write-tree"], commandOptions(cwd))).stdout.trim();
+  const tree = await stage(cwd, base);
 
   if (!observed || tree !== observed.tree) {
-    await git.commit(
-      { flags: { message: syncCommitMessage(options.sourceSha, base) } },
-      commandOptions(cwd),
-    );
-    await git.push({ args: ["origin", `HEAD:refs/heads/${branchName}`] }, commandOptions(cwd));
+    await git.commit({ flags: { message: syncCommitMessage(options.sourceSha, base) } }, commands);
+    await git.push({ args: ["origin", `HEAD:refs/heads/${branchName}`] }, commands);
   }
 
   return publishPullRequest(publication);
 }
 
+async function stage(cwd: string, base: string) {
+  const diff = await git.diff({ revisions: [base] }, { ...readOptions, cwd });
+  const paths = diff.flatMap((file) => (file.from ? [file.from, file.path] : [file.path]));
+
+  if (paths.some((path) => !targetFiles.includes(path))) {
+    throw new Error(
+      "Sync changed an unapproved path. Inspect the generated worktree before retrying.",
+    );
+  }
+
+  await sh.exec(["git", "diff", "--check", base], { ...readOptions, cwd });
+  await git.add({ args: targetFiles }, { ...writeOptions, cwd });
+
+  return (await sh.exec(["git", "write-tree"], { ...writeOptions, cwd })).stdout.trim();
+}
+
 async function publishPullRequest(publication: Publication) {
-  const { options, worktree: cwd, base, branchName, changes, existing } = publication;
+  const { options, cwd, base, branchName, changes, existing } = publication;
 
   const body = pullRequestBody(
     options.sourceSha,
@@ -270,57 +245,11 @@ async function publishPullRequest(publication: Publication) {
     existing
       ? ["gh", "pr", "edit", existing.url, ...details]
       : ["gh", "pr", "create", "--base", options.branch, "--head", branchName, ...details],
-    commandOptions(cwd),
+    { ...writeOptions, cwd },
   );
 
-  return existing?.url ?? result.stdout.trim();
-}
+  const url = existing?.url ?? result.stdout.trim();
+  log.info(`PR ${existing ? "updated" : "created"} ${url}`);
 
-function commandOptions(cwd: string) {
-  return { cwd, retry: { attempts: 1 }, timeout: 45_000 };
-}
-
-async function verifyTree(
-  metadata: ReturnType<typeof syncMetadata>,
-  expected: string,
-  source: Files,
-  target: Files,
-) {
-  const result = await sh.exec([
-    "gh",
-    "api",
-    `repos/unify-apps/uacode/git/commits/${metadata.base}`,
-  ]);
-
-  const base = await step("www-sync-base-commit", () => parseCommit(result.stdout));
-
-  const changes = await step("www-sync-prior-plan", () =>
-    planSync(source, target, metadata.source),
-  );
-
-  const tree = await reconstructTree(base.tree, changes);
-
-  if (tree !== expected) {
-    throw new Error("Refusing to update a sync branch with manual tree edits. Review it manually.");
-  }
-}
-
-async function reconstructTree(sha: string, changes: ReturnType<typeof planSync>): Promise<string> {
-  const result = await sh.exec(["gh", "api", `repos/unify-apps/uacode/git/trees/${sha}`]);
-  const entries = await step("www-sync-read-tree", () => parseTree(result.stdout));
-  const children: Record<string, string> = {};
-
-  for (const entry of entries) {
-    const prefix = `${entry.path}/`;
-
-    const nested = changes
-      .filter((change) => change.path.startsWith(prefix))
-      .map((change) => ({ ...change, path: change.path.slice(prefix.length) }));
-
-    if (nested.length) {
-      children[entry.path] = await reconstructTree(entry.sha, nested);
-    }
-  }
-
-  return step("www-sync-tree", () => patchTree(entries, changes, children));
+  return url;
 }

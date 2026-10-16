@@ -1,7 +1,7 @@
-import type { Json } from "loopy";
 import {
   appendRegistration,
   type Files,
+  isObject,
   type JsonObject,
   parse,
   read,
@@ -54,15 +54,11 @@ const skills = [
   ["performance", "e_6a5f2c12f62c9924bb176689"],
 ] as const;
 
-function isJsonObject(value: Json | undefined): value is JsonObject {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
 function requiredContent(content: Map<string, string>, key: string) {
   const value = content.get(key);
 
   if (value === undefined) {
-    throw new Error(`Source content is missing ${key}.`);
+    throw new Error(`Source content is missing ${key}. Restore the source file before retrying.`);
   }
 
   return value;
@@ -82,7 +78,9 @@ export function sourceText(text: string, stripMaintainerComment = false): string
   }
 
   if (normalized.indexOf("-->", start) < 0) {
-    throw new Error("Canonical prompt is missing its maintainer-note block");
+    throw new Error(
+      "Canonical prompt is missing its maintainer-note block. Restore the closing comment before retrying.",
+    );
   }
 
   const end = normalized.indexOf("-->", start) + 3;
@@ -103,7 +101,9 @@ function mergeAgentInstructions(existing: string, source: string): string {
   const existingName = existingHeader.match(/^name:\s*(.+)$/m)?.[1];
 
   if (!sourceName || !existingName) {
-    throw new Error("Agent frontmatter must include a name field");
+    throw new Error(
+      "Agent frontmatter must include a name field. Restore the source and asset names before retrying.",
+    );
   }
 
   const mergedHeader = sourceHeader.replace(/^name:\s*.+$/m, `name: ${existingName}`);
@@ -129,7 +129,7 @@ export function sourceContents(files: Files) {
     generatedAgent.slice(beginIndex + begin.length, endIndex).trim() !== rawCanonical.trim()
   ) {
     throw new Error(
-      ".claude/agents/workflow-agent.md is out of sync with packages/uac/docs/agent-prompt.md",
+      ".claude/agents/workflow-agent.md is out of sync with packages/uac/docs/agent-prompt.md. Regenerate the agent prompt before retrying.",
     );
   }
 
@@ -166,10 +166,10 @@ export function applyAssetSync(files: Files, content: Map<string, string>, sourc
     });
   }
 
-  const changed = Object.keys(files).filter((path) => files[path] !== before[path]);
-  bumpReleases(files, affectedFeatures(changed), sourceSha);
+  const changed = () => Object.keys(files).filter((path) => files[path] !== before[path]);
+  bumpReleases(files, affectedFeatures(changed()), sourceSha);
 
-  return Object.keys(files).filter((path) => files[path] !== before[path]);
+  return changed();
 }
 
 function syncAgent(files: Files, content: Map<string, string>, id: string) {
@@ -203,23 +203,27 @@ function syncEmbeddedSkill(
   const asset = readJson(files, path);
 
   if (!Array.isArray(asset.skills)) {
-    throw new Error(`Workflow Agent asset has no skills array: ${path}.`);
+    throw new Error(
+      `Workflow Agent asset has no skills array: ${path}. Restore the exported skills before retrying.`,
+    );
   }
 
   const match = asset.skills
     .map((item) => requireObject(item, path))
-    .find(
-      (item) => isJsonObject(item.skillEntity) && requireObject(item.skillEntity, path).id === id,
-    );
+    .find((item) => isObject(item.skillEntity) && requireObject(item.skillEntity, path).id === id);
 
   if (!match) {
-    throw new Error(`Workflow Agent is missing embedded skill ${id}.`);
+    throw new Error(
+      `Workflow Agent is missing embedded skill ${id}. Restore the embedded skill before retrying.`,
+    );
   }
 
   const entity = requireObject(match.skillEntity, path);
 
   if (standalone.version !== entity.version) {
-    throw new Error(`Standalone and embedded skill versions differ for ${id}.`);
+    throw new Error(
+      `Standalone and embedded skill versions differ for ${id}. Export matching versions before retrying.`,
+    );
   }
 
   requireObject(entity.properties, path).skill = requiredContent(content, name);
@@ -270,7 +274,9 @@ function bumpReleases(files: Files, features: Set<string>, sourceSha: string) {
   const missing = [...features].filter((feature) => !found.has(feature));
 
   if (missing.length) {
-    throw new Error(`Missing ai-sdlc release record(s): ${missing.join(", ")}.`);
+    throw new Error(
+      `Missing ai-sdlc release record(s): ${missing.join(", ")}. Restore the release records before retrying.`,
+    );
   }
 
   files[RELEASE_RECORDS] = next.join("\n");
@@ -284,7 +290,7 @@ function bumpRelease(line: string, features: Set<string>, found: Set<string>, so
 
   const record = requireObject(parse(line), "release record");
 
-  const properties = isJsonObject(record.properties)
+  const properties = isObject(record.properties)
     ? requireObject(record.properties, "release properties")
     : null;
 
@@ -295,7 +301,9 @@ function bumpRelease(line: string, features: Set<string>, found: Set<string>, so
   }
 
   if (found.has(feature)) {
-    throw new Error(`Duplicate ai-sdlc release record for ${feature}.`);
+    throw new Error(
+      `Duplicate ai-sdlc release record for ${feature}. Remove duplicate records before retrying.`,
+    );
   }
 
   found.add(feature);
@@ -303,7 +311,9 @@ function bumpRelease(line: string, features: Set<string>, found: Set<string>, so
   const version = current.match(/^(\d+)\.(\d+)\.(\d+)$/);
 
   if (!version) {
-    throw new Error(`Expected semver release version for ${feature}, got ${current}.`);
+    throw new Error(
+      `Expected semver release version for ${feature}, got ${current}. Correct the release version before retrying.`,
+    );
   }
 
   properties.version = `${version[1]}.${version[2]}.${Number(version[3]) + 1}`;
@@ -327,11 +337,11 @@ export const targetFiles = [
 
 export function planSync(source: Files, target: Files, sourceSha: string) {
   const next = { ...target };
-  applyAssetSync(next, sourceContents(source), sourceSha);
 
-  return Object.entries(next)
-    .filter(([path, contents]) => contents !== target[path])
-    .map(([path, contents]) => ({ path, contents }));
+  return applyAssetSync(next, sourceContents(source), sourceSha).map((path) => ({
+    path,
+    contents: read(next, path),
+  }));
 }
 
 export function syncCommitMessage(sourceSha: string, baseSha: string) {

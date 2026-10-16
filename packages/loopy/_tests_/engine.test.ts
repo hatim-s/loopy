@@ -607,3 +607,37 @@ test("command exit policy accepts only declared success codes before parsing", a
     }
   }
 });
+
+test("command parsers can distinguish an absent ref from a retryable exit", async () => {
+  const f = await fixture();
+  f.executor.result = { ...f.executor.result, exitCode: 1, stderr: "network unavailable" };
+
+  const workflow = (ctx: WorkflowContext) =>
+    ctx.command(
+      "remote-ref",
+      { program: "gh", args: ["api", "ref"] },
+      { okExitCodes: [0, 1], retry: { attempts: 3, retryOn: "exit" } },
+      (result) => {
+        if (result.exitCode === 1) {
+          if (result.stderr === "not found") {
+            return null;
+          }
+
+          throw new Error("Ref lookup failed. Retry the read.");
+        }
+
+        return result.stdout;
+      },
+    );
+
+  expect((await f.execute(workflow)).status).toBe("suspended");
+  expect((await f.store.getSteps("run"))[0]).toMatchObject({
+    status: "retrying",
+    maxAttempts: 3,
+    attempt: 1,
+  });
+  f.advance(10_000);
+  f.executor.result = { ...f.executor.result, stderr: "not found" };
+  expect(await f.execute(workflow)).toEqual({ status: "succeeded", output: null });
+  expect(f.executor.calls).toHaveLength(2);
+});

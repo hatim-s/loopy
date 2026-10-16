@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import type { Json } from "loopy";
 
 export type Files = Record<string, string>;
@@ -11,7 +12,7 @@ type Replacement = { start: number; end: number; text: string };
 // BOUNDARY: Asset JSON objects are validated before selecting fields.
 export function object(value: Json | undefined, location: string): JsonObject {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`Expected JSON object at ${location}.`);
+    throw new Error(`Expected JSON object at ${location}. Correct the asset JSON before retrying.`);
   }
 
   return value;
@@ -20,7 +21,7 @@ export function object(value: Json | undefined, location: string): JsonObject {
 // BOUNDARY: Selected asset fields must be strings before text transforms run.
 export function string(value: Json | undefined, location: string) {
   if (typeof value !== "string") {
-    throw new Error(`Expected string at ${location}.`);
+    throw new Error(`Expected string at ${location}. Correct the asset field before retrying.`);
   }
 
   return value;
@@ -30,7 +31,7 @@ export function read(files: Files, path: string) {
   const value = files[path];
 
   if (value === undefined) {
-    throw new Error(`Missing file ${path}.`);
+    throw new Error(`Missing file ${path}. Restore the source or exported asset before retrying.`);
   }
 
   return value;
@@ -71,7 +72,7 @@ class JsonSpans {
       }
     }
 
-    throw new Error("Malformed JSON string.");
+    throw new Error("Malformed JSON string. Correct the asset JSON before retrying.");
   }
   container(start: number, path: Path, array: boolean) {
     let cursor = this.space(start + 1);
@@ -135,7 +136,9 @@ function compare(before: Json, after: Json, path: Path, spans: JsonSpans, change
       Object.keys(before).length !== Object.keys(after).length ||
       Object.keys(before).some((key) => !(key in after))
     ) {
-      throw new Error("Refusing to reformat existing JSON structure.");
+      throw new Error(
+        "Refusing to reformat existing JSON structure. Inspect the planned asset changes before retrying.",
+      );
     }
 
     for (const key of Object.keys(before)) {
@@ -148,7 +151,7 @@ function compare(before: Json, after: Json, path: Path, spans: JsonSpans, change
   const span = spans.spans.get(JSON.stringify(path));
 
   if (!span || Array.isArray(after) || isObject(after)) {
-    throw new Error(`Cannot target JSON value at ${path.join(".")}.`);
+    throw new Error(`Cannot target JSON value at ${path.join(".")}. Inspect the JSON changes.`);
   }
 
   changes.push({ start: span[0], end: span[1], text: JSON.stringify(after) });
@@ -162,6 +165,12 @@ export function writeJson(files: Files, path: string, next: JsonObject) {
 
   for (const change of changes.sort((a, b) => b.start - a.start)) {
     patched = `${patched.slice(0, change.start)}${change.text}${patched.slice(change.end)}`;
+  }
+
+  if (!isDeepStrictEqual(parse(patched), next)) {
+    throw new Error(
+      `JSON patch did not produce the intended value at ${path}. Inspect duplicate keys and the source JSON before retrying.`,
+    );
   }
 
   files[path] = patched;
@@ -178,13 +187,17 @@ export function appendRegistration(
   const entries = details[assetClass];
 
   if (!Array.isArray(entries)) {
-    throw new Error(`Manifest has no ${assetClass} entries: ${path}.`);
+    throw new Error(
+      `Manifest has no ${assetClass} entries: ${path}. Restore the registration array before retrying.`,
+    );
   }
 
   const matches = entries.filter((item) => object(item, path).assetId === entry.assetId);
 
   if (matches.length > 1) {
-    throw new Error(`Manifest has duplicate registration ${entry.assetId}: ${path}.`);
+    throw new Error(
+      `Manifest has duplicate registration ${entry.assetId}: ${path}. Remove the duplicate registration before retrying.`,
+    );
   }
 
   if (matches.length) {
@@ -196,7 +209,7 @@ export function appendRegistration(
   );
 
   if (!span) {
-    throw new Error(`Missing registration array in ${path}.`);
+    throw new Error(`Missing registration array in ${path}. Restore the manifest before retrying.`);
   }
 
   files[path] = insertEntry(original, span, entry);
