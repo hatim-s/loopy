@@ -14,6 +14,8 @@ export const files = {
       t: { cli: "-t", kind: "boolean" },
       S: { cli: "-S", kind: "boolean" },
       d: { cli: "-d", kind: "boolean" },
+      one: { cli: "-1", kind: "boolean" },
+      F: { cli: "-F", kind: "boolean" },
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
     positionalSeparator: true,
@@ -39,6 +41,9 @@ export const files = {
       force: { cli: "-f", kind: "boolean" },
       interactive: { cli: "-i", kind: "boolean" },
       preserve: { cli: "-p", kind: "boolean" },
+      archive: { cli: "-a", kind: "boolean" },
+      noClobber: { cli: "-n", kind: "boolean" },
+      dereference: { cli: "-L", kind: "boolean" },
       verbose: { cli: "-v", kind: "boolean" },
     },
     positionals: [

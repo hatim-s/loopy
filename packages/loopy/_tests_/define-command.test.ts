@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { MemoryRunStore } from "../src/runtime/index.js";
 import { defineCommand, type Json, loopy } from "../src/sdk/index.js";
 import { startLoopy } from "../src/sdk/run.js";
+import { base64Descriptor } from "../src/sdk/shell/text/format.js";
 import { FakeExecutor } from "./engine-fixture.js";
 
 const probe = defineCommand({
@@ -124,3 +125,13 @@ function compileOnlyChecks() {
 }
 
 void compileOnlyChecks;
+
+test.each([
+  ["darwin", ["-D", "-i", "input"]],
+  ["linux", ["-d", "input"]],
+])("base64 renders typed input on %s", async (platform, expected) => {
+  const base64 = defineCommand(base64Descriptor, { platform: () => platform });
+  const f = await execute(() => base64({ flags: { input: "input", decode: true } }));
+  expect(f.result.status).toBe("succeeded");
+  expect(f.executor.calls[0]?.args).toEqual(expected);
+});

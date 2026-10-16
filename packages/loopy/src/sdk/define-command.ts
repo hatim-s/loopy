@@ -6,17 +6,24 @@ import type {
 } from "../core/index.js";
 import type { StepOptions } from "../runtime/index.js";
 import { command } from "./ambient.js";
+import { type RenderInput, renderArgv } from "./render-argv.js";
 
-type FlagDefinition = CoreFlag & {
+export type FlagDefinition = CoreFlag & {
   readonly supported?: boolean;
-  readonly style?: "equals" | "space" | "attached";
+  readonly style?: "equals" | "space" | "attached" | "positional";
+  readonly position?: "before" | "after";
+  readonly order?: number;
+  readonly prefix?: readonly string[];
+  readonly pairs?: boolean;
+  readonly terminator?: string;
 };
 
-type CommandDefinition = {
+export type CommandDefinition = {
   readonly program: string;
   readonly path?: readonly string[];
   readonly positionalSeparator?: boolean;
   readonly flagsAfterPositionals?: boolean;
+  readonly revisionPaths?: boolean;
   readonly positionals?: readonly PositionalDefinition[];
   readonly flags?: Readonly<Record<string, FlagDefinition>>;
   readonly style?: "equals" | "space";
@@ -60,9 +67,11 @@ type FlagValue<F extends FlagDefinition> = F["kind"] extends "boolean"
       ? C[number]
       : string;
 
-type FlagInput<F extends FlagDefinition> = F extends { readonly optionalValue: true }
-  ? FlagValue<F> | true
-  : FlagValue<F>;
+type FlagInput<F extends FlagDefinition> = F extends { readonly pairs: true }
+  ? Record<string, string>
+  : F extends { readonly optionalValue: true }
+    ? FlagValue<F> | true
+    : FlagValue<F>;
 
 type Flags<D extends CommandDescriptor> = D extends {
   readonly flags: infer F extends Readonly<Record<string, FlagDefinition>>;
@@ -74,12 +83,27 @@ type Flags<D extends CommandDescriptor> = D extends {
     }
   : Record<string, never>;
 
-type Input<D extends CommandDescriptor> = {
-  args?: D extends { readonly positionals: infer P extends readonly PositionalDefinition[] }
-    ? Positionals<P>
-    : readonly string[];
-  flags?: Flags<D>;
-};
+type Args<D extends CommandDescriptor> = D extends {
+  readonly positionals: infer P extends readonly PositionalDefinition[];
+}
+  ? Positionals<P>
+  : readonly string[];
+
+type Operands<D extends CommandDescriptor> = D extends { readonly revisionPaths: true }
+  ? { revisions?: readonly string[]; paths?: readonly string[] }
+  : readonly [] extends Args<D>
+    ? { args?: Args<D> }
+    : { args: Args<D> };
+
+type Input<D extends CommandDescriptor> = Operands<D> & { flags?: Flags<D> };
+
+type Simplify<T> = { [K in keyof T]: T[K] } & {};
+
+type CallArguments<I> = I extends { args: readonly string[] }
+  ? [input: Simplify<I>, options?: CommandOptions]
+  : [input?: Simplify<I>, options?: CommandOptions];
+
+const PLATFORM = process.platform;
 
 function platformVariant(descriptor: CommandDescriptor, platform: string): CommandDefinition {
   const variant =
@@ -92,85 +116,14 @@ function platformVariant(descriptor: CommandDescriptor, platform: string): Comma
   return { ...descriptor, ...variant, flags: { ...descriptor.flags, ...variant?.flags } };
 }
 
-// BOUNDARY: JavaScript callers supply untyped flag values at this public API.
-function flagTokens(
-  flag: FlagDefinition,
-  value: unknown,
-  style: CommandDefinition["style"],
-): string[] {
-  if (value === undefined || (value === false && flag.kind === "boolean")) {
-    return [];
-  }
-
-  if (flag.supported === false) {
-    throw new Error(
-      `Flag '${flag.cli}' is unavailable on this platform. Use sh.exec with a platform-specific alternative.`,
-    );
-  }
-
-  if (value === true && (flag.kind === "boolean" || flag.optionalValue)) {
-    return [flag.cli];
-  }
-
-  if (typeof value !== flag.kind || (typeof value === "number" && !Number.isFinite(value))) {
-    throw new Error(
-      `Flag '${flag.cli}' requires a ${flag.kind} value. Supply the declared flag type.`,
-    );
-  }
-
-  if (flag.choices && !flag.choices.includes(String(value))) {
-    throw new Error(
-      `Flag '${flag.cli}' must be one of: ${flag.choices.join(", ")}. Choose an allowed value.`,
-    );
-  }
-
-  const format = flag.style ?? (flag.attachedValue ? "attached" : (style ?? "space"));
-
-  if (format === "space") {
-    return [flag.cli, String(value)];
-  }
-
-  return [`${flag.cli}${format === "equals" ? "=" : ""}${String(value)}`];
-}
-
-// BOUNDARY: Validate flags once before handing argv to the executor.
-function buildFlags(
-  descriptor: CommandDefinition,
-  values: Readonly<Record<string, unknown>>,
-): string[] {
-  const allowed = descriptor.flags ?? {};
-
-  return Object.entries(values).flatMap(([name, value]) => {
-    const flag = Object.hasOwn(allowed, name) ? allowed[name] : undefined;
-
-    if (!flag) {
-      throw new Error(
-        `Unknown flag '${name}'. Use an allowed flag: ${Object.keys(allowed).join(", ") || "none"}.`,
-      );
-    }
-
-    if (value === undefined) {
-      return [];
-    }
-
-    if (flag.repeatable) {
-      if (!Array.isArray(value)) {
-        throw new Error(`Flag '${name}' is repeatable. Supply an array of values.`);
-      }
-
-      const items: readonly unknown[] = value;
-
-      return items.flatMap((item) => flagTokens(flag, item, descriptor.style));
-    }
-
-    return flagTokens(flag, value, descriptor.style);
-  });
-}
-
 export function defineCommand<const D extends CommandDescriptor>(
   descriptor: D,
-  environment: { platform: () => string } = { platform: () => process.platform },
-): (input?: Input<D>, options?: CommandOptions) => Promise<CommandResult> {
+  environment?: { platform: () => string },
+): (...args: CallArguments<Input<D>>) => Promise<CommandResult>;
+export function defineCommand(
+  descriptor: CommandDescriptor,
+  environment: { platform: () => string } = { platform: () => PLATFORM },
+): (input?: RenderInput, options?: CommandOptions) => Promise<CommandResult> {
   const key = descriptor.key ?? `${descriptor.namespace}.${descriptor.name}`;
 
   if (!descriptor.key && (!descriptor.namespace || !descriptor.name)) {
@@ -179,18 +132,7 @@ export function defineCommand<const D extends CommandDescriptor>(
 
   return async (input = {}, options = {}) => {
     const resolved = platformVariant(descriptor, environment.platform());
-    const flags = buildFlags(resolved, input.flags ?? {});
-    const args = [...(resolved.path ?? []), ...(resolved.flagsAfterPositionals ? [] : flags)];
-
-    if (resolved.positionalSeparator && input.args?.length) {
-      args.push("--");
-    }
-
-    args.push(...(input.args ?? []));
-
-    if (resolved.flagsAfterPositionals) {
-      args.push(...flags);
-    }
+    const args = renderArgv(resolved, input, key);
 
     return command(
       key,

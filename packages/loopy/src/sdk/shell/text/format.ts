@@ -1,4 +1,26 @@
-import { defineCommand } from "../../define-command.js";
+import { type CommandDescriptor, defineCommand } from "../../define-command.js";
+
+export const base64Descriptor = {
+  namespace: "text",
+  name: "base64",
+  program: "base64",
+  flags: {
+    decode: { cli: "-d", kind: "boolean" },
+    input: { cli: "-i", kind: "string" },
+  },
+  positionals: [],
+  variants: {
+    linux: {
+      flags: { input: { cli: "", kind: "string", style: "positional", position: "after" } },
+    },
+    darwin: {
+      flags: {
+        decode: { cli: "-D", kind: "boolean" },
+        input: { cli: "-i", kind: "string" },
+      },
+    },
+  },
+} as const satisfies CommandDescriptor;
 
 export const format = {
   wc: defineCommand({
@@ -44,6 +66,9 @@ export const format = {
       rawOutput: { cli: "-r", kind: "boolean" },
       compactOutput: { cli: "-c", kind: "boolean" },
       slurp: { cli: "-s", kind: "boolean" },
+      rawInput: { cli: "-R", kind: "boolean" },
+      arg: { cli: "--arg", kind: "string", pairs: true },
+      argjson: { cli: "--argjson", kind: "string", pairs: true },
       nullInput: { cli: "-n", kind: "boolean" },
       exitStatus: { cli: "-e", kind: "boolean" },
     },
@@ -60,22 +85,7 @@ export const format = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  base64: defineCommand({
-    namespace: "text",
-    name: "base64",
-    program: "base64",
-    flags: {
-      decode: { cli: "-d", kind: "boolean" },
-    },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
-    variants: {
-      darwin: {
-        flags: {
-          decode: { cli: "-D", kind: "boolean" },
-        },
-      },
-    },
-  }),
+  base64: defineCommand(base64Descriptor),
   sha256sum: defineCommand({
     namespace: "text",
     name: "sha256sum",

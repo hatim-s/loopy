@@ -30,17 +30,6 @@ export const archive = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  gunzip: defineCommand({
-    namespace: "archive",
-    name: "gunzip",
-    program: "gunzip",
-    flags: {
-      stdout: { cli: "-c", kind: "boolean" },
-      keep: { cli: "-k", kind: "boolean" },
-      force: { cli: "-f", kind: "boolean" },
-    },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
-  }),
   zip: defineCommand({
     namespace: "archive",
     name: "zip",
@@ -49,7 +38,7 @@ export const archive = {
       recursive: { cli: "-r", kind: "boolean" },
       quiet: { cli: "-q", kind: "boolean" },
       update: { cli: "-u", kind: "boolean" },
-      exclude: { cli: "-x", kind: "string" },
+      exclude: { cli: "-x", kind: "string", position: "after" },
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
