@@ -6,14 +6,23 @@ import type {
   EngineRunStatus,
   EngineStep,
   RunOutcome,
+  Schedule,
 } from "../core/index.js";
 import { OwnershipError, type RunStore } from "../runtime/index.js";
-import { rowToLog, rowToRun, rowToStep, SQL, stepToRow } from "./engine-store-rows.js";
+import {
+  rowToLog,
+  rowToRun,
+  rowToSchedule,
+  rowToStep,
+  SQL,
+  stepToRow,
+} from "./engine-store-rows.js";
 import {
   type LogRow,
   type RunRow,
   SCHEMA,
   SCHEMA_VERSION,
+  type ScheduleRow,
   type StepRow,
 } from "./engine-store-schema.js";
 
@@ -62,24 +71,7 @@ export class SqliteRunStore implements RunStore {
           throw new Error(`Run '${run.id}' already exists. Use a new run ID.`);
         }
 
-        this.db
-          .query(SQL.createRun)
-          .run(
-            run.id,
-            run.slug,
-            run.bundleHash,
-            JSON.stringify(run.input),
-            run.status,
-            run.output === undefined ? null : JSON.stringify(run.output),
-            run.error ?? null,
-            run.wakeAt === undefined ? null : new Date(run.wakeAt).toISOString(),
-            new Date(run.createdAt).toISOString(),
-            new Date(run.updatedAt).toISOString(),
-            run.owner?.token ?? null,
-            run.owner?.pid ?? null,
-            run.owner?.host ?? null,
-            run.owner === undefined ? null : new Date(run.owner.heartbeatAt).toISOString(),
-          );
+        this.insertRun(run);
       })
       .immediate();
   }
@@ -271,8 +263,87 @@ export class SqliteRunStore implements RunStore {
       .map(rowToRun);
   }
 
+  async nextWakeAt(): Promise<string | undefined> {
+    return (
+      this.db.query<{ wake_at: string | null }, []>(SQL.nextWakeAt).get()?.wake_at ?? undefined
+    );
+  }
+
+  async putSchedule(schedule: Schedule): Promise<void> {
+    this.db
+      .query(SQL.putSchedule)
+      .run(
+        schedule.slug,
+        schedule.cron,
+        schedule.tz,
+        JSON.stringify(schedule.input),
+        Number(schedule.enabled),
+        schedule.lastFireKey ?? null,
+        new Date(schedule.nextFireAt).toISOString(),
+      );
+  }
+
+  async listSchedules(): Promise<Schedule[]> {
+    return this.db.query<ScheduleRow, []>(SQL.schedules).all().map(rowToSchedule);
+  }
+
+  async deleteSchedule(slug: string): Promise<void> {
+    this.db.query(SQL.deleteSchedule).run(slug);
+  }
+
+  async fireSchedule(
+    slug: string,
+    fireKey: string,
+    run: EngineRun,
+    nextFireAt: string,
+  ): Promise<boolean> {
+    return this.db
+      .transaction(() => {
+        const schedule = this.db.query<ScheduleRow, [string]>(SQL.schedule).get(slug);
+
+        if (!schedule) {
+          throw new Error(`Schedule '${slug}' does not exist. Save the schedule before firing it.`);
+        }
+
+        if (schedule.last_fire_key === fireKey) {
+          return false;
+        }
+
+        if (this.row(run.id)) {
+          throw new Error(`Run '${run.id}' already exists. Use a new run ID.`);
+        }
+
+        this.insertRun(run);
+        this.db.query(SQL.fireSchedule).run(fireKey, new Date(nextFireAt).toISOString(), slug);
+
+        return true;
+      })
+      .immediate();
+  }
+
   close(): void {
     this.db.close();
+  }
+
+  private insertRun(run: EngineRun): void {
+    this.db
+      .query(SQL.createRun)
+      .run(
+        run.id,
+        run.slug,
+        run.bundleHash,
+        JSON.stringify(run.input),
+        run.status,
+        run.output === undefined ? null : JSON.stringify(run.output),
+        run.error ?? null,
+        run.wakeAt === undefined ? null : new Date(run.wakeAt).toISOString(),
+        new Date(run.createdAt).toISOString(),
+        new Date(run.updatedAt).toISOString(),
+        run.owner?.token ?? null,
+        run.owner?.pid ?? null,
+        run.owner?.host ?? null,
+        run.owner === undefined ? null : new Date(run.owner.heartbeatAt).toISOString(),
+      );
   }
 
   private row(runId: string): RunRow | undefined {

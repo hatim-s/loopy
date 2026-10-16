@@ -1,3 +1,5 @@
+export type { Schedule } from "../core/index.js";
+
 export type { Clock } from "./clock.js";
 
 export { map, parallel, race } from "./concurrency.js";
@@ -7,6 +9,8 @@ export type { LoopyContext, StepContext, StepOptions } from "./context.js";
 export type { CronSchedule } from "./cron.js";
 
 export { fireKey, nextFire, parseCron } from "./cron.js";
+
+export { Daemon } from "./daemon.js";
 
 export type { Duration } from "./duration.js";
 

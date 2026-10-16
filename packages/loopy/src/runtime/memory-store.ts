@@ -4,10 +4,12 @@ import type {
   EngineRunStatus,
   EngineStep,
   RunOutcome,
+  Schedule,
 } from "../core/index.js";
 import { OwnershipError, type RunStore } from "./store.js";
 
 export class MemoryRunStore implements RunStore {
+  private readonly schedules = new Map<string, Schedule>();
   private readonly runs = new Map<string, EngineRun>();
   private readonly steps = new Map<string, Map<number, EngineStep>>();
   private readonly logs = new Map<string, Map<number, EngineLog>>();
@@ -163,6 +165,63 @@ export class MemoryRunStore implements RunStore {
               Date.parse(run.wakeAt) <= Date.parse(now))),
       ),
     );
+  }
+
+  async nextWakeAt(): Promise<string | undefined> {
+    const wakes = [...this.runs.values()]
+      .filter((run) => run.status === "suspended" && run.owner === undefined)
+      .flatMap((run) => (run.wakeAt === undefined ? [] : [run.wakeAt]));
+
+    wakes.sort((left, right) => Date.parse(left) - Date.parse(right));
+
+    return wakes[0] === undefined ? undefined : new Date(wakes[0]).toISOString();
+  }
+
+  async putSchedule(schedule: Schedule): Promise<void> {
+    this.schedules.set(
+      schedule.slug,
+      structuredClone({
+        ...schedule,
+        nextFireAt: new Date(schedule.nextFireAt).toISOString(),
+      }),
+    );
+  }
+
+  async listSchedules(): Promise<Schedule[]> {
+    return structuredClone([...this.schedules.values()]);
+  }
+
+  async deleteSchedule(slug: string): Promise<void> {
+    this.schedules.delete(slug);
+  }
+
+  async fireSchedule(
+    slug: string,
+    fireKey: string,
+    run: EngineRun,
+    nextFireAt: string,
+  ): Promise<boolean> {
+    const schedule = this.schedules.get(slug);
+
+    if (!schedule) {
+      throw new Error(`Schedule '${slug}' does not exist. Save the schedule before firing it.`);
+    }
+
+    if (schedule.lastFireKey === fireKey) {
+      return false;
+    }
+
+    if (this.runs.has(run.id)) {
+      throw new Error(`Run '${run.id}' already exists. Use a new run ID.`);
+    }
+
+    const savedRun = structuredClone(run);
+    const next = new Date(nextFireAt).toISOString();
+    this.runs.set(run.id, savedRun);
+    schedule.lastFireKey = fireKey;
+    schedule.nextFireAt = next;
+
+    return true;
   }
 
   private requireRunning(run: EngineRun): void {

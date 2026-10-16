@@ -1,7 +1,16 @@
-import type { EngineLog, EngineRun, EngineStep, Json } from "../core/index.js";
-import type { LogRow, RunRow, StepColumns, StepRow } from "./engine-store-schema.js";
+import type { EngineLog, EngineRun, EngineStep, Json, Schedule } from "../core/index.js";
+import type { LogRow, RunRow, ScheduleRow, StepColumns, StepRow } from "./engine-store-schema.js";
 
 export const SQL = {
+  schedules: "SELECT * FROM schedules ORDER BY rowid",
+  schedule: "SELECT * FROM schedules WHERE slug=?",
+  putSchedule: `INSERT INTO schedules VALUES (?,?,?,?,?,?,?) ON CONFLICT(slug) DO UPDATE SET
+    cron=excluded.cron,tz=excluded.tz,input_json=excluded.input_json,enabled=excluded.enabled,
+    last_fire_key=excluded.last_fire_key,next_fire_at=excluded.next_fire_at`,
+  deleteSchedule: "DELETE FROM schedules WHERE slug=?",
+  fireSchedule: "UPDATE schedules SET last_fire_key=?,next_fire_at=? WHERE slug=?",
+  nextWakeAt:
+    "SELECT MIN(wake_at) AS wake_at FROM runs WHERE status='suspended' AND owner_token IS NULL",
   run: "SELECT * FROM runs WHERE id=?",
   createRun: `INSERT INTO runs VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
   listRuns: "SELECT * FROM runs ORDER BY rowid",
@@ -202,4 +211,21 @@ function rowToPosition(row: LogRow): EngineLog["position"] {
         index: row.log_index,
       };
   }
+}
+
+export function rowToSchedule(row: ScheduleRow): Schedule {
+  const schedule: Schedule = {
+    slug: row.slug,
+    cron: row.cron,
+    tz: row.tz,
+    input: decode(row.input_json),
+    enabled: row.enabled === 1,
+    nextFireAt: row.next_fire_at,
+  };
+
+  if (row.last_fire_key !== null) {
+    schedule.lastFireKey = row.last_fire_key;
+  }
+
+  return schedule;
 }

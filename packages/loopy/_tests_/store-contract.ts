@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { EngineLog, EngineStep, RunOutcome } from "../src/core/index.js";
+import type { EngineLog, EngineStep, RunOutcome, Schedule } from "../src/core/index.js";
 import { OwnershipError, type RunStore } from "../src/runtime/index.js";
 import { newRun } from "./engine-fixture.js";
 
@@ -188,6 +188,111 @@ function recordIsolation(makeStore: StoreFactory): void {
   });
 }
 
+const SCHEDULE: Schedule = {
+  slug: "test",
+  cron: "* * * * *",
+  tz: "UTC",
+  input: { value: 42 },
+  enabled: true,
+  nextFireAt: LOG.at,
+};
+
+function schedules(makeStore: StoreFactory): void {
+  test("schedules upsert by slug, isolate records, and delete idempotently", async () => {
+    const store = await makeStore();
+    const schedule = structuredClone(SCHEDULE);
+    await store.putSchedule(schedule);
+    schedule.input = "changed";
+    const listed = await store.listSchedules();
+    expect(listed).toEqual([SCHEDULE]);
+    const first = listed[0];
+
+    if (first) {
+      first.enabled = false;
+      first.input = "changed again";
+    }
+
+    expect(await store.listSchedules()).toEqual([SCHEDULE]);
+    const replacement = { ...SCHEDULE, enabled: false, lastFireKey: "old" };
+    await store.putSchedule(replacement);
+    await store.putSchedule({ ...SCHEDULE, slug: "other" });
+    expect(await store.listSchedules()).toEqual([replacement, { ...SCHEDULE, slug: "other" }]);
+    await store.deleteSchedule("test");
+    await store.deleteSchedule("test");
+    expect(await store.listSchedules()).toEqual([{ ...SCHEDULE, slug: "other" }]);
+  });
+}
+
+function scheduleFires(makeStore: StoreFactory): void {
+  test("competing schedule fires create exactly one run and advance the schedule atomically", async () => {
+    const store = await makeStore();
+    await store.putSchedule(SCHEDULE);
+    const next = "2026-10-16T00:01:00.000Z";
+    const run = newRun();
+    expect(
+      await Promise.all([
+        store.fireSchedule("test", "key", run, next),
+        store.fireSchedule("test", "key", { ...run, id: "duplicate" }, next),
+      ]),
+    ).toEqual([true, false]);
+    expect(await store.listRuns()).toEqual([run]);
+    run.input = "changed";
+    expect((await store.getRun("run"))?.input).toEqual(SCHEDULE.input);
+    expect(await store.listSchedules()).toEqual([
+      { ...SCHEDULE, lastFireKey: "key", nextFireAt: next },
+    ]);
+    expect(await store.fireSchedule("test", "key", newRun(), LOG.at)).toBe(false);
+    expect(await store.fireSchedule("test", "next-key", { ...newRun(), id: "next" }, next)).toBe(
+      true,
+    );
+    expect(await store.listRuns()).toHaveLength(2);
+  });
+
+  test("a failed schedule fire leaves both schedule and runs unchanged", async () => {
+    const store = await fixture(makeStore);
+    await store.putSchedule(SCHEDULE);
+    await expect(store.fireSchedule("test", "key", newRun(), LOG.at)).rejects.toThrow(
+      "Run 'run' already exists. Use a new run ID.",
+    );
+    expect(await store.listSchedules()).toEqual([SCHEDULE]);
+    expect(await store.listRuns()).toEqual([newRun()]);
+    await store.deleteSchedule("test");
+    await expect(
+      store.fireSchedule("test", "key", { ...newRun(), id: "missing" }, LOG.at),
+    ).rejects.toThrow("Schedule 'test' does not exist. Save the schedule before firing it.");
+    expect(await store.getRun("missing")).toBeUndefined();
+  });
+}
+
+function nextWakeAt(makeStore: StoreFactory): void {
+  test("nextWakeAt returns the earliest suspended unowned wake and excludes all other states", async () => {
+    const store = await makeStore();
+    expect(await store.nextWakeAt()).toBeUndefined();
+    await store.createRun({ ...newRun(), id: "queued", wakeAt: LOG.at });
+    await store.createRun({ ...newRun(), id: "done", status: "succeeded", wakeAt: LOG.at });
+    await store.createRun({ ...newRun(), id: "no-wake", status: "suspended" });
+    await store.createRun({
+      ...newRun(),
+      id: "owned",
+      status: "suspended",
+      wakeAt: LOG.at,
+      owner: { token: "owner", host: "test", pid: 0, heartbeatAt: LOG.at },
+    });
+    expect(await store.nextWakeAt()).toBeUndefined();
+    const early = "2026-10-16T00:01:00.000Z";
+    await store.createRun({
+      ...newRun(),
+      id: "late",
+      status: "suspended",
+      wakeAt: "2026-10-16T00:02:00.000Z",
+    });
+    await store.createRun({ ...newRun(), id: "early", status: "suspended", wakeAt: early });
+    expect(await store.nextWakeAt()).toBe(early);
+    await store.claim("early", "owner");
+    expect(await store.nextWakeAt()).toBe("2026-10-16T00:02:00.000Z");
+  });
+}
+
 export function storeContract(name: string, makeStore: StoreFactory): void {
   describe(name, () => {
     stateMachine(makeStore);
@@ -198,5 +303,8 @@ export function storeContract(name: string, makeStore: StoreFactory): void {
     stepUpsert(makeStore);
     dueRuns(makeStore);
     recordIsolation(makeStore);
+    schedules(makeStore);
+    scheduleFires(makeStore);
+    nextWakeAt(makeStore);
   });
 }

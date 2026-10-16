@@ -236,3 +236,13 @@ export type EngineLog = {
 };
 
 export type CommandResult = CommandOutput;
+
+export type Schedule = {
+  slug: string;
+  cron: string;
+  tz: string;
+  input: Json;
+  enabled: boolean;
+  lastFireKey?: string;
+  nextFireAt: string;
+};
