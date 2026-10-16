@@ -1,6 +1,6 @@
 import type { EngineLog, EngineRun, StepKind } from "../core/index.js";
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export const SCHEMA = `
   CREATE TABLE runs (
@@ -29,7 +29,7 @@ export const SCHEMA = `
   CREATE TABLE schedules (
     slug TEXT PRIMARY KEY, cron TEXT NOT NULL, tz TEXT NOT NULL,
     input_json TEXT NOT NULL, enabled INTEGER NOT NULL,
-    last_fire_key TEXT, next_fire_at TEXT
+    last_fire_key TEXT, next_fire_at TEXT NOT NULL
   );
   CREATE TABLE rate_limits (
     key TEXT PRIMARY KEY, window_start TEXT NOT NULL, count INTEGER NOT NULL
@@ -108,3 +108,13 @@ export type LogRow = {
       attempt: number;
     }
 );
+
+export type ScheduleRow = {
+  slug: string;
+  cron: string;
+  tz: string;
+  input_json: string;
+  enabled: number;
+  last_fire_key: string | null;
+  next_fire_at: string;
+};

@@ -34,7 +34,7 @@ test("schema version mismatch recreates tables", async () => {
     });
     original.close();
     const database = new Database(file);
-    database.exec("CREATE TABLE obsolete (value TEXT); PRAGMA user_version=2");
+    database.exec("CREATE TABLE obsolete (value TEXT); PRAGMA user_version=4");
     database.close();
     const store = new SqliteRunStore(file, clock);
 
@@ -44,7 +44,7 @@ test("schema version mismatch recreates tables", async () => {
       const inspection = new Database(file);
 
       try {
-        expect(inspection.query("PRAGMA user_version").get()).toEqual({ user_version: 4 });
+        expect(inspection.query("PRAGMA user_version").get()).toEqual({ user_version: 5 });
         expect(
           inspection.query("SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name").all(),
         ).toEqual(

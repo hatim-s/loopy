@@ -8,6 +8,8 @@ export type { CronSchedule } from "./cron.js";
 
 export { fireKey, nextFire, parseCron } from "./cron.js";
 
+export { Daemon } from "./daemon.js";
+
 export type { Duration } from "./duration.js";
 
 export type { ActivationOptions, ActivationOutcome } from "./engine.js";

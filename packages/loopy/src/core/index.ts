@@ -53,6 +53,7 @@ export type {
   RunRecord,
   RunStatus,
   Scalar,
+  Schedule,
   SecretBindings,
   StepBase,
   StepKind,

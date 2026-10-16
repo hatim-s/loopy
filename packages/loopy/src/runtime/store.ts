@@ -4,6 +4,7 @@ import type {
   EngineRunStatus,
   EngineStep,
   RunOutcome,
+  Schedule,
 } from "../core/index.js";
 
 export class OwnershipError extends Error {
@@ -27,4 +28,9 @@ export interface RunStore {
   appendLog(runId: string, token: string, log: EngineLog): Promise<void>;
   getLogs(runId: string, after?: number): Promise<EngineLog[]>;
   dueRuns(now: string): Promise<EngineRun[]>;
+  nextWakeAt(): Promise<string | undefined>;
+  putSchedule(schedule: Schedule): Promise<void>;
+  listSchedules(): Promise<Schedule[]>;
+  deleteSchedule(slug: string): Promise<void>;
+  fireSchedule(slug: string, fireKey: string, run: EngineRun, nextFireAt: string): Promise<boolean>;
 }
