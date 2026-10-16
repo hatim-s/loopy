@@ -1,4 +1,4 @@
-import type { EngineStep, RunOutcome } from "../core/index.js";
+import type { RunOutcome, StepRecord } from "../core/index.js";
 
 type Delivery = { finishOrder: number; source: "memoized" | "live"; deliver: () => void };
 
@@ -17,7 +17,7 @@ export class Activation {
   private resolveChange = () => {};
   changed = this.nextChange();
 
-  constructor(steps: EngineStep[]) {
+  constructor(steps: StepRecord[]) {
     this.highestStored = Math.max(0, ...steps.map((step) => step.seq));
 
     const finishOrder = Math.max(

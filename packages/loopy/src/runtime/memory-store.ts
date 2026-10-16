@@ -1,22 +1,22 @@
 import type {
-  EngineLog,
-  EngineRun,
-  EngineRunStatus,
-  EngineStep,
+  LogRecord,
   RunOutcome,
+  RunRecord,
+  RunStatus,
   Schedule,
+  StepRecord,
 } from "../core/index.js";
 import { OwnershipError, type RunStore } from "./store.js";
 
 export class MemoryRunStore implements RunStore {
   private readonly schedules = new Map<string, Schedule>();
-  private readonly runs = new Map<string, EngineRun>();
-  private readonly steps = new Map<string, Map<number, EngineStep>>();
-  private readonly logs = new Map<string, Map<number, EngineLog>>();
+  private readonly runs = new Map<string, RunRecord>();
+  private readonly steps = new Map<string, Map<number, StepRecord>>();
+  private readonly logs = new Map<string, Map<number, LogRecord>>();
 
   constructor(private readonly now: () => number = Date.now) {}
 
-  async createRun(run: EngineRun): Promise<void> {
+  async createRun(run: RunRecord): Promise<void> {
     if (this.runs.has(run.id)) {
       throw new Error(`Run '${run.id}' already exists. Use a new run ID.`);
     }
@@ -24,11 +24,11 @@ export class MemoryRunStore implements RunStore {
     this.runs.set(run.id, structuredClone(run));
   }
 
-  async getRun(id: string): Promise<EngineRun | undefined> {
+  async getRun(id: string): Promise<RunRecord | undefined> {
     return structuredClone(this.runs.get(id));
   }
 
-  async listRuns(filter: { slug?: string; status?: EngineRunStatus } = {}): Promise<EngineRun[]> {
+  async listRuns(filter: { slug?: string; status?: RunStatus } = {}): Promise<RunRecord[]> {
     return structuredClone(
       [...this.runs.values()].filter(
         (run) =>
@@ -38,7 +38,7 @@ export class MemoryRunStore implements RunStore {
     );
   }
 
-  async claim(runId: string, token: string): Promise<EngineRun> {
+  async claim(runId: string, token: string): Promise<RunRecord> {
     const run = this.requireRun(runId);
 
     if (run.owner !== undefined) {
@@ -118,24 +118,24 @@ export class MemoryRunStore implements RunStore {
     run.updatedAt = timestamp;
   }
 
-  async getSteps(runId: string): Promise<EngineStep[]> {
+  async getSteps(runId: string): Promise<StepRecord[]> {
     return structuredClone(
       [...(this.steps.get(runId)?.values() ?? [])].sort((a, b) => a.seq - b.seq),
     );
   }
 
-  async putStep(runId: string, token: string, step: EngineStep): Promise<void> {
+  async putStep(runId: string, token: string, step: StepRecord): Promise<void> {
     this.owned(runId, token);
 
-    const steps = this.steps.get(runId) ?? new Map<number, EngineStep>();
+    const steps = this.steps.get(runId) ?? new Map<number, StepRecord>();
     steps.set(step.seq, structuredClone(step));
     this.steps.set(runId, steps);
   }
 
-  async appendLog(runId: string, token: string, log: EngineLog): Promise<void> {
+  async appendLog(runId: string, token: string, log: LogRecord): Promise<void> {
     this.owned(runId, token);
 
-    const logs = this.logs.get(runId) ?? new Map<number, EngineLog>();
+    const logs = this.logs.get(runId) ?? new Map<number, LogRecord>();
 
     if (logs.has(log.seq)) {
       throw new Error(`Log sequence ${log.seq} already exists. Append a new sequence number.`);
@@ -146,7 +146,7 @@ export class MemoryRunStore implements RunStore {
     this.logs.set(runId, logs);
   }
 
-  async getLogs(runId: string, after = 0): Promise<EngineLog[]> {
+  async getLogs(runId: string, after = 0): Promise<LogRecord[]> {
     return structuredClone(
       [...(this.logs.get(runId)?.values() ?? [])]
         .filter((log) => log.seq > after)
@@ -154,7 +154,7 @@ export class MemoryRunStore implements RunStore {
     );
   }
 
-  async dueRuns(now: string): Promise<EngineRun[]> {
+  async dueRuns(now: string): Promise<RunRecord[]> {
     return structuredClone(
       [...this.runs.values()].filter(
         (run) =>
@@ -198,7 +198,7 @@ export class MemoryRunStore implements RunStore {
   async fireSchedule(
     slug: string,
     fireKey: string,
-    run: EngineRun,
+    run: RunRecord,
     nextFireAt: string,
   ): Promise<boolean> {
     const schedule = this.schedules.get(slug);
@@ -224,7 +224,7 @@ export class MemoryRunStore implements RunStore {
     return true;
   }
 
-  private requireRunning(run: EngineRun): void {
+  private requireRunning(run: RunRecord): void {
     if (run.status !== "running") {
       throw new Error(
         `Run '${run.id}' cannot transition from '${run.status}'. Claim a queued or suspended run first.`,
@@ -236,7 +236,7 @@ export class MemoryRunStore implements RunStore {
     return new Date(this.now()).toISOString();
   }
 
-  private requireRun(runId: string): EngineRun {
+  private requireRun(runId: string): RunRecord {
     const run = this.runs.get(runId);
 
     if (!run) {
@@ -246,7 +246,7 @@ export class MemoryRunStore implements RunStore {
     return run;
   }
 
-  private owned(runId: string, token: string): EngineRun {
+  private owned(runId: string, token: string): RunRecord {
     const run = this.requireRun(runId);
 
     if (run.owner?.token !== token) {

@@ -1,11 +1,11 @@
 export type {
   CommandResult,
-  EngineLog,
-  EngineRun,
-  EngineRunDetail,
-  EngineRunStatus,
-  EngineStep,
   Json,
+  LogRecord,
+  RunDetail,
+  RunRecord,
+  RunStatus,
+  StepRecord,
 } from "../core/index.js";
 
 export type { Duration, ResolvedCommand, RetryPolicy, StepOptions } from "../runtime/index.js";

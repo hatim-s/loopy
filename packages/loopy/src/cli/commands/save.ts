@@ -1,5 +1,5 @@
 import { dirname, relative, resolve } from "node:path";
-import { bundleLoopy, Loopies, loadLoopy } from "../../local/index.js";
+import { bundleLoopy, loadLoopy, Registry } from "../../local/index.js";
 import { type CliContext, requireTarget } from "../context.js";
 import { printJson } from "../output.js";
 
@@ -13,7 +13,7 @@ export async function runSave(context: CliContext): Promise<void> {
   const outside = path === ".." || path.startsWith("../");
   const cwd = !context.values.cwd && outside ? dirname(source) : context.cwd;
   printJson(
-    new Loopies(context.home, cwd).save(loopy, {
+    new Registry(context.home, cwd).save(loopy, {
       source,
       bundleHash: bundle.hash,
       replace: context.values.replace,

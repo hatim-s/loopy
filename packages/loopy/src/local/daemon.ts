@@ -1,21 +1,21 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { EngineRun } from "../core/index.js";
+import type { RunRecord } from "../core/index.js";
 import { Daemon } from "../runtime/index.js";
 import { type Loopy, loopyActivation } from "../sdk/host.js";
 import { loadLoopy } from "./bundle.js";
-import { LocalExecutor } from "./engine-executor.js";
-import { SqliteRunStore } from "./engine-store.js";
-import { Loopies } from "./loopies.js";
+import { LocalExecutor } from "./executor.js";
+import { Registry } from "./registry.js";
+import { SqliteRunStore } from "./store.js";
 
-export function openEngineStore(home: string) {
+export function openRunStore(home: string) {
   mkdirSync(home, { recursive: true, mode: 0o700 });
 
-  return new SqliteRunStore(join(home, "engine.sqlite"));
+  return new SqliteRunStore(join(home, "runs.sqlite"));
 }
 
-export async function loadRunLoopy(home: string, run: EngineRun): Promise<Loopy> {
-  const registry = new Loopies(home, run.workspace);
+export async function loadRunLoopy(home: string, run: RunRecord): Promise<Loopy> {
+  const registry = new Registry(home, run.workspace);
 
   return loadLoopy(registry.bundlePath(run.bundleHash));
 }
@@ -25,10 +25,10 @@ export function localDaemon(options: {
   cwd: string;
   store: SqliteRunStore;
   concurrency?: number;
-  onError?: (error: Error, run?: EngineRun) => void;
+  onError?: (error: Error, run?: RunRecord) => void;
 }) {
   const { home, cwd } = options;
-  const registry = new Loopies(home, cwd);
+  const registry = new Registry(home, cwd);
 
   return new Daemon({
     ...options,

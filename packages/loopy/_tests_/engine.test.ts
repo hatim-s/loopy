@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { EngineStep, Json, RunOutcome } from "../src/core/index.js";
+import type { Json, RunOutcome, StepRecord } from "../src/core/index.js";
 import {
   CommandExitError,
   type LoopyContext,
@@ -467,7 +467,7 @@ test("race returns the first branch result", async () => {
 });
 
 class WriteFailureStore extends MemoryRunStore {
-  override async putStep(runId: string, token: string, step: EngineStep): Promise<void> {
+  override async putStep(runId: string, token: string, step: StepRecord): Promise<void> {
     if (step.status === "succeeded") {
       throw new Error("Step write failed. Restore storage.");
     }

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { EngineStep } from "../src/core/index.js";
+import type { StepRecord } from "../src/core/index.js";
 import { type LoopyContext, MemoryRunStore, parallel } from "../src/runtime/index.js";
 import { delay, fixture } from "./engine-fixture.js";
 
@@ -47,7 +47,7 @@ for (const wait of ["sleep", "retry"] as const) {
 }
 
 class DelayedStore extends MemoryRunStore {
-  override async putStep(runId: string, token: string, step: EngineStep): Promise<void> {
+  override async putStep(runId: string, token: string, step: StepRecord): Promise<void> {
     if (step.status === "succeeded" && step.key === "a1") {
       await delay(20);
     }

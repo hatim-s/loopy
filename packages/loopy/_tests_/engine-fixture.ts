@@ -1,4 +1,4 @@
-import type { CommandResult, EngineRun, Json } from "../src/core/index.js";
+import type { CommandResult, Json, RunRecord } from "../src/core/index.js";
 import {
   activate,
   type Clock,
@@ -57,7 +57,7 @@ function testClock() {
   return { clock, advance, timers };
 }
 
-export function newRun(): EngineRun {
+export function newRun(): RunRecord {
   return {
     id: "run",
     slug: "test",

@@ -1,4 +1,4 @@
-import { type EngineStep, errorMessage, type Json, type StepBase } from "../core/index.js";
+import { errorMessage, type Json, type StepBase, type StepRecord } from "../core/index.js";
 import type { Activation } from "./activation.js";
 import type { Clock } from "./clock.js";
 import { assertJson } from "./json.js";
@@ -17,7 +17,7 @@ export class StepFailedError extends Error {
 
 type Runner = {
   record: StepBase;
-  stored?: EngineStep;
+  stored?: StepRecord;
   store: RunStore;
   token: string;
   activation: Activation;
@@ -27,7 +27,7 @@ type Runner = {
   signal?: AbortSignal;
 };
 
-async function put(options: Runner, step: EngineStep): Promise<void> {
+async function put(options: Runner, step: StepRecord): Promise<void> {
   try {
     await options.store.putStep(step.runId, options.token, step);
   } catch (cause) {

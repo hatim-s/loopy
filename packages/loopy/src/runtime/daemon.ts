@@ -1,4 +1,4 @@
-import { type EngineRun, errorMessage, type Schedule } from "../core/index.js";
+import { errorMessage, type RunRecord, type Schedule } from "../core/index.js";
 import { type Clock, SYSTEM_CLOCK } from "./clock.js";
 import { fireKey, nextFire, parseCron } from "./cron.js";
 import { type ActivationOptions, activate } from "./engine.js";
@@ -8,7 +8,7 @@ import { OwnershipError, type RunStore } from "./store.js";
 type DaemonOptions = {
   store: RunStore;
   prepare: (
-    run: EngineRun,
+    run: RunRecord,
   ) => Promise<
     Pick<ActivationOptions, "workflow" | "wrap" | "executor" | "mode" | "cwd" | "signal">
   >;
@@ -16,7 +16,7 @@ type DaemonOptions = {
   clock?: Clock;
   concurrency?: number;
   bundleHashFor: (slug: string) => string | Promise<string>;
-  onError?: (error: Error, run?: EngineRun) => void;
+  onError?: (error: Error, run?: RunRecord) => void;
   sleep?: (milliseconds: number, signal: AbortSignal) => Promise<void>;
 };
 
@@ -176,7 +176,7 @@ export class Daemon {
   private async fire(schedule: Schedule, now: string): Promise<boolean> {
     const at = new Date(schedule.nextFireAt);
 
-    const run: EngineRun = {
+    const run: RunRecord = {
       id: crypto.randomUUID(),
       slug: schedule.slug,
       bundleHash: await this.options.bundleHashFor(schedule.slug),
@@ -195,7 +195,7 @@ export class Daemon {
     );
   }
 
-  private async activateRun(run: EngineRun): Promise<boolean> {
+  private async activateRun(run: RunRecord): Promise<boolean> {
     if (this.stopped) {
       return false;
     }
@@ -224,7 +224,7 @@ export class Daemon {
     }
   }
 
-  private async prepareRun(run: EngineRun) {
+  private async prepareRun(run: RunRecord) {
     try {
       return await this.options.prepare(run);
     } catch (error) {
@@ -244,7 +244,7 @@ export class Daemon {
     }
   }
 
-  private report(cause: unknown, run?: EngineRun): void {
+  private report(cause: unknown, run?: RunRecord): void {
     const error = cause instanceof Error ? cause : new Error(errorMessage(cause));
     this.options.onError?.(error, run);
   }

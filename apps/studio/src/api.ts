@@ -1,4 +1,4 @@
-import type { EngineRun, EngineRunDetail, Loopy } from "loopy";
+import type { Loopy, RunDetail, RunRecord } from "loopy";
 
 const TOKEN_KEY = "loopy-studio-token";
 
@@ -42,6 +42,6 @@ async function api<T>(path: string): Promise<T> {
 
 export const endpoints = {
   loopies: () => api<LoopySummary[]>("/api/loopies"),
-  runs: (slug: string) => api<EngineRun[]>(`/api/runs?slug=${encodeURIComponent(slug)}`),
-  run: (id: string) => api<EngineRunDetail>(`/api/runs/${encodeURIComponent(id)}`),
+  runs: (slug: string) => api<RunRecord[]>(`/api/runs?slug=${encodeURIComponent(slug)}`),
+  run: (id: string) => api<RunDetail>(`/api/runs/${encodeURIComponent(id)}`),
 };

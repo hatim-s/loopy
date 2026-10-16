@@ -1,14 +1,14 @@
 import { localDaemon } from "../../local/index.js";
 import { type CliContext, requireTarget } from "../context.js";
-import { withEngineStore } from "../engine-store.js";
 import { report } from "../output.js";
+import { withRunStore } from "../store.js";
 
 export async function runDaemon(context: CliContext): Promise<void> {
   if (requireTarget(context, "Daemon action") !== "run") {
     throw new Error("Unknown daemon action. Use loopy daemon run.");
   }
 
-  await withEngineStore(context.home, async (store) => {
+  await withRunStore(context.home, async (store) => {
     const daemon = localDaemon({
       ...context,
       store,

@@ -1,9 +1,9 @@
 import { timingSafeEqual } from "node:crypto";
 import { resolve } from "node:path";
 import { errorMessage } from "../../core/index.js";
-import { openEngineStore } from "../engine-local.js";
+import { openRunStore } from "../daemon.js";
 import { defaultHome } from "../home.js";
-import { Loopies } from "../loopies.js";
+import { Registry } from "../registry.js";
 import { serveAsset, snapshotAssets } from "./assets.js";
 import { apiRoutes, dispatch, json } from "./routes.js";
 
@@ -48,16 +48,16 @@ function originRejection(request: Request, url: URL, ownOrigin: string): Respons
 export function startServer(options: ServerOptions = {}) {
   const home = options.home ?? defaultHome();
   const cwd = resolve(options.cwd ?? process.cwd());
-  const registry = new Loopies(home, cwd);
-  let engine: ReturnType<typeof openEngineStore> | undefined;
-  const engineStore = () => (engine ??= openEngineStore(home));
+  const registry = new Registry(home, cwd);
+  let store: ReturnType<typeof openRunStore> | undefined;
+  const getStore = () => (store ??= openRunStore(home));
   const token = crypto.randomUUID();
 
   const assets = snapshotAssets(
     resolve(options.assets ?? resolve(import.meta.dir, "../../../dist/studio")),
   );
 
-  const routes = apiRoutes({ cwd, registry, engineStore });
+  const routes = apiRoutes({ cwd, registry, getStore });
 
   const server = Bun.serve({
     hostname: "127.0.0.1",
@@ -93,7 +93,7 @@ export function startServer(options: ServerOptions = {}) {
     url: `http://127.0.0.1:${server.port}/#token=${token}`,
     async stop() {
       await server.stop(true);
-      engine?.close();
+      store?.close();
     },
   };
 }

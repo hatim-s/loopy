@@ -5,10 +5,10 @@ import { join, resolve } from "node:path";
 import {
   bundleLoopy,
   LocalExecutor,
-  Loopies,
   loadLoopy,
   localDaemon,
-  openEngineStore,
+  openRunStore,
+  Registry,
   SecretStore,
 } from "../src/local/index.js";
 import { prepareLaunch } from "../src/local/process.js";
@@ -124,9 +124,9 @@ test("Daemon.tick executes a bundled SDK command with activation-time secrets an
   );
   const changed = await bundleLoopy(source, home);
   const loopy = await loadLoopy(bundle.path);
-  const registry = new Loopies(home, cwd);
+  const registry = new Registry(home, cwd);
   registry.save(loopy, { source, bundleHash: bundle.hash });
-  const store = openEngineStore(home);
+  const store = openRunStore(home);
 
   try {
     await createLoopyRun({
@@ -181,8 +181,8 @@ test("Daemon.tick pins the registry bundle when a schedule creates a run", async
     export default loopy({ name: "scheduled", run: () => step("answer", () => 42) });`,
   );
   const bundle = await bundleLoopy(source, home);
-  new Loopies(home, cwd).save(await loadLoopy(bundle.path), { source, bundleHash: bundle.hash });
-  const store = openEngineStore(home);
+  new Registry(home, cwd).save(await loadLoopy(bundle.path), { source, bundleHash: bundle.hash });
+  const store = openRunStore(home);
   const daemon = localDaemon({ home, cwd, store });
 
   try {
@@ -218,7 +218,7 @@ for (const missing of ["secret", "bundle"]) {
     );
     const bundle = await bundleLoopy(source, home);
     const loopy = await loadLoopy(bundle.path);
-    const store = openEngineStore(home);
+    const store = openRunStore(home);
     const errors: { message: string; runId?: string }[] = [];
 
     const daemon = localDaemon({

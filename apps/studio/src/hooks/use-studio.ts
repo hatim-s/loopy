@@ -1,14 +1,14 @@
-import type { EngineRun, EngineRunDetail } from "loopy";
+import type { RunDetail, RunRecord } from "loopy";
 import { useEffect, useState } from "react";
 import { endpoints, type LoopySummary } from "../api.ts";
 import { useRequest } from "./use-request.ts";
 
 export function useStudio() {
-  const [loopies, setLoopies] = useState<LoopySummary[]>([]);
+  const [loopies, setRegistry] = useState<LoopySummary[]>([]);
   const [slug, setSlug] = useState<string>();
-  const [runs, setRuns] = useState<EngineRun[]>([]);
+  const [runs, setRuns] = useState<RunRecord[]>([]);
   const [runId, setRunId] = useState<string>();
-  const [detail, setDetail] = useState<EngineRunDetail>();
+  const [detail, setDetail] = useState<RunDetail>();
   const [error, setError] = useState<string>();
   const [revision, setRevision] = useState(0);
 
@@ -21,7 +21,7 @@ export function useStudio() {
     return () => clearInterval(timer);
   }, []);
 
-  useRequest({ load: endpoints.loopies, apply: setLoopies, onError }, [revision]);
+  useRequest({ load: endpoints.loopies, apply: setRegistry, onError }, [revision]);
   useRequest({ load: slug ? () => endpoints.runs(slug) : null, apply: setRuns, onError }, [
     slug,
     revision,

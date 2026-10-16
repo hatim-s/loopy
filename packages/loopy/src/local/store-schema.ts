@@ -1,6 +1,6 @@
-import type { EngineLog, EngineRun, StepKind } from "../core/index.js";
+import type { LogRecord, RunRecord, StepKind } from "../core/index.js";
 
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 export const SCHEMA = `
   CREATE TABLE runs (
@@ -47,7 +47,7 @@ export type RunRow = {
   bundle_hash: string;
   workspace: string;
   input_json: string;
-  status: EngineRun["status"];
+  status: RunRecord["status"];
   output_json: string | null;
   error: string | null;
   wake_at: string | null;
@@ -89,7 +89,7 @@ export type LogRow = {
   run_id: string;
   seq: number;
   log_index: number;
-  level: EngineLog["level"];
+  level: LogRecord["level"];
   message: string;
   data_json: string | null;
   at: string;

@@ -2,20 +2,6 @@ export type Json = null | boolean | number | string | Json[] | { [key: string]: 
 
 export type ExecutionMode = "sandbox" | "full";
 
-export type Workspace = { kind: "local"; path: string };
-
-export type RunOptions = { workspace: Workspace; mode: ExecutionMode };
-
-export type ResolvedCommand = {
-  program: string;
-  args: string[];
-  stdin?: string;
-  env?: Record<string, string>;
-  cwd?: string;
-  timeoutMs?: number;
-  maxOutputBytes?: number;
-};
-
 export type CommandOutput = {
   stdout: string;
   stderr: string;
@@ -23,13 +9,7 @@ export type CommandOutput = {
   durationMs: number;
 };
 
-export type EngineRunStatus =
-  | "queued"
-  | "running"
-  | "suspended"
-  | "succeeded"
-  | "failed"
-  | "cancelled";
+export type RunStatus = "queued" | "running" | "suspended" | "succeeded" | "failed" | "cancelled";
 
 export type StepKind = "command" | "function" | "sleep" | "hook" | "clock" | "random";
 
@@ -42,13 +22,13 @@ export type RunOutcome =
   | { status: "failed"; error: string }
   | { status: "cancelled" };
 
-export type EngineRun = {
+export type RunRecord = {
   id: string;
   slug: string;
   bundleHash: string;
   workspace: string;
   input: Json;
-  status: EngineRunStatus;
+  status: RunStatus;
   output?: Json;
   error?: string;
   wakeAt?: string;
@@ -68,7 +48,7 @@ export type StepBase = {
   startedAt: string;
 };
 
-export type EngineStep = StepBase &
+export type StepRecord = StepBase &
   (
     | { status: "running" }
     | { status: "succeeded"; output: Json; endedAt: string; finishOrder: number }
@@ -77,13 +57,13 @@ export type EngineStep = StepBase &
     | { status: "sleeping"; wakeAt: string }
   );
 
-export type StepStatus = EngineStep["status"];
+export type StepStatus = StepRecord["status"];
 
 export type LogPosition =
   | { kind: "workflow"; afterStep: number; afterFinish: number; index: number }
   | { kind: "step"; seq: number; attempt: number; index: number };
 
-export type EngineLog = {
+export type LogRecord = {
   runId: string;
   seq: number;
   position: LogPosition;
@@ -105,14 +85,14 @@ export type Schedule = {
   nextFireAt: string;
 };
 
-export type EngineRunDetail = { run: EngineRun; steps: EngineStep[]; logs: EngineLog[] };
+export type RunDetail = { run: RunRecord; steps: StepRecord[]; logs: LogRecord[] };
 
 export const TERMINAL_RUN_STATUSES = [
   "succeeded",
   "failed",
   "cancelled",
-] as const satisfies readonly EngineRunStatus[];
+] as const satisfies readonly RunStatus[];
 
-export function isTerminalRun(status: EngineRunStatus): boolean {
+export function isTerminalRun(status: RunStatus): boolean {
   return TERMINAL_RUN_STATUSES.some((terminal) => terminal === status);
 }

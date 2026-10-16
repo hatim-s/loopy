@@ -1,8 +1,8 @@
-import { Loopies } from "../../local/index.js";
+import { Registry } from "../../local/index.js";
 import { type CliContext, expectNoArguments } from "../context.js";
 import { printJson } from "../output.js";
 
 export async function runList(context: CliContext): Promise<void> {
   expectNoArguments(context);
-  printJson(new Loopies(context.home, context.cwd).list());
+  printJson(new Registry(context.home, context.cwd).list());
 }

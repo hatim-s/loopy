@@ -1,11 +1,11 @@
 import { LocalExecutor, loadRunLoopy } from "../../local/index.js";
 import { type CliContext, requireTarget } from "../context.js";
-import { requireRun, withEngineStore } from "../engine-store.js";
 import { inlineRun } from "../inline-run.js";
+import { requireRun, withRunStore } from "../store.js";
 
 export async function runResume(context: CliContext): Promise<void> {
   const runId = requireTarget(context, "Run ID");
-  await withEngineStore(context.home, async (store) => {
+  await withRunStore(context.home, async (store) => {
     const run = await requireRun(store, runId);
 
     const loopy = await loadRunLoopy(context.home, run);

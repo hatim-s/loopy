@@ -1,12 +1,12 @@
 import { setTimeout } from "node:timers/promises";
 import { isTerminalRun } from "../../core/index.js";
 import { type CliContext, requireTarget } from "../context.js";
-import { requireRun, withEngineStore } from "../engine-store.js";
 import { printJson, printLine } from "../output.js";
+import { requireRun, withRunStore } from "../store.js";
 
 export async function runLogs(context: CliContext): Promise<void> {
   const id = requireTarget(context, "Run ID");
-  await withEngineStore(context.home, async (store) => {
+  await withRunStore(context.home, async (store) => {
     let after = 0;
 
     while (true) {

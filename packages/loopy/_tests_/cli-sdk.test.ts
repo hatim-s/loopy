@@ -11,7 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { requireRecord } from "../src/core/index.js";
-import { openEngineStore, startServer } from "../src/local/index.js";
+import { openRunStore, startServer } from "../src/local/index.js";
 
 const roots: string[] = [];
 
@@ -229,7 +229,7 @@ test("schedule persists the next fire and off removes it", async () => {
   expect(schedule.tz).toBe("Asia/Kolkata");
   expect(Date.parse(String(schedule.nextFireAt))).toBeGreaterThan(Date.now());
   expect((await cli(f, "schedule", "scheduled", "--off")).code).toBe(0);
-  const store = openEngineStore(f.home);
+  const store = openRunStore(f.home);
 
   try {
     expect(await store.listSchedules()).toEqual([]);
@@ -269,7 +269,7 @@ test("cancel reports an active owner instead of stealing the run", async () => {
   await save(f);
   const run = object((await cli(f, "run", "owned", "--detach")).stdout);
   const id = String(run.id);
-  const store = openEngineStore(f.home);
+  const store = openRunStore(f.home);
 
   try {
     await store.claim(id, "test-owner");
@@ -317,7 +317,7 @@ test("missing secrets and unsupported SDK flags fail without creating queued run
   }
 
   expect(object((await cli(f, "run", "secret", "--detach")).stdout).status).toBe("queued");
-  const store = openEngineStore(f.home);
+  const store = openRunStore(f.home);
 
   try {
     expect(await store.listRuns()).toHaveLength(1);
@@ -353,7 +353,7 @@ test("Ctrl-C interrupts a running command, releases ownership and retries on res
     const run = object(await stdout);
     expect(run.status).toBe("suspended");
     expect(run.owner).toBeUndefined();
-    const store = openEngineStore(f.home);
+    const store = openRunStore(f.home);
 
     try {
       expect(await store.getSteps(String(run.id))).toMatchObject([

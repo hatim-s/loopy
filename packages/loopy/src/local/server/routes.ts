@@ -1,7 +1,7 @@
 import { requireNonEmptyString } from "../../core/index.js";
-import { engineRunDetail } from "../../runtime/index.js";
-import type { SqliteRunStore } from "../engine-store.js";
-import type { Loopies } from "../loopies.js";
+import { runDetail } from "../../runtime/index.js";
+import type { Registry } from "../registry.js";
+import type { SqliteRunStore } from "../store.js";
 
 type RouteContext = { params: Record<string, string>; request: Request; url: URL };
 
@@ -11,7 +11,7 @@ type Route = {
   handle: (context: RouteContext) => Promise<Response>;
 };
 
-type RouteDependencies = { cwd: string; registry: Loopies; engineStore: () => SqliteRunStore };
+type RouteDependencies = { cwd: string; registry: Registry; getStore: () => SqliteRunStore };
 
 // BOUNDARY: Response serialization accepts validated route payloads and errors.
 export function json(data: unknown, status = 200): Response {
@@ -28,7 +28,7 @@ async function detail(store: SqliteRunStore, id: string) {
     return json({ error: "Run not found. Use loopy runs to find a run ID." }, 404);
   }
 
-  return json(await engineRunDetail(store, run));
+  return json(await runDetail(store, run));
 }
 
 async function logs(store: SqliteRunStore, id: string, url: URL) {
@@ -45,7 +45,7 @@ async function logs(store: SqliteRunStore, id: string, url: URL) {
   return json(await store.getLogs(id, after));
 }
 
-export function apiRoutes({ cwd, registry, engineStore }: RouteDependencies): Route[] {
+export function apiRoutes({ cwd, registry, getStore }: RouteDependencies): Route[] {
   return [
     { method: "GET", pattern: /^\/api\/config$/, handle: async () => json({ cwd }) },
     { method: "GET", pattern: /^\/api\/loopies$/, handle: async () => json(registry.list()) },
@@ -53,18 +53,18 @@ export function apiRoutes({ cwd, registry, engineStore }: RouteDependencies): Ro
       method: "GET",
       pattern: /^\/api\/runs$/,
       handle: async ({ url }) =>
-        json(await engineStore().listRuns({ slug: url.searchParams.get("slug") ?? undefined })),
+        json(await getStore().listRuns({ slug: url.searchParams.get("slug") ?? undefined })),
     },
     {
       method: "GET",
       pattern: /^\/api\/runs\/(?<id>[^/]+)$/,
-      handle: async ({ params }) => detail(engineStore(), requireNonEmptyString(params.id, "id")),
+      handle: async ({ params }) => detail(getStore(), requireNonEmptyString(params.id, "id")),
     },
     {
       method: "GET",
       pattern: /^\/api\/runs\/(?<id>[^/]+)\/logs$/,
       handle: async ({ params, url }) =>
-        logs(engineStore(), requireNonEmptyString(params.id, "id"), url),
+        logs(getStore(), requireNonEmptyString(params.id, "id"), url),
     },
   ];
 }

@@ -1,8 +1,8 @@
 import { setTimeout } from "node:timers/promises";
 import type { LocalExecutor, SqliteRunStore } from "../local/index.js";
 import { activateLoopy, type Loopy } from "../sdk/host.js";
-import { requireRun } from "./engine-store.js";
 import { printJson, report } from "./output.js";
+import { requireRun } from "./store.js";
 
 type InlineOptions = {
   executor: LocalExecutor;

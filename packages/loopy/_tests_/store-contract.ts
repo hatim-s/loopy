@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { EngineLog, EngineStep, RunOutcome, Schedule } from "../src/core/index.js";
+import type { LogRecord, RunOutcome, Schedule, StepRecord } from "../src/core/index.js";
 import { OwnershipError, type RunStore } from "../src/runtime/index.js";
 import { newRun } from "./engine-fixture.js";
 
-const STEP: EngineStep = {
+const STEP: StepRecord = {
   runId: "run",
   seq: 1,
   key: "test",
@@ -15,7 +15,7 @@ const STEP: EngineStep = {
   startedAt: "2026-10-16T00:00:00.000Z",
 };
 
-const LOG: EngineLog = {
+const LOG: LogRecord = {
   runId: "run",
   seq: 1,
   position: { kind: "workflow", afterStep: 0, afterFinish: 0, index: 1 },
@@ -142,7 +142,7 @@ function stepUpsert(makeStore: StoreFactory): void {
     await store.claim("run", "owner");
     await store.putStep("run", "owner", STEP);
 
-    const completed: EngineStep = {
+    const completed: StepRecord = {
       ...STEP,
       status: "succeeded",
       output: 42,

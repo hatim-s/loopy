@@ -1,19 +1,23 @@
 import { realpathSync, statSync } from "node:fs";
 import { realpath, stat } from "node:fs/promises";
 import { resolve } from "node:path";
-import type { CommandOutput, ExecutionMode, ResolvedCommand, RunOptions } from "../core/index.js";
+import type { CommandOutput, ExecutionMode } from "../core/index.js";
 import { requirePositiveInteger } from "../core/index.js";
-import { CommandExecutionError } from "../runtime/index.js";
+import { CommandExecutionError, type ResolvedCommand } from "../runtime/index.js";
 import { sandboxLauncher } from "./sandbox/launcher.js";
 import { envArgs, resolveProgram, within } from "./sandbox/paths.js";
 import type { Launch, Limits } from "./spawn.js";
 import { emptyOutput, spawnCaptured, unstarted } from "./spawn.js";
 
+type ProcessCommand = ResolvedCommand & { maxOutputBytes?: number };
+
 const DEFAULT_TIMEOUT_MS = 5 * 60_000;
 
 const DEFAULT_MAX_OUTPUT_BYTES = 8 * 1024 * 1024;
 
-export type LocalExecutionOptions = RunOptions & {
+export type LocalExecutionOptions = {
+  workspace: { kind: "local"; path: string };
+  mode: ExecutionMode;
   signal?: AbortSignal;
   sensitiveEnv?: Record<string, string>;
 };
@@ -29,7 +33,7 @@ const child = Bun.spawn([config.program, ...config.args], {
 process.exit(await child.exited);
 `;
 
-export function localRunOptions(cwd: string, mode: ExecutionMode): RunOptions {
+export function localRunOptions(cwd: string, mode: ExecutionMode): LocalExecutionOptions {
   const path = realpathSync(cwd);
 
   if (!statSync(path).isDirectory()) {
@@ -39,7 +43,7 @@ export function localRunOptions(cwd: string, mode: ExecutionMode): RunOptions {
   return { workspace: { kind: "local", path }, mode };
 }
 
-function commandLimits(command: ResolvedCommand): Limits {
+function commandLimits(command: ProcessCommand): Limits {
   return {
     timeoutMs: requirePositiveInteger(command.timeoutMs ?? DEFAULT_TIMEOUT_MS, "timeoutMs"),
     maxOutputBytes: requirePositiveInteger(
@@ -50,7 +54,7 @@ function commandLimits(command: ResolvedCommand): Limits {
 }
 
 function launchEnvironment(
-  command: ResolvedCommand,
+  command: ProcessCommand,
   mode: ExecutionMode,
   workspace: string,
 ): NodeJS.ProcessEnv {
@@ -72,7 +76,7 @@ function launchEnvironment(
  * runs a Bun helper that reads them from stdin; `env -i` inside applies the rest.
  */
 async function sandboxLaunch(
-  command: ResolvedCommand,
+  command: ProcessCommand,
   program: string,
   workspace: string,
   cwd: string,
@@ -114,7 +118,7 @@ async function sandboxLaunch(
 }
 
 export async function prepareLaunch(
-  command: ResolvedCommand,
+  command: ProcessCommand,
   options: LocalExecutionOptions,
 ): Promise<Launch> {
   if (options.workspace.kind !== "local") {
@@ -150,7 +154,7 @@ export async function prepareLaunch(
 }
 
 export async function executeLocalCommand(
-  command: ResolvedCommand,
+  command: ProcessCommand,
   options: LocalExecutionOptions,
 ): Promise<CommandOutput> {
   const aborted = () =>

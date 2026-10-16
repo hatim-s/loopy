@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { EngineRun, Schedule } from "../src/core/index.js";
+import type { RunRecord, Schedule } from "../src/core/index.js";
 import {
   type ActivationOptions,
   type Clock,
@@ -11,7 +11,7 @@ import { FakeExecutor, newRun } from "./engine-fixture.js";
 
 function fixture(
   options: Partial<ConstructorParameters<typeof Daemon>[0]> & {
-    workflowFor?: (run: EngineRun) => Promise<ActivationOptions["workflow"]>;
+    workflowFor?: (run: RunRecord) => Promise<ActivationOptions["workflow"]>;
   } = {},
 ) {
   let time = Date.parse(newRun().createdAt);
@@ -24,7 +24,7 @@ function fixture(
   };
 
   const store = options.store ?? new MemoryRunStore(clock.now);
-  const errors: { error: Error; run?: EngineRun }[] = [];
+  const errors: { error: Error; run?: RunRecord }[] = [];
 
   const daemon = new Daemon({
     store,
@@ -474,7 +474,7 @@ test("failed activations back off from one second to the five second cap", async
 
 test("claim contention does not report an activation error", async () => {
   class ContendedStore extends MemoryRunStore {
-    override async claim(runId: string): Promise<EngineRun> {
+    override async claim(runId: string): Promise<RunRecord> {
       throw new OwnershipError(runId);
     }
   }

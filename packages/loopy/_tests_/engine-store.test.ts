@@ -3,7 +3,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { EngineLog, EngineStep } from "../src/core/index.js";
+import type { LogRecord, StepRecord } from "../src/core/index.js";
 import { SqliteRunStore } from "../src/local/index.js";
 import { newRun } from "./engine-fixture.js";
 import { storeContract } from "./store-contract.js";
@@ -14,7 +14,7 @@ storeContract("SqliteRunStore", () => new SqliteRunStore(":memory:"));
 
 test("schema version mismatch recreates tables", async () => {
   const directory = mkdtempSync(join(tmpdir(), "loopy-engine-schema-"));
-  const file = join(directory, "engine.sqlite");
+  const file = join(directory, "runs.sqlite");
 
   try {
     const original = new SqliteRunStore(file, clock);
@@ -63,7 +63,7 @@ test("schema version mismatch recreates tables", async () => {
 
 test("a reopened file store returns the same runs steps and logs", async () => {
   const directory = mkdtempSync(join(tmpdir(), "loopy-engine-reopen-"));
-  const file = join(directory, "engine.sqlite");
+  const file = join(directory, "runs.sqlite");
   const run = newRun();
 
   const base = {
@@ -74,9 +74,9 @@ test("a reopened file store returns the same runs steps and logs", async () => {
     attempt: 1,
     maxAttempts: 3,
     startedAt: run.createdAt,
-  } satisfies Omit<EngineStep, "seq" | "status">;
+  } satisfies Omit<StepRecord, "seq" | "status">;
 
-  const steps: EngineStep[] = [
+  const steps: StepRecord[] = [
     { ...base, seq: 1, status: "running" },
     { ...base, seq: 2, status: "succeeded", output: null, endedAt: run.createdAt, finishOrder: 1 },
     {
@@ -98,7 +98,7 @@ test("a reopened file store returns the same runs steps and logs", async () => {
     { ...base, seq: 5, status: "sleeping", wakeAt: run.createdAt },
   ];
 
-  const logs: EngineLog[] = [
+  const logs: LogRecord[] = [
     {
       runId: run.id,
       seq: 1,
@@ -198,7 +198,7 @@ test("timestamp writes use UTC and due comparisons accept offsets", async () => 
       attempt: 1,
       maxAttempts: 2,
       startedAt: offset,
-    } satisfies Omit<EngineStep, "status">;
+    } satisfies Omit<StepRecord, "status">;
 
     await store.putStep("run", "owner", {
       ...step,

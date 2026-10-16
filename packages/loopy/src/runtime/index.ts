@@ -32,7 +32,7 @@ export { MemoryRunStore } from "./memory-store.js";
 
 export type { RetryPolicy } from "./retry.js";
 
-export { engineRunDetail } from "./run-detail.js";
+export { runDetail } from "./run-detail.js";
 
 export { StepFailedError } from "./step-runner.js";
 

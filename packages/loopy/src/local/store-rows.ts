@@ -1,5 +1,5 @@
-import type { EngineLog, EngineRun, EngineStep, Json, Schedule } from "../core/index.js";
-import type { LogRow, RunRow, ScheduleRow, StepColumns, StepRow } from "./engine-store-schema.js";
+import type { Json, LogRecord, RunRecord, Schedule, StepRecord } from "../core/index.js";
+import type { LogRow, RunRow, ScheduleRow, StepColumns, StepRow } from "./store-schema.js";
 
 export const SQL = {
   schedules: "SELECT * FROM schedules ORDER BY rowid",
@@ -43,8 +43,8 @@ function decode(value: string): Json {
   return JSON.parse(value);
 }
 
-export function rowToRun(row: RunRow): EngineRun {
-  const run: EngineRun = {
+export function rowToRun(row: RunRow): RunRecord {
+  const run: RunRecord = {
     id: row.id,
     slug: row.slug,
     bundleHash: row.bundle_hash,
@@ -84,7 +84,7 @@ export function rowToRun(row: RunRow): EngineRun {
   return run;
 }
 
-export function rowToStep(row: StepRow): EngineStep {
+export function rowToStep(row: StepRow): StepRecord {
   const base = {
     runId: row.run_id,
     seq: row.seq,
@@ -128,7 +128,7 @@ export function rowToStep(row: StepRow): EngineStep {
   }
 }
 
-export function stepToRow(step: EngineStep): StepRow {
+export function stepToRow(step: StepRecord): StepRow {
   const base: StepColumns = {
     run_id: step.runId,
     seq: step.seq,
@@ -178,8 +178,8 @@ export function stepToRow(step: EngineStep): StepRow {
   }
 }
 
-export function rowToLog(row: LogRow): EngineLog {
-  const log: EngineLog = {
+export function rowToLog(row: LogRow): LogRecord {
+  const log: LogRecord = {
     runId: row.run_id,
     seq: row.seq,
     position: rowToPosition(row),
@@ -195,7 +195,7 @@ export function rowToLog(row: LogRow): EngineLog {
   return log;
 }
 
-function rowToPosition(row: LogRow): EngineLog["position"] {
+function rowToPosition(row: LogRow): LogRecord["position"] {
   switch (row.position_kind) {
     case "workflow":
       return {

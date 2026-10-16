@@ -1,22 +1,15 @@
 import { Database } from "bun:sqlite";
 import { hostname } from "node:os";
 import type {
-  EngineLog,
-  EngineRun,
-  EngineRunStatus,
-  EngineStep,
+  LogRecord,
   RunOutcome,
+  RunRecord,
+  RunStatus,
   Schedule,
+  StepRecord,
 } from "../core/index.js";
 import { OwnershipError, type RunStore } from "../runtime/index.js";
-import {
-  rowToLog,
-  rowToRun,
-  rowToSchedule,
-  rowToStep,
-  SQL,
-  stepToRow,
-} from "./engine-store-rows.js";
+import { rowToLog, rowToRun, rowToSchedule, rowToStep, SQL, stepToRow } from "./store-rows.js";
 import {
   type LogRow,
   type RunRow,
@@ -24,7 +17,7 @@ import {
   SCHEMA_VERSION,
   type ScheduleRow,
   type StepRow,
-} from "./engine-store-schema.js";
+} from "./store-schema.js";
 
 export class SqliteRunStore implements RunStore {
   private readonly db: Database;
@@ -64,7 +57,7 @@ export class SqliteRunStore implements RunStore {
       .immediate();
   }
 
-  async createRun(run: EngineRun): Promise<void> {
+  async createRun(run: RunRecord): Promise<void> {
     this.db
       .transaction(() => {
         if (this.row(run.id)) {
@@ -76,16 +69,16 @@ export class SqliteRunStore implements RunStore {
       .immediate();
   }
 
-  async getRun(id: string): Promise<EngineRun | undefined> {
+  async getRun(id: string): Promise<RunRecord | undefined> {
     const row = this.row(id);
 
     return row ? rowToRun(row) : undefined;
   }
 
-  async listRuns(filter: { slug?: string; status?: EngineRunStatus } = {}): Promise<EngineRun[]> {
+  async listRuns(filter: { slug?: string; status?: RunStatus } = {}): Promise<RunRecord[]> {
     if (filter.slug !== undefined && filter.status !== undefined) {
       return this.db
-        .query<RunRow, [string, EngineRunStatus]>(SQL.listRunsBySlugAndStatus)
+        .query<RunRow, [string, RunStatus]>(SQL.listRunsBySlugAndStatus)
         .all(filter.slug, filter.status)
         .map(rowToRun);
     }
@@ -96,7 +89,7 @@ export class SqliteRunStore implements RunStore {
 
     if (filter.status !== undefined) {
       return this.db
-        .query<RunRow, [EngineRunStatus]>(SQL.listRunsByStatus)
+        .query<RunRow, [RunStatus]>(SQL.listRunsByStatus)
         .all(filter.status)
         .map(rowToRun);
     }
@@ -104,7 +97,7 @@ export class SqliteRunStore implements RunStore {
     return this.db.query<RunRow, []>(SQL.listRuns).all().map(rowToRun);
   }
 
-  async claim(runId: string, token: string): Promise<EngineRun> {
+  async claim(runId: string, token: string): Promise<RunRecord> {
     return this.db
       .transaction(() => {
         const timestamp = this.timestamp();
@@ -185,11 +178,11 @@ export class SqliteRunStore implements RunStore {
       .immediate();
   }
 
-  async getSteps(runId: string): Promise<EngineStep[]> {
+  async getSteps(runId: string): Promise<StepRecord[]> {
     return this.db.query<StepRow, [string]>(SQL.steps).all(runId).map(rowToStep);
   }
 
-  async putStep(runId: string, token: string, step: EngineStep): Promise<void> {
+  async putStep(runId: string, token: string, step: StepRecord): Promise<void> {
     this.db
       .transaction(() => {
         this.owned(runId, token);
@@ -217,7 +210,7 @@ export class SqliteRunStore implements RunStore {
       .immediate();
   }
 
-  async appendLog(runId: string, token: string, log: EngineLog): Promise<void> {
+  async appendLog(runId: string, token: string, log: LogRecord): Promise<void> {
     this.db
       .transaction(() => {
         this.owned(runId, token);
@@ -252,11 +245,11 @@ export class SqliteRunStore implements RunStore {
       .immediate();
   }
 
-  async getLogs(runId: string, after = 0): Promise<EngineLog[]> {
+  async getLogs(runId: string, after = 0): Promise<LogRecord[]> {
     return this.db.query<LogRow, [string, number]>(SQL.logs).all(runId, after).map(rowToLog);
   }
 
-  async dueRuns(now: string): Promise<EngineRun[]> {
+  async dueRuns(now: string): Promise<RunRecord[]> {
     return this.db
       .query<RunRow, [string]>(SQL.dueRuns)
       .all(new Date(now).toISOString())
@@ -294,7 +287,7 @@ export class SqliteRunStore implements RunStore {
   async fireSchedule(
     slug: string,
     fireKey: string,
-    run: EngineRun,
+    run: RunRecord,
     nextFireAt: string,
   ): Promise<boolean> {
     return this.db
@@ -325,7 +318,7 @@ export class SqliteRunStore implements RunStore {
     this.db.close();
   }
 
-  private insertRun(run: EngineRun): void {
+  private insertRun(run: RunRecord): void {
     this.db
       .query(SQL.createRun)
       .run(

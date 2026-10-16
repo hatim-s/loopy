@@ -1,7 +1,7 @@
-import { openEngineStore, type SqliteRunStore } from "../local/index.js";
+import { openRunStore, type SqliteRunStore } from "../local/index.js";
 
-export async function withEngineStore<T>(home: string, fn: (store: SqliteRunStore) => Promise<T>) {
-  const store = openEngineStore(home);
+export async function withRunStore<T>(home: string, fn: (store: SqliteRunStore) => Promise<T>) {
+  const store = openRunStore(home);
 
   try {
     return await fn(store);

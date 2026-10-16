@@ -9,7 +9,7 @@ function readEntry(file: string) {
   return parseSavedLoopy(JSON.parse(readFileSync(file, "utf8")));
 }
 
-export class Loopies {
+export class Registry {
   readonly project: string;
   readonly projectDirectory: string;
   readonly globalDirectory: string;

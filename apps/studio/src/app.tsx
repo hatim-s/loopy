@@ -18,7 +18,7 @@ export function App() {
       {state.error && <ErrorBanner message={state.error} onDismiss={state.dismissError} />}
       <div className="studio-columns">
         <nav aria-label="Saved loopies">
-          <h1>Loopies</h1>
+          <h1>Registry</h1>
           {state.loopies.length === 0 && <p>Save a loopy with loopy save &lt;file.ts&gt;.</p>}
           {state.loopies.map((loopy) => (
             <button

@@ -1,5 +1,5 @@
 import { expect, spyOn, test } from "bun:test";
-import type { EngineLog, EngineStep } from "../src/core/index.js";
+import type { LogRecord, StepRecord } from "../src/core/index.js";
 import { MemoryRunStore, race } from "../src/runtime/index.js";
 import { delay, fixture } from "./engine-fixture.js";
 
@@ -7,14 +7,14 @@ class ReadFailureStore extends MemoryRunStore {
   constructor(private readonly operation: "steps" | "logs") {
     super();
   }
-  override async getSteps(runId: string): Promise<EngineStep[]> {
+  override async getSteps(runId: string): Promise<StepRecord[]> {
     if (this.operation === "steps") {
       throw new Error("Steps unavailable. Restore storage.");
     }
 
     return super.getSteps(runId);
   }
-  override async getLogs(): Promise<EngineLog[]> {
+  override async getLogs(): Promise<LogRecord[]> {
     throw new Error("Logs unavailable. Restore storage.");
   }
 }

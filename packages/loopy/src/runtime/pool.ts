@@ -1,4 +1,4 @@
-import type { EngineRun } from "../core/index.js";
+import type { RunRecord } from "../core/index.js";
 
 export class ActivationPool {
   private readonly pending = new Map<string, Promise<boolean>>();
@@ -6,11 +6,11 @@ export class ActivationPool {
 
   constructor(
     private readonly concurrency: number,
-    private readonly activate: (run: EngineRun) => Promise<boolean>,
+    private readonly activate: (run: RunRecord) => Promise<boolean>,
     private readonly onProgress: () => void,
   ) {}
 
-  start(run: EngineRun): Promise<boolean> | undefined {
+  start(run: RunRecord): Promise<boolean> | undefined {
     if (this.pending.has(run.id) || this.pending.size >= this.concurrency) {
       return undefined;
     }
@@ -31,7 +31,7 @@ export class ActivationPool {
     return activation;
   }
 
-  async activateAll(runs: EngineRun[]): Promise<number> {
+  async activateAll(runs: RunRecord[]): Promise<number> {
     let activated = 0;
     let pending: Promise<boolean>[] = [];
 

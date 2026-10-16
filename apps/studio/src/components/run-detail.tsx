@@ -1,6 +1,6 @@
-import type { EngineRunDetail } from "loopy";
+import type { RunDetail } from "loopy";
 
-export function RunDetail({ detail }: { detail: EngineRunDetail }) {
+export function RunDetail({ detail }: { detail: RunDetail }) {
   const { run, steps, logs } = detail;
 
   return (
