@@ -30,7 +30,23 @@ export function command(
   key: string,
   command: ResolvedCommand,
   options?: StepOptions,
-): Promise<CommandResult> {
+): Promise<CommandResult>;
+export function command<T extends Json>(
+  key: string,
+  command: ResolvedCommand,
+  options: StepOptions | undefined,
+  parse: (result: CommandResult) => T,
+): Promise<T>;
+export function command(
+  key: string,
+  command: ResolvedCommand,
+  options?: StepOptions,
+  parse?: (result: CommandResult) => Json,
+): Promise<Json> {
+  if (parse) {
+    return workflowContext().command(key, command, options, parse);
+  }
+
   return workflowContext().command(key, command, options);
 }
 

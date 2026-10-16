@@ -1,4 +1,5 @@
 import { defineCommand } from "../../define-command.js";
+import { parseStashList } from "../parse/git.js";
 
 export const stash = {
   push: defineCommand({
@@ -25,6 +26,8 @@ export const stash = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
   list: defineCommand({
+    parse: parseStashList,
+    preset: { flags: { format: "%gd%x00%H%x00%gs" } },
     namespace: "git",
     name: "stash.list",
     program: "git",

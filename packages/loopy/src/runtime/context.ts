@@ -1,4 +1,11 @@
-import type { EngineRun, EngineStep, ExecutionMode, Json, StepKind } from "../core/index.js";
+import type {
+  CommandResult,
+  EngineRun,
+  EngineStep,
+  ExecutionMode,
+  Json,
+  StepKind,
+} from "../core/index.js";
 import type { Activation } from "./activation.js";
 import type { Clock } from "./clock.js";
 import { type Duration, durationMs } from "./duration.js";
@@ -79,8 +86,42 @@ function createPerformer(options: ContextOptions) {
   };
 }
 
+async function executeCommand(
+  options: ContextOptions,
+  command: ResolvedCommand,
+  timeoutMs?: number,
+) {
+  const result = await options.executor.execute(command, {
+    cwd: command.cwd ?? options.cwd,
+    mode: options.mode,
+    timeoutMs,
+  });
+
+  if (result.exitCode !== 0) {
+    throw new CommandExitError(result);
+  }
+
+  return result;
+}
+
 function createCommand(options: ContextOptions, perform: ReturnType<typeof createPerformer>) {
-  return function command(key: string, command: ResolvedCommand, stepOptions: StepOptions = {}) {
+  function command(
+    key: string,
+    command: ResolvedCommand,
+    stepOptions?: StepOptions,
+  ): Promise<CommandResult>;
+  function command<T extends Json>(
+    key: string,
+    command: ResolvedCommand,
+    stepOptions: StepOptions | undefined,
+    parse: (result: CommandResult) => T,
+  ): Promise<T>;
+  function command(
+    key: string,
+    command: ResolvedCommand,
+    stepOptions: StepOptions = {},
+    parse?: (result: CommandResult) => Json,
+  ): Promise<Json> {
     const timeoutMs =
       stepOptions.timeout === undefined ? command.timeoutMs : durationMs(stepOptions.timeout);
 
@@ -89,21 +130,15 @@ function createCommand(options: ContextOptions, perform: ReturnType<typeof creat
       "command",
       command,
       async () => {
-        const result = await options.executor.execute(command, {
-          cwd: command.cwd ?? options.cwd,
-          mode: options.mode,
-          timeoutMs,
-        });
+        const result = await executeCommand(options, command, timeoutMs);
 
-        if (result.exitCode !== 0) {
-          throw new CommandExitError(result);
-        }
-
-        return result;
+        return parse ? parse(result) : result;
       },
       { retry: stepOptions.retry },
     );
-  };
+  }
+
+  return command;
 }
 
 export function createContext(options: ContextOptions) {

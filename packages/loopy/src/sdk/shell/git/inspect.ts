@@ -1,7 +1,18 @@
 import { defineCommand } from "../../define-command.js";
+import {
+  LOG_FORMAT,
+  parseDiff,
+  parseDiffNames,
+  parseLog,
+  parseLsFiles,
+  parseRevParse,
+  parseStatus,
+} from "../parse/git.js";
 
 export const inspect = {
   status: defineCommand({
+    parse: parseStatus,
+    preset: { flags: { porcelain: "v2", z: true, branch: true } },
     namespace: "git",
     name: "status",
     program: "git",
@@ -27,6 +38,8 @@ export const inspect = {
     positionalSeparator: true,
   }),
   diff: defineCommand({
+    parse: parseDiff,
+    preset: { flags: { numstat: true, z: true } },
     namespace: "git",
     name: "diff",
     program: "git",
@@ -44,12 +57,35 @@ export const inspect = {
     },
     revisionPaths: true,
   }),
+  diffNames: defineCommand({
+    parse: parseDiffNames,
+    preset: { flags: { nameStatus: true, z: true } },
+    namespace: "git",
+    name: "diffNames",
+    program: "git",
+    path: ["diff"],
+    flags: {
+      stat: { cli: "--stat", kind: "boolean" },
+      exitCode: { cli: "--exit-code", kind: "boolean" },
+      quiet: { cli: "--quiet", kind: "boolean" },
+      unified: { cli: "-U", kind: "number", style: "attached" },
+      staged: { cli: "--staged", kind: "boolean" },
+      nameOnly: { cli: "--name-only", kind: "boolean" },
+      nameStatus: { cli: "--name-status", kind: "boolean" },
+      numstat: { cli: "--numstat", kind: "boolean" },
+      z: { cli: "-z", kind: "boolean" },
+    },
+    revisionPaths: true,
+  }),
   log: defineCommand({
+    parse: parseLog,
+    preset: { flags: { format: LOG_FORMAT, z: true } },
     namespace: "git",
     name: "log",
     program: "git",
     path: ["log"],
     flags: {
+      z: { cli: "-z", kind: "boolean" },
       format: { cli: "--format", kind: "string" },
       maxCount: { cli: "--max-count", kind: "number" },
       oneline: { cli: "--oneline", kind: "boolean" },
@@ -65,6 +101,8 @@ export const inspect = {
     revisionPaths: true,
   }),
   revParse: defineCommand({
+    parse: parseRevParse,
+    preset: { flags: {} },
     namespace: "git",
     name: "rev-parse",
     program: "git",
@@ -78,6 +116,8 @@ export const inspect = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
   lsFiles: defineCommand({
+    parse: parseLsFiles,
+    preset: { flags: { z: true } },
     namespace: "git",
     name: "ls-files",
     program: "git",

@@ -27,6 +27,11 @@ export type CommandDefinition = {
   readonly positionals?: readonly PositionalDefinition[];
   readonly flags?: Readonly<Record<string, FlagDefinition>>;
   readonly style?: "equals" | "space";
+  readonly preset?: {
+    readonly flags: Readonly<
+      Record<string, string | number | boolean | readonly string[] | Record<string, string>>
+    >;
+  };
   readonly parse?: (result: CommandResult) => Json;
 };
 
@@ -95,7 +100,21 @@ type Operands<D extends CommandDescriptor> = D extends { readonly revisionPaths:
     ? { args?: Args<D> }
     : { args: Args<D> };
 
-type Input<D extends CommandDescriptor> = Operands<D> & { flags?: Flags<D> };
+type PresetKeys<D> = D extends { readonly preset: { readonly flags: infer F } } ? keyof F : never;
+
+type Input<D extends CommandDescriptor> = Operands<D> & {
+  flags?: Omit<Flags<D>, PresetKeys<D>> & { readonly [K in PresetKeys<D>]?: never };
+};
+
+type RawInput<D extends CommandDescriptor> = Operands<D> & { flags?: Flags<D> };
+
+type CommandCall<D extends CommandDescriptor> = D extends {
+  readonly parse: (result: CommandResult) => infer T extends Json;
+}
+  ? ((...args: CallArguments<Input<D>>) => Promise<T>) & {
+      raw: (...args: CallArguments<RawInput<D>>) => Promise<CommandResult>;
+    }
+  : (...args: CallArguments<RawInput<D>>) => Promise<CommandResult>;
 
 type Simplify<T> = { [K in keyof T]: T[K] } & {};
 
@@ -119,31 +138,49 @@ function platformVariant(descriptor: CommandDescriptor, platform: string): Comma
 export function defineCommand<const D extends CommandDescriptor>(
   descriptor: D,
   environment?: { platform: () => string },
-): (...args: CallArguments<Input<D>>) => Promise<CommandResult>;
+): CommandCall<D>;
 export function defineCommand(
   descriptor: CommandDescriptor,
   environment: { platform: () => string } = { platform: () => PLATFORM },
-): (input?: RenderInput, options?: CommandOptions) => Promise<CommandResult> {
+) {
   const key = descriptor.key ?? `${descriptor.namespace}.${descriptor.name}`;
 
   if (!descriptor.key && (!descriptor.namespace || !descriptor.name)) {
     throw new Error("Command identity is missing. Supply key or both namespace and name.");
   }
 
-  return async (input = {}, options = {}) => {
+  const raw = async (input: RenderInput = {}, options: CommandOptions = {}) => {
     const resolved = platformVariant(descriptor, environment.platform());
-    const args = renderArgv(resolved, input, key);
 
-    return command(
-      key,
-      {
-        program: resolved.program,
-        args,
-        cwd: options.cwd,
-        env: options.env,
-        stdin: options.stdin,
-      },
-      options,
-    );
+    return command(key, resolveCommand(resolved, input, key, options), options);
+  };
+
+  const parsed = async (input: RenderInput = {}, options: CommandOptions = {}) => {
+    const resolved = platformVariant(descriptor, environment.platform());
+    const flags = { ...input.flags, ...resolved.preset?.flags };
+    const request = resolveCommand(resolved, { ...input, flags }, key, options);
+
+    if (!resolved.parse) {
+      return command(key, request, options);
+    }
+
+    return command(key, request, options, resolved.parse);
+  };
+
+  return Object.assign(parsed, { raw });
+}
+
+function resolveCommand(
+  descriptor: CommandDefinition,
+  input: RenderInput,
+  key: string,
+  options: CommandOptions,
+) {
+  return {
+    program: descriptor.program,
+    args: renderArgv(descriptor, input, key),
+    cwd: options.cwd,
+    env: options.env,
+    stdin: options.stdin,
   };
 }

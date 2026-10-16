@@ -1,4 +1,5 @@
 import { defineCommand } from "../../define-command.js";
+import { parseBranch, parseRemote, parseTag } from "../parse/git.js";
 
 export const change = {
   add: defineCommand({
@@ -102,6 +103,13 @@ export const change = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
   branch: defineCommand({
+    parse: parseBranch,
+    preset: {
+      flags: {
+        format:
+          "%(refname:short)%00%(HEAD)%00%(upstream:short)%00%(objectname)%00%(upstream:track)",
+      },
+    },
     namespace: "git",
     name: "branch",
     program: "git",
@@ -118,6 +126,8 @@ export const change = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
   remote: defineCommand({
+    parse: parseRemote,
+    preset: { flags: { verbose: true } },
     namespace: "git",
     name: "remote",
     program: "git",
@@ -128,6 +138,8 @@ export const change = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
   tag: defineCommand({
+    parse: parseTag,
+    preset: { flags: { format: "%(refname:short)%00%(objectname)%00%(taggerdate:iso-strict)" } },
     namespace: "git",
     name: "tag",
     program: "git",
