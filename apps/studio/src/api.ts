@@ -1,8 +1,6 @@
-import type { Loopy, RunDetail, RunRecord } from "loopy";
+import type { LogRecord, LoopySummary, RunDetail, RunRecord } from "loopy";
 
 const TOKEN_KEY = "loopy-studio-token";
-
-export type LoopySummary = Pick<Loopy, "description" | "scope"> & { slug: string };
 
 export function captureToken(): void {
   const token = new URLSearchParams(window.location.hash.slice(1)).get("token");
@@ -42,6 +40,9 @@ async function api<T>(path: string): Promise<T> {
 
 export const endpoints = {
   loopies: () => api<LoopySummary[]>("/api/loopies"),
-  runs: (slug: string) => api<RunRecord[]>(`/api/runs?slug=${encodeURIComponent(slug)}`),
-  run: (id: string) => api<RunDetail>(`/api/runs/${encodeURIComponent(id)}`),
+  runs: () => api<RunRecord[]>("/api/runs"),
+  logs: (id: string, after: number) =>
+    api<LogRecord[]>(`/api/runs/${encodeURIComponent(id)}/logs?after=${after}`),
+  run: (id: string) =>
+    api<Omit<RunDetail, "logs">>(`/api/runs/${encodeURIComponent(id)}?logs=false`),
 };

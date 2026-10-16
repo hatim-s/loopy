@@ -659,3 +659,27 @@ async function waitForRunningStep(store: ReturnType<typeof openRunStore>) {
 
   throw new Error("CLI never started the long step. Check its stderr.");
 }
+
+test("API can omit log history while preserving steps and cursor reads", async () => {
+  const f = fixture(
+    "summary",
+    'run: ({ log }) => step("work", () => { log.info("hello"); return 1; })',
+  );
+
+  await save(f);
+  const run = object((await cli(f, "run", "summary")).stdout);
+  const server = startServer({ home: f.home, cwd: f.cwd, port: 0 });
+  servers.push(server);
+  const url = new URL(server.url);
+  const token = new URLSearchParams(url.hash.slice(1)).get("token");
+  const headers = { Authorization: `Bearer ${token}` };
+  const path = `${url.origin}/api/runs/${run.id}`;
+  const full = object(await (await fetch(path, { headers })).text());
+  const summary = object(await (await fetch(`${path}?logs=false`, { headers })).text());
+  expect(full.steps).toHaveLength(1);
+  expect(full.logs).toHaveLength(1);
+  expect(summary).toEqual({ run: full.run, steps: full.steps });
+  expect(await (await fetch(`${path}/logs?after=0`, { headers })).json()).toEqual(full.logs);
+  expect(await (await fetch(`${path}/logs?after=1`, { headers })).json()).toEqual([]);
+  expect((await fetch(`${url.origin}/api/runs/missing?logs=false`, { headers })).status).toBe(404);
+});

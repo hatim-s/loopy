@@ -1,57 +1,54 @@
-import type { RunDetail, RunRecord } from "loopy";
-import { useEffect, useState } from "react";
-import { endpoints, type LoopySummary } from "../api.ts";
+import type { LoopySummary } from "loopy";
+import { useCallback, useEffect, useState } from "react";
+import { endpoints } from "../api.ts";
 import { useRequest } from "./use-request.ts";
+import { useRun } from "./use-run.ts";
+import { useRuns } from "./use-runs.ts";
 
 export function useStudio() {
   const [loopies, setLoopies] = useState<LoopySummary[]>([]);
   const [slug, setSlug] = useState<string>();
-  const [runs, setRuns] = useState<RunRecord[]>([]);
   const [runId, setRunId] = useState<string>();
-  const [detail, setDetail] = useState<RunDetail>();
   const [error, setError] = useState<string>();
   const [revision, setRevision] = useState(0);
 
-  const onError = (cause: unknown) =>
-    setError(cause instanceof Error ? cause.message : String(cause));
+  const onError = useCallback(
+    (cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)),
+    [],
+  );
 
+  const detail = useRun(runId, onError, revision);
+  const allRuns = useRuns(onError, revision);
+  const refresh = () => setRevision((value) => value + 1);
   useEffect(() => {
-    const timer = setInterval(() => setRevision((value) => value + 1), 2000);
+    function visible() {
+      if (document.visibilityState === "visible") {
+        setRevision((value) => value + 1);
+      }
+    }
 
-    return () => clearInterval(timer);
+    document.addEventListener("visibilitychange", visible);
+
+    return () => document.removeEventListener("visibilitychange", visible);
   }, []);
-
   useRequest({ load: endpoints.loopies, apply: setLoopies, onError }, [revision]);
-  useRequest({ load: slug ? () => endpoints.runs(slug) : null, apply: setRuns, onError }, [
-    slug,
-    revision,
-  ]);
-  useRequest({ load: runId ? () => endpoints.run(runId) : null, apply: setDetail, onError }, [
-    runId,
-    revision,
-  ]);
 
   function selectSlug(value: string) {
     setSlug(value);
-    setRuns([]);
     setRunId(undefined);
-    setDetail(undefined);
-  }
-
-  function selectRun(value: string) {
-    setRunId(value);
-    setDetail(undefined);
   }
 
   return {
     loopies,
     slug,
-    runs,
+    allRuns,
+    runs: allRuns.filter((run) => run.slug === slug),
     runId,
     detail,
     error,
     selectSlug,
-    selectRun,
+    selectRun: setRunId,
+    refresh,
     dismissError: () => setError(undefined),
   };
 }

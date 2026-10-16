@@ -93,3 +93,10 @@ const TERMINAL_RUN_STATUSES = [
 export function isTerminalRun(status: RunStatus): boolean {
   return TERMINAL_RUN_STATUSES.some((terminal) => terminal === status);
 }
+
+export type LoopySummary = {
+  slug: string;
+  description?: string;
+  scope: "project" | "global";
+  schedule?: { cron: string; tz?: string };
+};

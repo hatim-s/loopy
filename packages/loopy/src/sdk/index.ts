@@ -2,6 +2,7 @@ export type {
   CommandResult,
   Json,
   LogRecord,
+  LoopySummary,
   RunDetail,
   RunRecord,
   RunStatus,
