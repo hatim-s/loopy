@@ -1,13 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { requireRecord } from "../src/core/index.js";
@@ -84,7 +76,6 @@ test("SDK CLI bundles, coerces named input, runs, inspects steps and prints logs
 
   const saved = await save(f);
   expect(saved.input).toEqual({ name: "string", count: "number", "loud?": "boolean" });
-  expect(existsSync(join(f.home, "runs.sqlite"))).toBe(false);
   rmSync(f.file);
 
   const result = await cli(f, "run", "hello", "--name", "world", "--count", "2", "--loud", "false");
@@ -100,7 +91,6 @@ test("SDK CLI bundles, coerces named input, runs, inspects steps and prints logs
   expect((await cli(f, "logs", String(run.id))).stdout).toContain("hello from sdk");
   expect((await cli(f, "runs", "hello")).stdout).toContain(String(run.id));
   expect((await cli(f, "list")).stdout).toContain("hello");
-  expect(existsSync(join(f.home, "runs.sqlite"))).toBe(false);
 });
 
 test("Ctrl-C during sleep leaves the run suspended and resume completes it", async () => {
@@ -238,7 +228,7 @@ test("schedule persists the next fire and off removes it", async () => {
   }
 });
 
-test("engine API returns run trace and cursor logs while leaving the legacy store unopened", async () => {
+test("API returns run records, step traces and cursor logs", async () => {
   const f = fixture(
     "api",
     `run: async ({ log }) => { log.info("first"); await step("one", () => 1); log.info("second"); return 2; }`,
@@ -261,7 +251,6 @@ test("engine API returns run trace and cursor logs while leaving the legacy stor
   expect((await request(`/runs/${run.id}/logs?after=-1`)).status).toBe(400);
   expect((await request("/runs/missing/logs")).status).toBe(404);
   expect(await (await request("/runs")).json()).toMatchObject([{ id: run.id }]);
-  expect(existsSync(join(f.home, "runs.sqlite"))).toBe(false);
 });
 
 test("cancel reports an active owner instead of stealing the run", async () => {
@@ -301,7 +290,7 @@ test("command-specific options preserve run input fields and reject invalid flag
   expect(invalid.stderr).toContain("Unknown option '--detach' for loopy logs.");
 });
 
-test("missing secrets and unsupported SDK flags fail without creating queued runs", async () => {
+test("missing secrets and incomplete input flags do not create queued runs", async () => {
   const f = fixture("secret", `secrets: ["MISSING_TOKEN"], run: () => 42`);
   await save(f);
   const missing = await cli(f, "run", "secret");
@@ -311,9 +300,7 @@ test("missing secrets and unsupported SDK flags fail without creating queued run
   for (const flag of ["--full", "--retry-uncertain"]) {
     const invalid = await cli(f, "run", "secret", flag);
     expect(invalid.code).toBe(1);
-    expect(invalid.stderr).toContain(
-      "SDK loopies declare mode in loopy({ mode }). Remove --full and --retry-uncertain.",
-    );
+    expect(invalid.stderr).toContain("requires a value");
   }
 
   expect(object((await cli(f, "run", "secret", "--detach")).stdout).status).toBe("queued");
@@ -393,43 +380,67 @@ test("schedule defaults come from the saved definition and logs follow emits NDJ
   ]);
 });
 
-test("inspect reports a missing run without creating a legacy database", async () => {
+test("inspect reports how to find a missing run", async () => {
   const f = fixture("missing", "run: () => 1");
   const result = await cli(f, "inspect", "nonexist");
   expect(result.code).toBe(1);
   expect(result.stderr).toContain("No run 'nonexist'. Use loopy runs to list run ids.");
-  expect(existsSync(join(f.home, "runs.sqlite"))).toBe(false);
 });
 
-test("legacy save resolves --cwd, removes the discarded bundle and preserves cron input", async () => {
-  const f = fixture("legacy-cron", "run: () => 1");
-  const workspace = join(f.cwd, "workspace");
-  mkdirSync(workspace);
-  const source = join(workspace, "legacy.loopy.ts");
-  const core = resolve(import.meta.dir, "../src/core/index.ts");
+test("Studio requires its token and origin, serves pinned assets and exposes read-only data", async () => {
+  const f = fixture("studio", "run: () => 1");
+  await save(f);
+  const assets = join(f.cwd, "assets");
+  mkdirSync(assets);
+  writeFileSync(join(assets, "index.html"), "original Studio");
+  const server = startServer({ home: f.home, cwd: f.cwd, assets, port: 0 });
+  servers.push(server);
+  const url = new URL(server.url);
+  const token = new URLSearchParams(url.hash.slice(1)).get("token");
+  const headers = { Authorization: `Bearer ${token}` };
+  expect((await fetch(`${url.origin}/api/runs`)).status).toBe(401);
+  expect(
+    (await fetch(`${url.origin}/api/runs`, { headers: { Authorization: "Bearer wrong" } })).status,
+  ).toBe(401);
+  expect(
+    (
+      await fetch(`${url.origin}/api/runs`, {
+        headers: { ...headers, Origin: "https://other.example" },
+      })
+    ).status,
+  ).toBe(403);
+  expect(await (await fetch(`${url.origin}/api/loopies`, { headers })).json()).toMatchObject([
+    { slug: "studio" },
+  ]);
+  expect((await fetch(`${url.origin}/api/runs`, { method: "POST", headers })).status).toBe(404);
+  writeFileSync(join(assets, "index.html"), "changed Studio");
+  const page = await fetch(url.origin);
+  expect(await page.text()).toBe("original Studio");
+  expect(page.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
+});
+
+test("saved slugs require explicit replacement and project entries override global entries", async () => {
+  const f = fixture("scoped", 'scope: "global", run: () => "global"');
+  await save(f);
+  const other = join(f.cwd, "other.loopy.ts");
   writeFileSync(
-    source,
-    `import { trigger, command } from ${JSON.stringify(core)};
-    export default trigger("legacy-cron").node("echo", ({ input }) => command("/bin/echo", input.cron));`,
+    other,
+    `import { loopy } from ${JSON.stringify(SDK)}; export default loopy({ name: "scoped", scope: "global", run: () => "replacement" });`,
   );
-  const saved = await cli(f, "--cwd", workspace, "save", "legacy.loopy.ts");
-  expect(saved.code).toBe(0);
-  expect(saved.stderr).toBe("");
-  expect(readdirSync(join(f.home, "bundles"))).toEqual([]);
-
-  const result = await cli(
-    f,
-    "--cwd",
-    workspace,
-    "run",
-    "legacy-cron",
-    "--full",
-    "--cron",
-    "hello",
+  const conflict = await cli(f, "save", other);
+  expect(conflict.code).toBe(1);
+  expect(conflict.stderr).toContain("belongs to another source");
+  expect((await cli(f, "save", other, "--replace")).code).toBe(0);
+  expect(object((await cli(f, "run", "scoped")).stdout).output).toBe("replacement");
+  writeFileSync(
+    f.file,
+    `import { loopy } from ${JSON.stringify(SDK)}; export default loopy({ name: "scoped", run: () => "project" });`,
   );
-
-  expect(result.code).toBe(0);
-  const run = object(result.stdout);
-  expect(run.input).toEqual({ cron: "hello" });
-  expect(run.status).toBe("succeeded");
+  await save(f);
+  const child = join(f.cwd, "nested");
+  mkdirSync(child);
+  const local = await cli({ ...f, cwd: child }, "run", "scoped");
+  expect(local.code).toBe(0);
+  expect(object(local.stdout).output).toBe("project");
+  expect(JSON.parse((await cli(f, "list")).stdout)).toHaveLength(1);
 });

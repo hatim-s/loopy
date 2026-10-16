@@ -1,17 +1,19 @@
 # Contributing
 
-Bun 1.4 or newer. `bun install`, then `bun run check` before you push; it builds, lints, typechecks and runs the tests. [AGENTS.md](AGENTS.md) describes where code goes and the patterns to follow; read it first.
+Bun 1.4 or newer. Run `bun install`, then `bun run check` before pushing. It builds, lints, typechecks and runs the tests. Read [AGENTS.md](AGENTS.md) for code ownership and conventions.
 
-One package, `packages/loopy`, with four entry points: `core`, `runtime`, `local`, `cloud`. Add a module when it hides a distinct responsibility; don't add a package per module. Studio (`apps/studio`) only views and runs saved graphs. Workflow editing stays in TypeScript files.
+One package, `packages/loopy`, exposes `loopy` for authors, `loopy/runtime` for the replay engine and `loopy/local` for OS adapters. Studio views saved loopies, runs, step traces and logs. Author definitions in TypeScript.
 
-`core`, `runtime` and `cloud` must not import Bun, Node or anything OS-specific. The portable typecheck, the browser-bundle test and the layering test in `_tests_/architecture.test.ts` enforce this. `local` owns SQLite, paths and subprocesses; the CLI wires the local pieces together. A hosted adapter implements `RunRepository` and `ExecuteCommand` rather than reaching into `local`.
+Core and runtime stay portable. The portable typecheck, browser-bundle test and architecture test enforce this. SDK imports core and runtime, with one `node:async_hooks` import for shared activation scope. Local owns SQLite, paths, subprocesses, sandboxing and secrets. The CLI wires these pieces together. Another execution host implements `RunStore` and `Executor`.
 
-Tests live in `packages/loopy/_tests_` and cover what's expensive to get wrong: type guarantees, sandbox confinement, durable state transitions and end-to-end CLI behaviour. Skip unit tests for glue.
+Tests live in `_tests_` directories and cover type guarantees, parsers, sandbox confinement, durable transitions and CLI behavior. Use temporary homes and fake executors. Skip tests for glue.
 
-Invariants worth knowing before you touch the runtime or store:
+Runtime and store invariants:
 
-- A run's graph, input, mode and workspace never change after creation.
-- Never replay a command whose outcome is uncertain without an explicit `retryUncertain`.
-- Attempt results and their events commit in one transaction, fenced on the owner token.
-- Distributed adapters expire leases and mark abandoned attempts uncertain.
+- A run keeps its input, workspace and bundle hash after creation.
+- Successful steps replay their persisted result in recorded completion order.
+- Every write is fenced by the active owner token.
+- An unfinished effect can repeat after a crash; design external actions to be idempotent.
+- Workflow logs deduplicate by replay position; step logs retain each executed attempt.
+- Schema changes recreate local tables with a version bump instead of migrations.
 - Sandbox execution fails closed.

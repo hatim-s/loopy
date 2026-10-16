@@ -1,100 +1,54 @@
 # Working in this repo
 
-Read this before changing code. `bun run check` must pass before a PR; it builds, lints,
-typechecks and runs the tests. The architecture test fails the build on import-rule violations.
+Read this before changing code. `bun run check` builds the package and Studio, lints, typechecks and runs the tests. It must pass before a PR. The architecture test enforces layer imports.
 
 ## Where code goes
 
-```
+```text
 packages/loopy/src/
-  core/      types, authoring DSL, validation. Pure. No node:* or bun:* imports.
-  runtime/   run execution against a RunRepository. Pure.
-  cloud/     queue worker on top of runtime. Pure.
-  local/     SQLite, filesystem, subprocesses, sandbox, HTTP server. Owns the OS.
-  cli/       one file per command in cli/commands/, dispatched from cli/index.ts.
+  core/      shared record types, argv parsing and boundary validation. Pure.
+  runtime/   replay engine, journal, retries, store contract and daemon scheduling. Pure.
+  sdk/       loopy(), ambient steps, defineCommand and typed shell wrappers.
+  local/     SQLite store, registry, bundles, processes, secrets and HTTP server.
+  cli/       commands and argument parsing. One file per command in commands/.
 apps/studio/src/
-  components/  one component per file     hooks/  state and effects     lib/  pure helpers
-packages/loopy/_tests_/   all tests. No tests next to source.
+  components/  display components
+  hooks/       state, polling and requests
+packages/loopy/_tests_/   package tests, including shell fixtures
+examples/                 canonical loopies and automation helpers
 ```
 
-Layers import downward only: `cli -> local -> runtime -> core`, `cloud -> runtime -> core`.
-The local bundle loader and activation adapter import sdk/host.ts; authoring imports use sdk/index.ts.
-During slice 2b part 1, SDK runs use `engine.sqlite`; legacy runs keep `runs.sqlite`.
-Both databases open only when a command or route needs them.
+The public package entries are `loopy` for the SDK, `loopy/runtime` and `loopy/local`. Studio imports types only from `"loopy"` and uses the local HTTP API for data. It lists loopies and runs and renders step traces and logs.
 
-Cross-layer imports go through the target layer's `index.ts`, or `sdk/host.ts` from local and cli. Same-layer imports use the
-file path. Studio imports the package only as `"loopy/core"` until slice 2b.
+Layers import downward. Runtime imports core; SDK imports core and runtime; local imports core, runtime and `sdk/host.ts`; CLI imports core, runtime, local and `sdk/host.ts`. Cross-layer imports go through the target layer's `index.ts`, except the explicit SDK host entry. Same-layer imports use file paths. Core and runtime have no Node or Bun dependencies. SDK permits `node:async_hooks` only in `current.ts` to share activation scope with bundled definitions.
 
-Adding a feature: put the data shape in `core/model.ts` and its validation next to it, the OS
-work in `local/`, the command in `cli/commands/<name>.ts` registered in the dispatch table. A
-new store column means SQL and row types in `local/store-schema.ts` and queries in
-`local/store.ts`. A new Studio panel is a component in `components/`, its state in a hook in
-`hooks/`, wired through `use-studio.ts` and `app.tsx`. A new file gets one responsibility and a
-kebab-case name; related files share a folder without an inner `index.ts`.
+## Ownership
+
+- `core/model.ts` defines RunRecord, StepRecord, LogRecord, RunDetail and run statuses.
+- `runtime/engine.ts` claims an activation, replays it, persists its outcome and releases ownership.
+- `runtime/journal.ts` checks step sequence and keys; `step-runner.ts` owns attempts and terminal writes.
+- `runtime/daemon.ts` coordinates schedules, due runs and the concurrency pool.
+- `sdk/loopy.ts` validates definitions; `sdk/schema.ts` validates author input.
+- `sdk/define-command.ts` and `render-argv.ts` turn typed descriptors into command steps.
+- `sdk/shell/` owns command descriptors and parsers.
+- `local/store.ts` owns SQLite transactions, fencing and queries; `store-schema.ts` defines SQL and rows; `store-rows.ts` maps rows.
+- `local/registry.ts` resolves project and global loopies, source ownership and bundle paths.
+- `local/bundle.ts` bundles and loads SDK definitions. `local/daemon.ts` prepares bundles and executors for the runtime daemon.
+- `local/process.ts` and `spawn.ts` launch and capture processes. `executor.ts` injects declared secrets and redacts results through `secret-redactor.ts`.
+- `local/server/routes.ts` exposes read-only loopy, run, trace and log data. `start-server.ts` owns authentication and the loopback server.
+
+Adding a feature: put shared records in core, replay behavior in runtime, author-facing calls in SDK, OS work in local, and commands in `cli/commands/<name>.ts` registered in `cli/index.ts`. Scope flags in `cli/args.ts`. A new store column needs SQL, row conversion and queries; bump the schema version instead of adding a migration. A Studio panel consumes SDK record types and API data. Give each new file one responsibility and a kebab-case name.
 
 ## Patterns to follow
 
-**Narrow unknown data with guards, not casts.** Generic guards (`requireRecord`,
-`isStringArray`) live in `core/validation.ts`; checks that know the domain (`validateWorkflow`,
-`validateSlug`) live next to the type they check.
+Validate untyped data once at its boundary. Reuse `requireRecord`, `requireOneOf`, `validateSlug`, `errorMessage` and the filesystem helpers. Search for existing behavior before adding a helper. Infer types where possible. Use `type` for shapes and `interface` for contracts implemented by classes.
 
-```ts
-// bad
-const body = (await request.json()) as Record<string, unknown>;
-if (typeof body.slug !== "string") throw new Error("slug missing");
+Use braces for every branch and loop. Check failure cases first and return or throw. Keep functions around 40 lines or less and split responsibilities when complexity grows. Errors end with a period and explain what to do next. Comments explain why; avoid em dashes. Casts require a nearby `SAFETY` comment except `as const`. Do not use `any`.
 
-// good
-const body = requireRecord(await request.json(), "The request body");
-allowKeys(body, "The request body", ["slug", "mode", "input"]);
-const slug = requireNonEmptyString(body.slug, "slug");
-```
+Each CLI command exports `run<Name>(context: CliContext)`, reads positionals through the context helpers and prints through `printJson` or `report`. Do not parse argv inside commands. A command opens its run store through `withRunStore` and closes it on completion.
 
-**Reuse the shared helpers instead of writing a local copy.** `errorMessage`,
-`latestAttempts`, `validateSlug` and friends in `core/names.ts`, `setOwnProperty`,
-`errnoCode`, `withLockDirectory`, `writeFileAtomically` in `local/fs.ts`. Before adding a
-helper, grep for the behaviour.
+The replay engine runs user code from the top. Keep code between steps deterministic, preserve sequence and completion order, never nest steps, and fence every durable write with the owner token. Successful steps replay from stored JSON. Recovery may repeat an unfinished effect; it does not promise exactly-once external execution.
 
-**One command, one file, one context.** A CLI command is `export async function
-run<Name>(context: CliContext)`. It reads its arguments through `requireTarget` or
-`optionalTarget`, prints through `printJson` and `report`, and never parses argv itself.
+Tests belong in `_tests_` directories. Reserve them for durable state transitions, type guarantees, parsers, sandbox confinement, secret handling and CLI behavior. Use temporary homes and fake or recording executors. Run example definitions through `startLoopy`. Do not add UI tests or glue tests for reversible edits.
 
-```ts
-// bad: logic inlined into a switch in cli/index.ts
-case "graph": print(registry.get(required(target, "Slug")).workflow); return;
-
-// good: cli/commands/graph.ts
-export async function runGraph(context: CliContext): Promise<void> {
-  const registry = new Registry(context.home, context.cwd);
-  printJson(registry.get(requireTarget(context, "Slug")).workflow);
-}
-```
-
-**Braces and early returns.** Every `if`, `for` and `while` body is a block. Check the
-failure case first and return or throw; keep the happy path at the left margin.
-
-**Error messages end with a period and say what failed and what to do.**
-`No saved loopy 'review'. Use loopy save <file.ts> first.` not `not found`.
-
-**Types describe the data, not the code.** `type` for shapes, `interface` only for a
-contract a class implements (`RunRepository`). Let inference carry local variables. Shared
-shapes (`WorkflowSummary`, `RunEventType`) live in `core/model.ts`; do not redeclare them in
-Studio or the CLI.
-
-**Naming.** `export function` for top-level functions. `SCREAMING_SNAKE_CASE` for module
-constants and regexes, `camelCase` for everything else. Files kebab-case.
-
-**Comments explain why.** A one-line `/** */` on an export only when the name does not
-already say it. No banners, no restating the code, no em dashes.
-
-## Patterns to avoid
-
-- A function the linter rejects for cognitive complexity. Split it; do not raise the limit.
-- A file that holds two jobs (parsing and rendering, schema and queries). Split it.
-- `export const name = () => ...` at module level.
-- `(error as NodeJS.ErrnoException).code`: use `errnoCode(error)`.
-- Importing `../local/registry/registry.js` from `cli/`, or re-exporting one layer's function
-  from another to shorten a path. Use the barrel.
-- Exporting from a barrel because it might be useful. Export what another layer or a package
-  consumer uses today.
-- Compatibility shims, deprecated aliases, or keeping an old path alive. Move it and fix the callers.
-- Tests for glue. Test invariants: types, sandbox confinement, durable state, CLI behaviour.
+Delete unused paths with their callers and tests. Do not add compatibility aliases or export symbols without a consumer. Preserve user work and keep unrelated automation checkouts untouched.

@@ -1,4 +1,4 @@
-export { bundleLoopy, importLoopy, loadLoopy } from "./bundle.js";
+export { bundleLoopy, loadLoopy } from "./bundle.js";
 
 export { loadRunLoopy, localDaemon, openRunStore } from "./daemon.js";
 

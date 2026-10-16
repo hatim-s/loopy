@@ -7,7 +7,7 @@ const SOURCE = resolve(import.meta.dir, "../src");
 
 const STUDIO = resolve(import.meta.dir, "../../../apps/studio/src");
 
-const LAYERS = ["core", "runtime", "local", "sdk", "cli"] as const;
+const LAYERS = ["core", "runtime", "sdk", "local", "cli"] as const;
 
 type Layer = (typeof LAYERS)[number];
 
@@ -129,11 +129,10 @@ test("layers import downward, and only through the target layer's index", () => 
 
       if (!ALLOWED_IMPORTS[layer].includes(target)) {
         violations.push(`${name} (${layer}) may not import ${target} (${specifier}).`);
-      } else if (
-        !isBarrel(specifier) &&
-        !(target === "sdk" && ["local", "cli"].includes(layer) && /\/host\.js$/.test(specifier))
-      ) {
-        violations.push(`${name} must import ${target} through ${target}/index.js (${specifier}).`);
+      } else if (target === "sdk" ? !/\/host\.js$/.test(specifier) : !isBarrel(specifier)) {
+        violations.push(
+          `${name} must import ${target} through ${target === "sdk" ? "sdk/host.js" : `${target}/index.js`} (${specifier}).`,
+        );
       }
     }
   }

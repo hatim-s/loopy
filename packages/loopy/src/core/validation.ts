@@ -41,15 +41,6 @@ export function requireNonEmptyString(value: unknown, location: string): string 
   return value;
 }
 
-// BOUNDARY: External HTTP and JSON fields must be booleans before their callers consume them.
-export function requireBoolean(value: unknown, location: string): boolean {
-  if (typeof value !== "boolean") {
-    throw new Error(`${location} must be a boolean.`);
-  }
-
-  return value;
-}
-
 // BOUNDARY: External workflow fields must be positive safe integers before execution limits are applied.
 export function requirePositiveInteger(value: unknown, location: string): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) {

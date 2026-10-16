@@ -1,10 +1,10 @@
-import type { CommandOutput } from "../core/index.js";
+import type { CommandResult } from "../core/index.js";
 
 /** `started` tells the runtime whether the command may have had side effects. */
 export class CommandExecutionError extends Error {
   constructor(
     message: string,
-    readonly output: CommandOutput,
+    readonly output: CommandResult,
     readonly started: boolean,
     options?: ErrorOptions,
   ) {

@@ -4,7 +4,7 @@ import { endpoints, type LoopySummary } from "../api.ts";
 import { useRequest } from "./use-request.ts";
 
 export function useStudio() {
-  const [loopies, setRegistry] = useState<LoopySummary[]>([]);
+  const [loopies, setLoopies] = useState<LoopySummary[]>([]);
   const [slug, setSlug] = useState<string>();
   const [runs, setRuns] = useState<RunRecord[]>([]);
   const [runId, setRunId] = useState<string>();
@@ -21,7 +21,7 @@ export function useStudio() {
     return () => clearInterval(timer);
   }, []);
 
-  useRequest({ load: endpoints.loopies, apply: setRegistry, onError }, [revision]);
+  useRequest({ load: endpoints.loopies, apply: setLoopies, onError }, [revision]);
   useRequest({ load: slug ? () => endpoints.runs(slug) : null, apply: setRuns, onError }, [
     slug,
     revision,

@@ -16,8 +16,6 @@ export type ServerOptions = {
   cwd?: string;
   port?: number;
   assets?: string;
-  /** Receives one line per background run that failed. Defaults to stderr. */
-  log?: (line: string) => void;
 };
 
 function bearerMatches(request: Request, token: string): boolean {

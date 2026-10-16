@@ -5,7 +5,6 @@ export type { FlagDefinition, PositionalDefinition } from "./command-types.js";
 export { errorMessage } from "./errors.js";
 
 export type {
-  CommandOutput,
   CommandResult,
   ExecutionMode,
   Json,
@@ -21,7 +20,6 @@ export type {
   StepBase,
   StepKind,
   StepRecord,
-  StepStatus,
 } from "./model.js";
 
 export { isTerminalRun, TERMINAL_RUN_STATUSES } from "./model.js";
@@ -37,7 +35,6 @@ export {
   isRecord,
   isString,
   isStringArray,
-  requireBoolean,
   requireNonEmptyString,
   requireOneOf,
   requirePositiveInteger,

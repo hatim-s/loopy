@@ -31,10 +31,6 @@ export class Registry {
     );
   }
 
-  has(slug: string): boolean {
-    return this.files(slug).some((file) => existsSync(file));
-  }
-
   get(slug: string): SavedLoopy {
     const file = this.files(slug).find((candidate) => existsSync(candidate));
 

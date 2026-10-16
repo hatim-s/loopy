@@ -29,7 +29,7 @@ test("reserved options stay separate and separator allows colliding input keys",
     "/tmp/run",
     "run",
     "x",
-    "--full",
+    "--detach",
     "--",
     "--full",
     "false",
@@ -37,7 +37,7 @@ test("reserved options stay separate and separator allows colliding input keys",
     "text",
   ]);
 
-  expect(parsed.values.full).toBe(true);
+  expect(parsed.values.detach).toBe(true);
   expect(parsed.triggerInput).toEqual({ full: "false", input: "text" });
   expect(parseCliArgs(["types", "tool", "--", "--help"]).positionals).toEqual([
     "types",
@@ -51,8 +51,8 @@ test("ambiguous or incomplete inputs fail before execution", () => {
     ["run", "x", "--key"],
     ["run", "x", "--key", "--full"],
     ["run", "x", "--key=a", "--key=b"],
-    ["run", "x", "--args", "a.json", "--input", "{}"],
-    ["run", "x", "--input", "{}", "--key=a"],
+    ["run", "x", "--input-file", "a.json", "--input-json", "{}"],
+    ["run", "x", "--input-json", "{}", "--key=a"],
     ["resume", "id", "--args", "a.json"],
     ["list", "--typo", "x"],
   ]) {

@@ -2,7 +2,7 @@ export type Json = null | boolean | number | string | Json[] | { [key: string]: 
 
 export type ExecutionMode = "sandbox" | "full";
 
-export type CommandOutput = {
+export type CommandResult = {
   stdout: string;
   stderr: string;
   exitCode: number;
@@ -57,8 +57,6 @@ export type StepRecord = StepBase &
     | { status: "sleeping"; wakeAt: string }
   );
 
-export type StepStatus = StepRecord["status"];
-
 export type LogPosition =
   | { kind: "workflow"; afterStep: number; afterFinish: number; index: number }
   | { kind: "step"; seq: number; attempt: number; index: number };
@@ -72,8 +70,6 @@ export type LogRecord = {
   data?: Json;
   at: string;
 };
-
-export type CommandResult = CommandOutput;
 
 export type Schedule = {
   slug: string;

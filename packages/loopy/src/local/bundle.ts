@@ -25,7 +25,7 @@ export async function bundleLoopy(file: string, home = defaultHome()) {
 }
 
 // BOUNDARY: Only the save or load caller can decide whether an imported default is an SDK definition.
-export async function importLoopy(path: string) {
+async function importLoopy(path: string) {
   const module: { default?: unknown } = await import(pathToFileURL(path).href);
 
   return module.default;

@@ -1,7 +1,7 @@
 import { realpathSync, statSync } from "node:fs";
 import { realpath, stat } from "node:fs/promises";
 import { resolve } from "node:path";
-import type { CommandOutput, ExecutionMode } from "../core/index.js";
+import type { CommandResult, ExecutionMode } from "../core/index.js";
 import { requirePositiveInteger } from "../core/index.js";
 import { CommandExecutionError, type ResolvedCommand } from "../runtime/index.js";
 import { sandboxLauncher } from "./sandbox/launcher.js";
@@ -156,7 +156,7 @@ export async function prepareLaunch(
 export async function executeLocalCommand(
   command: ProcessCommand,
   options: LocalExecutionOptions,
-): Promise<CommandOutput> {
+): Promise<CommandResult> {
   const aborted = () =>
     new CommandExecutionError("Command aborted.", emptyOutput(), false, {
       cause: options.signal?.reason,

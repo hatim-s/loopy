@@ -22,7 +22,7 @@ export function validateSecretValue(value: string): void {
   }
 }
 
-/** Keep default secrets outside the versioned graph store; custom homes stay isolated. */
+/** Keep default secrets outside the versioned run store; custom homes stay isolated. */
 export function secretDirectory(home = defaultHome()): string {
   const path = resolve(home);
 
