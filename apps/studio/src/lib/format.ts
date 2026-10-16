@@ -1,4 +1,4 @@
-import type { Command, Json, Workspace } from "loopy";
+import type { Command, Json, Workspace } from "loopy/core";
 
 /** Pretty JSON, falling back to String() for values JSON cannot represent. */
 export function formatted(value: Json | Command["env"] | undefined): string {

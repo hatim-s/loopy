@@ -1,8 +1,10 @@
 export type { Clock } from "./clock.js";
 
+export { SYSTEM_CLOCK } from "./clock.js";
+
 export { map, parallel, race } from "./concurrency.js";
 
-export type { LoopyContext, StepContext, StepOptions } from "./context.js";
+export type { ActivationScope, LoopyContext, StepContext, StepOptions } from "./context.js";
 
 export type { CronSchedule } from "./cron.js";
 

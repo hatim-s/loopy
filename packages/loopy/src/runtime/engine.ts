@@ -1,7 +1,7 @@
 import { type ExecutionMode, errorMessage, type Json, type RunOutcome } from "../core/index.js";
 import { Activation } from "./activation.js";
 import { type Clock, SYSTEM_CLOCK } from "./clock.js";
-import { createContext, type LoopyContext } from "./context.js";
+import { type ActivationScope, createContext, type LoopyContext } from "./context.js";
 import type { Executor } from "./executor.js";
 import { StepJournal } from "./journal.js";
 import { assertJson } from "./json.js";
@@ -16,6 +16,7 @@ export type ActivationOptions = {
   cwd: string;
   mode: ExecutionMode;
   clock?: Clock;
+  wrap?: ActivationScope;
 };
 
 export type ActivationOutcome = RunOutcome | { status: "suspended"; wakeAt: string };
@@ -24,9 +25,14 @@ function startWorkflow(
   activation: Activation,
   context: LoopyContext,
   workflow: ActivationOptions["workflow"],
+  wrap?: ActivationOptions["wrap"],
 ) {
   void Promise.resolve()
-    .then(() => workflow(context))
+    .then(() => {
+      const invoke = () => workflow(context);
+
+      return wrap ? wrap.workflow(invoke, context, (error) => activation.fail(error)) : invoke();
+    })
     .then((output) => {
       assertJson(output, "Workflow output");
       activation.complete({ status: "succeeded", output });
@@ -40,8 +46,9 @@ async function settle(
   activation: Activation,
   context: LoopyContext,
   workflow: ActivationOptions["workflow"],
+  wrap?: ActivationOptions["wrap"],
 ): Promise<ActivationOutcome> {
-  startWorkflow(activation, context, workflow);
+  startWorkflow(activation, context, workflow, wrap);
 
   while (true) {
     await activation.tick();
@@ -119,7 +126,7 @@ async function executeActivation(
   });
 
   const context = createContext({ ...options, run, token, clock, activation, journal, logger });
-  let outcome = await settle(activation, context, options.workflow);
+  let outcome = await settle(activation, context, options.workflow, options.wrap);
 
   try {
     await logger.flush();

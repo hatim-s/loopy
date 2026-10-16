@@ -1,4 +1,4 @@
-import type { ExecutionMode, Json, RunRecord } from "loopy";
+import type { ExecutionMode, Json, RunRecord } from "loopy/core";
 import { useState } from "react";
 import { endpoints, type RunDetail } from "../api.ts";
 import type { ErrorReporter } from "./use-error-reporter.ts";

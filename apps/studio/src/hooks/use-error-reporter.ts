@@ -1,4 +1,4 @@
-import { errorMessage } from "loopy";
+import { errorMessage } from "loopy/core";
 import { useMemo, useState } from "react";
 
 export type ErrorReporter = {

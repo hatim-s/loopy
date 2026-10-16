@@ -1,7 +1,14 @@
-import type { ExecutionMode, Json, RunDetail, RunRecord, Workflow, WorkflowSummary } from "loopy";
-import { isRecord, isString } from "loopy";
+import type {
+  ExecutionMode,
+  Json,
+  RunDetail,
+  RunRecord,
+  Workflow,
+  WorkflowSummary,
+} from "loopy/core";
+import { isRecord, isString } from "loopy/core";
 
-export type { RunDetail } from "loopy";
+export type { RunDetail } from "loopy/core";
 
 const TOKEN_KEY = "loopy-studio-token";
 

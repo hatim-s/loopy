@@ -1,4 +1,4 @@
-import type { AttemptRecord, WorkflowNode } from "loopy";
+import type { AttemptRecord, WorkflowNode } from "loopy/core";
 import { describe, selectedBranch } from "../lib/workflow.ts";
 
 type GraphSequenceProps = {

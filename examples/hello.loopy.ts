@@ -1,4 +1,4 @@
-import { command, concat, contains, node, trigger } from "loopy";
+import { command, concat, contains, node, trigger } from "loopy/core";
 
 export default trigger<{ message: string }>("hello")
   .description("Pass input between CLI commands and choose a branch.")

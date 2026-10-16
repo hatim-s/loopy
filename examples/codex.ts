@@ -1,4 +1,4 @@
-import { type CommandDescriptor, defineCommand } from "loopy";
+import { type CommandDescriptor, defineCommand } from "loopy/core";
 
 const descriptor = {
   program: "codex",

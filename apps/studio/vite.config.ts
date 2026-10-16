@@ -11,7 +11,7 @@ const core = fileURLToPath(new URL("../../packages/loopy/src/core/index.ts", imp
 export default defineConfig({
   plugins: [react()],
   resolve: {
-    alias: { loopy: core },
+    alias: { "loopy/core": core },
   },
   server: {
     port: 4173,

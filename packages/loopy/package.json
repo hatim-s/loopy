@@ -9,8 +9,8 @@
   },
   "exports": {
     ".": {
-      "types": "./dist/types/core/index.d.ts",
-      "default": "./dist/core/index.js"
+      "types": "./dist/types/sdk/index.d.ts",
+      "default": "./dist/sdk/index.js"
     },
     "./runtime": {
       "types": "./dist/types/runtime/index.d.ts",
@@ -23,6 +23,10 @@
     "./cloud": {
       "types": "./dist/types/cloud/index.d.ts",
       "default": "./dist/cloud/index.js"
+    },
+    "./core": {
+      "types": "./dist/types/core/index.d.ts",
+      "default": "./dist/core/index.js"
     }
   },
   "bin": {

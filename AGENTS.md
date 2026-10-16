@@ -19,7 +19,7 @@ packages/loopy/_tests_/   all tests. No tests next to source.
 
 Layers import downward only: `cli -> local -> runtime -> core`, `cloud -> runtime -> core`.
 Cross-layer imports go through the target layer's `index.ts`. Same-layer imports use the
-file path. Studio imports the package only as `"loopy"`.
+file path. Studio imports the package only as `"loopy/core"` until slice 2b.
 
 Adding a feature: put the data shape in `core/model.ts` and its validation next to it, the OS
 work in `local/`, the command in `cli/commands/<name>.ts` registered in the dispatch table. A

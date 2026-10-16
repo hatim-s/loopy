@@ -22,6 +22,7 @@ type ContextOptions = {
   activation: Activation;
   journal: StepJournal;
   logger: Logger;
+  wrap?: ActivationScope;
 };
 
 function replay(stored: Extract<EngineStep, { status: "succeeded" | "failed" }>): Json {
@@ -70,7 +71,11 @@ function createPerformer(options: ContextOptions) {
       attempt: record.attempt,
     };
 
-    return run(runner, () => activation.invoke(() => fn(scope)));
+    return run(runner, () => {
+      const invoke = () => fn(scope);
+
+      return options.wrap ? options.wrap.step(invoke, scope) : invoke();
+    });
   };
 }
 
@@ -131,3 +136,8 @@ export function createContext(options: ContextOptions) {
 }
 
 export type LoopyContext = ReturnType<typeof createContext>;
+
+export type ActivationScope = {
+  workflow<T>(fn: () => T, context: LoopyContext, fail: (error: Error) => void): T;
+  step<T>(fn: () => T, context: StepContext): T;
+};

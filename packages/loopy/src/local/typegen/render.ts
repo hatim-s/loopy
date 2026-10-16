@@ -7,7 +7,7 @@ export function renderCommandSource(name: string, descriptor: CommandDescriptor)
   }
 
   return (
-    `import { type CommandDescriptor, defineCommand } from "loopy";\n\n` +
+    `import { type CommandDescriptor, defineCommand } from "loopy/core";\n\n` +
     `const descriptor = ${JSON.stringify(descriptor, null, 2)} as const satisfies CommandDescriptor;\n\n` +
     `export const ${name} = defineCommand(descriptor);\n`
   );

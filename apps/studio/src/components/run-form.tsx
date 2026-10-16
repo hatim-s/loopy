@@ -1,4 +1,4 @@
-import type { ExecutionMode, Json } from "loopy";
+import type { ExecutionMode, Json } from "loopy/core";
 import type { FormEvent } from "react";
 import { useId, useState } from "react";
 

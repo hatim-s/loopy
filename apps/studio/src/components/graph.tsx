@@ -1,5 +1,5 @@
-import type { RunStatus, Workflow } from "loopy";
-import { latestAttempts } from "loopy";
+import type { RunStatus, Workflow } from "loopy/core";
+import { latestAttempts } from "loopy/core";
 import { useMemo } from "react";
 import type { RunDetail } from "../api.ts";
 import { GraphSequence } from "./graph-sequence.tsx";

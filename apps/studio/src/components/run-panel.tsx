@@ -1,4 +1,4 @@
-import type { RunRecord } from "loopy";
+import type { RunRecord } from "loopy/core";
 import type { RunDetail } from "../api.ts";
 import { shortDate, shortId } from "../lib/format.ts";
 import { RunDetailView } from "./run-detail.tsx";

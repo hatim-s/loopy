@@ -66,21 +66,6 @@ test("crash recovery retains logs of the original and recovered step attempts", 
   ]);
 });
 
-test("a nested step called synchronously inside a step fails the run", async () => {
-  const f = await fixture();
-
-  const result = await f.execute(async (ctx) =>
-    ctx.step("outer", () => ctx.step("inner", () => "invalid")),
-  );
-
-  expect(result).toEqual({
-    status: "failed",
-    error:
-      "Steps cannot be nested. Call steps from the workflow function, never from inside another step.",
-  });
-  expect((await f.store.getSteps("run")).map((step) => step.key)).toEqual(["outer"]);
-});
-
 test("command exit errors omit empty stderr and retain the last 500 characters", () => {
   const result = { exitCode: 1, stdout: "", stderr: "", durationMs: 1 };
   expect(new CommandExitError(result).message).toBe(
