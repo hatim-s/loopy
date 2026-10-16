@@ -1,5 +1,5 @@
-/** Machine-readable results go to stdout as indented JSON. */
-export function printJson<T>(value: T): void {
+// BOUNDARY: The output serializer accepts validated domain records of different shapes.
+export function printJson(value: unknown): void {
   console.log(JSON.stringify(value, null, 2));
 }
 

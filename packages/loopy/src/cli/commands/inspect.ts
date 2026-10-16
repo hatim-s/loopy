@@ -1,7 +1,10 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { engineRunDetail } from "../../runtime/index.js";
 import { type CliContext, requireTarget } from "../context.js";
 import { withEngineStore } from "../engine-store.js";
 import { printJson } from "../output.js";
-import { runInspect as legacyInspect } from "./legacy-inspect.js";
+import { runLegacyInspect } from "./legacy-inspect.js";
 
 export async function runInspect(context: CliContext): Promise<void> {
   const id = requireTarget(context, "Run ID");
@@ -9,9 +12,19 @@ export async function runInspect(context: CliContext): Promise<void> {
     const run = await store.getRun(id);
 
     if (!run) {
-      return legacyInspect(context);
+      return inspectLegacy(context);
     }
 
-    printJson({ run, steps: await store.getSteps(id) });
+    printJson(await engineRunDetail(store, run));
   });
+}
+
+async function inspectLegacy(context: CliContext) {
+  if (!existsSync(join(context.home, "runs.sqlite"))) {
+    throw new Error(
+      `No run '${requireTarget(context, "Run ID")}'. Use loopy runs to list run ids.`,
+    );
+  }
+
+  return runLegacyInspect(context);
 }

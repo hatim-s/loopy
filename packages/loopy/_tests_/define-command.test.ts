@@ -28,7 +28,7 @@ async function execute(run: () => Promise<Json | void>) {
     input: {},
     runId: "probe",
     bundleHash: "",
-    cwd: "/workspace",
+    workspace: "/workspace",
     loopy: loopy({
       name: "probe",
       run: async () => {

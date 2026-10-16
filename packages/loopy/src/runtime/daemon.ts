@@ -1,28 +1,21 @@
-import { type EngineRun, type ExecutionMode, errorMessage, type Schedule } from "../core/index.js";
+import { type EngineRun, errorMessage, type Schedule } from "../core/index.js";
 import { type Clock, SYSTEM_CLOCK } from "./clock.js";
 import { fireKey, nextFire, parseCron } from "./cron.js";
 import { type ActivationOptions, activate } from "./engine.js";
-import type { Executor } from "./executor.js";
 import { ActivationPool } from "./pool.js";
 import { OwnershipError, type RunStore } from "./store.js";
 
 type DaemonOptions = {
   store: RunStore;
-  executor: Executor;
-  loadWorkflow: (run: EngineRun) => Promise<
-    | ActivationOptions["workflow"]
-    | {
-        workflow: ActivationOptions["workflow"];
-        wrap?: ActivationOptions["wrap"];
-        executor?: Executor;
-        mode?: ExecutionMode;
-      }
+  prepare: (
+    run: EngineRun,
+  ) => Promise<
+    Pick<ActivationOptions, "workflow" | "wrap" | "executor" | "mode" | "cwd" | "signal">
   >;
+  workspace: string;
   clock?: Clock;
   concurrency?: number;
-  bundleHashFor?: (slug: string) => string | Promise<string>;
-  cwdFor: (run: EngineRun) => string;
-  modeFor: (run: EngineRun) => ExecutionMode;
+  bundleHashFor: (slug: string) => string | Promise<string>;
   onError?: (error: Error, run?: EngineRun) => void;
   sleep?: (milliseconds: number, signal: AbortSignal) => Promise<void>;
 };
@@ -186,7 +179,8 @@ export class Daemon {
     const run: EngineRun = {
       id: crypto.randomUUID(),
       slug: schedule.slug,
-      bundleHash: (await this.options.bundleHashFor?.(schedule.slug)) ?? "",
+      bundleHash: await this.options.bundleHashFor(schedule.slug),
+      workspace: this.options.workspace,
       input: schedule.input,
       status: "queued",
       createdAt: now,
@@ -207,17 +201,17 @@ export class Daemon {
     }
 
     try {
-      const loaded = await this.options.loadWorkflow(run);
-      const workflow = "workflow" in loaded ? loaded : { workflow: loaded };
+      const prepared = await this.prepareRun(run);
+
+      if (!prepared) {
+        return true;
+      }
 
       const outcome = await activate({
         runId: run.id,
         store: this.options.store,
-        executor: this.options.executor,
-        cwd: this.options.cwdFor(run),
-        mode: this.options.modeFor(run),
         clock: this.clock,
-        ...workflow,
+        ...prepared,
       });
 
       return outcome.status !== "suspended" || Date.parse(outcome.wakeAt) > this.clock.now();
@@ -227,6 +221,26 @@ export class Daemon {
       }
 
       return false;
+    }
+  }
+
+  private async prepareRun(run: EngineRun) {
+    try {
+      return await this.options.prepare(run);
+    } catch (error) {
+      const { store } = this.options;
+      const token = crypto.randomUUID();
+      await store.claim(run.id, token);
+
+      try {
+        await store.finishRun(run.id, token, { status: "failed", error: errorMessage(error) });
+      } finally {
+        await store.release(run.id, token);
+      }
+
+      this.report(error, run);
+
+      return undefined;
     }
   }
 

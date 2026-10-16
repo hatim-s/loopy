@@ -44,7 +44,7 @@ test("typed shell calls record exact argv and command step identities", async ()
       input: {},
       runId: "shell",
       bundleHash: "",
-      cwd: "/workspace",
+      workspace: "/workspace",
     }),
   ).toMatchObject({ status: "succeeded" });
   expect(executor.calls.map(({ program, args }) => [program, ...args])).toEqual([
@@ -84,7 +84,7 @@ test("sh.run rejects shell operators with the parser's actionable error", async 
     input: {},
     runId: "pipe",
     bundleHash: "",
-    cwd: "/workspace",
+    workspace: "/workspace",
   });
 
   expect(result).toEqual({
@@ -118,7 +118,7 @@ async function capture(run: () => Promise<CommandResult | void>) {
     input: {},
     runId: "capture",
     bundleHash: "",
-    cwd: "/workspace",
+    workspace: "/workspace",
     loopy: loopy({
       name: "capture",
       run: async () => {

@@ -1,32 +1,45 @@
 import { LocalExecutor, Loopies, loadLoopy } from "../../local/index.js";
-import { startLoopy } from "../../sdk/index.js";
+import { createLoopyRun } from "../../sdk/host.js";
 import { type CliContext, requireTarget } from "../context.js";
 import { withEngineStore } from "../engine-store.js";
 import { inlineRun } from "../inline-run.js";
 import { printJson } from "../output.js";
 import { sdkInput } from "../sdk-input.js";
-import { runRun as legacyRun } from "./legacy-run.js";
+import { runLegacyRun } from "./legacy-run.js";
 
 export async function runRun(context: CliContext): Promise<void> {
   const slug = requireTarget(context, "Slug");
   const registry = new Loopies(context.home, context.cwd);
 
   if (!registry.has(slug)) {
-    return legacyRun(context);
+    return runLegacyRun(context);
   }
 
+  if (context.values.full || context.values["retry-uncertain"]) {
+    throw new Error(
+      "SDK loopies declare mode in loopy({ mode }). Remove --full and --retry-uncertain.",
+    );
+  }
+
+  await runSaved(context, registry, slug);
+}
+
+async function runSaved(context: CliContext, registry: Loopies, slug: string) {
   const saved = registry.get(slug);
   const loopy = await loadLoopy(registry.bundlePath(saved.bundleHash));
   const input = await sdkInput(loopy, context);
+
+  const executor = context.values.detach
+    ? undefined
+    : new LocalExecutor({ home: context.home, secrets: loopy.secrets });
+
   await withEngineStore(context.home, async (store) => {
     const runId = crypto.randomUUID();
-    const options = { ...context, store, loopy, runId };
-    await startLoopy({
+    const options = { ...context, store, loopy, runId, workspace: context.cwd };
+    await createLoopyRun({
       ...options,
       input,
       bundleHash: saved.bundleHash,
-      executor: new LocalExecutor(),
-      detach: true,
     });
 
     if (context.values.detach) {
@@ -35,6 +48,8 @@ export async function runRun(context: CliContext): Promise<void> {
       return;
     }
 
-    await inlineRun(options);
+    if (executor) {
+      await inlineRun({ ...options, executor });
+    }
   });
 }

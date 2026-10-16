@@ -4,7 +4,7 @@ import type { Clock } from "./clock.js";
 import { assertJson } from "./json.js";
 import { type RetryPolicy, retryDelayMs, shouldRetry } from "./retry.js";
 import type { RunStore } from "./store.js";
-import { withTimeout } from "./timeout.js";
+import { withAbort, withTimeout } from "./timeout.js";
 
 export class StepFailedError extends Error {
   constructor(key: string, error: string) {
@@ -24,6 +24,7 @@ type Runner = {
   clock: Clock;
   retry: RetryPolicy;
   timeoutMs?: number;
+  signal?: AbortSignal;
 };
 
 async function put(options: Runner, step: EngineStep): Promise<void> {
@@ -61,6 +62,19 @@ async function failAttempt(options: Runner, cause: unknown): Promise<{ wakeAt: s
     throw cause;
   }
 
+  if (options.signal?.aborted) {
+    const at = new Date(clock.now()).toISOString();
+    await put(options, {
+      ...record,
+      status: "retrying",
+      error: "Step interrupted. Resume the run to retry.",
+      endedAt: at,
+      nextRetryAt: at,
+    });
+
+    return { wakeAt: at };
+  }
+
   if (record.attempt >= record.maxAttempts || !shouldRetry(cause, options.retry)) {
     return fail(options, cause);
   }
@@ -77,21 +91,40 @@ async function failAttempt(options: Runner, cause: unknown): Promise<{ wakeAt: s
   return { wakeAt: nextRetryAt };
 }
 
+async function invoke<T extends Json>(options: Runner, fn: () => T | Promise<T>) {
+  const call = () =>
+    options.timeoutMs === undefined
+      ? fn()
+      : withTimeout(
+          options.clock,
+          { milliseconds: options.timeoutMs, key: options.record.key },
+          fn,
+        );
+
+  // Command cancellation waits for the executor to reap the child before releasing ownership.
+  if (options.record.kind === "command" || !options.signal) {
+    return call();
+  }
+
+  return withAbort(options.signal, call);
+}
+
 async function execute<T extends Json>(
   options: Runner,
   fn: () => T | Promise<T>,
 ): Promise<{ output: T } | { wakeAt: string }> {
-  const { record, clock } = options;
+  const { record } = options;
   await put(options, { ...record, status: "running" });
   let output: T;
 
   try {
-    output =
-      options.timeoutMs === undefined
-        ? await fn()
-        : await withTimeout(clock, { milliseconds: options.timeoutMs, key: record.key }, fn);
+    output = await invoke(options, fn);
   } catch (cause) {
     return failAttempt(options, cause);
+  }
+
+  if (options.signal?.aborted) {
+    return failAttempt(options, options.signal.reason);
   }
 
   try {

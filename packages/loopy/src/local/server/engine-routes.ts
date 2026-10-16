@@ -1,4 +1,5 @@
 import { requireNonEmptyString } from "../../core/index.js";
+import { engineRunDetail } from "../../runtime/index.js";
 import { listLegacyRuns } from "../engine-local.js";
 import { json, type Route, type RouteDependencies } from "./routes.js";
 
@@ -9,7 +10,7 @@ async function detail({ engineStore, runtime }: Dependencies, id: string) {
   const run = await store.getRun(id);
 
   if (run) {
-    return json({ run, steps: await store.getSteps(id), logs: await store.getLogs(id) });
+    return json(await engineRunDetail(store, run));
   }
 
   const legacy = runtime();
@@ -52,10 +53,11 @@ export function engineRoutes(dependencies: Dependencies): Route[] {
       handle: async ({ url }) => {
         const slug = url.searchParams.get("slug") ?? undefined;
 
-        return json([
-          ...(await engineStore().listRuns({ slug })),
-          ...(await listLegacyRuns(home, slug)),
-        ]);
+        return json(
+          [...(await engineStore().listRuns({ slug })), ...(await listLegacyRuns(home, slug))].sort(
+            (a, b) => b.createdAt.localeCompare(a.createdAt),
+          ),
+        );
       },
     },
     {

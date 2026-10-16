@@ -1,49 +1,36 @@
-import type { ExecutionMode } from "../core/index.js";
-import {
-  CommandExecutionError,
-  CommandExitError,
-  type Executor,
-  type ResolvedCommand,
-} from "../runtime/index.js";
+import { CommandExecutionError, type Executor, type ResolvedCommand } from "../runtime/index.js";
 import { executeLocalCommand, localRunOptions } from "./process.js";
 import { secretRedactor } from "./secret-executor.js";
 import { SecretStore } from "./secrets.js";
 
 export class LocalExecutor implements Executor {
   private readonly sensitiveEnv: Record<string, string>;
+  private readonly redact: ReturnType<typeof secretRedactor>;
 
-  constructor(home?: string, secrets: readonly string[] = []) {
+  constructor({ home, secrets }: { home: string; secrets: readonly string[] }) {
     const store = new SecretStore(home);
     this.sensitiveEnv = Object.fromEntries(secrets.map((name) => [name, store.get(name)]));
+    this.redact = secretRedactor(Object.values(this.sensitiveEnv));
   }
 
-  async execute(
-    command: ResolvedCommand,
-    options: { cwd: string; mode: ExecutionMode; timeoutMs?: number },
-  ) {
-    const redact = secretRedactor(Object.values(this.sensitiveEnv));
+  async execute(command: ResolvedCommand, options: Parameters<Executor["execute"]>[1]) {
+    const redact = this.redact;
 
     try {
       const result = await executeLocalCommand(
         {
           ...command,
-          timeoutMs: options.timeoutMs ?? command.timeoutMs,
+          timeoutMs: options.timeoutMs,
         },
-        { ...localRunOptions(options.cwd, options.mode), sensitiveEnv: this.sensitiveEnv },
+        {
+          ...localRunOptions(options.workspace, options.mode),
+          sensitiveEnv: this.sensitiveEnv,
+          signal: options.signal,
+        },
       );
 
-      const output = { ...result, stdout: redact(result.stdout), stderr: redact(result.stderr) };
-
-      if (output.exitCode !== 0) {
-        throw new CommandExitError(output);
-      }
-
-      return output;
+      return { ...result, stdout: redact(result.stdout), stderr: redact(result.stderr) };
     } catch (error) {
-      if (error instanceof CommandExitError) {
-        throw error;
-      }
-
       if (error instanceof CommandExecutionError) {
         throw new CommandExecutionError(
           redact(error.message),

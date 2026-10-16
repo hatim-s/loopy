@@ -14,12 +14,8 @@ export async function requireRun(store: SqliteRunStore, id: string) {
   const run = await store.getRun(id);
 
   if (!run) {
-    throw new Error(`No run '${id}'. Use loopy runs to find a run ID.`);
+    throw new Error(`No run '${id}'. Use loopy runs to list run ids.`);
   }
 
   return run;
-}
-
-export function isTerminal(status: string) {
-  return status === "succeeded" || status === "failed" || status === "cancelled";
 }

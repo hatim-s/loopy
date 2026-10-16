@@ -36,7 +36,7 @@ async function resolveInput(workflow: Workflow, context: CliContext): Promise<Js
   return interactive ? promptInputs(workflow, supplied) : supplied;
 }
 
-export async function runRun(context: CliContext): Promise<void> {
+export async function runLegacyRun(context: CliContext): Promise<void> {
   const { home, cwd, values } = context;
   const saved = new Registry(home, cwd).get(requireTarget(context, "Slug"));
   const input = await resolveInput(saved.workflow, context);

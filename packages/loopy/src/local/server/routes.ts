@@ -30,7 +30,8 @@ export type RouteDependencies = {
   launch: (run: RunRecord, retryUncertain?: boolean) => void;
 };
 
-export function json<T>(data: T, status = 200): Response {
+// BOUNDARY: Response serialization accepts validated route payloads and errors.
+export function json(data: unknown, status = 200): Response {
   return Response.json(data, {
     status,
     headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" },

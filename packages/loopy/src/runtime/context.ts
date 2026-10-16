@@ -29,6 +29,7 @@ type ContextOptions = {
   activation: Activation;
   journal: StepJournal;
   logger: Logger;
+  signal?: AbortSignal;
   wrap?: ActivationScope;
 };
 
@@ -70,6 +71,7 @@ function createPerformer(options: ContextOptions) {
       retry,
       store: options.store,
       token: options.token,
+      signal: options.signal,
       timeoutMs: stepOptions.timeout === undefined ? undefined : durationMs(stepOptions.timeout),
     };
 
@@ -92,7 +94,8 @@ async function executeCommand(
   timeoutMs?: number,
 ) {
   const result = await options.executor.execute(command, {
-    cwd: options.cwd,
+    workspace: options.cwd,
+    signal: options.signal,
     mode: options.mode,
     timeoutMs,
   });

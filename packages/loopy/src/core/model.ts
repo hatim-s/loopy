@@ -189,6 +189,7 @@ export type EngineRun = {
   id: string;
   slug: string;
   bundleHash: string;
+  workspace: string;
   input: Json;
   status: EngineRunStatus;
   output?: Json;
@@ -246,3 +247,15 @@ export type Schedule = {
   lastFireKey?: string;
   nextFireAt: string;
 };
+
+export type EngineRunDetail = { run: EngineRun; steps: EngineStep[]; logs: EngineLog[] };
+
+export const TERMINAL_RUN_STATUSES = [
+  "succeeded",
+  "failed",
+  "cancelled",
+] as const satisfies readonly EngineRunStatus[];
+
+export function isTerminalRun(status: EngineRunStatus): boolean {
+  return TERMINAL_RUN_STATUSES.some((terminal) => terminal === status);
+}

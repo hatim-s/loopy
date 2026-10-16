@@ -12,8 +12,8 @@ import {
   SecretStore,
 } from "../src/local/index.js";
 import { prepareLaunch } from "../src/local/process.js";
-import { CommandExecutionError, CommandExitError } from "../src/runtime/index.js";
-import { startLoopy } from "../src/sdk/index.js";
+import { CommandExecutionError } from "../src/runtime/index.js";
+import { createLoopyRun } from "../src/sdk/host.js";
 
 const roots: string[] = [];
 
@@ -33,9 +33,9 @@ afterEach(() => {
 test("LocalExecutor runs printf in full mode with literal arguments", async () => {
   const cwd = directory();
 
-  const result = await new LocalExecutor().execute(
+  const result = await new LocalExecutor({ home: directory(), secrets: [] }).execute(
     { program: "printf", args: ["%s", "hello ; $HOME"] },
-    { cwd, mode: "full" },
+    { workspace: cwd, mode: "full" },
   );
 
   expect(result.stdout).toBe("hello ; $HOME");
@@ -62,54 +62,21 @@ test.skipIf(process.platform !== "darwin" || !existsSync("/usr/bin/sandbox-exec"
     expect(launch.args.join(" ")).not.toContain("private-sdk-value");
     expect(launch.stdin).toContain("private-sdk-value");
 
-    const result = await new LocalExecutor(home, ["SDK_TOKEN"]).execute(
-      { program: "printf", args: ["hello"] },
-      { cwd, mode: "sandbox" },
+    const result = await new LocalExecutor({ home, secrets: ["SDK_TOKEN"] }).execute(
+      { program: "/bin/sh", args: ["-c", 'printf %s "$SDK_TOKEN"'] },
+      { workspace: cwd, mode: "sandbox" },
     );
 
-    expect(result.stdout).toBe("hello");
+    expect(result.stdout).toBe("[redacted]");
   },
 );
-
-test("nonzero exit becomes CommandExitError carrying command output", async () => {
-  const executor = new LocalExecutor();
-
-  try {
-    await executor.execute(
-      { program: "/bin/sh", args: ["-c", "printf problem >&2; exit 7"] },
-      { cwd: directory(), mode: "full" },
-    );
-    throw new Error("Expected the command to fail.");
-  } catch (error) {
-    expect(error).toBeInstanceOf(CommandExitError);
-
-    if (!(error instanceof CommandExitError)) {
-      throw error;
-    }
-
-    expect(error.output.exitCode).toBe(7);
-    expect(error.output.stderr).toBe("problem");
-  }
-});
-
-test("timeout kills the real child and its descendants", async () => {
-  const cwd = directory();
-  await expect(
-    new LocalExecutor().execute(
-      { program: "/bin/sh", args: ["-c", "(sleep 0.4; touch survived) & wait"], timeoutMs: 100 },
-      { cwd, mode: "full" },
-    ),
-  ).rejects.toThrow("timed out");
-  await Bun.sleep(600);
-  expect(existsSync(join(cwd, "survived"))).toBe(false);
-});
 
 test("sensitive env is available to commands and redacted from output and errors", async () => {
   const home = directory();
   new SecretStore(home).set("SDK_TOKEN", "private-sdk-value");
-  const executor = new LocalExecutor(home, ["SDK_TOKEN"]);
+  const executor = new LocalExecutor({ home, secrets: ["SDK_TOKEN"] });
 
-  const options = { cwd: directory(), mode: "full" } satisfies Parameters<
+  const options = { workspace: directory(), mode: "full" } satisfies Parameters<
     LocalExecutor["execute"]
   >[1];
 
@@ -119,16 +86,17 @@ test("sensitive env is available to commands and redacted from output and errors
   );
 
   expect(result.stdout).toBe("[redacted]");
+
+  const failed = await executor.execute(
+    { program: "/bin/sh", args: ["-c", 'printf "%s" "$SDK_TOKEN" >&2; exit 2'] },
+    options,
+  );
+
+  expect(failed).toMatchObject({ exitCode: 2, stderr: "[redacted]" });
   await expect(
     executor.execute(
-      { program: "/bin/sh", args: ["-c", 'printf "%s" "$SDK_TOKEN" >&2; exit 2'] },
-      options,
-    ),
-  ).rejects.toThrow("[redacted]");
-  await expect(
-    executor.execute(
-      { program: "/bin/sh", args: ["-c", 'printf "%s" "$SDK_TOKEN"; sleep 5'], timeoutMs: 100 },
-      options,
+      { program: "/bin/sh", args: ["-c", 'printf "%s" "$SDK_TOKEN"; sleep 5'] },
+      { ...options, timeoutMs: 100 },
     ),
   ).rejects.toBeInstanceOf(CommandExecutionError);
 });
@@ -143,7 +111,7 @@ test("Daemon.tick executes a bundled SDK command with activation-time secrets an
     source,
     `import { loopy, command, step } from ${JSON.stringify(sdk)};
     export default loopy({ name: "queued", mode: "full", secrets: ["SDK_TOKEN"], run: async () => {
-      const printed = await command("printf", { program: "printf", args: ["%s", "daemon hello"], cwd: "nested" });
+      const printed = await command("pwd", { program: "/bin/pwd", args: [], cwd: "nested" });
       await command("secret", { program: "/bin/sh", args: ["-c", 'printf "%s" "$SDK_TOKEN" > token'] });
       return step("answer", () => printed.stdout);
     }});`,
@@ -157,30 +125,28 @@ test("Daemon.tick executes a bundled SDK command with activation-time secrets an
   const changed = await bundleLoopy(source, home);
   const loopy = await loadLoopy(bundle.path);
   const registry = new Loopies(home, cwd);
-  registry.save(loopy, source, bundle.hash);
+  registry.save(loopy, { source, bundleHash: bundle.hash });
   const store = openEngineStore(home);
 
   try {
-    await startLoopy({
+    await createLoopyRun({
       loopy,
       input: {},
       store,
-      executor: new LocalExecutor(),
-      cwd,
+      workspace: cwd,
       runId: "queued",
       bundleHash: bundle.hash,
-      detach: true,
     });
     new SecretStore(home).set("SDK_TOKEN", "resolved-at-activation");
 
-    registry.save(await loadLoopy(changed.path), source, changed.hash);
+    registry.save(await loadLoopy(changed.path), { source, bundleHash: changed.hash });
     expect(changed.hash).not.toBe(bundle.hash);
     rmSync(source);
     const errors: string[] = [];
 
     const daemon = localDaemon({
       home,
-      cwd,
+      cwd: directory(),
       store,
       onError: (error) => errors.push(error.message),
     });
@@ -190,11 +156,11 @@ test("Daemon.tick executes a bundled SDK command with activation-time secrets an
     expect(errors).toEqual([]);
     expect(await store.getRun("queued")).toMatchObject({
       status: "succeeded",
-      output: "daemon hello",
+      output: expect.stringMatching(/\/nested\n$/),
       bundleHash: bundle.hash,
     });
     expect(await store.getSteps("queued")).toMatchObject([
-      { key: "printf", kind: "command" },
+      { key: "pwd", kind: "command" },
       { key: "secret" },
       { key: "answer", kind: "function" },
     ]);
@@ -215,7 +181,7 @@ test("Daemon.tick pins the registry bundle when a schedule creates a run", async
     export default loopy({ name: "scheduled", run: () => step("answer", () => 42) });`,
   );
   const bundle = await bundleLoopy(source, home);
-  new Loopies(home, cwd).save(await loadLoopy(bundle.path), source, bundle.hash);
+  new Loopies(home, cwd).save(await loadLoopy(bundle.path), { source, bundleHash: bundle.hash });
   const store = openEngineStore(home);
   const daemon = localDaemon({ home, cwd, store });
 
@@ -238,3 +204,60 @@ test("Daemon.tick pins the registry bundle when a schedule creates a run", async
     store.close();
   }
 });
+
+for (const missing of ["secret", "bundle"]) {
+  test(`daemon fails a run with a missing ${missing} once and releases its owner`, async () => {
+    const cwd = directory();
+    const home = directory();
+    const source = join(cwd, "missing.loopy.ts");
+    const sdk = resolve(import.meta.dir, "../src/sdk/index.ts");
+    await Bun.write(
+      source,
+      `import { loopy } from ${JSON.stringify(sdk)};
+      export default loopy({ name: "missing", secrets: ["ABSENT_TOKEN"], run: () => 1 });`,
+    );
+    const bundle = await bundleLoopy(source, home);
+    const loopy = await loadLoopy(bundle.path);
+    const store = openEngineStore(home);
+    const errors: { message: string; runId?: string }[] = [];
+
+    const daemon = localDaemon({
+      home,
+      cwd,
+      store,
+      onError: (error, run) => errors.push({ message: error.message, runId: run?.id }),
+    });
+
+    try {
+      await createLoopyRun({
+        loopy,
+        input: {},
+        store,
+        runId: "missing",
+        bundleHash: bundle.hash,
+        workspace: cwd,
+      });
+
+      if (missing === "bundle") {
+        rmSync(bundle.path);
+      }
+
+      expect(await daemon.tick()).toEqual({ fired: 0, activated: 1 });
+      expect(await store.getRun("missing")).toMatchObject({
+        status: "failed",
+        error: expect.any(String),
+      });
+      expect((await store.getRun("missing"))?.owner).toBeUndefined();
+      expect(errors).toHaveLength(1);
+      expect(errors[0]?.runId).toBe("missing");
+      expect(errors[0]?.message).toContain(
+        missing === "secret" ? "ABSENT_TOKEN" : "Missing bundle",
+      );
+      expect(await daemon.tick()).toEqual({ fired: 0, activated: 0 });
+      expect(errors).toHaveLength(1);
+    } finally {
+      await daemon.stop();
+      store.close();
+    }
+  });
+}

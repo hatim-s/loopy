@@ -1,45 +1,24 @@
 import { setTimeout } from "node:timers/promises";
-import { LocalExecutor, type SqliteRunStore } from "../local/index.js";
-import { activateLoopy, type Loopy } from "../sdk/index.js";
+import type { LocalExecutor, SqliteRunStore } from "../local/index.js";
+import { activateLoopy, type Loopy } from "../sdk/host.js";
 import { requireRun } from "./engine-store.js";
 import { printJson, report } from "./output.js";
 
 type InlineOptions = {
-  home: string;
-  cwd: string;
+  executor: LocalExecutor;
   store: SqliteRunStore;
   loopy: Loopy;
   runId: string;
 };
 
 export async function inlineRun(options: InlineOptions) {
-  const { home, cwd, store, loopy, runId } = options;
+  const { store, runId } = options;
   const controller = new AbortController();
   const interrupt = () => controller.abort();
   process.once("SIGINT", interrupt);
 
   try {
-    let run = await requireRun(store, runId);
-
-    while (!controller.signal.aborted && (run.status === "queued" || run.status === "suspended")) {
-      if (run.wakeAt && !(await waitForWake(runId, run.wakeAt, controller.signal))) {
-        break;
-      }
-
-      await activateLoopy({
-        loopy,
-        store,
-        executor: new LocalExecutor(home, loopy.secrets),
-        runId,
-        cwd,
-      });
-      run = await requireRun(store, runId);
-
-      if (run.status === "suspended" && !run.wakeAt) {
-        break;
-      }
-    }
-
+    await runActivations(options, controller.signal);
     const result = await requireRun(store, runId);
     printJson(result);
 
@@ -48,6 +27,24 @@ export async function inlineRun(options: InlineOptions) {
     }
   } finally {
     process.removeListener("SIGINT", interrupt);
+  }
+}
+
+async function runActivations(options: InlineOptions, signal: AbortSignal) {
+  const { store, loopy, runId, executor } = options;
+  let run = await requireRun(store, runId);
+
+  while (!signal.aborted && (run.status === "queued" || run.status === "suspended")) {
+    if (run.wakeAt && !(await waitForWake(runId, run.wakeAt, signal))) {
+      return;
+    }
+
+    await activateLoopy({ loopy, store, executor, signal, runId });
+    run = await requireRun(store, runId);
+
+    if (run.status === "suspended" && !run.wakeAt) {
+      return;
+    }
   }
 }
 

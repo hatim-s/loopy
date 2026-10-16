@@ -19,7 +19,7 @@ async function projectRoot(context: CliContext, source: string, isDirectory: boo
   return isDirectory ? source : dirname(source);
 }
 
-export async function runSave(context: CliContext): Promise<void> {
+export async function runLegacySave(context: CliContext): Promise<void> {
   const source = resolve(requireTarget(context, "TypeScript file or directory"));
   const isDirectory = (await stat(source)).isDirectory();
   const registry = new Registry(context.home, await projectRoot(context, source, isDirectory));

@@ -2,8 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { compileWorkflow, type Workflow } from "../core/index.js";
-import { isLoopy, type Loopy } from "../sdk/index.js";
+import { isLoopy, type Loopy } from "../sdk/host.js";
 import { defaultHome } from "./home.js";
 
 export async function bundleLoopy(file: string, home = defaultHome()) {
@@ -25,13 +24,18 @@ export async function bundleLoopy(file: string, home = defaultHome()) {
   return { hash, path };
 }
 
-export async function importLoopy(path: string): Promise<Loopy | Workflow> {
+// BOUNDARY: Only the save or load caller can decide whether an imported default is an SDK definition.
+export async function importLoopy(path: string) {
   const module: { default?: unknown } = await import(pathToFileURL(path).href);
 
-  return isLoopy(module.default) ? module.default : compileWorkflow(module.default);
+  return module.default;
 }
 
 export async function loadLoopy(path: string): Promise<Loopy> {
+  if (!(await Bun.file(path).exists())) {
+    throw new Error(`Missing bundle '${path}'. Save the loopy again and start a new run.`);
+  }
+
   const value = await importLoopy(path);
 
   if (!isLoopy(value)) {

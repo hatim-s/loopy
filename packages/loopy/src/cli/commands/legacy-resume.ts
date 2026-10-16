@@ -2,7 +2,7 @@ import { type CliContext, requireTarget } from "../context.js";
 import { withLocalRuntime } from "../local-runtime.js";
 import { executeRun } from "../run-execution.js";
 
-export async function runResume(context: CliContext): Promise<void> {
+export async function runLegacyResume(context: CliContext): Promise<void> {
   const { values } = context;
 
   if (values.full || values.input || values.cwd) {

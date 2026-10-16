@@ -14,7 +14,7 @@ export async function runDaemon(context: CliContext): Promise<void> {
       store,
       concurrency:
         context.values.concurrency === undefined ? undefined : Number(context.values.concurrency),
-      onError: (error) => report(error.message),
+      onError: (error, run) => report(run ? `Run ${run.id}: ${error.message}` : error.message),
     });
 
     const stop = () => {

@@ -2,7 +2,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { EngineRun } from "../core/index.js";
 import { Daemon } from "../runtime/index.js";
-import { type Loopy, loopyActivation } from "../sdk/index.js";
+import { type Loopy, loopyActivation } from "../sdk/host.js";
 import { loadLoopy } from "./bundle.js";
 import { LocalExecutor } from "./engine-executor.js";
 import { SqliteRunStore } from "./engine-store.js";
@@ -15,11 +15,10 @@ export function openEngineStore(home: string) {
   return new SqliteRunStore(join(home, "engine.sqlite"));
 }
 
-export async function loadRunLoopy(home: string, cwd: string, run: EngineRun): Promise<Loopy> {
-  const registry = new Loopies(home, cwd);
-  const hash = run.bundleHash || registry.get(run.slug).bundleHash;
+export async function loadRunLoopy(home: string, run: EngineRun): Promise<Loopy> {
+  const registry = new Loopies(home, run.workspace);
 
-  return loadLoopy(registry.bundlePath(hash));
+  return loadLoopy(registry.bundlePath(run.bundleHash));
 }
 
 export function localDaemon(options: {
@@ -34,17 +33,16 @@ export function localDaemon(options: {
 
   return new Daemon({
     ...options,
-    executor: new LocalExecutor(),
-    cwdFor: () => cwd,
+    workspace: cwd,
     bundleHashFor: (slug) => registry.get(slug).bundleHash,
-    modeFor: () => "sandbox",
-    loadWorkflow: async (run) => {
-      const loopy = await loadRunLoopy(home, cwd, run);
+    prepare: async (run) => {
+      const loopy = await loadRunLoopy(home, run);
 
       return {
         ...loopyActivation(loopy),
-        executor: new LocalExecutor(home, loopy.secrets),
+        executor: new LocalExecutor({ home, secrets: loopy.secrets }),
         mode: loopy.mode,
+        cwd: run.workspace,
       };
     },
   });

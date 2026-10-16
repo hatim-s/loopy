@@ -9,7 +9,11 @@ import {
 } from "../src/runtime/index.js";
 import { FakeExecutor, newRun } from "./engine-fixture.js";
 
-function fixture(options: Partial<ConstructorParameters<typeof Daemon>[0]> = {}) {
+function fixture(
+  options: Partial<ConstructorParameters<typeof Daemon>[0]> & {
+    workflowFor?: (run: EngineRun) => Promise<ActivationOptions["workflow"]>;
+  } = {},
+) {
   let time = Date.parse(newRun().createdAt);
 
   const clock: Clock = {
@@ -25,10 +29,14 @@ function fixture(options: Partial<ConstructorParameters<typeof Daemon>[0]> = {})
   const daemon = new Daemon({
     store,
     clock,
-    executor: new FakeExecutor(),
-    loadWorkflow: async () => async (ctx) => ctx.input,
-    cwdFor: () => "/workspace",
-    modeFor: () => "sandbox",
+    workspace: "/workspace",
+    bundleHashFor: () => "bundle",
+    prepare: async (run) => ({
+      workflow: options.workflowFor ? await options.workflowFor(run) : async (ctx) => ctx.input,
+      executor: new FakeExecutor(),
+      cwd: run.workspace,
+      mode: "sandbox",
+    }),
     onError: (error, run) => errors.push({ error, run }),
     ...options,
   });
@@ -62,7 +70,11 @@ test("a due schedule fires once per key and the next minute fires a new run", as
   expect(await f.daemon.tick()).toEqual({ fired: 0, activated: 0 });
   const runs = await f.store.listRuns();
   expect(runs).toHaveLength(1);
-  expect(runs[0]).toMatchObject({ slug: "test", bundleHash: "", output: { scheduled: true } });
+  expect(runs[0]).toMatchObject({
+    slug: "test",
+    bundleHash: "bundle",
+    output: { scheduled: true },
+  });
   expect(runs[0]?.id).toMatch(/^[\da-f-]{36}$/u);
   expect(await f.store.listSchedules()).toEqual([
     schedule({
@@ -119,7 +131,7 @@ test("a sleeping run activates again only after its wake time", async () => {
     return "awake";
   };
 
-  const f = fixture({ loadWorkflow: async () => workflow });
+  const f = fixture({ workflowFor: async () => workflow });
   await f.store.createRun(newRun());
   expect((await f.daemon.tick()).activated).toBe(1);
   expect(await f.store.getRun("run")).toMatchObject({
@@ -140,7 +152,7 @@ test("six runs respect concurrency two even with overlapping ticks", async () =>
 
   const f = fixture({
     concurrency: 2,
-    loadWorkflow: async () => async (ctx) =>
+    workflowFor: async () => async (ctx) =>
       ctx.step("hold", async () => {
         active++;
         peak = Math.max(peak, active);
@@ -176,7 +188,7 @@ test("a throwing loader reports its run and other runs still activate", async ()
   const failure = new Error("Workflow could not load. Save the workflow again.");
 
   const f = fixture({
-    loadWorkflow: async (run) => {
+    workflowFor: async (run) => {
       if (run.id === "bad") {
         throw failure;
       }
@@ -187,10 +199,12 @@ test("a throwing loader reports its run and other runs still activate", async ()
 
   await f.store.createRun({ ...newRun(), id: "bad" });
   await f.store.createRun(newRun());
-  expect(await f.daemon.tick()).toEqual({ fired: 0, activated: 1 });
+  expect(await f.daemon.tick()).toEqual({ fired: 0, activated: 2 });
   expect(f.errors).toEqual([{ error: failure, run: { ...newRun(), id: "bad" } }]);
   expect((await f.store.getRun("run"))?.status).toBe("succeeded");
-  expect((await f.store.getRun("bad"))?.status).toBe("queued");
+  expect((await f.store.getRun("bad"))?.status).toBe("failed");
+  expect((await f.store.getRun("bad"))?.owner).toBeUndefined();
+  expect(await f.daemon.tick()).toEqual({ fired: 0, activated: 0 });
 });
 
 test("a throwing activation releases ownership and does not block other runs", async () => {
@@ -224,7 +238,7 @@ test("stop waits for an in-flight activation and the run loop to return", async 
 
   const f = fixture({
     concurrency: 1,
-    loadWorkflow: async () => async (ctx) =>
+    workflowFor: async () => async (ctx) =>
       ctx.step("hold", async () => {
         entered.resolve();
         await gate.promise;
@@ -358,7 +372,7 @@ test("a held activation leaves capacity for new work and overdue schedules", asy
   const f = fixture({
     concurrency: 2,
     sleep: sleeping.sleep,
-    loadWorkflow: async (run) => async () => {
+    workflowFor: async (run) => async () => {
       if (run.id === "held") {
         entered.resolve();
         await gate.promise;

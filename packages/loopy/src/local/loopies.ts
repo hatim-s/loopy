@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { validateSlug } from "../core/index.js";
-import { isStandardSchema, type Loopy } from "../sdk/index.js";
+import { isStandardSchema, type Loopy } from "../sdk/host.js";
 import { canonicalPath, withLockDirectory, writeFileAtomically } from "./fs.js";
 import { parseSavedLoopy, type SavedLoopy } from "./registry/saved-loopy.js";
 import { projectRoot } from "./registry/workflow-files.js";
@@ -12,20 +12,24 @@ function readEntry(file: string) {
 
 export class Loopies {
   readonly project: string;
-  private readonly directories: string[];
+  readonly projectDirectory: string;
+  readonly globalDirectory: string;
 
   constructor(
     readonly home: string,
     cwd: string,
   ) {
     this.project = projectRoot(cwd);
-    this.directories = [join(this.project, ".loopy", "loopies"), join(home, "loopies")];
+    this.projectDirectory = join(this.project, ".loopy", "loopies");
+    this.globalDirectory = join(home, "loopies");
   }
 
   private files(slug: string) {
     validateSlug(slug);
 
-    return this.directories.map((directory) => join(directory, `${slug}.json`));
+    return [this.projectDirectory, this.globalDirectory].map((directory) =>
+      join(directory, `${slug}.json`),
+    );
   }
 
   has(slug: string): boolean {
@@ -45,7 +49,7 @@ export class Loopies {
   list(): SavedLoopy[] {
     const entries = new Map<string, SavedLoopy>();
 
-    for (const directory of [...this.directories].reverse()) {
+    for (const directory of [this.globalDirectory, this.projectDirectory]) {
       if (!existsSync(directory)) {
         continue;
       }
@@ -59,14 +63,18 @@ export class Loopies {
     return [...entries.values()].sort((a, b) => a.slug.localeCompare(b.slug));
   }
 
-  save(loopy: Loopy, source: string, bundleHash: string, replace = false): SavedLoopy {
+  save(
+    loopy: Loopy,
+    {
+      source,
+      bundleHash,
+      replace = false,
+    }: { source: string; bundleHash: string; replace?: boolean },
+  ): SavedLoopy {
     const owner = canonicalPath(source);
     const files = this.files(loopy.name);
-    const file = files[loopy.scope === "project" ? 0 : 1];
-
-    if (!file) {
-      throw new Error("No registry directory. Choose project or global scope.");
-    }
+    const directory = loopy.scope === "project" ? this.projectDirectory : this.globalDirectory;
+    const file = join(directory, `${loopy.name}.json`);
 
     mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
 

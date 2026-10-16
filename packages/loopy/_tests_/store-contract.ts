@@ -35,6 +35,7 @@ type StoreFactory = () => RunStore | Promise<RunStore>;
 async function fixture(makeStore: StoreFactory) {
   const store = await makeStore();
   await store.createRun(newRun());
+  expect((await store.getRun("run"))?.workspace).toBe("/workspace");
 
   return store;
 }

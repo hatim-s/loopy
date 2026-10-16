@@ -6,8 +6,7 @@ import {
   setOwnProperty,
   validateSlug,
 } from "../../core/index.js";
-import { parseCron } from "../../runtime/index.js";
-import type { Loopy, RecordSpec } from "../../sdk/index.js";
+import { type Loopy, parseSchedule, type RecordSpec } from "../../sdk/host.js";
 
 export type SavedLoopy = {
   slug: string;
@@ -38,26 +37,6 @@ function inputSummary(value: unknown) {
   return fields;
 }
 
-// BOUNDARY: A registry schedule is untyped JSON until its cron and zone are checked.
-function scheduleSummary(value: unknown) {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  const schedule = requireRecord(value, "Saved schedule");
-  const cron = requireString(schedule.cron, "Schedule cron");
-  parseCron(cron);
-
-  const tz =
-    schedule.tz === undefined ? undefined : requireString(schedule.tz, "Schedule timezone");
-
-  if (tz !== undefined) {
-    new Intl.DateTimeFormat("en", { timeZone: tz });
-  }
-
-  return { cron, tz };
-}
-
 // BOUNDARY: Registry entries are validated once when their JSON is read.
 export function parseSavedLoopy(input: unknown): SavedLoopy {
   const value = requireRecord(input, "Saved loopy");
@@ -76,7 +55,7 @@ export function parseSavedLoopy(input: unknown): SavedLoopy {
     description:
       value.description === undefined ? undefined : requireString(value.description, "description"),
     input: inputSummary(value.input),
-    schedule: scheduleSummary(value.schedule),
+    schedule: parseSchedule(value.schedule),
     mode: requireOneOf(value.mode, ["sandbox", "full"], "mode"),
     secrets: value.secrets,
     savedAt: requireString(value.savedAt, "saved at"),

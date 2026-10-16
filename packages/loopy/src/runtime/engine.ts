@@ -16,6 +16,7 @@ export type ActivationOptions = {
   cwd: string;
   mode: ExecutionMode;
   clock?: Clock;
+  signal?: AbortSignal;
   wrap?: ActivationScope;
 };
 
@@ -42,25 +43,47 @@ function startWorkflow(
     });
 }
 
-async function settle(
+function settledOutcome(
+  activation: Activation,
+  options: ActivationOptions,
+): ActivationOutcome | undefined {
+  if (activation.running !== 0) {
+    return undefined;
+  }
+
+  if (options.signal?.aborted) {
+    activation.close();
+
+    return {
+      status: "suspended",
+      wakeAt: new Date((options.clock ?? SYSTEM_CLOCK).now()).toISOString(),
+    };
+  }
+
+  if (!activation.closed) {
+    return undefined;
+  }
+
+  if (activation.fatal) {
+    return { status: "failed", error: errorMessage(activation.fatal) };
+  }
+
+  return activation.outcome;
+}
+
+async function drainActivation(
   activation: Activation,
   context: LoopyContext,
-  workflow: ActivationOptions["workflow"],
-  wrap?: ActivationOptions["wrap"],
+  options: ActivationOptions,
 ): Promise<ActivationOutcome> {
-  startWorkflow(activation, context, workflow, wrap);
+  startWorkflow(activation, context, options.workflow, options.wrap);
 
   while (true) {
     await activation.tick();
+    const outcome = settledOutcome(activation, options);
 
-    if (activation.running === 0 && activation.closed) {
-      if (activation.fatal) {
-        return { status: "failed", error: errorMessage(activation.fatal) };
-      }
-
-      if (activation.outcome) {
-        return activation.outcome;
-      }
+    if (outcome) {
+      return outcome;
     }
 
     if (activation.deliver()) {
@@ -79,6 +102,17 @@ async function settle(
     }
 
     await activation.changed;
+  }
+}
+
+async function settle(activation: Activation, context: LoopyContext, options: ActivationOptions) {
+  const interrupt = () => activation.close();
+  options.signal?.addEventListener("abort", interrupt, { once: true });
+
+  try {
+    return await drainActivation(activation, context, options);
+  } finally {
+    options.signal?.removeEventListener("abort", interrupt);
   }
 }
 
@@ -126,7 +160,7 @@ async function executeActivation(
   });
 
   const context = createContext({ ...options, run, token, clock, activation, journal, logger });
-  let outcome = await settle(activation, context, options.workflow, options.wrap);
+  let outcome = await settle(activation, context, { ...options, clock });
 
   try {
     await logger.flush();

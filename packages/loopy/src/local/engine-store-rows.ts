@@ -12,7 +12,7 @@ export const SQL = {
   nextWakeAt:
     "SELECT MIN(wake_at) AS wake_at FROM runs WHERE status='suspended' AND owner_token IS NULL",
   run: "SELECT * FROM runs WHERE id=?",
-  createRun: `INSERT INTO runs VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+  createRun: `INSERT INTO runs VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
   listRuns: "SELECT * FROM runs ORDER BY rowid",
   listRunsBySlug: "SELECT * FROM runs WHERE slug=? ORDER BY rowid",
   listRunsByStatus: "SELECT * FROM runs WHERE status=? ORDER BY rowid",
@@ -48,6 +48,7 @@ export function rowToRun(row: RunRow): EngineRun {
     id: row.id,
     slug: row.slug,
     bundleHash: row.bundle_hash,
+    workspace: row.workspace,
     input: decode(row.input_json),
     status: row.status,
     createdAt: row.created_at,

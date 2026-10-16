@@ -31,6 +31,7 @@ export type {
   ConditionNode,
   EngineLog,
   EngineRun,
+  EngineRunDetail,
   EngineRunStatus,
   EngineStep,
   ExecuteCommand,
@@ -65,6 +66,8 @@ export type {
   WorkflowSummary,
   Workspace,
 } from "./model.js";
+
+export { isTerminalRun, TERMINAL_RUN_STATUSES } from "./model.js";
 
 export { validateEnvironmentName, validateSecretName, validateSlug } from "./names.js";
 

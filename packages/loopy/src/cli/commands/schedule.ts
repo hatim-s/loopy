@@ -1,6 +1,6 @@
 import { Loopies, loadLoopy } from "../../local/index.js";
 import { assertJson, nextFire, parseCron } from "../../runtime/index.js";
-import { type CliContext, requireArgument, requireTarget } from "../context.js";
+import { type CliContext, requireTarget } from "../context.js";
 import { withEngineStore } from "../engine-store.js";
 import { printJson } from "../output.js";
 import { jsonInput } from "../sdk-input.js";
@@ -22,8 +22,13 @@ export async function runSchedule(context: CliContext): Promise<void> {
       return;
     }
 
-    const cron = requireArgument(context.values.cron, "--cron");
-    const tz = context.values.tz ?? "UTC";
+    const cron = context.values.cron ?? saved.schedule?.cron;
+
+    if (!cron) {
+      throw new Error(`No schedule for '${slug}'. Pass --cron or add schedule to loopy().`);
+    }
+
+    const tz = context.values.tz ?? saved.schedule?.tz ?? "UTC";
     const loopy = await loadLoopy(registry.bundlePath(saved.bundleHash));
     const input = await loopy.validateInput(await jsonInput(context));
     assertJson(input, "Schedule input");
