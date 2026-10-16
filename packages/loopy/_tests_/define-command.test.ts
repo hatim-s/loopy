@@ -135,3 +135,86 @@ test.each([
   expect(f.result.status).toBe("succeeded");
   expect(f.executor.calls[0]?.args).toEqual(expected);
 });
+
+test("descriptor construction rejects flag aliases sharing a CLI option", () => {
+  expect(() =>
+    defineCommand({
+      key: "test.alias",
+      program: "probe",
+      flags: {
+        format: { cli: "--format", kind: "string" },
+        alias: { cli: "--format", kind: "string" },
+      },
+      preset: { flags: { format: "machine" } },
+      parse: ({ stdout }) => stdout,
+    }),
+  ).toThrow(
+    "Flags 'format' and 'alias' share CLI option '--format'. Give each flag a unique CLI option.",
+  );
+});
+
+test("descriptor construction validates merged platform flag identities", () => {
+  expect(() =>
+    defineCommand({
+      key: "test.alias",
+      program: "probe",
+      flags: { format: { cli: "--format", kind: "string" } },
+      variants: { linux: { flags: { alias: { cli: "--format", kind: "string" } } } },
+    }),
+  ).toThrow(
+    "Flags 'format' and 'alias' share CLI option '--format'. Give each flag a unique CLI option.",
+  );
+});
+
+test("parsed input protects preset CLI options even if a descriptor gains an alias", async () => {
+  const alias = { cli: "--other-format", kind: "string" as const };
+  const flags = { format: { cli: "--format", kind: "string" } as const, alias: { ...alias } };
+
+  const parsed = defineCommand({
+    key: "test.alias",
+    program: "probe",
+    flags,
+    preset: { flags: { format: "machine" } },
+    parse: ({ stdout }) => stdout,
+  });
+
+  flags.alias.cli = "--format";
+  const f = await execute(() => parsed({ flags: { alias: "custom" } }));
+  expect(f.result).toEqual({
+    status: "failed",
+    error: "Flag 'alias' changes the parsed output format. Use .raw() to supply this flag.",
+  });
+  expect(f.executor.calls).toHaveLength(0);
+});
+
+test("prefixed options have distinct identities for validation and presets", async () => {
+  const parsed = defineCommand({
+    key: "test.prefixed",
+    program: "probe",
+    flags: {
+      name: { cli: "-name", kind: "string" },
+      notName: { cli: "-name", kind: "string", prefix: ["!"] },
+    },
+    preset: { flags: { name: "machine" } },
+    parse: ({ stdout }) => stdout,
+  });
+
+  const f = await execute(() => parsed({ flags: { notName: "custom" } }));
+  expect(f.result).toMatchObject({ status: "succeeded" });
+  expect(f.executor.calls[0]?.args).toEqual(["-name", "machine", "!", "-name", "custom"]);
+});
+
+test("identical prefixed CLI options are rejected on unparsed descriptors", () => {
+  expect(() =>
+    defineCommand({
+      key: "test.prefixed",
+      program: "probe",
+      flags: {
+        name: { cli: "-name", kind: "string", prefix: ["!"] },
+        alias: { cli: "-name", kind: "string", prefix: ["!"] },
+      },
+    }),
+  ).toThrow(
+    "Flags 'name' and 'alias' share CLI option '-name'. Give each flag a unique CLI option.",
+  );
+});

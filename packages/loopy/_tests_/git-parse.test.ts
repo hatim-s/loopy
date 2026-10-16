@@ -41,6 +41,7 @@ for (const platform of ["darwin", "linux"]) {
       upstream: "origin/main",
       ahead: 1,
       behind: 1,
+      stashes: 0,
       staged: [
         { path: "binary.bin", status: "modified" },
         { path: "rename new.txt", status: "renamed", from: "rename old.txt" },
@@ -55,6 +56,7 @@ for (const platform of ["darwin", "linux"]) {
       upstream: null,
       ahead: 0,
       behind: 0,
+      stashes: 0,
       staged: [],
       unstaged: [],
       untracked: [],
@@ -256,7 +258,7 @@ test("parser errors fail the command step before storing output", async () => {
 
   const definition = loopy({
     name: "invalid",
-    run: () => git.status({}, { retry: { attempts: 1 } }),
+    run: () => git.status(),
   });
 
   expect(
@@ -278,9 +280,26 @@ test("parser errors fail the command step before storing output", async () => {
     error: "Unexpected git status output line: ok. Report this with the git version.",
   });
   expect(stored).not.toHaveProperty("output");
+  expect(executor.calls).toHaveLength(1);
 });
 
 function compileOnlyChecks() {
+  // @ts-expect-error Short output does not use porcelain v2.
+  git.status({ flags: { short: true } });
+  // @ts-expect-error Name-only output does not contain diff counts.
+  git.diff({ flags: { nameOnly: true } });
+  // @ts-expect-error Diff statistics are not numstat records.
+  git.diff({ flags: { stat: true } });
+  // @ts-expect-error Numstat output does not contain name-status records.
+  git.diffNames({ flags: { numstat: true } });
+  // @ts-expect-error Graph decorations corrupt log records.
+  git.log({ flags: { graph: true } });
+  // @ts-expect-error One-line output replaces the log format.
+  git.log({ flags: { oneline: true } });
+  // @ts-expect-error The current branch name is not a branch record.
+  git.branch({ flags: { showCurrent: true } });
+  // @ts-expect-error Tag deletion does not list tag records.
+  git.tag({ flags: { delete: true } });
   // @ts-expect-error The parser owns its porcelain format.
   git.status({ flags: { porcelain: "v1" } });
   git.status.raw({ flags: { porcelain: "v1" } });
@@ -399,4 +418,56 @@ test("raw calls omit presets and preserve the command result", async () => {
     }),
   ).toMatchObject({ status: "succeeded", output: executor.result });
   expect(executor.calls[0]?.args).toEqual(["status", "--porcelain=v1"]);
+});
+
+test("status accepts the porcelain v2 stash header", async () => {
+  expect(parseStatus(result(await fixture("status-stash", "linux"))).stashes).toBe(3);
+  expect(parseStatus(result("")).stashes).toBe(0);
+  expect(() => parseStatus(result("# stash invalid\0"))).toThrow(
+    "Unexpected git status output line: # stash invalid. Report this with the git version.",
+  );
+});
+
+const excludedCalls = [
+  [git.status, "short", "--short"],
+  [git.diff, "nameOnly", "--name-only"],
+  [git.diff, "stat", "--stat"],
+  [git.diff, "nameStatus", "--name-status"],
+  [git.diff, "quiet", "--quiet"],
+  [git.diffNames, "numstat", "--numstat"],
+  [git.diffNames, "stat", "--stat"],
+  [git.diffNames, "nameOnly", "--name-only"],
+  [git.log, "graph", "--graph"],
+  [git.log, "oneline", "--oneline"],
+  [git.branch, "showCurrent", "--show-current"],
+  [git.branch, "delete", "--delete"],
+  [git.tag, "delete", "--delete"],
+] as const;
+
+test.each(excludedCalls)("parsed %p rejects %s and raw retains it", async (call, name, cli) => {
+  const executor = new FakeExecutor();
+  const store = new MemoryRunStore();
+  const flags = { [name]: true };
+  const options = { executor, store, cwd: "/workspace", input: {}, bundleHash: "" };
+
+  const failed = await startLoopy({
+    ...options,
+    runId: "excluded",
+    loopy: loopy({ name: "excluded", run: async () => await call({ flags }) }),
+  });
+
+  expect(failed).toEqual({
+    status: "failed",
+    error: `Flag '${name}' changes the parsed output format. Use .raw() to supply this flag.`,
+  });
+  expect(executor.calls).toHaveLength(0);
+
+  const raw = await startLoopy({
+    ...options,
+    runId: "raw-excluded",
+    loopy: loopy({ name: "raw-excluded", run: () => call.raw({ flags }) }),
+  });
+
+  expect(raw).toMatchObject({ status: "succeeded", output: executor.result });
+  expect(executor.calls[0]?.args).toContain(cli);
 });

@@ -104,6 +104,7 @@ export const change = {
   }),
   branch: defineCommand({
     parse: parseBranch,
+    exclude: ["showCurrent", "delete", "force"],
     preset: {
       flags: {
         format:
@@ -139,6 +140,7 @@ export const change = {
   }),
   tag: defineCommand({
     parse: parseTag,
+    exclude: ["delete", "annotate", "message"],
     preset: { flags: { format: "%(refname:short)%00%(objectname)%00%(taggerdate:iso-strict)" } },
     namespace: "git",
     name: "tag",

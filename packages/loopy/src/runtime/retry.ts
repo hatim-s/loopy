@@ -1,4 +1,12 @@
+import { errorMessage } from "../core/index.js";
 import { CommandExitError } from "./executor.js";
+
+export class StepParseError extends Error {
+  constructor(cause: unknown) {
+    super(errorMessage(cause), { cause });
+    this.name = "StepParseError";
+  }
+}
 
 export type RetryPolicy = { attempts?: number; backoff?: "exponential"; retryOn?: "exit" };
 
@@ -11,5 +19,9 @@ export function retryDelayMs(attempt: number): number {
 }
 
 export function shouldRetry(cause: unknown, policy: RetryPolicy): boolean {
+  if (cause instanceof StepParseError) {
+    return false;
+  }
+
   return !(cause instanceof CommandExitError) || policy.retryOn === "exit";
 }

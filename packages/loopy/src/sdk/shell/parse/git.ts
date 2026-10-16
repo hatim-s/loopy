@@ -17,6 +17,7 @@ export type Status = {
   unstaged: Change[];
   untracked: string[];
   conflicts: Conflict[];
+  stashes: number;
 };
 
 export type LogEntry = {
@@ -131,6 +132,18 @@ function addChange(target: Change[], code: string, path: string, from?: string) 
 }
 
 function statusHeader(result: Status, line: string) {
+  const stash = /^# stash (\d+)$/.exec(line);
+
+  if (stash) {
+    result.stashes = Number(stash[1]);
+
+    return;
+  }
+
+  statusBranchHeader(result, line);
+}
+
+function statusBranchHeader(result: Status, line: string) {
   if (line.startsWith("# branch.oid ")) {
     const oid = line.slice(13);
 
@@ -211,6 +224,7 @@ export function parseStatus({ stdout }: CommandResult): Status {
     unstaged: [],
     untracked: [],
     conflicts: [],
+    stashes: 0,
   };
 
   const fields = nulFields(stdout, "status");

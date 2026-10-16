@@ -12,6 +12,7 @@ import {
 export const inspect = {
   status: defineCommand({
     parse: parseStatus,
+    exclude: ["short"],
     preset: { flags: { porcelain: "v2", z: true, branch: true } },
     namespace: "git",
     name: "status",
@@ -25,6 +26,7 @@ export const inspect = {
       },
       branch: { cli: "--branch", kind: "boolean" },
       short: { cli: "--short", kind: "boolean" },
+      showStash: { cli: "--show-stash", kind: "boolean" },
       ignored: { cli: "--ignored", kind: "boolean" },
       z: { cli: "-z", kind: "boolean" },
       untrackedFiles: {
@@ -39,6 +41,7 @@ export const inspect = {
   }),
   diff: defineCommand({
     parse: parseDiff,
+    exclude: ["stat", "quiet", "unified", "nameOnly", "nameStatus"],
     preset: { flags: { numstat: true, z: true } },
     namespace: "git",
     name: "diff",
@@ -59,6 +62,7 @@ export const inspect = {
   }),
   diffNames: defineCommand({
     parse: parseDiffNames,
+    exclude: ["stat", "quiet", "unified", "nameOnly", "numstat"],
     preset: { flags: { nameStatus: true, z: true } },
     namespace: "git",
     name: "diffNames",
@@ -79,6 +83,7 @@ export const inspect = {
   }),
   log: defineCommand({
     parse: parseLog,
+    exclude: ["graph", "oneline"],
     preset: { flags: { format: LOG_FORMAT, z: true } },
     namespace: "git",
     name: "log",

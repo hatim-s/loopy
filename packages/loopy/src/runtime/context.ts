@@ -12,7 +12,7 @@ import { type Duration, durationMs } from "./duration.js";
 import { CommandExitError, type Executor, type ResolvedCommand } from "./executor.js";
 import type { StepJournal } from "./journal.js";
 import type { Logger } from "./logger.js";
-import { type RetryPolicy, resolveRetry } from "./retry.js";
+import { type RetryPolicy, resolveRetry, StepParseError } from "./retry.js";
 import { runSleep, runStep, StepFailedError } from "./step-runner.js";
 import type { RunStore } from "./store.js";
 
@@ -104,6 +104,18 @@ async function executeCommand(
   return result;
 }
 
+function parseCommand(result: CommandResult, parse?: (result: CommandResult) => Json): Json {
+  if (!parse) {
+    return result;
+  }
+
+  try {
+    return parse(result);
+  } catch (cause) {
+    throw new StepParseError(cause);
+  }
+}
+
 function createCommand(options: ContextOptions, perform: ReturnType<typeof createPerformer>) {
   function command(
     key: string,
@@ -132,7 +144,7 @@ function createCommand(options: ContextOptions, perform: ReturnType<typeof creat
       async () => {
         const result = await executeCommand(options, command, timeoutMs);
 
-        return parse ? parse(result) : result;
+        return parseCommand(result, parse);
       },
       { retry: stepOptions.retry },
     );
