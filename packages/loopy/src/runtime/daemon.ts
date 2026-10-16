@@ -10,7 +10,10 @@ type DaemonOptions = {
   prepare: (
     run: RunRecord,
   ) => Promise<
-    Pick<ActivationOptions, "workflow" | "wrap" | "executor" | "mode" | "cwd" | "signal">
+    Pick<
+      ActivationOptions,
+      "workflow" | "wrap" | "executor" | "mode" | "cwd" | "signal" | "rateLimits"
+    >
   >;
   clock?: Clock;
   concurrency?: number;
@@ -213,7 +216,11 @@ export class Daemon {
         ...prepared,
       });
 
-      return outcome.status !== "suspended" || Date.parse(outcome.wakeAt) > this.clock.now();
+      return (
+        outcome.status !== "suspended" ||
+        outcome.wakeAt === undefined ||
+        Date.parse(outcome.wakeAt) > this.clock.now()
+      );
     } catch (error) {
       if (!(error instanceof OwnershipError)) {
         this.report(error, run);

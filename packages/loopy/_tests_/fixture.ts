@@ -1,5 +1,6 @@
 import type { CommandResult, Json, RunRecord } from "../src/core/index.js";
 import {
+  type ActivationOptions,
   activate,
   type Clock,
   type Executor,
@@ -77,8 +78,13 @@ export async function fixture(store = new MemoryRunStore()) {
   const executor = new FakeExecutor();
   await store.createRun(run);
 
-  function execute(workflow: (context: WorkflowContext) => Promise<Json>, signal?: AbortSignal) {
+  function execute(
+    workflow: (context: WorkflowContext) => Promise<Json>,
+    signal?: AbortSignal,
+    options: Pick<ActivationOptions, "rateLimits"> = {},
+  ) {
     return activate({
+      ...options,
       runId: run.id,
       store,
       executor,

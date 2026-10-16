@@ -1,4 +1,4 @@
-import { LocalExecutor, loadLoopy, Registry } from "../../local/index.js";
+import { LocalExecutor, loadLoopy, Registry, readRateLimits } from "../../local/index.js";
 import { createLoopyRun } from "../../sdk/host.js";
 import { type CliContext, requireTarget } from "../context.js";
 import { inlineRun } from "../inline-run.js";
@@ -7,6 +7,7 @@ import { printJson } from "../output.js";
 import { withRunStore } from "../store.js";
 
 export async function runRun(context: CliContext): Promise<void> {
+  const rateLimits = readRateLimits(context.home);
   const slug = requireTarget(context, "Slug");
   const registry = new Registry(context.home, context.cwd);
 
@@ -16,7 +17,7 @@ export async function runRun(context: CliContext): Promise<void> {
 
   await withRunStore(context, async (store) => {
     const runId = crypto.randomUUID();
-    const options = { ...context, store, loopy, runId, workspace: context.cwd };
+    const options = { ...context, store, loopy, runId, rateLimits, workspace: context.cwd };
     const create = () => createLoopyRun({ ...options, input, bundleHash: saved.bundleHash });
 
     if (context.values.detach) {

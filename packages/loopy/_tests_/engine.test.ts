@@ -455,7 +455,7 @@ class WriteFailureStore extends MemoryRunStore {
       throw new Error("Step write failed. Restore storage.");
     }
 
-    await super.putStep(runId, token, step);
+    return super.putStep(runId, token, step);
   }
 }
 
@@ -640,4 +640,164 @@ test("command parsers can distinguish an absent ref from a retryable exit", asyn
   f.executor.result = { ...f.executor.result, stderr: "not found" };
   expect(await f.execute(workflow)).toEqual({ status: "succeeded", output: null });
   expect(f.executor.calls).toHaveLength(2);
+});
+
+test("rate limits suspend the third step without an attempt and skip memoized steps", async () => {
+  const f = await fixture();
+  const options = { rateLimits: { codex: { count: 2, windowMs: 60_000 } } };
+
+  const workflow = async (ctx: WorkflowContext) => {
+    await ctx.step("one", () => 1, { rateLimit: "codex" });
+    await ctx.step("two", () => 2, { rateLimit: "codex" });
+
+    return ctx.command("three", { program: "echo", args: [] }, { rateLimit: "codex" });
+  };
+
+  const suspended = { status: "suspended", wakeAt: "2026-10-16T00:01:00.000Z" } as const;
+  expect(await f.execute(workflow, undefined, options)).toEqual(suspended);
+  expect((await f.store.getSteps("run"))[2]).toMatchObject({
+    status: "retrying",
+    attempt: 0,
+    nextRetryAt: suspended.wakeAt,
+    error: `Rate limit 'codex' reached. Retrying at ${suspended.wakeAt}.`,
+  });
+  expect(await f.execute(workflow, undefined, options)).toEqual(suspended);
+  expect((await f.store.getSteps("run"))[2]?.attempt).toBe(0);
+  expect(f.executor.calls).toHaveLength(0);
+  f.advance(60_000);
+  expect(await f.execute(workflow, undefined, options)).toEqual({
+    status: "succeeded",
+    output: f.executor.result,
+  });
+  expect((await f.store.getSteps("run")).map((step) => step.attempt)).toEqual([1, 1, 1]);
+  expect(f.executor.calls).toHaveLength(1);
+});
+
+test("an unknown rate limit fails the step without retrying", async () => {
+  const f = await fixture();
+  expect(
+    await f.execute(async (ctx) => ctx.step("limited", () => 1, { rateLimit: "codex" })),
+  ).toMatchObject({
+    status: "failed",
+    error:
+      "Step 'limited' failed: Rate limit 'codex' is not configured. Add it to rateLimits in config.json.",
+  });
+  expect((await f.store.getSteps("run"))[0]).toMatchObject({ status: "failed" });
+});
+
+test("hook suspends indefinitely, keeps its token and replays the resolved payload", async () => {
+  const f = await fixture();
+
+  const workflow = async (ctx: WorkflowContext) => {
+    const approval = await ctx.hook("approve");
+    await ctx.sleep("1s");
+
+    return approval;
+  };
+
+  expect(await f.execute(workflow)).toEqual({ status: "suspended", wakeAt: undefined });
+  const hooks = await f.store.listHooks("run");
+  const [hook] = hooks;
+  expect(hook?.token).toMatch(/^[0-9a-f-]{36}$/);
+  expect((await f.store.getSteps("run"))[0]).toMatchObject({
+    kind: "hook",
+    status: "waiting",
+    attempt: 1,
+    input: { name: "approve", token: hook?.token },
+  });
+  expect(await f.execute(workflow)).toEqual({ status: "suspended", wakeAt: undefined });
+  expect(await f.store.listHooks("run")).toEqual(hooks);
+  expect(await f.store.resolveHook(hook?.token ?? "", { ok: true })).toBe(true);
+  expect((await f.execute(workflow)).status).toBe("suspended");
+  f.advance(1000);
+  expect(await f.execute(workflow)).toEqual({ status: "succeeded", output: { ok: true } });
+  expect((await f.store.getSteps("run"))[0]?.attempt).toBe(1);
+});
+
+test("hook timeout fails once with no retry or in-process timer", async () => {
+  const f = await fixture();
+  const workflow = async (ctx: WorkflowContext) => ctx.hook("approve", { timeout: "1m" });
+  const suspended = { status: "suspended", wakeAt: "2026-10-16T00:01:00.000Z" } as const;
+  expect(await f.execute(workflow)).toEqual(suspended);
+  f.advance(59_999);
+  expect(await f.execute(workflow)).toEqual(suspended);
+  f.advance(1);
+  expect(await f.execute(workflow)).toMatchObject({
+    status: "failed",
+    error: expect.stringContaining(
+      "Hook 'approve' timed out at 2026-10-16T00:01:00.000Z. Resolve the hook before its deadline in a new run.",
+    ),
+  });
+  expect((await f.store.getSteps("run"))[0]).toMatchObject({
+    status: "failed",
+    error:
+      "Hook 'approve' timed out at 2026-10-16T00:01:00.000Z. Resolve the hook before its deadline in a new run.",
+    attempt: 1,
+    maxAttempts: 1,
+  });
+  expect(f.timers.size).toBe(0);
+});
+
+test("hook signals arriving during another branch preserve completion order on replay", async () => {
+  const f = await fixture();
+
+  const workflow = async (ctx: WorkflowContext) => {
+    const values = await parallel([
+      async () => {
+        const approval = await ctx.hook("approve");
+
+        return ctx.step("approved", () => approval);
+      },
+      async () => {
+        await ctx.step("resolve", async () => {
+          const [hook] = await f.store.listHooks("run");
+          expect(await f.store.resolveHook(hook?.token ?? "", 42)).toBe(true);
+
+          return 7;
+        });
+
+        return ctx.step("next", () => 8);
+      },
+    ]);
+
+    await ctx.sleep("1s");
+
+    return values;
+  };
+
+  expect((await f.execute(workflow)).status).toBe("suspended");
+  const steps = await f.store.getSteps("run");
+  expect(steps.map((step) => step.key)).toEqual(["hook:approve", "resolve", "next"]);
+  expect(steps.flatMap((step) => (step.status === "succeeded" ? [step.finishOrder] : []))).toEqual([
+    1, 2,
+  ]);
+  expect((await f.execute(workflow)).status).toBe("suspended");
+  f.advance(1000);
+  expect(await f.execute(workflow)).toEqual({ status: "succeeded", output: [42, 8] });
+});
+
+test("an external hook can release another running branch", async () => {
+  const f = await fixture();
+  let release = () => {};
+
+  const gate = new Promise<number>((resolve) => {
+    release = () => resolve(7);
+  });
+
+  const pending = f.execute(async (ctx) =>
+    parallel([
+      async () => {
+        const result = await ctx.hook("approve");
+        release();
+
+        return result;
+      },
+      async () => ctx.step("wait", () => gate),
+    ]),
+  );
+
+  await delay(10);
+  const [hook] = await f.store.listHooks("run");
+  expect(await f.store.resolveHook(hook?.token ?? "", 42)).toBe(true);
+  expect(await pending).toEqual({ status: "succeeded", output: [42, 7] });
 });

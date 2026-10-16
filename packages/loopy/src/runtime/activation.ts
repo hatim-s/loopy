@@ -1,4 +1,6 @@
-import type { RunOutcome, StepRecord } from "../core/index.js";
+import type { HookRecord, RunOutcome, StepRecord } from "../core/index.js";
+
+type HookWait = { wakeAt?: string; deliver: (hook: HookRecord) => void };
 
 type Delivery = { finishOrder: number; source: "memoized" | "live"; deliver: () => void };
 
@@ -8,7 +10,10 @@ export class Activation {
   finished = 0;
   fatal?: Error;
   outcome?: RunOutcome;
-  wakeAt?: string;
+  private blockedWakeAt?: string;
+  private readonly hooks = new Map<number, HookWait>();
+  private nextHookPollAt = 0;
+
   closed = false;
   private visited = 0;
   private readonly highestStored: number;
@@ -28,6 +33,80 @@ export class Activation {
     );
 
     this.writes = Promise.resolve(finishOrder);
+  }
+
+  get wakeAt(): string | undefined {
+    const deadlines = [...this.hooks.values()].flatMap((hook) =>
+      hook.wakeAt === undefined ? [] : [hook.wakeAt],
+    );
+
+    if (this.blockedWakeAt !== undefined) {
+      deadlines.push(this.blockedWakeAt);
+    }
+
+    return deadlines.sort()[0];
+  }
+
+  get waitingForHooks(): boolean {
+    return this.hooks.size > 0;
+  }
+
+  waitForHook(seq: number, wakeAt?: string): Promise<HookRecord> {
+    if (!this.waitingForHooks) {
+      this.nextHookPollAt = Date.now() + 100;
+    }
+
+    this.blocked++;
+
+    return new Promise((resolve) => {
+      this.hooks.set(seq, {
+        wakeAt,
+        deliver: (hook) => {
+          // Count the terminal write before the driver can decide this activation is idle.
+          this.start();
+          resolve(hook);
+        },
+      });
+      this.notify();
+    });
+  }
+
+  hooksToPoll(): number[] {
+    if (Date.now() < this.nextHookPollAt) {
+      return [];
+    }
+
+    this.nextHookPollAt = Date.now() + 100;
+
+    return [...this.hooks.keys()];
+  }
+
+  resolveHooks(hooks: HookRecord[], now: number): void {
+    for (const hook of hooks) {
+      const waiting = this.hooks.get(hook.seq);
+      const expired = waiting?.wakeAt !== undefined && Date.parse(waiting.wakeAt) <= now;
+
+      if (waiting && (hook.resolvedAt !== undefined || expired)) {
+        this.hooks.delete(hook.seq);
+        this.blocked--;
+        waiting.deliver(hook);
+      }
+    }
+  }
+
+  async waitForChange(): Promise<void> {
+    if (!this.waitingForHooks || this.running === 0) {
+      return this.changed;
+    }
+
+    // Signals come from other processes, so active branches must also check the store.
+    const timer = setTimeout(() => this.notify(), Math.max(0, this.nextHookPollAt - Date.now()));
+
+    try {
+      await this.changed;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   private nextChange(): Promise<void> {
@@ -82,6 +161,7 @@ export class Activation {
   terminal(write: (finishOrder: number) => Promise<void>): Promise<number> {
     const pending = this.writes.then(async (order) => {
       const next = order + 1;
+
       await write(next);
 
       return next;
@@ -132,11 +212,11 @@ export class Activation {
     return true;
   }
 
-  block(wakeAt: string): Promise<never> {
+  block(wakeAt?: string): Promise<never> {
     this.blocked++;
 
-    if (this.wakeAt === undefined || wakeAt < this.wakeAt) {
-      this.wakeAt = wakeAt;
+    if (wakeAt !== undefined && (this.blockedWakeAt === undefined || wakeAt < this.blockedWakeAt)) {
+      this.blockedWakeAt = wakeAt;
     }
 
     this.notify();

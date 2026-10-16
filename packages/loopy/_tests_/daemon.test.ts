@@ -484,3 +484,18 @@ test("claim contention does not report an activation error", async () => {
   expect(await f.daemon.tick()).toEqual({ fired: 0, activated: 0 });
   expect(f.errors).toEqual([]);
 });
+
+test("daemon leaves indefinite hooks suspended and resumes resolved payloads", async () => {
+  const f = fixture({ workflowFor: async () => async (ctx) => ctx.hook("approve") });
+  await f.store.createRun(newRun());
+  expect((await f.daemon.tick()).activated).toBe(1);
+  expect(await f.store.getRun("run")).toMatchObject({ status: "suspended" });
+  expect((await f.store.getRun("run"))?.wakeAt).toBeUndefined();
+  expect((await f.daemon.tick()).activated).toBe(0);
+  const [hook] = await f.store.listHooks("run");
+  expect(await f.store.resolveHook(hook?.token ?? "", { ok: true })).toBe(true);
+  expect((await f.daemon.tick()).activated).toBe(1);
+  expect(await f.store.getRun("run")).toMatchObject({ status: "succeeded", output: { ok: true } });
+  expect(f.errors).toEqual([]);
+  await f.daemon.stop();
+});

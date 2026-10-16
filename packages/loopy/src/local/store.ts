@@ -3,17 +3,37 @@ import { mkdirSync } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import type {
+  HookRecord,
+  Json,
   LogRecord,
   RunOutcome,
   RunRecord,
   RunStatus,
   Schedule,
   StepRecord,
+  WaitingHookStep,
 } from "../core/index.js";
-import { OwnershipError, type RunStore } from "../runtime/index.js";
-import { errnoCode } from "./fs.js";
-import { rowToLog, rowToRun, rowToSchedule, rowToStep, SQL, stepToRow } from "./store-rows.js";
 import {
+  acquireWindow,
+  canResolveHook,
+  earliestWake,
+  OwnershipError,
+  type RateLimitResult,
+  type RateLimitWindow,
+  type RunStore,
+} from "../runtime/index.js";
+import { errnoCode } from "./fs.js";
+import {
+  rowToHook,
+  rowToLog,
+  rowToRun,
+  rowToSchedule,
+  rowToStep,
+  SQL,
+  stepToRow,
+} from "./store-rows.js";
+import {
+  type HookRow,
   type LogRow,
   type RunRow,
   SCHEMA,
@@ -61,6 +81,125 @@ export class SqliteRunStore implements RunStore {
 
         this.db.exec(SCHEMA);
         this.db.exec(`PRAGMA user_version=${SCHEMA_VERSION}`);
+      })
+      .immediate();
+  }
+
+  async createHook(runId: string, token: string, step: WaitingHookStep): Promise<void> {
+    this.db
+      .transaction(() => {
+        this.requireRunning(this.owned(runId, token));
+
+        if (
+          this.db.query(SQL.hook).get(step.input.token) ||
+          this.db.query(SQL.step).get(runId, step.seq)
+        ) {
+          throw new Error("Hook already exists. Resume the run to use its waiting hook.");
+        }
+
+        this.writeStep({ ...step, runId });
+        this.db
+          .query(SQL.createHook)
+          .run(step.input.token, runId, step.seq, step.input.name, step.startedAt);
+      })
+      .immediate();
+  }
+
+  async resolveHook(token: string, payload: Json): Promise<boolean> {
+    return this.db
+      .transaction(() => {
+        const hook = this.db.query<HookRow, [string]>(SQL.hook).get(token);
+
+        const row = hook
+          ? this.db.query<StepRow, [string, number]>(SQL.step).get(hook.run_id, hook.seq)
+          : undefined;
+
+        const run = hook ? this.row(hook.run_id) : undefined;
+
+        if (
+          !hook ||
+          hook.resolved_at !== null ||
+          hook.expired_at !== null ||
+          !row ||
+          !run ||
+          !canResolveHook(rowToRun(run), rowToStep(row), this.now())
+        ) {
+          return false;
+        }
+
+        const timestamp = this.timestamp();
+        this.db.query(SQL.resolveHook).run(JSON.stringify(payload), timestamp, token);
+        this.db.query(SQL.wakeHook).run(timestamp, timestamp, hook.run_id);
+
+        return true;
+      })
+      .immediate();
+  }
+
+  async listHooks(runId: string): Promise<HookRecord[]> {
+    return this.db.query<HookRow, [string]>(SQL.hooks).all(runId).map(rowToHook);
+  }
+
+  async listPendingHooks(runId: string, seqs: number[]): Promise<HookRecord[]> {
+    if (seqs.length === 0) {
+      return [];
+    }
+
+    const placeholders = seqs.map(() => "?").join(",");
+
+    return this.db
+      .query<HookRow, [string, ...number[]]>(
+        `SELECT * FROM hooks WHERE run_id=? AND seq IN (${placeholders}) ORDER BY seq`,
+      )
+      .all(runId, ...seqs)
+      .map(rowToHook);
+  }
+
+  async expireHook(runId: string, token: string, seq: number): Promise<string | undefined> {
+    return this.db
+      .transaction(() => {
+        this.requireRunning(this.owned(runId, token));
+
+        const hook = this.db
+          .query<HookRow, [string, number]>("SELECT * FROM hooks WHERE run_id=? AND seq=?")
+          .get(runId, seq);
+
+        const step = this.db.query<StepRow, [string, number]>(SQL.step).get(runId, seq);
+
+        if (
+          !hook ||
+          hook.resolved_at !== null ||
+          step?.status !== "waiting" ||
+          step.wake_at === null ||
+          Date.parse(step.wake_at) > this.now()
+        ) {
+          return undefined;
+        }
+
+        this.db.query(SQL.expireHook).run(this.timestamp(), runId, seq);
+
+        return step.wake_at;
+      })
+      .immediate();
+  }
+
+  async acquireRateLimit(
+    key: string,
+    count: number,
+    windowMs: number,
+    now: string,
+  ): Promise<RateLimitResult> {
+    return this.db
+      .transaction(() => {
+        const window =
+          this.db.query<RateLimitWindow, [string]>(SQL.rateLimit).get(key) ?? undefined;
+
+        const acquired = acquireWindow(window, count, windowMs, now);
+        this.db
+          .query(SQL.putRateLimit)
+          .run(key, acquired.window.windowStart, acquired.window.count);
+
+        return acquired.result;
       })
       .immediate();
   }
@@ -152,11 +291,18 @@ export class SqliteRunStore implements RunStore {
   async suspend(runId: string, token: string, wakeAt?: string): Promise<void> {
     this.db
       .transaction(() => {
-        this.requireRunning(this.owned(runId, token));
+        const run = this.owned(runId, token);
+        this.requireRunning(run);
+
+        const resolved =
+          this.db.query<{ wake_at: string | null }, [string]>(SQL.unconsumedHook).get(runId)
+            ?.wake_at ?? undefined;
+
+        const wake = earliestWake(resolved, wakeAt);
         this.db
           .query(SQL.suspend)
           .run(
-            wakeAt === undefined ? null : new Date(wakeAt).toISOString(),
+            wake === undefined ? null : new Date(wake).toISOString(),
             this.timestamp(),
             runId,
             token,
@@ -201,28 +347,33 @@ export class SqliteRunStore implements RunStore {
     this.db
       .transaction(() => {
         this.owned(runId, token);
-        const row = stepToRow(step);
-        this.db
-          .query(SQL.putStep)
-          .run(
-            runId,
-            row.seq,
-            row.key,
-            row.kind,
-            row.input_json,
-            row.attempt,
-            row.max_attempts,
-            row.started_at,
-            row.status,
-            row.output_json,
-            row.error,
-            row.next_retry_at,
-            row.wake_at,
-            row.finish_order,
-            row.ended_at,
-          );
+        this.writeStep({ ...step, runId });
       })
       .immediate();
+  }
+
+  private writeStep(step: StepRecord): void {
+    const row = stepToRow(step);
+
+    this.db
+      .query(SQL.putStep)
+      .run(
+        row.run_id,
+        row.seq,
+        row.key,
+        row.kind,
+        row.input_json,
+        row.attempt,
+        row.max_attempts,
+        row.started_at,
+        row.status,
+        row.output_json,
+        row.error,
+        row.next_retry_at,
+        row.wake_at,
+        row.finish_order,
+        row.ended_at,
+      );
   }
 
   async appendLog(runId: string, token: string, log: LogRecord): Promise<void> {

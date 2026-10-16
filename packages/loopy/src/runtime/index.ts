@@ -20,11 +20,17 @@ export type { Executor, ResolvedCommand } from "./executor.js";
 
 export { CommandExecutionError, CommandExitError } from "./executor.js";
 
+export { canResolveHook, earliestWake } from "./hook-state.js";
+
 export { NondeterminismError } from "./journal.js";
 
 export { assertJson } from "./json.js";
 
 export { MemoryRunStore } from "./memory-store.js";
+
+export type { RateLimitResult, RateLimits, RateLimitWindow } from "./rate-limit.js";
+
+export { acquireWindow, parseRateLimits } from "./rate-limit.js";
 
 export type { RetryPolicy } from "./retry.js";
 

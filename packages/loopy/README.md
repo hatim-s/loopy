@@ -188,3 +188,32 @@ Set `LOOPY_HOME` or pass `--home` to move the home. Project lookup checks the ne
 - [Review](examples/review.loopy.ts) reads a parsed Git diff and asks Codex for a review.
 - [Uacode asset sync](examples/uacode-asset-sync/asset-sync-pr.loopy.ts) previews or applies exported assets, then publishes a focused PR. See its [inputs and prerequisites](examples/uacode-asset-sync/README.md).
 - [WWW prompt sync](examples/www-uacode-sync/www-uacode-sync.loopy.ts) maps prompts and skills into uacode assets and publishes one PR per changed base. See its [run instructions](examples/www-uacode-sync/README.md).
+
+## Rate limits
+
+Set shared per-key limits in `<home>/config.json`, for example
+`{ "rateLimits": { "codex": "10/1h", "gh": "60/1m" } }`. The CLI and daemon
+read this file at startup. A `rateLimit` key absent from config.json fails the step.
+Completed steps replay without acquiring a slot; waiting for a slot does not consume
+an attempt.
+
+```ts
+await step("generate", () => generate(), { rateLimit: "codex" });
+```
+
+## Hooks
+
+`hook()` suspends a run until an external signal supplies JSON. Without a timeout,
+inline `loopy run` prints the hook name and run ID and exits successfully with a
+suspended run. Resolve it, then continue with `loopy resume <run-id>`:
+
+```ts
+const approval = await hook("approve");
+// loopy hook <run-id> approve --payload '{"ok":true}'
+```
+
+Pass `{ timeout: "1h" }` to set a deadline. A timeout fails the step without retrying.
+`loopy inspect <run-id>` shows names and tokens. Local automation can POST a JSON
+body to `/api/hooks/<token>` on the `loopy ui` server with
+`Authorization: Bearer <viewer-token>`, using the token from the viewer URL. The same authentication and
+origin checks apply. This endpoint is for local automation, not public webhooks.

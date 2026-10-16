@@ -1,11 +1,16 @@
 import type {
+  HookRecord,
+  Json,
   LogRecord,
   RunOutcome,
   RunRecord,
   RunStatus,
   Schedule,
   StepRecord,
+  WaitingHookStep,
 } from "../core/index.js";
+
+import type { RateLimitResult } from "./rate-limit.js";
 
 export class OwnershipError extends Error {
   constructor(runId: string) {
@@ -15,7 +20,19 @@ export class OwnershipError extends Error {
 }
 
 export interface RunStore {
+  acquireRateLimit(
+    key: string,
+    count: number,
+    windowMs: number,
+    now: string,
+  ): Promise<RateLimitResult>;
   readonly leaseMs: number;
+  createHook(runId: string, token: string, step: WaitingHookStep): Promise<void>;
+  resolveHook(token: string, payload: Json): Promise<boolean>;
+  listHooks(runId: string): Promise<HookRecord[]>;
+  listPendingHooks(runId: string, seqs: number[]): Promise<HookRecord[]>;
+  // Expiry fences signals while the owner queues its terminal step write.
+  expireHook(runId: string, token: string, seq: number): Promise<string | undefined>;
   createRun(run: RunRecord): Promise<void>;
   getRun(id: string): Promise<RunRecord | undefined>;
   listRuns(filter?: { slug?: string; status?: RunStatus }): Promise<RunRecord[]>;

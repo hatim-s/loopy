@@ -55,7 +55,26 @@ export type StepRecord = StepBase &
     | { status: "failed"; error: string; endedAt: string; finishOrder: number }
     | { status: "retrying"; error: string; nextRetryAt: string; endedAt: string }
     | { status: "sleeping"; wakeAt: string }
+    | { status: "waiting"; wakeAt?: string }
   );
+
+export type WaitingHookStep = Omit<StepBase, "input" | "kind"> & {
+  kind: "hook";
+  status: "waiting";
+  input: { name: string; token: string };
+  wakeAt?: string;
+};
+
+export type HookRecord = {
+  token: string;
+  runId: string;
+  seq: number;
+  name: string;
+  createdAt: string;
+  payload?: Json;
+  resolvedAt?: string;
+  expiredAt?: string;
+};
 
 export type LogPosition =
   | { kind: "workflow"; afterStep: number; afterFinish: number; index: number }

@@ -188,3 +188,46 @@ for (const missing of ["secret", "bundle"]) {
     }
   });
 }
+
+test("local daemon loads configured per-key limits for bundled workflows", async () => {
+  const cwd = directory();
+  const home = directory();
+  const source = join(cwd, "limited.loopy.ts");
+  const sdk = resolve(import.meta.dir, "../src/sdk/index.ts");
+  await Bun.write(
+    source,
+    `import { loopy, step } from ${JSON.stringify(sdk)};
+    export default loopy({ name: "limited", run: async () => {
+      for (const name of ["one", "two", "three"]) {
+        await step(name, () => name, { rateLimit: "codex" });
+      }
+      return true;
+    }});`,
+  );
+  const bundle = await bundleLoopy(source, home);
+  const loopy = await loadLoopy(bundle.path);
+  const store = openRunStore(home);
+  await Bun.write(join(home, "config.json"), JSON.stringify({ rateLimits: { codex: "2/1m" } }));
+  const daemon = localDaemon({ home, cwd, store });
+
+  try {
+    await createLoopyRun({
+      loopy,
+      input: {},
+      store,
+      workspace: cwd,
+      runId: "limited",
+      bundleHash: bundle.hash,
+    });
+    expect((await daemon.tick()).activated).toBe(1);
+    expect(await store.getRun("limited")).toMatchObject({ status: "suspended" });
+    expect(await store.getSteps("limited")).toMatchObject([
+      { status: "succeeded", attempt: 1 },
+      { status: "succeeded", attempt: 1 },
+      { status: "retrying", attempt: 0 },
+    ]);
+  } finally {
+    await daemon.stop();
+    store.close();
+  }
+});
