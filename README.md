@@ -182,4 +182,9 @@ Run records retain input, command argv, explicit environment and stdin, step res
 
 Set `LOOPY_HOME` or pass `--home` to move the home. Project lookup checks the nearest ancestor containing `.loopy/loopies`; project entries override global entries. A slug belongs to its canonical source file. Use `loopy save <file.ts> --replace` to transfer ownership. A schema-version mismatch deletes all runs, steps, logs and schedules; there is no data migration.
 
-The canonical examples are [hello](examples/hello.loopy.ts), [review](examples/review.loopy.ts), [uacode asset sync](examples/uacode-asset-sync/README.md) and [www prompt sync](examples/www-uacode-sync/README.md).
+## Examples
+
+- [Hello](examples/hello.loopy.ts) records a greeting as a function step.
+- [Review](examples/review.loopy.ts) reads a parsed Git diff and asks Codex for a review.
+- [Uacode asset sync](examples/uacode-asset-sync/asset-sync-pr.loopy.ts) previews or applies exported assets, then publishes a focused PR. See its [inputs and prerequisites](examples/uacode-asset-sync/README.md).
+- [WWW prompt sync](examples/www-uacode-sync/www-uacode-sync.loopy.ts) maps prompts and skills into uacode assets and publishes one PR per changed base. See its [run instructions](examples/www-uacode-sync/README.md).
