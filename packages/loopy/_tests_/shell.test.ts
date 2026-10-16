@@ -14,8 +14,8 @@ test("typed shell calls record exact argv and command step identities", async ()
       await git.status.raw({ flags: { porcelain: "v2", branch: true } });
       await git.log.raw({ flags: { format: "%H%x00%s", maxCount: 5 } });
       await git.worktree.list.raw({ flags: { porcelain: true } });
-      await fs.find({ args: ["."], flags: { name: "*.ts", print0: true } });
-      await text.grep({ args: ["TODO", "src"], flags: { n: true, r: true } });
+      await fs.find.raw({ args: ["."], flags: { name: "*.ts", print0: true } });
+      await text.grep.raw({ args: ["TODO", "src"], flags: { n: true, r: true } });
       await fs.cp({
         args: ["one", "two", "destination"],
         flags: { recursive: true, force: false },
@@ -27,7 +27,7 @@ test("typed shell calls record exact argv and command step identities", async ()
         env: { LANG: "C" },
         timeout: "2s",
       });
-      await net.curl({
+      await net.curl.raw({
         flags: { header: ["Accept: application/json", "X-Test: yes"] },
         args: ["https://example.com"],
       });
@@ -104,7 +104,7 @@ function compileOnlyChecks() {
   // @ts-expect-error Variadic arguments remain strings.
   fs.cp({ args: [1, 2] });
   // @ts-expect-error Repeated flags require an array.
-  net.curl({ flags: { header: "X-Test: yes" } });
+  net.curl.raw({ flags: { header: "X-Test: yes" } });
 }
 
 void compileOnlyChecks;
@@ -146,9 +146,9 @@ test("zip exclusions trail archive operands", async () => {
 
 test("find predicates precede actions regardless of caller property order", async () => {
   const { executor, result } = await capture(async () => {
-    await fs.find({ args: ["."], flags: { print0: true, name: "*.ts", type: "f" } });
-    await fs.find({ args: ["."], flags: { type: "f", name: "*.ts", print0: true } });
-    await fs.find({
+    await fs.find.raw({ args: ["."], flags: { print0: true, name: "*.ts", type: "f" } });
+    await fs.find.raw({ args: ["."], flags: { type: "f", name: "*.ts", print0: true } });
+    await fs.find.raw({
       args: ["."],
       flags: { exec: ["echo", "{}"], notPath: "*/vendor/*", notName: "*.txt" },
     });
@@ -181,7 +181,7 @@ test("git inspection separates revisions from paths", async () => {
 
 test("jq named pairs retain separate keys and values", async () => {
   const { executor, result } = await capture(() =>
-    text.jq({
+    text.jq.raw({
       args: ["$name"],
       flags: {
         argjson: { count: "2" },
@@ -237,7 +237,7 @@ function revisedCompileOnlyChecks() {
   // @ts-expect-error base64 input is a typed flag, not a bare positional.
   text.base64({ args: ["input"] });
   // @ts-expect-error jq named values must be strings.
-  text.jq({ flags: { arg: { count: 2 } } });
+  text.jq.raw({ flags: { arg: { count: 2 } } });
   // @ts-expect-error staged is the sole spelling of the index diff flag.
   git.diff.raw({ flags: { cached: true } });
   // @ts-expect-error Decompression uses gzip with decompress.
@@ -267,18 +267,21 @@ test.each([
     () => git.push({ flags: { dryRun: true, atomic: true, followTags: true } }),
     ["push", "--dry-run", "--atomic", "--follow-tags"],
   ],
-  [() => fs.ls({ flags: { one: true, F: true } }), ["-1", "-F"]],
+  [() => fs.ls.raw({ flags: { one: true, F: true } }), ["-1", "-F"]],
   [
     () => fs.cp({ args: ["a", "b"], flags: { archive: true, noClobber: true, dereference: true } }),
     ["-a", "-n", "-L", "--", "a", "b"],
   ],
   [
     () =>
-      fs.find({ args: ["."], flags: { prune: true, path: "vendor", mtime: "+7", size: "+1M" } }),
+      fs.find.raw({
+        args: ["."],
+        flags: { prune: true, path: "vendor", mtime: "+7", size: "+1M" },
+      }),
     [".", "-path", "vendor", "-mtime", "+7", "-size", "+1M", "-prune"],
   ],
   [
-    () => text.grep({ flags: { q: true, w: true, o: true, A: 1, B: 2, C: 3 } }),
+    () => text.grep.raw({ flags: { q: true, w: true, o: true, A: 1, B: 2, C: 3 } }),
     ["-q", "-w", "-o", "-A", "1", "-B", "2", "-C", "3"],
   ],
 ] as const)("added shell flags preserve their CLI spelling: %#", async (run, expected) => {
@@ -289,10 +292,70 @@ test.each([
 
 test("jq rejects malformed named pairs before execution", async () => {
   // @ts-expect-error JavaScript callers can supply non-string named values.
-  const { executor, result } = await capture(() => text.jq({ flags: { arg: { count: 2 } } }));
+  const { executor, result } = await capture(() => text.jq.raw({ flags: { arg: { count: 2 } } }));
   expect(result).toEqual({
     status: "failed",
     error: "Flag '--arg' requires string values. Supply a record of strings.",
   });
   expect(executor.calls).toEqual([]);
+});
+
+test.each(["e", "f"] as const)("parsed grepCount rejects -%s before execution", async (flag) => {
+  const flags = flag === "e" ? { e: "pattern" } : { f: "patterns.txt" };
+
+  const { executor, result } = await capture(async () => {
+    // @ts-expect-error JavaScript callers can supply flags that change operand interpretation.
+    await text.grepCount({ args: ["one", "two"], flags });
+  });
+
+  expect(result).toEqual({
+    status: "failed",
+    error: `Flag '${flag}' changes the parsed output format. Use .raw() to supply this flag.`,
+  });
+  expect(executor.calls).toEqual([]);
+});
+
+test("raw grepCount keeps explicit patterns and pattern files", async () => {
+  const { executor, result } = await capture(async () => {
+    await text.grepCount.raw({ args: ["one", "two"], flags: { e: "pattern" } });
+    await text.grepCount.raw({ args: ["one", "two"], flags: { f: "patterns.txt" } });
+  });
+
+  expect(result.status).toBe("succeeded");
+  expect(executor.calls.map(({ args }) => args)).toEqual([
+    ["-e", "pattern", "--", "one", "two"],
+    ["-f", "patterns.txt", "--", "one", "two"],
+  ]);
+});
+
+test("parsed realpath requires exactly one path before execution", async () => {
+  const missing = await capture(async () => {
+    // @ts-expect-error JavaScript callers can omit the required path.
+    await fs.realpath();
+  });
+
+  const empty = await capture(async () => {
+    // @ts-expect-error JavaScript callers can supply no paths.
+    await fs.realpath({ args: [] });
+  });
+
+  const multiple = await capture(async () => {
+    // @ts-expect-error JavaScript callers can supply several paths.
+    await fs.realpath({ args: ["one", "two"] });
+  });
+
+  for (const { executor, result } of [missing, empty, multiple]) {
+    expect(result).toEqual({
+      status: "failed",
+      error:
+        "Command 'fs.realpath' expected 1 to 1 positional arguments. Supply args with the expected count.",
+    });
+    expect(executor.calls).toEqual([]);
+  }
+});
+
+test("raw realpath keeps variadic paths", async () => {
+  const { executor, result } = await capture(() => fs.realpath.raw({ args: ["one", "two"] }));
+  expect(result.status).toBe("succeeded");
+  expect(executor.calls[0]?.args).toEqual(["one", "two"]);
 });

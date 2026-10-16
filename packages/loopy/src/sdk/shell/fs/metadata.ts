@@ -1,7 +1,23 @@
 import { defineCommand } from "../../define-command.js";
+import {
+  parseDf,
+  parseDu,
+  parseFind,
+  parseMktemp,
+  parseRealpath,
+  parseStat,
+  parseTree,
+  parseWhich,
+  STAT_DARWIN_FORMAT,
+  STAT_LINUX_FORMAT,
+} from "../parse/fs.js";
 
 export const metadata = {
   find: defineCommand({
+    parse: parseFind,
+    prepare: (input) => ({ ...input, args: input.args?.length ? input.args : ["."] }),
+    preset: { flags: { print0: true } },
+    exclude: ["print", "ls", "delete", "printf", "exec", "prune"],
     namespace: "fs",
     name: "find",
     program: "find",
@@ -18,6 +34,7 @@ export const metadata = {
       minDepth: { cli: "-mindepth", kind: "number" },
       print0: { cli: "-print0", kind: "boolean", order: 10 },
       empty: { cli: "-empty", kind: "boolean" },
+      ls: { cli: "-ls", kind: "boolean", order: 10 },
       print: { cli: "-print", kind: "boolean", order: 10 },
       prune: { cli: "-prune", kind: "boolean", order: 10 },
       exec: { cli: "-exec", kind: "string", repeatable: true, terminator: ";", order: 10 },
@@ -39,6 +56,9 @@ export const metadata = {
     },
   }),
   tree: defineCommand({
+    parse: parseTree,
+    preset: { flags: { json: true, noReport: true } },
+    exclude: ["f", "indent", "noIndent", "color", "classify"],
     namespace: "fs",
     name: "tree",
     program: "tree",
@@ -46,6 +66,11 @@ export const metadata = {
       a: { cli: "-a", kind: "boolean" },
       d: { cli: "-d", kind: "boolean" },
       f: { cli: "-f", kind: "boolean" },
+      noReport: { cli: "--noreport", kind: "boolean" },
+      indent: { cli: "-A", kind: "boolean" },
+      noIndent: { cli: "-i", kind: "boolean" },
+      color: { cli: "-C", kind: "boolean" },
+      classify: { cli: "-F", kind: "boolean" },
       json: { cli: "-J", kind: "boolean" },
       level: { cli: "-L", kind: "number" },
       pattern: { cli: "-P", kind: "string" },
@@ -53,6 +78,8 @@ export const metadata = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
   stat: defineCommand({
+    parse: parseStat,
+    preset: { flags: { format: STAT_DARWIN_FORMAT } },
     namespace: "fs",
     name: "stat",
     program: "stat",
@@ -63,8 +90,9 @@ export const metadata = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
     variants: {
       linux: {
+        preset: { flags: { format: STAT_LINUX_FORMAT } },
         flags: {
-          format: { cli: "--format", kind: "string" },
+          format: { cli: "-c", kind: "string" },
         },
       },
     },
@@ -101,6 +129,9 @@ export const metadata = {
     positionalSeparator: true,
   }),
   realpath: defineCommand({
+    parse: parseRealpath,
+    parsedPositionals: [{ name: "path" }],
+    preset: { flags: {} },
     namespace: "fs",
     name: "realpath",
     program: "realpath",
@@ -109,7 +140,18 @@ export const metadata = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
+  which: defineCommand({
+    namespace: "fs",
+    name: "which",
+    program: "which",
+    parse: parseWhich,
+    okExitCodes: [0, 1],
+    preset: { flags: {} },
+    positionals: [{ name: "program" }],
+  }),
   mktemp: defineCommand({
+    parse: parseMktemp,
+    preset: { flags: {} },
     namespace: "fs",
     name: "mktemp",
     program: "mktemp",
@@ -125,6 +167,9 @@ export const metadata = {
     ],
   }),
   du: defineCommand({
+    parse: parseDu,
+    preset: { flags: { kilobytes: true } },
+    exclude: ["humanReadable"],
     namespace: "fs",
     name: "du",
     program: "du",
@@ -137,6 +182,9 @@ export const metadata = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
   df: defineCommand({
+    parse: parseDf,
+    preset: { flags: { kilobytes: true, portable: true } },
+    exclude: ["humanReadable"],
     namespace: "fs",
     name: "df",
     program: "df",

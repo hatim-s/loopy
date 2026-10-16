@@ -1,25 +1,49 @@
-import { defineCommand } from "../../define-command.js";
+import { type CommandOptions, defineCommand } from "../../define-command.js";
+import { parseLs } from "../parse/fs.js";
+
+const rawLs = defineCommand({
+  namespace: "fs",
+  name: "ls",
+  program: "ls",
+  flags: {
+    a: { cli: "-a", kind: "boolean" },
+    A: { cli: "-A", kind: "boolean" },
+    l: { cli: "-l", kind: "boolean" },
+    h: { cli: "-h", kind: "boolean" },
+    R: { cli: "-R", kind: "boolean" },
+    t: { cli: "-t", kind: "boolean" },
+    S: { cli: "-S", kind: "boolean" },
+    d: { cli: "-d", kind: "boolean" },
+    one: { cli: "-1", kind: "boolean" },
+    F: { cli: "-F", kind: "boolean" },
+  },
+  positionals: [{ name: "paths", optional: true, variadic: true }],
+  positionalSeparator: true,
+});
+
+const parsedLs = defineCommand({
+  namespace: "fs",
+  name: "ls",
+  program: "find",
+  parse: parseLs,
+  preset: { flags: { maxDepth: 1, minDepth: 1, print0: true } },
+  flags: {
+    maxDepth: { cli: "-maxdepth", kind: "number" },
+    minDepth: { cli: "-mindepth", kind: "number" },
+    print0: { cli: "-print0", kind: "boolean", order: 10 },
+  },
+  positionals: [{ name: "directory", optional: true }],
+  flagsAfterPositionals: true,
+  prepare: (input) => ({ ...input, args: input.args?.length ? input.args : ["."] }),
+});
+
+function listDirectory(input?: Parameters<typeof parsedLs>[0], options?: CommandOptions) {
+  return parsedLs(input, options);
+}
 
 export const files = {
-  ls: defineCommand({
-    namespace: "fs",
-    name: "ls",
-    program: "ls",
-    flags: {
-      a: { cli: "-a", kind: "boolean" },
-      A: { cli: "-A", kind: "boolean" },
-      l: { cli: "-l", kind: "boolean" },
-      h: { cli: "-h", kind: "boolean" },
-      R: { cli: "-R", kind: "boolean" },
-      t: { cli: "-t", kind: "boolean" },
-      S: { cli: "-S", kind: "boolean" },
-      d: { cli: "-d", kind: "boolean" },
-      one: { cli: "-1", kind: "boolean" },
-      F: { cli: "-F", kind: "boolean" },
-    },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
-    positionalSeparator: true,
-  }),
+  /** Lists immediate basenames using find, including hidden entries. .raw runs ls. */
+  ls: Object.assign(listDirectory, { raw: rawLs }),
   cat: defineCommand({
     namespace: "fs",
     name: "cat",

@@ -16,7 +16,11 @@ import { type RetryPolicy, resolveRetry, StepParseError } from "./retry.js";
 import { runSleep, runStep, StepFailedError } from "./step-runner.js";
 import type { RunStore } from "./store.js";
 
-export type StepOptions = { retry?: RetryPolicy; timeout?: Duration };
+export type StepOptions = {
+  retry?: RetryPolicy;
+  timeout?: Duration;
+  okExitCodes?: readonly number[];
+};
 
 type ContextOptions = {
   run: EngineRun;
@@ -92,6 +96,7 @@ async function executeCommand(
   options: ContextOptions,
   command: ResolvedCommand,
   timeoutMs?: number,
+  okExitCodes: readonly number[] = [0],
 ) {
   const result = await options.executor.execute(command, {
     workspace: options.cwd,
@@ -100,7 +105,7 @@ async function executeCommand(
     timeoutMs,
   });
 
-  if (result.exitCode !== 0) {
+  if (!okExitCodes.includes(result.exitCode)) {
     throw new CommandExitError(result);
   }
 
@@ -145,7 +150,7 @@ function createCommand(options: ContextOptions, perform: ReturnType<typeof creat
       "command",
       command,
       async () => {
-        const result = await executeCommand(options, command, timeoutMs);
+        const result = await executeCommand(options, command, timeoutMs, stepOptions.okExitCodes);
 
         return parseCommand(result, parse);
       },

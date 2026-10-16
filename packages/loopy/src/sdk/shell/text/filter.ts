@@ -1,28 +1,65 @@
 import { defineCommand } from "../../define-command.js";
+import type { RenderInput } from "../../render-argv.js";
+import { parseGrep, parseGrepCount, parseUniqCount } from "../parse/text.js";
+
+const GREP_FLAGS = {
+  H: { cli: "-H", kind: "boolean" },
+  h: { cli: "-h", kind: "boolean" },
+  L: { cli: "-L", kind: "boolean" },
+  n: { cli: "-n", kind: "boolean" },
+  r: { cli: "-r", kind: "boolean" },
+  i: { cli: "-i", kind: "boolean" },
+  v: { cli: "-v", kind: "boolean" },
+  l: { cli: "-l", kind: "boolean" },
+  c: { cli: "-c", kind: "boolean" },
+  E: { cli: "-E", kind: "boolean" },
+  F: { cli: "-F", kind: "boolean" },
+  e: { cli: "-e", kind: "string" },
+  f: { cli: "-f", kind: "string" },
+  q: { cli: "-q", kind: "boolean" },
+  w: { cli: "-w", kind: "boolean" },
+  o: { cli: "-o", kind: "boolean" },
+  A: { cli: "-A", kind: "number" },
+  B: { cli: "-B", kind: "number" },
+  C: { cli: "-C", kind: "number" },
+} as const;
+
+function grepInput(input: RenderInput): RenderInput {
+  const flags = { ...input.flags };
+  const hasPattern = input.flags?.e !== undefined || input.flags?.f !== undefined;
+  const paths = (input.args?.length ?? 0) - (hasPattern ? 0 : 1);
+
+  if (paths > 1) {
+    flags.H = true;
+  }
+
+  return { ...input, flags };
+}
 
 export const filter = {
   grep: defineCommand({
+    parse: parseGrep,
+    okExitCodes: [0, 1],
+    preset: { flags: { n: true } },
+    exclude: ["c", "l", "L", "o", "q", "H", "h", "A", "B", "C"],
+    prepare: grepInput,
     namespace: "text",
     name: "grep",
     program: "grep",
-    flags: {
-      n: { cli: "-n", kind: "boolean" },
-      r: { cli: "-r", kind: "boolean" },
-      i: { cli: "-i", kind: "boolean" },
-      v: { cli: "-v", kind: "boolean" },
-      l: { cli: "-l", kind: "boolean" },
-      c: { cli: "-c", kind: "boolean" },
-      E: { cli: "-E", kind: "boolean" },
-      F: { cli: "-F", kind: "boolean" },
-      e: { cli: "-e", kind: "string" },
-      q: { cli: "-q", kind: "boolean" },
-      w: { cli: "-w", kind: "boolean" },
-      o: { cli: "-o", kind: "boolean" },
-      A: { cli: "-A", kind: "number" },
-      B: { cli: "-B", kind: "number" },
-      C: { cli: "-C", kind: "number" },
-    },
+    flags: GREP_FLAGS,
     positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionalSeparator: true,
+  }),
+  grepCount: defineCommand({
+    namespace: "text",
+    name: "grepCount",
+    program: "grep",
+    parse: parseGrepCount,
+    okExitCodes: [0, 1],
+    preset: { flags: { c: true, h: true } },
+    exclude: ["n", "l", "L", "o", "q", "H", "r", "A", "B", "C", "e", "f"],
+    flags: GREP_FLAGS,
+    positionals: [{ name: "pattern" }, { name: "path", optional: true }],
     positionalSeparator: true,
   }),
   sed: defineCommand({
@@ -96,6 +133,20 @@ export const filter = {
   uniq: defineCommand({
     namespace: "text",
     name: "uniq",
+    program: "uniq",
+    flags: {
+      count: { cli: "-c", kind: "boolean" },
+      repeated: { cli: "-d", kind: "boolean" },
+      unique: { cli: "-u", kind: "boolean" },
+      ignoreCase: { cli: "-i", kind: "boolean" },
+    },
+    positionals: [{ name: "paths", optional: true, variadic: true }],
+  }),
+  uniqCount: defineCommand({
+    namespace: "text",
+    name: "uniqCount",
+    parse: parseUniqCount,
+    preset: { flags: { count: true } },
     program: "uniq",
     flags: {
       count: { cli: "-c", kind: "boolean" },
