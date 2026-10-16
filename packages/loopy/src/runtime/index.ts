@@ -26,6 +26,10 @@ export { assertJson } from "./json.js";
 
 export { MemoryRunStore } from "./memory-store.js";
 
+export type { RateLimitResult, RateLimits, RateLimitWindow } from "./rate-limit.js";
+
+export { acquireWindow, parseRateLimits } from "./rate-limit.js";
+
 export type { RetryPolicy } from "./retry.js";
 
 export { runDetail } from "./run-detail.js";

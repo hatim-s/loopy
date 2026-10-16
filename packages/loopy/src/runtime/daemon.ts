@@ -10,7 +10,10 @@ type DaemonOptions = {
   prepare: (
     run: RunRecord,
   ) => Promise<
-    Pick<ActivationOptions, "workflow" | "wrap" | "executor" | "mode" | "cwd" | "signal">
+    Pick<
+      ActivationOptions,
+      "workflow" | "wrap" | "executor" | "mode" | "cwd" | "signal" | "rateLimits"
+    >
   >;
   clock?: Clock;
   concurrency?: number;

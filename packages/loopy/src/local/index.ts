@@ -1,5 +1,7 @@
 export { bundleLoopy, loadLoopy, loadRunLoopy } from "./bundle.js";
 
+export { readRateLimits } from "./config.js";
+
 export { localDaemon } from "./daemon.js";
 
 export { daemonStatus, installDaemon, uninstallDaemon } from "./daemon-install.js";

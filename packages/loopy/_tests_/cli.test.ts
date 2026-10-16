@@ -683,3 +683,29 @@ test("API can omit log history while preserving steps and cursor reads", async (
   expect(await (await fetch(`${path}/logs?after=1`, { headers })).json()).toEqual([]);
   expect((await fetch(`${url.origin}/api/runs/missing?logs=false`, { headers })).status).toBe(404);
 });
+
+test("CLI reads rate limit config at startup and rejects malformed limits", async () => {
+  const f = fixture(
+    "limited",
+    `run: async () => step("limited", () => 42, { rateLimit: "codex" })`,
+  );
+
+  await save(f);
+  writeFileSync(join(f.home, "config.json"), JSON.stringify({ rateLimits: { codex: "2/1m" } }));
+  expect(object((await cli(f, "run", "limited")).stdout)).toMatchObject({
+    status: "succeeded",
+    output: 42,
+  });
+  writeFileSync(join(f.home, "config.json"), JSON.stringify({ rateLimits: { codex: "0/1m" } }));
+  const invalid = await cli(f, "run", "limited");
+  expect(invalid.code).toBe(1);
+  expect(invalid.stderr).toContain(
+    "Rate limit 'codex' is invalid. Use a positive count and duration such as '10/1h' in config.json.",
+  );
+  writeFileSync(join(f.home, "config.json"), "{");
+  const malformed = await cli(f, "run", "limited");
+  expect(malformed.code).toBe(1);
+  expect(malformed.stderr).toContain(
+    `Invalid config file '${join(f.home, "config.json")}'. Fix or delete it.`,
+  );
+});

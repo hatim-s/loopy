@@ -14,7 +14,15 @@ export class OwnershipError extends Error {
   }
 }
 
+import type { RateLimitResult } from "./rate-limit.js";
+
 export interface RunStore {
+  acquireRateLimit(
+    key: string,
+    count: number,
+    windowMs: number,
+    now: string,
+  ): Promise<RateLimitResult>;
   readonly leaseMs: number;
   createRun(run: RunRecord): Promise<void>;
   getRun(id: string): Promise<RunRecord | undefined>;

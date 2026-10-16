@@ -2,6 +2,7 @@ import type { RunRecord } from "../core/index.js";
 import { Daemon } from "../runtime/index.js";
 import { loopyActivation } from "../sdk/host.js";
 import { loadRunLoopy } from "./bundle.js";
+import { readRateLimits } from "./config.js";
 import { LocalExecutor } from "./executor.js";
 import { Registry } from "./registry.js";
 import type { SqliteRunStore } from "./store.js";
@@ -14,6 +15,7 @@ export function localDaemon(options: {
   onError?: (error: Error, run?: RunRecord) => void;
 }) {
   const { home } = options;
+  const rateLimits = readRateLimits(home);
 
   return new Daemon({
     ...options,
@@ -24,6 +26,7 @@ export function localDaemon(options: {
 
       return {
         ...loopyActivation(loopy),
+        rateLimits,
         executor: new LocalExecutor({ home, secrets: loopy.secrets }),
         mode: loopy.mode,
         cwd: run.workspace,

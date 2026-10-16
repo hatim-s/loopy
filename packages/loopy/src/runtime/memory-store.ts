@@ -6,9 +6,24 @@ import type {
   Schedule,
   StepRecord,
 } from "../core/index.js";
+import { acquireWindow, type RateLimitResult, type RateLimitWindow } from "./rate-limit.js";
 import { OwnershipError, type RunStore } from "./store.js";
 
 export class MemoryRunStore implements RunStore {
+  private readonly limits = new Map<string, RateLimitWindow>();
+
+  async acquireRateLimit(
+    key: string,
+    count: number,
+    windowMs: number,
+    now: string,
+  ): Promise<RateLimitResult> {
+    const acquired = acquireWindow(this.limits.get(key), count, windowMs, now);
+    this.limits.set(key, acquired.window);
+
+    return acquired.result;
+  }
+
   private readonly schedules = new Map<string, Schedule>();
   private readonly runs = new Map<string, RunRecord>();
   private readonly steps = new Map<string, Map<number, StepRecord>>();

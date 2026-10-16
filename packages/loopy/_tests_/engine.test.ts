@@ -641,3 +641,46 @@ test("command parsers can distinguish an absent ref from a retryable exit", asyn
   expect(await f.execute(workflow)).toEqual({ status: "succeeded", output: null });
   expect(f.executor.calls).toHaveLength(2);
 });
+
+test("rate limits suspend the third step without an attempt and skip memoized steps", async () => {
+  const f = await fixture();
+  const options = { rateLimits: { codex: { count: 2, windowMs: 60_000 } } };
+
+  const workflow = async (ctx: WorkflowContext) => {
+    await ctx.step("one", () => 1, { rateLimit: "codex" });
+    await ctx.step("two", () => 2, { rateLimit: "codex" });
+
+    return ctx.command("three", { program: "echo", args: [] }, { rateLimit: "codex" });
+  };
+
+  const suspended = { status: "suspended", wakeAt: "2026-10-16T00:01:00.000Z" } as const;
+  expect(await f.execute(workflow, undefined, options)).toEqual(suspended);
+  expect((await f.store.getSteps("run"))[2]).toMatchObject({
+    status: "retrying",
+    attempt: 0,
+    nextRetryAt: suspended.wakeAt,
+    error: `Rate limit 'codex' reached. Retrying at ${suspended.wakeAt}.`,
+  });
+  expect(await f.execute(workflow, undefined, options)).toEqual(suspended);
+  expect((await f.store.getSteps("run"))[2]?.attempt).toBe(0);
+  expect(f.executor.calls).toHaveLength(0);
+  f.advance(60_000);
+  expect(await f.execute(workflow, undefined, options)).toEqual({
+    status: "succeeded",
+    output: f.executor.result,
+  });
+  expect((await f.store.getSteps("run")).map((step) => step.attempt)).toEqual([1, 1, 1]);
+  expect(f.executor.calls).toHaveLength(1);
+});
+
+test("an unknown rate limit fails the step without retrying", async () => {
+  const f = await fixture();
+  expect(
+    await f.execute(async (ctx) => ctx.step("limited", () => 1, { rateLimit: "codex" })),
+  ).toMatchObject({
+    status: "failed",
+    error:
+      "Step 'limited' failed: Rate limit 'codex' is not configured. Add it to rateLimits in config.json.",
+  });
+  expect((await f.store.getSteps("run"))[0]).toMatchObject({ status: "failed" });
+});

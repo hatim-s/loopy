@@ -364,6 +364,7 @@ function staleTakeover(makeStore: StoreFactory): void {
 
 export function storeContract(name: string, makeStore: StoreFactory): void {
   describe(name, () => {
+    rateLimits(makeStore);
     staleTakeover(makeStore);
     stateMachine(makeStore);
     releaseRunning(makeStore);
@@ -376,5 +377,24 @@ export function storeContract(name: string, makeStore: StoreFactory): void {
     schedules(makeStore);
     scheduleFires(makeStore);
     nextWakeAt(makeStore);
+  });
+}
+
+function rateLimits(makeStore: StoreFactory): void {
+  test("rate limits share a fixed window and reset at its boundary", async () => {
+    const store = await makeStore();
+    const now = "2026-10-16T00:00:00.000Z";
+    const retryAt = "2026-10-16T00:01:00.000Z";
+    expect(
+      await Promise.all(
+        Array.from({ length: 3 }, () => store.acquireRateLimit("codex", 2, 60_000, now)),
+      ),
+    ).toEqual([{ ok: true }, { ok: true }, { ok: false, retryAt }]);
+    expect(await store.acquireRateLimit("gh", 2, 60_000, now)).toEqual({ ok: true });
+    expect(await store.acquireRateLimit("codex", 2, 60_000, "2026-10-16T00:00:59.999Z")).toEqual({
+      ok: false,
+      retryAt,
+    });
+    expect(await store.acquireRateLimit("codex", 2, 60_000, retryAt)).toEqual({ ok: true });
   });
 }

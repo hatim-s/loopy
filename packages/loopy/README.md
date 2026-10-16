@@ -188,3 +188,15 @@ Set `LOOPY_HOME` or pass `--home` to move the home. Project lookup checks the ne
 - [Review](examples/review.loopy.ts) reads a parsed Git diff and asks Codex for a review.
 - [Uacode asset sync](examples/uacode-asset-sync/asset-sync-pr.loopy.ts) previews or applies exported assets, then publishes a focused PR. See its [inputs and prerequisites](examples/uacode-asset-sync/README.md).
 - [WWW prompt sync](examples/www-uacode-sync/www-uacode-sync.loopy.ts) maps prompts and skills into uacode assets and publishes one PR per changed base. See its [run instructions](examples/www-uacode-sync/README.md).
+
+## Rate limits
+
+Set shared per-key limits in `<home>/config.json`, for example
+`{ "rateLimits": { "codex": "10/1h", "gh": "60/1m" } }`. The CLI and daemon
+read this file at startup. A `rateLimit` key absent from config.json fails the step.
+Completed steps replay without acquiring a slot; waiting for a slot does not consume
+an attempt.
+
+```ts
+await step("generate", () => generate(), { rateLimit: "codex" });
+```

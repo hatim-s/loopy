@@ -7,9 +7,11 @@ import { withHeartbeat } from "./heartbeat.js";
 import { StepJournal } from "./journal.js";
 import { assertJson } from "./json.js";
 import { Logger } from "./logger.js";
+import type { RateLimits } from "./rate-limit.js";
 import type { RunStore } from "./store.js";
 
 export type ActivationOptions = {
+  rateLimits?: RateLimits;
   runId: string;
   store: RunStore;
   executor: Executor;

@@ -44,10 +44,10 @@ test("schema version mismatch recreates tables", async () => {
       const inspection = new Database(file);
 
       try {
-        expect(inspection.query("PRAGMA user_version").get()).toEqual({ user_version: 8 });
+        expect(inspection.query("PRAGMA user_version").get()).toEqual({ user_version: 9 });
         expect(
           inspection.query("SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name").all(),
-        ).toEqual(["logs", "runs", "schedules", "steps"].map((name) => ({ name })));
+        ).toEqual(["logs", "rate_limits", "runs", "schedules", "steps"].map((name) => ({ name })));
       } finally {
         inspection.close();
       }

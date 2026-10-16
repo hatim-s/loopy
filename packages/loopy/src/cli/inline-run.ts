@@ -1,5 +1,6 @@
 import { setTimeout } from "node:timers/promises";
 import type { LocalExecutor, SqliteRunStore } from "../local/index.js";
+import type { RateLimits } from "../runtime/index.js";
 import { activateLoopy, type Loopy } from "../sdk/host.js";
 import { printJson, report } from "./output.js";
 import { onTermination } from "./signals.js";
@@ -10,6 +11,7 @@ type InlineOptions = {
   store: SqliteRunStore;
   loopy: Loopy;
   runId: string;
+  rateLimits?: RateLimits;
 };
 
 export async function inlineRun(options: InlineOptions) {
@@ -42,7 +44,7 @@ async function runActivations(options: InlineOptions, signal: AbortSignal) {
       return;
     }
 
-    await activateLoopy({ loopy, store, executor, signal, runId });
+    await activateLoopy({ loopy, store, executor, signal, runId, rateLimits: options.rateLimits });
     run = await requireRun(store, runId);
 
     if (run.status === "suspended" && !run.wakeAt) {

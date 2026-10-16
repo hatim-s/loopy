@@ -2,20 +2,21 @@ import { errorMessage, type Json, type StepBase, type StepRecord } from "../core
 import type { Activation } from "./activation.js";
 import type { Clock } from "./clock.js";
 import { assertJson } from "./json.js";
+import type { RateLimits } from "./rate-limit.js";
 import { type RetryPolicy, retryDelayMs, shouldRetry } from "./retry.js";
 import type { RunStore } from "./store.js";
 import { withAbort, withTimeout } from "./timeout.js";
 
 export class StepFailedError extends Error {
   constructor(key: string, error: string) {
-    super(
-      `Step '${key}' failed: ${error.replace(/\.$/, "")}. Fix the step before starting a new run.`,
-    );
+    super(`Step '${key}' failed: ${error.replace(/\.$/, "")}.`);
     this.name = "StepFailedError";
   }
 }
 
 type Runner = {
+  rateLimit?: string;
+  rateLimits?: RateLimits;
   record: StepBase;
   stored?: StepRecord;
   store: RunStore;
@@ -109,11 +110,52 @@ async function invoke<T extends Json>(options: Runner, fn: () => T | Promise<T>)
   return withAbort(options.signal, call);
 }
 
+async function acquireLimit(options: Runner): Promise<{ wakeAt: string } | undefined> {
+  const { rateLimit: key, rateLimits, record, store, clock } = options;
+
+  if (key === undefined) {
+    return undefined;
+  }
+
+  const limit = Object.hasOwn(rateLimits ?? {}, key) ? rateLimits?.[key] : undefined;
+
+  if (!limit) {
+    return fail(
+      options,
+      new Error(`Rate limit '${key}' is not configured. Add it to rateLimits in config.json.`),
+    );
+  }
+
+  const now = new Date(clock.now()).toISOString();
+  const result = await store.acquireRateLimit(key, limit.count, limit.windowMs, now);
+
+  if (result.ok) {
+    return undefined;
+  }
+
+  await put(options, {
+    ...record,
+    attempt: options.stored?.attempt ?? 0,
+    status: "retrying",
+    error: `Rate limit '${key}' reached. Retrying at ${result.retryAt}.`,
+    nextRetryAt: result.retryAt,
+    endedAt: now,
+  });
+
+  return { wakeAt: result.retryAt };
+}
+
 async function execute<T extends Json>(
   options: Runner,
   fn: () => T | Promise<T>,
 ): Promise<{ output: T } | { wakeAt: string }> {
   const { record } = options;
+  const limited = await acquireLimit(options);
+
+  if (limited) {
+    return limited;
+  }
+
   await put(options, { ...record, status: "running" });
   let output: T;
 

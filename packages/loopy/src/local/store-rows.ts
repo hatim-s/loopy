@@ -2,6 +2,9 @@ import type { Json, LogRecord, RunRecord, Schedule, StepRecord } from "../core/i
 import type { LogRow, RunRow, ScheduleRow, StepColumns, StepRow } from "./store-schema.js";
 
 export const SQL = {
+  rateLimit: "SELECT window_start AS windowStart,count FROM rate_limits WHERE key=?",
+  putRateLimit:
+    "INSERT INTO rate_limits VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET window_start=excluded.window_start,count=excluded.count",
   schedules: "SELECT * FROM schedules ORDER BY rowid",
   schedule: "SELECT * FROM schedules WHERE workspace=? AND slug=?",
   putSchedule: `INSERT INTO schedules VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(workspace,slug) DO UPDATE SET

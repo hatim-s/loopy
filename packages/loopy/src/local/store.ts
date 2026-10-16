@@ -10,7 +10,13 @@ import type {
   Schedule,
   StepRecord,
 } from "../core/index.js";
-import { OwnershipError, type RunStore } from "../runtime/index.js";
+import {
+  acquireWindow,
+  OwnershipError,
+  type RateLimitResult,
+  type RateLimitWindow,
+  type RunStore,
+} from "../runtime/index.js";
 import { errnoCode } from "./fs.js";
 import { rowToLog, rowToRun, rowToSchedule, rowToStep, SQL, stepToRow } from "./store-rows.js";
 import {
@@ -61,6 +67,27 @@ export class SqliteRunStore implements RunStore {
 
         this.db.exec(SCHEMA);
         this.db.exec(`PRAGMA user_version=${SCHEMA_VERSION}`);
+      })
+      .immediate();
+  }
+
+  async acquireRateLimit(
+    key: string,
+    count: number,
+    windowMs: number,
+    now: string,
+  ): Promise<RateLimitResult> {
+    return this.db
+      .transaction(() => {
+        const window =
+          this.db.query<RateLimitWindow, [string]>(SQL.rateLimit).get(key) ?? undefined;
+
+        const acquired = acquireWindow(window, count, windowMs, now);
+        this.db
+          .query(SQL.putRateLimit)
+          .run(key, acquired.window.windowStart, acquired.window.count);
+
+        return acquired.result;
       })
       .immediate();
   }

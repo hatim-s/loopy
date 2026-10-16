@@ -4,6 +4,7 @@ import {
   assertJson,
   type Clock,
   type Executor,
+  type RateLimits,
   type RunStore,
   SYSTEM_CLOCK,
   type WorkflowContext,
@@ -17,6 +18,7 @@ type ActivationOptions<Input, Output extends Json> = {
   store: RunStore;
   executor: Executor;
   runId: string;
+  rateLimits?: RateLimits;
   clock?: Clock;
   signal?: AbortSignal;
 };
@@ -53,7 +55,7 @@ export async function createLoopyRun<Input, Output extends Json>(
 export async function activateLoopy<Input, Output extends Json>(
   options: ActivationOptions<Input, Output>,
 ) {
-  const { loopy, store, executor, runId, clock, signal } = options;
+  const { loopy, store, executor, runId, clock, signal, rateLimits } = options;
   const run = await store.getRun(runId);
 
   if (!run) {
@@ -67,6 +69,7 @@ export async function activateLoopy<Input, Output extends Json>(
     cwd: run.workspace,
     clock,
     signal,
+    rateLimits,
     mode: loopy.mode,
     ...loopyActivation(loopy),
   });

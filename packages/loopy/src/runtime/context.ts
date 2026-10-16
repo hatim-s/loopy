@@ -12,17 +12,20 @@ import { type Duration, durationMs } from "./duration.js";
 import { CommandExitError, type Executor, type ResolvedCommand } from "./executor.js";
 import type { StepJournal } from "./journal.js";
 import type { Logger } from "./logger.js";
+import type { RateLimits } from "./rate-limit.js";
 import { type RetryPolicy, resolveRetry, StepParseError } from "./retry.js";
 import { runSleep, runStep, StepFailedError } from "./step-runner.js";
 import type { RunStore } from "./store.js";
 
 export type StepOptions = {
+  rateLimit?: string;
   retry?: RetryPolicy;
   timeout?: Duration;
   okExitCodes?: readonly number[];
 };
 
 type ContextOptions = {
+  rateLimits?: RateLimits;
   run: RunRecord;
   store: RunStore;
   executor: Executor;
@@ -70,6 +73,8 @@ function createPerformer(options: ContextOptions) {
     const runner = {
       record,
       stored,
+      rateLimit: stepOptions.rateLimit,
+      rateLimits: options.rateLimits,
       activation,
       clock,
       retry,
@@ -158,7 +163,7 @@ function createCommand(options: ContextOptions, perform: ReturnType<typeof creat
 
         return parseCommand(result, parse);
       },
-      { retry: stepOptions.retry },
+      { retry: stepOptions.retry, rateLimit: stepOptions.rateLimit },
     );
   }
 
