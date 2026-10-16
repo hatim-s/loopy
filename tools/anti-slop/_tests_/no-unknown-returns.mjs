@@ -4,6 +4,7 @@ const tester = new RuleTester();
 const error = { messageId: "unknownReturn" };
 tester.run("anti-slop/no-unknown-returns", noUnknownReturnsRule, {
   valid: [
+    "function parallel<T extends readonly (() => Promise<unknown>)[]>(fns: T): Promise<{ [K in keyof T]: Awaited<ReturnType<T[K]>> }> { throw new Error('test'); }",
     "type ImportedValue = unknown;",
     "function parse(): ImportedValue { return input; }",
     "function parse(): User { return user; }",

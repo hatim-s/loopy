@@ -27,10 +27,11 @@ export class StepJournal {
   prepare(key: string, kind: StepKind, input: Json, maxAttempts: number) {
     const seq = ++this.seq;
     const stored = this.steps.get(seq);
+    this.activation.visit(seq);
 
     if (stored && stored.key !== key) {
       const error = new NondeterminismError(seq, stored.key, key);
-      this.activation.fatal = error;
+      this.activation.fail(error);
       throw error;
     }
 

@@ -1,3 +1,6 @@
+export function parallel<const T extends readonly (() => Promise<unknown>)[]>(
+  functions: T,
+): Promise<{ -readonly [K in keyof T]: Awaited<ReturnType<T[K]>> }>;
 export function parallel<T>(functions: readonly (() => Promise<T>)[]): Promise<T[]> {
   return Promise.all(functions.map((fn) => fn()));
 }
@@ -13,11 +16,18 @@ export async function map<T, R>(
 
   const results: R[] = [];
   const entries = items.entries();
+  let rejected = false;
 
   async function worker(): Promise<void> {
-    for (let entry = entries.next(); !entry.done; entry = entries.next()) {
+    for (let entry = entries.next(); !entry.done && !rejected; entry = entries.next()) {
       const [index, item] = entry.value;
-      results[index] = await fn(item, index);
+
+      try {
+        results[index] = await fn(item, index);
+      } catch (cause) {
+        rejected = true;
+        throw cause;
+      }
     }
   }
 
@@ -28,6 +38,9 @@ export async function map<T, R>(
   return results;
 }
 
+export function race<const T extends readonly (() => Promise<unknown>)[]>(
+  functions: T,
+): Promise<Awaited<ReturnType<T[number]>>>;
 export function race<T>(functions: readonly (() => Promise<T>)[]): Promise<T> {
   return Promise.race(functions.map((fn) => fn()));
 }

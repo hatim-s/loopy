@@ -20,40 +20,58 @@ export type ActivationOptions = {
 
 export type ActivationOutcome = RunOutcome | { status: "suspended"; wakeAt: string };
 
+function startWorkflow(
+  activation: Activation,
+  context: LoopyContext,
+  workflow: ActivationOptions["workflow"],
+) {
+  void Promise.resolve()
+    .then(() => workflow(context))
+    .then((output) => {
+      assertJson(output, "Workflow output");
+      activation.complete({ status: "succeeded", output });
+    })
+    .catch((cause: unknown) => {
+      activation.complete({ status: "failed", error: errorMessage(cause) });
+    });
+}
+
 async function settle(
   activation: Activation,
   context: LoopyContext,
   workflow: ActivationOptions["workflow"],
 ): Promise<ActivationOutcome> {
-  let outcome: RunOutcome | undefined;
-  void Promise.resolve()
-    .then(() => workflow(context))
-    .then((output) => {
-      assertJson(output, "Workflow output");
-      outcome = { status: "succeeded", output };
-    })
-    .catch((cause: unknown) => {
-      outcome = { status: "failed", error: errorMessage(cause) };
-    });
+  startWorkflow(activation, context, workflow);
 
   while (true) {
     await activation.tick();
 
-    if (activation.fatal) {
-      return { status: "failed", error: errorMessage(activation.fatal) };
+    if (activation.running === 0 && activation.closed) {
+      if (activation.fatal) {
+        return { status: "failed", error: errorMessage(activation.fatal) };
+      }
+
+      if (activation.outcome) {
+        return activation.outcome;
+      }
     }
 
-    if (outcome) {
-      return outcome;
-    }
-
-    if (activation.deliverReplay()) {
+    if (activation.deliver()) {
       continue;
     }
 
-    if (activation.running === 0 && activation.blocked > 0 && activation.wakeAt !== undefined) {
+    if (
+      !activation.closed &&
+      activation.running === 0 &&
+      activation.blocked > 0 &&
+      activation.wakeAt !== undefined
+    ) {
+      activation.close();
+
       return { status: "suspended", wakeAt: activation.wakeAt };
     }
+
+    await activation.changed;
   }
 }
 
@@ -79,38 +97,75 @@ async function persist(
   }
 }
 
+async function executeActivation(
+  options: ActivationOptions,
+  run: Awaited<ReturnType<RunStore["claim"]>>,
+  token: string,
+): Promise<ActivationOutcome> {
+  const { store, runId } = options;
+  const clock = options.clock ?? SYSTEM_CLOCK;
+  const steps = await store.getSteps(runId);
+  const activation = new Activation(steps);
+  const journal = new StepJournal(runId, steps, activation, clock);
+
+  const logger = new Logger({
+    runId,
+    token,
+    store,
+    clock,
+    journal,
+    activation,
+    logs: await store.getLogs(runId),
+  });
+
+  const context = createContext({ ...options, run, token, clock, activation, journal, logger });
+  let outcome = await settle(activation, context, options.workflow);
+
+  try {
+    await logger.flush();
+  } catch (cause) {
+    outcome = { status: "failed", error: errorMessage(cause) };
+  }
+
+  return persist(store, runId, token, outcome);
+}
+
+async function release(
+  store: RunStore,
+  runId: string,
+  token: string,
+  failure?: Error,
+): Promise<void> {
+  try {
+    await store.release(runId, token);
+  } catch (cause) {
+    if (!failure) {
+      throw cause;
+    }
+
+    failure.cause = cause;
+    throw failure;
+  }
+}
+
 export async function activate(options: ActivationOptions): Promise<ActivationOutcome> {
   const { store, runId } = options;
   const token = crypto.randomUUID();
   const run = await store.claim(runId, token);
+  let failure: Error | undefined;
 
   try {
-    const clock = options.clock ?? SYSTEM_CLOCK;
-    const steps = await store.getSteps(runId);
-    const activation = new Activation(steps);
-    const journal = new StepJournal(runId, steps, activation, clock);
+    const outcome = await executeActivation(options, run, token);
 
-    const logger = new Logger({
-      runId,
-      token,
-      store,
-      clock,
-      journal,
-      activation,
-      logs: await store.getLogs(runId),
-    });
-
-    const context = createContext({ ...options, run, token, clock, activation, journal, logger });
-    let outcome = await settle(activation, context, options.workflow);
-
-    try {
-      await logger.flush();
-    } catch (cause) {
-      outcome = { status: "failed", error: errorMessage(cause) };
+    if (outcome.status === "failed") {
+      failure = new Error(outcome.error);
     }
 
-    return await persist(store, runId, token, outcome);
+    return outcome;
+  } catch (cause) {
+    failure = cause instanceof Error ? cause : new Error(errorMessage(cause));
+    throw failure;
   } finally {
-    await store.release(runId, token);
+    await release(store, runId, token, failure);
   }
 }

@@ -1,4 +1,4 @@
-import type { EngineLog, LogLevel } from "../core/index.js";
+import type { EngineLog, LogLevel, LogPosition } from "../core/index.js";
 import type { Activation } from "./activation.js";
 import type { Clock } from "./clock.js";
 import type { StepJournal } from "./journal.js";
@@ -27,19 +27,43 @@ export class Logger {
     },
   ) {
     this.seq = Math.max(0, ...options.logs.map((log) => log.seq));
-    this.positions = new Set(options.logs.map((log) => JSON.stringify(log.position)));
+    this.positions = new Set(
+      options.logs
+        .filter((log) => log.position.kind === "workflow")
+        .map((log) => JSON.stringify(log.position)),
+    );
   }
 
   flush(): Promise<void> {
     return this.writes;
   }
 
+  scope(seq: number, attempt: number) {
+    let index = 0;
+
+    const write = (level: LogLevel, message: string, data?: EngineLog["data"]) =>
+      this.append({ kind: "step", seq, attempt, index: ++index }, level, message, data);
+
+    return {
+      info: (message: string, data?: EngineLog["data"]) => write("info", message, data),
+      warn: (message: string, data?: EngineLog["data"]) => write("warn", message, data),
+      error: (message: string, data?: EngineLog["data"]) => write("error", message, data),
+    };
+  }
+
   private write(level: LogLevel, message: string, data?: EngineLog["data"]): void {
-    const { journal, activation, clock, runId, store, token } = this.options;
+    const { journal, activation } = this.options;
     const state = `${journal.seq}:${activation.finished}`;
     const index = (this.indexes.get(state) ?? 0) + 1;
     this.indexes.set(state, index);
-    const position = { afterStep: journal.seq, afterFinish: activation.finished, index };
+
+    const position = {
+      kind: "workflow",
+      afterStep: journal.seq,
+      afterFinish: activation.finished,
+      index,
+    } as const;
+
     const identity = JSON.stringify(position);
 
     if (this.positions.has(identity)) {
@@ -47,6 +71,16 @@ export class Logger {
     }
 
     this.positions.add(identity);
+    this.append(position, level, message, data);
+  }
+
+  private append(
+    position: LogPosition,
+    level: LogLevel,
+    message: string,
+    data?: EngineLog["data"],
+  ): void {
+    const { clock, runId, store, token } = this.options;
 
     const log: EngineLog = {
       runId,

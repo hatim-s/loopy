@@ -187,6 +187,7 @@ test("sleep suspends and resumes without an in-process timer", async () => {
   expect(f.timers.size).toBe(0);
   f.advance(3_600_000);
   expect(await f.execute(workflow)).toEqual({ status: "succeeded", output: "awake" });
+  expect((await f.store.getSteps("run"))[0]?.attempt).toBe(1);
 });
 
 test("parallel replays two steps per branch in original finish order", async () => {
@@ -380,8 +381,8 @@ test("logs inside a skipped step do not suppress workflow logs on replay", async
   const f = await fixture();
 
   const workflow = async (ctx: LoopyContext) => {
-    await ctx.step("value", () => {
-      ctx.log.info("inside");
+    await ctx.step("value", ({ log }) => {
+      log.info("inside");
 
       return 1;
     });

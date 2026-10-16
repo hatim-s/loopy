@@ -221,7 +221,9 @@ export type EngineStep = StepBase &
 
 export type StepStatus = EngineStep["status"];
 
-export type LogPosition = { afterStep: number; afterFinish: number; index: number };
+export type LogPosition =
+  | { kind: "workflow"; afterStep: number; afterFinish: number; index: number }
+  | { kind: "step"; seq: number; attempt: number; index: number };
 
 export type EngineLog = {
   runId: string;

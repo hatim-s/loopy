@@ -1,10 +1,4 @@
-import {
-  type EngineStep,
-  errorMessage,
-  isNumber,
-  type Json,
-  type StepBase,
-} from "../core/index.js";
+import { type EngineStep, errorMessage, type Json, type StepBase } from "../core/index.js";
 import type { Activation } from "./activation.js";
 import type { Clock } from "./clock.js";
 import { assertJson } from "./json.js";
@@ -36,7 +30,7 @@ async function put(options: Runner, step: EngineStep): Promise<void> {
   try {
     await options.store.putStep(step.runId, options.token, step);
   } catch (cause) {
-    options.activation.fatal = new Error(errorMessage(cause), { cause });
+    options.activation.fail(new Error(errorMessage(cause), { cause }));
     throw cause;
   }
 }
@@ -44,14 +38,20 @@ async function put(options: Runner, step: EngineStep): Promise<void> {
 async function fail(options: Runner, cause: unknown): Promise<never> {
   const { record, activation, clock } = options;
   const error = errorMessage(cause);
-  await put(options, {
-    ...record,
-    status: "failed",
-    error,
-    endedAt: new Date(clock.now()).toISOString(),
-    finishOrder: activation.finish(),
+
+  const order = await activation.terminal((finishOrder) =>
+    put(options, {
+      ...record,
+      status: "failed",
+      error,
+      endedAt: new Date(clock.now()).toISOString(),
+      finishOrder,
+    }),
+  );
+
+  return activation.queue(order, "live", () => {
+    throw new StepFailedError(record.key, error);
   });
-  throw new StepFailedError(record.key, error);
 }
 
 async function failAttempt(options: Runner, cause: unknown): Promise<{ wakeAt: string }> {
@@ -77,7 +77,7 @@ async function execute<T extends Json>(
   options: Runner,
   fn: () => T | Promise<T>,
 ): Promise<{ output: T } | { wakeAt: string }> {
-  const { record, activation, clock } = options;
+  const { record, clock } = options;
   await put(options, { ...record, status: "running" });
   let output: T;
 
@@ -96,46 +96,47 @@ async function execute<T extends Json>(
     return fail(options, cause);
   }
 
-  await put(options, {
-    ...record,
-    status: "succeeded",
-    output,
-    endedAt: new Date(clock.now()).toISOString(),
-    finishOrder: activation.finish(),
-  });
-
   return { output };
 }
 
-async function sleep(options: Runner, milliseconds: number): Promise<string | undefined> {
-  const { stored, clock, record } = options;
+async function succeed<T extends Json>(options: Runner, output: T): Promise<T> {
+  const { record, activation, clock } = options;
+
+  const order = await activation.terminal((finishOrder) =>
+    put(options, {
+      ...record,
+      status: "succeeded",
+      output,
+      endedAt: new Date(clock.now()).toISOString(),
+      finishOrder,
+    }),
+  );
+
+  return activation.queue(order, "live", () => output);
+}
+
+export async function runSleep(options: Runner, milliseconds: number): Promise<null> {
+  const { stored, clock, activation } = options;
+  const record = { ...options.record, attempt: 1 };
 
   const wakeAt =
     stored?.status === "sleeping"
       ? stored.wakeAt
       : new Date(clock.now() + milliseconds).toISOString();
 
-  if (Date.parse(wakeAt) <= clock.now()) {
-    return;
-  }
+  activation.start();
 
-  await put(options, { ...record, status: "sleeping", wakeAt });
-
-  return wakeAt;
-}
-
-async function attempt<T extends Json>(options: Runner, fn: () => T | Promise<T>) {
-  const { record } = options;
-
-  if (record.kind === "sleep" && isNumber(record.input)) {
-    const wakeAt = await sleep(options, record.input);
-
-    if (wakeAt !== undefined) {
-      return { wakeAt };
+  try {
+    if (Date.parse(wakeAt) <= clock.now()) {
+      return await succeed({ ...options, record }, null);
     }
+
+    await put(options, { ...record, status: "sleeping", wakeAt });
+  } finally {
+    activation.end();
   }
 
-  return execute(options, fn);
+  return activation.block(wakeAt);
 }
 
 export async function runStep<T extends Json>(
@@ -144,29 +145,23 @@ export async function runStep<T extends Json>(
 ): Promise<T> {
   const { stored, activation, clock } = options;
 
-  const wakeAt =
-    stored?.status === "retrying"
-      ? stored.nextRetryAt
-      : stored?.status === "sleeping"
-        ? stored.wakeAt
-        : undefined;
+  const wakeAt = stored?.status === "retrying" ? stored.nextRetryAt : undefined;
 
   if (wakeAt !== undefined && Date.parse(wakeAt) > clock.now()) {
     return activation.block(wakeAt);
   }
 
-  activation.running++;
-  let result;
+  activation.start();
 
   try {
-    result = await attempt(options, fn);
+    const result = await execute(options, fn);
+
+    if ("wakeAt" in result) {
+      return activation.block(result.wakeAt);
+    }
+
+    return await succeed(options, result.output);
   } finally {
-    activation.running--;
+    activation.end();
   }
-
-  if ("wakeAt" in result) {
-    return activation.block(result.wakeAt);
-  }
-
-  return result.output;
 }

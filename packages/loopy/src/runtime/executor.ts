@@ -19,11 +19,13 @@ export interface Executor {
 
 export class CommandExitError extends CommandExecutionError {
   constructor(result: CommandResult) {
-    super(
-      `Command exited with code ${result.exitCode}: ${result.stderr.slice(0, 500)}. Inspect stderr and correct the command.`,
-      result,
-      true,
-    );
+    const stderr = result.stderr.slice(-500).trim();
+
+    const detail = stderr
+      ? `: ${stderr}. Inspect stderr and correct the command.`
+      : ". Correct the command.";
+
+    super(`Command exited with code ${result.exitCode}${detail}`, result, true);
     this.name = "CommandExitError";
   }
 }

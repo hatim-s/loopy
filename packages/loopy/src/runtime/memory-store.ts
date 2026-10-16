@@ -105,8 +105,15 @@ export class MemoryRunStore implements RunStore {
 
   async release(runId: string, token: string): Promise<void> {
     const run = this.owned(runId, token);
+    const timestamp = this.timestamp();
+
+    if (run.status === "running") {
+      run.status = "suspended";
+      run.wakeAt = timestamp;
+    }
+
     delete run.owner;
-    run.updatedAt = this.timestamp();
+    run.updatedAt = timestamp;
   }
 
   async getSteps(runId: string): Promise<EngineStep[]> {

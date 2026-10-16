@@ -18,7 +18,7 @@ const STEP: EngineStep = {
 const LOG: EngineLog = {
   runId: "run",
   seq: 1,
-  position: { afterStep: 0, afterFinish: 0, index: 1 },
+  position: { kind: "workflow", afterStep: 0, afterFinish: 0, index: 1 },
   level: "info",
   message: "hello",
   at: STEP.startedAt,
@@ -56,6 +56,25 @@ function stateMachine(makeStore: StoreFactory): void {
     ).rejects.toThrow("cannot transition from 'suspended'");
     await store.release("run", "owner");
     expect((await store.getRun("run"))?.owner).toBeUndefined();
+    expect((await store.claim("run", "next")).status).toBe("running");
+  });
+}
+
+function releaseRunning(makeStore: StoreFactory): void {
+  test("release of a running run suspends it at release time and permits reclaim", async () => {
+    const store = await fixture(makeStore);
+    await store.claim("run", "owner");
+    const before = new Date().toISOString();
+    await store.release("run", "owner");
+    const after = new Date().toISOString();
+    const run = await store.getRun("run");
+    expect(run?.status).toBe("suspended");
+    expect(run?.owner).toBeUndefined();
+    expect(run?.wakeAt).toBe(run?.updatedAt);
+    expect(run?.wakeAt).toBeDefined();
+    expect(run?.wakeAt?.localeCompare(before)).toBeGreaterThanOrEqual(0);
+    expect(run?.wakeAt?.localeCompare(after)).toBeLessThanOrEqual(0);
+    expect((await store.dueRuns(after)).map((due) => due.id)).toEqual(["run"]);
     expect((await store.claim("run", "next")).status).toBe("running");
   });
 }
@@ -172,6 +191,7 @@ function recordIsolation(makeStore: StoreFactory): void {
 export function storeContract(name: string, makeStore: StoreFactory): void {
   describe(name, () => {
     stateMachine(makeStore);
+    releaseRunning(makeStore);
     terminalTransitions(makeStore);
     ownershipFencing(makeStore);
     logSequences(makeStore);

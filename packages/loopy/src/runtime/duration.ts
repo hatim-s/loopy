@@ -2,14 +2,19 @@ import { isNumber } from "../core/index.js";
 
 export type Duration = number | `${number}${"s" | "m" | "h" | "d"}`;
 
-const UNITS = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 };
+const UNITS = new Map([
+  ["s", 1000],
+  ["m", 60_000],
+  ["h", 3_600_000],
+  ["d", 86_400_000],
+]);
 
 const DURATION = /^(\d+(?:\.\d+)?)([smhd])$/;
 
 export function durationMs(duration: Duration): number {
   const match = isNumber(duration) ? null : DURATION.exec(duration);
 
-  const multiplier = Object.entries(UNITS).find(([unit]) => unit === match?.[2])?.[1];
+  const multiplier = UNITS.get(match?.[2] ?? "");
 
   const milliseconds = isNumber(duration)
     ? duration
