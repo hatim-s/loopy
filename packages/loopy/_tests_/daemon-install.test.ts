@@ -25,6 +25,7 @@ function fixture(platform: string, replies: DaemonExecResult[] = []) {
 
       files.set(path, content);
     },
+    exists: async (path) => files.has(path),
     exec: async (argv) => {
       commands.push(argv);
 
@@ -137,13 +138,13 @@ test("older launchctl falls back to unload and load -w", async () => {
     ["launchctl", "bootstrap", "gui/501", plist],
     ["launchctl", "unload", "-w", plist],
     ["launchctl", "load", "-w", plist],
+    ["launchctl", "print", target],
   ]);
 });
 
 for (const item of [
   { code: 0, stdout: "state = running\n pid = 42", state: "running", pid: 42 },
   { code: 0, stdout: "state = waiting", state: "stopped" },
-  { code: 113, stdout: "", state: "not-installed" },
 ] as const) {
   test(`launchctl status parses ${item.state}`, async () => {
     const { options, commands } = fixture("darwin", [{ ...ok, ...item }]);
@@ -251,10 +252,54 @@ test("failed install and uninstall report errors without deleting the definition
 });
 
 test("older launchctl uninstall uses unload when bootout is unavailable", async () => {
-  const { options, commands } = fixture("darwin", [{ ...ok, code: 1 }]);
+  const { options, commands, files } = fixture("darwin", [
+    { ...ok, code: 1 },
+    ok,
+    { ...ok, code: 113 },
+  ]);
+
+  files.set(plist, "installed");
   await uninstallDaemon(options);
+  expect(files.has(plist)).toBe(false);
   expect(commands).toEqual([
     ["launchctl", "bootout", target],
     ["launchctl", "unload", "-w", plist],
+    ["launchctl", "print", target],
   ]);
+});
+
+test("unloaded macOS service with a plist is stopped", async () => {
+  const { options, files } = fixture("darwin", [{ ...ok, code: 113 }]);
+  files.set(plist, "installed");
+  expect(await daemonStatus(options)).toEqual({ state: "stopped" });
+});
+
+test("unloaded macOS service without a plist is not installed", async () => {
+  const { options } = fixture("darwin", [{ ...ok, code: 113 }]);
+  expect(await daemonStatus(options)).toEqual({ state: "not-installed" });
+});
+
+test("zero-exit load rejects when the service remains unloaded", async () => {
+  const { options, commands } = fixture("darwin", [
+    ok,
+    { ...ok, code: 1 },
+    ok,
+    ok,
+    { ...ok, code: 113 },
+  ]);
+
+  await expect(installDaemon(options)).rejects.toThrow(
+    `Daemon did not load. Check launchctl print ${target} and the daemon logs, then retry installation.`,
+  );
+  expect(commands.at(-1)).toEqual(["launchctl", "print", target]);
+});
+
+test("zero-exit unload keeps the plist when the service remains loaded", async () => {
+  const { options, files, commands } = fixture("darwin", [{ ...ok, code: 1 }, ok, ok]);
+  files.set(plist, "installed");
+  await expect(uninstallDaemon(options)).rejects.toThrow(
+    `Cannot confirm the daemon was unloaded. Check launchctl print ${target} and retry uninstallation. The plist has been kept.`,
+  );
+  expect(files.get(plist)).toBe("installed");
+  expect(commands.at(-1)).toEqual(["launchctl", "print", target]);
 });

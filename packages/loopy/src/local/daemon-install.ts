@@ -75,6 +75,13 @@ async function startService(target: Service): Promise<void> {
   if (result.code !== 0) {
     await target.operations.exec(["launchctl", "unload", "-w", target.file]);
     await checked(target, ["launchctl", "load", "-w", target.file]);
+    const loaded = await target.operations.exec(["launchctl", "print", target.target]);
+
+    if (loaded.code !== 0) {
+      throw new Error(
+        `Daemon did not load. Check launchctl print ${target.target} and the daemon logs, then retry installation.`,
+      );
+    }
   }
 }
 
@@ -123,15 +130,28 @@ export async function installDaemon(options: InstallOptions): Promise<void> {
   await startService(target);
 }
 
+async function stopMacService(target: Service): Promise<void> {
+  const result = await target.operations.exec(["launchctl", "bootout", target.target]);
+
+  if ([0, 3, 113].includes(result.code)) {
+    return;
+  }
+
+  await checked(target, ["launchctl", "unload", "-w", target.file]);
+  const loaded = await target.operations.exec(["launchctl", "print", target.target]);
+
+  if (loaded.code !== 113) {
+    throw new Error(
+      `Cannot confirm the daemon was unloaded. Check launchctl print ${target.target} and retry uninstallation. The plist has been kept.`,
+    );
+  }
+}
+
 export async function uninstallDaemon(options: ServiceOptions = {}): Promise<void> {
   const target = service(options);
 
   if (target.platform === "darwin") {
-    const result = await target.operations.exec(["launchctl", "bootout", target.target]);
-
-    if (![0, 3, 113].includes(result.code)) {
-      await checked(target, ["launchctl", "unload", "-w", target.file]);
-    }
+    await stopMacService(target);
   } else {
     const result = await target.operations.exec([
       "systemctl",
@@ -172,7 +192,7 @@ export async function daemonStatus(options: ServiceOptions = {}): Promise<Daemon
     const result = await target.operations.exec(["launchctl", "print", target.target]);
 
     if (result.code === 113) {
-      return { state: "not-installed" };
+      return { state: (await target.operations.exists(target.file)) ? "stopped" : "not-installed" };
     }
 
     if (result.code !== 0) {
