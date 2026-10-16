@@ -13,23 +13,24 @@ export function usage(): string {
   loopy list                                   List saved loopies
   loopy graph <slug>                            Print the saved graph as JSON
   loopy run <slug>                             Prompt for inputs, then run
-  loopy run <slug> [--key value ...]            Run with string trigger inputs
-  loopy run <slug> --args input.json            Run with a JSON input file
-  loopy run <slug> --input JSON|@file           Run with JSON input
-  loopy run <slug> --full                       Run with your full host permissions
-  loopy resume <run-id> [--retry-uncertain]      Continue from saved checkpoints
+  loopy run <slug> [--key value ...]            Run with schema-coerced SDK inputs
+  loopy legacy:run <slug> --args input.json     Run a legacy graph with a JSON input file
+  loopy legacy:run <slug> --input JSON|@file    Run a legacy graph with JSON input
+  loopy legacy:run <slug> --full                Run a legacy graph with full host permissions
+  loopy resume <run-id>                       Continue a suspended SDK run
   loopy recover <run-id> --force               Release a run owned by another host
   loopy run <slug> --input-json JSON [--detach] SDK JSON input; detach queues for the daemon
-  loopy run hello-sdk -- --name Hatim         Pass a field whose name is a reserved option
+  loopy run hello-sdk --name Hatim            Pass named SDK input fields
   loopy run <slug> --input-file input.json     SDK input from a JSON file
   loopy logs <run-id> [--follow]                Show engine logs
   loopy cancel <run-id>                        Cancel a claimable engine run
-  loopy schedule <slug> --cron EXPR [--tz ZONE] Schedule an SDK loopy
+  loopy schedule <slug> [--cron EXPR] [--tz ZONE] Use the saved schedule or explicit overrides
   loopy schedule <slug> --off                  Remove its schedule
   loopy daemon run [--concurrency N]           Run the foreground daemon
+  loopy legacy:resume <id> --retry-uncertain   Retry an uncertain legacy attempt
   loopy legacy:<command>                      Use the original graph command
   loopy runs [slug]                             List runs
-  loopy inspect <run-id>                        Show inputs, attempts, outputs, and events
+  loopy inspect <run-id>                        Show run, steps and logs; legacy attempts and events
   loopy types <cli> [command...] --out file.ts   Generate a typed wrapper from CLI help
   loopy ui [--port ${DEFAULT_PORT}]                        Open a read-only graph and run viewer
 
@@ -38,7 +39,7 @@ export function usage(): string {
   --replace            Transfer a saved slug from another source file
   --name <identifier>   Export name for a generated CLI wrapper
 
-Run input: choose named flags, --args, or --input. Named values are strings.
+SDK input: choose named flags, --input-json, or --input-file. Legacy runs use --args or --input.
 In a terminal, missing named inputs are prompted one at a time before running.
 Use --key=value for dash-prefixed values; use -- --key value for reserved names.
 

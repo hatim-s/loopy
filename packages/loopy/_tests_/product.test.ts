@@ -203,6 +203,8 @@ test("CLI passes named and JSON file trigger inputs into the saved run", async (
     "--message",
     "hello world",
     "--code=001",
+    "--cron",
+    "hello",
     "--",
     "--args",
     "literal",
@@ -212,6 +214,7 @@ test("CLI passes named and JSON file trigger inputs into the saved run", async (
   expect(JSON.parse(named.stdout).input).toEqual({
     message: "hello world",
     code: "001",
+    cron: "hello",
     args: "literal",
   });
   const detail = JSON.parse((await cli(home, cwd, "inspect", JSON.parse(named.stdout).id)).stdout);

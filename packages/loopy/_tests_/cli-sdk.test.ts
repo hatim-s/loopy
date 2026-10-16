@@ -1,5 +1,13 @@
 import { afterEach, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { requireRecord } from "../src/core/index.js";
@@ -79,23 +87,12 @@ test("SDK CLI bundles, coerces named input, runs, inspects steps and prints logs
   expect(existsSync(join(f.home, "runs.sqlite"))).toBe(false);
   rmSync(f.file);
 
-  const result = await cli(
-    f,
-    "run",
-    "hello",
-    "--",
-    "--name",
-    "Hatim",
-    "--count",
-    "2",
-    "--loud",
-    "false",
-  );
+  const result = await cli(f, "run", "hello", "--name", "world", "--count", "2", "--loud", "false");
 
   expect(result.code).toBe(0);
   const run = object(result.stdout);
   expect(run.status).toBe("succeeded");
-  expect(run.output).toEqual({ name: "Hatim", count: 2, loud: false });
+  expect(run.output).toEqual({ name: "world", count: 2, loud: false });
   const detail = object((await cli(f, "inspect", String(run.id))).stdout);
   expect(detail.steps).toMatchObject([
     { seq: 1, key: "greet", kind: "function", status: "succeeded", attempt: 1 },
@@ -109,11 +106,11 @@ test("SDK CLI bundles, coerces named input, runs, inspects steps and prints logs
 test("Ctrl-C during sleep leaves the run suspended and resume completes it", async () => {
   const f = fixture(
     "nap",
-    `run: async ({ log }) => {
+    `mode: "full", run: async ({ log }) => {
     await step("before", () => 1);
     await sleep("1s");
     log.info("awake");
-    return step("after", () => 2);
+    return command("pwd", { program: "/bin/pwd", args: [] });
   }`,
   );
 
@@ -134,14 +131,20 @@ test("Ctrl-C during sleep leaves the run suspended and resume completes it", asy
   await reader.cancel();
   const run = object(await stdout);
   expect(run.status).toBe("suspended");
-  const resumed = await cli(f, "resume", String(run.id));
+  const other = join(f.cwd, "other");
+  mkdirSync(other);
+  const resumed = await cli({ ...f, cwd: other }, "resume", String(run.id));
   expect(resumed.code).toBe(0);
-  expect(object(resumed.stdout).status).toBe("succeeded");
+  expect(object(resumed.stdout)).toMatchObject({
+    status: "succeeded",
+    workspace: realpathSync(f.cwd),
+    output: { stdout: `${realpathSync(f.cwd)}\n` },
+  });
   const detail = object((await cli(f, "inspect", String(run.id))).stdout);
   expect(detail.steps).toMatchObject([
     { key: "before", attempt: 1 },
     { kind: "sleep" },
-    { key: "after", attempt: 1 },
+    { key: "pwd", attempt: 1 },
   ]);
 });
 
@@ -281,4 +284,152 @@ test("cancel reports an active owner instead of stealing the run", async () => {
   } finally {
     store.close();
   }
+});
+
+test("command-specific options preserve run input fields and reject invalid flags", async () => {
+  const f = fixture(
+    "flags",
+    `input: { cron: "string", follow: "string" }, run: ({ input }) => input`,
+  );
+
+  await save(f);
+  const result = await cli(f, "run", "flags", "--cron", "hello", "--follow", "yes");
+  expect(result.code).toBe(0);
+  expect(object(result.stdout).output).toEqual({ cron: "hello", follow: "yes" });
+  const invalid = await cli(f, "logs", "x", "--detach");
+  expect(invalid.code).toBe(1);
+  expect(invalid.stderr).toContain("Unknown option '--detach' for loopy logs.");
+});
+
+test("missing secrets and unsupported SDK flags fail without creating queued runs", async () => {
+  const f = fixture("secret", `secrets: ["MISSING_TOKEN"], run: () => 42`);
+  await save(f);
+  const missing = await cli(f, "run", "secret");
+  expect(missing.code).toBe(1);
+  expect(missing.stderr).toContain("MISSING_TOKEN");
+
+  for (const flag of ["--full", "--retry-uncertain"]) {
+    const invalid = await cli(f, "run", "secret", flag);
+    expect(invalid.code).toBe(1);
+    expect(invalid.stderr).toContain(
+      "SDK loopies declare mode in loopy({ mode }). Remove --full and --retry-uncertain.",
+    );
+  }
+
+  expect(object((await cli(f, "run", "secret", "--detach")).stdout).status).toBe("queued");
+  const store = openEngineStore(f.home);
+
+  try {
+    expect(await store.listRuns()).toHaveLength(1);
+  } finally {
+    store.close();
+  }
+});
+
+test("Ctrl-C interrupts a running command, releases ownership and retries on resume", async () => {
+  const f = fixture(
+    "interrupt",
+    `mode: "full", run: () => command("wait", { program: "/bin/sleep", args: ["8"] })`,
+  );
+
+  await save(f);
+
+  const child = Bun.spawn([process.execPath, CLI, "--home", f.home, "run", "interrupt"], {
+    cwd: f.cwd,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  const stdout = new Response(child.stdout).text();
+  const stderr = new Response(child.stderr).text();
+
+  try {
+    await Bun.sleep(1000);
+    const at = performance.now();
+    child.kill("SIGINT");
+    expect(await child.exited).toBe(0);
+    expect(performance.now() - at).toBeLessThan(2000);
+    expect(await stderr).toBe("");
+    const run = object(await stdout);
+    expect(run.status).toBe("suspended");
+    expect(run.owner).toBeUndefined();
+    const store = openEngineStore(f.home);
+
+    try {
+      expect(await store.getSteps(String(run.id))).toMatchObject([
+        { status: "retrying", attempt: 1 },
+      ]);
+    } finally {
+      store.close();
+    }
+
+    const resumed = await cli(f, "resume", String(run.id));
+    expect(resumed.code).toBe(0);
+    expect(object(resumed.stdout).status).toBe("succeeded");
+    const detail = object((await cli(f, "inspect", String(run.id))).stdout);
+    expect(detail.steps).toMatchObject([{ status: "succeeded", attempt: 2 }]);
+  } finally {
+    child.kill();
+    await child.exited;
+  }
+}, 15_000);
+
+test("schedule defaults come from the saved definition and logs follow emits NDJSON", async () => {
+  const f = fixture(
+    "defaults",
+    `schedule: { cron: "*/5 * * * *", tz: "Asia/Kolkata" }, run: ({ log }) => { log.info("one"); log.info("two"); return 1; }`,
+  );
+
+  await save(f);
+  const scheduled = await cli(f, "schedule", "defaults");
+  expect(scheduled.code).toBe(0);
+  expect(object(scheduled.stdout)).toMatchObject({ cron: "*/5 * * * *", tz: "Asia/Kolkata" });
+  const run = object((await cli(f, "run", "defaults")).stdout);
+  const logs = await cli(f, "logs", String(run.id), "--follow");
+  expect(logs.code).toBe(0);
+  expect(logs.stdout.trim().split("\n").map(object)).toMatchObject([
+    { message: "one" },
+    { message: "two" },
+  ]);
+});
+
+test("inspect reports a missing run without creating a legacy database", async () => {
+  const f = fixture("missing", "run: () => 1");
+  const result = await cli(f, "inspect", "nonexist");
+  expect(result.code).toBe(1);
+  expect(result.stderr).toContain("No run 'nonexist'. Use loopy runs to list run ids.");
+  expect(existsSync(join(f.home, "runs.sqlite"))).toBe(false);
+});
+
+test("legacy save resolves --cwd, removes the discarded bundle and preserves cron input", async () => {
+  const f = fixture("legacy-cron", "run: () => 1");
+  const workspace = join(f.cwd, "workspace");
+  mkdirSync(workspace);
+  const source = join(workspace, "legacy.loopy.ts");
+  const core = resolve(import.meta.dir, "../src/core/index.ts");
+  writeFileSync(
+    source,
+    `import { trigger, command } from ${JSON.stringify(core)};
+    export default trigger("legacy-cron").node("echo", ({ input }) => command("/bin/echo", input.cron));`,
+  );
+  const saved = await cli(f, "--cwd", workspace, "save", "legacy.loopy.ts");
+  expect(saved.code).toBe(0);
+  expect(saved.stderr).toBe("");
+  expect(readdirSync(join(f.home, "bundles"))).toEqual([]);
+
+  const result = await cli(
+    f,
+    "--cwd",
+    workspace,
+    "run",
+    "legacy-cron",
+    "--full",
+    "--cron",
+    "hello",
+  );
+
+  expect(result.code).toBe(0);
+  const run = object(result.stdout);
+  expect(run.input).toEqual({ cron: "hello" });
+  expect(run.status).toBe("succeeded");
 });

@@ -151,7 +151,7 @@ Each attempt is committed as running before the command launches, then its resul
 
 Runs are sequential with nested conditions. No parallelism, schedules, automatic retries, cycles, approvals or forks yet.
 
-Global graphs and run state live in `~/.loopy/v2` (`workflows/<slug>.json` and `runs.sqlite`); project graphs live in `<project>/.loopy/workflows`. set `LOOPY_HOME` or pass `--home` to move it. Run records keep resolved argv, stdin, explicit env, stdout and stderr, so don't pass credentials through them unless you want them on disk.
+Global graphs and run state live in `~/.loopy/v2` (`workflows/<slug>.json` and `runs.sqlite` for legacy runs, `engine.sqlite` for SDK runs until part 2); project graphs live in `<project>/.loopy/workflows`. set `LOOPY_HOME` or pass `--home` to move it. Run records keep resolved argv, stdin, explicit env, stdout and stderr, so don't pass credentials through them unless you want them on disk.
 
 ## Sandbox
 
