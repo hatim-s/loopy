@@ -133,14 +133,48 @@ function matchesDay(schedule: CronSchedule, wall: Date): boolean {
   return dom && dow;
 }
 
-function repeatedMinute(formatter: Intl.DateTimeFormat, timestamp: number, wall: Date): boolean {
-  // Compare offsets across the transition so only the first occurrence can fire.
-  const previous = timestamp - DAY_MS;
-  const offset = wall.getTime() - timestamp;
-  const previousOffset = wallTime(formatter, previous).getTime() - previous;
-  const difference = previousOffset - offset;
+function resolveWallTime(formatter: Intl.DateTimeFormat, candidate: number): number | null {
+  let first: number | null = null;
 
-  return difference > 0 && wallTime(formatter, timestamp - difference).getTime() === wall.getTime();
+  // Sample both sides of a transition, then verify each possible offset against Intl.
+  for (const delta of [-DAY_MS, 0, DAY_MS]) {
+    const sample = candidate + delta;
+    const offset = wallTime(formatter, sample).getTime() - sample;
+    const timestamp = candidate - offset;
+
+    if (wallTime(formatter, timestamp).getTime() !== candidate) {
+      continue;
+    }
+
+    if (first === null || timestamp < first) {
+      first = timestamp;
+    }
+  }
+
+  return first;
+}
+
+function* calendarCandidates(schedule: CronSchedule, start: Date, end: Date) {
+  const day = new Date(start);
+  day.setUTCHours(0, 0, 0, 0);
+  const hours = [...schedule.hour.values].sort((left, right) => left - right);
+  const minutes = [...schedule.minute.values].sort((left, right) => left - right);
+
+  for (; day.getTime() <= end.getTime(); day.setUTCDate(day.getUTCDate() + 1)) {
+    if (!schedule.month.values.has(day.getUTCMonth() + 1) || !matchesDay(schedule, day)) {
+      continue;
+    }
+
+    for (const hour of hours) {
+      for (const minute of minutes) {
+        const candidate = day.getTime() + (hour * 60 + minute) * MINUTE_MS;
+
+        if (candidate >= start.getTime() && candidate <= end.getTime()) {
+          yield candidate;
+        }
+      }
+    }
+  }
 }
 
 export function nextFire(schedule: CronSchedule, after: Date, timeZone: string): Date {
@@ -171,26 +205,13 @@ export function nextFire(schedule: CronSchedule, after: Date, timeZone: string):
   const limit = new Date(after);
   limit.setUTCFullYear(limit.getUTCFullYear() + 5);
 
-  for (
-    let timestamp = Math.floor(after.getTime() / MINUTE_MS) * MINUTE_MS + MINUTE_MS;
-    timestamp <= limit.getTime();
-    timestamp += MINUTE_MS
-  ) {
-    const wall = wallTime(formatter, timestamp);
+  const start = wallTime(formatter, after.getTime());
+  const end = wallTime(formatter, limit.getTime());
 
-    if (
-      !schedule.month.values.has(wall.getUTCMonth() + 1) ||
-      !matchesDay(schedule, wall) ||
-      !schedule.hour.values.has(wall.getUTCHours())
-    ) {
-      timestamp += (59 - wall.getUTCMinutes()) * MINUTE_MS;
-      continue;
-    }
+  for (const candidate of calendarCandidates(schedule, start, end)) {
+    const timestamp = resolveWallTime(formatter, candidate);
 
-    if (
-      schedule.minute.values.has(wall.getUTCMinutes()) &&
-      !repeatedMinute(formatter, timestamp, wall)
-    ) {
+    if (timestamp !== null && timestamp > after.getTime() && timestamp <= limit.getTime()) {
       return new Date(timestamp);
     }
   }

@@ -69,8 +69,18 @@ describe("nextFire", () => {
     );
   });
   test.each([
+    ["Pacific/Chatham", "50 3 * * *", "2026-09-26T13:40:00Z", "2026-09-26T14:05:00.000Z"],
+    ["Australia/Lord_Howe", "40 2 * * *", "2026-10-03T15:20:00Z", "2026-10-03T15:40:00.000Z"],
+  ])(
+    "finds valid minutes after a partial-hour spring gap in %s",
+    (zone, expression, after, expected) => {
+      expect(next(expression, after, zone)).toBe(expected);
+    },
+  );
+  test.each([
     ["America/New_York", "30 2 * * *", "2026-03-08T05:00:00Z", "2026-03-09T06:30:00.000Z"],
     ["Europe/London", "30 1 * * *", "2026-03-29T00:00:00Z", "2026-03-30T00:30:00.000Z"],
+    ["Australia/Lord_Howe", "10 2 * * *", "2026-10-03T15:20:00Z", "2026-10-04T15:10:00.000Z"],
   ])("skips the spring gap in %s", (zone, expression, after, expected) => {
     expect(next(expression, after, zone)).toBe(expected);
   });
@@ -92,6 +102,17 @@ describe("nextFire", () => {
     expect(next("30 1 * * *", first, zone)).toBe(following);
     expect(next("30 1 * * *", new Date(Date.parse(first) + 15 * 60_000).toISOString(), zone)).toBe(
       following,
+    );
+  });
+  test("fires only the first minute of the Lord Howe half-hour overlap", () => {
+    expect(next("45 1 * * *", "2026-04-04T14:00:00Z", "Australia/Lord_Howe")).toBe(
+      "2026-04-04T14:45:00.000Z",
+    );
+    expect(next("45 1 * * *", "2026-04-04T14:45:00Z", "Australia/Lord_Howe")).toBe(
+      "2026-04-05T15:15:00.000Z",
+    );
+    expect(next("45 1 * * *", "2026-04-04T15:00:00Z", "Australia/Lord_Howe")).toBe(
+      "2026-04-05T15:15:00.000Z",
     );
   });
   test("combines restricted days with OR and wildcard days with AND", () => {
