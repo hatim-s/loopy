@@ -14,9 +14,9 @@ export function fixture(namespace: string, name: string, platform = "darwin") {
 }
 
 export class SpawnExecutor implements Executor {
-  async execute(command: ResolvedCommand, options: { cwd: string }): Promise<CommandResult> {
+  async execute(command: ResolvedCommand, options: { workspace: string }): Promise<CommandResult> {
     const child = Bun.spawn([command.program, ...command.args], {
-      cwd: command.cwd ?? options.cwd,
+      cwd: command.cwd ?? options.workspace,
       env: { ...process.env, LC_ALL: "C", ...command.env },
       stdin: command.stdin === undefined ? "ignore" : new TextEncoder().encode(command.stdin),
       stdout: "pipe",

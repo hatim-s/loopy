@@ -130,6 +130,7 @@ export const metadata = {
   }),
   realpath: defineCommand({
     parse: parseRealpath,
+    parsedPositionals: [{ name: "path" }],
     preset: { flags: {} },
     namespace: "fs",
     name: "realpath",

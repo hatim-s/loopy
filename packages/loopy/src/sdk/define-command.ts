@@ -25,6 +25,7 @@ export type CommandDefinition = {
   readonly flagsAfterPositionals?: boolean;
   readonly revisionPaths?: boolean;
   readonly positionals?: readonly PositionalDefinition[];
+  readonly parsedPositionals?: readonly PositionalDefinition[];
   readonly flags?: Readonly<Record<string, FlagDefinition>>;
   readonly style?: "equals" | "space";
   readonly preset?: {
@@ -36,7 +37,7 @@ export type CommandDefinition = {
   readonly okExitCodes?: readonly number[];
   /** Adjust operands and derived flags only after parsed flag validation. */
   readonly prepare?: (input: RenderInput) => RenderInput;
-  readonly parse?: (result: CommandResult) => Json;
+  readonly parse?: (result: CommandResult, input: RenderInput) => Json;
 };
 
 export type CommandDescriptor = CommandDefinition & {
@@ -112,14 +113,20 @@ type ExcludedKeys<D> = D extends { readonly exclude: readonly (infer K extends s
 
 type ProtectedKeys<D> = PresetKeys<D> | ExcludedKeys<D>;
 
-type Input<D extends CommandDescriptor> = Operands<D> & {
+type ParsedDescriptor<D extends CommandDescriptor> = D extends {
+  readonly parsedPositionals: infer P extends readonly PositionalDefinition[];
+}
+  ? Omit<D, "positionals"> & { readonly positionals: P }
+  : D;
+
+type Input<D extends CommandDescriptor> = Operands<ParsedDescriptor<D>> & {
   flags?: Omit<Flags<D>, ProtectedKeys<D>> & { readonly [K in ProtectedKeys<D>]?: never };
 };
 
 type RawInput<D extends CommandDescriptor> = Operands<D> & { flags?: Flags<D> };
 
 type CommandCall<D extends CommandDescriptor> = D extends {
-  readonly parse: (result: CommandResult) => infer T extends Json;
+  readonly parse: (result: CommandResult, input: RenderInput) => infer T extends Json;
 }
   ? ((...args: CallArguments<Input<D>>) => Promise<T>) & {
       raw: (...args: CallArguments<RawInput<D>>) => Promise<CommandResult>;
@@ -169,20 +176,36 @@ export function defineCommand(
     return command(key, resolveCommand(resolved, input, key, options), options);
   };
 
-  const parsed = async (input: RenderInput = {}, options: CommandOptions = {}) => {
+  return Object.assign(createParsedCommand(descriptor, environment, key), { raw });
+}
+
+function createParsedCommand(
+  descriptor: CommandDescriptor,
+  environment: { platform: () => string },
+  key: string,
+) {
+  return async (input: RenderInput = {}, options: CommandOptions = {}) => {
     const resolved = platformVariant(descriptor, environment.platform());
     const flags = parsedFlags(resolved, input);
     const prepared = resolved.prepare?.({ ...input, flags }) ?? { ...input, flags };
-    const request = resolveCommand(resolved, prepared, key, options);
+
+    const request = resolveCommand(
+      { ...resolved, positionals: resolved.parsedPositionals ?? resolved.positionals },
+      prepared,
+      key,
+      options,
+    );
 
     if (!resolved.parse) {
       return command(key, request, options);
     }
 
-    return command(key, request, { ...options, okExitCodes: resolved.okExitCodes }, resolved.parse);
-  };
+    const parse = resolved.parse;
 
-  return Object.assign(parsed, { raw });
+    return command(key, request, { ...options, okExitCodes: resolved.okExitCodes }, (result) =>
+      parse(result, prepared),
+    );
+  };
 }
 
 function resolveCommand(

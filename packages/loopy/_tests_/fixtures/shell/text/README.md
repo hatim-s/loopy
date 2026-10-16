@@ -24,8 +24,10 @@ The Linux wrapper runs sha256sum; Darwin runs shasum -a 256.
 Grep uses line numbers, adding -H for multiple paths. Context and output mode
 flags stay raw because they change record shapes. Numeric filenames and filenames
 containing colon-delimited numbers can be ambiguous in grep's line format.
-GrepCount accepts one file or stdin, suppresses filenames and rejects recursion.
-Wc drops rows named total. Both wc and grep retain the limitations of their
+Grep returns text records in matches and binary filenames in binaryMatches.
+GrepCount accepts one file or stdin, suppresses filenames and rejects recursion,
+explicit patterns and pattern files. Use .raw() for those flags.
+Wc drops only the final aggregate row when given multiple file operands. Both wc and grep retain the limitations of their
 line-based tool formats for filenames containing newlines.
 
 Uniq stays raw; uniqCount presets -c. Diff, sort, head, tail, cut, tr, sed, awk,

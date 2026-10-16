@@ -1,11 +1,14 @@
 import type { CommandResult, Json } from "../../../core/index.js";
+import type { RenderInput } from "../../render-argv.js";
 import { jsonValue, lines, unexpected } from "./shared.js";
 
 export type Wc = { lines: number; words: number; bytes: number; file?: string };
 
 export type UniqCount = { count: number; line: string };
 
-export type Grep = { file: string | null; line: number; text: string };
+export type GrepMatch = { file: string | null; line: number; text: string };
+
+export type Grep = { matches: GrepMatch[]; binaryMatches: string[] };
 
 export type GrepCount = number;
 
@@ -13,8 +16,14 @@ export type Sha256 = { hash: string; file: string };
 
 export type Jq = Json;
 
-export function parseWc({ stdout }: CommandResult): Wc[] {
-  return lines(stdout).flatMap((line) => {
+export function parseWc({ stdout }: CommandResult, input: RenderInput = {}): Wc[] {
+  const rows = lines(stdout);
+
+  if ((input.args?.length ?? 0) > 1) {
+    rows.pop();
+  }
+
+  return rows.map((line) => {
     const match = /^\s*(\d+)\s+(\d+)\s+(\d+)(?:[ \t]+(.*))?$/.exec(line);
 
     if (!match || match.slice(1, 4).some((value) => !Number.isSafeInteger(Number(value)))) {
@@ -23,11 +32,7 @@ export function parseWc({ stdout }: CommandResult): Wc[] {
 
     const entry = { lines: Number(match[1]), words: Number(match[2]), bytes: Number(match[3]) };
 
-    if (match[4] === "total") {
-      return [];
-    }
-
-    return [match[4] === undefined ? entry : { ...entry, file: match[4] }];
+    return match[4] === undefined ? entry : { ...entry, file: match[4] };
   });
 }
 
@@ -53,26 +58,41 @@ function grepLine(value: string, line: string): number {
   return number;
 }
 
-export function parseGrep({ stdout, exitCode }: CommandResult): Grep[] {
-  if (exitCode === 1) {
-    return [];
+function parseGrepMatch(line: string): GrepMatch {
+  const single = /^(\d+):([\s\S]*)$/.exec(line);
+
+  if (single) {
+    return { file: null, line: grepLine(single[1] ?? "", line), text: single[2] ?? "" };
   }
 
-  return lines(stdout).map((line) => {
-    const single = /^(\d+):([\s\S]*)$/.exec(line);
+  const match = /^(.*?):(\d+):([\s\S]*)$/.exec(line);
 
-    if (single) {
-      return { file: null, line: grepLine(single[1] ?? "", line), text: single[2] ?? "" };
+  if (!match) {
+    unexpected("grep", line);
+  }
+
+  return { file: match[1] ?? null, line: grepLine(match[2] ?? "", line), text: match[3] ?? "" };
+}
+
+export function parseGrep({ stdout, exitCode }: CommandResult): Grep {
+  const result: Grep = { matches: [], binaryMatches: [] };
+
+  if (exitCode === 1) {
+    return result;
+  }
+
+  for (const line of lines(stdout)) {
+    const binary = /^Binary file (.+) matches$/.exec(line);
+
+    if (binary?.[1]) {
+      result.binaryMatches.push(binary[1]);
+      continue;
     }
 
-    const match = /^(.*?):(\d+):([\s\S]*)$/.exec(line);
+    result.matches.push(parseGrepMatch(line));
+  }
 
-    if (!match) {
-      unexpected("grep", line);
-    }
-
-    return { file: match[1] ?? null, line: grepLine(match[2] ?? "", line), text: match[3] ?? "" };
-  });
+  return result;
 }
 
 export function parseGrepCount({ stdout }: CommandResult): GrepCount {

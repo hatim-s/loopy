@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MemoryRunStore } from "../src/runtime/index.js";
@@ -87,6 +87,7 @@ async function filesystemRun(cwd: string) {
       run: async () => ({
         find: await fs.find({ args: ["."], flags: { type: "f" } }),
         ls: await fs.ls(),
+        realpath: await fs.realpath({ args: ["words.txt"] }),
         stat: await fs.stat({ args: ["words.txt"] }),
         du: await fs.du({ args: ["."], flags: { summary: true } }),
         missing: await fs.which({ args: ["loopy-command-that-does-not-exist-6b"] }),
@@ -94,7 +95,7 @@ async function filesystemRun(cwd: string) {
     }),
     store: new MemoryRunStore(),
     executor: new SpawnExecutor(),
-    cwd,
+    workspace: cwd,
     runId: "fs-parsed",
     input: {},
     bundleHash: "",
@@ -111,6 +112,7 @@ test("real filesystem commands persist typed results and which-not-found succeed
       output: {
         find: ["./words.txt"],
         ls: ["words.txt"],
+        realpath: await realpath(join(cwd, "words.txt")),
         missing: null,
         stat: [{ path: "words.txt", size: 6, type: "file", mode: "644" }],
         du: [{ path: ".", kilobytes: expect.any(Number) }],

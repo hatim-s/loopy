@@ -15,6 +15,7 @@ const GREP_FLAGS = {
   E: { cli: "-E", kind: "boolean" },
   F: { cli: "-F", kind: "boolean" },
   e: { cli: "-e", kind: "string" },
+  f: { cli: "-f", kind: "string" },
   q: { cli: "-q", kind: "boolean" },
   w: { cli: "-w", kind: "boolean" },
   o: { cli: "-o", kind: "boolean" },
@@ -25,7 +26,8 @@ const GREP_FLAGS = {
 
 function grepInput(input: RenderInput): RenderInput {
   const flags = { ...input.flags };
-  const paths = (input.args?.length ?? 0) - (input.flags?.e ? 0 : 1);
+  const hasPattern = input.flags?.e !== undefined || input.flags?.f !== undefined;
+  const paths = (input.args?.length ?? 0) - (hasPattern ? 0 : 1);
 
   if (paths > 1) {
     flags.H = true;
@@ -55,7 +57,7 @@ export const filter = {
     parse: parseGrepCount,
     okExitCodes: [0, 1],
     preset: { flags: { c: true, h: true } },
-    exclude: ["n", "l", "L", "o", "q", "H", "r", "A", "B", "C"],
+    exclude: ["n", "l", "L", "o", "q", "H", "r", "A", "B", "C", "e", "f"],
     flags: GREP_FLAGS,
     positionals: [{ name: "pattern" }, { name: "path", optional: true }],
     positionalSeparator: true,

@@ -39,7 +39,7 @@ async function curlRun(cwd: string, url: string) {
     }),
     store,
     executor: new SpawnExecutor(),
-    cwd,
+    workspace: cwd,
     runId: "curl-parsed",
     input: {},
     bundleHash: "",
