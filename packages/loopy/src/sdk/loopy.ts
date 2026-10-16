@@ -1,6 +1,7 @@
 import {
   allowKeys,
   type ExecutionMode,
+  isRecord,
   isStringArray,
   type Json,
   requireOneOf,
@@ -49,6 +50,11 @@ export type Loopy<Input = unknown, Output extends Json = Json> = Readonly<{
   // BOUNDARY: Public callers supply external data to the definition's schema.
   validateInput(value: unknown): Promise<Input>;
 }>;
+
+// BOUNDARY: Saved modules are unknown until their process-wide SDK brand is checked.
+export function isLoopy(value: unknown): value is Loopy {
+  return isRecord(value) && LOOPY in value && value[LOOPY] === true;
+}
 
 function validateSchedule(schedule: LoopyDefinition["schedule"]) {
   if (schedule === undefined) {

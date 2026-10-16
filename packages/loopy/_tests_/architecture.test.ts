@@ -16,7 +16,7 @@ const ALLOWED_IMPORTS: Record<Layer, readonly Layer[]> = {
   core: [],
   runtime: ["core"],
   cloud: ["core", "runtime"],
-  local: ["core", "runtime"],
+  local: ["core", "runtime", "sdk"],
   sdk: ["core", "runtime"],
   cli: ["core", "runtime", "local", "sdk"],
 };

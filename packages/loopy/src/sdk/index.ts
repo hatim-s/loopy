@@ -12,9 +12,9 @@ export { defineCommand } from "./define-command.js";
 
 export type { Loopy, LoopyContext, LoopyDefinition } from "./loopy.js";
 
-export { loopy } from "./loopy.js";
+export { isLoopy, loopy } from "./loopy.js";
 
-export type { StandardSchemaV1 } from "./schema.js";
+export type { RecordSpec, StandardSchemaV1 } from "./schema.js";
 
 export { archive } from "./shell/archive.js";
 
@@ -27,3 +27,5 @@ export { net } from "./shell/net.js";
 export { sh } from "./shell/sh.js";
 
 export { text } from "./shell/text.js";
+
+export { isStandardSchema } from "./schema.js";

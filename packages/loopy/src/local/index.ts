@@ -1,8 +1,14 @@
 export type { WorkflowSummary } from "../core/index.js";
 
+export { bundleLoopy, importLoopy, loadLoopy } from "./bundle.js";
+
+export { LocalExecutor } from "./engine-executor.js";
+
 export { SqliteRunStore } from "./engine-store.js";
 
 export { defaultHome } from "./home.js";
+
+export { Loopies } from "./loopies.js";
 
 export { executeLocalCommand, localRunOptions } from "./process.js";
 

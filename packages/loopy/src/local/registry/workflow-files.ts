@@ -9,7 +9,10 @@ export function projectRoot(cwd: string): string {
   let directory = canonicalPath(cwd);
 
   while (true) {
-    if (existsSync(join(directory, ".loopy", "workflows"))) {
+    if (
+      existsSync(join(directory, ".loopy", "workflows")) ||
+      existsSync(join(directory, ".loopy", "loopies"))
+    ) {
       return directory;
     }
 
