@@ -1,0 +1,102 @@
+import { defineCommand } from "../../define-command.js";
+
+export const files = {
+  ls: defineCommand({
+    namespace: "fs",
+    name: "ls",
+    program: "ls",
+    flags: {
+      a: { cli: "-a", kind: "boolean" },
+      A: { cli: "-A", kind: "boolean" },
+      l: { cli: "-l", kind: "boolean" },
+      h: { cli: "-h", kind: "boolean" },
+      R: { cli: "-R", kind: "boolean" },
+      t: { cli: "-t", kind: "boolean" },
+      S: { cli: "-S", kind: "boolean" },
+      d: { cli: "-d", kind: "boolean" },
+    },
+    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionalSeparator: true,
+  }),
+  cat: defineCommand({
+    namespace: "fs",
+    name: "cat",
+    program: "cat",
+    flags: {
+      n: { cli: "-n", kind: "boolean" },
+      b: { cli: "-b", kind: "boolean" },
+      s: { cli: "-s", kind: "boolean" },
+    },
+    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionalSeparator: true,
+  }),
+  cp: defineCommand({
+    namespace: "fs",
+    name: "cp",
+    program: "cp",
+    flags: {
+      recursive: { cli: "-R", kind: "boolean" },
+      force: { cli: "-f", kind: "boolean" },
+      interactive: { cli: "-i", kind: "boolean" },
+      preserve: { cli: "-p", kind: "boolean" },
+      verbose: { cli: "-v", kind: "boolean" },
+    },
+    positionals: [
+      {
+        name: "sources",
+        variadic: true,
+      },
+    ],
+    positionalSeparator: true,
+  }),
+  mv: defineCommand({
+    namespace: "fs",
+    name: "mv",
+    program: "mv",
+    flags: {
+      force: { cli: "-f", kind: "boolean" },
+      interactive: { cli: "-i", kind: "boolean" },
+      verbose: { cli: "-v", kind: "boolean" },
+    },
+    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionalSeparator: true,
+  }),
+  rm: defineCommand({
+    namespace: "fs",
+    name: "rm",
+    program: "rm",
+    flags: {
+      recursive: { cli: "-r", kind: "boolean" },
+      force: { cli: "-f", kind: "boolean" },
+      interactive: { cli: "-i", kind: "boolean" },
+      verbose: { cli: "-v", kind: "boolean" },
+    },
+    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionalSeparator: true,
+  }),
+  mkdir: defineCommand({
+    namespace: "fs",
+    name: "mkdir",
+    program: "mkdir",
+    flags: {
+      parents: { cli: "-p", kind: "boolean" },
+      mode: { cli: "-m", kind: "string" },
+      verbose: { cli: "-v", kind: "boolean" },
+    },
+    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionalSeparator: true,
+  }),
+  touch: defineCommand({
+    namespace: "fs",
+    name: "touch",
+    program: "touch",
+    flags: {
+      access: { cli: "-a", kind: "boolean" },
+      modify: { cli: "-m", kind: "boolean" },
+      noCreate: { cli: "-c", kind: "boolean" },
+      reference: { cli: "-r", kind: "string" },
+      time: { cli: "-t", kind: "string" },
+    },
+    positionals: [{ name: "paths", optional: true, variadic: true }],
+  }),
+};
