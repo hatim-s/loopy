@@ -8,17 +8,13 @@ import type {
   RunOutcome,
 } from "../core/index.js";
 import { OwnershipError, type RunStore } from "../runtime/index.js";
+import { rowToLog, rowToRun, rowToStep, SQL, stepToRow } from "./engine-store-rows.js";
 import {
   type LogRow,
   type RunRow,
-  rowToLog,
-  rowToRun,
-  rowToStep,
   SCHEMA,
   SCHEMA_VERSION,
-  SQL,
   type StepRow,
-  stepToRow,
 } from "./engine-store-schema.js";
 
 export class SqliteRunStore implements RunStore {
@@ -76,13 +72,13 @@ export class SqliteRunStore implements RunStore {
             run.status,
             run.output === undefined ? null : JSON.stringify(run.output),
             run.error ?? null,
-            run.wakeAt ?? null,
-            run.createdAt,
-            run.updatedAt,
+            run.wakeAt === undefined ? null : new Date(run.wakeAt).toISOString(),
+            new Date(run.createdAt).toISOString(),
+            new Date(run.updatedAt).toISOString(),
             run.owner?.token ?? null,
             run.owner?.pid ?? null,
             run.owner?.host ?? null,
-            run.owner?.heartbeatAt ?? null,
+            run.owner === undefined ? null : new Date(run.owner.heartbeatAt).toISOString(),
           );
       })
       .immediate();
@@ -95,10 +91,25 @@ export class SqliteRunStore implements RunStore {
   }
 
   async listRuns(filter: { slug?: string; status?: EngineRunStatus } = {}): Promise<EngineRun[]> {
-    return this.db
-      .query<RunRow, [string | null, string | null, string | null, string | null]>(SQL.listRuns)
-      .all(filter.slug ?? null, filter.slug ?? null, filter.status ?? null, filter.status ?? null)
-      .map(rowToRun);
+    if (filter.slug !== undefined && filter.status !== undefined) {
+      return this.db
+        .query<RunRow, [string, EngineRunStatus]>(SQL.listRunsBySlugAndStatus)
+        .all(filter.slug, filter.status)
+        .map(rowToRun);
+    }
+
+    if (filter.slug !== undefined) {
+      return this.db.query<RunRow, [string]>(SQL.listRunsBySlug).all(filter.slug).map(rowToRun);
+    }
+
+    if (filter.status !== undefined) {
+      return this.db
+        .query<RunRow, [EngineRunStatus]>(SQL.listRunsByStatus)
+        .all(filter.status)
+        .map(rowToRun);
+    }
+
+    return this.db.query<RunRow, []>(SQL.listRuns).all().map(rowToRun);
   }
 
   async claim(runId: string, token: string): Promise<EngineRun> {
@@ -142,7 +153,14 @@ export class SqliteRunStore implements RunStore {
     this.db
       .transaction(() => {
         this.requireRunning(this.owned(runId, token));
-        this.db.query(SQL.suspend).run(wakeAt ?? null, this.timestamp(), runId, token);
+        this.db
+          .query(SQL.suspend)
+          .run(
+            wakeAt === undefined ? null : new Date(wakeAt).toISOString(),
+            this.timestamp(),
+            runId,
+            token,
+          );
       })
       .immediate();
   }
@@ -169,7 +187,8 @@ export class SqliteRunStore implements RunStore {
     this.db
       .transaction(() => {
         this.owned(runId, token);
-        this.db.query(SQL.release).run(this.timestamp(), runId, token);
+        const timestamp = this.timestamp();
+        this.db.query(SQL.release).run(timestamp, timestamp, runId, token);
       })
       .immediate();
   }
@@ -217,13 +236,16 @@ export class SqliteRunStore implements RunStore {
             .run(
               runId,
               log.seq,
-              log.position.afterStep,
-              log.position.afterFinish,
+              log.position.kind,
+              log.position.kind === "workflow" ? log.position.afterStep : null,
+              log.position.kind === "workflow" ? log.position.afterFinish : null,
+              log.position.kind === "step" ? log.position.seq : null,
+              log.position.kind === "step" ? log.position.attempt : null,
               log.position.index,
               log.level,
               log.message,
               log.data === undefined ? null : JSON.stringify(log.data),
-              log.at,
+              new Date(log.at).toISOString(),
             );
         } catch (error) {
           if (this.db.query(SQL.logExists).get(runId, log.seq)) {
@@ -243,7 +265,10 @@ export class SqliteRunStore implements RunStore {
   }
 
   async dueRuns(now: string): Promise<EngineRun[]> {
-    return this.db.query<RunRow, [string]>(SQL.dueRuns).all(now).map(rowToRun);
+    return this.db
+      .query<RunRow, [string]>(SQL.dueRuns)
+      .all(new Date(now).toISOString())
+      .map(rowToRun);
   }
 
   close(): void {

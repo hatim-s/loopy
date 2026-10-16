@@ -10,7 +10,7 @@ import { storeContract } from "./store-contract.js";
 
 const clock = () => Date.parse("2026-10-16T00:00:00.000Z");
 
-storeContract("SqliteRunStore", () => new SqliteRunStore(":memory:", clock));
+storeContract("SqliteRunStore", () => new SqliteRunStore(":memory:"));
 
 test("schema version mismatch recreates tables", async () => {
   const directory = mkdtempSync(join(tmpdir(), "loopy-engine-schema-"));
@@ -44,7 +44,7 @@ test("schema version mismatch recreates tables", async () => {
       const inspection = new Database(file);
 
       try {
-        expect(inspection.query("PRAGMA user_version").get()).toEqual({ user_version: 3 });
+        expect(inspection.query("PRAGMA user_version").get()).toEqual({ user_version: 4 });
         expect(
           inspection.query("SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name").all(),
         ).toEqual(
@@ -102,7 +102,7 @@ test("a reopened file store returns the same runs steps and logs", async () => {
     {
       runId: run.id,
       seq: 1,
-      position: { afterStep: 3, afterFinish: 2, index: 1 },
+      position: { kind: "workflow", afterStep: 3, afterFinish: 2, index: 1 },
       level: "info",
       message: "hello",
       data: null,
@@ -111,7 +111,7 @@ test("a reopened file store returns the same runs steps and logs", async () => {
     {
       runId: run.id,
       seq: 2,
-      position: { afterStep: 3, afterFinish: 2, index: 2 },
+      position: { kind: "step", seq: 3, attempt: 2, index: 2 },
       level: "warn",
       message: "waiting",
       at: run.createdAt,
@@ -149,5 +149,86 @@ test("a reopened file store returns the same runs steps and logs", async () => {
     }
   } finally {
     rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("due runs sort chronologically when creation timestamps use different offsets", async () => {
+  const store = new SqliteRunStore(":memory:", clock);
+
+  try {
+    await store.createRun({ ...newRun(), id: "later", createdAt: "2026-10-16T01:00:00.000Z" });
+    await store.createRun({ ...newRun(), id: "earlier", createdAt: "2026-10-16T05:00:00+05:00" });
+    expect((await store.dueRuns(newRun().createdAt)).map((run) => run.id)).toEqual([
+      "earlier",
+      "later",
+    ]);
+    expect((await store.getRun("earlier"))?.createdAt).toBe(newRun().createdAt);
+  } finally {
+    store.close();
+  }
+});
+
+test("timestamp writes use UTC and due comparisons accept offsets", async () => {
+  const store = new SqliteRunStore(":memory:", clock);
+  const offset = "2026-10-16T05:00:00+05:00";
+  const utc = newRun().createdAt;
+
+  try {
+    await store.createRun({
+      ...newRun(),
+      status: "suspended",
+      wakeAt: offset,
+      createdAt: offset,
+      updatedAt: offset,
+      owner: { token: "owner", pid: 1, host: "test", heartbeatAt: offset },
+    });
+    expect(await store.getRun("run")).toMatchObject({
+      wakeAt: utc,
+      createdAt: utc,
+      updatedAt: utc,
+      owner: { heartbeatAt: utc },
+    });
+
+    const step = {
+      runId: "run",
+      seq: 1,
+      key: "test",
+      kind: "function",
+      input: null,
+      attempt: 1,
+      maxAttempts: 2,
+      startedAt: offset,
+    } satisfies Omit<EngineStep, "status">;
+
+    await store.putStep("run", "owner", {
+      ...step,
+      status: "retrying",
+      error: "Failed. Retry it.",
+      endedAt: offset,
+      nextRetryAt: offset,
+    });
+    expect(await store.getSteps("run")).toMatchObject([
+      { startedAt: utc, endedAt: utc, nextRetryAt: utc },
+    ]);
+    await store.putStep("run", "owner", { ...step, status: "sleeping", wakeAt: offset });
+    expect(await store.getSteps("run")).toMatchObject([{ startedAt: utc, wakeAt: utc }]);
+    await store.appendLog("run", "owner", {
+      runId: "run",
+      seq: 1,
+      position: { kind: "step", seq: 1, attempt: 1, index: 1 },
+      level: "info",
+      message: "hello",
+      at: offset,
+    });
+    expect(await store.getLogs("run")).toMatchObject([{ at: utc }]);
+    await store.release("run", "owner");
+    expect((await store.dueRuns(offset)).map((run) => run.id)).toEqual(["run"]);
+    await store.claim("run", "owner");
+    await store.suspend("run", "owner", offset);
+    await store.release("run", "owner");
+    expect((await store.getRun("run"))?.wakeAt).toBe(utc);
+    expect((await store.dueRuns(offset)).map((run) => run.id)).toEqual(["run"]);
+  } finally {
+    store.close();
   }
 });
