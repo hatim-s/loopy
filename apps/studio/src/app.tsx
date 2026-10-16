@@ -1,6 +1,8 @@
 import { BrandMark } from "./components/brand-mark.tsx";
 import { ErrorBanner } from "./components/error-banner.tsx";
+import { LoopyRail } from "./components/loopy-rail.tsx";
 import { RunDetail } from "./components/run-detail.tsx";
+import { RunList } from "./components/run-list.tsx";
 import { useStudio } from "./hooks/use-studio.ts";
 
 export function App() {
@@ -14,46 +16,31 @@ export function App() {
           <strong>loopy</strong>
           <span>Studio</span>
         </div>
+        <button type="button" onClick={state.refresh}>
+          Refresh
+        </button>
       </header>
       {state.error && <ErrorBanner message={state.error} onDismiss={state.dismissError} />}
       <div className="studio-columns">
-        <nav aria-label="Saved loopies">
-          <h1>Registry</h1>
-          {state.loopies.length === 0 && <p>Save a loopy with loopy save &lt;file.ts&gt;.</p>}
-          {state.loopies.map((loopy) => (
-            <button
-              type="button"
-              key={loopy.slug}
-              aria-pressed={state.slug === loopy.slug}
-              onClick={() => state.selectSlug(loopy.slug)}
-            >
-              <strong>{loopy.slug}</strong>
-              <span>{loopy.description}</span>
-            </button>
-          ))}
-        </nav>
-        <nav aria-label="Runs">
-          <h2>Runs</h2>
-          <p>{state.slug ?? "Select a loopy to see its runs."}</p>
-          {state.slug && state.runs.length === 0 && <p>No runs yet. Use loopy run {state.slug}.</p>}
-          {state.runs.map((run) => (
-            <button
-              type="button"
-              key={run.id}
-              aria-pressed={state.runId === run.id}
-              onClick={() => state.selectRun(run.id)}
-            >
-              <strong>{run.status}</strong>
-              <span>{run.id}</span>
-              <time>{run.createdAt}</time>
-            </button>
-          ))}
-        </nav>
+        <LoopyRail
+          loopies={state.loopies}
+          runs={state.allRuns}
+          selected={state.slug}
+          onSelect={state.selectSlug}
+        />
+        <RunList
+          runs={state.runs}
+          slug={state.slug}
+          selected={state.runId}
+          onSelect={state.selectRun}
+        />
         <main>
           {state.detail ? (
             <RunDetail detail={state.detail} />
           ) : (
-            <p>Select a run to see its step trace and logs.</p>
+            <p className="empty-state">
+              {state.runId ? "Loading run…" : "Select a run to see its step trace and logs."}
+            </p>
           )}
         </main>
       </div>
