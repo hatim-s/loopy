@@ -18,7 +18,11 @@ packages/loopy/_tests_/   all tests. No tests next to source.
 ```
 
 Layers import downward only: `cli -> local -> runtime -> core`, `cloud -> runtime -> core`.
-Cross-layer imports go through the target layer's `index.ts`. Same-layer imports use the
+The local bundle loader and activation adapter import sdk/host.ts; authoring imports use sdk/index.ts.
+During slice 2b part 1, SDK runs use `engine.sqlite`; legacy runs keep `runs.sqlite`.
+Both databases open only when a command or route needs them.
+
+Cross-layer imports go through the target layer's `index.ts`, or `sdk/host.ts` from local and cli. Same-layer imports use the
 file path. Studio imports the package only as `"loopy/core"` until slice 2b.
 
 Adding a feature: put the data shape in `core/model.ts` and its validation next to it, the OS

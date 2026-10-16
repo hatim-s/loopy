@@ -1,6 +1,14 @@
 import { parseArgs } from "node:util";
 
 const OPTIONS = {
+  "input-json": { type: "string" },
+  "input-file": { type: "string" },
+  detach: { type: "boolean" },
+  follow: { type: "boolean" },
+  cron: { type: "string" },
+  tz: { type: "string" },
+  off: { type: "boolean" },
+  concurrency: { type: "string" },
   help: { type: "boolean", short: "h" },
   home: { type: "string" },
   cwd: { type: "string" },
@@ -16,6 +24,26 @@ const OPTIONS = {
   stdin: { type: "boolean" },
 } as const;
 
+const GLOBAL_OPTIONS = ["home", "cwd", "help"] as const;
+
+const COMMAND_OPTIONS = new Map<string, readonly (keyof typeof OPTIONS)[]>(
+  Object.entries({
+    run: ["input-json", "input-file", "detach", "input", "args", "full", "retry-uncertain"],
+    "legacy:run": ["input", "args", "full", "retry-uncertain"],
+    resume: ["full", "retry-uncertain"],
+    "legacy:resume": ["full", "retry-uncertain"],
+    schedule: ["cron", "tz", "off", "input-json"],
+    logs: ["follow"],
+    "daemon run": ["concurrency"],
+    save: ["replace"],
+    "legacy:save": ["replace"],
+    types: ["out", "name"],
+    ui: ["port"],
+    recover: ["force"],
+    "secrets set": ["stdin"],
+  } satisfies Record<string, readonly (keyof typeof OPTIONS)[]>),
+);
+
 const OPTION_TYPES = new Map(Object.entries(OPTIONS).map(([name, option]) => [name, option.type]));
 
 export type ParsedCliArgs = ReturnType<typeof parseCliArgs>;
@@ -23,14 +51,14 @@ export type ParsedCliArgs = ReturnType<typeof parseCliArgs>;
 type Flag = { name: string; inline: string | undefined; type: "string" | "boolean" | undefined };
 
 /** Splits `--name=value` and looks the name up; `type` is undefined for trigger inputs. */
-function describeFlag(arg: string): Flag {
+function describeFlag(arg: string, allowed?: ReadonlySet<string>): Flag {
   const equals = arg.indexOf("=");
   const name = arg.slice(2, equals < 0 ? undefined : equals);
 
   return {
     name,
     inline: equals < 0 ? undefined : arg.slice(equals + 1),
-    type: OPTION_TYPES.get(name),
+    type: !allowed || allowed.has(name) ? OPTION_TYPES.get(name) : undefined,
   };
 }
 
@@ -44,16 +72,24 @@ function takesNextToken(flag: Flag, next: string | undefined): boolean {
 }
 
 /** The first token that is neither an option nor an option value. */
-function findCommand(args: string[]): string | undefined {
+function findCommands(args: string[]): string[] {
+  const commands: string[] = [];
+
   for (let index = 0; index < args.length; index++) {
     const arg = args[index];
 
     if (arg === undefined || arg === "--") {
-      return undefined;
+      break;
     }
 
     if (!arg.startsWith("-")) {
-      return arg;
+      commands.push(arg);
+
+      if (commands.length === 2) {
+        break;
+      }
+
+      continue;
     }
 
     if (arg.startsWith("--") && takesNextToken(describeFlag(arg), args[index + 1])) {
@@ -61,7 +97,7 @@ function findCommand(args: string[]): string | undefined {
     }
   }
 
-  return undefined;
+  return commands;
 }
 
 function recordInput(inputs: Map<string, string>, arg: string, next: string | undefined): boolean {
@@ -95,9 +131,7 @@ function recordInput(inputs: Map<string, string>, arg: string, next: string | un
 /** Copies a known option to `cli`; returns true when it consumed the value token after it. */
 function recordOption(
   cli: string[],
-  arg: string,
-  flag: Flag | undefined,
-  next: string | undefined,
+  { arg, flag, next }: { arg: string; flag?: Flag; next?: string },
 ) {
   cli.push(arg);
 
@@ -114,8 +148,36 @@ function recordOption(
   return true;
 }
 
+function recordArgument(
+  state: {
+    cli: string[];
+    inputs: Map<string, string>;
+    allowed: ReadonlySet<string>;
+    command: string;
+  },
+  arg: string,
+  options: { next?: string; inputsOnly: boolean },
+) {
+  const { cli, inputs, allowed, command } = state;
+  const flag = arg.startsWith("--") ? describeFlag(arg, allowed) : undefined;
+  const isInput = options.inputsOnly || (flag !== undefined && flag.type === undefined);
+
+  if (
+    (isInput && !["run", "legacy:run"].includes(command)) ||
+    (arg.startsWith("-") && !arg.startsWith("--") && arg !== "-h")
+  ) {
+    throw new Error(`Unknown option '${arg}' for loopy ${command}. Run loopy --help for usage.`);
+  }
+
+  return isInput
+    ? recordInput(inputs, arg, options.next)
+    : recordOption(cli, { arg, flag, next: options.next });
+}
+
 /** One pass over argv: known options go to `cli`, unknown `--flags` become trigger inputs. */
-function splitArguments(args: string[], acceptsInputs: boolean) {
+function splitArguments(args: string[], command: string) {
+  const acceptsInputs = ["run", "legacy:run"].includes(command);
+  const allowed = new Set<string>([...GLOBAL_OPTIONS, ...(COMMAND_OPTIONS.get(command) ?? [])]);
   const cli: string[] = [];
   const inputs = new Map<string, string>();
   let inputsOnly = false;
@@ -138,12 +200,10 @@ function splitArguments(args: string[], acceptsInputs: boolean) {
       break;
     }
 
-    const flag = arg.startsWith("--") ? describeFlag(arg) : undefined;
-    const isInput = inputsOnly || (flag !== undefined && flag.type === undefined);
-
-    const consumedNext = isInput
-      ? recordInput(inputs, arg, args[index + 1])
-      : recordOption(cli, arg, flag, args[index + 1]);
+    const consumedNext = recordArgument({ cli, inputs, allowed, command }, arg, {
+      next: args[index + 1],
+      inputsOnly,
+    });
 
     if (consumedNext) {
       index++;
@@ -154,25 +214,27 @@ function splitArguments(args: string[], acceptsInputs: boolean) {
 }
 
 export function parseCliArgs(args: string[]) {
-  const { cli, inputs } = splitArguments(args, findCommand(args) === "run");
+  const [command = "", action] = findCommands(args);
+
+  const scope = ["daemon", "secrets"].includes(command)
+    ? `${command} ${action ?? ""}`.trim()
+    : command;
+
+  const { cli, inputs } = splitArguments(args, scope);
+
   const parsed = parseArgs({ args: cli, options: OPTIONS, allowPositionals: true, strict: true });
-  const command = parsed.positionals[0];
-
-  if (command !== "run" && (inputs.size || parsed.values.args !== undefined)) {
-    throw new Error("Trigger input flags and --args are only supported by loopy run.");
-  }
-
-  if (command !== "secrets" && parsed.values.stdin) {
-    throw new Error("--stdin is only supported by loopy secrets set.");
-  }
 
   const sources =
     Number(inputs.size > 0) +
     Number(parsed.values.args !== undefined) +
-    Number(parsed.values.input !== undefined);
+    Number(parsed.values.input !== undefined) +
+    Number(parsed.values["input-json"] !== undefined) +
+    Number(parsed.values["input-file"] !== undefined);
 
   if (sources > 1) {
-    throw new Error("Choose one input source: named flags, --args, or --input.");
+    throw new Error(
+      "Choose one input source: named flags, --args, or --input. SDK runs also accept --input-json or --input-file.",
+    );
   }
 
   return {

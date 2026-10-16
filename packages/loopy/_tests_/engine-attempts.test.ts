@@ -76,3 +76,42 @@ test("command exit errors omit empty stderr and retain the last 500 characters",
     `Command exited with code 1: ${stderr.slice(-500)}. Inspect stderr and correct the command.`,
   );
 });
+
+test("abort suspends an in-flight function step and retries it immediately on resume", async () => {
+  const f = await fixture();
+  const entered = Promise.withResolvers<void>();
+  const pending = Promise.withResolvers<number>();
+  const controller = new AbortController();
+
+  const workflow = (ctx: LoopyContext) =>
+    ctx.step(
+      "hold",
+      ({ attempt }) => {
+        if (attempt > 1) {
+          return 42;
+        }
+
+        entered.resolve();
+
+        return pending.promise;
+      },
+      { retry: { attempts: 1 } },
+    );
+
+  const running = f.execute(workflow, controller.signal);
+  await entered.promise;
+  controller.abort();
+  expect(await running).toEqual({
+    status: "suspended",
+    wakeAt: new Date(f.clock.now()).toISOString(),
+  });
+  expect(await f.store.getSteps("run")).toMatchObject([
+    { status: "retrying", attempt: 1, nextRetryAt: new Date(f.clock.now()).toISOString() },
+  ]);
+  expect((await f.store.getRun("run"))?.owner).toBeUndefined();
+  expect(await f.execute(workflow)).toEqual({ status: "succeeded", output: 42 });
+  pending.resolve(1);
+  expect(await f.store.getSteps("run")).toMatchObject([
+    { status: "succeeded", attempt: 2, output: 42 },
+  ]);
+});

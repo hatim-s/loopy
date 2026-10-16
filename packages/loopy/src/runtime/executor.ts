@@ -13,7 +13,7 @@ export type ResolvedCommand = {
 export interface Executor {
   execute(
     command: ResolvedCommand,
-    options: { timeoutMs?: number; cwd: string; mode: ExecutionMode },
+    options: { timeoutMs?: number; workspace: string; mode: ExecutionMode; signal?: AbortSignal },
   ): Promise<CommandResult>;
 }
 

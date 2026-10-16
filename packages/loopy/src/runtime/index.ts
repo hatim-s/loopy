@@ -34,6 +34,8 @@ export type { RunRepository } from "./repository.js";
 
 export type { RetryPolicy } from "./retry.js";
 
+export { engineRunDetail } from "./run-detail.js";
+
 export { Runtime } from "./runtime.js";
 
 export { StepFailedError } from "./step-runner.js";

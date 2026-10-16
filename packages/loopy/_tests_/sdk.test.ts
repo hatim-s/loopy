@@ -46,7 +46,7 @@ function fixture() {
     executor: new FakeExecutor(),
     runId: "sdk-run",
     bundleHash: "",
-    cwd: "/workspace",
+    workspace: "/workspace",
     clock,
     advance(milliseconds: number) {
       time += milliseconds;

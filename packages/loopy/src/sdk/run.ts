@@ -5,6 +5,7 @@ import {
   type Clock,
   type Executor,
   type RunStore,
+  type LoopyContext as RuntimeContext,
   SYSTEM_CLOCK,
 } from "../runtime/index.js";
 import { log, now, random, uuid } from "./ambient.js";
@@ -16,18 +17,24 @@ type ActivationOptions<Input, Output extends Json> = {
   store: RunStore;
   executor: Executor;
   runId: string;
-  cwd: string;
   clock?: Clock;
+  signal?: AbortSignal;
 };
 
-type StartOptions<Input, Output extends Json> = ActivationOptions<Input, Output> & {
+type CreateOptions<Input, Output extends Json> = Omit<
+  ActivationOptions<Input, Output>,
+  "executor" | "signal"
+> & {
   input: unknown;
   bundleHash: string;
+  workspace: string;
 };
 
-// BOUNDARY: A CLI passes untyped input to a schema before it can create a durable run.
-export async function startLoopy<Input, Output extends Json>(options: StartOptions<Input, Output>) {
-  const { loopy, store, runId, bundleHash, clock = SYSTEM_CLOCK } = options;
+// BOUNDARY: A host passes untyped input to a schema before creating a durable run.
+export async function createLoopyRun<Input, Output extends Json>(
+  options: CreateOptions<Input, Output>,
+) {
+  const { loopy, store, runId, bundleHash, workspace, clock = SYSTEM_CLOCK } = options;
   const input = await loopy.validateInput(options.input);
   assertJson(input, "Validated input");
   const at = new Date(clock.now()).toISOString();
@@ -35,33 +42,53 @@ export async function startLoopy<Input, Output extends Json>(options: StartOptio
     id: runId,
     slug: loopy.name,
     bundleHash,
+    workspace,
     input,
     status: "queued",
     createdAt: at,
     updatedAt: at,
   });
+}
+
+export async function startLoopy<Input, Output extends Json>(
+  options: CreateOptions<Input, Output> &
+    Pick<ActivationOptions<Input, Output>, "executor" | "signal">,
+) {
+  await createLoopyRun(options);
 
   return activateLoopy(options);
 }
 
-export function activateLoopy<Input, Output extends Json>(
+export async function activateLoopy<Input, Output extends Json>(
   options: ActivationOptions<Input, Output>,
 ) {
-  const { loopy, store, executor, runId, cwd, clock } = options;
+  const { loopy, store, executor, runId, clock, signal } = options;
+  const run = await store.getRun(runId);
+
+  if (!run) {
+    throw new Error(`No run '${runId}'. Use loopy runs to list run ids.`);
+  }
 
   return activate({
     store,
     executor,
     runId,
-    cwd,
+    cwd: run.workspace,
     clock,
+    signal,
     mode: loopy.mode,
-    workflow: (context) => {
+    ...loopyActivation(loopy),
+  });
+}
+
+export function loopyActivation<Input, Output extends Json>(loopy: Loopy<Input, Output>) {
+  return {
+    workflow: (context: RuntimeContext) => {
       // SAFETY: The stored run input was validated by this loopy before createRun.
       const input = context.input as Input;
 
       return loopy.run({ input, log, now, random, uuid });
     },
     wrap: { workflow: workflowScope, step: stepScope },
-  });
+  };
 }

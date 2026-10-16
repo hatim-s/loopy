@@ -16,7 +16,7 @@ const ALLOWED_IMPORTS: Record<Layer, readonly Layer[]> = {
   core: [],
   runtime: ["core"],
   cloud: ["core", "runtime"],
-  local: ["core", "runtime"],
+  local: ["core", "runtime", "sdk"],
   sdk: ["core", "runtime"],
   cli: ["core", "runtime", "local", "sdk"],
 };
@@ -130,7 +130,10 @@ test("layers import downward, and only through the target layer's index", () => 
 
       if (!ALLOWED_IMPORTS[layer].includes(target)) {
         violations.push(`${name} (${layer}) may not import ${target} (${specifier}).`);
-      } else if (!isBarrel(specifier)) {
+      } else if (
+        !isBarrel(specifier) &&
+        !(target === "sdk" && ["local", "cli"].includes(layer) && /\/host\.js$/.test(specifier))
+      ) {
         violations.push(`${name} must import ${target} through ${target}/index.js (${specifier}).`);
       }
     }

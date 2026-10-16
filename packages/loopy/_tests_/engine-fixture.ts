@@ -12,8 +12,13 @@ export class FakeExecutor implements Executor {
   calls: ResolvedCommand[] = [];
   result: CommandResult = { stdout: "ok", stderr: "", exitCode: 0, durationMs: 1 };
   failure?: Error;
-  async execute(command: ResolvedCommand): Promise<CommandResult> {
+  options: Parameters<Executor["execute"]>[1][] = [];
+  async execute(
+    command: ResolvedCommand,
+    options: Parameters<Executor["execute"]>[1],
+  ): Promise<CommandResult> {
     this.calls.push(command);
+    this.options.push(options);
 
     if (this.failure) {
       throw this.failure;
@@ -57,6 +62,7 @@ export function newRun(): EngineRun {
     id: "run",
     slug: "test",
     bundleHash: "bundle",
+    workspace: "/workspace",
     input: { value: 42 },
     status: "queued",
     createdAt: "2026-10-16T00:00:00.000Z",
@@ -70,12 +76,13 @@ export async function fixture(store = new MemoryRunStore()) {
   const executor = new FakeExecutor();
   await store.createRun(run);
 
-  function execute(workflow: (context: LoopyContext) => Promise<Json>) {
+  function execute(workflow: (context: LoopyContext) => Promise<Json>, signal?: AbortSignal) {
     return activate({
       runId: run.id,
       store,
       executor,
       workflow,
+      signal,
       cwd: "/workspace",
       mode: "sandbox",
       clock,

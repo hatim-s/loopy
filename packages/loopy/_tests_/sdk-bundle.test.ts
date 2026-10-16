@@ -48,7 +48,7 @@ test("a self-contained Bun bundle shares the host's active scope and brand", asy
         executor: new FakeExecutor(),
         runId: "bundled",
         bundleHash: "",
-        cwd: root,
+        workspace: root,
       }),
     ).toEqual({ status: "succeeded", output: 42 });
     expect(await store.getSteps("bundled")).toMatchObject([

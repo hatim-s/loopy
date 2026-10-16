@@ -1,11 +1,4 @@
-import type {
-  Json,
-  RunDetail,
-  RunRecord,
-  UnknownRecord,
-  Workflow,
-  WorkflowSummary,
-} from "../../core/index.js";
+import type { RunRecord, UnknownRecord } from "../../core/index.js";
 import {
   allowKeys,
   requireBoolean,
@@ -15,8 +8,10 @@ import {
 } from "../../core/index.js";
 import type { Runtime } from "../../runtime/index.js";
 import { assertJson } from "../../runtime/index.js";
+import type { SqliteRunStore } from "../engine-store.js";
 import { localRunOptions } from "../process.js";
 import type { Registry } from "../registry/registry.js";
+import { engineRoutes } from "./engine-routes.js";
 
 export type RouteContext = { params: Record<string, string>; request: Request; url: URL };
 
@@ -29,13 +24,14 @@ export type Route = {
 export type RouteDependencies = {
   cwd: string;
   registry: Registry;
-  runtime: Runtime;
+  runtime: () => Runtime;
+  engineStore: () => SqliteRunStore;
+  home: string;
   launch: (run: RunRecord, retryUncertain?: boolean) => void;
 };
 
-type ApiResult = Json | Workflow | WorkflowSummary[] | RunRecord | RunRecord[] | RunDetail;
-
-export function json(data: ApiResult, status = 200): Response {
+// BOUNDARY: Response serialization accepts validated route payloads and errors.
+export function json(data: unknown, status = 200): Response {
   return Response.json(data, {
     status,
     headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" },
@@ -54,8 +50,16 @@ function notFound(): Response {
   return json({ error: "Run not found." }, 404);
 }
 
-export function apiRoutes({ cwd, registry, runtime, launch }: RouteDependencies): Route[] {
+export function apiRoutes({
+  cwd,
+  registry,
+  runtime,
+  engineStore,
+  home,
+  launch,
+}: RouteDependencies): Route[] {
   return [
+    ...engineRoutes({ engineStore, runtime, home }),
     { method: "GET", pattern: /^\/api\/config$/, handle: async () => json({ cwd }) },
     { method: "GET", pattern: /^\/api\/workflows$/, handle: async () => json(registry.list()) },
     {
@@ -63,12 +67,6 @@ export function apiRoutes({ cwd, registry, runtime, launch }: RouteDependencies)
       pattern: /^\/api\/workflows\/(?<slug>[^/]+)$/,
       handle: async ({ params }) =>
         json(registry.get(requireNonEmptyString(params.slug, "slug")).workflow),
-    },
-    {
-      method: "GET",
-      pattern: /^\/api\/runs$/,
-      handle: async ({ url }) =>
-        json(await runtime.listRuns(url.searchParams.get("slug") ?? undefined)),
     },
     {
       method: "POST",
@@ -82,7 +80,7 @@ export function apiRoutes({ cwd, registry, runtime, launch }: RouteDependencies)
         assertJson(input);
         const saved = registry.get(slug);
 
-        const run = await runtime.createRun(saved.workflow, input, {
+        const run = await runtime().createRun(saved.workflow, input, {
           ...localRunOptions(cwd, mode),
           secretBindings: saved.secretBindings,
         });
@@ -93,27 +91,10 @@ export function apiRoutes({ cwd, registry, runtime, launch }: RouteDependencies)
       },
     },
     {
-      method: "GET",
-      pattern: /^\/api\/runs\/(?<id>[^/]+)$/,
-      handle: async ({ params }) => {
-        const run = await runtime.getRun(requireNonEmptyString(params.id, "id"));
-
-        if (!run) {
-          return notFound();
-        }
-
-        return json({
-          run,
-          attempts: await runtime.getAttempts(run.id),
-          events: await runtime.getEvents(run.id),
-        });
-      },
-    },
-    {
       method: "POST",
       pattern: /^\/api\/runs\/(?<id>[^/]+)\/resume$/,
       handle: async ({ params, request }) => {
-        const run = await runtime.getRun(requireNonEmptyString(params.id, "id"));
+        const run = await runtime().getRun(requireNonEmptyString(params.id, "id"));
 
         if (!run) {
           return notFound();
@@ -133,7 +114,7 @@ export function apiRoutes({ cwd, registry, runtime, launch }: RouteDependencies)
 
         launch(run, retryUncertain);
 
-        const resumed = await runtime.getRun(run.id);
+        const resumed = await runtime().getRun(run.id);
 
         if (!resumed) {
           return notFound();

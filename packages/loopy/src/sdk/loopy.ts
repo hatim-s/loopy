@@ -1,6 +1,7 @@
 import {
   allowKeys,
   type ExecutionMode,
+  isRecord,
   isStringArray,
   type Json,
   requireOneOf,
@@ -50,7 +51,13 @@ export type Loopy<Input = unknown, Output extends Json = Json> = Readonly<{
   validateInput(value: unknown): Promise<Input>;
 }>;
 
-function validateSchedule(schedule: LoopyDefinition["schedule"]) {
+// BOUNDARY: Saved modules are unknown until their process-wide SDK brand is checked.
+export function isLoopy(value: unknown): value is Loopy {
+  return isRecord(value) && LOOPY in value && value[LOOPY] === true;
+}
+
+// BOUNDARY: Both definitions and saved JSON must validate their cron and timezone.
+export function parseSchedule(schedule: unknown) {
   if (schedule === undefined) {
     return undefined;
   }
@@ -120,7 +127,7 @@ export function loopy<
     input,
     scope: requireOneOf(scope, ["project", "global"], "Loopy scope"),
     mode: requireOneOf(mode, ["sandbox", "full"], "Loopy mode"),
-    schedule: validateSchedule(definition.schedule),
+    schedule: parseSchedule(definition.schedule),
     secrets: validateSecrets(definition.secrets),
     validateInput: inputValidator<Schema>(definition.input),
     async run(context: LoopyContext<InferInput<Schema>>) {

@@ -228,8 +228,10 @@ test("parsed command output is stored and replayed without executing", async () 
     },
   });
 
-  const options = { loopy: definition, store, executor, runId: "parsed", cwd: "/workspace", clock };
-  expect(await startLoopy({ ...options, input: {}, bundleHash: "" })).toMatchObject({
+  const options = { loopy: definition, store, executor, runId: "parsed", clock };
+  expect(
+    await startLoopy({ ...options, input: {}, bundleHash: "", workspace: "/workspace" }),
+  ).toMatchObject({
     status: "suspended",
   });
   const expected = parseStatus(executor.result);
@@ -266,7 +268,7 @@ test("parser errors fail the command step before storing output", async () => {
       loopy: definition,
       executor,
       store,
-      cwd: "/workspace",
+      workspace: "/workspace",
       runId: "invalid",
       input: {},
       bundleHash: "",
@@ -317,9 +319,9 @@ function compileOnlyChecks() {
 void compileOnlyChecks;
 
 class SpawnExecutor implements Executor {
-  async execute(command: ResolvedCommand, options: { cwd: string }): Promise<CommandResult> {
+  async execute(command: ResolvedCommand, options: { workspace: string }): Promise<CommandResult> {
     const child = Bun.spawn([command.program, ...command.args], {
-      cwd: command.cwd ?? options.cwd,
+      cwd: command.cwd ?? options.workspace,
       stdout: "pipe",
       stderr: "pipe",
     });
@@ -342,7 +344,7 @@ async function prepareRepo(cwd: string) {
     ["config", "user.name", "Smoke"],
     ["config", "user.email", "smoke@example.com"],
   ]) {
-    expect((await executor.execute({ program: "git", args }, { cwd })).exitCode).toBe(0);
+    expect((await executor.execute({ program: "git", args }, { workspace: cwd })).exitCode).toBe(0);
   }
 
   await writeFile(join(cwd, "file.txt"), "hello\n");
@@ -351,7 +353,7 @@ async function prepareRepo(cwd: string) {
     ["add", "."],
     ["commit", "-m", "Smoke subject\n\nBody line\n\nLast line"],
   ]) {
-    expect((await executor.execute({ program: "git", args }, { cwd })).exitCode).toBe(0);
+    expect((await executor.execute({ program: "git", args }, { workspace: cwd })).exitCode).toBe(0);
   }
 
   return executor;
@@ -378,7 +380,7 @@ test("real git status, log and worktree.list run through the command step", asyn
       loopy: definition,
       store,
       executor,
-      cwd,
+      workspace: cwd,
       runId: "smoke",
       input: {},
       bundleHash: "",
@@ -411,7 +413,7 @@ test("raw calls omit presets and preserve the command result", async () => {
       loopy: definition,
       executor,
       store,
-      cwd: "/workspace",
+      workspace: "/workspace",
       runId: "raw",
       input: {},
       bundleHash: "",
@@ -448,7 +450,14 @@ test.each(excludedCalls)("parsed %p rejects %s and raw retains it", async (call,
   const executor = new FakeExecutor();
   const store = new MemoryRunStore();
   const flags = { [name]: true };
-  const options = { executor, store, cwd: "/workspace", input: {}, bundleHash: "" };
+
+  const options = {
+    executor,
+    store,
+    workspace: "/workspace",
+    input: {},
+    bundleHash: "",
+  };
 
   const failed = await startLoopy({
     ...options,

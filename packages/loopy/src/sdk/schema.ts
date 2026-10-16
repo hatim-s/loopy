@@ -54,7 +54,7 @@ export type InferInput<Def> = Def extends StandardSchemaV1
     : Record<string, never>;
 
 // BOUNDARY: Imported schemas are untyped module values until their Standard Schema contract is checked.
-function isStandardSchema<Value>(value: Value): value is Value & StandardSchemaV1 {
+export function isStandardSchema<Value>(value: Value): value is Value & StandardSchemaV1 {
   if (!isRecord(value) || !isRecord(value["~standard"])) {
     return false;
   }

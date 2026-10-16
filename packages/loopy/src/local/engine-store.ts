@@ -332,6 +332,7 @@ export class SqliteRunStore implements RunStore {
         run.id,
         run.slug,
         run.bundleHash,
+        run.workspace,
         JSON.stringify(run.input),
         run.status,
         run.output === undefined ? null : JSON.stringify(run.output),

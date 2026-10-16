@@ -29,3 +29,21 @@ export async function withTimeout<T>(
     cancel();
   }
 }
+
+export async function withAbort<T>(signal: AbortSignal, fn: () => T | Promise<T>): Promise<T> {
+  signal.throwIfAborted();
+  let abort = () => {};
+
+  const interrupted = new Promise<Error>((resolve) => {
+    abort = () => resolve(new Error("Step interrupted. Resume the run to retry."));
+    signal.addEventListener("abort", abort, { once: true });
+  }).then((error) => {
+    throw error;
+  });
+
+  try {
+    return await Promise.race([Promise.resolve().then(fn), interrupted]);
+  } finally {
+    signal.removeEventListener("abort", abort);
+  }
+}
