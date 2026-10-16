@@ -327,7 +327,10 @@ if (import.meta.main) {
       throw new Error("Expected one request JSON file path");
     }
 
-    const request = parseRequest(JSON.parse(await Bun.file(requestFile).text()));
+    const source =
+      requestFile === "-" ? await Bun.stdin.text() : await Bun.file(requestFile).text();
+
+    const request = parseRequest(JSON.parse(source));
     console.log(JSON.stringify(await run(request)));
   } catch (error) {
     console.error(error instanceof Error ? error.message : "Asset sync failed");

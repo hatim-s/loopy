@@ -22,17 +22,15 @@ Create `/tmp/asset-sync-request.json` with non-secret inputs:
 }
 ```
 
-Save the graph and run it with the Loopy repository as its working directory. The runner path is
-relative to that directory, even when the saved graph is global:
+Save the loopy and run it with the Loopy repository as its working directory. The runner path is
+relative to that directory, even when the saved loopy is global:
 
 ```sh
 loopy save /path/to/loopy/examples/uacode-asset-sync/asset-sync-pr.loopy.ts
-loopy run uacode-asset-sync --cwd /path/to/loopy --full \
-  --input '{"requestFile":"/tmp/asset-sync-request.json"}'
+loopy run uacode-asset-sync --cwd /path/to/loopy --requestFile /tmp/asset-sync-request.json
 ```
 
-`requestFile` must be readable at execution time. Its contents are validated by the runner, rather
-than serialized into the saved graph. Saving creates no worktree and performs no export.
+`requestFile` must be readable at execution time. Loopy records its non-secret contents as a command result and sends that snapshot to the runner over stdin. The runner validates it. Saving creates no worktree and performs no export.
 
 Omit `exportDirectory` to request a fresh UAT export. Set `UA_ASSET_EXPORT_WEBHOOK_URL` privately in
 the inherited environment before running. The source automation is

@@ -1,13 +1,18 @@
-import { command, trigger } from "loopy/core";
+import { loopy, sh } from "loopy";
 
-export type SyncInput = {
-  dryRun: string;
-};
+export default loopy({
+  name: "www-uacode-sync",
+  description: "Copy www prompts and skills into uacode assets and open a PR per changed branch.",
+  mode: "full",
+  input: { dryRun: "boolean" },
+  run: async ({ input, log }) => {
+    const result = await sh.run(
+      `bun run examples/www-uacode-sync/sync.ts --dry-run ${input.dryRun}`,
+      { timeout: "1h", retry: { attempts: 1 } },
+    );
 
-export default trigger<SyncInput>("www-uacode-sync")
-  .description(
-    "Copy current www agent prompts and skills into uacode asset JSON, then open one PR per changed branch.",
-  )
-  .node("sync", ({ input }) =>
-    command("bun", "run", "examples/www-uacode-sync/sync.ts", "--dry-run", input.dryRun),
-  );
+    log.info("Prompt and skill synchronization completed.", { dryRun: input.dryRun });
+
+    return { summary: result.stdout };
+  },
+});
