@@ -5,8 +5,8 @@ import {
   requireString,
   setOwnProperty,
   validateSlug,
-} from "../../core/index.js";
-import { type Loopy, parseSchedule, type RecordSpec } from "../../sdk/host.js";
+} from "../core/index.js";
+import { type Loopy, parseSchedule, type RecordSpec } from "../sdk/host.js";
 
 export type SavedLoopy = {
   slug: string;

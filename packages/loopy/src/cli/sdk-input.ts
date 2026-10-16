@@ -72,10 +72,6 @@ async function recordInput(spec: RecordSpec, context: CliContext) {
 
 // BOUNDARY: The SDK validates CLI input against the author's schema.
 export async function sdkInput(loopy: Loopy, context: CliContext): Promise<Json> {
-  if (context.values.input !== undefined || context.values.args !== undefined) {
-    throw new Error("SDK runs use --input-json or --input-file. Replace the legacy input option.");
-  }
-
   if (context.values["input-json"] !== undefined || context.values["input-file"] !== undefined) {
     return jsonInput(context);
   }

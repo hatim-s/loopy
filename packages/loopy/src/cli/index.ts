@@ -5,17 +5,9 @@ import { defaultHome } from "../local/index.js";
 import { parseCliArgs } from "./args.js";
 import { runCancel } from "./commands/cancel.js";
 import { runDaemon } from "./commands/daemon.js";
-import { runGraph } from "./commands/graph.js";
 import { runInspect } from "./commands/inspect.js";
-import { runLegacyInspect } from "./commands/legacy-inspect.js";
-import { runLegacyList } from "./commands/legacy-list.js";
-import { runLegacyResume } from "./commands/legacy-resume.js";
-import { runLegacyRun } from "./commands/legacy-run.js";
-import { runLegacyRuns } from "./commands/legacy-runs.js";
-import { runLegacySave } from "./commands/legacy-save.js";
 import { runList } from "./commands/list.js";
 import { runLogs } from "./commands/logs.js";
-import { runRecover } from "./commands/recover.js";
 import { runResume } from "./commands/resume.js";
 import { runRun } from "./commands/run.js";
 import { runRuns } from "./commands/runs.js";
@@ -33,19 +25,11 @@ const COMMANDS = {
   daemon: runDaemon,
   logs: runLogs,
   schedule: runSchedule,
-  "legacy:save": runLegacySave,
-  "legacy:run": runLegacyRun,
-  "legacy:runs": runLegacyRuns,
-  "legacy:inspect": runLegacyInspect,
-  "legacy:resume": runLegacyResume,
-  "legacy:list": runLegacyList,
 
   save: runSave,
   list: runList,
-  graph: runGraph,
   run: runRun,
   resume: runResume,
-  recover: runRecover,
   runs: runRuns,
   inspect: runInspect,
   types: runTypes,

@@ -19,10 +19,6 @@
     "./local": {
       "types": "./dist/types/local/index.d.ts",
       "default": "./dist/local/index.js"
-    },
-    "./core": {
-      "types": "./dist/types/core/index.d.ts",
-      "default": "./dist/core/index.js"
     }
   },
   "bin": {

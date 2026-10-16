@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { EngineRun } from "../core/index.js";
 import { Daemon } from "../runtime/index.js";
@@ -7,7 +7,6 @@ import { loadLoopy } from "./bundle.js";
 import { LocalExecutor } from "./engine-executor.js";
 import { SqliteRunStore } from "./engine-store.js";
 import { Loopies } from "./loopies.js";
-import { createLocalRuntime } from "./runtime.js";
 
 export function openEngineStore(home: string) {
   mkdirSync(home, { recursive: true, mode: 0o700 });
@@ -46,18 +45,4 @@ export function localDaemon(options: {
       };
     },
   });
-}
-
-export async function listLegacyRuns(home: string, slug?: string) {
-  if (!existsSync(join(home, "runs.sqlite"))) {
-    return [];
-  }
-
-  const local = createLocalRuntime({ home });
-
-  try {
-    return await local.runtime.listRuns(slug);
-  } finally {
-    local.close();
-  }
 }

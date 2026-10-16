@@ -5,21 +5,10 @@ import { withEngineStore } from "../engine-store.js";
 import { inlineRun } from "../inline-run.js";
 import { printJson } from "../output.js";
 import { sdkInput } from "../sdk-input.js";
-import { runLegacyRun } from "./legacy-run.js";
 
 export async function runRun(context: CliContext): Promise<void> {
   const slug = requireTarget(context, "Slug");
   const registry = new Loopies(context.home, context.cwd);
-
-  if (!registry.has(slug)) {
-    return runLegacyRun(context);
-  }
-
-  if (context.values.full || context.values["retry-uncertain"]) {
-    throw new Error(
-      "SDK loopies declare mode in loopy({ mode }). Remove --full and --retry-uncertain.",
-    );
-  }
 
   await runSaved(context, registry, slug);
 }

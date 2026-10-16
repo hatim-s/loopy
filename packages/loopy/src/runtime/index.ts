@@ -18,7 +18,7 @@ export type { ActivationOptions, ActivationOutcome } from "./engine.js";
 
 export { activate } from "./engine.js";
 
-export { CommandExecutionError, RunBusyError } from "./errors.js";
+export { CommandExecutionError } from "./errors.js";
 
 export type { Executor, ResolvedCommand } from "./executor.js";
 
@@ -30,13 +30,9 @@ export { assertJson } from "./json.js";
 
 export { MemoryRunStore } from "./memory-store.js";
 
-export type { RunRepository } from "./repository.js";
-
 export type { RetryPolicy } from "./retry.js";
 
 export { engineRunDetail } from "./run-detail.js";
-
-export { Runtime } from "./runtime.js";
 
 export { StepFailedError } from "./step-runner.js";
 

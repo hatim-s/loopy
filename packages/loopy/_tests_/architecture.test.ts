@@ -141,14 +141,14 @@ test("layers import downward, and only through the target layer's index", () => 
   expect(violations).toEqual([]);
 });
 
-test("studio reaches the package only through the portable core entry", () => {
+test("studio reaches the package only through the SDK entry", () => {
   const violations: string[] = [];
 
   for (const file of sourceFiles(STUDIO)) {
     const name = relative(STUDIO, file);
 
     for (const specifier of importsOf(file)) {
-      if (specifier.startsWith("loopy/") && specifier !== "loopy/core") {
+      if (specifier.startsWith("loopy/")) {
         violations.push(`${name} imports a non-portable entry (${specifier}).`);
       } else if (
         specifier.startsWith(".") &&

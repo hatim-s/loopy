@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { validateSlug } from "../core/index.js";
 import { isStandardSchema, type Loopy } from "../sdk/host.js";
 import { canonicalPath, withLockDirectory, writeFileAtomically } from "./fs.js";
-import { parseSavedLoopy, type SavedLoopy } from "./registry/saved-loopy.js";
+import { parseSavedLoopy, type SavedLoopy } from "./saved-loopy.js";
 
 function readEntry(file: string) {
   return parseSavedLoopy(JSON.parse(readFileSync(file, "utf8")));

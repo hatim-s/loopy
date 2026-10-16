@@ -1,41 +1,57 @@
-import { findNode } from "../lib/workflow.ts";
-import { useErrorReporter } from "./use-error-reporter.ts";
-import { useRunDetail } from "./use-run-detail.ts";
-import { useScopedState } from "./use-scoped-state.ts";
-import { useWorkflows } from "./use-workflows.ts";
+import type { EngineRun, EngineRunDetail } from "loopy";
+import { useEffect, useState } from "react";
+import { endpoints, type LoopySummary } from "../api.ts";
+import { useRequest } from "./use-request.ts";
 
-/** Everything the App layout renders, with the state and effects kept out of the view. */
 export function useStudio() {
-  const errors = useErrorReporter();
-  const library = useWorkflows(errors);
+  const [loopies, setLoopies] = useState<LoopySummary[]>([]);
+  const [slug, setSlug] = useState<string>();
+  const [runs, setRuns] = useState<EngineRun[]>([]);
+  const [runId, setRunId] = useState<string>();
+  const [detail, setDetail] = useState<EngineRunDetail>();
+  const [error, setError] = useState<string>();
+  const [revision, setRevision] = useState(0);
 
-  const run = useRunDetail({
-    slug: library.slug,
-    loaded: library.workflow !== null,
-    runs: library.runs,
-    putRun: library.putRun,
-    errors,
-  });
+  const onError = (cause: unknown) =>
+    setError(cause instanceof Error ? cause.message : String(cause));
 
-  const [selectedNodeId, selectNode] = useScopedState<string | null>(library.slug, null);
+  useEffect(() => {
+    const timer = setInterval(() => setRevision((value) => value + 1), 2000);
 
-  // With a run selected the graph shows that run's snapshot of the workflow,
-  // which may differ from the saved definition.
-  const viewedWorkflow = run.selectedRunId ? run.detail?.run.workflow : library.workflow;
+    return () => clearInterval(timer);
+  }, []);
 
-  const node =
-    viewedWorkflow && selectedNodeId ? findNode(viewedWorkflow.nodes, selectedNodeId) : undefined;
+  useRequest({ load: endpoints.loopies, apply: setLoopies, onError }, [revision]);
+  useRequest({ load: slug ? () => endpoints.runs(slug) : null, apply: setRuns, onError }, [
+    slug,
+    revision,
+  ]);
+  useRequest({ load: runId ? () => endpoints.run(runId) : null, apply: setDetail, onError }, [
+    runId,
+    revision,
+  ]);
 
-  function viewSavedDefinition() {
-    run.selectRun(null);
-    selectNode(null);
+  function selectSlug(value: string) {
+    setSlug(value);
+    setRuns([]);
+    setRunId(undefined);
+    setDetail(undefined);
+  }
+
+  function selectRun(value: string) {
+    setRunId(value);
+    setDetail(undefined);
   }
 
   return {
-    error: errors.message,
-    dismissError: errors.clear,
-    library,
-    run,
-    graph: { workflow: viewedWorkflow, node, selectedNodeId, selectNode, viewSavedDefinition },
+    loopies,
+    slug,
+    runs,
+    runId,
+    detail,
+    error,
+    selectSlug,
+    selectRun,
+    dismissError: () => setError(undefined),
   };
 }

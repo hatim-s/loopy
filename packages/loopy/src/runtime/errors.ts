@@ -1,12 +1,5 @@
 import type { CommandOutput } from "../core/index.js";
 
-export class RunBusyError extends Error {
-  constructor(runId: string) {
-    super(`Run ${runId} is already executing.`);
-    this.name = "RunBusyError";
-  }
-}
-
 /** `started` tells the runtime whether the command may have had side effects. */
 export class CommandExecutionError extends Error {
   constructor(
