@@ -8,7 +8,7 @@ import type { ExecuteCommand } from "../src/core/model.js";
 import { localRunOptions } from "../src/local/process.js";
 import { Registry } from "../src/local/registry/registry.js";
 import { createLocalRuntime } from "../src/local/runtime.js";
-import { secretRedactor } from "../src/local/secret-executor.js";
+import { secretRedactor } from "../src/local/secret-redactor.js";
 import { SecretStore } from "../src/local/secrets.js";
 import { CommandExecutionError } from "../src/runtime/errors.js";
 

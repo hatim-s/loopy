@@ -16,7 +16,6 @@
       "loopy": ["./packages/loopy/src/sdk/index.ts"],
       "loopy/runtime": ["./packages/loopy/src/runtime/index.ts"],
       "loopy/local": ["./packages/loopy/src/local/index.ts"],
-      "loopy/cloud": ["./packages/loopy/src/cloud/index.ts"],
       "loopy/core": ["./packages/loopy/src/core/index.ts"]
     },
     "skipLibCheck": true,

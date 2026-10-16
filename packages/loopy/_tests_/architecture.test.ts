@@ -7,7 +7,7 @@ const SOURCE = resolve(import.meta.dir, "../src");
 
 const STUDIO = resolve(import.meta.dir, "../../../apps/studio/src");
 
-const LAYERS = ["core", "runtime", "cloud", "local", "sdk", "cli"] as const;
+const LAYERS = ["core", "runtime", "local", "sdk", "cli"] as const;
 
 type Layer = (typeof LAYERS)[number];
 
@@ -15,7 +15,6 @@ type Layer = (typeof LAYERS)[number];
 const ALLOWED_IMPORTS: Record<Layer, readonly Layer[]> = {
   core: [],
   runtime: ["core"],
-  cloud: ["core", "runtime"],
   local: ["core", "runtime", "sdk"],
   sdk: ["core", "runtime"],
   cli: ["core", "runtime", "local", "sdk"],
@@ -85,9 +84,9 @@ function isBarrel(specifier: string): boolean {
   return /\/index(\.[jt]s)?$/.test(specifier);
 }
 
-test("authoring, runtime and cloud exports bundle without host dependencies", async () => {
+test("authoring and runtime exports bundle without host dependencies", async () => {
   const result = await Bun.build({
-    entrypoints: ["core", "runtime", "cloud"].map((name) => resolve(SOURCE, `${name}/index.ts`)),
+    entrypoints: ["core", "runtime"].map((name) => resolve(SOURCE, `${name}/index.ts`)),
     target: "browser",
   });
 

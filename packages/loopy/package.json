@@ -20,10 +20,6 @@
       "types": "./dist/types/local/index.d.ts",
       "default": "./dist/local/index.js"
     },
-    "./cloud": {
-      "types": "./dist/types/cloud/index.d.ts",
-      "default": "./dist/cloud/index.js"
-    },
     "./core": {
       "types": "./dist/types/core/index.d.ts",
       "default": "./dist/core/index.js"

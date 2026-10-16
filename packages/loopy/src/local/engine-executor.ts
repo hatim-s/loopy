@@ -1,6 +1,6 @@
 import { CommandExecutionError, type Executor, type ResolvedCommand } from "../runtime/index.js";
 import { executeLocalCommand, localRunOptions } from "./process.js";
-import { secretRedactor } from "./secret-executor.js";
+import { secretRedactor } from "./secret-redactor.js";
 import { SecretStore } from "./secrets.js";
 
 export class LocalExecutor implements Executor {

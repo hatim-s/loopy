@@ -4,7 +4,6 @@ import { validateSlug } from "../core/index.js";
 import { isStandardSchema, type Loopy } from "../sdk/host.js";
 import { canonicalPath, withLockDirectory, writeFileAtomically } from "./fs.js";
 import { parseSavedLoopy, type SavedLoopy } from "./registry/saved-loopy.js";
-import { projectRoot } from "./registry/workflow-files.js";
 
 function readEntry(file: string) {
   return parseSavedLoopy(JSON.parse(readFileSync(file, "utf8")));
@@ -120,4 +119,22 @@ function savedEntry(loopy: Loopy, source: string, bundleHash: string): SavedLoop
     secrets: loopy.secrets,
     savedAt: new Date().toISOString(),
   };
+}
+
+export function projectRoot(cwd: string): string {
+  let directory = canonicalPath(cwd);
+
+  while (true) {
+    if (existsSync(join(directory, ".loopy", "loopies"))) {
+      return directory;
+    }
+
+    const parent = dirname(directory);
+
+    if (parent === directory) {
+      return canonicalPath(cwd);
+    }
+
+    directory = parent;
+  }
 }
