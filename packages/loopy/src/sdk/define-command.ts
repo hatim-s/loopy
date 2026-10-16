@@ -27,6 +27,12 @@ export type CommandDefinition = {
   readonly positionals?: readonly PositionalDefinition[];
   readonly flags?: Readonly<Record<string, FlagDefinition>>;
   readonly style?: "equals" | "space";
+  readonly preset?: {
+    readonly flags: Readonly<
+      Record<string, string | number | boolean | readonly string[] | Record<string, string>>
+    >;
+  };
+  readonly exclude?: readonly string[];
   readonly parse?: (result: CommandResult) => Json;
 };
 
@@ -95,7 +101,27 @@ type Operands<D extends CommandDescriptor> = D extends { readonly revisionPaths:
     ? { args?: Args<D> }
     : { args: Args<D> };
 
-type Input<D extends CommandDescriptor> = Operands<D> & { flags?: Flags<D> };
+type PresetKeys<D> = D extends { readonly preset: { readonly flags: infer F } } ? keyof F : never;
+
+type ExcludedKeys<D> = D extends { readonly exclude: readonly (infer K extends string)[] }
+  ? K
+  : never;
+
+type ProtectedKeys<D> = PresetKeys<D> | ExcludedKeys<D>;
+
+type Input<D extends CommandDescriptor> = Operands<D> & {
+  flags?: Omit<Flags<D>, ProtectedKeys<D>> & { readonly [K in ProtectedKeys<D>]?: never };
+};
+
+type RawInput<D extends CommandDescriptor> = Operands<D> & { flags?: Flags<D> };
+
+type CommandCall<D extends CommandDescriptor> = D extends {
+  readonly parse: (result: CommandResult) => infer T extends Json;
+}
+  ? ((...args: CallArguments<Input<D>>) => Promise<T>) & {
+      raw: (...args: CallArguments<RawInput<D>>) => Promise<CommandResult>;
+    }
+  : (...args: CallArguments<RawInput<D>>) => Promise<CommandResult>;
 
 type Simplify<T> = { [K in keyof T]: T[K] } & {};
 
@@ -119,31 +145,90 @@ function platformVariant(descriptor: CommandDescriptor, platform: string): Comma
 export function defineCommand<const D extends CommandDescriptor>(
   descriptor: D,
   environment?: { platform: () => string },
-): (...args: CallArguments<Input<D>>) => Promise<CommandResult>;
+): CommandCall<D>;
 export function defineCommand(
   descriptor: CommandDescriptor,
   environment: { platform: () => string } = { platform: () => PLATFORM },
-): (input?: RenderInput, options?: CommandOptions) => Promise<CommandResult> {
+) {
   const key = descriptor.key ?? `${descriptor.namespace}.${descriptor.name}`;
 
   if (!descriptor.key && (!descriptor.namespace || !descriptor.name)) {
     throw new Error("Command identity is missing. Supply key or both namespace and name.");
   }
 
-  return async (input = {}, options = {}) => {
-    const resolved = platformVariant(descriptor, environment.platform());
-    const args = renderArgv(resolved, input, key);
+  for (const platform of ["default", "darwin", "linux"]) {
+    validateCliOptions(platformVariant(descriptor, platform));
+  }
 
-    return command(
-      key,
-      {
-        program: resolved.program,
-        args,
-        cwd: options.cwd,
-        env: options.env,
-        stdin: options.stdin,
-      },
-      options,
-    );
+  const raw = async (input: RenderInput = {}, options: CommandOptions = {}) => {
+    const resolved = platformVariant(descriptor, environment.platform());
+
+    return command(key, resolveCommand(resolved, input, key, options), options);
   };
+
+  const parsed = async (input: RenderInput = {}, options: CommandOptions = {}) => {
+    const resolved = platformVariant(descriptor, environment.platform());
+    const flags = parsedFlags(resolved, input);
+    const request = resolveCommand(resolved, { ...input, flags }, key, options);
+
+    if (!resolved.parse) {
+      return command(key, request, options);
+    }
+
+    return command(key, request, options, resolved.parse);
+  };
+
+  return Object.assign(parsed, { raw });
+}
+
+function resolveCommand(
+  descriptor: CommandDefinition,
+  input: RenderInput,
+  key: string,
+  options: CommandOptions,
+) {
+  return {
+    program: descriptor.program,
+    args: renderArgv(descriptor, input, key),
+    cwd: options.cwd,
+    env: options.env,
+    stdin: options.stdin,
+  };
+}
+
+function validateCliOptions(descriptor: CommandDefinition) {
+  const names = new Map<string, string>();
+
+  for (const [name, flag] of Object.entries(descriptor.flags ?? {})) {
+    const identity = optionIdentity(flag);
+    const previous = names.get(identity);
+
+    if (previous !== undefined) {
+      throw new Error(
+        `Flags '${previous}' and '${name}' share CLI option '${flag.cli}'. Give each flag a unique CLI option.`,
+      );
+    }
+
+    names.set(identity, name);
+  }
+}
+
+function parsedFlags(descriptor: CommandDefinition, input: RenderInput) {
+  const flags = descriptor.flags ?? {};
+  const preset = descriptor.preset?.flags ?? {};
+  const protectedOptions = new Set(Object.keys(preset).map((name) => optionIdentity(flags[name])));
+
+  for (const name of Object.keys(input.flags ?? {})) {
+    if (descriptor.exclude?.includes(name) || protectedOptions.has(optionIdentity(flags[name]))) {
+      throw new Error(
+        `Flag '${name}' changes the parsed output format. Use .raw() to supply this flag.`,
+      );
+    }
+  }
+
+  return { ...input.flags, ...preset };
+}
+
+function optionIdentity(flag: FlagDefinition | undefined): string {
+  return JSON.stringify([...(flag?.prefix ?? []), flag?.cli]);
 }

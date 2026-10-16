@@ -1,4 +1,5 @@
 import { defineCommand } from "../../define-command.js";
+import { parseWorktreeList } from "../parse/git.js";
 
 export const worktree = {
   add: defineCommand({
@@ -14,6 +15,8 @@ export const worktree = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
   list: defineCommand({
+    parse: parseWorktreeList,
+    preset: { flags: { porcelain: true, z: false } },
     namespace: "git",
     name: "worktree.list",
     program: "git",

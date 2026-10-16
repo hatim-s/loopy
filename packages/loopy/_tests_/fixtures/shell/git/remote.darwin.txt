@@ -1,0 +1,2 @@
+origin	https://example.com/fetch.git (fetch)
+origin	ssh://example.com/push.git (push)

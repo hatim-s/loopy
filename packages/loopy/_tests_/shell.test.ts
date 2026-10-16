@@ -11,9 +11,9 @@ test("typed shell calls record exact argv and command step identities", async ()
   const definition = loopy({
     name: "shell",
     run: async () => {
-      await git.status({ flags: { porcelain: "v2", branch: true } });
-      await git.log({ flags: { format: "%H%x00%s", maxCount: 5 } });
-      await git.worktree.list({ flags: { porcelain: true } });
+      await git.status.raw({ flags: { porcelain: "v2", branch: true } });
+      await git.log.raw({ flags: { format: "%H%x00%s", maxCount: 5 } });
+      await git.worktree.list.raw({ flags: { porcelain: true } });
       await fs.find({ args: ["."], flags: { name: "*.ts", print0: true } });
       await text.grep({ args: ["TODO", "src"], flags: { n: true, r: true } });
       await fs.cp({
@@ -96,11 +96,11 @@ test("sh.run rejects shell operators with the parser's actionable error", async 
 
 function compileOnlyChecks() {
   // @ts-expect-error Only declared flags are accepted.
-  git.status({ flags: { typo: true } });
+  git.status.raw({ flags: { typo: true } });
   // @ts-expect-error Number flags retain their value type.
-  git.log({ flags: { maxCount: "5" } });
+  git.log.raw({ flags: { maxCount: "5" } });
   // @ts-expect-error Enum flags retain literal choices.
-  git.status({ flags: { porcelain: "v3" } });
+  git.status.raw({ flags: { porcelain: "v3" } });
   // @ts-expect-error Variadic arguments remain strings.
   fs.cp({ args: [1, 2] });
   // @ts-expect-error Repeated flags require an array.
@@ -164,10 +164,10 @@ test("find predicates precede actions regardless of caller property order", asyn
 
 test("git inspection separates revisions from paths", async () => {
   const { executor, result } = await capture(async () => {
-    await git.diff({ revisions: ["HEAD~1", "HEAD"], paths: ["src"], flags: { stat: true } });
-    await git.log({ revisions: ["main..HEAD"], paths: ["src"], flags: { oneline: true } });
+    await git.diff.raw({ revisions: ["HEAD~1", "HEAD"], paths: ["src"], flags: { stat: true } });
+    await git.log.raw({ revisions: ["main..HEAD"], paths: ["src"], flags: { oneline: true } });
     await git.show({ revisions: ["HEAD"], paths: ["src"], flags: { stat: true } });
-    await git.diff({ revisions: ["HEAD~1", "HEAD"] });
+    await git.diff.raw({ revisions: ["HEAD~1", "HEAD"] });
   });
 
   expect(result.status).toBe("succeeded");
@@ -229,9 +229,9 @@ test("required positionals reject missing and short JavaScript inputs", async ()
 
 function revisedCompileOnlyChecks() {
   // @ts-expect-error Git revisions and paths use separate fields.
-  git.diff({ args: ["HEAD"] });
+  git.diff.raw({ args: ["HEAD"] });
   // @ts-expect-error Git revisions and paths use separate fields.
-  git.log({ args: ["HEAD"] });
+  git.log.raw({ args: ["HEAD"] });
   // @ts-expect-error Git revisions and paths use separate fields.
   git.show({ args: ["HEAD"] });
   // @ts-expect-error base64 input is a typed flag, not a bare positional.
@@ -239,7 +239,7 @@ function revisedCompileOnlyChecks() {
   // @ts-expect-error jq named values must be strings.
   text.jq({ flags: { arg: { count: 2 } } });
   // @ts-expect-error staged is the sole spelling of the index diff flag.
-  git.diff({ flags: { cached: true } });
+  git.diff.raw({ flags: { cached: true } });
   // @ts-expect-error Decompression uses gzip with decompress.
   archive.gunzip();
 }
@@ -248,15 +248,15 @@ void revisedCompileOnlyChecks;
 
 test.each([
   [
-    () => git.status({ flags: { z: true, untrackedFiles: "all" } }),
+    () => git.status.raw({ flags: { z: true, untrackedFiles: "all" } }),
     ["status", "-z", "--untracked-files=all"],
   ],
   [
-    () => git.diff({ flags: { staged: true, exitCode: true, quiet: true, unified: 3 } }),
+    () => git.diff.raw({ flags: { staged: true, exitCode: true, quiet: true, unified: 3 } }),
     ["diff", "--exit-code", "--quiet", "-U3", "--staged"],
   ],
   [
-    () => git.log({ flags: { until: "yesterday", grep: "fix", firstParent: true } }),
+    () => git.log.raw({ flags: { until: "yesterday", grep: "fix", firstParent: true } }),
     ["log", "--until=yesterday", "--grep=fix", "--first-parent"],
   ],
   [
