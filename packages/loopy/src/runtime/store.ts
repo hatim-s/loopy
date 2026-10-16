@@ -1,4 +1,10 @@
-import type { EngineLog, EngineRun, EngineRunStatus, EngineStep, Json } from "../core/index.js";
+import type {
+  EngineLog,
+  EngineRun,
+  EngineRunStatus,
+  EngineStep,
+  RunOutcome,
+} from "../core/index.js";
 
 export class OwnershipError extends Error {
   constructor(runId: string) {
@@ -14,13 +20,7 @@ export interface RunStore {
   claim(runId: string, token: string): Promise<EngineRun>;
   heartbeat(runId: string, token: string): Promise<boolean>;
   suspend(runId: string, token: string, wakeAt?: string): Promise<void>;
-  finishRun(
-    runId: string,
-    token: string,
-    status: "succeeded" | "failed" | "cancelled",
-    output?: Json,
-    error?: string,
-  ): Promise<void>;
+  finishRun(runId: string, token: string, outcome: RunOutcome): Promise<void>;
   release(runId: string, token: string): Promise<void>;
   getSteps(runId: string): Promise<EngineStep[]>;
   putStep(runId: string, token: string, step: EngineStep): Promise<void>;

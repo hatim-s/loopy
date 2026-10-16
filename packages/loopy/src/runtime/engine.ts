@@ -1,86 +1,116 @@
-import type { EngineRun, ExecutionMode, Json } from "../core/index.js";
-import { errorMessage } from "../core/index.js";
-import { Context, type EngineClock, type Executor, SYSTEM_CLOCK } from "./context.js";
+import { type ExecutionMode, errorMessage, type Json, type RunOutcome } from "../core/index.js";
+import { Activation } from "./activation.js";
+import { type Clock, SYSTEM_CLOCK } from "./clock.js";
+import { createContext, type LoopyContext } from "./context.js";
+import type { Executor } from "./executor.js";
+import { StepJournal } from "./journal.js";
 import { assertJson } from "./json.js";
+import { Logger } from "./logger.js";
 import type { RunStore } from "./store.js";
 
 export type ActivationOptions = {
-  run: EngineRun;
+  runId: string;
   store: RunStore;
   executor: Executor;
-  workflow: (context: Context) => Promise<Json>;
+  workflow: (context: LoopyContext) => Promise<Json>;
   cwd: string;
   mode: ExecutionMode;
-  clock?: EngineClock;
+  clock?: Clock;
 };
 
-type Outcome = { status: "succeeded"; output: Json } | { status: "failed"; error: string };
+export type ActivationOutcome = RunOutcome | { status: "suspended"; wakeAt: string };
 
-export async function activate(options: ActivationOptions): Promise<EngineRun> {
-  const { store, executor, workflow } = options;
-  const token = crypto.randomUUID();
-  const run = await store.claim(options.run.id, token);
-  const clock = options.clock ?? SYSTEM_CLOCK;
-
-  try {
-    const context = new Context({
-      ...options,
-      run,
-      executor,
-      token,
-      clock,
-      steps: await store.getSteps(run.id),
-      logSequences: (await store.getLogs(run.id)).map((log) => log.seq),
+async function settle(
+  activation: Activation,
+  context: LoopyContext,
+  workflow: ActivationOptions["workflow"],
+): Promise<ActivationOutcome> {
+  let outcome: RunOutcome | undefined;
+  void Promise.resolve()
+    .then(() => workflow(context))
+    .then((output) => {
+      assertJson(output, "Workflow output");
+      outcome = { status: "succeeded", output };
+    })
+    .catch((cause: unknown) => {
+      outcome = { status: "failed", error: errorMessage(cause) };
     });
 
-    let outcome: Outcome | undefined;
+  while (true) {
+    await activation.tick();
 
-    const result = Promise.resolve()
-      .then(() => workflow(context))
-      .then((output) => {
-        assertJson(output, "Workflow output");
-        outcome = { status: "succeeded", output };
-      })
-      .catch((cause: unknown) => {
-        outcome = { status: "failed", error: errorMessage(cause) };
-      });
-
-    while (!outcome) {
-      const changed = context.changed();
-
-      if (context.running === 0 && context.blocked > 0) {
-        await clock.tick();
-
-        if (context.running === 0 && !outcome) {
-          break;
-        }
-
-        continue;
-      }
-
-      await Promise.race([result, changed]);
+    if (activation.fatal) {
+      return { status: "failed", error: errorMessage(activation.fatal) };
     }
 
-    await context.flushLogs();
+    if (outcome) {
+      return outcome;
+    }
 
-    if (!outcome) {
-      await store.suspend(run.id, token, context.wakeAt);
-    } else if (outcome.status === "failed") {
-      await store.finishRun(run.id, token, "failed", undefined, outcome.error);
+    if (activation.deliverReplay()) {
+      continue;
+    }
+
+    if (activation.running === 0 && activation.blocked > 0 && activation.wakeAt !== undefined) {
+      return { status: "suspended", wakeAt: activation.wakeAt };
+    }
+  }
+}
+
+async function persist(
+  store: RunStore,
+  runId: string,
+  token: string,
+  outcome: ActivationOutcome,
+): Promise<ActivationOutcome> {
+  try {
+    if (outcome.status === "suspended") {
+      await store.suspend(runId, token, outcome.wakeAt);
     } else {
-      await store.finishRun(run.id, token, "succeeded", outcome.output);
+      await store.finishRun(runId, token, outcome);
     }
+
+    return outcome;
+  } catch (cause) {
+    const failure: RunOutcome = { status: "failed", error: errorMessage(cause) };
+    await store.finishRun(runId, token, failure);
+
+    return failure;
+  }
+}
+
+export async function activate(options: ActivationOptions): Promise<ActivationOutcome> {
+  const { store, runId } = options;
+  const token = crypto.randomUUID();
+  const run = await store.claim(runId, token);
+
+  try {
+    const clock = options.clock ?? SYSTEM_CLOCK;
+    const steps = await store.getSteps(runId);
+    const activation = new Activation(steps);
+    const journal = new StepJournal(runId, steps, activation, clock);
+
+    const logger = new Logger({
+      runId,
+      token,
+      store,
+      clock,
+      journal,
+      activation,
+      logs: await store.getLogs(runId),
+    });
+
+    const context = createContext({ ...options, run, token, clock, activation, journal, logger });
+    let outcome = await settle(activation, context, options.workflow);
+
+    try {
+      await logger.flush();
+    } catch (cause) {
+      outcome = { status: "failed", error: errorMessage(cause) };
+    }
+
+    return await persist(store, runId, token, outcome);
   } finally {
-    await store.release(run.id, token);
+    await store.release(runId, token);
   }
-
-  const updated = await store.getRun(run.id);
-
-  if (!updated) {
-    throw new Error(
-      `Run '${run.id}' disappeared. Restore its persisted record before activating again.`,
-    );
-  }
-
-  return updated;
 }

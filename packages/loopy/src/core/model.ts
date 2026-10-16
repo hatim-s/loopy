@@ -166,7 +166,6 @@ export type ExecuteCommand = (
 
 export type RunDetail = { run: RunRecord; attempts: AttemptRecord[]; events: RunEvent[] };
 
-// Slice 2b renames EngineRunStatus to RunStatus after deleting the old runtime.
 export type EngineRunStatus =
   | "queued"
   | "running"
@@ -177,11 +176,15 @@ export type EngineRunStatus =
 
 export type StepKind = "command" | "function" | "sleep" | "hook" | "clock" | "random";
 
-export type StepStatus = "running" | "succeeded" | "failed" | "retrying" | "sleeping" | "waiting";
-
 export type LogLevel = "info" | "warn" | "error";
 
-// Slice 2b renames EngineRun to RunRecord after deleting the old runtime.
+export type RunOwner = { token: string; pid: number; host: string; heartbeatAt: string };
+
+export type RunOutcome =
+  | { status: "succeeded"; output: Json }
+  | { status: "failed"; error: string }
+  | { status: "cancelled" };
+
 export type EngineRun = {
   id: string;
   slug: string;
@@ -193,38 +196,40 @@ export type EngineRun = {
   wakeAt?: string;
   createdAt: string;
   updatedAt: string;
-  ownerToken?: string;
-  ownerPid?: number;
-  ownerHost?: string;
-  heartbeatAt?: string;
+  owner?: RunOwner;
 };
 
-// Slice 2b renames EngineStep to StepRecord.
-export type EngineStep = {
+export type StepBase = {
   runId: string;
   seq: number;
   key: string;
   kind: StepKind;
-  status: StepStatus;
   input: Json;
-  output?: Json;
-  error?: string;
   attempt: number;
   maxAttempts: number;
-  nextRetryAt?: string;
-  wakeAt?: string;
   startedAt: string;
-  endedAt?: string;
 };
 
-// Slice 2b renames EngineLog to LogRecord.
+export type EngineStep = StepBase &
+  (
+    | { status: "running" }
+    | { status: "succeeded"; output: Json; endedAt: string; finishOrder: number }
+    | { status: "failed"; error: string; endedAt: string; finishOrder: number }
+    | { status: "retrying"; error: string; nextRetryAt: string; endedAt: string }
+    | { status: "sleeping"; wakeAt: string }
+  );
+
+export type StepStatus = EngineStep["status"];
+
+export type LogPosition = { afterStep: number; afterFinish: number; index: number };
+
 export type EngineLog = {
   runId: string;
   seq: number;
+  position: LogPosition;
   level: LogLevel;
   message: string;
   data?: Json;
-  stepSeq?: number;
   at: string;
 };
 

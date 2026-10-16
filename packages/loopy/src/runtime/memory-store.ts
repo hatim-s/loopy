@@ -1,4 +1,10 @@
-import type { EngineLog, EngineRun, EngineRunStatus, EngineStep, Json } from "../core/index.js";
+import type {
+  EngineLog,
+  EngineRun,
+  EngineRunStatus,
+  EngineStep,
+  RunOutcome,
+} from "../core/index.js";
 import { OwnershipError, type RunStore } from "./store.js";
 
 export class MemoryRunStore implements RunStore {
@@ -33,7 +39,7 @@ export class MemoryRunStore implements RunStore {
   async claim(runId: string, token: string): Promise<EngineRun> {
     const run = this.requireRun(runId);
 
-    if (run.ownerToken !== undefined) {
+    if (run.owner !== undefined) {
       throw new OwnershipError(runId);
     }
 
@@ -43,51 +49,63 @@ export class MemoryRunStore implements RunStore {
       );
     }
 
-    run.ownerToken = token;
+    const timestamp = this.timestamp();
+    run.owner = { token, pid: 0, host: "memory", heartbeatAt: timestamp };
     run.status = "running";
-    run.heartbeatAt = this.timestamp();
-    run.updatedAt = this.timestamp();
+    run.updatedAt = timestamp;
     delete run.wakeAt;
 
     return structuredClone(run);
   }
 
   async heartbeat(runId: string, token: string): Promise<boolean> {
-    const run = this.owned(runId, token);
-    run.heartbeatAt = this.timestamp();
-    run.updatedAt = this.timestamp();
+    const run = this.requireRun(runId);
+
+    if (run.owner?.token !== token) {
+      return false;
+    }
+
+    run.owner.heartbeatAt = this.timestamp();
+    run.updatedAt = run.owner.heartbeatAt;
 
     return true;
   }
 
   async suspend(runId: string, token: string, wakeAt?: string): Promise<void> {
     const run = this.owned(runId, token);
+    this.requireRunning(run);
     run.status = "suspended";
-    run.wakeAt = wakeAt;
+    delete run.wakeAt;
+
+    if (wakeAt !== undefined) {
+      run.wakeAt = wakeAt;
+    }
+
     run.updatedAt = this.timestamp();
   }
 
-  async finishRun(
-    runId: string,
-    token: string,
-    status: "succeeded" | "failed" | "cancelled",
-    output?: Json,
-    error?: string,
-  ): Promise<void> {
+  async finishRun(runId: string, token: string, outcome: RunOutcome): Promise<void> {
     const run = this.owned(runId, token);
-    run.status = status;
-    run.output = structuredClone(output);
-    run.error = error;
+    this.requireRunning(run);
+    run.status = outcome.status;
+    delete run.output;
+    delete run.error;
+
+    if (outcome.status === "succeeded") {
+      run.output = structuredClone(outcome.output);
+    }
+
+    if (outcome.status === "failed") {
+      run.error = outcome.error;
+    }
+
     delete run.wakeAt;
     run.updatedAt = this.timestamp();
   }
 
   async release(runId: string, token: string): Promise<void> {
     const run = this.owned(runId, token);
-    delete run.ownerToken;
-    delete run.ownerPid;
-    delete run.ownerHost;
-    delete run.heartbeatAt;
+    delete run.owner;
     run.updatedAt = this.timestamp();
   }
 
@@ -100,10 +118,6 @@ export class MemoryRunStore implements RunStore {
   async putStep(runId: string, token: string, step: EngineStep): Promise<void> {
     this.owned(runId, token);
 
-    if (step.runId !== runId) {
-      throw new Error("Step belongs to another run. Supply the claimed run ID.");
-    }
-
     const steps = this.steps.get(runId) ?? new Map<number, EngineStep>();
     steps.set(step.seq, structuredClone(step));
     this.steps.set(runId, steps);
@@ -112,15 +126,13 @@ export class MemoryRunStore implements RunStore {
   async appendLog(runId: string, token: string, log: EngineLog): Promise<void> {
     this.owned(runId, token);
 
-    if (log.runId !== runId) {
-      throw new Error("Log belongs to another run. Supply the claimed run ID.");
-    }
-
     const logs = this.logs.get(runId) ?? new Map<number, EngineLog>();
 
-    if (!logs.has(log.seq)) {
-      logs.set(log.seq, structuredClone(log));
+    if (logs.has(log.seq)) {
+      throw new Error(`Log sequence ${log.seq} already exists. Append a new sequence number.`);
     }
+
+    logs.set(log.seq, structuredClone(log));
 
     this.logs.set(runId, logs);
   }
@@ -137,13 +149,21 @@ export class MemoryRunStore implements RunStore {
     return structuredClone(
       [...this.runs.values()].filter(
         (run) =>
-          run.ownerToken === undefined &&
+          run.owner === undefined &&
           (run.status === "queued" ||
             (run.status === "suspended" &&
               run.wakeAt !== undefined &&
               Date.parse(run.wakeAt) <= Date.parse(now))),
       ),
     );
+  }
+
+  private requireRunning(run: EngineRun): void {
+    if (run.status !== "running") {
+      throw new Error(
+        `Run '${run.id}' cannot transition from '${run.status}'. Claim a queued or suspended run first.`,
+      );
+    }
   }
 
   private timestamp(): string {
@@ -163,7 +183,7 @@ export class MemoryRunStore implements RunStore {
   private owned(runId: string, token: string): EngineRun {
     const run = this.requireRun(runId);
 
-    if (run.ownerToken !== token) {
+    if (run.owner?.token !== token) {
       throw new OwnershipError(runId);
     }
 

@@ -1,3 +1,7 @@
+export function parallel<T>(functions: readonly (() => Promise<T>)[]): Promise<T[]> {
+  return Promise.all(functions.map((fn) => fn()));
+}
+
 export async function map<T, R>(
   items: readonly T[],
   fn: (item: T, index: number) => Promise<R>,
@@ -17,7 +21,13 @@ export async function map<T, R>(
     }
   }
 
-  await Promise.all(Array.from({ length: Math.min(options.concurrency, items.length) }, worker));
+  await Promise.all(
+    Array.from({ length: Math.min(options.concurrency, items.length) }, () => worker()),
+  );
 
   return results;
+}
+
+export function race<T>(functions: readonly (() => Promise<T>)[]): Promise<T> {
+  return Promise.race(functions.map((fn) => fn()));
 }
