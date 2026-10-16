@@ -1,4 +1,4 @@
-import type { AttemptRecord } from "loopy";
+import type { AttemptRecord } from "loopy/core";
 import { formatted, shortDate } from "../lib/format.ts";
 import { outputText, selectedBranch } from "../lib/workflow.ts";
 

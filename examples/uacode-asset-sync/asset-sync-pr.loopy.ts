@@ -1,4 +1,4 @@
-import { command, trigger } from "loopy";
+import { command, trigger } from "loopy/core";
 
 export default trigger<{ requestFile: string }>("uacode-asset-sync")
   .description("Sync requested uacode assets in a disposable worktree and open a focused PR.")

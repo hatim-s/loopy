@@ -1,4 +1,4 @@
-import type { CommandNode, ConditionNode, WorkflowNode } from "loopy";
+import type { CommandNode, ConditionNode, WorkflowNode } from "loopy/core";
 import type { ReactNode } from "react";
 import type { RunDetail } from "../api.ts";
 import { formatted } from "../lib/format.ts";

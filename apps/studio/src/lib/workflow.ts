@@ -1,5 +1,5 @@
-import type { AttemptRecord, Json, Scalar, Value, WorkflowNode } from "loopy";
-import { isRecord, isString } from "loopy";
+import type { AttemptRecord, Json, Scalar, Value, WorkflowNode } from "loopy/core";
+import { isRecord, isString } from "loopy/core";
 
 /** Renders a persisted value the way an author would write it. */
 export function describe(value: Value<Scalar> | undefined): string {

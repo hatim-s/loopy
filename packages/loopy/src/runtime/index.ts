@@ -1,3 +1,5 @@
+export { NESTED_STEP_MESSAGE } from "./activation.js";
+
 export type { Clock } from "./clock.js";
 
 export { map, parallel, race } from "./concurrency.js";

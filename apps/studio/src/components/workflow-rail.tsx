@@ -1,4 +1,4 @@
-import type { WorkflowSummary } from "loopy";
+import type { WorkflowSummary } from "loopy/core";
 import { shortDate } from "../lib/format.ts";
 
 type WorkflowRailProps = {

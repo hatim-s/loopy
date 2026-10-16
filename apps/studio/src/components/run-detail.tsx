@@ -1,4 +1,4 @@
-import { latestAttempts } from "loopy";
+import { latestAttempts } from "loopy/core";
 import type { RunDetail } from "../api.ts";
 import { formatted, shortDate, workspaceName } from "../lib/format.ts";
 import { Attempt } from "./attempt.tsx";

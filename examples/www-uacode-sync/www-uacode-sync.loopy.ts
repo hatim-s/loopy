@@ -1,4 +1,4 @@
-import { command, trigger } from "loopy";
+import { command, trigger } from "loopy/core";
 
 export type SyncInput = {
   dryRun: string;

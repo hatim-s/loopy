@@ -2,6 +2,9 @@ import type { EngineStep, RunOutcome } from "../core/index.js";
 
 type Delivery = { finishOrder: number; source: "memoized" | "live"; deliver: () => void };
 
+export const NESTED_STEP_MESSAGE =
+  "Steps cannot be nested. Call steps from the workflow function, never from inside another step.";
+
 export class Activation {
   running = 0;
   blocked = 0;
@@ -10,7 +13,6 @@ export class Activation {
   outcome?: RunOutcome;
   wakeAt?: string;
   closed = false;
-  private invoking = false;
   private visited = 0;
   private readonly highestStored: number;
   private writes: Promise<number>;
@@ -48,29 +50,10 @@ export class Activation {
   }
 
   assertOpen(): void {
-    if (this.invoking) {
-      const error = new Error(
-        "Steps cannot be nested. Call steps from the workflow function, never from inside another step.",
-      );
-
-      this.fail(error);
-      throw error;
-    }
-
     if (this.closed) {
       throw new Error(
         "Activation is closed. Await all branches before returning from the workflow.",
       );
-    }
-  }
-
-  invoke<T>(fn: () => T): T {
-    this.invoking = true;
-
-    try {
-      return fn();
-    } finally {
-      this.invoking = false;
     }
   }
 

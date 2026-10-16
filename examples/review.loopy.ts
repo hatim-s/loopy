@@ -1,4 +1,4 @@
-import { command, concat, ne, node, trigger } from "loopy";
+import { command, concat, ne, node, trigger } from "loopy/core";
 import { codexExec } from "./codex.ts";
 
 export default trigger<{ instructions: string }>("review")

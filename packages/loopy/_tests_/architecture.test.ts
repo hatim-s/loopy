@@ -7,7 +7,7 @@ const SOURCE = resolve(import.meta.dir, "../src");
 
 const STUDIO = resolve(import.meta.dir, "../../../apps/studio/src");
 
-const LAYERS = ["core", "runtime", "cloud", "local", "cli"] as const;
+const LAYERS = ["core", "runtime", "cloud", "local", "sdk", "cli"] as const;
 
 type Layer = (typeof LAYERS)[number];
 
@@ -17,7 +17,8 @@ const ALLOWED_IMPORTS: Record<Layer, readonly Layer[]> = {
   runtime: ["core"],
   cloud: ["core", "runtime"],
   local: ["core", "runtime"],
-  cli: ["core", "runtime", "local"],
+  sdk: ["core", "runtime"],
+  cli: ["core", "runtime", "local", "sdk"],
 };
 
 function sourceFiles(directory: string): string[] {
@@ -108,6 +109,12 @@ test("layers import downward, and only through the target layer's index", () => 
       }
 
       if (!specifier.startsWith(".")) {
+        if (layer === "sdk" && !(name === "sdk/current.ts" && specifier === "node:async_hooks")) {
+          violations.push(
+            `${name} may only import core, runtime, or node:async_hooks (${specifier}).`,
+          );
+        }
+
         continue;
       }
 
@@ -132,14 +139,14 @@ test("layers import downward, and only through the target layer's index", () => 
   expect(violations).toEqual([]);
 });
 
-test("studio reaches the package only through the portable 'loopy' entry", () => {
+test("studio reaches the package only through the portable core entry", () => {
   const violations: string[] = [];
 
   for (const file of sourceFiles(STUDIO)) {
     const name = relative(STUDIO, file);
 
     for (const specifier of importsOf(file)) {
-      if (specifier.startsWith("loopy/")) {
+      if (specifier.startsWith("loopy/") && specifier !== "loopy/core") {
         violations.push(`${name} imports a non-portable entry (${specifier}).`);
       } else if (
         specifier.startsWith(".") &&

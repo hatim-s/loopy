@@ -1,4 +1,4 @@
-import type { RunRecord, Workflow, WorkflowSummary } from "loopy";
+import type { RunRecord, Workflow, WorkflowSummary } from "loopy/core";
 import { useEffect, useState } from "react";
 import { endpoints } from "../api.ts";
 import type { ErrorReporter } from "./use-error-reporter.ts";
