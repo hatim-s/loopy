@@ -16,17 +16,13 @@ export async function runSchedule(context: CliContext): Promise<void> {
 
   await withRunStore(context, async (store) => {
     if (context.values.off) {
-      await store.deleteSchedule(context.cwd, slug);
+      await store.deleteSchedule(registry.project, slug);
       printJson({ slug, scheduled: false });
 
       return;
     }
 
-    const cron = context.values.cron ?? saved.schedule?.cron;
-
-    if (!cron) {
-      throw new Error(`No schedule for '${slug}'. Pass --cron or add schedule to loopy().`);
-    }
+    const cron = requireCron(context.values.cron ?? saved.schedule?.cron, slug);
 
     const tz = context.values.tz ?? saved.schedule?.tz ?? "UTC";
     const loopy = await loadLoopy(registry.bundlePath(saved.bundleHash));
@@ -34,7 +30,7 @@ export async function runSchedule(context: CliContext): Promise<void> {
     assertJson(input, "Schedule input");
 
     const schedule = {
-      workspace: context.cwd,
+      workspace: registry.project,
       slug,
       cron,
       tz,
@@ -46,4 +42,12 @@ export async function runSchedule(context: CliContext): Promise<void> {
     await store.putSchedule(schedule);
     printJson(schedule);
   });
+}
+
+function requireCron(cron: string | undefined, slug: string): string {
+  if (!cron) {
+    throw new Error(`No schedule for '${slug}'. Pass --cron or add schedule to loopy().`);
+  }
+
+  return cron;
 }

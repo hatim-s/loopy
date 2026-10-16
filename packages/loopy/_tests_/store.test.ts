@@ -231,11 +231,12 @@ test("timestamp writes use UTC and due comparisons accept offsets", async () => 
   }
 });
 
-test("a dead same-host PID permits immediate takeover before lease expiry", async () => {
+test("a dead same-host PID permits takeover after lease expiry", async () => {
   const child = Bun.spawn(["/bin/sleep", "30"], { stdout: "ignore", stderr: "ignore" });
   child.kill("SIGKILL");
   await child.exited;
-  const store = new SqliteRunStore(":memory:", clock);
+  let now = clock();
+  const store = new SqliteRunStore(":memory:", () => now, { leaseMs: 2000 });
 
   try {
     await store.createRun({
@@ -248,11 +249,31 @@ test("a dead same-host PID permits immediate takeover before lease expiry", asyn
         heartbeatAt: newRun().createdAt,
       },
     });
-    expect((await store.dueRuns(newRun().createdAt)).map((run) => run.id)).toEqual(["run"]);
+    expect(await store.dueRuns(newRun().createdAt)).toEqual([]);
+    now += 2001;
+    expect((await store.dueRuns(new Date(now).toISOString())).map((run) => run.id)).toEqual([
+      "run",
+    ]);
     expect(await store.claim("run", "alive")).toMatchObject({
       owner: { token: "alive", pid: process.pid },
     });
     expect(await store.heartbeat("run", "dead")).toBe(false);
+  } finally {
+    store.close();
+  }
+});
+
+test("a live local PID remains owned after its heartbeat lease expires", async () => {
+  let now = clock();
+  const store = new SqliteRunStore(":memory:", () => now, { leaseMs: 2000 });
+
+  try {
+    await store.createRun(newRun());
+    await store.claim("run", "live");
+    now += 2001;
+    expect(await store.dueRuns(new Date(now).toISOString())).toEqual([]);
+    await expect(store.claim("run", "thief")).rejects.toThrow("not owned by this token");
+    expect((await store.getRun("run"))?.owner?.token).toBe("live");
   } finally {
     store.close();
   }

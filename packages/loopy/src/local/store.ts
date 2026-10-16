@@ -25,6 +25,10 @@ import {
 export class SqliteRunStore implements RunStore {
   private readonly db: Database;
 
+  get leaseMs(): number {
+    return this.options.leaseMs ?? 60_000;
+  }
+
   constructor(
     file: string,
     private readonly now: () => number = Date.now,
@@ -341,19 +345,19 @@ export class SqliteRunStore implements RunStore {
       return false;
     }
 
-    if (now - Date.parse(row.heartbeat_at) > (this.options.leaseMs ?? 60_000)) {
-      return true;
-    }
-
     if (row.owner_host === hostname() && row.owner_pid !== null) {
       try {
         process.kill(row.owner_pid, 0);
+
+        return false;
       } catch (error) {
-        return errnoCode(error) === "ESRCH";
+        if (errnoCode(error) !== "ESRCH") {
+          return false;
+        }
       }
     }
 
-    return false;
+    return now - Date.parse(row.heartbeat_at) > this.leaseMs;
   }
 
   private insertRun(run: RunRecord): void {

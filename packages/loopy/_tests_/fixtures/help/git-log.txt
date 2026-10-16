@@ -7,6 +7,13 @@ SYNOPSIS
        git log [<options>] [<revision-range>] [[--] <path>...]
 
 OPTIONS
+       -<number>, -n <number>, --max-count=<number>
+           Limit the output to <number> commits.
+
+       --oneline
+           This is a shorthand for --pretty=oneline --abbrev-commit used
+           together.
+
        --follow
            Continue listing the history of a file beyond renames (works only
            for a single file).

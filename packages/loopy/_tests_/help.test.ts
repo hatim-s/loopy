@@ -7,6 +7,7 @@ import { parseCliHelp } from "../src/local/typegen/parse-help";
 import { renderCommandSource } from "../src/local/typegen/render";
 import { MemoryRunStore } from "../src/runtime/index.js";
 import { defineCommand, loopy } from "../src/sdk/index.js";
+import { renderArgv } from "../src/sdk/render-argv.js";
 import { FakeExecutor, startLoopy } from "./fixture.js";
 
 const help = `Run Codex non-interactively
@@ -82,6 +83,15 @@ describe("CLI help generation", () => {
       parseCliHelp("codex", ["exec"], help).descriptor,
     );
 
+    const gitHelp = await Bun.file(resolve(import.meta.dir, "fixtures/help/git-log.txt")).text();
+
+    const gitSource = renderCommandSource(
+      "gitLog",
+      parseCliHelp("git", ["log"], gitHelp).descriptor,
+    )
+      .replace('import { type CommandDescriptor, defineCommand } from "loopy";', "")
+      .replaceAll("descriptor", "logDescriptor");
+
     try {
       await writeFile(
         file,
@@ -96,6 +106,11 @@ describe("CLI help generation", () => {
       )
         .replace('import { type CommandDescriptor, defineCommand } from "loopy";', "")
         .replaceAll("descriptor", "emptyDescriptor")}
+      ${gitSource}
+      gitLog({ args: ["HEAD"], flags: { oneline: true, maxCount: 1 } });
+      gitLog({ revisions: ["HEAD"], paths: ["src"] });
+      // @ts-expect-error Generated boolean flags retain their type.
+      gitLog({ args: ["HEAD"], flags: { oneline: "yes" } });
       // @ts-expect-error Empty flag maps reject excess flags.
       noFlags({ flags: { typo: true } });
       codexExec({ args: ["hi"], flags: { json: true, config: ["model=test"] } });
@@ -212,7 +227,7 @@ for (const fixture of [
     positional: "revision-range",
     flag: "follow",
     kind: "boolean",
-    separator: true,
+    separator: false,
   },
   {
     binary: "bun",
@@ -230,7 +245,7 @@ for (const fixture of [
     positional: "filter",
     flag: "rawOutput",
     kind: "boolean",
-    separator: true,
+    separator: false,
   },
 ] as const) {
   test(`captured ${fixture.file} help preserves operands and flag metadata`, async () => {
@@ -252,6 +267,7 @@ for (const fixture of [
     expect(source).not.toContain('"program":');
 
     if (fixture.binary === "git") {
+      expect(descriptor.revisionPaths).toBe(true);
       expect(descriptor.positionals?.[1]).toMatchObject({
         name: "path",
         optional: true,
@@ -270,4 +286,133 @@ test("man-page overstrikes retain the advertised positional separator", () => {
 
   expect(descriptor.positionalSeparator).toBe(true);
   expect(descriptor.positionals).toEqual([{ name: "path", optional: true, variadic: true }]);
+});
+
+test("generated git log keeps revision args before the path separator", async () => {
+  const captured = await Bun.file(resolve(import.meta.dir, "fixtures/help/git-log.txt")).text();
+  const { descriptor, warnings } = parseCliHelp("git", ["log"], captured);
+  expect(descriptor.flags?.maxCount).toMatchObject({ kind: "number", style: "equals" });
+  expect(warnings.some((warning) => warning.includes("max-count"))).toBe(false);
+  const oneline = descriptor.flags?.oneline;
+
+  if (!oneline || oneline.kind !== "boolean") {
+    throw new Error("Missing --oneline metadata. Check the captured help parser.");
+  }
+
+  const gitLog = defineCommand({
+    ...descriptor,
+    flags: { oneline: { ...oneline, kind: oneline.kind } },
+  });
+
+  const executor = new FakeExecutor();
+  const store = new MemoryRunStore();
+
+  const definition = loopy({
+    name: "log",
+    run: () => gitLog({ args: ["HEAD"], flags: { oneline: true } }),
+  });
+
+  await startLoopy({
+    loopy: definition,
+    input: {},
+    executor,
+    store,
+    runId: "log",
+    bundleHash: "bundle",
+    workspace: "/workspace",
+  });
+  expect(executor.calls).toMatchObject([{ program: "git", args: ["log", "--oneline", "HEAD"] }]);
+  expect(renderArgv(descriptor, { revisions: ["HEAD"], paths: ["src"] }, "git.log")).toEqual([
+    "log",
+    "HEAD",
+    "--",
+    "src",
+  ]);
+});
+
+test("only path-only usage receives an automatic positional separator", () => {
+  for (const operand of ["pathspec", "path", "file"]) {
+    const { descriptor } = parseCliHelp(
+      "tool",
+      [],
+      `Usage: tool [--] <${operand}>...\nOptions:\n  --json  JSON output`,
+    );
+
+    expect(descriptor.positionalSeparator).toBe(true);
+  }
+
+  const { descriptor } = parseCliHelp(
+    "tool",
+    [],
+    "Usage: tool <name> [[--] <path>...]\nOptions:\n  --json  JSON output",
+  );
+
+  expect(descriptor.positionalSeparator).toBe(false);
+  expect(descriptor.revisionPaths).toBe(false);
+});
+
+test("comma aliases retain value styles and repeatable placeholder metadata", () => {
+  const { descriptor, warnings } = parseCliHelp(
+    "git",
+    ["log"],
+    `Usage: git [-C <path>] log [<revision-range>] [[--] <path>...]
+Options:
+  -n, --max-count <number>  Limit commits
+  -a, --author=<name>  Filter author
+  -f, --files <files>  Select files
+  -p, --pattern <pattern>...  Match patterns
+  -l, --label <name>  Label (can be repeated)
+  -r, --reviewer <handle>  Select multiple reviewers
+`,
+  );
+
+  expect(warnings.some((warning) => warning.includes("Could not parse option"))).toBe(false);
+  expect(descriptor.flags).toMatchObject({
+    maxCount: { kind: "number" },
+    author: { kind: "string", style: "equals" },
+    files: { repeatable: true },
+    pattern: { repeatable: true },
+    label: { repeatable: true },
+    reviewer: { repeatable: true },
+  });
+  expect(descriptor.positionals?.map((operand) => operand.name)).toEqual([
+    "revision-range",
+    "path",
+  ]);
+});
+
+test("captured gh flags accept repeated labels, assignees and reviewers", async () => {
+  const captured = await Bun.file(
+    resolve(import.meta.dir, "fixtures/help/gh-pr-create.txt"),
+  ).text();
+
+  const { descriptor, warnings } = parseCliHelp("gh", ["pr", "create"], captured);
+  expect(descriptor.flags).toMatchObject({
+    assignee: { repeatable: true },
+    label: { repeatable: true },
+    reviewer: { repeatable: true },
+  });
+  expect(warnings.some((warning) => warning.includes("Could not parse option"))).toBe(false);
+  expect(
+    renderArgv(
+      descriptor,
+      { flags: { label: ["bug", "fix"], assignee: ["alice", "bob"], reviewer: ["carol", "dave"] } },
+      "gh.pr.create",
+    ),
+  ).toEqual([
+    "pr",
+    "create",
+    "--assignee",
+    "alice",
+    "--assignee",
+    "bob",
+    "--label",
+    "bug",
+    "--label",
+    "fix",
+    "--reviewer",
+    "carol",
+    "--reviewer",
+    "dave",
+  ]);
 });

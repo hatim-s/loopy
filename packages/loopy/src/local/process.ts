@@ -1,5 +1,6 @@
-import { realpath, stat } from "node:fs/promises";
-import { resolve } from "node:path";
+import { mkdtemp, realpath, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import type { CommandResult, ExecutionMode } from "../core/index.js";
 import { requirePositiveInteger } from "../core/index.js";
 import { CommandExecutionError, type ResolvedCommand } from "../runtime/index.js";
@@ -9,6 +10,15 @@ import type { Launch, Limits } from "./spawn.js";
 import { emptyOutput, spawnCaptured, unstarted } from "./spawn.js";
 
 type ProcessCommand = ResolvedCommand & { maxOutputBytes?: number };
+
+type SandboxContext = {
+  program: string;
+  workspace: string;
+  cwd: string;
+  scratch: string;
+  env: NodeJS.ProcessEnv;
+  sensitiveEnv?: Record<string, string>;
+};
 
 const DEFAULT_TIMEOUT_MS = 5 * 60_000;
 
@@ -42,19 +52,13 @@ function commandLimits(command: ProcessCommand): Limits {
   };
 }
 
-function launchEnvironment(
-  command: ProcessCommand,
-  mode: ExecutionMode,
-  workspace: string,
-): NodeJS.ProcessEnv {
+function launchEnvironment(command: ProcessCommand, mode: ExecutionMode): NodeJS.ProcessEnv {
   if (mode === "full") {
     return { ...process.env, ...command.env };
   }
 
   return {
     PATH: process.env.PATH ?? "/usr/bin:/bin",
-    HOME: workspace,
-    TMPDIR: workspace,
     LANG: process.env.LANG ?? "C.UTF-8",
     ...command.env,
   };
@@ -64,14 +68,8 @@ function launchEnvironment(
  * Wraps the command in the platform sandbox. With private values the launcher
  * runs a Bun helper that reads them from stdin; `env -i` inside applies the rest.
  */
-async function sandboxLaunch(
-  command: ProcessCommand,
-  program: string,
-  workspace: string,
-  cwd: string,
-  env: NodeJS.ProcessEnv,
-  sensitiveEnv: Record<string, string> | undefined,
-): Promise<Launch> {
+async function sandboxLaunch(command: ProcessCommand, context: SandboxContext): Promise<Launch> {
+  const { program, workspace, cwd, scratch, env, sensitiveEnv } = context;
   const privateEnvironment = sensitiveEnv !== undefined && Object.keys(sensitiveEnv).length > 0;
   const helper = privateEnvironment ? await realpath(process.execPath) : undefined;
 
@@ -81,7 +79,7 @@ async function sandboxLaunch(
     }
   }
 
-  const [launcher, prefix] = await sandboxLauncher(program, workspace, cwd, env, helper);
+  const [launcher, prefix] = await sandboxLauncher(program, workspace, cwd, env, scratch, helper);
 
   const launch: Launch = {
     cwd,
@@ -109,19 +107,21 @@ async function sandboxLaunch(
 export async function prepareLaunch(
   command: ProcessCommand,
   options: LocalExecutionOptions,
-): Promise<Launch> {
+): Promise<Launch & { scratch?: string }> {
   const workspace = await realpath(options.workspace);
   const cwd = await realpath(resolve(workspace, command.cwd ?? "."));
 
   if (options.mode === "sandbox" && !within(workspace, cwd)) {
-    throw new Error(`Command directory '${command.cwd}' is outside the sandbox workspace.`);
+    throw new Error(
+      `Command directory '${command.cwd}' is outside the sandbox workspace. Choose a directory inside the workspace.`,
+    );
   }
 
   if (!(await stat(cwd)).isDirectory()) {
-    throw new Error(`Command directory '${cwd}' is not a directory.`);
+    throw new Error(`Command directory '${cwd}' is not a directory. Choose an existing directory.`);
   }
 
-  const env = launchEnvironment(command, options.mode, workspace);
+  const env = launchEnvironment(command, options.mode);
   const effectiveEnv = { ...env, ...options.sensitiveEnv };
   // Validate without putting sensitive values into launcher arguments.
   envArgs(options.sensitiveEnv ?? {});
@@ -132,10 +132,34 @@ export async function prepareLaunch(
   }
 
   if (options.mode !== "sandbox") {
-    throw new Error(`Execution mode '${options.mode}' is unknown.`);
+    throw new Error(`Execution mode '${options.mode}' is unknown. Choose full or sandbox.`);
   }
 
-  return sandboxLaunch(command, program, workspace, cwd, env, options.sensitiveEnv);
+  return prepareSandbox(command, options, { program, workspace, cwd });
+}
+
+async function prepareSandbox(
+  command: ProcessCommand,
+  options: LocalExecutionOptions,
+  paths: { program: string; workspace: string; cwd: string },
+): Promise<Launch & { scratch: string }> {
+  const scratch = await realpath(await mkdtemp(join(tmpdir(), "loopy-run-")));
+
+  try {
+    const env = { ...launchEnvironment(command, "sandbox"), HOME: scratch, TMPDIR: scratch };
+
+    const launch = await sandboxLaunch(command, {
+      ...paths,
+      env,
+      scratch,
+      sensitiveEnv: options.sensitiveEnv,
+    });
+
+    return { ...launch, scratch };
+  } catch (error) {
+    await rm(scratch, { recursive: true, force: true });
+    throw error;
+  }
 }
 
 export async function executeLocalCommand(
@@ -151,7 +175,7 @@ export async function executeLocalCommand(
     throw aborted();
   }
 
-  let launch: Launch;
+  let launch: Awaited<ReturnType<typeof prepareLaunch>>;
   let limits: Limits;
 
   try {
@@ -161,9 +185,15 @@ export async function executeLocalCommand(
     throw unstarted(error);
   }
 
-  if (options.signal?.aborted) {
-    throw aborted();
-  }
+  try {
+    if (options.signal?.aborted) {
+      throw aborted();
+    }
 
-  return spawnCaptured(launch, limits, options.signal, performance.now());
+    return await spawnCaptured(launch, limits, options.signal, performance.now());
+  } finally {
+    if (launch.scratch) {
+      await rm(launch.scratch, { recursive: true, force: true });
+    }
+  }
 }

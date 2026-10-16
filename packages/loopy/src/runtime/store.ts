@@ -15,6 +15,7 @@ export class OwnershipError extends Error {
 }
 
 export interface RunStore {
+  readonly leaseMs: number;
   createRun(run: RunRecord): Promise<void>;
   getRun(id: string): Promise<RunRecord | undefined>;
   listRuns(filter?: { slug?: string; status?: RunStatus }): Promise<RunRecord[]>;

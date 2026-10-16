@@ -10,17 +10,20 @@ export async function withHeartbeat<T>(
   let pending = Promise.resolve();
   let failure: Error | undefined;
 
-  const timer = setInterval(() => {
-    pending = pending
-      .then(async () => {
-        if (!(await store.heartbeat(runId, token))) {
-          throw new OwnershipError(runId);
-        }
-      })
-      .catch((cause) => {
-        failure = cause instanceof Error ? cause : new Error(errorMessage(cause));
-      });
-  }, 15_000);
+  const timer = setInterval(
+    () => {
+      pending = pending
+        .then(async () => {
+          if (!(await store.heartbeat(runId, token))) {
+            throw new OwnershipError(runId);
+          }
+        })
+        .catch((cause) => {
+          failure = cause instanceof Error ? cause : new Error(errorMessage(cause));
+        });
+    },
+    Math.max(250, store.leaseMs / 4),
+  );
 
   try {
     const result = await fn();

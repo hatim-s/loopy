@@ -16,7 +16,7 @@ export class MemoryRunStore implements RunStore {
 
   constructor(
     private readonly now: () => number = Date.now,
-    private readonly leaseMs = 60_000,
+    readonly leaseMs = 60_000,
   ) {}
 
   async createRun(run: RunRecord): Promise<void> {

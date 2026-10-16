@@ -83,6 +83,28 @@ async function programMountOf(
   return (await packageDirectory(program, home)) ?? program;
 }
 
+async function bindProgram(
+  plan: MountPlan,
+  paths: { program: string; workspace: string; home: string; helper?: string },
+): Promise<void> {
+  const { program, workspace, home, helper } = paths;
+  const { args } = plan;
+  const programMount = await programMountOf(program, workspace, home);
+  prepareUnderTmpfs(plan, workspace, true);
+
+  if (programMount) {
+    prepareUnderTmpfs(plan, programMount, await isDirectory(programMount));
+    args.push("--ro-bind", programMount, programMount);
+  }
+
+  const helperCovered =
+    !helper || within(workspace, helper) || Boolean(programMount && within(programMount, helper));
+
+  if (helper && !helperCovered && prepareUnderTmpfs(plan, helper, false)) {
+    args.push("--ro-bind", helper, helper);
+  }
+}
+
 /**
  * Read-only root, tmpfs over /tmp, /run and the home directory, then the
  * workspace (and the program's package, if it lives under home) bound back in.
@@ -92,6 +114,7 @@ export async function linuxSandbox(
   workspace: string,
   cwd: string,
   env: NodeJS.ProcessEnv,
+  scratch: string,
   helper?: string,
 ): Promise<[string, string[]]> {
   const bwrap = await findBwrap();
@@ -112,22 +135,9 @@ export async function linuxSandbox(
   const plan: MountPlan = { args, tmpfs: ["/tmp", "/run"], created: new Set() };
   hideHome(plan, home);
 
-  const programMount = await programMountOf(program, workspace, home);
-  prepareUnderTmpfs(plan, workspace, true);
-
-  if (programMount) {
-    prepareUnderTmpfs(plan, programMount, await isDirectory(programMount));
-    args.push("--ro-bind", programMount, programMount);
-  }
-
-  const helperCovered =
-    !helper || within(workspace, helper) || Boolean(programMount && within(programMount, helper));
-
-  if (helper && !helperCovered && prepareUnderTmpfs(plan, helper, false)) {
-    args.push("--ro-bind", helper, helper);
-  }
-
-  args.push("--bind", workspace, workspace);
+  await bindProgram(plan, { program, workspace, home, helper });
+  prepareUnderTmpfs(plan, scratch, true);
+  args.push("--bind", scratch, scratch, "--bind", workspace, workspace);
   args.push("--chdir", cwd, "--", ENV_EXEC, "-i", "--", ...envArgs(env), helper ?? program);
 
   return [bwrap, args];

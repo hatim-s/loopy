@@ -310,8 +310,11 @@ function staleTakeover(makeStore: StoreFactory): void {
   test("stale takeover retries unfinished steps and fences the former owner", async () => {
     let now = Date.parse(LOG.at);
     const store = await makeStore({ now: () => now, leaseMs: 100 });
-    await store.createRun(newRun());
-    await store.claim("run", "old");
+    await store.createRun({
+      ...newRun(),
+      status: "running",
+      owner: { token: "old", host: "remote-host", pid: 0, heartbeatAt: LOG.at },
+    });
     await store.putStep("run", "old", STEP);
     now += 100;
     expect(await store.dueRuns(new Date(now).toISOString())).toEqual([]);

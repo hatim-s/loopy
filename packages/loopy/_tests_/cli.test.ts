@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { afterEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { requireRecord } from "../src/core/index.js";
@@ -219,10 +219,45 @@ test("schedule persists the next fire and off removes it", async () => {
   const schedule = object(result.stdout);
   expect(schedule.tz).toBe("Asia/Kolkata");
   expect(Date.parse(String(schedule.nextFireAt))).toBeGreaterThan(Date.now());
-  expect((await cli(f, "schedule", "scheduled", "--off")).code).toBe(0);
+  const sub = join(f.cwd, "sub");
+  mkdirSync(sub);
+  const alias = join(f.cwd, "alias");
+  symlinkSync(sub, alias);
+
+  const repeated = await cli(
+    { ...f, cwd: sub },
+    "schedule",
+    "scheduled",
+    "--cron",
+    "*/5 * * * *",
+    "--input-json",
+    '{"count":2}',
+  );
+
+  expect(repeated.code).toBe(0);
+  expect(
+    (
+      await cli(
+        f,
+        "schedule",
+        "scheduled",
+        "--cwd",
+        alias,
+        "--cron",
+        "*/5 * * * *",
+        "--input-json",
+        '{"count":2}',
+      )
+    ).code,
+  ).toBe(0);
   const store = openRunStore(f.home);
 
   try {
+    expect(await store.listSchedules()).toMatchObject([
+      { workspace: realpathSync(f.cwd), slug: "scheduled" },
+    ]);
+    expect(await store.listSchedules()).toHaveLength(1);
+    expect((await cli({ ...f, cwd: sub }, "schedule", "scheduled", "--off")).code).toBe(0);
     expect(await store.listSchedules()).toEqual([]);
   } finally {
     store.close();
@@ -504,11 +539,11 @@ for (const signal of ["SIGKILL", "SIGTERM"] as const) {
           db.close();
         }
 
-        expect((await cli(f, "resume", id, "--lease-ms", "500")).code).toBe(1);
-        await Bun.sleep(510);
+        expect((await cli(f, "resume", id, "--lease-ms", "1000")).code).toBe(1);
+        await Bun.sleep(1010);
       }
 
-      const resumed = await cli(f, "resume", id, "--lease-ms", "500");
+      const resumed = await cli(f, "resume", id, "--lease-ms", "1000");
       expect(resumed.stderr).toBe("");
       expect(resumed.code).toBe(0);
       expect(object(resumed.stdout)).toMatchObject({ status: "succeeded", output: 2 });
@@ -562,3 +597,65 @@ test("API distinguishes invalid cursors from registry failures", async () => {
   expect((await fetch(`${url.origin}/api/loopies`, { headers })).status).toBe(500);
   expect((await fetch(`${url.origin}/api/config`, { headers })).status).toBe(404);
 });
+
+test("CLI rejects leases shorter than one second", async () => {
+  const f = fixture("short-lease", "run: () => 1");
+  const result = await cli(f, "runs", "--lease-ms", "999");
+  expect(result.code).toBe(1);
+  expect(result.stderr).toContain(
+    "--lease-ms must be an integer of at least 1000. Use 1000 or more.",
+  );
+});
+
+test("a short lease cannot steal a live inline run but recovers its dead PID", async () => {
+  const f = fixture(
+    "live-lease",
+    `run: () => step("long", async ({ attempt }) => {
+    if (attempt === 1) { await new Promise((resolve) => setTimeout(resolve, 30_000)); }
+    return attempt;
+  })`,
+  );
+
+  await save(f);
+
+  const child = Bun.spawn([process.execPath, CLI, "--home", f.home, "run", "live-lease"], {
+    cwd: f.cwd,
+    stdout: "ignore",
+    stderr: "pipe",
+  });
+
+  const store = openRunStore(f.home);
+
+  try {
+    const run = await waitForRunningStep(store);
+    await Bun.sleep(2100);
+    const blocked = await cli(f, "resume", run.id, "--lease-ms", "2000");
+    expect(blocked.code).toBe(1);
+    expect(blocked.stderr).toContain("not owned by this token");
+    expect((await store.getRun(run.id))?.owner?.pid).toBe(child.pid);
+    child.kill("SIGKILL");
+    await child.exited;
+    const resumed = await cli(f, "resume", run.id, "--lease-ms", "2000");
+    expect(resumed.stderr).toBe("");
+    expect(resumed.code).toBe(0);
+    expect(object(resumed.stdout)).toMatchObject({ status: "succeeded", output: 2 });
+  } finally {
+    child.kill();
+    await child.exited;
+    store.close();
+  }
+}, 10_000);
+
+async function waitForRunningStep(store: ReturnType<typeof openRunStore>) {
+  for (let tries = 0; tries < 100; tries++) {
+    const [run] = await store.listRuns();
+
+    if (run && (await store.getSteps(run.id))[0]?.status === "running") {
+      return run;
+    }
+
+    await Bun.sleep(20);
+  }
+
+  throw new Error("CLI never started the long step. Check its stderr.");
+}

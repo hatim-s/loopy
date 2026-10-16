@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { MemoryRunStore } from "../src/runtime/index.js";
 import { fixture } from "./fixture.js";
 
-test("activation renews ownership every 15 seconds while a step is running", async () => {
+test("activation renews ownership at a quarter of its lease while a step is running", async () => {
   const renewed = Promise.withResolvers<void>();
   let heartbeats = 0;
 
@@ -16,7 +16,7 @@ test("activation renews ownership every 15 seconds while a step is running", asy
     }
   }
 
-  const f = await fixture(new RecordingStore());
+  const f = await fixture(new RecordingStore(undefined, 2000));
 
   const activation = f.execute(async (context) =>
     context.step("wait", async () => {
@@ -29,4 +29,4 @@ test("activation renews ownership every 15 seconds while a step is running", asy
   expect(await activation).toEqual({ status: "succeeded", output: 42 });
   expect(heartbeats).toBe(1);
   expect((await f.store.getRun("run"))?.owner).toBeUndefined();
-}, 20_000);
+}, 2_000);

@@ -111,7 +111,11 @@ type Args<D extends CommandDescriptor> = D extends {
   : readonly string[];
 
 type Operands<D extends CommandDescriptor> = D extends { readonly revisionPaths: true }
-  ? { revisions?: readonly string[]; paths?: readonly string[] }
+  ? {
+      revisions?: readonly string[];
+      paths?: readonly string[];
+      args?: D extends { readonly positionals: readonly PositionalDefinition[] } ? Args<D> : never;
+    }
   : readonly [] extends Args<D>
     ? { args?: Args<D> }
     : { args: Args<D> };

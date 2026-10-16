@@ -7,14 +7,15 @@ export async function sandboxLauncher(
   workspace: string,
   cwd: string,
   env: NodeJS.ProcessEnv,
+  scratch: string,
   helper?: string,
 ): Promise<[string, string[]]> {
   if (process.platform === "darwin") {
-    return macSandbox(program, workspace, env, helper);
+    return macSandbox(program, workspace, env, scratch, helper);
   }
 
   if (process.platform === "linux") {
-    return linuxSandbox(program, workspace, cwd, env, helper);
+    return linuxSandbox(program, workspace, cwd, env, scratch, helper);
   }
 
   throw new Error(`Sandbox mode is unavailable on ${process.platform}.`);

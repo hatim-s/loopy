@@ -16,13 +16,14 @@ function sbpl(path: string): string {
 }
 
 /**
- * Read-everything except the home directory, write only inside the workspace,
- * no network. The program and its package stay readable even under home.
+ * Hides the user's home and denies network access. The workspace and scratch
+ * directory are writable; the program and its package stay readable under home.
  */
 export async function macSandbox(
   program: string,
   workspace: string,
   env: NodeJS.ProcessEnv,
+  scratch: string,
   helper?: string,
 ): Promise<[string, string[]]> {
   if (!(await executable(SANDBOX_EXEC))) {
@@ -47,6 +48,8 @@ export async function macSandbox(
     `(allow file-read* (literal ${sbpl(program)}))`,
     ...(helper ? [`(allow file-read* (literal ${sbpl(helper)}))`] : []),
     ...(allowedPackage ? [`(allow file-read* (subpath ${sbpl(allowedPackage)}))`] : []),
+    `(allow file-read* (subpath ${sbpl(scratch)}))`,
+    `(allow file-write* (subpath ${sbpl(scratch)}))`,
     `(allow file-write* (subpath ${sbpl(workspace)}))`,
     '(allow file-write* (literal "/dev/null") (literal "/dev/tty"))',
     '(allow file-read* (literal "/dev/null") (literal "/dev/zero") (literal "/dev/tty"))',

@@ -188,7 +188,7 @@ export function renderArgv(
   const args = [...(descriptor.path ?? []), ...flags.before];
 
   if (descriptor.revisionPaths) {
-    args.push(...(input.revisions ?? []));
+    args.push(...operands, ...(input.revisions ?? []));
 
     if (input.paths?.length) {
       args.push("--", ...input.paths);

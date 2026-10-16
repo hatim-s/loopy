@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { LocalExecutor, SecretStore } from "../src/local/index.js";
@@ -53,6 +53,10 @@ test.skipIf(process.platform !== "darwin" || !existsSync("/usr/bin/sandbox-exec"
     expect(launch.args.join(" ")).not.toContain("private-sdk-value");
     expect(launch.stdin).toContain("private-sdk-value");
 
+    if (launch.scratch) {
+      rmSync(launch.scratch, { recursive: true, force: true });
+    }
+
     const result = await new LocalExecutor({ home, secrets: ["SDK_TOKEN"] }).execute(
       { program: "/bin/sh", args: ["-c", 'printf %s "$SDK_TOKEN"'] },
       { workspace: cwd, mode: "sandbox" },
@@ -93,7 +97,7 @@ test("sensitive env is available to commands and redacted from output and errors
 });
 
 test.skipIf(process.platform !== "darwin" || !existsSync("/usr/bin/sandbox-exec"))(
-  "git status works in the macOS sandbox in a temporary repository",
+  "sandboxed git status leaves the workspace clean",
   async () => {
     const cwd = directory();
     const executor = new LocalExecutor({ home: directory(), secrets: [] });
@@ -109,11 +113,34 @@ test.skipIf(process.platform !== "darwin" || !existsSync("/usr/bin/sandbox-exec"
     ).toBe(0);
 
     const result = await executor.execute(
-      { program: "git", args: ["status", "--porcelain"], cwd: "repo" },
+      { program: "/usr/bin/git", args: ["status", "--porcelain"], cwd: "repo" },
       { workspace: cwd, mode: "sandbox" },
     );
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toBe("");
+    expect(readdirSync(cwd)).toEqual(["repo"]);
+    expect(readdirSync(join(cwd, "repo"))).toEqual([".git"]);
+  },
+);
+
+test.skipIf(process.platform !== "darwin")(
+  "sandbox scratch is writable and removed after execution",
+  async () => {
+    const cwd = directory();
+
+    const result = await new LocalExecutor({ home: directory(), secrets: [] }).execute(
+      {
+        program: "/bin/sh",
+        args: ["-c", 'touch "$HOME/cache" "$TMPDIR/temp"; printf "%s" "$HOME"'],
+      },
+      { workspace: cwd, mode: "sandbox" },
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).not.toBe(cwd);
+    expect(result.stdout).toContain("loopy-run-");
+    expect(existsSync(result.stdout)).toBe(false);
+    expect(readdirSync(cwd)).toEqual([]);
   },
 );
