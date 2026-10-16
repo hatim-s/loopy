@@ -120,6 +120,10 @@ function parseCommand(result: CommandResult, parse?: (result: CommandResult) => 
   try {
     return parse(result);
   } catch (cause) {
+    if (result.exitCode !== 0) {
+      throw new CommandExitError(result);
+    }
+
     throw new StepParseError(cause);
   }
 }
