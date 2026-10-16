@@ -1,3 +1,5 @@
+export type { CommandDescriptor, FlagDefinition } from "./define-command.js";
+
 export type { Loopy } from "./loopy.js";
 
 export { isLoopy, parseSchedule } from "./loopy.js";

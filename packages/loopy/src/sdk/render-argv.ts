@@ -48,7 +48,7 @@ function formatValue(
   value: string,
   style: CommandDefinition["style"],
 ): string[] {
-  const format = flag.style ?? (flag.attachedValue ? "attached" : (style ?? "space"));
+  const format = flag.style ?? style ?? "space";
 
   if (format === "positional") {
     return [value];

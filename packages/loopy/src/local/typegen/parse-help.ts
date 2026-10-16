@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { basename } from "node:path";
-import type { CommandDescriptor, FlagDefinition, PositionalDefinition } from "../../core/index.js";
+import type { PositionalDefinition } from "../../core/index.js";
+import type { CommandDescriptor, FlagDefinition } from "../../sdk/host.js";
 import { identifier } from "./names.js";
 
 export type ParsedHelp = {
@@ -174,7 +175,7 @@ function parseFlagMatch(match: RegExpExecArray, options: string[], index: number
   }
 
   if (match[3]) {
-    flag = { ...flag, attachedValue: true };
+    flag = { ...flag, style: "equals" };
   }
 
   if (choices?.length) {
@@ -277,6 +278,8 @@ export function parseCliHelp(binary: string, path: readonly string[], help: stri
   }
 
   const descriptor: CommandDescriptor = {
+    key: [basename(binary), ...path].join("."),
+    positionalSeparator: true,
     program: binary,
     path,
     positionals,

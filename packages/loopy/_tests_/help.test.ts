@@ -1,7 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { defineCommand } from "../src/core/command";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import ts from "typescript";
 import { parseCliHelp } from "../src/local/typegen/parse-help";
 import { renderCommandSource } from "../src/local/typegen/render";
+import { MemoryRunStore } from "../src/runtime/index.js";
+import { startLoopy } from "../src/sdk/host.js";
+import { defineCommand, loopy } from "../src/sdk/index.js";
+import { FakeExecutor } from "./engine-fixture.js";
 
 const help = `Run Codex non-interactively
 
@@ -38,34 +45,77 @@ describe("CLI help generation", () => {
     expect(parsed.descriptor.helpHash).toHaveLength(64);
     const source = renderCommandSource("codexExec", parsed.descriptor);
     expect(source.split("\n")[0]).toBe(
-      'import { type CommandDescriptor, defineCommand } from "loopy/core";',
+      'import { type CommandDescriptor, defineCommand } from "loopy";',
     );
     expect(source).toContain("as const satisfies CommandDescriptor");
     expect(source).toContain('"read-only"');
   });
 
-  test("rejects unknown flags when constructing argv", () => {
+  test("generated descriptors execute through durable command steps", async () => {
     const parsed = parseCliHelp("codex", ["exec"], help);
     const codexExec = defineCommand(parsed.descriptor);
-    expect(codexExec({ args: [] }).args).toEqual(["exec"]);
-    // SAFETY: The parsed help descriptor contains these flags; its dynamically constructed type loses their literal names.
-    expect(codexExec({ args: ["hi"], flags: { json: true, model: "gpt" } } as never).args).toEqual([
-      "exec",
-      "--json",
-      "--model",
-      "gpt",
-      "--",
-      "hi",
+    const executor = new FakeExecutor();
+    const store = new MemoryRunStore();
+    const definition = loopy({ name: "generated", run: () => codexExec({ args: ["--help"] }) });
+    expect(
+      await startLoopy({
+        loopy: definition,
+        input: {},
+        executor,
+        store,
+        runId: "generated",
+        bundleHash: "bundle",
+        workspace: "/workspace",
+      }),
+    ).toMatchObject({ status: "succeeded" });
+    expect(executor.calls).toMatchObject([{ program: "codex", args: ["exec", "--", "--help"] }]);
+    expect(await store.getSteps("generated")).toMatchObject([
+      { key: "codex.exec", kind: "command" },
     ]);
-    // SAFETY: The generated descriptor declares sandbox; this test checks the runtime spelling from dynamic metadata.
-    const literal = codexExec({ args: ["--help"], flags: { sandbox: "read-only" } } as never);
-    expect(literal.args).toEqual(["exec", "--sandbox", "read-only", "--", "--help"]);
-    expect(literal.argConstraints).toEqual({
-      2: { kind: "string", choices: ["read-only", "workspace-write", "danger-full-access"] },
-      4: { kind: "string" },
-    });
-    // SAFETY: This intentionally invalid flag exercises runtime rejection for untyped callers.
-    expect(() => codexExec({ args: [], flags: { typo: true } as never })).toThrow("Unknown flag");
+  });
+
+  test("emitted source typechecks against the SDK with typed flags and arity", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "loopy-generated-"));
+    const file = join(directory, "codex.ts");
+
+    const source = renderCommandSource(
+      "codexExec",
+      parseCliHelp("codex", ["exec"], help).descriptor,
+    );
+
+    try {
+      await writeFile(
+        file,
+        `${source}
+      codexExec({ args: ["hi"], flags: { json: true, config: ["model=test"] } });
+      // @ts-expect-error Unknown flags must fail compilation.
+      codexExec({ flags: { typo: true } });
+      // @ts-expect-error Boolean flags retain their type.
+      codexExec({ flags: { json: "true" } });
+      // @ts-expect-error The descriptor declares at most one positional.
+      codexExec({ args: ["one", "two"] });
+      `,
+      );
+
+      const program = ts.createProgram([file], {
+        noEmit: true,
+        strict: true,
+        skipLibCheck: true,
+        target: ts.ScriptTarget.ES2022,
+        module: ts.ModuleKind.ESNext,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+        types: ["bun-types"],
+        paths: { loopy: [resolve(import.meta.dir, "../src/sdk/index.ts")] },
+      });
+
+      expect(
+        ts
+          .getPreEmitDiagnostics(program)
+          .map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")),
+      ).toEqual([]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   test("reports option lines it cannot parse", () => {
@@ -116,33 +166,14 @@ describe("CLI help generation", () => {
       cli: "--inspect",
       kind: "number",
       optionalValue: true,
-      attachedValue: true,
+      style: "equals",
     });
     expect(() => renderCommandSource("default", parsed.descriptor)).toThrow(
       "valid TypeScript identifier",
     );
-
-    const inspect = defineCommand({
-      program: "tool",
-      positionals: [],
-      flags: { inspect: { cli: "--inspect", kind: "number", optionalValue: true } },
-    });
-
-    expect(inspect({ flags: { inspect: true } }).args).toEqual(["--inspect"]);
-    expect(inspect({ flags: { inspect: 9229 } }).args).toEqual(["--inspect", 9229]);
-    // SAFETY: The parsed descriptor declares inspect; dynamic metadata cannot retain that flag name in its TypeScript type.
-    const attached = defineCommand(parsed.descriptor)({ flags: { inspect: 9229 } } as never);
-    expect(attached.args).toEqual([{ $op: "concat", args: ["--inspect=", 9229] }]);
-    expect(attached.argConstraints).toEqual({ 0: { kind: "number", prefix: "--inspect=" } });
-    expect(() =>
-      defineCommand({
-        program: "tool",
-        positionals: [{ name: "first", optional: true }, { name: "second" }],
-      }),
-    ).toThrow("required positional cannot follow an optional");
   });
 
-  test("reads inline choices and permits tools without a positional separator", () => {
+  test("reads inline choices", () => {
     const parsed = parseCliHelp(
       "tool",
       [],
@@ -150,25 +181,5 @@ describe("CLI help generation", () => {
     );
 
     expect(parsed.descriptor.flags?.mode?.choices).toEqual(["safe", "fast"]);
-
-    const echo = defineCommand({
-      program: "echo",
-      positionals: [{ name: "message" }],
-      positionalSeparator: false,
-    });
-
-    expect(echo({ args: ["hello"] }).args).toEqual(["hello"]);
-
-    const two = defineCommand({
-      program: "tool",
-      positionals: [
-        { name: "first", optional: true },
-        { name: "second", optional: true },
-      ],
-    });
-
-    expect(() => two({ args: [undefined, "second"] })).toThrow(
-      "Cannot omit a positional before a later positional",
-    );
   });
 });

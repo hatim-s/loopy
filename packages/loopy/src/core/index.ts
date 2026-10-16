@@ -1,6 +1,6 @@
 export { parseArgv } from "./argv.js";
 
-export type { CommandDescriptor, FlagDefinition, PositionalDefinition } from "./command-types.js";
+export type { FlagDefinition, PositionalDefinition } from "./command-types.js";
 
 export { errorMessage } from "./errors.js";
 

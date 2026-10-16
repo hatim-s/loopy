@@ -19,6 +19,8 @@ export type FlagDefinition = CoreFlag & {
 };
 
 export type CommandDefinition = {
+  readonly helpHash?: string;
+  readonly observedVersion?: string;
   readonly program: string;
   readonly path?: readonly string[];
   readonly positionalSeparator?: boolean;
