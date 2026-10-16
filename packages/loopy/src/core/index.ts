@@ -1,3 +1,5 @@
+export { parseArgv } from "./argv.js";
+
 export { latestAttempts } from "./attempts.js";
 
 export { node, trigger, WorkflowBuilder } from "./builder.js";
