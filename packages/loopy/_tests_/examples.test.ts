@@ -129,7 +129,7 @@ function assetExecutor(dryRun: boolean, changed = true, fail = "") {
     }
 
     if (command.args[0] === "status") {
-      return `# branch.head ${branch}\0`;
+      return `# branch.oid ${baseSha}\0# branch.head ${branch}\0${!dryRun && changed ? `? ${assetPath}\0` : ""}`;
     }
 
     if (command.args[0] === fail) {
@@ -138,6 +138,13 @@ function assetExecutor(dryRun: boolean, changed = true, fail = "") {
 
     if (command.program === "git" && command.args.includes("--numstat")) {
       return !dryRun && changed ? `1\t0\t${assetPath}\0` : "";
+    }
+
+    if (command.program === "codex") {
+      return JSON.stringify({
+        proposedFiles: changed ? [assetPath] : [],
+        checks: ["sync-preview"],
+      });
     }
 
     if (command.program === "gh") {
@@ -157,7 +164,7 @@ async function runAsset(executor: Executor, dryRun: boolean, repository = "/fixt
       repository,
       dryRun,
       exportDirectory: "/fixture/export",
-      assetsJson: '[{"assetClass":"WORKFLOW_DEFINITION","assetId":"fixture"}]',
+      assets: [{ assetClass: "WORKFLOW_DEFINITION", assetId: "fixture" }],
     },
     store,
     executor,
@@ -175,7 +182,12 @@ for (const dryRun of [true, false]) {
     const { store, result } = await runAsset(executor, dryRun);
     expect(result).toMatchObject({
       status: "succeeded",
-      output: { dryRun, prUrl: dryRun ? null : prUrl },
+      output: {
+        dryRun,
+        prUrl: dryRun ? null : prUrl,
+        proposedFiles: [assetPath],
+        checks: ["sync-preview"],
+      },
     });
     const steps = await store.getSteps("asset");
     expect(steps.map((step) => step.key)).toEqual(assetStepKeys(dryRun));
@@ -201,22 +213,17 @@ function commandName(command: ResolvedCommand) {
 }
 
 const assetPreviewSteps = [
-  "git.rev-parse",
   "git.diff",
   "git.status",
-  "git.rev-parse",
-  "asset-sync-prompt",
   "codex.exec",
   "git.diff",
   "git.status",
   "git.rev-parse",
-  "git.diff",
   "sh.exec",
 ];
 
 const assetApplySteps = [
   "git.worktree.add",
-  "asset-sync-prompt",
   "codex.exec",
   "git.rev-parse",
   "sh.exec",
@@ -227,18 +234,16 @@ const assetApplySteps = [
   "git.push",
   "sh.exec",
   "git.worktree.remove",
+  "git.branch",
 ];
 
 const assetPreviewCommands = [
-  "git rev-parse",
   "git diff",
   "git status",
-  "git rev-parse",
   "codex exec",
   "git diff",
   "git status",
   "git rev-parse",
-  "git diff",
   "git diff",
 ];
 
@@ -254,11 +259,11 @@ const assetApplyCommands = [
   "git push",
   "gh pr create",
   "git worktree remove",
+  "git branch",
 ];
 
 function assetStepKeys(dryRun: boolean) {
   return [
-    "asset-request",
     "git.remote",
     "sh.exec",
     "sh.exec",
@@ -266,10 +271,11 @@ function assetStepKeys(dryRun: boolean) {
     ...(dryRun ? [] : ["git.fetch"]),
     "git.rev-parse",
     "fs.stat",
-    "git.show",
+    "sh.exec",
     "sh.exec",
     "fs.stat",
     "uuid",
+    "now",
     ...(dryRun ? assetPreviewSteps : assetApplySteps),
   ];
 }
@@ -283,7 +289,7 @@ function assetCommandNames(dryRun: boolean) {
     ...(dryRun ? [] : ["git fetch"]),
     "git rev-parse",
     "stat -f",
-    "git show",
+    "git cat-file",
     "gh auth status",
     "stat -f",
     ...(dryRun ? assetPreviewCommands : assetApplyCommands),
@@ -312,7 +318,8 @@ function assertAssetPublication(calls: ResolvedCommand[]) {
     "--head",
   ]);
   expect(pr?.args.at(-1)).toContain(assetPath);
-  expect(calls.at(-1)?.args.slice(0, 3)).toEqual(["worktree", "remove", "--force"]);
+  expect(calls.at(-2)?.args.slice(0, 3)).toEqual(["worktree", "remove", "--force"]);
+  expect(calls.at(-1)?.args.slice(0, 2)).toEqual(["branch", "--delete"]);
 }
 
 test("asset sync skips publication without changes and cleans up a failed attempt", async () => {
@@ -322,7 +329,7 @@ test("asset sync skips publication without changes and cleans up a failed attemp
   const failed = assetExecutor(false, true, "commit");
   const { result } = await runAsset(failed, false);
   expect(result.status).toBe("failed");
-  expect(failed.calls.at(-1)?.args.slice(0, 2)).toEqual(["worktree", "remove"]);
+  expect(failed.calls.at(-2)?.args.slice(0, 2)).toEqual(["worktree", "remove"]);
 });
 
 function wwwExecutor(
@@ -569,7 +576,7 @@ for (const example of ["asset", "www"] as const) {
               repository: "/fixture/uacode",
               dryRun: false,
               exportDirectory: "/fixture/export",
-              assetsJson: '[{"assetClass":"WORKFLOW_DEFINITION","assetId":"fixture"}]',
+              assets: [{ assetClass: "WORKFLOW_DEFINITION", assetId: "fixture" }],
             }
           : { repository: "/fixture/uacode", dryRun: false, targetBranches: "main" };
 
@@ -622,14 +629,16 @@ test("asset prerequisite failures stop before worktree creation or Codex", async
         return "origin\tgit@github.com:someone/other.git (fetch)\n";
       }
 
-      if (failure === "script" && command.args[0] === "show") {
+      if (failure === "script" && command.args[0] === "cat-file") {
         throw new Error("Selected base lacks the sync script. Merge uacode#40724 first.");
       }
 
       return gitOutput(command);
     });
 
-    expect((await runAsset(executor, false)).result.status).toBe("failed");
+    expect((await runAsset(executor, false)).result.status).toBe(
+      failure === "script" ? "suspended" : "failed",
+    );
     expect(
       executor.calls.some(
         (command) => command.program === "codex" || command.args[0] === "worktree",
@@ -806,7 +815,10 @@ test("asset sync preserves dirty source files and unregisters its disposable wor
           `diff --git a/${assetPath} b/${assetPath}\n--- a/${assetPath}\n+++ b/${assetPath}\n@@ -1 +1 @@\n-old\n+new\n`,
         );
 
-        return "";
+        return JSON.stringify({
+          proposedFiles: [assetPath],
+          checks: ["sync-preview", "sync-check"],
+        });
       }
 
       if (command.program === "git" && command.args[0] !== "remote") {
@@ -844,4 +856,62 @@ async function assetGitFixture(root: string) {
   await Bun.write(join(repository, "user.txt"), "keep this local edit\n");
 
   return repository;
+}
+
+for (const violation of ["outside", "staged", "conflicted", "branch", "head", "preview"] as const) {
+  test(`asset sync rejects ${violation} changes before publication`, async () => {
+    let branch = "main";
+    let synchronized = false;
+
+    const executor = new RecordingExecutor((command) => {
+      if (command.program === "codex") {
+        synchronized = true;
+
+        return JSON.stringify({ proposedFiles: [assetPath], checks: [] });
+      }
+
+      if (command.args[0] === "worktree" && command.args[1] === "add") {
+        branch = command.args[command.args.indexOf("-b") + 1] ?? "";
+      }
+
+      if (command.args[0] === "status") {
+        const name = synchronized && violation === "branch" ? "wrong-branch" : branch;
+
+        const entry =
+          violation === "staged"
+            ? `1 M. N... 100644 100644 100644 ${baseSha} ${baseSha} ${assetPath}`
+            : violation === "conflicted"
+              ? `u UU N... 100644 100644 100644 100644 ${baseSha} ${baseSha} ${baseSha} ${assetPath}`
+              : violation === "outside"
+                ? "? outside.json"
+                : violation === "preview" && synchronized
+                  ? `? ${assetPath}`
+                  : "";
+
+        return `# branch.oid ${baseSha}\0# branch.head ${name}\0${entry ? `${entry}\0` : ""}`;
+      }
+
+      if (synchronized && violation === "head" && command.args[0] === "rev-parse") {
+        return sourceSha;
+      }
+
+      return gitOutput(command);
+    });
+
+    const { result } = await runAsset(executor, violation === "preview");
+
+    const message =
+      violation === "head"
+        ? "Sync changed HEAD"
+        : violation === "preview"
+          ? "Preview changed the source checkout"
+          : violation === "outside"
+            ? "outside the selected"
+            : "Sync must keep its branch";
+
+    expect(result).toMatchObject({ status: "failed", error: expect.stringContaining(message) });
+    expect(
+      executor.calls.some((command) => ["add", "commit", "push"].includes(command.args[0] ?? "")),
+    ).toBe(false);
+  });
 }

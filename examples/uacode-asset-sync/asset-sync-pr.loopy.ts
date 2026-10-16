@@ -1,44 +1,26 @@
-import { fs, git, loopy, sh, step } from "loopy";
+import { fs, git, loopy, sh } from "loopy";
 import { codexExec } from "../codex.ts";
-import { changedFiles, pullRequestBody, syncPrompt } from "./prompt.ts";
-import { parseRequest, type Request, script } from "./run.ts";
+import { readOptions, writeOptions } from "../options.ts";
+import { changedFiles, parseSummary, pullRequestBody, syncPrompt } from "./prompt.ts";
+import { type Request, requestSchema, script } from "./request.ts";
 
 export default loopy({
   name: "uacode-asset-sync",
   description: "Sync requested uacode assets in a disposable worktree and open a focused PR.",
   mode: "full",
-  input: {
-    repository: "string",
-    assetsJson: "string",
-    dryRun: "boolean",
-    "exportDirectory?": "string",
-    "feature?": "string",
-    "indexPath?": "string",
-    "baseBranch?": "string",
-    "branchPrefix?": "string",
-    "prTitle?": "string",
-  },
-  run: async ({ input, log, uuid }) => {
-    const request = await step("asset-request", () => {
-      const { assetsJson, ...options } = input;
-
-      const supplied = Object.fromEntries(
-        Object.entries(options).filter(([, value]) => value !== undefined),
-      );
-
-      return parseRequest({ ...supplied, assets: JSON.parse(assetsJson) });
-    });
-
+  input: requestSchema,
+  run: async ({ input: request, log, uuid, now }) => {
     const base = await prerequisites(request);
     const id = await uuid();
-    const branch = `${request.branchPrefix}-${id}`;
+    const date = new Date(await now()).toISOString().slice(0, 10).replaceAll("-", "");
+    const branch = `${request.branchPrefix}-${date}-${id.slice(0, 8)}`;
     const worktree = `${request.repository}-loopy-${id}`;
 
     if (request.dryRun) {
       log.info("Dry run: skip worktree creation, apply, staging, commit, push, PR and cleanup.");
-      await preview(request, base);
+      const summary = await preview(request, base);
 
-      return { base, branch: null, files: [], dryRun: true, prUrl: null };
+      return { base, branch: null, files: [], dryRun: true, prUrl: null, ...summary };
     }
 
     return apply(request, base, branch, worktree);
@@ -47,7 +29,8 @@ export default loopy({
 
 async function prerequisites(request: Request) {
   const cwd = request.repository;
-  const remotes = await git.remote(undefined, commandOptions(cwd));
+  const options = { ...readOptions, cwd };
+  const remotes = await git.remote(undefined, options);
   const origin = remotes.find((remote) => remote.name === "origin")?.fetch ?? "";
 
   if (
@@ -55,31 +38,45 @@ async function prerequisites(request: Request) {
       origin,
     )
   ) {
-    throw new Error("Origin must be unify-apps/uacode on github.com.");
+    throw new Error("Origin must be unify-apps/uacode on github.com. Use the correct checkout.");
   }
 
-  await sh.exec(["git", "check-ref-format", "--branch", request.baseBranch], commandOptions(cwd));
-  await sh.exec(
-    ["git", "check-ref-format", "--branch", `${request.branchPrefix}-check`],
-    commandOptions(cwd),
-  );
-
+  await sh.exec(["git", "check-ref-format", "--branch", request.base], options);
+  await sh.exec(["git", "check-ref-format", "--branch", `${request.branchPrefix}-check`], options);
   const base = await selectedBase(request);
+  await fs.stat({ args: [cwd] }, options);
 
-  await fs.stat({ args: [request.repository] }, commandOptions(cwd));
-  await git.show({ revisions: [`${base}:${script}`] }, commandOptions(cwd));
-  await sh.exec(["gh", "auth", "status"], commandOptions(cwd));
+  try {
+    await sh.exec(["git", "cat-file", "-e", `${base}:${script}`], options);
+  } catch {
+    throw new Error(
+      "The selected base lacks the sync script. Merge unify-apps/uacode#40724 first.",
+    );
+  }
+
+  await sh.exec(["gh", "auth", "status"], options);
 
   if (request.exportDirectory) {
-    await fs.stat({ args: [request.exportDirectory] }, commandOptions(cwd));
+    await fs.stat({ args: [request.exportDirectory] }, options);
+  } else {
+    await webhookPrecheck(cwd);
   }
 
   return base;
 }
 
-async function synchronize(request: Request, base: string, cwd: string) {
-  const prompt = await step("asset-sync-prompt", () => syncPrompt(request, base));
-  await codexExec(
+async function webhookPrecheck(cwd: string) {
+  try {
+    await sh.exec(["sh", "-c", 'test -n "$UA_ASSET_EXPORT_WEBHOOK_URL"'], { ...readOptions, cwd });
+  } catch {
+    throw new Error(
+      "Missing UA_ASSET_EXPORT_WEBHOOK_URL. Set it in the inherited environment or supply exportDirectory.",
+    );
+  }
+}
+
+function synchronize(request: Request, base: string, cwd: string) {
+  return codexExec(
     {
       args: ["-"],
       flags: {
@@ -90,43 +87,31 @@ async function synchronize(request: Request, base: string, cwd: string) {
         cd: cwd,
       },
     },
-    { cwd, stdin: prompt, timeout: "1h", retry: { attempts: 1 } },
+    { ...writeOptions, cwd, stdin: syncPrompt(request, base), timeout: "1h" },
   );
 }
 
 async function preview(request: Request, base: string) {
   const cwd = request.repository;
-
-  if (!request.exportDirectory) {
-    throw new Error("Supply an extracted exportDirectory for a read-only preview.");
-  }
-
-  const selected = await git.revParse({ args: ["HEAD"] }, commandOptions(cwd));
-
-  if (selected !== base) {
-    throw new Error(
-      "Preview requires HEAD at the selected origin base. Use a checkout at that commit.",
-    );
-  }
-
-  const before = (await git.diff.raw(undefined, commandOptions(cwd))).stdout;
-  const status = await git.status(undefined, commandOptions(cwd));
-  const head = await git.revParse({ args: ["HEAD"] }, commandOptions(cwd));
-  await synchronize(request, base, cwd);
-  const after = (await git.diff.raw(undefined, commandOptions(cwd))).stdout;
-  const nextStatus = await git.status(undefined, commandOptions(cwd));
-  const nextHead = await git.revParse({ args: ["HEAD"] }, commandOptions(cwd));
+  const options = { ...readOptions, cwd };
+  const before = (await git.diff.raw(undefined, options)).stdout;
+  const status = await git.status({ flags: { untrackedFiles: "all" } }, options);
+  const result = await synchronize(request, base, cwd);
+  const after = (await git.diff.raw(undefined, options)).stdout;
+  const nextStatus = await git.status({ flags: { untrackedFiles: "all" } }, options);
+  const nextHead = await git.revParse({ args: ["HEAD"] }, options);
 
   if (
     before !== after ||
     JSON.stringify(status) !== JSON.stringify(nextStatus) ||
-    JSON.stringify(head) !== JSON.stringify(nextHead)
+    nextHead !== base
   ) {
     throw new Error("Preview changed the source checkout. Inspect it before continuing.");
   }
 
-  await git.diff(undefined, commandOptions(cwd));
-  await sh.exec(["git", "diff", "--check"], commandOptions(cwd));
+  await sh.exec(["git", "diff", "--check"], options);
+
+  return parseSummary(result.stdout, request);
 }
 
 async function inspectChanges(
@@ -134,21 +119,24 @@ async function inspectChanges(
   target: { cwd: string; base: string; branch: string },
 ) {
   const { cwd, base, branch } = target;
-  const head = await git.revParse({ args: ["HEAD"] }, { cwd, retry: { attempts: 1 } });
+  const options = { ...readOptions, cwd };
+  const head = await git.revParse({ args: ["HEAD"] }, options);
 
   if (head !== base) {
     throw new Error("Sync changed HEAD. Leave all changes uncommitted for Loopy to publish.");
   }
 
-  await sh.exec(["git", "diff", "--check"], commandOptions(cwd));
-  const diff = await git.diff(undefined, commandOptions(cwd));
-  const status = await git.status(undefined, commandOptions(cwd));
+  await sh.exec(["git", "diff", "--check"], options);
+  const diff = await git.diff(undefined, options);
+  const status = await git.status({ flags: { untrackedFiles: "all" } }, options);
 
   if (status.staged.length || status.conflicts.length || status.branch !== branch) {
-    throw new Error("Sync must keep its branch and leave changes unstaged and without conflicts.");
+    throw new Error(
+      "Sync must keep its branch and leave changes unstaged and without conflicts. Restore the generated branch and unstage or resolve changes before retrying.",
+    );
   }
 
-  const files = changedFiles(
+  return changedFiles(
     [
       ...new Set([
         ...diff.flatMap((file) => (file.from ? [file.from, file.path] : [file.path])),
@@ -157,15 +145,13 @@ async function inspectChanges(
     ],
     request,
   );
-
-  return files;
 }
 
 async function publish(request: Request, cwd: string, branch: string, files: string[]) {
-  const body = pullRequestBody(request, files);
-  await git.add({ args: files }, commandOptions(cwd));
-  await git.commit({ flags: { message: request.prTitle } }, commandOptions(cwd));
-  await git.push({ args: ["origin", branch], flags: { setUpstream: true } }, commandOptions(cwd));
+  const options = { ...writeOptions, cwd };
+  await git.add({ args: files }, options);
+  await git.commit({ flags: { message: request.prTitle } }, options);
+  await git.push({ args: ["origin", branch], flags: { setUpstream: true } }, options);
 
   const result = await sh.exec(
     [
@@ -175,61 +161,73 @@ async function publish(request: Request, cwd: string, branch: string, files: str
       "--repo",
       "unify-apps/uacode",
       "--base",
-      request.baseBranch,
+      request.base,
       "--head",
       branch,
       "--title",
       request.prTitle,
       "--body",
-      body,
+      pullRequestBody(request, files),
     ],
-    commandOptions(cwd),
+    options,
   );
 
-  return result.stdout.trim();
-}
+  const url = result.stdout.trim();
 
-function commandOptions(cwd: string) {
-  return { cwd, retry: { attempts: 1 }, timeout: 45_000 };
+  if (!/^https:\/\/github\.com\/unify-apps\/uacode\/pull\/\d+$/.test(url)) {
+    throw new Error(
+      "Could not verify the resulting uacode pull request URL. Inspect the generated branch on GitHub.",
+    );
+  }
+
+  return url;
 }
 
 async function selectedBase(request: Request) {
-  const options = commandOptions(request.repository);
+  const cwd = request.repository;
+  const options = { ...readOptions, cwd };
 
   const remote = await sh.exec(
-    ["git", "ls-remote", "--exit-code", "origin", `refs/heads/${request.baseBranch}`],
+    ["git", "ls-remote", "--exit-code", "origin", `refs/heads/${request.base}`],
     options,
   );
 
   const sha = remote.stdout.trim().split(/\s+/)[0] ?? "";
 
   if (!/^[a-f0-9]{40,64}$/.test(sha)) {
-    throw new Error("Origin returned an invalid base SHA.");
+    throw new Error("Origin returned an invalid base SHA. Verify the selected remote branch.");
   }
 
-  if (!request.dryRun) {
-    await git.fetch({ args: ["origin", sha] }, options);
+  if (request.dryRun) {
+    const head = await git.revParse({ args: ["HEAD"] }, options);
+
+    if (head !== sha) {
+      throw new Error(
+        "Preview requires HEAD at the selected origin base. Use a checkout at that commit.",
+      );
+    }
+
+    return head;
   }
+
+  await git.fetch({ args: ["origin", sha] }, { ...writeOptions, cwd });
 
   return git.revParse({ args: [`${sha}^{commit}`], flags: { verify: true } }, options);
 }
 
 async function apply(request: Request, base: string, branch: string, worktree: string) {
-  await git.worktree.add(
-    { args: [worktree, base], flags: { b: branch } },
-    commandOptions(request.repository),
-  );
+  const options = { ...writeOptions, cwd: request.repository };
+  await git.worktree.add({ args: [worktree, base], flags: { b: branch } }, options);
 
   try {
-    await synchronize(request, base, worktree);
+    const result = await synchronize(request, base, worktree);
+    const summary = parseSummary(result.stdout, request);
     const files = await inspectChanges(request, { cwd: worktree, base, branch });
     const prUrl = files.length ? await publish(request, worktree, branch, files) : null;
 
-    return { base, branch, files, dryRun: false, prUrl };
+    return { base, branch, files, dryRun: false, prUrl, ...summary };
   } finally {
-    await git.worktree.remove(
-      { args: [worktree], flags: { force: true } },
-      commandOptions(request.repository),
-    );
+    await git.worktree.remove({ args: [worktree], flags: { force: true } }, options);
+    await git.branch.raw({ args: [branch], flags: { delete: true, force: true } }, options);
   }
 }

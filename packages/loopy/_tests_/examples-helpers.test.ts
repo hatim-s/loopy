@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 import type { Json } from "loopy";
-import { parseRequest } from "../../../examples/uacode-asset-sync/run.ts";
+import assetSync from "../../../examples/uacode-asset-sync/asset-sync-pr.loopy.ts";
+import { parseSummary } from "../../../examples/uacode-asset-sync/prompt.ts";
 import {
   type Files,
   object,
@@ -324,13 +325,13 @@ export function sourceFixture(content: Map<string, string>) {
   return source;
 }
 
-test("asset request rejects malformed identities, paths and options", () => {
+test("asset request rejects malformed identities, paths and options", async () => {
   const input = {
     repository: "/fixture/uacode",
     assets: [{ assetClass: "WORKFLOW_DEFINITION", assetId: "fixture" }],
   };
 
-  expect(parseRequest(input).feature).toBe("ai-agents");
+  expect((await assetSync.validateInput(input)).feature).toBe("ai-agents");
 
   for (const invalid of [
     { assets: [] },
@@ -341,7 +342,7 @@ test("asset request rejects malformed identities, paths and options", () => {
     { typo: true },
     { repository: "relative" },
   ]) {
-    expect(() => parseRequest({ ...input, ...invalid })).toThrow();
+    await expect(assetSync.validateInput({ ...input, ...invalid })).rejects.toThrow();
   }
 });
 
@@ -425,3 +426,30 @@ function assertPlannerName(files: Files) {
     },
   });
 }
+
+test("asset summary rejects outside paths, traversal, unsafe characters and unknown checks", async () => {
+  const request = await assetSync.validateInput({
+    repository: "/fixture/uacode",
+    assets: [{ assetClass: "asset", assetId: "id" }],
+  });
+
+  const path = "configs/platform-features/ai-agents/asset-repository/fixture.json";
+  expect(
+    parseSummary(JSON.stringify({ proposedFiles: [path], checks: ["sync-preview"] }), request),
+  ).toEqual({ proposedFiles: [path], checks: ["sync-preview"] });
+
+  for (const proposedFiles of [
+    ["outside.json"],
+    [path.replace("fixture", "../fixture")],
+    [path.replace("fixture", "unsafe name")],
+  ]) {
+    expect(() => parseSummary(JSON.stringify({ proposedFiles, checks: [] }), request)).toThrow(
+      "outside",
+    );
+  }
+
+  expect(() => parseSummary('{"proposedFiles":[],"checks":["invented"]}', request)).toThrow(
+    "Invalid check summary",
+  );
+  expect(() => parseSummary("not JSON", request)).toThrow("Missing or invalid Codex summary");
+});
