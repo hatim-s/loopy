@@ -29,6 +29,7 @@ const COMMAND_OPTIONS = new Map<string, readonly (keyof typeof OPTIONS)[]>(
     schedule: ["cron", "tz", "off", "input-json"],
     logs: ["follow"],
     "daemon run": ["concurrency"],
+    "daemon install": ["concurrency"],
     save: ["replace"],
     types: ["out", "name"],
     ui: ["port"],

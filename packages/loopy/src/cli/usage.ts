@@ -17,6 +17,9 @@ export function usage(): string {
   loopy schedule <slug> [--cron EXPR] [--tz ZONE] [--input-json JSON]
   loopy schedule <slug> --off                 Remove its schedule
   loopy daemon run [--concurrency N]          Run the foreground daemon
+  loopy daemon install [--concurrency N]      Install and start the user service
+  loopy daemon uninstall                     Remove the user service
+  loopy daemon status                        Show service state and PID
   loopy types <cli> [command...] --out file.ts [--name identifier]
   loopy secrets set <name> [--stdin]          Store a secret privately
   loopy secrets list                          List secret names
