@@ -1,0 +1,4 @@
+words.txt281700000000regular file644
+space name.txt71700000000regular file644
+nested40961700000000directory755
+link91700000000symbolic link777

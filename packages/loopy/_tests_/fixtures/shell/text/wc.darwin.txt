@@ -1,0 +1,3 @@
+       3       5      28 words.txt
+       1       1       7 space name.txt
+       4       6      35 total

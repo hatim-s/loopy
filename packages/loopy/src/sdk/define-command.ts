@@ -33,6 +33,9 @@ export type CommandDefinition = {
     >;
   };
   readonly exclude?: readonly string[];
+  readonly okExitCodes?: readonly number[];
+  /** Adjust operands and derived flags only after parsed flag validation. */
+  readonly prepare?: (input: RenderInput) => RenderInput;
   readonly parse?: (result: CommandResult) => Json;
 };
 
@@ -169,13 +172,14 @@ export function defineCommand(
   const parsed = async (input: RenderInput = {}, options: CommandOptions = {}) => {
     const resolved = platformVariant(descriptor, environment.platform());
     const flags = parsedFlags(resolved, input);
-    const request = resolveCommand(resolved, { ...input, flags }, key, options);
+    const prepared = resolved.prepare?.({ ...input, flags }) ?? { ...input, flags };
+    const request = resolveCommand(resolved, prepared, key, options);
 
     if (!resolved.parse) {
       return command(key, request, options);
     }
 
-    return command(key, request, options, resolved.parse);
+    return command(key, request, { ...options, okExitCodes: resolved.okExitCodes }, resolved.parse);
   };
 
   return Object.assign(parsed, { raw });

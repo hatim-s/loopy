@@ -598,3 +598,29 @@ test("invalid durations name the rejected input", async () => {
     error: expect.stringContaining("Duration '-1' is invalid."),
   });
 });
+
+test("command exit policy accepts only declared success codes before parsing", async () => {
+  for (const [exitCode, okExitCodes, expected] of [
+    [1, [0, 1], "succeeded"],
+    [1, undefined, "failed"],
+    [2, [0, 1], "failed"],
+  ] as const) {
+    const f = await fixture();
+    f.executor.result = { ...f.executor.result, exitCode };
+
+    const outcome = await f.execute((ctx) =>
+      ctx.command("lookup", { program: "which", args: ["missing"] }, { okExitCodes }, (output) =>
+        output.exitCode === 1 ? null : output.stdout,
+      ),
+    );
+
+    expect(outcome.status).toBe(expected);
+
+    if (expected === "succeeded") {
+      expect((await f.store.getSteps("run"))[0]).toMatchObject({
+        status: "succeeded",
+        output: null,
+      });
+    }
+  }
+});

@@ -1,0 +1,10 @@
+HTTP/1.1 200 OK
+x-fixture: yes
+content-type: text/plain;charset=utf-8
+Date: Fri, 16 Oct 2026 20:15:24 GMT
+Content-Length: 32
+
+hello
+__LOOPY_CURL__body marker
+
+__LOOPY_CURL__{"certs":"","content_type":"text/plain;charset=utf-8","conn_id":0,"errormsg":null,"exitcode":0,"filename_effective":null,"ftp_entry_path":null,"http_code":200,"http_connect":0,"http_version":"1.1","local_ip":"127.0.0.1","local_port":53091,"method":"GET","num_certs":0,"num_connects":1,"num_headers":4,"num_redirects":0,"proxy_ssl_verify_result":0,"proxy_used":0,"redirect_url":null,"referer":null,"remote_ip":"127.0.0.1","remote_port":53089,"response_code":200,"scheme":"HTTP","size_download":32,"size_header":132,"size_request":0,"size_upload":0,"speed_download":68230,"speed_upload":0,"ssl_verify_result":0,"time_appconnect":0.000000,"time_connect":0.000210,"time_namelookup":0.000051,"time_pretransfer":0.000223,"time_redirect":0.000000,"time_starttransfer":0.000455,"time_total":0.000469,"url":"http://127.0.0.1:53089/","url.scheme":"http","url.user":null,"url.password":null,"url.options":null,"url.host":"127.0.0.1","url.port":"53089","url.path":"/","url.query":null,"url.fragment":null,"url.zoneid":null,"urle.scheme":"http","urle.user":null,"urle.password":null,"urle.options":null,"urle.host":"127.0.0.1","urle.port":"53089","urle.path":"/","urle.query":null,"urle.fragment":null,"urle.zoneid":null,"url_effective":"http://127.0.0.1:53089/","urlnum":0,"xfer_id":0,"curl_version":"libcurl/8.7.1 (SecureTransport) LibreSSL/3.3.6 zlib/1.2.12 nghttp2/1.64.0"}

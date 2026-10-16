@@ -1,4 +1,5 @@
 import type { CommandResult } from "../../../core/index.js";
+import { lines, nulFields as splitNulFields } from "./shared.js";
 
 export type Change = {
   path: string;
@@ -79,20 +80,8 @@ function unexpected(cmd: string, line: string): never {
   throw new Error(`Unexpected git ${cmd} output line: ${line}. Report this with the git version.`);
 }
 
-function lines(stdout: string): string[] {
-  return stdout === "" ? [] : stdout.replace(/\n$/, "").split("\n");
-}
-
 function nulFields(stdout: string, cmd: string): string[] {
-  if (stdout === "") {
-    return [];
-  }
-
-  if (!stdout.endsWith("\0")) {
-    unexpected(cmd, stdout);
-  }
-
-  return stdout.slice(0, -1).split("\0");
+  return splitNulFields(stdout, cmd, unexpected);
 }
 
 function required(value: string | undefined, cmd: string, line: string): string {

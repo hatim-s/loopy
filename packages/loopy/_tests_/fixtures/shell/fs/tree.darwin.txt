@@ -1,0 +1,10 @@
+[
+    {"type":"directory","name":".","contents":[
+        {"type":"file","name":"created.lHOItP"},
+        {"type":"link","name":"link","target":"words.txt"},
+        {"type":"directory","name":"nested"},
+        {"type":"file","name":"space name.txt"},
+        {"type":"file","name":"words.txt"}
+    ]}
+
+]

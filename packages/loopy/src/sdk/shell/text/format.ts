@@ -1,4 +1,5 @@
 import { type CommandDescriptor, defineCommand } from "../../define-command.js";
+import { parseJq, parseSha256, parseWc } from "../parse/text.js";
 
 export const base64Descriptor = {
   namespace: "text",
@@ -24,6 +25,9 @@ export const base64Descriptor = {
 
 export const format = {
   wc: defineCommand({
+    parse: parseWc,
+    exclude: ["lines", "words", "bytes", "characters"],
+    preset: { flags: {} },
     namespace: "text",
     name: "wc",
     program: "wc",
@@ -59,10 +63,14 @@ export const format = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
   jq: defineCommand({
+    parse: parseJq,
+    exclude: ["rawOutput", "rawOutput0"],
+    preset: { flags: { compactOutput: true } },
     namespace: "text",
     name: "jq",
     program: "jq",
     flags: {
+      rawOutput0: { cli: "--raw-output0", kind: "boolean" },
       rawOutput: { cli: "-r", kind: "boolean" },
       compactOutput: { cli: "-c", kind: "boolean" },
       slurp: { cli: "-s", kind: "boolean" },
@@ -87,6 +95,9 @@ export const format = {
   }),
   base64: defineCommand(base64Descriptor),
   sha256sum: defineCommand({
+    parse: parseSha256,
+    exclude: ["check"],
+    preset: { flags: {} },
     namespace: "text",
     name: "sha256sum",
     program: "sha256sum",
