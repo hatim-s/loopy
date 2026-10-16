@@ -66,7 +66,7 @@ test("crash recovery retains logs of the original and recovered step attempts", 
   ]);
 });
 
-test("captured workflow context cannot start a nested step", async () => {
+test("a nested step called synchronously inside a step fails the run", async () => {
   const f = await fixture();
 
   const result = await f.execute(async (ctx) =>
@@ -75,7 +75,8 @@ test("captured workflow context cannot start a nested step", async () => {
 
   expect(result).toEqual({
     status: "failed",
-    error: "Steps cannot be nested. Call steps from the workflow instead.",
+    error:
+      "Steps cannot be nested. Call steps from the workflow function, never from inside another step.",
   });
   expect((await f.store.getSteps("run")).map((step) => step.key)).toEqual(["outer"]);
 });

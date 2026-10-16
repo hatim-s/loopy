@@ -55,7 +55,11 @@ async function fail(options: Runner, cause: unknown): Promise<never> {
 }
 
 async function failAttempt(options: Runner, cause: unknown): Promise<{ wakeAt: string }> {
-  const { record, clock } = options;
+  const { record, clock, activation } = options;
+
+  if (activation.fatal) {
+    throw cause;
+  }
 
   if (record.attempt >= record.maxAttempts || !shouldRetry(cause, options.retry)) {
     return fail(options, cause);

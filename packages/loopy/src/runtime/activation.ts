@@ -49,7 +49,10 @@ export class Activation {
 
   assertOpen(): void {
     if (this.invoking) {
-      const error = new Error("Steps cannot be nested. Call steps from the workflow instead.");
+      const error = new Error(
+        "Steps cannot be nested. Call steps from the workflow function, never from inside another step.",
+      );
+
       this.fail(error);
       throw error;
     }
