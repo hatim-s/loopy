@@ -2,6 +2,8 @@ export { bundleLoopy, loadLoopy, loadRunLoopy } from "./bundle.js";
 
 export { localDaemon } from "./daemon.js";
 
+export { daemonStatus, installDaemon, uninstallDaemon } from "./daemon-install.js";
+
 export { LocalExecutor } from "./executor.js";
 
 export { defaultHome } from "./home.js";

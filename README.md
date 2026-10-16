@@ -96,7 +96,23 @@ An inline run activates until it finishes or suspends without a wake time. For a
 
 `inspect` returns the run, ordered steps and logs. Run statuses are `queued`, `running`, `suspended`, `succeeded`, `failed` and `cancelled`. Each step records its sequence, key, kind, attempt, status and result or error. Logs carry their workflow position or step attempt. `logs --follow` emits one JSON object per line.
 
-A definition can include `schedule: { cron: "0 9 * * 1-5", tz: "Asia/Kolkata" }`. `loopy schedule <slug>` uses those defaults; flags override them. Pass schedule input with `--input-json`. Schedules retain their workspace, even when the daemon starts elsewhere. Missed fires are not backfilled. Scheduling stores the next fire time; keep `loopy daemon run` running to execute it. Cron uses five fields and defaults to UTC. Command options are scoped: `--follow` belongs to logs, `--concurrency` to daemon run, and `--cron`, `--tz` and `--off` to schedule.
+A definition can include `schedule: { cron: "0 9 * * 1-5", tz: "Asia/Kolkata" }`. `loopy schedule <slug>` uses those defaults; flags override them. Pass schedule input with `--input-json`. Schedules retain their workspace, even when the daemon starts elsewhere. Missed fires are not backfilled. Scheduling stores the next fire time; keep `loopy daemon run` running to execute it. Cron uses five fields and defaults to UTC. Command options are scoped: `--follow` belongs to logs, `--concurrency` to daemon run and install, and `--cron`, `--tz` and `--off` to schedule.
+
+### Run the daemon as a service
+
+```sh
+loopy daemon install --concurrency 4
+loopy daemon status
+loopy daemon uninstall
+```
+
+Install starts a launchd user agent on macOS or a systemd user unit on Linux.
+Reinstall updates the service and restarts it. Use `--home /absolute/path` when
+installing to select another Loopy home. Output and errors append to
+`<home>/logs/daemon.log`, normally `~/.loopy/logs/daemon.log`.
+The service runs in your user session. On Linux, use systemd user lingering if
+it must keep running after logout. Keep Bun and the installed CLI at their
+installation paths, then reinstall the service after moving either one.
 
 ## Typed shell wrappers
 
