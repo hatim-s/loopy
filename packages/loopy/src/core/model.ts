@@ -165,3 +165,67 @@ export type ExecuteCommand = (
 ) => Promise<CommandOutput>;
 
 export type RunDetail = { run: RunRecord; attempts: AttemptRecord[]; events: RunEvent[] };
+
+// Slice 2b renames EngineRunStatus to RunStatus after deleting the old runtime.
+export type EngineRunStatus =
+  | "queued"
+  | "running"
+  | "suspended"
+  | "succeeded"
+  | "failed"
+  | "cancelled";
+
+export type StepKind = "command" | "function" | "sleep" | "hook" | "clock" | "random";
+
+export type StepStatus = "running" | "succeeded" | "failed" | "retrying" | "sleeping" | "waiting";
+
+export type LogLevel = "info" | "warn" | "error";
+
+// Slice 2b renames EngineRun to RunRecord after deleting the old runtime.
+export type EngineRun = {
+  id: string;
+  slug: string;
+  bundleHash: string;
+  input: Json;
+  status: EngineRunStatus;
+  output?: Json;
+  error?: string;
+  wakeAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  ownerToken?: string;
+  ownerPid?: number;
+  ownerHost?: string;
+  heartbeatAt?: string;
+};
+
+// Slice 2b renames EngineStep to StepRecord.
+export type EngineStep = {
+  runId: string;
+  seq: number;
+  key: string;
+  kind: StepKind;
+  status: StepStatus;
+  input: Json;
+  output?: Json;
+  error?: string;
+  attempt: number;
+  maxAttempts: number;
+  nextRetryAt?: string;
+  wakeAt?: string;
+  startedAt: string;
+  endedAt?: string;
+};
+
+// Slice 2b renames EngineLog to LogRecord.
+export type EngineLog = {
+  runId: string;
+  seq: number;
+  level: LogLevel;
+  message: string;
+  data?: Json;
+  stepSeq?: number;
+  at: string;
+};
+
+export type CommandResult = CommandOutput;
