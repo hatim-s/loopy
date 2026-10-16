@@ -521,6 +521,31 @@ for (const signal of ["SIGKILL", "SIGTERM"] as const) {
   });
 }
 
+test("loopy types generates a git wrapper that can execute --version", async () => {
+  const f = fixture("generated-git", "run: () => 1");
+  const generated = join(f.cwd, "git.ts");
+  const result = await cli(f, "types", "git", "--out", generated, "--name", "generatedGit");
+  expect(result.code).toBe(0);
+  writeFileSync(
+    generated,
+    (await Bun.file(generated).text()).replace('from "loopy"', `from ${JSON.stringify(SDK)}`),
+  );
+  writeFileSync(
+    f.file,
+    `import { loopy } from ${JSON.stringify(SDK)};
+    import { generatedGit } from "./git.ts";
+    export default loopy({ name: "generated-git", mode: "full", run: () => generatedGit({ args: ["--version"] }) });`,
+  );
+  await save(f);
+  const run = await cli(f, "run", "generated-git");
+  expect(run.stderr).toBe("");
+  expect(run.code).toBe(0);
+  expect(object(run.stdout).output).toMatchObject({
+    exitCode: 0,
+    stdout: expect.stringContaining("git version"),
+  });
+});
+
 test("API distinguishes invalid cursors from registry failures", async () => {
   const f = fixture("server-errors", "run: () => 1");
   await save(f);

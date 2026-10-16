@@ -95,11 +95,13 @@ type FlagInput<F extends FlagDefinition> = F extends { readonly pairs: true }
 type Flags<D extends CommandDescriptor> = D extends {
   readonly flags: infer F extends Readonly<Record<string, FlagDefinition>>;
 }
-  ? {
-      readonly [K in keyof F]?: F[K] extends { readonly repeatable: true }
-        ? readonly FlagInput<F[K]>[]
-        : FlagInput<F[K]>;
-    }
+  ? keyof F extends never
+    ? Record<string, never>
+    : {
+        readonly [K in keyof F]?: F[K] extends { readonly repeatable: true }
+          ? readonly FlagInput<F[K]>[]
+          : FlagInput<F[K]>;
+      }
   : Record<string, never>;
 
 type Args<D extends CommandDescriptor> = D extends {

@@ -10,21 +10,23 @@ export type ParsedHelp = {
 
 const USAGE_LINE = /^Usage:\s*\S/i;
 
-const SECTION_HEADING = /^[A-Za-z][\w /-]*:\s*$/;
+const SECTION_HEADING = /^(?:[A-Za-z][\w /-]*:|[A-Z][A-Z /-]*)\s*$/;
 
 const POSITIONAL_NAME = /^[A-Za-z][A-Za-z0-9_-]*$/;
 
 const OPTION_START = /^\s*(?:-\w,\s*)?--[A-Za-z0-9]/;
 
 const OPTION_LINE =
-  /^\s*(?:(?:-\w,\s*)?)(--[A-Za-z0-9][A-Za-z0-9-]*)(?:[ =](<[^>\s]+>|\[[A-Z][A-Z0-9_-]*\])|(\[=<[^>\s]+>\]))?(\.\.\.)?(?:\s{2,}.*)?$/;
+  /^\s*(?:(?:-\w,\s*)?)(--[A-Za-z0-9][A-Za-z0-9-]*)(?:[ =](<[^>\s]+>|\[[A-Z][A-Z0-9_-]*\]|[A-Za-z][A-Za-z0-9_-]*)|(\[=<[^>\s]+>\]))?(\.\.\.)?(?:\s{2,}.*)?$/;
 
 const NUMERIC_PLACEHOLDER = /(?:^|_)(count|number|timeout|limit|port|seconds|ms)(?:$|_)/;
 
 const POSSIBLE_VALUES = /\[possible values:\s*([^\]]+)\]/i;
 
 function section(lines: string[], title: string): string[] {
-  const start = lines.findIndex((line) => line.trim() === `${title}:`);
+  const start = lines.findIndex(
+    (line) => line.trim().replace(/:$/, "").toLowerCase() === title.toLowerCase(),
+  );
 
   if (start < 0) {
     return [];
@@ -39,9 +41,15 @@ function section(lines: string[], title: string): string[] {
 function parsePositionalToken(token: string): PositionalDefinition | undefined {
   const variadic = token.includes("...");
   const optional = token.startsWith("[");
-  const rawName = token.replace(/[<>[\]]/g, "").replace(/\.\.\.$/, "");
 
-  if (!POSITIONAL_NAME.test(rawName) || rawName.toUpperCase() === "OPTIONS") {
+  const rawName =
+    token
+      .replace(/[<>[\]]/g, "")
+      .replace(/\.\.\.$/, "")
+      .split(/\s+/)
+      .at(-1) ?? "";
+
+  if (!POSITIONAL_NAME.test(rawName) || ["OPTIONS", "FLAGS"].includes(rawName.toUpperCase())) {
     return undefined;
   }
 
@@ -68,20 +76,28 @@ function positionalCandidates(lines: string[]): PositionalCandidates {
   }
 
   const usage = lines.find((line) => USAGE_LINE.test(line));
-  const source = usage ? [usage.replace(/^Usage:\s*/i, "")] : section(lines, "Usage");
+  const usageSection = section(lines, "Usage");
+
+  const source = usage
+    ? [usage.replace(/^Usage:\s*/i, "")]
+    : usageSection.length
+      ? usageSection
+      : section(lines, "Synopsis");
 
   return {
     tokens: source.map((line) =>
-      line
-        .trim()
-        .split(/\s+/)
-        .filter((token) => token.startsWith("[") || token.startsWith("<")),
+      [...line.matchAll(/\[?<[^>]+>(?:\.\.\.)?\]?|\[[A-Za-z][\w-]*(?:\.\.\.)?\]/g)].map((match) => {
+        const prefix = line.slice(0, match.index);
+        const depth = (prefix.match(/\[/g)?.length ?? 0) - (prefix.match(/\]/g)?.length ?? 0);
+
+        return depth > 0 && !match[0].startsWith("[") ? `[${match[0]}]` : match[0];
+      }),
     ),
     fromSection: false,
   };
 }
 
-export function parsePositionals(lines: string[]): PositionalDefinition[] {
+function parsePositionals(lines: string[]): PositionalDefinition[] {
   const { tokens, fromSection } = positionalCandidates(lines);
   const result: PositionalDefinition[] = [];
   const seen = new Set<string>();
@@ -107,7 +123,7 @@ export function parsePositionals(lines: string[]): PositionalDefinition[] {
   return result;
 }
 
-export function choicesAfter(lines: string[], start: number): string[] | undefined {
+function choicesAfter(lines: string[], start: number): string[] | undefined {
   for (let index = start; index < Math.min(lines.length, start + 12); index += 1) {
     const line = lines[index] ?? "";
 
@@ -184,10 +200,13 @@ function parseFlagMatch(match: RegExpExecArray, options: string[], index: number
   return flag;
 }
 
-export function parseFlags(lines: string[], warnings: string[]) {
+function parseFlags(lines: string[], warnings: string[]) {
   const flags: Record<string, FlagDefinition> = {};
   const optionsSection = section(lines, "Options");
-  const options = optionsSection.length ? optionsSection : section(lines, "Flags");
+
+  const options = optionsSection.length
+    ? optionsSection
+    : [...section(lines, "Flags"), ...section(lines, "Command options")];
 
   for (const [index, line] of options.entries()) {
     const match = OPTION_LINE.exec(line);
@@ -202,7 +221,7 @@ export function parseFlags(lines: string[], warnings: string[]) {
 
     const cli = match[1];
 
-    if (!cli) {
+    if (!cli || cli === "--help" || cli === "--version") {
       continue;
     }
 
@@ -252,7 +271,8 @@ function hasMultipleUsageForms(lines: string[], prefix: string): boolean {
 }
 
 export function parseCliHelp(binary: string, path: readonly string[], help: string): ParsedHelp {
-  const lines = help.replaceAll("\r\n", "\n").split("\n");
+  const normalized = help.replaceAll("\r\n", "\n").replace(/.\x08/g, "");
+  const lines = normalized.split("\n");
   const warnings: string[] = [];
 
   if (!help.trim()) {
@@ -278,7 +298,7 @@ export function parseCliHelp(binary: string, path: readonly string[], help: stri
 
   const descriptor: CommandDescriptor = {
     key: [basename(binary), ...path].join("."),
-    positionalSeparator: true,
+    positionalSeparator: /(?:^|\s|\[)--(?:\]|\s|$)/m.test(normalized),
     program: binary,
     path,
     positionals,

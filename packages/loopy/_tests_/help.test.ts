@@ -67,7 +67,7 @@ describe("CLI help generation", () => {
         workspace: "/workspace",
       }),
     ).toMatchObject({ status: "succeeded" });
-    expect(executor.calls).toMatchObject([{ program: "codex", args: ["exec", "--", "--help"] }]);
+    expect(executor.calls).toMatchObject([{ program: "codex", args: ["exec", "--help"] }]);
     expect(await store.getSteps("generated")).toMatchObject([
       { key: "codex.exec", kind: "command" },
     ]);
@@ -86,6 +86,18 @@ describe("CLI help generation", () => {
       await writeFile(
         file,
         `${source}
+      ${renderCommandSource(
+        "noFlags",
+        parseCliHelp(
+          "tool",
+          [],
+          "Usage: tool [flags]\nOptions:\n  --help  Show help\n  --version  Show version",
+        ).descriptor,
+      )
+        .replace('import { type CommandDescriptor, defineCommand } from "loopy";', "")
+        .replaceAll("descriptor", "emptyDescriptor")}
+      // @ts-expect-error Empty flag maps reject excess flags.
+      noFlags({ flags: { typo: true } });
       codexExec({ args: ["hi"], flags: { json: true, config: ["model=test"] } });
       // @ts-expect-error Unknown flags must fail compilation.
       codexExec({ flags: { typo: true } });
@@ -181,4 +193,81 @@ describe("CLI help generation", () => {
 
     expect(parsed.descriptor.flags?.mode?.choices).toEqual(["safe", "fast"]);
   });
+});
+
+for (const fixture of [
+  {
+    binary: "gh",
+    path: ["pr", "create"],
+    file: "gh-pr-create",
+    positional: undefined,
+    flag: "assignee",
+    kind: "string",
+    separator: false,
+  },
+  {
+    binary: "git",
+    path: ["log"],
+    file: "git-log",
+    positional: "revision-range",
+    flag: "follow",
+    kind: "boolean",
+    separator: true,
+  },
+  {
+    binary: "bun",
+    path: ["build"],
+    file: "bun-build",
+    positional: "entrypoint",
+    flag: "outfile",
+    kind: "string",
+    separator: false,
+  },
+  {
+    binary: "jq",
+    path: [],
+    file: "jq",
+    positional: "filter",
+    flag: "rawOutput",
+    kind: "boolean",
+    separator: true,
+  },
+] as const) {
+  test(`captured ${fixture.file} help preserves operands and flag metadata`, async () => {
+    const help = await Bun.file(
+      resolve(import.meta.dir, "fixtures/help", `${fixture.file}.txt`),
+    ).text();
+
+    const { descriptor } = parseCliHelp(fixture.binary, fixture.path, help);
+    expect(descriptor.positionals?.[0]?.name).toBe(fixture.positional);
+    expect(descriptor.flags?.[fixture.flag]?.kind).toBe(fixture.kind);
+    expect(descriptor.positionalSeparator).toBe(fixture.separator);
+    expect(descriptor.flags).not.toHaveProperty("help");
+    expect(descriptor.flags).not.toHaveProperty("version");
+    expect(
+      descriptor.positionals?.some((positional) => /^(options|flags)$/.test(positional.name)),
+    ).toBe(false);
+    const source = renderCommandSource("generated", descriptor);
+    expect(source).toContain(`${fixture.flag}: { cli: `);
+    expect(source).not.toContain('"program":');
+
+    if (fixture.binary === "git") {
+      expect(descriptor.positionals?.[1]).toMatchObject({
+        name: "path",
+        optional: true,
+        variadic: true,
+      });
+    }
+  });
+}
+
+test("man-page overstrikes retain the advertised positional separator", () => {
+  const { descriptor } = parseCliHelp(
+    "git",
+    ["log"],
+    "SYNOPSIS\n       g\bgit log [[-\b--\b-] <path>...]\nOPTIONS\n       --follow\n",
+  );
+
+  expect(descriptor.positionalSeparator).toBe(true);
+  expect(descriptor.positionals).toEqual([{ name: "path", optional: true, variadic: true }]);
 });
