@@ -37,6 +37,9 @@ describe("CLI help generation", () => {
     });
     expect(parsed.descriptor.helpHash).toHaveLength(64);
     const source = renderCommandSource("codexExec", parsed.descriptor);
+    expect(source.split("\n")[0]).toBe(
+      'import { type CommandDescriptor, defineCommand } from "loopy/core";',
+    );
     expect(source).toContain("as const satisfies CommandDescriptor");
     expect(source).toContain('"read-only"');
   });

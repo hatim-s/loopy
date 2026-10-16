@@ -1,9 +1,11 @@
 import { expect, test } from "bun:test";
 import { isRecord } from "../src/core/index.js";
-import { activate, type Clock, MemoryRunStore, NESTED_STEP_MESSAGE } from "../src/runtime/index.js";
-import { WRAP } from "../src/sdk/current.js";
+import { type Clock, MemoryRunStore } from "../src/runtime/index.js";
+import { NESTED_STEP_MESSAGE } from "../src/sdk/current.js";
 import {
   command,
+  type Loopy,
+  type LoopyContext,
   log,
   loopy,
   now,
@@ -13,7 +15,7 @@ import {
   step,
   uuid,
 } from "../src/sdk/index.js";
-import { runLoopy } from "../src/sdk/run.js";
+import { activateLoopy, startLoopy } from "../src/sdk/run.js";
 import { FakeExecutor } from "./engine-fixture.js";
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
@@ -43,6 +45,7 @@ function fixture() {
     store: new MemoryRunStore(),
     executor: new FakeExecutor(),
     runId: "sdk-run",
+    bundleHash: "",
     cwd: "/workspace",
     clock,
     advance(milliseconds: number) {
@@ -58,13 +61,13 @@ test("a Standard Schema validates input and infers the workflow input type", asy
     name: "schema",
     input: NAME_SCHEMA,
     run: async ({ input }) => {
-      const inferred = true satisfies Equal<typeof input, { name: string }>;
+      const inferred: Equal<typeof input, { name: string }> = true;
 
       return { name: input.name, inferred };
     },
   });
 
-  expect(await runLoopy({ ...f, loopy: definition, input: { name: " Hatim " } })).toEqual({
+  expect(await startLoopy({ ...f, loopy: definition, input: { name: " Hatim " } })).toEqual({
     status: "succeeded",
     output: { name: "Hatim", inferred: true },
   });
@@ -80,18 +83,19 @@ test("a plain record infers required and optional primitive input types", async 
     name: "record",
     input: { name: "string", count: "number", enabled: "boolean", "limit?": "number" },
     run: async ({ input }) => {
-      const name = input.name satisfies string;
-      const count = input.count satisfies number;
-      const enabled = input.enabled satisfies boolean;
-      const limit = input.limit satisfies number | undefined;
-      const optional = { name, count, enabled } satisfies typeof input;
+      const inferred: Equal<
+        typeof input,
+        { name: string; count: number; enabled: boolean; limit?: number }
+      > = true;
 
-      return { ...optional, limit: limit ?? 0 };
+      expect(inferred).toBe(true);
+
+      return { ...input, limit: input.limit ?? 0 };
     },
   });
 
   expect(
-    await runLoopy({
+    await startLoopy({
       ...fixture(),
       loopy: definition,
       input: { name: "test", count: 2, enabled: true },
@@ -126,7 +130,7 @@ test("a plain record accepts an optional field when present", async () => {
     run: async ({ input }) => input.limit ?? 0,
   });
 
-  expect(await runLoopy({ ...fixture(), loopy: definition, input: { limit: 3 } })).toEqual({
+  expect(await startLoopy({ ...fixture(), loopy: definition, input: { limit: 3 } })).toEqual({
     status: "succeeded",
     output: 3,
   });
@@ -135,7 +139,7 @@ test("a plain record accepts an optional field when present", async () => {
 test("a Standard Schema failure leaves no run record", async () => {
   const f = fixture();
   const definition = loopy({ name: "invalid", input: NAME_SCHEMA, run: async () => null });
-  await expect(runLoopy({ ...f, loopy: definition, input: {} })).rejects.toThrow(
+  await expect(startLoopy({ ...f, loopy: definition, input: {} })).rejects.toThrow(
     "name: Supply a name",
   );
   expect(await f.store.getRun(f.runId)).toBeUndefined();
@@ -144,7 +148,7 @@ test("a Standard Schema failure leaves no run record", async () => {
 test("ambient step records its result", async () => {
   const f = fixture();
   const definition = loopy({ name: "step", run: async () => step("answer", () => 42) });
-  expect(await runLoopy({ ...f, loopy: definition, input: {} })).toEqual({
+  expect(await startLoopy({ ...f, loopy: definition, input: {} })).toEqual({
     status: "succeeded",
     output: 42,
   });
@@ -159,27 +163,24 @@ test("ambient sleep suspends and resumes across two activations", async () => {
 
   const definition = loopy({
     name: "sleep",
-    run: async () => {
+    input: { value: "number" },
+    run: async ({ input }) => {
       const result = await step("before", () => ++calls);
       await sleep("1s");
 
-      return result;
+      return result + input.value;
     },
   });
 
-  expect(await runLoopy({ ...f, loopy: definition, input: {} })).toEqual({
+  expect(await startLoopy({ ...f, loopy: definition, input: { value: 4 } })).toEqual({
     status: "suspended",
     wakeAt: "2026-10-16T00:00:01.000Z",
   });
   f.advance(1000);
-  expect(
-    await activate({
-      ...f,
-      mode: definition.mode,
-      wrap: WRAP,
-      workflow: (context) => definition.run({ ...context, input: {} }),
-    }),
-  ).toEqual({ status: "succeeded", output: 1 });
+  expect(await activateLoopy({ ...f, loopy: definition })).toEqual({
+    status: "succeeded",
+    output: 5,
+  });
   expect(calls).toBe(1);
   expect((await f.store.getSteps(f.runId))[1]).toMatchObject({
     key: "sleep",
@@ -207,7 +208,7 @@ test("ambient logs carry workflow and step attempt positions", async () => {
     },
   });
 
-  await runLoopy({ ...f, loopy: definition, input: {} });
+  await startLoopy({ ...f, loopy: definition, input: {} });
   expect(await f.store.getLogs(f.runId)).toMatchObject([
     { level: "info", message: "workflow", data: { count: 1 }, position: { kind: "workflow" } },
     { level: "warn", message: "attempt", position: { kind: "step", seq: 1, attempt: 1 } },
@@ -218,7 +219,7 @@ test("ambient logs carry workflow and step attempt positions", async () => {
 test("ambient now records the supplied clock", async () => {
   const f = fixture();
   const definition = loopy({ name: "clock", run: async () => now() });
-  expect(await runLoopy({ ...f, loopy: definition, input: {} })).toEqual({
+  expect(await startLoopy({ ...f, loopy: definition, input: {} })).toEqual({
     status: "succeeded",
     output: f.clock.now(),
   });
@@ -230,7 +231,7 @@ test("ambient now records the supplied clock", async () => {
 test("ambient random records its result", async () => {
   const f = fixture();
   const definition = loopy({ name: "random", run: async () => random() });
-  const result = await runLoopy({ ...f, loopy: definition, input: {} });
+  const result = await startLoopy({ ...f, loopy: definition, input: {} });
 
   expect(result).toMatchObject({ status: "succeeded", output: expect.any(Number) });
   expect(await f.store.getSteps(f.runId)).toMatchObject([
@@ -241,7 +242,7 @@ test("ambient random records its result", async () => {
 test("ambient uuid records its result", async () => {
   const f = fixture();
   const definition = loopy({ name: "uuid", run: async () => uuid() });
-  const result = await runLoopy({ ...f, loopy: definition, input: {} });
+  const result = await startLoopy({ ...f, loopy: definition, input: {} });
 
   expect(result).toMatchObject({ status: "succeeded", output: expect.any(String) });
   expect(await f.store.getSteps(f.runId)).toMatchObject([
@@ -257,7 +258,7 @@ test("ambient command uses the supplied executor", async () => {
     run: async () => command("echo", { program: "echo", args: ["ok"] }),
   });
 
-  expect(await runLoopy({ ...f, loopy: definition, input: {} })).toEqual({
+  expect(await startLoopy({ ...f, loopy: definition, input: {} })).toEqual({
     status: "succeeded",
     output: f.executor.result,
   });
@@ -272,7 +273,7 @@ test("a synchronous nested step fails the run", async () => {
     run: async () => step("outer", () => step("inner", () => null)),
   });
 
-  expect(await runLoopy({ ...f, loopy: definition, input: {} })).toEqual({
+  expect(await startLoopy({ ...f, loopy: definition, input: {} })).toEqual({
     status: "failed",
     error: NESTED_STEP_MESSAGE,
   });
@@ -297,7 +298,7 @@ test("a nested step after await fails the run even if caught", async () => {
       }),
   });
 
-  expect(await runLoopy({ ...f, loopy: definition, input: {} })).toEqual({
+  expect(await startLoopy({ ...f, loopy: definition, input: {} })).toEqual({
     status: "failed",
     error: NESTED_STEP_MESSAGE,
   });
@@ -336,7 +337,7 @@ test("loopy rejects an invalid scope", () => {
 test("loopy freezes the normalized definition", () => {
   const definition = loopy({
     name: "defaults",
-    schedule: { cron: "check at save time" },
+    schedule: { cron: "0 * * * *" },
     secrets: ["TOKEN"],
     run: async () => null,
   });
@@ -344,7 +345,7 @@ test("loopy freezes the normalized definition", () => {
   expect(definition).toMatchObject({
     mode: "sandbox",
     scope: "project",
-    schedule: { cron: "check at save time" },
+    schedule: { cron: "0 * * * *" },
     secrets: ["TOKEN"],
   });
   expect(Object.isFrozen(definition)).toBe(true);
@@ -355,7 +356,7 @@ test("loopy freezes the normalized definition", () => {
 test("an omitted input schema accepts a run without input", async () => {
   const definition = loopy({ name: "no-input", run: async ({ input }) => input });
 
-  expect(await runLoopy({ ...fixture(), loopy: definition, input: undefined })).toEqual({
+  expect(await startLoopy({ ...fixture(), loopy: definition, input: undefined })).toEqual({
     status: "succeeded",
     output: {},
   });
@@ -383,7 +384,7 @@ test("concurrent runs keep their ambient scopes separate", async () => {
 
   const outcomes = await Promise.all(
     ["first", "second"].map((value) =>
-      runLoopy({
+      startLoopy({
         ...f,
         loopy: definition,
         runId: value,
@@ -426,3 +427,122 @@ test("loopy rejects an input schema that is not an object", () => {
     "Input schema must be an object.",
   );
 });
+
+test("a run context's now cannot bypass the nested step check", async () => {
+  const definition = loopy({
+    name: "nested-context",
+    run: ({ now }) => step("outer", () => now()),
+  });
+
+  expect(await startLoopy({ ...fixture(), loopy: definition, input: {} })).toEqual({
+    status: "failed",
+    error: NESTED_STEP_MESSAGE,
+  });
+});
+
+test("the run context exposes only author functions and logs at the active step", async () => {
+  const f = fixture();
+
+  const definition = loopy({
+    name: "context",
+    run: async (context) => {
+      const inferred: Equal<typeof context, LoopyContext<Record<string, never>>> = true;
+      expect(inferred).toBe(true);
+      expect(Object.keys(context).sort()).toEqual(["input", "log", "now", "random", "uuid"]);
+      await step("work", async () => {
+        await Promise.resolve();
+        context.log.info("inside");
+
+        return null;
+      });
+
+      return null;
+    },
+  });
+
+  await startLoopy({ ...f, loopy: definition, input: {} });
+  expect(await f.store.getLogs(f.runId)).toMatchObject([
+    { message: "inside", position: { kind: "step", seq: 1, attempt: 1 } },
+  ]);
+});
+
+test("a typed loopy is assignable to plain Loopy and accepts a synchronous run", async () => {
+  const typed: Loopy<{ a: string }, string> = loopy({
+    name: "typed",
+    input: { a: "string" },
+    run: ({ input }) => input.a,
+  });
+
+  const definition: Loopy = typed;
+
+  expect(await startLoopy({ ...fixture(), loopy: definition, input: { a: "ok" } })).toEqual({
+    status: "succeeded",
+    output: "ok",
+  });
+});
+
+test("record input reports every unknown field", async () => {
+  const definition = loopy({ name: "unknown-input", input: { a: "string" }, run: () => null });
+
+  await expect(definition.validateInput({ a: "ok", typo: 1, extra: false })).rejects.toThrow(
+    "Input validation failed: typo: Unknown field; extra: Unknown field. Correct the input and try again.",
+  );
+});
+
+test("loopy rejects a missing run function", () => {
+  // @ts-expect-error JavaScript callers may omit the run function.
+  expect(() => loopy({ name: "missing-run" })).toThrow(
+    "Loopy run must be a function. Supply a run(context) function.",
+  );
+});
+
+test("loopy rejects a non-function run", () => {
+  // @ts-expect-error JavaScript callers may supply a malformed run function.
+  expect(() => loopy({ name: "invalid-run", run: 42 })).toThrow(
+    "Loopy run must be a function. Supply a run(context) function.",
+  );
+});
+
+test("loopy rejects unknown definition fields", () => {
+  // @ts-expect-error JavaScript callers may misspell definition fields.
+  expect(() => loopy({ name: "unknown-key", typo: true, run: () => null })).toThrow(
+    "Loopy definition has an unsupported field 'typo'.",
+  );
+});
+
+test("loopy validates cron expressions when defined", () => {
+  expect(() =>
+    loopy({ name: "cron", schedule: { cron: "check at save time" }, run: () => null }),
+  ).toThrow(
+    "Provide five fields: minute hour day-of-month month day-of-week, or a supported alias.",
+  );
+});
+
+test("loopy validates schedule timezones when defined", () => {
+  expect(() =>
+    loopy({ name: "tz", schedule: { cron: "@daily", tz: "invalid/zone" }, run: () => null }),
+  ).toThrow(
+    "Invalid schedule timezone 'invalid/zone'. Provide an IANA time zone such as 'Asia/Kolkata'.",
+  );
+  expect(
+    loopy({ name: "tz", schedule: { cron: "@daily", tz: "Asia/Kolkata" }, run: () => null })
+      .schedule,
+  ).toEqual({ cron: "@daily", tz: "Asia/Kolkata" });
+});
+
+function compileOnlyChecks() {
+  loopy({
+    name: "wrong-record-field",
+    input: { a: "string" },
+    run: ({ input }) => {
+      // @ts-expect-error Record input fields keep their declared primitive types.
+      const wrong: typeof input = { a: 42 };
+      // @ts-expect-error Record input exposes only the declared fields.
+      const typo: string = input.typo;
+
+      return wrong.a + typo;
+    },
+  });
+}
+
+void compileOnlyChecks;

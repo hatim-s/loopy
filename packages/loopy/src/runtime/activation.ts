@@ -2,9 +2,6 @@ import type { EngineStep, RunOutcome } from "../core/index.js";
 
 type Delivery = { finishOrder: number; source: "memoized" | "live"; deliver: () => void };
 
-export const NESTED_STEP_MESSAGE =
-  "Steps cannot be nested. Call steps from the workflow function, never from inside another step.";
-
 export class Activation {
   running = 0;
   blocked = 0;

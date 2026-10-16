@@ -1,15 +1,28 @@
-import { isRecord, requireOneOf, requireRecord, setOwnProperty } from "../core/index.js";
+import {
+  isBoolean,
+  isNumber,
+  isRecord,
+  isString,
+  requireOneOf,
+  requireRecord,
+  setOwnProperty,
+} from "../core/index.js";
 
-import type * as StandardSchemaV1 from "./schema-types.js";
+type StandardIssue = {
+  readonly message: string;
+  readonly path?: readonly (PropertyKey | { readonly key: PropertyKey })[];
+};
+
+type StandardResult<Output> =
+  | { readonly value: Output; readonly issues?: undefined }
+  | { readonly issues: readonly StandardIssue[] };
 
 type StandardSchemaV1<Input = unknown, Output = Input> = {
   readonly "~standard": {
     readonly version: 1;
     readonly vendor: string;
     // BOUNDARY: Standard Schema validators receive external input before it has a type.
-    validate(
-      value: unknown,
-    ): StandardSchemaV1.Result<Output> | Promise<StandardSchemaV1.Result<Output>>;
+    validate(value: unknown): StandardResult<Output> | Promise<StandardResult<Output>>;
     readonly types?: { readonly input: Input; readonly output: Output };
   };
 };
@@ -22,24 +35,26 @@ export type InputSchema = StandardSchemaV1 | RecordSpec;
 
 type Primitive = { string: string; number: number; boolean: boolean };
 
-type RecordInput<Spec extends RecordSpec> = {
-  -readonly [Key in keyof Spec as Key extends `${string}?` ? never : Key]: Primitive[Spec[Key]];
-} & {
-  -readonly [Key in keyof Spec as Key extends `${infer Name}?`
-    ? Name
-    : never]?: Primitive[Spec[Key]];
-};
+type Simplify<T> = { [K in keyof T]: T[K] } & {};
 
-export type inferInput<Def> = Def extends StandardSchemaV1
-  ? StandardSchemaV1.InferOutput<Def>
+type RecordInput<Spec extends RecordSpec> = Simplify<
+  {
+    -readonly [Key in keyof Spec as Key extends `${string}?` ? never : Key]: Primitive[Spec[Key]];
+  } & {
+    -readonly [Key in keyof Spec as Key extends `${infer Name}?`
+      ? Name
+      : never]?: Primitive[Spec[Key]];
+  }
+>;
+
+export type InferInput<Def> = Def extends StandardSchemaV1
+  ? NonNullable<Def["~standard"]["types"]>["output"]
   : Def extends RecordSpec
     ? RecordInput<Def>
-    : Def extends { input: infer Schema }
-      ? inferInput<Schema>
-      : Record<string, never>;
+    : Record<string, never>;
 
 // BOUNDARY: Imported schemas are untyped module values until their Standard Schema contract is checked.
-export function isStandardSchema<Value>(value: Value): value is Value & StandardSchemaV1 {
+function isStandardSchema<Value>(value: Value): value is Value & StandardSchemaV1 {
   if (!isRecord(value) || !isRecord(value["~standard"])) {
     return false;
   }
@@ -53,13 +68,24 @@ export function isStandardSchema<Value>(value: Value): value is Value & Standard
   );
 }
 
+const GUARDS = {
+  string: isString,
+  number: (value: unknown): value is number => isNumber(value) && Number.isFinite(value),
+  boolean: isBoolean,
+};
+
 // BOUNDARY: Record schema input comes from argv or external JSON and must match each declared primitive.
-function validateRecord(spec: RecordSpec, value: unknown): StandardSchemaV1.Result<unknown> {
+function validateRecord(spec: RecordSpec, value: unknown): StandardResult<unknown> {
   if (!isRecord(value)) {
     return { issues: [{ message: "Expected an object", path: [] }] };
   }
 
-  const issues: StandardSchemaV1.Issue[] = [];
+  const keys = new Set(Object.keys(spec).map((field) => field.replace(/\?$/, "")));
+
+  const issues: StandardIssue[] = Object.keys(value)
+    .filter((key) => !keys.has(key))
+    .map((key) => ({ message: "Unknown field", path: [key] }));
+
   const output: Record<string, string | number | boolean> = {};
 
   for (const [field, kind] of Object.entries(spec)) {
@@ -71,20 +97,18 @@ function validateRecord(spec: RecordSpec, value: unknown): StandardSchemaV1.Resu
       continue;
     }
 
-    if (typeof item !== kind || (typeof item === "number" && !Number.isFinite(item))) {
+    if (!GUARDS[kind](item)) {
       issues.push({ message: `Expected ${kind}`, path: [key] });
       continue;
     }
 
-    if (typeof item === "string" || typeof item === "number" || typeof item === "boolean") {
-      setOwnProperty(output, key, item);
-    }
+    setOwnProperty(output, key, item);
   }
 
   return issues.length > 0 ? { issues } : { value: output };
 }
 
-export function recordSchema<const Spec extends RecordSpec>(
+function recordSchema<const Spec extends RecordSpec>(
   spec: Spec,
 ): StandardSchemaV1<unknown, RecordInput<Spec>> {
   const fields = Object.freeze({ ...spec });
@@ -111,7 +135,7 @@ export function recordSchema<const Spec extends RecordSpec>(
   };
 }
 
-function issueMessage(issue: StandardSchemaV1.Issue): string {
+function issueMessage(issue: StandardIssue): string {
   const path = issue.path?.map((part) => String(isRecord(part) ? part.key : part)).join(".");
 
   return `${path || "input"}: ${issue.message.replace(/\.$/, "")}`;
@@ -126,7 +150,7 @@ export function inputValidator<Schema extends InputSchema | undefined>(schema: S
   const validator = isStandardSchema(schema) ? schema : recordSchema(schema ?? {});
 
   // BOUNDARY: Run input is external data validated by the author's schema.
-  async function validateInput(value: unknown): Promise<inferInput<Schema>> {
+  async function validateInput(value: unknown): Promise<InferInput<Schema>> {
     const supplied = schema === undefined && value === undefined ? {} : value;
     const result = await validator["~standard"].validate(supplied);
 
@@ -137,7 +161,7 @@ export function inputValidator<Schema extends InputSchema | undefined>(schema: S
     }
 
     // SAFETY: Standard Schema validates the untyped value and guarantees the schema's inferred output.
-    return result.value as inferInput<Schema>;
+    return result.value as InferInput<Schema>;
   }
 
   return validateInput;

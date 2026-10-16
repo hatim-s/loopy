@@ -1,5 +1,5 @@
-import type { Json } from "../core/index.js";
-import type { Duration, LoopyContext, StepContext, StepOptions } from "../runtime/index.js";
+import type { CommandResult, Json } from "../core/index.js";
+import type { Duration, ResolvedCommand, StepContext, StepOptions } from "../runtime/index.js";
 import { current, workflowContext } from "./current.js";
 
 export function step<T extends Json>(
@@ -26,8 +26,12 @@ export function uuid(): Promise<string> {
   return workflowContext().uuid();
 }
 
-export function command(...args: Parameters<LoopyContext["command"]>) {
-  return workflowContext().command(...args);
+export function command(
+  key: string,
+  command: ResolvedCommand,
+  options?: StepOptions,
+): Promise<CommandResult> {
+  return workflowContext().command(key, command, options);
 }
 
 export const log = {

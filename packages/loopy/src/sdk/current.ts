@@ -1,14 +1,19 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import {
-  type ActivationOptions,
-  type LoopyContext,
-  NESTED_STEP_MESSAGE,
-  type StepContext,
-} from "../runtime/index.js";
+import type { LoopyContext, StepContext } from "../runtime/index.js";
 
-type Scope = { context: LoopyContext; insideStep: boolean; fail: (error: Error) => void };
+type Scope =
+  | { kind: "workflow"; context: LoopyContext; fail: (error: Error) => void }
+  | { kind: "step"; log: StepContext["log"]; fail: (error: Error) => void };
 
-const STORAGE = new AsyncLocalStorage<Scope>();
+const SCOPE: unique symbol = Symbol.for("loopy.scope");
+
+// SAFETY: Every SDK copy uses this process-wide symbol for the same scope storage contract.
+const GLOBAL = globalThis as typeof globalThis & { [SCOPE]?: AsyncLocalStorage<Scope> };
+
+const STORAGE = (GLOBAL[SCOPE] ??= new AsyncLocalStorage<Scope>());
+
+export const NESTED_STEP_MESSAGE =
+  "Steps cannot be nested. Call steps from the workflow function, never from inside another step.";
 
 function active(): Scope {
   const scope = STORAGE.getStore();
@@ -20,14 +25,16 @@ function active(): Scope {
   return scope;
 }
 
-export function current(): LoopyContext {
-  return active().context;
+export function current() {
+  const scope = active();
+
+  return scope.kind === "workflow" ? scope.context : scope;
 }
 
 export function workflowContext(): LoopyContext {
   const scope = active();
 
-  if (scope.insideStep) {
+  if (scope.kind === "step") {
     const error = new Error(NESTED_STEP_MESSAGE);
     scope.fail(error);
     throw error;
@@ -36,17 +43,16 @@ export function workflowContext(): LoopyContext {
   return scope.context;
 }
 
-function workflow<T>(fn: () => T, context: LoopyContext, fail: Scope["fail"]): T {
-  return STORAGE.run({ context, insideStep: false, fail }, fn);
+export function workflowScope<T>(
+  fn: () => T,
+  context: LoopyContext,
+  fail: (error: Error) => void,
+): T {
+  return STORAGE.run({ kind: "workflow", context, fail }, fn);
 }
 
-function step<T>(fn: () => T, context: StepContext): T {
-  const scope = active();
+export function stepScope<T>(fn: () => T, context: StepContext): T {
+  const { fail } = active();
 
-  return STORAGE.run(
-    { ...scope, context: { ...scope.context, log: context.log }, insideStep: true },
-    fn,
-  );
+  return STORAGE.run({ kind: "step", log: context.log, fail }, fn);
 }
-
-export const WRAP = { workflow, step } satisfies NonNullable<ActivationOptions["wrap"]>;

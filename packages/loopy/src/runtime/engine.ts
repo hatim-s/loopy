@@ -1,7 +1,7 @@
 import { type ExecutionMode, errorMessage, type Json, type RunOutcome } from "../core/index.js";
 import { Activation } from "./activation.js";
 import { type Clock, SYSTEM_CLOCK } from "./clock.js";
-import { createContext, type LoopyContext, type StepContext } from "./context.js";
+import { type ActivationScope, createContext, type LoopyContext } from "./context.js";
 import type { Executor } from "./executor.js";
 import { StepJournal } from "./journal.js";
 import { assertJson } from "./json.js";
@@ -16,10 +16,7 @@ export type ActivationOptions = {
   cwd: string;
   mode: ExecutionMode;
   clock?: Clock;
-  wrap?: {
-    workflow?: <T>(fn: () => T, context: LoopyContext, fail: (error: Error) => void) => T;
-    step?: <T>(fn: () => T, context: StepContext) => T;
-  };
+  wrap?: ActivationScope;
 };
 
 export type ActivationOutcome = RunOutcome | { status: "suspended"; wakeAt: string };
@@ -34,9 +31,7 @@ function startWorkflow(
     .then(() => {
       const invoke = () => workflow(context);
 
-      return wrap?.workflow
-        ? wrap.workflow(invoke, context, (error) => activation.fail(error))
-        : invoke();
+      return wrap ? wrap.workflow(invoke, context, (error) => activation.fail(error)) : invoke();
     })
     .then((output) => {
       assertJson(output, "Workflow output");

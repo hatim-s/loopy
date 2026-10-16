@@ -2,7 +2,6 @@ import type { EngineRun, EngineStep, ExecutionMode, Json, StepKind } from "../co
 import type { Activation } from "./activation.js";
 import type { Clock } from "./clock.js";
 import { type Duration, durationMs } from "./duration.js";
-import type { ActivationOptions } from "./engine.js";
 import { CommandExitError, type Executor, type ResolvedCommand } from "./executor.js";
 import type { StepJournal } from "./journal.js";
 import type { Logger } from "./logger.js";
@@ -23,7 +22,7 @@ type ContextOptions = {
   activation: Activation;
   journal: StepJournal;
   logger: Logger;
-  wrap?: ActivationOptions["wrap"];
+  wrap?: ActivationScope;
 };
 
 function replay(stored: Extract<EngineStep, { status: "succeeded" | "failed" }>): Json {
@@ -75,7 +74,7 @@ function createPerformer(options: ContextOptions) {
     return run(runner, () => {
       const invoke = () => fn(scope);
 
-      return options.wrap?.step ? options.wrap.step(invoke, scope) : invoke();
+      return options.wrap ? options.wrap.step(invoke, scope) : invoke();
     });
   };
 }
@@ -137,3 +136,8 @@ export function createContext(options: ContextOptions) {
 }
 
 export type LoopyContext = ReturnType<typeof createContext>;
+
+export type ActivationScope = {
+  workflow<T>(fn: () => T, context: LoopyContext, fail: (error: Error) => void): T;
+  step<T>(fn: () => T, context: StepContext): T;
+};

@@ -1,4 +1,5 @@
 import {
+  allowKeys,
   type ExecutionMode,
   isStringArray,
   type Json,
@@ -7,12 +8,19 @@ import {
   requireString,
   validateSlug,
 } from "../core/index.js";
-import type { LoopyContext } from "../runtime/index.js";
-import { type InputSchema, type inferInput, inputValidator } from "./schema.js";
+import { parseCron } from "../runtime/index.js";
+import type { log, now, random, uuid } from "./ambient.js";
+import { type InferInput, type InputSchema, inputValidator } from "./schema.js";
 
-const LOOPY = Symbol("loopy");
+const LOOPY = Symbol.for("loopy");
 
-type RunContext<Input> = Pick<LoopyContext, "log" | "now" | "random" | "uuid"> & { input: Input };
+export type LoopyContext<Input = unknown> = {
+  input: Input;
+  log: typeof log;
+  now: typeof now;
+  random: typeof random;
+  uuid: typeof uuid;
+};
 
 export type LoopyDefinition<
   Schema extends InputSchema | undefined = undefined,
@@ -25,7 +33,7 @@ export type LoopyDefinition<
   scope?: "project" | "global";
   mode?: ExecutionMode;
   secrets?: string[];
-  run: (context: RunContext<inferInput<Schema>>) => Promise<Output>;
+  run(context: LoopyContext<InferInput<Schema>>): Output | Promise<Output>;
 };
 
 export type Loopy<Input = unknown, Output extends Json = Json> = Readonly<{
@@ -37,7 +45,7 @@ export type Loopy<Input = unknown, Output extends Json = Json> = Readonly<{
   scope: "project" | "global";
   mode: ExecutionMode;
   secrets: readonly string[];
-  run: (context: RunContext<Input>) => Promise<Output>;
+  run(context: LoopyContext<Input>): Promise<Output>;
   // BOUNDARY: Public callers supply external data to the definition's schema.
   validateInput(value: unknown): Promise<Input>;
 }>;
@@ -48,9 +56,20 @@ function validateSchedule(schedule: LoopyDefinition["schedule"]) {
   }
 
   const value = requireRecord(schedule, "Schedule");
+  allowKeys(value, "Schedule", ["cron", "tz"]);
   const cron = requireString(value.cron, "Schedule cron");
-
+  parseCron(cron);
   const tz = value.tz === undefined ? undefined : requireString(value.tz, "Schedule timezone");
+
+  if (tz !== undefined) {
+    try {
+      new Intl.DateTimeFormat("en", { timeZone: tz });
+    } catch {
+      throw new Error(
+        `Invalid schedule timezone '${tz}'. Provide an IANA time zone such as 'Asia/Kolkata'.`,
+      );
+    }
+  }
 
   return Object.freeze({ cron, tz });
 }
@@ -63,30 +82,49 @@ function validateSecrets(secrets: string[] = []) {
   return Object.freeze([...secrets]);
 }
 
+// BOUNDARY: JavaScript authors can supply malformed definitions despite the TypeScript contract.
+function validateDefinition(definition: LoopyDefinition<InputSchema | undefined>) {
+  const value = requireRecord(definition, "Loopy definition");
+  allowKeys(value, "Loopy definition", [
+    "name",
+    "description",
+    "input",
+    "schedule",
+    "scope",
+    "mode",
+    "secrets",
+    "run",
+  ]);
+  validateSlug(requireString(value.name, "Loopy name"));
+
+  if (value.description !== undefined) {
+    requireString(value.description, "Loopy description");
+  }
+
+  if (typeof value.run !== "function") {
+    throw new Error("Loopy run must be a function. Supply a run(context) function.");
+  }
+}
+
 export function loopy<
   const Schema extends InputSchema | undefined = undefined,
   Output extends Json = Json,
->(definition: LoopyDefinition<Schema, Output>): Loopy<inferInput<Schema>, Output> {
-  validateSlug(requireString(definition.name, "Loopy name"));
-
-  if (definition.description !== undefined) {
-    requireString(definition.description, "Loopy description");
-  }
-
-  const { scope = "project", mode = "sandbox" } = definition;
-  requireOneOf(scope, ["project", "global"], "Loopy scope");
-  requireOneOf(mode, ["sandbox", "full"], "Loopy mode");
-  const schedule = validateSchedule(definition.schedule);
-  const secrets = validateSecrets(definition.secrets);
-  const validateInput = inputValidator<Schema>(definition.input);
+>(definition: LoopyDefinition<Schema, Output>): Loopy<InferInput<Schema>, Output> {
+  validateDefinition(definition);
+  const { name, description, input, scope = "project", mode = "sandbox", run } = definition;
 
   return Object.freeze({
-    ...definition,
-    [LOOPY]: true,
-    scope,
-    mode,
-    schedule,
-    secrets,
-    validateInput,
-  } satisfies Loopy<inferInput<Schema>, Output>);
+    [LOOPY]: true as const,
+    name,
+    description,
+    input,
+    scope: requireOneOf(scope, ["project", "global"], "Loopy scope"),
+    mode: requireOneOf(mode, ["sandbox", "full"], "Loopy mode"),
+    schedule: validateSchedule(definition.schedule),
+    secrets: validateSecrets(definition.secrets),
+    validateInput: inputValidator<Schema>(definition.input),
+    async run(context: LoopyContext<InferInput<Schema>>) {
+      return run(context);
+    },
+  });
 }
