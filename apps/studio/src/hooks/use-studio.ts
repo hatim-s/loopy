@@ -1,13 +1,13 @@
-import type { LoopySummary, RunRecord } from "loopy";
+import type { LoopySummary } from "loopy";
 import { useCallback, useEffect, useState } from "react";
 import { endpoints } from "../api.ts";
 import { useRequest } from "./use-request.ts";
 import { useRun } from "./use-run.ts";
+import { useRuns } from "./use-runs.ts";
 
 export function useStudio() {
   const [loopies, setLoopies] = useState<LoopySummary[]>([]);
   const [slug, setSlug] = useState<string>();
-  const [allRuns, setRuns] = useState<RunRecord[]>([]);
   const [runId, setRunId] = useState<string>();
   const [error, setError] = useState<string>();
   const [revision, setRevision] = useState(0);
@@ -18,6 +18,7 @@ export function useStudio() {
   );
 
   const detail = useRun(runId, onError, revision);
+  const allRuns = useRuns(onError, revision);
   const refresh = () => setRevision((value) => value + 1);
   useEffect(() => {
     function visible() {
@@ -31,7 +32,6 @@ export function useStudio() {
     return () => document.removeEventListener("visibilitychange", visible);
   }, []);
   useRequest({ load: endpoints.loopies, apply: setLoopies, onError }, [revision]);
-  useRequest({ load: endpoints.runs, apply: setRuns, onError }, [revision, detail]);
 
   function selectSlug(value: string) {
     setSlug(value);

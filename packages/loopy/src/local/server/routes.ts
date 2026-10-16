@@ -21,11 +21,15 @@ export function json(data: unknown, status = 200): Response {
   });
 }
 
-async function detail(store: SqliteRunStore, id: string) {
+async function detail(store: SqliteRunStore, id: string, url: URL) {
   const run = await store.getRun(id);
 
   if (!run) {
     return json({ error: "Run not found. Use loopy runs to find a run ID." }, 404);
+  }
+
+  if (url.searchParams.get("logs") === "false") {
+    return json({ run, steps: await store.getSteps(id) });
   }
 
   return json(await runDetail(store, run));
@@ -57,7 +61,8 @@ export function apiRoutes({ registry, getStore }: RouteDependencies): Route[] {
     {
       method: "GET",
       pattern: /^\/api\/runs\/(?<id>[^/]+)$/,
-      handle: async ({ params }) => detail(getStore(), requireNonEmptyString(params.id, "id")),
+      handle: async ({ params, url }) =>
+        detail(getStore(), requireNonEmptyString(params.id, "id"), url),
     },
     {
       method: "GET",

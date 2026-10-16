@@ -43,5 +43,6 @@ export const endpoints = {
   runs: () => api<RunRecord[]>("/api/runs"),
   logs: (id: string, after: number) =>
     api<LogRecord[]>(`/api/runs/${encodeURIComponent(id)}/logs?after=${after}`),
-  run: (id: string) => api<RunDetail>(`/api/runs/${encodeURIComponent(id)}`),
+  run: (id: string) =>
+    api<Omit<RunDetail, "logs">>(`/api/runs/${encodeURIComponent(id)}?logs=false`),
 };

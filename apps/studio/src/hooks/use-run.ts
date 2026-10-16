@@ -1,7 +1,7 @@
 import type { RunDetail } from "loopy";
 import { useEffect, useState } from "react";
 import { endpoints } from "../api.ts";
-import { shouldPoll } from "../lib/polling.ts";
+import { nextPollDelay } from "../lib/polling.ts";
 
 export function useRun(
   id: string | undefined,
@@ -29,7 +29,7 @@ export function useRun(
         const increments = await endpoints.logs(id, cursor);
 
         const logs = new Map(
-          [...(current?.logs ?? []), ...next.logs, ...increments].map((log) => [log.seq, log]),
+          [...(current?.logs ?? []), ...increments].map((log) => [log.seq, log]),
         );
 
         if (stale || requestGeneration !== generation || document.visibilityState !== "visible") {
@@ -40,13 +40,10 @@ export function useRun(
 
         setDetail(current);
 
-        if (shouldPoll(current.run, true, Date.now())) {
-          timer = setTimeout(() => void refresh(), 2000);
-        } else if (current.run.status === "suspended" && current.run.wakeAt) {
-          timer = setTimeout(
-            () => void refresh(),
-            Math.min(2_147_483_647, Math.max(1, Date.parse(current.run.wakeAt) - Date.now())),
-          );
+        const delay = nextPollDelay(current.run, true, Date.now());
+
+        if (delay !== undefined) {
+          timer = setTimeout(() => void refresh(), delay);
         }
       } catch (cause) {
         if (!stale && requestGeneration === generation && document.visibilityState === "visible") {
