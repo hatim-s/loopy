@@ -165,3 +165,74 @@ export type ExecuteCommand = (
 ) => Promise<CommandOutput>;
 
 export type RunDetail = { run: RunRecord; attempts: AttemptRecord[]; events: RunEvent[] };
+
+export type EngineRunStatus =
+  | "queued"
+  | "running"
+  | "suspended"
+  | "succeeded"
+  | "failed"
+  | "cancelled";
+
+export type StepKind = "command" | "function" | "sleep" | "hook" | "clock" | "random";
+
+export type LogLevel = "info" | "warn" | "error";
+
+export type RunOwner = { token: string; pid: number; host: string; heartbeatAt: string };
+
+export type RunOutcome =
+  | { status: "succeeded"; output: Json }
+  | { status: "failed"; error: string }
+  | { status: "cancelled" };
+
+export type EngineRun = {
+  id: string;
+  slug: string;
+  bundleHash: string;
+  input: Json;
+  status: EngineRunStatus;
+  output?: Json;
+  error?: string;
+  wakeAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  owner?: RunOwner;
+};
+
+export type StepBase = {
+  runId: string;
+  seq: number;
+  key: string;
+  kind: StepKind;
+  input: Json;
+  attempt: number;
+  maxAttempts: number;
+  startedAt: string;
+};
+
+export type EngineStep = StepBase &
+  (
+    | { status: "running" }
+    | { status: "succeeded"; output: Json; endedAt: string; finishOrder: number }
+    | { status: "failed"; error: string; endedAt: string; finishOrder: number }
+    | { status: "retrying"; error: string; nextRetryAt: string; endedAt: string }
+    | { status: "sleeping"; wakeAt: string }
+  );
+
+export type StepStatus = EngineStep["status"];
+
+export type LogPosition =
+  | { kind: "workflow"; afterStep: number; afterFinish: number; index: number }
+  | { kind: "step"; seq: number; attempt: number; index: number };
+
+export type EngineLog = {
+  runId: string;
+  seq: number;
+  position: LogPosition;
+  level: LogLevel;
+  message: string;
+  data?: Json;
+  at: string;
+};
+
+export type CommandResult = CommandOutput;

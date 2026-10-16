@@ -1,0 +1,92 @@
+import type { CommandResult, EngineRun, Json } from "../src/core/index.js";
+import {
+  activate,
+  type Clock,
+  type Executor,
+  type LoopyContext,
+  MemoryRunStore,
+  type ResolvedCommand,
+} from "../src/runtime/index.js";
+
+export class FakeExecutor implements Executor {
+  calls: ResolvedCommand[] = [];
+  result: CommandResult = { stdout: "ok", stderr: "", exitCode: 0, durationMs: 1 };
+  failure?: Error;
+  async execute(command: ResolvedCommand): Promise<CommandResult> {
+    this.calls.push(command);
+
+    if (this.failure) {
+      throw this.failure;
+    }
+
+    return this.result;
+  }
+}
+
+function testClock() {
+  let time = Date.parse("2026-10-16T00:00:00.000Z");
+  const timers = new Map<() => void, number>();
+
+  const clock: Clock = {
+    now: () => time,
+    timeout: (callback, milliseconds) => {
+      timers.set(callback, time + milliseconds);
+
+      return () => {
+        timers.delete(callback);
+      };
+    },
+  };
+
+  function advance(milliseconds: number): void {
+    time += milliseconds;
+
+    for (const [callback, deadline] of timers) {
+      if (deadline <= time) {
+        timers.delete(callback);
+        callback();
+      }
+    }
+  }
+
+  return { clock, advance, timers };
+}
+
+export function newRun(): EngineRun {
+  return {
+    id: "run",
+    slug: "test",
+    bundleHash: "bundle",
+    input: { value: 42 },
+    status: "queued",
+    createdAt: "2026-10-16T00:00:00.000Z",
+    updatedAt: "2026-10-16T00:00:00.000Z",
+  };
+}
+
+export async function fixture(store = new MemoryRunStore()) {
+  const { clock, advance, timers } = testClock();
+  const run = newRun();
+  const executor = new FakeExecutor();
+  await store.createRun(run);
+
+  function execute(workflow: (context: LoopyContext) => Promise<Json>) {
+    return activate({
+      runId: run.id,
+      store,
+      executor,
+      workflow,
+      cwd: "/workspace",
+      mode: "sandbox",
+      clock,
+    });
+  }
+
+  return { run, store, executor, execute, advance, timers, clock };
+}
+
+export function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+}

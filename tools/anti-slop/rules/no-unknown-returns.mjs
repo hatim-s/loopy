@@ -29,6 +29,15 @@ export const noUnknownReturnsRule = {
       return value !== undefined && matches(value);
     });
     const checkReturnType = (node) => {
+      // Generic constraints bound inference without exposing unknown as the function result.
+      for (let parent = node.parent; parent; parent = parent.parent) {
+        if (parent.type === "TSTypeParameter") {
+          return;
+        }
+        if (parent.type === "FunctionDeclaration" || parent.type === "TSDeclareFunction") {
+          break;
+        }
+      }
       const annotation = node.returnType;
       if (annotation === null || annotation === undefined)
         return;
