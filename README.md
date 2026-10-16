@@ -24,7 +24,7 @@ To install the CLI globally, run `bun run install:global`. The installer builds 
 Save this as `review.loopy.ts` in a project with the `loopy` dependency:
 
 ```ts
-import { defineCommand, git, loopy, step } from "loopy";
+import { defineCommand, git, loopy } from "loopy";
 
 const codex = defineCommand({
   key: "codex.exec",
@@ -41,21 +41,20 @@ export default loopy({
   mode: "full",
   input: { "instructions?": "string" },
   run: async ({ input, log }) => {
-    const diff = await git.diff.raw({ flags: { stat: true } });
+    const changes = await git.diff();
 
-    if (diff.stdout.trim() === "") {
+    if (changes.length === 0) {
       log.info("No changes to review.");
 
       return { outcome: "clean", review: null };
     }
 
+    const diff = (await git.diff.raw()).stdout;
     const result = await codex(
       { args: ["-"], flags: { sandbox: "read-only" } },
-      { stdin: `Review these changes.\n${diff.stdout}\n${input.instructions ?? "Find bugs."}`, timeout: "10m" },
+      { stdin: `Review these changes.\n${diff}\n${input.instructions ?? "Find bugs."}`, timeout: "10m" },
     );
-    const review = await step("summary", () => result.stdout.trim(), {
-      retry: { attempts: 1 },
-    });
+    const review = result.stdout.trim();
     log.info("Review completed.", { characters: review.length });
 
     return { outcome: "reviewed", review };
@@ -93,11 +92,11 @@ loopy schedule review --cron '0 9 * * 1-5' --tz Asia/Kolkata
 loopy schedule review --off
 ```
 
-An inline run activates until it finishes or suspends without a wake time. For a timed sleep or retry, it waits and activates again. Ctrl-C leaves unfinished work resumable. `--detach` creates a queued run without executing it; the foreground daemon claims queued and due runs. `resume` continues queued or suspended runs. A finished run stays finished; start a new run to try a failed workflow again. Cancellation requires a claimable run. Stop its runner before cancelling an actively owned run.
+An inline run activates until it finishes or suspends without a wake time. For a timed sleep or retry, it waits and activates again. Ctrl-C and SIGTERM leave unfinished work resumable. `--detach` creates a queued run without executing it; the foreground daemon claims queued and due runs. `resume` continues queued, suspended or abandoned runs. A finished run stays finished; start a new run to try a failed workflow again. Cancellation requires a claimable run. Stop its runner before cancelling an actively owned run.
 
 `inspect` returns the run, ordered steps and logs. Run statuses are `queued`, `running`, `suspended`, `succeeded`, `failed` and `cancelled`. Each step records its sequence, key, kind, attempt, status and result or error. Logs carry their workflow position or step attempt. `logs --follow` emits one JSON object per line.
 
-A definition can include `schedule: { cron: "0 9 * * 1-5", tz: "Asia/Kolkata" }`. `loopy schedule <slug>` uses those defaults; flags override them. Pass schedule input with `--input-json`. Scheduling stores the next fire time; keep `loopy daemon run` running to execute it. Cron uses five fields and defaults to UTC. Command options are scoped: `--follow` belongs to logs, `--concurrency` to daemon run, and `--cron`, `--tz` and `--off` to schedule.
+A definition can include `schedule: { cron: "0 9 * * 1-5", tz: "Asia/Kolkata" }`. `loopy schedule <slug>` uses those defaults; flags override them. Pass schedule input with `--input-json`. Schedules retain their workspace, even when the daemon starts elsewhere. Missed fires are not backfilled. Scheduling stores the next fire time; keep `loopy daemon run` running to execute it. Cron uses five fields and defaults to UTC. Command options are scoped: `--follow` belongs to logs, `--concurrency` to daemon run, and `--cron`, `--tz` and `--off` to schedule.
 
 ## Typed shell wrappers
 
@@ -121,17 +120,25 @@ Generate a wrapper for another CLI with `loopy types codex exec --out codex.ts -
 
 ## Determinism and retries
 
-The engine identifies a step by its sequence and checks its key on replay. Keep branches and code between steps deterministic. Put external reads and effects in a shell wrapper or `step("name", fn)`. Step results must be JSON. Use context `now()`, `random()` and `uuid()` instead of unrecorded time or randomness. These calls also create steps. `sleep("1h")` persists a wake time and suspends without keeping a timer alive in the daemon.
+The engine identifies a step by its sequence and checks its key on replay. Keep branches and code between steps deterministic. Put external reads and effects in a shell wrapper or `step("name", fn)`. Step results must be JSON. Use context `now()`, `random()` and `uuid()` instead of unrecorded time or randomness. Await each call, for example `const at = await now()`, `const value = await random()` and `const id = await uuid()`. These calls also create steps. `sleep("1h")` persists a wake time and suspends without keeping a timer alive in the daemon.
 
 Steps cannot nest, including shell calls inside a function step. A function step receives `{ log, attempt }` for attempt-specific logs. Use workflow `log.info`, `log.warn` and `log.error` between steps. The engine deduplicates workflow logs by replay position and retains logs from each executed step attempt. `parallel`, bounded `map` and `race` compose step calls; recorded completion order controls replay delivery. A changed step key fails with a nondeterminism error even if workflow code catches it.
 
+Composition accepts functions that return promises:
+
+```ts
+const [status, files] = await parallel([() => git.status(), () => git.lsFiles()]);
+const results = await map(items, async (item, index) => processItem(item, index), { concurrency: 4 });
+const first = await race([() => queryPrimary(), () => queryReplica()]);
+```
+
 The default is three attempts with exponential delays starting at one second, doubling to a 60-second cap without jitter. Function failures, spawn failures and timeouts can retry. Nonzero command exits require `retry: { retryOn: "exit" }`; parser errors and non-JSON outputs fail without retry. Set `retry: { attempts: 1 }` to disable automatic retries. Durations accept milliseconds or strings such as `"30s"`, `"10m"`, `"1h"` and `"2d"`.
 
-A process can finish an effect before its result is persisted. Crash recovery can execute that unfinished step again. Use idempotent operations or external idempotency keys for publication and other effects that must not repeat.
+Runners heartbeat every 15 seconds while holding a run. After a crash, resume or the daemon can reclaim ownership once its heartbeat is more than 60 seconds old. On the same host, a dead PID permits immediate recovery. The `--lease-ms` global option overrides the lease duration. Unfinished running steps retry with the next attempt number. A process can finish an effect before its result is persisted. Crash recovery can execute that unfinished step again. Use idempotent operations or external idempotency keys for publication and other effects that must not repeat.
 
 ## Execution and secrets
 
-Sandbox mode denies network access and confines writes to the workspace using the platform sandbox. An unavailable or failed sandbox never falls back to full permissions. `mode: "full"` runs with the host environment and permissions; use it deliberately for network tools and automation that needs other checkouts. Saved TypeScript executes during save and activation, so only save code you trust.
+Sandbox mode denies network access and confines writes to the workspace using sandbox-exec on macOS or bwrap on Linux. Other platforms have no supported sandbox and reject sandbox mode. Device access includes /dev/null and /dev/tty writes on macOS. An unavailable or failed sandbox never falls back to full permissions. `mode: "full"` runs with the host environment and permissions; use it deliberately for network tools and automation that needs other checkouts. Saved TypeScript executes during save and activation, so only save code you trust.
 
 Declare `secrets: ["NPM_TOKEN"]` in the definition and store each value privately:
 
@@ -151,13 +158,12 @@ Run records retain input, command argv, explicit environment and stdin, step res
 ```text
 ~/.loopy/
   secrets.json
-  v2/
-    loopies/<slug>.json
-    bundles/<sha256>.js
-    runs.sqlite
+  loopies/<slug>.json
+  bundles/<sha256>.js
+  runs.sqlite
 <project>/.loopy/loopies/<slug>.json
 ```
 
-Set `LOOPY_HOME` or pass `--home` to move the versioned home. Project lookup checks the nearest ancestor containing `.loopy/loopies`; project entries override global entries. A slug belongs to its canonical source file. Use `loopy save <file.ts> --replace` to transfer ownership. The store recreates tables on schema-version mismatch; there is no data migration.
+Set `LOOPY_HOME` or pass `--home` to move the home. Project lookup checks the nearest ancestor containing `.loopy/loopies`; project entries override global entries. A slug belongs to its canonical source file. Use `loopy save <file.ts> --replace` to transfer ownership. A schema-version mismatch deletes all runs, steps, logs and schedules; there is no data migration.
 
 The canonical examples are [hello](examples/hello.loopy.ts), [review](examples/review.loopy.ts), [uacode asset sync](examples/uacode-asset-sync/README.md) and [www prompt sync](examples/www-uacode-sync/README.md).

@@ -29,7 +29,21 @@ for (const changed of [false, true]) {
   test(`review ${changed ? "calls Codex with the diff" : "skips Codex for a clean checkout"}`, async () => {
     const store = new MemoryRunStore();
     const executor = new FakeExecutor();
-    executor.result.stdout = changed ? "src/app.ts | 2 ++" : "";
+    executor.execute = async (command, options) => {
+      executor.calls.push(command);
+      executor.options.push(options);
+
+      return {
+        ...executor.result,
+        stdout: command.args.includes("--numstat")
+          ? changed
+            ? "2\t0\tsrc/app.ts\0"
+            : ""
+          : command.program === "git"
+            ? "diff --git a/src/app.ts b/src/app.ts\n+new code"
+            : "Found an issue.",
+      };
+    };
 
     const options = {
       loopy: review,
@@ -44,13 +58,14 @@ for (const changed of [false, true]) {
       await startLoopy({ ...options, input: { instructions: "Check correctness." } }),
     ).toMatchObject({ status: "succeeded", output: { outcome: changed ? "reviewed" : "clean" } });
     expect(executor.calls.map((command) => command.program)).toEqual(
-      changed ? ["git", "codex"] : ["git"],
+      changed ? ["git", "git", "codex"] : ["git"],
     );
 
     if (changed) {
-      expect(executor.calls[1]).toMatchObject({
-        args: ["exec", "--sandbox", "read-only", "--json", "--", "-"],
-        stdin: "Review these changes without editing files.\nsrc/app.ts | 2 ++\nCheck correctness.",
+      expect(executor.calls[2]).toMatchObject({
+        args: ["exec", "--sandbox", "read-only", "--", "-"],
+        stdin:
+          "Review these changes without editing files.\ndiff --git a/src/app.ts b/src/app.ts\n+new code\nCheck correctness.",
       });
     }
 

@@ -31,7 +31,7 @@ Layers import downward. Runtime imports core; SDK imports core and runtime; loca
 - `sdk/loopy.ts` validates definitions; `sdk/schema.ts` validates author input.
 - `sdk/define-command.ts` and `render-argv.ts` turn typed descriptors into command steps.
 - `sdk/shell/` owns command descriptors and parsers.
-- `local/store.ts` owns SQLite transactions, fencing and queries; `store-schema.ts` defines SQL and rows; `store-rows.ts` maps rows.
+- `local/store.ts` owns SQLite transactions, fencing and queries; `store-schema.ts` defines the schema and row types; `store-rows.ts` defines queries and maps rows.
 - `local/registry.ts` resolves project and global loopies, source ownership and bundle paths.
 - `local/bundle.ts` bundles and loads SDK definitions. `local/daemon.ts` prepares bundles and executors for the runtime daemon.
 - `local/process.ts` and `spawn.ts` launch and capture processes. `executor.ts` injects declared secrets and redacts results through `secret-redactor.ts`.
@@ -49,6 +49,6 @@ Each CLI command exports `run<Name>(context: CliContext)`, reads positionals thr
 
 The replay engine runs user code from the top. Keep code between steps deterministic, preserve sequence and completion order, never nest steps, and fence every durable write with the owner token. Successful steps replay from stored JSON. Recovery may repeat an unfinished effect; it does not promise exactly-once external execution.
 
-Tests belong in `_tests_` directories. Reserve them for durable state transitions, type guarantees, parsers, sandbox confinement, secret handling and CLI behavior. Use temporary homes and fake or recording executors. Run example definitions through `startLoopy`. Do not add UI tests or glue tests for reversible edits.
+Tests belong in `_tests_` directories. Reserve them for durable state transitions, type guarantees, parsers, sandbox confinement, secret handling and CLI behavior. Use temporary homes and fake or recording executors. Run example definitions through `createLoopyRun` and `activateLoopy`. Do not add UI tests or glue tests for reversible edits.
 
 Delete unused paths with their callers and tests. Do not add compatibility aliases or export symbols without a consumer. Preserve user work and keep unrelated automation checkouts untouched.
