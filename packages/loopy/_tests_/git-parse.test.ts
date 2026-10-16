@@ -9,7 +9,7 @@ import {
   SYSTEM_CLOCK,
 } from "../src/runtime/index.js";
 import { type CommandResult, git, loopy, sleep } from "../src/sdk/index.js";
-import { activateLoopy, startLoopy } from "../src/sdk/run.js";
+import { activateLoopy } from "../src/sdk/run.js";
 import {
   parseBranch,
   parseDiff,
@@ -23,7 +23,7 @@ import {
   parseTag,
   parseWorktreeList,
 } from "../src/sdk/shell/parse/git.js";
-import { FakeExecutor } from "./engine-fixture.js";
+import { FakeExecutor, startLoopy } from "./fixture.js";
 
 function result(stdout: string): CommandResult {
   return { stdout, stderr: "", exitCode: 0, durationMs: 1 };

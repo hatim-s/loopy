@@ -1,14 +1,14 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { generateCommand } from "../../local/index.js";
-import { type CliContext, requireArgument } from "../context.js";
+import { type CliContext, requireArgument, requireHead } from "../context.js";
 import { printJson, report } from "../output.js";
 
 export async function runTypes(context: CliContext): Promise<void> {
-  const [binary, ...path] = context.positionals;
-  const destination = resolve(requireArgument(context.values.out, "--out"));
+  const { head: binary, rest: path } = requireHead(context, "CLI executable");
+  const destination = resolve(context.cwd, requireArgument(context.values.out, "--out"));
 
-  const generated = await generateCommand(requireArgument(binary, "CLI executable"), path, {
+  const generated = await generateCommand(binary, path, {
     name: context.values.name,
   });
 

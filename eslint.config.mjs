@@ -49,18 +49,14 @@ export default tseslint.config(
     rules: { "sonarjs/cognitive-complexity": "off", "no-console": "off" },
   },
   {
-    files: [
-      "packages/loopy/src/core/**",
-      "packages/loopy/src/runtime/**",
-      "packages/loopy/src/cloud/**",
-    ],
+    files: ["packages/loopy/src/core/**", "packages/loopy/src/runtime/**"],
     rules: {
       "no-restricted-imports": [
         "error",
         {
           paths: ["bun", "bun:sqlite", "bun:test"].map((name) => ({
             name,
-            message: "Core, runtime and cloud stay portable. Do not use Bun APIs.",
+            message: "Core and runtime stay portable. Do not use Bun APIs.",
           })),
         },
       ],

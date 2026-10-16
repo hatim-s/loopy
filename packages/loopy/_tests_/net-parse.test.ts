@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MemoryRunStore } from "../src/runtime/index.js";
 import { loopy, net } from "../src/sdk/index.js";
-import { startLoopy } from "../src/sdk/run.js";
 import { parseCurl } from "../src/sdk/shell/parse/net.js";
+import { startLoopy } from "./fixture.js";
 import { fixture, result, SpawnExecutor } from "./shell-parse-fixture.js";
 
 test("curl capture separates headers, body marker text and metadata", async () => {

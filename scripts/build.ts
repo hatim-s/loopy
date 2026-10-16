@@ -42,4 +42,4 @@ await cp(resolve(root, "README.md"), resolve(root, "packages/loopy/README.md"));
 
 await chmod(resolve(packageDist, "cli/index.js"), 0o755);
 
-console.log("Built loopy with the graph viewer.");
+console.log("Built loopy with Studio.");

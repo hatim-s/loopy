@@ -4,7 +4,7 @@
  * location it is checking so an error tells the reader where the bad value is.
  */
 // BOUNDARY: JSON files, HTTP bodies and imported module fields remain untrusted until their domain validators check each field.
-export type UnknownRecord = Record<string, unknown>;
+type UnknownRecord = Record<string, unknown>;
 
 export function isRecord(value: unknown): value is UnknownRecord {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -36,15 +36,6 @@ export function requireString(value: unknown, location: string): string {
 export function requireNonEmptyString(value: unknown, location: string): string {
   if (typeof value !== "string" || !value.trim()) {
     throw new Error(`${location} is required.`);
-  }
-
-  return value;
-}
-
-// BOUNDARY: External HTTP and JSON fields must be booleans before their callers consume them.
-export function requireBoolean(value: unknown, location: string): boolean {
-  if (typeof value !== "boolean") {
-    throw new Error(`${location} must be a boolean.`);
   }
 
   return value;

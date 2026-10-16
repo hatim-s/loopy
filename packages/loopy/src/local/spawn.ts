@@ -1,6 +1,6 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { spawn } from "node:child_process";
-import type { CommandOutput } from "../core/index.js";
+import type { CommandResult } from "../core/index.js";
 import { errorMessage } from "../core/index.js";
 import { CommandExecutionError } from "../runtime/index.js";
 
@@ -16,13 +16,13 @@ export type Launch = {
 
 export type Limits = { timeoutMs: number; maxOutputBytes: number };
 
-export function emptyOutput(): CommandOutput {
+export function emptyOutput(): CommandResult {
   return { stdout: "", stderr: "", exitCode: -1, durationMs: 0 };
 }
 
 /** An error raised before the process spawned, so retrying it is safe. */
 export function unstarted(cause: unknown): CommandExecutionError {
-  return new CommandExecutionError(errorMessage(cause), emptyOutput(), false, { cause });
+  return new CommandExecutionError(errorMessage(cause), emptyOutput(), { cause });
 }
 
 function killTree(child: ChildProcessWithoutNullStreams, signal: NodeJS.Signals): void {
@@ -92,7 +92,7 @@ export function spawnCaptured(
   limits: Limits,
   signal: AbortSignal | undefined,
   started: number,
-): Promise<CommandOutput> {
+): Promise<CommandResult> {
   return new Promise((resolveOutput, rejectOutput) => {
     let child: ChildProcessWithoutNullStreams;
 
@@ -154,7 +154,7 @@ export function spawnCaptured(
       signal?.removeEventListener("abort", onAbort);
       const partial = Boolean(failure || error || exitSignal);
 
-      const output: CommandOutput = {
+      const output: CommandResult = {
         stdout: decodeCaptured(stdout, partial),
         stderr: decodeCaptured(stderr, partial),
         exitCode: exitCode ?? -1,
@@ -168,7 +168,7 @@ export function spawnCaptured(
 
       if (reason) {
         rejectOutput(
-          new CommandExecutionError(reason.message, output, child.pid !== undefined, {
+          new CommandExecutionError(reason.message, output, {
             cause: reason,
           }),
         );

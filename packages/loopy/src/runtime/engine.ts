@@ -1,8 +1,9 @@
 import { type ExecutionMode, errorMessage, type Json, type RunOutcome } from "../core/index.js";
 import { Activation } from "./activation.js";
 import { type Clock, SYSTEM_CLOCK } from "./clock.js";
-import { type ActivationScope, createContext, type LoopyContext } from "./context.js";
+import { type ActivationScope, createContext, type WorkflowContext } from "./context.js";
 import type { Executor } from "./executor.js";
+import { withHeartbeat } from "./heartbeat.js";
 import { StepJournal } from "./journal.js";
 import { assertJson } from "./json.js";
 import { Logger } from "./logger.js";
@@ -12,7 +13,7 @@ export type ActivationOptions = {
   runId: string;
   store: RunStore;
   executor: Executor;
-  workflow: (context: LoopyContext) => Promise<Json>;
+  workflow: (context: WorkflowContext) => Promise<Json>;
   cwd: string;
   mode: ExecutionMode;
   clock?: Clock;
@@ -20,11 +21,11 @@ export type ActivationOptions = {
   wrap?: ActivationScope;
 };
 
-export type ActivationOutcome = RunOutcome | { status: "suspended"; wakeAt: string };
+type ActivationOutcome = RunOutcome | { status: "suspended"; wakeAt: string };
 
 function startWorkflow(
   activation: Activation,
-  context: LoopyContext,
+  context: WorkflowContext,
   workflow: ActivationOptions["workflow"],
   wrap?: ActivationOptions["wrap"],
 ) {
@@ -73,7 +74,7 @@ function settledOutcome(
 
 async function drainActivation(
   activation: Activation,
-  context: LoopyContext,
+  context: WorkflowContext,
   options: ActivationOptions,
 ): Promise<ActivationOutcome> {
   startWorkflow(activation, context, options.workflow, options.wrap);
@@ -105,7 +106,11 @@ async function drainActivation(
   }
 }
 
-async function settle(activation: Activation, context: LoopyContext, options: ActivationOptions) {
+async function settle(
+  activation: Activation,
+  context: WorkflowContext,
+  options: ActivationOptions,
+) {
   const interrupt = () => activation.close();
   options.signal?.addEventListener("abort", interrupt, { once: true });
 
@@ -196,7 +201,9 @@ export async function activate(options: ActivationOptions): Promise<ActivationOu
   let failure: Error | undefined;
 
   try {
-    const outcome = await executeActivation(options, run, token);
+    const outcome = await withHeartbeat(store, runId, token, () =>
+      executeActivation(options, run, token),
+    );
 
     if (outcome.status === "failed") {
       failure = new Error(outcome.error);

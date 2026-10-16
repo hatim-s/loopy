@@ -18,6 +18,5 @@ export async function runUi(context: CliContext): Promise<void> {
   const { home, cwd, values } = context;
   const server = startServer({ home, cwd, port: parsePort(values.port) });
   printLine(server.url);
-  // Both signals may arrive; stop() aborts running jobs and is safe to await twice.
   onTermination(() => void server.stop());
 }

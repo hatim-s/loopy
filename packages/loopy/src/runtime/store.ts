@@ -1,10 +1,10 @@
 import type {
-  EngineLog,
-  EngineRun,
-  EngineRunStatus,
-  EngineStep,
+  LogRecord,
   RunOutcome,
+  RunRecord,
+  RunStatus,
   Schedule,
+  StepRecord,
 } from "../core/index.js";
 
 export class OwnershipError extends Error {
@@ -15,22 +15,29 @@ export class OwnershipError extends Error {
 }
 
 export interface RunStore {
-  createRun(run: EngineRun): Promise<void>;
-  getRun(id: string): Promise<EngineRun | undefined>;
-  listRuns(filter?: { slug?: string; status?: EngineRunStatus }): Promise<EngineRun[]>;
-  claim(runId: string, token: string): Promise<EngineRun>;
+  readonly leaseMs: number;
+  createRun(run: RunRecord): Promise<void>;
+  getRun(id: string): Promise<RunRecord | undefined>;
+  listRuns(filter?: { slug?: string; status?: RunStatus }): Promise<RunRecord[]>;
+  claim(runId: string, token: string): Promise<RunRecord>;
   heartbeat(runId: string, token: string): Promise<boolean>;
   suspend(runId: string, token: string, wakeAt?: string): Promise<void>;
   finishRun(runId: string, token: string, outcome: RunOutcome): Promise<void>;
   release(runId: string, token: string): Promise<void>;
-  getSteps(runId: string): Promise<EngineStep[]>;
-  putStep(runId: string, token: string, step: EngineStep): Promise<void>;
-  appendLog(runId: string, token: string, log: EngineLog): Promise<void>;
-  getLogs(runId: string, after?: number): Promise<EngineLog[]>;
-  dueRuns(now: string): Promise<EngineRun[]>;
+  getSteps(runId: string): Promise<StepRecord[]>;
+  putStep(runId: string, token: string, step: StepRecord): Promise<void>;
+  appendLog(runId: string, token: string, log: LogRecord): Promise<void>;
+  getLogs(runId: string, after?: number): Promise<LogRecord[]>;
+  dueRuns(now: string): Promise<RunRecord[]>;
   nextWakeAt(): Promise<string | undefined>;
   putSchedule(schedule: Schedule): Promise<void>;
   listSchedules(): Promise<Schedule[]>;
-  deleteSchedule(slug: string): Promise<void>;
-  fireSchedule(slug: string, fireKey: string, run: EngineRun, nextFireAt: string): Promise<boolean>;
+  deleteSchedule(workspace: string, slug: string): Promise<void>;
+  fireSchedule(
+    workspace: string,
+    slug: string,
+    fireKey: string,
+    run: RunRecord,
+    nextFireAt: string,
+  ): Promise<boolean>;
 }

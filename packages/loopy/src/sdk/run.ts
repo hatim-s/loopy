@@ -5,8 +5,8 @@ import {
   type Clock,
   type Executor,
   type RunStore,
-  type LoopyContext as RuntimeContext,
   SYSTEM_CLOCK,
+  type WorkflowContext,
 } from "../runtime/index.js";
 import { log, now, random, uuid } from "./ambient.js";
 import { stepScope, workflowScope } from "./current.js";
@@ -50,15 +50,6 @@ export async function createLoopyRun<Input, Output extends Json>(
   });
 }
 
-export async function startLoopy<Input, Output extends Json>(
-  options: CreateOptions<Input, Output> &
-    Pick<ActivationOptions<Input, Output>, "executor" | "signal">,
-) {
-  await createLoopyRun(options);
-
-  return activateLoopy(options);
-}
-
 export async function activateLoopy<Input, Output extends Json>(
   options: ActivationOptions<Input, Output>,
 ) {
@@ -83,7 +74,7 @@ export async function activateLoopy<Input, Output extends Json>(
 
 export function loopyActivation<Input, Output extends Json>(loopy: Loopy<Input, Output>) {
   return {
-    workflow: (context: RuntimeContext) => {
+    workflow: (context: WorkflowContext) => {
       // SAFETY: The stored run input was validated by this loopy before createRun.
       const input = context.input as Input;
 

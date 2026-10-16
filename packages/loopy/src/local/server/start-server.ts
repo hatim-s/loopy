@@ -1,11 +1,9 @@
 import { timingSafeEqual } from "node:crypto";
 import { resolve } from "node:path";
-import type { RunRecord } from "../../core/index.js";
 import { errorMessage } from "../../core/index.js";
-import { openEngineStore } from "../engine-local.js";
 import { defaultHome } from "../home.js";
-import { Registry } from "../registry/registry.js";
-import { createLocalRuntime } from "../runtime.js";
+import { Registry } from "../registry.js";
+import { openRunStore } from "../store.js";
 import { serveAsset, snapshotAssets } from "./assets.js";
 import { apiRoutes, dispatch, json } from "./routes.js";
 
@@ -18,8 +16,6 @@ export type ServerOptions = {
   cwd?: string;
   port?: number;
   assets?: string;
-  /** Receives one line per background run that failed. Defaults to stderr. */
-  log?: (line: string) => void;
 };
 
 function bearerMatches(request: Request, token: string): boolean {
@@ -50,42 +46,16 @@ function originRejection(request: Request, url: URL, ownOrigin: string): Respons
 export function startServer(options: ServerOptions = {}) {
   const home = options.home ?? defaultHome();
   const cwd = resolve(options.cwd ?? process.cwd());
-  const log = options.log ?? ((message) => process.stderr.write(`${message}\n`));
   const registry = new Registry(home, cwd);
-  let local: ReturnType<typeof createLocalRuntime> | undefined;
-  let engine: ReturnType<typeof openEngineStore> | undefined;
-  const runtime = () => (local ??= createLocalRuntime({ home })).runtime;
-  const engineStore = () => (engine ??= openEngineStore(home));
+  let store: ReturnType<typeof openRunStore> | undefined;
+  const getStore = () => (store ??= openRunStore(home));
   const token = crypto.randomUUID();
 
   const assets = snapshotAssets(
     resolve(options.assets ?? resolve(import.meta.dir, "../../../dist/studio")),
   );
 
-  // Executions run in the background; the viewer polls run detail for progress.
-  const controllers = new Map<string, AbortController>();
-  const jobs = new Set<Promise<unknown>>();
-
-  const launch = (run: RunRecord, retryUncertain = false) => {
-    if (controllers.has(run.id)) {
-      throw new Error("This run is already executing.");
-    }
-
-    const controller = new AbortController();
-    controllers.set(run.id, controller);
-
-    const job = runtime()
-      .execute(run.id, { retryUncertain, signal: controller.signal })
-      .catch((cause: unknown) => log(`Run ${run.id} failed: ${errorMessage(cause)}`))
-      .finally(() => {
-        controllers.delete(run.id);
-        jobs.delete(job);
-      });
-
-    jobs.add(job);
-  };
-
-  const routes = apiRoutes({ cwd, registry, runtime, launch, home, engineStore });
+  const routes = apiRoutes({ registry, getStore });
 
   const server = Bun.serve({
     hostname: "127.0.0.1",
@@ -112,7 +82,7 @@ export function startServer(options: ServerOptions = {}) {
 
         return await dispatch(routes, request, url, path);
       } catch (error) {
-        return json({ error: errorMessage(error) }, 400);
+        return json({ error: errorMessage(error) }, error instanceof URIError ? 400 : 500);
       }
     },
   });
@@ -120,14 +90,8 @@ export function startServer(options: ServerOptions = {}) {
   return {
     url: `http://127.0.0.1:${server.port}/#token=${token}`,
     async stop() {
-      for (const controller of controllers.values()) {
-        controller.abort();
-      }
-
-      await Promise.allSettled(jobs);
       await server.stop(true);
-      local?.close();
-      engine?.close();
+      store?.close();
     },
   };
 }

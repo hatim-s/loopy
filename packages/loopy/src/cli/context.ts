@@ -2,11 +2,12 @@ import type { ParsedCliArgs } from "./args.js";
 
 export type CliContext = {
   home: string;
+  leaseMs?: number;
   cwd: string;
   values: ParsedCliArgs["values"];
   /** Positional arguments after the command name. */
   positionals: string[];
-  triggerInput: Record<string, string> | undefined;
+  namedInput: Record<string, string> | undefined;
 };
 
 export function requireArgument(value: string | undefined, label: string): string {
@@ -36,4 +37,10 @@ export function optionalTarget(context: CliContext): string | undefined {
 
 export function requireTarget(context: CliContext, label: string): string {
   return requireArgument(optionalTarget(context), label);
+}
+
+export function requireHead(context: CliContext, label: string) {
+  const [head, ...rest] = context.positionals;
+
+  return { head: requireArgument(head, label), rest };
 }

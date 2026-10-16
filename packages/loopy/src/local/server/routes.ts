@@ -1,34 +1,17 @@
-import type { RunRecord, UnknownRecord } from "../../core/index.js";
-import {
-  allowKeys,
-  requireBoolean,
-  requireNonEmptyString,
-  requireOneOf,
-  requireRecord,
-} from "../../core/index.js";
-import type { Runtime } from "../../runtime/index.js";
-import { assertJson } from "../../runtime/index.js";
-import type { SqliteRunStore } from "../engine-store.js";
-import { localRunOptions } from "../process.js";
-import type { Registry } from "../registry/registry.js";
-import { engineRoutes } from "./engine-routes.js";
+import { requireNonEmptyString } from "../../core/index.js";
+import { runDetail } from "../../runtime/index.js";
+import type { Registry } from "../registry.js";
+import type { SqliteRunStore } from "../store.js";
 
-export type RouteContext = { params: Record<string, string>; request: Request; url: URL };
+type RouteContext = { params: Record<string, string>; request: Request; url: URL };
 
-export type Route = {
-  method: "GET" | "POST";
+type Route = {
+  method: "GET";
   pattern: RegExp;
   handle: (context: RouteContext) => Promise<Response>;
 };
 
-export type RouteDependencies = {
-  cwd: string;
-  registry: Registry;
-  runtime: () => Runtime;
-  engineStore: () => SqliteRunStore;
-  home: string;
-  launch: (run: RunRecord, retryUncertain?: boolean) => void;
-};
+type RouteDependencies = { registry: Registry; getStore: () => SqliteRunStore };
 
 // BOUNDARY: Response serialization accepts validated route payloads and errors.
 export function json(data: unknown, status = 200): Response {
@@ -38,101 +21,54 @@ export function json(data: unknown, status = 200): Response {
   });
 }
 
-export async function jsonBody(request: Request): Promise<UnknownRecord> {
-  if (!request.headers.get("content-type")?.startsWith("application/json")) {
-    throw new Error("Send an application/json request body.");
+async function detail(store: SqliteRunStore, id: string) {
+  const run = await store.getRun(id);
+
+  if (!run) {
+    return json({ error: "Run not found. Use loopy runs to find a run ID." }, 404);
   }
 
-  return requireRecord(await request.json(), "The request body");
+  return json(await runDetail(store, run));
 }
 
-function notFound(): Response {
-  return json({ error: "Run not found." }, 404);
+async function logs(store: SqliteRunStore, id: string, url: URL) {
+  if (!(await store.getRun(id))) {
+    return json({ error: "Run not found. Use loopy runs to find a run ID." }, 404);
+  }
+
+  const after = Number(url.searchParams.get("after") ?? 0);
+
+  if (!Number.isSafeInteger(after) || after < 0) {
+    return json({ error: "Invalid log cursor. Supply a nonnegative integer after value." }, 400);
+  }
+
+  return json(await store.getLogs(id, after));
 }
 
-export function apiRoutes({
-  cwd,
-  registry,
-  runtime,
-  engineStore,
-  home,
-  launch,
-}: RouteDependencies): Route[] {
+export function apiRoutes({ registry, getStore }: RouteDependencies): Route[] {
   return [
-    ...engineRoutes({ engineStore, runtime, home }),
-    { method: "GET", pattern: /^\/api\/config$/, handle: async () => json({ cwd }) },
-    { method: "GET", pattern: /^\/api\/workflows$/, handle: async () => json(registry.list()) },
+    { method: "GET", pattern: /^\/api\/loopies$/, handle: async () => json(registry.list()) },
     {
       method: "GET",
-      pattern: /^\/api\/workflows\/(?<slug>[^/]+)$/,
-      handle: async ({ params }) =>
-        json(registry.get(requireNonEmptyString(params.slug, "slug")).workflow),
-    },
-    {
-      method: "POST",
       pattern: /^\/api\/runs$/,
-      handle: async ({ request }) => {
-        const body = await jsonBody(request);
-        allowKeys(body, "The request body", ["slug", "mode", "input"]);
-        const slug = requireNonEmptyString(body.slug, "slug");
-        const mode = requireOneOf(body.mode, ["sandbox", "full"], "mode");
-        const input = body.input === undefined ? {} : body.input;
-        assertJson(input);
-        const saved = registry.get(slug);
-
-        const run = await runtime().createRun(saved.workflow, input, {
-          ...localRunOptions(cwd, mode),
-          secretBindings: saved.secretBindings,
-        });
-
-        launch(run);
-
-        return json(run, 202);
-      },
+      handle: async ({ url }) =>
+        json(await getStore().listRuns({ slug: url.searchParams.get("slug") ?? undefined })),
     },
     {
-      method: "POST",
-      pattern: /^\/api\/runs\/(?<id>[^/]+)\/resume$/,
-      handle: async ({ params, request }) => {
-        const run = await runtime().getRun(requireNonEmptyString(params.id, "id"));
-
-        if (!run) {
-          return notFound();
-        }
-
-        const body = await jsonBody(request);
-        allowKeys(body, "The request body", ["retryUncertain"]);
-
-        const retryUncertain =
-          body.retryUncertain === undefined
-            ? false
-            : requireBoolean(body.retryUncertain, "retryUncertain");
-
-        if (run.status === "succeeded" || run.status === "running") {
-          throw new Error(`Cannot resume a ${run.status} run.`);
-        }
-
-        launch(run, retryUncertain);
-
-        const resumed = await runtime().getRun(run.id);
-
-        if (!resumed) {
-          return notFound();
-        }
-
-        return json(resumed, 202);
-      },
+      method: "GET",
+      pattern: /^\/api\/runs\/(?<id>[^/]+)$/,
+      handle: async ({ params }) => detail(getStore(), requireNonEmptyString(params.id, "id")),
+    },
+    {
+      method: "GET",
+      pattern: /^\/api\/runs\/(?<id>[^/]+)\/logs$/,
+      handle: async ({ params, url }) =>
+        logs(getStore(), requireNonEmptyString(params.id, "id"), url),
     },
   ];
 }
 
-/** Runs the first route whose method and pattern match; named groups become params. */
-export async function dispatch(
-  routes: Route[],
-  request: Request,
-  url: URL,
-  path: string,
-): Promise<Response> {
+export async function dispatch(routes: Route[], request: Request, url: URL, path: string) {
   for (const route of routes) {
     if (route.method !== request.method) {
       continue;
@@ -145,5 +81,5 @@ export async function dispatch(
     }
   }
 
-  return json({ error: "Endpoint not found." }, 404);
+  return json({ error: "Endpoint not found. Check the API path and method." }, 404);
 }

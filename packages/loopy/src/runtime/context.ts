@@ -1,10 +1,10 @@
 import type {
   CommandResult,
-  EngineRun,
-  EngineStep,
   ExecutionMode,
   Json,
+  RunRecord,
   StepKind,
+  StepRecord,
 } from "../core/index.js";
 import type { Activation } from "./activation.js";
 import type { Clock } from "./clock.js";
@@ -23,7 +23,7 @@ export type StepOptions = {
 };
 
 type ContextOptions = {
-  run: EngineRun;
+  run: RunRecord;
   store: RunStore;
   executor: Executor;
   token: string;
@@ -37,7 +37,7 @@ type ContextOptions = {
   wrap?: ActivationScope;
 };
 
-function replay(stored: Extract<EngineStep, { status: "succeeded" | "failed" }>): Json {
+function replay(stored: Extract<StepRecord, { status: "succeeded" | "failed" }>): Json {
   if (stored.status === "failed") {
     throw new StepFailedError(stored.key, stored.error);
   }
@@ -190,9 +190,9 @@ export function createContext(options: ContextOptions) {
   };
 }
 
-export type LoopyContext = ReturnType<typeof createContext>;
+export type WorkflowContext = ReturnType<typeof createContext>;
 
 export type ActivationScope = {
-  workflow<T>(fn: () => T, context: LoopyContext, fail: (error: Error) => void): T;
+  workflow<T>(fn: () => T, context: WorkflowContext, fail: (error: Error) => void): T;
   step<T>(fn: () => T, context: StepContext): T;
 };

@@ -1,431 +1,426 @@
 import { Database } from "bun:sqlite";
-import { randomUUID } from "node:crypto";
-import { chmodSync, mkdirSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import type {
-  AttemptRecord,
-  AttemptStatus,
-  Json,
-  RunEvent,
-  RunEventType,
+  LogRecord,
+  RunOutcome,
   RunRecord,
   RunStatus,
+  Schedule,
+  StepRecord,
 } from "../core/index.js";
-import type { RunRepository } from "../runtime/index.js";
-import { RunBusyError } from "../runtime/index.js";
+import { OwnershipError, type RunStore } from "../runtime/index.js";
 import { errnoCode } from "./fs.js";
-import type { AttemptRow, EventRow, RunRow } from "./store-schema.js";
+import { rowToLog, rowToRun, rowToSchedule, rowToStep, SQL, stepToRow } from "./store-rows.js";
 import {
-  attemptFromRow,
-  encode,
-  eventFromRow,
-  now,
-  runFromRow,
+  type LogRow,
+  type RunRow,
   SCHEMA,
   SCHEMA_VERSION,
+  type ScheduleRow,
+  type StepRow,
 } from "./store-schema.js";
 
-/** True when the owning process is alive on this host. */
-function ownerAlive(row: RunRow): boolean {
-  if (!row.owner_token || !row.owner_pid || row.owner_host !== hostname()) {
-    return false;
-  }
-
-  try {
-    process.kill(row.owner_pid, 0);
-
-    return true;
-  } catch (error) {
-    return errnoCode(error) === "EPERM";
-  }
-}
-
-/** A foreign host's owner cannot be probed, so it counts as active until recovered. */
-function ownerActive(row: RunRow): boolean {
-  return ownerAlive(row) || Boolean(row.owner_token && row.owner_host !== hostname());
-}
-
-/** One SQLite owner for run state, node attempts, and ordered events. */
-export class SqliteRunStore implements RunRepository {
+export class SqliteRunStore implements RunStore {
   private readonly db: Database;
 
-  constructor(home: string) {
-    mkdirSync(home, { recursive: true, mode: 0o700 });
-    const file = join(home, "runs.sqlite");
+  get leaseMs(): number {
+    return this.options.leaseMs ?? 60_000;
+  }
+
+  constructor(
+    file: string,
+    private readonly now: () => number = Date.now,
+    private readonly options: { leaseMs?: number } = {},
+  ) {
     this.db = new Database(file, { create: true });
-    chmodSync(file, 0o600);
-    this.db.exec(
-      "PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON",
-    );
+    this.db.exec("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000");
+    this.db
+      .transaction(() => {
+        const version = this.db
+          .query<{ user_version: number }, []>("PRAGMA user_version")
+          .get()?.user_version;
 
-    const version = this.db
-      .query<{ user_version: number }, []>("PRAGMA user_version")
-      .get()?.user_version;
+        if (version === SCHEMA_VERSION) {
+          return;
+        }
 
-    if (version !== 0 && version !== SCHEMA_VERSION) {
-      this.db.close();
-      throw new Error(`Run database version ${version} is unsupported.`);
+        const tables = this.db
+          .query<{ name: string }, []>(
+            "SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+          )
+          .all();
+
+        // Defer foreign keys until every old table has been dropped.
+        this.db.exec("PRAGMA defer_foreign_keys=ON");
+
+        for (const table of tables) {
+          this.db.exec(`DROP TABLE "${table.name.replaceAll('"', '""')}"`);
+        }
+
+        this.db.exec(SCHEMA);
+        this.db.exec(`PRAGMA user_version=${SCHEMA_VERSION}`);
+      })
+      .immediate();
+  }
+
+  async createRun(run: RunRecord): Promise<void> {
+    this.db
+      .transaction(() => {
+        if (this.row(run.id)) {
+          throw new Error(`Run '${run.id}' already exists. Use a new run ID.`);
+        }
+
+        this.insertRun(run);
+      })
+      .immediate();
+  }
+
+  async getRun(id: string): Promise<RunRecord | undefined> {
+    const row = this.row(id);
+
+    return row ? rowToRun(row) : undefined;
+  }
+
+  async listRuns(filter: { slug?: string; status?: RunStatus } = {}): Promise<RunRecord[]> {
+    if (filter.slug !== undefined && filter.status !== undefined) {
+      return this.db
+        .query<RunRow, [string, RunStatus]>(SQL.listRunsBySlugAndStatus)
+        .all(filter.slug, filter.status)
+        .map(rowToRun);
     }
 
-    this.db.exec(SCHEMA);
-    this.db.exec(`PRAGMA user_version=${SCHEMA_VERSION}`);
-    this.recoverOrphans();
+    if (filter.slug !== undefined) {
+      return this.db.query<RunRow, [string]>(SQL.listRunsBySlug).all(filter.slug).map(rowToRun);
+    }
+
+    if (filter.status !== undefined) {
+      return this.db
+        .query<RunRow, [RunStatus]>(SQL.listRunsByStatus)
+        .all(filter.status)
+        .map(rowToRun);
+    }
+
+    return this.db.query<RunRow, []>(SQL.listRuns).all().map(rowToRun);
+  }
+
+  async claim(runId: string, token: string): Promise<RunRecord> {
+    return this.db
+      .transaction(() => {
+        const timestamp = this.timestamp();
+
+        const previous = this.requireRow(runId);
+
+        if (this.stale(previous, this.now())) {
+          this.db.query(SQL.recoverSteps).run(timestamp, timestamp, runId);
+          this.db.query(SQL.release).run(timestamp, timestamp, runId, previous.owner_token);
+        }
+
+        const result = this.db
+          .query(SQL.claim)
+          .run(token, process.pid, hostname(), timestamp, timestamp, runId);
+
+        if (result.changes !== 1) {
+          const row = this.requireRow(runId);
+
+          if (row.owner_token !== null) {
+            throw new OwnershipError(runId);
+          }
+
+          throw new Error(
+            `Run '${runId}' cannot be claimed in status '${row.status}'. Activate a queued or suspended run.`,
+          );
+        }
+
+        return rowToRun(this.requireRow(runId));
+      })
+      .immediate();
+  }
+
+  async heartbeat(runId: string, token: string): Promise<boolean> {
+    return this.db
+      .transaction(() => {
+        this.requireRow(runId);
+        const timestamp = this.timestamp();
+
+        return this.db.query(SQL.heartbeat).run(timestamp, timestamp, runId, token).changes === 1;
+      })
+      .immediate();
+  }
+
+  async suspend(runId: string, token: string, wakeAt?: string): Promise<void> {
+    this.db
+      .transaction(() => {
+        this.requireRunning(this.owned(runId, token));
+        this.db
+          .query(SQL.suspend)
+          .run(
+            wakeAt === undefined ? null : new Date(wakeAt).toISOString(),
+            this.timestamp(),
+            runId,
+            token,
+          );
+      })
+      .immediate();
+  }
+
+  async finishRun(runId: string, token: string, outcome: RunOutcome): Promise<void> {
+    this.db
+      .transaction(() => {
+        this.requireRunning(this.owned(runId, token));
+        this.db
+          .query(SQL.finish)
+          .run(
+            outcome.status,
+            outcome.status === "succeeded" ? JSON.stringify(outcome.output) : null,
+            outcome.status === "failed" ? outcome.error : null,
+            this.timestamp(),
+            runId,
+            token,
+          );
+      })
+      .immediate();
+  }
+
+  async release(runId: string, token: string): Promise<void> {
+    this.db
+      .transaction(() => {
+        this.owned(runId, token);
+        const timestamp = this.timestamp();
+        this.db.query(SQL.release).run(timestamp, timestamp, runId, token);
+      })
+      .immediate();
+  }
+
+  async getSteps(runId: string): Promise<StepRecord[]> {
+    return this.db.query<StepRow, [string]>(SQL.steps).all(runId).map(rowToStep);
+  }
+
+  async putStep(runId: string, token: string, step: StepRecord): Promise<void> {
+    this.db
+      .transaction(() => {
+        this.owned(runId, token);
+        const row = stepToRow(step);
+        this.db
+          .query(SQL.putStep)
+          .run(
+            runId,
+            row.seq,
+            row.key,
+            row.kind,
+            row.input_json,
+            row.attempt,
+            row.max_attempts,
+            row.started_at,
+            row.status,
+            row.output_json,
+            row.error,
+            row.next_retry_at,
+            row.wake_at,
+            row.finish_order,
+            row.ended_at,
+          );
+      })
+      .immediate();
+  }
+
+  async appendLog(runId: string, token: string, log: LogRecord): Promise<void> {
+    this.db
+      .transaction(() => {
+        this.owned(runId, token);
+
+        try {
+          this.db
+            .query(SQL.appendLog)
+            .run(
+              runId,
+              log.seq,
+              log.position.kind,
+              log.position.kind === "workflow" ? log.position.afterStep : null,
+              log.position.kind === "workflow" ? log.position.afterFinish : null,
+              log.position.kind === "step" ? log.position.seq : null,
+              log.position.kind === "step" ? log.position.attempt : null,
+              log.position.index,
+              log.level,
+              log.message,
+              log.data === undefined ? null : JSON.stringify(log.data),
+              new Date(log.at).toISOString(),
+            );
+        } catch (error) {
+          if (this.db.query(SQL.logExists).get(runId, log.seq)) {
+            throw new Error(
+              `Log sequence ${log.seq} already exists. Append a new sequence number.`,
+            );
+          }
+
+          throw error;
+        }
+      })
+      .immediate();
+  }
+
+  async getLogs(runId: string, after = 0): Promise<LogRecord[]> {
+    return this.db.query<LogRow, [string, number]>(SQL.logs).all(runId, after).map(rowToLog);
+  }
+
+  async dueRuns(now: string): Promise<RunRecord[]> {
+    return this.db
+      .query<RunRow, [string]>(SQL.dueRuns)
+      .all(new Date(now).toISOString())
+      .filter((row) => row.owner_token === null || this.stale(row, Date.parse(now)))
+      .map(rowToRun);
+  }
+
+  async nextWakeAt(): Promise<string | undefined> {
+    return (
+      this.db.query<{ wake_at: string | null }, []>(SQL.nextWakeAt).get()?.wake_at ?? undefined
+    );
+  }
+
+  async putSchedule(schedule: Schedule): Promise<void> {
+    this.db
+      .query(SQL.putSchedule)
+      .run(
+        schedule.workspace,
+        schedule.slug,
+        schedule.cron,
+        schedule.tz,
+        JSON.stringify(schedule.input),
+        Number(schedule.enabled),
+        schedule.lastFireKey ?? null,
+        new Date(schedule.nextFireAt).toISOString(),
+      );
+  }
+
+  async listSchedules(): Promise<Schedule[]> {
+    return this.db.query<ScheduleRow, []>(SQL.schedules).all().map(rowToSchedule);
+  }
+
+  async deleteSchedule(workspace: string, slug: string): Promise<void> {
+    this.db.query(SQL.deleteSchedule).run(workspace, slug);
+  }
+
+  async fireSchedule(
+    workspace: string,
+    slug: string,
+    fireKey: string,
+    run: RunRecord,
+    nextFireAt: string,
+  ): Promise<boolean> {
+    return this.db
+      .transaction(() => {
+        const schedule = this.db
+          .query<ScheduleRow, [string, string]>(SQL.schedule)
+          .get(workspace, slug);
+
+        if (!schedule) {
+          throw new Error(`Schedule '${slug}' does not exist. Save the schedule before firing it.`);
+        }
+
+        if (schedule.last_fire_key === fireKey) {
+          return false;
+        }
+
+        if (this.row(run.id)) {
+          throw new Error(`Run '${run.id}' already exists. Use a new run ID.`);
+        }
+
+        this.insertRun(run);
+        this.db
+          .query(SQL.fireSchedule)
+          .run(fireKey, new Date(nextFireAt).toISOString(), workspace, slug);
+
+        return true;
+      })
+      .immediate();
+  }
+
+  close(): void {
+    this.db.close();
+  }
+
+  private stale(row: RunRow, now: number): boolean {
+    if (row.status !== "running" || row.owner_token === null || row.heartbeat_at === null) {
+      return false;
+    }
+
+    if (row.owner_host === hostname() && row.owner_pid !== null) {
+      try {
+        process.kill(row.owner_pid, 0);
+
+        return false;
+      } catch (error) {
+        if (errnoCode(error) !== "ESRCH") {
+          return false;
+        }
+      }
+    }
+
+    return now - Date.parse(row.heartbeat_at) > this.leaseMs;
+  }
+
+  private insertRun(run: RunRecord): void {
+    this.db
+      .query(SQL.createRun)
+      .run(
+        run.id,
+        run.slug,
+        run.bundleHash,
+        run.workspace,
+        JSON.stringify(run.input),
+        run.status,
+        run.output === undefined ? null : JSON.stringify(run.output),
+        run.error ?? null,
+        run.wakeAt === undefined ? null : new Date(run.wakeAt).toISOString(),
+        new Date(run.createdAt).toISOString(),
+        new Date(run.updatedAt).toISOString(),
+        run.owner?.token ?? null,
+        run.owner?.pid ?? null,
+        run.owner?.host ?? null,
+        run.owner === undefined ? null : new Date(run.owner.heartbeatAt).toISOString(),
+      );
   }
 
   private row(runId: string): RunRow | undefined {
-    return this.db.query<RunRow, [string]>("SELECT * FROM runs WHERE id=?").get(runId) ?? undefined;
+    return this.db.query<RunRow, [string]>(SQL.run).get(runId) ?? undefined;
   }
 
   private requireRow(runId: string): RunRow {
     const row = this.row(runId);
 
     if (!row) {
-      throw new Error(`Run ${runId} does not exist.`);
+      throw new Error(`Run '${runId}' does not exist. Create the run first.`);
     }
 
     return row;
   }
 
-  private event(runId: string, type: RunEventType, data: Json, nodeId?: string): void {
-    const next =
-      this.db
-        .query<{ sequence: number }, [string]>(
-          "SELECT COALESCE(MAX(sequence), -1) + 1 AS sequence FROM events WHERE run_id=?",
-        )
-        .get(runId)?.sequence ?? 0;
+  private owned(runId: string, token: string): RunRow {
+    const row = this.requireRow(runId);
 
-    this.db.run(
-      "INSERT INTO events(run_id,sequence,node_id,type,data_json,created_at) VALUES (?,?,?,?,?,?)",
-      [runId, next, nodeId ?? null, type, encode(data), now()],
-    );
-  }
-
-  /** Marks every running attempt uncertain and returns how many there were. */
-  private abandonAttempts(runId: string, reason: string): number {
-    const attempts = this.db
-      .query<AttemptRow, [string]>("SELECT * FROM attempts WHERE run_id=? AND status='running'")
-      .all(runId);
-
-    for (const attempt of attempts) {
-      this.db.run("UPDATE attempts SET status='uncertain',error=?,ended_at=? WHERE id=?", [
-        reason,
-        now(),
-        attempt.id,
-      ]);
-      this.event(runId, "node.uncertain", { attemptId: attempt.id }, attempt.node_id);
+    if (row.owner_token !== token) {
+      throw new OwnershipError(runId);
     }
 
-    return attempts.length;
+    return row;
   }
 
-  private clearOwner(
-    runId: string,
-    token: string | null,
-    status: RunStatus,
-    error: string | null,
-  ): void {
-    this.db.run(
-      "UPDATE runs SET status=?,error=?,owner_token=NULL,owner_pid=NULL,owner_host=NULL,heartbeat_at=NULL,updated_at=? WHERE id=? AND owner_token IS ?",
-      [status, error, now(), runId, token],
-    );
-  }
-
-  private assertOwner(runId: string, token: string): void {
-    if (!this.db.query("SELECT 1 FROM runs WHERE id=? AND owner_token=?").get(runId, token)) {
-      throw new RunBusyError(runId);
+  private requireRunning(row: RunRow): void {
+    if (row.status !== "running") {
+      throw new Error(
+        `Run '${row.id}' cannot transition from '${row.status}'. Claim a queued or suspended run first.`,
+      );
     }
   }
 
-  /** A dead owner cannot leave a run looking active or silently replay its command. */
-  recoverOrphans(): void {
-    const reason = "Execution owner stopped before recording a result";
-    const rows = this.db.query<RunRow, []>("SELECT * FROM runs WHERE status='running'").all();
-
-    for (const row of rows) {
-      if (ownerActive(row)) {
-        continue;
-      }
-
-      this.db.transaction(() => {
-        const current = this.row(row.id);
-
-        if (
-          !current ||
-          current.status !== "running" ||
-          current.owner_token !== row.owner_token ||
-          ownerActive(current)
-        ) {
-          return;
-        }
-
-        const uncertainAttempts = this.abandonAttempts(row.id, reason);
-        this.clearOwner(row.id, row.owner_token, "interrupted", reason);
-        this.event(row.id, "run.interrupted", { uncertainAttempts });
-      })();
-    }
+  private timestamp(): string {
+    return new Date(this.now()).toISOString();
   }
+}
 
-  /** Fences an owner on another host, whose liveness cannot be checked from here. */
-  recoverOwner(runId: string): RunRecord {
-    this.recoverOrphans();
+export function openRunStore(home: string, options: { leaseMs?: number } = {}) {
+  mkdirSync(home, { recursive: true, mode: 0o700 });
 
-    return this.db.transaction(() => {
-      const row = this.requireRow(runId);
-
-      if (!row.owner_token) {
-        if (row.status === "interrupted") {
-          return runFromRow(row);
-        }
-
-        throw new Error(`Run ${runId} has no owner to recover.`);
-      }
-
-      if (!row.owner_host || row.owner_host === hostname()) {
-        if (ownerAlive(row)) {
-          throw new RunBusyError(runId);
-        }
-
-        throw new Error(`Run ${runId} has no foreign owner to recover.`);
-      }
-
-      const uncertainAttempts = this.abandonAttempts(
-        runId,
-        "Foreign execution owner was explicitly recovered before recording a result",
-      );
-
-      const status = row.status === "succeeded" ? "succeeded" : "interrupted";
-      this.clearOwner(
-        runId,
-        row.owner_token,
-        status,
-        status === "interrupted" ? "Foreign execution owner was explicitly recovered" : null,
-      );
-      this.event(runId, "run.owner_recovered", {
-        previousOwnerHost: row.owner_host,
-        previousOwnerPid: row.owner_pid,
-        previousStatus: row.status,
-        uncertainAttempts,
-      });
-
-      if (row.status === "running") {
-        this.event(runId, "run.interrupted", { uncertainAttempts });
-      }
-
-      return runFromRow(this.requireRow(runId));
-    })();
-  }
-
-  async createRun(run: RunRecord): Promise<void> {
-    this.db.transaction(() => {
-      this.db.run(
-        "INSERT INTO runs(id,slug,workflow_json,workflow_hash,input_json,options_json,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
-        [
-          run.id,
-          run.slug,
-          encode(run.workflow),
-          run.workflowHash,
-          encode(run.input),
-          encode(run.options),
-          run.status,
-          run.createdAt,
-          run.updatedAt,
-        ],
-      );
-      this.event(run.id, "run.created", { slug: run.slug, workflowHash: run.workflowHash });
-    })();
-  }
-
-  async getRun(id: string): Promise<RunRecord | undefined> {
-    this.recoverOrphans();
-    const row = this.row(id);
-
-    return row ? runFromRow(row) : undefined;
-  }
-
-  async listRuns(slug?: string): Promise<RunRecord[]> {
-    this.recoverOrphans();
-
-    const rows = slug
-      ? this.db
-          .query<RunRow, [string]>(
-            "SELECT * FROM runs WHERE slug=? ORDER BY created_at DESC,id DESC",
-          )
-          .all(slug)
-      : this.db.query<RunRow, []>("SELECT * FROM runs ORDER BY created_at DESC,id DESC").all();
-
-    return rows.map(runFromRow);
-  }
-
-  async getAttempts(runId: string): Promise<AttemptRecord[]> {
-    return this.db
-      .query<AttemptRow, [string]>("SELECT * FROM attempts WHERE run_id=? ORDER BY rowid")
-      .all(runId)
-      .map(attemptFromRow);
-  }
-
-  async getEvents(runId: string, after = -1): Promise<RunEvent[]> {
-    return this.db
-      .query<EventRow, [string, number]>(
-        "SELECT * FROM events WHERE run_id=? AND sequence>? ORDER BY sequence",
-      )
-      .all(runId, after)
-      .map(eventFromRow);
-  }
-
-  /** Claims a run with compare-and-set. A live local owner cannot be displaced. */
-  async claim(
-    runId: string,
-    token: string,
-    options: { resume?: boolean } = {},
-  ): Promise<RunRecord> {
-    return this.db.transaction(() => {
-      const row = this.requireRow(runId);
-      const terminal = row.status === "failed" || row.status === "interrupted";
-
-      if (row.status === "succeeded" || (options.resume === false && terminal)) {
-        return runFromRow(row);
-      }
-
-      if (ownerActive(row)) {
-        throw new RunBusyError(runId);
-      }
-
-      const claimed = this.db.run(
-        "UPDATE runs SET owner_token=?,owner_pid=?,owner_host=?,heartbeat_at=?,status='running',error=NULL,updated_at=? WHERE id=? AND owner_token IS ?",
-        [token, process.pid, hostname(), now(), now(), runId, row.owner_token],
-      );
-
-      if (claimed.changes !== 1) {
-        throw new RunBusyError(runId);
-      }
-
-      this.abandonAttempts(runId, "Previous process stopped before recording a result");
-      this.event(runId, row.status === "pending" ? "run.started" : "run.resumed", {});
-
-      return runFromRow(this.requireRow(runId));
-    })();
-  }
-
-  async heartbeat(runId: string, token: string): Promise<boolean> {
-    return (
-      this.db.run(
-        "UPDATE runs SET heartbeat_at=? WHERE id=? AND owner_token=? AND status='running'",
-        [now(), runId, token],
-      ).changes === 1
-    );
-  }
-
-  async startAttempt(
-    runId: string,
-    token: string,
-    nodeId: string,
-    input: Json,
-  ): Promise<AttemptRecord> {
-    return this.db.transaction(() => {
-      this.assertOwner(runId, token);
-
-      const number =
-        this.db
-          .query<{ number: number }, [string, string]>(
-            "SELECT COALESCE(MAX(number),0)+1 AS number FROM attempts WHERE run_id=? AND node_id=?",
-          )
-          .get(runId, nodeId)?.number ?? 1;
-
-      const attempt: AttemptRecord = {
-        id: randomUUID(),
-        runId,
-        nodeId,
-        number,
-        status: "running",
-        input,
-        startedAt: now(),
-      };
-
-      this.db.run(
-        "INSERT INTO attempts(id,run_id,node_id,number,status,input_json,started_at) VALUES (?,?,?,?,?,?,?)",
-        [attempt.id, runId, nodeId, number, attempt.status, encode(input), attempt.startedAt],
-      );
-      this.event(runId, "node.started", { attemptId: attempt.id, number }, nodeId);
-
-      return attempt;
-    })();
-  }
-
-  async finishAttempt(
-    runId: string,
-    token: string,
-    attemptId: string,
-    status: Exclude<AttemptStatus, "running">,
-    output?: Json,
-    error?: string,
-  ): Promise<AttemptRecord> {
-    return this.db.transaction(() => {
-      this.assertOwner(runId, token);
-
-      const row = this.db
-        .query<AttemptRow, [string, string]>("SELECT * FROM attempts WHERE id=? AND run_id=?")
-        .get(attemptId, runId);
-
-      if (!row || row.status !== "running") {
-        throw new Error(`Attempt ${attemptId} is not running.`);
-      }
-
-      const finished: AttemptRow = {
-        ...row,
-        status,
-        output_json: output === undefined ? null : encode(output),
-        error: error ?? null,
-        ended_at: now(),
-      };
-
-      this.db.run("UPDATE attempts SET status=?,output_json=?,error=?,ended_at=? WHERE id=?", [
-        finished.status,
-        finished.output_json,
-        finished.error,
-        finished.ended_at,
-        attemptId,
-      ]);
-      const data: RunEvent["data"] = { attemptId };
-
-      if (error) {
-        data.error = error;
-      }
-
-      this.event(runId, `node.${status}`, data, row.node_id);
-
-      return attemptFromRow(finished);
-    })();
-  }
-
-  async finishRun(
-    runId: string,
-    token: string,
-    status: RunStatus,
-    error?: string,
-  ): Promise<RunRecord> {
-    return this.db.transaction(() => {
-      this.assertOwner(runId, token);
-      this.db.run("UPDATE runs SET status=?,error=?,updated_at=? WHERE id=?", [
-        status,
-        error ?? null,
-        now(),
-        runId,
-      ]);
-      this.event(runId, `run.${status}`, error ? { error } : {});
-
-      return runFromRow(this.requireRow(runId));
-    })();
-  }
-
-  async release(runId: string, token: string): Promise<void> {
-    this.db.run(
-      "UPDATE runs SET owner_token=NULL,owner_pid=NULL,owner_host=NULL,heartbeat_at=NULL WHERE id=? AND owner_token=?",
-      [runId, token],
-    );
-  }
-
-  close(): void {
-    this.db.close();
-  }
+  return new SqliteRunStore(join(home, "runs.sqlite"), Date.now, options);
 }

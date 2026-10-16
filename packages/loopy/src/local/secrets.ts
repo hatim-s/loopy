@@ -8,8 +8,7 @@ import {
   openSync,
   readFileSync,
 } from "node:fs";
-import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { isString, requireRecord, setOwnProperty, validateSecretName } from "../core/index.js";
 import { errnoCode, withLockDirectory, writeFileAtomically } from "./fs.js";
 import { defaultHome } from "./home.js";
@@ -20,13 +19,6 @@ export function validateSecretValue(value: string): void {
   if (!value || value.includes("\0") || Buffer.byteLength(value) > MAX_VALUE_BYTES) {
     throw new Error("A secret must be nonempty, contain no NUL bytes, and fit within 64 KiB.");
   }
-}
-
-/** Keep default secrets outside the versioned graph store; custom homes stay isolated. */
-export function secretDirectory(home = defaultHome()): string {
-  const path = resolve(home);
-
-  return path === join(homedir(), ".loopy", "v2") ? dirname(path) : path;
 }
 
 function assertOwned(stats: ReturnType<typeof fstatSync>, label: string): void {
@@ -60,7 +52,7 @@ export class SecretStore {
   readonly file: string;
 
   constructor(home = defaultHome()) {
-    this.directory = secretDirectory(home);
+    this.directory = resolve(home);
     this.file = join(this.directory, "secrets.json");
   }
 

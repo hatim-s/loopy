@@ -7,7 +7,7 @@ const SOURCE = resolve(import.meta.dir, "../src");
 
 const STUDIO = resolve(import.meta.dir, "../../../apps/studio/src");
 
-const LAYERS = ["core", "runtime", "cloud", "local", "sdk", "cli"] as const;
+const LAYERS = ["core", "runtime", "sdk", "local", "cli"] as const;
 
 type Layer = (typeof LAYERS)[number];
 
@@ -15,7 +15,6 @@ type Layer = (typeof LAYERS)[number];
 const ALLOWED_IMPORTS: Record<Layer, readonly Layer[]> = {
   core: [],
   runtime: ["core"],
-  cloud: ["core", "runtime"],
   local: ["core", "runtime", "sdk"],
   sdk: ["core", "runtime"],
   cli: ["core", "runtime", "local", "sdk"],
@@ -85,9 +84,9 @@ function isBarrel(specifier: string): boolean {
   return /\/index(\.[jt]s)?$/.test(specifier);
 }
 
-test("authoring, runtime and cloud exports bundle without host dependencies", async () => {
+test("core and runtime exports bundle without host dependencies", async () => {
   const result = await Bun.build({
-    entrypoints: ["core", "runtime", "cloud"].map((name) => resolve(SOURCE, `${name}/index.ts`)),
+    entrypoints: ["core", "runtime"].map((name) => resolve(SOURCE, `${name}/index.ts`)),
     target: "browser",
   });
 
@@ -109,6 +108,10 @@ test("layers import downward, and only through the target layer's index", () => 
       }
 
       if (!specifier.startsWith(".")) {
+        if (layer === "core" || layer === "runtime") {
+          violations.push(`${name} may only import relative specifiers (${specifier}).`);
+        }
+
         if (layer === "sdk" && !(name === "sdk/current.ts" && specifier === "node:async_hooks")) {
           violations.push(
             `${name} may only import core, runtime, or node:async_hooks (${specifier}).`,
@@ -130,11 +133,10 @@ test("layers import downward, and only through the target layer's index", () => 
 
       if (!ALLOWED_IMPORTS[layer].includes(target)) {
         violations.push(`${name} (${layer}) may not import ${target} (${specifier}).`);
-      } else if (
-        !isBarrel(specifier) &&
-        !(target === "sdk" && ["local", "cli"].includes(layer) && /\/host\.js$/.test(specifier))
-      ) {
-        violations.push(`${name} must import ${target} through ${target}/index.js (${specifier}).`);
+      } else if (target === "sdk" ? !/\/host\.js$/.test(specifier) : !isBarrel(specifier)) {
+        violations.push(
+          `${name} must import ${target} through ${target === "sdk" ? "sdk/host.js" : `${target}/index.js`} (${specifier}).`,
+        );
       }
     }
   }
@@ -142,14 +144,14 @@ test("layers import downward, and only through the target layer's index", () => 
   expect(violations).toEqual([]);
 });
 
-test("studio reaches the package only through the portable core entry", () => {
+test("studio reaches the package only through the SDK entry", () => {
   const violations: string[] = [];
 
   for (const file of sourceFiles(STUDIO)) {
     const name = relative(STUDIO, file);
 
     for (const specifier of importsOf(file)) {
-      if (specifier.startsWith("loopy/") && specifier !== "loopy/core") {
+      if (specifier.startsWith("loopy/")) {
         violations.push(`${name} imports a non-portable entry (${specifier}).`);
       } else if (
         specifier.startsWith(".") &&

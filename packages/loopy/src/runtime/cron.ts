@@ -1,6 +1,6 @@
 type CronField = { values: ReadonlySet<number>; restricted: boolean };
 
-export type CronSchedule = {
+type CronSchedule = {
   minute: CronField;
   hour: CronField;
   dayOfMonth: CronField;
@@ -219,8 +219,4 @@ export function nextFire(schedule: CronSchedule, after: Date, timeZone: string):
   throw new Error(
     "No cron fire found within five years. Choose a schedule with a reachable calendar date.",
   );
-}
-
-export function fireKey(slug: string, at: Date): string {
-  return `${slug}@${at.toISOString().slice(0, 16)}Z`;
 }

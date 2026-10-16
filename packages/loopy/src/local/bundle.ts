@@ -2,8 +2,10 @@ import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import type { RunRecord } from "../core/index.js";
 import { isLoopy, type Loopy } from "../sdk/host.js";
 import { defaultHome } from "./home.js";
+import { Registry } from "./registry.js";
 
 export async function bundleLoopy(file: string, home = defaultHome()) {
   const result = await Bun.build({ entrypoints: [file], target: "bun", format: "esm" });
@@ -25,7 +27,7 @@ export async function bundleLoopy(file: string, home = defaultHome()) {
 }
 
 // BOUNDARY: Only the save or load caller can decide whether an imported default is an SDK definition.
-export async function importLoopy(path: string) {
+async function importLoopy(path: string) {
   const module: { default?: unknown } = await import(pathToFileURL(path).href);
 
   return module.default;
@@ -45,4 +47,10 @@ export async function loadLoopy(path: string): Promise<Loopy> {
   }
 
   return value;
+}
+
+export async function loadRunLoopy(home: string, run: RunRecord): Promise<Loopy> {
+  const registry = new Registry(home, run.workspace);
+
+  return loadLoopy(registry.bundlePath(run.bundleHash));
 }

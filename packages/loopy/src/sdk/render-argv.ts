@@ -48,7 +48,7 @@ function formatValue(
   value: string,
   style: CommandDefinition["style"],
 ): string[] {
-  const format = flag.style ?? (flag.attachedValue ? "attached" : (style ?? "space"));
+  const format = flag.style ?? style ?? "space";
 
   if (format === "positional") {
     return [value];
@@ -188,7 +188,7 @@ export function renderArgv(
   const args = [...(descriptor.path ?? []), ...flags.before];
 
   if (descriptor.revisionPaths) {
-    args.push(...(input.revisions ?? []));
+    args.push(...operands, ...(input.revisions ?? []));
 
     if (input.paths?.length) {
       args.push("--", ...input.paths);

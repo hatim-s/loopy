@@ -12,11 +12,3 @@ export function onTermination(handler: () => void): () => void {
     }
   };
 }
-
-/** Aborts the work on SIGINT/SIGTERM; the runtime then records where it stopped. */
-export function untilSignalled<T>(work: (signal: AbortSignal) => Promise<T>): Promise<T> {
-  const controller = new AbortController();
-  const release = onTermination(() => controller.abort());
-
-  return work(controller.signal).finally(release);
-}

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { fireKey, nextFire, parseCron } from "../src/runtime/index.js";
+import { nextFire, parseCron } from "../src/runtime/index.js";
 
 function next(expression: string, after: string, zone = "UTC") {
   return nextFire(parseCron(expression), new Date(after), zone).toISOString();
@@ -135,10 +135,4 @@ describe("nextFire", () => {
       "Invalid time zone 'invalid/zone'.",
     );
   });
-});
-
-test("fireKey uses the UTC minute", () => {
-  expect(fireKey("daily", new Date("2026-01-01T09:00:59.999+05:30"))).toBe(
-    "daily@2026-01-01T03:30Z",
-  );
 });

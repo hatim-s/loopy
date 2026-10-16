@@ -1,4 +1,4 @@
-import type { EngineLog, LogLevel, LogPosition } from "../core/index.js";
+import type { LogLevel, LogPosition, LogRecord } from "../core/index.js";
 import type { Activation } from "./activation.js";
 import type { Clock } from "./clock.js";
 import type { StepJournal } from "./journal.js";
@@ -10,9 +10,9 @@ export class Logger {
   private readonly indexes = new Map<string, number>();
   private writes = Promise.resolve();
   readonly log = {
-    info: (message: string, data?: EngineLog["data"]) => this.write("info", message, data),
-    warn: (message: string, data?: EngineLog["data"]) => this.write("warn", message, data),
-    error: (message: string, data?: EngineLog["data"]) => this.write("error", message, data),
+    info: (message: string, data?: LogRecord["data"]) => this.write("info", message, data),
+    warn: (message: string, data?: LogRecord["data"]) => this.write("warn", message, data),
+    error: (message: string, data?: LogRecord["data"]) => this.write("error", message, data),
   };
 
   constructor(
@@ -20,7 +20,7 @@ export class Logger {
       runId: string;
       token: string;
       store: RunStore;
-      logs: EngineLog[];
+      logs: LogRecord[];
       journal: StepJournal;
       activation: Activation;
       clock: Clock;
@@ -41,17 +41,17 @@ export class Logger {
   scope(seq: number, attempt: number) {
     let index = 0;
 
-    const write = (level: LogLevel, message: string, data?: EngineLog["data"]) =>
+    const write = (level: LogLevel, message: string, data?: LogRecord["data"]) =>
       this.append({ kind: "step", seq, attempt, index: ++index }, level, message, data);
 
     return {
-      info: (message: string, data?: EngineLog["data"]) => write("info", message, data),
-      warn: (message: string, data?: EngineLog["data"]) => write("warn", message, data),
-      error: (message: string, data?: EngineLog["data"]) => write("error", message, data),
+      info: (message: string, data?: LogRecord["data"]) => write("info", message, data),
+      warn: (message: string, data?: LogRecord["data"]) => write("warn", message, data),
+      error: (message: string, data?: LogRecord["data"]) => write("error", message, data),
     };
   }
 
-  private write(level: LogLevel, message: string, data?: EngineLog["data"]): void {
+  private write(level: LogLevel, message: string, data?: LogRecord["data"]): void {
     const { journal, activation } = this.options;
     const state = `${journal.seq}:${activation.finished}`;
     const index = (this.indexes.get(state) ?? 0) + 1;
@@ -78,11 +78,11 @@ export class Logger {
     position: LogPosition,
     level: LogLevel,
     message: string,
-    data?: EngineLog["data"],
+    data?: LogRecord["data"],
   ): void {
     const { clock, runId, store, token } = this.options;
 
-    const log: EngineLog = {
+    const log: LogRecord = {
       runId,
       seq: ++this.seq,
       position,

@@ -1,6 +1,8 @@
-import { type CommandDescriptor, defineCommand } from "loopy/core";
+import { type CommandDescriptor, defineCommand } from "loopy";
 
 const descriptor = {
+  key: "codex.exec",
+  positionalSeparator: true,
   program: "codex",
   path: ["exec"],
   positionals: [
@@ -13,6 +15,7 @@ const descriptor = {
     config: {
       cli: "--config",
       kind: "string",
+      repeatable: true,
     },
     enable: {
       cli: "--enable",

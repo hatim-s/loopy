@@ -1,21 +1,14 @@
 #!/usr/bin/env bun
+import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
 import { errorMessage } from "../core/index.js";
 import { defaultHome } from "../local/index.js";
 import { parseCliArgs } from "./args.js";
 import { runCancel } from "./commands/cancel.js";
 import { runDaemon } from "./commands/daemon.js";
-import { runGraph } from "./commands/graph.js";
 import { runInspect } from "./commands/inspect.js";
-import { runLegacyInspect } from "./commands/legacy-inspect.js";
-import { runLegacyList } from "./commands/legacy-list.js";
-import { runLegacyResume } from "./commands/legacy-resume.js";
-import { runLegacyRun } from "./commands/legacy-run.js";
-import { runLegacyRuns } from "./commands/legacy-runs.js";
-import { runLegacySave } from "./commands/legacy-save.js";
 import { runList } from "./commands/list.js";
 import { runLogs } from "./commands/logs.js";
-import { runRecover } from "./commands/recover.js";
 import { runResume } from "./commands/resume.js";
 import { runRun } from "./commands/run.js";
 import { runRuns } from "./commands/runs.js";
@@ -31,34 +24,39 @@ import { usage } from "./usage.js";
 const COMMANDS = {
   cancel: runCancel,
   daemon: runDaemon,
-  logs: runLogs,
-  schedule: runSchedule,
-  "legacy:save": runLegacySave,
-  "legacy:run": runLegacyRun,
-  "legacy:runs": runLegacyRuns,
-  "legacy:inspect": runLegacyInspect,
-  "legacy:resume": runLegacyResume,
-  "legacy:list": runLegacyList,
-
-  save: runSave,
-  list: runList,
-  graph: runGraph,
-  run: runRun,
-  resume: runResume,
-  recover: runRecover,
-  runs: runRuns,
   inspect: runInspect,
+  list: runList,
+  logs: runLogs,
+  resume: runResume,
+  run: runRun,
+  runs: runRuns,
+  save: runSave,
+  schedule: runSchedule,
+  secrets: runSecrets,
   types: runTypes,
   ui: runUi,
-  secrets: runSecrets,
 } satisfies Record<string, (context: CliContext) => Promise<void>>;
 
 function isCommandName(value: string): value is keyof typeof COMMANDS {
   return Object.hasOwn(COMMANDS, value);
 }
 
+function leaseMilliseconds(value: string | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const lease = Number(value);
+
+  if (!Number.isSafeInteger(lease) || lease < 1000) {
+    throw new Error("--lease-ms must be an integer of at least 1000. Use 1000 or more.");
+  }
+
+  return lease;
+}
+
 export async function main(args = process.argv.slice(2)): Promise<void> {
-  const { values, positionals, triggerInput } = parseCliArgs(args);
+  const { values, positionals, namedInput } = parseCliArgs(args);
   const [command, ...rest] = positionals;
 
   if (values.help || !command) {
@@ -75,10 +73,11 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
 
   await handler({
     home: resolve(values.home ?? defaultHome()),
-    cwd: resolve(values.cwd ?? process.cwd()),
+    leaseMs: leaseMilliseconds(values["lease-ms"]),
+    cwd: await realpath(resolve(values.cwd ?? process.cwd())),
     values,
     positionals: rest,
-    triggerInput,
+    namedInput,
   });
 }
 

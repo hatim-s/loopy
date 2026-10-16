@@ -4,8 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { MemoryRunStore } from "../src/runtime/index.js";
 import type { Loopy } from "../src/sdk/index.js";
-import { startLoopy } from "../src/sdk/run.js";
-import { FakeExecutor } from "./engine-fixture.js";
+import { FakeExecutor, startLoopy } from "./fixture.js";
 
 async function bundledLoopy(root: string): Promise<Loopy> {
   const entry = join(root, "entry.ts");

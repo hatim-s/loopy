@@ -12,6 +12,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { secretRedactor } from "../src/local/secret-redactor.js";
 import { SecretStore } from "../src/local/secrets.js";
 
 const directories: string[] = [];
@@ -112,4 +113,11 @@ test("CLI stdin entry and name-only listing do not disclose values", async () =>
 
   expect(await listed.exited).toBe(0);
   expect(JSON.parse(await new Response(listed.stdout).text())).toEqual(["orbit-cookie"]);
+});
+
+test("redaction handles overlapping values, regex punctuation and truncated secrets", () => {
+  expect(secretRedactor(["abc", "abcdef", "a.b?"])("abcdef abc a.b?")).toBe(
+    "[redacted] [redacted] [redacted]",
+  );
+  expect(secretRedactor(["abcdef"])("prefix abc", true)).toBe("prefix [redacted]");
 });

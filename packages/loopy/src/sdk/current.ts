@@ -1,8 +1,8 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import type { LoopyContext, StepContext } from "../runtime/index.js";
+import type { StepContext, WorkflowContext } from "../runtime/index.js";
 
 type Scope =
-  | { kind: "workflow"; context: LoopyContext; fail: (error: Error) => void }
+  | { kind: "workflow"; context: WorkflowContext; fail: (error: Error) => void }
   | { kind: "step"; log: StepContext["log"]; fail: (error: Error) => void };
 
 const SCOPE: unique symbol = Symbol.for("loopy.scope");
@@ -31,7 +31,7 @@ export function current() {
   return scope.kind === "workflow" ? scope.context : scope;
 }
 
-export function workflowContext(): LoopyContext {
+export function workflowContext(): WorkflowContext {
   const scope = active();
 
   if (scope.kind === "step") {
@@ -45,7 +45,7 @@ export function workflowContext(): LoopyContext {
 
 export function workflowScope<T>(
   fn: () => T,
-  context: LoopyContext,
+  context: WorkflowContext,
   fail: (error: Error) => void,
 ): T {
   return STORAGE.run({ kind: "workflow", context, fail }, fn);

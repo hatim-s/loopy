@@ -13,7 +13,7 @@
     "skipLibCheck": true,
     "noUncheckedIndexedAccess": true,
     "paths": {
-      "loopy/core": ["../../packages/loopy/src/core/index.ts"]
+      "loopy": ["../../packages/loopy/src/sdk/index.ts"]
     }
   },
   "include": ["src", "vite.config.ts"]

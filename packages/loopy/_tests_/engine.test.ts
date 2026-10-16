@@ -1,15 +1,15 @@
 import { expect, test } from "bun:test";
-import type { EngineStep, Json, RunOutcome } from "../src/core/index.js";
+import type { Json, RunOutcome, StepRecord } from "../src/core/index.js";
 import {
   CommandExitError,
-  type LoopyContext,
   MemoryRunStore,
   map,
   parallel,
   race,
   StepFailedError,
+  type WorkflowContext,
 } from "../src/runtime/index.js";
-import { delay, fixture } from "./engine-fixture.js";
+import { delay, fixture } from "./fixture.js";
 
 test("engine succeeds and releases ownership", async () => {
   const f = await fixture();
@@ -36,7 +36,7 @@ test("replay memoizes completed work without re-executing it", async () => {
   const f = await fixture();
   let calls = 0;
 
-  const workflow = async (ctx: LoopyContext) => {
+  const workflow = async (ctx: WorkflowContext) => {
     const value = await ctx.step("value", () => {
       calls++;
 
@@ -98,7 +98,10 @@ test("user code cannot catch nondeterminism and succeed", async () => {
 test("retry suspends with nextRetryAt and resumes when due", async () => {
   const f = await fixture();
   f.executor.failure = new Error("Spawn failed. Check the executable.");
-  const workflow = async (ctx: LoopyContext) => ctx.command("echo", { program: "echo", args: [] });
+
+  const workflow = async (ctx: WorkflowContext) =>
+    ctx.command("echo", { program: "echo", args: [] });
+
   expect(await f.execute(workflow)).toEqual({
     status: "suspended",
     wakeAt: "2026-10-16T00:00:01.000Z",
@@ -119,7 +122,7 @@ test("retry suspends with nextRetryAt and resumes when due", async () => {
 test("default retry exhausts three attempts with exponential backoff", async () => {
   const f = await fixture();
 
-  const workflow = async (ctx: LoopyContext) =>
+  const workflow = async (ctx: WorkflowContext) =>
     ctx.step("broken", () => {
       throw new Error("Broken. Fix it.");
     });
@@ -161,7 +164,7 @@ test("retryOn exit retries the command and succeeds", async () => {
   const f = await fixture();
   f.executor.result.exitCode = 1;
 
-  const workflow = async (ctx: LoopyContext) =>
+  const workflow = async (ctx: WorkflowContext) =>
     ctx.command("exit", { program: "false", args: [] }, { retry: { retryOn: "exit" } });
 
   expect((await f.execute(workflow)).status).toBe("suspended");
@@ -174,7 +177,7 @@ test("retryOn exit retries the command and succeeds", async () => {
 test("sleep suspends and resumes without an in-process timer", async () => {
   const f = await fixture();
 
-  const workflow = async (ctx: LoopyContext) => {
+  const workflow = async (ctx: WorkflowContext) => {
     await ctx.sleep("1h");
 
     return "awake";
@@ -194,7 +197,7 @@ test("parallel replays two steps per branch in original finish order", async () 
   const f = await fixture();
   const calls: string[] = [];
 
-  const workflow = async (ctx: LoopyContext) => {
+  const workflow = async (ctx: WorkflowContext) => {
     const values = await parallel(
       ["A", "B"].map((branch) => async () => {
         await ctx.step(`${branch}1`, async () => {
@@ -234,7 +237,7 @@ test("map replays three multi-step callbacks with varied delays", async () => {
   const f = await fixture();
   const calls: string[] = [];
 
-  const workflow = async (ctx: LoopyContext) => {
+  const workflow = async (ctx: WorkflowContext) => {
     const values = await map(
       [20, 1, 8],
       async (wait, index) => {
@@ -302,7 +305,7 @@ test("a caught step failure replays as the same failure", async () => {
   const errors: string[] = [];
   let calls = 0;
 
-  const workflow = async (ctx: LoopyContext) => {
+  const workflow = async (ctx: WorkflowContext) => {
     try {
       await ctx.step(
         "broken",
@@ -357,7 +360,7 @@ test("timeout names the step and limit and cancels its timer", async () => {
 test("logs are not duplicated on replay", async () => {
   const f = await fixture();
 
-  const workflow = async (ctx: LoopyContext) => {
+  const workflow = async (ctx: WorkflowContext) => {
     ctx.log.info("started");
     ctx.log.warn("also started");
     await ctx.sleep("1s");
@@ -380,7 +383,7 @@ test("logs are not duplicated on replay", async () => {
 test("logs inside a skipped step do not suppress workflow logs on replay", async () => {
   const f = await fixture();
 
-  const workflow = async (ctx: LoopyContext) => {
+  const workflow = async (ctx: WorkflowContext) => {
     await ctx.step("value", ({ log }) => {
       log.info("inside");
 
@@ -428,7 +431,7 @@ test("clock random and UUID are memoized across replay", async () => {
   const f = await fixture();
   const values: Json[] = [];
 
-  const workflow = async (ctx: LoopyContext) => {
+  const workflow = async (ctx: WorkflowContext) => {
     const value = { now: await ctx.now(), random: await ctx.random(), uuid: await ctx.uuid() };
     values.push(value);
     await ctx.sleep("1s");
@@ -442,32 +445,12 @@ test("clock random and UUID are memoized across replay", async () => {
   expect(values[1]).toEqual(values[0]);
 });
 
-test("map bounds concurrency and preserves input order", async () => {
-  let running = 0;
-  let peak = 0;
-  expect(
-    await map(
-      [3, 2, 1],
-      async (item) => {
-        running++;
-        peak = Math.max(peak, running);
-        await Promise.resolve();
-        running--;
-
-        return item * 2;
-      },
-      { concurrency: 2 },
-    ),
-  ).toEqual([6, 4, 2]);
-  expect(peak).toBe(2);
-});
-
 test("race returns the first branch result", async () => {
   expect(await race([async () => 1, async () => 2])).toBe(1);
 });
 
 class WriteFailureStore extends MemoryRunStore {
-  override async putStep(runId: string, token: string, step: EngineStep): Promise<void> {
+  override async putStep(runId: string, token: string, step: StepRecord): Promise<void> {
     if (step.status === "succeeded") {
       throw new Error("Step write failed. Restore storage.");
     }
@@ -553,7 +536,7 @@ test("finish failure persists a failed outcome and releases ownership", async ()
 test("retry delay is capped at sixty seconds", async () => {
   const f = await fixture();
 
-  const workflow = async (ctx: LoopyContext) =>
+  const workflow = async (ctx: WorkflowContext) =>
     ctx.step(
       "broken",
       () => {

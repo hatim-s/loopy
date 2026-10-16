@@ -1,4 +1,12 @@
-export type { CommandResult, Json } from "../core/index.js";
+export type {
+  CommandResult,
+  Json,
+  LogRecord,
+  RunDetail,
+  RunRecord,
+  RunStatus,
+  StepRecord,
+} from "../core/index.js";
 
 export type { Duration, ResolvedCommand, RetryPolicy, StepOptions } from "../runtime/index.js";
 

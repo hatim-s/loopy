@@ -15,13 +15,13 @@ bun run loopy save examples/www-uacode-sync/www-uacode-sync.loopy.ts
 Run the preview first. The helper reads current GitHub `main` and uacode `main`/`uat` by API, pins every content read to the returned commit SHA, and stages changes in a temporary directory. It does not rely on local branch refs.
 
 ```sh
-bun run loopy run www-uacode-sync --full --input '{"dryRun":"true"}'
+bun run loopy run www-uacode-sync --dryRun true
 ```
 
 Review the JSON output and then run with `dryRun` set to `false` to push branches and open PRs:
 
 ```sh
-bun run loopy run www-uacode-sync --full --input '{"dryRun":"false"}'
+bun run loopy run www-uacode-sync --dryRun false
 ```
 
 Apply mode uses authenticated GitHub CLI API calls to create one commit and branch per changed base, then `gh` to reuse or create the PR. Make sure `gh auth status` succeeds and the token can read both private repos, create branches, and open PRs. API and Git commands time out after 45 seconds and report failures without printing credentials.

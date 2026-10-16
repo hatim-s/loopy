@@ -1,14 +1,15 @@
-import type {
-  CommandResult,
-  FlagDefinition as CoreFlag,
-  Json,
-  PositionalDefinition,
-} from "../core/index.js";
+import type { CommandResult, Json } from "../core/index.js";
 import type { StepOptions } from "../runtime/index.js";
 import { command } from "./ambient.js";
 import { type RenderInput, renderArgv } from "./render-argv.js";
 
-export type FlagDefinition = CoreFlag & {
+export type FlagDefinition = {
+  readonly cli: string;
+  readonly kind: "boolean" | "string" | "number";
+  readonly repeatable?: boolean;
+  readonly optionalValue?: boolean;
+  readonly choices?: readonly string[];
+
   readonly supported?: boolean;
   readonly style?: "equals" | "space" | "attached" | "positional";
   readonly position?: "before" | "after";
@@ -18,7 +19,15 @@ export type FlagDefinition = CoreFlag & {
   readonly terminator?: string;
 };
 
+export type PositionalDefinition = {
+  readonly name: string;
+  readonly optional?: boolean;
+  readonly variadic?: boolean;
+};
+
 export type CommandDefinition = {
+  readonly helpHash?: string;
+  readonly observedVersion?: string;
   readonly program: string;
   readonly path?: readonly string[];
   readonly positionalSeparator?: boolean;
@@ -86,11 +95,13 @@ type FlagInput<F extends FlagDefinition> = F extends { readonly pairs: true }
 type Flags<D extends CommandDescriptor> = D extends {
   readonly flags: infer F extends Readonly<Record<string, FlagDefinition>>;
 }
-  ? {
-      readonly [K in keyof F]?: F[K] extends { readonly repeatable: true }
-        ? readonly FlagInput<F[K]>[]
-        : FlagInput<F[K]>;
-    }
+  ? keyof F extends never
+    ? Record<string, never>
+    : {
+        readonly [K in keyof F]?: F[K] extends { readonly repeatable: true }
+          ? readonly FlagInput<F[K]>[]
+          : FlagInput<F[K]>;
+      }
   : Record<string, never>;
 
 type Args<D extends CommandDescriptor> = D extends {
@@ -100,7 +111,11 @@ type Args<D extends CommandDescriptor> = D extends {
   : readonly string[];
 
 type Operands<D extends CommandDescriptor> = D extends { readonly revisionPaths: true }
-  ? { revisions?: readonly string[]; paths?: readonly string[] }
+  ? {
+      revisions?: readonly string[];
+      paths?: readonly string[];
+      args?: D extends { readonly positionals: readonly PositionalDefinition[] } ? Args<D> : never;
+    }
   : readonly [] extends Args<D>
     ? { args?: Args<D> }
     : { args: Args<D> };

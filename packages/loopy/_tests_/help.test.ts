@@ -1,7 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { defineCommand } from "../src/core/command";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import ts from "typescript";
 import { parseCliHelp } from "../src/local/typegen/parse-help";
 import { renderCommandSource } from "../src/local/typegen/render";
+import { MemoryRunStore } from "../src/runtime/index.js";
+import { defineCommand, loopy } from "../src/sdk/index.js";
+import { renderArgv } from "../src/sdk/render-argv.js";
+import { FakeExecutor, startLoopy } from "./fixture.js";
 
 const help = `Run Codex non-interactively
 
@@ -38,34 +45,103 @@ describe("CLI help generation", () => {
     expect(parsed.descriptor.helpHash).toHaveLength(64);
     const source = renderCommandSource("codexExec", parsed.descriptor);
     expect(source.split("\n")[0]).toBe(
-      'import { type CommandDescriptor, defineCommand } from "loopy/core";',
+      'import { type CommandDescriptor, defineCommand } from "loopy";',
     );
     expect(source).toContain("as const satisfies CommandDescriptor");
     expect(source).toContain('"read-only"');
   });
 
-  test("rejects unknown flags when constructing argv", () => {
+  test("generated descriptors execute through durable command steps", async () => {
     const parsed = parseCliHelp("codex", ["exec"], help);
     const codexExec = defineCommand(parsed.descriptor);
-    expect(codexExec({ args: [] }).args).toEqual(["exec"]);
-    // SAFETY: The parsed help descriptor contains these flags; its dynamically constructed type loses their literal names.
-    expect(codexExec({ args: ["hi"], flags: { json: true, model: "gpt" } } as never).args).toEqual([
-      "exec",
-      "--json",
-      "--model",
-      "gpt",
-      "--",
-      "hi",
+    const executor = new FakeExecutor();
+    const store = new MemoryRunStore();
+    const definition = loopy({ name: "generated", run: () => codexExec({ args: ["--help"] }) });
+    expect(
+      await startLoopy({
+        loopy: definition,
+        input: {},
+        executor,
+        store,
+        runId: "generated",
+        bundleHash: "bundle",
+        workspace: "/workspace",
+      }),
+    ).toMatchObject({ status: "succeeded" });
+    expect(executor.calls).toMatchObject([{ program: "codex", args: ["exec", "--help"] }]);
+    expect(await store.getSteps("generated")).toMatchObject([
+      { key: "codex.exec", kind: "command" },
     ]);
-    // SAFETY: The generated descriptor declares sandbox; this test checks the runtime spelling from dynamic metadata.
-    const literal = codexExec({ args: ["--help"], flags: { sandbox: "read-only" } } as never);
-    expect(literal.args).toEqual(["exec", "--sandbox", "read-only", "--", "--help"]);
-    expect(literal.argConstraints).toEqual({
-      2: { kind: "string", choices: ["read-only", "workspace-write", "danger-full-access"] },
-      4: { kind: "string" },
-    });
-    // SAFETY: This intentionally invalid flag exercises runtime rejection for untyped callers.
-    expect(() => codexExec({ args: [], flags: { typo: true } as never })).toThrow("Unknown flag");
+  });
+
+  test("emitted source typechecks against the SDK with typed flags and arity", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "loopy-generated-"));
+    const file = join(directory, "codex.ts");
+
+    const source = renderCommandSource(
+      "codexExec",
+      parseCliHelp("codex", ["exec"], help).descriptor,
+    );
+
+    const gitHelp = await Bun.file(resolve(import.meta.dir, "fixtures/help/git-log.txt")).text();
+
+    const gitSource = renderCommandSource(
+      "gitLog",
+      parseCliHelp("git", ["log"], gitHelp).descriptor,
+    )
+      .replace('import { type CommandDescriptor, defineCommand } from "loopy";', "")
+      .replaceAll("descriptor", "logDescriptor");
+
+    try {
+      await writeFile(
+        file,
+        `${source}
+      ${renderCommandSource(
+        "noFlags",
+        parseCliHelp(
+          "tool",
+          [],
+          "Usage: tool [flags]\nOptions:\n  --help  Show help\n  --version  Show version",
+        ).descriptor,
+      )
+        .replace('import { type CommandDescriptor, defineCommand } from "loopy";', "")
+        .replaceAll("descriptor", "emptyDescriptor")}
+      ${gitSource}
+      gitLog({ args: ["HEAD"], flags: { oneline: true, maxCount: 1 } });
+      gitLog({ revisions: ["HEAD"], paths: ["src"] });
+      // @ts-expect-error Generated boolean flags retain their type.
+      gitLog({ args: ["HEAD"], flags: { oneline: "yes" } });
+      // @ts-expect-error Empty flag maps reject excess flags.
+      noFlags({ flags: { typo: true } });
+      codexExec({ args: ["hi"], flags: { json: true, config: ["model=test"] } });
+      // @ts-expect-error Unknown flags must fail compilation.
+      codexExec({ flags: { typo: true } });
+      // @ts-expect-error Boolean flags retain their type.
+      codexExec({ flags: { json: "true" } });
+      // @ts-expect-error The descriptor declares at most one positional.
+      codexExec({ args: ["one", "two"] });
+      `,
+      );
+
+      const program = ts.createProgram([file], {
+        noEmit: true,
+        strict: true,
+        skipLibCheck: true,
+        target: ts.ScriptTarget.ES2022,
+        module: ts.ModuleKind.ESNext,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+        types: ["bun-types"],
+        paths: { loopy: [resolve(import.meta.dir, "../src/sdk/index.ts")] },
+      });
+
+      expect(
+        ts
+          .getPreEmitDiagnostics(program)
+          .map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")),
+      ).toEqual([]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   test("reports option lines it cannot parse", () => {
@@ -116,33 +192,14 @@ describe("CLI help generation", () => {
       cli: "--inspect",
       kind: "number",
       optionalValue: true,
-      attachedValue: true,
+      style: "equals",
     });
     expect(() => renderCommandSource("default", parsed.descriptor)).toThrow(
       "valid TypeScript identifier",
     );
-
-    const inspect = defineCommand({
-      program: "tool",
-      positionals: [],
-      flags: { inspect: { cli: "--inspect", kind: "number", optionalValue: true } },
-    });
-
-    expect(inspect({ flags: { inspect: true } }).args).toEqual(["--inspect"]);
-    expect(inspect({ flags: { inspect: 9229 } }).args).toEqual(["--inspect", 9229]);
-    // SAFETY: The parsed descriptor declares inspect; dynamic metadata cannot retain that flag name in its TypeScript type.
-    const attached = defineCommand(parsed.descriptor)({ flags: { inspect: 9229 } } as never);
-    expect(attached.args).toEqual([{ $op: "concat", args: ["--inspect=", 9229] }]);
-    expect(attached.argConstraints).toEqual({ 0: { kind: "number", prefix: "--inspect=" } });
-    expect(() =>
-      defineCommand({
-        program: "tool",
-        positionals: [{ name: "first", optional: true }, { name: "second" }],
-      }),
-    ).toThrow("required positional cannot follow an optional");
   });
 
-  test("reads inline choices and permits tools without a positional separator", () => {
+  test("reads inline choices", () => {
     const parsed = parseCliHelp(
       "tool",
       [],
@@ -150,25 +207,212 @@ describe("CLI help generation", () => {
     );
 
     expect(parsed.descriptor.flags?.mode?.choices).toEqual(["safe", "fast"]);
-
-    const echo = defineCommand({
-      program: "echo",
-      positionals: [{ name: "message" }],
-      positionalSeparator: false,
-    });
-
-    expect(echo({ args: ["hello"] }).args).toEqual(["hello"]);
-
-    const two = defineCommand({
-      program: "tool",
-      positionals: [
-        { name: "first", optional: true },
-        { name: "second", optional: true },
-      ],
-    });
-
-    expect(() => two({ args: [undefined, "second"] })).toThrow(
-      "Cannot omit a positional before a later positional",
-    );
   });
+});
+
+for (const fixture of [
+  {
+    binary: "gh",
+    path: ["pr", "create"],
+    file: "gh-pr-create",
+    positional: undefined,
+    flag: "assignee",
+    kind: "string",
+    separator: false,
+  },
+  {
+    binary: "git",
+    path: ["log"],
+    file: "git-log",
+    positional: "revision-range",
+    flag: "follow",
+    kind: "boolean",
+    separator: false,
+  },
+  {
+    binary: "bun",
+    path: ["build"],
+    file: "bun-build",
+    positional: "entrypoint",
+    flag: "outfile",
+    kind: "string",
+    separator: false,
+  },
+  {
+    binary: "jq",
+    path: [],
+    file: "jq",
+    positional: "filter",
+    flag: "rawOutput",
+    kind: "boolean",
+    separator: false,
+  },
+] as const) {
+  test(`captured ${fixture.file} help preserves operands and flag metadata`, async () => {
+    const help = await Bun.file(
+      resolve(import.meta.dir, "fixtures/help", `${fixture.file}.txt`),
+    ).text();
+
+    const { descriptor } = parseCliHelp(fixture.binary, fixture.path, help);
+    expect(descriptor.positionals?.[0]?.name).toBe(fixture.positional);
+    expect(descriptor.flags?.[fixture.flag]?.kind).toBe(fixture.kind);
+    expect(descriptor.positionalSeparator).toBe(fixture.separator);
+    expect(descriptor.flags).not.toHaveProperty("help");
+    expect(descriptor.flags).not.toHaveProperty("version");
+    expect(
+      descriptor.positionals?.some((positional) => /^(options|flags)$/.test(positional.name)),
+    ).toBe(false);
+    const source = renderCommandSource("generated", descriptor);
+    expect(source).toContain(`${fixture.flag}: { cli: `);
+    expect(source).not.toContain('"program":');
+
+    if (fixture.binary === "git") {
+      expect(descriptor.revisionPaths).toBe(true);
+      expect(descriptor.positionals?.[1]).toMatchObject({
+        name: "path",
+        optional: true,
+        variadic: true,
+      });
+    }
+  });
+}
+
+test("man-page overstrikes retain the advertised positional separator", () => {
+  const { descriptor } = parseCliHelp(
+    "git",
+    ["log"],
+    "SYNOPSIS\n       g\bgit log [[-\b--\b-] <path>...]\nOPTIONS\n       --follow\n",
+  );
+
+  expect(descriptor.positionalSeparator).toBe(true);
+  expect(descriptor.positionals).toEqual([{ name: "path", optional: true, variadic: true }]);
+});
+
+test("generated git log keeps revision args before the path separator", async () => {
+  const captured = await Bun.file(resolve(import.meta.dir, "fixtures/help/git-log.txt")).text();
+  const { descriptor, warnings } = parseCliHelp("git", ["log"], captured);
+  expect(descriptor.flags?.maxCount).toMatchObject({ kind: "number", style: "equals" });
+  expect(warnings.some((warning) => warning.includes("max-count"))).toBe(false);
+  const oneline = descriptor.flags?.oneline;
+
+  if (!oneline || oneline.kind !== "boolean") {
+    throw new Error("Missing --oneline metadata. Check the captured help parser.");
+  }
+
+  const gitLog = defineCommand({
+    ...descriptor,
+    flags: { oneline: { ...oneline, kind: oneline.kind } },
+  });
+
+  const executor = new FakeExecutor();
+  const store = new MemoryRunStore();
+
+  const definition = loopy({
+    name: "log",
+    run: () => gitLog({ args: ["HEAD"], flags: { oneline: true } }),
+  });
+
+  await startLoopy({
+    loopy: definition,
+    input: {},
+    executor,
+    store,
+    runId: "log",
+    bundleHash: "bundle",
+    workspace: "/workspace",
+  });
+  expect(executor.calls).toMatchObject([{ program: "git", args: ["log", "--oneline", "HEAD"] }]);
+  expect(renderArgv(descriptor, { revisions: ["HEAD"], paths: ["src"] }, "git.log")).toEqual([
+    "log",
+    "HEAD",
+    "--",
+    "src",
+  ]);
+});
+
+test("only path-only usage receives an automatic positional separator", () => {
+  for (const operand of ["pathspec", "path", "file"]) {
+    const { descriptor } = parseCliHelp(
+      "tool",
+      [],
+      `Usage: tool [--] <${operand}>...\nOptions:\n  --json  JSON output`,
+    );
+
+    expect(descriptor.positionalSeparator).toBe(true);
+  }
+
+  const { descriptor } = parseCliHelp(
+    "tool",
+    [],
+    "Usage: tool <name> [[--] <path>...]\nOptions:\n  --json  JSON output",
+  );
+
+  expect(descriptor.positionalSeparator).toBe(false);
+  expect(descriptor.revisionPaths).toBe(false);
+});
+
+test("comma aliases retain value styles and repeatable placeholder metadata", () => {
+  const { descriptor, warnings } = parseCliHelp(
+    "git",
+    ["log"],
+    `Usage: git [-C <path>] log [<revision-range>] [[--] <path>...]
+Options:
+  -n, --max-count <number>  Limit commits
+  -a, --author=<name>  Filter author
+  -f, --files <files>  Select files
+  -p, --pattern <pattern>...  Match patterns
+  -l, --label <name>  Label (can be repeated)
+  -r, --reviewer <handle>  Select multiple reviewers
+`,
+  );
+
+  expect(warnings.some((warning) => warning.includes("Could not parse option"))).toBe(false);
+  expect(descriptor.flags).toMatchObject({
+    maxCount: { kind: "number" },
+    author: { kind: "string", style: "equals" },
+    files: { repeatable: true },
+    pattern: { repeatable: true },
+    label: { repeatable: true },
+    reviewer: { repeatable: true },
+  });
+  expect(descriptor.positionals?.map((operand) => operand.name)).toEqual([
+    "revision-range",
+    "path",
+  ]);
+});
+
+test("captured gh flags accept repeated labels, assignees and reviewers", async () => {
+  const captured = await Bun.file(
+    resolve(import.meta.dir, "fixtures/help/gh-pr-create.txt"),
+  ).text();
+
+  const { descriptor, warnings } = parseCliHelp("gh", ["pr", "create"], captured);
+  expect(descriptor.flags).toMatchObject({
+    assignee: { repeatable: true },
+    label: { repeatable: true },
+    reviewer: { repeatable: true },
+  });
+  expect(warnings.some((warning) => warning.includes("Could not parse option"))).toBe(false);
+  expect(
+    renderArgv(
+      descriptor,
+      { flags: { label: ["bug", "fix"], assignee: ["alice", "bob"], reviewer: ["carol", "dave"] } },
+      "gh.pr.create",
+    ),
+  ).toEqual([
+    "pr",
+    "create",
+    "--assignee",
+    "alice",
+    "--assignee",
+    "bob",
+    "--label",
+    "bug",
+    "--label",
+    "fix",
+    "--reviewer",
+    "carol",
+    "--reviewer",
+    "dave",
+  ]);
 });

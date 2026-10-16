@@ -1,4 +1,4 @@
-import type { EngineStep, Json, StepBase, StepKind } from "../core/index.js";
+import type { Json, StepBase, StepKind, StepRecord } from "../core/index.js";
 import type { Activation } from "./activation.js";
 import type { Clock } from "./clock.js";
 
@@ -13,11 +13,11 @@ export class NondeterminismError extends Error {
 
 export class StepJournal {
   seq = 0;
-  private readonly steps: Map<number, EngineStep>;
+  private readonly steps: Map<number, StepRecord>;
 
   constructor(
     private readonly runId: string,
-    steps: EngineStep[],
+    steps: StepRecord[],
     private readonly activation: Activation,
     private readonly clock: Clock,
   ) {

@@ -1,0 +1,74 @@
+Usage:
+  Transpile and bundle one or more files.
+  bun build [flags] <entrypoint>
+
+Flags:
+      --production                          Set NODE_ENV=production and enable minification
+      --compile                             Generate a standalone Bun executable containing your bundled code. Implies --production
+      --compile-exec-argv=<val>             Prepend arguments to the standalone executable's execArgv
+      --compile-autoload-dotenv             Enable autoloading of .env files in standalone executable (default: true)
+      --no-compile-autoload-dotenv          Disable autoloading of .env files in standalone executable
+      --compile-autoload-bunfig             Enable autoloading of bunfig.toml in standalone executable (default: true)
+      --no-compile-autoload-bunfig          Disable autoloading of bunfig.toml in standalone executable
+      --compile-autoload-tsconfig           Enable autoloading of tsconfig.json at runtime in standalone executable (default: false)
+      --no-compile-autoload-tsconfig        Disable autoloading of tsconfig.json at runtime in standalone executable
+      --compile-autoload-package-json       Enable autoloading of package.json at runtime in standalone executable (default: false)
+      --no-compile-autoload-package-json    Disable autoloading of package.json at runtime in standalone executable
+      --compile-executable-path=<val>       Path to a Bun executable to use for cross-compilation instead of downloading
+      --asset=<val>                         Embed a file or directory into the compiled executable, preserving its relative path (requires --compile)
+      --bytecode                            Use a bytecode cache
+      --watch                               Automatically restart the process on file change
+      --no-clear-screen                     Disable clearing the terminal screen on reload when --watch is enabled
+      --target=<val>                        The intended execution environment for the bundle. "browser", "bun" or "node"
+      --outdir=<val>                        Default to "dist" if multiple files
+      --outfile=<val>                       Write to a file
+      --metafile=<val>                      Write a JSON file with metadata about the build
+      --metafile-md=<val>                   Write a markdown file with a visualization of the module graph (LLM-friendly)
+      --sourcemap=<val>                     Build with sourcemaps - 'linked', 'inline', 'external', or 'none'
+      --banner=<val>                        Add a banner to the bundled output such as "use client"; for a bundle being used with RSCs
+      --footer=<val>                        Add a footer to the bundled output such as // built with bun!
+      --format=<val>                        Specifies the module format to build to. "esm", "cjs" and "iife" are supported. Defaults to "esm", or "cjs" with --bytecode.
+      --root=<val>                          Root directory used for multiple entry points
+      --splitting                           Enable code splitting
+      --public-path=<val>                   A prefix to be appended to any import paths in bundled code
+  -e, --external=<val>                      Exclude module from transpilation (can use * wildcards). ex: -e react
+      --allow-unresolved=<val>              Allow unresolved dynamic import()/require() specifiers matching these glob patterns. Use '<empty>' for opaque specifiers. Default is '*' (allow all).
+      --reject-unresolved                   Fail the build on any dynamic import()/require() specifier that cannot be resolved at build time.
+      --packages=<val>                      Add dependencies to bundle or keep them external. "external", "bundle" is supported. Defaults to "bundle".
+      --entry-naming=<val>                  Customize entry point filenames. Defaults to "[dir]/[name].[ext]"
+      --chunk-naming=<val>                  Customize chunk filenames. Defaults to "[name]-[hash].[ext]"
+      --asset-naming=<val>                  Customize asset filenames. Defaults to "[name]-[hash].[ext]"
+      --react-fast-refresh                  Enable React Fast Refresh transform (does not emit hot-module code, use this for testing)
+      --react-compiler                      Enable the React Compiler optimizing transform
+      --no-bundle                           Transpile file only, do not bundle
+      --emit-dce-annotations                Re-emit DCE annotations in bundles. Enabled by default unless --minify-whitespace is passed.
+      --minify                              Enable all minification flags
+      --minify-syntax                       Minify syntax and inline data
+      --minify-whitespace                   Minify whitespace
+      --minify-identifiers                  Minify identifiers
+      --keep-names                          Preserve original function and class names when minifying
+      --css-chunking                        Chunk CSS files together to reduce duplicated CSS loaded in a browser. Only has an effect when multiple entrypoints import CSS
+      --conditions=<val>                    Pass custom conditions to resolve
+      --app                                 (EXPERIMENTAL) Build a web app for production using Bun Bake.
+      --server-components                   (EXPERIMENTAL) Enable server components
+      --env=<val>                           Inline environment variables into the bundle as process.env.${name}. Defaults to 'disable'. To inline environment variables matching a prefix, use my prefix like 'FOO_PUBLIC_*'.
+      --windows-hide-console                When using --compile targeting Windows, prevent a Command prompt from opening alongside the executable
+      --windows-icon=<val>                  When using --compile targeting Windows, assign an executable icon
+      --windows-title=<val>                 When using --compile targeting Windows, set the executable product name
+      --windows-publisher=<val>             When using --compile targeting Windows, set the executable company name
+      --windows-version=<val>               When using --compile targeting Windows, set the executable version (e.g. 1.2.3.4)
+      --windows-description=<val>           When using --compile targeting Windows, set the executable description
+      --windows-copyright=<val>             When using --compile targeting Windows, set the executable copyright
+
+Examples:
+  Frontend web apps:
+  bun build --outfile=bundle.js ./src/index.ts
+  bun build --minify --splitting --outdir=out ./index.jsx ./lib/worker.ts
+
+  Bundle code to be run in Bun (reduces server startup time)
+  bun build --target=bun --outfile=server.js ./server.ts
+
+  Creating a standalone executable (see https://bun.com/docs/bundler/executables)
+  bun build --compile --outfile=my-app ./cli.ts
+
+A full list of flags is available at https://bun.com/docs/bundler

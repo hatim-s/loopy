@@ -1,13 +1,13 @@
 import { expect, test } from "bun:test";
-import type { EngineStep } from "../src/core/index.js";
-import { type LoopyContext, MemoryRunStore, parallel } from "../src/runtime/index.js";
-import { delay, fixture } from "./engine-fixture.js";
+import type { StepRecord } from "../src/core/index.js";
+import { MemoryRunStore, parallel, type WorkflowContext } from "../src/runtime/index.js";
+import { delay, fixture } from "./fixture.js";
 
 for (const wait of ["sleep", "retry"] as const) {
   test(`live ${wait} completion waits for queued memoized branch results`, async () => {
     const f = await fixture();
 
-    const workflow = (ctx: LoopyContext) =>
+    const workflow = (ctx: WorkflowContext) =>
       parallel([
         async () => {
           await ctx.step("a1", async () => {
@@ -47,7 +47,7 @@ for (const wait of ["sleep", "retry"] as const) {
 }
 
 class DelayedStore extends MemoryRunStore {
-  override async putStep(runId: string, token: string, step: EngineStep): Promise<void> {
+  override async putStep(runId: string, token: string, step: StepRecord): Promise<void> {
     if (step.status === "succeeded" && step.key === "a1") {
       await delay(20);
     }
@@ -60,7 +60,7 @@ test("terminal write latency preserves the finish order observed by workflow cod
   const f = await fixture(new DelayedStore());
   const observed: string[] = [];
 
-  const workflow = async (ctx: LoopyContext) => {
+  const workflow = async (ctx: WorkflowContext) => {
     await parallel(
       ["a", "b"].map((key) => async () => {
         await ctx.step(`${key}1`, () => key);

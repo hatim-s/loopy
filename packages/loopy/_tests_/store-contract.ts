@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { EngineLog, EngineStep, RunOutcome, Schedule } from "../src/core/index.js";
+import type { LogRecord, RunOutcome, Schedule, StepRecord } from "../src/core/index.js";
 import { OwnershipError, type RunStore } from "../src/runtime/index.js";
-import { newRun } from "./engine-fixture.js";
+import { newRun } from "./fixture.js";
 
-const STEP: EngineStep = {
+const STEP: StepRecord = {
   runId: "run",
   seq: 1,
   key: "test",
@@ -15,7 +15,7 @@ const STEP: EngineStep = {
   startedAt: "2026-10-16T00:00:00.000Z",
 };
 
-const LOG: EngineLog = {
+const LOG: LogRecord = {
   runId: "run",
   seq: 1,
   position: { kind: "workflow", afterStep: 0, afterFinish: 0, index: 1 },
@@ -30,7 +30,10 @@ const OUTCOMES: RunOutcome[] = [
   { status: "cancelled" },
 ];
 
-type StoreFactory = () => RunStore | Promise<RunStore>;
+type StoreFactory = (options?: {
+  now: () => number;
+  leaseMs: number;
+}) => RunStore | Promise<RunStore>;
 
 async function fixture(makeStore: StoreFactory) {
   const store = await makeStore();
@@ -142,7 +145,7 @@ function stepUpsert(makeStore: StoreFactory): void {
     await store.claim("run", "owner");
     await store.putStep("run", "owner", STEP);
 
-    const completed: EngineStep = {
+    const completed: StepRecord = {
       ...STEP,
       status: "succeeded",
       output: 42,
@@ -190,6 +193,7 @@ function recordIsolation(makeStore: StoreFactory): void {
 }
 
 const SCHEDULE: Schedule = {
+  workspace: "/workspace",
   slug: "test",
   cron: "* * * * *",
   tz: "UTC",
@@ -218,8 +222,8 @@ function schedules(makeStore: StoreFactory): void {
     await store.putSchedule(replacement);
     await store.putSchedule({ ...SCHEDULE, slug: "other" });
     expect(await store.listSchedules()).toEqual([replacement, { ...SCHEDULE, slug: "other" }]);
-    await store.deleteSchedule("test");
-    await store.deleteSchedule("test");
+    await store.deleteSchedule(SCHEDULE.workspace, "test");
+    await store.deleteSchedule(SCHEDULE.workspace, "test");
     expect(await store.listSchedules()).toEqual([{ ...SCHEDULE, slug: "other" }]);
   });
 }
@@ -232,8 +236,8 @@ function scheduleFires(makeStore: StoreFactory): void {
     const run = newRun();
     expect(
       await Promise.all([
-        store.fireSchedule("test", "key", run, next),
-        store.fireSchedule("test", "key", { ...run, id: "duplicate" }, next),
+        store.fireSchedule(SCHEDULE.workspace, "test", "key", run, next),
+        store.fireSchedule(SCHEDULE.workspace, "test", "key", { ...run, id: "duplicate" }, next),
       ]),
     ).toEqual([true, false]);
     expect(await store.listRuns()).toEqual([run]);
@@ -242,24 +246,32 @@ function scheduleFires(makeStore: StoreFactory): void {
     expect(await store.listSchedules()).toEqual([
       { ...SCHEDULE, lastFireKey: "key", nextFireAt: next },
     ]);
-    expect(await store.fireSchedule("test", "key", newRun(), LOG.at)).toBe(false);
-    expect(await store.fireSchedule("test", "next-key", { ...newRun(), id: "next" }, next)).toBe(
-      true,
+    expect(await store.fireSchedule(SCHEDULE.workspace, "test", "key", newRun(), LOG.at)).toBe(
+      false,
     );
+    expect(
+      await store.fireSchedule(
+        SCHEDULE.workspace,
+        "test",
+        "next-key",
+        { ...newRun(), id: "next" },
+        next,
+      ),
+    ).toBe(true);
     expect(await store.listRuns()).toHaveLength(2);
   });
 
   test("a failed schedule fire leaves both schedule and runs unchanged", async () => {
     const store = await fixture(makeStore);
     await store.putSchedule(SCHEDULE);
-    await expect(store.fireSchedule("test", "key", newRun(), LOG.at)).rejects.toThrow(
-      "Run 'run' already exists. Use a new run ID.",
-    );
+    await expect(
+      store.fireSchedule(SCHEDULE.workspace, "test", "key", newRun(), LOG.at),
+    ).rejects.toThrow("Run 'run' already exists. Use a new run ID.");
     expect(await store.listSchedules()).toEqual([SCHEDULE]);
     expect(await store.listRuns()).toEqual([newRun()]);
-    await store.deleteSchedule("test");
+    await store.deleteSchedule(SCHEDULE.workspace, "test");
     await expect(
-      store.fireSchedule("test", "key", { ...newRun(), id: "missing" }, LOG.at),
+      store.fireSchedule(SCHEDULE.workspace, "test", "key", { ...newRun(), id: "missing" }, LOG.at),
     ).rejects.toThrow("Schedule 'test' does not exist. Save the schedule before firing it.");
     expect(await store.getRun("missing")).toBeUndefined();
   });
@@ -294,8 +306,65 @@ function nextWakeAt(makeStore: StoreFactory): void {
   });
 }
 
+function staleTakeover(makeStore: StoreFactory): void {
+  test("stale takeover retries unfinished steps and fences the former owner", async () => {
+    let now = Date.parse(LOG.at);
+    const store = await makeStore({ now: () => now, leaseMs: 100 });
+    await store.createRun({
+      ...newRun(),
+      status: "running",
+      owner: { token: "old", host: "remote-host", pid: 0, heartbeatAt: LOG.at },
+    });
+    await store.putStep("run", "old", STEP);
+    now += 100;
+    expect(await store.dueRuns(new Date(now).toISOString())).toEqual([]);
+    await expect(store.claim("run", "new")).rejects.toBeInstanceOf(OwnershipError);
+    expect(await store.heartbeat("run", "old")).toBe(true);
+    now += 101;
+    expect((await store.dueRuns(new Date(now).toISOString())).map((run) => run.id)).toEqual([
+      "run",
+    ]);
+    expect(await store.claim("run", "new")).toMatchObject({
+      status: "running",
+      owner: { token: "new" },
+    });
+    expect(await store.getSteps("run")).toMatchObject([
+      { status: "retrying", attempt: 1, nextRetryAt: new Date(now).toISOString() },
+    ]);
+    expect(await store.heartbeat("run", "old")).toBe(false);
+    await expect(store.putStep("run", "old", STEP)).rejects.toBeInstanceOf(OwnershipError);
+    await expect(store.release("run", "old")).rejects.toBeInstanceOf(OwnershipError);
+  });
+
+  test("the same slug has independent schedules in different workspaces", async () => {
+    const store = await makeStore();
+    const other = { ...SCHEDULE, workspace: "/other" };
+    await store.putSchedule(SCHEDULE);
+    await store.putSchedule(other);
+    expect(await store.listSchedules()).toEqual([SCHEDULE, other]);
+    const at = "2026-10-16T00:01:00.000Z";
+    expect(await store.fireSchedule(SCHEDULE.workspace, SCHEDULE.slug, "same", newRun(), at)).toBe(
+      true,
+    );
+    expect(
+      await store.fireSchedule(
+        other.workspace,
+        other.slug,
+        "same",
+        { ...newRun(), id: "other", workspace: other.workspace },
+        at,
+      ),
+    ).toBe(true);
+    await store.deleteSchedule(SCHEDULE.workspace, SCHEDULE.slug);
+    expect(await store.listSchedules()).toEqual([
+      { ...other, lastFireKey: "same", nextFireAt: at },
+    ]);
+  });
+}
+
 export function storeContract(name: string, makeStore: StoreFactory): void {
   describe(name, () => {
+    staleTakeover(makeStore);
     stateMachine(makeStore);
     releaseRunning(makeStore);
     terminalTransitions(makeStore);

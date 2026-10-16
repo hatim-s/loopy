@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { basename } from "node:path";
-import type { CommandDescriptor, FlagDefinition, PositionalDefinition } from "../../core/index.js";
+import type { CommandDescriptor, FlagDefinition, PositionalDefinition } from "../../sdk/host.js";
 import { identifier } from "./names.js";
 
 export type ParsedHelp = {
@@ -10,21 +10,25 @@ export type ParsedHelp = {
 
 const USAGE_LINE = /^Usage:\s*\S/i;
 
-const SECTION_HEADING = /^[A-Za-z][\w /-]*:\s*$/;
+const SECTION_HEADING = /^(?:[A-Za-z][\w /-]*:|[A-Z][A-Z /-]*)\s*$/;
 
 const POSITIONAL_NAME = /^[A-Za-z][A-Za-z0-9_-]*$/;
 
 const OPTION_START = /^\s*(?:-\w,\s*)?--[A-Za-z0-9]/;
 
+const OPTION_ALIASES = /^\s*(?:(?:-<[^>\s]+>|-[\w-]+(?:[ =]<[^>\s]+>)?),\s*)+/;
+
 const OPTION_LINE =
-  /^\s*(?:(?:-\w,\s*)?)(--[A-Za-z0-9][A-Za-z0-9-]*)(?:[ =](<[^>\s]+>|\[[A-Z][A-Z0-9_-]*\])|(\[=<[^>\s]+>\]))?(\.\.\.)?(?:\s{2,}.*)?$/;
+  /^\s*(--[A-Za-z0-9][A-Za-z0-9-]*)(?:([ =])(<[^>\s]+>|\[[A-Z][A-Z0-9_-]*\]|[A-Za-z][A-Za-z0-9_-]*)|(\[=<[^>\s]+>\]))?(\.\.\.)?(?:\s{2,}.*)?$/;
 
 const NUMERIC_PLACEHOLDER = /(?:^|_)(count|number|timeout|limit|port|seconds|ms)(?:$|_)/;
 
 const POSSIBLE_VALUES = /\[possible values:\s*([^\]]+)\]/i;
 
 function section(lines: string[], title: string): string[] {
-  const start = lines.findIndex((line) => line.trim() === `${title}:`);
+  const start = lines.findIndex(
+    (line) => line.trim().replace(/:$/, "").toLowerCase() === title.toLowerCase(),
+  );
 
   if (start < 0) {
     return [];
@@ -39,9 +43,15 @@ function section(lines: string[], title: string): string[] {
 function parsePositionalToken(token: string): PositionalDefinition | undefined {
   const variadic = token.includes("...");
   const optional = token.startsWith("[");
-  const rawName = token.replace(/[<>[\]]/g, "").replace(/\.\.\.$/, "");
 
-  if (!POSITIONAL_NAME.test(rawName) || rawName.toUpperCase() === "OPTIONS") {
+  const rawName =
+    token
+      .replace(/[<>[\]]/g, "")
+      .replace(/\.\.\.$/, "")
+      .split(/\s+/)
+      .at(-1) ?? "";
+
+  if (!POSITIONAL_NAME.test(rawName) || ["OPTIONS", "FLAGS"].includes(rawName.toUpperCase())) {
     return undefined;
   }
 
@@ -67,21 +77,39 @@ function positionalCandidates(lines: string[]): PositionalCandidates {
     };
   }
 
-  const usage = lines.find((line) => USAGE_LINE.test(line));
-  const source = usage ? [usage.replace(/^Usage:\s*/i, "")] : section(lines, "Usage");
-
-  return {
-    tokens: source.map((line) =>
-      line
-        .trim()
-        .split(/\s+/)
-        .filter((token) => token.startsWith("[") || token.startsWith("<")),
-    ),
-    fromSection: false,
-  };
+  return { tokens: usageLines(lines).map(usageTokens), fromSection: false };
 }
 
-export function parsePositionals(lines: string[]): PositionalDefinition[] {
+function usageLines(lines: string[]): string[] {
+  const usage = lines.find((line) => USAGE_LINE.test(line));
+
+  if (usage) {
+    return [usage.replace(/^Usage:\s*/i, "")];
+  }
+
+  const usageSection = section(lines, "Usage");
+
+  return usageSection.length ? usageSection : section(lines, "Synopsis");
+}
+
+function usageTokens(line: string): string[] {
+  const tokens: string[] = [];
+
+  for (const match of line.matchAll(/\[?<[^>]+>(?:\.\.\.)?\]?|\[[A-Za-z][\w-]*(?:\.\.\.)?\]/g)) {
+    const prefix = line.slice(0, match.index);
+
+    if (/(?:^|[\s[])-{1,2}[\w-]+[ =]*$/.test(prefix)) {
+      continue;
+    }
+
+    const depth = (prefix.match(/\[/g)?.length ?? 0) - (prefix.match(/\]/g)?.length ?? 0);
+    tokens.push(depth > 0 && !match[0].startsWith("[") ? `[${match[0]}]` : match[0]);
+  }
+
+  return tokens;
+}
+
+function parsePositionals(lines: string[]): PositionalDefinition[] {
   const { tokens, fromSection } = positionalCandidates(lines);
   const result: PositionalDefinition[] = [];
   const seen = new Set<string>();
@@ -107,7 +135,7 @@ export function parsePositionals(lines: string[]): PositionalDefinition[] {
   return result;
 }
 
-export function choicesAfter(lines: string[], start: number): string[] | undefined {
+function choicesAfter(lines: string[], start: number): string[] | undefined {
   for (let index = start; index < Math.min(lines.length, start + 12); index += 1) {
     const line = lines[index] ?? "";
 
@@ -155,12 +183,17 @@ function flagKind(placeholder: string | undefined): FlagDefinition["kind"] {
 
 function parseFlagMatch(match: RegExpExecArray, options: string[], index: number): FlagDefinition {
   const cli = match[1] ?? "";
-  const placeholder = (match[2] ?? match[3])?.replace(/[<>[\]=]/g, "").toLowerCase();
-  const optionalValue = Boolean(match[3] || match[2]?.startsWith("["));
+  const placeholder = (match[3] ?? match[4])?.replace(/[<>[\]=]/g, "").toLowerCase();
+  const optionalValue = Boolean(match[4] || match[3]?.startsWith("["));
   const choices = choicesAfter(options, index);
 
   const repeatable = Boolean(
-    match[4] || /\brepeatable\b/i.test(descriptionLines(options, index).join(" ")),
+    match[5] ||
+      placeholder?.includes("...") ||
+      (flagKind(placeholder) === "string" && placeholder?.endsWith("s")) ||
+      /\b(?:repeatable|can be repeated|multiple)\b|\b(?:assign|add|request) (?:people|[a-z]+s)\b/i.test(
+        descriptionLines(options, index).join(" "),
+      ),
   );
 
   let flag: FlagDefinition = { cli, kind: flagKind(placeholder) };
@@ -173,8 +206,8 @@ function parseFlagMatch(match: RegExpExecArray, options: string[], index: number
     flag = { ...flag, optionalValue: true };
   }
 
-  if (match[3]) {
-    flag = { ...flag, attachedValue: true };
+  if (match[4] || match[2] === "=") {
+    flag = { ...flag, style: "equals" };
   }
 
   if (choices?.length) {
@@ -184,13 +217,16 @@ function parseFlagMatch(match: RegExpExecArray, options: string[], index: number
   return flag;
 }
 
-export function parseFlags(lines: string[], warnings: string[]) {
+function parseFlags(lines: string[], warnings: string[]) {
   const flags: Record<string, FlagDefinition> = {};
   const optionsSection = section(lines, "Options");
-  const options = optionsSection.length ? optionsSection : section(lines, "Flags");
+
+  const options = optionsSection.length
+    ? optionsSection
+    : [...section(lines, "Flags"), ...section(lines, "Command options")];
 
   for (const [index, line] of options.entries()) {
-    const match = OPTION_LINE.exec(line);
+    const match = OPTION_LINE.exec(line.replace(OPTION_ALIASES, ""));
 
     if (!match) {
       if (/^\s{0,8}(?:-\w,\s*)?--[\w-]+/.test(line)) {
@@ -200,21 +236,10 @@ export function parseFlags(lines: string[], warnings: string[]) {
       continue;
     }
 
-    const cli = match[1];
-
-    if (!cli) {
-      continue;
-    }
-
-    const name = identifier(cli);
+    const cli = match[1] ?? "";
+    const name = flagName(cli, flags, warnings);
 
     if (!name) {
-      warnings.push(`Could not name option: ${cli}`);
-      continue;
-    }
-
-    if (flags[name]) {
-      warnings.push(`Generated name '${name}' collides; skipped ${cli}`);
       continue;
     }
 
@@ -226,6 +251,28 @@ export function parseFlags(lines: string[], warnings: string[]) {
   }
 
   return flags;
+}
+
+function flagName(cli: string, flags: Record<string, FlagDefinition>, warnings: string[]) {
+  if (!cli || cli === "--help" || cli === "--version") {
+    return undefined;
+  }
+
+  const name = identifier(cli);
+
+  if (!name) {
+    warnings.push(`Could not name option: ${cli}`);
+
+    return undefined;
+  }
+
+  if (flags[name]) {
+    warnings.push(`Generated name '${name}' collides; skipped ${cli}`);
+
+    return undefined;
+  }
+
+  return name;
 }
 
 /** True when a later usage line repeats the command prefix, meaning several usage forms exist. */
@@ -251,8 +298,33 @@ function hasMultipleUsageForms(lines: string[], prefix: string): boolean {
   return false;
 }
 
+function operandLayout(
+  lines: string[],
+): Pick<CommandDescriptor, "positionalSeparator" | "revisionPaths"> {
+  const usage = usageLines(lines).find((line) => line.trim());
+  const separator = usage && /\[--\]\s+<(?:pathspec|path|file)>/i.exec(usage);
+
+  if (!usage || !separator) {
+    return { positionalSeparator: false };
+  }
+
+  const preceding = usageTokens(usage.slice(0, separator.index))
+    .map(parsePositionalToken)
+    .filter((operand) => operand !== undefined);
+
+  if (!preceding.length) {
+    return { positionalSeparator: true };
+  }
+
+  return {
+    positionalSeparator: false,
+    revisionPaths: preceding.every((operand) => /^revision(?:-range)?$/.test(operand.name)),
+  };
+}
+
 export function parseCliHelp(binary: string, path: readonly string[], help: string): ParsedHelp {
-  const lines = help.replaceAll("\r\n", "\n").split("\n");
+  const normalized = help.replaceAll("\r\n", "\n").replace(/.\x08/g, "");
+  const lines = normalized.split("\n");
   const warnings: string[] = [];
 
   if (!help.trim()) {
@@ -277,6 +349,8 @@ export function parseCliHelp(binary: string, path: readonly string[], help: stri
   }
 
   const descriptor: CommandDescriptor = {
+    key: [basename(binary), ...path].join("."),
+    ...operandLayout(lines),
     program: binary,
     path,
     positionals,

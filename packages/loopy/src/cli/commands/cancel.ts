@@ -1,11 +1,11 @@
 import { OwnershipError } from "../../runtime/index.js";
 import { type CliContext, requireTarget } from "../context.js";
-import { requireRun, withEngineStore } from "../engine-store.js";
 import { printJson } from "../output.js";
+import { requireRun, withRunStore } from "../store.js";
 
 export async function runCancel(context: CliContext): Promise<void> {
   const id = requireTarget(context, "Run ID");
-  await withEngineStore(context.home, async (store) => {
+  await withRunStore(context, async (store) => {
     await requireRun(store, id);
     const token = crypto.randomUUID();
 

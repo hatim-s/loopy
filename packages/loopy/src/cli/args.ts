@@ -11,35 +11,27 @@ const OPTIONS = {
   concurrency: { type: "string" },
   help: { type: "boolean", short: "h" },
   home: { type: "string" },
+  "lease-ms": { type: "string" },
   cwd: { type: "string" },
-  input: { type: "string" },
-  args: { type: "string" },
-  full: { type: "boolean" },
   out: { type: "string" },
   name: { type: "string" },
   port: { type: "string" },
-  "retry-uncertain": { type: "boolean" },
-  force: { type: "boolean" },
   replace: { type: "boolean" },
   stdin: { type: "boolean" },
 } as const;
 
-const GLOBAL_OPTIONS = ["home", "cwd", "help"] as const;
+const GLOBAL_OPTIONS = ["home", "cwd", "help", "lease-ms"] as const;
 
 const COMMAND_OPTIONS = new Map<string, readonly (keyof typeof OPTIONS)[]>(
   Object.entries({
-    run: ["input-json", "input-file", "detach", "input", "args", "full", "retry-uncertain"],
-    "legacy:run": ["input", "args", "full", "retry-uncertain"],
-    resume: ["full", "retry-uncertain"],
-    "legacy:resume": ["full", "retry-uncertain"],
+    run: ["input-json", "input-file", "detach"],
+    resume: [],
     schedule: ["cron", "tz", "off", "input-json"],
     logs: ["follow"],
     "daemon run": ["concurrency"],
     save: ["replace"],
-    "legacy:save": ["replace"],
     types: ["out", "name"],
     ui: ["port"],
-    recover: ["force"],
     "secrets set": ["stdin"],
   } satisfies Record<string, readonly (keyof typeof OPTIONS)[]>),
 );
@@ -50,7 +42,7 @@ export type ParsedCliArgs = ReturnType<typeof parseCliArgs>;
 
 type Flag = { name: string; inline: string | undefined; type: "string" | "boolean" | undefined };
 
-/** Splits `--name=value` and looks the name up; `type` is undefined for trigger inputs. */
+/** Splits `--name=value` and looks the name up; `type` is undefined for loopy inputs. */
 function describeFlag(arg: string, allowed?: ReadonlySet<string>): Flag {
   const equals = arg.indexOf("=");
   const name = arg.slice(2, equals < 0 ? undefined : equals);
@@ -102,24 +94,24 @@ function findCommands(args: string[]): string[] {
 
 function recordInput(inputs: Map<string, string>, arg: string, next: string | undefined): boolean {
   if (!arg.startsWith("--")) {
-    throw new Error(`Expected a trigger input flag, received '${arg}'.`);
+    throw new Error(`Expected a loopy input flag, received '${arg}'.`);
   }
 
   const flag = describeFlag(arg);
 
   if (!flag.name) {
-    throw new Error(`Expected a trigger input flag, received '${arg}'.`);
+    throw new Error(`Expected a loopy input flag, received '${arg}'.`);
   }
 
   if (inputs.has(flag.name)) {
-    throw new Error(`Trigger input --${flag.name} was provided more than once.`);
+    throw new Error(`Loopy input --${flag.name} was provided more than once.`);
   }
 
   const consumesNext = flag.inline === undefined;
 
   if (consumesNext && (next === undefined || next.startsWith("--"))) {
     throw new Error(
-      `Trigger input --${flag.name} requires a value. Use --${flag.name}=value for a value starting with --.`,
+      `Loopy input --${flag.name} requires a value. Use --${flag.name}=value for a value starting with --.`,
     );
   }
 
@@ -163,7 +155,7 @@ function recordArgument(
   const isInput = options.inputsOnly || (flag !== undefined && flag.type === undefined);
 
   if (
-    (isInput && !["run", "legacy:run"].includes(command)) ||
+    (isInput && command !== "run") ||
     (arg.startsWith("-") && !arg.startsWith("--") && arg !== "-h")
   ) {
     throw new Error(`Unknown option '${arg}' for loopy ${command}. Run loopy --help for usage.`);
@@ -174,9 +166,9 @@ function recordArgument(
     : recordOption(cli, { arg, flag, next: options.next });
 }
 
-/** One pass over argv: known options go to `cli`, unknown `--flags` become trigger inputs. */
+/** One pass over argv: known options go to `cli`, unknown `--flags` become loopy inputs. */
 function splitArguments(args: string[], command: string) {
-  const acceptsInputs = ["run", "legacy:run"].includes(command);
+  const acceptsInputs = command === "run";
   const allowed = new Set<string>([...GLOBAL_OPTIONS, ...(COMMAND_OPTIONS.get(command) ?? [])]);
   const cli: string[] = [];
   const inputs = new Map<string, string>();
@@ -226,20 +218,16 @@ export function parseCliArgs(args: string[]) {
 
   const sources =
     Number(inputs.size > 0) +
-    Number(parsed.values.args !== undefined) +
-    Number(parsed.values.input !== undefined) +
     Number(parsed.values["input-json"] !== undefined) +
     Number(parsed.values["input-file"] !== undefined);
 
   if (sources > 1) {
-    throw new Error(
-      "Choose one input source: named flags, --args, or --input. SDK runs also accept --input-json or --input-file.",
-    );
+    throw new Error("Choose one input source: named flags, --input-json, or --input-file.");
   }
 
   return {
     values: parsed.values,
     positionals: parsed.positionals,
-    triggerInput: inputs.size ? Object.fromEntries(inputs) : undefined,
+    namedInput: inputs.size ? Object.fromEntries(inputs) : undefined,
   };
 }

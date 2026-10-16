@@ -1,18 +1,9 @@
-import type {
-  ExecutionMode,
-  Json,
-  RunDetail,
-  RunRecord,
-  Workflow,
-  WorkflowSummary,
-} from "loopy/core";
-import { isRecord, isString } from "loopy/core";
-
-export type { RunDetail } from "loopy/core";
+import type { Loopy, RunDetail, RunRecord } from "loopy";
 
 const TOKEN_KEY = "loopy-studio-token";
 
-/** Moves the session token from the URL fragment into session storage. */
+export type LoopySummary = Pick<Loopy, "description" | "scope"> & { slug: string };
+
 export function captureToken(): void {
   const token = new URLSearchParams(window.location.hash.slice(1)).get("token");
 
@@ -26,37 +17,20 @@ export function captureToken(): void {
   history.replaceState(null, "", url);
 }
 
+// BOUNDARY: HTTP error JSON must contain a string error message before Studio displays it.
 async function failureMessage(response: Response): Promise<string> {
   const body: unknown = await response.json().catch(() => null);
 
-  if (isRecord(body) && isString(body.error)) {
+  if (body && typeof body === "object" && "error" in body && typeof body.error === "string") {
     return body.error;
   }
 
-  return `Request failed with status ${response.status}.`;
+  return `Request failed with status ${response.status}. Refresh Studio and try again.`;
 }
 
-type StartRunRequest = { slug: string; input: Json; mode: ExecutionMode };
-
-type ResumeRunRequest = { retryUncertain: boolean };
-
-async function api<T>(path: string, body?: StartRunRequest | ResumeRunRequest): Promise<T> {
-  const token = sessionStorage.getItem(TOKEN_KEY);
-
-  const headers: Record<string, string> = {};
-
-  if (body !== undefined) {
-    headers["Content-Type"] = "application/json";
-  }
-
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
+async function api<T>(path: string): Promise<T> {
   const response = await fetch(path, {
-    method: body === undefined ? "GET" : "POST",
-    body: body === undefined ? undefined : JSON.stringify(body),
-    headers,
+    headers: { Authorization: `Bearer ${sessionStorage.getItem(TOKEN_KEY) ?? ""}` },
   });
 
   if (!response.ok) {
@@ -67,13 +41,7 @@ async function api<T>(path: string, body?: StartRunRequest | ResumeRunRequest): 
 }
 
 export const endpoints = {
-  config: () => api<{ cwd: string }>("/api/config"),
-  workflows: () => api<WorkflowSummary[]>("/api/workflows"),
-  workflow: (slug: string) => api<Workflow>(`/api/workflows/${encodeURIComponent(slug)}`),
+  loopies: () => api<LoopySummary[]>("/api/loopies"),
   runs: (slug: string) => api<RunRecord[]>(`/api/runs?slug=${encodeURIComponent(slug)}`),
   run: (id: string) => api<RunDetail>(`/api/runs/${encodeURIComponent(id)}`),
-  start: (slug: string, input: Json, mode: ExecutionMode) =>
-    api<RunRecord>("/api/runs", { slug, input, mode }),
-  resume: (id: string, retryUncertain: boolean) =>
-    api<RunRecord>(`/api/runs/${encodeURIComponent(id)}/resume`, { retryUncertain }),
 };
