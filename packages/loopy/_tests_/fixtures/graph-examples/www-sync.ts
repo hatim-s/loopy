@@ -1,0 +1,47 @@
+import { code, log, loopy, uuid } from "../../../src/sdk/graph/index.js";
+
+export default loopy({
+  name: "www-uacode-sync",
+  input: {
+    repository: "string",
+    dryRun: "boolean",
+    "sourceRef?": "string",
+    "targetBranches?": "string",
+  },
+  run: ({ input }) => {
+    const options = code("validate", {
+      in: input,
+      out: { options: "json" },
+      module: "./www-sync/validate.ts",
+    });
+
+    const source = code("snapshot", {
+      in: { options },
+      out: { sha: "string", files: "json" },
+      module: "./www-sync/snapshot.ts",
+    });
+
+    const plan = code("plan", {
+      in: { options, source, id: uuid() },
+      out: { changes: "json", target: "json" },
+      module: "./www-sync/plan.ts",
+    });
+
+    const verified = code("verify", {
+      in: { options, plan },
+      out: { observed: "json" },
+      module: "./www-sync/verify.ts",
+    });
+
+    const results = code("publish", {
+      in: { options, plan, verified },
+      out: { results: "json" },
+      module: "./www-sync/publish.ts",
+    });
+
+    code("cleanup", { in: { plan }, out: {}, module: "./www-sync/cleanup.ts" });
+    log("Prompt and skill synchronization completed.", { dryRun: input.dryRun });
+
+    return { sourceSha: source.get("sha"), results };
+  },
+});

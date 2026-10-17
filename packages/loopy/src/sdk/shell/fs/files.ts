@@ -43,7 +43,7 @@ function listDirectory(input?: Parameters<typeof parsedLs>[0], options?: Command
 
 export const files = {
   /** Lists immediate basenames using find, including hidden entries. .raw runs ls. */
-  ls: Object.assign(listDirectory, { raw: rawLs }),
+  ls: Object.assign(listDirectory, { raw: rawLs, descriptor: parsedLs.descriptor }),
   cat: defineCommand({
     namespace: "fs",
     name: "cat",

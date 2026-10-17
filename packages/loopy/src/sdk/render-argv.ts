@@ -158,7 +158,7 @@ function buildFlags(descriptor: CommandDefinition, values: Readonly<Record<strin
   return { before, after };
 }
 
-function validateArity(descriptor: CommandDefinition, args: readonly string[], key: string) {
+function validateArity<T>(descriptor: CommandDefinition, args: readonly T[], key: string) {
   if (!descriptor.positionals) {
     return;
   }
@@ -183,23 +183,29 @@ export function renderArgv(
   key: string,
 ): string[] {
   const flags = buildFlags(descriptor, input.flags ?? {});
+  const operands = renderOperands(descriptor, input, key);
+
+  const separator =
+    descriptor.positionalSeparator && operands.length && !descriptor.revisionPaths ? ["--"] : [];
+
+  return [...(descriptor.path ?? []), ...flags.before, ...separator, ...operands, ...flags.after];
+}
+
+export function renderOperands<T>(
+  descriptor: CommandDefinition,
+  input: { args?: readonly T[]; revisions?: readonly T[]; paths?: readonly T[] },
+  key: string,
+): (T | string)[] {
   const operands = input.args ?? [];
   validateArity(descriptor, operands, key);
-  const args = [...(descriptor.path ?? []), ...flags.before];
 
   if (descriptor.revisionPaths) {
-    args.push(...operands, ...(input.revisions ?? []));
-
-    if (input.paths?.length) {
-      args.push("--", ...input.paths);
-    }
-
-    return [...args, ...flags.after];
+    return [
+      ...operands,
+      ...(input.revisions ?? []),
+      ...(input.paths?.length ? ["--", ...input.paths] : []),
+    ];
   }
 
-  if (descriptor.positionalSeparator && operands.length) {
-    args.push("--");
-  }
-
-  return [...args, ...operands, ...flags.after];
+  return [...operands];
 }

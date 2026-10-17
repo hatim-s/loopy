@@ -23,6 +23,10 @@
     "./contract": {
       "types": "./dist/types/contract/index.d.ts",
       "default": "./dist/contract/index.js"
+    },
+    "./graph": {
+      "types": "./dist/types/sdk/graph/index.d.ts",
+      "default": "./dist/sdk/graph/index.js"
     }
   },
   "bin": {
