@@ -8,14 +8,13 @@ import {
   type LoopyView,
   type PutScheduleBody,
   type RunSnapshotView,
+  type RunsQuery,
   type RunView,
-  type runsQuerySchema,
   type ScheduleView,
   type ServerEvent,
 } from "loopy/contract";
-import type { z } from "zod";
 
-export type RunsQuery = z.output<typeof runsQuerySchema>;
+export type { RunsQuery } from "loopy/contract";
 
 /** live: frames arrive. reconnecting: the transport is retrying. stale: it gave up. */
 export type StreamState = "connecting" | "live" | "reconnecting" | "stale";

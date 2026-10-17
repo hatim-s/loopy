@@ -1,6 +1,6 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { type LoopyView, runsQuerySchema } from "loopy/contract";
+import { type LoopyView, routes } from "loopy/contract";
 import { z } from "zod";
 import { Countdown } from "../components/countdown.tsx";
 import { RouteError } from "../components/error-banner.tsx";
@@ -17,7 +17,7 @@ const SCOPE = {
 } satisfies Record<LoopyView["scope"], string>;
 
 /** An unknown status in a pasted URL falls back to every run instead of an error page. */
-const searchSchema = z.object({ status: runsQuerySchema.shape.status.catch(undefined) });
+const searchSchema = z.object({ status: routes.runs.query.shape.status.catch(undefined) });
 
 export const Route = createFileRoute("/loopies/$slug")({
   validateSearch: searchSchema,

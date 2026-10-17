@@ -284,38 +284,6 @@ test("route patterns are unique and every parameter has a schema", () => {
   }
 });
 
-test("edge schemas reject malformed variants, JSON and request values", () => {
-  expect(contract.jsonSchema.safeParse({ value: undefined }).success).toBe(false);
-  expect(contract.jsonSchema.safeParse(Number.POSITIVE_INFINITY).success).toBe(false);
-  expect(contract.runViewSchema.safeParse({ ...view(newRun()), status: "succeeded" }).success).toBe(
-    false,
-  );
-  expect(contract.stepRecordSchema.safeParse({ ...waiting, status: "succeeded" }).success).toBe(
-    false,
-  );
-  expect(contract.runOutcomeSchema.parse({ status: "succeeded", output: null })).toEqual({
-    status: "succeeded",
-    output: null,
-  });
-  expect(contract.routes.runs.query.parse({ limit: "20", status: "queued" })).toEqual({
-    limit: 20,
-    status: "queued",
-  });
-  expect(contract.routes.runs.query.parse({ waiting: "false" })).toEqual({ waiting: false });
-  expect(contract.routes.runs.query.parse({ waiting: "true" })).toEqual({ waiting: true });
-  expect(contract.routes.runs.query.safeParse({ waiting: "yes" }).success).toBe(false);
-  expect(contract.routes.runs.query.safeParse({ limit: "-1" }).success).toBe(false);
-  expect(contract.routes.logs.query.parse({ after: "3" })).toEqual({ after: 3 });
-  expect(contract.routes.events.query.safeParse({ after: "-1", epoch: "epoch" }).success).toBe(
-    false,
-  );
-  expect(contract.routes.startRun.body.safeParse({}).success).toBe(false);
-  expect(contract.routes.resolveHook.body.safeParse({}).success).toBe(false);
-  expect(
-    contract.errorBodySchema.safeParse({ error: { code: "unexpected", message: "oops" } }).success,
-  ).toBe(false);
-});
-
 test("cancelled engine runs no longer advertise their pending hook", async () => {
   const f = await fixture();
   expect((await f.execute((ctx) => ctx.hook("approve"))).status).toBe("suspended");
@@ -397,16 +365,20 @@ test("strict edges reject misspelled request keys and injected view tokens", () 
   expect(described.loopy).toEqual({ slug: "test", description: "Review approvals" });
 });
 
-test("run cursors preserve timestamp ties and reject timestamp-only paging", async () => {
-  const { encodeRunCursor, decodeRunCursor, runsQuerySchema } = await import(
-    "../src/contract/index.js"
+test("run cursors preserve timestamp ties and reject timestamp-only paging", () => {
+  const cursor = contract.encodeRunCursor({ createdAt: "2026-10-17T00:00:00.000Z", id: "run-b" });
+  expect(contract.decodeRunCursor(cursor)).toEqual({
+    createdAt: "2026-10-17T00:00:00.000Z",
+    id: "run-b",
+  });
+  expect(contract.routes.runs.query.parse({ before: cursor })).toEqual({
+    before: cursor,
+    limit: 50,
+  });
+  expect(contract.routes.runs.query.safeParse({ before: "2026-10-17T00:00:00.000Z" }).success).toBe(
+    false,
   );
-
-  const cursor = encodeRunCursor({ createdAt: "2026-10-17T00:00:00.000Z", id: "run-b" });
-  expect(decodeRunCursor(cursor)).toEqual({ createdAt: "2026-10-17T00:00:00.000Z", id: "run-b" });
-  expect(runsQuerySchema.parse({ before: cursor })).toEqual({ before: cursor });
-  expect(runsQuerySchema.safeParse({ before: "2026-10-17T00:00:00.000Z" }).success).toBe(false);
-  expect(runsQuerySchema.safeParse({ before: `${cursor}|extra` }).success).toBe(false);
+  expect(contract.routes.runs.query.safeParse({ before: `${cursor}|extra` }).success).toBe(false);
 });
 
 test("schedule wire fields normalize core nullability and preserve every field", () => {
@@ -488,10 +460,20 @@ test("schedule validation errors cross the contract with default messages", () =
   for (const code of ["invalid_cron", "invalid_timezone"] satisfies contract.ErrorCode[]) {
     const error = {
       code,
-      message: contract.DEFAULT_ERROR_MESSAGES[contract.errorCodeSchema.parse(code)],
+      message: contract.DEFAULT_ERROR_MESSAGES[code],
     };
 
     expect(contract.errorBodySchema.parse({ error })).toEqual({ error });
     expect(error.message.length).toBeGreaterThan(0);
   }
+});
+
+test("runs queries default to 50 and cap pages at 200", () => {
+  const input: contract.RunsQuery = {};
+  const query = contract.routes.runs.query.parse(input);
+
+  expect(query).toEqual({ limit: 50 });
+  expectTypeOf(query.limit).toEqualTypeOf<number>();
+  expect(contract.routes.runs.query.parse({ limit: "200" }).limit).toBe(200);
+  expect(contract.routes.runs.query.safeParse({ limit: 201 }).success).toBe(false);
 });

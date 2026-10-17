@@ -11,14 +11,14 @@ type Route = {
   method: string;
   path: string;
   params: z.ZodType<Record<string, string>>;
-  query: z.ZodType<Record<string, string | number | boolean | undefined>>;
+  query: z.ZodObject;
   body: z.ZodType;
   response: z.ZodType;
 };
 
 type Call<R extends Route> = {
   params: z.output<R["params"]>;
-  query: z.output<R["query"]>;
+  query: z.input<R["query"]>;
   body: z.output<R["body"]>;
 };
 
@@ -30,7 +30,7 @@ const RETRY_MS = { first: 500, max: 10_000 } as const;
 function routeUrl(
   path: string,
   params: Record<string, string>,
-  query: Record<string, string | number | boolean | undefined>,
+  query: z.input<Route["query"]>,
 ): string {
   const filled = path
     .split("/")

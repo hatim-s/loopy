@@ -2,6 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { encodeRunCursor, routes } from "../src/contract/index.js";
 import type { RunRecord } from "../src/core/index.js";
 import {
   bundleLoopy,
@@ -138,9 +139,11 @@ test("service pages newest runs by createdAt with default and maximum page sizes
   const first = await service.startRun("service", { name: "first" }, root);
   advance();
   const second = await service.startRun("service", { name: "second" }, root);
-  expect(await service.listRuns({ limit: 1 })).toEqual([second]);
-  expect(await service.listRuns({ before: second.createdAt })).toEqual([first]);
-  expect(await service.listRuns({ status: "failed" })).toEqual([]);
+  expect(await service.listRuns(routes.runs.query.parse({ limit: 1 }))).toEqual([second]);
+  expect(
+    await service.listRuns(routes.runs.query.parse({ before: encodeRunCursor(second) })),
+  ).toEqual([first]);
+  expect(await service.listRuns(routes.runs.query.parse({ status: "failed" }))).toEqual([]);
 
   for (let i = 0; i < 205; i++) {
     await store.createRun({
@@ -155,7 +158,7 @@ test("service pages newest runs by createdAt with default and maximum page sizes
     });
   }
 
-  expect(await service.listRuns({ slug: "page" })).toHaveLength(50);
+  expect(await service.listRuns(routes.runs.query.parse({ slug: "page" }))).toHaveLength(50);
   expect(await service.listRuns({ slug: "page", limit: 200 })).toHaveLength(200);
 });
 
