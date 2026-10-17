@@ -29,12 +29,19 @@ export function useConnectionState(): ConnectionState {
   return useSyncExternalStore(subscribe, () => current);
 }
 
-/** Holds one event stream open for as long as the run page is mounted. */
-export function useRunStream(runId: string): void {
+/**
+ * Holds one event stream open while mounted. The run's snapshot supplies the starting
+ * cursor; the stream then carries events for every run. Null holds nothing open.
+ */
+export function useRunStream(runId: string | null): void {
   const client = useQueryClient();
   const backend = useBackend();
 
   useEffect(() => {
+    if (runId === null) {
+      return;
+    }
+
     const controller = new AbortController();
 
     followRun({ client, backend, runId, signal: controller.signal, onState: publish }).catch(() => {

@@ -2,6 +2,7 @@ import { createRootRouteWithContext, Link, Outlet } from "@tanstack/react-router
 import { BrandMark } from "../components/brand-mark.tsx";
 import { ConnectionStatus } from "../components/connection-status.tsx";
 import { RouteError } from "../components/error-banner.tsx";
+import { InboxLink } from "../components/inbox/inbox-link.tsx";
 import { LoopyRail } from "../components/loopy-rail.tsx";
 import type { RouterContext } from "../router-context.ts";
 
@@ -19,6 +20,7 @@ function Shell() {
           <BrandMark className="size-5 text-active" />
           loopy
         </Link>
+        <InboxLink />
         <ConnectionStatus />
       </header>
       <div className="grid min-h-0 md:grid-cols-[15rem_minmax(0,1fr)]">

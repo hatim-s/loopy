@@ -1,5 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 import type { LoopyBackend, RunsQuery } from "../backend/backend.ts";
+import { INBOX_QUERY, inboxGroups } from "./inbox.ts";
 import { keys } from "./keys.ts";
 
 export function loopiesQuery(backend: LoopyBackend) {
@@ -16,5 +17,13 @@ export function runQuery(backend: LoopyBackend, id: string) {
     queryKey: keys.run(id),
     queryFn: ({ signal }) => backend.run(id, signal),
     staleTime: Number.POSITIVE_INFINITY,
+  });
+}
+
+export function inboxQuery(backend: LoopyBackend) {
+  return queryOptions({
+    queryKey: keys.runs(INBOX_QUERY),
+    queryFn: () => backend.runs(INBOX_QUERY),
+    select: inboxGroups,
   });
 }
