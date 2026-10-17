@@ -712,3 +712,229 @@ test("array refs use the declared map result type for size and membership", () =
     );
   }
 });
+
+function numericBranchGraph(): Graph {
+  return contract.graphSchema.parse({
+    version: 1,
+    name: "derived-types",
+    input: {},
+    entry: "branch",
+    outputs: null,
+    warnings: [],
+    nodes: [
+      {
+        id: "branch",
+        kind: "branch",
+        scope: null,
+        label: null,
+        predicate: { op: "eq", left: true, right: true },
+        arms: { yes: "yes", no: "no" },
+      },
+      { id: "yes", kind: "join", scope: "branch", label: null, result: 1 },
+      { id: "no", kind: "join", scope: "branch", label: null, result: 2 },
+      { id: "result", kind: "join", scope: null, label: null, result: { ref: "branch", path: [] } },
+      {
+        id: "check",
+        kind: "branch",
+        scope: null,
+        label: null,
+        predicate: { op: "gt", left: { ref: "branch", path: [] }, right: 0 },
+        arms: { yes: "pass", no: "fail" },
+      },
+      { id: "pass", kind: "uuid", scope: "check", label: null },
+      { id: "fail", kind: "uuid", scope: "check", label: null },
+    ],
+    edges: [
+      { from: "branch", to: "yes", kind: "yes" },
+      { from: "branch", to: "no", kind: "no" },
+      { from: "yes", to: "result", kind: "join" },
+      { from: "no", to: "result", kind: "join" },
+      { from: "result", to: "check", kind: "next" },
+    ],
+  });
+}
+
+test("numeric branch results allow ordering and reject string equality", () => {
+  const graph = numericBranchGraph();
+  expect(validateGraph(graph)).toEqual([]);
+  graph.nodes = graph.nodes.map((node) =>
+    node.id === "check" && node.kind === "branch"
+      ? {
+          ...node,
+          predicate: {
+            op: "eq",
+            left: { ref: contract.refIdSchema.parse("branch"), path: [] },
+            right: "wrong",
+          },
+        }
+      : node,
+  );
+  expect(validateGraph(graph).map((error) => error.code)).toEqual(["predicate_type"]);
+});
+
+test("a branch with mismatched arm results rejects ordering", () => {
+  const graph = numericBranchGraph();
+  graph.nodes = graph.nodes.map((node) =>
+    node.id === "no" && node.kind === "join" ? { ...node, result: "wrong" } : node,
+  );
+  expect(validateGraph(graph).map((error) => error.code)).toEqual(["predicate_type"]);
+});
+
+test("switch results resolve through each arm's terminal join", () => {
+  const graph = numericBranchGraph();
+  graph.input = { choice: "string" };
+  graph.nodes = graph.nodes.map((node) =>
+    node.id === "branch"
+      ? contract.nodeSchema.parse({
+          id: node.id,
+          kind: "switch",
+          scope: null,
+          label: null,
+          on: { ref: "input", path: ["choice"] },
+          cases: { yes: "yes" },
+          default: "no",
+        })
+      : node,
+  );
+  graph.edges = graph.edges.map((edge) =>
+    edge.from === "branch"
+      ? { ...edge, kind: "case", label: edge.to === "yes" ? "yes" : "default" }
+      : edge,
+  );
+  expect(validateGraph(graph)).toEqual([]);
+  graph.nodes = graph.nodes.map((node) =>
+    node.id === "no" && node.kind === "join" ? { ...node, result: "wrong" } : node,
+  );
+  expect(validateGraph(graph).map((error) => error.code)).toEqual(["predicate_type"]);
+});
+
+test("format accepts a scalar join result", () => {
+  const graph = contract.graphSchema.parse({
+    version: 1,
+    name: "scalar-join",
+    input: {},
+    entry: "join",
+    outputs: null,
+    warnings: [],
+    nodes: [
+      { id: "join", kind: "join", scope: null, label: null, result: 42 },
+      {
+        id: "format",
+        kind: "format",
+        scope: null,
+        label: null,
+        template: "{n}",
+        values: { n: { ref: "join", path: [] } },
+      },
+    ],
+    edges: [{ from: "join", to: "format", kind: "next" }],
+  });
+
+  expect(validateGraph(graph)).toEqual([]);
+});
+
+test("format accepts map items from a declared string array", () => {
+  const graph: Graph = {
+    ...mapGraph,
+    input: { items: "string[]" },
+    nodes: mapGraph.nodes.map((node) =>
+      node.kind === "format"
+        ? { ...node, values: { value: { ref: contract.refIdSchema.parse("item"), path: [] } } }
+        : node,
+    ),
+  };
+
+  expect(contract.graphSchema.parse(graph)).toEqual(graph);
+  expect(validateGraph(graph)).toEqual([]);
+});
+
+test("finally preserves its body result type", () => {
+  const graph = numericBranchGraph();
+  graph.nodes = graph.nodes.map((node) =>
+    node.id === "branch"
+      ? contract.nodeSchema.parse({
+          id: node.id,
+          kind: "finally",
+          scope: null,
+          label: null,
+          body: "yes",
+          cleanup: "no",
+        })
+      : node,
+  );
+  graph.edges = graph.edges.map((edge) =>
+    edge.from === "branch" ? { ...edge, kind: edge.to === "yes" ? "next" : "cleanup" } : edge,
+  );
+  expect(validateGraph(graph)).toEqual([]);
+});
+
+test("command refs use their declared output fields", () => {
+  const graph = structuredClone(approveDemoGraph);
+  graph.nodes = graph.nodes.map((node) =>
+    node.kind === "command"
+      ? { ...node, out: { count: "number" } }
+      : node.id === "6:join" && node.kind === "join"
+        ? { ...node, result: { ref: contract.refIdSchema.parse("5:apply"), path: ["count"] } }
+        : node,
+  );
+  expect(validateGraph(graph)).toEqual([]);
+  graph.nodes = graph.nodes.map((node) =>
+    node.id === "6:join" && node.kind === "join"
+      ? { ...node, result: { ref: contract.refIdSchema.parse("5:apply"), path: ["missing"] } }
+      : node,
+  );
+  expect(validateGraph(graph).map((error) => error.code)).toEqual(["unresolved_ref"]);
+});
+
+for (const kind of ["yes", "no", "case", "each", "cleanup", "rescue"] as const) {
+  test(`${kind} control edges reject the wrong owner`, () => {
+    const graph = structuredClone(approveDemoGraph);
+    graph.edges.push(
+      kind === "case"
+        ? contract.edgeSchema.parse({ from: "0:draft", to: "1:log", kind, label: "arm" })
+        : contract.edgeSchema.parse({ from: "0:draft", to: "1:log", kind }),
+    );
+    expect(validateGraph(graph).map((error) => error.code)).toEqual(["invalid_scope"]);
+  });
+
+  test(`${kind} control edges participate in cycle detection`, () => {
+    const graph = structuredClone(approveDemoGraph);
+    graph.edges.push(
+      kind === "case"
+        ? contract.edgeSchema.parse({ from: "1:log", to: "0:draft", kind, label: "arm" })
+        : contract.edgeSchema.parse({ from: "1:log", to: "0:draft", kind }),
+    );
+    expect(validateGraph(graph).map((error) => error.code)).toEqual(["invalid_scope", "cycle"]);
+  });
+}
+
+test("control edges must match their owner's declared target", () => {
+  const graph = structuredClone(approveDemoGraph);
+  graph.edges = graph.edges.map((edge) =>
+    edge.kind === "yes" ? { ...edge, to: contract.nodeIdSchema.parse("7:fail") } : edge,
+  );
+  expect(validateGraph(graph).map((error) => error.code)).toEqual(["invalid_scope"]);
+});
+
+test("cyclic join field projections produce diagnostics without recursing forever", () => {
+  const graph = contract.graphSchema.parse({
+    version: 1,
+    name: "cyclic-ref",
+    input: {},
+    entry: "join",
+    outputs: null,
+    warnings: [],
+    nodes: [
+      {
+        id: "join",
+        kind: "join",
+        scope: null,
+        label: null,
+        result: { ref: "join", path: ["field"] },
+      },
+    ],
+    edges: [],
+  });
+
+  expect(validateGraph(graph).map((error) => error.code)).toEqual(["out_of_scope_ref"]);
+});

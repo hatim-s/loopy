@@ -14,9 +14,17 @@ export const FIELD_TYPES = ["string", "number", "boolean", "json"] as const;
 
 export type RecordSpec = Readonly<Record<string, (typeof FIELD_TYPES)[number]>>;
 
-export type InputSpec = RecordSpec;
+export const GRAPH_FIELD_TYPES = [
+  ...FIELD_TYPES,
+  "string[]",
+  "number[]",
+  "boolean[]",
+  "json[]",
+] as const;
 
-export type OutputSchema = RecordSpec | "json";
+export type InputSpec = Readonly<Record<string, (typeof GRAPH_FIELD_TYPES)[number]>>;
+
+export type OutputSchema = InputSpec | "json";
 
 export type Ref = { ref: RefId; path: string[] };
 
@@ -114,6 +122,7 @@ export type Node = Expand<
       | {
           kind: (typeof NODE_KINDS)[1];
           key: string;
+          out: OutputSchema;
           argv: Value[];
           flags: Record<string, Value>;
           options: { cwd: Value | null; env: Record<string, Value>; stdin: Value | null };

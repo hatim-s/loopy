@@ -2,17 +2,23 @@ import type {
   ComparisonOperand,
   Diagnostic,
   DiagnosticCode,
+  Edge,
   Graph,
+  InputSpec,
   Node,
   NodeId,
   Predicate,
-  RecordSpec,
   Ref,
   Value,
 } from "./graph.js";
 import { isBoolean, isNumber, isRecord, isString } from "./validation.js";
 
-type Context = { graph: Graph; nodes: Map<string, Node> };
+type Context = {
+  graph: Graph;
+  nodes: Map<string, Node>;
+  refTypes: Map<string, string | null>;
+  resolving: Set<string>;
+};
 
 function diagnostic(code: DiagnosticCode, node: NodeId | null, message: string): Diagnostic {
   return { code, node, message, source: null };
@@ -187,6 +193,42 @@ function scopeReaches(context: Context, from: NodeId, to: NodeId): boolean {
   return visit(from);
 }
 
+function controlTarget(node: Node, edge: Edge): boolean {
+  switch (edge.kind) {
+    case "yes":
+    case "no":
+      return node.kind === "branch" && node.arms[edge.kind] === edge.to;
+    case "case":
+      return node.kind === "switch"
+        ? (edge.label === "default" ? node.default : node.cases[edge.label]) === edge.to
+        : node.kind === "parallel" && node.branches[edge.label] === edge.to;
+    case "each":
+      return node.kind === "map" && node.body === edge.to;
+    case "cleanup":
+      return node.kind === "finally" && node.cleanup === edge.to;
+    case "rescue":
+      return node.kind === "rescue" && node.handler === edge.to;
+    default:
+      return true;
+  }
+}
+
+function controlEdges({ graph, nodes }: Context): Diagnostic[] {
+  return graph.edges.flatMap((edge) => {
+    const node = nodes.get(edge.from);
+
+    return node && !controlTarget(node, edge)
+      ? [
+          diagnostic(
+            "invalid_scope",
+            node.id,
+            "Control edges must match their owner and declared target.",
+          ),
+        ]
+      : [];
+  });
+}
+
 function scopeEdges(context: Context): Diagnostic[] {
   return context.graph.edges.flatMap((edge) => {
     const from = context.nodes.get(edge.from);
@@ -245,7 +287,7 @@ function isScopeJoin(context: Context, from: NodeId, to: NodeId, kind: string): 
   return (
     kind === "join" &&
     owner !== undefined &&
-    targets(owner).length > 0 &&
+    owner.kind === "map" &&
     source?.kind === "join" &&
     source.scope === to
   );
@@ -256,12 +298,7 @@ function successors(context: Context, id: NodeId): NodeId[] {
 
   return [
     ...context.graph.edges
-      .filter(
-        (edge) =>
-          edge.from === id &&
-          (edge.kind === "next" || edge.kind === "join") &&
-          !isScopeJoin(context, edge.from, edge.to, edge.kind),
-      )
+      .filter((edge) => edge.from === id && !isScopeJoin(context, edge.from, edge.to, edge.kind))
       .map((edge) => edge.to),
     ...(node ? targets(node) : []),
   ];
@@ -387,7 +424,7 @@ function reaches(context: Context, from: NodeId, to: NodeId): boolean {
   return visit(from);
 }
 
-function binding(context: Context, ref: Ref): Node | undefined {
+function binding(context: Context, ref: { ref: string; path: string[] }): Node | undefined {
   return context.graph.nodes.find(
     (node) =>
       (node.kind === "map" && (node.item === ref.ref || node.index === ref.ref)) ||
@@ -411,7 +448,7 @@ function visible(context: Context, producer: Node, consumer: Node): boolean {
   );
 }
 
-function validPath(context: Context, ref: Ref): boolean {
+function validPath(context: Context, ref: { ref: string; path: string[] }): boolean {
   const schema = declaredSchema(context, ref);
 
   if (schema && schema !== "schema" && schema !== "json" && ref.path.length > 0) {
@@ -506,21 +543,21 @@ function references(context: Context): Diagnostic[] {
   ];
 }
 
-function declaredSchema(context: Context, ref: Ref) {
+function declaredSchema(context: Context, ref: { ref: string; path: string[] }) {
   if (ref.ref === "input") {
     return context.graph.input;
   }
 
   const node = context.nodes.get(ref.ref);
 
-  if (node?.kind === "code") {
+  if (node?.kind === "code" || node?.kind === "command") {
     return node.out;
   }
 
   return node?.kind === "wait" ? node.payload : null;
 }
 
-function recordPathType(schema: RecordSpec, path: string[]): string | null {
+function recordPathType(schema: InputSpec, path: string[]): string | null {
   if (path.length === 0) {
     return "object";
   }
@@ -535,23 +572,84 @@ function recordPathType(schema: RecordSpec, path: string[]): string | null {
   return type ?? null;
 }
 
-function schemaType(context: Context, ref: Ref, seen = new Set<string>()): string | null {
-  if (seen.has(ref.ref)) {
+function bodyResultType(
+  context: Context,
+  owner: Node,
+  entry: NodeId,
+  path: string[],
+): string | null {
+  const result = context.graph.nodes.find(
+    (child) =>
+      child.scope === owner.id &&
+      child.kind === "join" &&
+      !context.graph.edges.some((edge) => edge.from === child.id && edge.kind === "next") &&
+      scopeReaches(context, entry, child.id),
+  );
+
+  return resolveRefType(context, { ref: result?.id ?? entry, path });
+}
+
+function derivedType(context: Context, node: Node, path: string[]): string | null {
+  switch (node.kind) {
+    case "branch":
+    case "switch": {
+      const arms = targets(node).map((entry) => bodyResultType(context, node, entry, path));
+
+      return arms.length > 0 && arms.every((type) => type === arms[0]) ? (arms[0] ?? null) : "json";
+    }
+
+    case "join":
+      return isRef(node.result)
+        ? resolveRefType(context, { ref: node.result.ref, path: [...node.result.path, ...path] })
+        : path.length === 0
+          ? operandType(context, node.result)
+          : null;
+    case "finally":
+      return bodyResultType(context, node, node.body, path);
+    case "map":
+      return path.length === 0
+        ? `${node.onError === "collect" ? "json" : (bodyResultType(context, node, node.body, []) ?? "json")}[]`
+        : null;
+    default:
+      return null;
+  }
+}
+
+function resolveRefType(context: Context, ref: { ref: string; path: string[] }): string | null {
+  const key = JSON.stringify([ref.ref, ref.path]);
+
+  if (context.refTypes.has(key)) {
+    return context.refTypes.get(key) ?? null;
+  }
+
+  // Track ids because cyclic field projections can grow the path on each traversal.
+  if (context.resolving.has(ref.ref)) {
     return null;
   }
 
-  seen.add(ref.ref);
+  context.resolving.add(ref.ref);
+  const type = declaredRefType(context, ref);
+  context.resolving.delete(ref.ref);
+  context.refTypes.set(key, type);
+
+  return type;
+}
+
+function declaredRefType(context: Context, ref: { ref: string; path: string[] }): string | null {
   const node = context.nodes.get(ref.ref);
   const owner = binding(context, ref);
 
-  if (owner?.kind === "map" && owner.index === ref.ref) {
-    return ref.path.length === 0 ? "number" : null;
+  if (owner?.kind === "map") {
+    const array = resolveRefType(context, owner.over);
+
+    const type =
+      owner.index === ref.ref ? "number" : array?.endsWith("[]") ? array.slice(0, -2) : "json";
+
+    return ref.path.length === 0 ? (type ?? "json") : null;
   }
 
   if (owner?.kind === "rescue") {
-    return ref.path.length === 1 && ["message", "code"].includes(ref.path[0] ?? "")
-      ? "string"
-      : null;
+    return "json";
   }
 
   const schema = declaredSchema(context, ref);
@@ -560,8 +658,12 @@ function schemaType(context: Context, ref: Ref, seen = new Set<string>()): strin
     return recordPathType(schema, ref.path);
   }
 
+  if (node && ["branch", "switch", "join", "finally", "map"].includes(node.kind)) {
+    return derivedType(context, node, ref.path);
+  }
+
   if (ref.path.length > 0) {
-    return null;
+    return schema === "json" ? "json" : null;
   }
 
   if (node?.kind === "format" || node?.kind === "now" || node?.kind === "uuid") {
@@ -572,26 +674,16 @@ function schemaType(context: Context, ref: Ref, seen = new Set<string>()): strin
     return "number";
   }
 
-  if (node?.kind === "map") {
-    const result = context.graph.nodes.find(
-      (child) => child.scope === node.id && child.kind === "join",
-    );
-
-    const type = result?.kind === "join" ? operandType(context, result.result, seen) : null;
-
-    return `${node.onError === "collect" ? "object" : (type ?? "json")}[]`;
+  if (node?.kind === "log" || node?.kind === "sleep") {
+    return "null";
   }
 
   return schema === "json" ? "json" : null;
 }
 
-function operandType(
-  context: Context,
-  value: ComparisonOperand,
-  seen = new Set<string>(),
-): string | null {
+function operandType(context: Context, value: ComparisonOperand): string | null {
   if (isRef(value)) {
-    return "size" in value ? "number" : schemaType(context, value, seen);
+    return "size" in value ? "number" : resolveRefType(context, value);
   }
 
   if (value === null) {
@@ -634,7 +726,7 @@ function comparisonErrors(
       return hasSize(operand);
     }
 
-    const type = schemaType(context, operand);
+    const type = resolveRefType(context, operand);
 
     return operand.size !== true || (type !== "string" && !type?.endsWith("[]"));
   });
@@ -704,7 +796,8 @@ function formats(context: Context): Diagnostic[] {
     node.kind === "format" &&
     Object.values(node.values).some(
       (value) =>
-        isRef(value) && !["string", "number", "boolean"].includes(schemaType(context, value) ?? ""),
+        isRef(value) &&
+        !["string", "number", "boolean"].includes(resolveRefType(context, value) ?? ""),
     )
       ? [diagnostic("predicate_type", node.id, "Format operands must have a declared scalar type.")]
       : [],
@@ -735,6 +828,7 @@ const rules = [
   endpoints,
   scopes,
   scopeEdges,
+  controlEdges,
   connectivity,
   references,
   predicates,
@@ -743,7 +837,22 @@ const rules = [
 ];
 
 export function validateGraph(graph: Graph): Diagnostic[] {
-  const context = { graph, nodes: new Map(graph.nodes.map((node) => [node.id, node])) };
+  const context: Context = {
+    graph,
+    nodes: new Map(graph.nodes.map((node) => [node.id, node])),
+    refTypes: new Map(),
+    resolving: new Set(),
+  };
+
+  for (const node of graph.nodes) {
+    for (const ref of values(node).flatMap(refs)) {
+      resolveRefType(context, ref);
+    }
+  }
+
+  if (graph.outputs !== null) {
+    resolveRefType(context, graph.outputs);
+  }
 
   return rules.flatMap((rule) => rule(context));
 }
