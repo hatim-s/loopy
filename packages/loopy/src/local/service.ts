@@ -20,6 +20,7 @@ import { createLoopyRun } from "../sdk/host.js";
 import { loadLoopy } from "./bundle.js";
 import { canonicalPath } from "./fs.js";
 import type { Registry } from "./registry.js";
+import type { SavedLoopy } from "./saved-loopy.js";
 import type { SqliteRunStore } from "./store.js";
 
 export class ServiceError extends Error {
@@ -183,7 +184,7 @@ export class LoopyService {
     return (await this.viewResolver([run.id]))(run);
   }
 
-  private async viewResolver(ids: string[]) {
+  private async viewResolver(ids: string[], registries = new Map<string, SavedLoopy[]>()) {
     const records = await Promise.all(
       ids.map(async (id) => {
         const [steps, hooks] = await Promise.all([
@@ -197,7 +198,6 @@ export class LoopyService {
 
     const snapshots = new Map(records);
     const now = this.now();
-    const registries = new Map<string, ReturnType<Registry["list"]>>();
 
     return (run: RunRecord) => {
       const snapshot = snapshots.get(run.id);
@@ -217,16 +217,23 @@ export class LoopyService {
   }
 
   // A run outlives its registry entry, so a deleted loopy leaves the description empty.
-  private loopySummary(
-    run: RunRecord,
-    registries = new Map<string, ReturnType<Registry["list"]>>(),
-  ) {
-    const entries = registries.get(run.workspace) ?? this.options.registry(run.workspace).list();
-    registries.set(run.workspace, entries);
+  private loopySummary(run: RunRecord, registries = new Map<string, SavedLoopy[]>()) {
+    const entries = this.registryEntries(this.options.registry(run.workspace), registries);
 
     const saved = entries.find((entry) => entry.slug === run.slug);
 
     return { slug: run.slug, description: saved?.description ?? null };
+  }
+
+  private registryEntries(registry: Registry, registries: Map<string, SavedLoopy[]>) {
+    let entries = registries.get(registry.project);
+
+    if (!entries) {
+      entries = registry.list();
+      registries.set(registry.project, entries);
+    }
+
+    return entries;
   }
 
   private async claim(id: string, token: string) {
@@ -244,6 +251,13 @@ export class LoopyService {
           "owned_elsewhere",
           `Run '${id}' is owned by PID ${run.owner?.pid} on ${run.owner?.host}. Stop its runner before retrying.`,
         );
+      }
+
+      // Completion can win the race after requireRun but before the store claims ownership.
+      const current = await this.options.store.getRun(id);
+
+      if (current && isTerminalRun(current.status)) {
+        throw new ServiceError("not_claimable");
       }
 
       throw error;
@@ -347,7 +361,13 @@ export class LoopyService {
       this.options.store.listSchedules(),
     ]);
 
-    const resolve = await this.viewResolver(records.map((run) => run.id));
+    const registries = new Map<string, SavedLoopy[]>();
+
+    const resolve = await this.viewResolver(
+      records.map((run) => run.id),
+      registries,
+    );
+
     const runs = records.map(resolve);
 
     const workspaces = new Set([
@@ -361,7 +381,12 @@ export class LoopyService {
     for (const workspace of workspaces) {
       const registry = this.options.registry(workspace);
 
-      for (const view of this.registryViews(registry, schedules, runs)) {
+      for (const view of this.registryViews(
+        registry,
+        this.registryEntries(registry, registries),
+        schedules,
+        runs,
+      )) {
         if (!views.has(view.slug)) {
           views.set(view.slug, view);
         }
@@ -371,8 +396,13 @@ export class LoopyService {
     return [...views.values()];
   }
 
-  private registryViews(registry: Registry, schedules: Schedule[], runs: RunView[]): LoopyView[] {
-    return registry.list().map((saved) =>
+  private registryViews(
+    registry: Registry,
+    entries: SavedLoopy[],
+    schedules: Schedule[],
+    runs: RunView[],
+  ): LoopyView[] {
+    return entries.map((saved) =>
       loopyView(
         saved,
         schedules.find((item) => item.slug === saved.slug && item.workspace === registry.project) ??

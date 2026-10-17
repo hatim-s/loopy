@@ -456,3 +456,63 @@ test("waiting filter runs before the page cap and preserves cursor order", async
     ),
   ).toEqual([first.id]);
 });
+
+test("service maps completion between requireRun and claim to not_claimable", async () => {
+  const { service, store, root } = await fixture();
+  const run = await service.startRun("service", { name: "Hatim" }, root);
+  const claim = store.claim.bind(store);
+  store.claim = async (id, token) => {
+    await claim(id, "finisher");
+    await store.finishRun(id, "finisher", { status: "succeeded", output: 1 });
+    await store.release(id, "finisher");
+
+    return claim(id, token);
+  };
+
+  await expect(service.cancelRun(run.id)).rejects.toMatchObject({
+    code: "not_claimable",
+    message: "The run cannot be claimed in its current state.",
+  });
+});
+
+test("listLoopies reads each workspace registry once per call", async () => {
+  const { service, store, root, home, clock } = await fixture();
+  await service.startRun("service", { name: "Hatim" }, root);
+  const other = join(root, "other");
+  mkdirSync(join(other, ".loopy", "loopies"), { recursive: true });
+  await store.createRun({
+    id: "other-workspace",
+    slug: "service",
+    workspace: other,
+    bundleHash: "a".repeat(64),
+    input: {},
+    status: "queued",
+    createdAt: new Date(clock.now()).toISOString(),
+    updatedAt: new Date(clock.now()).toISOString(),
+  });
+  const reads = new Map<string, number>();
+
+  class CountingRegistry extends Registry {
+    override list() {
+      reads.set(this.project, (reads.get(this.project) ?? 0) + 1);
+
+      return super.list();
+    }
+  }
+
+  const countingService = new LoopyService({
+    store,
+    clock,
+    registry: (workspace) => new CountingRegistry(home, workspace === "" ? root : workspace),
+  });
+
+  for (const count of [1, 2]) {
+    expect(await countingService.listLoopies()).toHaveLength(1);
+    expect(reads).toEqual(
+      new Map([
+        [root, count],
+        [other, count],
+      ]),
+    );
+  }
+});
