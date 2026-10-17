@@ -398,3 +398,59 @@ test("run cursors preserve timestamp ties and reject timestamp-only paging", asy
   expect(runsQuerySchema.safeParse({ before: "2026-10-17T00:00:00.000Z" }).success).toBe(false);
   expect(runsQuerySchema.safeParse({ before: `${cursor}|extra` }).success).toBe(false);
 });
+
+test("schedule wire fields normalize core nullability and preserve every field", () => {
+  expectTypeOf<contract.ScheduleView>().toEqualTypeOf<
+    Flatten<
+      Omit<core.Schedule, "lastFireKey" | "nextFireAt"> & {
+        lastFireKey: string | null;
+        nextFireAt: string | null;
+      }
+    >
+  >();
+  expect(contract.putScheduleBodySchema.parse({})).toEqual({});
+
+  for (const body of [
+    { cron: 1 },
+    { tz: null },
+    { input: undefined, enabled: "false" },
+    { typo: true },
+  ]) {
+    expect(contract.putScheduleBodySchema.safeParse(body).success).toBe(false);
+  }
+
+  expect(contract.scheduleEnabledBodySchema.safeParse({}).success).toBe(false);
+  expect(contract.scheduleEnabledBodySchema.parse({ enabled: false })).toEqual({ enabled: false });
+});
+
+test("loopy declared schedule is visible until a persisted schedule overrides it", () => {
+  const saved = {
+    slug: "test",
+    scope: "project",
+    mode: "sandbox",
+    input: {},
+    schedule: { cron: "0 * * * *" },
+  } satisfies Parameters<typeof contract.loopyView>[0];
+
+  expect(contract.loopyView(saved, null, []).schedule).toEqual({
+    cron: "0 * * * *",
+    tz: "UTC",
+    enabled: false,
+    nextFireAt: null,
+  });
+  expect(
+    contract.loopyView(
+      saved,
+      {
+        workspace: "/workspace",
+        slug: "test",
+        cron: "*/5 * * * *",
+        tz: "Asia/Kolkata",
+        input: {},
+        enabled: true,
+        nextFireAt: now,
+      },
+      [],
+    ).schedule,
+  ).toEqual({ cron: "*/5 * * * *", tz: "Asia/Kolkata", enabled: true, nextFireAt: now });
+});
