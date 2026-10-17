@@ -1,88 +1,12 @@
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { parseSync, Visitor } from "oxc-parser";
 import type { RunRecord } from "../core/index.js";
 import { isLoopy, type Loopy } from "../sdk/host.js";
 import { defaultHome } from "./home.js";
 import { Registry } from "./registry.js";
-
-// A saved bundle runs from <home>/bundles, so each module's import.meta must keep
-// naming the file it was written in. Loopies locate sibling scripts with it. Only
-// the parsed `import.meta.<key>` expressions are spliced, so strings, comments,
-// loaders and type elision stay exactly as Bun would otherwise see them.
-// Destructuring and computed access such as import.meta["url"] are not rewritten, and
-// Bun does not tell plugins about import attributes, so a module imported with
-// { type: "text" } is still rewritten when it mentions import.meta.
-const DIALECTS = new Map<Bun.Loader, "js" | "jsx" | "ts" | "tsx">([
-  ["js", "jsx"],
-  ["jsx", "jsx"],
-  ["ts", "ts"],
-  ["tsx", "tsx"],
-]);
-
-function inlineImportMeta(path: string, lang: "js" | "jsx" | "ts" | "tsx", source: string) {
-  const values = new Map([
-    ["url", pathToFileURL(path).href],
-    ["path", path],
-    ["filename", path],
-    ["file", basename(path)],
-    ["dir", dirname(path)],
-    ["dirname", dirname(path)],
-  ]);
-
-  const { program, errors } = parseSync(path, source, {
-    lang,
-    sourceType: "module",
-    preserveParens: false,
-  });
-
-  if (errors.length > 0) {
-    return source;
-  }
-
-  const edits: { start: number; end: number; text: string }[] = [];
-
-  new Visitor({
-    MemberExpression(node) {
-      if (
-        node.object.type !== "MetaProperty" ||
-        node.object.meta.name !== "import" ||
-        node.computed ||
-        node.property.type !== "Identifier"
-      ) {
-        return;
-      }
-
-      const value = values.get(node.property.name);
-
-      if (value !== undefined) {
-        edits.push({ start: node.start, end: node.end, text: JSON.stringify(value) });
-      }
-    },
-  }).visit(program);
-
-  return edits
-    .sort((a, b) => b.start - a.start)
-    .reduce((text, edit) => text.slice(0, edit.start) + edit.text + text.slice(edit.end), source);
-}
-
-const sourcePaths: Bun.BunPlugin = {
-  name: "loopy-source-paths",
-  setup(build) {
-    build.onLoad({ filter: /\.[cm]?[jt]sx?$/ }, async ({ path, loader }) => {
-      const lang = DIALECTS.get(loader);
-      const source = await Bun.file(path).text();
-
-      if (lang === undefined || !source.includes("import")) {
-        return undefined;
-      }
-
-      return { contents: inlineImportMeta(path, lang, source), loader };
-    });
-  },
-};
+import { sourcePaths } from "./source-paths.js";
 
 export async function bundleLoopy(file: string, home = defaultHome()) {
   const result = await Bun.build({
