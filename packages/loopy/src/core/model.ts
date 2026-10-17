@@ -101,6 +101,15 @@ export type Schedule = {
   nextFireAt: string;
 };
 
+export type RunSnapshot = {
+  run: RunRecord;
+  steps: StepRecord[];
+  logs: LogRecord[];
+  hooks: HookRecord[];
+  cursor: number;
+  epoch: string;
+};
+
 export type RunDetail = { run: RunRecord; steps: StepRecord[]; logs: LogRecord[] };
 
 const TERMINAL_RUN_STATUSES = [
@@ -119,3 +128,48 @@ export type LoopySummary = {
   scope: "project" | "global";
   schedule?: { cron: string; tz?: string };
 };
+
+export const RUN_EVENT_KINDS = [
+  "created",
+  "claimed",
+  "heartbeat",
+  "suspended",
+  "woken",
+  "released",
+  "finished",
+] as const;
+
+export const STEP_STATUSES = [
+  "running",
+  "succeeded",
+  "failed",
+  "retrying",
+  "sleeping",
+  "waiting",
+] as const;
+
+export const HOOK_EVENT_KINDS = ["created", "resolved", "expired"] as const;
+
+export const SCHEDULE_EVENT_KINDS = ["saved", "fired"] as const;
+
+type Event<E extends string, K extends string, R> = {
+  sequence: number;
+  at: string;
+  txn: string;
+  entity: E;
+  kind: K;
+  runId: string | null;
+  record: R;
+};
+
+export type RuntimeEvent =
+  | Event<"run", (typeof RUN_EVENT_KINDS)[number], RunRecord>
+  | Event<"step", StepRecord["status"], StepRecord>
+  | Event<"log", "written", LogRecord>
+  | Event<"hook", (typeof HOOK_EVENT_KINDS)[number], HookRecord>
+  | Event<"schedule", (typeof SCHEDULE_EVENT_KINDS)[number], Schedule>
+  | Event<"schedule", "deleted", { workspace: string; slug: string }>;
+
+export type RuntimeEventChange<T = RuntimeEvent> = T extends RuntimeEvent
+  ? Omit<T, "sequence" | "at" | "txn">
+  : never;

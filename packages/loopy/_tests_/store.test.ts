@@ -44,11 +44,21 @@ test("schema version mismatch recreates tables", async () => {
       const inspection = new Database(file);
 
       try {
-        expect(inspection.query("PRAGMA user_version").get()).toEqual({ user_version: 9 });
+        expect(inspection.query("PRAGMA user_version").get()).toEqual({ user_version: 10 });
         expect(
           inspection.query("SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name").all(),
         ).toEqual(
-          ["hooks", "logs", "rate_limits", "runs", "schedules", "steps"].map((name) => ({ name })),
+          [
+            "events",
+            "hooks",
+            "logs",
+            "meta",
+            "rate_limits",
+            "runs",
+            "schedules",
+            "sqlite_sequence",
+            "steps",
+          ].map((name) => ({ name })),
         );
       } finally {
         inspection.close();
@@ -321,6 +331,115 @@ test("rate windows and hook payloads survive reopening the SQLite file", async (
     ]);
   } finally {
     reopened.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("event history and epoch persist across connections and reset with the schema", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "loopy-events-epoch-"));
+  const file = join(directory, "runs.sqlite");
+
+  try {
+    const first = new SqliteRunStore(file, clock);
+    await first.createRun(newRun());
+    const epoch = await first.epoch();
+    const events = await first.events(0, 10);
+    expect(epoch).toMatch(/^[0-9a-f-]{36}$/);
+    const second = new SqliteRunStore(file, clock);
+
+    try {
+      expect(await second.epoch()).toBe(epoch);
+      expect(await second.events(0, 10)).toEqual(events);
+      let readable: Promise<ReturnType<typeof newRun> | undefined> | undefined;
+      let visibleEvents: ReturnType<typeof second.events> | undefined;
+      first.subscribe(() => {
+        readable = second.getRun("another");
+        visibleEvents = second.events(1, 10);
+      });
+      await first.createRun({ ...newRun(), id: "another" });
+      expect(await readable).toMatchObject({ id: "another" });
+      expect(await visibleEvents).toMatchObject([{ sequence: 2, entity: "run", kind: "created" }]);
+    } finally {
+      first.close();
+      second.close();
+    }
+
+    const database = new Database(file);
+    database.exec("PRAGMA user_version=9");
+    database.close();
+    const reset = new SqliteRunStore(file, clock);
+
+    try {
+      expect(await reset.epoch()).not.toBe(epoch);
+      expect(await reset.events(0, 10)).toEqual([]);
+      expect(await reset.getRun("run")).toBeUndefined();
+      await reset.createRun(newRun());
+      expect((await reset.events(0, 10))[0]?.sequence).toBe(1);
+    } finally {
+      reset.close();
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("an event append failure rolls back state and never notifies subscribers", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "loopy-events-rollback-"));
+  const file = join(directory, "runs.sqlite");
+  const store = new SqliteRunStore(file, clock);
+  const database = new Database(file);
+
+  try {
+    let deliveries = 0;
+    store.subscribe(() => {
+      deliveries++;
+    });
+    database.exec(`CREATE TRIGGER reject_event BEFORE INSERT ON events
+      BEGIN SELECT RAISE(ABORT, 'outbox unavailable'); END`);
+    await expect(store.createRun(newRun())).rejects.toThrow("outbox unavailable");
+    expect(await store.getRun("run")).toBeUndefined();
+    expect(await store.events(0, 10)).toEqual([]);
+    expect(deliveries).toBe(0);
+    database.exec("DROP TRIGGER reject_event");
+    await store.createRun(newRun());
+    expect(deliveries).toBe(1);
+    expect((await store.events(0, 10))[0]?.sequence).toBe(1);
+  } finally {
+    database.close();
+    store.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("SQLite event reads reject malformed entity records at the JSON boundary", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "loopy-events-validation-"));
+  const file = join(directory, "runs.sqlite");
+  const store = new SqliteRunStore(file, clock);
+  const database = new Database(file);
+
+  try {
+    await store.createRun(newRun());
+    database
+      .query("UPDATE events SET record=?")
+      .run(JSON.stringify({ ...newRun(), status: "unknown" }));
+    await expect(store.events(0, 10)).rejects.toThrow("Event run status must be one of");
+    database.query("UPDATE events SET record=?").run(
+      JSON.stringify({
+        ...newRun(),
+        input: null,
+        owner: { token: "owner", pid: "wrong", host: "host", heartbeatAt: newRun().createdAt },
+      }),
+    );
+    await expect(store.events(0, 10)).rejects.toThrow(
+      "Event record.pid must be a nonnegative integer.",
+    );
+    database.query("UPDATE events SET record=?").run("[]");
+    await expect(store.events(0, 10)).rejects.toThrow("Event record must be an object.");
+    database.query("UPDATE events SET record=?").run("{");
+    await expect(store.events(0, 10)).rejects.toThrow(SyntaxError);
+  } finally {
+    database.close();
+    store.close();
     rmSync(directory, { recursive: true, force: true });
   }
 });

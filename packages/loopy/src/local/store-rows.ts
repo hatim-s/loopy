@@ -3,13 +3,49 @@ import type {
   Json,
   LogRecord,
   RunRecord,
+  RuntimeEvent,
   Schedule,
+  StepBase,
   StepRecord,
 } from "../core/index.js";
-import type { HookRow, LogRow, RunRow, ScheduleRow, StepColumns, StepRow } from "./store-schema.js";
+import {
+  HOOK_EVENT_KINDS,
+  isBoolean,
+  isNumber,
+  RUN_EVENT_KINDS,
+  requireOneOf,
+  requireRecord,
+  requireString,
+  SCHEDULE_EVENT_KINDS,
+  STEP_STATUSES,
+} from "../core/index.js";
+import { assertJson } from "../runtime/index.js";
+import type {
+  EventRow,
+  HookRow,
+  LogRow,
+  RunRow,
+  ScheduleRow,
+  StepColumns,
+  StepRow,
+} from "./store-schema.js";
 
 export const SQL = {
+  createEpoch: "INSERT INTO meta(key,value) VALUES ('epoch',?)",
+  epoch: "SELECT value FROM meta WHERE key='epoch'",
+  appendEvent:
+    "INSERT INTO events(at,txn,entity,kind,run_id,record) VALUES (?,?,?,?,?,?) RETURNING *",
+  events: "SELECT * FROM events WHERE sequence>? ORDER BY sequence LIMIT ?",
+  cursor: "SELECT COALESCE(MAX(sequence),0) AS cursor FROM events",
+  pruneEvents: `DELETE FROM events WHERE at<? OR sequence IN (
+    SELECT sequence FROM events ORDER BY sequence DESC LIMIT -1 OFFSET 100000
+  )`,
+  hookStep: "SELECT * FROM hooks WHERE run_id=? AND seq=?",
+  log: "SELECT * FROM logs WHERE run_id=? AND seq=?",
+  runningSteps: "SELECT * FROM steps WHERE run_id=? AND status='running' ORDER BY seq",
   hooks: "SELECT * FROM hooks WHERE run_id=? ORDER BY seq",
+  pendingHooks: (count: number) =>
+    `SELECT * FROM hooks WHERE run_id=? AND seq IN (${Array.from({ length: count }, () => "?").join(",")}) ORDER BY seq`,
   hook: "SELECT * FROM hooks WHERE token=?",
   step: "SELECT * FROM steps WHERE run_id=? AND seq=?",
   createHook: "INSERT INTO hooks(token,run_id,seq,name,created_at) VALUES (?,?,?,?,?)",
@@ -282,4 +318,268 @@ export function rowToHook(row: HookRow): HookRecord {
   }
 
   return hook;
+}
+
+type ParsedRecord = ReturnType<typeof requireRecord>;
+
+function text(record: ParsedRecord, key: string): string {
+  return requireString(record[key], `Event record.${key}`);
+}
+
+function optionalText(record: ParsedRecord, key: string): string | undefined {
+  return record[key] === undefined ? undefined : text(record, key);
+}
+
+function number(record: ParsedRecord, key: string): number {
+  const value = record[key];
+
+  if (!isNumber(value) || !Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`Event record.${key} must be a nonnegative integer.`);
+  }
+
+  return value;
+}
+
+function json(record: ParsedRecord, key: string): Json {
+  const value = record[key];
+  assertJson(value, `Event record.${key}`);
+
+  return value;
+}
+
+function eventRun(record: ParsedRecord): RunRecord {
+  const run: RunRecord = {
+    id: text(record, "id"),
+    slug: text(record, "slug"),
+    bundleHash: text(record, "bundleHash"),
+    workspace: text(record, "workspace"),
+    input: json(record, "input"),
+    status: requireOneOf(
+      record.status,
+      ["queued", "running", "suspended", "succeeded", "failed", "cancelled"],
+      "Event run status",
+    ),
+    createdAt: text(record, "createdAt"),
+    updatedAt: text(record, "updatedAt"),
+  };
+
+  if (record.output !== undefined) {
+    run.output = json(record, "output");
+  }
+
+  if (record.error !== undefined) {
+    run.error = text(record, "error");
+  }
+
+  if (record.wakeAt !== undefined) {
+    run.wakeAt = text(record, "wakeAt");
+  }
+
+  if (record.owner !== undefined) {
+    run.owner = eventOwner(requireRecord(record.owner, "Event run owner"));
+  }
+
+  return run;
+}
+
+function eventOwner(owner: ParsedRecord): NonNullable<RunRecord["owner"]> {
+  return {
+    token: text(owner, "token"),
+    pid: number(owner, "pid"),
+    host: text(owner, "host"),
+    heartbeatAt: text(owner, "heartbeatAt"),
+  };
+}
+
+function eventStepBase(record: ParsedRecord): StepBase {
+  return {
+    runId: text(record, "runId"),
+    seq: number(record, "seq"),
+    key: text(record, "key"),
+    kind: requireOneOf(
+      record.kind,
+      ["command", "function", "sleep", "hook", "clock", "random"],
+      "Event step kind",
+    ),
+    input: json(record, "input"),
+    attempt: number(record, "attempt"),
+    maxAttempts: number(record, "maxAttempts"),
+    startedAt: text(record, "startedAt"),
+  };
+}
+
+function eventStep(record: ParsedRecord): StepRecord {
+  const base = eventStepBase(record);
+  const status = requireOneOf(record.status, STEP_STATUSES, "Event step status");
+
+  switch (status) {
+    case "running":
+      return { ...base, status };
+    case "succeeded":
+      return {
+        ...base,
+        status,
+        output: json(record, "output"),
+        endedAt: text(record, "endedAt"),
+        finishOrder: number(record, "finishOrder"),
+      };
+    case "failed":
+      return {
+        ...base,
+        status,
+        error: text(record, "error"),
+        endedAt: text(record, "endedAt"),
+        finishOrder: number(record, "finishOrder"),
+      };
+    case "retrying":
+      return {
+        ...base,
+        status,
+        error: text(record, "error"),
+        endedAt: text(record, "endedAt"),
+        nextRetryAt: text(record, "nextRetryAt"),
+      };
+    case "sleeping":
+      return { ...base, status, wakeAt: text(record, "wakeAt") };
+    case "waiting":
+      return { ...base, status, wakeAt: optionalText(record, "wakeAt") };
+  }
+}
+
+function eventLog(record: ParsedRecord): LogRecord {
+  const position = requireRecord(record.position, "Event log position");
+  const kind = requireOneOf(position.kind, ["workflow", "step"], "Event log position kind");
+
+  const log: LogRecord = {
+    runId: text(record, "runId"),
+    seq: number(record, "seq"),
+    position:
+      kind === "workflow"
+        ? {
+            kind,
+            afterStep: number(position, "afterStep"),
+            afterFinish: number(position, "afterFinish"),
+            index: number(position, "index"),
+          }
+        : {
+            kind,
+            seq: number(position, "seq"),
+            attempt: number(position, "attempt"),
+            index: number(position, "index"),
+          },
+    level: requireOneOf(record.level, ["info", "warn", "error"], "Event log level"),
+    message: text(record, "message"),
+    at: text(record, "at"),
+  };
+
+  if (record.data !== undefined) {
+    log.data = json(record, "data");
+  }
+
+  return log;
+}
+
+function eventHook(record: ParsedRecord): HookRecord {
+  const hook: HookRecord = {
+    token: text(record, "token"),
+    runId: text(record, "runId"),
+    seq: number(record, "seq"),
+    name: text(record, "name"),
+    createdAt: text(record, "createdAt"),
+  };
+
+  if (record.payload !== undefined) {
+    hook.payload = json(record, "payload");
+  }
+
+  if (record.resolvedAt !== undefined) {
+    hook.resolvedAt = text(record, "resolvedAt");
+  }
+
+  if (record.expiredAt !== undefined) {
+    hook.expiredAt = text(record, "expiredAt");
+  }
+
+  return hook;
+}
+
+function eventSchedule(record: ParsedRecord): Schedule {
+  if (!isBoolean(record.enabled)) {
+    throw new Error("Event schedule.enabled must be a boolean.");
+  }
+
+  const schedule: Schedule = {
+    workspace: text(record, "workspace"),
+    slug: text(record, "slug"),
+    cron: text(record, "cron"),
+    tz: text(record, "tz"),
+    input: json(record, "input"),
+    enabled: record.enabled,
+    nextFireAt: text(record, "nextFireAt"),
+  };
+
+  if (record.lastFireKey !== undefined) {
+    schedule.lastFireKey = text(record, "lastFireKey");
+  }
+
+  return schedule;
+}
+
+export function rowToEvent(row: EventRow): RuntimeEvent {
+  // BOUNDARY: Persisted event JSON must validate before callers receive typed records.
+  const record = requireRecord(JSON.parse(row.record), "Event record");
+  const base = { sequence: row.sequence, at: row.at, txn: row.txn, runId: row.run_id };
+
+  const entity = requireOneOf(
+    row.entity,
+    ["run", "step", "log", "hook", "schedule"],
+    "Event entity",
+  );
+
+  switch (entity) {
+    case "run":
+      return {
+        ...base,
+        entity,
+        kind: requireOneOf(row.kind, RUN_EVENT_KINDS, "Event run kind"),
+        record: eventRun(record),
+      };
+    case "step":
+      return {
+        ...base,
+        entity,
+        kind: requireOneOf(row.kind, STEP_STATUSES, "Event step kind"),
+        record: eventStep(record),
+      };
+    case "log":
+      return {
+        ...base,
+        entity,
+        kind: requireOneOf(row.kind, ["written"], "Event log kind"),
+        record: eventLog(record),
+      };
+    case "hook":
+      return {
+        ...base,
+        entity,
+        kind: requireOneOf(row.kind, HOOK_EVENT_KINDS, "Event hook kind"),
+        record: eventHook(record),
+      };
+    case "schedule": {
+      const kind = requireOneOf(
+        row.kind,
+        [...SCHEDULE_EVENT_KINDS, "deleted"],
+        "Event schedule kind",
+      );
+
+      return kind === "deleted"
+        ? {
+            ...base,
+            entity,
+            kind,
+            record: { workspace: text(record, "workspace"), slug: text(record, "slug") },
+          }
+        : { ...base, entity, kind, record: eventSchedule(record) };
+    }
+  }
 }
