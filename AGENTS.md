@@ -10,7 +10,8 @@ packages/loopy/src/
   contract/  browser-safe wire schemas, route table and view derivations.
   runtime/   replay engine, journal, retries, store contract and daemon scheduling. Pure.
   sdk/       loopy(), ambient steps, defineCommand and typed shell wrappers.
-  local/     SQLite store, registry, bundles, processes, secrets and HTTP server.
+  compiler/  restricted author evaluation, code and parser bundles, canonical revisions.
+  local/     SQLite store, graph registry, processes, secrets and HTTP server.
   cli/       commands and argument parsing. One file per command in commands/.
 apps/dashboard/src/
   backend/     contract-backed HTTP and event stream adapter
@@ -24,7 +25,7 @@ examples/                 canonical loopies and automation helpers
 
 The public package entries are `loopy` for the SDK, `loopy/runtime`, `loopy/local` and `loopy/contract`, plus the compile-only `loopy/graph`. The dashboard imports only `"loopy/contract"` and uses the daemon HTTP API and event stream for data.
 
-Layers import downward. Contract imports core and zod; local and CLI may import contract through its index. Runtime imports core; SDK imports core and runtime; local imports core, runtime and `sdk/host.ts`; CLI imports core, runtime, local and `sdk/host.ts`. Cross-layer imports go through the target layer's `index.ts`, except the explicit SDK host entry. Same-layer imports use file paths. Core and runtime have no Node or Bun dependencies. SDK permits `node:async_hooks` only in `current.ts` to share activation scope with bundled definitions.
+Layers import downward. Contract imports core and zod; local and CLI may import contract through its index. Runtime imports core; SDK imports core and runtime; local imports core, runtime and `sdk/host.ts`; CLI imports core, runtime, local and `sdk/host.ts`. Compiler imports core, contract and local through their indexes. Its trusted parser entry uses `sdk/graph-host.ts`. CLI may import compiler through its index. Cross-layer imports go through the target layer's `index.ts`, except the explicit SDK host entry. Same-layer imports use file paths. Core and runtime have no Node or Bun dependencies. SDK permits `node:async_hooks` only in `current.ts` to share activation scope with bundled definitions.
 
 ## Ownership
 
@@ -40,7 +41,9 @@ Layers import downward. Contract imports core and zod; local and CLI may import 
 - `sdk/shell/` owns command descriptors and parsers.
 - `local/store.ts` owns SQLite transactions, fencing and queries; `store-schema.ts` defines the schema and row types; `store-rows.ts` defines queries and maps rows.
 - `local/registry.ts` resolves project and global loopies, source ownership and bundle paths.
-- `local/bundle.ts` bundles and loads SDK definitions. `local/daemon.ts` prepares bundles and executors for the runtime daemon.
+- `compiler/restrict.ts` walks author modules; `ast.ts` enforces builder syntax; `module.ts` checks code-module exports. `evaluate.ts` imports the restricted source snapshot once in an OS sandbox. `bundle.ts` builds code and parser modules; `runner.ts` defines JSON stdin/stdout execution; `revision.ts` hashes the canonical graph and ordered hashes; `compile.ts` composes the pipeline.
+- Command parsers carry prepared `parse.input` values alongside the hash. PR 4a must resolve these values and send `{ result, input }` to the parser bundle. Code bundles receive the resolved input directly, expose cwd as `context.workspace`, and write `context.log` and console output as JSON lines on stderr.
+- `local/save-compiled.ts` verifies hashes and stores private artifacts before publishing registry metadata. The daemon never imports author definitions. Graph execution is pending PR 4a.
 - `local/process.ts` and `spawn.ts` launch and capture processes. `executor.ts` injects declared secrets and redacts results through `secret-redactor.ts`.
 - `local/service.ts` owns shared CLI and HTTP mutations and contract views. `local/daemon-file.ts` owns private daemon discovery.
 - `local/server/routes.ts` dispatches the contract route table; `events.ts` owns SSE replay and live delivery. `start-server.ts` owns authentication and the loopback server inside the daemon.
@@ -53,7 +56,7 @@ Validate untyped data once at its boundary. Reuse `requireRecord`, `requireOneOf
 
 Use braces for every branch and loop. Check failure cases first and return or throw. Keep functions around 40 lines or less and split responsibilities when complexity grows. Errors end with a period and explain what to do next. Comments explain why; avoid em dashes. Casts require a nearby `SAFETY` comment except `as const`. Do not use `any`.
 
-Each CLI command exports `run<Name>(context: CliContext)`, reads positionals through the context helpers and prints through `printJson` or `report`. Do not parse argv inside commands. A command opens its run store through `withRunStore` and closes it on completion.
+Each CLI command exports `run<Name>(context: CliContext)`, reads positionals through the context helpers and prints through `printJson` or `report`. Do not parse argv inside commands. Data commands use the daemon HTTP client; only daemon control opens the run store. Save compiles locally and sends graph artifacts to the daemon.
 
 The replay engine runs user code from the top. Keep code between steps deterministic, preserve sequence and completion order, never nest steps, and fence every durable write with the owner token. Successful steps replay from stored JSON. Recovery may repeat an unfinished effect; it does not promise exactly-once external execution.
 
