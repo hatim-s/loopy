@@ -1,6 +1,7 @@
 import { createRootRouteWithContext, Link, Outlet } from "@tanstack/react-router";
 import { BrandMark } from "../components/brand-mark.tsx";
 import { ConnectionStatus } from "../components/connection-status.tsx";
+import { DaemonIndicator } from "../components/daemon-indicator.tsx";
 import { RouteError } from "../components/error-banner.tsx";
 import { LoopyRail } from "../components/loopy-rail.tsx";
 import type { RouterContext } from "../router-context.ts";
@@ -19,7 +20,10 @@ function Shell() {
           <BrandMark className="size-5 text-active" />
           loopy
         </Link>
-        <ConnectionStatus />
+        <div className="flex items-center gap-4">
+          <ConnectionStatus />
+          <DaemonIndicator />
+        </div>
       </header>
       <div className="grid min-h-0 md:grid-cols-[15rem_minmax(0,1fr)]">
         <aside className="hidden overflow-y-auto border-r border-line md:block">

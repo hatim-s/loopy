@@ -1,4 +1,4 @@
-import type { QueryClient } from "@tanstack/react-query";
+import type { InfiniteData, QueryClient } from "@tanstack/react-query";
 import type {
   HookRecord,
   LogRecord,
@@ -12,6 +12,23 @@ import { keys } from "./keys.ts";
 import { runQuery } from "./queries.ts";
 
 type HookEvent = Extract<ServerEvent, { entity: "hook" }>;
+
+/** A `["runs", ...]` cache entry: one page from `useQuery`, or the pages of `useInfiniteQuery`. */
+type RunList = RunView[] | InfiniteData<RunView[], unknown>;
+
+function mapRunList(list: RunList | undefined, update: (runs: RunView[]) => RunView[]) {
+  if (list === undefined || Array.isArray(list)) {
+    return list && update(list);
+  }
+
+  return { ...list, pages: list.pages.map(update) };
+}
+
+function runListHas(list: RunList | undefined, id: string): boolean {
+  const pages = list === undefined || Array.isArray(list) ? [list ?? []] : list.pages;
+
+  return pages.some((runs) => runs.some((run) => run.id === id));
+}
 
 function upsertBy<T>(items: T[], item: T, same: (a: T) => boolean, order: (a: T) => number): T[] {
   return [...items.filter((existing) => !same(existing)), item].sort((a, b) => order(a) - order(b));
@@ -156,9 +173,8 @@ function applyEvent(client: QueryClient, event: ServerEvent): void {
   const snapshot = client.getQueryData<RunSnapshotView>(keys.run(event.runId));
 
   if (event.sequence > (cursors.get(event.runId) ?? -1)) {
-    client.setQueriesData<RunView[]>(
-      { queryKey: keys.runLists },
-      (runs) => runs && applyToList(runs, event, snapshot),
+    client.setQueriesData<RunList>({ queryKey: keys.runLists }, (list) =>
+      mapRunList(list, (runs) => applyToList(runs, event, snapshot)),
     );
     cursors.set(event.runId, event.sequence);
 
@@ -166,8 +182,7 @@ function applyEvent(client: QueryClient, event: ServerEvent): void {
       void client.invalidateQueries({
         queryKey: keys.runLists,
         predicate: (query) =>
-          client.getQueryData<RunView[]>(query.queryKey)?.some((run) => run.id === event.runId) ??
-          false,
+          runListHas(client.getQueryData<RunList>(query.queryKey), event.record.runId),
       });
     }
   }
@@ -208,8 +223,10 @@ export function applyRunView(client: QueryClient, run: RunView): void {
     (snapshot) => snapshot && (newer(snapshot.run, run) ? { ...snapshot, run } : snapshot),
   );
 
-  client.setQueriesData<RunView[]>({ queryKey: keys.runLists }, (runs) =>
-    runs?.map((item) => (item.id === run.id && newer(item, run) ? run : item)),
+  client.setQueriesData<RunList>({ queryKey: keys.runLists }, (list) =>
+    mapRunList(list, (runs) =>
+      runs.map((item) => (item.id === run.id && newer(item, run) ? run : item)),
+    ),
   );
 }
 

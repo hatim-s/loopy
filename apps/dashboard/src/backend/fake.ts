@@ -1,10 +1,11 @@
-import type {
-  DaemonView,
-  HookRecord,
-  LoopyView,
-  RunSnapshotView,
-  RunView,
-  ServerEvent,
+import {
+  type DaemonView,
+  encodeRunCursor,
+  type HookRecord,
+  type LoopyView,
+  type RunSnapshotView,
+  type RunView,
+  type ServerEvent,
 } from "loopy/contract";
 import { applyToSnapshot } from "../lib/stream.ts";
 import { BackendError, type EventSubscription, type LoopyBackend } from "./backend.ts";
@@ -123,10 +124,17 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
         ...loopy,
         lastRun: loopy.lastRun && (snapshots.get(loopy.lastRun.id)?.run ?? loopy.lastRun),
       })),
-    runs: async ({ slug, status }) =>
-      [...snapshots.values()].flatMap(({ run }) =>
-        (slug ?? run.slug) === run.slug && (status ?? run.status) === run.status ? [run] : [],
-      ),
+    runs: async ({ slug, status, limit = 50, before }) =>
+      [...snapshots.values()]
+        .flatMap(({ run }) =>
+          (slug ?? run.slug) === run.slug &&
+          (status ?? run.status) === run.status &&
+          (before === undefined || encodeRunCursor(run) < before)
+            ? [run]
+            : [],
+        )
+        .sort((a, b) => (encodeRunCursor(a) < encodeRunCursor(b) ? 1 : -1))
+        .slice(0, limit),
     run: async (id) => snapshot(id),
     logs: async (id, after) => snapshot(id).logs.filter((log) => log.seq > after),
     startRun: async () => {
@@ -135,8 +143,12 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
     resumeRun: async (id) => {
       const { run } = snapshot(id);
 
-      if (run.status !== "suspended") {
+      if (!ACTIVE.has(run.status)) {
         throw new BackendError("not_claimable");
+      }
+
+      if (run.owner !== null && !run.ownerStale) {
+        throw new BackendError("owned_elsewhere");
       }
 
       const woken = changeRun(id, "woken", { ...base(run), status: "queued" });
