@@ -1,4 +1,4 @@
-import type { InfiniteData, QueryClient } from "@tanstack/react-query";
+import type { InfiniteData, Query, QueryClient } from "@tanstack/react-query";
 import type {
   HookRecord,
   LogRecord,
@@ -153,7 +153,7 @@ type RunEvent = Extract<ServerEvent, { entity: "run" }>;
 type StreamHistory = {
   sequences: Map<string, number>;
   runs: Map<string, { sequence: number; run: RunView }>;
-  lists: Map<string, { sequence: number; run: RunView }>;
+  lists: WeakMap<Query, Map<string, { sequence: number; run: RunView }>>;
 };
 
 type BatchContext = { client: QueryClient; history: StreamHistory; changes: BatchChanges };
@@ -188,11 +188,12 @@ function listRun(list: RunList | undefined, id: string): RunView | undefined {
 
 function acceptListRun(
   previous: RunView | undefined,
-  hash: string,
+  query: Query,
   write: { history: StreamHistory; event: RunEvent },
 ): boolean {
   const { history, event } = write;
-  const saved = history.lists.get(hash);
+  const runs = history.lists.get(query) ?? new Map<string, { sequence: number; run: RunView }>();
+  const saved = runs.get(event.record.id);
   const current = previous ?? saved?.run;
 
   if (
@@ -202,7 +203,9 @@ function acceptListRun(
     return false;
   }
 
-  history.lists.set(hash, { sequence: event.sequence, run: event.record });
+  runs.set(event.record.id, { sequence: event.sequence, run: event.record });
+  // Query identity lets garbage collection discard list freshness with the cached data.
+  history.lists.set(query, runs);
 
   return true;
 }
@@ -225,7 +228,7 @@ function updateMembership(
     const list = client.getQueryData<RunList>(key);
     const previous = listRun(list, run.id);
 
-    if (write !== undefined && !acceptListRun(previous, `${query.queryHash}:${run.id}`, write)) {
+    if (write !== undefined && !acceptListRun(previous, query, write)) {
       continue;
     }
 
@@ -338,7 +341,7 @@ export function applyBatch(client: QueryClient, batch: ServerEvent[]): void {
   const history = histories.get(client) ?? {
     sequences: new Map(),
     runs: new Map(),
-    lists: new Map(),
+    lists: new WeakMap(),
   };
 
   histories.set(client, history);

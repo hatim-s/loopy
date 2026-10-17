@@ -134,3 +134,30 @@ test("removing the oldest row from a full page preserves its next cursor", async
     requests.mockRestore();
   }
 });
+
+test("garbage collecting a list discards its stream freshness history", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { gcTime: 0 } } });
+  const queryKey = keys.runs({ status: "queued" });
+  client.setQueryData(queryKey, [queued]);
+  applyBatch(client, [event(running, 12, "claimed")]);
+  expect(client.getQueryData<RunView[]>(queryKey)).toEqual([]);
+
+  const query = client.getQueryCache().find({ queryKey, exact: true });
+
+  const removed = new Promise<void>((resolve) => {
+    const unsubscribe = client.getQueryCache().subscribe((change) => {
+      if (change.type === "removed" && change.query === query) {
+        unsubscribe();
+        resolve();
+      }
+    });
+  });
+
+  await removed;
+  expect(client.getQueryCache().find({ queryKey, exact: true })).toBeUndefined();
+
+  client.setQueryData(queryKey, [queued]);
+  applyBatch(client, [event(running, 11, "claimed")]);
+  expect(client.getQueryData<RunView[]>(queryKey)).toEqual([]);
+  client.clear();
+});
