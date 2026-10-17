@@ -54,7 +54,6 @@ export type LoopyBackend = {
 };
 
 const CLIENT_ERROR_MESSAGES = {
-  unauthorized: "The session token is missing or expired. Open the URL printed by loopy ui.",
   unreachable: "The Loopy server did not answer. Check that the daemon is running.",
   malformed_response: "The server sent a response this dashboard does not understand.",
 } as const;

@@ -1,7 +1,7 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import type { RunView } from "loopy/contract";
-import { ago, duration, span, timestamp } from "../lib/format.ts";
+import { isTerminalRun, type RunView } from "loopy/contract";
+import { ago, duration, timestamp } from "../lib/format.ts";
 import type { RunFilters } from "../lib/keys.ts";
 import { runPagesQuery } from "../lib/queries.ts";
 import { useBackend } from "../router-context.ts";
@@ -9,16 +9,14 @@ import { Button } from "./button.tsx";
 import { ErrorBanner } from "./error-banner.tsx";
 import { StatusBadge } from "./status-badge.tsx";
 
-const FINISHED = new Set<RunView["status"]>(["succeeded", "failed", "cancelled"]);
-
 /** Live while the run holds a worker, total once it finished, blank while it waits. */
 function RunDuration({ run, now }: { run: RunView; now: number }) {
   if (run.status === "running") {
     return <span className="text-active">{duration(run.createdAt, now)}</span>;
   }
 
-  return FINISHED.has(run.status) ? (
-    <span>{span(Date.parse(run.updatedAt) - Date.parse(run.createdAt))}</span>
+  return isTerminalRun(run.status) ? (
+    <span>{duration(run.createdAt, Date.parse(run.updatedAt))}</span>
   ) : null;
 }
 

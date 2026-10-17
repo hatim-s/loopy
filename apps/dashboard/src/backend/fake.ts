@@ -2,6 +2,7 @@ import {
   type DaemonView,
   encodeRunCursor,
   type HookRecord,
+  isTerminalRun,
   type LoopyView,
   type PutScheduleBody,
   type RunSnapshotView,
@@ -27,8 +28,6 @@ export type FakeScript = {
   batches: EventDraft[][];
   intervalMs: number;
 };
-
-const ACTIVE = new Set<RunView["status"]>(["queued", "running", "suspended"]);
 
 const HOUR_MS = 3_600_000;
 
@@ -206,7 +205,7 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
     resumeRun: async (id) => {
       const { run } = snapshot(id);
 
-      if (!ACTIVE.has(run.status)) {
+      if (isTerminalRun(run.status)) {
         throw new BackendError("not_claimable");
       }
 
@@ -223,7 +222,7 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
     cancelRun: async (id) => {
       const { run } = snapshot(id);
 
-      if (!ACTIVE.has(run.status)) {
+      if (isTerminalRun(run.status)) {
         throw new BackendError("not_claimable");
       }
 

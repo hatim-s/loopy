@@ -7,7 +7,14 @@ import {
   type StreamEnd,
 } from "./backend.ts";
 
-type Route = (typeof routes)[keyof typeof routes];
+type Route = {
+  method: string;
+  path: string;
+  params: z.ZodType<Record<string, string>>;
+  query: z.ZodType<Record<string, string | number | boolean | undefined>>;
+  body: z.ZodType;
+  response: z.ZodType;
+};
 
 type Call<R extends Route> = {
   params: z.output<R["params"]>;
@@ -56,10 +63,6 @@ function routeUrl(
 }
 
 async function failure(response: Response): Promise<BackendError> {
-  if (response.status === 401) {
-    return new BackendError("unauthorized");
-  }
-
   const body = decode(errorBodySchema, await response.text());
 
   if (!body.valid) {
@@ -80,7 +83,7 @@ function frameData(frame: string): string {
     .join("\n");
 }
 
-/** Splits an SSE body into the joined data lines of each frame. */
+// Read the stream by hand because EventSource cannot send the bearer header.
 async function* frames(body: ReadableStream<Uint8Array>): AsyncGenerator<string> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -183,11 +186,11 @@ export function localHttpBackend({ origin, token }: LocalHttpOptions): LoopyBack
     }
   }
 
-  async function send<R extends Route, S extends z.ZodType>(
-    route: R & { response: S },
+  async function send<R extends Route>(
+    route: R,
     call: Call<R>,
     signal?: AbortSignal,
-  ): Promise<z.output<S>> {
+  ): Promise<z.output<R["response"]>> {
     const init: RequestInit = { method: route.method, signal };
 
     if (call.body !== undefined) {
@@ -201,7 +204,9 @@ export function localHttpBackend({ origin, token }: LocalHttpOptions): LoopyBack
       throw await failure(response);
     }
 
-    return contractBody<S>(route.response, await response.text(), route.path);
+    const schema: R["response"] = route.response;
+
+    return contractBody<R["response"]>(schema, await response.text(), route.path);
   }
 
   /** Follows one stream until the server drops it, and reports why it stopped. */
