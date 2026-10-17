@@ -190,3 +190,41 @@ test("service cursor follows the last event without requiring a run snapshot", a
   expect(events.at(-1)?.sequence).toBe(current.cursor);
   expect(current).toEqual({ cursor: initial.cursor + 1, epoch: initial.epoch });
 });
+
+test("waiting filter runs before the page cap and preserves cursor order", async () => {
+  const { service, store, root, advance } = await fixture();
+  const first = await service.startRun("service", { name: "approval" }, root);
+  await store.claim(first.id, "owner");
+  await store.createHook(first.id, "owner", {
+    runId: first.id,
+    seq: 0,
+    key: "approval",
+    kind: "hook",
+    input: { name: "approve", token: "waiting-filter" },
+    status: "waiting",
+    attempt: 1,
+    maxAttempts: 1,
+    startedAt: first.createdAt,
+  });
+  await store.suspend(first.id, "owner");
+  await store.release(first.id, "owner");
+  advance();
+  const second = await service.startRun("service", { name: "sleep" }, root);
+  await store.claim(second.id, "sleeper");
+  await store.suspend(second.id, "sleeper", "2099-01-01T00:00:00.000Z");
+  await store.release(second.id, "sleeper");
+  const query = { status: "suspended", waiting: true, limit: 1 } as const;
+  const page = await service.listRuns(query);
+  expect(page.map((run) => run.id)).toEqual([first.id]);
+  expect((await service.listRuns({ ...query, waiting: false })).map((run) => run.id)).toEqual([
+    second.id,
+  ]);
+  expect(await service.listRuns({ ...query, before: `${first.createdAt}|${first.id}` })).toEqual(
+    [],
+  );
+  expect(
+    (await service.listRuns({ ...query, before: `${second.createdAt}|${second.id}` })).map(
+      (run) => run.id,
+    ),
+  ).toEqual([first.id]);
+});

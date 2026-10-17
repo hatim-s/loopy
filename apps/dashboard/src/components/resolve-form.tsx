@@ -1,20 +1,10 @@
-import { type Json, jsonSchema } from "loopy/contract";
 import { useState } from "react";
 import { BackendError } from "../backend/backend.ts";
+import { parseJsonInput } from "../lib/input-form.ts";
 import type { useResolveHook } from "../lib/mutations.ts";
 import { Button } from "./button.tsx";
 
 type Resolve = ReturnType<typeof useResolveHook>;
-
-type Payload = { valid: true; value: Json } | { valid: false };
-
-function parsePayload(text: string): Payload {
-  try {
-    return { valid: true, value: jsonSchema.parse(JSON.parse(text)) };
-  } catch {
-    return { valid: false };
-  }
-}
 
 /** Server codes stay visible: unknown_hook means someone or something resolved it first. */
 export function ResolveError({ error }: { error: Error }) {
@@ -28,7 +18,7 @@ export function ResolveError({ error }: { error: Error }) {
 
 export function PayloadEditor({ resolve }: { resolve: Resolve }) {
   const [text, setText] = useState("{}");
-  const payload = parsePayload(text);
+  const payload = parseJsonInput(text);
 
   return (
     <form

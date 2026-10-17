@@ -35,7 +35,9 @@ function RunRow({ run, now, withLoopy }: { run: RunView; now: number; withLoopy:
           className="after:absolute after:inset-0 focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-active"
         >
           {withLoopy && <span className="mr-2 font-medium">{run.slug}</span>}
-          <span className="font-mono text-xs text-muted">{run.id}</span>
+          <span className="block truncate font-mono text-xs text-muted" title={run.id}>
+            {run.id.slice(-12)}
+          </span>
         </Link>
         {run.waitingOn && (
           <span className="ml-2 rounded-sm bg-attention/12 px-1.5 py-px text-xs text-attention">

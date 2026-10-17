@@ -1,23 +1,22 @@
 import type { RunView } from "loopy/contract";
 import type { RunsQuery } from "../backend/backend.ts";
 
-/**
- * The contract has no waiting filter, so the inbox fetches suspended runs and keeps the ones
- * with waitingOn set. 200 is the server's page cap.
- */
-export const INBOX_QUERY = { status: "suspended", limit: 200 } as const satisfies RunsQuery;
+export const INBOX_QUERY = {
+  status: "suspended",
+  waiting: true,
+  limit: 200,
+} as const satisfies RunsQuery;
 
 export type WaitingRun = RunView & { waitingOn: NonNullable<RunView["waitingOn"]> };
 
 export type InboxGroup = { slug: string; runs: WaitingRun[] };
 
 function isWaiting(run: RunView): run is WaitingRun {
-  return run.waitingOn !== null;
+  return run.status === "suspended" && run.waitingOn !== null;
 }
 
-/** A suspended run stops changing once it waits, so updatedAt is when the wait began. */
 export function waitingSince(run: WaitingRun): string {
-  return run.updatedAt;
+  return run.waitingOn.since;
 }
 
 /** Waiting runs grouped by loopy, oldest wait first within a group and across groups. */

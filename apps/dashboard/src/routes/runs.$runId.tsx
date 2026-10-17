@@ -6,7 +6,6 @@ import { RunHeader } from "../components/run-header.tsx";
 import { RunIo } from "../components/run-io.tsx";
 import { RunTrace } from "../components/run-trace.tsx";
 import { useClock } from "../lib/clock.ts";
-import { useRunStream } from "../lib/connection.ts";
 import { runQuery } from "../lib/queries.ts";
 import { useBackend } from "../router-context.ts";
 
@@ -23,8 +22,6 @@ function RunPage() {
   const { data } = useSuspenseQuery(runQuery(useBackend(), runId));
   const { run, steps, logs } = data;
   const now = useClock();
-
-  useRunStream(runId);
 
   return (
     <article className="mx-auto max-w-4xl space-y-6 px-6 py-6">

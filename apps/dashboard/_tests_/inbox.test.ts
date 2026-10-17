@@ -13,7 +13,9 @@ function run(id: string, slug: string, updatedAt: string, waiting: boolean): Run
     updatedAt,
     owner: null,
     ownerStale: false,
-    waitingOn: waiting ? { hook: "approve", token: `tok-${id}`, seq: 1, expiresAt: null } : null,
+    waitingOn: waiting
+      ? { hook: "approve", token: `tok-${id}`, seq: 1, expiresAt: null, since: updatedAt }
+      : null,
     status: "suspended",
     wakeAt: null,
   };
@@ -36,4 +38,14 @@ test("the inbox keeps waiting runs, grouped by loopy, oldest wait first", () => 
 
 test("suspended runs that only sleep leave the inbox empty", () => {
   expect(inboxGroups([run("s1", "triage", "2026-10-17T10:00:00.000Z", false)])).toEqual([]);
+});
+
+test("hook creation time keeps inbox order stable across later run updates", () => {
+  const early = run("early", "deploy", "2026-10-17T10:00:00.000Z", true);
+  const late = run("late", "deploy", "2026-10-17T11:00:00.000Z", true);
+  const active: RunView = { ...early, id: "active", status: "running" };
+
+  const groups = inboxGroups([late, { ...early, updatedAt: "2026-10-17T12:00:00.000Z" }, active]);
+
+  expect(groups.flatMap((group) => group.runs.map((item) => item.id))).toEqual(["early", "late"]);
 });

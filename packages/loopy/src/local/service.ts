@@ -260,9 +260,13 @@ export class LoopyService {
             : 0,
       );
 
-    return Promise.all(
-      runs.slice(0, Math.min(query.limit ?? 50, 200)).map((run) => this.view(run)),
-    );
+    const limit = Math.min(query.limit ?? 50, 200);
+    const selected = query.waiting === undefined ? runs.slice(0, limit) : runs;
+    const views = await Promise.all(selected.map((run) => this.view(run)));
+
+    return views
+      .filter((run) => query.waiting === undefined || (run.waitingOn !== null) === query.waiting)
+      .slice(0, limit);
   }
 
   async listLoopies(): Promise<LoopyView[]> {

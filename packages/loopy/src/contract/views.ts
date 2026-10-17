@@ -37,6 +37,7 @@ const runBaseSchema = z.strictObject({
       token: z.string(),
       seq: z.number().int().nonnegative(),
       expiresAt: z.string().nullable(),
+      since: z.string(),
     })
     .nullable(),
 });

@@ -317,3 +317,16 @@ test("snapshot HTTP requests stop when their signal is aborted", async () => {
   await expect(requested).rejects.toMatchObject({ name: "AbortError" });
   await cancelled.promise;
 });
+
+test("session cursor uses its route schema and waiting booleans survive URL encoding", async () => {
+  reply = () => Response.json({ cursor: 42, epoch: "session" });
+  expect(await backend.cursor(AbortSignal.timeout(1000))).toEqual({ cursor: 42, epoch: "session" });
+  expect(last()?.path).toBe("/api/cursor");
+  reply = () => Response.json([]);
+  await backend.runs({ status: "suspended", waiting: true });
+  expect(last()?.path).toBe("/api/runs?status=suspended&waiting=true");
+  reply = () => Response.json({ cursor: "bad", epoch: "session" });
+  await expect(backend.cursor(AbortSignal.timeout(1000))).rejects.toMatchObject({
+    code: "malformed_response",
+  });
+});

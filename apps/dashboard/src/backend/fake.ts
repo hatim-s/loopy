@@ -119,16 +119,18 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
   };
 
   return {
+    cursor: async () => ({ cursor: sequence, epoch: script.epoch }),
     loopies: async () =>
       script.loopies.map((loopy) => ({
         ...loopy,
         lastRun: loopy.lastRun && (snapshots.get(loopy.lastRun.id)?.run ?? loopy.lastRun),
       })),
-    runs: async ({ slug, status, limit = 50, before }) =>
+    runs: async ({ slug, status, waiting, limit = 50, before }) =>
       [...snapshots.values()]
         .flatMap(({ run }) =>
           (slug ?? run.slug) === run.slug &&
           (status ?? run.status) === run.status &&
+          (waiting === undefined || (run.waitingOn !== null) === waiting) &&
           (before === undefined || encodeRunCursor(run) < before)
             ? [run]
             : [],

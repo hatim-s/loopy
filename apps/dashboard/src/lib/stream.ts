@@ -7,9 +7,8 @@ import type {
   ServerEvent,
   StepRecord,
 } from "loopy/contract";
-import type { LoopyBackend, StreamState } from "../backend/backend.ts";
+import type { LoopyBackend, RunsQuery, StreamState } from "../backend/backend.ts";
 import { keys } from "./keys.ts";
-import { runQuery } from "./queries.ts";
 
 type HookEvent = Extract<ServerEvent, { entity: "hook" }>;
 
@@ -72,11 +71,24 @@ function waitingAfter(run: RunView, event: HookEvent, steps: StepRecord[]): RunV
   const step = steps.find((item) => item.seq === hook.seq);
   const expiresAt = step?.status === "waiting" ? (step.wakeAt ?? null) : null;
 
-  return { hook: hook.name, token: hook.token, seq: hook.seq, expiresAt };
+  return { hook: hook.name, token: hook.token, seq: hook.seq, since: hook.createdAt, expiresAt };
 }
 
 function newer(current: RunView, next: RunView): boolean {
   return next.updatedAt >= current.updatedAt;
+}
+
+function withSnapshotHook(snapshot: RunSnapshotView, event: HookEvent): RunSnapshotView {
+  const run = snapshot.run;
+
+  return {
+    ...snapshot,
+    hooks: withHook(snapshot.hooks, event.record),
+    run:
+      event.at >= run.updatedAt
+        ? { ...run, waitingOn: waitingAfter(run, event, snapshot.steps) }
+        : run,
+  };
 }
 
 /**
@@ -104,14 +116,7 @@ export function applyToSnapshot(snapshot: RunSnapshotView, event: ServerEvent): 
     }
 
     case "hook": {
-      return {
-        ...next,
-        hooks: withHook(snapshot.hooks, event.record),
-        run:
-          event.at >= snapshot.run.updatedAt
-            ? { ...snapshot.run, waitingOn: waitingAfter(snapshot.run, event, snapshot.steps) }
-            : snapshot.run,
-      };
+      return withSnapshotHook(next, event);
     }
 
     case "schedule": {
@@ -134,102 +139,203 @@ function canApplyHook(event: HookEvent, snapshot: RunSnapshotView | undefined): 
   );
 }
 
-/** Run lists carry no cursor, so they take a run only when it is at least as new. */
-function applyToList(
+function applyHookToList(
   runs: RunView[],
-  event: ServerEvent,
+  event: HookEvent,
   snapshot: RunSnapshotView | undefined,
 ): RunView[] {
-  if (event.entity === "run") {
-    const record = event.record;
-
-    return runs.map((run) => (run.id === record.id && newer(run, record) ? record : run));
-  }
-
-  if (event.entity === "hook") {
-    return runs.map((run) =>
-      run.id === event.record.runId &&
-      event.at >= run.updatedAt &&
-      (snapshot === undefined || event.sequence > snapshot.cursor) &&
-      canApplyHook(event, snapshot)
-        ? { ...run, waitingOn: waitingAfter(run, event, snapshot?.steps ?? []) }
-        : run,
-    );
-  }
-
-  return runs;
-}
-
-// Lists have no wire cursor, so retain the sequence of events already applied to them.
-const listCursors = new WeakMap<QueryClient, Map<string, number>>();
-
-function applyEvent(client: QueryClient, event: ServerEvent): void {
-  if (event.runId === null) {
-    return;
-  }
-
-  const cursors = listCursors.get(client) ?? new Map<string, number>();
-  listCursors.set(client, cursors);
-  const snapshot = client.getQueryData<RunSnapshotView>(keys.run(event.runId));
-
-  if (event.sequence > (cursors.get(event.runId) ?? -1)) {
-    client.setQueriesData<RunList>({ queryKey: keys.runLists }, (list) =>
-      mapRunList(list, (runs) => applyToList(runs, event, snapshot)),
-    );
-    cursors.set(event.runId, event.sequence);
-
-    if (event.entity === "hook" && !canApplyHook(event, snapshot)) {
-      void client.invalidateQueries({
-        queryKey: keys.runLists,
-        predicate: (query) =>
-          runListHas(client.getQueryData<RunList>(query.queryKey), event.record.runId),
-      });
-    }
-  }
-
-  client.setQueryData<RunSnapshotView>(
-    keys.run(event.runId),
-    (current) => current && applyToSnapshot(current, event),
+  return runs.map((run) =>
+    run.id === event.record.runId && event.at >= run.updatedAt && canApplyHook(event, snapshot)
+      ? { ...run, waitingOn: waitingAfter(run, event, snapshot?.steps ?? []) }
+      : run,
   );
 }
 
-/**
- * A list filtered by status only maps runs it already holds, so a run entering that status
- * (a run suspending on a hook, for the inbox) refetches the lists for it that lack the run.
- */
-function invalidateEntered(client: QueryClient, run: RunView): void {
-  void client.invalidateQueries({
-    queryKey: keys.runs({ status: run.status }),
-    predicate: (query) =>
-      !client.getQueryData<RunView[]>(query.queryKey)?.some((item) => item.id === run.id),
+type BatchChanges = { lists: Set<string>; loopies: boolean };
+
+type StreamHistory = { sequences: Map<string, number>; runs: Map<string, RunView> };
+
+type BatchContext = { client: QueryClient; history: StreamHistory; changes: BatchChanges };
+
+// Lists have no wire cursor, so replay protection belongs to the session reducer.
+const histories = new WeakMap<QueryClient, StreamHistory>();
+
+function matchesRun(filters: RunsQuery, run: RunView): boolean {
+  return (
+    (filters.slug === undefined || filters.slug === run.slug) &&
+    (filters.status === undefined || filters.status === run.status) &&
+    (filters.waiting === undefined || filters.waiting === (run.waitingOn !== null))
+  );
+}
+
+function replaceMember(runs: RunView[], next: RunView, filters: RunsQuery): RunView[] {
+  return runs.flatMap((run) => {
+    if (run.id !== next.id || !newer(run, next)) {
+      return [run];
+    }
+
+    return matchesRun(filters, next) ? [next] : [];
   });
 }
 
-/** Writes one stream batch into every cached query it touches. */
-export function applyBatch(client: QueryClient, batch: ServerEvent[]): void {
-  for (const event of batch) {
-    applyEvent(client, event);
-  }
+function updateMembership(client: QueryClient, run: RunView, previous?: RunView): Set<string> {
+  const missing = new Set<string>();
 
-  const created = batch.some((event) => event.entity === "run" && event.kind === "created");
+  for (const query of client.getQueryCache().findAll({ queryKey: keys.runLists })) {
+    const key = query.queryKey;
 
-  const loopiesChanged = batch.some(
-    (event) =>
-      event.entity === "schedule" ||
-      (event.entity === "run" && (event.kind === "created" || event.kind === "finished")),
-  );
+    if (key[0] !== "runs" || key[1] === undefined) {
+      continue;
+    }
 
-  for (const event of batch) {
-    if (event.entity === "run") {
-      invalidateEntered(client, event.record);
+    const filters = key[1] === "pages" ? key[2] : key[1];
+    const list = client.getQueryData<RunList>(key);
+    const present = runListHas(list, run.id);
+
+    if (present) {
+      client.setQueryData<RunList>(key, (current) =>
+        mapRunList(current, (runs) => replaceMember(runs, run, filters)),
+      );
+    } else if (
+      matchesRun(filters, run) ||
+      (previous !== undefined && matchesRun(filters, previous))
+    ) {
+      missing.add(query.queryHash);
     }
   }
 
-  if (created) {
-    void client.invalidateQueries({ queryKey: keys.runLists });
+  return missing;
+}
+
+function cachedRun(client: QueryClient, id: string): RunView | undefined {
+  const snapshot = client.getQueryData<RunSnapshotView>(keys.run(id));
+
+  if (snapshot) {
+    return snapshot.run;
   }
 
-  if (loopiesChanged) {
+  for (const [, list] of client.getQueriesData<RunList>({ queryKey: keys.runLists })) {
+    const pages = list === undefined || Array.isArray(list) ? [list ?? []] : list.pages;
+    const run = pages.flat().find((item) => item.id === id);
+
+    if (run) {
+      return run;
+    }
+  }
+
+  return undefined;
+}
+
+function applyHookLists(
+  { client, changes }: BatchContext,
+  event: HookEvent,
+  snapshot: RunSnapshotView | undefined,
+): void {
+  for (const query of client.getQueryCache().findAll({ queryKey: keys.runLists })) {
+    const list = client.getQueryData<RunList>(query.queryKey);
+
+    if (!canApplyHook(event, snapshot) && runListHas(list, event.record.runId)) {
+      changes.lists.add(query.queryHash);
+    }
+
+    client.setQueryData<RunList>(query.queryKey, (current) =>
+      mapRunList(current, (runs) => applyHookToList(runs, event, snapshot)),
+    );
+  }
+}
+
+function applyRunEvent(
+  { client, history, changes }: BatchContext,
+  event: Extract<ServerEvent, { entity: "run" }>,
+): void {
+  const previous = history.runs.get(event.record.id) ?? cachedRun(client, event.record.id);
+
+  if (previous !== undefined && !newer(previous, event.record)) {
+    return;
+  }
+
+  const status = history.runs.get(event.record.id)?.status;
+
+  const missing = updateMembership(client, event.record, previous);
+
+  if (event.kind !== "heartbeat") {
+    for (const hash of missing) {
+      changes.lists.add(hash);
+    }
+  }
+
+  changes.loopies ||=
+    status === undefined ? event.kind !== "heartbeat" : status !== event.record.status;
+  history.runs.set(event.record.id, event.record);
+}
+
+function acceptEvent(history: StreamHistory, event: ServerEvent): boolean {
+  const identity =
+    event.entity === "schedule"
+      ? `schedule:${event.record.workspace}:${event.record.slug}`
+      : event.runId;
+
+  if (identity === null) {
+    return false;
+  }
+
+  if (event.sequence <= (history.sequences.get(identity) ?? -1)) {
+    return false;
+  }
+
+  history.sequences.set(identity, event.sequence);
+
+  return true;
+}
+
+function applyEvent(context: BatchContext, event: ServerEvent): void {
+  const { client, history, changes } = context;
+
+  const snapshot =
+    event.runId === null ? undefined : client.getQueryData<RunSnapshotView>(keys.run(event.runId));
+
+  if (!acceptEvent(history, event)) {
+    return;
+  }
+
+  if (event.entity === "schedule") {
+    changes.loopies = true;
+
+    return;
+  }
+
+  if (event.entity === "run") {
+    applyRunEvent(context, event);
+  } else if (event.entity === "hook") {
+    applyHookLists(context, event, snapshot);
+  }
+
+  if (event.runId !== null) {
+    client.setQueryData<RunSnapshotView>(
+      keys.run(event.runId),
+      (current) => current && applyToSnapshot(current, event),
+    );
+  }
+}
+
+/** Writes a transaction before refetching each affected list once. */
+export function applyBatch(client: QueryClient, batch: ServerEvent[]): void {
+  const history = histories.get(client) ?? { sequences: new Map(), runs: new Map() };
+  histories.set(client, history);
+  const changes: BatchChanges = { lists: new Set(), loopies: false };
+
+  for (const event of batch) {
+    applyEvent({ client, history, changes }, event);
+  }
+
+  if (changes.lists.size > 0) {
+    void client.invalidateQueries({
+      queryKey: keys.runLists,
+      predicate: (query) => changes.lists.has(query.queryHash),
+    });
+  }
+
+  if (changes.loopies) {
     void client.invalidateQueries({ queryKey: keys.loopies });
   }
 }
@@ -241,32 +347,34 @@ export function applyRunView(client: QueryClient, run: RunView): void {
     (snapshot) => snapshot && (newer(snapshot.run, run) ? { ...snapshot, run } : snapshot),
   );
 
-  client.setQueriesData<RunList>({ queryKey: keys.runLists }, (list) =>
-    mapRunList(list, (runs) =>
-      runs.map((item) => (item.id === run.id && newer(item, run) ? run : item)),
-    ),
-  );
+  const missing = updateMembership(client, run);
+  void client.invalidateQueries({
+    queryKey: keys.runLists,
+    predicate: (query) => missing.has(query.queryHash),
+  });
+  void client.invalidateQueries({ queryKey: keys.loopies });
 }
 
 type FollowOptions = {
   client: QueryClient;
   backend: LoopyBackend;
-  runId: string;
   signal: AbortSignal;
   onState: (state: StreamState) => void;
 };
 
-async function followSnapshots({ client, backend, runId, signal, onState }: FollowOptions) {
+/** A cursor precedes the initial refetch so writes during that refetch are replayed. */
+async function followCursors({ client, backend, signal, onState }: FollowOptions) {
   while (!signal.aborted) {
-    const snapshot = await client.fetchQuery(runQuery(backend, runId));
+    const cursor = await backend.cursor(signal);
+    await client.invalidateQueries();
 
     if (signal.aborted) {
       return;
     }
 
     const end = await backend.events({
-      after: snapshot.cursor,
-      epoch: snapshot.epoch,
+      after: cursor.cursor,
+      epoch: cursor.epoch,
       signal,
       onState,
       onBatch: (batch) => applyBatch(client, batch),
@@ -276,30 +384,18 @@ async function followSnapshots({ client, backend, runId, signal, onState }: Foll
       return;
     }
 
-    listCursors.delete(client);
+    histories.delete(client);
     onState("reconnecting");
-    await client.invalidateQueries();
   }
 }
 
-/** Reset recovery refetches the snapshot before choosing the next stream cursor. */
-export async function followRun(options: FollowOptions) {
-  const { client, runId, signal } = options;
-
-  const cancel = () => {
-    void client.cancelQueries({ queryKey: keys.run(runId), exact: true });
-  };
-
-  signal.addEventListener("abort", cancel, { once: true });
-
+/** Transport reconnects keep their cursor; a reset starts a new cache session. */
+export async function followSession(options: FollowOptions): Promise<void> {
   try {
-    await followSnapshots(options);
+    await followCursors(options);
   } catch (error) {
-    if (!signal.aborted) {
+    if (!options.signal.aborted) {
       throw error;
     }
-  } finally {
-    signal.removeEventListener("abort", cancel);
-    await client.cancelQueries({ queryKey: keys.run(runId), exact: true });
   }
 }

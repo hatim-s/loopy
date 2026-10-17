@@ -174,12 +174,18 @@ test("views strip fencing tokens and derive staleness at the lease boundary", ()
 });
 
 test("waitingOn uses only the latest waiting hook step and an unresolved unexpired hook", () => {
-  const run = { ...newRun(), status: "suspended" } satisfies core.RunRecord;
+  const run = {
+    ...newRun(),
+    status: "suspended",
+    updatedAt: "2099-01-01T00:00:00.000Z",
+  } satisfies core.RunRecord;
+
   expect(view(run, [waiting], [hook]).waitingOn).toEqual({
     hook: "approve",
     token: "hook",
     seq: 2,
     expiresAt: null,
+    since: hook.createdAt,
   });
   const future = new Date(Date.parse(now) + 1000).toISOString();
   expect(view(run, [{ ...waiting, wakeAt: future }], [hook]).waitingOn?.expiresAt).toBe(future);
@@ -294,6 +300,9 @@ test("edge schemas reject malformed variants, JSON and request values", () => {
     limit: 20,
     status: "queued",
   });
+  expect(contract.routes.runs.query.parse({ waiting: "false" })).toEqual({ waiting: false });
+  expect(contract.routes.runs.query.parse({ waiting: "true" })).toEqual({ waiting: true });
+  expect(contract.routes.runs.query.safeParse({ waiting: "yes" }).success).toBe(false);
   expect(contract.routes.runs.query.safeParse({ limit: "-1" }).success).toBe(false);
   expect(contract.routes.logs.query.parse({ after: "3" })).toEqual({ after: 3 });
   expect(contract.routes.events.query.safeParse({ after: "-1", epoch: "epoch" }).success).toBe(

@@ -5,6 +5,7 @@ import { DaemonIndicator } from "../components/daemon-indicator.tsx";
 import { RouteError } from "../components/error-banner.tsx";
 import { InboxLink } from "../components/inbox/inbox-link.tsx";
 import { LoopyRail } from "../components/loopy-rail.tsx";
+import { useSessionStream } from "../lib/connection.ts";
 import type { RouterContext } from "../router-context.ts";
 
 export const Route = createRootRouteWithContext<RouterContext>()({
@@ -14,6 +15,8 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 });
 
 function Shell() {
+  useSessionStream();
+
   return (
     <div className="grid h-full grid-rows-[2.75rem_minmax(0,1fr)]">
       <header className="flex items-center justify-between border-b border-line px-4">

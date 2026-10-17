@@ -1,38 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
 import { ErrorBanner } from "../components/error-banner.tsx";
 import { InboxGroup } from "../components/inbox/inbox-group.tsx";
 import { useClock } from "../lib/clock.ts";
-import { useRunStream } from "../lib/connection.ts";
-import { type InboxGroup as Group, waitingCount } from "../lib/inbox.ts";
+import { waitingCount } from "../lib/inbox.ts";
 import { inboxQuery } from "../lib/queries.ts";
 import { useBackend } from "../router-context.ts";
 
 export const Route = createFileRoute("/inbox")({ component: Inbox });
 
-/**
- * The stream needs a snapshot cursor and the contract only hands one out per run, so the
- * first waiting run seen anchors it for the life of the page. An empty inbox has no anchor
- * and refreshes on focus instead.
- */
-function useStreamAnchor(groups: Group[] | undefined): string | null {
-  const first = groups?.[0]?.runs[0]?.id ?? null;
-  const [anchor, setAnchor] = useState(first);
-
-  if (anchor === null && first !== null) {
-    setAnchor(first);
-  }
-
-  return anchor;
-}
-
 function Inbox() {
   const inbox = useQuery(inboxQuery(useBackend()));
   const now = useClock();
   const total = inbox.data ? waitingCount(inbox.data) : 0;
-
-  useRunStream(useStreamAnchor(inbox.data));
 
   return (
     <section aria-labelledby="inbox-heading" className="mx-auto max-w-4xl space-y-5 px-6 py-6">
