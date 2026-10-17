@@ -24,6 +24,7 @@ import {
   type RateLimitResult,
   type RateLimitWindow,
   type RunStore,
+  sameStepRecord,
 } from "../runtime/index.js";
 import { errnoCode } from "./fs.js";
 import {
@@ -170,7 +171,6 @@ export class SqliteRunStore implements RunStore {
       if (
         !hook ||
         hook.resolved_at !== null ||
-        hook.expired_at !== null ||
         step?.status !== "waiting" ||
         step.wake_at === null ||
         Date.parse(step.wake_at) > this.now()
@@ -178,8 +178,10 @@ export class SqliteRunStore implements RunStore {
         return undefined;
       }
 
-      this.db.query(SQL.expireHook).run(this.timestamp(), runId, seq);
-      this.emitHook(txn, hook.token, "expired");
+      if (hook.expired_at === null) {
+        this.db.query(SQL.expireHook).run(this.timestamp(), runId, seq);
+        this.emitHook(txn, hook.token, "expired");
+      }
 
       return step.wake_at;
     });
@@ -368,7 +370,7 @@ export class SqliteRunStore implements RunStore {
       const previous = this.db.query<StepRow, [string, number]>(SQL.step).get(runId, step.seq);
       const next = stepToRow({ ...step, runId });
 
-      if (previous && JSON.stringify(rowToStep(previous)) === JSON.stringify(rowToStep(next))) {
+      if (previous && sameStepRecord(rowToStep(previous), rowToStep(next))) {
         return;
       }
 

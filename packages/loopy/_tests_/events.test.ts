@@ -302,7 +302,9 @@ for (const { name, make } of factories) {
           wakeAt: newRun().createdAt,
         });
         expect(await store.expireHook("run", "owner", 2)).toBe(newRun().createdAt);
-        expect(await store.expireHook("run", "owner", 2)).toBeUndefined();
+        const expired = await store.events(0, 100);
+        expect(await store.expireHook("run", "owner", 2)).toBe(newRun().createdAt);
+        expect(await store.events(0, 100)).toEqual(expired);
         await store.release("run", "owner");
         const events = await store.events(3, 10);
         expect(order(events)).toEqual([
@@ -315,6 +317,69 @@ for (const { name, make } of factories) {
         ]);
         expect(events.at(-1)?.txn).toBe(events.at(-2)?.txn);
         expect(events.at(-1)?.record).toEqual(await store.getRun("run"));
+      } finally {
+        if (store instanceof SqliteRunStore) {
+          store.close();
+        }
+      }
+    });
+
+    test("an owner recovers a hook expired before the terminal step write", async () => {
+      const store = make(() => start);
+
+      try {
+        await store.createRun(newRun());
+        await store.claim("run", "owner");
+        await store.createHook("run", "owner", {
+          ...waitingStep(),
+          maxAttempts: 1,
+          wakeAt: newRun().createdAt,
+        });
+        expect(await store.expireHook("run", "owner", 1)).toBe(newRun().createdAt);
+        expect(await store.expireHook("run", "owner", 1)).toBe(newRun().createdAt);
+        await store.release("run", "owner");
+
+        const outcome = await activate({
+          store,
+          runId: "run",
+          executor: new FakeExecutor(),
+          cwd: "/workspace",
+          mode: "sandbox",
+          clock: { now: () => start, timeout: () => () => {} },
+          workflow: (ctx) => ctx.hook("approve", { timeout: "1s" }),
+        });
+
+        expect(outcome.status).toBe("failed");
+        expect((await store.getSteps("run"))[0]).toMatchObject({
+          status: "failed",
+          finishOrder: 1,
+          error: `Hook 'approve' timed out at ${newRun().createdAt}. Resolve the hook before its deadline in a new run.`,
+        });
+        expect(
+          (await store.events(0, 100)).filter((event) => event.kind === "expired"),
+        ).toHaveLength(1);
+      } finally {
+        if (store instanceof SqliteRunStore) {
+          store.close();
+        }
+      }
+    });
+
+    test("snapshot keeps the global cursor after every event is pruned", async () => {
+      let time = start;
+      const store = make(() => time);
+
+      try {
+        await store.createRun(newRun());
+        await store.claim("run", "owner");
+        const last = (await store.events(0, 100)).at(-1)?.sequence;
+        time += 86_400_001;
+        expect(await store.pruneEvents(new Date(time).toISOString())).toBe(2);
+        expect(await store.events(0, 100)).toEqual([]);
+        const cursor = (await store.snapshotRun("run"))?.cursor;
+        expect(cursor).toBe(last);
+        await store.heartbeat("run", "owner");
+        expect((await store.events(0, 100))[0]?.sequence).toBe((cursor ?? 0) + 1);
       } finally {
         if (store instanceof SqliteRunStore) {
           store.close();
@@ -374,6 +439,24 @@ test("both stores emit the same entity, kind and runId order", async () => {
 
   try {
     expect(order(await trace(sqlite))).toEqual(order(await trace(memory)));
+    const step = { ...runningStep(3), input: { a: 1, b: [2, 3] } };
+
+    for (const store of [memory, sqlite]) {
+      await store.putStep("run", "owner", { ...step, input: { a: 1, b: [2, 3] } });
+      const before = await store.events(0, 100);
+      await store.putStep("run", "owner", {
+        input: { b: [2, 3], a: 1 },
+        status: step.status,
+        startedAt: step.startedAt,
+        maxAttempts: step.maxAttempts,
+        attempt: step.attempt,
+        kind: step.kind,
+        key: step.key,
+        seq: step.seq,
+        runId: step.runId,
+      });
+      expect(await store.events(0, 100)).toEqual(before);
+    }
   } finally {
     sqlite.close();
   }

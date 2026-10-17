@@ -36,7 +36,7 @@ export const SQL = {
   appendEvent:
     "INSERT INTO events(at,txn,entity,kind,run_id,record) VALUES (?,?,?,?,?,?) RETURNING *",
   events: "SELECT * FROM events WHERE sequence>? ORDER BY sequence LIMIT ?",
-  cursor: "SELECT COALESCE(MAX(sequence),0) AS cursor FROM events",
+  cursor: "SELECT COALESCE((SELECT seq FROM sqlite_sequence WHERE name='events'),0) AS cursor",
   pruneEvents: `DELETE FROM events WHERE at<? OR sequence IN (
     SELECT sequence FROM events ORDER BY sequence DESC LIMIT -1 OFFSET 100000
   )`,
@@ -530,11 +530,7 @@ export function rowToEvent(row: EventRow): RuntimeEvent {
   const record = requireRecord(JSON.parse(row.record), "Event record");
   const base = { sequence: row.sequence, at: row.at, txn: row.txn, runId: row.run_id };
 
-  const entity = requireOneOf(
-    row.entity,
-    ["run", "step", "log", "hook", "schedule"],
-    "Event entity",
-  );
+  const entity = row.entity;
 
   switch (entity) {
     case "run":
@@ -552,12 +548,7 @@ export function rowToEvent(row: EventRow): RuntimeEvent {
         record: eventStep(record),
       };
     case "log":
-      return {
-        ...base,
-        entity,
-        kind: requireOneOf(row.kind, ["written"], "Event log kind"),
-        record: eventLog(record),
-      };
+      return logEvent(row, record);
     case "hook":
       return {
         ...base,
@@ -565,21 +556,48 @@ export function rowToEvent(row: EventRow): RuntimeEvent {
         kind: requireOneOf(row.kind, HOOK_EVENT_KINDS, "Event hook kind"),
         record: eventHook(record),
       };
-    case "schedule": {
-      const kind = requireOneOf(
-        row.kind,
-        [...SCHEDULE_EVENT_KINDS, "deleted"],
-        "Event schedule kind",
-      );
-
-      return kind === "deleted"
-        ? {
-            ...base,
-            entity,
-            kind,
-            record: { workspace: text(record, "workspace"), slug: text(record, "slug") },
-          }
-        : { ...base, entity, kind, record: eventSchedule(record) };
-    }
+    case "schedule":
+      return scheduleEvent(row, record);
+    default:
+      throw new Error(`Unknown event entity '${entity}'. Restore the event store.`);
   }
+}
+
+function scheduleEvent(
+  row: EventRow,
+  record: ParsedRecord,
+): Extract<RuntimeEvent, { entity: "schedule" }> {
+  const kind = requireOneOf(row.kind, [...SCHEDULE_EVENT_KINDS, "deleted"], "Event schedule kind");
+
+  return kind === "deleted"
+    ? {
+        sequence: row.sequence,
+        at: row.at,
+        txn: row.txn,
+        runId: row.run_id,
+        entity: "schedule",
+        kind,
+        record: { workspace: text(record, "workspace"), slug: text(record, "slug") },
+      }
+    : {
+        sequence: row.sequence,
+        at: row.at,
+        txn: row.txn,
+        runId: row.run_id,
+        entity: "schedule",
+        kind,
+        record: eventSchedule(record),
+      };
+}
+
+function logEvent(row: EventRow, record: ParsedRecord): Extract<RuntimeEvent, { entity: "log" }> {
+  return {
+    sequence: row.sequence,
+    at: row.at,
+    txn: row.txn,
+    runId: row.run_id,
+    entity: "log",
+    kind: requireOneOf(row.kind, ["written"], "Event log kind"),
+    record: eventLog(record),
+  };
 }

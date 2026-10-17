@@ -14,6 +14,7 @@ import type {
 } from "../core/index.js";
 import { canResolveHook, earliestWake } from "./hook-state.js";
 import { acquireWindow, type RateLimitResult, type RateLimitWindow } from "./rate-limit.js";
+import { sameStepRecord } from "./step-record.js";
 import { OwnershipError, type RunStore } from "./store.js";
 
 type EventTransaction = { id: string; events: RuntimeEvent[] };
@@ -111,7 +112,6 @@ export class MemoryRunStore implements RunStore {
       if (
         !hook ||
         hook.resolvedAt !== undefined ||
-        hook.expiredAt !== undefined ||
         step?.status !== "waiting" ||
         step.wakeAt === undefined ||
         Date.parse(step.wakeAt) > this.now()
@@ -119,8 +119,10 @@ export class MemoryRunStore implements RunStore {
         return undefined;
       }
 
-      hook.expiredAt = this.timestamp();
-      this.emit(txn, { entity: "hook", kind: "expired", runId, record: hook });
+      if (hook.expiredAt === undefined) {
+        hook.expiredAt = this.timestamp();
+        this.emit(txn, { entity: "hook", kind: "expired", runId, record: hook });
+      }
 
       return step.wakeAt;
     });
@@ -326,7 +328,7 @@ export class MemoryRunStore implements RunStore {
       const steps = this.steps.get(runId) ?? new Map<number, StepRecord>();
       const record = structuredClone({ ...step, runId });
 
-      if (JSON.stringify(steps.get(step.seq)) === JSON.stringify(record)) {
+      if (sameStepRecord(steps.get(step.seq), record)) {
         return;
       }
 
@@ -484,7 +486,7 @@ export class MemoryRunStore implements RunStore {
       hooks: [...(this.hooksByRun.get(id)?.values() ?? [])].sort(
         (left, right) => left.seq - right.seq,
       ),
-      cursor: this.eventLog.at(-1)?.sequence ?? 0,
+      cursor: this.sequence,
       epoch: this.storeEpoch,
     });
   }
