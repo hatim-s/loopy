@@ -1,3 +1,12 @@
+import { z } from "zod";
+import {
+  hookRecordSchema,
+  jsonSchema,
+  logRecordSchema,
+  runStatusSchema,
+  scheduleSchema,
+  stepRecordSchema,
+} from "../contract/index.js";
 import type {
   HookRecord,
   Json,
@@ -5,21 +14,15 @@ import type {
   RunRecord,
   RuntimeEvent,
   Schedule,
-  StepBase,
   StepRecord,
 } from "../core/index.js";
 import {
   HOOK_EVENT_KINDS,
-  isBoolean,
-  isNumber,
   RUN_EVENT_KINDS,
-  requireOneOf,
-  requireRecord,
-  requireString,
   SCHEDULE_EVENT_KINDS,
   STEP_STATUSES,
 } from "../core/index.js";
-import { assertJson } from "../runtime/index.js";
+import { EVENT_RETENTION } from "../runtime/index.js";
 import type {
   EventRow,
   HookRow,
@@ -39,7 +42,7 @@ export const SQL = {
   transactionEvents: "SELECT * FROM events WHERE txn=? AND sequence>? ORDER BY sequence",
   cursor: "SELECT COALESCE((SELECT seq FROM sqlite_sequence WHERE name='events'),0) AS cursor",
   pruneEvents: `DELETE FROM events WHERE at<? OR sequence IN (
-    SELECT sequence FROM events ORDER BY sequence DESC LIMIT -1 OFFSET 100000
+    SELECT sequence FROM events ORDER BY sequence DESC LIMIT -1 OFFSET ${EVENT_RETENTION.maxRows}
   )`,
   hookStep: "SELECT * FROM hooks WHERE run_id=? AND seq=?",
   log: "SELECT * FROM logs WHERE run_id=? AND seq=?",
@@ -70,10 +73,8 @@ export const SQL = {
     "SELECT MIN(wake_at) AS wake_at FROM runs WHERE status='suspended' AND owner_token IS NULL",
   run: "SELECT * FROM runs WHERE id=?",
   createRun: `INSERT INTO runs VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-  listRuns: "SELECT * FROM runs ORDER BY rowid",
-  listRunsBySlug: "SELECT * FROM runs WHERE slug=? ORDER BY rowid",
-  listRunsByStatus: "SELECT * FROM runs WHERE status=? ORDER BY rowid",
-  listRunsBySlugAndStatus: "SELECT * FROM runs WHERE slug=? AND status=? ORDER BY rowid",
+  listRuns:
+    "SELECT * FROM runs WHERE (?1 IS NULL OR slug=?1) AND (?2 IS NULL OR status=?2) ORDER BY rowid",
   claim: `UPDATE runs SET owner_token=?,owner_pid=?,owner_host=?,heartbeat_at=?,updated_at=?,status='running',wake_at=NULL WHERE id=? AND owner_token IS NULL AND status IN ('queued','suspended')`,
   heartbeat: "UPDATE runs SET heartbeat_at=?,updated_at=? WHERE id=? AND owner_token=?",
   suspend:
@@ -321,284 +322,79 @@ export function rowToHook(row: HookRow): HookRecord {
   return hook;
 }
 
-type ParsedRecord = ReturnType<typeof requireRecord>;
+const runRecordSchema = z.strictObject({
+  id: z.string(),
+  slug: z.string(),
+  bundleHash: z.string(),
+  workspace: z.string(),
+  input: jsonSchema,
+  status: runStatusSchema,
+  output: jsonSchema.optional(),
+  error: z.string().optional(),
+  wakeAt: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  owner: z
+    .strictObject({
+      token: z.string(),
+      pid: z.number().int().nonnegative(),
+      host: z.string(),
+      heartbeatAt: z.string(),
+    })
+    .optional(),
+});
 
-function text(record: ParsedRecord, key: string): string {
-  return requireString(record[key], `Event record.${key}`);
-}
+const eventBaseSchema = z.strictObject({
+  sequence: z.number().int().positive(),
+  at: z.string(),
+  txn: z.string(),
+  runId: z.string().nullable(),
+});
 
-function optionalText(record: ParsedRecord, key: string): string | undefined {
-  return record[key] === undefined ? undefined : text(record, key);
-}
-
-function number(record: ParsedRecord, key: string): number {
-  const value = record[key];
-
-  if (!isNumber(value) || !Number.isSafeInteger(value) || value < 0) {
-    throw new Error(`Event record.${key} must be a nonnegative integer.`);
-  }
-
-  return value;
-}
-
-function json(record: ParsedRecord, key: string): Json {
-  const value = record[key];
-  assertJson(value, `Event record.${key}`);
-
-  return value;
-}
-
-function eventRun(record: ParsedRecord): RunRecord {
-  const run: RunRecord = {
-    id: text(record, "id"),
-    slug: text(record, "slug"),
-    bundleHash: text(record, "bundleHash"),
-    workspace: text(record, "workspace"),
-    input: json(record, "input"),
-    status: requireOneOf(
-      record.status,
-      ["queued", "running", "suspended", "succeeded", "failed", "cancelled"],
-      "Event run status",
-    ),
-    createdAt: text(record, "createdAt"),
-    updatedAt: text(record, "updatedAt"),
-  };
-
-  if (record.output !== undefined) {
-    run.output = json(record, "output");
-  }
-
-  if (record.error !== undefined) {
-    run.error = text(record, "error");
-  }
-
-  if (record.wakeAt !== undefined) {
-    run.wakeAt = text(record, "wakeAt");
-  }
-
-  if (record.owner !== undefined) {
-    run.owner = eventOwner(requireRecord(record.owner, "Event run owner"));
-  }
-
-  return run;
-}
-
-function eventOwner(owner: ParsedRecord): NonNullable<RunRecord["owner"]> {
-  return {
-    token: text(owner, "token"),
-    pid: number(owner, "pid"),
-    host: text(owner, "host"),
-    heartbeatAt: text(owner, "heartbeatAt"),
-  };
-}
-
-function eventStepBase(record: ParsedRecord): StepBase {
-  return {
-    runId: text(record, "runId"),
-    seq: number(record, "seq"),
-    key: text(record, "key"),
-    kind: requireOneOf(
-      record.kind,
-      ["command", "function", "sleep", "hook", "clock", "random"],
-      "Event step kind",
-    ),
-    input: json(record, "input"),
-    attempt: number(record, "attempt"),
-    maxAttempts: number(record, "maxAttempts"),
-    startedAt: text(record, "startedAt"),
-  };
-}
-
-function eventStep(record: ParsedRecord): StepRecord {
-  const base = eventStepBase(record);
-  const status = requireOneOf(record.status, STEP_STATUSES, "Event step status");
-
-  switch (status) {
-    case "running":
-      return { ...base, status };
-    case "succeeded":
-      return {
-        ...base,
-        status,
-        output: json(record, "output"),
-        endedAt: text(record, "endedAt"),
-        finishOrder: number(record, "finishOrder"),
-      };
-    case "failed":
-      return {
-        ...base,
-        status,
-        error: text(record, "error"),
-        endedAt: text(record, "endedAt"),
-        finishOrder: number(record, "finishOrder"),
-      };
-    case "retrying":
-      return {
-        ...base,
-        status,
-        error: text(record, "error"),
-        endedAt: text(record, "endedAt"),
-        nextRetryAt: text(record, "nextRetryAt"),
-      };
-    case "sleeping":
-      return { ...base, status, wakeAt: text(record, "wakeAt") };
-    case "waiting":
-      return { ...base, status, wakeAt: optionalText(record, "wakeAt") };
-  }
-}
-
-function eventLog(record: ParsedRecord): LogRecord {
-  const position = requireRecord(record.position, "Event log position");
-  const kind = requireOneOf(position.kind, ["workflow", "step"], "Event log position kind");
-
-  const log: LogRecord = {
-    runId: text(record, "runId"),
-    seq: number(record, "seq"),
-    position:
-      kind === "workflow"
-        ? {
-            kind,
-            afterStep: number(position, "afterStep"),
-            afterFinish: number(position, "afterFinish"),
-            index: number(position, "index"),
-          }
-        : {
-            kind,
-            seq: number(position, "seq"),
-            attempt: number(position, "attempt"),
-            index: number(position, "index"),
-          },
-    level: requireOneOf(record.level, ["info", "warn", "error"], "Event log level"),
-    message: text(record, "message"),
-    at: text(record, "at"),
-  };
-
-  if (record.data !== undefined) {
-    log.data = json(record, "data");
-  }
-
-  return log;
-}
-
-function eventHook(record: ParsedRecord): HookRecord {
-  const hook: HookRecord = {
-    token: text(record, "token"),
-    runId: text(record, "runId"),
-    seq: number(record, "seq"),
-    name: text(record, "name"),
-    createdAt: text(record, "createdAt"),
-  };
-
-  if (record.payload !== undefined) {
-    hook.payload = json(record, "payload");
-  }
-
-  if (record.resolvedAt !== undefined) {
-    hook.resolvedAt = text(record, "resolvedAt");
-  }
-
-  if (record.expiredAt !== undefined) {
-    hook.expiredAt = text(record, "expiredAt");
-  }
-
-  return hook;
-}
-
-function eventSchedule(record: ParsedRecord): Schedule {
-  if (!isBoolean(record.enabled)) {
-    throw new Error("Event schedule.enabled must be a boolean.");
-  }
-
-  const schedule: Schedule = {
-    workspace: text(record, "workspace"),
-    slug: text(record, "slug"),
-    cron: text(record, "cron"),
-    tz: text(record, "tz"),
-    input: json(record, "input"),
-    enabled: record.enabled,
-    nextFireAt: text(record, "nextFireAt"),
-  };
-
-  if (record.lastFireKey !== undefined) {
-    schedule.lastFireKey = text(record, "lastFireKey");
-  }
-
-  return schedule;
-}
+const eventRecordSchema = z.discriminatedUnion("entity", [
+  eventBaseSchema.extend({
+    entity: z.literal("run"),
+    kind: z.enum(RUN_EVENT_KINDS),
+    record: runRecordSchema,
+  }),
+  eventBaseSchema.extend({
+    entity: z.literal("step"),
+    kind: z.enum(STEP_STATUSES),
+    record: stepRecordSchema,
+  }),
+  eventBaseSchema.extend({
+    entity: z.literal("log"),
+    kind: z.literal("written"),
+    record: logRecordSchema,
+  }),
+  eventBaseSchema.extend({
+    entity: z.literal("hook"),
+    kind: z.enum(HOOK_EVENT_KINDS),
+    record: hookRecordSchema,
+  }),
+  z.discriminatedUnion("kind", [
+    eventBaseSchema.extend({
+      entity: z.literal("schedule"),
+      kind: z.enum(SCHEDULE_EVENT_KINDS),
+      record: scheduleSchema,
+    }),
+    eventBaseSchema.extend({
+      entity: z.literal("schedule"),
+      kind: z.literal("deleted"),
+      record: z.strictObject({ workspace: z.string(), slug: z.string() }),
+    }),
+  ]),
+]);
 
 export function rowToEvent(row: EventRow): RuntimeEvent {
   // BOUNDARY: Persisted event JSON must validate before callers receive typed records.
-  const record = requireRecord(JSON.parse(row.record), "Event record");
-  const base = { sequence: row.sequence, at: row.at, txn: row.txn, runId: row.run_id };
-
-  const entity = row.entity;
-
-  switch (entity) {
-    case "run":
-      return {
-        ...base,
-        entity,
-        kind: requireOneOf(row.kind, RUN_EVENT_KINDS, "Event run kind"),
-        record: eventRun(record),
-      };
-    case "step":
-      return {
-        ...base,
-        entity,
-        kind: requireOneOf(row.kind, STEP_STATUSES, "Event step kind"),
-        record: eventStep(record),
-      };
-    case "log":
-      return logEvent(row, record);
-    case "hook":
-      return {
-        ...base,
-        entity,
-        kind: requireOneOf(row.kind, HOOK_EVENT_KINDS, "Event hook kind"),
-        record: eventHook(record),
-      };
-    case "schedule":
-      return scheduleEvent(row, record);
-    default:
-      throw new Error(`Unknown event entity '${entity}'. Restore the event store.`);
-  }
-}
-
-function scheduleEvent(
-  row: EventRow,
-  record: ParsedRecord,
-): Extract<RuntimeEvent, { entity: "schedule" }> {
-  const kind = requireOneOf(row.kind, [...SCHEDULE_EVENT_KINDS, "deleted"], "Event schedule kind");
-
-  return kind === "deleted"
-    ? {
-        sequence: row.sequence,
-        at: row.at,
-        txn: row.txn,
-        runId: row.run_id,
-        entity: "schedule",
-        kind,
-        record: { workspace: text(record, "workspace"), slug: text(record, "slug") },
-      }
-    : {
-        sequence: row.sequence,
-        at: row.at,
-        txn: row.txn,
-        runId: row.run_id,
-        entity: "schedule",
-        kind,
-        record: eventSchedule(record),
-      };
-}
-
-function logEvent(row: EventRow, record: ParsedRecord): Extract<RuntimeEvent, { entity: "log" }> {
-  return {
+  return eventRecordSchema.parse({
     sequence: row.sequence,
     at: row.at,
     txn: row.txn,
     runId: row.run_id,
-    entity: "log",
-    kind: requireOneOf(row.kind, ["written"], "Event log kind"),
-    record: eventLog(record),
-  };
+    entity: row.entity,
+    kind: row.kind,
+    record: JSON.parse(row.record),
+  });
 }

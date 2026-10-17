@@ -20,6 +20,9 @@ import type {
 import {
   acquireWindow,
   canResolveHook,
+  EVENT_RETENTION,
+  EventListeners,
+  type EventTransaction,
   earliestWake,
   OwnershipError,
   type RateLimitResult,
@@ -48,8 +51,6 @@ import {
   type ScheduleRow,
   type StepRow,
 } from "./store-schema.js";
-
-type EventTransaction = { id: string; events: RuntimeEvent[] };
 
 export class SqliteRunStore implements RunStore {
   private readonly db: Database;
@@ -158,12 +159,14 @@ export class SqliteRunStore implements RunStore {
     );
   }
 
-  eventBounds() {
-    return this.db
-      .query<{ oldest: number | null; newest: number | null }, []>(
-        "SELECT COALESCE(MIN(sequence), (SELECT seq + 1 FROM sqlite_sequence WHERE name='events')) AS oldest, MAX(sequence) AS newest FROM events",
-      )
-      .get();
+  oldestEventSequence(): number | undefined {
+    return (
+      this.db
+        .query<{ oldest: number | null }, []>(
+          "SELECT COALESCE(MIN(sequence), (SELECT seq + 1 FROM sqlite_sequence WHERE name='events')) AS oldest FROM events",
+        )
+        .get()?.oldest ?? undefined
+    );
   }
 
   async listHooks(runId: string): Promise<HookRecord[]> {
@@ -247,25 +250,10 @@ export class SqliteRunStore implements RunStore {
   }
 
   async listRuns(filter: { slug?: string; status?: RunStatus } = {}): Promise<RunRecord[]> {
-    if (filter.slug !== undefined && filter.status !== undefined) {
-      return this.db
-        .query<RunRow, [string, RunStatus]>(SQL.listRunsBySlugAndStatus)
-        .all(filter.slug, filter.status)
-        .map(rowToRun);
-    }
-
-    if (filter.slug !== undefined) {
-      return this.db.query<RunRow, [string]>(SQL.listRunsBySlug).all(filter.slug).map(rowToRun);
-    }
-
-    if (filter.status !== undefined) {
-      return this.db
-        .query<RunRow, [RunStatus]>(SQL.listRunsByStatus)
-        .all(filter.status)
-        .map(rowToRun);
-    }
-
-    return this.db.query<RunRow, []>(SQL.listRuns).all().map(rowToRun);
+    return this.db
+      .query<RunRow, [string | null, RunStatus | null]>(SQL.listRuns)
+      .all(filter.slug ?? null, filter.status ?? null)
+      .map(rowToRun);
   }
 
   async claim(runId: string, token: string): Promise<RunRecord> {
@@ -581,14 +569,10 @@ export class SqliteRunStore implements RunStore {
     });
   }
 
-  private readonly listeners = new Set<(events: RuntimeEvent[]) => void>();
+  private readonly listeners = new EventListeners();
 
   subscribe(listener: (events: RuntimeEvent[]) => void): () => void {
-    this.listeners.add(listener);
-
-    return () => {
-      this.listeners.delete(listener);
-    };
+    return this.listeners.subscribe(listener);
   }
 
   async events(after: number, limit: number): Promise<RuntimeEvent[]> {
@@ -638,7 +622,7 @@ export class SqliteRunStore implements RunStore {
   }
 
   async pruneEvents(now: string): Promise<number> {
-    const cutoff = new Date(Date.parse(now) - 86_400_000).toISOString();
+    const cutoff = new Date(Date.parse(now) - EVENT_RETENTION.maxAgeMs).toISOString();
 
     return this.db.query(SQL.pruneEvents).run(cutoff).changes;
   }
@@ -647,15 +631,7 @@ export class SqliteRunStore implements RunStore {
     const txn: EventTransaction = { id: crypto.randomUUID(), events: [] };
     const result = this.db.transaction(() => change(txn)).immediate();
 
-    if (txn.events.length > 0) {
-      for (const listener of this.listeners) {
-        try {
-          listener(structuredClone(txn.events));
-        } catch {
-          continue;
-        }
-      }
-    }
+    this.listeners.publish(txn.events);
 
     return result;
   }

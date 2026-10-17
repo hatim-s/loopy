@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import { type eventsQuerySchema, routes, serverEvent } from "../../contract/index.js";
+import { routes, serverEvent } from "../../contract/index.js";
 import type { RuntimeEvent } from "../../core/index.js";
 import { type LoopyService, ServiceError } from "../service.js";
 import type { SqliteRunStore } from "../store.js";
@@ -7,7 +7,9 @@ import type { SqliteRunStore } from "../store.js";
 // A full queue is normal while a reader drains; two seconds without a pull is a reader that stopped.
 const STALLED_READER_MS = 2000;
 
-type EventsQuery = z.infer<typeof eventsQuerySchema>;
+const ENCODER = new TextEncoder();
+
+type EventsQuery = z.output<typeof routes.events.query>;
 
 export async function eventStream(
   store: SqliteRunStore,
@@ -15,12 +17,9 @@ export async function eventStream(
   query: EventsQuery,
   signal: AbortSignal,
 ): Promise<Response> {
-  const oldest = store.eventBounds()?.oldest;
+  const oldest = store.oldestEventSequence();
 
-  if (
-    query.epoch !== (await store.epoch()) ||
-    (oldest !== null && oldest !== undefined && query.after < oldest - 1)
-  ) {
+  if (query.epoch !== (await store.epoch()) || (oldest !== undefined && query.after < oldest - 1)) {
     throw new ServiceError("stale_cursor");
   }
 
@@ -67,8 +66,9 @@ class EventFeed {
 
   start(controller: ReadableStreamDefaultController<Uint8Array>): void {
     this.controller = controller;
-    controller.enqueue(new TextEncoder().encode(": connected\n\n"));
+    controller.enqueue(ENCODER.encode(": connected\n\n"));
     this.unsubscribe = this.store.subscribe(this.enqueue);
+    // Subscribe only sees this process's commits; data_version detects other processes' writes.
     this.tail = setInterval(() => {
       const next = this.store.dataVersion();
 
@@ -79,7 +79,7 @@ class EventFeed {
     }, 100);
     this.heartbeat = setInterval(() => {
       if ((controller.desiredSize ?? 0) > 0) {
-        controller.enqueue(new TextEncoder().encode(": heartbeat\n\n"));
+        controller.enqueue(ENCODER.encode(": heartbeat\n\n"));
       }
     }, 15_000);
     this.signal.addEventListener("abort", this.abort, { once: true });
@@ -139,7 +139,7 @@ class EventFeed {
     }
 
     if (!this.closed) {
-      controller.enqueue(new TextEncoder().encode(text));
+      controller.enqueue(ENCODER.encode(text));
     }
   }
 

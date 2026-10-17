@@ -3,10 +3,25 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
+import { z } from "zod";
 import type { LogRecord, StepRecord } from "../src/core/index.js";
 import { SqliteRunStore } from "../src/local/index.js";
 import { newRun } from "./fixture.js";
 import { storeContract } from "./store-contract.js";
+
+function runningStep(): Extract<StepRecord, { status: "running" }> {
+  return {
+    runId: "run",
+    seq: 1,
+    key: "step-1",
+    kind: "function",
+    input: null,
+    status: "running",
+    attempt: 1,
+    maxAttempts: 3,
+    startedAt: newRun().createdAt,
+  };
+}
 
 const clock = () => Date.parse("2026-10-16T00:00:00.000Z");
 
@@ -422,7 +437,7 @@ test("SQLite event reads reject malformed entity records at the JSON boundary", 
     database
       .query("UPDATE events SET record=?")
       .run(JSON.stringify({ ...newRun(), status: "unknown" }));
-    await expect(store.events(0, 10)).rejects.toThrow("Event run status must be one of");
+    await expect(store.events(0, 10)).rejects.toThrow(z.ZodError);
     database.query("UPDATE events SET record=?").run(
       JSON.stringify({
         ...newRun(),
@@ -430,11 +445,19 @@ test("SQLite event reads reject malformed entity records at the JSON boundary", 
         owner: { token: "owner", pid: "wrong", host: "host", heartbeatAt: newRun().createdAt },
       }),
     );
-    await expect(store.events(0, 10)).rejects.toThrow(
-      "Event record.pid must be a nonnegative integer.",
-    );
+    await expect(store.events(0, 10)).rejects.toThrow(z.ZodError);
     database.query("UPDATE events SET record=?").run("[]");
-    await expect(store.events(0, 10)).rejects.toThrow("Event record must be an object.");
+    await expect(store.events(0, 10)).rejects.toThrow(z.ZodError);
+    await store.claim("run", "owner");
+    await store.putStep("run", "owner", runningStep());
+    database
+      .query("UPDATE events SET record=? WHERE entity='step'")
+      .run(JSON.stringify({ ...runningStep(), seq: -1 }));
+    await expect(store.events(0, 10)).rejects.toThrow(z.ZodError);
+    database
+      .query("UPDATE events SET record=? WHERE entity='step'")
+      .run(JSON.stringify({ ...runningStep(), attempt: 1.5 }));
+    await expect(store.events(0, 10)).rejects.toThrow(z.ZodError);
     database.query("UPDATE events SET record=?").run("{");
     await expect(store.events(0, 10)).rejects.toThrow(SyntaxError);
   } finally {

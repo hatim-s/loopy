@@ -16,6 +16,8 @@ export type { ActivationOptions } from "./engine.js";
 
 export { activate } from "./engine.js";
 
+export { EVENT_RETENTION, EventListeners, type EventTransaction } from "./event-outbox.js";
+
 export type { Executor, ResolvedCommand } from "./executor.js";
 
 export { CommandExecutionError, CommandExitError } from "./executor.js";
@@ -33,8 +35,6 @@ export type { RateLimitResult, RateLimits, RateLimitWindow } from "./rate-limit.
 export { acquireWindow, parseRateLimits } from "./rate-limit.js";
 
 export type { RetryPolicy } from "./retry.js";
-
-export { runDetail } from "./run-detail.js";
 
 export { sameStepRecord } from "./step-record.js";
 

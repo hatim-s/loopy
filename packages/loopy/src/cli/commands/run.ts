@@ -15,22 +15,19 @@ export async function runRun(context: CliContext): Promise<void> {
   const input = await sdkInput(loopy, context);
 
   await withRunStore(context, async (store) => {
-    const executor = context.values.detach
-      ? undefined
-      : new LocalExecutor({ home: context.home, secrets: loopy.secrets });
-
-    const run = await runService(context, store).startRun(slug, input, context.cwd);
-    const runId = run.id;
-    const options = { ...context, store, loopy, runId, rateLimits, workspace: context.cwd };
+    const options = { ...context, store, loopy, rateLimits, workspace: context.cwd };
 
     if (context.values.detach) {
-      printJson(run);
+      printJson(await runService(context, store).startRun(slug, input, context.cwd));
 
       return;
     }
 
-    if (executor) {
-      await inlineRun({ ...options, executor });
-    }
+    await inlineRun({
+      ...options,
+      // Missing secrets must fail before startRun persists the queued run.
+      executor: new LocalExecutor({ home: context.home, secrets: loopy.secrets }),
+      runId: (await runService(context, store).startRun(slug, input, context.cwd)).id,
+    });
   });
 }
