@@ -85,7 +85,11 @@ function isJson(value: unknown): value is Json {
     return value.every(isJson);
   }
 
-  return isRecord(value) && Object.values(value).every(isJson);
+  return (
+    isRecord(value) &&
+    [Object.prototype, null].includes(Object.getPrototypeOf(value)) &&
+    Object.values(value).every(isJson)
+  );
 }
 
 const GUARDS = {

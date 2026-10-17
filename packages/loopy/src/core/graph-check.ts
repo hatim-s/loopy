@@ -123,12 +123,129 @@ function scopes({ graph, nodes }: Context): Diagnostic[] {
   });
 }
 
-function isMapBackEdge(context: Context, from: NodeId, to: NodeId, kind: string): boolean {
+function bodyEntries(context: Context, node: Node): NodeId[] {
+  const owner = node.scope === null ? undefined : context.nodes.get(node.scope);
+
+  return owner ? targets(owner).filter((entry) => scopeReaches(context, entry, node.id)) : [];
+}
+
+function sameBody(context: Context, left: Node, right: Node): boolean {
+  if (left.scope === null && right.scope === null) {
+    return true;
+  }
+
+  const entries = bodyEntries(context, left);
+  const other = bodyEntries(context, right);
+
+  return entries.length === 1 && other.length === 1 && entries[0] === other[0];
+}
+
+function scopeReaches(context: Context, from: NodeId, to: NodeId): boolean {
+  const seen = new Set<NodeId>();
+  const scope = context.nodes.get(from)?.scope;
+  const owner = scope === null || scope === undefined ? undefined : context.nodes.get(scope);
+  const entries = owner ? targets(owner) : [];
+
+  function visit(id: NodeId): boolean {
+    if (id === to) {
+      return true;
+    }
+
+    if (seen.has(id)) {
+      return false;
+    }
+
+    seen.add(id);
+
+    const control = context.nodes.get(id);
+
+    const exits = control
+      ? context.graph.edges
+          .filter(
+            (edge) =>
+              edge.kind === "join" &&
+              context.nodes.get(edge.from)?.scope === control.id &&
+              context.nodes.get(edge.to)?.scope === scope,
+          )
+          .map((edge) => edge.to)
+      : [];
+
+    return (
+      exits.some(visit) ||
+      context.graph.edges.some(
+        (edge) =>
+          edge.from === id &&
+          (edge.kind === "next" ||
+            (edge.kind === "join" && context.nodes.get(id)?.kind === "join")) &&
+          context.nodes.get(edge.to)?.scope === scope &&
+          !entries.includes(edge.to) &&
+          visit(edge.to),
+      )
+    );
+  }
+
+  return visit(from);
+}
+
+function scopeEdges(context: Context): Diagnostic[] {
+  return context.graph.edges.flatMap((edge) => {
+    const from = context.nodes.get(edge.from);
+    const to = context.nodes.get(edge.to);
+
+    if (!from || !to) {
+      return [];
+    }
+
+    const local = from.scope === to.scope && sameBody(context, from, to);
+    const entry = targets(from).includes(to.id) && to.scope === from.id;
+    const last = !context.graph.edges.some((next) => next.from === from.id && next.kind === "next");
+    const owner = from.scope === null ? undefined : context.nodes.get(from.scope);
+
+    const join =
+      edge.kind === "join" &&
+      from.kind === "join" &&
+      last &&
+      owner &&
+      (to.id === owner.id || (to.kind === "join" && to.scope === owner.scope));
+
+    return local || entry || join
+      ? []
+      : [
+          diagnostic(
+            "invalid_scope",
+            from.id,
+            "Edges must stay within a body or use its entry or join.",
+          ),
+        ];
+  });
+}
+
+function connectivity(context: Context): Diagnostic[] {
+  if (!context.nodes.has(context.graph.entry)) {
+    return [];
+  }
+
+  return context.graph.nodes.flatMap((node) =>
+    reaches(context, context.graph.entry, node.id)
+      ? []
+      : [
+          diagnostic(
+            "invalid_scope",
+            node.id,
+            "Every node must be reachable from the graph entry.",
+          ),
+        ],
+  );
+}
+
+function isScopeJoin(context: Context, from: NodeId, to: NodeId, kind: string): boolean {
   const source = context.nodes.get(from);
+  const owner = context.nodes.get(to);
 
   return (
     kind === "join" &&
-    context.nodes.get(to)?.kind === "map" &&
+    owner !== undefined &&
+    targets(owner).length > 0 &&
     source?.kind === "join" &&
     source.scope === to
   );
@@ -139,7 +256,12 @@ function successors(context: Context, id: NodeId): NodeId[] {
 
   return [
     ...context.graph.edges
-      .filter((edge) => edge.from === id && !isMapBackEdge(context, edge.from, edge.to, edge.kind))
+      .filter(
+        (edge) =>
+          edge.from === id &&
+          (edge.kind === "next" || edge.kind === "join") &&
+          !isScopeJoin(context, edge.from, edge.to, edge.kind),
+      )
       .map((edge) => edge.to),
     ...(node ? targets(node) : []),
   ];
@@ -167,7 +289,7 @@ function cycles(context: Context): Diagnostic[] {
   }
 
   return context.graph.nodes.some((node) => visit(node.id))
-    ? [diagnostic("cycle", null, "Graphs must be acyclic except for map iteration edges.")]
+    ? [diagnostic("cycle", null, "Graphs must be acyclic except for scope joins.")]
     : [];
 }
 
@@ -277,14 +399,15 @@ function visible(context: Context, producer: Node, consumer: Node): boolean {
   const chain = [consumer, ...ancestors(consumer, context.nodes)];
 
   if (chain.slice(1).some((node) => node.id === producer.id)) {
-    return true;
+    return false;
   }
 
   return chain.some(
     (node) =>
       node.id !== producer.id &&
       node.scope === producer.scope &&
-      reaches(context, producer.id, node.id),
+      sameBody(context, node, producer) &&
+      scopeReaches(context, producer.id, node.id),
   );
 }
 
@@ -349,7 +472,13 @@ function refError(context: Context, ref: Ref, consumer: Node | null): Diagnostic
     owner && consumer && ancestors(consumer, context.nodes).some((node) => node.id === owner.id);
 
   const handler =
-    owner?.kind !== "rescue" || (consumer && reaches(context, owner.handler, consumer.id));
+    owner?.kind !== "rescue" ||
+    (consumer &&
+      [consumer, ...ancestors(consumer, context.nodes)].some((node) => {
+        const entries = bodyEntries(context, node);
+
+        return node.scope === owner.id && entries.length === 1 && entries[0] === owner.handler;
+      }));
 
   const allowed = owner
     ? local && handler
@@ -400,13 +529,18 @@ function recordPathType(schema: RecordSpec, path: string[]): string | null {
   const type = schema[field] ?? schema[`${field}?`];
 
   if (path.length !== 1 || type === "json") {
-    return null;
+    return "json";
   }
 
   return type ?? null;
 }
 
-function schemaType(context: Context, ref: Ref): string | null {
+function schemaType(context: Context, ref: Ref, seen = new Set<string>()): string | null {
+  if (seen.has(ref.ref)) {
+    return null;
+  }
+
+  seen.add(ref.ref);
   const node = context.nodes.get(ref.ref);
   const owner = binding(context, ref);
 
@@ -439,15 +573,25 @@ function schemaType(context: Context, ref: Ref): string | null {
   }
 
   if (node?.kind === "map") {
-    return "array";
+    const result = context.graph.nodes.find(
+      (child) => child.scope === node.id && child.kind === "join",
+    );
+
+    const type = result?.kind === "join" ? operandType(context, result.result, seen) : null;
+
+    return `${node.onError === "collect" ? "object" : (type ?? "json")}[]`;
   }
 
-  return null;
+  return schema === "json" ? "json" : null;
 }
 
-function operandType(context: Context, value: ComparisonOperand): string | null {
+function operandType(
+  context: Context,
+  value: ComparisonOperand,
+  seen = new Set<string>(),
+): string | null {
   if (isRef(value)) {
-    return "size" in value ? "number" : schemaType(context, value);
+    return "size" in value ? "number" : schemaType(context, value, seen);
   }
 
   if (value === null) {
@@ -492,7 +636,7 @@ function comparisonErrors(
 
     const type = schemaType(context, operand);
 
-    return operand.size !== true || (type !== null && type !== "string" && type !== "array");
+    return operand.size !== true || (type !== "string" && !type?.endsWith("[]"));
   });
 
   if (invalidSize) {
@@ -505,15 +649,23 @@ function comparisonErrors(
     ];
   }
 
+  const ordering = ["lt", "lte", "gt", "gte"].includes(predicate.op);
+
   const mismatch =
     predicate.op === "in"
-      ? right !== null && right !== "array"
-      : left !== null && right !== null && left !== right;
+      ? !Array.isArray(predicate.right) &&
+        (!right?.endsWith("[]") || right.slice(0, -2) !== left || left === "json")
+      : ordering
+        ? left !== right || (left !== "number" && left !== "string")
+        : left !== null && right !== null && left !== right;
 
   const members = predicate.op === "in" && Array.isArray(predicate.right) ? predicate.right : [];
 
   const badMember =
-    left !== null && members.some((member) => operandType(context, member) !== left);
+    predicate.op === "in" &&
+    (left === null ||
+      left === "json" ||
+      members.some((member) => operandType(context, member) !== left));
 
   return mismatch || badMember
     ? [diagnostic("predicate_type", node, "Predicate operands must have matching declared types.")]
@@ -547,6 +699,18 @@ function predicates(context: Context): Diagnostic[] {
   );
 }
 
+function formats(context: Context): Diagnostic[] {
+  return context.graph.nodes.flatMap((node) =>
+    node.kind === "format" &&
+    Object.values(node.values).some(
+      (value) =>
+        isRef(value) && !["string", "number", "boolean"].includes(schemaType(context, value) ?? ""),
+    )
+      ? [diagnostic("predicate_type", node.id, "Format operands must have a declared scalar type.")]
+      : [],
+  );
+}
+
 function bindings({ graph }: Context): Diagnostic[] {
   const seen = new Set<string>(["input", ...graph.nodes.map((node) => node.id)]);
 
@@ -565,7 +729,18 @@ function bindings({ graph }: Context): Diagnostic[] {
   });
 }
 
-const rules = [identity, bindings, endpoints, scopes, references, predicates, cycles];
+const rules = [
+  identity,
+  bindings,
+  endpoints,
+  scopes,
+  scopeEdges,
+  connectivity,
+  references,
+  predicates,
+  formats,
+  cycles,
+];
 
 export function validateGraph(graph: Graph): Diagnostic[] {
   const context = { graph, nodes: new Map(graph.nodes.map((node) => [node.id, node])) };

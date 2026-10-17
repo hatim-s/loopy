@@ -11,7 +11,6 @@ import {
   NODE_RUN_STATUSES,
   type NodeId,
   PREDICATE_OPS,
-  type Predicate,
   RETRY_BACKOFFS,
   type RefId,
 } from "../core/index.js";
@@ -51,17 +50,22 @@ export const outputSchema = z.union([
 
 const operandSchema = z.union([refSchema.extend({ size: z.literal(true) }), valueSchema]);
 
-export const predicateSchema: z.ZodType<Predicate> = z.lazy(() =>
-  z.discriminatedUnion("op", [
-    z.strictObject({ op: z.enum(COMPARISON_OPS), left: operandSchema, right: operandSchema }),
-    z.strictObject({ op: z.enum([PREDICATE_OPS[6], PREDICATE_OPS[7]]), value: valueSchema }),
-    z.strictObject({
-      op: z.enum([PREDICATE_OPS[9], PREDICATE_OPS[10]]),
-      predicates: z.array(predicateSchema),
-    }),
-    z.strictObject({ op: z.literal(PREDICATE_OPS[11]), predicate: predicateSchema }),
-  ]),
-);
+export const predicateSchema = z.discriminatedUnion("op", [
+  z.strictObject({ op: z.enum(COMPARISON_OPS), left: operandSchema, right: operandSchema }),
+  z.strictObject({ op: z.enum([PREDICATE_OPS[6], PREDICATE_OPS[7]]), value: valueSchema }),
+  z.strictObject({
+    op: z.enum([PREDICATE_OPS[9], PREDICATE_OPS[10]]),
+    get predicates() {
+      return z.array(predicateSchema);
+    },
+  }),
+  z.strictObject({
+    op: z.literal(PREDICATE_OPS[11]),
+    get predicate() {
+      return predicateSchema;
+    },
+  }),
+]);
 
 // BOUNDARY: Durations arrive as JSON numbers or unit-suffixed strings.
 const durationSchema = z.custom<Duration>((value): value is Duration =>
@@ -145,7 +149,7 @@ const otherNodes = [
   base.extend({
     kind: z.literal(NODE_KINDS[11]),
     template: z.string(),
-    values: z.record(z.string(), valueSchema),
+    values: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), refSchema])),
   }),
   base.extend({
     kind: z.literal(NODE_KINDS[12]),
@@ -240,7 +244,17 @@ const nodeViewSchema = z.discriminatedUnion("kind", [
   ...otherNodes,
 ]);
 
-export const graphViewSchema = graphSchema.extend({ nodes: z.array(nodeViewSchema) });
+export const graphViewSchema = graphSchema.extend({
+  nodes: z.array(nodeViewSchema),
+  warnings: z.array(
+    z.strictObject({
+      code: z.enum(DIAGNOSTIC_CODES),
+      message: z.string(),
+      nodeId: nodeIdSchema.nullable(),
+      label: z.string().nullable(),
+    }),
+  ),
+});
 
 export const nodeRunViewSchema = nodeRunSchema;
 

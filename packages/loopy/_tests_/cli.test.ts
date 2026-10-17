@@ -656,3 +656,18 @@ async function waitForWaitingHook(store: ReturnType<typeof openRunStore>) {
 
   throw new Error("CLI never suspended on its hook. Check its stderr.");
 }
+
+test("CLI named json fields parse JSON and report invalid JSON", async () => {
+  const f = fixture("json-fields", `input: { data: "json" }, run: ({ input }) => input.data`);
+  await save(f);
+
+  for (const data of ['{"nested":[1,true,null]}', "null", '["a",2]', '"text"']) {
+    const result = await cli(f, "run", "json-fields", "--data", data);
+    expect(result.code).toBe(0);
+    expect(object(result.stdout).output).toEqual(JSON.parse(data));
+  }
+
+  const invalid = await cli(f, "run", "json-fields", "--data", "{bad}");
+  expect(invalid.code).toBe(1);
+  expect(invalid.stderr).toContain("Input --data must be valid JSON.");
+});

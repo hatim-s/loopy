@@ -15,7 +15,7 @@ export {
   scheduleEnabledBodySchema,
 } from "./api.js";
 
-export { loopyView, runView, serverEvent } from "./derive.js";
+export { graphView, loopyView, runView, serverEvent } from "./derive.js";
 
 export * from "./graph.js";
 

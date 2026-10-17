@@ -1,4 +1,5 @@
 import { expect, expectTypeOf, test } from "bun:test";
+import type { z } from "zod";
 import * as contract from "../src/contract/index.js";
 import type * as core from "../src/core/index.js";
 import {
@@ -11,7 +12,15 @@ import { approveDemoGraph } from "./fixtures/graphs.js";
 
 type Flatten<T> = T extends unknown ? { [K in keyof T]: T[K] } : never;
 
+type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+  ? true
+  : false;
+
 test("graph schemas exactly match the portable model", () => {
+  const graph: Equal<contract.Graph, core.Graph> = true;
+  const predicate: Equal<z.infer<typeof contract.predicateSchema>, core.Predicate> = true;
+  const reverse: Equal<core.Predicate, z.infer<typeof contract.predicateSchema>> = true;
+  expect([graph, predicate, reverse]).toEqual([true, true, true]);
   expectTypeOf<contract.Graph>().toEqualTypeOf<core.Graph>();
   expectTypeOf<contract.Node>().toEqualTypeOf<Flatten<core.Node>>();
   expectTypeOf<contract.Edge>().toEqualTypeOf<Flatten<core.Edge>>();
@@ -24,7 +33,13 @@ test("graph schemas exactly match the portable model", () => {
   expectTypeOf<contract.NodeRunView>().toEqualTypeOf<Flatten<core.NodeRun>>();
   expectTypeOf<contract.GraphView>().toEqualTypeOf<
     Flatten<
-      Omit<core.Graph, "nodes"> & {
+      Omit<core.Graph, "nodes" | "warnings"> & {
+        warnings: {
+          code: core.DiagnosticCode;
+          message: string;
+          nodeId: core.NodeId | null;
+          label: string | null;
+        }[];
         nodes: Flatten<
           | Exclude<Flatten<core.Node>, { kind: "code" | "command" }>
           | (Omit<Extract<core.Node, { kind: "code" }>, "module"> & { module: { name: string } })
@@ -35,7 +50,6 @@ test("graph schemas exactly match the portable model", () => {
       }
     >
   >();
-  expectTypeOf<ReturnType<typeof contract.predicateSchema.parse>>().toEqualTypeOf<core.Predicate>();
 });
 
 test("approve-demo is the canonical JSON graph for the builder", () => {
@@ -46,11 +60,15 @@ test("approve-demo is the canonical JSON graph for the builder", () => {
   expect(validateGraph(approveDemoGraph)).toEqual([]);
 });
 
-function broken(code: DiagnosticCode, change: (graph: Graph) => Graph) {
-  test(`graph validation reports only ${code}`, () => {
+function broken(
+  code: DiagnosticCode,
+  change: (graph: Graph) => Graph,
+  related: DiagnosticCode[] = [],
+) {
+  test(`graph validation reports ${code}`, () => {
     expect(
       validateGraph(change(structuredClone(approveDemoGraph))).map((error) => error.code),
-    ).toEqual([code]);
+    ).toEqual([code, ...related]);
   });
 }
 
@@ -110,14 +128,18 @@ broken("invalid_size", (graph) => ({
   ),
 }));
 
-broken("missing_arm", (graph) => ({
-  ...graph,
-  nodes: graph.nodes.map((node) =>
-    node.kind === "branch"
-      ? { ...node, arms: { ...node.arms, no: contract.nodeIdSchema.parse("missing") } }
-      : node,
-  ),
-}));
+broken(
+  "missing_arm",
+  (graph) => ({
+    ...graph,
+    nodes: graph.nodes.map((node) =>
+      node.kind === "branch"
+        ? { ...node, arms: { ...node.arms, no: contract.nodeIdSchema.parse("missing") } }
+        : node,
+    ),
+  }),
+  ["invalid_scope", "invalid_scope"],
+);
 
 broken("invalid_scope", (graph) => ({
   ...graph,
@@ -226,9 +248,15 @@ const mapGraph = contract.graphSchema.parse({
       scope: "map",
       label: null,
       template: "{i}:{value}",
-      values: { i: { ref: "index", path: [] }, value: { ref: "item", path: [] } },
+      values: { i: { ref: "index", path: [] }, value: "item" },
     },
-    { id: "end", kind: "join", scope: "map", label: null, result: { ref: "body", path: [] } },
+    {
+      id: "end",
+      kind: "join",
+      scope: "map",
+      label: null,
+      result: { value: { ref: "item", path: [] }, formatted: { ref: "body", path: [] } },
+    },
   ],
   edges: [
     { from: "map", to: "body", kind: "each" },
@@ -260,7 +288,7 @@ test("map bindings stay inside the body and only scope joins can iterate", () =>
     ),
   };
 
-  expect(validateGraph(badCycle).map((error) => error.code)).toEqual(["cycle"]);
+  expect(validateGraph(badCycle).map((error) => error.code)).toEqual(["invalid_scope", "cycle"]);
 });
 
 test("parallel siblings cannot consume one another's results", () => {
@@ -342,7 +370,7 @@ test("graph wire views reject paths and hashes, including command parser hashes"
     return node;
   });
 
-  const view = { ...approveDemoGraph, nodes };
+  const view = { ...approveDemoGraph, nodes, warnings: [] };
   expect(contract.graphViewSchema.parse(view)).toEqual(view);
   expect(contract.graphViewSchema.safeParse(approveDemoGraph).success).toBe(false);
   expect(
@@ -397,7 +425,7 @@ test("every node run status round-trips without optional state fields", () => {
 
 test("scope bindings cannot shadow node outputs, input, or one another", () => {
   const withoutIndex = mapGraph.nodes.map((node) =>
-    node.kind === "format" ? { ...node, values: { value: node.values.value ?? null } } : node,
+    node.kind === "format" ? { ...node, values: { value: node.values.value ?? "" } } : node,
   );
 
   const graph = {
@@ -415,4 +443,272 @@ test("scope bindings cannot shadow node outputs, input, or one another", () => {
   };
 
   expect(validateGraph(shadow).map((error) => error.code)).toEqual(["duplicate_ref"]);
+});
+
+function withPredicate(predicate: core.Predicate): Graph {
+  return {
+    ...approveDemoGraph,
+    input: {
+      "subject?": "string",
+      data: "json",
+      text: "string",
+    },
+    nodes: approveDemoGraph.nodes.map((node) =>
+      node.kind === "branch" ? { ...node, predicate } : node,
+    ),
+  };
+}
+
+const jsonRef = { ref: contract.refIdSchema.parse("input"), path: ["data"] };
+
+for (const op of ["lt", "lte", "gt", "gte"] as const) {
+  test(`${op} rejects JSON and non-orderable declared types`, () => {
+    for (const [left, right] of [
+      [jsonRef, 1],
+      [1, jsonRef],
+      [true, false],
+      ["a", 1],
+    ]) {
+      const predicate = contract.predicateSchema.parse({ op, left, right });
+      expect(validateGraph(withPredicate(predicate)).map((error) => error.code)).toContain(
+        "predicate_type",
+      );
+    }
+
+    expect(validateGraph(withPredicate({ op, left: "a", right: "b" }))).toEqual([]);
+    expect(validateGraph(withPredicate({ op, left: 1, right: 2 }))).toEqual([]);
+  });
+}
+
+test("size requires declared string or array and in requires matching array elements", () => {
+  expect(
+    validateGraph(withPredicate({ op: "gt", left: { ...jsonRef, size: true }, right: 0 })).map(
+      (error) => error.code,
+    ),
+  ).toEqual(["invalid_size"]);
+
+  for (const [left, right] of [
+    [1, jsonRef],
+    [jsonRef, [1]],
+    [1, ["a"]],
+    [1, "text"],
+  ]) {
+    expect(
+      validateGraph(withPredicate(contract.predicateSchema.parse({ op: "in", left, right }))).map(
+        (error) => error.code,
+      ),
+    ).toEqual(["predicate_type"]);
+  }
+
+  expect(validateGraph(withPredicate({ op: "in", left: 1, right: [1, 2] }))).toEqual([]);
+});
+
+for (const op of ["eq", "ne", "exists", "isNull"] as const) {
+  test(`${op} accepts declared JSON`, () => {
+    const predicate: core.Predicate =
+      op === "eq" || op === "ne" ? { op, left: jsonRef, right: jsonRef } : { op, value: jsonRef };
+
+    expect(validateGraph(withPredicate(predicate))).toEqual([]);
+  });
+}
+
+test("a map body cannot consume its enclosing map output", () => {
+  const graph = {
+    ...mapGraph,
+    nodes: mapGraph.nodes.map((node) =>
+      node.kind === "join"
+        ? { ...node, result: { ref: contract.refIdSchema.parse("map"), path: [] } }
+        : node,
+    ),
+  };
+
+  expect(validateGraph(graph).map((error) => error.code)).toEqual(["out_of_scope_ref"]);
+});
+
+test("format accepts scalar literals and declared scalar refs only", () => {
+  for (const path of [[], ["data"]]) {
+    const graph = {
+      ...approveDemoGraph,
+      input: { data: "json" as const },
+      nodes: approveDemoGraph.nodes.map((node) =>
+        node.kind === "format"
+          ? { ...node, values: { value: { ref: contract.refIdSchema.parse("input"), path } } }
+          : node,
+      ),
+    };
+
+    expect(validateGraph(graph).map((error) => error.code)).toContain("predicate_type");
+  }
+
+  for (const value of [null, [], {}]) {
+    const format = approveDemoGraph.nodes.find((node) => node.kind === "format");
+    expect(contract.nodeSchema.safeParse({ ...format, values: { value } }).success).toBe(false);
+  }
+});
+
+test("graph warning views project node labels without source module paths", () => {
+  const graph = {
+    ...approveDemoGraph,
+    warnings: [
+      {
+        code: "predicate_type" as const,
+        message: "warning",
+        node: approveDemoGraph.entry,
+        source: { module: "/private/author.ts", line: 1, column: 1 },
+      },
+    ],
+  };
+
+  const view = contract.graphView(graph);
+  expect(view.warnings).toEqual([
+    { code: "predicate_type", message: "warning", nodeId: graph.entry, label: "draft" },
+  ]);
+  expect(contract.graphViewSchema.parse(view)).toEqual(view);
+  expect(JSON.stringify(view)).not.toContain("/private/author.ts");
+  expect(contract.graphViewSchema.safeParse({ ...view, warnings: graph.warnings }).success).toBe(
+    false,
+  );
+});
+
+test("predicate wire schema parses the complete vocabulary and rejects unknown ops", () => {
+  for (const op of ["eq", "ne", "lt", "lte", "gt", "gte", "in"] as const) {
+    const predicate = { op, left: 1, right: 1 };
+    expect(JSON.stringify(contract.predicateSchema.parse(predicate))).toBe(
+      JSON.stringify(predicate),
+    );
+  }
+
+  const eq = { op: "eq", left: 1, right: 1 } as const;
+
+  for (const predicate of [
+    { op: "exists", value: 1 },
+    { op: "isNull", value: null },
+    { op: "and", predicates: [eq] },
+    { op: "or", predicates: [eq] },
+    { op: "not", predicate: eq },
+    { op: "gt", left: { ref: "input", path: ["text"], size: true }, right: 0 },
+  ]) {
+    expect(JSON.stringify(contract.predicateSchema.parse(predicate))).toBe(
+      JSON.stringify(predicate),
+    );
+  }
+
+  expect(contract.predicateSchema.safeParse({ op: "unknown" }).success).toBe(false);
+});
+
+test("disconnected nodes are diagnosed", () => {
+  const graph = {
+    ...approveDemoGraph,
+    nodes: [
+      ...approveDemoGraph.nodes,
+      contract.nodeSchema.parse({ id: "orphan", kind: "uuid", label: null, scope: null }),
+    ],
+  };
+
+  expect(
+    validateGraph(graph)
+      .filter((error) => error.code === "invalid_scope")
+      .map((error) => error.node),
+  ).toEqual([contract.nodeIdSchema.parse("orphan")]);
+});
+
+test("a second root with an edge into the graph is diagnosed", () => {
+  const root = contract.nodeSchema.parse({ id: "root", kind: "uuid", label: null, scope: null });
+
+  const graph = {
+    ...approveDemoGraph,
+    nodes: [...approveDemoGraph.nodes, root],
+    edges: [
+      ...approveDemoGraph.edges,
+      { from: root.id, to: approveDemoGraph.entry, kind: "next" as const },
+    ],
+  };
+
+  expect(validateGraph(graph).map((error) => error.code)).toContain("invalid_scope");
+});
+
+for (const target of ["5:apply", "6:join"]) {
+  test(`outside edges cannot enter body node ${target}`, () => {
+    const graph = {
+      ...approveDemoGraph,
+      edges: [
+        ...approveDemoGraph.edges,
+        {
+          from: approveDemoGraph.entry,
+          to: contract.nodeIdSchema.parse(target),
+          kind: "next" as const,
+        },
+      ],
+    };
+
+    expect(validateGraph(graph).map((error) => error.code)).toContain("invalid_scope");
+  });
+}
+
+test("sibling arm edges cannot grant reference visibility", () => {
+  const graph = {
+    ...approveDemoGraph,
+    nodes: approveDemoGraph.nodes.map((node) =>
+      node.kind === "fail"
+        ? { ...node, message: { ref: contract.refIdSchema.parse("4:format"), path: [] } }
+        : node,
+    ),
+    edges: [
+      ...approveDemoGraph.edges,
+      {
+        from: contract.nodeIdSchema.parse("4:format"),
+        to: contract.nodeIdSchema.parse("7:fail"),
+        kind: "next" as const,
+      },
+    ],
+  };
+
+  const codes = validateGraph(graph).map((error) => error.code);
+  expect(codes).toContain("invalid_scope");
+  expect(codes).toContain("out_of_scope_ref");
+});
+
+test("array refs use the declared map result type for size and membership", () => {
+  const done = contract.nodeIdSchema.parse("done");
+  const mapRef = { ref: contract.refIdSchema.parse("map"), path: [] };
+
+  const graph: Graph = {
+    ...mapGraph,
+    nodes: [
+      ...mapGraph.nodes.map((node) =>
+        node.kind === "map"
+          ? { ...node, onError: "fail" as const }
+          : node.kind === "join"
+            ? { ...node, result: { ref: contract.refIdSchema.parse("body"), path: [] } }
+            : node,
+      ),
+      {
+        id: done,
+        kind: "branch",
+        scope: null,
+        label: null,
+        arms: { yes: contract.nodeIdSchema.parse("yes"), no: contract.nodeIdSchema.parse("no") },
+        predicate: { op: "in", left: "value", right: mapRef },
+      },
+      { id: contract.nodeIdSchema.parse("yes"), kind: "uuid", scope: done, label: null },
+      { id: contract.nodeIdSchema.parse("no"), kind: "uuid", scope: done, label: null },
+    ],
+    edges: [...mapGraph.edges, { from: mapGraph.entry, to: done, kind: "next" }],
+  };
+
+  expect(validateGraph(graph)).toEqual([]);
+
+  for (const predicate of [
+    { op: "in", left: 1, right: mapRef },
+    { op: "gt", left: { ...mapRef, size: true }, right: 0 },
+  ] satisfies core.Predicate[]) {
+    const changed = {
+      ...graph,
+      nodes: graph.nodes.map((node) => (node.kind === "branch" ? { ...node, predicate } : node)),
+    };
+
+    expect(validateGraph(changed).map((error) => error.code)).toEqual(
+      predicate.op === "in" ? ["predicate_type"] : [],
+    );
+  }
 });

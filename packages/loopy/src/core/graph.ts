@@ -22,6 +22,8 @@ export type Ref = { ref: RefId; path: string[] };
 
 export type Value = Json | Ref;
 
+export type FormatOperand = string | number | boolean | Ref;
+
 export const PREDICATE_OPS = [
   "eq",
   "ne",
@@ -49,7 +51,7 @@ export const COMPARISON_OPS = [
   PREDICATE_OPS[8],
 ] as const;
 
-export type ComparisonOperand = Value | (Ref & { size: true });
+export type ComparisonOperand = Value | { ref: RefId; path: string[]; size: true };
 
 export type Predicate =
   | { op: (typeof COMPARISON_OPS)[number]; left: ComparisonOperand; right: ComparisonOperand }
@@ -141,7 +143,7 @@ export type Node = Expand<
       | { kind: (typeof NODE_KINDS)[8]; body: NodeId; cleanup: NodeId }
       | { kind: (typeof NODE_KINDS)[9]; body: NodeId; handler: NodeId; error: RefId }
       | { kind: (typeof NODE_KINDS)[10]; message: Value }
-      | { kind: (typeof NODE_KINDS)[11]; template: string; values: Record<string, Value> }
+      | { kind: (typeof NODE_KINDS)[11]; template: string; values: Record<string, FormatOperand> }
       | { kind: (typeof NODE_KINDS)[12]; message: Value; data: Value | null }
       | { kind: (typeof NODE_KINDS)[13] }
       | { kind: (typeof NODE_KINDS)[14] }

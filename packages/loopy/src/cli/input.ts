@@ -24,6 +24,17 @@ export async function jsonInput(context: CliContext): Promise<Json> {
 }
 
 function coerce(value: string, kind: RecordSpec[string], key: string) {
+  if (kind === "json") {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      assertJson(parsed, `Input --${key}`);
+
+      return parsed;
+    } catch {
+      throw new Error(`Input --${key} must be valid JSON.`);
+    }
+  }
+
   if (kind === "string") {
     return value;
   }
@@ -39,7 +50,7 @@ function coerce(value: string, kind: RecordSpec[string], key: string) {
   throw new Error(`Input --${key} must be a ${kind}. Provide a valid value.`);
 }
 
-type NamedInput = Record<string, string | number | boolean>;
+type NamedInput = Record<string, Json>;
 
 async function recordInput(spec: RecordSpec, context: CliContext) {
   const input: NamedInput = {};
