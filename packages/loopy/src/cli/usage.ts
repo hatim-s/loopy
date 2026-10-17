@@ -17,15 +17,15 @@ export function usage(): string {
   loopy cancel <run-id>                       Cancel a claimable run
   loopy schedule <slug> [--cron EXPR] [--tz ZONE] [--input-json JSON]
   loopy schedule <slug> --off                 Remove its schedule
-  loopy daemon run [--concurrency N]          Run the foreground daemon
-  loopy daemon install [--concurrency N]      Install and start the user service
+  loopy daemon run [--concurrency N] [--port 4310]          Run the foreground daemon
+  loopy daemon install [--concurrency N] [--port 4310]      Install and start the user service
   loopy daemon uninstall                     Remove the user service
-  loopy daemon status                        Show service state and PID
+  loopy daemon status                        Show daemon PID, port, token and start time
   loopy types <cli> [command...] --out file.ts [--name identifier]
   loopy secrets set <name> [--stdin]          Store a secret privately
   loopy secrets list                          List secret names
   loopy secrets remove <name>                 Delete a stored secret
-  loopy ui [--port ${DEFAULT_PORT}]                      Open Studio's read-only run viewer
+  loopy ui [--port ${DEFAULT_PORT}]                      Print the daemon URL, starting it in the foreground if needed
 
 Global options:
   --home <directory>    Registry, bundles and runs.sqlite. Default: ~/.loopy

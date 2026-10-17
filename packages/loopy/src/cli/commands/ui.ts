@@ -1,22 +1,25 @@
-import { DEFAULT_PORT, startServer } from "../../local/index.js";
+import { daemonUrl, readDaemonFile } from "../../local/index.js";
 import { type CliContext, expectNoArguments } from "../context.js";
 import { printLine } from "../output.js";
-import { onTermination } from "../signals.js";
-
-function parsePort(value: string | undefined): number {
-  const port = value === undefined ? DEFAULT_PORT : Number(value);
-
-  if (!Number.isInteger(port) || port < 0 || port > 65535) {
-    throw new Error("Port must be an integer from 0 to 65535.");
-  }
-
-  return port;
-}
+import { runForeground } from "./daemon.js";
 
 export async function runUi(context: CliContext): Promise<void> {
   expectNoArguments(context);
-  const { home, cwd, values } = context;
-  const server = startServer({ home, cwd, port: parsePort(values.port) });
-  printLine(server.url);
-  onTermination(() => void server.stop());
+  const daemon = readDaemonFile(context.home);
+
+  if (daemon) {
+    printLine(daemonUrl(daemon));
+
+    return;
+  }
+
+  await runForeground(context, () => {
+    const started = readDaemonFile(context.home);
+
+    if (!started) {
+      throw new Error("Daemon discovery is missing. Restart loopy ui.");
+    }
+
+    printLine(daemonUrl(started));
+  });
 }

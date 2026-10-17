@@ -1,8 +1,14 @@
 import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
-import { daemonStatus, installDaemon, localDaemon, uninstallDaemon } from "../../local/index.js";
+import {
+  DEFAULT_PORT,
+  installDaemon,
+  localDaemon,
+  readDaemonFile,
+  uninstallDaemon,
+} from "../../local/index.js";
 import { type CliContext, requireTarget } from "../context.js";
-import { printJson, report } from "../output.js";
+import { printJson, printLine, report } from "../output.js";
 import { onTermination } from "../signals.js";
 import { withRunStore } from "../store.js";
 
@@ -24,7 +30,7 @@ export async function runDaemon(context: CliContext): Promise<void> {
   }
 
   if (action === "status") {
-    printJson(await daemonStatus());
+    printJson(readDaemonFile(context.home) ?? { state: "stopped" });
 
     return;
   }
@@ -57,15 +63,24 @@ async function installService(context: CliContext): Promise<void> {
     args: [
       await realpath(resolve(entry)),
       ...(value === undefined ? [] : ["--concurrency", value]),
+      ...(context.values.port === undefined
+        ? []
+        : ["--port", String(parsePort(context.values.port))]),
     ],
   });
 }
 
-async function runForeground(context: CliContext): Promise<void> {
+function reportAddress(url: string): void {
+  printLine(new URL(url).origin);
+  printLine("Run loopy ui to open the dashboard.");
+}
+
+export async function runForeground(context: CliContext, onStarted = reportAddress): Promise<void> {
   await withRunStore(context, async (store) => {
     const daemon = localDaemon({
       ...context,
       store,
+      port: parsePort(context.values.port),
       concurrency:
         context.values.concurrency === undefined ? undefined : Number(context.values.concurrency),
       onError: (error, run) => report(run ? `Run ${run.id}: ${error.message}` : error.message),
@@ -78,10 +93,21 @@ async function runForeground(context: CliContext): Promise<void> {
     const cleanup = onTermination(stop);
 
     try {
+      onStarted(daemon.start());
       await daemon.run();
     } finally {
       cleanup();
       await daemon.stop();
     }
   });
+}
+
+export function parsePort(value: string | undefined): number {
+  const port = value === undefined ? DEFAULT_PORT : Number(value);
+
+  if (!Number.isInteger(port) || port < 0 || port > 65535) {
+    throw new Error("Port must be an integer from 0 to 65535.");
+  }
+
+  return port;
 }

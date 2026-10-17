@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { extname, join } from "node:path";
 
 export type Asset = { body: Blob; type: string };
 
@@ -42,7 +42,9 @@ export function serveAsset(assets: Map<string, Asset>, request: Request, path: s
     return new Response("Method not allowed.", { status: 405 });
   }
 
-  const file = assets.get(path === "/" ? "index.html" : path.replace(/^\/+/, ""));
+  const file =
+    assets.get(path === "/" ? "index.html" : path.replace(/^\/+/, "")) ??
+    (extname(path) === "" ? assets.get("index.html") : undefined);
 
   if (!file) {
     return new Response("Viewer assets are missing. Run bun run build first.", { status: 404 });

@@ -1,10 +1,9 @@
 import { LocalExecutor, loadLoopy, Registry, readRateLimits } from "../../local/index.js";
-import { createLoopyRun } from "../../sdk/host.js";
 import { type CliContext, requireTarget } from "../context.js";
 import { inlineRun } from "../inline-run.js";
 import { sdkInput } from "../input.js";
 import { printJson } from "../output.js";
-import { withRunStore } from "../store.js";
+import { runService, withRunStore } from "../store.js";
 
 export async function runRun(context: CliContext): Promise<void> {
   const rateLimits = readRateLimits(context.home);
@@ -16,19 +15,22 @@ export async function runRun(context: CliContext): Promise<void> {
   const input = await sdkInput(loopy, context);
 
   await withRunStore(context, async (store) => {
-    const runId = crypto.randomUUID();
+    const executor = context.values.detach
+      ? undefined
+      : new LocalExecutor({ home: context.home, secrets: loopy.secrets });
+
+    const run = await runService(context, store).startRun(slug, input, context.cwd);
+    const runId = run.id;
     const options = { ...context, store, loopy, runId, rateLimits, workspace: context.cwd };
-    const create = () => createLoopyRun({ ...options, input, bundleHash: saved.bundleHash });
 
     if (context.values.detach) {
-      await create();
-      printJson(await store.getRun(runId));
+      printJson(run);
 
       return;
     }
 
-    const executor = new LocalExecutor({ home: context.home, secrets: loopy.secrets });
-    await create();
-    await inlineRun({ ...options, executor });
+    if (executor) {
+      await inlineRun({ ...options, executor });
+    }
   });
 }

@@ -1,13 +1,15 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
   bundleLoopy,
+  daemonUrl,
   loadLoopy,
   localDaemon,
   openRunStore,
   Registry,
+  readDaemonFile,
   SecretStore,
 } from "../src/local/index.js";
 import { createLoopyRun } from "../src/sdk/host.js";
@@ -229,5 +231,89 @@ test("local daemon loads configured per-key limits for bundled workflows", async
   } finally {
     await daemon.stop();
     store.close();
+  }
+});
+
+test("daemon publishes a private discovery file and removes it on clean shutdown", async () => {
+  const home = directory();
+  const cwd = directory();
+  const store = openRunStore(home);
+  const daemon = localDaemon({ home, cwd, store, port: 0, concurrency: 2 });
+
+  try {
+    const url = new URL(daemon.start());
+    expect(statSync(join(home, "daemon.json")).mode & 0o777).toBe(0o600);
+    const record = readDaemonFile(home);
+    expect(record).toMatchObject({
+      pid: process.pid,
+      port: Number(url.port),
+      token: new URLSearchParams(url.hash.slice(1)).get("token"),
+      startedAt: expect.any(String),
+    });
+
+    const child = Bun.spawn(
+      [process.execPath, resolve(import.meta.dir, "../src/cli/index.ts"), "--home", home, "ui"],
+      { cwd, stdout: "pipe", stderr: "pipe" },
+    );
+
+    expect((await new Response(child.stdout).text()).trim()).toBe(url.toString());
+    expect(await child.exited).toBe(0);
+
+    const status = Bun.spawn(
+      [
+        process.execPath,
+        resolve(import.meta.dir, "../src/cli/index.ts"),
+        "--home",
+        home,
+        "daemon",
+        "status",
+      ],
+      { stdout: "pipe", stderr: "pipe" },
+    );
+
+    expect(JSON.parse(await new Response(status.stdout).text())).toEqual(record);
+    expect(await status.exited).toBe(0);
+  } finally {
+    await daemon.stop();
+    store.close();
+  }
+
+  expect(existsSync(join(home, "daemon.json"))).toBe(false);
+});
+
+test("ui starts the foreground daemon when discovery is absent and removes it on SIGTERM", async () => {
+  const home = directory();
+  const cwd = directory();
+
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      resolve(import.meta.dir, "../src/cli/index.ts"),
+      "--home",
+      home,
+      "ui",
+      "--port",
+      "0",
+    ],
+    { cwd, stdout: "pipe", stderr: "pipe" },
+  );
+
+  try {
+    for (let i = 0; i < 100 && !readDaemonFile(home); i++) {
+      await Bun.sleep(20);
+    }
+
+    const record = readDaemonFile(home);
+    expect(record?.pid).toBe(child.pid);
+    const reader = child.stdout.getReader();
+    const chunk = await reader.read();
+    expect(new TextDecoder().decode(chunk.value).trim()).toBe(daemonUrl(record!));
+    reader.releaseLock();
+    child.kill("SIGTERM");
+    expect(await child.exited).toBe(0);
+    expect(existsSync(join(home, "daemon.json"))).toBe(false);
+  } finally {
+    child.kill();
+    await child.exited;
   }
 });

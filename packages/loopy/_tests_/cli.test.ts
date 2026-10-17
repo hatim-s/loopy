@@ -4,19 +4,15 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { requireRecord } from "../src/core/index.js";
-import { openRunStore, startServer } from "../src/local/index.js";
+import { openRunStore } from "../src/local/index.js";
 
 const roots: string[] = [];
-
-const servers: ReturnType<typeof startServer>[] = [];
 
 const CLI = resolve(import.meta.dir, "../src/cli/index.ts");
 
 const SDK = resolve(import.meta.dir, "../src/sdk/index.ts");
 
 afterEach(async () => {
-  await Promise.all(servers.splice(0).map((server) => server.stop()));
-
   for (const root of roots.splice(0)) {
     rmSync(root, { recursive: true, force: true });
   }
@@ -264,31 +260,6 @@ test("schedule persists the next fire and off removes it", async () => {
   }
 });
 
-test("API returns run records, step traces and cursor logs", async () => {
-  const f = fixture(
-    "api",
-    `run: async ({ log }) => { log.info("first"); await step("one", () => 1); log.info("second"); return 2; }`,
-  );
-
-  await save(f);
-  const run = object((await cli(f, "run", "api")).stdout);
-  const server = startServer({ home: f.home, cwd: f.cwd, port: 0 });
-  servers.push(server);
-  const url = new URL(server.url);
-  const token = new URLSearchParams(url.hash.slice(1)).get("token");
-  const headers = { Authorization: `Bearer ${token}` };
-  const request = (path: string) => fetch(`${url.origin}/api${path}`, { headers });
-  const detail = requireRecord(await (await request(`/runs/${run.id}`)).json(), "Run detail");
-  expect(detail.steps).toMatchObject([{ key: "one", status: "succeeded" }]);
-  expect(detail.logs).toMatchObject([{ message: "first" }, { message: "second" }]);
-  expect(await (await request(`/runs/${run.id}/logs?after=1`)).json()).toMatchObject([
-    { message: "second" },
-  ]);
-  expect((await request(`/runs/${run.id}/logs?after=-1`)).status).toBe(400);
-  expect((await request("/runs/missing/logs")).status).toBe(404);
-  expect(await (await request("/runs")).json()).toMatchObject([{ id: run.id }]);
-});
-
 test("cancel reports an active owner instead of stealing the run", async () => {
   const f = fixture("owned", "run: () => 42");
   await save(f);
@@ -423,38 +394,6 @@ test("inspect reports how to find a missing run", async () => {
   expect(result.stderr).toContain("No run 'nonexist'. Use loopy runs to list run ids.");
 });
 
-test("Studio requires its token and origin, serves pinned assets and exposes read-only data", async () => {
-  const f = fixture("studio", "run: () => 1");
-  await save(f);
-  const assets = join(f.cwd, "assets");
-  mkdirSync(assets);
-  writeFileSync(join(assets, "index.html"), "original Studio");
-  const server = startServer({ home: f.home, cwd: f.cwd, assets, port: 0 });
-  servers.push(server);
-  const url = new URL(server.url);
-  const token = new URLSearchParams(url.hash.slice(1)).get("token");
-  const headers = { Authorization: `Bearer ${token}` };
-  expect((await fetch(`${url.origin}/api/runs`)).status).toBe(401);
-  expect(
-    (await fetch(`${url.origin}/api/runs`, { headers: { Authorization: "Bearer wrong" } })).status,
-  ).toBe(401);
-  expect(
-    (
-      await fetch(`${url.origin}/api/runs`, {
-        headers: { ...headers, Origin: "https://other.example" },
-      })
-    ).status,
-  ).toBe(403);
-  expect(await (await fetch(`${url.origin}/api/loopies`, { headers })).json()).toMatchObject([
-    { slug: "studio" },
-  ]);
-  expect((await fetch(`${url.origin}/api/runs`, { method: "POST", headers })).status).toBe(404);
-  writeFileSync(join(assets, "index.html"), "changed Studio");
-  const page = await fetch(url.origin);
-  expect(await page.text()).toBe("original Studio");
-  expect(page.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
-});
-
 test("saved slugs require explicit replacement and project entries override global entries", async () => {
   const f = fixture("scoped", 'scope: "global", run: () => "global"');
   await save(f);
@@ -581,23 +520,6 @@ test("loopy types generates a git wrapper that can execute --version", async () 
   });
 });
 
-test("API distinguishes invalid cursors from registry failures", async () => {
-  const f = fixture("server-errors", "run: () => 1");
-  await save(f);
-  const run = object((await cli(f, "run", "server-errors")).stdout);
-  const server = startServer({ home: f.home, cwd: f.cwd, port: 0 });
-  servers.push(server);
-  const url = new URL(server.url);
-  const token = new URLSearchParams(url.hash.slice(1)).get("token");
-  const headers = { Authorization: `Bearer ${token}` };
-  expect((await fetch(`${url.origin}/api/runs/${run.id}/logs?after=bad`, { headers })).status).toBe(
-    400,
-  );
-  writeFileSync(join(f.cwd, ".loopy", "loopies", "server-errors.json"), "invalid JSON");
-  expect((await fetch(`${url.origin}/api/loopies`, { headers })).status).toBe(500);
-  expect((await fetch(`${url.origin}/api/config`, { headers })).status).toBe(404);
-});
-
 test("CLI rejects leases shorter than one second", async () => {
   const f = fixture("short-lease", "run: () => 1");
   const result = await cli(f, "runs", "--lease-ms", "999");
@@ -631,7 +553,7 @@ test("a short lease cannot steal a live inline run but recovers its dead PID", a
     await Bun.sleep(2100);
     const blocked = await cli(f, "resume", run.id, "--lease-ms", "2000");
     expect(blocked.code).toBe(1);
-    expect(blocked.stderr).toContain("not owned by this token");
+    expect(blocked.stderr).toContain("Another worker owns this run");
     expect((await store.getRun(run.id))?.owner?.pid).toBe(child.pid);
     child.kill("SIGKILL");
     await child.exited;
@@ -659,30 +581,6 @@ async function waitForRunningStep(store: ReturnType<typeof openRunStore>) {
 
   throw new Error("CLI never started the long step. Check its stderr.");
 }
-
-test("API can omit log history while preserving steps and cursor reads", async () => {
-  const f = fixture(
-    "summary",
-    'run: ({ log }) => step("work", () => { log.info("hello"); return 1; })',
-  );
-
-  await save(f);
-  const run = object((await cli(f, "run", "summary")).stdout);
-  const server = startServer({ home: f.home, cwd: f.cwd, port: 0 });
-  servers.push(server);
-  const url = new URL(server.url);
-  const token = new URLSearchParams(url.hash.slice(1)).get("token");
-  const headers = { Authorization: `Bearer ${token}` };
-  const path = `${url.origin}/api/runs/${run.id}`;
-  const full = object(await (await fetch(path, { headers })).text());
-  const summary = object(await (await fetch(`${path}?logs=false`, { headers })).text());
-  expect(full.steps).toHaveLength(1);
-  expect(full.logs).toHaveLength(1);
-  expect(summary).toEqual({ run: full.run, steps: full.steps });
-  expect(await (await fetch(`${path}/logs?after=0`, { headers })).json()).toEqual(full.logs);
-  expect(await (await fetch(`${path}/logs?after=1`, { headers })).json()).toEqual([]);
-  expect((await fetch(`${url.origin}/api/runs/missing?logs=false`, { headers })).status).toBe(404);
-});
 
 test("CLI reads rate limit config at startup and rejects malformed limits", async () => {
   const f = fixture(
@@ -748,34 +646,6 @@ test("CLI resolves the latest waiting hook with a shared name", async () => {
   expect(object((await cli(f, "resume", id)).stdout)).toMatchObject({
     status: "succeeded",
     output: [1, 2],
-  });
-});
-
-test("hook API applies auth and origin checks and resolves JSON exactly once", async () => {
-  const f = fixture("api-hook", `run: async () => hook("approve")`);
-  await save(f);
-  const run = object((await cli(f, "run", "api-hook")).stdout);
-  const store = openRunStore(f.home);
-  const [hook] = await store.listHooks(String(run.id));
-  store.close();
-  const server = startServer({ home: f.home, cwd: f.cwd, port: 0 });
-  servers.push(server);
-  const url = new URL(server.url);
-  const token = new URLSearchParams(url.hash.slice(1)).get("token");
-  const endpoint = `${url.origin}/api/hooks/${hook?.token}`;
-  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
-
-  const post = (body: string, requestHeaders: Record<string, string> = headers) =>
-    fetch(endpoint, { method: "POST", headers: requestHeaders, body });
-
-  expect((await post("{}", { ...headers, Authorization: "Bearer wrong" })).status).toBe(401);
-  expect((await post("{}", { ...headers, Origin: "https://untrusted.example" })).status).toBe(403);
-  expect((await post("invalid")).status).toBe(400);
-  expect(await (await post('{"ok":true}')).json()).toEqual({ resolved: true });
-  expect((await post("null")).status).toBe(404);
-  expect(object((await cli(f, "resume", String(run.id))).stdout)).toMatchObject({
-    status: "succeeded",
-    output: { ok: true },
   });
 });
 

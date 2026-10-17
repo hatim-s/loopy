@@ -37,7 +37,8 @@ Layers import downward. Contract imports core and zod; local and CLI may import 
 - `local/registry.ts` resolves project and global loopies, source ownership and bundle paths.
 - `local/bundle.ts` bundles and loads SDK definitions. `local/daemon.ts` prepares bundles and executors for the runtime daemon.
 - `local/process.ts` and `spawn.ts` launch and capture processes. `executor.ts` injects declared secrets and redacts results through `secret-redactor.ts`.
-- `local/server/routes.ts` exposes read-only loopy, run, trace and log data. `start-server.ts` owns authentication and the loopback server.
+- `local/service.ts` owns shared CLI and HTTP mutations and contract views. `local/daemon-file.ts` owns private daemon discovery.
+- `local/server/routes.ts` dispatches the contract route table; `events.ts` owns SSE replay and live delivery. `start-server.ts` owns authentication and the loopback server inside the daemon.
 
 Adding a feature: put shared records in core, replay behavior in runtime, author-facing calls in SDK, OS work in local, and commands in `cli/commands/<name>.ts` registered in `cli/index.ts`. Scope flags in `cli/args.ts`. A new store column needs SQL, row conversion and queries; bump the schema version instead of adding a migration. A Studio panel consumes SDK record types and API data. Give each new file one responsibility and a kebab-case name.
 
