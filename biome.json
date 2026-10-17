@@ -8,7 +8,8 @@
       "!**/dist",
       "!coverage",
       "!.loopy",
-      "!tools/anti-slop"
+      "!tools/anti-slop",
+      "!**/routeTree.gen.ts"
     ]
   },
   "formatter": {

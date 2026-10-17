@@ -49,7 +49,7 @@ export function startServer(options: ServerOptions) {
   const { token, store, service } = options;
 
   const assets = snapshotAssets(
-    resolve(options.assets ?? resolve(import.meta.dir, "../../../dist/studio")),
+    resolve(options.assets ?? resolve(import.meta.dir, "../../../dist/dashboard")),
   );
 
   const table = apiRoutes({ service, store, cwd });
