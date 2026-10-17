@@ -1,4 +1,4 @@
-import type { Json, PutScheduleBody } from "loopy/contract";
+import type { PutScheduleBody, ScheduleView } from "loopy/contract";
 import { type ReactNode, useState } from "react";
 import { BackendError } from "../../backend/backend.ts";
 import { describeCron } from "../../lib/cron.ts";
@@ -7,30 +7,23 @@ import { useSaveSchedule } from "../../lib/mutations.ts";
 import { Button } from "../button.tsx";
 import { ResolveError } from "../resolve-form.tsx";
 
-export type ScheduleDraft = { cron: string; tz: string; input: Json; enabled: boolean };
+export type ScheduleDraft = Pick<ScheduleView, "cron" | "tz" | "input" | "enabled">;
 
 type Field = "cron" | "tz" | "input";
 
 const CONTROL =
   "block h-7 w-full rounded-md border border-line bg-panel px-2 font-mono text-xs aria-invalid:border-danger";
 
-/** The server names the part it rejected in its message; anything else stays under the form. */
-const FIELD_HINTS: [Field, RegExp][] = [
-  ["tz", /time ?zone/iu],
-  ["cron", /cron|token/iu],
-  ["input", /input/iu],
-];
-
 function rejectedField(error: Error | null): Field | undefined {
   if (!(error instanceof BackendError)) {
     return undefined;
   }
 
-  if (error.code !== "invalid_schedule" && error.code !== "bad_request") {
-    return undefined;
+  if (error.code === "invalid_cron") {
+    return "cron";
   }
 
-  return FIELD_HINTS.find(([, hint]) => hint.test(error.message))?.[0];
+  return error.code === "invalid_timezone" ? "tz" : undefined;
 }
 
 function Labelled({ label, children }: { label: ReactNode; children: ReactNode }) {

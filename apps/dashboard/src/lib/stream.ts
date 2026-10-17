@@ -325,7 +325,8 @@ function applyEvent(context: BatchContext, event: ServerEvent): void {
 
   if (event.entity === "schedule") {
     changes.loopies = true;
-    changes.schedules ||= !applyScheduleEvent(client, event);
+    const applied = applyScheduleEvent(client, event);
+    changes.schedules ||= !applied;
 
     return;
   }
@@ -381,7 +382,11 @@ function sameSchedule(a: ScheduleId, b: ScheduleId): boolean {
 function withSchedule(list: ScheduleView[], next: ScheduleView): ScheduleView[] {
   const current = list.find((item) => sameSchedule(item, next));
 
-  if (current && current.revision > next.revision) {
+  if (
+    current &&
+    (current.revision > next.revision ||
+      (current.revision === next.revision && current.nextFireAt > next.nextFireAt))
+  ) {
     return list;
   }
 

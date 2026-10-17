@@ -72,34 +72,58 @@ export class LoopyService {
   async putSchedule(slug: string, body: PutScheduleBody): Promise<ScheduleView> {
     const { registry, saved, workspace } = this.scheduleTarget(slug);
     const loopy = await loadLoopy(registry.bundlePath(saved.bundleHash));
-    let schedule: Omit<Schedule, "revision">;
+    const cron = body.cron ?? saved.schedule?.cron;
 
-    try {
-      const cron = body.cron ?? saved.schedule?.cron;
+    if (cron === undefined) {
+      throw new ServiceError(
+        "invalid_schedule",
+        `No schedule for '${slug}'. Pass --cron or add schedule to loopy().`,
+      );
+    }
 
-      if (!cron) {
-        throw new Error(`No schedule for '${slug}'. Pass --cron or add schedule to loopy().`);
-      }
+    const tz = body.tz ?? saved.schedule?.tz ?? "UTC";
+    this.validateTimezone(tz);
+    const nextFireAt = this.scheduleNextFire(cron, tz);
+    const input = await this.scheduleInput(loopy, body);
 
-      const tz = body.tz ?? saved.schedule?.tz ?? "UTC";
-      new Intl.DateTimeFormat("en", { timeZone: tz });
-      const parsed = parseCron(cron);
-      const input = await loopy.validateInput(body.input === undefined ? {} : body.input);
-      assertJson(input, "Schedule input");
-      schedule = {
+    return this.scheduleView(
+      await this.options.store.putSchedule({
         workspace,
         slug,
         cron,
         tz,
         input,
         enabled: body.enabled ?? true,
-        nextFireAt: nextFire(parsed, new Date(this.options.clock.now()), tz).toISOString(),
-      };
-    } catch (error) {
-      throw new ServiceError("invalid_schedule", errorMessage(error));
-    }
+        nextFireAt,
+      }),
+    );
+  }
 
-    return this.scheduleView(await this.options.store.putSchedule(schedule));
+  private validateTimezone(tz: string): void {
+    try {
+      new Intl.DateTimeFormat("en", { timeZone: tz });
+    } catch (error) {
+      throw new ServiceError("invalid_timezone", errorMessage(error));
+    }
+  }
+
+  private scheduleNextFire(cron: string, tz: string) {
+    try {
+      return nextFire(parseCron(cron), new Date(this.options.clock.now()), tz).toISOString();
+    } catch (error) {
+      throw new ServiceError("invalid_cron", errorMessage(error));
+    }
+  }
+
+  private async scheduleInput(loopy: Awaited<ReturnType<typeof loadLoopy>>, body: PutScheduleBody) {
+    try {
+      const input = await loopy.validateInput(body.input === undefined ? {} : body.input);
+      assertJson(input, "Schedule input");
+
+      return input;
+    } catch (error) {
+      throw new ServiceError("bad_request", errorMessage(error));
+    }
   }
 
   private async requireSchedule(slug: string): Promise<Schedule> {

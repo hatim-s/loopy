@@ -21,6 +21,8 @@ const STATUS: Record<ErrorCode, number> = {
   unauthorized: 401,
   forbidden: 403,
   internal: 500,
+  invalid_cron: 400,
+  invalid_timezone: 400,
 };
 
 export function json(data: Json, status = 200): Response {

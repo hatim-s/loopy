@@ -1,9 +1,9 @@
 const ALIASES = new Map([
-  ["@hourly", "0 * * * *"],
-  ["@daily", "0 0 * * *"],
-  ["@weekly", "0 0 * * 0"],
-  ["@monthly", "0 0 1 * *"],
-  ["@yearly", "0 0 1 1 *"],
+  ["@hourly", "Every hour at :00"],
+  ["@daily", "Daily at 00:00"],
+  ["@weekly", "At 00:00 on Sunday"],
+  ["@monthly", "At 00:00 on day 1 of the month"],
+  ["@yearly", "At 00:00 on January 1"],
 ]);
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -14,11 +14,20 @@ const NUMBER = /^\d+$/u;
 
 const STEP = /^\*\/(\d+)$/u;
 
-const pad = (value: string) => value.padStart(2, "0");
+const pad = (value: string) => String(Number(value)).padStart(2, "0");
 
-/** Cron allows 7 for Sunday as well as 0. */
-function weekday(text: string): string | undefined {
-  return NUMBER.test(text) ? DAYS[Number(text) % 7] : DAYS[DAY_NAMES.indexOf(text.toLowerCase())];
+function bounded(text: string, min: number, max: number): boolean {
+  return NUMBER.test(text) && Number(text) >= min && Number(text) <= max;
+}
+
+function weekday(text: string): number | undefined {
+  const named = DAY_NAMES.indexOf(text.toLowerCase());
+
+  if (named >= 0) {
+    return named;
+  }
+
+  return bounded(text, 0, 7) ? Number(text) : undefined;
 }
 
 function dayRange(token: string): string | undefined {
@@ -26,17 +35,21 @@ function dayRange(token: string): string | undefined {
   const first = weekday(from);
   const last = weekday(to);
 
-  if (rest.length > 0 || first === undefined || last === undefined) {
+  if (rest.length > 0 || first === undefined || last === undefined || first > last) {
     return undefined;
   }
 
-  return first === last ? first : `${first} to ${last}`;
+  if (first === 0 && last === 7) {
+    return "Sunday to Saturday";
+  }
+
+  return first === last ? DAYS[first % 7] : `${DAYS[first % 7]} to ${DAYS[last % 7]}`;
 }
 
 function days(dayOfMonth: string, dayOfWeek: string): string | undefined {
   if (dayOfMonth !== "*") {
-    return dayOfWeek === "*" && NUMBER.test(dayOfMonth)
-      ? `day ${dayOfMonth} of the month`
+    return dayOfWeek === "*" && bounded(dayOfMonth, 1, 31)
+      ? `day ${Number(dayOfMonth)} of the month`
       : undefined;
   }
 
@@ -47,41 +60,51 @@ function days(dayOfMonth: string, dayOfWeek: string): string | undefined {
     : undefined;
 }
 
-/** Minute and hour patterns, first match wins. */
-function clock(minute: string, hour: string): string | undefined {
-  const minuteStep = STEP.exec(minute)?.[1];
-  const hourStep = STEP.exec(hour)?.[1];
-  const exact = NUMBER.test(minute);
+function interval(token: string, cycle: number): string | undefined {
+  const step = STEP.exec(token)?.[1];
 
-  const readings: [boolean, string][] = [
-    [minute === "*" && hour === "*", "Every minute"],
-    [minuteStep !== undefined && hour === "*", `Every ${minuteStep} minutes`],
-    [exact && hour === "*", `Every hour at :${pad(minute)}`],
-    [exact && hourStep !== undefined, `Every ${hourStep} hours at :${pad(minute)}`],
-    [exact && NUMBER.test(hour), `At ${pad(hour)}:${pad(minute)}`],
-  ];
-
-  return readings.find(([matches]) => matches)?.[1];
+  return step !== undefined && Number(step) > 0 && cycle % Number(step) === 0
+    ? String(Number(step))
+    : undefined;
 }
 
-/**
- * A plain reading of the common cron patterns: "Every 5 minutes", "At 09:00 on Monday to
- * Friday". Rarer expressions read as undefined and the expression speaks for itself.
- */
-export function describeCron(expression: string): string | undefined {
-  const fields = (ALIASES.get(expression.trim()) ?? expression).trim().split(/\s+/u);
-  const [minute = "", hour = "", dayOfMonth = "", month = "", dayOfWeek = ""] = fields;
-  const when = clock(minute, hour);
+/** Only uniform intervals get an interval reading; cron steps restart at each boundary. */
+function recurring(minute: string, hour: string): string | undefined {
+  const minutes = interval(minute, 60);
+  const hours = interval(hour, 24);
 
-  if (fields.length !== 5 || month !== "*" || when === undefined) {
+  if (minutes !== undefined && hour === "*") {
+    return `Every ${minutes} minutes`;
+  }
+
+  return minute === "0" && hours !== undefined ? `Every ${hours} hours at :00` : undefined;
+}
+
+/** Unsupported expressions keep their literal spelling instead of a misleading reading. */
+export function describeCron(expression: string): string | undefined {
+  const trimmed = expression.trim();
+  const alias = ALIASES.get(trimmed.toLowerCase());
+
+  if (alias !== undefined) {
+    return alias;
+  }
+
+  const fields = trimmed.split(/\s+/u);
+  const [minute = "", hour = "", dayOfMonth = "", month = "", dayOfWeek = ""] = fields;
+
+  if (fields.length !== 5 || month !== "*") {
     return undefined;
   }
 
   if (dayOfMonth === "*" && dayOfWeek === "*") {
-    return when.startsWith("At ") ? `Daily at ${when.slice(3)}` : when;
+    return bounded(minute, 0, 59) && bounded(hour, 0, 23)
+      ? `Daily at ${pad(hour)}:${pad(minute)}`
+      : recurring(minute, hour);
   }
 
   const on = days(dayOfMonth, dayOfWeek);
 
-  return on === undefined ? undefined : `${when} on ${on}`;
+  return bounded(minute, 0, 59) && bounded(hour, 0, 23) && on !== undefined
+    ? `At ${pad(hour)}:${pad(minute)} on ${on}`
+    : undefined;
 }

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import type { LoopyView, ScheduleView } from "loopy/contract";
+import { type LoopyView, routes, type ScheduleView } from "loopy/contract";
 import { z } from "zod";
 import { ErrorBanner } from "../components/error-banner.tsx";
 import { ScheduleForm } from "../components/schedules/schedule-form.tsx";
@@ -10,7 +10,9 @@ import { loopiesQuery, schedulesQuery } from "../lib/queries.ts";
 import { useBackend } from "../router-context.ts";
 
 /** The loopy whose schedule form is open. */
-const searchSchema = z.object({ slug: z.string().optional().catch(undefined) });
+const searchSchema = z.object({
+  slug: routes.putSchedule.params.shape.slug.optional().catch(undefined),
+});
 
 export const Route = createFileRoute("/schedules")({
   validateSearch: searchSchema,

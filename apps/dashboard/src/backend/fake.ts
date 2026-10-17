@@ -3,6 +3,7 @@ import {
   encodeRunCursor,
   type HookRecord,
   type LoopyView,
+  type PutScheduleBody,
   type RunSnapshotView,
   type RunView,
   type ScheduleView,
@@ -113,18 +114,20 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
   }
 
   /** The fake has no cron engine: a new schedule fires in an hour and edits keep the time. */
-  function newSchedule(slug: string): ScheduleView {
+  function newSchedule(slug: string, body: PutScheduleBody): ScheduleView {
     const declared = script.loopies.find((loopy) => loopy.slug === slug)?.schedule;
 
-    if (!declared) {
+    const cron = body.cron ?? declared?.cron;
+
+    if (!cron) {
       throw new BackendError("invalid_schedule", `No schedule for '${slug}'. Pass a cron.`);
     }
 
     return {
       workspace: "fake",
       slug,
-      cron: declared.cron,
-      tz: declared.tz,
+      cron,
+      tz: body.tz ?? declared?.tz ?? "UTC",
       enabled: true,
       input: {},
       nextFireAt: new Date(Date.now() + HOUR_MS).toISOString(),
@@ -257,7 +260,7 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
     daemon: async () => daemon,
     schedules: async () => [...schedules.values()],
     putSchedule: async (slug, body) =>
-      saveSchedule({ ...(schedules.get(slug) ?? newSchedule(slug)), ...body }),
+      saveSchedule({ ...(schedules.get(slug) ?? newSchedule(slug, body)), ...body }),
     setScheduleEnabled: async (slug, enabled) => saveSchedule({ ...schedule(slug), enabled }),
     deleteSchedule: async (slug) => {
       const existing = schedules.get(slug);

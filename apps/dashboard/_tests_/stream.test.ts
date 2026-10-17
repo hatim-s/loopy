@@ -6,7 +6,12 @@ import { type EventDraft, fakeBackend } from "../src/backend/fake.ts";
 import { INBOX_QUERY, inboxGroups } from "../src/lib/inbox.ts";
 import { keys } from "../src/lib/keys.ts";
 import type { RunPage } from "../src/lib/queries.ts";
-import { applyBatch, applyToSnapshot, followSession } from "../src/lib/stream.ts";
+import {
+  applyBatch,
+  applyScheduleView,
+  applyToSnapshot,
+  followSession,
+} from "../src/lib/stream.ts";
 
 const AT = "2026-10-17T10:00:00.000Z";
 
@@ -660,4 +665,38 @@ test("a deleted schedule leaves the list without a refetch, and only for its wor
 
   expect(client.getQueryData<ScheduleView[]>(keys.schedules)).toEqual([elsewhere]);
   expect(client.getQueryState(keys.schedules)?.isInvalidated).toBe(false);
+});
+
+test("a delayed HTTP response cannot undo a fire at the same revision", () => {
+  const client = new QueryClient();
+  client.setQueryData(keys.schedules, [scheduled]);
+  const fired = { ...record, nextFireAt: "2026-10-17T10:10:00.000Z", lastFireKey: "fire-1" };
+  applyBatch(client, [
+    event(11, { entity: "schedule", kind: "fired", runId: null, record: fired }),
+  ]);
+
+  applyScheduleView(client, scheduled);
+
+  expect(client.getQueryData<ScheduleView[]>(keys.schedules)).toEqual([fired]);
+  applyScheduleView(client, { ...fired, nextFireAt: "2026-10-17T10:15:00.000Z" });
+  expect(client.getQueryData<ScheduleView[]>(keys.schedules)?.[0]?.nextFireAt).toBe(
+    "2026-10-17T10:15:00.000Z",
+  );
+});
+
+test("an unseen save cannot skip a later delete in the same batch", () => {
+  const client = new QueryClient();
+  client.setQueryData(keys.schedules, [scheduled]);
+  applyBatch(client, [
+    scheduleSaved(11, { ...record, slug: "unseen" }),
+    event(12, {
+      entity: "schedule",
+      kind: "deleted",
+      runId: null,
+      record: { workspace: record.workspace, slug: record.slug },
+    }),
+  ]);
+
+  expect(client.getQueryData<ScheduleView[]>(keys.schedules)).toEqual([]);
+  expect(client.getQueryState(keys.schedules)?.isInvalidated).toBe(true);
 });

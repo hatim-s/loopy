@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Json, PutScheduleBody, RunView, ScheduleView } from "loopy/contract";
 import type { LoopyBackend } from "../backend/backend.ts";
 import { useBackend } from "../router-context.ts";
@@ -32,26 +32,45 @@ export function useSaveSchedule(slug: string) {
   });
 }
 
-/** Flips the row at once; an error puts the old list back, and the stream confirms success. */
+/** Identity guards keep a failed request from overwriting stream writes to the same row. */
+export async function toggleSchedule(
+  client: QueryClient,
+  backend: LoopyBackend,
+  change: { slug: string; enabled: boolean },
+) {
+  const { slug, enabled } = change;
+  await client.cancelQueries({ queryKey: keys.schedules });
+
+  const previous = client
+    .getQueryData<ScheduleView[]>(keys.schedules)
+    ?.find((item) => item.slug === slug);
+
+  const optimistic = previous && { ...previous, enabled };
+  client.setQueryData<ScheduleView[]>(keys.schedules, (current) =>
+    current?.map((item) => (item === previous && optimistic ? optimistic : item)),
+  );
+
+  // React Query may structurally share an unchanged row, so keep the cached identity.
+  const written = client
+    .getQueryData<ScheduleView[]>(keys.schedules)
+    ?.find((item) => item.slug === slug);
+
+  try {
+    return await backend.setScheduleEnabled(slug, enabled);
+  } catch (error) {
+    client.setQueryData<ScheduleView[]>(keys.schedules, (current) =>
+      current?.map((item) => (item === written && previous ? previous : item)),
+    );
+    throw error;
+  }
+}
+
 export function useToggleSchedule(slug: string) {
   const backend = useBackend();
   const client = useQueryClient();
 
   return useMutation({
-    mutationFn: async (enabled: boolean) => {
-      await client.cancelQueries({ queryKey: keys.schedules });
-      const previous = client.getQueryData<ScheduleView[]>(keys.schedules);
-      client.setQueryData<ScheduleView[]>(keys.schedules, (current) =>
-        current?.map((item) => (item.slug === slug ? { ...item, enabled } : item)),
-      );
-
-      try {
-        return await backend.setScheduleEnabled(slug, enabled);
-      } catch (error) {
-        client.setQueryData(keys.schedules, previous);
-        throw error;
-      }
-    },
+    mutationFn: (enabled: boolean) => toggleSchedule(client, backend, { slug, enabled }),
     onSuccess: (schedule) => applyScheduleView(client, schedule),
   });
 }
