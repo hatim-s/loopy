@@ -4,6 +4,9 @@ import type { RuntimeEvent } from "../../core/index.js";
 import { type LoopyService, ServiceError } from "../service.js";
 import type { SqliteRunStore } from "../store.js";
 
+// A full queue is normal while a reader drains; two seconds without a pull is a reader that stopped.
+const STALLED_READER_MS = 2000;
+
 type EventsQuery = z.infer<typeof eventsQuerySchema>;
 
 export async function eventStream(
@@ -131,7 +134,7 @@ class EventFeed {
         this.stalled = setTimeout(() => {
           this.close();
           controller.error(new Error("SSE client fell behind. Reconnect from the last event ID."));
-        }, 2000);
+        }, STALLED_READER_MS);
       });
     }
 
