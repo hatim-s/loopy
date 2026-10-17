@@ -26,10 +26,14 @@ export type {
 } from "./model.js";
 
 export {
+  EXECUTION_MODES,
   HOOK_EVENT_KINDS,
   isTerminalRun,
+  LOG_LEVELS,
   RUN_EVENT_KINDS,
+  RUN_STATUSES,
   SCHEDULE_EVENT_KINDS,
+  STEP_KINDS,
   STEP_STATUSES,
 } from "./model.js";
 

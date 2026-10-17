@@ -7,6 +7,7 @@ Read this before changing code. `bun run check` builds the package and Studio, l
 ```text
 packages/loopy/src/
   core/      shared record types, argv parsing and boundary validation. Pure.
+  contract/  browser-safe wire schemas, route table and view derivations.
   runtime/   replay engine, journal, retries, store contract and daemon scheduling. Pure.
   sdk/       loopy(), ambient steps, defineCommand and typed shell wrappers.
   local/     SQLite store, registry, bundles, processes, secrets and HTTP server.
@@ -18,13 +19,14 @@ packages/loopy/_tests_/   package tests, including shell fixtures
 examples/                 canonical loopies and automation helpers
 ```
 
-The public package entries are `loopy` for the SDK, `loopy/runtime` and `loopy/local`. Studio imports types only from `"loopy"` and uses the local HTTP API for data. It lists loopies and runs and renders step traces and logs.
+The public package entries are `loopy` for the SDK, `loopy/runtime`, `loopy/local` and `loopy/contract`. Studio imports types only from `"loopy"` and uses the local HTTP API for data. It lists loopies and runs and renders step traces and logs.
 
-Layers import downward. Runtime imports core; SDK imports core and runtime; local imports core, runtime and `sdk/host.ts`; CLI imports core, runtime, local and `sdk/host.ts`. Cross-layer imports go through the target layer's `index.ts`, except the explicit SDK host entry. Same-layer imports use file paths. Core and runtime have no Node or Bun dependencies. SDK permits `node:async_hooks` only in `current.ts` to share activation scope with bundled definitions.
+Layers import downward. Contract imports core and zod; local and CLI may import contract through its index. Runtime imports core; SDK imports core and runtime; local imports core, runtime and `sdk/host.ts`; CLI imports core, runtime, local and `sdk/host.ts`. Cross-layer imports go through the target layer's `index.ts`, except the explicit SDK host entry. Same-layer imports use file paths. Core and runtime have no Node or Bun dependencies. SDK permits `node:async_hooks` only in `current.ts` to share activation scope with bundled definitions.
 
 ## Ownership
 
 - `core/model.ts` defines RunRecord, StepRecord, LogRecord, RunDetail and run statuses.
+- `contract/records.ts` owns record schemas; `views.ts` owns wire views, `api.ts` the route table and errors, and `derive.ts` pure view derivations.
 - `runtime/engine.ts` claims an activation, replays it, persists its outcome and releases ownership.
 - `runtime/journal.ts` checks step sequence and keys; `step-runner.ts` owns attempts and terminal writes.
 - `runtime/daemon.ts` coordinates schedules, due runs and the concurrency pool.
