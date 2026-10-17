@@ -2,7 +2,7 @@ import { text as runtime } from "../../shell/text.js";
 import { defineCommand } from "./command.js";
 
 export const text = {
-  grep: defineCommand(runtime.grep.descriptor),
+  grep: defineCommand(runtime.grep.descriptor, { matches: "json[]", binaryMatches: "string[]" }),
   grepCount: defineCommand(runtime.grepCount.descriptor),
   sed: defineCommand(runtime.sed.descriptor),
   awk: defineCommand(runtime.awk.descriptor),

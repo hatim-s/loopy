@@ -68,11 +68,15 @@ export function switch_<A extends Record<string, Arm>>(
   return builder.ref(base.id);
 }
 
-export function map<T, R extends AuthorValue>(
+type Collected<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: { message: string; code: string } };
+
+export function map<T, R extends AuthorValue, M extends "fail" | "collect">(
   over: Ref<T[]>,
   body: (item: Ref<T>, index: Ref<number>) => R,
-  options: { concurrency?: number; onError: "fail" | "collect" },
-): Ref<Result<R>[]> {
+  options: { concurrency?: number; onError: M },
+): Ref<(M extends "collect" ? Collected<Result<R>> : Result<R>)[]> {
   const builder = currentBuilder();
   const base = builder.allocate("map", null);
   const item = builder.binding(base.id, "item");

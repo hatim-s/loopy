@@ -5,7 +5,7 @@ export default loopy({
   input: { name: "string", "enthusiastic?": "boolean" },
   run: ({ input }) => {
     const greeting = code("greet", {
-      in: input,
+      in: { name: input.get("name"), enthusiastic: input.get("enthusiastic") },
       out: { greeting: "string" },
       module: "./hello/greet.ts",
     });

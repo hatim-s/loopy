@@ -5,13 +5,18 @@ export default loopy({
   input: { repository: "string", base: "string", dryRun: "boolean", request: "json" },
   run: ({ input }) => {
     const base = code("prerequisites", {
-      in: input,
+      in: {
+        repository: input.get("repository"),
+        base: input.get("base"),
+        dryRun: input.get("dryRun"),
+        request: input.get("request"),
+      },
       out: { sha: "string" },
       module: "./asset-sync/prerequisites.ts",
     });
 
     const target = code("target", {
-      in: { request: input.request, base, id: uuid(), time: now() },
+      in: { request: input.get("request"), base, id: uuid(), time: now() },
       out: { branch: "string", worktree: "string" },
       module: "./asset-sync/target.ts",
     });

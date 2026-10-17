@@ -1,19 +1,25 @@
 import { currentBuilder } from "../builder.js";
-import { type AuthorValue, type Ref, serialize, serializeValues } from "../ref.js";
+import { type AuthorValue, isRef, type Ref, serialize, serializeRef } from "../ref.js";
 
 export function format(
   template: string,
   values: Readonly<
-    Record<
-      string,
-      string | number | boolean | null | Ref<string | number | boolean | null | undefined>
-    >
+    Record<string, string | number | boolean | Ref<string | number | boolean | undefined>>
   >,
 ) {
   const builder = currentBuilder();
 
   return builder.ref<string>(
-    builder.add({ kind: "format", template, values: serializeValues(values, builder) }).id,
+    builder.add({
+      kind: "format",
+      template,
+      values: Object.fromEntries(
+        Object.entries(values).map(([key, value]) => [
+          key,
+          isRef(value) ? serializeRef(value, builder) : value,
+        ]),
+      ),
+    }).id,
   );
 }
 

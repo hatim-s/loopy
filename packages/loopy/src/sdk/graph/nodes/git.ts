@@ -2,7 +2,17 @@ import { git as runtime } from "../../shell/git.js";
 import { defineCommand } from "./command.js";
 
 export const git = {
-  status: defineCommand(runtime.status.descriptor),
+  status: defineCommand(runtime.status.descriptor, {
+    branch: "json",
+    upstream: "json",
+    ahead: "number",
+    behind: "number",
+    staged: "json[]",
+    unstaged: "json[]",
+    untracked: "string[]",
+    conflicts: "json[]",
+    stashes: "number",
+  }),
   diff: defineCommand(runtime.diff.descriptor),
   diffNames: defineCommand(runtime.diffNames.descriptor),
   log: defineCommand(runtime.log.descriptor),

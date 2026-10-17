@@ -2,12 +2,12 @@ import {
   type Edge,
   type Graph,
   type GraphRetry,
-  type InputSpec,
   type Node,
   type NodeId,
   type NodeKind,
   type OutputSchema,
   type Predicate,
+  type RecordSpec,
   type RefId,
 } from "../../core/index.js";
 import { type AuthorValue, checkSerialized, REF, Ref, type RefValue, serialize } from "./ref.js";
@@ -76,7 +76,7 @@ export class GraphBuilder {
 
   constructor(
     readonly name: string,
-    readonly input: InputSpec,
+    readonly input: RecordSpec,
   ) {}
 
   get scope(): Frame {
@@ -120,8 +120,8 @@ export class GraphBuilder {
   }
 
   // PR 3 checks label literals in the AST; construction accepts the already typed string.
-  allocate(kind: NodeKind, label: string | null) {
-    const name = [...this.prefixes, label ?? kind].join("/");
+  allocate(kind: NodeKind, label: string | null, fallback: string = kind) {
+    const name = [...this.prefixes, label ?? fallback].join("/");
 
     if (label !== null && this.scope.labels.has(name)) {
       refuse("duplicate_label", "Labels must be unique inside one scope.");
@@ -138,7 +138,7 @@ export class GraphBuilder {
   }
 
   add(data: NodeData, label: string | null = null) {
-    const base = this.allocate(data.kind, label);
+    const base = this.allocate(data.kind, label, data.kind === "command" ? data.key : data.kind);
     const node = { ...base, ...data };
     this.record(node);
 
@@ -241,9 +241,15 @@ export class GraphBuilder {
 
   finish(result: AuthorValue) {
     const terminal = this.scope.first !== null && this.scope.tails.length === 0;
-    const output = this.add({ kind: "join", result: terminal ? null : serialize(result, this) });
-    const graph = this.snapshot(this.scope.first ?? output.id);
-    graph.outputs = { ref: bindingId(output.id), path: [] };
+    const output = terminal ? null : this.add({ kind: "join", result: serialize(result, this) });
+    const entry = this.scope.first;
+
+    if (entry === null) {
+      return refuse("missing_entry", "The builder requires an entry node.");
+    }
+
+    const graph = this.snapshot(entry);
+    graph.outputs = output === null ? null : { ref: bindingId(output.id), path: [] };
     graph.edges.sort((a, b) => (this.order.get(a.from) ?? 0) - (this.order.get(b.from) ?? 0));
 
     return { graph, diagnostics: validate(graph) };

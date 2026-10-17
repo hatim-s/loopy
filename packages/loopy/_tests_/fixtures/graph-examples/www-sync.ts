@@ -10,7 +10,12 @@ export default loopy({
   },
   run: ({ input }) => {
     const options = code("validate", {
-      in: input,
+      in: {
+        repository: input.get("repository"),
+        dryRun: input.get("dryRun"),
+        sourceRef: input.get("sourceRef"),
+        targetBranches: input.get("targetBranches"),
+      },
       out: { options: "json" },
       module: "./www-sync/validate.ts",
     });
@@ -40,7 +45,7 @@ export default loopy({
     });
 
     code("cleanup", { in: { plan }, out: {}, module: "./www-sync/cleanup.ts" });
-    log("Prompt and skill synchronization completed.", { dryRun: input.dryRun });
+    log("Prompt and skill synchronization completed.", { dryRun: input.get("dryRun") });
 
     return { sourceSha: source.get("sha"), results };
   },

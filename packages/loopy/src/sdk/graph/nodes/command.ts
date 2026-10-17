@@ -1,4 +1,9 @@
-import { type CommandResult, type GraphRetry, parseArgv } from "../../../core/index.js";
+import {
+  type CommandResult,
+  type GraphRetry,
+  type OutputSchema,
+  parseArgv,
+} from "../../../core/index.js";
 import type { CommandDescriptor } from "../../define-command.js";
 import { currentBuilder } from "../builder.js";
 import { commandArgv } from "../command-argv.js";
@@ -6,6 +11,7 @@ import type { CommandInput, CommandRawInput } from "../command-input.js";
 import { type AuthorValue, type Ref, type RefValue, serialize, serializeValues } from "../ref.js";
 
 type Options = {
+  label?: string;
   cwd?: string | Ref<string>;
   env?: Record<string, string | Ref<string>>;
   stdin?: string | Ref<string>;
@@ -29,12 +35,14 @@ function record({
   input,
   options,
   mode,
+  out,
 }: {
-  label: string;
+  label: string | null;
   descriptor: CommandDescriptor;
   input: Input;
   options: Options;
   mode: "parsed" | "raw";
+  out: OutputSchema;
 }) {
   const builder = currentBuilder();
   const key = descriptor.key ?? `${descriptor.namespace}.${descriptor.name}`;
@@ -44,6 +52,7 @@ function record({
     {
       kind: "command",
       key,
+      out,
       argv: [rendered.program, ...rendered.argv].map((arg) => serialize(arg, builder)),
       flags: serializeValues(rendered.flags, builder),
       flagSpec: rendered.flagSpec,
@@ -62,15 +71,37 @@ function record({
   return node.id;
 }
 
-export function defineCommand<const D extends CommandDescriptor>(descriptor: D) {
-  function call(label: string, input: CommandInput<D>, options?: Options): Ref<Output<D>>;
-  function call(label: string, input: Input, options: Options = {}): Ref<Output<D>> {
-    return currentBuilder().ref(record({ label, descriptor, input, options, mode: "parsed" }));
+export const commandOutput = { stdout: "string", stderr: "string", exitCode: "number" } as const;
+
+type CallArguments<I> = I extends { args: readonly unknown[] }
+  ? [input: I, options?: Options]
+  : [input?: I, options?: Options];
+
+export function defineCommand<const D extends CommandDescriptor>(
+  descriptor: D,
+  out: OutputSchema = descriptor.parse ? "json" : commandOutput,
+) {
+  function call(...args: CallArguments<CommandInput<D>>): Ref<Output<D>>;
+  function call(input: Input = {}, options: Options = {}): Ref<Output<D>> {
+    return currentBuilder().ref(
+      record({ label: options.label ?? null, descriptor, input, options, mode: "parsed", out }),
+      out,
+    );
   }
 
-  function raw(label: string, input?: CommandRawInput<D>, options?: Options): Ref<CommandResult>;
-  function raw(label: string, input: Input = {}, options: Options = {}): Ref<CommandResult> {
-    return currentBuilder().ref(record({ label, descriptor, input, options, mode: "raw" }));
+  function raw(...args: CallArguments<CommandRawInput<D>>): Ref<CommandResult>;
+  function raw(input: Input = {}, options: Options = {}): Ref<CommandResult> {
+    return currentBuilder().ref(
+      record({
+        label: options.label ?? null,
+        descriptor,
+        input,
+        options,
+        mode: "raw",
+        out: commandOutput,
+      }),
+      commandOutput,
+    );
   }
 
   return Object.assign(call, { raw });
@@ -82,7 +113,7 @@ function shell({
   argv,
   options,
 }: {
-  label: string;
+  label: string | null;
   key: string;
   argv: readonly (string | RefValue)[];
   options: Options;
@@ -93,6 +124,7 @@ function shell({
     {
       kind: "command",
       key,
+      out: commandOutput,
       argv: argv.map((arg) => serialize(arg, builder)),
       flags: {},
       options: {
@@ -107,15 +139,15 @@ function shell({
     label,
   );
 
-  return builder.ref<CommandResult>(node.id);
+  return builder.ref<CommandResult>(node.id, commandOutput);
 }
 
-function exec(label: string, argv: readonly (string | RefValue)[], options: Options = {}) {
-  return shell({ label, key: "sh.exec", argv, options });
+function exec(argv: readonly (string | RefValue)[], options: Options = {}) {
+  return shell({ label: options.label ?? null, key: "sh.exec", argv, options });
 }
 
-function run(label: string, line: string, options: Options = {}) {
-  return shell({ label, key: "sh.run", argv: parseArgv(line), options });
+function run(line: string, options: Options = {}) {
+  return shell({ label: options.label ?? null, key: "sh.run", argv: parseArgv(line), options });
 }
 
 export const sh = Object.assign(exec, { exec, run });

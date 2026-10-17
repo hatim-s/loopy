@@ -1,6 +1,6 @@
 import { expect, expectTypeOf, test } from "bun:test";
 import { graphSchema } from "../src/contract/index.js";
-import { type DiagnosticCode } from "../src/core/index.js";
+import { type DiagnosticCode, validateGraph } from "../src/core/index.js";
 import {
   and,
   archive,
@@ -53,6 +53,7 @@ import { approveDemoGraph } from "./fixtures/graphs.js";
 function compile(run: () => AuthorValue) {
   const result = loopy({ name: "test", input: {}, run });
   expect(result.diagnostics).toEqual([]);
+  expect(validateGraph(result.graph)).toEqual([]);
   expect(graphSchema.parse(result.graph)).toEqual(result.graph);
 
   return result.graph;
@@ -78,7 +79,7 @@ test("approve-demo reproduces the canonical graph exactly", () => {
     input: { "subject?": "string" },
     run: ({ input }) => {
       const draft = code("draft", {
-        in: { subject: input.subject },
+        in: { subject: input.get("subject") },
         out: { words: "number" },
         module: "./draft.ts",
       });
@@ -87,7 +88,10 @@ test("approve-demo reproduces the canonical graph exactly", () => {
       const approval = wait("approve", { timeout: "1h", payload: { approved: "boolean" } });
 
       const applied = branch(eq(approval.get("approved"), true), {
-        yes: () => sh("apply", ["bun", "apply.ts", format("{n} words", { n: draft.get("words") })]),
+        yes: () =>
+          sh(["bun", "apply.ts", format("{n} words", { n: draft.get("words") })], {
+            label: "apply",
+          }),
         no: () => fail("Rejected"),
       });
 
@@ -96,6 +100,7 @@ test("approve-demo reproduces the canonical graph exactly", () => {
   });
 
   expect(result.diagnostics).toEqual([]);
+  expect(validateGraph(result.graph)).toEqual([]);
   expect(graphSchema.parse(result.graph)).toEqual(approveDemoGraph);
 });
 
@@ -112,7 +117,7 @@ const simple = [
   ],
   [
     "command",
-    () => sh.exec("echo", ["echo", "hello"]),
+    () => sh.exec(["echo", "hello"], { label: "echo" }),
     { key: "sh.exec", argv: ["echo", "hello"], flags: {}, parse: null },
   ],
   [
@@ -159,9 +164,13 @@ test("branch carries each successful arm result in its own join", () => {
 
 test("map binds item and index, collects errors, and joins back to its owner", () => {
   const graph = compile(() =>
-    map(git.lsFiles("files", {}), (item, index) => format("{index}:{item}", { index, item }), {
-      onError: "collect",
-    }),
+    map(
+      code("files", { in: {}, out: { paths: "string[]" }, module: "./files.ts" }).get("paths"),
+      (item, index) => format("{index}:{item}", { index, item }),
+      {
+        onError: "collect",
+      },
+    ),
   );
 
   expect(graph.nodes[1]).toMatchObject({
@@ -203,19 +212,19 @@ test("rescue binds its error only in the handler", () => {
   const graph = compile(() =>
     rescue(
       () => fail("failed"),
-      (error) => format("{message}", { message: error.get("message") }),
+      (error) => log(error.get("message")),
     ),
   );
 
   expect(graph.nodes[0]).toMatchObject({
     kind: "rescue",
     body: "1:fail",
-    handler: "2:format",
+    handler: "2:log",
     error: "0:rescue:error",
   });
-  expect<unknown>(graph.edges).toContainEqual({ from: "0:rescue", to: "2:format", kind: "rescue" });
+  expect<unknown>(graph.edges).toContainEqual({ from: "0:rescue", to: "2:log", kind: "rescue" });
   expect(graph.nodes[2]).toMatchObject({
-    values: { message: { ref: "0:rescue:error", path: ["message"] } },
+    message: { ref: "0:rescue:error", path: ["message"] },
   });
 });
 
@@ -247,18 +256,18 @@ test("subgraphs expand inline with nested prefixes and shared allocation", () =>
 
 test("all shell namespaces use descriptors and record parsers without executing them", () => {
   const graph = compile(() => ({
-    git: git.status("status", {}),
-    fs: fs.ls("ls", {}),
-    text: text.wc("wc", {}),
-    net: net.curl("curl", { args: ["https://example.com"] }),
-    archive: archive.tar("tar", { args: ["file"], flags: { list: true } }),
+    git: git.status({}, { label: "status" }),
+    fs: fs.ls({}, { label: "ls" }),
+    text: text.wc({}, { label: "wc" }),
+    net: net.curl({ args: ["https://example.com"] }, { label: "curl" }),
+    archive: archive.tar({ args: ["file"], flags: { list: true } }, { label: "tar" }),
     custom: defineCommand({
       key: "custom",
       program: "echo",
       parse: () => {
         throw new Error("Parser executed.");
       },
-    })("custom", {}),
+    })({}, { label: "custom" }),
   }));
 
   const commands = graph.nodes.filter((node) => node.kind === "command");
@@ -286,9 +295,8 @@ test("command argv, flags and options preserve symbolic values", () => {
     const value = uuid();
 
     return git.commit(
-      "commit",
       { flags: { message: value } },
-      { cwd: value, env: { ID: value }, stdin: value },
+      { label: "commit", cwd: value, env: { ID: value }, stdin: value },
     );
   });
 
@@ -339,7 +347,7 @@ test("refs cannot cross builders, including input refs", () => {
     name: "first",
     input: { value: "string" },
     run: ({ input }) => {
-      foreign = input.value;
+      foreign = input.get("value");
 
       return null;
     },
@@ -462,6 +470,7 @@ for (const [name, result, expectedName] of [
 ] as const) {
   test(`${name} example compiles to a validated graph without executing modules`, () => {
     expect(result.diagnostics).toEqual([]);
+    expect(validateGraph(result.graph)).toEqual([]);
     expect(graphSchema.parse(result.graph).nodes.length).toBeGreaterThan(2);
     expect(result.graph.name).toBe(expectedName);
   });
@@ -498,7 +507,7 @@ test("map and rescue bindings cannot escape their callbacks", () => {
   rejects("out_of_scope_ref", () =>
     compile(() => {
       map(
-        git.lsFiles("files", {}),
+        code("files", { in: {}, out: { paths: "string[]" }, module: "./files.ts" }).get("paths"),
         (entry) => {
           item = entry;
 
@@ -558,7 +567,7 @@ test("dynamic flags preserve all descriptor rendering rules for the executor", (
       payload: { enabled: "boolean", count: "number", tag: "string" },
     });
 
-    return command("flags", {
+    return command({
       args: [values.get("tag")],
       flags: {
         enabled: values.get("enabled"),
@@ -608,8 +617,8 @@ test("size rejects declared non-string scalars and unknown fields are errors", (
 
 test("raw shell identities and fs.ls's separate raw descriptor survive", () => {
   const graph = compile(() => ({
-    line: sh.run("line", "echo 'hello world'"),
-    ls: fs.ls.raw("raw-ls"),
+    line: sh.run("echo 'hello world'", { label: "line" }),
+    ls: fs.ls.raw({}, { label: "raw-ls" }),
   }));
 
   expect(graph.nodes[0]).toMatchObject({ key: "sh.run", argv: ["echo", "hello world"] });
@@ -638,7 +647,7 @@ test("stored descriptor data renders false booleans, attached values and ordered
   });
 
   const graph = compile(() =>
-    command("render", { args: [uuid()], flags: { enabled: false, count: 7, tag: ["a", "b"] } }),
+    command({ args: [uuid()], flags: { enabled: false, count: 7, tag: ["a", "b"] } }),
   );
 
   const node = graph.nodes[1];
@@ -654,4 +663,66 @@ test("stored descriptor data renders false booleans, attached values and ordered
       node.key,
     ),
   ).toEqual(["sub", "--", "resolved-id", "-n7", "--tag=a", "--tag=b"]);
+});
+
+test("collect maps infer success and failure outcomes while fail maps preserve values", () => {
+  const result = loopy({
+    name: "map-types",
+    input: { names: "string[]", counts: "number[]", flags: "boolean[]", records: "json[]" },
+    run: ({ input }) => {
+      expectTypeOf(input.get("names")).toEqualTypeOf<Ref<string[]>>();
+      expectTypeOf(input.get("counts")).toEqualTypeOf<Ref<number[]>>();
+      expectTypeOf(input.get("flags")).toEqualTypeOf<Ref<boolean[]>>();
+      const collected = map(input.get("names"), (item) => item, { onError: "collect" });
+      expectTypeOf(collected).toEqualTypeOf<
+        Ref<
+          ({ ok: true; value: string } | { ok: false; error: { message: string; code: string } })[]
+        >
+      >();
+      const plain = map(input.get("names"), (item) => item, { onError: "fail" });
+      expectTypeOf(plain).toEqualTypeOf<Ref<string[]>>();
+
+      return { collected, plain };
+    },
+  });
+
+  expect(validateGraph(result.graph)).toEqual([]);
+});
+
+test("known command fields resolve through main's validator without synthetic value nodes", () => {
+  const graph = compile(() => {
+    const status = git.status();
+    const response = net.curl({ args: ["https://example.com"] });
+    const matches = text.grep({ args: ["needle", "file"] });
+    const command = sh(["echo", "hello"]);
+    const archived = archive.tar({ args: ["file"], flags: { list: true } });
+    const file = fs.cat({ args: ["file"] });
+
+    return branch(
+      and(
+        gt(status.get("ahead"), 0),
+        gt(size(status.get("untracked")), 0),
+        eq(response.get("status"), 200),
+        gt(size(matches.get("binaryMatches")), 0),
+        eq(command.get("exitCode"), 0),
+        eq(archived.get("exitCode"), 0),
+        gt(size(file.get("stdout")), 0),
+      ),
+      { yes: () => format("{body}", { body: response.get("body") }), no: () => null },
+    );
+  });
+
+  expect(graph.nodes[0]).toMatchObject({ id: "0:git.status", label: null });
+  expect(graph.nodes[3]).toMatchObject({ id: "3:sh.exec", label: null });
+});
+
+test("reserved value keys and opaque JSON comparisons are rejected", () => {
+  rejects("unresolved_ref", () => compile(() => log("bad", { nested: { ref: "reserved" } })));
+  rejects("predicate_type", () =>
+    compile(() => {
+      const value = code("opaque", { in: {}, out: { value: "json" }, module: "./opaque.ts" });
+
+      return branch(eq(value.get("value"), 1), { yes: () => true, no: () => false });
+    }),
+  );
 });
