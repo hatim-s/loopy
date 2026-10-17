@@ -1,9 +1,7 @@
-import type { RunView } from "loopy/contract";
+import { isTerminalRun, type RunView } from "loopy/contract";
 import { useRunMutation } from "../lib/mutations.ts";
 import { Button } from "./button.tsx";
 import { ErrorBanner } from "./error-banner.tsx";
-
-const CANCELLABLE = new Set<RunView["status"]>(["queued", "running", "suspended"]);
 
 /** A running run can only be resumed once its owner's lease lapsed; the server recovers it. */
 function resumable(run: RunView): boolean {
@@ -38,7 +36,7 @@ export function RunActions({ run }: { run: RunView }) {
           {resume.isPending ? "Resuming" : "Resume"}
         </Button>
         <Button
-          disabled={busy || !CANCELLABLE.has(run.status)}
+          disabled={busy || isTerminalRun(run.status)}
           onClick={() => {
             resume.reset();
             cancel.mutate();

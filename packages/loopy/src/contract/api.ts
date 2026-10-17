@@ -61,14 +61,14 @@ export const runsQuerySchema = z.strictObject({
   waiting: z
     .union([z.boolean(), z.enum(["true", "false"]).transform((value) => value === "true")])
     .optional(),
-  limit: z.coerce.number().int().positive().max(200).optional(),
+  limit: z.coerce.number().int().positive().max(200).default(50),
   before: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\|[^|]+$/)
     .optional(),
 });
 
-export type RunsQuery = z.infer<typeof runsQuerySchema>;
+export type RunsQuery = z.input<typeof runsQuerySchema>;
 
 /** The ID breaks timestamp ties so every run remains reachable. */
 export function encodeRunCursor(run: { createdAt: string; id: string }): string {

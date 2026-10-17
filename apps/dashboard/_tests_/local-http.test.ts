@@ -94,6 +94,18 @@ test("an error body becomes a BackendError with the server's code and message", 
   );
 });
 
+test.each([
+  [401, "unauthorized"],
+  [403, "forbidden"],
+  [500, "internal"],
+] as const)("GET %i preserves the contract error %s", async (status, code) => {
+  reply = () => Response.json({ error: { code, message: "Server guidance." } }, { status });
+  const failure = backend.loopies();
+
+  await expect(failure).rejects.toBeInstanceOf(BackendError);
+  await expect(failure).rejects.toMatchObject({ code, message: "Server guidance." });
+});
+
 test("the event stream ends with reset when the server no longer holds the cursor", async () => {
   reply = () =>
     Response.json({ error: { code: "stale_cursor", message: "Refetch." } }, { status: 410 });

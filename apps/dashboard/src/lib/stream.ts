@@ -1,7 +1,5 @@
 import type { InfiniteData, Query, QueryClient } from "@tanstack/react-query";
 import type {
-  HookRecord,
-  LogRecord,
   RunSnapshotView,
   RunView,
   ScheduleView,
@@ -33,33 +31,6 @@ function upsertBy<T>(items: T[], item: T, same: (a: T) => boolean, order: (a: T)
   return [...items.filter((existing) => !same(existing)), item].sort((a, b) => order(a) - order(b));
 }
 
-function withStep(steps: StepRecord[], step: StepRecord): StepRecord[] {
-  return upsertBy(
-    steps,
-    step,
-    (existing) => existing.seq === step.seq,
-    (item) => item.seq,
-  );
-}
-
-function withLog(logs: LogRecord[], log: LogRecord): LogRecord[] {
-  return upsertBy(
-    logs,
-    log,
-    (existing) => existing.seq === log.seq,
-    (item) => item.seq,
-  );
-}
-
-function withHook(hooks: HookRecord[], hook: HookRecord): HookRecord[] {
-  return upsertBy(
-    hooks,
-    hook,
-    (existing) => existing.token === hook.token,
-    (item) => item.seq,
-  );
-}
-
 /** A created hook becomes what the run waits on; a resolved or expired one stops being it. */
 function waitingAfter(run: RunView, event: HookEvent, steps: StepRecord[]): RunView["waitingOn"] {
   const hook = event.record;
@@ -83,7 +54,12 @@ function withSnapshotHook(snapshot: RunSnapshotView, event: HookEvent): RunSnaps
 
   return {
     ...snapshot,
-    hooks: withHook(snapshot.hooks, event.record),
+    hooks: upsertBy(
+      snapshot.hooks,
+      event.record,
+      (hook) => hook.token === event.record.token,
+      (hook) => hook.seq,
+    ),
     run:
       event.at >= run.updatedAt
         ? { ...run, waitingOn: waitingAfter(run, event, snapshot.steps) }
@@ -102,27 +78,27 @@ export function applyToSnapshot(snapshot: RunSnapshotView, event: ServerEvent): 
 
   const next = { ...snapshot, cursor: event.sequence };
 
-  switch (event.entity) {
-    case "run": {
-      return { ...next, run: newer(snapshot.run, event.record) ? event.record : snapshot.run };
-    }
-
-    case "step": {
-      return { ...next, steps: withStep(snapshot.steps, event.record) };
-    }
-
-    case "log": {
-      return { ...next, logs: withLog(snapshot.logs, event.record) };
-    }
-
-    case "hook": {
-      return withSnapshotHook(next, event);
-    }
-
-    case "schedule": {
-      return next;
-    }
+  if (event.entity === "run") {
+    next.run = newer(snapshot.run, event.record) ? event.record : snapshot.run;
+  } else if (event.entity === "step") {
+    next.steps = upsertBy(
+      snapshot.steps,
+      event.record,
+      (step) => step.seq === event.record.seq,
+      (step) => step.seq,
+    );
+  } else if (event.entity === "log") {
+    next.logs = upsertBy(
+      snapshot.logs,
+      event.record,
+      (log) => log.seq === event.record.seq,
+      (log) => log.seq,
+    );
+  } else if (event.entity === "hook") {
+    return withSnapshotHook(next, event);
   }
+
+  return next;
 }
 
 function hookNeedsSteps(event: HookEvent): boolean {

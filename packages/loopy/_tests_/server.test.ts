@@ -9,8 +9,8 @@ import {
   encodeRunCursor,
   errorBodySchema,
   type Json,
+  routes,
   runSnapshotViewSchema,
-  runsQuerySchema,
   runViewSchema,
   scheduleViewSchema,
   serverEventSchema,
@@ -643,16 +643,16 @@ test("run paging includes every run sharing a timestamp", async () => {
       });
     }
 
-    const first = await service.listRuns(runsQuerySchema.parse({ limit: 1 }));
+    const first = await service.listRuns(routes.runs.query.parse({ limit: 1 }));
     expect(first.map((run) => run.id)).toEqual(["b"]);
 
     const second = await service.listRuns(
-      runsQuerySchema.parse({ limit: 1, before: encodeRunCursor(first[0]!) }),
+      routes.runs.query.parse({ limit: 1, before: encodeRunCursor(first[0]!) }),
     );
 
     expect(second.map((run) => run.id)).toEqual(["a"]);
     expect(
-      await service.listRuns(runsQuerySchema.parse({ before: encodeRunCursor(second[0]!) })),
+      await service.listRuns(routes.runs.query.parse({ before: encodeRunCursor(second[0]!) })),
     ).toEqual([]);
   } finally {
     store.close();

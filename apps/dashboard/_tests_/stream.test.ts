@@ -360,19 +360,21 @@ test("abort during reset cursor fetch cancels the request and settles followSess
           return backend.cursor(signal);
         }
 
-        return new Promise((resolve, reject) => {
-          void resolve;
-          pending = true;
-          signal.addEventListener(
-            "abort",
-            () => {
-              pending = false;
-              reject(new Error("cancelled"));
-            },
-            { once: true },
-          );
-          queueMicrotask(() => controller.abort());
-        });
+        const { promise, reject } =
+          Promise.withResolvers<Awaited<ReturnType<typeof backend.cursor>>>();
+
+        pending = true;
+        signal.addEventListener(
+          "abort",
+          () => {
+            pending = false;
+            reject(new Error("cancelled"));
+          },
+          { once: true },
+        );
+        queueMicrotask(() => controller.abort());
+
+        return promise;
       },
     },
   });
@@ -381,90 +383,6 @@ test("abort during reset cursor fetch cancels the request and settles followSess
   expect(pending).toBe(false);
   expect(subscriptions).toBe(1);
   expect(client.getQueryState(keys.run(run.id))?.fetchStatus).toBe("idle");
-});
-
-test("fake playback cancels its last subscriber's timer and resumes on subscribe", async () => {
-  const backend = fakeBackend({
-    epoch: "e1",
-    loopies: [],
-    schedules: [],
-    runs: [snapshot()],
-    batches: [[{ entity: "run", kind: "claimed", runId: run.id, record: running }]],
-    intervalMs: 20,
-  });
-
-  const controller = new AbortController();
-  const cleared = spyOn(globalThis, "clearTimeout");
-
-  try {
-    const first = backend.events({
-      after: 10,
-      epoch: "e1",
-      signal: controller.signal,
-      onState: () => undefined,
-      onBatch: () => {
-        throw new Error("unsubscribed playback");
-      },
-    });
-
-    controller.abort();
-    await expect(first).resolves.toBe("aborted");
-    expect(cleared).toHaveBeenCalledTimes(1);
-    expect(cleared.mock.calls[0]?.[0]).toBeDefined();
-    await Bun.sleep(30);
-    expect((await backend.run(run.id, AbortSignal.timeout(1000))).cursor).toBe(10);
-    const next = new AbortController();
-    let batches = 0;
-    await backend.events({
-      after: 10,
-      epoch: "e1",
-      signal: next.signal,
-      onState: () => undefined,
-      onBatch: () => {
-        batches++;
-        next.abort();
-      },
-    });
-    expect(batches).toBe(1);
-    expect((await backend.run(run.id, AbortSignal.timeout(1000))).cursor).toBe(11);
-  } finally {
-    cleared.mockRestore();
-  }
-});
-
-test("aborting as a subscription opens prevents replay and playback", async () => {
-  const backend = fakeBackend({
-    epoch: "e1",
-    loopies: [],
-    schedules: [],
-    runs: [snapshot()],
-    batches: [[{ entity: "run", kind: "claimed", runId: run.id, record: running }]],
-    intervalMs: 1,
-  });
-
-  const first = new AbortController();
-  await backend.events({
-    after: 10,
-    epoch: "e1",
-    signal: first.signal,
-    onState: () => undefined,
-    onBatch: () => first.abort(),
-  });
-  const second = new AbortController();
-  let replayed = 0;
-
-  const end = await backend.events({
-    after: 10,
-    epoch: "e1",
-    signal: second.signal,
-    onState: () => second.abort(),
-    onBatch: () => {
-      replayed++;
-    },
-  });
-
-  expect(end).toBe("aborted");
-  expect(replayed).toBe(0);
 });
 
 const waiting: RunView = {

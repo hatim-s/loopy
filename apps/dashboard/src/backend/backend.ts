@@ -8,14 +8,13 @@ import {
   type LoopyView,
   type PutScheduleBody,
   type RunSnapshotView,
+  type RunsQuery,
   type RunView,
-  type runsQuerySchema,
   type ScheduleView,
   type ServerEvent,
 } from "loopy/contract";
-import type { z } from "zod";
 
-export type RunsQuery = z.output<typeof runsQuerySchema>;
+export type { RunsQuery } from "loopy/contract";
 
 /** live: frames arrive. reconnecting: the transport is retrying. stale: it gave up. */
 export type StreamState = "connecting" | "live" | "reconnecting" | "stale";
@@ -54,7 +53,6 @@ export type LoopyBackend = {
 };
 
 const CLIENT_ERROR_MESSAGES = {
-  unauthorized: "The session token is missing or expired. Open the URL printed by loopy ui.",
   unreachable: "The Loopy server did not answer. Check that the daemon is running.",
   malformed_response: "The server sent a response this dashboard does not understand.",
 } as const;

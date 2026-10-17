@@ -1,3 +1,4 @@
+import type { z } from "zod";
 import {
   type CursorView,
   DEFAULT_ERROR_MESSAGES,
@@ -8,8 +9,8 @@ import {
   type LoopyView,
   loopyView,
   type PutScheduleBody,
-  type RunsQuery,
   type RunView,
+  type routes,
   runView,
   type ScheduleView,
   serverEvent,
@@ -360,7 +361,7 @@ export class LoopyService {
     };
   }
 
-  async listRuns(query: RunsQuery): Promise<RunView[]> {
+  async listRuns(query: z.output<typeof routes.runs.query>): Promise<RunView[]> {
     const runs = (await this.options.store.listRuns(query))
       .filter((run) => query.before === undefined || encodeRunCursor(run) < query.before)
       .sort(
@@ -369,14 +370,13 @@ export class LoopyService {
           Number(encodeRunCursor(a) > encodeRunCursor(b)),
       );
 
-    const limit = query.limit ?? 50;
-    const selected = query.waiting === undefined ? runs.slice(0, limit) : runs;
+    const selected = query.waiting === undefined ? runs.slice(0, query.limit) : runs;
     const resolve = await this.viewResolver(selected.map((run) => run.id));
 
     return selected
       .map(resolve)
       .filter((run) => query.waiting === undefined || (run.waitingOn !== null) === query.waiting)
-      .slice(0, limit);
+      .slice(0, query.limit);
   }
 
   async listLoopies(): Promise<LoopyView[]> {

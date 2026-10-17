@@ -2,10 +2,12 @@ import {
   type DaemonView,
   encodeRunCursor,
   type HookRecord,
+  isTerminalRun,
   type LoopyView,
   type PutScheduleBody,
   type RunSnapshotView,
   type RunView,
+  routes,
   type ScheduleView,
   type ServerEvent,
 } from "loopy/contract";
@@ -27,8 +29,6 @@ export type FakeScript = {
   batches: EventDraft[][];
   intervalMs: number;
 };
-
-const ACTIVE = new Set<RunView["status"]>(["queued", "running", "suspended"]);
 
 const HOUR_MS = 3_600_000;
 
@@ -186,8 +186,10 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
         ...loopy,
         lastRun: loopy.lastRun && (snapshots.get(loopy.lastRun.id)?.run ?? loopy.lastRun),
       })),
-    runs: async ({ slug, status, waiting, limit = 50, before }) =>
-      [...snapshots.values()]
+    runs: async (query) => {
+      const { slug, status, waiting, limit, before } = routes.runs.query.parse(query);
+
+      return [...snapshots.values()]
         .flatMap(({ run }) =>
           (slug ?? run.slug) === run.slug &&
           (status ?? run.status) === run.status &&
@@ -197,7 +199,8 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
             : [],
         )
         .sort((a, b) => (encodeRunCursor(a) < encodeRunCursor(b) ? 1 : -1))
-        .slice(0, limit),
+        .slice(0, limit);
+    },
     run: async (id) => snapshot(id),
     logs: async (id, after) => snapshot(id).logs.filter((log) => log.seq > after),
     startRun: async () => {
@@ -206,7 +209,7 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
     resumeRun: async (id) => {
       const { run } = snapshot(id);
 
-      if (!ACTIVE.has(run.status)) {
+      if (isTerminalRun(run.status)) {
         throw new BackendError("not_claimable");
       }
 
@@ -223,7 +226,7 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
     cancelRun: async (id) => {
       const { run } = snapshot(id);
 
-      if (!ACTIVE.has(run.status)) {
+      if (isTerminalRun(run.status)) {
         throw new BackendError("not_claimable");
       }
 
