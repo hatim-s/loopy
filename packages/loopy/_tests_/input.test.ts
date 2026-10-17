@@ -53,7 +53,16 @@ test("RecordSpec round-trips every field type through contracts and input bounda
     "../../../apps/dashboard/src/lib/input-form.js"
   );
 
-  const spec = outputSchema.parse(JSON.parse(JSON.stringify(allFields)));
+  const output = outputSchema.parse({
+    kind: "record",
+    fields: JSON.parse(JSON.stringify(allFields)),
+  });
+
+  if (output.kind !== "record") {
+    throw new Error("Expected a record output.");
+  }
+
+  const spec = output.fields;
   expect(spec).toEqual(allFields);
   expect(Object.values(allFields)).toEqual([...FIELD_TYPES]);
   expect(graphSchema.parse({ ...approveDemoGraph, input: spec }).input).toEqual(allFields);

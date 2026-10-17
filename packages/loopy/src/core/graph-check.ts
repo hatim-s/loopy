@@ -1,436 +1,19 @@
-import type {
-  ComparisonOperand,
-  Diagnostic,
-  DiagnosticCode,
-  Edge,
-  Graph,
-  Node,
-  NodeId,
-  Predicate,
-  RecordSpec,
-  Ref,
-  Value,
-} from "./graph.js";
-import { isBoolean, isNumber, isRecord, isString } from "./validation.js";
-
-type Context = {
-  graph: Graph;
-  nodes: Map<string, Node>;
-  refTypes: Map<string, string | null>;
-  resolving: Set<string>;
-};
-
-function diagnostic(code: DiagnosticCode, node: NodeId | null, message: string): Diagnostic {
-  return { code, node, message, source: null };
-}
-
-function identity({ graph, nodes }: Context): Diagnostic[] {
-  const seen = new Set<string>(["input"]);
-  const errors: Diagnostic[] = [];
-
-  for (const node of graph.nodes) {
-    if (seen.has(node.id)) {
-      errors.push(diagnostic("duplicate_node", node.id, "Node ids must be unique."));
-    }
-
-    seen.add(node.id);
-  }
-
-  if (!nodes.has(graph.entry)) {
-    errors.push(diagnostic("missing_entry", graph.entry, "Entry must name a node."));
-  }
-
-  return errors;
-}
-
-function targets(node: Node): NodeId[] {
-  switch (node.kind) {
-    case "branch":
-      return Object.values(node.arms);
-    case "switch":
-      return [...Object.values(node.cases), ...(node.default === null ? [] : [node.default])];
-    case "map":
-      return [node.body];
-    case "parallel":
-      return Object.values(node.branches);
-    case "finally":
-      return [node.body, node.cleanup];
-    case "rescue":
-      return [node.body, node.handler];
-    default:
-      return [];
-  }
-}
-
-function endpoints({ graph, nodes }: Context): Diagnostic[] {
-  const errors = graph.edges.flatMap((edge) =>
-    [edge.from, edge.to].flatMap((id) =>
-      nodes.has(id) ? [] : [diagnostic("missing_endpoint", id, "Edge endpoints must name nodes.")],
-    ),
-  );
-
-  for (const node of graph.nodes) {
-    for (const id of targets(node)) {
-      if (!nodes.has(id)) {
-        errors.push(
-          diagnostic(
-            node.kind === "branch" ? "missing_arm" : "missing_endpoint",
-            node.id,
-            "Control targets must name nodes.",
-          ),
-        );
-      }
-    }
-  }
-
-  return errors;
-}
-
-function ancestors(node: Node, nodes: Map<string, Node>): Node[] {
-  const result: Node[] = [];
-  const seen = new Set<string>([node.id]);
-  let parent = node.scope === null ? undefined : nodes.get(node.scope);
-
-  while (parent && !seen.has(parent.id)) {
-    result.push(parent);
-    seen.add(parent.id);
-    parent = parent.scope === null ? undefined : nodes.get(parent.scope);
-  }
-
-  return result;
-}
-
-function scopes({ graph, nodes }: Context): Diagnostic[] {
-  return graph.nodes.flatMap((node) => {
-    const parent = node.scope === null ? undefined : nodes.get(node.scope);
-
-    const badParent =
-      node.scope !== null &&
-      (!parent ||
-        targets(parent).length === 0 ||
-        parent.id === node.id ||
-        ancestors(parent, nodes).some((ancestor) => ancestor.id === node.id));
-
-    const badChild = targets(node).some((id) => {
-      const child = nodes.get(id);
-
-      return child && child.scope !== node.id;
-    });
-
-    return badParent || badChild
-      ? [
-          diagnostic(
-            "invalid_scope",
-            node.id,
-            "Control bodies must belong to their enclosing scope.",
-          ),
-        ]
-      : [];
-  });
-}
-
-function bodyEntries(context: Context, node: Node): NodeId[] {
-  const owner = node.scope === null ? undefined : context.nodes.get(node.scope);
-
-  return owner ? targets(owner).filter((entry) => scopeReaches(context, entry, node.id)) : [];
-}
-
-function sameBody(context: Context, left: Node, right: Node): boolean {
-  if (left.scope === null && right.scope === null) {
-    return true;
-  }
-
-  const entries = bodyEntries(context, left);
-  const other = bodyEntries(context, right);
-
-  return entries.length === 1 && other.length === 1 && entries[0] === other[0];
-}
-
-function scopeReaches(context: Context, from: NodeId, to: NodeId): boolean {
-  const seen = new Set<NodeId>();
-  const scope = context.nodes.get(from)?.scope;
-  const owner = scope === null || scope === undefined ? undefined : context.nodes.get(scope);
-  const entries = owner ? targets(owner) : [];
-
-  function visit(id: NodeId): boolean {
-    if (id === to) {
-      return true;
-    }
-
-    if (seen.has(id)) {
-      return false;
-    }
-
-    seen.add(id);
-
-    const control = context.nodes.get(id);
-
-    const exits = control
-      ? context.graph.edges
-          .filter(
-            (edge) =>
-              edge.kind === "join" &&
-              context.nodes.get(edge.from)?.scope === control.id &&
-              context.nodes.get(edge.to)?.scope === scope,
-          )
-          .map((edge) => edge.to)
-      : [];
-
-    return (
-      exits.some(visit) ||
-      context.graph.edges.some(
-        (edge) =>
-          edge.from === id &&
-          (edge.kind === "next" ||
-            (edge.kind === "join" && context.nodes.get(id)?.kind === "join")) &&
-          context.nodes.get(edge.to)?.scope === scope &&
-          !entries.includes(edge.to) &&
-          visit(edge.to),
-      )
-    );
-  }
-
-  return visit(from);
-}
-
-function controlTarget(node: Node, edge: Edge): boolean {
-  switch (edge.kind) {
-    case "yes":
-    case "no":
-      return node.kind === "branch" && node.arms[edge.kind] === edge.to;
-    case "case":
-      return node.kind === "switch"
-        ? (edge.label === "default" ? node.default : node.cases[edge.label]) === edge.to
-        : node.kind === "parallel" && node.branches[edge.label] === edge.to;
-    case "each":
-      return node.kind === "map" && node.body === edge.to;
-    case "cleanup":
-      return node.kind === "finally" && node.cleanup === edge.to;
-    case "rescue":
-      return node.kind === "rescue" && node.handler === edge.to;
-    default:
-      return true;
-  }
-}
-
-function controlEdges({ graph, nodes }: Context): Diagnostic[] {
-  return graph.edges.flatMap((edge) => {
-    const node = nodes.get(edge.from);
-
-    return node && !controlTarget(node, edge)
-      ? [
-          diagnostic(
-            "invalid_scope",
-            node.id,
-            "Control edges must match their owner and declared target.",
-          ),
-        ]
-      : [];
-  });
-}
-
-function scopeEdges(context: Context): Diagnostic[] {
-  return context.graph.edges.flatMap((edge) => {
-    const from = context.nodes.get(edge.from);
-    const to = context.nodes.get(edge.to);
-
-    if (!from || !to) {
-      return [];
-    }
-
-    const local = from.scope === to.scope && sameBody(context, from, to);
-    const entry = targets(from).includes(to.id) && to.scope === from.id;
-    const last = !context.graph.edges.some((next) => next.from === from.id && next.kind === "next");
-    const owner = from.scope === null ? undefined : context.nodes.get(from.scope);
-
-    const join =
-      edge.kind === "join" &&
-      from.kind === "join" &&
-      last &&
-      owner &&
-      (to.id === owner.id || (to.kind === "join" && to.scope === owner.scope));
-
-    return local || entry || join
-      ? []
-      : [
-          diagnostic(
-            "invalid_scope",
-            from.id,
-            "Edges must stay within a body or use its entry or join.",
-          ),
-        ];
-  });
-}
-
-function connectivity(context: Context): Diagnostic[] {
-  if (!context.nodes.has(context.graph.entry)) {
-    return [];
-  }
-
-  return context.graph.nodes.flatMap((node) =>
-    reaches(context, context.graph.entry, node.id)
-      ? []
-      : [
-          diagnostic(
-            "invalid_scope",
-            node.id,
-            "Every node must be reachable from the graph entry.",
-          ),
-        ],
-  );
-}
-
-function isScopeJoin(context: Context, from: NodeId, to: NodeId, kind: string): boolean {
-  const source = context.nodes.get(from);
-  const owner = context.nodes.get(to);
-
-  return (
-    kind === "join" &&
-    owner !== undefined &&
-    owner.kind === "map" &&
-    source?.kind === "join" &&
-    source.scope === to
-  );
-}
-
-function successors(context: Context, id: NodeId): NodeId[] {
-  const node = context.nodes.get(id);
-
-  return [
-    ...context.graph.edges
-      .filter((edge) => edge.from === id && !isScopeJoin(context, edge.from, edge.to, edge.kind))
-      .map((edge) => edge.to),
-    ...(node ? targets(node) : []),
-  ];
-}
-
-function cycles(context: Context): Diagnostic[] {
-  const visited = new Set<string>();
-  const active = new Set<string>();
-
-  function visit(id: NodeId): boolean {
-    if (active.has(id)) {
-      return true;
-    }
-
-    if (visited.has(id)) {
-      return false;
-    }
-
-    visited.add(id);
-    active.add(id);
-    const cyclic = successors(context, id).some(visit);
-    active.delete(id);
-
-    return cyclic;
-  }
-
-  return context.graph.nodes.some((node) => visit(node.id))
-    ? [diagnostic("cycle", null, "Graphs must be acyclic except for scope joins.")]
-    : [];
-}
-
-function isRef(value: Value): value is Ref {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    "ref" in value &&
-    typeof value.ref === "string" &&
-    "path" in value &&
-    Array.isArray(value.path)
-  );
-}
-
-function refs(value: Value): Ref[] {
-  if (isRef(value)) {
-    return [value];
-  }
-
-  if (Array.isArray(value)) {
-    return value.flatMap(refs);
-  }
-
-  if (isRecord(value)) {
-    return Object.values(value).flatMap(refs);
-  }
-
-  return [];
-}
-
-function predicateValues(predicate: Predicate): ComparisonOperand[] {
-  switch (predicate.op) {
-    case "and":
-    case "or":
-      return predicate.predicates.flatMap(predicateValues);
-    case "not":
-      return predicateValues(predicate.predicate);
-    case "exists":
-    case "isNull":
-      return [predicate.value];
-    default:
-      return [predicate.left, predicate.right];
-  }
-}
-
-function values(node: Node): Value[] {
-  switch (node.kind) {
-    case "code":
-      return Object.values(node.in);
-    case "command":
-      return [
-        ...node.argv,
-        ...Object.values(node.flags),
-        node.options.cwd,
-        ...Object.values(node.options.env),
-        node.options.stdin,
-      ];
-    case "branch":
-      return predicateValues(node.predicate);
-    case "switch":
-      return [node.on];
-    case "map":
-      return [node.over];
-    case "fail":
-      return [node.message];
-    case "format":
-      return Object.values(node.values);
-    case "log":
-      return [node.message, node.data];
-    case "join":
-      return [node.result];
-    default:
-      return [];
-  }
-}
-
-function reaches(context: Context, from: NodeId, to: NodeId): boolean {
-  const seen = new Set<string>();
-
-  function visit(id: NodeId): boolean {
-    if (id === to) {
-      return true;
-    }
-
-    if (seen.has(id)) {
-      return false;
-    }
-
-    seen.add(id);
-
-    return successors(context, id).some(visit);
-  }
-
-  return visit(from);
-}
-
-function binding(context: Context, ref: { ref: string; path: string[] }): Node | undefined {
-  return context.graph.nodes.find(
-    (node) =>
-      (node.kind === "map" && (node.item === ref.ref || node.index === ref.ref)) ||
-      (node.kind === "rescue" && node.error === ref.ref),
-  );
-}
+import type { Diagnostic, Graph, Node, Ref } from "./graph.js";
+import {
+  ancestors,
+  binding,
+  bodyEntries,
+  isRef,
+  refs,
+  sameBody,
+  scopeReaches,
+  values,
+} from "./graph-context.js";
+import { isReservedGraphName, nodeNames } from "./graph-names.js";
+import { checkPredicate, hasSize } from "./graph-predicate.js";
+import { structureRules } from "./graph-structure.js";
+import { graphTypeResolver } from "./graph-type.js";
+import { type ValidationContext as Context, diagnostic } from "./graph-validation.js";
 
 function visible(context: Context, producer: Node, consumer: Node): boolean {
   const chain = [consumer, ...ancestors(consumer, context.nodes)];
@@ -449,31 +32,15 @@ function visible(context: Context, producer: Node, consumer: Node): boolean {
 }
 
 function validPath(context: Context, ref: { ref: string; path: string[] }): boolean {
-  const schema = declaredSchema(context, ref);
-
-  if (schema && schema !== "schema" && schema !== "json" && ref.path.length > 0) {
-    const field = ref.path[0] ?? "";
-    const type = schema[field] ?? schema[`${field}?`];
-
-    return type !== undefined && (ref.path.length === 1 || type === "json");
+  if (context.resolveType(ref) === "never") {
+    return false;
   }
 
-  const owner = binding(context, ref);
-
-  if (owner?.kind === "map" && owner.index === ref.ref) {
-    return ref.path.length === 0;
+  if (ref.path.length === 0) {
+    return true;
   }
 
-  if (owner?.kind === "rescue") {
-    return (
-      ref.path.length === 0 ||
-      (ref.path.length === 1 && ["message", "code"].includes(ref.path[0] ?? ""))
-    );
-  }
-
-  const node = context.nodes.get(ref.ref);
-
-  return !node || !["format", "now", "uuid", "random"].includes(node.kind) || ref.path.length === 0;
+  return context.resolveType(ref) !== null;
 }
 
 function refError(context: Context, ref: Ref, consumer: Node | null): Diagnostic[] {
@@ -543,267 +110,12 @@ function references(context: Context): Diagnostic[] {
   ];
 }
 
-function declaredSchema(context: Context, ref: { ref: string; path: string[] }) {
-  if (ref.ref === "input") {
-    return context.graph.input;
-  }
-
-  const node = context.nodes.get(ref.ref);
-
-  if (node?.kind === "code" || node?.kind === "command") {
-    return node.out;
-  }
-
-  return node?.kind === "wait" ? node.payload : null;
-}
-
-function recordPathType(schema: RecordSpec, path: string[]): string | null {
-  if (path.length === 0) {
-    return "object";
-  }
-
-  const field = path[0] ?? "";
-  const type = schema[field] ?? schema[`${field}?`];
-
-  if (path.length !== 1 || type === "json") {
-    return "json";
-  }
-
-  return type ?? null;
-}
-
-function bodyResultType(
-  context: Context,
-  owner: Node,
-  entry: NodeId,
-  path: string[],
-): string | null {
-  const result = context.graph.nodes.find(
-    (child) =>
-      child.scope === owner.id &&
-      child.kind === "join" &&
-      !context.graph.edges.some((edge) => edge.from === child.id && edge.kind === "next") &&
-      scopeReaches(context, entry, child.id),
-  );
-
-  return resolveRefType(context, { ref: result?.id ?? entry, path });
-}
-
-function literalPathType(context: Context, value: Value, path: string[]): string | null {
-  if (isRef(value)) {
-    return resolveRefType(context, { ref: value.ref, path: [...value.path, ...path] });
-  }
-
-  if (path.length === 0) {
-    return operandType(context, value);
-  }
-
-  const [field, ...rest] = path;
-
-  if (field === undefined || !isRecord(value) || !Object.hasOwn(value, field)) {
-    return null;
-  }
-
-  return literalPathType(context, value[field] ?? null, rest);
-}
-
-function derivedType(context: Context, node: Node, path: string[]): string | null {
-  switch (node.kind) {
-    case "branch":
-    case "switch":
-    case "rescue": {
-      const arms = targets(node).map((entry) => bodyResultType(context, node, entry, path));
-
-      return arms.length > 0 && arms.every((type) => type === arms[0]) ? (arms[0] ?? null) : "json";
-    }
-
-    case "join":
-      return literalPathType(context, node.result, path);
-    case "finally":
-      return bodyResultType(context, node, node.body, path);
-    case "map":
-      return path.length === 0
-        ? `${node.onError === "collect" ? "json" : (bodyResultType(context, node, node.body, []) ?? "json")}[]`
-        : null;
-    default:
-      return null;
-  }
-}
-
-function resolveRefType(context: Context, ref: { ref: string; path: string[] }): string | null {
-  const key = JSON.stringify([ref.ref, ref.path]);
-
-  if (context.refTypes.has(key)) {
-    return context.refTypes.get(key) ?? null;
-  }
-
-  // Track ids because cyclic field projections can grow the path on each traversal.
-  if (context.resolving.has(ref.ref)) {
-    return null;
-  }
-
-  context.resolving.add(ref.ref);
-  const type = declaredRefType(context, ref);
-  context.resolving.delete(ref.ref);
-  context.refTypes.set(key, type);
-
-  return type;
-}
-
-function declaredRefType(context: Context, ref: { ref: string; path: string[] }): string | null {
-  const node = context.nodes.get(ref.ref);
-  const owner = binding(context, ref);
-
-  if (owner?.kind === "map") {
-    const array = resolveRefType(context, owner.over);
-
-    const type =
-      owner.index === ref.ref ? "number" : array?.endsWith("[]") ? array.slice(0, -2) : "json";
-
-    return ref.path.length === 0 ? (type ?? "json") : null;
-  }
-
-  if (owner?.kind === "rescue") {
-    return "json";
-  }
-
-  const schema = declaredSchema(context, ref);
-
-  if (schema && schema !== "schema" && schema !== "json") {
-    return recordPathType(schema, ref.path);
-  }
-
-  if (node && ["branch", "switch", "rescue", "join", "finally", "map"].includes(node.kind)) {
-    return derivedType(context, node, ref.path);
-  }
-
-  if (ref.path.length > 0) {
-    return schema === "json" ? "json" : null;
-  }
-
-  if (node?.kind === "format" || node?.kind === "now" || node?.kind === "uuid") {
-    return "string";
-  }
-
-  if (node?.kind === "random") {
-    return "number";
-  }
-
-  if (node?.kind === "log" || node?.kind === "sleep") {
-    return "null";
-  }
-
-  return schema === "json" ? "json" : null;
-}
-
-function operandType(context: Context, value: ComparisonOperand): string | null {
-  if (isRef(value)) {
-    return "size" in value ? "number" : resolveRefType(context, value);
-  }
-
-  if (value === null) {
-    return "null";
-  }
-
-  if (Array.isArray(value)) {
-    const elements = value.map((item) => operandType(context, item));
-    const type = elements[0];
-    const scalar = type === "string" || type === "number" || type === "boolean";
-
-    return `${scalar && elements.every((element) => element === type) ? type : "json"}[]`;
-  }
-
-  if (isString(value)) {
-    return "string";
-  }
-
-  if (isNumber(value)) {
-    return "number";
-  }
-
-  if (isBoolean(value)) {
-    return "boolean";
-  }
-
-  return "object";
-}
-
-function hasSize(value: Value): boolean {
-  return refs(value).some((ref) => "size" in ref);
-}
-
-function comparisonErrors(
-  context: Context,
-  predicate: Extract<Predicate, { left: ComparisonOperand }>,
-  node: NodeId,
-): Diagnostic[] {
-  const left = operandType(context, predicate.left);
-  const right = operandType(context, predicate.right);
-
-  const invalidSize = [predicate.left, predicate.right].some((operand) => {
-    if (!isRef(operand) || !("size" in operand)) {
-      return hasSize(operand);
-    }
-
-    const type = resolveRefType(context, operand);
-
-    return operand.size !== true || (type !== "string" && !type?.endsWith("[]"));
-  });
-
-  if (invalidSize) {
-    return [
-      diagnostic(
-        "invalid_size",
-        node,
-        "Size requires a string or array reference in a comparison.",
-      ),
-    ];
-  }
-
-  const ordering = ["lt", "lte", "gt", "gte"].includes(predicate.op);
-
-  const mismatch =
-    predicate.op === "in"
-      ? !Array.isArray(predicate.right) &&
-        (!right?.endsWith("[]") || right.slice(0, -2) !== left || left === "json")
-      : ordering
-        ? left !== right || (left !== "number" && left !== "string")
-        : left !== null && right !== null && left !== right;
-
-  const members = predicate.op === "in" && Array.isArray(predicate.right) ? predicate.right : [];
-
-  const badMember =
-    predicate.op === "in" &&
-    (left === null ||
-      left === "json" ||
-      members.some((member) => operandType(context, member) !== left));
-
-  return mismatch || badMember
-    ? [diagnostic("predicate_type", node, "Predicate operands must have matching declared types.")]
-    : [];
-}
-
-function predicateErrors(context: Context, predicate: Predicate, node: NodeId): Diagnostic[] {
-  switch (predicate.op) {
-    case "and":
-    case "or":
-      return predicate.predicates.flatMap((child) => predicateErrors(context, child, node));
-    case "not":
-      return predicateErrors(context, predicate.predicate, node);
-    case "exists":
-    case "isNull":
-      return hasSize(predicate.value)
-        ? [diagnostic("invalid_size", node, "Size is allowed only in comparisons.")]
-        : [];
-    default:
-      return comparisonErrors(context, predicate, node);
-  }
-}
-
 function predicates(context: Context): Diagnostic[] {
   return context.graph.nodes.flatMap((node) =>
     node.kind === "branch"
-      ? predicateErrors(context, node.predicate, node.id)
+      ? checkPredicate(node.predicate, (ref) => context.resolveType(ref)).map((error) =>
+          diagnostic(error.code, node.id, error.message),
+        )
       : values(node).some(hasSize)
         ? [diagnostic("invalid_size", node.id, "Size is allowed only in comparisons.")]
         : [],
@@ -815,8 +127,7 @@ function formats(context: Context): Diagnostic[] {
     node.kind === "format" &&
     Object.values(node.values).some(
       (value) =>
-        isRef(value) &&
-        !["string", "number", "boolean"].includes(resolveRefType(context, value) ?? ""),
+        isRef(value) && !["string", "number", "boolean"].includes(context.resolveType(value) ?? ""),
     )
       ? [diagnostic("predicate_type", node.id, "Format operands must have a declared scalar type.")]
       : [],
@@ -841,37 +152,32 @@ function bindings({ graph }: Context): Diagnostic[] {
   });
 }
 
-const rules = [
-  identity,
-  bindings,
-  endpoints,
-  scopes,
-  scopeEdges,
-  controlEdges,
-  connectivity,
-  references,
-  predicates,
-  formats,
-  cycles,
-];
+function reservedNames({ graph }: Context): Diagnostic[] {
+  const names = [
+    ...(graph.input === "schema"
+      ? []
+      : Object.keys(graph.input).map((name) => ({ name, node: null }))),
+    ...graph.nodes.flatMap((node) => nodeNames(node).map((name) => ({ name, node: node.id }))),
+    ...graph.edges.flatMap((edge) =>
+      edge.kind === "case" ? [{ name: edge.label, node: edge.from }] : [],
+    ),
+  ];
+
+  return names.flatMap(({ name, node }) =>
+    isReservedGraphName(name)
+      ? [diagnostic("reserved_name", node, `Label "${name}" is reserved`)]
+      : [],
+  );
+}
 
 export function validateGraph(graph: Graph): Diagnostic[] {
   const context: Context = {
     graph,
     nodes: new Map(graph.nodes.map((node) => [node.id, node])),
-    refTypes: new Map(),
-    resolving: new Set(),
+    resolveType: graphTypeResolver(graph),
   };
 
-  for (const node of graph.nodes) {
-    for (const ref of values(node).flatMap(refs)) {
-      resolveRefType(context, ref);
-    }
-  }
-
-  if (graph.outputs !== null) {
-    resolveRefType(context, graph.outputs);
-  }
-
-  return rules.flatMap((rule) => rule(context));
+  return [...structureRules, reservedNames, bindings, references, predicates, formats].flatMap(
+    (rule) => rule(context),
+  );
 }

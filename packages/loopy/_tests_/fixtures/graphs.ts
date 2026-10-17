@@ -6,7 +6,7 @@ export const approveDemoGraph = graphSchema.parse({
   name: "approve-demo",
   input: { "subject?": "string" },
   entry: "0:draft",
-  outputs: { ref: "8:join", path: [] },
+  outputs: { ref: "9:join", path: [] },
   warnings: [],
   nodes: [
     {
@@ -15,7 +15,7 @@ export const approveDemoGraph = graphSchema.parse({
       label: "draft",
       scope: null,
       in: { subject: { ref: "input", path: ["subject"] } },
-      out: { words: "number" },
+      out: { kind: "record", fields: { words: "number" } },
       module: { path: "./draft.ts", bundleHash: null },
       retry: { attempts: 3, backoff: "exponential", retryOnExit: false },
       timeout: null,
@@ -27,7 +27,7 @@ export const approveDemoGraph = graphSchema.parse({
       label: "approve",
       scope: null,
       timeout: "1h",
-      payload: { approved: "boolean" },
+      payload: { kind: "record", fields: { approved: "boolean" } },
     },
     {
       id: "3:branch",
@@ -51,7 +51,7 @@ export const approveDemoGraph = graphSchema.parse({
       label: "apply",
       scope: "3:branch",
       key: "sh.exec",
-      out: "json",
+      out: { kind: "record", fields: { stdout: "string", stderr: "string", exitCode: "number" } },
       argv: ["bun", "apply.ts", { ref: "4:format", path: [] }],
       flags: {},
       options: { cwd: null, env: {}, stdin: null },
@@ -64,7 +64,7 @@ export const approveDemoGraph = graphSchema.parse({
       kind: "join",
       label: null,
       scope: "3:branch",
-      result: { ref: "5:apply", path: [] },
+      result: { kind: "value", value: { ref: "5:apply", path: [] } },
     },
     { id: "7:fail", kind: "fail", label: null, scope: "3:branch", message: "Rejected" },
     {
@@ -72,7 +72,17 @@ export const approveDemoGraph = graphSchema.parse({
       kind: "join",
       label: null,
       scope: null,
-      result: { draft: { ref: "0:draft", path: [] }, applied: { ref: "3:branch", path: [] } },
+      result: { kind: "value", value: { ref: "3:branch", path: [] } },
+    },
+    {
+      id: "9:join",
+      kind: "join",
+      label: null,
+      scope: null,
+      result: {
+        kind: "value",
+        value: { draft: { ref: "0:draft", path: [] }, applied: { ref: "3:branch", path: [] } },
+      },
     },
   ],
   edges: [
@@ -84,5 +94,6 @@ export const approveDemoGraph = graphSchema.parse({
     { from: "4:format", to: "5:apply", kind: "next" },
     { from: "5:apply", to: "6:join", kind: "next" },
     { from: "6:join", to: "8:join", kind: "join" },
+    { from: "8:join", to: "9:join", kind: "next" },
   ],
 });

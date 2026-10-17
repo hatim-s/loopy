@@ -21,9 +21,17 @@ export const FIELD_TYPES = [
   "json[]",
 ] as const;
 
-export type RecordSpec = Readonly<Record<string, (typeof FIELD_TYPES)[number]>>;
+export type FieldType = (typeof FIELD_TYPES)[number];
 
-export type OutputSchema = RecordSpec | "json";
+export type RecordSpec = Readonly<Record<string, FieldType>>;
+
+export const ERROR_FIELDS = {
+  message: "string",
+  code: "string",
+  data: "json",
+} as const satisfies RecordSpec;
+
+export type OutSchema = { kind: "record"; fields: RecordSpec } | { kind: "value"; type: FieldType };
 
 export type Ref = { ref: RefId; path: string[] };
 
@@ -98,6 +106,29 @@ export type GraphRetry = {
   retryOnExit: boolean;
 };
 
+export type CommandFlag = {
+  readonly cli: string;
+  readonly kind: "boolean" | "string" | "number";
+  readonly repeatable?: boolean;
+  readonly optionalValue?: boolean;
+  readonly choices?: readonly string[];
+  readonly supported?: boolean;
+  readonly style?: "equals" | "space" | "attached" | "positional";
+  readonly position?: "before" | "after";
+  readonly order?: number;
+  readonly prefix?: readonly string[];
+  readonly pairs?: boolean;
+  readonly terminator?: string;
+};
+
+export type CommandFlagSpec = {
+  path: string[];
+  flags: Record<string, CommandFlag>;
+  style: "equals" | "space";
+  positionalSeparator: boolean;
+  flagsAfterPositionals: boolean;
+};
+
 type Expand<T> = T extends unknown ? { [K in keyof T]: T[K] } : never;
 
 type NodeBase = {
@@ -113,7 +144,7 @@ export type Node = Expand<
       | {
           kind: (typeof NODE_KINDS)[0];
           in: Record<string, Value>;
-          out: OutputSchema;
+          out: OutSchema;
           module: { path: string; bundleHash: string | null };
           retry: GraphRetry;
           timeout: Duration | null;
@@ -121,13 +152,14 @@ export type Node = Expand<
       | {
           kind: (typeof NODE_KINDS)[1];
           key: string;
-          out: OutputSchema;
+          out: OutSchema;
           argv: Value[];
           flags: Record<string, Value>;
+          flagSpec?: CommandFlagSpec;
           options: { cwd: Value | null; env: Record<string, Value>; stdin: Value | null };
           retry: GraphRetry;
           okExitCodes: number[];
-          parse: { bundleHash: string } | null;
+          parse: { bundleHash: string | null } | null;
         }
       | { kind: (typeof NODE_KINDS)[2]; predicate: Predicate; arms: { yes: NodeId; no: NodeId } }
       | {
@@ -146,7 +178,7 @@ export type Node = Expand<
           onError: (typeof MAP_ERROR_MODES)[number];
         }
       | { kind: (typeof NODE_KINDS)[5]; branches: Record<string, NodeId> }
-      | { kind: (typeof NODE_KINDS)[6]; timeout: Duration | null; payload: OutputSchema }
+      | { kind: (typeof NODE_KINDS)[6]; timeout: Duration | null; payload: OutSchema }
       | { kind: (typeof NODE_KINDS)[7]; duration: Duration }
       | { kind: (typeof NODE_KINDS)[8]; body: NodeId; cleanup: NodeId }
       | { kind: (typeof NODE_KINDS)[9]; body: NodeId; handler: NodeId; error: RefId }
@@ -157,7 +189,10 @@ export type Node = Expand<
       | { kind: (typeof NODE_KINDS)[14] }
       | { kind: (typeof NODE_KINDS)[15] }
       // Joins make a scope's result explicit without inventing an executable callback.
-      | { kind: (typeof NODE_KINDS)[16]; result: Value | null }
+      | {
+          kind: (typeof NODE_KINDS)[16];
+          result: { kind: "value"; value: Value } | { kind: "none" };
+        }
     )
 >;
 
@@ -182,6 +217,9 @@ export type Edge = Expand<
 >;
 
 export const DIAGNOSTIC_CODES = [
+  "duplicate_label",
+  "reserved_name",
+  "inactive_builder",
   "duplicate_node",
   "duplicate_ref",
   "missing_endpoint",

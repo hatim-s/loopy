@@ -5,12 +5,14 @@ import {
   type Duration,
   EDGE_KINDS,
   FIELD_TYPES,
+  isRecord,
   type Json,
   MAP_ERROR_MODES,
   NODE_KINDS,
   NODE_RUN_STATUSES,
   type NodeId,
   PREDICATE_OPS,
+  RESERVED_GRAPH_NAMES,
   RETRY_BACKOFFS,
   type RefId,
 } from "../core/index.js";
@@ -26,7 +28,26 @@ export const refIdSchema = z.custom<RefId>(
   (value): value is RefId => typeof value === "string" && value.length > 0,
 );
 
+const labelSchema = z
+  .string()
+  .refine(
+    (name) => !RESERVED_GRAPH_NAMES.some((reserved) => reserved === name.replace(/\?$/, "")),
+    { message: "Reserved graph names cannot be labels or record keys." },
+  );
+
 export const refSchema = z.strictObject({ ref: refIdSchema, path: z.array(z.string()) });
+
+// BOUNDARY: Zod records skip __proto__ before validating keys, so inspect raw own keys first.
+function graphRecord<T extends z.ZodType>(schema: T) {
+  return z
+    .unknown()
+    .refine(
+      (value) =>
+        !isRecord(value) || Object.keys(value).every((name) => labelSchema.safeParse(name).success),
+      { message: "Reserved graph names cannot be record keys." },
+    )
+    .pipe(z.record(labelSchema, schema));
+}
 
 // 'ref' is reserved in object values so malformed references cannot pass as JSON literals.
 const literalSchema: z.ZodType<Json> = z.lazy(() =>
@@ -37,15 +58,18 @@ const literalSchema: z.ZodType<Json> = z.lazy(() =>
     z.string(),
     refSchema,
     z.array(literalSchema),
-    z.record(z.string(), literalSchema).refine((value) => !Object.hasOwn(value, "ref")),
+    graphRecord(literalSchema).refine((value) => !Object.hasOwn(value, "ref")),
   ]),
 );
 
 export const valueSchema = z.union([refSchema, literalSchema]);
 
-export const outputSchema = z.union([
-  z.record(z.string(), z.enum(FIELD_TYPES)).readonly(),
-  z.literal("json"),
+export const outputSchema = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("record"),
+    fields: graphRecord(z.enum(FIELD_TYPES)).readonly(),
+  }),
+  z.strictObject({ kind: z.literal("value"), type: z.enum(FIELD_TYPES) }),
 ]);
 
 const operandSchema = z.union([refSchema.extend({ size: z.literal(true) }), valueSchema]);
@@ -82,17 +106,42 @@ const retrySchema = z.strictObject({
 
 const base = z.strictObject({
   id: nodeIdSchema,
-  label: z.string().nullable(),
+  label: labelSchema.nullable(),
   scope: nodeIdSchema.nullable(),
 });
 
 const code = base.extend({
   kind: z.literal(NODE_KINDS[0]),
-  in: z.record(z.string(), valueSchema),
+  in: graphRecord(valueSchema),
   out: outputSchema,
   module: z.strictObject({ path: z.string(), bundleHash: z.string().nullable() }),
   retry: retrySchema,
   timeout: durationSchema.nullable(),
+});
+
+const commandFlagSchema = z
+  .strictObject({
+    cli: z.string(),
+    kind: z.enum(["boolean", "string", "number"]),
+    repeatable: z.boolean().optional(),
+    optionalValue: z.boolean().optional(),
+    choices: z.array(z.string()).readonly().optional(),
+    supported: z.boolean().optional(),
+    style: z.enum(["equals", "space", "attached", "positional"]).optional(),
+    position: z.enum(["before", "after"]).optional(),
+    order: z.number().optional(),
+    prefix: z.array(z.string()).readonly().optional(),
+    pairs: z.boolean().optional(),
+    terminator: z.string().optional(),
+  })
+  .readonly();
+
+const commandFlagSpecSchema = z.strictObject({
+  path: z.array(z.string()),
+  flags: graphRecord(commandFlagSchema),
+  style: z.enum(["equals", "space"]),
+  positionalSeparator: z.boolean(),
+  flagsAfterPositionals: z.boolean(),
 });
 
 const command = base.extend({
@@ -100,15 +149,16 @@ const command = base.extend({
   key: z.string(),
   out: outputSchema,
   argv: z.array(valueSchema),
-  flags: z.record(z.string(), valueSchema),
+  flags: graphRecord(valueSchema),
+  flagSpec: commandFlagSpecSchema.optional(),
   options: z.strictObject({
     cwd: valueSchema.nullable(),
-    env: z.record(z.string(), valueSchema),
+    env: graphRecord(valueSchema),
     stdin: valueSchema.nullable(),
   }),
   retry: retrySchema,
   okExitCodes: z.array(z.number().int()),
-  parse: z.strictObject({ bundleHash: z.string() }).nullable(),
+  parse: z.strictObject({ bundleHash: z.string().nullable() }).nullable(),
 });
 
 const otherNodes = [
@@ -120,7 +170,7 @@ const otherNodes = [
   base.extend({
     kind: z.literal(NODE_KINDS[3]),
     on: refSchema,
-    cases: z.record(z.string(), nodeIdSchema),
+    cases: graphRecord(nodeIdSchema),
     default: nodeIdSchema.nullable(),
   }),
   base.extend({
@@ -132,7 +182,7 @@ const otherNodes = [
     concurrency: z.number().int().positive(),
     onError: z.enum(MAP_ERROR_MODES),
   }),
-  base.extend({ kind: z.literal(NODE_KINDS[5]), branches: z.record(z.string(), nodeIdSchema) }),
+  base.extend({ kind: z.literal(NODE_KINDS[5]), branches: graphRecord(nodeIdSchema) }),
   base.extend({
     kind: z.literal(NODE_KINDS[6]),
     timeout: durationSchema.nullable(),
@@ -150,7 +200,7 @@ const otherNodes = [
   base.extend({
     kind: z.literal(NODE_KINDS[11]),
     template: z.string(),
-    values: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), refSchema])),
+    values: graphRecord(z.union([z.string(), z.number(), z.boolean(), refSchema])),
   }),
   base.extend({
     kind: z.literal(NODE_KINDS[12]),
@@ -160,7 +210,13 @@ const otherNodes = [
   base.extend({ kind: z.literal(NODE_KINDS[13]) }),
   base.extend({ kind: z.literal(NODE_KINDS[14]) }),
   base.extend({ kind: z.literal(NODE_KINDS[15]) }),
-  base.extend({ kind: z.literal(NODE_KINDS[16]), result: valueSchema.nullable() }),
+  base.extend({
+    kind: z.literal(NODE_KINDS[16]),
+    result: z.discriminatedUnion("kind", [
+      z.strictObject({ kind: z.literal("value"), value: valueSchema }),
+      z.strictObject({ kind: z.literal("none") }),
+    ]),
+  }),
 ] as const;
 
 export const nodeSchema = z.discriminatedUnion("kind", [code, command, ...otherNodes]);
@@ -175,7 +231,7 @@ export const edgeSchema = z.discriminatedUnion("kind", [
     from: nodeIdSchema,
     to: nodeIdSchema,
     kind: z.literal("case"),
-    label: z.string(),
+    label: labelSchema,
   }),
 ]);
 
@@ -195,7 +251,7 @@ export const diagnosticSchema = z.strictObject({
 export const graphSchema = z.strictObject({
   version: z.literal(1),
   name: z.string(),
-  input: z.union([z.record(z.string(), z.enum(FIELD_TYPES)).readonly(), z.literal("schema")]),
+  input: z.union([graphRecord(z.enum(FIELD_TYPES)).readonly(), z.literal("schema")]),
   nodes: z.array(nodeSchema),
   edges: z.array(edgeSchema),
   entry: nodeIdSchema,
@@ -273,7 +329,7 @@ export type Value = z.infer<typeof valueSchema>;
 
 export type Ref = z.infer<typeof refSchema>;
 
-export type OutputSchema = z.infer<typeof outputSchema>;
+export type OutSchema = z.infer<typeof outputSchema>;
 
 export type Diagnostic = z.infer<typeof diagnosticSchema>;
 

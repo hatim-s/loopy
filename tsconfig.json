@@ -16,6 +16,7 @@
       "loopy": ["./packages/loopy/src/sdk/index.ts"],
       "loopy/runtime": ["./packages/loopy/src/runtime/index.ts"],
       "loopy/local": ["./packages/loopy/src/local/index.ts"],
+      "loopy/graph": ["./packages/loopy/src/sdk/graph/index.ts"],
       "loopy/contract": ["./packages/loopy/src/contract/index.ts"]
     },
     "skipLibCheck": true,
