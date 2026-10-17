@@ -1,6 +1,8 @@
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 
-export type ExecutionMode = "sandbox" | "full";
+export const EXECUTION_MODES = ["sandbox", "full"] as const;
+
+export type ExecutionMode = (typeof EXECUTION_MODES)[number];
 
 export type CommandResult = {
   stdout: string;
@@ -9,11 +11,24 @@ export type CommandResult = {
   durationMs: number;
 };
 
-export type RunStatus = "queued" | "running" | "suspended" | "succeeded" | "failed" | "cancelled";
+export const RUN_STATUSES = [
+  "queued",
+  "running",
+  "suspended",
+  "succeeded",
+  "failed",
+  "cancelled",
+] as const;
 
-export type StepKind = "command" | "function" | "sleep" | "hook" | "clock" | "random";
+export type RunStatus = (typeof RUN_STATUSES)[number];
 
-export type LogLevel = "info" | "warn" | "error";
+export const STEP_KINDS = ["command", "function", "sleep", "hook", "clock", "random"] as const;
+
+export type StepKind = (typeof STEP_KINDS)[number];
+
+export const LOG_LEVELS = ["info", "warn", "error"] as const;
+
+export type LogLevel = (typeof LOG_LEVELS)[number];
 
 type RunOwner = { token: string; pid: number; host: string; heartbeatAt: string };
 

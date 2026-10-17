@@ -19,6 +19,10 @@
     "./local": {
       "types": "./dist/types/local/index.d.ts",
       "default": "./dist/local/index.js"
+    },
+    "./contract": {
+      "types": "./dist/types/contract/index.d.ts",
+      "default": "./dist/contract/index.js"
     }
   },
   "bin": {
@@ -33,6 +37,7 @@
     "prepack": "bun ../../scripts/build.ts"
   },
   "dependencies": {
-    "oxc-parser": "^0.154.0"
+    "oxc-parser": "^0.154.0",
+    "zod": "4.6.7"
   }
 }

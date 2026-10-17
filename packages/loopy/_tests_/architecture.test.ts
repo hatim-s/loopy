@@ -7,7 +7,7 @@ const SOURCE = resolve(import.meta.dir, "../src");
 
 const STUDIO = resolve(import.meta.dir, "../../../apps/studio/src");
 
-const LAYERS = ["core", "runtime", "sdk", "local", "cli"] as const;
+const LAYERS = ["core", "runtime", "contract", "sdk", "local", "cli"] as const;
 
 type Layer = (typeof LAYERS)[number];
 
@@ -15,9 +15,10 @@ type Layer = (typeof LAYERS)[number];
 const ALLOWED_IMPORTS: Record<Layer, readonly Layer[]> = {
   core: [],
   runtime: ["core"],
-  local: ["core", "runtime", "sdk"],
+  contract: ["core"],
+  local: ["core", "runtime", "sdk", "contract"],
   sdk: ["core", "runtime"],
-  cli: ["core", "runtime", "local", "sdk"],
+  cli: ["core", "runtime", "local", "sdk", "contract"],
 };
 
 function sourceFiles(directory: string): string[] {
@@ -84,9 +85,9 @@ function isBarrel(specifier: string): boolean {
   return /\/index(\.[jt]s)?$/.test(specifier);
 }
 
-test("core and runtime exports bundle without host dependencies", async () => {
+test("core, runtime and contract exports bundle without host dependencies", async () => {
   const result = await Bun.build({
-    entrypoints: ["core", "runtime"].map((name) => resolve(SOURCE, `${name}/index.ts`)),
+    entrypoints: ["core", "runtime", "contract"].map((name) => resolve(SOURCE, `${name}/index.ts`)),
     target: "browser",
   });
 
@@ -108,7 +109,11 @@ test("layers import downward, and only through the target layer's index", () => 
       }
 
       if (!specifier.startsWith(".")) {
-        if (layer === "core" || layer === "runtime") {
+        if (
+          layer === "core" ||
+          layer === "runtime" ||
+          (layer === "contract" && specifier !== "zod")
+        ) {
           violations.push(`${name} may only import relative specifiers (${specifier}).`);
         }
 

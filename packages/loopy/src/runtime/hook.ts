@@ -9,7 +9,19 @@ export async function runHook(options: Runner, name: string, timeout?: Duration)
 
   try {
     const record = stored ?? (await createHook(options, name, wakeAt));
-    const runner = { ...options, record };
+
+    // Preserve hook identity on completion without carrying waiting-only fields.
+    const runner = {
+      ...options,
+      record: {
+        ...options.record,
+        input: record.input,
+        attempt: record.attempt,
+        maxAttempts: record.maxAttempts,
+        startedAt: record.startedAt,
+      },
+    };
+
     let hook = await readHook(runner);
 
     if (
