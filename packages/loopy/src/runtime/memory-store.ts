@@ -459,6 +459,10 @@ export class MemoryRunStore implements RunStore {
     return this.listeners.subscribe(listener);
   }
 
+  oldestEventSequence(): number | undefined {
+    return this.eventLog[0]?.sequence ?? (this.sequence === 0 ? undefined : this.sequence + 1);
+  }
+
   async events(after: number, limit: number): Promise<RuntimeEvent[]> {
     return structuredClone(this.eventLog.filter((event) => event.sequence > after).slice(0, limit));
   }

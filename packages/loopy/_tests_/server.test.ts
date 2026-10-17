@@ -1,7 +1,6 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { get, type IncomingMessage } from "node:http";
-import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
   daemonViewSchema,
@@ -26,14 +25,9 @@ import {
 import { eventStream } from "../src/local/server/events.js";
 import { apiRoutes, dispatch } from "../src/local/server/routes.js";
 import { SYSTEM_CLOCK } from "../src/runtime/index.js";
+import { CLI, cli, fixture, object, roots, save } from "./cli-fixture.js";
 
-const roots: string[] = [];
-
-const servers: ReturnType<typeof startServer>[] = [];
-
-const CLI = resolve(import.meta.dir, "../src/cli/index.ts");
-
-const SDK = resolve(import.meta.dir, "../src/sdk/index.ts");
+const servers: ReturnType<typeof startDaemon>[] = [];
 
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => server.stop()));
@@ -43,49 +37,7 @@ afterEach(async () => {
   }
 });
 
-function fixture(name: string, definition: string) {
-  const root = mkdtempSync(join(tmpdir(), "loopy-cli-sdk-"));
-  roots.push(root);
-  const home = join(root, "home");
-  const file = join(root, `${name}.loopy.ts`);
-  writeFileSync(
-    file,
-    `import { loopy, step, sleep, hook, command } from ${JSON.stringify(SDK)};
-export default loopy({ name: ${JSON.stringify(name)}, ${definition} });`,
-  );
-
-  return { cwd: root, home, file };
-}
-
-async function cli(f: ReturnType<typeof fixture>, ...args: string[]) {
-  const child = Bun.spawn([process.execPath, CLI, "--home", f.home, ...args], {
-    cwd: f.cwd,
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-
-  const [stdout, stderr, code] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ]);
-
-  return { stdout, stderr, code };
-}
-
-function object(text: string) {
-  return requireRecord(JSON.parse(text), "CLI output");
-}
-
-async function save(f: ReturnType<typeof fixture>) {
-  const result = await cli(f, "save", f.file);
-  expect(result.stderr).toBe("");
-  expect(result.code).toBe(0);
-
-  return object(result.stdout);
-}
-
-function startServer(options: { home: string; cwd: string; port: number; assets?: string }) {
+function startDaemon(options: { home: string; cwd: string; port: number; assets?: string }) {
   const store = openRunStore(options.home);
   const daemon = localDaemon({ ...options, store });
 
@@ -106,7 +58,7 @@ test("API returns run records, step traces and cursor logs", async () => {
 
   await save(f);
   const run = object((await cli(f, "run", "api")).stdout);
-  const server = startServer({ home: f.home, cwd: f.cwd, port: 0 });
+  const server = startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
   const token = new URLSearchParams(url.hash.slice(1)).get("token");
@@ -123,13 +75,13 @@ test("API returns run records, step traces and cursor logs", async () => {
   expect(await (await request("/runs")).json()).toMatchObject([{ id: run.id }]);
 });
 
-test("Studio requires its token and origin, serves pinned assets and exposes read-only data", async () => {
+test("the daemon server requires its token and origin, serves pinned assets and exposes read-only data", async () => {
   const f = fixture("studio", "run: () => 1");
   await save(f);
   const assets = join(f.cwd, "assets");
   mkdirSync(assets);
   writeFileSync(join(assets, "index.html"), "original Studio");
-  const server = startServer({ home: f.home, cwd: f.cwd, assets, port: 0 });
+  const server = startDaemon({ home: f.home, cwd: f.cwd, assets, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
   const token = new URLSearchParams(url.hash.slice(1)).get("token");
@@ -159,7 +111,7 @@ test("API distinguishes invalid cursors from registry failures", async () => {
   const f = fixture("server-errors", "run: () => 1");
   await save(f);
   const run = object((await cli(f, "run", "server-errors")).stdout);
-  const server = startServer({ home: f.home, cwd: f.cwd, port: 0 });
+  const server = startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
   const token = new URLSearchParams(url.hash.slice(1)).get("token");
@@ -180,7 +132,7 @@ test("API returns the contract snapshot, rejects unknown query keys and keeps cu
 
   await save(f);
   const run = object((await cli(f, "run", "summary")).stdout);
-  const server = startServer({ home: f.home, cwd: f.cwd, port: 0 });
+  const server = startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
   const token = new URLSearchParams(url.hash.slice(1)).get("token");
@@ -203,7 +155,7 @@ test("hook API applies auth and origin checks and resolves JSON exactly once", a
   const store = openRunStore(f.home);
   const [hook] = await store.listHooks(String(run.id));
   store.close();
-  const server = startServer({ home: f.home, cwd: f.cwd, port: 0 });
+  const server = startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
   const token = new URLSearchParams(url.hash.slice(1)).get("token");
@@ -227,7 +179,7 @@ test("contract routes start, snapshot, resume and cancel without exposing owner 
   const f = fixture("contract", 'run: async () => hook("approve")');
   await save(f);
   const initial = object((await cli(f, "run", "contract")).stdout);
-  const server = startServer({ ...f, port: 0 });
+  const server = startDaemon({ ...f, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
 
@@ -279,7 +231,7 @@ test("SPA routes fall back to pinned index but missing files stay 404", async ()
   const assets = join(f.cwd, "assets");
   mkdirSync(assets);
   writeFileSync(join(assets, "index.html"), "SPA");
-  const server = startServer({ ...f, port: 0, assets });
+  const server = startDaemon({ ...f, port: 0, assets });
   servers.push(server);
   const origin = new URL(server.url).origin;
   expect(await (await fetch(`${origin}/runs/some-run`)).text()).toBe("SPA");

@@ -159,12 +159,14 @@ export class SqliteRunStore implements RunStore {
     );
   }
 
-  eventBounds() {
-    return this.db
-      .query<{ oldest: number | null; newest: number | null }, []>(
-        "SELECT COALESCE(MIN(sequence), (SELECT seq + 1 FROM sqlite_sequence WHERE name='events')) AS oldest, MAX(sequence) AS newest FROM events",
-      )
-      .get();
+  oldestEventSequence(): number | undefined {
+    return (
+      this.db
+        .query<{ oldest: number | null }, []>(
+          "SELECT COALESCE(MIN(sequence), (SELECT seq + 1 FROM sqlite_sequence WHERE name='events')) AS oldest FROM events",
+        )
+        .get()?.oldest ?? undefined
+    );
   }
 
   async listHooks(runId: string): Promise<HookRecord[]> {

@@ -22,6 +22,7 @@ export class OwnershipError extends Error {
 }
 
 export interface RunStore {
+  oldestEventSequence(): number | undefined;
   events(after: number, limit: number): Promise<RuntimeEvent[]>;
   epoch(): Promise<string>;
   snapshotRun(id: string): Promise<RunSnapshot | undefined>;
