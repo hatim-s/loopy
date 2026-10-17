@@ -19,20 +19,22 @@ function Shell() {
 
   return (
     <div className="grid h-full grid-rows-[2.75rem_minmax(0,1fr)]">
-      <header className="flex items-center justify-between border-b border-line px-4">
+      <header className="flex items-center justify-between gap-3 border-b border-line px-4">
         <Link to="/" className="flex items-center gap-2 font-semibold tracking-tight">
           <BrandMark className="size-5 text-active" />
           loopy
         </Link>
-        <div className="flex items-center gap-4">
-          <InboxLink />
-          <Link
-            to="/schedules"
-            className="mr-4 -ml-2 hidden rounded-md px-2 sm:block py-1 text-muted hover:bg-raised hover:text-ink"
-            activeProps={{ className: "bg-raised text-ink" }}
-          >
-            Schedules
-          </Link>
+        <div className="flex items-center gap-3 sm:gap-4">
+          <nav className="flex items-center sm:gap-1">
+            <InboxLink />
+            <Link
+              to="/schedules"
+              className="rounded-md px-1.5 py-1 text-muted hover:bg-raised hover:text-ink sm:px-2"
+              activeProps={{ className: "bg-raised text-ink" }}
+            >
+              Schedules
+            </Link>
+          </nav>
           <ConnectionStatus />
           <DaemonIndicator />
         </div>

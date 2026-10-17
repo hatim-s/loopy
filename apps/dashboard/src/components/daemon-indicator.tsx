@@ -8,18 +8,21 @@ export function isUnreachable(error: Error | null): boolean {
   return error instanceof BackendError && error.code === "unreachable";
 }
 
-/** The header's link to the daemon page, with its slot use at a glance. */
+/** The header's link to the daemon page, with its slot use at a glance. Narrow screens get the short form. */
 export function DaemonIndicator() {
   const daemon = useQuery(daemonQuery(useBackend()));
 
   const unreachable = isUnreachable(daemon.error);
   const tone = unreachable ? "text-danger" : "text-muted";
   let text = "Daemon";
+  let short = "Daemon";
 
   if (unreachable) {
     text = "Daemon not reachable";
+    short = "No daemon";
   } else if (daemon.data) {
     text = `Daemon, ${daemon.data.running} of ${daemon.data.concurrency} running`;
+    short = `Daemon ${daemon.data.running}/${daemon.data.concurrency}`;
   }
 
   return (
@@ -29,7 +32,8 @@ export function DaemonIndicator() {
       activeProps={{ className: "text-ink" }}
     >
       <span aria-hidden="true" className="size-1.5 rounded-full border border-current" />
-      {text}
+      <span className="sm:hidden">{short}</span>
+      <span className="max-sm:hidden">{text}</span>
     </Link>
   );
 }

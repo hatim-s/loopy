@@ -82,8 +82,8 @@ export function ScheduleRow({
 
   return (
     <>
-      <tr className="align-baseline">
-        <td className="max-w-0 py-2 pr-4 pl-2">
+      <tr className="align-baseline max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-4 max-md:px-2 max-md:py-2">
+        <td className="max-w-0 py-2 pr-4 pl-2 max-md:max-w-none max-md:basis-full max-md:p-0 max-md:pb-1.5">
           <Link
             to="/loopies/$slug"
             params={{ slug: schedule.slug }}
@@ -91,14 +91,14 @@ export function ScheduleRow({
           >
             {schedule.slug}
           </Link>
-          <span className="block truncate text-xs text-muted">
-            <code className="font-mono text-ink">{schedule.cron}</code>{" "}
-            <span className="md:hidden">{schedule.tz}</span>
-            {reading && <span className="hidden lg:inline">{reading}</span>}
+          <span className="block truncate text-xs text-muted max-md:whitespace-normal">
+            <code className="mr-2 font-mono text-ink">{schedule.cron}</code>
+            {reading && <span className="mr-2 md:hidden lg:inline">{reading}</span>}
+            <span className="font-mono md:hidden">{schedule.tz}</span>
           </span>
         </td>
         <td className="hidden truncate py-2 pr-4 font-mono text-xs md:table-cell">{schedule.tz}</td>
-        <td className="py-2 pr-4 text-xs whitespace-nowrap">
+        <td className="py-2 pr-4 text-xs whitespace-nowrap max-md:p-0">
           <NextFire schedule={schedule} now={now} />
         </td>
         <td className="hidden max-w-0 py-2 pr-4 text-xs xl:table-cell">
@@ -113,10 +113,10 @@ export function ScheduleRow({
         <td className="hidden max-w-0 py-2 pr-4 text-xs lg:table-cell">
           <InputSummary input={schedule.input} />
         </td>
-        <td className="py-2 pr-4">
+        <td className="py-2 pr-4 max-md:flex max-md:p-0">
           <EnabledSwitch schedule={schedule} toggle={toggle} />
         </td>
-        <td className="py-2 pr-2">
+        <td className="py-2 pr-2 max-md:ml-auto max-md:p-0">
           <span className="flex justify-end gap-1.5">
             <Link
               to="/schedules"
@@ -131,8 +131,8 @@ export function ScheduleRow({
         </td>
       </tr>
       {error && (
-        <tr>
-          <td colSpan={SCHEDULE_COLUMNS} className="px-2 pb-2">
+        <tr className="max-md:block">
+          <td colSpan={SCHEDULE_COLUMNS} className="px-2 pb-2 max-md:block">
             <ResolveError error={error} />
           </td>
         </tr>
@@ -146,8 +146,8 @@ function EditRow({ schedule }: { schedule: ScheduleView }) {
   const navigate = useNavigate();
 
   return (
-    <tr>
-      <td colSpan={SCHEDULE_COLUMNS} className="bg-raised/50 px-2 py-3">
+    <tr className="max-md:block">
+      <td colSpan={SCHEDULE_COLUMNS} className="bg-raised/50 px-2 py-3 max-md:block">
         <ScheduleForm
           slug={schedule.slug}
           draft={schedule}

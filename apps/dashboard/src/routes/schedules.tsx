@@ -25,8 +25,8 @@ function ScheduleTable({ schedules, open }: { schedules: ScheduleView[]; open?: 
   const now = useClock();
 
   return (
-    <table className="w-full table-fixed border-y border-line text-left">
-      <thead className="text-xs text-muted">
+    <table className="w-full table-fixed border-y border-line text-left max-md:block">
+      <thead className="text-xs text-muted max-md:sr-only">
         <tr className="border-b border-line">
           <th scope="col" className={`${HEAD} pl-2`}>
             Loopy
@@ -51,7 +51,7 @@ function ScheduleTable({ schedules, open }: { schedules: ScheduleView[]; open?: 
           </th>
         </tr>
       </thead>
-      <tbody className="divide-y divide-line">
+      <tbody className="divide-y divide-line max-md:block">
         {schedules.map((schedule) => (
           <ScheduleRow
             key={`${schedule.workspace}:${schedule.slug}`}
