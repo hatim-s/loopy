@@ -455,3 +455,22 @@ test("loopy declared schedule is visible until a persisted schedule overrides it
     ).schedule,
   ).toEqual({ cron: "*/5 * * * *", tz: "Asia/Kolkata", enabled: true, nextFireAt: now });
 });
+
+test("cursor route rejects invalid cursors and extra response fields", () => {
+  expect(contract.routes.cursor.method).toBe("GET");
+  expect(contract.routes.cursor.path).toBe("/cursor");
+  expect(contract.routes.cursor.response.parse({ cursor: 0, epoch: "epoch" })).toEqual({
+    cursor: 0,
+    epoch: "epoch",
+  });
+
+  for (const value of [
+    { cursor: -1, epoch: "epoch" },
+    { cursor: 0.5, epoch: "epoch" },
+    { cursor: "0", epoch: "epoch" },
+    { cursor: 0 },
+    { cursor: 0, epoch: "epoch", extra: true },
+  ]) {
+    expect(contract.cursorViewSchema.safeParse(value).success).toBe(false);
+  }
+});

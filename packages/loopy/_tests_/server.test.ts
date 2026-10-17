@@ -3,6 +3,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { get, type IncomingMessage } from "node:http";
 import { join, resolve } from "node:path";
 import {
+  cursorViewSchema,
   daemonViewSchema,
   type ErrorCode,
   encodeRunCursor,
@@ -27,6 +28,7 @@ import { eventStream } from "../src/local/server/events.js";
 import { apiRoutes, dispatch } from "../src/local/server/routes.js";
 import { SYSTEM_CLOCK } from "../src/runtime/index.js";
 import { CLI, cli, fixture, object, roots, save } from "./cli-fixture.js";
+import { newRun } from "./fixture.js";
 
 const servers: ReturnType<typeof startDaemon>[] = [];
 
@@ -943,6 +945,31 @@ test("schedule PUT publishes a saved SSE frame", async () => {
   } finally {
     controller.abort();
     await reader.cancel();
+    store.close();
+  }
+});
+
+test("cursor endpoint bootstraps an empty dashboard and follows new events", async () => {
+  const f = fixture("cursor", "run: () => 1");
+  const server = startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
+  servers.push(server);
+  const url = new URL(server.url);
+  const token = new URLSearchParams(url.hash.slice(1)).get("token");
+  const headers = { Authorization: `Bearer ${token}` };
+  const request = () => fetch(`${url.origin}/api/cursor`, { headers });
+  const response = await request();
+  expect(response.status).toBe(200);
+  const initial = cursorViewSchema.parse(await response.json());
+  expect(initial.cursor).toBe(0);
+  expect(initial.epoch).toBeString();
+  const store = openRunStore(f.home);
+
+  try {
+    await store.createRun(newRun());
+    const current = cursorViewSchema.parse(await (await request()).json());
+    expect(current).toEqual({ cursor: 1, epoch: initial.epoch });
+    expect(current).toEqual(await store.eventCursor());
+  } finally {
     store.close();
   }
 });

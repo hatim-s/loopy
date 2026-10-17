@@ -646,6 +646,17 @@ export class SqliteRunStore implements RunStore {
     return row.value;
   }
 
+  private readEventCursor() {
+    return {
+      cursor: this.db.query<{ cursor: number }, []>(SQL.cursor).get()?.cursor ?? 0,
+      epoch: this.readEpoch(),
+    };
+  }
+
+  async eventCursor(): Promise<{ cursor: number; epoch: string }> {
+    return this.db.transaction(() => this.readEventCursor()).deferred();
+  }
+
   async snapshotRun(id: string): Promise<RunSnapshot | undefined> {
     return this.db
       .transaction(() => {
@@ -660,8 +671,7 @@ export class SqliteRunStore implements RunStore {
           steps: this.db.query<StepRow, [string]>(SQL.steps).all(id).map(rowToStep),
           logs: this.db.query<LogRow, [string, number]>(SQL.logs).all(id, 0).map(rowToLog),
           hooks: this.db.query<HookRow, [string]>(SQL.hooks).all(id).map(rowToHook),
-          cursor: this.db.query<{ cursor: number }, []>(SQL.cursor).get()?.cursor ?? 0,
-          epoch: this.readEpoch(),
+          ...this.readEventCursor(),
         };
       })
       .deferred();

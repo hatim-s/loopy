@@ -145,3 +145,10 @@ export const serverEventSchema = z.discriminatedUnion("entity", [
 ]);
 
 export type ServerEvent = z.infer<typeof serverEventSchema>;
+
+export const cursorViewSchema = z.strictObject({
+  cursor: z.number().int().nonnegative(),
+  epoch: z.string(),
+});
+
+export type CursorView = z.infer<typeof cursorViewSchema>;

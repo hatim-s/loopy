@@ -485,6 +485,7 @@ export function storeContract(name: string, makeStore: StoreFactory): void {
     scheduleToggles(makeStore);
     scheduleAdvances(makeStore);
     nextWakeAt(makeStore);
+    eventCursors(makeStore);
   });
 }
 
@@ -601,5 +602,24 @@ function hookRejections(makeStore: StoreFactory): void {
       true,
     );
     expect((await store.getSteps("run")).every((step) => step.status === "waiting")).toBe(true);
+  });
+}
+
+function eventCursors(makeStore: StoreFactory): void {
+  test("global cursor survives pruning and agrees with run snapshots", async () => {
+    const store = await makeStore();
+    const initial = await store.eventCursor();
+    expect(initial).toEqual({ cursor: 0, epoch: await store.epoch() });
+    await store.createRun(newRun());
+    await store.createRun({ ...newRun(), id: "other" });
+    const current = await store.eventCursor();
+    expect(current).toEqual({ cursor: 2, epoch: initial.epoch });
+    expect((await store.events(0, 100)).at(-1)?.sequence).toBe(current.cursor);
+    expect(await store.snapshotRun("run")).toMatchObject(current);
+    expect(await store.pruneEvents("2100-01-01T00:00:00.000Z")).toBe(2);
+    expect(await store.events(0, 100)).toEqual([]);
+    expect(await store.eventCursor()).toEqual(current);
+    await store.createRun({ ...newRun(), id: "after-pruning" });
+    expect(await store.eventCursor()).toEqual({ cursor: 3, epoch: initial.epoch });
   });
 }
