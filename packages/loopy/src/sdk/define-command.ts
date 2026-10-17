@@ -1,23 +1,9 @@
-import type { CommandResult, Json } from "../core/index.js";
+import type { CommandFlag, CommandResult, Json } from "../core/index.js";
 import type { StepOptions } from "../runtime/index.js";
 import { command } from "./ambient.js";
 import { type RenderInput, renderArgv } from "./render-argv.js";
 
-export type FlagDefinition = {
-  readonly cli: string;
-  readonly kind: "boolean" | "string" | "number";
-  readonly repeatable?: boolean;
-  readonly optionalValue?: boolean;
-  readonly choices?: readonly string[];
-
-  readonly supported?: boolean;
-  readonly style?: "equals" | "space" | "attached" | "positional";
-  readonly position?: "before" | "after";
-  readonly order?: number;
-  readonly prefix?: readonly string[];
-  readonly pairs?: boolean;
-  readonly terminator?: string;
-};
+export type FlagDefinition = CommandFlag;
 
 export type PositionalDefinition = {
   readonly name: string;
@@ -134,11 +120,11 @@ type ParsedDescriptor<D extends CommandDescriptor> = D extends {
   ? Omit<D, "positionals"> & { readonly positionals: P }
   : D;
 
-type Input<D extends CommandDescriptor> = Operands<ParsedDescriptor<D>> & {
+export type Input<D extends CommandDescriptor> = Operands<ParsedDescriptor<D>> & {
   flags?: Omit<Flags<D>, ProtectedKeys<D>> & { readonly [K in ProtectedKeys<D>]?: never };
 };
 
-type RawInput<D extends CommandDescriptor> = Operands<D> & { flags?: Flags<D> };
+export type RawInput<D extends CommandDescriptor> = Operands<D> & { flags?: Flags<D> };
 
 type CommandCall<D extends CommandDescriptor> = D extends {
   readonly parse: (result: CommandResult, input: RenderInput) => infer T extends Json;
@@ -156,7 +142,10 @@ type CallArguments<I> = I extends { args: readonly string[] }
 
 const PLATFORM = process.platform;
 
-function platformVariant(descriptor: CommandDescriptor, platform: string): CommandDefinition {
+export function platformVariant(
+  descriptor: CommandDescriptor,
+  platform: string,
+): CommandDefinition {
   const variant =
     platform === "darwin"
       ? descriptor.variants?.darwin
@@ -170,7 +159,7 @@ function platformVariant(descriptor: CommandDescriptor, platform: string): Comma
 export function defineCommand<const D extends CommandDescriptor>(
   descriptor: D,
   environment?: { platform: () => string },
-): CommandCall<D>;
+): CommandCall<D> & { readonly descriptor: D };
 export function defineCommand(
   descriptor: CommandDescriptor,
   environment: { platform: () => string } = { platform: () => PLATFORM },
@@ -191,7 +180,7 @@ export function defineCommand(
     return command(key, resolveCommand(resolved, input, key, options), options);
   };
 
-  return Object.assign(createParsedCommand(descriptor, environment, key), { raw });
+  return Object.assign(createParsedCommand(descriptor, environment, key), { raw, descriptor });
 }
 
 function createParsedCommand(
@@ -255,7 +244,10 @@ function validateCliOptions(descriptor: CommandDefinition) {
   }
 }
 
-function parsedFlags(descriptor: CommandDefinition, input: RenderInput) {
+export function parsedFlags<Value>(
+  descriptor: CommandDefinition,
+  input: { flags?: Readonly<Record<string, Value>> },
+) {
   const flags = descriptor.flags ?? {};
   const preset = descriptor.preset?.flags ?? {};
   const protectedOptions = new Set(Object.keys(preset).map((name) => optionIdentity(flags[name])));

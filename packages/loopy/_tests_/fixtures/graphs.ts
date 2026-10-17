@@ -51,7 +51,7 @@ export const approveDemoGraph = graphSchema.parse({
       label: "apply",
       scope: "3:branch",
       key: "sh.exec",
-      out: "json",
+      out: { stdout: "string", stderr: "string", exitCode: "number" },
       argv: ["bun", "apply.ts", { ref: "4:format", path: [] }],
       flags: {},
       options: { cwd: null, env: {}, stdin: null },

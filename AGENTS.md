@@ -22,7 +22,7 @@ packages/loopy/_tests_/   package tests, including shell fixtures
 examples/                 canonical loopies and automation helpers
 ```
 
-The public package entries are `loopy` for the SDK, `loopy/runtime`, `loopy/local` and `loopy/contract`. The dashboard imports only `"loopy/contract"` and uses the daemon HTTP API and event stream for data.
+The public package entries are `loopy` for the SDK, `loopy/runtime`, `loopy/local` and `loopy/contract`, plus the compile-only `loopy/graph`. The dashboard imports only `"loopy/contract"` and uses the daemon HTTP API and event stream for data.
 
 Layers import downward. Contract imports core and zod; local and CLI may import contract through its index. Runtime imports core; SDK imports core and runtime; local imports core, runtime and `sdk/host.ts`; CLI imports core, runtime, local and `sdk/host.ts`. Cross-layer imports go through the target layer's `index.ts`, except the explicit SDK host entry. Same-layer imports use file paths. Core and runtime have no Node or Bun dependencies. SDK permits `node:async_hooks` only in `current.ts` to share activation scope with bundled definitions.
 
@@ -33,7 +33,9 @@ Layers import downward. Contract imports core and zod; local and CLI may import 
 - `runtime/engine.ts` claims an activation, replays it, persists its outcome and releases ownership.
 - `runtime/journal.ts` checks step sequence and keys; `step-runner.ts` owns attempts and terminal writes.
 - `runtime/daemon.ts` coordinates schedules, due runs and the concurrency pool.
-- `sdk/loopy.ts` validates definitions; `sdk/schema.ts` validates author input.
+- `sdk/loopy.ts` validates runtime definitions; `sdk/schema.ts` validates author input.
+- `sdk/graph/builder.ts` owns graph ids, scopes, refs and edges; `ref.ts` owns value serialization; `types.ts` maps schemas to author types; `validate.ts` owns build errors and graph validation.
+- `sdk/graph/nodes/` records nodes without executing commands, modules, parsers, clocks or randomness. `command-argv.ts` adapts existing descriptors to positional argv, named flags and rendering data. The compiler in PR 3 enforces literal labels and bundles code and parsers.
 - `sdk/define-command.ts` and `render-argv.ts` turn typed descriptors into command steps.
 - `sdk/shell/` owns command descriptors and parsers.
 - `local/store.ts` owns SQLite transactions, fencing and queries; `store-schema.ts` defines the schema and row types; `store-rows.ts` defines queries and maps rows.

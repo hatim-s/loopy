@@ -95,12 +95,38 @@ const code = base.extend({
   timeout: durationSchema.nullable(),
 });
 
+const commandFlagSchema = z
+  .strictObject({
+    cli: z.string(),
+    kind: z.enum(["boolean", "string", "number"]),
+    repeatable: z.boolean().optional(),
+    optionalValue: z.boolean().optional(),
+    choices: z.array(z.string()).readonly().optional(),
+    supported: z.boolean().optional(),
+    style: z.enum(["equals", "space", "attached", "positional"]).optional(),
+    position: z.enum(["before", "after"]).optional(),
+    order: z.number().optional(),
+    prefix: z.array(z.string()).readonly().optional(),
+    pairs: z.boolean().optional(),
+    terminator: z.string().optional(),
+  })
+  .readonly();
+
+const commandFlagSpecSchema = z.strictObject({
+  path: z.array(z.string()),
+  flags: z.record(z.string(), commandFlagSchema),
+  style: z.enum(["equals", "space"]),
+  positionalSeparator: z.boolean(),
+  flagsAfterPositionals: z.boolean(),
+});
+
 const command = base.extend({
   kind: z.literal(NODE_KINDS[1]),
   key: z.string(),
   out: outputSchema,
   argv: z.array(valueSchema),
   flags: z.record(z.string(), valueSchema),
+  flagSpec: commandFlagSpecSchema.optional(),
   options: z.strictObject({
     cwd: valueSchema.nullable(),
     env: z.record(z.string(), valueSchema),
@@ -108,7 +134,7 @@ const command = base.extend({
   }),
   retry: retrySchema,
   okExitCodes: z.array(z.number().int()),
-  parse: z.strictObject({ bundleHash: z.string() }).nullable(),
+  parse: z.strictObject({ bundleHash: z.string().nullable() }).nullable(),
 });
 
 const otherNodes = [
