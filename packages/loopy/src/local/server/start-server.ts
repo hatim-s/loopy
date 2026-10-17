@@ -1,9 +1,8 @@
 import { timingSafeEqual } from "node:crypto";
 import { resolve } from "node:path";
 import { errorMessage } from "../../core/index.js";
-import { defaultHome } from "../home.js";
-import { Registry } from "../registry.js";
-import { openRunStore } from "../store.js";
+import type { LoopyService } from "../service.js";
+import type { SqliteRunStore } from "../store.js";
 import { serveAsset, snapshotAssets } from "./assets.js";
 import { apiRoutes, dispatch, json } from "./routes.js";
 
@@ -12,7 +11,9 @@ export const DEFAULT_PORT = 4310;
 const MAX_BODY_BYTES = 1024 * 1024;
 
 export type ServerOptions = {
-  home?: string;
+  service: LoopyService;
+  store: SqliteRunStore;
+  token: string;
   cwd?: string;
   port?: number;
   assets?: string;
@@ -43,19 +44,15 @@ function originRejection(request: Request, url: URL, ownOrigin: string): Respons
   return undefined;
 }
 
-export function startServer(options: ServerOptions = {}) {
-  const home = options.home ?? defaultHome();
+export function startServer(options: ServerOptions) {
   const cwd = resolve(options.cwd ?? process.cwd());
-  const registry = new Registry(home, cwd);
-  let store: ReturnType<typeof openRunStore> | undefined;
-  const getStore = () => (store ??= openRunStore(home));
-  const token = crypto.randomUUID();
+  const { token, store, service } = options;
 
   const assets = snapshotAssets(
     resolve(options.assets ?? resolve(import.meta.dir, "../../../dist/studio")),
   );
 
-  const routes = apiRoutes({ registry, getStore });
+  const table = apiRoutes({ service, store, cwd });
 
   const server = Bun.serve({
     hostname: "127.0.0.1",
@@ -80,7 +77,13 @@ export function startServer(options: ServerOptions = {}) {
           return json({ error: "Open the viewer URL printed by loopy ui to authenticate." }, 401);
         }
 
-        return await dispatch(routes, request, url, path);
+        const response = await dispatch(table, request, url, path);
+
+        if (response.headers.get("Content-Type") === "text/event-stream") {
+          server.timeout(request, 0);
+        }
+
+        return response;
       } catch (error) {
         return json({ error: errorMessage(error) }, error instanceof URIError ? 400 : 500);
       }
@@ -88,10 +91,10 @@ export function startServer(options: ServerOptions = {}) {
   });
 
   return {
+    port: server.port ?? DEFAULT_PORT,
     url: `http://127.0.0.1:${server.port}/#token=${token}`,
     async stop() {
       await server.stop(true);
-      store?.close();
     },
   };
 }

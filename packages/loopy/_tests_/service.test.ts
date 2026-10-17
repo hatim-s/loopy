@@ -1,0 +1,181 @@
+import { afterEach, expect, test } from "bun:test";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { hostname, tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import type { RunRecord } from "../src/core/index.js";
+import {
+  bundleLoopy,
+  LoopyService,
+  loadLoopy,
+  openRunStore,
+  Registry,
+} from "../src/local/index.js";
+import { SYSTEM_CLOCK } from "../src/runtime/index.js";
+
+const cleanups: (() => void)[] = [];
+
+afterEach(() => {
+  for (const cleanup of cleanups.splice(0)) {
+    cleanup();
+  }
+});
+
+async function fixture() {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "loopy-service-")));
+  const home = join(root, "home");
+  const source = join(root, "service.ts");
+  await Bun.write(
+    source,
+    `import { loopy } from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/index.ts"))};
+  export default loopy({ name: "service", input: { name: "string" }, secrets: ["PRIVATE"], run: () => 1 });`,
+  );
+  const bundle = await bundleLoopy(source, home);
+  const registry = new Registry(home, root);
+  registry.save(await loadLoopy(bundle.path), { source, bundleHash: bundle.hash });
+  let now = Date.now();
+  const store = openRunStore(home);
+
+  const service = new LoopyService({
+    home,
+    store,
+    registry: () => registry,
+    clock: { ...SYSTEM_CLOCK, now: () => now },
+  });
+
+  cleanups.push(() => {
+    store.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  return {
+    service,
+    store,
+    root,
+    advance: () => {
+      now += 1000;
+    },
+  };
+}
+
+test("service validates input before queuing and hides registry private fields", async () => {
+  const { service, store, root } = await fixture();
+  await expect(service.startRun("service", {}, root)).rejects.toMatchObject({
+    code: "bad_request",
+  });
+  expect(await store.listRuns()).toEqual([]);
+  const run = await service.startRun("service", { name: "Hatim" }, root);
+  expect(run).toMatchObject({ status: "queued", input: { name: "Hatim" }, owner: null });
+  const [loopy] = await service.listLoopies();
+  expect(loopy).toMatchObject({ slug: "service", lastRun: run, counts: { queued: 1 } });
+
+  for (const privateField of ["source", "bundleHash", "secrets", "savedAt"]) {
+    expect(Object.hasOwn(loopy ?? {}, privateField)).toBe(false);
+  }
+});
+
+test("service resumes queued, suspended and abandoned runs and rejects terminal or owned runs", async () => {
+  const { service, store, root } = await fixture();
+
+  for (const status of [
+    "queued",
+    "suspended",
+    "running",
+    "succeeded",
+    "failed",
+    "cancelled",
+  ] as const) {
+    const run: RunRecord = {
+      id: status,
+      slug: "service",
+      workspace: root,
+      bundleHash: "a".repeat(64),
+      input: {},
+      status,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (status === "running") {
+      run.owner = {
+        token: "dead",
+        pid: 2147483647,
+        host: hostname(),
+        heartbeatAt: new Date(0).toISOString(),
+      };
+    }
+
+    await store.createRun(run);
+
+    if (status === "queued" || status === "suspended" || status === "running") {
+      expect(await service.resumeRun(status)).toMatchObject({
+        status: status === "queued" ? "queued" : "suspended",
+        owner: null,
+      });
+    } else {
+      await expect(service.resumeRun(status)).rejects.toMatchObject({ code: "not_claimable" });
+    }
+  }
+
+  const owned = await service.startRun("service", { name: "Hatim" }, root);
+  await store.claim(owned.id, "owner");
+  await expect(service.cancelRun(owned.id)).rejects.toMatchObject({ code: "owned_elsewhere" });
+  await expect(service.resumeRun(owned.id)).rejects.toMatchObject({ code: "owned_elsewhere" });
+  await store.release(owned.id, "owner");
+  expect(await service.cancelRun(owned.id)).toMatchObject({ status: "cancelled", owner: null });
+  await expect(service.cancelRun("missing")).rejects.toMatchObject({ code: "not_found" });
+});
+
+test("service pages newest runs by createdAt and caps the page size", async () => {
+  const { service, store, root, advance } = await fixture();
+  const first = await service.startRun("service", { name: "first" }, root);
+  advance();
+  const second = await service.startRun("service", { name: "second" }, root);
+  expect(await service.listRuns({ limit: 1 })).toEqual([second]);
+  expect(await service.listRuns({ before: second.createdAt })).toEqual([first]);
+  expect(await service.listRuns({ status: "failed" })).toEqual([]);
+
+  for (let i = 0; i < 205; i++) {
+    await store.createRun({
+      id: `page-${i}`,
+      slug: "page",
+      workspace: root,
+      bundleHash: "a".repeat(64),
+      input: {},
+      status: "queued",
+      createdAt: first.createdAt,
+      updatedAt: first.updatedAt,
+    });
+  }
+
+  expect(await service.listRuns({ slug: "page" })).toHaveLength(50);
+  expect(await service.listRuns({ slug: "page", limit: 300 })).toHaveLength(200);
+});
+
+test("service hook resolution returns the woken run and rejects duplicate resolution", async () => {
+  const { service, store, root } = await fixture();
+  const run = await service.startRun("service", { name: "Hatim" }, root);
+  await store.claim(run.id, "owner");
+  await store.createHook(run.id, "owner", {
+    runId: run.id,
+    seq: 0,
+    key: "approval",
+    kind: "hook",
+    input: { name: "approve", token: "hook" },
+    status: "waiting",
+    attempt: 1,
+    maxAttempts: 1,
+    startedAt: run.createdAt,
+  });
+  await store.suspend(run.id, "owner");
+  await store.release(run.id, "owner");
+  expect((await service.runSnapshot(run.id))?.run.waitingOn).toMatchObject({
+    hook: "approve",
+    token: "hook",
+  });
+  expect(await service.resolveHook("hook", { approved: true })).toMatchObject({
+    id: run.id,
+    status: "suspended",
+    wakeAt: expect.any(String),
+  });
+  await expect(service.resolveHook("hook", null)).rejects.toMatchObject({ code: "unknown_hook" });
+});

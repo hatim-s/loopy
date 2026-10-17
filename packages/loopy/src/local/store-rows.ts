@@ -36,6 +36,7 @@ export const SQL = {
   appendEvent:
     "INSERT INTO events(at,txn,entity,kind,run_id,record) VALUES (?,?,?,?,?,?) RETURNING *",
   events: "SELECT * FROM events WHERE sequence>? ORDER BY sequence LIMIT ?",
+  transactionEvents: "SELECT * FROM events WHERE txn=? AND sequence>? ORDER BY sequence",
   cursor: "SELECT COALESCE((SELECT seq FROM sqlite_sequence WHERE name='events'),0) AS cursor",
   pruneEvents: `DELETE FROM events WHERE at<? OR sequence IN (
     SELECT sequence FROM events ORDER BY sequence DESC LIMIT -1 OFFSET 100000

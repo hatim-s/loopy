@@ -1,4 +1,5 @@
-import { openRunStore, type SqliteRunStore } from "../local/index.js";
+import { LoopyService, openRunStore, Registry, type SqliteRunStore } from "../local/index.js";
+import { SYSTEM_CLOCK } from "../runtime/index.js";
 import type { CliContext } from "./context.js";
 
 export async function withRunStore<T>(
@@ -22,4 +23,13 @@ export async function requireRun(store: SqliteRunStore, id: string) {
   }
 
   return run;
+}
+
+export function runService(context: Pick<CliContext, "home" | "cwd">, store: SqliteRunStore) {
+  return new LoopyService({
+    home: context.home,
+    store,
+    registry: (workspace) => new Registry(context.home, workspace || context.cwd),
+    clock: SYSTEM_CLOCK,
+  });
 }

@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
+import type { ErrorCode } from "../contract/index.js";
 import type {
   HookRecord,
   Json,
@@ -143,6 +144,26 @@ export class SqliteRunStore implements RunStore {
 
       return true;
     });
+  }
+
+  async hook(token: string): Promise<HookRecord | undefined> {
+    const row = this.db.query<HookRow, [string]>(SQL.hook).get(token);
+
+    return row ? rowToHook(row) : undefined;
+  }
+
+  dataVersion(): number {
+    return (
+      this.db.query<{ data_version: number }, []>("PRAGMA data_version").get()?.data_version ?? 0
+    );
+  }
+
+  eventBounds() {
+    return this.db
+      .query<{ oldest: number | null; newest: number | null }, []>(
+        "SELECT COALESCE(MIN(sequence), (SELECT seq + 1 FROM sqlite_sequence WHERE name='events')) AS oldest, MAX(sequence) AS newest FROM events",
+      )
+      .get();
   }
 
   async listHooks(runId: string): Promise<HookRecord[]> {
@@ -290,6 +311,33 @@ export class SqliteRunStore implements RunStore {
 
     this.db.query(SQL.release).run(timestamp, timestamp, runId, previous.owner_token);
     this.emitRun(txn, runId, "released");
+  }
+
+  async wakeRun(id: string, at: string): Promise<ErrorCode | undefined> {
+    return this.commit((txn) => {
+      const row = this.row(id);
+
+      if (!row) {
+        return "not_found";
+      }
+
+      if (row.owner_token !== null) {
+        if (!this.stale(row, this.now())) {
+          return "owned_elsewhere";
+        }
+
+        this.recoverRun(txn, row, at);
+      }
+
+      if (row.status !== "queued" && row.status !== "suspended" && row.status !== "running") {
+        return "not_claimable";
+      }
+
+      this.db.query(SQL.wakeHook).run(at, at, id);
+      this.emitRun(txn, id, "woken");
+
+      return undefined;
+    });
   }
 
   async heartbeat(runId: string, token: string): Promise<boolean> {
@@ -545,6 +593,13 @@ export class SqliteRunStore implements RunStore {
 
   async events(after: number, limit: number): Promise<RuntimeEvent[]> {
     return this.db.query<EventRow, [number, number]>(SQL.events).all(after, limit).map(rowToEvent);
+  }
+
+  async transactionEvents(txn: string, after: number): Promise<RuntimeEvent[]> {
+    return this.db
+      .query<EventRow, [string, number]>(SQL.transactionEvents)
+      .all(txn, after)
+      .map(rowToEvent);
   }
 
   async epoch(): Promise<string> {
