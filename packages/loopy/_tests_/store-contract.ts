@@ -308,6 +308,43 @@ function scheduleRevisions(makeStore: StoreFactory): void {
   });
 }
 
+function scheduleAdvances(makeStore: StoreFactory): void {
+  test("catch-up advances only nextFireAt and rejects stale, disabled and deleted schedules without events", async () => {
+    const store = await makeStore();
+    const original = await store.putSchedule(SCHEDULE);
+
+    const replacement = await store.putSchedule({
+      ...original,
+      cron: "0 * * * *",
+      input: "edited",
+    });
+
+    const nextFireAt = "2026-10-16T01:00:00.000Z";
+    const before = await store.events(0, 100);
+    expect(await store.advanceSchedule({ ...original, nextFireAt })).toBe(false);
+    expect(await store.listSchedules()).toEqual([replacement]);
+    expect(await store.events(0, 100)).toEqual(before);
+    expect(await store.advanceSchedule({ ...replacement, nextFireAt })).toBe(true);
+    const advanced = { ...replacement, nextFireAt };
+    expect(await store.listSchedules()).toEqual([advanced]);
+    expect((await store.events(0, 100)).slice(before.length)).toMatchObject([
+      { entity: "schedule", kind: "saved", record: advanced },
+    ]);
+    const disabled = await store.setScheduleEnabled({ ...advanced, enabled: false });
+    const disabledEvents = await store.events(0, 100);
+    expect(await store.advanceSchedule({ ...disabled, nextFireAt: SCHEDULE.nextFireAt })).toBe(
+      false,
+    );
+    expect(await store.listSchedules()).toEqual([disabled]);
+    expect(await store.events(0, 100)).toEqual(disabledEvents);
+    await store.deleteSchedule(disabled.workspace, disabled.slug);
+    const deletedEvents = await store.events(0, 100);
+    expect(await store.advanceSchedule({ ...disabled, nextFireAt })).toBe(false);
+    expect(await store.listSchedules()).toEqual([]);
+    expect(await store.events(0, 100)).toEqual(deletedEvents);
+  });
+}
+
 function scheduleToggles(makeStore: StoreFactory): void {
   test("toggles preserve a concurrent PUT and fire while rejecting pre-toggle snapshots", async () => {
     const store = await makeStore();
@@ -446,6 +483,7 @@ export function storeContract(name: string, makeStore: StoreFactory): void {
     scheduleFireFailures(makeStore);
     scheduleRevisions(makeStore);
     scheduleToggles(makeStore);
+    scheduleAdvances(makeStore);
     nextWakeAt(makeStore);
   });
 }

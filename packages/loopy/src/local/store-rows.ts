@@ -70,6 +70,8 @@ export const SQL = {
   deleteSchedule: "DELETE FROM schedules WHERE workspace=? AND slug=?",
   setScheduleEnabled: `UPDATE schedules SET enabled=?,revision=revision+1,
     next_fire_at=COALESCE(?,next_fire_at) WHERE workspace=? AND slug=? RETURNING *`,
+  advanceSchedule: `UPDATE schedules SET next_fire_at=? WHERE workspace=? AND slug=?
+    AND revision=? AND enabled=1`,
   fireSchedule: `UPDATE schedules SET last_fire_key=?,next_fire_at=? WHERE workspace=? AND slug=?
     AND revision=? AND enabled=1 AND (last_fire_key IS NULL OR last_fire_key<>?)`,
   nextWakeAt:

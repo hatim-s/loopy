@@ -61,6 +61,9 @@ export interface RunStore {
       nextFireAt?: string;
     },
   ): Promise<Schedule>;
+  advanceSchedule(
+    options: Pick<Schedule, "workspace" | "slug" | "revision" | "nextFireAt">,
+  ): Promise<boolean>;
   listSchedules(): Promise<Schedule[]>;
   deleteSchedule(workspace: string, slug: string): Promise<void>;
   fireSchedule(

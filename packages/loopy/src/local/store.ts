@@ -545,6 +545,24 @@ export class SqliteRunStore implements RunStore {
     });
   }
 
+  async advanceSchedule(options: Parameters<RunStore["advanceSchedule"]>[0]): Promise<boolean> {
+    return this.commit((txn) => {
+      const { workspace, slug, revision, nextFireAt } = options;
+
+      const updated = this.db
+        .query(SQL.advanceSchedule)
+        .run(new Date(nextFireAt).toISOString(), workspace, slug, revision);
+
+      if (!updated.changes) {
+        return false;
+      }
+
+      this.emitSchedule(txn, options, "saved");
+
+      return true;
+    });
+  }
+
   async listSchedules(): Promise<Schedule[]> {
     return this.db.query<ScheduleRow, []>(SQL.schedules).all().map(rowToSchedule);
   }

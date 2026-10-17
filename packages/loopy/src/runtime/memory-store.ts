@@ -430,6 +430,22 @@ export class MemoryRunStore implements RunStore {
     });
   }
 
+  async advanceSchedule(options: Parameters<RunStore["advanceSchedule"]>[0]): Promise<boolean> {
+    return this.commit((txn) => {
+      const { workspace, slug, revision, nextFireAt } = options;
+      const schedule = this.schedules.get(JSON.stringify([workspace, slug]));
+
+      if (!schedule || schedule.revision !== revision || !schedule.enabled) {
+        return false;
+      }
+
+      schedule.nextFireAt = new Date(nextFireAt).toISOString();
+      this.emit(txn, { entity: "schedule", kind: "saved", runId: null, record: schedule });
+
+      return true;
+    });
+  }
+
   async listSchedules(): Promise<Schedule[]> {
     return structuredClone([...this.schedules.values()]);
   }

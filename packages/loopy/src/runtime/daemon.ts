@@ -162,8 +162,10 @@ export class Daemon {
 
       try {
         if (starting && Date.parse(now) - Date.parse(schedule.nextFireAt) > 60_000) {
-          await this.options.store.putSchedule({
-            ...schedule,
+          await this.options.store.advanceSchedule({
+            workspace: schedule.workspace,
+            slug: schedule.slug,
+            revision: schedule.revision,
             nextFireAt: nextFire(
               parseCron(schedule.cron),
               new Date(now),
