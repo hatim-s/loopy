@@ -193,6 +193,18 @@ function applyEvent(client: QueryClient, event: ServerEvent): void {
   );
 }
 
+/**
+ * A list filtered by status only maps runs it already holds, so a run entering that status
+ * (a run suspending on a hook, for the inbox) refetches the lists for it that lack the run.
+ */
+function invalidateEntered(client: QueryClient, run: RunView): void {
+  void client.invalidateQueries({
+    queryKey: keys.runs({ status: run.status }),
+    predicate: (query) =>
+      !client.getQueryData<RunView[]>(query.queryKey)?.some((item) => item.id === run.id),
+  });
+}
+
 /** Writes one stream batch into every cached query it touches. */
 export function applyBatch(client: QueryClient, batch: ServerEvent[]): void {
   for (const event of batch) {
@@ -206,6 +218,12 @@ export function applyBatch(client: QueryClient, batch: ServerEvent[]): void {
       event.entity === "schedule" ||
       (event.entity === "run" && (event.kind === "created" || event.kind === "finished")),
   );
+
+  for (const event of batch) {
+    if (event.entity === "run") {
+      invalidateEntered(client, event.record);
+    }
+  }
 
   if (created) {
     void client.invalidateQueries({ queryKey: keys.runLists });

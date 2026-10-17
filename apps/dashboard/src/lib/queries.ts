@@ -1,6 +1,7 @@
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 import { encodeRunCursor } from "loopy/contract";
 import type { LoopyBackend, RunsQuery } from "../backend/backend.ts";
+import { INBOX_QUERY, inboxGroups } from "./inbox.ts";
 import { keys, type RunFilters } from "./keys.ts";
 
 export const RUN_PAGE_SIZE = 25;
@@ -46,5 +47,13 @@ export function daemonQuery(backend: LoopyBackend) {
     queryFn: () => backend.daemon(),
     refetchInterval: 5000,
     retry: false,
+  });
+}
+
+export function inboxQuery(backend: LoopyBackend) {
+  return queryOptions({
+    queryKey: keys.runs(INBOX_QUERY),
+    queryFn: () => backend.runs(INBOX_QUERY),
+    select: inboxGroups,
   });
 }

@@ -3,6 +3,7 @@ import { BrandMark } from "../components/brand-mark.tsx";
 import { ConnectionStatus } from "../components/connection-status.tsx";
 import { DaemonIndicator } from "../components/daemon-indicator.tsx";
 import { RouteError } from "../components/error-banner.tsx";
+import { InboxLink } from "../components/inbox/inbox-link.tsx";
 import { LoopyRail } from "../components/loopy-rail.tsx";
 import type { RouterContext } from "../router-context.ts";
 
@@ -21,6 +22,7 @@ function Shell() {
           loopy
         </Link>
         <div className="flex items-center gap-4">
+          <InboxLink />
           <ConnectionStatus />
           <DaemonIndicator />
         </div>

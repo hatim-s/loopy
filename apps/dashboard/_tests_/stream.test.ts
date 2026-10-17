@@ -3,6 +3,7 @@ import { type InfiniteData, QueryClient } from "@tanstack/react-query";
 import type { RunSnapshotView, RunView, ServerEvent } from "loopy/contract";
 import type { EventSubscription, StreamEnd } from "../src/backend/backend.ts";
 import { type EventDraft, fakeBackend } from "../src/backend/fake.ts";
+import { INBOX_QUERY, inboxGroups } from "../src/lib/inbox.ts";
 import { keys } from "../src/lib/keys.ts";
 import { applyBatch, applyToSnapshot, followRun } from "../src/lib/stream.ts";
 
@@ -439,4 +440,41 @@ test("aborting as a subscription opens prevents replay and playback", async () =
 
   expect(end).toBe("aborted");
   expect(replayed).toBe(0);
+});
+
+const waiting: RunView = {
+  ...run,
+  status: "suspended",
+  wakeAt: null,
+  waitingOn: { hook: "approve", token: "tok", seq: 1, expiresAt: null },
+};
+
+test("a resolved hook drops the run from the inbox in place, without a refetch", () => {
+  const client = new QueryClient();
+  client.setQueryData(keys.runs(INBOX_QUERY), [waiting]);
+
+  applyBatch(client, [hookEvent(11, "resolved")]);
+
+  const runs = client.getQueryData<RunView[]>(keys.runs(INBOX_QUERY)) ?? [];
+  expect(runs.map((item) => item.id)).toEqual(["run-1"]);
+  expect(inboxGroups(runs)).toEqual([]);
+  expect(client.getQueryState(keys.runs(INBOX_QUERY))?.isInvalidated).toBe(false);
+});
+
+test("a run entering a status refetches the lists for that status that lack it", () => {
+  const client = new QueryClient();
+  const other = { ...waiting, id: "run-2" };
+  client.setQueryData(keys.runs(INBOX_QUERY), [other]);
+  client.setQueryData(keys.runs({ status: "suspended", slug: "triage" }), [waiting]);
+  client.setQueryData(keys.runs({ status: "failed" }), []);
+
+  applyBatch(client, [
+    event(11, { entity: "run", kind: "suspended", runId: waiting.id, record: waiting }),
+  ]);
+
+  expect(client.getQueryState(keys.runs(INBOX_QUERY))?.isInvalidated).toBe(true);
+  expect(
+    client.getQueryState(keys.runs({ status: "suspended", slug: "triage" }))?.isInvalidated,
+  ).toBe(false);
+  expect(client.getQueryState(keys.runs({ status: "failed" }))?.isInvalidated).toBe(false);
 });

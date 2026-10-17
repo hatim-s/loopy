@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DaemonRouteImport } from './routes/daemon'
+import { Route as InboxRouteImport } from './routes/inbox'
 import { Route as LoopiesSlugRouteImport } from './routes/loopies.$slug'
 import { Route as RunsRunIdRouteImport } from './routes/runs.$runId'
 
@@ -22,6 +23,11 @@ const IndexRoute = IndexRouteImport.update({
 const DaemonRoute = DaemonRouteImport.update({
   id: '/daemon',
   path: '/daemon',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InboxRoute = InboxRouteImport.update({
+  id: '/inbox',
+  path: '/inbox',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoopiesSlugRoute = LoopiesSlugRouteImport.update({
@@ -38,12 +44,14 @@ const RunsRunIdRoute = RunsRunIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/daemon': typeof DaemonRoute
+  '/inbox': typeof InboxRoute
   '/loopies/$slug': typeof LoopiesSlugRoute
   '/runs/$runId': typeof RunsRunIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/daemon': typeof DaemonRoute
+  '/inbox': typeof InboxRoute
   '/loopies/$slug': typeof LoopiesSlugRoute
   '/runs/$runId': typeof RunsRunIdRoute
 }
@@ -51,20 +59,23 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/daemon': typeof DaemonRoute
+  '/inbox': typeof InboxRoute
   '/loopies/$slug': typeof LoopiesSlugRoute
   '/runs/$runId': typeof RunsRunIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/daemon' | '/loopies/$slug' | '/runs/$runId'
+  fullPaths: '/' | '/daemon' | '/inbox' | '/loopies/$slug' | '/runs/$runId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/daemon' | '/loopies/$slug' | '/runs/$runId'
-  id: '__root__' | '/' | '/daemon' | '/loopies/$slug' | '/runs/$runId'
+  to: '/' | '/daemon' | '/inbox' | '/loopies/$slug' | '/runs/$runId'
+  id:
+    '__root__' | '/' | '/daemon' | '/inbox' | '/loopies/$slug' | '/runs/$runId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DaemonRoute: typeof DaemonRoute
+  InboxRoute: typeof InboxRoute
   LoopiesSlugRoute: typeof LoopiesSlugRoute
   RunsRunIdRoute: typeof RunsRunIdRoute
 }
@@ -83,6 +94,13 @@ declare module '@tanstack/react-router' {
       path: '/daemon'
       fullPath: '/daemon'
       preLoaderRoute: typeof DaemonRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inbox': {
+      id: '/inbox'
+      path: '/inbox'
+      fullPath: '/inbox'
+      preLoaderRoute: typeof InboxRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/loopies/$slug': {
@@ -105,6 +123,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DaemonRoute: DaemonRoute,
+  InboxRoute: InboxRoute,
   LoopiesSlugRoute: LoopiesSlugRoute,
   RunsRunIdRoute: RunsRunIdRoute,
 }

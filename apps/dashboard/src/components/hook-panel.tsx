@@ -1,96 +1,106 @@
-import { type HookRecord, type Json, jsonSchema, type RunView } from "loopy/contract";
-import { useState } from "react";
+import type { HookRecord, RunSnapshotView } from "loopy/contract";
+import type { ReactNode } from "react";
 import { timestamp } from "../lib/format.ts";
-import { useRunMutation } from "../lib/mutations.ts";
-import { Button } from "./button.tsx";
+import type { WaitingRun } from "../lib/inbox.ts";
+import { useResolveHook } from "../lib/mutations.ts";
 import { Countdown } from "./countdown.tsx";
-import { ErrorBanner } from "./error-banner.tsx";
+import { JsonPreview } from "./json-preview.tsx";
+import { PayloadEditor, ResolveError } from "./resolve-form.tsx";
 
-type Waiting = NonNullable<RunView["waitingOn"]>;
+type Waiting = WaitingRun["waitingOn"];
 
-type Payload = { valid: true; value: Json } | { valid: false };
-
-function parsePayload(text: string): Payload {
-  try {
-    return { valid: true, value: jsonSchema.parse(JSON.parse(text)) };
-  } catch {
-    return { valid: false };
-  }
+function Fact({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs text-muted">{label}</dt>
+      <dd className="truncate">{children}</dd>
+    </div>
+  );
 }
 
-export function HookPanel({
+function WaitingHook({
   waiting,
-  hook,
+  snapshot,
   now,
 }: {
   waiting: Waiting;
-  hook: HookRecord | undefined;
+  snapshot: RunSnapshotView;
   now: number;
 }) {
-  const [text, setText] = useState("{}");
-  const payload = parsePayload(text);
-
-  const resolve = useRunMutation((backend, value: Json) =>
-    backend.resolveHook(waiting.token, value),
-  );
+  const resolve = useResolveHook(waiting.token);
+  const hook = snapshot.hooks.find((item) => item.token === waiting.token);
+  const step = snapshot.steps.find((item) => item.seq === waiting.seq);
 
   return (
     <section
       aria-label="Waiting for a person"
-      className="space-y-3 rounded-md border border-attention/40 bg-attention/6 p-4"
+      className="space-y-4 rounded-md border border-attention/40 bg-attention/6 p-4"
     >
-      <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h2 className="font-medium">
-          Waiting on <span className="font-mono">{waiting.hook}</span>
-        </h2>
-        <p className="text-xs text-muted">
-          {hook && (
-            <>
-              Opened <time dateTime={hook.createdAt}>{timestamp(hook.createdAt)}</time>.{" "}
-            </>
-          )}
-          {waiting.expiresAt === null ? (
-            "No expiry."
-          ) : (
-            <>
-              Expires <Countdown at={waiting.expiresAt} now={now} />.
-            </>
-          )}
-        </p>
-      </header>
-      <form
-        className="space-y-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-
-          if (payload.valid) {
-            resolve.mutate(payload.value);
-          }
-        }}
-      >
-        <label className="block space-y-1">
-          <span className="text-xs text-muted">
-            Payload, as JSON. The run receives it as the hook result.
+      <h2 className="font-medium">
+        Waiting on <span className="font-mono">{waiting.hook}</span>
+      </h2>
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
+        <Fact label="Opened">
+          {hook ? <time dateTime={hook.createdAt}>{timestamp(hook.createdAt)}</time> : "unknown"}
+        </Fact>
+        <Fact label="Expires">
+          {waiting.expiresAt === null ? "never" : <Countdown at={waiting.expiresAt} now={now} />}
+        </Fact>
+        <Fact label="Step">
+          <span className="font-mono text-xs">{step?.key ?? `#${waiting.seq}`}</span>
+        </Fact>
+        <Fact label="Token">
+          <span className="font-mono text-xs" title={waiting.token}>
+            {waiting.token}
           </span>
-          <textarea
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            rows={4}
-            spellCheck={false}
-            aria-invalid={!payload.valid}
-            className="block w-full resize-y rounded-md border border-line bg-panel p-2.5 font-mono text-xs aria-invalid:border-danger"
-          />
-        </label>
-        <div className="flex items-center gap-3">
-          <Button type="submit" variant="primary" disabled={!payload.valid || resolve.isPending}>
-            {resolve.isPending ? "Resolving" : "Resolve hook"}
-          </Button>
-          {!payload.valid && (
-            <span className="text-xs text-danger">The payload is not valid JSON.</span>
-          )}
-        </div>
-        {resolve.error && <ErrorBanner error={resolve.error} />}
-      </form>
+        </Fact>
+      </dl>
+      <PayloadEditor resolve={resolve} />
+      {resolve.error && <ResolveError error={resolve.error} />}
     </section>
   );
+}
+
+function SettledHook({ hook }: { hook: HookRecord }) {
+  const expired = hook.expiredAt !== undefined;
+  const at = hook.resolvedAt ?? hook.expiredAt;
+
+  return (
+    <section
+      aria-label="Hook outcome"
+      className="space-y-2 rounded-md border border-line bg-panel p-4"
+    >
+      <h2 className="font-medium">
+        <span className="font-mono">{hook.name}</span>{" "}
+        <span className={expired ? "text-danger" : "text-success"}>
+          {expired ? "expired" : "resolved"}
+        </span>
+        {at !== undefined && (
+          <span className="ml-2 text-xs font-normal text-muted">
+            <time dateTime={at}>{timestamp(at)}</time>
+          </span>
+        )}
+      </h2>
+      {hook.payload === undefined ? (
+        <p className="text-xs text-muted">No payload. The hook step failed with a timeout.</p>
+      ) : (
+        <JsonPreview label="Payload" value={hook.payload} />
+      )}
+    </section>
+  );
+}
+
+/** The pending hook with its resolve form, or the outcome of the latest settled hook. */
+export function HookPanel({ snapshot, now }: { snapshot: RunSnapshotView; now: number }) {
+  const { waitingOn } = snapshot.run;
+
+  if (waitingOn) {
+    return <WaitingHook key={waitingOn.token} waiting={waitingOn} snapshot={snapshot} now={now} />;
+  }
+
+  const settled = snapshot.hooks
+    .filter((hook) => hook.resolvedAt !== undefined || hook.expiredAt !== undefined)
+    .at(-1);
+
+  return settled ? <SettledHook hook={settled} /> : null;
 }
