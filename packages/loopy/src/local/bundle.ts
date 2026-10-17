@@ -1,36 +1,53 @@
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, extname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { RunRecord } from "../core/index.js";
 import { isLoopy, type Loopy } from "../sdk/host.js";
 import { defaultHome } from "./home.js";
 import { Registry } from "./registry.js";
 
-const IMPORT_META = /\bimport\.meta\.(?:url|path|filename|file|dir|dirname)\b/g;
+const LOADERS = new Map<string, Bun.JavaScriptLoader>([
+  [".ts", "ts"],
+  [".mts", "ts"],
+  [".cts", "ts"],
+  [".js", "js"],
+  [".mjs", "js"],
+  [".cjs", "js"],
+]);
 
 // A saved bundle runs from <home>/bundles, so each module's import.meta must keep
-// pointing at the file it was written in. Loopies locate sibling scripts with it.
-function inlineImportMeta(path: string, source: string) {
-  const values = new Map([
-    ["import.meta.url", pathToFileURL(path).href],
-    ["import.meta.path", path],
-    ["import.meta.filename", path],
-    ["import.meta.file", basename(path)],
-    ["import.meta.dir", dirname(path)],
-    ["import.meta.dirname", dirname(path)],
-  ]);
+// naming the file it was written in. Loopies locate sibling scripts with it. Bun's
+// transpiler applies the substitutions to parsed expressions only, so strings and
+// regexes that mention import.meta stay intact. Destructuring import.meta is not
+// rewritten; JSX modules are left alone because transpiling them here would drop
+// the runtime import the bundler adds later.
+function inlineImportMeta(path: string, loader: Bun.JavaScriptLoader, source: string) {
+  const define = {
+    "import.meta.url": JSON.stringify(pathToFileURL(path).href),
+    "import.meta.path": JSON.stringify(path),
+    "import.meta.filename": JSON.stringify(path),
+    "import.meta.file": JSON.stringify(basename(path)),
+    "import.meta.dir": JSON.stringify(dirname(path)),
+    "import.meta.dirname": JSON.stringify(dirname(path)),
+  };
 
-  return source.replaceAll(IMPORT_META, (match) => JSON.stringify(values.get(match) ?? match));
+  return new Bun.Transpiler({ loader, define, target: "bun" }).transformSync(source);
 }
 
 const sourcePaths: Bun.BunPlugin = {
   name: "loopy-source-paths",
   setup(build) {
-    build.onLoad({ filter: /\.[cm]?[jt]sx?$/ }, async ({ path, loader }) => ({
-      contents: inlineImportMeta(path, await Bun.file(path).text()),
-      loader,
-    }));
+    build.onLoad({ filter: /\.[cm]?[jt]s$/ }, async ({ path }) => {
+      const loader = LOADERS.get(extname(path));
+      const source = await Bun.file(path).text();
+
+      if (loader === undefined || !source.includes("import.meta")) {
+        return undefined;
+      }
+
+      return { contents: inlineImportMeta(path, loader, source), loader: "js" };
+    });
   },
 };
 
