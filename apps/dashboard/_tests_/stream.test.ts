@@ -362,7 +362,7 @@ test("fake playback cancels its last subscriber's timer and resumes on subscribe
     expect(cleared).toHaveBeenCalledTimes(1);
     expect(cleared.mock.calls[0]?.[0]).toBeDefined();
     await Bun.sleep(30);
-    expect((await backend.run(run.id)).cursor).toBe(10);
+    expect((await backend.run(run.id, AbortSignal.timeout(1000))).cursor).toBe(10);
     const next = new AbortController();
     let batches = 0;
     await backend.events({
@@ -376,7 +376,7 @@ test("fake playback cancels its last subscriber's timer and resumes on subscribe
       },
     });
     expect(batches).toBe(1);
-    expect((await backend.run(run.id)).cursor).toBe(11);
+    expect((await backend.run(run.id, AbortSignal.timeout(1000))).cursor).toBe(11);
   } finally {
     cleared.mockRestore();
   }

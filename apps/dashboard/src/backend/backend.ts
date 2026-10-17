@@ -35,7 +35,7 @@ export type StreamEnd = "aborted" | "reset";
 export type LoopyBackend = {
   loopies(): Promise<LoopyView[]>;
   runs(query: RunsQuery): Promise<RunView[]>;
-  run(id: string, signal?: AbortSignal): Promise<RunSnapshotView>;
+  run(id: string, signal: AbortSignal): Promise<RunSnapshotView>;
   logs(id: string, after: number): Promise<LogRecord[]>;
   startRun(slug: string, input: Json): Promise<RunView>;
   resumeRun(id: string): Promise<RunView>;
