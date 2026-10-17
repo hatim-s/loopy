@@ -1,4 +1,4 @@
-import { type Json, jsonSchema, type LoopyView } from "loopy/contract";
+import { isFieldValue, type Json, jsonSchema, type LoopyView } from "loopy/contract";
 
 export type RecordSpec = Exclude<LoopyView["input"], "schema">;
 
@@ -35,10 +35,20 @@ type FieldResult = { valid: true; value: Json } | { valid: false; message: strin
 
 function coerceField(kind: InputField["kind"], text: string): FieldResult {
   switch (kind) {
+    case "string[]":
+    case "number[]":
+    case "boolean[]":
+    case "json[]":
     case "json": {
       const parsed = parseJsonInput(text);
 
-      return parsed.valid ? parsed : { valid: false, message: "Enter valid JSON." };
+      if (!parsed.valid) {
+        return { valid: false, message: "Enter valid JSON." };
+      }
+
+      return isFieldValue(kind, parsed.value)
+        ? parsed
+        : { valid: false, message: `Enter a ${kind} as JSON.` };
     }
 
     case "string": {

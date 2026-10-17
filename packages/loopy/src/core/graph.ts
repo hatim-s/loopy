@@ -10,21 +10,20 @@ export type RefId = Brand<string, "RefId">;
 
 export type Duration = number | `${number}${"s" | "m" | "h" | "d"}`;
 
-export const FIELD_TYPES = ["string", "number", "boolean", "json"] as const;
-
-export type RecordSpec = Readonly<Record<string, (typeof FIELD_TYPES)[number]>>;
-
-export const GRAPH_FIELD_TYPES = [
-  ...FIELD_TYPES,
+export const FIELD_TYPES = [
+  "string",
+  "number",
+  "boolean",
+  "json",
   "string[]",
   "number[]",
   "boolean[]",
   "json[]",
 ] as const;
 
-export type InputSpec = Readonly<Record<string, (typeof GRAPH_FIELD_TYPES)[number]>>;
+export type RecordSpec = Readonly<Record<string, (typeof FIELD_TYPES)[number]>>;
 
-export type OutputSchema = InputSpec | "json";
+export type OutputSchema = RecordSpec | "json";
 
 export type Ref = { ref: RefId; path: string[] };
 
@@ -208,7 +207,7 @@ export type Diagnostic = {
 export type Graph = {
   version: 1;
   name: string;
-  input: InputSpec | "schema";
+  input: RecordSpec | "schema";
   nodes: Node[];
   edges: Edge[];
   entry: NodeId;

@@ -4,7 +4,7 @@ import {
   DIAGNOSTIC_CODES,
   type Duration,
   EDGE_KINDS,
-  GRAPH_FIELD_TYPES,
+  FIELD_TYPES,
   type Json,
   MAP_ERROR_MODES,
   NODE_KINDS,
@@ -44,7 +44,7 @@ const literalSchema: z.ZodType<Json> = z.lazy(() =>
 export const valueSchema = z.union([refSchema, literalSchema]);
 
 export const outputSchema = z.union([
-  z.record(z.string(), z.enum(GRAPH_FIELD_TYPES)).readonly(),
+  z.record(z.string(), z.enum(FIELD_TYPES)).readonly(),
   z.literal("json"),
 ]);
 
@@ -195,7 +195,7 @@ export const diagnosticSchema = z.strictObject({
 export const graphSchema = z.strictObject({
   version: z.literal(1),
   name: z.string(),
-  input: z.union([z.record(z.string(), z.enum(GRAPH_FIELD_TYPES)).readonly(), z.literal("schema")]),
+  input: z.union([z.record(z.string(), z.enum(FIELD_TYPES)).readonly(), z.literal("schema")]),
   nodes: z.array(nodeSchema),
   edges: z.array(edgeSchema),
   entry: nodeIdSchema,

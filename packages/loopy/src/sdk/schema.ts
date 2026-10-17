@@ -1,9 +1,7 @@
 import {
   FIELD_TYPES,
-  isBoolean,
-  isNumber,
+  isFieldValue,
   isRecord,
-  isString,
   type Json,
   type RecordSpec,
   requireOneOf,
@@ -38,15 +36,22 @@ export type InputSchema = StandardSchemaV1 | RecordSpec;
 
 type Primitive = { string: string; number: number; boolean: boolean; json: Json };
 
+type FieldValue<Kind extends RecordSpec[string]> =
+  Kind extends `${infer Element extends keyof Primitive}[]`
+    ? Primitive[Element][]
+    : Kind extends keyof Primitive
+      ? Primitive[Kind]
+      : never;
+
 type Simplify<T> = { [K in keyof T]: T[K] } & {};
 
 type RecordInput<Spec extends RecordSpec> = Simplify<
   {
-    -readonly [Key in keyof Spec as Key extends `${string}?` ? never : Key]: Primitive[Spec[Key]];
+    -readonly [Key in keyof Spec as Key extends `${string}?` ? never : Key]: FieldValue<Spec[Key]>;
   } & {
-    -readonly [Key in keyof Spec as Key extends `${infer Name}?`
-      ? Name
-      : never]?: Primitive[Spec[Key]];
+    -readonly [Key in keyof Spec as Key extends `${infer Name}?` ? Name : never]?: FieldValue<
+      Spec[Key]
+    >;
   }
 >;
 
@@ -71,34 +76,6 @@ export function isStandardSchema<Value>(value: Value): value is Value & Standard
   );
 }
 
-// BOUNDARY: Record inputs may contain arbitrary external JSON, but not host values.
-function isJson(value: unknown): value is Json {
-  if (value === null || typeof value === "string" || typeof value === "boolean") {
-    return true;
-  }
-
-  if (typeof value === "number") {
-    return Number.isFinite(value);
-  }
-
-  if (Array.isArray(value)) {
-    return value.every(isJson);
-  }
-
-  return (
-    isRecord(value) &&
-    [Object.prototype, null].includes(Object.getPrototypeOf(value)) &&
-    Object.values(value).every(isJson)
-  );
-}
-
-const GUARDS = {
-  string: isString,
-  number: (value: unknown): value is number => isNumber(value) && Number.isFinite(value),
-  boolean: isBoolean,
-  json: isJson,
-};
-
 // BOUNDARY: Record schema input comes from argv or external JSON and must match each declared primitive.
 function validateRecord(spec: RecordSpec, value: unknown): StandardResult<unknown> {
   if (!isRecord(value)) {
@@ -122,7 +99,7 @@ function validateRecord(spec: RecordSpec, value: unknown): StandardResult<unknow
       continue;
     }
 
-    if (!GUARDS[kind](item)) {
+    if (!isFieldValue(kind, item)) {
       issues.push({ message: `Expected ${kind}`, path: [key] });
       continue;
     }

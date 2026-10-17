@@ -938,3 +938,88 @@ test("cyclic join field projections produce diagnostics without recursing foreve
 
   expect(validateGraph(graph).map((error) => error.code)).toEqual(["out_of_scope_ref"]);
 });
+
+test("rescue results use the common body and handler type", () => {
+  const graph = numericBranchGraph();
+  graph.nodes = graph.nodes.map((node) =>
+    node.id === "branch"
+      ? contract.nodeSchema.parse({
+          id: node.id,
+          kind: "rescue",
+          scope: null,
+          label: null,
+          body: "yes",
+          handler: "no",
+          error: "error",
+        })
+      : node,
+  );
+  graph.edges = graph.edges.map((edge) =>
+    edge.from === "branch" ? { ...edge, kind: edge.to === "yes" ? "next" : "rescue" } : edge,
+  );
+  expect(validateGraph(graph)).toEqual([]);
+  graph.nodes = graph.nodes.map((node) =>
+    node.id === "no" && node.kind === "join" ? { ...node, result: "different" } : node,
+  );
+  expect(validateGraph(graph).map((error) => error.code)).toEqual(["predicate_type"]);
+});
+
+for (const [yes, no, member] of [
+  [[1], [2], 1],
+  [["a"], ["b"], "a"],
+  [[true], [false], true],
+  [[1, "a"], [false, null], null],
+  [[], [], null],
+] satisfies [core.Value[], core.Value[], core.Value][]) {
+  test(`literal array branch results preserve element types for ${JSON.stringify(yes)}`, () => {
+    const graph = numericBranchGraph();
+    const result = { ref: contract.refIdSchema.parse("result"), path: [] };
+    graph.nodes = graph.nodes.map((node) =>
+      node.kind === "join" && (node.id === "yes" || node.id === "no")
+        ? { ...node, result: node.id === "yes" ? yes : no }
+        : node.id === "check" && node.kind === "branch"
+          ? { ...node, predicate: { op: "gt", left: { ...result, size: true }, right: 0 } }
+          : node,
+    );
+    expect(validateGraph(graph)).toEqual([]);
+    graph.nodes = graph.nodes.map((node) =>
+      node.id === "check" && node.kind === "branch"
+        ? { ...node, predicate: { op: "in", left: member, right: result } }
+        : node,
+    );
+    expect(validateGraph(graph).map((error) => error.code)).toEqual(
+      member === null ? ["predicate_type"] : [],
+    );
+  });
+}
+
+for (const result of [
+  { nested: { count: 1 } },
+  { nested: { ref: "input", path: [] } },
+  { nested: { count: { ref: "input", path: ["count"] } } },
+]) {
+  test(`format resolves literal join paths through ${JSON.stringify(result)}`, () => {
+    const graph = contract.graphSchema.parse({
+      version: 1,
+      name: "literal-path",
+      input: { count: "number" },
+      entry: "join",
+      outputs: null,
+      warnings: [],
+      nodes: [
+        { id: "join", kind: "join", scope: null, label: null, result },
+        {
+          id: "format",
+          kind: "format",
+          scope: null,
+          label: null,
+          template: "{n}",
+          values: { n: { ref: "join", path: ["nested", "count"] } },
+        },
+      ],
+      edges: [{ from: "join", to: "format", kind: "next" }],
+    });
+
+    expect(validateGraph(graph)).toEqual([]);
+  });
+}

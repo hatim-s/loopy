@@ -4,10 +4,10 @@ import type {
   DiagnosticCode,
   Edge,
   Graph,
-  InputSpec,
   Node,
   NodeId,
   Predicate,
+  RecordSpec,
   Ref,
   Value,
 } from "./graph.js";
@@ -557,7 +557,7 @@ function declaredSchema(context: Context, ref: { ref: string; path: string[] }) 
   return node?.kind === "wait" ? node.payload : null;
 }
 
-function recordPathType(schema: InputSpec, path: string[]): string | null {
+function recordPathType(schema: RecordSpec, path: string[]): string | null {
   if (path.length === 0) {
     return "object";
   }
@@ -589,21 +589,36 @@ function bodyResultType(
   return resolveRefType(context, { ref: result?.id ?? entry, path });
 }
 
+function literalPathType(context: Context, value: Value, path: string[]): string | null {
+  if (isRef(value)) {
+    return resolveRefType(context, { ref: value.ref, path: [...value.path, ...path] });
+  }
+
+  if (path.length === 0) {
+    return operandType(context, value);
+  }
+
+  const [field, ...rest] = path;
+
+  if (field === undefined || !isRecord(value) || !Object.hasOwn(value, field)) {
+    return null;
+  }
+
+  return literalPathType(context, value[field] ?? null, rest);
+}
+
 function derivedType(context: Context, node: Node, path: string[]): string | null {
   switch (node.kind) {
     case "branch":
-    case "switch": {
+    case "switch":
+    case "rescue": {
       const arms = targets(node).map((entry) => bodyResultType(context, node, entry, path));
 
       return arms.length > 0 && arms.every((type) => type === arms[0]) ? (arms[0] ?? null) : "json";
     }
 
     case "join":
-      return isRef(node.result)
-        ? resolveRefType(context, { ref: node.result.ref, path: [...node.result.path, ...path] })
-        : path.length === 0
-          ? operandType(context, node.result)
-          : null;
+      return literalPathType(context, node.result, path);
     case "finally":
       return bodyResultType(context, node, node.body, path);
     case "map":
@@ -658,7 +673,7 @@ function declaredRefType(context: Context, ref: { ref: string; path: string[] })
     return recordPathType(schema, ref.path);
   }
 
-  if (node && ["branch", "switch", "join", "finally", "map"].includes(node.kind)) {
+  if (node && ["branch", "switch", "rescue", "join", "finally", "map"].includes(node.kind)) {
     return derivedType(context, node, ref.path);
   }
 
@@ -691,7 +706,11 @@ function operandType(context: Context, value: ComparisonOperand): string | null 
   }
 
   if (Array.isArray(value)) {
-    return "array";
+    const elements = value.map((item) => operandType(context, item));
+    const type = elements[0];
+    const scalar = type === "string" || type === "number" || type === "boolean";
+
+    return `${scalar && elements.every((element) => element === type) ? type : "json"}[]`;
   }
 
   if (isString(value)) {
