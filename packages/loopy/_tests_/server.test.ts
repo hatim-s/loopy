@@ -1,5 +1,6 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { get, type IncomingMessage } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
@@ -734,41 +735,162 @@ test("hook POST wakes a run to completion while the daemon runs", async () => {
   }
 }, 10_000);
 
-test("SSE bounds an unread client while another receives and coalesces a burst", async () => {
-  const { f, store, service } = await serviceFixture("slow-client");
+async function httpEvents(name: string) {
+  const { f, store } = await serviceFixture(name);
+  const daemon = localDaemon({ ...f, store, port: 0 });
+  const url = new URL(daemon.start());
+  const headers = { Authorization: `Bearer ${readDaemonFile(f.home)!.token}` };
+  const endpoint = `${url.origin}/api/events?after=0&epoch=${await store.epoch()}`;
 
-  const query = { after: 0, epoch: await store.epoch() };
-  const slow = await eventStream(store, service, query, new AbortController().signal);
-  const fast = await eventStream(store, service, query, new AbortController().signal);
-  const capture = captureFrames(fast.body!);
-  const selects = spyOn(store, "events");
+  return {
+    store,
+    url,
+    headers,
+    endpoint,
+    write: (id: number, bytes: number) =>
+      store.createRun({ ...replayRun(f.cwd), id: String(id), input: "x".repeat(bytes) }),
+    connect: (id: number) =>
+      fetch(endpoint, { headers: { ...headers, "Last-Event-ID": String(id) } }),
+    async close() {
+      await daemon.stop();
+      store.close();
+    },
+  };
+}
+
+async function waitForFrames(capture: ReturnType<typeof captureFrames>, count: number) {
+  for (let attempt = 0; attempt < 500 && capture.frames.length < count; attempt++) {
+    await Bun.sleep(10);
+  }
+
+  expect(capture.frames).toHaveLength(count);
+}
+
+test("SSE HTTP replay drains 45 large transactions from Last-Event-ID 1 in order", async () => {
+  const http = await httpEvents("large-replay");
 
   try {
-    const writes = [...Array.from({ length: 40 }).keys()].map((id) =>
-      store.createRun({
-        id: String(id),
-        slug: "slow-client",
-        workspace: f.cwd,
-        bundleHash: "a".repeat(64),
-        input: "x".repeat(40_000),
-        status: "queued",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      }),
-    );
+    for (let id = 1; id <= 46; id++) {
+      await http.write(id, 40_000);
+    }
 
-    await Promise.all(writes);
-    const frames = await capture.finish();
-    expect(frames.flatMap((frame) => frame.sequences)).toEqual(
-      [...Array.from({ length: 40 }).keys()].map((index) => index + 1),
-    );
-    expect(selects.mock.calls.length).toBeLessThan(10);
-    await expect(slow.body!.getReader().read()).rejects.toThrow("SSE client fell behind.");
+    const response = await http.connect(1);
+    expect(response.status).toBe(200);
+    const capture = captureFrames(response.body!);
+    await waitForFrames(capture, 45);
+    expect(await capture.finish()).toEqual(expectedFrames(await http.store.events(1, 100)));
   } finally {
-    selects.mockRestore();
-    store.close();
+    await http.close();
   }
-});
+}, 15_000);
+
+test("SSE HTTP replays an oversized transaction and live-delivers another whole frame", async () => {
+  const http = await httpEvents("oversized-replay");
+
+  try {
+    await http.write(1, 0);
+    await http.write(2, 1_100_000);
+    const response = await http.connect(1);
+    const capture = captureFrames(response.body!);
+    await waitForFrames(capture, 1);
+    await http.write(3, 1_100_000);
+    await waitForFrames(capture, 2);
+    expect(await capture.finish()).toEqual(expectedFrames(await http.store.events(1, 100)));
+  } finally {
+    await http.close();
+  }
+}, 15_000);
+
+async function unreadHttp(http: Awaited<ReturnType<typeof httpEvents>>) {
+  const response = await new Promise<IncomingMessage>((resolve, reject) => {
+    get(http.endpoint, { headers: { ...http.headers, "Last-Event-ID": "1" } }, resolve).on(
+      "error",
+      reject,
+    );
+  });
+
+  response.pause();
+  const chunks: Buffer[] = [];
+
+  const ended = new Promise<string>((resolve, reject) => {
+    response.on("data", (chunk: Buffer) => chunks.push(chunk));
+    response.on("close", () => resolve(Buffer.concat(chunks).toString()));
+    response.on("error", (error: NodeJS.ErrnoException) => {
+      if (error.code !== "ECONNRESET") {
+        reject(error);
+      }
+    });
+  });
+
+  return { response, ended };
+}
+
+async function closedCursor(slow: Awaited<ReturnType<typeof unreadHttp>>) {
+  await Bun.sleep(2300);
+  slow.response.resume();
+
+  const received = await Promise.race([
+    slow.ended,
+    Bun.sleep(3000).then(() => {
+      throw new Error("Unread HTTP client was not closed.");
+    }),
+  ]);
+
+  expect(slow.response.statusCode).toBe(200);
+
+  const ids = received
+    .split("\n\n")
+    .slice(0, -1)
+    .flatMap((frame) => parseFrame(frame.split("\n"))?.id ?? []);
+
+  return ids.at(-1) ?? 1;
+}
+
+async function stalledHttpReader(name: string) {
+  const http = await httpEvents(name);
+  await http.write(1, 0);
+  const slow = await unreadHttp(http);
+
+  try {
+    const response = await http.connect(1);
+    const capture = captureFrames(response.body!);
+    await Bun.sleep(50);
+
+    for (let id = 2; id <= 401; id++) {
+      await http.write(id, 40_000);
+    }
+
+    await waitForFrames(capture, 400);
+    expect(await capture.finish()).toEqual(expectedFrames(await http.store.events(1, 1000)));
+    const lastId = await closedCursor(slow);
+    expect(lastId).toBeLessThan(401);
+
+    return { http, lastId };
+  } catch (error) {
+    await http.close();
+    throw error;
+  } finally {
+    slow.response.destroy();
+  }
+}
+
+test("SSE HTTP closes a client that never reads while a concurrent reader gets every transaction", async () => {
+  const { http } = await stalledHttpReader("unread-http");
+  await http.close();
+}, 20_000);
+
+test("SSE HTTP reconnect from a closed client's last id has no gap", async () => {
+  const { http, lastId } = await stalledHttpReader("unread-reconnect");
+
+  try {
+    const response = await http.connect(lastId);
+    const capture = captureFrames(response.body!);
+    await waitForFrames(capture, 401 - lastId);
+    expect(await capture.finish()).toEqual(expectedFrames(await http.store.events(lastId, 1000)));
+  } finally {
+    await http.close();
+  }
+}, 20_000);
 
 test("local server leaves event pruning to the runtime daemon", async () => {
   const { f, store } = await serviceFixture("retention-owner");

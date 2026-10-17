@@ -26,9 +26,10 @@ export async function eventStream(
   const stream = new ReadableStream<Uint8Array>(
     {
       start: (controller) => feed.start(controller),
+      pull: () => feed.pull(),
       cancel: () => feed.close(),
     },
-    new ByteLengthQueuingStrategy({ highWaterMark: 1024 * 1024 }),
+    new CountQueuingStrategy({ highWaterMark: 1 }),
   );
 
   return new Response(stream, {
@@ -45,6 +46,8 @@ class EventFeed {
   private pending = false;
   private dirty = false;
   private version: number;
+  private drained?: () => void;
+  private stalled?: ReturnType<typeof setTimeout>;
   private tail?: ReturnType<typeof setInterval>;
   private heartbeat?: ReturnType<typeof setInterval>;
   private unsubscribe?: () => void;
@@ -61,7 +64,7 @@ class EventFeed {
 
   start(controller: ReadableStreamDefaultController<Uint8Array>): void {
     this.controller = controller;
-    this.send(": connected\n\n");
+    controller.enqueue(new TextEncoder().encode(": connected\n\n"));
     this.unsubscribe = this.store.subscribe(this.enqueue);
     this.tail = setInterval(() => {
       const next = this.store.dataVersion();
@@ -71,7 +74,11 @@ class EventFeed {
         this.enqueue();
       }
     }, 100);
-    this.heartbeat = setInterval(() => this.send(": heartbeat\n\n"), 15_000);
+    this.heartbeat = setInterval(() => {
+      if ((controller.desiredSize ?? 0) > 0) {
+        controller.enqueue(new TextEncoder().encode(": heartbeat\n\n"));
+      }
+    }, 15_000);
     this.signal.addEventListener("abort", this.abort, { once: true });
 
     if (this.signal.aborted) {
@@ -87,6 +94,7 @@ class EventFeed {
     }
 
     this.closed = true;
+    this.pull();
     clearInterval(this.tail);
     clearInterval(this.heartbeat);
     this.unsubscribe?.();
@@ -102,23 +110,34 @@ class EventFeed {
     this.controller?.close();
   };
 
-  private send(text: string): void {
+  pull(): void {
+    clearTimeout(this.stalled);
+    this.drained?.();
+    this.drained = undefined;
+  }
+
+  private async send(text: string): Promise<void> {
     const controller = this.controller;
 
     if (this.closed || !controller) {
       return;
     }
 
-    const bytes = new TextEncoder().encode(text);
-
-    if ((controller.desiredSize ?? 0) < bytes.byteLength) {
-      this.close();
-      controller.error(new Error("SSE client fell behind. Reconnect from the last event ID."));
-
-      return;
+    // One queued and one pending transaction bound memory without splitting large frames.
+    // Only two seconds without a pull while full identifies a reader that stopped draining.
+    while (!this.closed && (controller.desiredSize ?? 0) <= 0) {
+      await new Promise<void>((resolve) => {
+        this.drained = resolve;
+        this.stalled = setTimeout(() => {
+          this.close();
+          controller.error(new Error("SSE client fell behind. Reconnect from the last event ID."));
+        }, 2000);
+      });
     }
 
-    controller.enqueue(bytes);
+    if (!this.closed) {
+      controller.enqueue(new TextEncoder().encode(text));
+    }
   }
 
   private readonly enqueue = () => {
@@ -149,7 +168,7 @@ class EventFeed {
   private async drain(): Promise<void> {
     while (!this.closed) {
       this.dirty = false;
-      const events = await this.store.events(this.cursor, 500);
+      const events = await this.store.events(this.cursor, 1);
 
       const last = events.at(-1);
 
@@ -160,13 +179,7 @@ class EventFeed {
       // A reconnect cursor must never acknowledge only part of a transaction.
       events.push(...(await this.store.transactionEvents(last.txn, last.sequence)));
 
-      for (const transaction of transactions(events)) {
-        if (this.closed) {
-          return;
-        }
-
-        await this.deliver(transaction);
-      }
+      await this.deliver(events);
     }
   }
 
@@ -178,22 +191,6 @@ class EventFeed {
     const view = await this.service.viewResolver(ids);
     const data = transaction.map((event) => routes.events.response.parse(serverEvent(event, view)));
     this.cursor = transaction.at(-1)?.sequence ?? this.cursor;
-    this.send(`id: ${this.cursor}\nevent: txn\ndata: ${JSON.stringify(data)}\n\n`);
+    await this.send(`id: ${this.cursor}\nevent: txn\ndata: ${JSON.stringify(data)}\n\n`);
   }
-}
-
-function transactions(events: RuntimeEvent[]): RuntimeEvent[][] {
-  const groups: RuntimeEvent[][] = [];
-
-  for (const event of events) {
-    const last = groups.at(-1);
-
-    if (last?.[0]?.txn === event.txn) {
-      last.push(event);
-    } else {
-      groups.push([event]);
-    }
-  }
-
-  return groups;
 }
