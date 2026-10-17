@@ -97,6 +97,7 @@ export const hookRecordSchema = z.strictObject({
 export type HookRecord = z.infer<typeof hookRecordSchema>;
 
 export const scheduleSchema = z.strictObject({
+  revision: z.number().int(),
   workspace: z.string(),
   slug: z.string(),
   cron: z.string(),

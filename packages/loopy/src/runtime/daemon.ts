@@ -198,13 +198,14 @@ export class Daemon {
       updatedAt: now,
     };
 
-    return this.options.store.fireSchedule(
-      schedule.workspace,
-      schedule.slug,
-      `${schedule.slug}@${at.toISOString().slice(0, 16)}Z`,
+    return this.options.store.fireSchedule({
+      workspace: schedule.workspace,
+      slug: schedule.slug,
+      revision: schedule.revision,
+      fireKey: `${schedule.slug}@${at.toISOString().slice(0, 16)}Z`,
       run,
-      nextFire(parseCron(schedule.cron), at, schedule.tz).toISOString(),
-    );
+      nextFireAt: nextFire(parseCron(schedule.cron), at, schedule.tz).toISOString(),
+    });
   }
 
   private async activateRun(run: RunRecord): Promise<boolean> {

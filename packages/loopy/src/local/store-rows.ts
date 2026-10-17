@@ -64,11 +64,14 @@ export const SQL = {
     "INSERT INTO rate_limits VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET window_start=excluded.window_start,count=excluded.count",
   schedules: "SELECT * FROM schedules ORDER BY rowid",
   schedule: "SELECT * FROM schedules WHERE workspace=? AND slug=?",
-  putSchedule: `INSERT INTO schedules VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(workspace,slug) DO UPDATE SET
+  putSchedule: `INSERT INTO schedules VALUES (?,?,?,?,?,?,?,?,1) ON CONFLICT(workspace,slug) DO UPDATE SET
     cron=excluded.cron,tz=excluded.tz,input_json=excluded.input_json,enabled=excluded.enabled,
-    last_fire_key=excluded.last_fire_key,next_fire_at=excluded.next_fire_at`,
+    last_fire_key=excluded.last_fire_key,next_fire_at=excluded.next_fire_at,revision=schedules.revision+1 RETURNING *`,
   deleteSchedule: "DELETE FROM schedules WHERE workspace=? AND slug=?",
-  fireSchedule: "UPDATE schedules SET last_fire_key=?,next_fire_at=? WHERE workspace=? AND slug=?",
+  setScheduleEnabled: `UPDATE schedules SET enabled=?,revision=revision+1,
+    next_fire_at=COALESCE(?,next_fire_at) WHERE workspace=? AND slug=? RETURNING *`,
+  fireSchedule: `UPDATE schedules SET last_fire_key=?,next_fire_at=? WHERE workspace=? AND slug=?
+    AND revision=? AND enabled=1 AND (last_fire_key IS NULL OR last_fire_key<>?)`,
   nextWakeAt:
     "SELECT MIN(wake_at) AS wake_at FROM runs WHERE status='suspended' AND owner_token IS NULL",
   run: "SELECT * FROM runs WHERE id=?",
@@ -285,6 +288,7 @@ function rowToPosition(row: LogRow): LogRecord["position"] {
 
 export function rowToSchedule(row: ScheduleRow): Schedule {
   const schedule: Schedule = {
+    revision: row.revision,
     workspace: row.workspace,
     slug: row.slug,
     cron: row.cron,

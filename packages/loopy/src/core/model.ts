@@ -106,6 +106,7 @@ export type LogRecord = {
 };
 
 export type Schedule = {
+  revision: number;
   workspace: string;
   slug: string;
   cron: string;

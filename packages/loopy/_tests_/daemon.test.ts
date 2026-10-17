@@ -52,6 +52,7 @@ function fixture(
 
 function schedule(overrides: Partial<Schedule> = {}): Schedule {
   return {
+    revision: 1,
     workspace: "/workspace",
     slug: "test",
     cron: "* * * * *",
@@ -102,6 +103,7 @@ test("startup skips stale schedules forward without firing and preserves the fir
   expect(await f.daemon.tick()).toEqual({ fired: 0, activated: 0 });
   expect(await f.store.listSchedules()).toEqual([
     schedule({
+      revision: 2,
       lastFireKey: "old",
       nextFireAt: "2026-10-16T00:01:00.000Z",
     }),

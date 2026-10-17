@@ -105,6 +105,7 @@ function scheduleView(
   declared: SavedLoopyInput["schedule"],
 ): LoopyView["schedule"] {
   if (schedule === null) {
+    // LoopyView can show a schedule declared in the definition, not scheduled yet.
     return declared
       ? { cron: declared.cron, tz: declared.tz ?? "UTC", enabled: false, nextFireAt: null }
       : null;

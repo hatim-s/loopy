@@ -196,7 +196,7 @@ test("service schedules create, replace, toggle, delete and emit persisted event
 
   expect(first).toMatchObject({ workspace: root, enabled: true, lastFireKey: null, tz: "UTC" });
   expect(await service.listSchedules()).toEqual([first]);
-  await store.putSchedule({ ...first, lastFireKey: "fired", nextFireAt: first.nextFireAt! });
+  await store.putSchedule({ ...first, lastFireKey: "fired", nextFireAt: first.nextFireAt });
   expect(await service.setScheduleEnabled("service", false)).toMatchObject({
     enabled: false,
     lastFireKey: "fired",
@@ -351,3 +351,56 @@ test("global schedules use the service workspace and preserve other workspaces",
   await otherService.deleteSchedule("service");
   expect(await store.listSchedules()).toMatchObject([{ workspace: root, enabled: true }]);
 });
+
+function pausedScheduleDaemon(f: Awaited<ReturnType<typeof fixture>>) {
+  const entered = Promise.withResolvers<void>();
+  const bundle = Promise.withResolvers<string>();
+
+  const daemon = new Daemon({
+    store: f.store,
+    clock: f.clock,
+    bundleHashFor: () => {
+      entered.resolve();
+
+      return bundle.promise;
+    },
+    prepare: async (run) => ({
+      workflow: async () => run.input,
+      executor: new FakeExecutor(),
+      cwd: run.workspace,
+      mode: "sandbox",
+    }),
+  });
+
+  return { daemon, entered: entered.promise, release: () => bundle.resolve("bundle") };
+}
+
+for (const mutation of ["PUT", "disable"]) {
+  test(`a ${mutation} during bundle resolution rejects the pending schedule fire`, async () => {
+    const f = await fixture();
+    await f.service.putSchedule("service", { cron: "* * * * *", input: { name: "first" } });
+    f.advance(60_000);
+    const paused = pausedScheduleDaemon(f);
+    const ticking = paused.daemon.tick();
+    await paused.entered;
+
+    try {
+      const saved =
+        mutation === "PUT"
+          ? await f.service.putSchedule("service", { cron: "0 * * * *", input: { name: "new" } })
+          : await f.service.setScheduleEnabled("service", false);
+
+      expect(saved.nextFireAt).toBe(
+        mutation === "PUT" ? "2026-10-17T01:00:00.000Z" : "2026-10-17T00:01:00.000Z",
+      );
+      paused.release();
+      expect(await ticking).toEqual({ fired: 0, activated: 0 });
+      expect(await f.store.listRuns()).toEqual([]);
+      expect(await f.service.listSchedules()).toEqual([saved]);
+    } finally {
+      paused.release();
+      await ticking;
+      await paused.daemon.stop();
+    }
+  });
+}

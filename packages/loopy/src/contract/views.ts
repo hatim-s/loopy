@@ -53,7 +53,6 @@ export const runViewSchema = z.discriminatedUnion("status", [
 export type RunView = z.infer<typeof runViewSchema>;
 
 export const scheduleViewSchema = scheduleSchema.extend({
-  nextFireAt: z.string().nullable(),
   lastFireKey: z.string().nullable(),
 });
 

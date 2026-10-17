@@ -220,6 +220,7 @@ test("loopy views count matching runs and choose the newest without leaking regi
   });
 
   const schedule: core.Schedule = {
+    revision: 1,
     workspace: "/workspace",
     slug: "test",
     cron: "* * * * *",
@@ -402,9 +403,8 @@ test("run cursors preserve timestamp ties and reject timestamp-only paging", asy
 test("schedule wire fields normalize core nullability and preserve every field", () => {
   expectTypeOf<contract.ScheduleView>().toEqualTypeOf<
     Flatten<
-      Omit<core.Schedule, "lastFireKey" | "nextFireAt"> & {
+      Omit<core.Schedule, "lastFireKey"> & {
         lastFireKey: string | null;
-        nextFireAt: string | null;
       }
     >
   >();
@@ -442,6 +442,7 @@ test("loopy declared schedule is visible until a persisted schedule overrides it
     contract.loopyView(
       saved,
       {
+        revision: 1,
         workspace: "/workspace",
         slug: "test",
         cron: "*/5 * * * *",

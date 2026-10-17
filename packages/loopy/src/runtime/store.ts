@@ -55,14 +55,18 @@ export interface RunStore {
   getLogs(runId: string, after?: number): Promise<LogRecord[]>;
   dueRuns(now: string): Promise<RunRecord[]>;
   nextWakeAt(): Promise<string | undefined>;
-  putSchedule(schedule: Schedule): Promise<void>;
+  putSchedule(schedule: Omit<Schedule, "revision">): Promise<Schedule>;
+  setScheduleEnabled(
+    options: Pick<Schedule, "workspace" | "slug" | "enabled"> & {
+      nextFireAt?: string;
+    },
+  ): Promise<Schedule>;
   listSchedules(): Promise<Schedule[]>;
   deleteSchedule(workspace: string, slug: string): Promise<void>;
   fireSchedule(
-    workspace: string,
-    slug: string,
-    fireKey: string,
-    run: RunRecord,
-    nextFireAt: string,
+    options: Pick<Schedule, "workspace" | "slug" | "revision" | "nextFireAt"> & {
+      fireKey: string;
+      run: RunRecord;
+    },
   ): Promise<boolean>;
 }

@@ -76,7 +76,7 @@ export class LoopyService {
   async putSchedule(slug: string, body: PutScheduleBody): Promise<ScheduleView> {
     const { registry, saved, workspace } = this.scheduleTarget(slug);
     const loopy = await loadLoopy(registry.bundlePath(saved.bundleHash));
-    let schedule: Schedule;
+    let schedule: Omit<Schedule, "revision">;
 
     try {
       const cron = body.cron ?? saved.schedule?.cron;
@@ -103,9 +103,7 @@ export class LoopyService {
       throw new ServiceError("invalid_schedule", errorMessage(error));
     }
 
-    await this.options.store.putSchedule(schedule);
-
-    return this.scheduleView(schedule);
+    return this.scheduleView(await this.options.store.putSchedule(schedule));
   }
 
   private async requireSchedule(slug: string): Promise<Schedule> {
@@ -125,8 +123,9 @@ export class LoopyService {
   async setScheduleEnabled(slug: string, enabled: boolean): Promise<ScheduleView> {
     const current = await this.requireSchedule(slug);
 
-    const schedule = {
-      ...current,
+    const schedule = await this.options.store.setScheduleEnabled({
+      workspace: current.workspace,
+      slug,
       enabled,
       nextFireAt: enabled
         ? nextFire(
@@ -134,10 +133,8 @@ export class LoopyService {
             new Date(this.options.clock.now()),
             current.tz,
           ).toISOString()
-        : current.nextFireAt,
-    };
-
-    await this.options.store.putSchedule(schedule);
+        : undefined,
+    });
 
     return this.scheduleView(schedule);
   }
