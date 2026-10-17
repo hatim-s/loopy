@@ -6,9 +6,16 @@ import type { RunRecord } from "../core/index.js";
 import { isLoopy, type Loopy } from "../sdk/host.js";
 import { defaultHome } from "./home.js";
 import { Registry } from "./registry.js";
+import { sourcePaths } from "./source-paths.js";
 
 export async function bundleLoopy(file: string, home = defaultHome()) {
-  const result = await Bun.build({ entrypoints: [file], target: "bun", format: "esm" });
+  const result = await Bun.build({
+    entrypoints: [file],
+    target: "bun",
+    format: "esm",
+    plugins: [sourcePaths],
+  });
+
   const output = result.outputs[0];
 
   if (!result.success || !output) {
