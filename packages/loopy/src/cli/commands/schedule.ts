@@ -1,53 +1,36 @@
-import { loadLoopy, Registry } from "../../local/index.js";
-import { assertJson, nextFire, parseCron } from "../../runtime/index.js";
 import { type CliContext, requireTarget } from "../context.js";
 import { jsonInput } from "../input.js";
 import { printJson } from "../output.js";
-import { withRunStore } from "../store.js";
+import { runService, withRunStore } from "../store.js";
 
 export async function runSchedule(context: CliContext): Promise<void> {
   const slug = requireTarget(context, "Slug");
-  const registry = new Registry(context.home, context.cwd);
-  const saved = registry.get(slug);
+  const { off, enable, disable, cron, tz } = context.values;
+  const actions = Number(!!off) + Number(!!enable) + Number(!!disable);
 
-  if (context.values.off && context.values.cron) {
-    throw new Error("Choose --cron or --off. Provide only one schedule action.");
+  if (
+    actions > 1 ||
+    (actions > 0 &&
+      (cron !== undefined || tz !== undefined || context.values["input-json"] !== undefined))
+  ) {
+    throw new Error("Choose one schedule action: --cron, --off, --enable, or --disable.");
   }
 
   await withRunStore(context, async (store) => {
-    if (context.values.off) {
-      await store.deleteSchedule(registry.project, slug);
-      printJson({ slug, scheduled: false });
+    const service = runService(context, store);
+
+    if (off) {
+      printJson(await service.deleteSchedule(slug));
 
       return;
     }
 
-    const cron = requireCron(context.values.cron ?? saved.schedule?.cron, slug);
+    if (enable || disable) {
+      printJson(await service.setScheduleEnabled(slug, !!enable));
 
-    const tz = context.values.tz ?? saved.schedule?.tz ?? "UTC";
-    const loopy = await loadLoopy(registry.bundlePath(saved.bundleHash));
-    const input = await loopy.validateInput(await jsonInput(context));
-    assertJson(input, "Schedule input");
+      return;
+    }
 
-    const schedule = {
-      workspace: registry.project,
-      slug,
-      cron,
-      tz,
-      input,
-      enabled: true,
-      nextFireAt: nextFire(parseCron(cron), new Date(), tz).toISOString(),
-    };
-
-    await store.putSchedule(schedule);
-    printJson(schedule);
+    printJson(await service.putSchedule(slug, { cron, tz, input: await jsonInput(context) }));
   });
-}
-
-function requireCron(cron: string | undefined, slug: string): string {
-  if (!cron) {
-    throw new Error(`No schedule for '${slug}'. Pass --cron or add schedule to loopy().`);
-  }
-
-  return cron;
 }

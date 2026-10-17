@@ -52,6 +52,12 @@ export const runViewSchema = z.discriminatedUnion("status", [
 
 export type RunView = z.infer<typeof runViewSchema>;
 
+export const scheduleViewSchema = scheduleSchema.extend({
+  lastFireKey: z.string().nullable(),
+});
+
+export type ScheduleView = z.infer<typeof scheduleViewSchema>;
+
 export const loopyViewSchema = z.strictObject({
   slug: z.string(),
   description: z.string().optional(),
@@ -66,7 +72,7 @@ export const loopyViewSchema = z.strictObject({
       cron: z.string(),
       tz: z.string(),
       enabled: z.boolean(),
-      nextFireAt: z.string(),
+      nextFireAt: z.string().nullable(),
     })
     .nullable(),
   lastRun: runViewSchema.nullable(),

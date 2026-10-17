@@ -496,11 +496,14 @@ export class SqliteRunStore implements RunStore {
     );
   }
 
-  async putSchedule(schedule: Schedule): Promise<void> {
-    this.commit((txn) => {
-      this.db
-        .query(SQL.putSchedule)
-        .run(
+  async putSchedule(schedule: Omit<Schedule, "revision">): Promise<Schedule> {
+    return this.commit((txn) => {
+      const row = this.db
+        .query<
+          ScheduleRow,
+          [string, string, string, string, string, number, string | null, string]
+        >(SQL.putSchedule)
+        .get(
           schedule.workspace,
           schedule.slug,
           schedule.cron,
@@ -510,7 +513,53 @@ export class SqliteRunStore implements RunStore {
           schedule.lastFireKey ?? null,
           new Date(schedule.nextFireAt).toISOString(),
         );
+
+      if (!row) {
+        throw new Error("Schedule was not saved. Restore storage.");
+      }
+
       this.emitSchedule(txn, schedule, "saved");
+
+      return rowToSchedule(row);
+    });
+  }
+
+  async setScheduleEnabled({
+    workspace,
+    slug,
+    enabled,
+    nextFireAt,
+  }: Parameters<RunStore["setScheduleEnabled"]>[0]): Promise<Schedule> {
+    return this.commit((txn) => {
+      const row = this.db
+        .query<ScheduleRow, [number, string | null, string, string]>(SQL.setScheduleEnabled)
+        .get(Number(enabled), nextFireAt ?? null, workspace, slug);
+
+      if (!row) {
+        throw new Error(`Schedule '${slug}' does not exist. Save the schedule before toggling it.`);
+      }
+
+      this.emitSchedule(txn, row, "saved");
+
+      return rowToSchedule(row);
+    });
+  }
+
+  async advanceSchedule(options: Parameters<RunStore["advanceSchedule"]>[0]): Promise<boolean> {
+    return this.commit((txn) => {
+      const { workspace, slug, revision, nextFireAt } = options;
+
+      const updated = this.db
+        .query(SQL.advanceSchedule)
+        .run(new Date(nextFireAt).toISOString(), workspace, slug, revision);
+
+      if (!updated.changes) {
+        return false;
+      }
+
+      this.emitSchedule(txn, options, "saved");
+
+      return true;
     });
   }
 
@@ -534,14 +583,10 @@ export class SqliteRunStore implements RunStore {
     });
   }
 
-  async fireSchedule(
-    workspace: string,
-    slug: string,
-    fireKey: string,
-    run: RunRecord,
-    nextFireAt: string,
-  ): Promise<boolean> {
+  async fireSchedule(options: Parameters<RunStore["fireSchedule"]>[0]): Promise<boolean> {
     return this.commit((txn) => {
+      const { workspace, slug, revision, fireKey, run, nextFireAt } = options;
+
       const schedule = this.db
         .query<ScheduleRow, [string, string]>(SQL.schedule)
         .get(workspace, slug);
@@ -550,7 +595,11 @@ export class SqliteRunStore implements RunStore {
         throw new Error(`Schedule '${slug}' does not exist. Save the schedule before firing it.`);
       }
 
-      if (schedule.last_fire_key === fireKey) {
+      const updated = this.db
+        .query(SQL.fireSchedule)
+        .run(fireKey, new Date(nextFireAt).toISOString(), workspace, slug, revision, fireKey);
+
+      if (!updated.changes) {
         return false;
       }
 
@@ -560,9 +609,6 @@ export class SqliteRunStore implements RunStore {
 
       this.insertRun(run);
       this.emitRun(txn, run.id, "created");
-      this.db
-        .query(SQL.fireSchedule)
-        .run(fireKey, new Date(nextFireAt).toISOString(), workspace, slug);
       this.emitSchedule(txn, schedule, "fired");
 
       return true;

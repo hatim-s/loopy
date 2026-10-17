@@ -9,10 +9,13 @@ export {
   errorCodeSchema,
   eventsQuerySchema,
   logsQuerySchema,
+  type PutScheduleBody,
+  putScheduleBodySchema,
   type RunsQuery,
   resolveHookBodySchema,
   routes,
   runsQuerySchema,
+  scheduleEnabledBodySchema,
   startRunBodySchema,
 } from "./api.js";
 
@@ -46,6 +49,8 @@ export {
   type RunView,
   runSnapshotViewSchema,
   runViewSchema,
+  type ScheduleView,
   type ServerEvent,
+  scheduleViewSchema,
   serverEventSchema,
 } from "./views.js";

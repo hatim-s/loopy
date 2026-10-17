@@ -6,13 +6,15 @@ import {
   type Json,
   type LoopyView,
   loopyView,
+  type PutScheduleBody,
   type RunSnapshotView,
   type RunsQuery,
   type RunView,
   runView,
+  type ScheduleView,
 } from "../contract/index.js";
 import { errorMessage, type RunRecord, type Schedule } from "../core/index.js";
-import { type Clock, OwnershipError } from "../runtime/index.js";
+import { assertJson, type Clock, nextFire, OwnershipError, parseCron } from "../runtime/index.js";
 import { createLoopyRun } from "../sdk/host.js";
 import { loadLoopy } from "./bundle.js";
 import { canonicalPath } from "./fs.js";
@@ -46,6 +48,102 @@ export class LoopyService {
 
   private now() {
     return new Date(this.options.clock.now()).toISOString();
+  }
+
+  private scheduleTarget(slug: string) {
+    const registry = this.options.registry("");
+    const saved = registry.list().find((entry) => entry.slug === slug);
+
+    if (!saved) {
+      throw new ServiceError("not_found");
+    }
+
+    return { registry, saved, workspace: registry.project };
+  }
+
+  async listSchedules(): Promise<ScheduleView[]> {
+    const workspace = this.options.registry("").project;
+
+    return (await this.options.store.listSchedules())
+      .filter((schedule) => schedule.workspace === workspace)
+      .map((schedule) => this.scheduleView(schedule));
+  }
+
+  private scheduleView(schedule: Schedule): ScheduleView {
+    return { ...schedule, lastFireKey: schedule.lastFireKey ?? null };
+  }
+
+  async putSchedule(slug: string, body: PutScheduleBody): Promise<ScheduleView> {
+    const { registry, saved, workspace } = this.scheduleTarget(slug);
+    const loopy = await loadLoopy(registry.bundlePath(saved.bundleHash));
+    let schedule: Omit<Schedule, "revision">;
+
+    try {
+      const cron = body.cron ?? saved.schedule?.cron;
+
+      if (!cron) {
+        throw new Error(`No schedule for '${slug}'. Pass --cron or add schedule to loopy().`);
+      }
+
+      const tz = body.tz ?? saved.schedule?.tz ?? "UTC";
+      new Intl.DateTimeFormat("en", { timeZone: tz });
+      const parsed = parseCron(cron);
+      const input = await loopy.validateInput(body.input === undefined ? {} : body.input);
+      assertJson(input, "Schedule input");
+      schedule = {
+        workspace,
+        slug,
+        cron,
+        tz,
+        input,
+        enabled: body.enabled ?? true,
+        nextFireAt: nextFire(parsed, new Date(this.options.clock.now()), tz).toISOString(),
+      };
+    } catch (error) {
+      throw new ServiceError("invalid_schedule", errorMessage(error));
+    }
+
+    return this.scheduleView(await this.options.store.putSchedule(schedule));
+  }
+
+  private async requireSchedule(slug: string): Promise<Schedule> {
+    const { workspace } = this.scheduleTarget(slug);
+
+    const schedule = (await this.options.store.listSchedules()).find(
+      (entry) => entry.workspace === workspace && entry.slug === slug,
+    );
+
+    if (!schedule) {
+      throw new ServiceError("not_found");
+    }
+
+    return schedule;
+  }
+
+  async setScheduleEnabled(slug: string, enabled: boolean): Promise<ScheduleView> {
+    const current = await this.requireSchedule(slug);
+
+    const schedule = await this.options.store.setScheduleEnabled({
+      workspace: current.workspace,
+      slug,
+      enabled,
+      nextFireAt: enabled
+        ? nextFire(
+            parseCron(current.cron),
+            new Date(this.options.clock.now()),
+            current.tz,
+          ).toISOString()
+        : undefined,
+    });
+
+    return this.scheduleView(schedule);
+  }
+
+  async deleteSchedule(slug: string): Promise<{ deleted: true }> {
+    const { workspace } = this.scheduleTarget(slug);
+    await this.options.store.deleteSchedule(workspace, slug);
+
+    return { deleted: true };
   }
 
   async startRun(slug: string, input: Json, workspace: string): Promise<RunView> {
@@ -297,11 +395,8 @@ export class LoopyService {
     return registry.list().map((saved) =>
       loopyView(
         saved,
-        schedules.find(
-          (item) =>
-            item.slug === saved.slug &&
-            (saved.scope === "global" || item.workspace === registry.project),
-        ) ?? null,
+        schedules.find((item) => item.slug === saved.slug && item.workspace === registry.project) ??
+          null,
         runs.filter((run) => saved.scope === "global" || run.workspace === registry.project),
       ),
     );

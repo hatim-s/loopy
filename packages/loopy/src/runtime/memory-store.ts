@@ -387,15 +387,62 @@ export class MemoryRunStore implements RunStore {
     return wakes[0] === undefined ? undefined : new Date(wakes[0]).toISOString();
   }
 
-  async putSchedule(schedule: Schedule): Promise<void> {
+  async putSchedule(schedule: Omit<Schedule, "revision">): Promise<Schedule> {
     return this.commit((txn) => {
       const record = structuredClone({
         ...schedule,
+        revision:
+          (this.schedules.get(JSON.stringify([schedule.workspace, schedule.slug]))?.revision ?? 0) +
+          1,
         nextFireAt: new Date(schedule.nextFireAt).toISOString(),
       });
 
       this.schedules.set(JSON.stringify([schedule.workspace, schedule.slug]), record);
       this.emit(txn, { entity: "schedule", kind: "saved", runId: null, record });
+
+      return structuredClone(record);
+    });
+  }
+
+  async setScheduleEnabled({
+    workspace,
+    slug,
+    enabled,
+    nextFireAt,
+  }: Parameters<RunStore["setScheduleEnabled"]>[0]): Promise<Schedule> {
+    return this.commit((txn) => {
+      const schedule = this.schedules.get(JSON.stringify([workspace, slug]));
+
+      if (!schedule) {
+        throw new Error(`Schedule '${slug}' does not exist. Save the schedule before toggling it.`);
+      }
+
+      schedule.enabled = enabled;
+      schedule.revision += 1;
+
+      if (nextFireAt !== undefined) {
+        schedule.nextFireAt = new Date(nextFireAt).toISOString();
+      }
+
+      this.emit(txn, { entity: "schedule", kind: "saved", runId: null, record: schedule });
+
+      return structuredClone(schedule);
+    });
+  }
+
+  async advanceSchedule(options: Parameters<RunStore["advanceSchedule"]>[0]): Promise<boolean> {
+    return this.commit((txn) => {
+      const { workspace, slug, revision, nextFireAt } = options;
+      const schedule = this.schedules.get(JSON.stringify([workspace, slug]));
+
+      if (!schedule || schedule.revision !== revision || !schedule.enabled) {
+        return false;
+      }
+
+      schedule.nextFireAt = new Date(nextFireAt).toISOString();
+      this.emit(txn, { entity: "schedule", kind: "saved", runId: null, record: schedule });
+
+      return true;
     });
   }
 
@@ -416,21 +463,16 @@ export class MemoryRunStore implements RunStore {
     });
   }
 
-  async fireSchedule(
-    workspace: string,
-    slug: string,
-    fireKey: string,
-    run: RunRecord,
-    nextFireAt: string,
-  ): Promise<boolean> {
+  async fireSchedule(options: Parameters<RunStore["fireSchedule"]>[0]): Promise<boolean> {
     return this.commit((txn) => {
+      const { workspace, slug, revision, fireKey, run, nextFireAt } = options;
       const schedule = this.schedules.get(JSON.stringify([workspace, slug]));
 
       if (!schedule) {
         throw new Error(`Schedule '${slug}' does not exist. Save the schedule before firing it.`);
       }
 
-      if (schedule.lastFireKey === fireKey) {
+      if (schedule.lastFireKey === fireKey || schedule.revision !== revision || !schedule.enabled) {
         return false;
       }
 

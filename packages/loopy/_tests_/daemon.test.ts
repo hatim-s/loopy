@@ -1,11 +1,16 @@
 import { expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { RunRecord, Schedule } from "../src/core/index.js";
+import { SqliteRunStore } from "../src/local/index.js";
 import {
   type ActivationOptions,
   type Clock,
   Daemon,
   MemoryRunStore,
   OwnershipError,
+  type RunStore,
 } from "../src/runtime/index.js";
 import { FakeExecutor, newRun } from "./fixture.js";
 
@@ -52,6 +57,7 @@ function fixture(
 
 function schedule(overrides: Partial<Schedule> = {}): Schedule {
   return {
+    revision: 1,
     workspace: "/workspace",
     slug: "test",
     cron: "* * * * *",
@@ -102,6 +108,7 @@ test("startup skips stale schedules forward without firing and preserves the fir
   expect(await f.daemon.tick()).toEqual({ fired: 0, activated: 0 });
   expect(await f.store.listSchedules()).toEqual([
     schedule({
+      revision: 1,
       lastFireKey: "old",
       nextFireAt: "2026-10-16T00:01:00.000Z",
     }),
@@ -526,3 +533,86 @@ test("the loop prunes old events at startup and each hour", async () => {
     await running;
   }
 });
+
+function catchUpStores(kind: "memory" | "sqlite") {
+  if (kind === "memory") {
+    const store = new MemoryRunStore(() => Date.parse(newRun().createdAt));
+
+    return { store, writer: store, close: () => {} };
+  }
+
+  const directory = mkdtempSync(join(tmpdir(), "loopy-catch-up-"));
+  const file = join(directory, "runs.sqlite");
+  const store = new SqliteRunStore(file);
+  const writer = new SqliteRunStore(file);
+
+  return {
+    store,
+    writer,
+    close: () => {
+      writer.close();
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    },
+  };
+}
+
+async function editOverdueSchedule(
+  store: RunStore,
+  overdue: Schedule,
+  mutation: "PUT" | "disable",
+) {
+  if (mutation === "disable") {
+    return store.setScheduleEnabled({ ...overdue, enabled: false });
+  }
+
+  return store.putSchedule({
+    ...overdue,
+    cron: "0 * * * *",
+    input: { edited: true },
+    nextFireAt: "2026-10-16T01:00:00.000Z",
+  });
+}
+
+for (const kind of ["memory", "sqlite"] as const) {
+  for (const mutation of ["PUT", "disable"] as const) {
+    test(`${kind} startup catch-up preserves a concurrent ${mutation} of a later overdue schedule`, async () => {
+      const stores = catchUpStores(kind);
+      const entered = Promise.withResolvers<void>();
+      const gate = Promise.withResolvers<string>();
+
+      const f = fixture({
+        store: stores.store,
+        bundleHashFor: () => {
+          entered.resolve();
+
+          return gate.promise;
+        },
+      });
+
+      await f.store.putSchedule(schedule({ slug: "a-first" }));
+
+      const overdue = await f.store.putSchedule(
+        schedule({ slug: "z-later", nextFireAt: "2026-10-15T23:58:00.000Z" }),
+      );
+
+      const ticking = f.daemon.tick();
+
+      try {
+        await entered.promise;
+
+        const committed = await editOverdueSchedule(stores.writer, overdue, mutation);
+        gate.resolve("bundle");
+        expect(await ticking).toEqual({ fired: 1, activated: 1 });
+        expect(
+          (await stores.writer.listSchedules()).find((row) => row.slug === overdue.slug),
+        ).toEqual(committed);
+        expect(f.errors).toEqual([]);
+      } finally {
+        gate.resolve("bundle");
+        await f.daemon.stop();
+        stores.close();
+      }
+    });
+  }
+}

@@ -37,6 +37,7 @@ function waitingStep(): WaitingHookStep {
 
 function schedule(): Schedule {
   return {
+    revision: 1,
     workspace: "/workspace",
     slug: "test",
     cron: "* * * * *",
@@ -189,12 +190,9 @@ for (const { name, make } of factories) {
 
       try {
         await store.putSchedule(schedule());
-        expect(
-          await store.fireSchedule("/workspace", "test", "fire-1", newRun(), newRun().createdAt),
-        ).toBe(true);
-        expect(
-          await store.fireSchedule("/workspace", "test", "fire-1", newRun(), newRun().createdAt),
-        ).toBe(false);
+        const fire = { ...schedule(), fireKey: "fire-1", run: newRun() };
+        expect(await store.fireSchedule(fire)).toBe(true);
+        expect(await store.fireSchedule(fire)).toBe(false);
         const events = await store.events(0, 10);
         expect(order(events)).toEqual([
           ["schedule", "saved", null],

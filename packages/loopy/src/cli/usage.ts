@@ -16,6 +16,7 @@ export function usage(): string {
   loopy resume <run-id>                       Continue a queued, suspended or abandoned run
   loopy cancel <run-id>                       Cancel a claimable run
   loopy schedule <slug> [--cron EXPR] [--tz ZONE] [--input-json JSON]
+  loopy schedule <slug> --enable|--disable    Toggle its saved schedule
   loopy schedule <slug> --off                 Remove its schedule
   loopy daemon run [--concurrency N] [--port 4310]          Run the foreground daemon
   loopy daemon install [--concurrency N] [--port 4310]      Install and start the user service

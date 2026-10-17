@@ -204,7 +204,22 @@ test("schedule persists the next fire and off removes it", async () => {
       { workspace: realpathSync(f.cwd), slug: "scheduled" },
     ]);
     expect(await store.listSchedules()).toHaveLength(1);
-    expect((await cli({ ...f, cwd: sub }, "schedule", "scheduled", "--off")).code).toBe(0);
+
+    for (const [flag, enabled] of [
+      ["--disable", false],
+      ["--enable", true],
+    ] as const) {
+      const toggled = await cli(f, "schedule", "scheduled", flag);
+      expect(toggled.code).toBe(0);
+      expect(object(toggled.stdout)).toMatchObject({ enabled, input: { count: 2 } });
+    }
+
+    const conflict = await cli(f, "schedule", "scheduled", "--enable", "--disable");
+    expect(conflict.code).toBe(1);
+    expect(conflict.stderr).toContain("Choose one schedule action");
+    const removed = await cli({ ...f, cwd: sub }, "schedule", "scheduled", "--off");
+    expect(removed.code).toBe(0);
+    expect(object(removed.stdout)).toEqual({ deleted: true });
     expect(await store.listSchedules()).toEqual([]);
   } finally {
     store.close();
