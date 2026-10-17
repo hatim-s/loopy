@@ -14,7 +14,7 @@ export function runsQuery(backend: LoopyBackend, query: RunsQuery) {
 export function runQuery(backend: LoopyBackend, id: string) {
   return queryOptions({
     queryKey: keys.run(id),
-    queryFn: () => backend.run(id),
+    queryFn: ({ signal }) => backend.run(id, signal),
     staleTime: Number.POSITIVE_INFINITY,
   });
 }

@@ -1,4 +1,4 @@
-import { afterAll, expect, test } from "bun:test";
+import { afterAll, expect, spyOn, test } from "bun:test";
 import type { RunView } from "loopy/contract";
 import { BackendError } from "../src/backend/backend.ts";
 import { localHttpBackend } from "../src/backend/local-http.ts";
@@ -160,4 +160,160 @@ test("frames split across chunks arrive as batches and a reconnect resumes after
   expect(batches).toEqual([[11], [12]]);
   expect(end).toBe("reset");
   expect(last()?.path).toBe("/api/events?after=12&epoch=e1");
+});
+
+test("a malformed 410 is rejected instead of triggering reset", async () => {
+  reply = () => Response.json({ error: "broken" }, { status: 410 });
+  await expect(
+    backend.events({
+      after: 0,
+      epoch: "e1",
+      signal: new AbortController().signal,
+      onState: () => undefined,
+      onBatch: () => undefined,
+    }),
+  ).rejects.toMatchObject({ code: "malformed_response" });
+});
+
+test("a valid non-cursor 410 preserves its error code", async () => {
+  reply = () =>
+    Response.json({ error: { code: "not_found", message: "Missing." } }, { status: 410 });
+  await expect(
+    backend.events({
+      after: 0,
+      epoch: "e1",
+      signal: new AbortController().signal,
+      onState: () => undefined,
+      onBatch: () => undefined,
+    }),
+  ).rejects.toMatchObject({ code: "not_found", message: "Missing." });
+});
+
+test("a malformed frame cancels the open response stream", async () => {
+  const cancelled = Promise.withResolvers<void>();
+  reply = () =>
+    new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("data: broken\n\n"));
+        },
+        cancel() {
+          cancelled.resolve();
+        },
+      }),
+    );
+  await expect(
+    backend.events({
+      after: 0,
+      epoch: "e1",
+      signal: new AbortController().signal,
+      onState: () => undefined,
+      onBatch: () => undefined,
+    }),
+  ).rejects.toMatchObject({ code: "malformed_response" });
+  await cancelled.promise;
+});
+
+test("byte-at-a-time CRLF frames deliver a batch", async () => {
+  const bytes = new TextEncoder().encode(
+    `data: ${JSON.stringify([
+      {
+        sequence: 11,
+        at: run.createdAt,
+        txn: "t11",
+        entity: "run",
+        kind: "claimed",
+        runId: run.id,
+        record: run,
+      },
+    ])}\r\n\r\n`,
+  );
+
+  let index = 0;
+  reply = () =>
+    new Response(
+      new ReadableStream<Uint8Array>({
+        async pull(controller) {
+          await Bun.sleep(1);
+
+          if (index === bytes.length) {
+            controller.close();
+
+            return;
+          }
+
+          controller.enqueue(bytes.slice(index, ++index));
+        },
+      }),
+    );
+  const controller = new AbortController();
+  const batches: number[][] = [];
+  await backend.events({
+    after: 10,
+    epoch: "e1",
+    signal: controller.signal,
+    onState: () => undefined,
+    onBatch: (batch) => {
+      batches.push(batch.map((item) => item.sequence));
+      controller.abort();
+    },
+  });
+  expect(batches).toEqual([[11]]);
+});
+
+test("three empty EOFs back off for 500, 1000, then 2000 ms and release pause listeners", async () => {
+  const controller = new AbortController();
+  const attempts: number[] = [];
+  const timers = spyOn(globalThis, "setTimeout");
+  const removed = spyOn(controller.signal, "removeEventListener");
+  reply = () => {
+    attempts.push(Date.now());
+
+    if (attempts.length === 4) {
+      controller.abort();
+    }
+
+    return new Response("");
+  };
+
+  try {
+    await backend.events({
+      after: 0,
+      epoch: "e1",
+      signal: controller.signal,
+      onState: () => undefined,
+      onBatch: () => undefined,
+    });
+    expect(attempts).toHaveLength(4);
+
+    for (const [index, delay] of [500, 1000, 2000].entries()) {
+      expect((attempts[index + 1] ?? 0) - (attempts[index] ?? 0)).toBeGreaterThanOrEqual(
+        delay - 25,
+      );
+      const pause = timers.mock.calls.find((call) => call[1] === delay);
+      expect(pause).toBeDefined();
+      expect(removed).toHaveBeenCalledWith("abort", pause?.[0]);
+    }
+  } finally {
+    timers.mockRestore();
+    removed.mockRestore();
+  }
+});
+
+test("snapshot HTTP requests stop when their signal is aborted", async () => {
+  const cancelled = Promise.withResolvers<void>();
+  reply = () =>
+    new Response(
+      new ReadableStream<Uint8Array>({
+        cancel() {
+          cancelled.resolve();
+        },
+      }),
+    );
+  const controller = new AbortController();
+  const requested = backend.run(run.id, controller.signal);
+  await Bun.sleep(10);
+  controller.abort();
+  await expect(requested).rejects.toMatchObject({ name: "AbortError" });
+  await cancelled.promise;
 });

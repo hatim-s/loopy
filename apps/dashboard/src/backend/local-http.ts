@@ -72,28 +72,49 @@ async function failure(response: Response): Promise<BackendError> {
   return new BackendError(body.value.error.code, body.value.error.message);
 }
 
+function frameData(frame: string): string {
+  return frame
+    .split("\n")
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice(5).replace(/^ /, ""))
+    .join("\n");
+}
+
 /** Splits an SSE body into the joined data lines of each frame. */
 async function* frames(body: ReadableStream<Uint8Array>): AsyncGenerator<string> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
 
-  for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
-    buffer += decoder.decode(chunk.value, { stream: true }).replaceAll("\r\n", "\n");
+  let finished = false;
 
-    for (let end = buffer.indexOf("\n\n"); end !== -1; end = buffer.indexOf("\n\n")) {
-      const data = buffer
-        .slice(0, end)
-        .split("\n")
-        .filter((line) => line.startsWith("data:"))
-        .map((line) => line.slice(5).replace(/^ /, ""))
-        .join("\n");
+  try {
+    while (true) {
+      const chunk = await reader.read();
+      finished = chunk.done;
 
-      buffer = buffer.slice(end + 2);
-
-      if (data !== "") {
-        yield data;
+      if (chunk.done) {
+        return;
       }
+
+      buffer = (buffer + decoder.decode(chunk.value, { stream: true })).replaceAll("\r\n", "\n");
+
+      for (let end = buffer.indexOf("\n\n"); end !== -1; end = buffer.indexOf("\n\n")) {
+        const data = frameData(buffer.slice(0, end));
+        buffer = buffer.slice(end + 2);
+
+        if (data !== "") {
+          yield data;
+        }
+      }
+    }
+  } finally {
+    try {
+      if (!finished) {
+        await reader.cancel();
+      }
+    } finally {
+      reader.releaseLock();
     }
   }
 }
@@ -126,16 +147,18 @@ function contractBody<S extends z.ZodType>(schema: S, text: string, path: string
 
 function pause(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
-    const timer = setTimeout(resolve, ms);
+    const finish = () => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", finish);
+      resolve();
+    };
 
-    signal.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(timer);
-        resolve();
-      },
-      { once: true },
-    );
+    const timer = setTimeout(finish, ms);
+    signal.addEventListener("abort", finish, { once: true });
+
+    if (signal.aborted) {
+      finish();
+    }
   });
 }
 
@@ -163,8 +186,9 @@ export function localHttpBackend({ origin, token }: LocalHttpOptions): LoopyBack
   async function send<R extends Route, S extends z.ZodType>(
     route: R & { response: S },
     call: Call<R>,
+    signal?: AbortSignal,
   ): Promise<z.output<S>> {
-    const init: RequestInit = { method: route.method };
+    const init: RequestInit = { method: route.method, signal };
 
     if (call.body !== undefined) {
       init.body = JSON.stringify(call.body);
@@ -183,14 +207,20 @@ export function localHttpBackend({ origin, token }: LocalHttpOptions): LoopyBack
   /** Follows one stream until the server drops it, and reports why it stopped. */
   async function follow(
     subscription: EventSubscription,
-    cursor: { after: number },
+    cursor: { after: number; received: boolean },
   ): Promise<StreamEnd | "dropped"> {
     const { epoch, signal, onBatch, onState } = subscription;
     const url = routeUrl(routes.events.path, {}, { after: cursor.after, epoch });
     const response = await request(url, { signal, headers: { Accept: "text/event-stream" } });
 
     if (response.status === 410) {
-      return "reset";
+      const error = await failure(response);
+
+      if (error.code === "stale_cursor") {
+        return "reset";
+      }
+
+      throw error;
     }
 
     if (!response.ok || response.body === null) {
@@ -200,6 +230,7 @@ export function localHttpBackend({ origin, token }: LocalHttpOptions): LoopyBack
     onState("live");
 
     for await (const data of frames(response.body)) {
+      cursor.received = true;
       const batch = contractBody(batchSchema, data, routes.events.path);
       cursor.after = batch.reduce((max, event) => Math.max(max, event.sequence), cursor.after);
       onBatch(batch);
@@ -210,20 +241,19 @@ export function localHttpBackend({ origin, token }: LocalHttpOptions): LoopyBack
 
   async function events(subscription: EventSubscription): Promise<StreamEnd> {
     const { signal, onState } = subscription;
-    const cursor = { after: subscription.after };
+    const cursor = { after: subscription.after, received: false };
     let delay: number = RETRY_MS.first;
 
     onState("connecting");
 
     while (!signal.aborted) {
       try {
+        cursor.received = false;
         const end = await follow(subscription, cursor);
 
         if (end !== "dropped") {
           return end;
         }
-
-        delay = RETRY_MS.first;
       } catch (error) {
         if (signal.aborted) {
           break;
@@ -233,6 +263,10 @@ export function localHttpBackend({ origin, token }: LocalHttpOptions): LoopyBack
           onState("stale");
           throw error;
         }
+      }
+
+      if (cursor.received) {
+        delay = RETRY_MS.first;
       }
 
       onState("reconnecting");
@@ -246,7 +280,7 @@ export function localHttpBackend({ origin, token }: LocalHttpOptions): LoopyBack
   return {
     loopies: () => send(routes.loopies, { params: {}, query: {}, body: undefined }),
     runs: (query) => send(routes.runs, { params: {}, query, body: undefined }),
-    run: (id) => send(routes.run, { params: { id }, query: {}, body: undefined }),
+    run: (id, signal) => send(routes.run, { params: { id }, query: {}, body: undefined }, signal),
     logs: (id, after) => send(routes.logs, { params: { id }, query: { after }, body: undefined }),
     startRun: (slug, input) =>
       send(routes.startRun, { params: { slug }, query: {}, body: { input } }),

@@ -48,7 +48,7 @@ function withHook(hooks: HookRecord[], hook: HookRecord): HookRecord[] {
 function waitingAfter(run: RunView, event: HookEvent, steps: StepRecord[]): RunView["waitingOn"] {
   const hook = event.record;
 
-  if (event.kind !== "created") {
+  if (hook.resolvedAt !== undefined || hook.expiredAt !== undefined) {
     return run.waitingOn?.token === hook.token ? null : run.waitingOn;
   }
 
@@ -90,7 +90,10 @@ export function applyToSnapshot(snapshot: RunSnapshotView, event: ServerEvent): 
       return {
         ...next,
         hooks: withHook(snapshot.hooks, event.record),
-        run: { ...snapshot.run, waitingOn: waitingAfter(snapshot.run, event, snapshot.steps) },
+        run:
+          event.at >= snapshot.run.updatedAt
+            ? { ...snapshot.run, waitingOn: waitingAfter(snapshot.run, event, snapshot.steps) }
+            : snapshot.run,
       };
     }
 
@@ -100,8 +103,26 @@ export function applyToSnapshot(snapshot: RunSnapshotView, event: ServerEvent): 
   }
 }
 
+function hookNeedsSteps(event: HookEvent): boolean {
+  return event.record.resolvedAt === undefined && event.record.expiredAt === undefined;
+}
+
+function canApplyHook(event: HookEvent, snapshot: RunSnapshotView | undefined): boolean {
+  return (
+    !hookNeedsSteps(event) ||
+    (snapshot?.steps.some(
+      (step) => step.seq === event.record.seq && step.status === "waiting" && step.kind === "hook",
+    ) ??
+      false)
+  );
+}
+
 /** Run lists carry no cursor, so they take a run only when it is at least as new. */
-function applyToList(runs: RunView[], event: ServerEvent): RunView[] {
+function applyToList(
+  runs: RunView[],
+  event: ServerEvent,
+  snapshot: RunSnapshotView | undefined,
+): RunView[] {
   if (event.entity === "run") {
     const record = event.record;
 
@@ -110,28 +131,58 @@ function applyToList(runs: RunView[], event: ServerEvent): RunView[] {
 
   if (event.entity === "hook") {
     return runs.map((run) =>
-      run.id === event.record.runId ? { ...run, waitingOn: waitingAfter(run, event, []) } : run,
+      run.id === event.record.runId &&
+      event.at >= run.updatedAt &&
+      (snapshot === undefined || event.sequence > snapshot.cursor) &&
+      canApplyHook(event, snapshot)
+        ? { ...run, waitingOn: waitingAfter(run, event, snapshot?.steps ?? []) }
+        : run,
     );
   }
 
   return runs;
 }
 
-/** Writes one stream batch into every cached query it touches. */
-export function applyBatch(client: QueryClient, batch: ServerEvent[]): void {
-  const runIds = new Set(batch.flatMap((event) => (event.runId === null ? [] : [event.runId])));
+// Lists have no wire cursor, so retain the sequence of events already applied to them.
+const listCursors = new WeakMap<QueryClient, Map<string, number>>();
 
-  for (const id of runIds) {
-    client.setQueryData<RunSnapshotView>(
-      keys.run(id),
-      (snapshot) => snapshot && batch.reduce(applyToSnapshot, snapshot),
-    );
+function applyEvent(client: QueryClient, event: ServerEvent): void {
+  if (event.runId === null) {
+    return;
   }
 
-  client.setQueriesData<RunView[]>(
-    { queryKey: keys.runLists },
-    (runs) => runs && batch.reduce(applyToList, runs),
+  const cursors = listCursors.get(client) ?? new Map<string, number>();
+  listCursors.set(client, cursors);
+  const snapshot = client.getQueryData<RunSnapshotView>(keys.run(event.runId));
+
+  if (event.sequence > (cursors.get(event.runId) ?? -1)) {
+    client.setQueriesData<RunView[]>(
+      { queryKey: keys.runLists },
+      (runs) => runs && applyToList(runs, event, snapshot),
+    );
+    cursors.set(event.runId, event.sequence);
+
+    if (event.entity === "hook" && !canApplyHook(event, snapshot)) {
+      void client.invalidateQueries({
+        queryKey: keys.runLists,
+        predicate: (query) =>
+          client.getQueryData<RunView[]>(query.queryKey)?.some((run) => run.id === event.runId) ??
+          false,
+      });
+    }
+  }
+
+  client.setQueryData<RunSnapshotView>(
+    keys.run(event.runId),
+    (current) => current && applyToSnapshot(current, event),
   );
+}
+
+/** Writes one stream batch into every cached query it touches. */
+export function applyBatch(client: QueryClient, batch: ServerEvent[]): void {
+  for (const event of batch) {
+    applyEvent(client, event);
+  }
 
   const created = batch.some((event) => event.entity === "run" && event.kind === "created");
 
@@ -170,14 +221,13 @@ type FollowOptions = {
   onState: (state: StreamState) => void;
 };
 
-/**
- * Streams events from the run snapshot's cursor. When the backend no longer knows that
- * cursor or epoch, every cached query is invalidated and the stream restarts from the
- * refetched snapshot.
- */
-export async function followRun({ client, backend, runId, signal, onState }: FollowOptions) {
+async function followSnapshots({ client, backend, runId, signal, onState }: FollowOptions) {
   while (!signal.aborted) {
     const snapshot = await client.fetchQuery(runQuery(backend, runId));
+
+    if (signal.aborted) {
+      return;
+    }
 
     const end = await backend.events({
       after: snapshot.cursor,
@@ -187,11 +237,34 @@ export async function followRun({ client, backend, runId, signal, onState }: Fol
       onBatch: (batch) => applyBatch(client, batch),
     });
 
-    if (end === "aborted") {
+    if (end === "aborted" || signal.aborted) {
       return;
     }
 
+    listCursors.delete(client);
     onState("reconnecting");
     await client.invalidateQueries();
+  }
+}
+
+/** Reset recovery refetches the snapshot before choosing the next stream cursor. */
+export async function followRun(options: FollowOptions) {
+  const { client, runId, signal } = options;
+
+  const cancel = () => {
+    void client.cancelQueries({ queryKey: keys.run(runId), exact: true });
+  };
+
+  signal.addEventListener("abort", cancel, { once: true });
+
+  try {
+    await followSnapshots(options);
+  } catch (error) {
+    if (!signal.aborted) {
+      throw error;
+    }
+  } finally {
+    signal.removeEventListener("abort", cancel);
+    await client.cancelQueries({ queryKey: keys.run(runId), exact: true });
   }
 }

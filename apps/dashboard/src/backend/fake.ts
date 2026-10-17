@@ -75,7 +75,7 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
   }
 
   function play(): void {
-    if (timer !== undefined || held || pending.length === 0) {
+    if (listeners.size === 0 || timer !== undefined || held || pending.length === 0) {
       return;
     }
 
@@ -197,6 +197,12 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
           "abort",
           () => {
             listeners.delete(onBatch);
+
+            if (listeners.size === 0) {
+              clearTimeout(timer);
+              timer = undefined;
+            }
+
             resolve("aborted");
           },
           { once: true },
@@ -205,6 +211,10 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
         onState("live");
 
         for (const batch of released) {
+          if (signal.aborted) {
+            break;
+          }
+
           const unseen = batch.filter((event) => event.sequence > after);
 
           if (unseen.length > 0) {
