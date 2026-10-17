@@ -385,7 +385,7 @@ function withSchedule(list: ScheduleView[], next: ScheduleView): ScheduleView[] 
   if (
     current &&
     (current.revision > next.revision ||
-      (current.revision === next.revision && current.nextFireAt > next.nextFireAt))
+      (current.revision === next.revision && current.nextFireAt >= next.nextFireAt))
   ) {
     return list;
   }

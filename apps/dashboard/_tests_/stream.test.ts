@@ -684,6 +684,16 @@ test("a delayed HTTP response cannot undo a fire at the same revision", () => {
   );
 });
 
+test("an equal-revision schedule with the same fire time leaves the cached row unchanged", () => {
+  const client = new QueryClient();
+  const current = { ...scheduled, lastFireKey: "fire-1" };
+  client.setQueryData(keys.schedules, [current]);
+
+  applyScheduleView(client, { ...current, lastFireKey: "fire-2" });
+
+  expect(client.getQueryData<ScheduleView[]>(keys.schedules)?.[0]).toBe(current);
+});
+
 test("an unseen save cannot skip a later delete in the same batch", () => {
   const client = new QueryClient();
   client.setQueryData(keys.schedules, [scheduled]);
