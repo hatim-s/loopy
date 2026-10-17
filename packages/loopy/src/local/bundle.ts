@@ -59,5 +59,5 @@ export async function loadLoopy(path: string): Promise<Loopy> {
 export async function loadRunLoopy(home: string, run: RunRecord): Promise<Loopy> {
   const registry = new Registry(home, run.workspace);
 
-  return loadLoopy(registry.bundlePath(run.bundleHash));
+  return loadLoopy(registry.bundlePath(run.revision));
 }

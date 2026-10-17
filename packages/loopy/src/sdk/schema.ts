@@ -1,8 +1,11 @@
 import {
+  FIELD_TYPES,
   isBoolean,
   isNumber,
   isRecord,
   isString,
+  type Json,
+  type RecordSpec,
   requireOneOf,
   requireRecord,
   setOwnProperty,
@@ -29,11 +32,11 @@ type StandardSchemaV1<Input = unknown, Output = Input> = {
 
 export type { StandardSchemaV1 };
 
-export type RecordSpec = Readonly<Record<string, "string" | "number" | "boolean">>;
+export type { RecordSpec } from "../core/index.js";
 
 export type InputSchema = StandardSchemaV1 | RecordSpec;
 
-type Primitive = { string: string; number: number; boolean: boolean };
+type Primitive = { string: string; number: number; boolean: boolean; json: Json };
 
 type Simplify<T> = { [K in keyof T]: T[K] } & {};
 
@@ -68,10 +71,28 @@ export function isStandardSchema<Value>(value: Value): value is Value & Standard
   );
 }
 
+// BOUNDARY: Record inputs may contain arbitrary external JSON, but not host values.
+function isJson(value: unknown): value is Json {
+  if (value === null || typeof value === "string" || typeof value === "boolean") {
+    return true;
+  }
+
+  if (typeof value === "number") {
+    return Number.isFinite(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value.every(isJson);
+  }
+
+  return isRecord(value) && Object.values(value).every(isJson);
+}
+
 const GUARDS = {
   string: isString,
   number: (value: unknown): value is number => isNumber(value) && Number.isFinite(value),
   boolean: isBoolean,
+  json: isJson,
 };
 
 // BOUNDARY: Record schema input comes from argv or external JSON and must match each declared primitive.
@@ -86,7 +107,7 @@ function validateRecord(spec: RecordSpec, value: unknown): StandardResult<unknow
     .filter((key) => !keys.has(key))
     .map((key) => ({ message: "Unknown field", path: [key] }));
 
-  const output: Record<string, string | number | boolean> = {};
+  const output: Record<string, Json> = {};
 
   for (const [field, kind] of Object.entries(spec)) {
     const optional = field.endsWith("?");
@@ -114,7 +135,7 @@ function recordSchema<const Spec extends RecordSpec>(
   const fields = Object.freeze({ ...spec });
 
   for (const kind of Object.values(fields)) {
-    requireOneOf(kind, ["string", "number", "boolean"], "Input field type");
+    requireOneOf(kind, FIELD_TYPES, "Input field type");
   }
 
   return {

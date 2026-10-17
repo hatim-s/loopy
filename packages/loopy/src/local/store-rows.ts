@@ -3,6 +3,7 @@ import {
   hookRecordSchema,
   jsonSchema,
   logRecordSchema,
+  nodeRunSchema,
   runStatusSchema,
   scheduleSchema,
   stepRecordSchema,
@@ -18,6 +19,7 @@ import type {
 } from "../core/index.js";
 import {
   HOOK_EVENT_KINDS,
+  NODE_RUN_STATUSES,
   RUN_EVENT_KINDS,
   SCHEDULE_EVENT_KINDS,
   STEP_STATUSES,
@@ -113,7 +115,7 @@ export function rowToRun(row: RunRow): RunRecord {
   const run: RunRecord = {
     id: row.id,
     slug: row.slug,
-    bundleHash: row.bundle_hash,
+    revision: row.bundle_hash,
     workspace: row.workspace,
     input: decode(row.input_json),
     status: row.status,
@@ -331,7 +333,7 @@ export function rowToHook(row: HookRow): HookRecord {
 const runRecordSchema = z.strictObject({
   id: z.string(),
   slug: z.string(),
-  bundleHash: z.string(),
+  revision: z.string(),
   workspace: z.string(),
   input: jsonSchema,
   status: runStatusSchema,
@@ -362,6 +364,11 @@ const eventRecordSchema = z.discriminatedUnion("entity", [
     entity: z.literal("run"),
     kind: z.enum(RUN_EVENT_KINDS),
     record: runRecordSchema,
+  }),
+  eventBaseSchema.extend({
+    entity: z.literal("node"),
+    kind: z.enum(NODE_RUN_STATUSES),
+    record: nodeRunSchema,
   }),
   eventBaseSchema.extend({
     entity: z.literal("step"),

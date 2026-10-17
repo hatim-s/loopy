@@ -86,7 +86,7 @@ test("Daemon.tick executes a bundled SDK command with activation-time secrets an
     expect(await store.getRun("queued")).toMatchObject({
       status: "succeeded",
       output: expect.stringMatching(/\/nested\n$/),
-      bundleHash: bundle.hash,
+      revision: bundle.hash,
     });
     expect(await store.getSteps("queued")).toMatchObject([
       { key: "pwd", kind: "command" },
@@ -126,7 +126,7 @@ test("Daemon.tick pins the registry bundle when a schedule creates a run", async
     });
     expect(await daemon.tick()).toEqual({ fired: 1, activated: 1 });
     expect(await store.listRuns()).toMatchObject([
-      { bundleHash: bundle.hash, status: "succeeded", output: 42 },
+      { revision: bundle.hash, status: "succeeded", output: 42 },
     ]);
     expect(await daemon.tick()).toEqual({ fired: 0, activated: 0 });
   } finally {

@@ -79,7 +79,7 @@ test("a due schedule fires once per key and the next minute fires a new run", as
   expect(runs).toHaveLength(1);
   expect(runs[0]).toMatchObject({
     slug: "test",
-    bundleHash: "bundle",
+    revision: "bundle",
     output: { scheduled: true },
   });
   expect(runs[0]?.id).toMatch(/^[\da-f-]{36}$/u);

@@ -1,11 +1,14 @@
 import { z } from "zod";
 import {
   EXECUTION_MODES,
+  FIELD_TYPES,
   HOOK_EVENT_KINDS,
+  NODE_RUN_STATUSES,
   RUN_EVENT_KINDS,
   SCHEDULE_EVENT_KINDS,
   STEP_STATUSES,
 } from "../core/index.js";
+import { nodeRunViewSchema } from "./graph.js";
 import { jsonSchema } from "./json.js";
 import {
   hookRecordSchema,
@@ -64,10 +67,7 @@ export const loopyViewSchema = z.strictObject({
   description: z.string().nullable(),
   scope: z.enum(["project", "global"]),
   mode: z.enum(EXECUTION_MODES),
-  input: z.union([
-    z.record(z.string(), z.enum(["string", "number", "boolean"])),
-    z.literal("schema"),
-  ]),
+  input: z.union([z.record(z.string(), z.enum(FIELD_TYPES)), z.literal("schema")]),
   schedule: z
     .strictObject({
       cron: z.string(),
@@ -115,6 +115,11 @@ export const serverEventSchema = z.discriminatedUnion("entity", [
     entity: z.literal("run"),
     kind: z.enum(RUN_EVENT_KINDS),
     record: runViewSchema,
+  }),
+  eventBaseSchema.extend({
+    entity: z.literal("node"),
+    kind: z.enum(NODE_RUN_STATUSES),
+    record: nodeRunViewSchema,
   }),
   eventBaseSchema.extend({
     entity: z.literal("step"),

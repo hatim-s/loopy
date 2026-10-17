@@ -31,12 +31,16 @@ export function initialValues(fields: InputField[]): FieldValues {
   );
 }
 
-type Primitive = string | number | boolean;
-
-type FieldResult = { valid: true; value: Primitive } | { valid: false; message: string };
+type FieldResult = { valid: true; value: Json } | { valid: false; message: string };
 
 function coerceField(kind: InputField["kind"], text: string): FieldResult {
   switch (kind) {
+    case "json": {
+      const parsed = parseJsonInput(text);
+
+      return parsed.valid ? parsed : { valid: false, message: "Enter valid JSON." };
+    }
+
     case "string": {
       return { valid: true, value: text };
     }
@@ -60,7 +64,7 @@ function coerceField(kind: InputField["kind"], text: string): FieldResult {
  * field is left out of the object; an empty required one is an issue.
  */
 export function coerceInput(fields: InputField[], values: FieldValues): Coerced {
-  const entries: [string, Primitive][] = [];
+  const entries: [string, Json][] = [];
   const issues: FieldIssue[] = [];
 
   for (const field of fields) {

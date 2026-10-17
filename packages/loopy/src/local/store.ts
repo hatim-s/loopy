@@ -792,7 +792,7 @@ export class SqliteRunStore implements RunStore {
       .run(
         run.id,
         run.slug,
-        run.bundleHash,
+        run.revision,
         run.workspace,
         JSON.stringify(run.input),
         run.status,
