@@ -1016,3 +1016,40 @@ test("arm dictionaries contain only own callbacks", () => {
     "own",
   ]);
 });
+
+test("an author reference to a parallel with one failing arm is unresolved", () => {
+  const result = loopy({
+    name: "never-parallel-ref",
+    input: {},
+    run: () => {
+      const failed = parallel({ bad: () => fail("oops"), good: () => 1 });
+
+      return log("author ref", failed);
+    },
+  });
+
+  expect(result.diagnostics.map(({ code }) => code)).toEqual(["unresolved_ref"]);
+  expect(result.diagnostics[0]?.node).toBe(
+    result.graph.nodes.find((node) => node.kind === "log")?.id,
+  );
+  expect(graphTypeResolver(result.graph)({ ref: "0:parallel", path: [] })).toBe("never");
+  expect(
+    result.graph.nodes.find((node) => node.kind === "join" && node.scope === null),
+  ).toMatchObject({ result: { kind: "none" } });
+});
+
+test("rescue resolves a parallel with one failing arm to its numeric handler", () => {
+  const graph = compile(() =>
+    rescue(
+      () => parallel({ bad: () => fail("oops"), good: () => 1 }),
+      () => 3,
+    ),
+  );
+
+  const resolve = graphTypeResolver(graph);
+  expect(resolve({ ref: "1:parallel", path: [] })).toBe("never");
+  expect(resolve({ ref: "0:rescue", path: [] })).toBe("number");
+  expect(
+    graph.nodes.filter((node) => node.kind === "join" && node.result.kind === "none"),
+  ).toHaveLength(2);
+});

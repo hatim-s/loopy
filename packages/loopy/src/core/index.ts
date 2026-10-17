@@ -8,7 +8,7 @@ export * from "./graph.js";
 
 export { validateGraph } from "./graph-check.js";
 
-export { isReservedGraphName, nodeNames } from "./graph-names.js";
+export { isReservedGraphName, nodeNames, RESERVED_GRAPH_NAMES } from "./graph-names.js";
 
 export { checkPredicate } from "./graph-predicate.js";
 

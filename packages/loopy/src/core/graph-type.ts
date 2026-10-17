@@ -97,10 +97,7 @@ function parallelType(
 ): string | null {
   const entries = Object.values(node.branches);
 
-  if (
-    entries.length > 0 &&
-    entries.every((entry) => bodyResultType(context, node, entry, []) === "never")
-  ) {
+  if (entries.some((entry) => bodyResultType(context, node, entry, []) === "never")) {
     return "never";
   }
 

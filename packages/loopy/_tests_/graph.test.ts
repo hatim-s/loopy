@@ -1339,11 +1339,11 @@ for (const field of ["toString", "constructor", "__proto__"]) {
 
       graph.edges = graph.edges.map((edge) =>
         edge.from === "branch"
-          ? contract.edgeSchema.parse({
+          ? {
               ...edge,
               kind: "case",
               label: edge.to === "yes" ? field : kind === "switch" ? "default" : "b",
-            })
+            }
           : edge,
       );
       expect(validateGraph(graph).map((error) => error.code)).toContain("invalid_scope");
@@ -1413,7 +1413,7 @@ for (const label of ["__proto__", "constructor", "prototype"]) {
         ...graph,
         edges: [
           ...graph.edges,
-          contract.edgeSchema.parse({ from: "branch", to: "yes", kind: "case", label }),
+          { from: graph.entry, to: contract.nodeIdSchema.parse("yes"), kind: "case", label },
         ],
       },
     ];
@@ -1478,4 +1478,49 @@ for (const name of ["__proto__", "constructor", "prototype"]) {
       contract.graphSchema.safeParse({ ...approveDemoGraph, input: { [name]: "number" } }).success,
     ).toBe(false);
   });
+}
+
+for (const name of ["__proto__", "constructor", "prototype"]) {
+  const base = { id: "node", label: null, scope: null };
+
+  for (const label of [name, `${name}?`]) {
+    const sites = [
+      ["node label", contract.nodeSchema, { ...base, kind: "uuid", label }],
+      ["case-edge label", contract.edgeSchema, { from: "node", to: "arm", kind: "case", label }],
+      [
+        "parallel arm",
+        contract.nodeSchema,
+        { ...base, kind: "parallel", branches: { [label]: "arm" } },
+      ],
+      [
+        "switch arm",
+        contract.nodeSchema,
+        {
+          ...base,
+          kind: "switch",
+          on: { ref: "input", path: [] },
+          cases: { [label]: "arm" },
+          default: null,
+        },
+      ],
+      ["input field", contract.graphSchema, { ...approveDemoGraph, input: { [label]: "number" } }],
+      ["output field", contract.outputSchema, { kind: "record", fields: { [label]: "number" } }],
+      [
+        "wait field",
+        contract.nodeSchema,
+        {
+          ...base,
+          kind: "wait",
+          timeout: null,
+          payload: { kind: "record", fields: { [label]: "number" } },
+        },
+      ],
+    ] as const;
+
+    for (const [site, schema, value] of sites) {
+      test(`wire rejects reserved ${site} ${label}`, () => {
+        expect(schema.safeParse(value).success).toBe(false);
+      });
+    }
+  }
 }

@@ -6,13 +6,13 @@ import {
   EDGE_KINDS,
   FIELD_TYPES,
   isRecord,
-  isReservedGraphName,
   type Json,
   MAP_ERROR_MODES,
   NODE_KINDS,
   NODE_RUN_STATUSES,
   type NodeId,
   PREDICATE_OPS,
+  RESERVED_GRAPH_NAMES,
   RETRY_BACKOFFS,
   type RefId,
 } from "../core/index.js";
@@ -28,6 +28,13 @@ export const refIdSchema = z.custom<RefId>(
   (value): value is RefId => typeof value === "string" && value.length > 0,
 );
 
+const labelSchema = z
+  .string()
+  .refine(
+    (name) => !RESERVED_GRAPH_NAMES.some((reserved) => reserved === name.replace(/\?$/, "")),
+    { message: "Reserved graph names cannot be labels or record keys." },
+  );
+
 export const refSchema = z.strictObject({ ref: refIdSchema, path: z.array(z.string()) });
 
 // BOUNDARY: Zod records skip __proto__ before validating keys, so inspect raw own keys first.
@@ -35,10 +42,11 @@ function graphRecord<T extends z.ZodType>(schema: T) {
   return z
     .unknown()
     .refine(
-      (value) => !isRecord(value) || Object.keys(value).every((name) => !isReservedGraphName(name)),
+      (value) =>
+        !isRecord(value) || Object.keys(value).every((name) => labelSchema.safeParse(name).success),
       { message: "Reserved graph names cannot be record keys." },
     )
-    .pipe(z.record(z.string(), schema));
+    .pipe(z.record(labelSchema, schema));
 }
 
 // 'ref' is reserved in object values so malformed references cannot pass as JSON literals.
@@ -98,7 +106,7 @@ const retrySchema = z.strictObject({
 
 const base = z.strictObject({
   id: nodeIdSchema,
-  label: z.string().nullable(),
+  label: labelSchema.nullable(),
   scope: nodeIdSchema.nullable(),
 });
 
@@ -223,7 +231,7 @@ export const edgeSchema = z.discriminatedUnion("kind", [
     from: nodeIdSchema,
     to: nodeIdSchema,
     kind: z.literal("case"),
-    label: z.string(),
+    label: labelSchema,
   }),
 ]);
 

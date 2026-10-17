@@ -2,8 +2,10 @@ import type { Node, Value } from "./graph.js";
 import { values } from "./graph-context.js";
 import { isRecord } from "./validation.js";
 
+export const RESERVED_GRAPH_NAMES = ["__proto__", "constructor", "prototype"] as const;
+
 export function isReservedGraphName(name: string): boolean {
-  return ["__proto__", "constructor", "prototype"].includes(name.replace(/\?$/, ""));
+  return RESERVED_GRAPH_NAMES.some((reserved) => reserved === name.replace(/\?$/, ""));
 }
 
 function valueNames(value: Value): string[] {
