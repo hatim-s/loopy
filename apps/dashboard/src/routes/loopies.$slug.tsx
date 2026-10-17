@@ -45,7 +45,7 @@ function LoopyHeader({ loopy, now }: { loopy: LoopyView; now: number }) {
         {schedule && (
           <span title={schedule.tz}>
             Scheduled <code className="font-mono">{schedule.cron}</code>
-            {schedule.enabled ? (
+            {schedule.enabled && schedule.nextFireAt !== null ? (
               <>
                 , next fire <Countdown at={schedule.nextFireAt} now={now} />.
               </>

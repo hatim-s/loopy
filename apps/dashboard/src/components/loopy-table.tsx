@@ -44,7 +44,7 @@ function LoopyRow({ loopy, now }: { loopy: LoopyView; now: number }) {
         <StatusCounts counts={loopy.counts} />
       </td>
       <td className="hidden py-2 pr-2 text-right text-xs whitespace-nowrap text-muted sm:table-cell">
-        {schedule?.enabled ? (
+        {schedule?.enabled && schedule.nextFireAt !== null ? (
           <span title={`${schedule.cron} (${schedule.tz})`}>
             <Countdown at={schedule.nextFireAt} now={now} />
           </span>
