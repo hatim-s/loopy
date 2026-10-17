@@ -1141,3 +1141,137 @@ test("control unions reject paths that enter a scalar or array arm", () => {
   );
   expect(validateGraph(graph).map((error) => error.code)).toEqual(["unresolved_ref"]);
 });
+
+for (const kind of ["branch", "rescue"] as const) {
+  test(`${kind} ignores a non-returning arm when resolving its result`, () => {
+    const graph = numericBranchGraph();
+    graph.nodes = graph.nodes.map((node) =>
+      node.id === "yes"
+        ? contract.nodeSchema.parse({
+            id: node.id,
+            kind: "fail",
+            scope: node.scope,
+            label: null,
+            message: "oops",
+          })
+        : node.id === "branch" && kind === "rescue"
+          ? contract.nodeSchema.parse({
+              id: node.id,
+              kind,
+              scope: null,
+              label: null,
+              body: "yes",
+              handler: "no",
+              error: "error",
+            })
+          : node,
+    );
+    graph.edges = graph.edges
+      .filter((edge) => edge.from !== "yes")
+      .map((edge) =>
+        edge.from === "branch" && kind === "rescue"
+          ? { ...edge, kind: edge.to === "yes" ? "next" : "rescue" }
+          : edge,
+      );
+
+    expect(graphTypeResolver(graph)({ ref: "branch", path: [] })).toBe("number");
+    expect(validateGraph(graph)).toEqual([]);
+  });
+}
+
+test("a branch with no returning arms has an unresolved result reference", () => {
+  const graph = numericBranchGraph();
+  graph.nodes = graph.nodes
+    .filter((node) => !["check", "pass", "fail"].includes(node.id))
+    .map((node) =>
+      node.id === "yes" || node.id === "no"
+        ? contract.nodeSchema.parse({
+            id: node.id,
+            kind: "fail",
+            scope: "branch",
+            label: null,
+            message: "oops",
+          })
+        : node,
+    );
+  graph.edges = graph.edges.filter((edge) => edge.from === "branch");
+  graph.edges.push(contract.edgeSchema.parse({ from: "branch", to: "result", kind: "next" }));
+
+  expect(graphTypeResolver(graph)({ ref: "branch", path: [] })).toBe("never");
+  expect(validateGraph(graph).map((error) => error.code)).toEqual(["unresolved_ref"]);
+});
+
+for (const field of ["toString", "constructor", "__proto__"]) {
+  test(`record paths require an own declaration for ${field}`, () => {
+    const graph = structuredClone(approveDemoGraph);
+    graph.outputs = { ref: contract.refIdSchema.parse("0:draft"), path: [field] };
+    expect(validateGraph(graph).map((error) => error.code)).toEqual(["unresolved_ref"]);
+
+    for (const key of [field, `${field}?`]) {
+      graph.nodes = graph.nodes.map((node) =>
+        node.kind === "code"
+          ? { ...node, out: { kind: "record", fields: { [key]: "number" } } }
+          : node,
+      );
+      expect(graphTypeResolver(graph)({ ref: "0:draft", path: [field] })).toBe("number");
+    }
+  });
+
+  test(`parallel paths reject undeclared label ${field}`, () => {
+    const graph = contract.graphSchema.parse({
+      ...numericBranchGraph(),
+      nodes: [
+        { id: "parallel", kind: "parallel", scope: null, label: null, branches: { a: "a" } },
+        { id: "a", kind: "join", scope: "parallel", label: null, result: 1 },
+      ],
+      entry: "parallel",
+      outputs: { ref: "parallel", path: [field] },
+      edges: [],
+    });
+
+    const parallel = graph.nodes.find((node) => node.kind === "parallel");
+
+    if (parallel?.kind === "parallel") {
+      Object.setPrototypeOf(parallel.branches, { [field]: "a" });
+    }
+
+    expect(validateGraph(graph).map((error) => error.code)).toEqual(["unresolved_ref"]);
+  });
+
+  for (const kind of ["switch", "parallel"] as const) {
+    test(`${kind} edges reject inherited target ${field}`, () => {
+      const graph = numericBranchGraph();
+      graph.nodes = graph.nodes.map((node) =>
+        node.id === "branch"
+          ? contract.nodeSchema.parse({
+              id: node.id,
+              kind,
+              scope: null,
+              label: null,
+              ...(kind === "switch"
+                ? { on: { ref: "input", path: [] }, cases: { a: "yes" }, default: "no" }
+                : { branches: { a: "yes", b: "no" } }),
+            })
+          : node,
+      );
+      const control = graph.nodes.find((node) => node.id === "branch");
+
+      if (control?.kind === "switch" || control?.kind === "parallel") {
+        Object.setPrototypeOf(control.kind === "switch" ? control.cases : control.branches, {
+          [field]: "yes",
+        });
+      }
+
+      graph.edges = graph.edges.map((edge) =>
+        edge.from === "branch"
+          ? contract.edgeSchema.parse({
+              ...edge,
+              kind: "case",
+              label: edge.to === "yes" ? field : kind === "switch" ? "default" : "b",
+            })
+          : edge,
+      );
+      expect(validateGraph(graph).map((error) => error.code)).toContain("invalid_scope");
+    });
+  }
+}

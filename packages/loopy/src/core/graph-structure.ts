@@ -81,8 +81,14 @@ function controlTarget(node: Node, edge: Edge): boolean {
       return node.kind === "branch" && node.arms[edge.kind] === edge.to;
     case "case":
       return node.kind === "switch"
-        ? (edge.label === "default" ? node.default : node.cases[edge.label]) === edge.to
-        : node.kind === "parallel" && node.branches[edge.label] === edge.to;
+        ? (edge.label === "default"
+            ? node.default
+            : Object.hasOwn(node.cases, edge.label)
+              ? node.cases[edge.label]
+              : null) === edge.to
+        : node.kind === "parallel" &&
+            Object.hasOwn(node.branches, edge.label) &&
+            node.branches[edge.label] === edge.to;
     case "each":
       return node.kind === "map" && node.body === edge.to;
     case "cleanup":

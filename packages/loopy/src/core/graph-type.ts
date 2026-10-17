@@ -40,7 +40,13 @@ function recordPathType(schema: RecordSpec, path: string[]): string | null {
   }
 
   const field = path[0] ?? "";
-  const type = schema[field] ?? schema[`${field}?`];
+  const optional = `${field}?`;
+
+  const type = Object.hasOwn(schema, field)
+    ? schema[field]
+    : Object.hasOwn(schema, optional)
+      ? schema[optional]
+      : null;
 
   if (path.length !== 1) {
     return null;
@@ -58,7 +64,7 @@ function bodyResultType(
   const result = context.graph.nodes.find(
     (child) =>
       child.scope === owner.id &&
-      child.kind === "join" &&
+      (child.kind === "join" || child.kind === "fail") &&
       !context.graph.edges.some((edge) => edge.from === child.id && edge.kind === "next") &&
       scopeReaches(context, entry, child.id),
   );
@@ -89,13 +95,19 @@ function derivedType(context: Context, node: Node, path: string[]): string | nul
     case "branch":
     case "switch":
     case "rescue": {
-      const arms = targets(node).map((entry) => bodyResultType(context, node, entry, path));
+      const arms = targets(node)
+        .map((entry) => bodyResultType(context, node, entry, path))
+        .filter((type) => type !== "never");
+
+      if (arms.length === 0) {
+        return "never";
+      }
 
       if (path.length > 0 && arms.some((type) => type === null)) {
         return null;
       }
 
-      return arms.length > 0 && arms.every((type) => type === arms[0]) ? (arms[0] ?? null) : "json";
+      return arms.every((type) => type === arms[0]) ? (arms[0] ?? null) : "json";
     }
 
     case "parallel": {
@@ -104,7 +116,11 @@ function derivedType(context: Context, node: Node, path: string[]): string | nul
       }
 
       const [label, ...rest] = path;
-      const entry = label === undefined ? undefined : node.branches[label];
+
+      const entry =
+        label !== undefined && Object.hasOwn(node.branches, label)
+          ? node.branches[label]
+          : undefined;
 
       return entry === undefined ? null : bodyResultType(context, node, entry, rest);
     }
@@ -145,6 +161,10 @@ function resolveRefType(context: Context, ref: { ref: string; path: string[] }):
 function declaredRefType(context: Context, ref: { ref: string; path: string[] }): string | null {
   const node = context.nodes.get(ref.ref);
   const owner = binding(context, ref);
+
+  if (node?.kind === "fail") {
+    return "never";
+  }
 
   if (owner?.kind === "map" && ref.ref !== "input") {
     const array = resolveRefType(context, owner.over);

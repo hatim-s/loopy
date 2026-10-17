@@ -851,11 +851,47 @@ for (const [kind, control] of [
       ),
   ],
 ] as const) {
-  test(`${kind} with no successful arm tails still records a reachable control join`, () => {
-    compile(() => {
-      control();
+  test(`${kind} with no successful arm tails keeps its join and diagnoses never results`, () => {
+    const result = loopy({
+      name: "test",
+      input: {},
+      run: () => {
+        control();
 
-      return log("after");
+        return log("after");
+      },
     });
+
+    expect(result.diagnostics.map((error) => error.code)).toEqual(
+      kind === "parallel" ? [] : ["unresolved_ref"],
+    );
+    expect(validateGraph(result.graph)).toEqual(result.diagnostics);
+    expect(graphSchema.parse(result.graph)).toEqual(result.graph);
   });
 }
+
+test("a failing rescue body leaves a numeric handler result", () => {
+  compile(() => {
+    const result = rescue(
+      () => fail("oops"),
+      () => 3,
+    );
+
+    return branch(gt(result, 0), { yes: () => 1, no: () => 0 });
+  });
+});
+
+test("a branch arm ending in fail after another node does not widen its result", () => {
+  compile(() => {
+    const result = branch(eq(uuid(), "yes"), {
+      yes: () => {
+        log("before failure");
+
+        return fail("oops");
+      },
+      no: () => 3,
+    });
+
+    return branch(gt(result, 0), { yes: () => 1, no: () => 0 });
+  });
+});

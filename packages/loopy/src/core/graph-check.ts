@@ -31,6 +31,10 @@ function visible(context: Context, producer: Node, consumer: Node): boolean {
 }
 
 function validPath(context: Context, ref: { ref: string; path: string[] }): boolean {
+  if (context.resolveType(ref) === "never") {
+    return false;
+  }
+
   if (ref.path.length === 0) {
     return true;
   }
