@@ -44,7 +44,6 @@ export async function runDaemon(context: CliContext): Promise<void> {
 
 async function installService(context: CliContext): Promise<void> {
   const { port, concurrency } = daemonFlags(context);
-
   const entry = process.argv[1];
 
   if (!entry) {

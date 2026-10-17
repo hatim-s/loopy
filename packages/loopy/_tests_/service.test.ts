@@ -133,7 +133,7 @@ test("service resumes queued, suspended and abandoned runs and rejects terminal 
   });
 });
 
-test("service pages newest runs by createdAt and caps the page size", async () => {
+test("service pages newest runs by createdAt with default and maximum page sizes", async () => {
   const { service, store, root, advance } = await fixture();
   const first = await service.startRun("service", { name: "first" }, root);
   advance();
@@ -156,7 +156,7 @@ test("service pages newest runs by createdAt and caps the page size", async () =
   }
 
   expect(await service.listRuns({ slug: "page" })).toHaveLength(50);
-  expect(await service.listRuns({ slug: "page", limit: 300 })).toHaveLength(200);
+  expect(await service.listRuns({ slug: "page", limit: 200 })).toHaveLength(200);
 });
 
 test("service hook resolution returns the woken run and rejects duplicate resolution", async () => {

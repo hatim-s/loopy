@@ -1,27 +1,20 @@
 import {
   type CursorView,
   DEFAULT_ERROR_MESSAGES,
-  decodeRunCursor,
   type ErrorCode,
   encodeRunCursor,
+  isTerminalRun,
   type Json,
   type LoopyView,
   loopyView,
   type PutScheduleBody,
-  type RunSnapshotView,
   type RunsQuery,
   type RunView,
   runView,
   type ScheduleView,
   serverEvent,
 } from "../contract/index.js";
-import {
-  errorMessage,
-  isTerminalRun,
-  type RunRecord,
-  type RuntimeEvent,
-  type Schedule,
-} from "../core/index.js";
+import { errorMessage, type RunRecord, type RuntimeEvent, type Schedule } from "../core/index.js";
 import { assertJson, type Clock, nextFire, OwnershipError, parseCron } from "../runtime/index.js";
 import { createLoopyRun } from "../sdk/host.js";
 import { loadLoopy } from "./bundle.js";
@@ -187,9 +180,7 @@ export class LoopyService {
   }
 
   async view(run: RunRecord): Promise<RunView> {
-    const resolve = await this.viewResolver([run.id]);
-
-    return resolve(run);
+    return (await this.viewResolver([run.id]))(run);
   }
 
   private async viewResolver(ids: string[]) {
@@ -313,7 +304,7 @@ export class LoopyService {
     return this.view(await this.requireRun(hook.runId));
   }
 
-  async runSnapshot(id: string): Promise<RunSnapshotView> {
+  async runSnapshot(id: string) {
     const snapshot = await this.options.store.snapshotRun(id);
 
     if (!snapshot) {
@@ -332,29 +323,20 @@ export class LoopyService {
   }
 
   async listRuns(query: RunsQuery): Promise<RunView[]> {
-    const before = query.before === undefined ? undefined : decodeRunCursor(query.before);
-
     const runs = (await this.options.store.listRuns(query))
-      .filter(
-        (run) =>
-          !before ||
-          run.createdAt < before.createdAt ||
-          (run.createdAt === before.createdAt && run.id < before.id),
-      )
-      .sort((a, b) =>
-        encodeRunCursor(a) < encodeRunCursor(b)
-          ? 1
-          : encodeRunCursor(a) > encodeRunCursor(b)
-            ? -1
-            : 0,
+      .filter((run) => query.before === undefined || encodeRunCursor(run) < query.before)
+      .sort(
+        (a, b) =>
+          Number(encodeRunCursor(a) < encodeRunCursor(b)) -
+          Number(encodeRunCursor(a) > encodeRunCursor(b)),
       );
 
-    const limit = Math.min(query.limit ?? 50, 200);
+    const limit = query.limit ?? 50;
     const selected = query.waiting === undefined ? runs.slice(0, limit) : runs;
     const resolve = await this.viewResolver(selected.map((run) => run.id));
-    const views = selected.map(resolve);
 
-    return views
+    return selected
+      .map(resolve)
       .filter((run) => query.waiting === undefined || (run.waitingOn !== null) === query.waiting)
       .slice(0, limit);
   }

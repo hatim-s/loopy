@@ -91,17 +91,20 @@ test("the daemon server requires its token and origin, serves pinned assets and 
   const url = new URL(server.url);
   const token = new URLSearchParams(url.hash.slice(1)).get("token");
   const headers = { Authorization: `Bearer ${token}` };
-  expect((await fetch(`${url.origin}/api/runs`)).status).toBe(401);
-  expect(
-    (await fetch(`${url.origin}/api/runs`, { headers: { Authorization: "Bearer wrong" } })).status,
-  ).toBe(401);
-  expect(
-    (
-      await fetch(`${url.origin}/api/runs`, {
-        headers: { ...headers, Origin: "https://other.example" },
-      })
-    ).status,
-  ).toBe(403);
+
+  const rejections: [HeadersInit, number, ErrorCode][] = [
+    [{}, 401, "unauthorized"],
+    [{ Authorization: "Bearer wrong" }, 401, "unauthorized"],
+    [{ ...headers, Origin: "https://other.example" }, 403, "forbidden"],
+    [{ ...headers, Host: "evil.example" }, 403, "forbidden"],
+  ];
+
+  for (const [headers, status, code] of rejections) {
+    const response = await fetch(`${url.origin}/api/runs`, { headers });
+    expect(response.status).toBe(status);
+    expect(errorBodySchema.parse(await response.json()).error.code).toBe(code);
+  }
+
   expect(await (await fetch(`${url.origin}/api/loopies`, { headers })).json()).toMatchObject([
     { slug: "dashboard" },
   ]);
@@ -121,11 +124,17 @@ test("API distinguishes invalid cursors from registry failures", async () => {
   const url = new URL(server.url);
   const token = new URLSearchParams(url.hash.slice(1)).get("token");
   const headers = { Authorization: `Bearer ${token}` };
-  expect((await fetch(`${url.origin}/api/runs/${run.id}/logs?after=bad`, { headers })).status).toBe(
-    400,
-  );
+
+  for (const path of [`/api/runs/${run.id}/logs?after=bad`, "/api/runs?limit=300"]) {
+    const response = await fetch(`${url.origin}${path}`, { headers });
+    expect(response.status).toBe(400);
+    expect(errorBodySchema.parse(await response.json()).error.code).toBe("bad_request");
+  }
+
   writeFileSync(join(f.cwd, ".loopy", "loopies", "server-errors.json"), "invalid JSON");
-  expect((await fetch(`${url.origin}/api/loopies`, { headers })).status).toBe(500);
+  const failed = await fetch(`${url.origin}/api/loopies`, { headers });
+  expect(failed.status).toBe(500);
+  expect(errorBodySchema.parse(await failed.json()).error.code).toBe("internal");
   expect((await fetch(`${url.origin}/api/config`, { headers })).status).toBe(404);
 });
 
@@ -484,7 +493,6 @@ test("response validation rejects a view with extra fields", async () => {
         apiRoutes({ service, store, cwd: f.cwd, daemon: daemonMetadata }),
         request,
         new URL(request.url),
-        "/api/loopies",
       ),
     ).rejects.toThrow("unrecognized_keys");
   } finally {
@@ -506,6 +514,9 @@ test("service error codes serialize with their HTTP status", async () => {
     ["bad_request", 400],
     ["invalid_schedule", 400],
     ["stale_cursor", 410],
+    ["unauthorized", 401],
+    ["forbidden", 403],
+    ["internal", 500],
   ];
 
   const list = spyOn(service, "listRuns");
@@ -518,7 +529,6 @@ test("service error codes serialize with their HTTP status", async () => {
         apiRoutes({ service, store, cwd: f.cwd, daemon: daemonMetadata }),
         request,
         new URL(request.url),
-        "/api/runs",
       );
 
       expect(response.status).toBe(status);
@@ -879,7 +889,6 @@ async function scheduleApi() {
       table,
       new Request(url, { method, body: body === undefined ? undefined : JSON.stringify(body) }),
       url,
-      url.pathname,
     );
   };
 
