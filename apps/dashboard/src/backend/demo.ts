@@ -11,7 +11,7 @@ const queued: RunView = {
   id: RUN_ID,
   slug: "triage-inbox",
   workspace: "~/projects/support",
-  bundleHash: "b3c9e1d0",
+  loopy: { slug: "triage-inbox", description: "Triage the support inbox and draft replies." },
   input: { mailbox: "support@acme.dev", since: "24h" },
   createdAt: minutes(-1),
   updatedAt: minutes(-1),

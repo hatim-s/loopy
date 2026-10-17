@@ -223,13 +223,13 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
 
 /** The fields every run status shares, so a script can move a run to any status. */
 export function base(run: RunView) {
-  const { id, slug, workspace, bundleHash, input, createdAt, owner, ownerStale, waitingOn } = run;
+  const { id, slug, workspace, loopy, input, createdAt, owner, ownerStale, waitingOn } = run;
 
   return {
     id,
     slug,
     workspace,
-    bundleHash,
+    loopy,
     input,
     createdAt,
     updatedAt: new Date().toISOString(),

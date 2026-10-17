@@ -11,7 +11,7 @@ const run: RunView = {
   id: "run-1",
   slug: "triage",
   workspace: "/work",
-  bundleHash: "hash",
+  loopy: { slug: "triage", description: null },
   input: null,
   createdAt: AT,
   updatedAt: AT,
