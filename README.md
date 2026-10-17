@@ -62,7 +62,7 @@ export default loopy({
 });
 ```
 
-`loopy()` accepts a name, description, input schema, scope, mode, secret names, optional schedule and `run` function. The default scope is `project`; the default mode is `sandbox`. Use `scope: "global"` to make a loopy available from other projects. Saving bundles the definition and its imports. Existing runs retain their original bundle when you save a new version.
+`loopy()` accepts a name, description, input schema, scope, mode, secret names, optional schedule and `run` function. The default scope is `project`; the default mode is `sandbox`. Use `scope: "global"` to make a loopy available from other projects. Saving bundles the definition and its imports. Inside the bundle, each module's `import.meta.url`, `path`, `file` and `dir` still name its source file, so `fileURLToPath(new URL("./cli.py", import.meta.url))` finds a sibling script. Existing runs retain their original bundle when you save a new version.
 
 A record input specification supports `string`, `number` and `boolean`; suffix an optional key with `?`. Named CLI flags coerce those types and prompt for missing required fields in a terminal. Standard Schema v1 validators are also supported, with their inferred input type passed to `run`. Use JSON input for Standard Schema definitions.
 

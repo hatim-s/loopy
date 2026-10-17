@@ -1,14 +1,47 @@
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { RunRecord } from "../core/index.js";
 import { isLoopy, type Loopy } from "../sdk/host.js";
 import { defaultHome } from "./home.js";
 import { Registry } from "./registry.js";
 
+const IMPORT_META = /\bimport\.meta\.(?:url|path|filename|file|dir|dirname)\b/g;
+
+// A saved bundle runs from <home>/bundles, so each module's import.meta must keep
+// pointing at the file it was written in. Loopies locate sibling scripts with it.
+function inlineImportMeta(path: string, source: string) {
+  const values = new Map([
+    ["import.meta.url", pathToFileURL(path).href],
+    ["import.meta.path", path],
+    ["import.meta.filename", path],
+    ["import.meta.file", basename(path)],
+    ["import.meta.dir", dirname(path)],
+    ["import.meta.dirname", dirname(path)],
+  ]);
+
+  return source.replaceAll(IMPORT_META, (match) => JSON.stringify(values.get(match) ?? match));
+}
+
+const sourcePaths: Bun.BunPlugin = {
+  name: "loopy-source-paths",
+  setup(build) {
+    build.onLoad({ filter: /\.[cm]?[jt]sx?$/ }, async ({ path, loader }) => ({
+      contents: inlineImportMeta(path, await Bun.file(path).text()),
+      loader,
+    }));
+  },
+};
+
 export async function bundleLoopy(file: string, home = defaultHome()) {
-  const result = await Bun.build({ entrypoints: [file], target: "bun", format: "esm" });
+  const result = await Bun.build({
+    entrypoints: [file],
+    target: "bun",
+    format: "esm",
+    plugins: [sourcePaths],
+  });
+
   const output = result.outputs[0];
 
   if (!result.success || !output) {
