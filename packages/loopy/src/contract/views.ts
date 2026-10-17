@@ -15,18 +15,18 @@ import {
   stepRecordSchema,
 } from "./records.js";
 
-const runBaseSchema = z.object({
+const runBaseSchema = z.strictObject({
   id: z.string(),
   slug: z.string(),
   workspace: z.string(),
-  bundleHash: z.string(),
+  loopy: z.strictObject({ slug: z.string(), description: z.string().nullable() }),
   input: jsonSchema,
   createdAt: z.string(),
   updatedAt: z.string(),
-  owner: z.object({ pid: z.number(), host: z.string(), heartbeatAt: z.string() }).nullable(),
+  owner: z.strictObject({ pid: z.number(), host: z.string(), heartbeatAt: z.string() }).nullable(),
   ownerStale: z.boolean(),
   waitingOn: z
-    .object({
+    .strictObject({
       hook: z.string(),
       token: z.string(),
       seq: z.number(),
@@ -46,7 +46,7 @@ export const runViewSchema = z.discriminatedUnion("status", [
 
 export type RunView = z.infer<typeof runViewSchema>;
 
-export const loopyViewSchema = z.object({
+export const loopyViewSchema = z.strictObject({
   slug: z.string(),
   description: z.string().optional(),
   scope: z.enum(["project", "global"]),
@@ -56,7 +56,12 @@ export const loopyViewSchema = z.object({
     z.literal("schema"),
   ]),
   schedule: z
-    .object({ cron: z.string(), tz: z.string(), enabled: z.boolean(), nextFireAt: z.string() })
+    .strictObject({
+      cron: z.string(),
+      tz: z.string(),
+      enabled: z.boolean(),
+      nextFireAt: z.string(),
+    })
     .nullable(),
   lastRun: runViewSchema.nullable(),
   counts: z.record(runStatusSchema, z.number()),
@@ -64,7 +69,7 @@ export const loopyViewSchema = z.object({
 
 export type LoopyView = z.infer<typeof loopyViewSchema>;
 
-export const runSnapshotViewSchema = z.object({
+export const runSnapshotViewSchema = z.strictObject({
   run: runViewSchema,
   steps: z.array(stepRecordSchema),
   logs: z.array(logRecordSchema),
@@ -75,7 +80,7 @@ export const runSnapshotViewSchema = z.object({
 
 export type RunSnapshotView = z.infer<typeof runSnapshotViewSchema>;
 
-export const daemonViewSchema = z.object({
+export const daemonViewSchema = z.strictObject({
   pid: z.number(),
   startedAt: z.string(),
   concurrency: z.number(),
@@ -85,7 +90,7 @@ export const daemonViewSchema = z.object({
 
 export type DaemonView = z.infer<typeof daemonViewSchema>;
 
-const eventBaseSchema = z.object({
+const eventBaseSchema = z.strictObject({
   sequence: z.number(),
   at: z.string(),
   txn: z.string(),
@@ -122,7 +127,7 @@ export const serverEventSchema = z.discriminatedUnion("entity", [
     eventBaseSchema.extend({
       entity: z.literal("schedule"),
       kind: z.literal("deleted"),
-      record: z.object({ workspace: z.string(), slug: z.string() }),
+      record: z.strictObject({ workspace: z.string(), slug: z.string() }),
     }),
   ]),
 ]);

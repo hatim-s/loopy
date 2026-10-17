@@ -7,14 +7,14 @@ export const runStatusSchema = z.enum(RUN_STATUSES);
 export type RunStatus = z.infer<typeof runStatusSchema>;
 
 export const runOutcomeSchema = z.discriminatedUnion("status", [
-  z.object({ status: z.literal("succeeded"), output: jsonSchema }),
-  z.object({ status: z.literal("failed"), error: z.string() }),
-  z.object({ status: z.literal("cancelled") }),
+  z.strictObject({ status: z.literal("succeeded"), output: jsonSchema }),
+  z.strictObject({ status: z.literal("failed"), error: z.string() }),
+  z.strictObject({ status: z.literal("cancelled") }),
 ]);
 
 export type RunOutcome = z.infer<typeof runOutcomeSchema>;
 
-const stepBaseSchema = z.object({
+const stepBaseSchema = z.strictObject({
   runId: z.string(),
   seq: z.number(),
   key: z.string(),
@@ -52,18 +52,23 @@ export const stepRecordSchema = z.discriminatedUnion("status", [
 export type StepRecord = z.infer<typeof stepRecordSchema>;
 
 export const logPositionSchema = z.discriminatedUnion("kind", [
-  z.object({
+  z.strictObject({
     kind: z.literal("workflow"),
     afterStep: z.number(),
     afterFinish: z.number(),
     index: z.number(),
   }),
-  z.object({ kind: z.literal("step"), seq: z.number(), attempt: z.number(), index: z.number() }),
+  z.strictObject({
+    kind: z.literal("step"),
+    seq: z.number(),
+    attempt: z.number(),
+    index: z.number(),
+  }),
 ]);
 
 export type LogPosition = z.infer<typeof logPositionSchema>;
 
-export const logRecordSchema = z.object({
+export const logRecordSchema = z.strictObject({
   runId: z.string(),
   seq: z.number(),
   position: logPositionSchema,
@@ -75,7 +80,7 @@ export const logRecordSchema = z.object({
 
 export type LogRecord = z.infer<typeof logRecordSchema>;
 
-export const hookRecordSchema = z.object({
+export const hookRecordSchema = z.strictObject({
   token: z.string(),
   runId: z.string(),
   seq: z.number(),
@@ -88,7 +93,7 @@ export const hookRecordSchema = z.object({
 
 export type HookRecord = z.infer<typeof hookRecordSchema>;
 
-export const scheduleSchema = z.object({
+export const scheduleSchema = z.strictObject({
   workspace: z.string(),
   slug: z.string(),
   cron: z.string(),

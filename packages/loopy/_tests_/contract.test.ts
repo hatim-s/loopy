@@ -4,40 +4,42 @@ import type * as core from "../src/core/index.js";
 import type { SavedLoopy } from "../src/local/saved-loopy.js";
 import { fixture, newRun } from "./fixture.js";
 
+type Flatten<T> = T extends unknown ? { [Key in keyof T]: T[Key] } : never;
+
 const now = newRun().createdAt;
 
 const leaseMs = 60_000;
 
+const loopy = { slug: "test", description: null };
+
 function view(run: core.RunRecord, steps: core.StepRecord[] = [], hooks: core.HookRecord[] = []) {
-  return contract.runView({ run, steps, hooks, now, leaseMs });
+  return contract.runView({ run, loopy, steps, hooks, now, leaseMs });
 }
 
-test("schema outputs and core records remain assignable in both directions", () => {
-  expectTypeOf<contract.Json>().toMatchTypeOf<core.Json>();
-  expectTypeOf<core.Json>().toMatchTypeOf<contract.Json>();
-  expectTypeOf<contract.RunStatus>().toMatchTypeOf<core.RunStatus>();
-  expectTypeOf<core.RunStatus>().toMatchTypeOf<contract.RunStatus>();
-  expectTypeOf<contract.RunOutcome>().toMatchTypeOf<core.RunOutcome>();
-  expectTypeOf<core.RunOutcome>().toMatchTypeOf<contract.RunOutcome>();
-  expectTypeOf<contract.StepRecord>().toMatchTypeOf<core.StepRecord>();
-  expectTypeOf<core.StepRecord>().toMatchTypeOf<contract.StepRecord>();
-  expectTypeOf<contract.LogPosition>().toMatchTypeOf<core.LogPosition>();
-  expectTypeOf<core.LogPosition>().toMatchTypeOf<contract.LogPosition>();
-  expectTypeOf<contract.LogRecord>().toMatchTypeOf<core.LogRecord>();
-  expectTypeOf<core.LogRecord>().toMatchTypeOf<contract.LogRecord>();
-  expectTypeOf<contract.HookRecord>().toMatchTypeOf<core.HookRecord>();
-  expectTypeOf<core.HookRecord>().toMatchTypeOf<contract.HookRecord>();
-  expectTypeOf<contract.Schedule>().toMatchTypeOf<core.Schedule>();
-  expectTypeOf<core.Schedule>().toMatchTypeOf<contract.Schedule>();
+test("schema outputs exactly match core records and the wire owner projection", () => {
+  expectTypeOf<contract.Json>().toEqualTypeOf<core.Json>();
+  expectTypeOf<contract.RunStatus>().toEqualTypeOf<core.RunStatus>();
+  expectTypeOf<contract.RunOutcome>().toEqualTypeOf<core.RunOutcome>();
+  expectTypeOf<contract.StepRecord>().toEqualTypeOf<Flatten<core.StepRecord>>();
+  expectTypeOf<contract.LogPosition>().toEqualTypeOf<core.LogPosition>();
+  expectTypeOf<contract.LogRecord>().toEqualTypeOf<core.LogRecord>();
+  expectTypeOf<contract.HookRecord>().toEqualTypeOf<core.HookRecord>();
+  expectTypeOf<contract.Schedule>().toEqualTypeOf<core.Schedule>();
+  expectTypeOf<contract.RunView["owner"]>().toEqualTypeOf<Omit<
+    NonNullable<core.RunRecord["owner"]>,
+    "token"
+  > | null>();
 
   type WireEvent =
-    | Exclude<core.RuntimeEvent, { entity: "run" }>
+    | Exclude<core.RuntimeEvent, { entity: "run" | "step" }>
+    | (Omit<Extract<core.RuntimeEvent, { entity: "step" }>, "record"> & {
+        record: Flatten<core.StepRecord>;
+      })
     | (Omit<Extract<core.RuntimeEvent, { entity: "run" }>, "record"> & {
         record: contract.RunView;
       });
 
-  expectTypeOf<contract.ServerEvent>().toMatchTypeOf<WireEvent>();
-  expectTypeOf<WireEvent>().toMatchTypeOf<contract.ServerEvent>();
+  expectTypeOf<contract.ServerEvent>().toEqualTypeOf<Flatten<WireEvent>>();
   expectTypeOf<SavedLoopy>().toMatchTypeOf<Parameters<typeof contract.loopyView>[0]>();
 });
 
@@ -74,6 +76,10 @@ test("engine records and events round-trip through wire schemas across a hook re
   if (!snapshot) {
     throw new Error("Expected a persisted snapshot.");
   }
+
+  expect(snapshot.steps.find((step) => step.kind === "hook")?.input).toEqual(
+    suspended.steps.find((step) => step.kind === "hook")?.input,
+  );
 
   for (const step of snapshot.steps) {
     expect(contract.stepRecordSchema.parse(step)).toEqual(step);
@@ -141,13 +147,13 @@ test("views strip fencing tokens and derive staleness at the lease boundary", ()
   const derived = view(run);
   expect(derived.owner).toEqual({ pid: 1, host: "host", heartbeatAt: now });
   expect(derived.owner).not.toHaveProperty("token");
-  expect(contract.runViewSchema.parse({ ...derived, owner: run.owner }).owner).not.toHaveProperty(
-    "token",
-  );
+  expect(contract.runViewSchema.safeParse({ ...derived, owner: run.owner }).success).toBe(false);
+  expect(derived.loopy).toEqual({ slug: "test", description: null });
   expect(derived.ownerStale).toBe(false);
   expect(
     contract.runView({
       run,
+      loopy,
       steps: [],
       hooks: [],
       now: new Date(Date.parse(now) + leaseMs).toISOString(),
@@ -157,6 +163,7 @@ test("views strip fencing tokens and derive staleness at the lease boundary", ()
   expect(
     contract.runView({
       run,
+      loopy,
       steps: [],
       hooks: [],
       now: new Date(Date.parse(now) + leaseMs + 1).toISOString(),
@@ -297,4 +304,85 @@ test("edge schemas reject malformed variants, JSON and request values", () => {
   expect(
     contract.errorBodySchema.safeParse({ error: { code: "unexpected", message: "oops" } }).success,
   ).toBe(false);
+});
+
+test("cancelled engine runs no longer advertise their pending hook", async () => {
+  const f = await fixture();
+  expect((await f.execute((ctx) => ctx.hook("approve"))).status).toBe("suspended");
+  const suspended = await f.store.snapshotRun("run");
+
+  if (!suspended) {
+    throw new Error("Expected a suspended run snapshot.");
+  }
+
+  expect(view(suspended.run, suspended.steps, suspended.hooks).waitingOn?.hook).toBe("approve");
+  await f.store.claim("run", "canceller");
+  await f.store.finishRun("run", "canceller", { status: "cancelled" });
+  await f.store.release("run", "canceller");
+  const cancelled = await f.store.snapshotRun("run");
+
+  if (!cancelled) {
+    throw new Error("Expected a cancelled run snapshot.");
+  }
+
+  expect(cancelled.run.status).toBe("cancelled");
+  expect(cancelled.steps.some((step) => step.status === "waiting")).toBe(true);
+  expect(cancelled.hooks.some((hook) => hook.resolvedAt === undefined)).toBe(true);
+  expect(view(cancelled.run, cancelled.steps, cancelled.hooks).waitingOn).toBeNull();
+});
+
+test("serialized loopy and snapshot views exclude private registry and owner keys", () => {
+  const run = view({
+    ...newRun(),
+    owner: { token: "private", pid: 1, host: "host", heartbeatAt: now },
+  });
+
+  const saved: SavedLoopy = {
+    slug: "test",
+    scope: "project",
+    mode: "sandbox",
+    input: {},
+    source: "/private/source",
+    secrets: ["SECRET"],
+    bundleHash: "private",
+    savedAt: now,
+  };
+
+  const loopy = contract.loopyView(saved, null, [run]);
+
+  const snapshot: contract.RunSnapshotView = {
+    run,
+    steps: [],
+    logs: [],
+    hooks: [],
+    cursor: 0,
+    epoch: "epoch",
+  };
+
+  expect(contract.loopyViewSchema.parse(loopy)).toEqual(loopy);
+  expect(contract.runSnapshotViewSchema.parse(snapshot)).toEqual(snapshot);
+
+  for (const serialized of [JSON.stringify(loopy), JSON.stringify(snapshot)]) {
+    expect(serialized).not.toMatch(/"(?:bundleHash|token|source|secrets)"\s*:/);
+  }
+});
+
+test("strict edges reject misspelled request keys and injected view tokens", () => {
+  expect(
+    contract.routes.startRun.body.safeParse({ input: null, workspcae: "/workspace" }).success,
+  ).toBe(false);
+  expect(contract.runViewSchema.safeParse({ ...view(newRun()), token: "private" }).success).toBe(
+    false,
+  );
+
+  const described = contract.runView({
+    run: newRun(),
+    loopy: { slug: "test", description: "Review approvals" },
+    steps: [],
+    hooks: [],
+    now,
+    leaseMs,
+  });
+
+  expect(described.loopy).toEqual({ slug: "test", description: "Review approvals" });
 });

@@ -3,6 +3,7 @@ import type { LoopyView, RunView, ServerEvent } from "./views.js";
 
 type RunViewOptions = {
   run: RunRecord;
+  loopy: RunView["loopy"];
   steps: StepRecord[];
   hooks: HookRecord[];
   now: string;
@@ -10,6 +11,10 @@ type RunViewOptions = {
 };
 
 function waitingOn({ run, steps, hooks, now }: RunViewOptions): RunView["waitingOn"] {
+  if (run.status !== "running" && run.status !== "suspended") {
+    return null;
+  }
+
   const latest = steps
     .filter((step) => step.runId === run.id)
     .reduce<StepRecord | null>(
@@ -79,7 +84,7 @@ export function runView(options: RunViewOptions): RunView {
     id: run.id,
     slug: run.slug,
     workspace: run.workspace,
-    bundleHash: run.bundleHash,
+    loopy: { slug: options.loopy.slug, description: options.loopy.description },
     input: run.input,
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,

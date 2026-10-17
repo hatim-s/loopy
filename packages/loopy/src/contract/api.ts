@@ -31,35 +31,38 @@ export const DEFAULT_ERROR_MESSAGES = {
   stale_cursor: "The event cursor is stale. Fetch a fresh snapshot.",
 } satisfies Record<ErrorCode, string>;
 
-export const errorBodySchema = z.object({
-  error: z.object({ code: errorCodeSchema, message: z.string() }),
+export const errorBodySchema = z.strictObject({
+  error: z.strictObject({ code: errorCodeSchema, message: z.string() }),
 });
 
 export type ErrorBody = z.infer<typeof errorBodySchema>;
 
-const emptySchema = z.object({});
+const emptySchema = z.strictObject({});
 
-const runParamsSchema = z.object({ id: z.string() });
+const runParamsSchema = z.strictObject({ id: z.string() });
 
-export const runsQuerySchema = z.object({
+export const runsQuerySchema = z.strictObject({
   slug: z.string().optional(),
   status: runStatusSchema.optional(),
   limit: z.coerce.number().int().positive().optional(),
   before: z.string().optional(),
 });
 
-export const logsQuerySchema = z.object({
+export const logsQuerySchema = z.strictObject({
   after: z.coerce.number().int().nonnegative().optional(),
 });
 
-export const eventsQuerySchema = z.object({
+export const eventsQuerySchema = z.strictObject({
   after: z.coerce.number().int().nonnegative(),
   epoch: z.string(),
 });
 
-export const startRunBodySchema = z.object({ input: jsonSchema, workspace: z.string().optional() });
+export const startRunBodySchema = z.strictObject({
+  input: jsonSchema,
+  workspace: z.string().optional(),
+});
 
-export const resolveHookBodySchema = z.object({ payload: jsonSchema });
+export const resolveHookBodySchema = z.strictObject({ payload: jsonSchema });
 
 type Route = {
   method: "GET" | "POST";
@@ -106,7 +109,7 @@ export const routes = {
   startRun: {
     method: "POST",
     path: "/loopies/:slug/runs",
-    params: z.object({ slug: z.string() }),
+    params: z.strictObject({ slug: z.string() }),
     query: emptySchema,
     body: startRunBodySchema,
     response: runViewSchema,
@@ -130,7 +133,7 @@ export const routes = {
   resolveHook: {
     method: "POST",
     path: "/hooks/:token",
-    params: z.object({ token: z.string() }),
+    params: z.strictObject({ token: z.string() }),
     query: emptySchema,
     body: resolveHookBodySchema,
     response: runViewSchema,
