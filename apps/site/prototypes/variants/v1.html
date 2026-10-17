@@ -234,7 +234,7 @@ footer a:hover{color:var(--text)}
       <p class="lede">Loopy watches you finish a task with a coding agent, turns that session into a graph you can read and edit, then runs the graph again on your machine.</p>
       <div class="install" id="install">
         <div class="cmd"><span><span class="prompt">$ </span>bun add -g loopy</span><button type="button" data-copy="bun add -g loopy">Copy</button></div>
-        <span class="hero-note">Then run <a href="#docs"><code>loopy studio</code></a></span>
+        <span class="hero-note">Then run <a href="#docs"><code>loopy ui</code></a></span>
       </div>
     </div>
     <div class="term" aria-label="A recorded Codex session">
@@ -355,7 +355,7 @@ footer a:hover{color:var(--text)}
 <section class="final" id="docs">
   <div class="wrap">
     <h2>Do it once. Then let it loop.</h2>
-    <p class="sub">Install the CLI, run one task the way you normally would, and open Studio to see the graph it leaves behind.</p>
+    <p class="sub">Install the CLI, run one task the way you normally would, and open Dashboard to see the graph it leaves behind.</p>
     <div class="install">
       <div class="cmd"><span><span class="prompt">$ </span>bun add -g loopy</span><button type="button" data-copy="bun add -g loopy">Copy</button></div>
       <a class="btn" href="#docs">Read the docs</a>
@@ -616,14 +616,14 @@ footer a:hover{color:var(--text)}
 
 <span class="c"># 3. run it, and look at it</span>
 <span class="p">$ </span>loopy run patch-critical-cves
-<span class="p">$ </span>loopy studio`,
+<span class="p">$ </span>loopy ui`,
     rebase: `<span class="c"># every morning at nine</span>
 <span class="p">$ </span>loopy schedule create \\
     --workflow keep-prs-rebased \\
     --cron <span class="s">'0 9 * * *'</span>
 
 <span class="c"># runs, joins and approvals land in SQLite</span>
-<span class="p">$ </span>loopy studio`
+<span class="p">$ </span>loopy ui`
   };
   const code = $('#ex-code');
   const tabs = [...document.querySelectorAll('.tab')];

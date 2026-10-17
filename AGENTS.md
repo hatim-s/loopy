@@ -1,6 +1,6 @@
 # Working in this repo
 
-Read this before changing code. `bun run check` builds the package and Studio, lints, typechecks and runs the tests. It must pass before a PR. The architecture test enforces layer imports.
+Read this before changing code. `bun run check` builds the package and dashboard, lints, typechecks and runs the tests. It must pass before a PR. The architecture test enforces layer imports.
 
 ## Where code goes
 
@@ -12,20 +12,23 @@ packages/loopy/src/
   sdk/       loopy(), ambient steps, defineCommand and typed shell wrappers.
   local/     SQLite store, registry, bundles, processes, secrets and HTTP server.
   cli/       commands and argument parsing. One file per command in commands/.
-apps/studio/src/
-  components/  display components
-  hooks/       state, polling and requests
+apps/dashboard/src/
+  backend/     contract-backed HTTP and event stream adapter
+  routes/      dashboard pages
+  components/  shared display and action components
+  lib/         query cache, event reducer and formatting
+apps/dashboard/_tests_/  dashboard logic tests
 packages/loopy/_tests_/   package tests, including shell fixtures
 examples/                 canonical loopies and automation helpers
 ```
 
-The public package entries are `loopy` for the SDK, `loopy/runtime`, `loopy/local` and `loopy/contract`. Studio imports types only from `"loopy"` and uses the local HTTP API for data. It lists loopies and runs and renders step traces and logs.
+The public package entries are `loopy` for the SDK, `loopy/runtime`, `loopy/local` and `loopy/contract`. The dashboard imports only `"loopy/contract"` and uses the daemon HTTP API and event stream for data.
 
 Layers import downward. Contract imports core and zod; local and CLI may import contract through its index. Runtime imports core; SDK imports core and runtime; local imports core, runtime and `sdk/host.ts`; CLI imports core, runtime, local and `sdk/host.ts`. Cross-layer imports go through the target layer's `index.ts`, except the explicit SDK host entry. Same-layer imports use file paths. Core and runtime have no Node or Bun dependencies. SDK permits `node:async_hooks` only in `current.ts` to share activation scope with bundled definitions.
 
 ## Ownership
 
-- `core/model.ts` defines RunRecord, StepRecord, LogRecord, RunDetail and run statuses.
+- `core/model.ts` defines RunRecord, StepRecord, LogRecord and run statuses.
 - `contract/records.ts` owns record schemas; `views.ts` owns wire views, `api.ts` the route table and errors, and `derive.ts` pure view derivations.
 - `runtime/engine.ts` claims an activation, replays it, persists its outcome and releases ownership.
 - `runtime/journal.ts` checks step sequence and keys; `step-runner.ts` owns attempts and terminal writes.
@@ -40,7 +43,7 @@ Layers import downward. Contract imports core and zod; local and CLI may import 
 - `local/service.ts` owns shared CLI and HTTP mutations and contract views. `local/daemon-file.ts` owns private daemon discovery.
 - `local/server/routes.ts` dispatches the contract route table; `events.ts` owns SSE replay and live delivery. `start-server.ts` owns authentication and the loopback server inside the daemon.
 
-Adding a feature: put shared records in core, replay behavior in runtime, author-facing calls in SDK, OS work in local, and commands in `cli/commands/<name>.ts` registered in `cli/index.ts`. Scope flags in `cli/args.ts`. A new store column needs SQL, row conversion and queries; bump the schema version instead of adding a migration. A Studio panel consumes SDK record types and API data. Give each new file one responsibility and a kebab-case name.
+Adding a feature: put shared records in core, replay behavior in runtime, author-facing calls in SDK, OS work in local, and commands in `cli/commands/<name>.ts` registered in `cli/index.ts`. Scope flags in `cli/args.ts`. A new store column needs SQL, row conversion and queries; bump the schema version instead of adding a migration. A dashboard panel consumes contract views and API data. Give each new file one responsibility and a kebab-case name.
 
 ## Patterns to follow
 

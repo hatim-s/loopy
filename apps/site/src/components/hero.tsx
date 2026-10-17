@@ -61,7 +61,7 @@ export function Hero() {
             <CopyButton text={INSTALL} />
           </div>
           <p className="then rv" style={stagger(5)}>
-            Then open <code>loopy studio</code> and point it at a session.
+            Then open <code>loopy ui</code> and point it at a session.
           </p>
         </div>
       </div>

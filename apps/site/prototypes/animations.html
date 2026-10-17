@@ -554,7 +554,7 @@ function layoutLane(svg, entrance) {
 }
 
 // ---------- L4: layered DAG ----------
-// the Studio layout on its side: rows by depth, so six depths and a branch fit beside the log
+// the Dashboard layout on its side: rows by depth, so six depths and a branch fit beside the log
 function layoutDag(svg, entrance) {
   const cw = 172, ch = 44, CX = 760, rowY = r => 40 + r * 82;
   const pos = [0, 1, null, 4, 5, 6].map(r => ({ x: CX - cw / 2, y: r == null ? rowY(2) : rowY(r) })); pos[2].x = CX - cw / 2 - 120;

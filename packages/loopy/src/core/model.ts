@@ -126,8 +126,6 @@ export type RunSnapshot = {
   epoch: string;
 };
 
-export type RunDetail = { run: RunRecord; steps: StepRecord[]; logs: LogRecord[] };
-
 const TERMINAL_RUN_STATUSES = [
   "succeeded",
   "failed",
@@ -137,13 +135,6 @@ const TERMINAL_RUN_STATUSES = [
 export function isTerminalRun(status: RunStatus): boolean {
   return TERMINAL_RUN_STATUSES.some((terminal) => terminal === status);
 }
-
-export type LoopySummary = {
-  slug: string;
-  description?: string;
-  scope: "project" | "global";
-  schedule?: { cron: string; tz?: string };
-};
 
 export const RUN_EVENT_KINDS = [
   "created",

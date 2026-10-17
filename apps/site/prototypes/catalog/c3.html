@@ -246,7 +246,7 @@ state .loopy/loopy.db</pre>
 └── loopy.db   <span class="d"># runs, checkpoints,</span>
                <span class="d"># approvals, schedules</span></pre>
 <pre><span class="d">$ loopy ui</span>
-studio: serving on 127.0.0.1
+dashboard: serving on 127.0.0.1
 <span class="d">read and edit nodes, edges</span>
 <span class="d">and policies in the browser</span></pre>
     </div>
@@ -365,7 +365,7 @@ loopy ui</pre>
       out('  loopy extract           propose a graph from the trace');
       out('  loopy approve &lt;id&gt;      accept the proposal');
       out('  loopy run cve-patch     run the graph');
-      out('  loopy ui                open the local Studio');
+      out('  loopy ui                open the local Dashboard');
       out('  clear');
     },
     clear: () => { screen.innerHTML = ''; },
@@ -380,7 +380,7 @@ loopy ui</pre>
     },
     'loopy approve': () => { out('workflow <span class="h">cve-patch</span> v1 approved'); },
     'loopy run': () => startRun(),
-    'loopy ui': () => { out('studio: serving on 127.0.0.1'); out('open the printed url to edit nodes and edges', 'd'); },
+    'loopy ui': () => { out('dashboard: serving on 127.0.0.1'); out('open the printed url to edit nodes and edges', 'd'); },
   };
   async function exec(raw) {
     const line = raw.trim(); if (!line) return;

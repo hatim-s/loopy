@@ -1,7 +1,5 @@
 @import "tailwindcss";
 
-/* Studio's dark tokens, with a light set derived for daylight use. Status colours carry
-   meaning; everything else stays neutral so they are the first thing the eye finds. */
 :root {
   --page: #f6f8fb;
   --panel: #ffffff;

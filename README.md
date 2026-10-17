@@ -15,9 +15,13 @@ bun run loopy runs hello
 bun run loopy ui
 ```
 
-Studio prints an authenticated local URL. It lists saved loopies and runs, then shows each run's steps and logs. Author and run loopies through TypeScript and the CLI.
+`loopy ui` prints the authenticated URL for the dashboard served by the daemon. Open it in your browser. If no daemon is running, the command starts one in the foreground. Keep that terminal open.
 
 To install the CLI globally, run `bun run install:global`. The installer builds and packs the package into `~/.loopy/packages/loopy-<sha256>.tgz`, installs it with Bun, and prints a command for adding the same archive to a project. A project that imports `loopy` needs its own dependency. Put `bun pm bin -g` on your PATH.
+
+## Dashboard
+
+Home lists saved loopies and recent runs. Each loopy page has an input form, schedule details, status filters and paged runs. A run page shows its inputs, output, live step trace, logs, hook resolution and run controls. Inbox groups waiting hooks by loopy, oldest first. The schedules page is being added separately for listing and toggling schedules. The daemon page shows its process, start time, concurrency, active runs and next wake. One event stream updates the session query cache; reconnects resume from the cursor, and stale cursors or a changed store epoch trigger a refetch.
 
 ## Write a loopy
 
@@ -89,14 +93,18 @@ loopy cancel <run-id>
 loopy run review --detach
 loopy daemon run --concurrency 4
 loopy schedule review --cron '0 9 * * 1-5' --tz Asia/Kolkata
+loopy schedule review --disable
+loopy schedule review --enable
 loopy schedule review --off
 ```
 
 An inline run activates until it finishes or suspends without a wake time. For a timed sleep or retry, it waits and activates again. Ctrl-C and SIGTERM leave unfinished work resumable. `--detach` creates a queued run without executing it; the foreground daemon claims queued and due runs. `resume` continues queued, suspended or abandoned runs. A finished run stays finished; start a new run to try a failed workflow again. Cancellation requires a claimable run. Stop its runner before cancelling an actively owned run.
 
+`runs [slug]` prints the stored runs as a JSON array. Dashboard run lists page newest first and load older runs on request. The HTTP API accepts `slug`, `status`, `limit` and `before` filters.
+
 `inspect` returns a snapshot with the run, ordered steps, logs, hooks, event cursor and store epoch. Run statuses are `queued`, `running`, `suspended`, `succeeded`, `failed` and `cancelled`. Each step records its sequence, key, kind, attempt, status and result or error. Logs carry their workflow position or step attempt. `logs --follow` emits one JSON object per line.
 
-A definition can include `schedule: { cron: "0 9 * * 1-5", tz: "Asia/Kolkata" }`. `loopy schedule <slug>` uses those defaults; flags override them. Pass schedule input with `--input-json`. Schedules retain their workspace, even when the daemon starts elsewhere. Missed fires are not backfilled. Scheduling stores the next fire time; keep `loopy daemon run` running to execute it. Cron uses five fields and defaults to UTC. Command options are scoped: `--follow` belongs to logs, `--concurrency` to daemon run and install, and `--cron`, `--tz` and `--off` to schedule.
+A definition can include `schedule: { cron: "0 9 * * 1-5", tz: "Asia/Kolkata" }`. `loopy schedule <slug>` uses those defaults; flags override them. Pass schedule input with `--input-json`. `--disable` pauses a saved schedule; `--enable` resumes it. `--off` deletes it. These actions cannot be combined with each other or with cron, timezone or input flags. Schedules retain their workspace, even when the daemon starts elsewhere. Missed fires are not backfilled. Scheduling stores the next fire time; keep `loopy daemon run` running to execute it. Cron uses five fields and defaults to UTC. Command options are scoped: `--follow` belongs to logs, `--concurrency` to daemon run and install, and `--cron`, `--tz`, `--enable`, `--disable` and `--off` to schedule.
 
 ### Run the daemon as a service
 
@@ -105,6 +113,8 @@ loopy daemon install --concurrency 4
 loopy daemon status
 loopy daemon uninstall
 ```
+
+`loopy daemon status` reads `<home>/daemon.json` and prints the live daemon's PID, port, bearer token and start time. It prints `{ "state": "stopped" }` when no live daemon is recorded. The daemon creates this private file at startup and removes it on shutdown.
 
 Install starts a launchd user agent on macOS or a systemd user unit on Linux.
 Reinstall updates the service and restarts it. Use `--home /absolute/path` when
@@ -174,6 +184,8 @@ Run records retain input, command argv, explicit environment and stdin, step res
 ```text
 ~/.loopy/
   secrets.json
+  daemon.json
+  logs/daemon.log
   loopies/<slug>.json
   bundles/<sha256>.js
   runs.sqlite
@@ -214,6 +226,6 @@ const approval = await hook("approve");
 
 Pass `{ timeout: "1h" }` to set a deadline. A timeout fails the step without retrying.
 `loopy inspect <run-id>` shows names and tokens. Local automation can POST a JSON
-body to `/api/hooks/<token>` on the `loopy ui` server with
-`Authorization: Bearer <viewer-token>`, using the token from the viewer URL. The same authentication and
+body to `/api/hooks/<token>` on the daemon server with
+`Authorization: Bearer <daemon-token>`, using the token from the dashboard URL. The same authentication and
 origin checks apply. This endpoint is for local automation, not public webhooks.

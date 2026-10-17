@@ -9,8 +9,8 @@ export function usage(): string {
   loopy run <slug> --input-json JSON          Run with JSON input
   loopy run <slug> --input-file input.json    Run with input from a file
   loopy run <slug> [--detach]                 Queue for the daemon instead of running inline
-  loopy runs [slug]                           List runs
-  loopy inspect <run-id>                      Show the run, step trace and logs
+  loopy runs [slug]                           List runs as JSON
+  loopy inspect <run-id>                      Show the snapshot, cursor and epoch
   loopy logs <run-id> [--follow]              Print logs; follow emits NDJSON
   loopy hook <run-id> <name> [--payload JSON] Resolve a waiting hook
   loopy resume <run-id>                       Continue a queued, suspended or abandoned run
@@ -21,17 +21,17 @@ export function usage(): string {
   loopy daemon run [--concurrency N] [--port 4310]          Run the foreground daemon
   loopy daemon install [--concurrency N] [--port 4310]      Install and start the user service
   loopy daemon uninstall                     Remove the user service
-  loopy daemon status                        Show daemon PID, port, token and start time
+  loopy daemon status                        Show daemon.json PID, port, token and start time
   loopy types <cli> [command...] --out file.ts [--name identifier]
   loopy secrets set <name> [--stdin]          Store a secret privately
   loopy secrets list                          List secret names
   loopy secrets remove <name>                 Delete a stored secret
-  loopy ui [--port ${DEFAULT_PORT}]                      Print the daemon URL, starting it in the foreground if needed
+  loopy ui [--port ${DEFAULT_PORT}]                      Print the dashboard URL, starting the daemon if needed
 
 Global options:
   --home <directory>    Registry, bundles and runs.sqlite. Default: ~/.loopy
   --lease-ms <number>   Ownership lease in milliseconds. Default: 60000
-  --cwd <directory>     Workspace for a new run or Studio. Default: current directory
+  --cwd <directory>     Workspace for a new run. Default: current directory
   --help, -h            Show usage
 
 Choose one input source: named flags, --input-json, or --input-file.

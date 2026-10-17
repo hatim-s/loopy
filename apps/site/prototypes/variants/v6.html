@@ -311,7 +311,7 @@ footer a.c:focus-visible{box-shadow:inset 0 0 0 2px var(--accent);border-radius:
       <p class="lede">Finish a task once with your coding agent. <b>Loopy reads the session, proposes a graph of what happened, and runs that graph again on your machine</b> whenever you need it.</p>
       <div class="cmdrow">
         <div class="cmd"><span><span class="p">$ </span>bun add -g loopy</span><button type="button" data-copy="bun add -g loopy">Copy</button></div>
-        <span class="note">Then <code>loopy studio</code> opens the editor.</span>
+        <span class="note">Then <code>loopy ui</code> opens the editor.</span>
       </div>
     </div>
   </div>
@@ -462,7 +462,7 @@ footer a.c:focus-visible{box-shadow:inset 0 0 0 2px var(--accent);border-radius:
     </div>
     <div class="c pad cta-b">
       <div class="cmd"><span><span class="p">$ </span>bun add -g loopy</span><button type="button" data-copy="bun add -g loopy">Copy</button></div>
-      <div class="cmd"><span><span class="p">$ </span>loopy studio</span><button type="button" data-copy="loopy studio">Copy</button></div>
+      <div class="cmd"><span><span class="p">$ </span>loopy ui</span><button type="button" data-copy="loopy ui">Copy</button></div>
     </div>
   </div>
 </section>
@@ -524,7 +524,7 @@ const bandItems = [
   ['', 'waiting for approval'],
   ['', 'gh pr create --fill'],
   ['hi', "<span class=\"p\">$ </span>loopy schedule create --cron '0 9 * * *'"],
-  ['hi', '<span class="p">$ </span>loopy studio'],
+  ['hi', '<span class="p">$ </span>loopy ui'],
 ];
 const bandHTML = bandItems.map(([c, t]) => `<span class="${c}">${t}</span>`).join('');
 $('#band').innerHTML = bandHTML + bandHTML.replace(/<span class="/g, '<span aria-hidden="true" class="');
