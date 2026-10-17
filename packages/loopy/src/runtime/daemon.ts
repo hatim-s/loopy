@@ -5,6 +5,8 @@ import { type ActivationOptions, activate } from "./engine.js";
 import { ActivationPool } from "./pool.js";
 import { OwnershipError, type RunStore } from "./store.js";
 
+const PRUNE_INTERVAL_MS = 3_600_000;
+
 type DaemonOptions = {
   store: RunStore;
   prepare: (
@@ -131,7 +133,7 @@ export class Daemon {
 
     if (time >= this.nextPruneAt) {
       await this.options.store.pruneEvents(now);
-      this.nextPruneAt = time + 3_600_000;
+      this.nextPruneAt = time + PRUNE_INTERVAL_MS;
     }
 
     const fired = await this.fireSchedules(now);

@@ -21,11 +21,13 @@ type DaemonOptions = {
 };
 
 function runtimeDaemon(options: DaemonOptions) {
-  const { home } = options;
+  const { home, store, concurrency, onError } = options;
   const rateLimits = readRateLimits(home);
 
   return new Daemon({
-    ...options,
+    store,
+    concurrency,
+    onError,
     bundleHashFor: (schedule) =>
       new Registry(home, schedule.workspace).get(schedule.slug).bundleHash,
     prepare: async (run) => {

@@ -36,8 +36,6 @@ export { acquireWindow, parseRateLimits } from "./rate-limit.js";
 
 export type { RetryPolicy } from "./retry.js";
 
-export { runDetail } from "./run-detail.js";
-
 export { sameStepRecord } from "./step-record.js";
 
 export { StepFailedError } from "./step-runner.js";
