@@ -1,4 +1,5 @@
 import {
+  type CursorView,
   DEFAULT_ERROR_MESSAGES,
   decodeRunCursor,
   type ErrorCode,
@@ -315,5 +316,9 @@ export class LoopyService {
       running: (await this.options.store.listRuns({ status: "running" })).length,
       nextWakeAt: (await this.options.store.nextWakeAt()) ?? null,
     };
+  }
+
+  async cursor(): Promise<CursorView> {
+    return this.options.store.eventCursor();
   }
 }

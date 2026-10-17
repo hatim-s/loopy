@@ -2,6 +2,7 @@ import { z } from "zod";
 import { jsonSchema } from "./json.js";
 import { logRecordSchema, runStatusSchema } from "./records.js";
 import {
+  cursorViewSchema,
   daemonViewSchema,
   loopyViewSchema,
   runSnapshotViewSchema,
@@ -169,5 +170,13 @@ export const routes = {
     query: eventsQuerySchema,
     body: z.undefined(),
     response: serverEventSchema,
+  },
+  cursor: {
+    method: "GET",
+    path: "/cursor",
+    params: emptySchema,
+    query: emptySchema,
+    body: z.undefined(),
+    response: cursorViewSchema,
   },
 } as const satisfies Record<string, Route>;

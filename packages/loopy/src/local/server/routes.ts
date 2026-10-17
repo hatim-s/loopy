@@ -128,6 +128,7 @@ export function apiRoutes({ service, store, cwd }: Dependencies) {
     endpoint(routes.events, async ({ query, request }) =>
       eventStream(store, service, query, request.signal),
     ),
+    endpoint(routes.cursor, async () => service.cursor()),
   ];
 }
 
