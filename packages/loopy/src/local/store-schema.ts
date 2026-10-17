@@ -1,8 +1,14 @@
 import type { LogRecord, RunRecord, StepKind } from "../core/index.js";
 
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 10;
 
 export const SCHEMA = `
+  CREATE TABLE events (
+    sequence INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, txn TEXT NOT NULL,
+    entity TEXT NOT NULL, kind TEXT NOT NULL, run_id TEXT, record TEXT NOT NULL
+  );
+  CREATE INDEX events_run_sequence ON events(run_id, sequence);
+  CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
   CREATE TABLE runs (
     id TEXT PRIMARY KEY, slug TEXT NOT NULL, bundle_hash TEXT NOT NULL, workspace TEXT NOT NULL,
     input_json TEXT NOT NULL, status TEXT NOT NULL, output_json TEXT, error TEXT,
@@ -129,4 +135,14 @@ export type HookRow = {
   created_at: string;
   resolved_at: string | null;
   expired_at: string | null;
+};
+
+export type EventRow = {
+  sequence: number;
+  at: string;
+  txn: string;
+  entity: string;
+  kind: string;
+  run_id: string | null;
+  record: string;
 };

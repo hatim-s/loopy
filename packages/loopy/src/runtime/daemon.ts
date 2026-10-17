@@ -47,6 +47,7 @@ export class Daemon {
   private readonly clock: Clock;
   private readonly pool: ActivationPool;
   private started = false;
+  private nextPruneAt = 0;
   private stopped = false;
   private wakeRequested = false;
   private waiting?: AbortController;
@@ -125,7 +126,14 @@ export class Daemon {
   }
 
   private async dueWork() {
-    const now = new Date(this.clock.now()).toISOString();
+    const time = this.clock.now();
+    const now = new Date(time).toISOString();
+
+    if (time >= this.nextPruneAt) {
+      await this.options.store.pruneEvents(now);
+      this.nextPruneAt = time + 3_600_000;
+    }
+
     const fired = await this.fireSchedules(now);
     const runs = await this.options.store.dueRuns(now);
 

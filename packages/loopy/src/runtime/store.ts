@@ -4,7 +4,9 @@ import type {
   LogRecord,
   RunOutcome,
   RunRecord,
+  RunSnapshot,
   RunStatus,
+  RuntimeEvent,
   Schedule,
   StepRecord,
   WaitingHookStep,
@@ -20,6 +22,11 @@ export class OwnershipError extends Error {
 }
 
 export interface RunStore {
+  events(after: number, limit: number): Promise<RuntimeEvent[]>;
+  epoch(): Promise<string>;
+  snapshotRun(id: string): Promise<RunSnapshot | undefined>;
+  pruneEvents(now: string): Promise<number>;
+  subscribe(listener: (events: RuntimeEvent[]) => void): () => void;
   acquireRateLimit(
     key: string,
     count: number,

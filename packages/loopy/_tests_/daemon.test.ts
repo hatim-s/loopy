@@ -499,3 +499,30 @@ test("daemon leaves indefinite hooks suspended and resumes resolved payloads", a
   expect(f.errors).toEqual([]);
   await f.daemon.stop();
 });
+
+test("the loop prunes old events at startup and each hour", async () => {
+  const sleeping = steppingSleeper();
+  const f = fixture({ sleep: sleeping.sleep });
+  await f.store.createRun({ ...newRun(), status: "succeeded" });
+  f.advance(3_600_000);
+  await f.store.putSchedule(schedule({ enabled: false, nextFireAt: "2099-01-01T00:00:00.000Z" }));
+  f.advance(23 * 3_600_000 + 1);
+  const running = f.daemon.run();
+
+  try {
+    await until(() => sleeping.calls.length === 1);
+    expect((await f.store.events(0, 100)).map((event) => event.entity)).toEqual(["schedule"]);
+    f.advance(3_600_000 - 1);
+    sleeping.calls[0]?.resume();
+    await until(() => sleeping.calls.length === 2);
+    expect(await f.store.events(0, 100)).toHaveLength(1);
+    f.advance(1);
+    sleeping.calls[1]?.resume();
+    await until(() => sleeping.calls.length === 3);
+    expect(await f.store.events(0, 100)).toEqual([]);
+    expect(f.errors).toEqual([]);
+  } finally {
+    await f.daemon.stop();
+    await running;
+  }
+});

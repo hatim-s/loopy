@@ -4,67 +4,87 @@ import type {
   LogRecord,
   RunOutcome,
   RunRecord,
+  RunSnapshot,
   RunStatus,
+  RuntimeEvent,
+  RuntimeEventChange,
   Schedule,
   StepRecord,
   WaitingHookStep,
 } from "../core/index.js";
 import { canResolveHook, earliestWake } from "./hook-state.js";
 import { acquireWindow, type RateLimitResult, type RateLimitWindow } from "./rate-limit.js";
+import { sameStepRecord } from "./step-record.js";
 import { OwnershipError, type RunStore } from "./store.js";
+
+type EventTransaction = { id: string; events: RuntimeEvent[] };
 
 export class MemoryRunStore implements RunStore {
   private readonly hooks = new Map<string, HookRecord>();
   private readonly hooksByRun = new Map<string, Map<number, HookRecord>>();
 
   async createHook(runId: string, token: string, step: WaitingHookStep): Promise<void> {
-    this.requireRunning(this.owned(runId, token));
+    return this.commit((txn) => {
+      this.requireRunning(this.owned(runId, token));
 
-    if (this.hooks.has(step.input.token) || this.steps.get(runId)?.has(step.seq)) {
-      throw new Error("Hook already exists. Resume the run to use its waiting hook.");
-    }
+      if (this.hooks.has(step.input.token) || this.steps.get(runId)?.has(step.seq)) {
+        throw new Error("Hook already exists. Resume the run to use its waiting hook.");
+      }
 
-    const steps = this.steps.get(runId) ?? new Map<number, StepRecord>();
-    steps.set(step.seq, structuredClone({ ...step, runId }));
-    this.steps.set(runId, steps);
+      const steps = this.steps.get(runId) ?? new Map<number, StepRecord>();
+      const record = structuredClone({ ...step, runId });
+      steps.set(step.seq, record);
+      this.steps.set(runId, steps);
 
-    const hook = {
-      ...step.input,
-      runId,
-      seq: step.seq,
-      createdAt: step.startedAt,
-    };
+      const hook = {
+        ...step.input,
+        runId,
+        seq: step.seq,
+        createdAt: step.startedAt,
+      };
 
-    this.hooks.set(step.input.token, hook);
-    const hooks = this.hooksByRun.get(runId) ?? new Map<number, HookRecord>();
-    hooks.set(step.seq, hook);
-    this.hooksByRun.set(runId, hooks);
+      this.hooks.set(step.input.token, hook);
+      const hooks = this.hooksByRun.get(runId) ?? new Map<number, HookRecord>();
+      hooks.set(step.seq, hook);
+      this.hooksByRun.set(runId, hooks);
+      this.emit(txn, {
+        entity: "step",
+        kind: "waiting",
+        runId,
+        record,
+      });
+      this.emit(txn, { entity: "hook", kind: "created", runId, record: hook });
+    });
   }
 
   async resolveHook(token: string, payload: Json): Promise<boolean> {
-    const hook = this.hooks.get(token);
-    const run = hook ? this.runs.get(hook.runId) : undefined;
-    const steps = hook ? this.steps.get(hook.runId) : undefined;
-    const step = hook ? steps?.get(hook.seq) : undefined;
+    return this.commit((txn) => {
+      const hook = this.hooks.get(token);
+      const run = hook ? this.runs.get(hook.runId) : undefined;
+      const steps = hook ? this.steps.get(hook.runId) : undefined;
+      const step = hook ? steps?.get(hook.seq) : undefined;
 
-    if (
-      !hook ||
-      hook.resolvedAt !== undefined ||
-      hook.expiredAt !== undefined ||
-      !run ||
-      !step ||
-      !canResolveHook(run, step, this.now())
-    ) {
-      return false;
-    }
+      if (
+        !hook ||
+        hook.resolvedAt !== undefined ||
+        hook.expiredAt !== undefined ||
+        !run ||
+        !step ||
+        !canResolveHook(run, step, this.now())
+      ) {
+        return false;
+      }
 
-    const timestamp = this.timestamp();
-    hook.payload = structuredClone(payload);
-    hook.resolvedAt = timestamp;
-    run.wakeAt = timestamp;
-    run.updatedAt = timestamp;
+      const timestamp = this.timestamp();
+      hook.payload = structuredClone(payload);
+      hook.resolvedAt = timestamp;
+      run.wakeAt = timestamp;
+      run.updatedAt = timestamp;
+      this.emit(txn, { entity: "hook", kind: "resolved", runId: run.id, record: hook });
+      this.emit(txn, { entity: "run", kind: "woken", runId: run.id, record: run });
 
-    return true;
+      return true;
+    });
   }
 
   async listHooks(runId: string): Promise<HookRecord[]> {
@@ -84,23 +104,28 @@ export class MemoryRunStore implements RunStore {
   }
 
   async expireHook(runId: string, token: string, seq: number): Promise<string | undefined> {
-    this.requireRunning(this.owned(runId, token));
-    const hook = this.hooksByRun.get(runId)?.get(seq);
-    const step = this.steps.get(runId)?.get(seq);
+    return this.commit((txn) => {
+      this.requireRunning(this.owned(runId, token));
+      const hook = this.hooksByRun.get(runId)?.get(seq);
+      const step = this.steps.get(runId)?.get(seq);
 
-    if (
-      !hook ||
-      hook.resolvedAt !== undefined ||
-      step?.status !== "waiting" ||
-      step.wakeAt === undefined ||
-      Date.parse(step.wakeAt) > this.now()
-    ) {
-      return undefined;
-    }
+      if (
+        !hook ||
+        hook.resolvedAt !== undefined ||
+        step?.status !== "waiting" ||
+        step.wakeAt === undefined ||
+        Date.parse(step.wakeAt) > this.now()
+      ) {
+        return undefined;
+      }
 
-    hook.expiredAt = this.timestamp();
+      if (hook.expiredAt === undefined) {
+        hook.expiredAt = this.timestamp();
+        this.emit(txn, { entity: "hook", kind: "expired", runId, record: hook });
+      }
 
-    return step.wakeAt;
+      return step.wakeAt;
+    });
   }
 
   private readonly limits = new Map<string, RateLimitWindow>();
@@ -128,11 +153,14 @@ export class MemoryRunStore implements RunStore {
   ) {}
 
   async createRun(run: RunRecord): Promise<void> {
-    if (this.runs.has(run.id)) {
-      throw new Error(`Run '${run.id}' already exists. Use a new run ID.`);
-    }
+    return this.commit((txn) => {
+      if (this.runs.has(run.id)) {
+        throw new Error(`Run '${run.id}' already exists. Use a new run ID.`);
+      }
 
-    this.runs.set(run.id, structuredClone(run));
+      this.runs.set(run.id, structuredClone(run));
+      this.emit(txn, { entity: "run", kind: "created", runId: run.id, record: run });
+    });
   }
 
   async getRun(id: string): Promise<RunRecord | undefined> {
@@ -150,96 +178,111 @@ export class MemoryRunStore implements RunStore {
   }
 
   async claim(runId: string, token: string): Promise<RunRecord> {
-    const run = this.requireRun(runId);
+    return this.commit((txn) => {
+      const run = this.requireRun(runId);
 
-    if (run.owner !== undefined && !this.stale(run, this.now())) {
-      throw new OwnershipError(runId);
-    }
-
-    if (run.status !== "queued" && run.status !== "suspended" && !this.stale(run, this.now())) {
-      throw new Error(
-        `Run '${runId}' cannot be claimed in status '${run.status}'. Activate a queued or suspended run.`,
-      );
-    }
-
-    const timestamp = this.timestamp();
-
-    if (run.owner) {
-      for (const [seq, step] of this.steps.get(runId) ?? []) {
-        if (step.status === "running") {
-          this.steps.get(runId)?.set(seq, {
-            ...step,
-            status: "retrying",
-            error: "Runner lost ownership. Retrying unfinished step.",
-            nextRetryAt: timestamp,
-            endedAt: timestamp,
-          });
-        }
+      if (run.owner !== undefined && !this.stale(run, this.now())) {
+        throw new OwnershipError(runId);
       }
-    }
 
-    run.owner = { token, pid: 0, host: "memory", heartbeatAt: timestamp };
-    run.status = "running";
-    run.updatedAt = timestamp;
-    delete run.wakeAt;
+      if (run.status !== "queued" && run.status !== "suspended" && !this.stale(run, this.now())) {
+        throw new Error(
+          `Run '${runId}' cannot be claimed in status '${run.status}'. Activate a queued or suspended run.`,
+        );
+      }
 
-    return structuredClone(run);
+      const timestamp = this.timestamp();
+
+      if (run.owner) {
+        this.recoverSteps(txn, runId, timestamp);
+        this.dropOwner(txn, run);
+      }
+
+      run.owner = { token, pid: 0, host: "memory", heartbeatAt: timestamp };
+      run.status = "running";
+      run.updatedAt = timestamp;
+      delete run.wakeAt;
+
+      this.emit(txn, { entity: "run", kind: "claimed", runId, record: run });
+
+      return structuredClone(run);
+    });
   }
 
   async heartbeat(runId: string, token: string): Promise<boolean> {
-    const run = this.requireRun(runId);
+    return this.commit((txn) => {
+      const run = this.requireRun(runId);
 
-    if (run.owner?.token !== token) {
-      return false;
-    }
+      if (run.owner?.token !== token) {
+        return false;
+      }
 
-    run.owner.heartbeatAt = this.timestamp();
-    run.updatedAt = run.owner.heartbeatAt;
+      run.owner.heartbeatAt = this.timestamp();
+      run.updatedAt = run.owner.heartbeatAt;
+      this.emit(txn, { entity: "run", kind: "heartbeat", runId, record: run });
 
-    return true;
+      return true;
+    });
   }
 
   async suspend(runId: string, token: string, wakeAt?: string): Promise<void> {
-    const run = this.owned(runId, token);
-    this.requireRunning(run);
-    run.status = "suspended";
+    return this.commit((txn) => {
+      const run = this.owned(runId, token);
+      this.requireRunning(run);
+      run.status = "suspended";
 
-    const resolved = [...(this.hooksByRun.get(runId)?.values() ?? [])]
-      .filter((hook) => this.steps.get(runId)?.get(hook.seq)?.status === "waiting")
-      .flatMap((hook) => (hook.resolvedAt === undefined ? [] : [hook.resolvedAt]))
-      .sort()[0];
+      const resolved = [...(this.hooksByRun.get(runId)?.values() ?? [])]
+        .filter((hook) => this.steps.get(runId)?.get(hook.seq)?.status === "waiting")
+        .flatMap((hook) => (hook.resolvedAt === undefined ? [] : [hook.resolvedAt]))
+        .sort()[0];
 
-    const wake = earliestWake(resolved, wakeAt);
-    delete run.wakeAt;
+      const wake = earliestWake(resolved, wakeAt);
+      delete run.wakeAt;
 
-    if (wake !== undefined) {
-      run.wakeAt = wake;
-    }
+      if (wake !== undefined) {
+        run.wakeAt = wake;
+      }
 
-    run.updatedAt = this.timestamp();
+      run.updatedAt = this.timestamp();
+      this.emit(txn, { entity: "run", kind: "suspended", runId, record: run });
+    });
   }
 
   async finishRun(runId: string, token: string, outcome: RunOutcome): Promise<void> {
-    const run = this.owned(runId, token);
-    this.requireRunning(run);
-    run.status = outcome.status;
-    delete run.output;
-    delete run.error;
+    return this.commit((txn) => {
+      const run = this.owned(runId, token);
+      this.requireRunning(run);
+      run.status = outcome.status;
+      delete run.output;
+      delete run.error;
 
-    if (outcome.status === "succeeded") {
-      run.output = structuredClone(outcome.output);
-    }
+      if (outcome.status === "succeeded") {
+        run.output = structuredClone(outcome.output);
+      }
 
-    if (outcome.status === "failed") {
-      run.error = outcome.error;
-    }
+      if (outcome.status === "failed") {
+        run.error = outcome.error;
+      }
 
-    delete run.wakeAt;
-    run.updatedAt = this.timestamp();
+      delete run.wakeAt;
+      run.updatedAt = this.timestamp();
+      this.emit(txn, { entity: "run", kind: "finished", runId, record: run });
+    });
   }
 
   async release(runId: string, token: string): Promise<void> {
-    const run = this.owned(runId, token);
+    return this.commit((txn) => {
+      const run = this.owned(runId, token);
+      const wasRunning = run.status === "running";
+      this.dropOwner(txn, run);
+
+      if (wasRunning) {
+        this.emit(txn, { entity: "run", kind: "suspended", runId, record: run });
+      }
+    });
+  }
+
+  private dropOwner(txn: EventTransaction, run: RunRecord): void {
     const timestamp = this.timestamp();
 
     if (run.status === "running") {
@@ -249,6 +292,28 @@ export class MemoryRunStore implements RunStore {
 
     delete run.owner;
     run.updatedAt = timestamp;
+    this.emit(txn, { entity: "run", kind: "released", runId: run.id, record: run });
+  }
+
+  private recoverSteps(txn: EventTransaction, runId: string, timestamp: string): void {
+    const steps = this.steps.get(runId);
+
+    for (const [seq, step] of [...(steps ?? [])].sort(([left], [right]) => left - right)) {
+      if (step.status !== "running") {
+        continue;
+      }
+
+      const recovered: StepRecord = {
+        ...step,
+        status: "retrying",
+        error: "Runner lost ownership. Retrying unfinished step.",
+        nextRetryAt: timestamp,
+        endedAt: timestamp,
+      };
+
+      steps?.set(seq, recovered);
+      this.emit(txn, { entity: "step", kind: "retrying", runId, record: recovered });
+    }
   }
 
   async getSteps(runId: string): Promise<StepRecord[]> {
@@ -258,24 +323,37 @@ export class MemoryRunStore implements RunStore {
   }
 
   async putStep(runId: string, token: string, step: StepRecord): Promise<void> {
-    this.owned(runId, token);
-    const steps = this.steps.get(runId) ?? new Map<number, StepRecord>();
-    steps.set(step.seq, structuredClone(step));
-    this.steps.set(runId, steps);
+    return this.commit((txn) => {
+      this.owned(runId, token);
+      const steps = this.steps.get(runId) ?? new Map<number, StepRecord>();
+      const record = structuredClone({ ...step, runId });
+
+      if (sameStepRecord(steps.get(step.seq), record)) {
+        return;
+      }
+
+      steps.set(step.seq, record);
+      this.steps.set(runId, steps);
+      this.emit(txn, { entity: "step", kind: record.status, runId, record });
+    });
   }
 
   async appendLog(runId: string, token: string, log: LogRecord): Promise<void> {
-    this.owned(runId, token);
+    return this.commit((txn) => {
+      this.owned(runId, token);
 
-    const logs = this.logs.get(runId) ?? new Map<number, LogRecord>();
+      const logs = this.logs.get(runId) ?? new Map<number, LogRecord>();
 
-    if (logs.has(log.seq)) {
-      throw new Error(`Log sequence ${log.seq} already exists. Append a new sequence number.`);
-    }
+      if (logs.has(log.seq)) {
+        throw new Error(`Log sequence ${log.seq} already exists. Append a new sequence number.`);
+      }
 
-    logs.set(log.seq, structuredClone(log));
+      const record = structuredClone({ ...log, runId });
+      logs.set(log.seq, record);
 
-    this.logs.set(runId, logs);
+      this.logs.set(runId, logs);
+      this.emit(txn, { entity: "log", kind: "written", runId, record });
+    });
   }
 
   async getLogs(runId: string, after = 0): Promise<LogRecord[]> {
@@ -311,13 +389,15 @@ export class MemoryRunStore implements RunStore {
   }
 
   async putSchedule(schedule: Schedule): Promise<void> {
-    this.schedules.set(
-      JSON.stringify([schedule.workspace, schedule.slug]),
-      structuredClone({
+    return this.commit((txn) => {
+      const record = structuredClone({
         ...schedule,
         nextFireAt: new Date(schedule.nextFireAt).toISOString(),
-      }),
-    );
+      });
+
+      this.schedules.set(JSON.stringify([schedule.workspace, schedule.slug]), record);
+      this.emit(txn, { entity: "schedule", kind: "saved", runId: null, record });
+    });
   }
 
   async listSchedules(): Promise<Schedule[]> {
@@ -325,7 +405,16 @@ export class MemoryRunStore implements RunStore {
   }
 
   async deleteSchedule(workspace: string, slug: string): Promise<void> {
-    this.schedules.delete(JSON.stringify([workspace, slug]));
+    return this.commit((txn) => {
+      if (this.schedules.delete(JSON.stringify([workspace, slug]))) {
+        this.emit(txn, {
+          entity: "schedule",
+          kind: "deleted",
+          runId: null,
+          record: { workspace, slug },
+        });
+      }
+    });
   }
 
   async fireSchedule(
@@ -335,27 +424,104 @@ export class MemoryRunStore implements RunStore {
     run: RunRecord,
     nextFireAt: string,
   ): Promise<boolean> {
-    const schedule = this.schedules.get(JSON.stringify([workspace, slug]));
+    return this.commit((txn) => {
+      const schedule = this.schedules.get(JSON.stringify([workspace, slug]));
 
-    if (!schedule) {
-      throw new Error(`Schedule '${slug}' does not exist. Save the schedule before firing it.`);
+      if (!schedule) {
+        throw new Error(`Schedule '${slug}' does not exist. Save the schedule before firing it.`);
+      }
+
+      if (schedule.lastFireKey === fireKey) {
+        return false;
+      }
+
+      if (this.runs.has(run.id)) {
+        throw new Error(`Run '${run.id}' already exists. Use a new run ID.`);
+      }
+
+      const savedRun = structuredClone(run);
+      const next = new Date(nextFireAt).toISOString();
+      this.runs.set(run.id, savedRun);
+      schedule.lastFireKey = fireKey;
+      schedule.nextFireAt = next;
+      this.emit(txn, { entity: "run", kind: "created", runId: run.id, record: savedRun });
+      this.emit(txn, { entity: "schedule", kind: "fired", runId: null, record: schedule });
+
+      return true;
+    });
+  }
+
+  private eventLog: RuntimeEvent[] = [];
+  private sequence = 0;
+  private readonly storeEpoch = crypto.randomUUID();
+  private readonly listeners = new Set<(events: RuntimeEvent[]) => void>();
+
+  subscribe(listener: (events: RuntimeEvent[]) => void): () => void {
+    this.listeners.add(listener);
+
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  async events(after: number, limit: number): Promise<RuntimeEvent[]> {
+    return structuredClone(this.eventLog.filter((event) => event.sequence > after).slice(0, limit));
+  }
+
+  async epoch(): Promise<string> {
+    return this.storeEpoch;
+  }
+
+  async snapshotRun(id: string): Promise<RunSnapshot | undefined> {
+    const run = this.runs.get(id);
+
+    if (!run) {
+      return undefined;
     }
 
-    if (schedule.lastFireKey === fireKey) {
-      return false;
+    return structuredClone({
+      run,
+      steps: [...(this.steps.get(id)?.values() ?? [])].sort((left, right) => left.seq - right.seq),
+      logs: [...(this.logs.get(id)?.values() ?? [])].sort((left, right) => left.seq - right.seq),
+      hooks: [...(this.hooksByRun.get(id)?.values() ?? [])].sort(
+        (left, right) => left.seq - right.seq,
+      ),
+      cursor: this.sequence,
+      epoch: this.storeEpoch,
+    });
+  }
+
+  async pruneEvents(now: string): Promise<number> {
+    const cutoff = Date.parse(now) - 86_400_000;
+    const kept = this.eventLog.slice(-100_000).filter((event) => Date.parse(event.at) >= cutoff);
+    const deleted = this.eventLog.length - kept.length;
+    this.eventLog = kept;
+
+    return deleted;
+  }
+
+  private commit<T>(change: (txn: EventTransaction) => T): T {
+    const txn: EventTransaction = { id: crypto.randomUUID(), events: [] };
+    const result = change(txn);
+    this.eventLog.push(...txn.events);
+
+    if (txn.events.length > 0) {
+      for (const listener of this.listeners) {
+        try {
+          listener(structuredClone(txn.events));
+        } catch {
+          continue;
+        }
+      }
     }
 
-    if (this.runs.has(run.id)) {
-      throw new Error(`Run '${run.id}' already exists. Use a new run ID.`);
-    }
+    return result;
+  }
 
-    const savedRun = structuredClone(run);
-    const next = new Date(nextFireAt).toISOString();
-    this.runs.set(run.id, savedRun);
-    schedule.lastFireKey = fireKey;
-    schedule.nextFireAt = next;
-
-    return true;
+  private emit(txn: EventTransaction, change: RuntimeEventChange): void {
+    txn.events.push(
+      structuredClone({ ...change, sequence: ++this.sequence, at: this.timestamp(), txn: txn.id }),
+    );
   }
 
   private stale(run: RunRecord, now: number): boolean {

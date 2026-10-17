@@ -8,7 +8,10 @@ import type {
   LogRecord,
   RunOutcome,
   RunRecord,
+  RunSnapshot,
   RunStatus,
+  RuntimeEvent,
+  RuntimeEventChange,
   Schedule,
   StepRecord,
   WaitingHookStep,
@@ -21,9 +24,11 @@ import {
   type RateLimitResult,
   type RateLimitWindow,
   type RunStore,
+  sameStepRecord,
 } from "../runtime/index.js";
 import { errnoCode } from "./fs.js";
 import {
+  rowToEvent,
   rowToHook,
   rowToLog,
   rowToRun,
@@ -33,6 +38,7 @@ import {
   stepToRow,
 } from "./store-rows.js";
 import {
+  type EventRow,
   type HookRow,
   type LogRow,
   type RunRow,
@@ -41,6 +47,8 @@ import {
   type ScheduleRow,
   type StepRow,
 } from "./store-schema.js";
+
+type EventTransaction = { id: string; events: RuntimeEvent[] };
 
 export class SqliteRunStore implements RunStore {
   private readonly db: Database;
@@ -80,60 +88,61 @@ export class SqliteRunStore implements RunStore {
         }
 
         this.db.exec(SCHEMA);
+        this.db.query(SQL.createEpoch).run(crypto.randomUUID());
         this.db.exec(`PRAGMA user_version=${SCHEMA_VERSION}`);
       })
       .immediate();
   }
 
   async createHook(runId: string, token: string, step: WaitingHookStep): Promise<void> {
-    this.db
-      .transaction(() => {
-        this.requireRunning(this.owned(runId, token));
+    this.commit((txn) => {
+      this.requireRunning(this.owned(runId, token));
 
-        if (
-          this.db.query(SQL.hook).get(step.input.token) ||
-          this.db.query(SQL.step).get(runId, step.seq)
-        ) {
-          throw new Error("Hook already exists. Resume the run to use its waiting hook.");
-        }
+      if (
+        this.db.query(SQL.hook).get(step.input.token) ||
+        this.db.query(SQL.step).get(runId, step.seq)
+      ) {
+        throw new Error("Hook already exists. Resume the run to use its waiting hook.");
+      }
 
-        this.writeStep({ ...step, runId });
-        this.db
-          .query(SQL.createHook)
-          .run(step.input.token, runId, step.seq, step.input.name, step.startedAt);
-      })
-      .immediate();
+      this.writeStep({ ...step, runId });
+      this.db
+        .query(SQL.createHook)
+        .run(step.input.token, runId, step.seq, step.input.name, step.startedAt);
+      this.emitStep(txn, runId, step.seq);
+      this.emitHook(txn, step.input.token, "created");
+    });
   }
 
   async resolveHook(token: string, payload: Json): Promise<boolean> {
-    return this.db
-      .transaction(() => {
-        const hook = this.db.query<HookRow, [string]>(SQL.hook).get(token);
+    return this.commit((txn) => {
+      const hook = this.db.query<HookRow, [string]>(SQL.hook).get(token);
 
-        const row = hook
-          ? this.db.query<StepRow, [string, number]>(SQL.step).get(hook.run_id, hook.seq)
-          : undefined;
+      const row = hook
+        ? this.db.query<StepRow, [string, number]>(SQL.step).get(hook.run_id, hook.seq)
+        : undefined;
 
-        const run = hook ? this.row(hook.run_id) : undefined;
+      const run = hook ? this.row(hook.run_id) : undefined;
 
-        if (
-          !hook ||
-          hook.resolved_at !== null ||
-          hook.expired_at !== null ||
-          !row ||
-          !run ||
-          !canResolveHook(rowToRun(run), rowToStep(row), this.now())
-        ) {
-          return false;
-        }
+      if (
+        !hook ||
+        hook.resolved_at !== null ||
+        hook.expired_at !== null ||
+        !row ||
+        !run ||
+        !canResolveHook(rowToRun(run), rowToStep(row), this.now())
+      ) {
+        return false;
+      }
 
-        const timestamp = this.timestamp();
-        this.db.query(SQL.resolveHook).run(JSON.stringify(payload), timestamp, token);
-        this.db.query(SQL.wakeHook).run(timestamp, timestamp, hook.run_id);
+      const timestamp = this.timestamp();
+      this.db.query(SQL.resolveHook).run(JSON.stringify(payload), timestamp, token);
+      this.db.query(SQL.wakeHook).run(timestamp, timestamp, hook.run_id);
+      this.emitHook(txn, token, "resolved");
+      this.emitRun(txn, hook.run_id, "woken");
 
-        return true;
-      })
-      .immediate();
+      return true;
+    });
   }
 
   async listHooks(runId: string): Promise<HookRecord[]> {
@@ -145,42 +154,37 @@ export class SqliteRunStore implements RunStore {
       return [];
     }
 
-    const placeholders = seqs.map(() => "?").join(",");
-
     return this.db
-      .query<HookRow, [string, ...number[]]>(
-        `SELECT * FROM hooks WHERE run_id=? AND seq IN (${placeholders}) ORDER BY seq`,
-      )
+      .query<HookRow, [string, ...number[]]>(SQL.pendingHooks(seqs.length))
       .all(runId, ...seqs)
       .map(rowToHook);
   }
 
   async expireHook(runId: string, token: string, seq: number): Promise<string | undefined> {
-    return this.db
-      .transaction(() => {
-        this.requireRunning(this.owned(runId, token));
+    return this.commit((txn) => {
+      this.requireRunning(this.owned(runId, token));
 
-        const hook = this.db
-          .query<HookRow, [string, number]>("SELECT * FROM hooks WHERE run_id=? AND seq=?")
-          .get(runId, seq);
+      const hook = this.db.query<HookRow, [string, number]>(SQL.hookStep).get(runId, seq);
 
-        const step = this.db.query<StepRow, [string, number]>(SQL.step).get(runId, seq);
+      const step = this.db.query<StepRow, [string, number]>(SQL.step).get(runId, seq);
 
-        if (
-          !hook ||
-          hook.resolved_at !== null ||
-          step?.status !== "waiting" ||
-          step.wake_at === null ||
-          Date.parse(step.wake_at) > this.now()
-        ) {
-          return undefined;
-        }
+      if (
+        !hook ||
+        hook.resolved_at !== null ||
+        step?.status !== "waiting" ||
+        step.wake_at === null ||
+        Date.parse(step.wake_at) > this.now()
+      ) {
+        return undefined;
+      }
 
+      if (hook.expired_at === null) {
         this.db.query(SQL.expireHook).run(this.timestamp(), runId, seq);
+        this.emitHook(txn, hook.token, "expired");
+      }
 
-        return step.wake_at;
-      })
-      .immediate();
+      return step.wake_at;
+    });
   }
 
   async acquireRateLimit(
@@ -205,15 +209,14 @@ export class SqliteRunStore implements RunStore {
   }
 
   async createRun(run: RunRecord): Promise<void> {
-    this.db
-      .transaction(() => {
-        if (this.row(run.id)) {
-          throw new Error(`Run '${run.id}' already exists. Use a new run ID.`);
-        }
+    this.commit((txn) => {
+      if (this.row(run.id)) {
+        throw new Error(`Run '${run.id}' already exists. Use a new run ID.`);
+      }
 
-        this.insertRun(run);
-      })
-      .immediate();
+      this.insertRun(run);
+      this.emitRun(txn, run.id, "created");
+    });
   }
 
   async getRun(id: string): Promise<RunRecord | undefined> {
@@ -245,98 +248,116 @@ export class SqliteRunStore implements RunStore {
   }
 
   async claim(runId: string, token: string): Promise<RunRecord> {
-    return this.db
-      .transaction(() => {
-        const timestamp = this.timestamp();
+    return this.commit((txn) => {
+      const timestamp = this.timestamp();
 
-        const previous = this.requireRow(runId);
+      const previous = this.requireRow(runId);
 
-        if (this.stale(previous, this.now())) {
-          this.db.query(SQL.recoverSteps).run(timestamp, timestamp, runId);
-          this.db.query(SQL.release).run(timestamp, timestamp, runId, previous.owner_token);
+      if (this.stale(previous, this.now())) {
+        this.recoverRun(txn, previous, timestamp);
+      }
+
+      const result = this.db
+        .query(SQL.claim)
+        .run(token, process.pid, hostname(), timestamp, timestamp, runId);
+
+      if (result.changes !== 1) {
+        const row = this.requireRow(runId);
+
+        if (row.owner_token !== null) {
+          throw new OwnershipError(runId);
         }
 
-        const result = this.db
-          .query(SQL.claim)
-          .run(token, process.pid, hostname(), timestamp, timestamp, runId);
+        throw new Error(
+          `Run '${runId}' cannot be claimed in status '${row.status}'. Activate a queued or suspended run.`,
+        );
+      }
 
-        if (result.changes !== 1) {
-          const row = this.requireRow(runId);
+      this.emitRun(txn, runId, "claimed");
 
-          if (row.owner_token !== null) {
-            throw new OwnershipError(runId);
-          }
+      return rowToRun(this.requireRow(runId));
+    });
+  }
 
-          throw new Error(
-            `Run '${runId}' cannot be claimed in status '${row.status}'. Activate a queued or suspended run.`,
-          );
-        }
+  private recoverRun(txn: EventTransaction, previous: RunRow, timestamp: string): void {
+    const runId = previous.id;
+    const running = this.db.query<StepRow, [string]>(SQL.runningSteps).all(runId);
+    this.db.query(SQL.recoverSteps).run(timestamp, timestamp, runId);
 
-        return rowToRun(this.requireRow(runId));
-      })
-      .immediate();
+    for (const step of running) {
+      this.emitStep(txn, runId, step.seq);
+    }
+
+    this.db.query(SQL.release).run(timestamp, timestamp, runId, previous.owner_token);
+    this.emitRun(txn, runId, "released");
   }
 
   async heartbeat(runId: string, token: string): Promise<boolean> {
-    return this.db
-      .transaction(() => {
-        this.requireRow(runId);
-        const timestamp = this.timestamp();
+    return this.commit((txn) => {
+      this.requireRow(runId);
+      const timestamp = this.timestamp();
 
-        return this.db.query(SQL.heartbeat).run(timestamp, timestamp, runId, token).changes === 1;
-      })
-      .immediate();
+      const changed =
+        this.db.query(SQL.heartbeat).run(timestamp, timestamp, runId, token).changes === 1;
+
+      if (changed) {
+        this.emitRun(txn, runId, "heartbeat");
+      }
+
+      return changed;
+    });
   }
 
   async suspend(runId: string, token: string, wakeAt?: string): Promise<void> {
-    this.db
-      .transaction(() => {
-        const run = this.owned(runId, token);
-        this.requireRunning(run);
+    this.commit((txn) => {
+      const run = this.owned(runId, token);
+      this.requireRunning(run);
 
-        const resolved =
-          this.db.query<{ wake_at: string | null }, [string]>(SQL.unconsumedHook).get(runId)
-            ?.wake_at ?? undefined;
+      const resolved =
+        this.db.query<{ wake_at: string | null }, [string]>(SQL.unconsumedHook).get(runId)
+          ?.wake_at ?? undefined;
 
-        const wake = earliestWake(resolved, wakeAt);
-        this.db
-          .query(SQL.suspend)
-          .run(
-            wake === undefined ? null : new Date(wake).toISOString(),
-            this.timestamp(),
-            runId,
-            token,
-          );
-      })
-      .immediate();
+      const wake = earliestWake(resolved, wakeAt);
+      this.db
+        .query(SQL.suspend)
+        .run(
+          wake === undefined ? null : new Date(wake).toISOString(),
+          this.timestamp(),
+          runId,
+          token,
+        );
+      this.emitRun(txn, runId, "suspended");
+    });
   }
 
   async finishRun(runId: string, token: string, outcome: RunOutcome): Promise<void> {
-    this.db
-      .transaction(() => {
-        this.requireRunning(this.owned(runId, token));
-        this.db
-          .query(SQL.finish)
-          .run(
-            outcome.status,
-            outcome.status === "succeeded" ? JSON.stringify(outcome.output) : null,
-            outcome.status === "failed" ? outcome.error : null,
-            this.timestamp(),
-            runId,
-            token,
-          );
-      })
-      .immediate();
+    this.commit((txn) => {
+      this.requireRunning(this.owned(runId, token));
+      this.db
+        .query(SQL.finish)
+        .run(
+          outcome.status,
+          outcome.status === "succeeded" ? JSON.stringify(outcome.output) : null,
+          outcome.status === "failed" ? outcome.error : null,
+          this.timestamp(),
+          runId,
+          token,
+        );
+      this.emitRun(txn, runId, "finished");
+    });
   }
 
   async release(runId: string, token: string): Promise<void> {
-    this.db
-      .transaction(() => {
-        this.owned(runId, token);
-        const timestamp = this.timestamp();
-        this.db.query(SQL.release).run(timestamp, timestamp, runId, token);
-      })
-      .immediate();
+    this.commit((txn) => {
+      const previous = this.owned(runId, token);
+      const timestamp = this.timestamp();
+      this.db.query(SQL.release).run(timestamp, timestamp, runId, token);
+      this.emitRun(txn, runId, "released");
+
+      if (previous.status === "running") {
+        this.emitRun(txn, runId, "suspended");
+      }
+    });
   }
 
   async getSteps(runId: string): Promise<StepRecord[]> {
@@ -344,12 +365,18 @@ export class SqliteRunStore implements RunStore {
   }
 
   async putStep(runId: string, token: string, step: StepRecord): Promise<void> {
-    this.db
-      .transaction(() => {
-        this.owned(runId, token);
-        this.writeStep({ ...step, runId });
-      })
-      .immediate();
+    this.commit((txn) => {
+      this.owned(runId, token);
+      const previous = this.db.query<StepRow, [string, number]>(SQL.step).get(runId, step.seq);
+      const next = stepToRow({ ...step, runId });
+
+      if (previous && sameStepRecord(rowToStep(previous), rowToStep(next))) {
+        return;
+      }
+
+      this.writeStep({ ...step, runId });
+      this.emitStep(txn, runId, step.seq);
+    });
   }
 
   private writeStep(step: StepRecord): void {
@@ -377,38 +404,42 @@ export class SqliteRunStore implements RunStore {
   }
 
   async appendLog(runId: string, token: string, log: LogRecord): Promise<void> {
-    this.db
-      .transaction(() => {
-        this.owned(runId, token);
+    this.commit((txn) => {
+      this.owned(runId, token);
 
-        try {
-          this.db
-            .query(SQL.appendLog)
-            .run(
-              runId,
-              log.seq,
-              log.position.kind,
-              log.position.kind === "workflow" ? log.position.afterStep : null,
-              log.position.kind === "workflow" ? log.position.afterFinish : null,
-              log.position.kind === "step" ? log.position.seq : null,
-              log.position.kind === "step" ? log.position.attempt : null,
-              log.position.index,
-              log.level,
-              log.message,
-              log.data === undefined ? null : JSON.stringify(log.data),
-              new Date(log.at).toISOString(),
-            );
-        } catch (error) {
-          if (this.db.query(SQL.logExists).get(runId, log.seq)) {
-            throw new Error(
-              `Log sequence ${log.seq} already exists. Append a new sequence number.`,
-            );
-          }
-
-          throw error;
+      try {
+        this.db
+          .query(SQL.appendLog)
+          .run(
+            runId,
+            log.seq,
+            log.position.kind,
+            log.position.kind === "workflow" ? log.position.afterStep : null,
+            log.position.kind === "workflow" ? log.position.afterFinish : null,
+            log.position.kind === "step" ? log.position.seq : null,
+            log.position.kind === "step" ? log.position.attempt : null,
+            log.position.index,
+            log.level,
+            log.message,
+            log.data === undefined ? null : JSON.stringify(log.data),
+            new Date(log.at).toISOString(),
+          );
+      } catch (error) {
+        if (this.db.query(SQL.logExists).get(runId, log.seq)) {
+          throw new Error(`Log sequence ${log.seq} already exists. Append a new sequence number.`);
         }
-      })
-      .immediate();
+
+        throw error;
+      }
+
+      const row = this.db.query<LogRow, [string, number]>(SQL.log).get(runId, log.seq);
+
+      if (!row) {
+        throw new Error("Log disappeared before commit. Restore storage.");
+      }
+
+      this.emit(txn, { entity: "log", kind: "written", runId, record: rowToLog(row) });
+    });
   }
 
   async getLogs(runId: string, after = 0): Promise<LogRecord[]> {
@@ -430,18 +461,21 @@ export class SqliteRunStore implements RunStore {
   }
 
   async putSchedule(schedule: Schedule): Promise<void> {
-    this.db
-      .query(SQL.putSchedule)
-      .run(
-        schedule.workspace,
-        schedule.slug,
-        schedule.cron,
-        schedule.tz,
-        JSON.stringify(schedule.input),
-        Number(schedule.enabled),
-        schedule.lastFireKey ?? null,
-        new Date(schedule.nextFireAt).toISOString(),
-      );
+    this.commit((txn) => {
+      this.db
+        .query(SQL.putSchedule)
+        .run(
+          schedule.workspace,
+          schedule.slug,
+          schedule.cron,
+          schedule.tz,
+          JSON.stringify(schedule.input),
+          Number(schedule.enabled),
+          schedule.lastFireKey ?? null,
+          new Date(schedule.nextFireAt).toISOString(),
+        );
+      this.emitSchedule(txn, schedule, "saved");
+    });
   }
 
   async listSchedules(): Promise<Schedule[]> {
@@ -449,7 +483,19 @@ export class SqliteRunStore implements RunStore {
   }
 
   async deleteSchedule(workspace: string, slug: string): Promise<void> {
-    this.db.query(SQL.deleteSchedule).run(workspace, slug);
+    this.commit((txn) => {
+      const row = this.db.query<ScheduleRow, [string, string]>(SQL.schedule).get(workspace, slug);
+
+      if (this.db.query(SQL.deleteSchedule).run(workspace, slug).changes && row) {
+        const record = rowToSchedule(row);
+        this.emit(txn, {
+          entity: "schedule",
+          kind: "deleted",
+          runId: null,
+          record: { workspace: record.workspace, slug: record.slug },
+        });
+      }
+    });
   }
 
   async fireSchedule(
@@ -459,32 +505,173 @@ export class SqliteRunStore implements RunStore {
     run: RunRecord,
     nextFireAt: string,
   ): Promise<boolean> {
+    return this.commit((txn) => {
+      const schedule = this.db
+        .query<ScheduleRow, [string, string]>(SQL.schedule)
+        .get(workspace, slug);
+
+      if (!schedule) {
+        throw new Error(`Schedule '${slug}' does not exist. Save the schedule before firing it.`);
+      }
+
+      if (schedule.last_fire_key === fireKey) {
+        return false;
+      }
+
+      if (this.row(run.id)) {
+        throw new Error(`Run '${run.id}' already exists. Use a new run ID.`);
+      }
+
+      this.insertRun(run);
+      this.emitRun(txn, run.id, "created");
+      this.db
+        .query(SQL.fireSchedule)
+        .run(fireKey, new Date(nextFireAt).toISOString(), workspace, slug);
+      this.emitSchedule(txn, schedule, "fired");
+
+      return true;
+    });
+  }
+
+  private readonly listeners = new Set<(events: RuntimeEvent[]) => void>();
+
+  subscribe(listener: (events: RuntimeEvent[]) => void): () => void {
+    this.listeners.add(listener);
+
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  async events(after: number, limit: number): Promise<RuntimeEvent[]> {
+    return this.db.query<EventRow, [number, number]>(SQL.events).all(after, limit).map(rowToEvent);
+  }
+
+  async epoch(): Promise<string> {
+    return this.readEpoch();
+  }
+
+  private readEpoch(): string {
+    const row = this.db.query<{ value: string }, []>(SQL.epoch).get();
+
+    if (!row) {
+      throw new Error("Store epoch is missing. Recreate the database.");
+    }
+
+    return row.value;
+  }
+
+  async snapshotRun(id: string): Promise<RunSnapshot | undefined> {
     return this.db
       .transaction(() => {
-        const schedule = this.db
-          .query<ScheduleRow, [string, string]>(SQL.schedule)
-          .get(workspace, slug);
+        const row = this.row(id);
 
-        if (!schedule) {
-          throw new Error(`Schedule '${slug}' does not exist. Save the schedule before firing it.`);
+        if (!row) {
+          return undefined;
         }
 
-        if (schedule.last_fire_key === fireKey) {
-          return false;
-        }
-
-        if (this.row(run.id)) {
-          throw new Error(`Run '${run.id}' already exists. Use a new run ID.`);
-        }
-
-        this.insertRun(run);
-        this.db
-          .query(SQL.fireSchedule)
-          .run(fireKey, new Date(nextFireAt).toISOString(), workspace, slug);
-
-        return true;
+        return {
+          run: rowToRun(row),
+          steps: this.db.query<StepRow, [string]>(SQL.steps).all(id).map(rowToStep),
+          logs: this.db.query<LogRow, [string, number]>(SQL.logs).all(id, 0).map(rowToLog),
+          hooks: this.db.query<HookRow, [string]>(SQL.hooks).all(id).map(rowToHook),
+          cursor: this.db.query<{ cursor: number }, []>(SQL.cursor).get()?.cursor ?? 0,
+          epoch: this.readEpoch(),
+        };
       })
-      .immediate();
+      .deferred();
+  }
+
+  async pruneEvents(now: string): Promise<number> {
+    const cutoff = new Date(Date.parse(now) - 86_400_000).toISOString();
+
+    return this.db.query(SQL.pruneEvents).run(cutoff).changes;
+  }
+
+  private commit<T>(change: (txn: EventTransaction) => T): T {
+    const txn: EventTransaction = { id: crypto.randomUUID(), events: [] };
+    const result = this.db.transaction(() => change(txn)).immediate();
+
+    if (txn.events.length > 0) {
+      for (const listener of this.listeners) {
+        try {
+          listener(structuredClone(txn.events));
+        } catch {
+          continue;
+        }
+      }
+    }
+
+    return result;
+  }
+
+  private emit(txn: EventTransaction, change: RuntimeEventChange): void {
+    const row = this.db
+      .query<EventRow, [string, string, string, string, string | null, string]>(SQL.appendEvent)
+      .get(
+        this.timestamp(),
+        txn.id,
+        change.entity,
+        change.kind,
+        change.runId,
+        JSON.stringify(change.record),
+      );
+
+    if (!row) {
+      throw new Error("Event was not appended. Restore storage.");
+    }
+
+    txn.events.push(rowToEvent(row));
+  }
+
+  private emitRun(
+    txn: EventTransaction,
+    runId: string,
+    kind: Extract<RuntimeEvent, { entity: "run" }>["kind"],
+  ): void {
+    this.emit(txn, { entity: "run", kind, runId, record: rowToRun(this.requireRow(runId)) });
+  }
+
+  private emitStep(txn: EventTransaction, runId: string, seq: number): void {
+    const row = this.db.query<StepRow, [string, number]>(SQL.step).get(runId, seq);
+
+    if (!row) {
+      throw new Error("Step disappeared before commit. Restore storage.");
+    }
+
+    const record = rowToStep(row);
+    this.emit(txn, { entity: "step", kind: record.status, runId, record });
+  }
+
+  private emitHook(
+    txn: EventTransaction,
+    token: string,
+    kind: Extract<RuntimeEvent, { entity: "hook" }>["kind"],
+  ): void {
+    const row = this.db.query<HookRow, [string]>(SQL.hook).get(token);
+
+    if (!row) {
+      throw new Error("Hook disappeared before commit. Restore storage.");
+    }
+
+    const record = rowToHook(row);
+    this.emit(txn, { entity: "hook", kind, runId: record.runId, record });
+  }
+
+  private emitSchedule(
+    txn: EventTransaction,
+    schedule: Pick<Schedule, "workspace" | "slug">,
+    kind: "saved" | "fired",
+  ): void {
+    const row = this.db
+      .query<ScheduleRow, [string, string]>(SQL.schedule)
+      .get(schedule.workspace, schedule.slug);
+
+    if (!row) {
+      throw new Error("Schedule disappeared before commit. Restore storage.");
+    }
+
+    this.emit(txn, { entity: "schedule", kind, runId: null, record: rowToSchedule(row) });
   }
 
   close(): void {

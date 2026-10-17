@@ -14,7 +14,10 @@ export type {
   RunDetail,
   RunOutcome,
   RunRecord,
+  RunSnapshot,
   RunStatus,
+  RuntimeEvent,
+  RuntimeEventChange,
   Schedule,
   StepBase,
   StepKind,
@@ -22,7 +25,13 @@ export type {
   WaitingHookStep,
 } from "./model.js";
 
-export { isTerminalRun } from "./model.js";
+export {
+  HOOK_EVENT_KINDS,
+  isTerminalRun,
+  RUN_EVENT_KINDS,
+  SCHEDULE_EVENT_KINDS,
+  STEP_STATUSES,
+} from "./model.js";
 
 export { validateSecretName, validateSlug } from "./names.js";
 
