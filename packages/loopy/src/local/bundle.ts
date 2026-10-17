@@ -32,7 +32,11 @@ function inlineImportMeta(path: string, lang: "js" | "jsx" | "ts" | "tsx", sourc
     ["dirname", dirname(path)],
   ]);
 
-  const { program, errors } = parseSync(path, source, { lang, sourceType: "module" });
+  const { program, errors } = parseSync(path, source, {
+    lang,
+    sourceType: "module",
+    preserveParens: false,
+  });
 
   if (errors.length > 0) {
     return source;

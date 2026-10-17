@@ -25,7 +25,7 @@ test("a saved bundle keeps each module's import.meta on its source file", async 
       `#!/usr/bin/env bun
       import { Thing } from "./types.ts";
       export const thing: Thing = require("./types.ts").thing;
-      export const helper = { url: import.meta.url, dir: import /* meta */ .meta.dir, file: import.meta.file };
+      export const helper = { url: (import.meta).url, dir: import /* meta */ .meta.dir, file: import.meta.file };
       export class Target { path = "own"; constructor() { this.path = new.target.path ?? this.path; } static path = "static"; }`,
     );
     await Bun.write(
