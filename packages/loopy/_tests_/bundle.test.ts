@@ -25,7 +25,8 @@ test("a saved bundle keeps each module's import.meta on its source file", async 
       `#!/usr/bin/env bun
       import { Thing } from "./types.ts";
       export const thing: Thing = require("./types.ts").thing;
-      export const helper = { url: import.meta.url, dir: import.meta . dir, file: import.meta.file };`,
+      export const helper = { url: import.meta.url, dir: import /* meta */ .meta.dir, file: import.meta.file };
+      export class Target { path = "own"; constructor() { this.path = new.target.path ?? this.path; } static path = "static"; }`,
     );
     await Bun.write(
       join(root, "lib", "view.tsx"),
@@ -35,7 +36,7 @@ test("a saved bundle keeps each module's import.meta on its source file", async 
       entry,
       `
       import { loopy } from ${JSON.stringify(sdk)};
-      import { helper, thing } from "./lib/helper.ts";
+      import { helper, Target, thing } from "./lib/helper.ts";
       import { view } from "./lib/view.tsx";
       import note from "./lib/note.txt" with { type: "text" };
       const literal = "import.meta.url"; // import.meta.url in a comment
@@ -47,6 +48,7 @@ test("a saved bundle keeps each module's import.meta on its source file", async 
           note,
           thing,
           main: import.meta.main,
+          target: new Target().path,
           view: view().href,
           ...helper,
         }),
@@ -74,6 +76,7 @@ test("a saved bundle keeps each module's import.meta on its source file", async 
         note: "plain text",
         thing: { n: 1 },
         main: false,
+        target: "static",
         view: join(root, "lib", "view.tsx"),
         url: pathToFileURL(helper).href,
         dir: join(root, "lib"),

@@ -12,8 +12,17 @@ import { Registry } from "./registry.js";
 // naming the file it was written in. Loopies locate sibling scripts with it. Only
 // the parsed `import.meta.<key>` expressions are spliced, so strings, comments,
 // loaders and type elision stay exactly as Bun would otherwise see them.
-// Destructuring and computed access such as import.meta["url"] are not rewritten.
-function inlineImportMeta(path: string, source: string) {
+// Destructuring and computed access such as import.meta["url"] are not rewritten, and
+// Bun does not tell plugins about import attributes, so a module imported with
+// { type: "text" } is still rewritten when it mentions import.meta.
+const DIALECTS = new Map<Bun.Loader, "js" | "jsx" | "ts" | "tsx">([
+  ["js", "jsx"],
+  ["jsx", "jsx"],
+  ["ts", "ts"],
+  ["tsx", "tsx"],
+]);
+
+function inlineImportMeta(path: string, lang: "js" | "jsx" | "ts" | "tsx", source: string) {
   const values = new Map([
     ["url", pathToFileURL(path).href],
     ["path", path],
@@ -23,7 +32,7 @@ function inlineImportMeta(path: string, source: string) {
     ["dirname", dirname(path)],
   ]);
 
-  const { program, errors } = parseSync(path, source);
+  const { program, errors } = parseSync(path, source, { lang, sourceType: "module" });
 
   if (errors.length > 0) {
     return source;
@@ -35,6 +44,7 @@ function inlineImportMeta(path: string, source: string) {
     MemberExpression(node) {
       if (
         node.object.type !== "MetaProperty" ||
+        node.object.meta.name !== "import" ||
         node.computed ||
         node.property.type !== "Identifier"
       ) {
@@ -58,13 +68,14 @@ const sourcePaths: Bun.BunPlugin = {
   name: "loopy-source-paths",
   setup(build) {
     build.onLoad({ filter: /\.[cm]?[jt]sx?$/ }, async ({ path, loader }) => {
+      const lang = DIALECTS.get(loader);
       const source = await Bun.file(path).text();
 
-      if (!/\bimport\s*\.\s*meta\b/.test(source)) {
+      if (lang === undefined || !source.includes("import")) {
         return undefined;
       }
 
-      return { contents: inlineImportMeta(path, source), loader };
+      return { contents: inlineImportMeta(path, lang, source), loader };
     });
   },
 };
