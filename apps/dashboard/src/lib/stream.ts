@@ -9,24 +9,19 @@ import type {
 } from "loopy/contract";
 import type { LoopyBackend, RunsQuery, StreamState } from "../backend/backend.ts";
 import { keys } from "./keys.ts";
+import type { RunPage } from "./queries.ts";
 
 type HookEvent = Extract<ServerEvent, { entity: "hook" }>;
 
 /** A `["runs", ...]` cache entry: one page from `useQuery`, or the pages of `useInfiniteQuery`. */
-type RunList = RunView[] | InfiniteData<RunView[], unknown>;
+type RunList = RunView[] | InfiniteData<RunPage, unknown>;
 
 function mapRunList(list: RunList | undefined, update: (runs: RunView[]) => RunView[]) {
   if (list === undefined || Array.isArray(list)) {
     return list && update(list);
   }
 
-  return { ...list, pages: list.pages.map(update) };
-}
-
-function runListHas(list: RunList | undefined, id: string): boolean {
-  const pages = list === undefined || Array.isArray(list) ? [list ?? []] : list.pages;
-
-  return pages.some((runs) => runs.some((run) => run.id === id));
+  return { ...list, pages: list.pages.map((page) => ({ ...page, runs: update(page.runs) })) };
 }
 
 function upsertBy<T>(items: T[], item: T, same: (a: T) => boolean, order: (a: T) => number): T[] {
@@ -104,7 +99,7 @@ export function applyToSnapshot(snapshot: RunSnapshotView, event: ServerEvent): 
 
   switch (event.entity) {
     case "run": {
-      return { ...next, run: event.record };
+      return { ...next, run: newer(snapshot.run, event.record) ? event.record : snapshot.run };
     }
 
     case "step": {
@@ -153,7 +148,13 @@ function applyHookToList(
 
 type BatchChanges = { lists: Set<string>; loopies: boolean };
 
-type StreamHistory = { sequences: Map<string, number>; runs: Map<string, RunView> };
+type RunEvent = Extract<ServerEvent, { entity: "run" }>;
+
+type StreamHistory = {
+  sequences: Map<string, number>;
+  runs: Map<string, { sequence: number; run: RunView }>;
+  lists: Map<string, { sequence: number; run: RunView }>;
+};
 
 type BatchContext = { client: QueryClient; history: StreamHistory; changes: BatchChanges };
 
@@ -178,7 +179,39 @@ function replaceMember(runs: RunView[], next: RunView, filters: RunsQuery): RunV
   });
 }
 
-function updateMembership(client: QueryClient, run: RunView, previous?: RunView): Set<string> {
+function listRun(list: RunList | undefined, id: string): RunView | undefined {
+  const pages =
+    list === undefined || Array.isArray(list) ? [list ?? []] : list.pages.map((page) => page.runs);
+
+  return pages.flat().find((run) => run.id === id);
+}
+
+function acceptListRun(
+  previous: RunView | undefined,
+  hash: string,
+  write: { history: StreamHistory; event: RunEvent },
+): boolean {
+  const { history, event } = write;
+  const saved = history.lists.get(hash);
+  const current = previous ?? saved?.run;
+
+  if (
+    event.sequence <= (saved?.sequence ?? -1) ||
+    (current !== undefined && !newer(current, event.record))
+  ) {
+    return false;
+  }
+
+  history.lists.set(hash, { sequence: event.sequence, run: event.record });
+
+  return true;
+}
+
+function updateMembership(
+  client: QueryClient,
+  run: RunView,
+  write?: { history: StreamHistory; event: RunEvent },
+): Set<string> {
   const missing = new Set<string>();
 
   for (const query of client.getQueryCache().findAll({ queryKey: keys.runLists })) {
@@ -190,40 +223,22 @@ function updateMembership(client: QueryClient, run: RunView, previous?: RunView)
 
     const filters = key[1] === "pages" ? key[2] : key[1];
     const list = client.getQueryData<RunList>(key);
-    const present = runListHas(list, run.id);
+    const previous = listRun(list, run.id);
 
-    if (present) {
+    if (write !== undefined && !acceptListRun(previous, `${query.queryHash}:${run.id}`, write)) {
+      continue;
+    }
+
+    if (previous !== undefined) {
       client.setQueryData<RunList>(key, (current) =>
         mapRunList(current, (runs) => replaceMember(runs, run, filters)),
       );
-    } else if (
-      matchesRun(filters, run) ||
-      (previous !== undefined && matchesRun(filters, previous))
-    ) {
+    } else if (matchesRun(filters, run)) {
       missing.add(query.queryHash);
     }
   }
 
   return missing;
-}
-
-function cachedRun(client: QueryClient, id: string): RunView | undefined {
-  const snapshot = client.getQueryData<RunSnapshotView>(keys.run(id));
-
-  if (snapshot) {
-    return snapshot.run;
-  }
-
-  for (const [, list] of client.getQueriesData<RunList>({ queryKey: keys.runLists })) {
-    const pages = list === undefined || Array.isArray(list) ? [list ?? []] : list.pages;
-    const run = pages.flat().find((item) => item.id === id);
-
-    if (run) {
-      return run;
-    }
-  }
-
-  return undefined;
 }
 
 function applyHookLists(
@@ -234,7 +249,7 @@ function applyHookLists(
   for (const query of client.getQueryCache().findAll({ queryKey: keys.runLists })) {
     const list = client.getQueryData<RunList>(query.queryKey);
 
-    if (!canApplyHook(event, snapshot) && runListHas(list, event.record.runId)) {
+    if (!canApplyHook(event, snapshot) && listRun(list, event.record.runId) !== undefined) {
       changes.lists.add(query.queryHash);
     }
 
@@ -244,29 +259,28 @@ function applyHookLists(
   }
 }
 
-function applyRunEvent(
-  { client, history, changes }: BatchContext,
-  event: Extract<ServerEvent, { entity: "run" }>,
-): void {
-  const previous = history.runs.get(event.record.id) ?? cachedRun(client, event.record.id);
+function applyRunEvent({ client, history, changes }: BatchContext, event: RunEvent): void {
+  const missing = updateMembership(client, event.record, { history, event });
 
-  if (previous !== undefined && !newer(previous, event.record)) {
+  if (event.kind === "heartbeat") {
     return;
   }
 
-  const status = history.runs.get(event.record.id)?.status;
-
-  const missing = updateMembership(client, event.record, previous);
-
-  if (event.kind !== "heartbeat") {
-    for (const hash of missing) {
-      changes.lists.add(hash);
-    }
+  for (const hash of missing) {
+    changes.lists.add(hash);
   }
 
-  changes.loopies ||=
-    status === undefined ? event.kind !== "heartbeat" : status !== event.record.status;
-  history.runs.set(event.record.id, event.record);
+  const previous = history.runs.get(event.record.id);
+
+  if (
+    previous !== undefined &&
+    (event.sequence <= previous.sequence || !newer(previous.run, event.record))
+  ) {
+    return;
+  }
+
+  changes.loopies ||= previous === undefined || previous.run.status !== event.record.status;
+  history.runs.set(event.record.id, { sequence: event.sequence, run: event.record });
 }
 
 function acceptEvent(history: StreamHistory, event: ServerEvent): boolean {
@@ -294,7 +308,10 @@ function applyEvent(context: BatchContext, event: ServerEvent): void {
   const snapshot =
     event.runId === null ? undefined : client.getQueryData<RunSnapshotView>(keys.run(event.runId));
 
-  if (!acceptEvent(history, event)) {
+  if (event.entity === "run") {
+    applyRunEvent(context, event);
+    acceptEvent(history, event);
+  } else if (!acceptEvent(history, event)) {
     return;
   }
 
@@ -304,9 +321,7 @@ function applyEvent(context: BatchContext, event: ServerEvent): void {
     return;
   }
 
-  if (event.entity === "run") {
-    applyRunEvent(context, event);
-  } else if (event.entity === "hook") {
+  if (event.entity === "hook") {
     applyHookLists(context, event, snapshot);
   }
 
@@ -320,7 +335,12 @@ function applyEvent(context: BatchContext, event: ServerEvent): void {
 
 /** Writes a transaction before refetching each affected list once. */
 export function applyBatch(client: QueryClient, batch: ServerEvent[]): void {
-  const history = histories.get(client) ?? { sequences: new Map(), runs: new Map() };
+  const history = histories.get(client) ?? {
+    sequences: new Map(),
+    runs: new Map(),
+    lists: new Map(),
+  };
+
   histories.set(client, history);
   const changes: BatchChanges = { lists: new Set(), loopies: false };
 

@@ -10,24 +10,27 @@ export function loopiesQuery(backend: LoopyBackend) {
   return queryOptions({ queryKey: keys.loopies, queryFn: () => backend.loopies() });
 }
 
-export function runsQuery(backend: LoopyBackend, query: RunsQuery) {
-  return queryOptions({ queryKey: keys.runs(query), queryFn: () => backend.runs(query) });
+// The server page boundary survives stream removals, including removal of its oldest row.
+function runPage(runs: Awaited<ReturnType<LoopyBackend["runs"]>>) {
+  const oldest = runs.at(-1);
+
+  return {
+    runs,
+    nextCursor:
+      runs.length < RUN_PAGE_SIZE || oldest === undefined ? undefined : encodeRunCursor(oldest),
+  };
 }
 
-/** Newest first. A short page is the last one; otherwise its oldest run is the next cursor. */
+export type RunPage = ReturnType<typeof runPage>;
+
 export function runPagesQuery(backend: LoopyBackend, filters: RunFilters) {
   return infiniteQueryOptions({
     queryKey: keys.runPages(filters),
-    queryFn: ({ pageParam }: { pageParam: RunsQuery["before"] }) =>
-      backend.runs({ ...filters, limit: RUN_PAGE_SIZE, before: pageParam }),
+    queryFn: async ({ pageParam }: { pageParam: RunsQuery["before"] }) =>
+      runPage(await backend.runs({ ...filters, limit: RUN_PAGE_SIZE, before: pageParam })),
     initialPageParam: undefined,
-    getNextPageParam: (page) => {
-      const oldest = page.at(-1);
-
-      return page.length < RUN_PAGE_SIZE || oldest === undefined
-        ? undefined
-        : encodeRunCursor(oldest);
-    },
+    getNextPageParam: (page) => page.nextCursor,
+    select: (data) => ({ ...data, pages: data.pages.map((page) => page.runs) }),
   });
 }
 

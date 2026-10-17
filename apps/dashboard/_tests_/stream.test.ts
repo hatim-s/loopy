@@ -5,6 +5,7 @@ import type { EventSubscription, StreamEnd } from "../src/backend/backend.ts";
 import { type EventDraft, fakeBackend } from "../src/backend/fake.ts";
 import { INBOX_QUERY, inboxGroups } from "../src/lib/inbox.ts";
 import { keys } from "../src/lib/keys.ts";
+import type { RunPage } from "../src/lib/queries.ts";
 import { applyBatch, applyToSnapshot, followSession } from "../src/lib/stream.ts";
 
 const AT = "2026-10-17T10:00:00.000Z";
@@ -22,6 +23,10 @@ const run: RunView = {
   waitingOn: null,
   status: "queued",
 };
+
+function page(runs: RunView[]): RunPage {
+  return { runs, nextCursor: undefined };
+}
 
 function snapshot(overrides: Partial<RunSnapshotView> = {}): RunSnapshotView {
   return { run, steps: [], logs: [], hooks: [], cursor: 10, epoch: "e1", ...overrides };
@@ -101,13 +106,18 @@ test("a run event replaces the snapshot run and every list entry for that run", 
 test("a run event updates its run inside every page of a paged list", () => {
   const client = new QueryClient();
   const older = { ...run, id: "run-0" };
-  const paged = { pages: [[{ ...run, id: "run-2" }], [older, run]], pageParams: [undefined, "c1"] };
+
+  const paged = {
+    pages: [page([{ ...run, id: "run-2" }]), page([older, run])],
+    pageParams: [undefined, "c1"],
+  };
+
   client.setQueryData(keys.runPages({ slug: "triage" }), paged);
 
   applyBatch(client, [runEvent(11, running)]);
 
-  expect(client.getQueryData<InfiniteData<RunView[]>>(keys.runPages({ slug: "triage" }))).toEqual({
-    pages: [[{ ...run, id: "run-2" }], [older, running]],
+  expect(client.getQueryData<InfiniteData<RunPage>>(keys.runPages({ slug: "triage" }))).toEqual({
+    pages: [page([{ ...run, id: "run-2" }]), page([older, running])],
     pageParams: [undefined, "c1"],
   });
 });
@@ -116,8 +126,8 @@ test("hook creation without steps invalidates a paged list that holds its run", 
   const client = new QueryClient();
   const holding = keys.runPages({});
   const other = keys.runPages({ slug: "other" });
-  client.setQueryData(holding, { pages: [[], [run]], pageParams: [undefined, "c1"] });
-  client.setQueryData(other, { pages: [[{ ...run, id: "other" }]], pageParams: [undefined] });
+  client.setQueryData(holding, { pages: [page([]), page([run])], pageParams: [undefined, "c1"] });
+  client.setQueryData(other, { pages: [page([{ ...run, id: "other" }])], pageParams: [undefined] });
   applyBatch(client, [hookEvent(11, "created")]);
   expect(client.getQueryState(holding)?.isInvalidated).toBe(true);
   expect(client.getQueryState(other)?.isInvalidated).toBe(false);
@@ -491,8 +501,8 @@ test("an unseen run invalidates matching array and infinite lists once per fresh
   const pages = keys.runPages({ status: "running", slug: run.slug });
   const unrelated = keys.runPages({ status: "running", slug: "other" });
   client.setQueryData(array, []);
-  client.setQueryData(pages, { pages: [[]], pageParams: [undefined] });
-  client.setQueryData(unrelated, { pages: [[]], pageParams: [undefined] });
+  client.setQueryData(pages, { pages: [page([])], pageParams: [undefined] });
+  client.setQueryData(unrelated, { pages: [page([])], pageParams: [undefined] });
   const invalidations = spyOn(client, "invalidateQueries");
   const batch = [runEvent(11, running), runEvent(12, running)];
   applyBatch(client, batch);
@@ -502,7 +512,7 @@ test("an unseen run invalidates matching array and infinite lists once per fresh
   expect(client.getQueryData(keys.run(run.id))).toBeUndefined();
   expect(invalidations).toHaveBeenCalledTimes(2);
   client.setQueryData(array, []);
-  client.setQueryData(pages, { pages: [[]], pageParams: [undefined] });
+  client.setQueryData(pages, { pages: [page([])], pageParams: [undefined] });
   invalidations.mockClear();
   applyBatch(client, batch);
   expect(invalidations).not.toHaveBeenCalled();
@@ -516,11 +526,11 @@ test("queued to running removes old membership and refetches the destination pag
   const queued = keys.runPages({ status: "queued", slug: run.slug });
   const active = keys.runPages({ status: "running", slug: run.slug });
   const array = keys.runs({ status: "queued" });
-  client.setQueryData(queued, { pages: [[run]], pageParams: [undefined] });
-  client.setQueryData(active, { pages: [[]], pageParams: [undefined] });
+  client.setQueryData(queued, { pages: [page([run])], pageParams: [undefined] });
+  client.setQueryData(active, { pages: [page([])], pageParams: [undefined] });
   client.setQueryData(array, [run]);
   applyBatch(client, [runEvent(11, running)]);
-  expect(client.getQueryData<InfiniteData<RunView[]>>(queued)?.pages).toEqual([[]]);
+  expect(client.getQueryData<InfiniteData<RunPage>>(queued)?.pages).toEqual([page([])]);
   expect(client.getQueryData<RunView[]>(array)).toEqual([]);
   expect(client.getQueryState(active)?.isInvalidated).toBe(true);
   expect(client.getQueryState(queued)?.isInvalidated).toBe(false);
