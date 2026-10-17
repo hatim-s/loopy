@@ -39,7 +39,6 @@ async function fixture(definition = "") {
   const store = openRunStore(home);
 
   const service = new LoopyService({
-    home,
     store,
     registry: () => registry,
     clock,
@@ -128,7 +127,10 @@ test("service resumes queued, suspended and abandoned runs and rejects terminal 
   await expect(service.resumeRun(owned.id)).rejects.toMatchObject({ code: "owned_elsewhere" });
   await store.release(owned.id, "owner");
   expect(await service.cancelRun(owned.id)).toMatchObject({ status: "cancelled", owner: null });
-  await expect(service.cancelRun("missing")).rejects.toMatchObject({ code: "not_found" });
+  await expect(service.cancelRun("missing")).rejects.toMatchObject({
+    code: "not_found",
+    message: "No run 'missing'. Use loopy runs to list run ids.",
+  });
 });
 
 test("service pages newest runs by createdAt and caps the page size", async () => {
@@ -270,7 +272,7 @@ test("definition defaults apply and workspace schedule mutations stay isolated",
   const other = join(root, "other");
   mkdirSync(join(other, ".loopy", "loopies"), { recursive: true });
   const otherRegistry = new Registry(home, other);
-  const otherService = new LoopyService({ home, store, clock, registry: () => otherRegistry });
+  const otherService = new LoopyService({ store, clock, registry: () => otherRegistry });
   await store.putSchedule({
     workspace: other,
     slug: "service",
@@ -296,6 +298,7 @@ test("disabled schedules stay dormant and re-enabling waits for the next slot", 
   const { service, store, clock, advance } = await fixture();
 
   const daemon = new Daemon({
+    concurrency: 4,
     store,
     clock,
     bundleHashFor: () => "bundle",
@@ -330,7 +333,6 @@ test("global schedules use the service workspace and preserve other workspaces",
   mkdirSync(join(other, ".loopy", "loopies"), { recursive: true });
 
   const otherService = new LoopyService({
-    home,
     store,
     clock,
     registry: () => new Registry(home, other),
@@ -357,6 +359,7 @@ function pausedScheduleDaemon(f: Awaited<ReturnType<typeof fixture>>) {
   const bundle = Promise.withResolvers<string>();
 
   const daemon = new Daemon({
+    concurrency: 4,
     store: f.store,
     clock: f.clock,
     bundleHashFor: () => {

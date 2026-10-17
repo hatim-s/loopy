@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { resolve } from "node:path";
+import type { DaemonView } from "../../contract/index.js";
 import { errorMessage } from "../../core/index.js";
 import type { LoopyService } from "../service.js";
 import type { SqliteRunStore } from "../store.js";
@@ -12,6 +13,7 @@ const MAX_BODY_BYTES = 1024 * 1024;
 
 export type ServerOptions = {
   service: LoopyService;
+  daemon: Pick<DaemonView, "startedAt" | "concurrency">;
   store: SqliteRunStore;
   token: string;
   cwd?: string;
@@ -52,7 +54,7 @@ export function startServer(options: ServerOptions) {
     resolve(options.assets ?? resolve(import.meta.dir, "../../../dist/dashboard")),
   );
 
-  const table = apiRoutes({ service, store, cwd });
+  const table = apiRoutes({ service, store, cwd, daemon: options.daemon });
 
   const server = Bun.serve({
     hostname: "127.0.0.1",

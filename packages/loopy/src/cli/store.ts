@@ -27,7 +27,6 @@ export async function requireRun(store: SqliteRunStore, id: string) {
 
 export function runService(context: Pick<CliContext, "home" | "cwd">, store: SqliteRunStore) {
   return new LoopyService({
-    home: context.home,
     store,
     registry: (workspace) => new Registry(context.home, workspace || context.cwd),
     clock: SYSTEM_CLOCK,

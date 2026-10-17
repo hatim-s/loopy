@@ -32,6 +32,7 @@ function fixture(
   const errors: { error: Error; run?: RunRecord }[] = [];
 
   const daemon = new Daemon({
+    concurrency: 4,
     store,
     clock,
     bundleHashFor: () => "bundle",

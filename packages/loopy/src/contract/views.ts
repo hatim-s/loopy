@@ -61,7 +61,7 @@ export type ScheduleView = z.infer<typeof scheduleViewSchema>;
 
 export const loopyViewSchema = z.strictObject({
   slug: z.string(),
-  description: z.string().optional(),
+  description: z.string().nullable(),
   scope: z.enum(["project", "global"]),
   mode: z.enum(EXECUTION_MODES),
   input: z.union([

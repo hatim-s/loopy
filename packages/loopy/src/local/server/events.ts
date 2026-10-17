@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import { routes, serverEvent } from "../../contract/index.js";
+import { routes } from "../../contract/index.js";
 import type { RuntimeEvent } from "../../core/index.js";
 import { type LoopyService, ServiceError } from "../service.js";
 import type { SqliteRunStore } from "../store.js";
@@ -187,12 +187,10 @@ class EventFeed {
   }
 
   private async deliver(transaction: RuntimeEvent[]): Promise<void> {
-    const ids = [
-      ...new Set(transaction.flatMap((event) => (event.entity === "run" ? [event.record.id] : []))),
-    ];
+    const data = (await this.service.events(transaction)).map((event) =>
+      routes.events.response.parse(event),
+    );
 
-    const view = await this.service.viewResolver(ids);
-    const data = transaction.map((event) => routes.events.response.parse(serverEvent(event, view)));
     this.cursor = transaction.at(-1)?.sequence ?? this.cursor;
     await this.send(`id: ${this.cursor}\nevent: txn\ndata: ${JSON.stringify(data)}\n\n`);
   }

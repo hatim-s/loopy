@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { type ErrorCode, errorBodySchema, routes } from "../../contract/index.js";
+import { type DaemonView, type ErrorCode, errorBodySchema, routes } from "../../contract/index.js";
 import { type LoopyService, ServiceError } from "../service.js";
 import type { SqliteRunStore } from "../store.js";
 import { eventStream } from "./events.js";
@@ -22,7 +22,12 @@ export function json(data: unknown, status = 200): Response {
   });
 }
 
-type Dependencies = { service: LoopyService; store: SqliteRunStore; cwd: string };
+type Dependencies = {
+  service: LoopyService;
+  store: SqliteRunStore;
+  cwd: string;
+  daemon: Pick<DaemonView, "startedAt" | "concurrency">;
+};
 
 type Schemas<P extends z.ZodType, Q extends z.ZodType, B extends z.ZodType, R extends z.ZodType> = {
   method: string;
@@ -99,7 +104,7 @@ async function parseRequest<
   }
 }
 
-export function apiRoutes({ service, store, cwd }: Dependencies) {
+export function apiRoutes({ service, store, cwd, daemon }: Dependencies) {
   return [
     endpoint(routes.schedules, async () => service.listSchedules()),
     endpoint(routes.putSchedule, async ({ params: { slug }, body }) =>
@@ -111,15 +116,7 @@ export function apiRoutes({ service, store, cwd }: Dependencies) {
     endpoint(routes.deleteSchedule, async ({ params: { slug } }) => service.deleteSchedule(slug)),
     endpoint(routes.loopies, async () => service.listLoopies()),
     endpoint(routes.runs, async ({ query }) => service.listRuns(query)),
-    endpoint(routes.run, async ({ params: { id } }) => {
-      const snapshot = await service.runSnapshot(id);
-
-      if (!snapshot) {
-        throw new ServiceError("not_found");
-      }
-
-      return snapshot;
-    }),
+    endpoint(routes.run, async ({ params: { id } }) => service.runSnapshot(id)),
     endpoint(routes.logs, async ({ params: { id }, query }) => {
       await service.requireRun(id);
 
@@ -133,7 +130,13 @@ export function apiRoutes({ service, store, cwd }: Dependencies) {
     endpoint(routes.resolveHook, async ({ params: { token }, body }) =>
       service.resolveHook(token, body.payload),
     ),
-    endpoint(routes.daemon, async () => service.daemon()),
+    endpoint(routes.daemon, async () => ({
+      pid: process.pid,
+      startedAt: daemon.startedAt,
+      concurrency: daemon.concurrency,
+      running: (await store.listRuns({ status: "running" })).length,
+      nextWakeAt: (await store.nextWakeAt()) ?? null,
+    })),
     endpoint(routes.events, async ({ query, request }) =>
       eventStream(store, service, query, request.signal),
     ),

@@ -18,7 +18,7 @@ type DaemonOptions = {
     >
   >;
   clock?: Clock;
-  concurrency?: number;
+  concurrency: number;
   bundleHashFor: (schedule: Schedule) => string | Promise<string>;
   onError?: (error: Error, run?: RunRecord) => void;
   sleep?: (milliseconds: number, signal: AbortSignal) => Promise<void>;
@@ -58,7 +58,7 @@ export class Daemon {
 
   constructor(private readonly options: DaemonOptions) {
     this.clock = options.clock ?? SYSTEM_CLOCK;
-    const concurrency = options.concurrency ?? 4;
+    const { concurrency } = options;
 
     if (!Number.isSafeInteger(concurrency) || concurrency < 1) {
       throw new Error("Daemon concurrency must be a positive integer. Supply at least one worker.");

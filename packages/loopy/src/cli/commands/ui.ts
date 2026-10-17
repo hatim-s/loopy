@@ -13,13 +13,5 @@ export async function runUi(context: CliContext): Promise<void> {
     return;
   }
 
-  await runForeground(context, () => {
-    const started = readDaemonFile(context.home);
-
-    if (!started) {
-      throw new Error("Daemon discovery is missing. Restart loopy ui.");
-    }
-
-    printLine(daemonUrl(started));
-  });
+  await runForeground(context, printLine);
 }

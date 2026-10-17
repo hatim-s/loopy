@@ -101,7 +101,8 @@ export function runView(options: RunViewOptions): RunView {
   };
 }
 
-type SavedLoopyInput = Pick<LoopyView, "slug" | "description" | "scope" | "mode"> & {
+type SavedLoopyInput = Pick<LoopyView, "slug" | "scope" | "mode"> & {
+  description?: string;
   input: Readonly<Exclude<LoopyView["input"], "schema">> | "schema";
   schedule?: { cron: string; tz?: string };
 };
@@ -153,7 +154,7 @@ export function loopyView(
 
   return {
     slug: saved.slug,
-    description: saved.description,
+    description: saved.description ?? null,
     scope: saved.scope,
     mode: saved.mode,
     input: saved.input,

@@ -17,6 +17,7 @@ import type {
   StepRecord,
   WaitingHookStep,
 } from "../core/index.js";
+import { isTerminalRun } from "../core/index.js";
 import {
   acquireWindow,
   canResolveHook,
@@ -317,7 +318,7 @@ export class SqliteRunStore implements RunStore {
         this.recoverRun(txn, row, at);
       }
 
-      if (row.status !== "queued" && row.status !== "suspended" && row.status !== "running") {
+      if (isTerminalRun(row.status)) {
         return "not_claimable";
       }
 

@@ -39,15 +39,11 @@ export async function runDaemon(context: CliContext): Promise<void> {
     throw new Error("Unknown daemon action. Use loopy daemon run, install, uninstall or status.");
   }
 
-  await runForeground(context);
+  await runForeground(context, reportAddress);
 }
 
 async function installService(context: CliContext): Promise<void> {
-  const value = context.values.concurrency;
-
-  if (value !== undefined && (!Number.isSafeInteger(Number(value)) || Number(value) < 1)) {
-    throw new Error("Daemon concurrency must be a positive integer. Supply at least one worker.");
-  }
+  const { port, concurrency } = daemonFlags(context);
 
   const entry = process.argv[1];
 
@@ -62,10 +58,10 @@ async function installService(context: CliContext): Promise<void> {
     executable: await realpath(process.execPath),
     args: [
       await realpath(resolve(entry)),
-      ...(value === undefined ? [] : ["--concurrency", value]),
-      ...(context.values.port === undefined
-        ? []
-        : ["--port", String(parsePort(context.values.port))]),
+      "--concurrency",
+      String(concurrency),
+      "--port",
+      String(port),
     ],
   });
 }
@@ -75,14 +71,16 @@ function reportAddress(url: string): void {
   printLine("Run loopy ui to open the dashboard.");
 }
 
-export async function runForeground(context: CliContext, onStarted = reportAddress): Promise<void> {
+export async function runForeground(
+  context: CliContext,
+  onStarted: (url: string) => void,
+): Promise<void> {
+  const flags = daemonFlags(context);
   await withRunStore(context, async (store) => {
     const daemon = localDaemon({
       ...context,
       store,
-      port: parsePort(context.values.port),
-      concurrency:
-        context.values.concurrency === undefined ? undefined : Number(context.values.concurrency),
+      ...flags,
       onError: (error, run) => report(run ? `Run ${run.id}: ${error.message}` : error.message),
     });
 
@@ -102,12 +100,19 @@ export async function runForeground(context: CliContext, onStarted = reportAddre
   });
 }
 
-export function parsePort(value: string | undefined): number {
-  const port = value === undefined ? DEFAULT_PORT : Number(value);
+function daemonFlags(context: CliContext) {
+  const port = context.values.port === undefined ? DEFAULT_PORT : Number(context.values.port);
+
+  const concurrency =
+    context.values.concurrency === undefined ? 4 : Number(context.values.concurrency);
+
+  if (!Number.isSafeInteger(concurrency) || concurrency < 1) {
+    throw new Error("Daemon concurrency must be a positive integer. Supply at least one worker.");
+  }
 
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
     throw new Error("Port must be an integer from 0 to 65535.");
   }
 
-  return port;
+  return { port, concurrency };
 }
