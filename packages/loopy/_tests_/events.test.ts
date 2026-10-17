@@ -288,13 +288,22 @@ for (const { name, make } of factories) {
         await store.claim("run", "owner");
         await store.putStep("run", "owner", runningStep());
         await store.putStep("run", "owner", runningStep());
+        // Composed and decomposed keys are distinct keys, so reordering them is still a no-op.
+        await store.putStep("run", "owner", {
+          ...runningStep(),
+          input: { "\u00e9": 1, "e\u0301": 2 },
+        });
+        await store.putStep("run", "owner", {
+          ...runningStep(),
+          input: { "e\u0301": 2, "\u00e9": 1 },
+        });
         expect(await store.heartbeat("run", "wrong")).toBe(false);
         await expect(store.putStep("run", "wrong", runningStep())).rejects.toThrow(
           "not owned by this token",
         );
         await store.acquireRateLimit("key", 1, 1000, newRun().createdAt);
         await store.acquireRateLimit("key", 1, 1000, newRun().createdAt);
-        expect(await store.events(3, 10)).toEqual([]);
+        expect(await store.events(4, 10)).toEqual([]);
         await store.heartbeat("run", "owner");
         await store.createHook("run", "owner", {
           ...waitingStep(),
@@ -306,7 +315,7 @@ for (const { name, make } of factories) {
         expect(await store.expireHook("run", "owner", 2)).toBe(newRun().createdAt);
         expect(await store.events(0, 100)).toEqual(expired);
         await store.release("run", "owner");
-        const events = await store.events(3, 10);
+        const events = await store.events(4, 10);
         expect(order(events)).toEqual([
           ["run", "heartbeat", "run"],
           ["step", "waiting", "run"],
