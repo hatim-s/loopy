@@ -1,6 +1,6 @@
 import type { LogRecord, RunRecord, StepKind } from "../core/index.js";
 
-export const SCHEMA_VERSION = 10;
+export const SCHEMA_VERSION = 11;
 
 export const SCHEMA = `
   CREATE TABLE events (
@@ -41,7 +41,7 @@ export const SCHEMA = `
   CREATE TABLE schedules (
     workspace TEXT NOT NULL, slug TEXT NOT NULL, cron TEXT NOT NULL, tz TEXT NOT NULL,
     input_json TEXT NOT NULL, enabled INTEGER NOT NULL,
-    last_fire_key TEXT, next_fire_at TEXT NOT NULL, PRIMARY KEY (workspace, slug)
+    last_fire_key TEXT, next_fire_at TEXT NOT NULL, revision INTEGER NOT NULL, PRIMARY KEY (workspace, slug)
   );
 `;
 
@@ -116,6 +116,7 @@ export type LogRow = {
 );
 
 export type ScheduleRow = {
+  revision: number;
   workspace: string;
   slug: string;
   cron: string;

@@ -7,6 +7,7 @@ import {
   loopyViewSchema,
   runSnapshotViewSchema,
   runViewSchema,
+  scheduleViewSchema,
   serverEventSchema,
 } from "./views.js";
 
@@ -16,6 +17,7 @@ export const ERROR_CODES = [
   "owned_elsewhere",
   "unknown_hook",
   "bad_request",
+  "invalid_schedule",
   "stale_cursor",
 ] as const;
 
@@ -29,6 +31,7 @@ export const DEFAULT_ERROR_MESSAGES = {
   owned_elsewhere: "Another worker owns this run. Try again after its lease expires.",
   unknown_hook: "The hook is unknown or no longer pending.",
   bad_request: "The request is invalid. Check its parameters and body.",
+  invalid_schedule: "The schedule is invalid. Check its cron expression, timezone and input.",
   stale_cursor: "The event cursor is stale. Fetch a fresh snapshot.",
 } satisfies Record<ErrorCode, string>;
 
@@ -84,8 +87,21 @@ export const startRunBodySchema = z.strictObject({
 
 export const resolveHookBodySchema = z.strictObject({ payload: jsonSchema });
 
+export const putScheduleBodySchema = z.strictObject({
+  cron: z.string().optional(),
+  tz: z.string().optional(),
+  input: jsonSchema.optional(),
+  enabled: z.boolean().optional(),
+});
+
+export type PutScheduleBody = z.infer<typeof putScheduleBodySchema>;
+
+export const scheduleEnabledBodySchema = z.strictObject({ enabled: z.boolean() });
+
+const scheduleParamsSchema = z.strictObject({ slug: z.string() });
+
 type Route = {
-  method: "GET" | "POST";
+  method: "GET" | "POST" | "PUT" | "DELETE";
   path: string;
   params: z.ZodObject;
   query: z.ZodObject;
@@ -94,6 +110,38 @@ type Route = {
 };
 
 export const routes = {
+  schedules: {
+    method: "GET",
+    path: "/schedules",
+    params: emptySchema,
+    query: emptySchema,
+    body: z.undefined(),
+    response: z.array(scheduleViewSchema),
+  },
+  putSchedule: {
+    method: "PUT",
+    path: "/loopies/:slug/schedule",
+    params: scheduleParamsSchema,
+    query: emptySchema,
+    body: putScheduleBodySchema,
+    response: scheduleViewSchema,
+  },
+  setScheduleEnabled: {
+    method: "POST",
+    path: "/loopies/:slug/schedule/enabled",
+    params: scheduleParamsSchema,
+    query: emptySchema,
+    body: scheduleEnabledBodySchema,
+    response: scheduleViewSchema,
+  },
+  deleteSchedule: {
+    method: "DELETE",
+    path: "/loopies/:slug/schedule",
+    params: scheduleParamsSchema,
+    query: emptySchema,
+    body: z.undefined(),
+    response: z.strictObject({ deleted: z.literal(true) }),
+  },
   loopies: {
     method: "GET",
     path: "/loopies",

@@ -103,11 +103,18 @@ export function runView(options: RunViewOptions): RunView {
 
 type SavedLoopyInput = Pick<LoopyView, "slug" | "description" | "scope" | "mode"> & {
   input: Readonly<Exclude<LoopyView["input"], "schema">> | "schema";
+  schedule?: { cron: string; tz?: string };
 };
 
-function scheduleView(schedule: Schedule | null): LoopyView["schedule"] {
+function scheduleView(
+  schedule: Schedule | null,
+  declared: SavedLoopyInput["schedule"],
+): LoopyView["schedule"] {
   if (schedule === null) {
-    return null;
+    // LoopyView can show a schedule declared in the definition, not scheduled yet.
+    return declared
+      ? { cron: declared.cron, tz: declared.tz ?? "UTC", enabled: false, nextFireAt: null }
+      : null;
   }
 
   return {
@@ -150,7 +157,7 @@ export function loopyView(
     scope: saved.scope,
     mode: saved.mode,
     input: saved.input,
-    schedule: scheduleView(schedule),
+    schedule: scheduleView(schedule, saved.schedule),
     lastRun,
     counts,
   };

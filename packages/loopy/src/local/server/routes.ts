@@ -10,6 +10,7 @@ const STATUS: Record<ErrorCode, number> = {
   not_claimable: 409,
   owned_elsewhere: 409,
   bad_request: 400,
+  invalid_schedule: 400,
   stale_cursor: 410,
 };
 
@@ -82,7 +83,7 @@ async function parseRequest<
     }
 
     const body: unknown =
-      request.method === "POST" && request.body ? await request.json() : undefined;
+      ["POST", "PUT"].includes(request.method) && request.body ? await request.json() : undefined;
 
     return {
       params: route.params.parse(params),
@@ -100,6 +101,14 @@ async function parseRequest<
 
 export function apiRoutes({ service, store, cwd }: Dependencies) {
   return [
+    endpoint(routes.schedules, async () => service.listSchedules()),
+    endpoint(routes.putSchedule, async ({ params: { slug }, body }) =>
+      service.putSchedule(slug, body),
+    ),
+    endpoint(routes.setScheduleEnabled, async ({ params: { slug }, body }) =>
+      service.setScheduleEnabled(slug, body.enabled),
+    ),
+    endpoint(routes.deleteSchedule, async ({ params: { slug } }) => service.deleteSchedule(slug)),
     endpoint(routes.loopies, async () => service.listLoopies()),
     endpoint(routes.runs, async ({ query }) => service.listRuns(query)),
     endpoint(routes.run, async ({ params: { id } }) => {

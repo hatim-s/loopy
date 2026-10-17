@@ -12,6 +12,7 @@ import {
   runSnapshotViewSchema,
   runsQuerySchema,
   runViewSchema,
+  scheduleViewSchema,
   serverEventSchema,
 } from "../src/contract/index.js";
 import { requireRecord } from "../src/core/index.js";
@@ -502,6 +503,7 @@ test("service error codes serialize with their HTTP status", async () => {
     ["not_claimable", 409],
     ["owned_elsewhere", 409],
     ["bad_request", 400],
+    ["invalid_schedule", 400],
     ["stale_cursor", 410],
   ];
 
@@ -861,6 +863,88 @@ test("local server leaves event pruning to the runtime daemon", async () => {
   } finally {
     await daemon.stop();
     prune.mockRestore();
+    store.close();
+  }
+});
+
+async function scheduleApi() {
+  const { f, store, service } = await serviceFixture("schedule-api");
+  const table = apiRoutes({ service, store, cwd: f.cwd });
+
+  const request = (path: string, method = "GET", body?: Json) => {
+    const url = new URL(`http://localhost/api${path}`);
+
+    return dispatch(
+      table,
+      new Request(url, { method, body: body === undefined ? undefined : JSON.stringify(body) }),
+      url,
+      url.pathname,
+    );
+  };
+
+  return { store, service, request };
+}
+
+test("schedule routes round trip validated views and report status codes", async () => {
+  const { store, request } = await scheduleApi();
+  const path = "/loopies/schedule-api/schedule";
+
+  try {
+    expect(await (await request("/schedules")).json()).toEqual([]);
+    const response = await request(path, "PUT", { cron: "* * * * *" });
+    expect(response.status).toBe(200);
+    const saved = scheduleViewSchema.parse(await response.json());
+    expect(saved).toMatchObject({ slug: "schedule-api", enabled: true, lastFireKey: null });
+    expect(await (await request("/schedules")).json()).toEqual([saved]);
+    expect(
+      await (await request(`${path}/enabled`, "POST", { enabled: false })).json(),
+    ).toMatchObject({ enabled: false });
+    const invalidBodies: Json[] = [{ cron: "invalid" }, { cron: "* * * * *", tz: "Bad/Zone" }];
+
+    for (const body of invalidBodies) {
+      const invalid = await request(path, "PUT", body);
+      expect(invalid.status).toBe(400);
+      expect(errorBodySchema.parse(await invalid.json()).error.code).toBe("invalid_schedule");
+    }
+
+    const malformed = await request(path, "PUT", { enabled: "no" });
+    expect(malformed.status).toBe(400);
+    expect(errorBodySchema.parse(await malformed.json()).error.code).toBe("bad_request");
+    expect((await request("/loopies/missing/schedule", "PUT", {})).status).toBe(404);
+    expect(await (await request(path, "DELETE")).json()).toEqual({ deleted: true });
+    expect((await request(`${path}/enabled`, "POST", { enabled: true })).status).toBe(404);
+  } finally {
+    store.close();
+  }
+});
+
+test("schedule PUT publishes a saved SSE frame", async () => {
+  const { store, service, request } = await scheduleApi();
+  const controller = new AbortController();
+
+  const stream = await eventStream(
+    store,
+    service,
+    { after: 0, epoch: await store.epoch() },
+    controller.signal,
+  );
+
+  const reader = stream.body!.getReader();
+
+  try {
+    expect(new TextDecoder().decode((await reader.read()).value)).toContain(": connected");
+    expect(
+      (await request("/loopies/schedule-api/schedule", "PUT", { cron: "* * * * *" })).status,
+    ).toBe(200);
+    const frame = new TextDecoder().decode((await reader.read()).value);
+    const data = frame.split("\n").find((line) => line.startsWith("data: "));
+    expect(data).toBeDefined();
+    expect(serverEventSchema.array().parse(JSON.parse(data!.slice(6)))).toMatchObject([
+      { entity: "schedule", kind: "saved", record: { slug: "schedule-api", cron: "* * * * *" } },
+    ]);
+  } finally {
+    controller.abort();
+    await reader.cancel();
     store.close();
   }
 });

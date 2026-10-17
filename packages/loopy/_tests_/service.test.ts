@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { RunRecord } from "../src/core/index.js";
@@ -10,7 +10,9 @@ import {
   openRunStore,
   Registry,
 } from "../src/local/index.js";
-import { SYSTEM_CLOCK } from "../src/runtime/index.js";
+import { Daemon, SYSTEM_CLOCK } from "../src/runtime/index.js";
+
+import { FakeExecutor } from "./fixture.js";
 
 const cleanups: (() => void)[] = [];
 
@@ -20,26 +22,27 @@ afterEach(() => {
   }
 });
 
-async function fixture() {
+async function fixture(definition = "") {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "loopy-service-")));
   const home = join(root, "home");
   const source = join(root, "service.ts");
   await Bun.write(
     source,
     `import { loopy } from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/index.ts"))};
-  export default loopy({ name: "service", input: { name: "string" }, secrets: ["PRIVATE"], run: () => 1 });`,
+  export default loopy({ name: "service", ${definition} input: { name: "string" }, secrets: ["PRIVATE"], run: () => 1 });`,
   );
   const bundle = await bundleLoopy(source, home);
   const registry = new Registry(home, root);
   registry.save(await loadLoopy(bundle.path), { source, bundleHash: bundle.hash });
-  let now = Date.now();
+  let now = Date.parse("2026-10-17T00:00:00.000Z");
+  const clock = { ...SYSTEM_CLOCK, now: () => now };
   const store = openRunStore(home);
 
   const service = new LoopyService({
     home,
     store,
     registry: () => registry,
-    clock: { ...SYSTEM_CLOCK, now: () => now },
+    clock,
   });
 
   cleanups.push(() => {
@@ -51,8 +54,11 @@ async function fixture() {
     service,
     store,
     root,
-    advance: () => {
-      now += 1000;
+    home,
+    clock,
+    registry,
+    advance: (milliseconds = 1000) => {
+      now += milliseconds;
     },
   };
 }
@@ -179,6 +185,225 @@ test("service hook resolution returns the woken run and rejects duplicate resolu
   });
   await expect(service.resolveHook("hook", null)).rejects.toMatchObject({ code: "unknown_hook" });
 });
+
+test("service schedules create, replace, toggle, delete and emit persisted events", async () => {
+  const { service, store, root, advance } = await fixture();
+
+  const first = await service.putSchedule("service", {
+    cron: "* * * * *",
+    input: { name: "first" },
+  });
+
+  expect(first).toMatchObject({ workspace: root, enabled: true, lastFireKey: null, tz: "UTC" });
+  expect(await service.listSchedules()).toEqual([first]);
+  await store.putSchedule({ ...first, lastFireKey: "fired", nextFireAt: first.nextFireAt });
+  expect(await service.setScheduleEnabled("service", false)).toMatchObject({
+    enabled: false,
+    lastFireKey: "fired",
+  });
+  advance();
+  const enabled = await service.setScheduleEnabled("service", true);
+  expect(enabled).toMatchObject({ enabled: true, input: { name: "first" }, lastFireKey: "fired" });
+
+  const replaced = await service.putSchedule("service", {
+    cron: "0 0 * * *",
+    input: { name: "second" },
+    enabled: false,
+  });
+
+  expect(replaced).toMatchObject({
+    cron: "0 0 * * *",
+    enabled: false,
+    input: { name: "second" },
+    lastFireKey: null,
+  });
+  expect(replaced.nextFireAt).not.toBe(first.nextFireAt);
+  expect(await service.deleteSchedule("service")).toEqual({ deleted: true });
+  expect(await service.listSchedules()).toEqual([]);
+  await expect(service.setScheduleEnabled("service", true)).rejects.toMatchObject({
+    code: "not_found",
+  });
+  expect((await store.events(0, 100)).map((event) => `${event.entity}.${event.kind}`)).toEqual([
+    "schedule.saved",
+    "schedule.saved",
+    "schedule.saved",
+    "schedule.saved",
+    "schedule.saved",
+    "schedule.deleted",
+  ]);
+});
+
+test("service rejects invalid schedule semantics before writing", async () => {
+  const { service, store } = await fixture();
+
+  for (const body of [
+    { cron: "bad" },
+    { cron: "* * * * *", tz: "Invalid/Zone" },
+    {},
+    { cron: "* * * * *", input: {} },
+  ]) {
+    await expect(service.putSchedule("service", body)).rejects.toMatchObject({
+      code: "invalid_schedule",
+    });
+  }
+
+  await expect(service.putSchedule("missing", { cron: "* * * * *" })).rejects.toMatchObject({
+    code: "not_found",
+  });
+  await expect(service.deleteSchedule("missing")).rejects.toMatchObject({ code: "not_found" });
+  expect(await store.listSchedules()).toEqual([]);
+});
+
+test("definition defaults apply and workspace schedule mutations stay isolated", async () => {
+  const { service, store, root, home, clock } = await fixture(
+    'schedule: { cron: "*/5 * * * *", tz: "Asia/Kolkata" },',
+  );
+
+  expect((await service.listLoopies())[0]?.schedule).toEqual({
+    cron: "*/5 * * * *",
+    tz: "Asia/Kolkata",
+    enabled: false,
+    nextFireAt: null,
+  });
+  const saved = await service.putSchedule("service", { input: { name: "default" } });
+  expect(saved).toMatchObject({ cron: "*/5 * * * *", tz: "Asia/Kolkata" });
+  const other = join(root, "other");
+  mkdirSync(join(other, ".loopy", "loopies"), { recursive: true });
+  const otherRegistry = new Registry(home, other);
+  const otherService = new LoopyService({ home, store, clock, registry: () => otherRegistry });
+  await store.putSchedule({
+    workspace: other,
+    slug: "service",
+    cron: "* * * * *",
+    tz: "UTC",
+    input: {},
+    enabled: true,
+    nextFireAt: "2026-10-17T00:01:00.000Z",
+  });
+  expect(await otherService.listSchedules()).toMatchObject([{ workspace: other }]);
+  await expect(otherService.putSchedule("service", {})).rejects.toMatchObject({
+    code: "not_found",
+  });
+  await expect(otherService.setScheduleEnabled("service", false)).rejects.toMatchObject({
+    code: "not_found",
+  });
+  await expect(otherService.deleteSchedule("service")).rejects.toMatchObject({ code: "not_found" });
+  await service.deleteSchedule("service");
+  expect(await store.listSchedules()).toMatchObject([{ workspace: other }]);
+});
+
+test("disabled schedules stay dormant and re-enabling waits for the next slot", async () => {
+  const { service, store, clock, advance } = await fixture();
+
+  const daemon = new Daemon({
+    store,
+    clock,
+    bundleHashFor: () => "bundle",
+    prepare: async (run) => ({
+      workflow: async () => run.input,
+      executor: new FakeExecutor(),
+      cwd: run.workspace,
+      mode: "sandbox",
+    }),
+  });
+
+  await service.putSchedule("service", {
+    cron: "* * * * *",
+    input: { name: "scheduled" },
+    enabled: false,
+  });
+  advance(120_000);
+  expect(await daemon.tick()).toEqual({ fired: 0, activated: 0 });
+  expect(await store.listRuns()).toEqual([]);
+  expect(await service.setScheduleEnabled("service", true)).toMatchObject({
+    nextFireAt: "2026-10-17T00:03:00.000Z",
+  });
+  expect(await daemon.tick()).toEqual({ fired: 0, activated: 0 });
+  advance(60_000);
+  expect(await daemon.tick()).toEqual({ fired: 1, activated: 1 });
+  await daemon.stop();
+});
+
+test("global schedules use the service workspace and preserve other workspaces", async () => {
+  const { service, store, root, home, clock } = await fixture('scope: "global",');
+  const other = join(root, "other");
+  mkdirSync(join(other, ".loopy", "loopies"), { recursive: true });
+
+  const otherService = new LoopyService({
+    home,
+    store,
+    clock,
+    registry: () => new Registry(home, other),
+  });
+
+  await service.putSchedule("service", { cron: "* * * * *", input: { name: "first" } });
+
+  const second = await otherService.putSchedule("service", {
+    cron: "0 * * * *",
+    input: { name: "second" },
+  });
+
+  expect(second.workspace).toBe(other);
+  expect(await service.listSchedules()).toMatchObject([
+    { workspace: root, input: { name: "first" } },
+  ]);
+  await otherService.setScheduleEnabled("service", false);
+  await otherService.deleteSchedule("service");
+  expect(await store.listSchedules()).toMatchObject([{ workspace: root, enabled: true }]);
+});
+
+function pausedScheduleDaemon(f: Awaited<ReturnType<typeof fixture>>) {
+  const entered = Promise.withResolvers<void>();
+  const bundle = Promise.withResolvers<string>();
+
+  const daemon = new Daemon({
+    store: f.store,
+    clock: f.clock,
+    bundleHashFor: () => {
+      entered.resolve();
+
+      return bundle.promise;
+    },
+    prepare: async (run) => ({
+      workflow: async () => run.input,
+      executor: new FakeExecutor(),
+      cwd: run.workspace,
+      mode: "sandbox",
+    }),
+  });
+
+  return { daemon, entered: entered.promise, release: () => bundle.resolve("bundle") };
+}
+
+for (const mutation of ["PUT", "disable"]) {
+  test(`a ${mutation} during bundle resolution rejects the pending schedule fire`, async () => {
+    const f = await fixture();
+    await f.service.putSchedule("service", { cron: "* * * * *", input: { name: "first" } });
+    f.advance(60_000);
+    const paused = pausedScheduleDaemon(f);
+    const ticking = paused.daemon.tick();
+    await paused.entered;
+
+    try {
+      const saved =
+        mutation === "PUT"
+          ? await f.service.putSchedule("service", { cron: "0 * * * *", input: { name: "new" } })
+          : await f.service.setScheduleEnabled("service", false);
+
+      expect(saved.nextFireAt).toBe(
+        mutation === "PUT" ? "2026-10-17T01:00:00.000Z" : "2026-10-17T00:01:00.000Z",
+      );
+      paused.release();
+      expect(await ticking).toEqual({ fired: 0, activated: 0 });
+      expect(await f.store.listRuns()).toEqual([]);
+      expect(await f.service.listSchedules()).toEqual([saved]);
+    } finally {
+      paused.release();
+      await ticking;
+      await paused.daemon.stop();
+    }
+  });
+}
 
 test("service cursor follows the last event without requiring a run snapshot", async () => {
   const { service, store, root } = await fixture();
