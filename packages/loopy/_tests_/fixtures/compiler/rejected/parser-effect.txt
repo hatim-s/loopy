@@ -1,0 +1,3 @@
+import {loopy,defineCommand} from "__SDK__";
+const command=defineCommand({key:"effect",program:"echo",parse:fetch("http://127.0.0.1:1")},{kind:"value",type:"string"});
+export default loopy({name:"invalid",input:{},run:()=>command()});

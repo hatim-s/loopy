@@ -1,10 +1,14 @@
 export { parseArgv } from "./argv.js";
 
+export { canonicalJson } from "./canonical-json.js";
+
 export { errorMessage } from "./errors.js";
 
 export { isFieldValue } from "./field-value.js";
 
 export * from "./graph.js";
+
+export { COMPILER_DIAGNOSTIC_CODES, type CompilerDiagnosticCode } from "./graph.js";
 
 export { validateGraph } from "./graph-check.js";
 

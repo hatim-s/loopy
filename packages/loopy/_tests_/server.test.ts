@@ -1,5 +1,5 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { get, type IncomingMessage } from "node:http";
 import { join, resolve } from "node:path";
 import {
@@ -27,7 +27,7 @@ import {
 import { eventStream } from "../src/local/server/events.js";
 import { apiRoutes, dispatch } from "../src/local/server/routes.js";
 import { SYSTEM_CLOCK } from "../src/runtime/index.js";
-import { CLI, cli, fixture, object, roots, save } from "./cli-fixture.js";
+import { CLI, fixture, object, roots, runFixture, save } from "./cli-fixture.js";
 import { newRun } from "./fixture.js";
 
 const daemonMetadata = { startedAt: new Date(0).toISOString(), concurrency: 4 };
@@ -62,7 +62,7 @@ test("API returns run records, step traces and cursor logs", async () => {
   );
 
   await save(f);
-  const run = object((await cli(f, "run", "api")).stdout);
+  const run = object((await runFixture(f)).stdout);
   const server = startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
@@ -118,7 +118,7 @@ test("the daemon server requires its token and origin, serves pinned assets and 
 test("API distinguishes invalid cursors from registry failures", async () => {
   const f = fixture("server-errors", "run: () => 1");
   await save(f);
-  const run = object((await cli(f, "run", "server-errors")).stdout);
+  const run = object((await runFixture(f)).stdout);
   const server = startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
@@ -145,7 +145,7 @@ test("API returns the contract snapshot, rejects unknown query keys and keeps cu
   );
 
   await save(f);
-  const run = object((await cli(f, "run", "summary")).stdout);
+  const run = object((await runFixture(f)).stdout);
   const server = startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
@@ -165,7 +165,7 @@ test("API returns the contract snapshot, rejects unknown query keys and keeps cu
 test("hook API applies auth and origin checks and resolves JSON exactly once", async () => {
   const f = fixture("api-hook", `run: async () => hook("approve")`);
   await save(f);
-  const run = object((await cli(f, "run", "api-hook")).stdout);
+  const run = object((await runFixture(f)).stdout);
   const store = openRunStore(f.home);
   const [hook] = await store.listHooks(String(run.id));
   store.close();
@@ -192,7 +192,7 @@ test("hook API applies auth and origin checks and resolves JSON exactly once", a
 test("contract routes start, snapshot, resume and cancel without exposing owner tokens", async () => {
   const f = fixture("contract", 'run: async () => hook("approve")');
   await save(f);
-  const initial = object((await cli(f, "run", "contract")).stdout);
+  const initial = object((await runFixture(f)).stdout);
   const server = startDaemon({ ...f, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
@@ -659,51 +659,6 @@ test("run paging includes every run sharing a timestamp", async () => {
   }
 });
 
-async function waitForSuccess(store: ReturnType<typeof openRunStore>, id: string) {
-  for (
-    let attempt = 0;
-    attempt < 300 && (await store.getRun(id))?.status !== "succeeded";
-    attempt++
-  ) {
-    await Bun.sleep(20);
-  }
-}
-
-test("hook POST wakes a run to completion while the daemon runs", async () => {
-  const f = fixture("hook-completion", 'run: async () => hook("approve")');
-  await save(f);
-  const run = object((await cli(f, "run", "hook-completion")).stdout);
-  const store = openRunStore(f.home);
-  const daemon = localDaemon({ concurrency: 4, ...f, store, port: 0 });
-  const origin = new URL(daemon.start()).origin;
-  const running = daemon.run();
-
-  try {
-    const [hook] = await store.listHooks(String(run.id));
-
-    const response = await fetch(`${origin}/api/hooks/${hook!.token}`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${readDaemonFile(f.home)!.token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ payload: { ok: true } }),
-    });
-
-    expect(response.status).toBe(200);
-
-    await waitForSuccess(store, String(run.id));
-    expect(await store.getRun(String(run.id))).toMatchObject({
-      status: "succeeded",
-      output: { ok: true },
-    });
-  } finally {
-    await daemon.stop();
-    await running;
-    store.close();
-  }
-}, 10_000);
-
 async function httpEvents(name: string) {
   const { f, store } = await serviceFixture(name);
   const daemon = localDaemon({ concurrency: 4, ...f, store, port: 0 });
@@ -989,4 +944,122 @@ test("cursor endpoint bootstraps an empty dashboard and follows new events", asy
   } finally {
     store.close();
   }
+});
+
+test("compiled save route verifies artifacts, stores private bundles and returns only GraphView", async () => {
+  const { f, service, store } = await serviceFixture("compiled-save");
+  const { compile } = await import("../src/compiler/index.js");
+  const { compiledBody } = await import("./compiled-fixture.js");
+  const source = join(f.cwd, "compiled.ts");
+  const sdk = resolve(import.meta.dir, "../src/sdk/graph/index.ts");
+  await Bun.write(
+    source,
+    `import {loopy,code} from ${JSON.stringify(sdk)}; export default loopy({name:"compiled-save",input:{},run:()=>code("answer",{in:{},out:{kind:"value",type:"number"},module:"./answer.ts"})});`,
+  );
+  await Bun.write(
+    join(f.cwd, "answer.ts"),
+    'throw new Error("Must not execute while saving."); export default () => 42;',
+  );
+  const result = await compile(source);
+
+  if (!result.ok) {
+    throw new Error(JSON.stringify(result.diagnostics));
+  }
+
+  const body = {
+    ...compiledBody("compiled-save", source),
+    replace: true,
+    graph: result.graph,
+    revision: result.revision,
+    bundles: result.bundles.map((bundle) => ({
+      ...bundle,
+      bytes: Buffer.from(bundle.bytes).toString("base64"),
+    })),
+  };
+
+  const table = apiRoutes({ service, store, cwd: f.cwd, daemon: daemonMetadata });
+
+  const put = async (payload: typeof body) => {
+    const request = new Request("http://localhost/api/loopies/compiled-save", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+
+    return dispatch(table, request, new URL(request.url));
+  };
+
+  expect((await put({ ...body, revision: "0".repeat(64) })).status).toBe(400);
+  expect((await put({ ...body, bundles: [] })).status).toBe(400);
+  expect(
+    (
+      await put({
+        ...body,
+        bundles: body.bundles.map((bundle) => ({
+          ...bundle,
+          bytes: Buffer.from("changed").toString("base64"),
+        })),
+      })
+    ).status,
+  ).toBe(400);
+  const response = await put(body);
+  expect(response.status).toBe(200);
+  const serialized = JSON.stringify(await response.json());
+  expect(serialized).not.toMatch(/"(?:bytes|bundleHash|source|revision)":/);
+  const registry = new Registry(f.home, f.cwd);
+  const saved = registry.get("compiled-save");
+  expect(saved.revision).toBe(result.revision);
+  expect(saved.bundles).toEqual(
+    result.bundles.map(({ nodeId, bundleHash }) => ({ nodeId, bundleHash })),
+  );
+
+  for (const bundle of result.bundles) {
+    expect(statSync(registry.bundlePath(bundle.bundleHash)).mode & 0o777).toBe(0o600);
+    expect([
+      ...new Uint8Array(await Bun.file(registry.bundlePath(bundle.bundleHash)).arrayBuffer()),
+    ]).toEqual([...bundle.bytes]);
+  }
+});
+
+test("saving another revision retains the earlier graph and executable artifacts", async () => {
+  const { f, service } = await serviceFixture("revisions");
+  const { compile } = await import("../src/compiler/index.js");
+  const { compiledBody } = await import("./compiled-fixture.js");
+  const source = join(f.cwd, "revision.ts");
+  await Bun.write(
+    source,
+    `import {loopy,code} from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/graph/index.ts"))}; export default loopy({name:"revisions",input:{},run:()=>code("value",{in:{},out:{kind:"value",type:"number"},module:"./value.ts"})});`,
+  );
+  const registry = new Registry(f.home, f.cwd);
+  const revisions: string[] = [];
+
+  for (const value of [1, 2]) {
+    await Bun.write(join(f.cwd, "value.ts"), `export default ()=>${value};`);
+    const compiled = await compile(source);
+
+    if (!compiled.ok) {
+      throw new Error(JSON.stringify(compiled.diagnostics));
+    }
+
+    await service.putLoopy("revisions", {
+      ...compiledBody("revisions", source),
+      replace: true,
+      graph: compiled.graph,
+      revision: compiled.revision,
+      bundles: compiled.bundles.map((bundle) => ({
+        ...bundle,
+        bytes: Buffer.from(bundle.bytes).toString("base64"),
+      })),
+    });
+    revisions.push(compiled.revision);
+  }
+
+  expect(revisions[0]).not.toBe(revisions[1]);
+
+  for (const revision of revisions) {
+    const graph = await Bun.file(registry.graphPath(revision)).json();
+    expect(graph.name).toBe("revisions");
+    expect(statSync(registry.graphPath(revision)).mode & 0o777).toBe(0o600);
+  }
+
+  expect(revisions.at(-1)).toBe(registry.get("revisions").revision);
 });

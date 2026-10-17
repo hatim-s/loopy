@@ -4,10 +4,12 @@ import {
   DEFAULT_ERROR_MESSAGES,
   type ErrorCode,
   encodeRunCursor,
+  graphView,
   isTerminalRun,
   type Json,
   type LoopyView,
   loopyView,
+  type PutLoopyBody,
   type PutScheduleBody,
   type RunView,
   type routes,
@@ -15,14 +17,22 @@ import {
   type ScheduleView,
   serverEvent,
 } from "../contract/index.js";
-import { errorMessage, type RunRecord, type RuntimeEvent, type Schedule } from "../core/index.js";
+import {
+  errorMessage,
+  isFieldValue,
+  isRecord,
+  type RunRecord,
+  type RuntimeEvent,
+  type Schedule,
+} from "../core/index.js";
 import { assertJson, type Clock, nextFire, OwnershipError, parseCron } from "../runtime/index.js";
-import { createLoopyRun } from "../sdk/host.js";
-import { loadLoopy } from "./bundle.js";
 import { canonicalPath } from "./fs.js";
 import type { Registry } from "./registry.js";
+import { saveCompiled } from "./save-compiled.js";
 import type { SavedLoopy } from "./saved-loopy.js";
+import { SecretStore } from "./secrets.js";
 import type { SqliteRunStore } from "./store.js";
+import { generateCommand } from "./typegen/generate.js";
 
 export class ServiceError extends Error {
   constructor(
@@ -47,8 +57,8 @@ export class LoopyService {
     return new Date(this.options.clock.now()).toISOString();
   }
 
-  private scheduleTarget(slug: string) {
-    const registry = this.options.registry("");
+  private scheduleTarget(slug: string, callerWorkspace = "") {
+    const registry = this.options.registry(callerWorkspace);
     const saved = registry.list().find((entry) => entry.slug === slug);
 
     if (!saved) {
@@ -58,8 +68,8 @@ export class LoopyService {
     return { registry, saved, workspace: registry.project };
   }
 
-  async listSchedules(): Promise<ScheduleView[]> {
-    const workspace = this.options.registry("").project;
+  async listSchedules(callerWorkspace = ""): Promise<ScheduleView[]> {
+    const workspace = this.options.registry(callerWorkspace).project;
 
     return (await this.options.store.listSchedules())
       .filter((schedule) => schedule.workspace === workspace)
@@ -70,9 +80,12 @@ export class LoopyService {
     return { ...schedule, lastFireKey: schedule.lastFireKey ?? null };
   }
 
-  async putSchedule(slug: string, body: PutScheduleBody): Promise<ScheduleView> {
-    const { registry, saved, workspace } = this.scheduleTarget(slug);
-    const loopy = await loadLoopy(registry.bundlePath(saved.bundleHash));
+  async putSchedule(
+    slug: string,
+    body: PutScheduleBody,
+    callerWorkspace = "",
+  ): Promise<ScheduleView> {
+    const { saved, workspace } = this.scheduleTarget(slug, callerWorkspace);
     const cron = body.cron ?? saved.schedule?.cron;
 
     if (cron === undefined) {
@@ -85,7 +98,7 @@ export class LoopyService {
     const tz = body.tz ?? saved.schedule?.tz ?? "UTC";
     this.validateTimezone(tz);
     const nextFireAt = this.scheduleNextFire(cron, tz);
-    const input = await this.scheduleInput(loopy, body);
+    const input = await this.scheduleInput(saved, body);
 
     return this.scheduleView(
       await this.options.store.putSchedule({
@@ -116,9 +129,9 @@ export class LoopyService {
     }
   }
 
-  private async scheduleInput(loopy: Awaited<ReturnType<typeof loadLoopy>>, body: PutScheduleBody) {
+  private async scheduleInput(saved: SavedLoopy, body: PutScheduleBody) {
     try {
-      const input = await loopy.validateInput(body.input === undefined ? {} : body.input);
+      const input = this.validateInput(saved, body.input === undefined ? {} : body.input);
       assertJson(input, "Schedule input");
 
       return input;
@@ -127,8 +140,8 @@ export class LoopyService {
     }
   }
 
-  private async requireSchedule(slug: string): Promise<Schedule> {
-    const { workspace } = this.scheduleTarget(slug);
+  private async requireSchedule(slug: string, callerWorkspace: string): Promise<Schedule> {
+    const { workspace } = this.scheduleTarget(slug, callerWorkspace);
 
     const schedule = (await this.options.store.listSchedules()).find(
       (entry) => entry.workspace === workspace && entry.slug === slug,
@@ -141,8 +154,12 @@ export class LoopyService {
     return schedule;
   }
 
-  async setScheduleEnabled(slug: string, enabled: boolean): Promise<ScheduleView> {
-    const current = await this.requireSchedule(slug);
+  async setScheduleEnabled(
+    slug: string,
+    enabled: boolean,
+    callerWorkspace = "",
+  ): Promise<ScheduleView> {
+    const current = await this.requireSchedule(slug, callerWorkspace);
 
     const schedule = await this.options.store.setScheduleEnabled({
       workspace: current.workspace,
@@ -160,8 +177,8 @@ export class LoopyService {
     return this.scheduleView(schedule);
   }
 
-  async deleteSchedule(slug: string): Promise<{ deleted: true }> {
-    const { workspace } = this.scheduleTarget(slug);
+  async deleteSchedule(slug: string, callerWorkspace = ""): Promise<{ deleted: true }> {
+    const { workspace } = this.scheduleTarget(slug, callerWorkspace);
     await this.options.store.deleteSchedule(workspace, slug);
 
     return { deleted: true };
@@ -175,24 +192,67 @@ export class LoopyService {
       throw new ServiceError("not_found");
     }
 
-    const loopy = await loadLoopy(registry.bundlePath(saved.bundleHash));
     const runId = crypto.randomUUID();
+    const validated = this.validateInput(saved, input);
+    await this.options.store.createRun({
+      id: runId,
+      slug,
+      input: validated,
+      workspace: canonicalPath(workspace),
+      revision: saved.revision,
+      status: "queued",
+      createdAt: this.now(),
+      updatedAt: this.now(),
+    });
+
+    return this.view(await this.requireRun(runId));
+  }
+
+  private validateInput(saved: SavedLoopy, input: Json): Json {
+    const spec = saved.graph.input;
+
+    if (spec === "schema" || !isRecord(input)) {
+      throw new ServiceError("bad_request", "Graph input requires a record schema and an object.");
+    }
+
+    const keys = Object.keys(spec).map((key) => key.replace(/\?$/, ""));
+
+    if (
+      Object.keys(input).some((key) => !keys.includes(key)) ||
+      Object.entries(spec).some(([field, kind]) => {
+        const key = field.replace(/\?$/, "");
+
+        return (
+          !(field.endsWith("?") && input[key] === undefined) && !isFieldValue(kind, input[key])
+        );
+      })
+    ) {
+      throw new ServiceError("bad_request", "Input does not match the saved graph schema.");
+    }
+
+    return input;
+  }
+
+  async putLoopy(slug: string, body: PutLoopyBody) {
+    if (slug !== body.graph.name) {
+      throw new ServiceError("bad_request", "The URL name must match the graph name.");
+    }
 
     try {
-      await createLoopyRun({
-        loopy,
-        input,
-        workspace: canonicalPath(workspace),
-        runId,
-        bundleHash: saved.bundleHash,
-        store: this.options.store,
-        clock: this.options.clock,
-      });
+      await saveCompiled(this.options.registry(body.source.workspace), body);
+
+      return graphView(body.graph);
     } catch (error) {
       throw new ServiceError("bad_request", errorMessage(error));
     }
+  }
 
-    return this.view(await this.requireRun(runId));
+  graph(slug: string, workspace: string) {
+    try {
+      return graphView(this.options.registry(workspace).get(slug).graph);
+    } catch (error) {
+      throw new ServiceError("not_found", errorMessage(error));
+    }
   }
 
   async requireRun(id: string): Promise<RunRecord> {
@@ -379,7 +439,7 @@ export class LoopyService {
       .slice(0, query.limit);
   }
 
-  async listLoopies(): Promise<LoopyView[]> {
+  async listLoopies(callerWorkspace = ""): Promise<LoopyView[]> {
     const [records, schedules] = await Promise.all([
       this.options.store.listRuns(),
       this.options.store.listSchedules(),
@@ -395,7 +455,7 @@ export class LoopyService {
     const runs = records.map(resolve);
 
     const workspaces = new Set([
-      "",
+      callerWorkspace,
       ...runs.map((run) => run.workspace),
       ...schedules.map((schedule) => schedule.workspace),
     ]);
@@ -434,6 +494,38 @@ export class LoopyService {
         runs.filter((run) => saved.scope === "global" || run.workspace === registry.project),
       ),
     );
+  }
+
+  listSecrets() {
+    return new SecretStore(this.options.registry("").home).list();
+  }
+
+  putSecret(name: string, value: string) {
+    try {
+      new SecretStore(this.options.registry("").home).set(name, value);
+
+      return { name, saved: true as const };
+    } catch (error) {
+      throw new ServiceError("bad_request", errorMessage(error));
+    }
+  }
+
+  deleteSecret(name: string) {
+    try {
+      new SecretStore(this.options.registry("").home).remove(name);
+
+      return { name, removed: true as const };
+    } catch (error) {
+      throw new ServiceError("bad_request", errorMessage(error));
+    }
+  }
+
+  async generateTypes(body: z.output<typeof routes.generateTypes.body>) {
+    try {
+      return await generateCommand(body.binary, body.path, { name: body.name ?? undefined });
+    } catch (error) {
+      throw new ServiceError("bad_request", errorMessage(error));
+    }
   }
 
   async events(transaction: RuntimeEvent[]) {

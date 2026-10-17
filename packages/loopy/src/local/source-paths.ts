@@ -23,7 +23,7 @@ function metaValues(path: string) {
   ]);
 }
 
-function inlineImportMeta(path: string, lang: Lang, source: string) {
+export function inlineImportMeta(path: string, lang: Lang, source: string) {
   const values = metaValues(path);
 
   const { program, errors } = parseSync(path, source, {

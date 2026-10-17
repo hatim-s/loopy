@@ -1,22 +1,53 @@
 import { dirname, relative, resolve } from "node:path";
-import { bundleLoopy, loadLoopy, Registry } from "../../local/index.js";
+import { compile } from "../../compiler/index.js";
+import { routes } from "../../contract/index.js";
+import { request } from "../client.js";
 import { type CliContext, requireTarget } from "../context.js";
 import { printJson } from "../output.js";
 
 export async function runSave(context: CliContext): Promise<void> {
   const source = resolve(context.cwd, requireTarget(context, "TypeScript file"));
+  const result = await compile(source);
 
-  const bundle = await bundleLoopy(source, context.home);
-  const loopy = await loadLoopy(bundle.path);
+  if (!result.ok) {
+    throw new Error(
+      result.diagnostics
+        .map(
+          (value) => `${value.file}:${value.line}:${value.column} [${value.code}] ${value.message}`,
+        )
+        .join("\n"),
+    );
+  }
 
   const path = relative(context.cwd, source);
   const outside = path === ".." || path.startsWith("../");
-  const cwd = !context.values.cwd && outside ? dirname(source) : context.cwd;
+  const workspace = !context.values.cwd && outside ? dirname(source) : context.cwd;
   printJson(
-    new Registry(context.home, cwd).save(loopy, {
-      source,
-      bundleHash: bundle.hash,
-      replace: context.values.replace,
-    }),
+    await request(
+      context,
+      `/loopies/${encodeURIComponent(result.graph.name)}`,
+      routes.putLoopy.response,
+      {
+        method: "PUT",
+        body: {
+          graph: result.graph,
+          revision: result.revision,
+          bundles: result.bundles.map((value) => ({
+            ...value,
+            bytes: Buffer.from(value.bytes).toString("base64"),
+          })),
+          source: {
+            path: source,
+            workspace,
+            scope: "project",
+            description: null,
+            mode: "sandbox",
+            secrets: [],
+            schedule: null,
+          },
+          replace: context.values.replace ?? false,
+        },
+      },
+    ),
   );
 }

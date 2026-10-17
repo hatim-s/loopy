@@ -158,7 +158,9 @@ const command = base.extend({
   }),
   retry: retrySchema,
   okExitCodes: z.array(z.number().int()),
-  parse: z.strictObject({ bundleHash: z.string().nullable() }).nullable(),
+  parse: z
+    .strictObject({ bundleHash: z.string().nullable(), input: graphRecord(valueSchema) })
+    .nullable(),
 });
 
 const otherNodes = [
@@ -297,7 +299,7 @@ export const nodeRunSchema = z.discriminatedUnion("status", [
 
 const nodeViewSchema = z.discriminatedUnion("kind", [
   code.extend({ module: z.strictObject({ name: z.string() }) }),
-  command.extend({ parse: z.strictObject({}).nullable() }),
+  command.extend({ parse: z.strictObject({ input: graphRecord(valueSchema) }).nullable() }),
   ...otherNodes,
 ]);
 

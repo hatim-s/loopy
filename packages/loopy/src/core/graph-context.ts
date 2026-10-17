@@ -177,6 +177,7 @@ export function values(node: Node): Value[] {
     case "command":
       return [
         ...node.argv,
+        ...Object.values(node.parse?.input ?? {}),
         ...Object.values(node.flags),
         node.options.cwd,
         ...Object.values(node.options.env),

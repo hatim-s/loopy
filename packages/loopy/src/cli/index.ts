@@ -6,6 +6,7 @@ import { defaultHome } from "../local/index.js";
 import { parseCliArgs } from "./args.js";
 import { runCancel } from "./commands/cancel.js";
 import { runDaemon } from "./commands/daemon.js";
+import { runGraph } from "./commands/graph.js";
 import { runHook } from "./commands/hook.js";
 import { runInspect } from "./commands/inspect.js";
 import { runList } from "./commands/list.js";
@@ -23,6 +24,7 @@ import { printLine, report } from "./output.js";
 import { usage } from "./usage.js";
 
 const COMMANDS = {
+  graph: runGraph,
   cancel: runCancel,
   daemon: runDaemon,
   inspect: runInspect,

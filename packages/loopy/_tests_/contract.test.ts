@@ -3,6 +3,7 @@ import * as contract from "../src/contract/index.js";
 import type * as core from "../src/core/index.js";
 import type { SavedLoopy } from "../src/local/saved-loopy.js";
 import { fixture, newRun } from "./fixture.js";
+import { approveDemoGraph } from "./fixtures/graphs.js";
 
 type Flatten<T> = T extends unknown ? { [Key in keyof T]: T[Key] } : never;
 
@@ -217,7 +218,12 @@ test("loopy views count matching runs and choose the newest without leaking regi
     mode: "sandbox",
     source: "/private/source",
     secrets: ["SECRET"],
-    bundleHash: "private",
+    version: 2,
+    graph: approveDemoGraph,
+    revision: "private",
+    bundles: [],
+    description: null,
+    schedule: null,
     savedAt: now,
   };
 
@@ -281,8 +287,12 @@ test("route patterns are unique and every parameter has a schema", () => {
     const names = [...route.path.matchAll(/:([a-z]+)/g)].map((match) => match[0].slice(1));
     expect(Object.keys(route.params.shape).sort()).toEqual(names.sort());
 
-    for (const name of names) {
-      expect(route.params.safeParse({ [name]: "value" }).success).toBe(true);
+    expect(
+      route.params.safeParse(Object.fromEntries(names.map((parameter) => [parameter, "value"])))
+        .success,
+    ).toBe(true);
+
+    if (names.length > 0) {
       expect(route.params.safeParse({}).success).toBe(false);
     }
   }
@@ -326,7 +336,12 @@ test("serialized loopy and snapshot views exclude private registry and owner key
     input: {},
     source: "/private/source",
     secrets: ["SECRET"],
-    bundleHash: "private",
+    version: 2,
+    graph: approveDemoGraph,
+    revision: "private",
+    bundles: [],
+    description: null,
+    schedule: null,
     savedAt: now,
   };
 

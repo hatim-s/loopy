@@ -2,17 +2,13 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { revision } from "../src/compiler/revision.js";
 import { encodeRunCursor, routes } from "../src/contract/index.js";
 import type { RunRecord } from "../src/core/index.js";
-import {
-  bundleLoopy,
-  LoopyService,
-  loadLoopy,
-  openRunStore,
-  Registry,
-} from "../src/local/index.js";
+import { LoopyService, openRunStore, Registry } from "../src/local/index.js";
 import { Daemon, SYSTEM_CLOCK } from "../src/runtime/index.js";
-
+import type { Loopy } from "../src/sdk/host.js";
+import { compiledBody } from "./compiled-fixture.js";
 import { FakeExecutor } from "./fixture.js";
 
 const cleanups: (() => void)[] = [];
@@ -32,9 +28,20 @@ async function fixture(definition = "") {
     `import { loopy } from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/index.ts"))};
   export default loopy({ name: "service", ${definition} input: { name: "string" }, secrets: ["PRIVATE"], run: () => 1 });`,
   );
-  const bundle = await bundleLoopy(source, home);
+
+  const { default: definitionValue }: { default: Loopy } = await import(source);
+
   const registry = new Registry(home, root);
-  registry.save(await loadLoopy(bundle.path), { source, bundleHash: bundle.hash });
+
+  const body = compiledBody("service", source, {
+    scope: definitionValue.scope,
+    schedule: definitionValue.schedule ?? null,
+    secrets: ["PRIVATE"],
+  });
+
+  body.graph.input = { name: "string" };
+  body.revision = revision(body.graph, []);
+  registry.save(body);
   let now = Date.parse("2026-10-17T00:00:00.000Z");
   const clock = { ...SYSTEM_CLOCK, now: () => now };
   const store = openRunStore(home);
@@ -74,7 +81,7 @@ test("service validates input before queuing and hides registry private fields",
   const [loopy] = await service.listLoopies();
   expect(loopy).toMatchObject({ slug: "service", lastRun: run, counts: { queued: 1 } });
 
-  for (const privateField of ["source", "bundleHash", "secrets", "savedAt"]) {
+  for (const privateField of ["source", "revision", "bundles", "secrets", "savedAt"]) {
     expect(Object.hasOwn(loopy ?? {}, privateField)).toBe(false);
   }
 });

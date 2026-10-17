@@ -1,14 +1,14 @@
 import { DEFAULT_PORT } from "../local/index.js";
 
 export function usage(): string {
-  return `loopy: replayable TypeScript workflows for CLI tools
+  return `loopy: compiled workflow graphs for CLI tools
 
-  loopy save <file.ts> [--replace]            Bundle and register a loopy
+  loopy graph <name|file> [--format json|text]
+  loopy save <file.ts> [--replace]            Compile and save a graph
   loopy list                                  List saved loopies
-  loopy run <slug> [--key value ...]          Run with named inputs
+  loopy run <slug> [--key value ...]          Queue with named inputs
   loopy run <slug> --input-json JSON          Run with JSON input
   loopy run <slug> --input-file input.json    Run with input from a file
-  loopy run <slug> [--detach]                 Queue for the daemon instead of running inline
   loopy runs [slug]                           List runs as JSON
   loopy inspect <run-id>                      Show the snapshot, cursor and epoch
   loopy logs <run-id> [--follow]              Print logs; follow emits NDJSON

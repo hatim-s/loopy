@@ -49,7 +49,11 @@ export function withLockDirectory<T>(lock: string, holder: string, work: () => T
 }
 
 /** Writes through a sibling temp file so a reader sees the old or the new content, never half. */
-export function writeFileAtomically(file: string, text: string, mode: number): void {
+export function writeFileAtomically(
+  file: string,
+  contents: string | Uint8Array,
+  mode: number,
+): void {
   const temporary = join(dirname(file), `.${basename(file)}.${crypto.randomUUID()}.tmp`);
 
   try {
@@ -60,7 +64,7 @@ export function writeFileAtomically(file: string, text: string, mode: number): v
     );
 
     try {
-      writeFileSync(fd, text);
+      writeFileSync(fd, contents);
       fsyncSync(fd);
     } finally {
       closeSync(fd);

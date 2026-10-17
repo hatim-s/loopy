@@ -110,9 +110,9 @@ export function runView(options: RunViewOptions): RunView {
 }
 
 type SavedLoopyInput = Pick<LoopyView, "slug" | "scope" | "mode"> & {
-  description?: string;
+  description?: string | null;
   input: Readonly<Exclude<LoopyView["input"], "schema">> | "schema";
-  schedule?: { cron: string; tz?: string };
+  schedule?: { cron: string; tz?: string } | null;
 };
 
 function scheduleView(
@@ -188,7 +188,9 @@ export function graphView(graph: CoreGraph): GraphView {
         return { ...node, module: { name: node.module.path.split("/").at(-1) ?? "" } };
       }
 
-      return node.kind === "command" ? { ...node, parse: node.parse === null ? null : {} } : node;
+      return node.kind === "command"
+        ? { ...node, parse: node.parse === null ? null : { input: node.parse.input } }
+        : node;
     }),
     warnings: graph.warnings.map(({ code, message, node }) => ({
       code,

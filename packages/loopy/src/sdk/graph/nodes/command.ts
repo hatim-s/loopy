@@ -61,7 +61,10 @@ function record({
       },
       retry: builder.retry(options.retry),
       okExitCodes: [...(descriptor.okExitCodes ?? [0])],
-      parse: mode === "parsed" && descriptor.parse ? { bundleHash: null } : null,
+      parse:
+        mode === "parsed" && descriptor.parse
+          ? { bundleHash: null, input: serializeValues(rendered.parseInput, builder) }
+          : null,
     },
     label,
   );

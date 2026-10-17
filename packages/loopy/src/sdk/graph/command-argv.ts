@@ -103,6 +103,11 @@ export function commandArgv(original: CommandDescriptor, input: Input, mode: "pa
   };
 
   return {
+    parseInput: Object.fromEntries(
+      Object.entries(prepared)
+        .filter(([, value]) => value !== undefined)
+        .map(([name, value]) => [name, codec.decode(value)]),
+    ),
     program: descriptor.program,
     argv: renderOperands(operands, prepared, key).map((value) => codec.decode(value)),
     flagSpec: flagSpec(descriptor),

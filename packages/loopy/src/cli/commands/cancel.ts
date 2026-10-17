@@ -1,10 +1,13 @@
+import { routes } from "../../contract/index.js";
+import { request } from "../client.js";
 import { type CliContext, requireTarget } from "../context.js";
 import { printJson } from "../output.js";
-import { runService, withRunStore } from "../store.js";
 
 export async function runCancel(context: CliContext): Promise<void> {
   const id = requireTarget(context, "Run ID");
-  await withRunStore(context, async (store) => {
-    printJson(await runService(context, store).cancelRun(id));
-  });
+  printJson(
+    await request(context, `/runs/${encodeURIComponent(id)}/cancel`, routes.cancelRun.response, {
+      method: "POST",
+    }),
+  );
 }

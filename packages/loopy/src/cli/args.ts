@@ -1,9 +1,9 @@
 import { parseArgs } from "node:util";
 
 const OPTIONS = {
+  format: { type: "string" },
   "input-json": { type: "string" },
   "input-file": { type: "string" },
-  detach: { type: "boolean" },
   payload: { type: "string" },
   follow: { type: "boolean" },
   cron: { type: "string" },
@@ -27,7 +27,7 @@ const GLOBAL_OPTIONS = ["home", "cwd", "help", "lease-ms"] as const;
 
 const COMMAND_OPTIONS = new Map<string, readonly (keyof typeof OPTIONS)[]>(
   Object.entries({
-    run: ["input-json", "input-file", "detach"],
+    run: ["input-json", "input-file"],
     resume: [],
     hook: ["payload"],
     schedule: ["cron", "tz", "off", "enable", "disable", "input-json"],
@@ -35,6 +35,7 @@ const COMMAND_OPTIONS = new Map<string, readonly (keyof typeof OPTIONS)[]>(
     "daemon run": ["concurrency", "port"],
     "daemon install": ["concurrency", "port"],
     save: ["replace"],
+    graph: ["format"],
     types: ["out", "name"],
     ui: ["port"],
     "secrets set": ["stdin"],

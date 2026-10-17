@@ -159,7 +159,7 @@ export type Node = Expand<
           options: { cwd: Value | null; env: Record<string, Value>; stdin: Value | null };
           retry: GraphRetry;
           okExitCodes: number[];
-          parse: { bundleHash: string | null } | null;
+          parse: { bundleHash: string | null; input: Record<string, Value> } | null;
         }
       | { kind: (typeof NODE_KINDS)[2]; predicate: Predicate; arms: { yes: NodeId; no: NodeId } }
       | {
@@ -297,3 +297,32 @@ export type NodeRun = Expand<
     | { status: (typeof NODE_RUN_STATUSES)[6]; endedAt: string }
   )
 >;
+
+export const COMPILER_DIAGNOSTIC_CODES = [
+  "default_loopy",
+  "source_error",
+  "evaluation_failed",
+  "bundle_failed",
+  "syntax_error",
+  "literal_required",
+  "synchronous_run",
+  "invalid_binding",
+  "literal_key",
+  "module_path",
+  "module_default",
+  "invalid_callback",
+  "forbidden_call",
+  "forbidden_expression",
+  "invalid_reference",
+  "await_forbidden",
+  "template_reference",
+  "forbidden_statement",
+  "command_descriptor",
+  "command_key",
+  "module_import",
+  "cyclic_import",
+  "sdk_alias",
+  "module_effect",
+] as const;
+
+export type CompilerDiagnosticCode = (typeof COMPILER_DIAGNOSTIC_CODES)[number] | DiagnosticCode;

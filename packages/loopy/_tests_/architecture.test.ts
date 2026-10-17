@@ -7,7 +7,7 @@ const SOURCE = resolve(import.meta.dir, "../src");
 
 const DASHBOARD = resolve(import.meta.dir, "../../../apps/dashboard/src");
 
-const LAYERS = ["core", "runtime", "contract", "sdk", "local", "cli"] as const;
+const LAYERS = ["core", "runtime", "contract", "sdk", "local", "compiler", "cli"] as const;
 
 type Layer = (typeof LAYERS)[number];
 
@@ -18,7 +18,8 @@ const ALLOWED_IMPORTS: Record<Layer, readonly Layer[]> = {
   contract: ["core"],
   local: ["core", "runtime", "sdk", "contract"],
   sdk: ["core", "runtime"],
-  cli: ["core", "runtime", "local", "sdk", "contract"],
+  cli: ["core", "runtime", "local", "sdk", "contract", "compiler"],
+  compiler: ["core", "contract", "local", "sdk"],
 };
 
 function sourceFiles(directory: string): string[] {
@@ -138,7 +139,9 @@ test("layers import downward, and only through the target layer's index", () => 
 
       if (!ALLOWED_IMPORTS[layer].includes(target)) {
         violations.push(`${name} (${layer}) may not import ${target} (${specifier}).`);
-      } else if (target === "sdk" ? !/\/host\.js$/.test(specifier) : !isBarrel(specifier)) {
+      } else if (
+        target === "sdk" ? !/\/(?:host|graph-host)\.js$/.test(specifier) : !isBarrel(specifier)
+      ) {
         violations.push(
           `${name} must import ${target} through ${target === "sdk" ? "sdk/host.js" : `${target}/index.js`} (${specifier}).`,
         );

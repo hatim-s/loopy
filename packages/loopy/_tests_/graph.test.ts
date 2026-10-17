@@ -47,7 +47,7 @@ test("graph schemas exactly match the portable model", () => {
           | Exclude<Flatten<core.Node>, { kind: "code" | "command" }>
           | (Omit<Extract<core.Node, { kind: "code" }>, "module"> & { module: { name: string } })
           | (Omit<Extract<core.Node, { kind: "command" }>, "parse"> & {
-              parse: Record<string, never> | null;
+              parse: { input: Record<string, core.Value> } | null;
             })
         >[];
       }
@@ -370,7 +370,7 @@ test("graph wire views reject paths and hashes, including command parser hashes"
     }
 
     if (node.kind === "command") {
-      return { ...node, parse: node.parse === null ? null : {} };
+      return { ...node, parse: node.parse === null ? null : { input: node.parse.input } };
     }
 
     return node;
@@ -1524,3 +1524,22 @@ for (const name of ["__proto__", "constructor", "prototype"]) {
     }
   }
 }
+
+test("parser input references use the same graph visibility checks as command arguments", () => {
+  const graph = {
+    ...approveDemoGraph,
+    nodes: approveDemoGraph.nodes.map((node) =>
+      node.kind === "command"
+        ? {
+            ...node,
+            parse: {
+              bundleHash: null,
+              input: { args: [{ ref: contract.refIdSchema.parse("missing"), path: [] }] },
+            },
+          }
+        : node,
+    ),
+  };
+
+  expect(validateGraph(graph).map((value) => value.code)).toContain("unresolved_ref");
+});

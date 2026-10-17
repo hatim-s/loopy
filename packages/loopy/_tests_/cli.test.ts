@@ -1,673 +1,167 @@
-import { Database } from "bun:sqlite";
 import { afterEach, expect, test } from "bun:test";
-import { mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { openRunStore } from "../src/local/index.js";
-import { CLI, cli, fixture, object, roots, SDK, save } from "./cli-fixture.js";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { localDaemon, openRunStore, Registry, readDaemonFile } from "../src/local/index.js";
+import { cli, fixture, object, roots } from "./cli-fixture.js";
+
+const daemons: { stop(): Promise<void> }[] = [];
 
 afterEach(async () => {
+  await Promise.all(daemons.splice(0).map((daemon) => daemon.stop()));
+
   for (const root of roots.splice(0)) {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test("SDK CLI bundles, coerces named input, runs, inspects steps and prints logs", async () => {
-  const f = fixture(
-    "hello",
-    `input: { name: "string", count: "number", "loud?": "boolean" },
-    run: async ({ input, log }) => {
-      const greeting = await step("greet", () => input);
-      log.info("hello from sdk", greeting);
-      return greeting;
-    }`,
+function graphFixture(name = "compiled") {
+  const f = fixture(name, "run: () => null");
+  writeFileSync(
+    f.file,
+    `import { loopy, log } from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/graph/index.ts"))}; export default loopy({name:${JSON.stringify(name)}, input: {count: "number"}, run: ({input}) => {log("ready"); return input.get("count");}});`,
   );
-
-  const saved = await save(f);
-  expect(saved.input).toEqual({ name: "string", count: "number", "loud?": "boolean" });
-  rmSync(f.file);
-
-  const result = await cli(f, "run", "hello", "--name", "world", "--count", "2", "--loud", "false");
-
-  expect(result.code).toBe(0);
-  const run = object(result.stdout);
-  expect(run.status).toBe("succeeded");
-  expect(run.output).toEqual({ name: "world", count: 2, loud: false });
-  const detail = object((await cli(f, "inspect", String(run.id))).stdout);
-  expect(detail.steps).toMatchObject([
-    { seq: 1, key: "greet", kind: "function", status: "succeeded", attempt: 1 },
-  ]);
-  expect((await cli(f, "logs", String(run.id))).stdout).toContain("hello from sdk");
-  expect((await cli(f, "runs", "hello")).stdout).toContain(String(run.id));
-  expect((await cli(f, "list")).stdout).toContain("hello");
-});
-
-test("Ctrl-C during sleep leaves the run suspended and resume completes it", async () => {
-  const f = fixture(
-    "nap",
-    `mode: "full", run: async ({ log }) => {
-    await step("before", () => 1);
-    await sleep("1s");
-    log.info("awake");
-    return command("pwd", { program: "/bin/pwd", args: [] });
-  }`,
-  );
-
-  await save(f);
-
-  const child = Bun.spawn([process.execPath, CLI, "--home", f.home, "run", "nap"], {
-    cwd: f.cwd,
-    stdout: "pipe",
-    stderr: "pipe",
+  const store = openRunStore(f.home);
+  const daemon = localDaemon({ ...f, store, concurrency: 4, port: 0 });
+  daemon.start();
+  daemons.push({
+    async stop() {
+      await daemon.stop();
+      store.close();
+    },
   });
 
-  const stdout = new Response(child.stdout).text();
-  const reader = child.stderr.getReader();
-  const notice = await reader.read();
-  expect(new TextDecoder().decode(notice.value)).toContain("wakes at");
-  child.kill("SIGINT");
-  expect(await child.exited).toBe(0);
-  await reader.cancel();
-  const run = object(await stdout);
-  expect(run.status).toBe("suspended");
+  return { ...f, store };
+}
+
+test("save posts a compiled graph and graph prints the same redacted view by file and name", async () => {
+  const f = graphFixture();
+  const saved = await cli(f, "save", f.file);
+  expect(saved).toMatchObject({ code: 0, stderr: "" });
+  const view = object(saved.stdout);
+  expect(view.name).toBe("compiled");
+  expect(object((await cli(f, "graph", "compiled")).stdout)).toEqual(view);
+  expect(object((await cli(f, "graph", f.file)).stdout)).toEqual(view);
+  const text = await cli(f, "graph", "compiled", "--format", "text");
+  expect(text.code).toBe(0);
+  expect(text.stdout).toContain("0:log log [next -> 1:join]");
+  const entry = new Registry(f.home, f.cwd).get("compiled");
+  expect(entry).toMatchObject({
+    version: 2,
+    graph: { name: "compiled" },
+    revision: expect.stringMatching(/^[a-f0-9]{64}$/),
+    bundles: [],
+  });
+  expect(entry).not.toHaveProperty("bundleHash");
+});
+
+test("HTTP commands queue schema-validated graph runs and pin the saved revision", async () => {
+  const f = graphFixture();
+  expect((await cli(f, "save", f.file)).code).toBe(0);
+  expect((await cli(f, "run", "compiled", "--count", "bad")).code).toBe(1);
+  expect(await f.store.listRuns()).toEqual([]);
+  const queued = await cli(f, "run", "compiled", "--count", "2");
+  expect(queued).toMatchObject({ code: 0, stderr: "" });
+  const run = object(queued.stdout);
+  expect(run).toMatchObject({ status: "queued", input: { count: 2 } });
+  expect(await f.store.getRun(String(run.id))).toMatchObject({
+    revision: new Registry(f.home, f.cwd).get("compiled").revision,
+  });
+  expect(object((await cli(f, "inspect", String(run.id))).stdout).run).toMatchObject({
+    id: run.id,
+  });
+  expect(object((await cli(f, "cancel", String(run.id))).stdout)).toMatchObject({
+    status: "cancelled",
+  });
+});
+
+test("save rejects another source until --replace and locates absolute files beside their source", async () => {
+  const f = graphFixture();
+  expect((await cli(f, "save", f.file)).code).toBe(0);
+  const other = join(f.cwd, "other.ts");
+  writeFileSync(other, await Bun.file(f.file).text());
+  const rejected = await cli(f, "save", other);
+  expect(rejected.stderr).toContain("belongs to another source");
+  expect((await cli(f, "save", other, "--replace")).code).toBe(0);
+  const caller = join(f.cwd, "caller");
+  mkdirSync(caller);
+  expect((await cli({ ...f, cwd: caller }, "save", other)).code).toBe(0);
+  expect(new Registry(f.home, f.cwd).get("compiled").source).toBe(other);
+});
+
+test("compiler diagnostics include locations and do not create registry entries", async () => {
+  const f = graphFixture();
+  writeFileSync(
+    f.file,
+    `import {loopy} from "loopy/graph"; export default loopy({name:"bad",input:{},run:async()=>1});`,
+  );
+  const result = await cli(f, "save", f.file);
+  expect(result.code).toBe(1);
+  expect(result.stderr).toContain("[synchronous_run]");
+  expect(new Registry(f.home, f.cwd).list()).toEqual([]);
+});
+
+test("CLI rejects invalid graph formats and short leases", async () => {
+  const f = graphFixture();
+  expect((await cli(f, "graph", f.file, "--format", "svg")).stderr).toContain(
+    "--format json or --format text",
+  );
+  expect((await cli(f, "runs", "--lease-ms", "999")).stderr).toContain("at least 1000");
+});
+
+test("save starts the daemon on demand and leaves artifact writes to the service", async () => {
+  const f = fixture("on-demand", "run: () => null");
+  writeFileSync(
+    f.file,
+    `import {loopy} from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/graph/index.ts"))}; export default loopy({name:"on-demand",input:{},run:()=>null});`,
+  );
+  const [result, concurrent] = await Promise.all([cli(f, "save", f.file), cli(f, "save", f.file)]);
+  const record = readDaemonFile(f.home);
+
+  if (record) {
+    daemons.push({
+      async stop() {
+        process.kill(record.pid, "SIGTERM");
+
+        for (let attempt = 0; attempt < 100 && readDaemonFile(f.home); attempt++) {
+          await Bun.sleep(20);
+        }
+      },
+    });
+  }
+
+  expect(result).toMatchObject({ code: 0, stderr: "" });
+  expect(concurrent).toMatchObject({ code: 0, stderr: "" });
+  expect(record?.pid).not.toBe(process.pid);
+  expect(new Registry(f.home, f.cwd).get("on-demand").graph.name).toBe("on-demand");
+});
+
+test("list and schedules use the caller workspace when the daemon started elsewhere", async () => {
+  const f = graphFixture();
   const other = join(f.cwd, "other");
   mkdirSync(other);
-  const resumed = await cli({ ...f, cwd: other }, "resume", String(run.id));
-  expect(resumed.code).toBe(0);
-  expect(object(resumed.stdout)).toMatchObject({
-    status: "succeeded",
-    workspace: realpathSync(f.cwd),
-    output: { stdout: `${realpathSync(f.cwd)}\n` },
-  });
-  const detail = object((await cli(f, "inspect", String(run.id))).stdout);
-  expect(detail.steps).toMatchObject([
-    { key: "before", attempt: 1 },
-    { kind: "sleep" },
-    { key: "pwd", attempt: 1 },
-  ]);
+  const file = join(other, "other.ts");
+  writeFileSync(
+    file,
+    `import {loopy} from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/graph/index.ts"))}; export default loopy({name:"other",input:{},run:()=>null});`,
+  );
+  const caller = { ...f, cwd: other };
+  expect((await cli(caller, "save", file, "--cwd", other)).code).toBe(0);
+  expect(JSON.parse((await cli(caller, "list")).stdout)).toMatchObject([{ slug: "other" }]);
+  expect((await cli(caller, "schedule", "other", "--cron", "* * * * *")).code).toBe(0);
 });
 
-test("detach queues without loading secrets and a queued run can be cancelled", async () => {
-  const f = fixture(
-    "queued",
-    `secrets: ["MISSING_TOKEN"], run: async () => step("answer", () => 42)`,
-  );
-
-  await save(f);
-  const detached = await cli(f, "run", "queued", "--detach");
-  expect(detached.code).toBe(0);
-  const run = object(detached.stdout);
-  expect(run.status).toBe("queued");
-  expect((await cli(f, "inspect", String(run.id))).stdout).toContain('"steps": []');
-  const cancelled = await cli(f, "cancel", String(run.id));
-  expect(cancelled.code).toBe(0);
-  expect(object(cancelled.stdout).status).toBe("cancelled");
-});
-
-test("JSON schema input is required, validated and accepted from JSON or a file", async () => {
-  const f = fixture(
-    "schema",
-    `input: { "~standard": { version: 1, vendor: "test",
-    validate(value: unknown) { return { value }; } } },
-    run: async ({ input }) => step("echo", () => input)`,
-  );
-
-  expect((await save(f)).input).toBe("schema");
-  const missing = await cli(f, "run", "schema");
-  expect(missing.code).toBe(1);
-  expect(missing.stderr).toContain("Supply --input-json");
-  const json = await cli(f, "run", "schema", "--input-json", '{"nested":[1,true]}');
-  expect(object(json.stdout).output).toEqual({ nested: [1, true] });
-  writeFileSync(join(f.cwd, "input.json"), '{"from":"file"}');
-  const file = await cli(f, "run", "schema", "--input-file", "input.json");
-  expect(object(file.stdout).output).toEqual({ from: "file" });
-});
-
-test("record input errors do not create runs and failed workflows exit nonzero", async () => {
-  const f = fixture(
-    "failure",
-    `input: { count: "number" }, run: async () => step("fail", () => { throw new Error("intentional failure"); }, { retry: { attempts: 1 } })`,
-  );
-
-  await save(f);
-  const missing = await cli(f, "run", "failure");
-  expect(missing.code).toBe(1);
-  expect(missing.stderr).toContain("count: Expected number");
-  const bad = await cli(f, "run", "failure", "--count", "wrong");
-  expect(bad.stderr).toContain("must be a number");
-  const unknown = await cli(f, "run", "failure", "--count", "1", "--extra", "x");
-  expect(unknown.stderr).toContain("Unknown field");
-  const failed = await cli(f, "run", "failure", "--count", "1");
-  expect(failed.code).toBe(1);
-  expect(object(failed.stdout).status).toBe("failed");
-  expect(JSON.parse((await cli(f, "runs")).stdout)).toHaveLength(1);
-});
-
-test("schedule persists the next fire and off removes it", async () => {
-  const f = fixture(
-    "scheduled",
-    `input: { count: "number" }, run: async ({ input }) => input.count`,
-  );
-
-  await save(f);
-
-  const result = await cli(
-    f,
-    "schedule",
-    "scheduled",
-    "--cron",
-    "*/5 * * * *",
-    "--tz",
-    "Asia/Kolkata",
-    "--input-json",
-    '{"count":2}',
-  );
-
+test("types uses the daemon's command-help endpoint and writes the returned source", async () => {
+  const f = graphFixture();
+  const result = await cli(f, "types", "git", "--out", "git.ts");
   expect(result.code).toBe(0);
-  const schedule = object(result.stdout);
-  expect(schedule.tz).toBe("Asia/Kolkata");
-  expect(Date.parse(String(schedule.nextFireAt))).toBeGreaterThan(Date.now());
-  const sub = join(f.cwd, "sub");
-  mkdirSync(sub);
-  const alias = join(f.cwd, "alias");
-  symlinkSync(sub, alias);
-
-  const repeated = await cli(
-    { ...f, cwd: sub },
-    "schedule",
-    "scheduled",
-    "--cron",
-    "*/5 * * * *",
-    "--input-json",
-    '{"count":2}',
-  );
-
-  expect(repeated.code).toBe(0);
-  expect(
-    (
-      await cli(
-        f,
-        "schedule",
-        "scheduled",
-        "--cwd",
-        alias,
-        "--cron",
-        "*/5 * * * *",
-        "--input-json",
-        '{"count":2}',
-      )
-    ).code,
-  ).toBe(0);
-  const store = openRunStore(f.home);
-
-  try {
-    expect(await store.listSchedules()).toMatchObject([
-      { workspace: realpathSync(f.cwd), slug: "scheduled" },
-    ]);
-    expect(await store.listSchedules()).toHaveLength(1);
-
-    for (const [flag, enabled] of [
-      ["--disable", false],
-      ["--enable", true],
-    ] as const) {
-      const toggled = await cli(f, "schedule", "scheduled", flag);
-      expect(toggled.code).toBe(0);
-      expect(object(toggled.stdout)).toMatchObject({ enabled, input: { count: 2 } });
-    }
-
-    const conflict = await cli(f, "schedule", "scheduled", "--enable", "--disable");
-    expect(conflict.code).toBe(1);
-    expect(conflict.stderr).toContain("Choose one schedule action");
-    const removed = await cli({ ...f, cwd: sub }, "schedule", "scheduled", "--off");
-    expect(removed.code).toBe(0);
-    expect(object(removed.stdout)).toEqual({ deleted: true });
-    expect(await store.listSchedules()).toEqual([]);
-  } finally {
-    store.close();
-  }
+  expect(await Bun.file(join(f.cwd, "git.ts")).text()).toContain("defineCommand");
 });
 
-test("cancel reports an active owner instead of stealing the run", async () => {
-  const f = fixture("owned", "run: () => 42");
-  await save(f);
-  const run = object((await cli(f, "run", "owned", "--detach")).stdout);
-  const id = String(run.id);
-  const store = openRunStore(f.home);
-
-  try {
-    await store.claim(id, "test-owner");
-    const cancelled = await cli(f, "cancel", id);
-    expect(cancelled.code).toBe(1);
-    expect(cancelled.stderr).toContain(`owned by PID ${process.pid}`);
-    expect(await store.getRun(id)).toMatchObject({
-      status: "running",
-      owner: { token: "test-owner" },
-    });
-    await store.release(id, "test-owner");
-  } finally {
-    store.close();
-  }
-});
-
-test("command-specific options preserve run input fields and reject invalid flags", async () => {
-  const f = fixture(
-    "flags",
-    `input: { cron: "string", follow: "string" }, run: ({ input }) => input`,
-  );
-
-  await save(f);
-  const result = await cli(f, "run", "flags", "--cron", "hello", "--follow", "yes");
-  expect(result.code).toBe(0);
-  expect(object(result.stdout).output).toEqual({ cron: "hello", follow: "yes" });
-  const invalid = await cli(f, "logs", "x", "--detach");
-  expect(invalid.code).toBe(1);
-  expect(invalid.stderr).toContain("Unknown option '--detach' for loopy logs.");
-});
-
-test("missing secrets and incomplete input flags do not create queued runs", async () => {
-  const f = fixture("secret", `secrets: ["MISSING_TOKEN"], run: () => 42`);
-  await save(f);
-  const missing = await cli(f, "run", "secret");
-  expect(missing.code).toBe(1);
-  expect(missing.stderr).toContain("MISSING_TOKEN");
-
-  for (const flag of ["--full", "--retry-uncertain"]) {
-    const invalid = await cli(f, "run", "secret", flag);
-    expect(invalid.code).toBe(1);
-    expect(invalid.stderr).toContain("requires a value");
-  }
-
-  expect(object((await cli(f, "run", "secret", "--detach")).stdout).status).toBe("queued");
-  const store = openRunStore(f.home);
-
-  try {
-    expect(await store.listRuns()).toHaveLength(1);
-  } finally {
-    store.close();
-  }
-});
-
-test("Ctrl-C interrupts a running command, releases ownership and retries on resume", async () => {
-  const f = fixture(
-    "interrupt",
-    `mode: "full", run: () => command("wait", { program: "/bin/sleep", args: ["8"] })`,
-  );
-
-  await save(f);
-
-  const child = Bun.spawn([process.execPath, CLI, "--home", f.home, "run", "interrupt"], {
-    cwd: f.cwd,
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-
-  const stdout = new Response(child.stdout).text();
-  const stderr = new Response(child.stderr).text();
-
-  try {
-    await Bun.sleep(1000);
-    const at = performance.now();
-    child.kill("SIGINT");
-    expect(await child.exited).toBe(0);
-    expect(performance.now() - at).toBeLessThan(2000);
-    expect(await stderr).toBe("");
-    const run = object(await stdout);
-    expect(run.status).toBe("suspended");
-    expect(run.owner).toBeUndefined();
-    const store = openRunStore(f.home);
-
-    try {
-      expect(await store.getSteps(String(run.id))).toMatchObject([
-        { status: "retrying", attempt: 1 },
-      ]);
-    } finally {
-      store.close();
-    }
-
-    const resumed = await cli(f, "resume", String(run.id));
-    expect(resumed.code).toBe(0);
-    expect(object(resumed.stdout).status).toBe("succeeded");
-    const detail = object((await cli(f, "inspect", String(run.id))).stdout);
-    expect(detail.steps).toMatchObject([{ status: "succeeded", attempt: 2 }]);
-  } finally {
-    child.kill();
-    await child.exited;
-  }
-}, 15_000);
-
-test("schedule defaults come from the saved definition and logs follow emits NDJSON", async () => {
-  const f = fixture(
-    "defaults",
-    `schedule: { cron: "*/5 * * * *", tz: "Asia/Kolkata" }, run: ({ log }) => { log.info("one"); log.info("two"); return 1; }`,
-  );
-
-  await save(f);
-  const scheduled = await cli(f, "schedule", "defaults");
-  expect(scheduled.code).toBe(0);
-  expect(object(scheduled.stdout)).toMatchObject({ cron: "*/5 * * * *", tz: "Asia/Kolkata" });
-  const run = object((await cli(f, "run", "defaults")).stdout);
-  const logs = await cli(f, "logs", String(run.id), "--follow");
-  expect(logs.code).toBe(0);
-  expect(logs.stdout.trim().split("\n").map(object)).toMatchObject([
-    { message: "one" },
-    { message: "two" },
-  ]);
-});
-
-test("inspect reports how to find a missing run", async () => {
-  const f = fixture("missing", "run: () => 1");
-  const result = await cli(f, "inspect", "nonexist");
-  expect(result.code).toBe(1);
-  expect(result.stderr).toContain("No run 'nonexist'. Use loopy runs to list run ids.");
-});
-
-test("saved slugs require explicit replacement and project entries override global entries", async () => {
-  const f = fixture("scoped", 'scope: "global", run: () => "global"');
-  await save(f);
-  const other = join(f.cwd, "other.loopy.ts");
-  writeFileSync(
-    other,
-    `import { loopy } from ${JSON.stringify(SDK)}; export default loopy({ name: "scoped", scope: "global", run: () => "replacement" });`,
-  );
-  const conflict = await cli(f, "save", other);
-  expect(conflict.code).toBe(1);
-  expect(conflict.stderr).toContain("belongs to another source");
-  expect((await cli(f, "save", other, "--replace")).code).toBe(0);
-  expect(object((await cli(f, "run", "scoped")).stdout).output).toBe("replacement");
-  writeFileSync(
-    f.file,
-    `import { loopy } from ${JSON.stringify(SDK)}; export default loopy({ name: "scoped", run: () => "project" });`,
-  );
-  await save(f);
-  const child = join(f.cwd, "nested");
-  mkdirSync(child);
-  const local = await cli({ ...f, cwd: child }, "run", "scoped");
-  expect(local.code).toBe(0);
-  expect(object(local.stdout).output).toBe("project");
-  expect(JSON.parse((await cli(f, "list")).stdout)).toHaveLength(1);
-});
-
-for (const signal of ["SIGKILL", "SIGTERM"] as const) {
-  test(`${signal} recovery retries a long step with the next attempt`, async () => {
-    const f = fixture(
-      "crash",
-      `mode: "full", run: () => step("long", async ({ attempt }) => {
-      if (attempt === 1) { await new Promise((resolve) => { setTimeout(resolve, 30_000).unref(); }); }
-      return attempt;
-    })`,
-    );
-
-    await save(f);
-
-    const child = Bun.spawn([process.execPath, CLI, "--home", f.home, "run", "crash"], {
-      cwd: f.cwd,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-
-    const stdout = new Response(child.stdout).text();
-    const stderr = new Response(child.stderr).text();
-    const store = openRunStore(f.home);
-
-    try {
-      let id: string | undefined;
-
-      for (let tries = 0; tries < 100; tries++) {
-        const [run] = await store.listRuns();
-
-        if (run && (await store.getSteps(run.id))[0]?.status === "running") {
-          id = run.id;
-          break;
-        }
-
-        await Bun.sleep(20);
-      }
-
-      if (!id) {
-        throw new Error("CLI never started the long step.");
-      }
-
-      child.kill(signal);
-      await child.exited;
-      await stdout;
-      expect(await stderr).toBe("");
-
-      if (signal === "SIGKILL") {
-        const db = new Database(join(f.home, "runs.sqlite"));
-
-        try {
-          db.query("UPDATE runs SET owner_host=?,heartbeat_at=? WHERE id=?").run(
-            "other-host",
-            new Date().toISOString(),
-            id,
-          );
-        } finally {
-          db.close();
-        }
-
-        expect((await cli(f, "resume", id, "--lease-ms", "1000")).code).toBe(1);
-        await Bun.sleep(1010);
-      }
-
-      const resumed = await cli(f, "resume", id, "--lease-ms", "1000");
-      expect(resumed.stderr).toBe("");
-      expect(resumed.code).toBe(0);
-      expect(object(resumed.stdout)).toMatchObject({ status: "succeeded", output: 2 });
-      expect(await store.getSteps(id)).toMatchObject([{ attempt: 2, status: "succeeded" }]);
-    } finally {
-      child.kill();
-      await child.exited;
-      store.close();
-    }
-  });
-}
-
-test("loopy types generates a git wrapper that can execute --version", async () => {
-  const f = fixture("generated-git", "run: () => 1");
-  const generated = join(f.cwd, "git.ts");
-  const result = await cli(f, "types", "git", "--out", generated, "--name", "generatedGit");
-  expect(result.code).toBe(0);
-  writeFileSync(
-    generated,
-    (await Bun.file(generated).text()).replace('from "loopy"', `from ${JSON.stringify(SDK)}`),
-  );
-  writeFileSync(
-    f.file,
-    `import { loopy } from ${JSON.stringify(SDK)};
-    import { generatedGit } from "./git.ts";
-    export default loopy({ name: "generated-git", mode: "full", run: () => generatedGit({ args: ["--version"] }) });`,
-  );
-  await save(f);
-  const run = await cli(f, "run", "generated-git");
-  expect(run.stderr).toBe("");
-  expect(run.code).toBe(0);
-  expect(object(run.stdout).output).toMatchObject({
-    exitCode: 0,
-    stdout: expect.stringContaining("git version"),
-  });
-});
-
-test("CLI rejects leases shorter than one second", async () => {
-  const f = fixture("short-lease", "run: () => 1");
-  const result = await cli(f, "runs", "--lease-ms", "999");
-  expect(result.code).toBe(1);
-  expect(result.stderr).toContain(
-    "--lease-ms must be an integer of at least 1000. Use 1000 or more.",
-  );
-});
-
-test("a short lease cannot steal a live inline run but recovers its dead PID", async () => {
-  const f = fixture(
-    "live-lease",
-    `run: () => step("long", async ({ attempt }) => {
-    if (attempt === 1) { await new Promise((resolve) => setTimeout(resolve, 30_000)); }
-    return attempt;
-  })`,
-  );
-
-  await save(f);
-
-  const child = Bun.spawn([process.execPath, CLI, "--home", f.home, "run", "live-lease"], {
-    cwd: f.cwd,
-    stdout: "ignore",
-    stderr: "pipe",
-  });
-
-  const store = openRunStore(f.home);
-
-  try {
-    const run = await waitForRunningStep(store);
-    await Bun.sleep(2100);
-    const blocked = await cli(f, "resume", run.id, "--lease-ms", "2000");
-    expect(blocked.code).toBe(1);
-    expect(blocked.stderr).toContain("Another worker owns this run");
-    expect((await store.getRun(run.id))?.owner?.pid).toBe(child.pid);
-    child.kill("SIGKILL");
-    await child.exited;
-    const resumed = await cli(f, "resume", run.id, "--lease-ms", "2000");
-    expect(resumed.stderr).toBe("");
-    expect(resumed.code).toBe(0);
-    expect(object(resumed.stdout)).toMatchObject({ status: "succeeded", output: 2 });
-  } finally {
-    child.kill();
-    await child.exited;
-    store.close();
-  }
-}, 10_000);
-
-async function waitForRunningStep(store: ReturnType<typeof openRunStore>) {
-  for (let tries = 0; tries < 100; tries++) {
-    const [run] = await store.listRuns();
-
-    if (run && (await store.getSteps(run.id))[0]?.status === "running") {
-      return run;
-    }
-
-    await Bun.sleep(20);
-  }
-
-  throw new Error("CLI never started the long step. Check its stderr.");
-}
-
-test("CLI reads rate limit config at startup and rejects malformed limits", async () => {
-  const f = fixture(
-    "limited",
-    `run: async () => step("limited", () => 42, { rateLimit: "codex" })`,
-  );
-
-  await save(f);
-  writeFileSync(join(f.home, "config.json"), JSON.stringify({ rateLimits: { codex: "2/1m" } }));
-  expect(object((await cli(f, "run", "limited")).stdout)).toMatchObject({
-    status: "succeeded",
-    output: 42,
-  });
-  writeFileSync(join(f.home, "config.json"), JSON.stringify({ rateLimits: { codex: "0/1m" } }));
-  const invalid = await cli(f, "run", "limited");
-  expect(invalid.code).toBe(1);
-  expect(invalid.stderr).toContain(
-    "Rate limit 'codex' is invalid. Use a positive count and duration such as '10/1h' in config.json.",
-  );
-  writeFileSync(join(f.home, "config.json"), "{");
-  const malformed = await cli(f, "run", "limited");
-  expect(malformed.code).toBe(1);
-  expect(malformed.stderr).toContain(
-    `Invalid config file '${join(f.home, "config.json")}'. Fix or delete it.`,
-  );
-});
-
-test("CLI suspends on a hook, resolves by name, and resumes with its payload", async () => {
-  const f = fixture("approval", `run: async () => hook("approve")`);
-  await save(f);
-  const initial = await cli(f, "run", "approval");
-  expect(initial.code).toBe(0);
-  const run = object(initial.stdout);
-  const id = String(run.id);
-  expect(run.status).toBe("suspended");
-  expect(run.wakeAt).toBeUndefined();
-  expect(initial.stderr).toContain(`Run ${id} is suspended on hooks: approve.`);
-  const inspected = object((await cli(f, "inspect", id)).stdout);
-  expect(inspected.hooks).toMatchObject([{ name: "approve", token: expect.any(String) }]);
-  const resolved = await cli(f, "hook", id, "approve", "--payload", '{"ok":true}');
-  expect(resolved.code).toBe(0);
-  expect(resolved.stdout).toContain(`Resolved hook 'approve' for run ${id}.`);
-  expect(resolved.stdout).not.toContain('"token"');
-  const resumed = await cli(f, "resume", id);
-  expect(resumed.code).toBe(0);
-  expect(object(resumed.stdout)).toMatchObject({ status: "succeeded", output: { ok: true } });
-  const duplicate = await cli(f, "hook", id, "approve");
-  expect(duplicate.code).toBe(1);
-  expect(duplicate.stderr).toContain("is not waiting");
-});
-
-test("CLI resolves the latest waiting hook with a shared name", async () => {
-  const f = fixture(
-    "two-hooks",
-    `run: async () => Promise.all([hook("approve"), hook("approve")])`,
-  );
-
-  await save(f);
-  const run = object((await cli(f, "run", "two-hooks")).stdout);
-  const id = String(run.id);
-  expect((await cli(f, "hook", id, "approve", "--payload", "2")).code).toBe(0);
-  expect((await cli(f, "hook", id, "approve", "--payload", "1")).code).toBe(0);
-  expect(object((await cli(f, "resume", id)).stdout)).toMatchObject({
-    status: "succeeded",
-    output: [1, 2],
-  });
-});
-
-test("inline runs notice resolved hooks before their timeout deadline", async () => {
-  const f = fixture("timed-hook", `run: async () => hook("approve", { timeout: "1h" })`);
-  await save(f);
-
-  const child = Bun.spawn([process.execPath, CLI, "--home", f.home, "run", "timed-hook"], {
-    cwd: f.cwd,
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-
-  const stdout = new Response(child.stdout).text();
-  const stderr = new Response(child.stderr).text();
-  const store = openRunStore(f.home);
-
-  try {
-    const hook = await waitForWaitingHook(store);
-    expect((await cli(f, "hook", hook.runId, "approve", "--payload", '"accepted"')).code).toBe(0);
-    expect(await child.exited).toBe(0);
-    expect(object(await stdout)).toMatchObject({ status: "succeeded", output: "accepted" });
-    expect(await stderr).toContain("wakes at");
-  } finally {
-    child.kill();
-    await child.exited;
-    store.close();
-  }
-}, 5000);
-
-async function waitForWaitingHook(store: ReturnType<typeof openRunStore>) {
-  for (let tries = 0; tries < 100; tries++) {
-    const [run] = await store.listRuns();
-    const [hook] = run ? await store.listHooks(run.id) : [];
-
-    if (hook && run?.status === "suspended") {
-      return hook;
-    }
-
-    await Bun.sleep(20);
-  }
-
-  throw new Error("CLI never suspended on its hook. Check its stderr.");
-}
-
-test("CLI named json fields parse JSON and report invalid JSON", async () => {
-  const f = fixture("json-fields", `input: { data: "json" }, run: ({ input }) => input.data`);
-  await save(f);
-
-  for (const data of ['{"nested":[1,true,null]}', "null", '["a",2]', '"text"']) {
-    const result = await cli(f, "run", "json-fields", "--data", data);
-    expect(result.code).toBe(0);
-    expect(object(result.stdout).output).toEqual(JSON.parse(data));
-  }
-
-  const invalid = await cli(f, "run", "json-fields", "--data", "{bad}");
-  expect(invalid.code).toBe(1);
-  expect(invalid.stderr).toContain("Input --data must be valid JSON.");
+test("an absolute source in another project is registered beside that source", async () => {
+  const source = graphFixture("external-source");
+  const caller = fixture("unrelated-caller", "run: () => null");
+  const saved = await cli({ ...caller, home: source.home }, "save", source.file);
+  expect(saved).toMatchObject({ code: 0, stderr: "" });
+  expect(new Registry(source.home, source.cwd).get("external-source").source).toBe(source.file);
+  expect(new Registry(source.home, caller.cwd).list()).toEqual([]);
 });

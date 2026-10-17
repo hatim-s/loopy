@@ -312,7 +312,9 @@ test("all shell namespaces use descriptors and record parsers without executing 
     "archive.tar",
     "custom",
   ]);
-  expect(commands.map((node) => node.parse)).toEqual([
+  expect(
+    commands.map((node) => (node.parse === null ? null : { bundleHash: node.parse.bundleHash })),
+  ).toEqual([
     { bundleHash: null },
     { bundleHash: null },
     { bundleHash: null },
