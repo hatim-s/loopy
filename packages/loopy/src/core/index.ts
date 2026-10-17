@@ -8,6 +8,10 @@ export * from "./graph.js";
 
 export { validateGraph } from "./graph-check.js";
 
+export { checkPredicate } from "./graph-predicate.js";
+
+export { graphTypeResolver } from "./graph-type.js";
+
 export type {
   CommandResult,
   ExecutionMode,

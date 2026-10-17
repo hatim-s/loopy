@@ -24,8 +24,8 @@ export { sleep, wait } from "./nodes/wait.js";
 
 export { and, eq, exists, gt, gte, in_, isNull, lt, lte, ne, not, or, size } from "./predicates.js";
 
-export { Ref } from "./ref.js";
+export type { Ref } from "./ref.js";
 
-export type { InferSchema } from "./types.js";
+export type { Infer } from "./types.js";
 
 export { GraphBuildError } from "./validate.js";

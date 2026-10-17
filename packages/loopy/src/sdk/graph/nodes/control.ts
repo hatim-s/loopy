@@ -1,8 +1,9 @@
-import type { Predicate } from "../../../core/index.js";
+import { ERROR_FIELDS, type Predicate } from "../../../core/index.js";
 import { currentBuilder } from "../builder.js";
+import { recordPredicate } from "../predicates.js";
 import type { Ref } from "../ref.js";
 import { type AuthorValue, serialize, serializeRef } from "../ref.js";
-import type { Result } from "../types.js";
+import type { InferRecord, Result } from "../types.js";
 
 type Arm = () => AuthorValue;
 
@@ -17,7 +18,7 @@ export function branch<Y extends AuthorValue, N extends AuthorValue>(
   const node = {
     ...base,
     kind: "branch" as const,
-    predicate: builder.predicate(predicate),
+    predicate: recordPredicate(predicate),
     arms: { yes: base.id, no: base.id },
   };
 
@@ -27,7 +28,7 @@ export function branch<Y extends AuthorValue, N extends AuthorValue>(
   node.arms = { yes: yes.entry, no: no.entry };
   builder.edge(base.id, yes.entry, "yes");
   builder.edge(base.id, no.entry, "no");
-  builder.continueFrom([...yes.tails, ...no.tails]);
+  builder.continueFrom(base.id, [...yes.tails, ...no.tails]);
 
   return builder.ref(base.id);
 }
@@ -63,7 +64,7 @@ export function switch_<A extends Record<string, Arm>>(
     tails.push(...arm.tails);
   }
 
-  builder.continueFrom(tails);
+  builder.continueFrom(base.id, tails);
 
   return builder.ref(base.id);
 }
@@ -102,12 +103,14 @@ export function map<T, R extends AuthorValue, M extends "fail" | "collect">(
     builder.edge(tail, base.id, "join");
   }
 
+  builder.continueFrom(base.id, [base.id], "next");
+
   return builder.ref(base.id);
 }
 
 export function parallel<A extends Record<string, Arm>>(
   arms: A,
-): Ref<{ [K in keyof A]: Result<ReturnType<A[K]>> }> {
+): Ref<{ [K in keyof A]: Result<ReturnType<A[K]>> }, { [K in keyof A]: Result<ReturnType<A[K]>> }> {
   const builder = currentBuilder();
   const base = builder.allocate("parallel", null);
   const node = { ...base, kind: "parallel" as const, branches: {} };
@@ -121,7 +124,7 @@ export function parallel<A extends Record<string, Arm>>(
     tails.push(...arm.tails);
   }
 
-  builder.continueFrom(tails);
+  builder.continueFrom(base.id, tails);
 
   return builder.ref(base.id);
 }
@@ -137,14 +140,14 @@ export function finally_<R extends AuthorValue>(body: () => R, cleanup: Arm): Re
   node.cleanup = final.entry;
   builder.edge(base.id, main.entry, "next");
   builder.edge(base.id, final.entry, "cleanup");
-  builder.continueFrom(final.tails);
+  builder.continueFrom(base.id, [...main.tails, ...final.tails]);
 
   return builder.ref(base.id);
 }
 
 export function rescue<R extends AuthorValue, H extends AuthorValue>(
   body: () => R,
-  handler: (error: Ref<{ message: string; code: string }>) => H,
+  handler: (error: Ref<InferRecord<typeof ERROR_FIELDS>, InferRecord<typeof ERROR_FIELDS>>) => H,
 ): Ref<Result<R> | Result<H>> {
   const builder = currentBuilder();
   const base = builder.allocate("rescue", null);
@@ -154,14 +157,14 @@ export function rescue<R extends AuthorValue, H extends AuthorValue>(
   const main = builder.arm(base.id, body);
 
   const caught = builder.arm(base.id, () =>
-    handler(builder.ref(error, { message: "string", code: "string" })),
+    handler(builder.ref(error, { kind: "record", fields: ERROR_FIELDS })),
   );
 
   node.body = main.entry;
   node.handler = caught.entry;
   builder.edge(base.id, main.entry, "next");
   builder.edge(base.id, caught.entry, "rescue");
-  builder.continueFrom([...main.tails, ...caught.tails]);
+  builder.continueFrom(base.id, [...main.tails, ...caught.tails]);
 
   return builder.ref(base.id);
 }

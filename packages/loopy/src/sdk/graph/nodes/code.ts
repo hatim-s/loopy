@@ -1,9 +1,9 @@
-import type { Duration, GraphRetry, OutputSchema } from "../../../core/index.js";
+import type { Duration, GraphRetry, OutSchema } from "../../../core/index.js";
 import { currentBuilder } from "../builder.js";
 import { type AuthorValue, serializeValues } from "../ref.js";
-import type { InferSchema } from "../types.js";
+import type { Infer, SchemaFields } from "../types.js";
 
-export function code<const S extends OutputSchema>(
+export function code<const S extends OutSchema>(
   label: string,
   options: {
     in: Readonly<Record<string, AuthorValue>>;
@@ -27,5 +27,5 @@ export function code<const S extends OutputSchema>(
     label,
   );
 
-  return builder.ref<InferSchema<S>>(node.id, options.out);
+  return builder.ref<Infer<S>, SchemaFields<S>>(node.id, options.out);
 }

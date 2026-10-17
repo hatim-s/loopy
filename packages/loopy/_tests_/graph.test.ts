@@ -4,8 +4,11 @@ import * as contract from "../src/contract/index.js";
 import type * as core from "../src/core/index.js";
 import {
   type DiagnosticCode,
+  ERROR_FIELDS,
   executionKeyString,
+  FIELD_TYPES,
   type Graph,
+  graphTypeResolver,
   validateGraph,
 } from "../src/core/index.js";
 import { approveDemoGraph } from "./fixtures/graphs.js";
@@ -26,7 +29,7 @@ test("graph schemas exactly match the portable model", () => {
   expectTypeOf<contract.Edge>().toEqualTypeOf<Flatten<core.Edge>>();
   expectTypeOf<contract.Value>().toEqualTypeOf<core.Value>();
   expectTypeOf<contract.Ref>().toEqualTypeOf<core.Ref>();
-  expectTypeOf<contract.OutputSchema>().toEqualTypeOf<core.OutputSchema>();
+  expectTypeOf<contract.OutSchema>().toEqualTypeOf<core.OutSchema>();
   expectTypeOf<contract.Diagnostic>().toEqualTypeOf<core.Diagnostic>();
   expectTypeOf<contract.ExecutionKey>().toEqualTypeOf<core.ExecutionKey>();
   expectTypeOf<contract.NodeRun>().toEqualTypeOf<Flatten<core.NodeRun>>();
@@ -872,7 +875,7 @@ test("command refs use their declared output fields", () => {
   const graph = structuredClone(approveDemoGraph);
   graph.nodes = graph.nodes.map((node) =>
     node.kind === "command"
-      ? { ...node, out: { count: "number" } }
+      ? { ...node, out: { kind: "record", fields: { count: "number" } } }
       : node.id === "6:join" && node.kind === "join"
         ? { ...node, result: { ref: contract.refIdSchema.parse("5:apply"), path: ["count"] } }
         : node,
@@ -936,7 +939,7 @@ test("cyclic join field projections produce diagnostics without recursing foreve
     edges: [],
   });
 
-  expect(validateGraph(graph).map((error) => error.code)).toEqual(["out_of_scope_ref"]);
+  expect(validateGraph(graph).map((error) => error.code)).toEqual(["unresolved_ref"]);
 });
 
 test("rescue results use the common body and handler type", () => {
@@ -1023,3 +1026,118 @@ for (const result of [
     expect(validateGraph(graph)).toEqual([]);
   });
 }
+
+test("parallel result paths resolve each labelled arm through its join", () => {
+  const graph = numericBranchGraph();
+  graph.nodes = graph.nodes.map((node) =>
+    node.id === "branch"
+      ? contract.nodeSchema.parse({
+          id: node.id,
+          kind: "parallel",
+          scope: null,
+          label: null,
+          branches: { a: "yes", b: "no" },
+        })
+      : node.kind === "branch" && node.id === "check"
+        ? {
+            ...node,
+            predicate: {
+              op: "gt",
+              left: { ref: contract.refIdSchema.parse("branch"), path: ["a"] },
+              right: 0,
+            },
+          }
+        : node.kind === "join" && node.id === "result"
+          ? { ...node, result: { ref: contract.refIdSchema.parse("branch"), path: ["a"] } }
+          : node,
+  );
+  graph.edges = graph.edges.map((edge) =>
+    edge.from === "branch"
+      ? contract.edgeSchema.parse({ ...edge, kind: "case", label: edge.to === "yes" ? "a" : "b" })
+      : edge,
+  );
+  expect(validateGraph(graph)).toEqual([]);
+  const resolve = graphTypeResolver(graph);
+  expect(resolve({ ref: "branch", path: [] })).toBe("object");
+  expect(resolve({ ref: "branch", path: ["a"] })).toBe("number");
+  expect(resolve({ ref: "branch", path: ["missing"] })).toBeNull();
+});
+
+test("rescue error binding resolves the shared record fields", () => {
+  const graph = contract.graphSchema.parse({
+    ...numericBranchGraph(),
+    nodes: [
+      {
+        id: "rescue",
+        kind: "rescue",
+        scope: null,
+        label: null,
+        body: "body",
+        handler: "handler",
+        error: "rescue:error",
+      },
+      { id: "body", kind: "fail", scope: "rescue", label: null, message: "failed" },
+      {
+        id: "handler",
+        kind: "format",
+        scope: "rescue",
+        label: null,
+        template: "{message}:{code}",
+        values: {
+          message: { ref: "rescue:error", path: ["message"] },
+          code: { ref: "rescue:error", path: ["code"] },
+        },
+      },
+    ],
+    entry: "rescue",
+    outputs: null,
+    edges: [],
+  });
+
+  expect(validateGraph(graph)).toEqual([]);
+  const resolve = graphTypeResolver(graph);
+
+  for (const [field, type] of Object.entries(ERROR_FIELDS)) {
+    expect(resolve({ ref: "rescue:error", path: [field] })).toBe(type);
+  }
+
+  expect(resolve({ ref: "rescue:error", path: ["missing"] })).toBeNull();
+});
+
+for (const type of FIELD_TYPES) {
+  test(`value output ${type} resolves without permitting scalar or array paths`, () => {
+    const graph = structuredClone(approveDemoGraph);
+    graph.nodes = graph.nodes.map((node) =>
+      node.kind === "code"
+        ? { ...node, out: { kind: "value", type } }
+        : node.kind === "format"
+          ? { ...node, values: {} }
+          : node,
+    );
+    const resolve = graphTypeResolver(graph);
+    expect(resolve({ ref: "0:draft", path: [] })).toBe(type);
+
+    for (const path of [["0"], ["length"], ["toString"]]) {
+      graph.outputs = { ref: contract.refIdSchema.parse("0:draft"), path };
+      expect(validateGraph(graph).map((error) => error.code)).toContain("unresolved_ref");
+    }
+  });
+}
+
+test("control unions reject paths that enter a scalar or array arm", () => {
+  const graph = numericBranchGraph();
+  graph.nodes = graph.nodes.map((node) =>
+    node.kind === "join" && node.id === "yes"
+      ? { ...node, result: { field: "value" } }
+      : node.id === "check" && node.kind === "branch"
+        ? {
+            ...node,
+            predicate: {
+              op: "exists",
+              value: { ref: contract.refIdSchema.parse("branch"), path: ["field"] },
+            },
+          }
+        : node,
+  );
+  expect(validateGraph(graph).map((error) => error.code)).toEqual(["unresolved_ref"]);
+});

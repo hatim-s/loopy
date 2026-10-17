@@ -43,9 +43,12 @@ const literalSchema: z.ZodType<Json> = z.lazy(() =>
 
 export const valueSchema = z.union([refSchema, literalSchema]);
 
-export const outputSchema = z.union([
-  z.record(z.string(), z.enum(FIELD_TYPES)).readonly(),
-  z.literal("json"),
+export const outputSchema = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("record"),
+    fields: z.record(z.string(), z.enum(FIELD_TYPES)).readonly(),
+  }),
+  z.strictObject({ kind: z.literal("value"), type: z.enum(FIELD_TYPES) }),
 ]);
 
 const operandSchema = z.union([refSchema.extend({ size: z.literal(true) }), valueSchema]);
@@ -299,7 +302,7 @@ export type Value = z.infer<typeof valueSchema>;
 
 export type Ref = z.infer<typeof refSchema>;
 
-export type OutputSchema = z.infer<typeof outputSchema>;
+export type OutSchema = z.infer<typeof outputSchema>;
 
 export type Diagnostic = z.infer<typeof diagnosticSchema>;
 

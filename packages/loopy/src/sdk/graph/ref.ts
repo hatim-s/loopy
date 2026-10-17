@@ -1,4 +1,4 @@
-import type { Ref as GraphRef, OutputSchema, RefId, Value } from "../../core/index.js";
+import type { Ref as GraphRef, OutSchema, RefId, Value } from "../../core/index.js";
 import { refuse } from "./validate.js";
 
 export const REF = Symbol("loopy.graph.ref");
@@ -15,7 +15,7 @@ export type RefMetadata = {
   owner: RefContext;
   scope: symbol;
   id: RefId;
-  schema: OutputSchema | null;
+  schema: OutSchema | null;
 };
 
 export class RefValue {
@@ -28,25 +28,28 @@ export class RefValue {
   }
 }
 
-export class Ref<T> extends RefValue {
+export class Reference<T, Fields = never> extends RefValue {
   declare readonly output: T;
 
-  get<K extends keyof T>(key: K): Ref<T[K]> {
+  get<K extends [Fields] extends [never] ? never : keyof Fields & string>(key: K): Ref<Fields[K]> {
     const { schema } = this[REF];
 
     if (
       schema !== null &&
-      schema !== "json" &&
+      schema.kind === "record" &&
       this.path.length === 0 &&
-      !Object.hasOwn(schema, key) &&
-      !Object.hasOwn(schema, `${String(key)}?`)
+      !Object.hasOwn(schema.fields, key) &&
+      !Object.hasOwn(schema.fields, `${String(key)}?`)
     ) {
       refuse("unresolved_ref", "Reference paths must match the declared output schema.");
     }
 
-    return new Ref(this[REF], [...this.path, String(key)]);
+    return new Reference(this[REF], [...this.path, String(key)]);
   }
 }
+
+export type Ref<T, Fields = never> = Omit<Reference<T, Fields>, "get"> &
+  ([Fields] extends [never] ? object : Pick<Reference<T, Fields>, "get">);
 
 export type AuthorValue =
   | string

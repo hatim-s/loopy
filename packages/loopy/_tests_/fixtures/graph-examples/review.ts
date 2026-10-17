@@ -1,4 +1,4 @@
-import { branch, code, eq, git, log, loopy, sh, size } from "../../../src/sdk/graph/index.js";
+import { branch, code, git, log, loopy, lte, sh, size } from "../../../src/sdk/graph/index.js";
 
 export default loopy({
   name: "review",
@@ -6,7 +6,7 @@ export default loopy({
   run: ({ input }) => {
     const changes = git.diff.raw({}, { label: "changes" });
 
-    return branch(eq(size(changes.get("stdout")), 0), {
+    return branch(lte(size(changes.get("stdout")), 0), {
       yes: () => {
         log("No uncommitted changes.");
 
@@ -17,7 +17,7 @@ export default loopy({
 
         const prompt = code("prompt", {
           in: { diff: diff.get("stdout"), instructions: input.get("instructions") },
-          out: { prompt: "string" },
+          out: { kind: "record", fields: { prompt: "string" } },
           module: "./review/prompt.ts",
         });
 

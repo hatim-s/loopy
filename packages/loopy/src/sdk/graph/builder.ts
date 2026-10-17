@@ -5,13 +5,12 @@ import {
   type Node,
   type NodeId,
   type NodeKind,
-  type OutputSchema,
-  type Predicate,
+  type OutSchema,
   type RecordSpec,
   type RefId,
 } from "../../core/index.js";
-import { type AuthorValue, checkSerialized, REF, Ref, type RefValue, serialize } from "./ref.js";
-import { refuse, validate, validateArguments } from "./validate.js";
+import { type AuthorValue, REF, type Ref, Reference, type RefValue, serialize } from "./ref.js";
+import { refuse, validate } from "./validate.js";
 
 type Tail = { id: NodeId; kind: "next" | "join" };
 
@@ -164,10 +163,11 @@ export class GraphBuilder {
     this.edges.push({ from, to, kind: "case", label });
   }
 
-  ref<T>(refId: string, schema: OutputSchema | null = null): Ref<T> {
+  ref<T, Fields = never>(refId: string, schema?: OutSchema | null): Ref<T, Fields>;
+  ref(refId: string, schema: OutSchema | null = null): RefValue {
     const referenceId = bindingId(refId);
 
-    return new Ref({ owner: this, scope: this.scope.token, id: referenceId, schema });
+    return new Reference({ owner: this, scope: this.scope.token, id: referenceId, schema });
   }
 
   check(ref: RefValue) {
@@ -203,27 +203,13 @@ export class GraphBuilder {
     }
   }
 
-  continueFrom(tails: NodeId[]) {
-    this.scope.tails = tails.map((nodeId) => ({ id: nodeId, kind: "join" }));
-  }
+  continueFrom(owner: NodeId, tails: NodeId[], kind: Tail["kind"] = "join") {
+    this.scope.tails =
+      tails.length === 0
+        ? [{ id: owner, kind: "next" }]
+        : tails.map((nodeId) => ({ id: nodeId, kind }));
 
-  predicate(predicate: Predicate): Predicate {
-    if (predicate.op === "and" || predicate.op === "or") {
-      predicate.predicates.forEach((child) => this.predicate(child));
-    } else if (predicate.op === "not") {
-      this.predicate(predicate.predicate);
-    } else if (predicate.op === "exists" || predicate.op === "isNull") {
-      checkSerialized(predicate.value, this);
-    } else if ("left" in predicate) {
-      checkSerialized(predicate.left, this);
-      checkSerialized(predicate.right, this);
-    }
-
-    const base = { id: id("predicate-check"), label: null, scope: this.scope.scope };
-    const node: Node = { ...base, kind: "branch", predicate, arms: { yes: base.id, no: base.id } };
-    validateArguments({ ...this.snapshot(base.id), nodes: [...this.nodes, node] });
-
-    return predicate;
+    return this.add({ kind: "join", result: { ref: bindingId(owner), path: [] } });
   }
 
   snapshot(entry: NodeId): Graph {

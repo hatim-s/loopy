@@ -16,35 +16,39 @@ export default loopy({
         sourceRef: input.get("sourceRef"),
         targetBranches: input.get("targetBranches"),
       },
-      out: { options: "json" },
+      out: { kind: "record", fields: { options: "json" } },
       module: "./www-sync/validate.ts",
     });
 
     const source = code("snapshot", {
       in: { options },
-      out: { sha: "string", files: "json" },
+      out: { kind: "record", fields: { sha: "string", files: "json" } },
       module: "./www-sync/snapshot.ts",
     });
 
     const plan = code("plan", {
       in: { options, source, id: uuid() },
-      out: { changes: "json", target: "json" },
+      out: { kind: "record", fields: { changes: "json", target: "json" } },
       module: "./www-sync/plan.ts",
     });
 
     const verified = code("verify", {
       in: { options, plan },
-      out: { observed: "json" },
+      out: { kind: "record", fields: { observed: "json" } },
       module: "./www-sync/verify.ts",
     });
 
     const results = code("publish", {
       in: { options, plan, verified },
-      out: { results: "json" },
+      out: { kind: "record", fields: { results: "json" } },
       module: "./www-sync/publish.ts",
     });
 
-    code("cleanup", { in: { plan }, out: {}, module: "./www-sync/cleanup.ts" });
+    code("cleanup", {
+      in: { plan },
+      out: { kind: "record", fields: {} },
+      module: "./www-sync/cleanup.ts",
+    });
     log("Prompt and skill synchronization completed.", { dryRun: input.get("dryRun") });
 
     return { sourceSha: source.get("sha"), results };

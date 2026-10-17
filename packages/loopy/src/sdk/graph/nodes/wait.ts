@@ -1,8 +1,8 @@
-import type { Duration, OutputSchema } from "../../../core/index.js";
+import type { Duration, OutSchema } from "../../../core/index.js";
 import { currentBuilder } from "../builder.js";
-import type { InferSchema } from "../types.js";
+import type { Infer, SchemaFields } from "../types.js";
 
-export function wait<const S extends OutputSchema>(
+export function wait<const S extends OutSchema>(
   label: string,
   options: { timeout?: Duration; payload: S },
 ) {
@@ -13,7 +13,7 @@ export function wait<const S extends OutputSchema>(
     label,
   );
 
-  return builder.ref<InferSchema<S>>(node.id, options.payload);
+  return builder.ref<Infer<S>, SchemaFields<S>>(node.id, options.payload);
 }
 
 export function sleep(duration: Duration) {

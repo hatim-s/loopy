@@ -1,4 +1,4 @@
-import type { Json, OutputSchema, RecordSpec } from "../../core/index.js";
+import type { Json, OutSchema, RecordSpec } from "../../core/index.js";
 
 import type { RefValue } from "./ref.js";
 
@@ -19,9 +19,18 @@ type ObjectOf<S extends RecordSpec> = {
   -readonly [K in keyof S as K extends `${infer Name}?` ? Name : never]?: Field[S[K]];
 };
 
-export type InferSchema<S extends OutputSchema> = S extends RecordSpec
-  ? { [K in keyof ObjectOf<S>]: ObjectOf<S>[K] }
-  : Json;
+export type InferRecord<S extends RecordSpec> = { [K in keyof ObjectOf<S>]: ObjectOf<S>[K] };
+
+export type Infer<S extends OutSchema> = S extends {
+  kind: "record";
+  fields: infer F extends RecordSpec;
+}
+  ? InferRecord<F>
+  : S extends { kind: "value"; type: infer T extends keyof Field }
+    ? Field[T]
+    : never;
+
+export type SchemaFields<S extends OutSchema> = S extends { kind: "record" } ? Infer<S> : never;
 
 export type Result<T> = T extends RefValue & { readonly output: infer R }
   ? R

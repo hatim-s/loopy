@@ -3,11 +3,14 @@ import { defineCommand } from "./command.js";
 
 export const net = {
   curl: defineCommand(runtime.curl.descriptor, {
-    status: "number",
-    headers: "json",
-    body: "string",
-    timeTotal: "number",
-    sizeDownload: "number",
-    url: "string",
+    kind: "record",
+    fields: {
+      status: "number",
+      headers: "json",
+      body: "string",
+      timeTotal: "number",
+      sizeDownload: "number",
+      url: "string",
+    },
   }),
 };

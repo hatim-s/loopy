@@ -1,7 +1,7 @@
 import {
   type CommandResult,
   type GraphRetry,
-  type OutputSchema,
+  type OutSchema,
   parseArgv,
 } from "../../../core/index.js";
 import type { CommandDescriptor } from "../../define-command.js";
@@ -9,6 +9,8 @@ import { currentBuilder } from "../builder.js";
 import { commandArgv } from "../command-argv.js";
 import type { CommandInput, CommandRawInput } from "../command-input.js";
 import { type AuthorValue, type Ref, type RefValue, serialize, serializeValues } from "../ref.js";
+
+import type { Infer, SchemaFields } from "../types.js";
 
 type Options = {
   label?: string;
@@ -25,10 +27,6 @@ type Input = {
   flags?: Readonly<Record<string, AuthorValue>>;
 };
 
-type Output<D extends CommandDescriptor> = D extends { parse: (...args: never[]) => infer R }
-  ? R
-  : CommandResult;
-
 function record({
   label,
   descriptor,
@@ -42,7 +40,7 @@ function record({
   input: Input;
   options: Options;
   mode: "parsed" | "raw";
-  out: OutputSchema;
+  out: OutSchema;
 }) {
   const builder = currentBuilder();
   const key = descriptor.key ?? `${descriptor.namespace}.${descriptor.name}`;
@@ -71,26 +69,46 @@ function record({
   return node.id;
 }
 
-export const commandOutput = { stdout: "string", stderr: "string", exitCode: "number" } as const;
+export const commandOutput = {
+  kind: "record",
+  fields: { stdout: "string", stderr: "string", exitCode: "number" },
+} as const;
 
 type CallArguments<I> = I extends { args: readonly unknown[] }
   ? [input: I, options?: Options]
   : [input?: I, options?: Options];
 
+type Parsed<S extends OutSchema> = {
+  parse: (...args: Parameters<NonNullable<CommandDescriptor["parse"]>>) => Infer<S>;
+};
+
+type CommandCall<D extends CommandDescriptor, S extends OutSchema> = {
+  (...args: CallArguments<CommandInput<D>>): Ref<Infer<S>, SchemaFields<S>>;
+  raw: (...args: CallArguments<CommandRawInput<D>>) => Ref<CommandResult, CommandResult>;
+};
+
 export function defineCommand<const D extends CommandDescriptor>(
+  descriptor: D & { parse?: never },
+): CommandCall<D, typeof commandOutput>;
+export function defineCommand<const S extends OutSchema, const D extends CommandDescriptor>(
+  descriptor: D & Parsed<NoInfer<S>>,
+  out: S,
+): CommandCall<D, S>;
+export function defineCommand<const S extends OutSchema, const D extends CommandDescriptor>(
   descriptor: D,
-  out: OutputSchema = descriptor.parse ? "json" : commandOutput,
+  schema?: S,
 ) {
-  function call(...args: CallArguments<CommandInput<D>>): Ref<Output<D>>;
-  function call(input: Input = {}, options: Options = {}): Ref<Output<D>> {
+  const out = schema ?? commandOutput;
+  function call(...args: CallArguments<CommandInput<D>>): Ref<Infer<S>, SchemaFields<S>>;
+  function call(input: Input = {}, options: Options = {}): Ref<Infer<S>, SchemaFields<S>> {
     return currentBuilder().ref(
       record({ label: options.label ?? null, descriptor, input, options, mode: "parsed", out }),
       out,
     );
   }
 
-  function raw(...args: CallArguments<CommandRawInput<D>>): Ref<CommandResult>;
-  function raw(input: Input = {}, options: Options = {}): Ref<CommandResult> {
+  function raw(...args: CallArguments<CommandRawInput<D>>): Ref<CommandResult, CommandResult>;
+  function raw(input: Input = {}, options: Options = {}): Ref<CommandResult, CommandResult> {
     return currentBuilder().ref(
       record({
         label: options.label ?? null,
@@ -139,7 +157,7 @@ function shell({
     label,
   );
 
-  return builder.ref<CommandResult>(node.id, commandOutput);
+  return builder.ref<CommandResult, CommandResult>(node.id, commandOutput);
 }
 
 function exec(argv: readonly (string | RefValue)[], options: Options = {}) {

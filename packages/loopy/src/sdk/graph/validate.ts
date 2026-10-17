@@ -1,8 +1,11 @@
 import {
+  checkPredicate,
   type Diagnostic,
   type DiagnosticCode,
   type Graph,
+  graphTypeResolver,
   type NodeId,
+  type Predicate,
   validateGraph,
 } from "../../core/index.js";
 
@@ -21,12 +24,13 @@ export function validate(graph: Graph): Diagnostic[] {
   return validateGraph(graph);
 }
 
-export function validateArguments(graph: Graph): void {
-  const error = validateGraph(graph).find((error) =>
-    ["predicate_type", "invalid_size", "unresolved_ref"].includes(error.code),
-  );
+export function validatePredicate(
+  predicate: Predicate,
+  graph: Pick<Graph, "input" | "nodes" | "edges">,
+): void {
+  const error = checkPredicate(predicate, graphTypeResolver(graph))[0];
 
   if (error) {
-    throw new GraphBuildError({ ...error, node: null });
+    throw new GraphBuildError({ ...error, node: null, source: null });
   }
 }

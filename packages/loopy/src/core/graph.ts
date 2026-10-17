@@ -21,9 +21,17 @@ export const FIELD_TYPES = [
   "json[]",
 ] as const;
 
-export type RecordSpec = Readonly<Record<string, (typeof FIELD_TYPES)[number]>>;
+export type FieldType = (typeof FIELD_TYPES)[number];
 
-export type OutputSchema = RecordSpec | "json";
+export type RecordSpec = Readonly<Record<string, FieldType>>;
+
+export const ERROR_FIELDS = {
+  message: "string",
+  code: "string",
+  data: "json",
+} as const satisfies RecordSpec;
+
+export type OutSchema = { kind: "record"; fields: RecordSpec } | { kind: "value"; type: FieldType };
 
 export type Ref = { ref: RefId; path: string[] };
 
@@ -136,7 +144,7 @@ export type Node = Expand<
       | {
           kind: (typeof NODE_KINDS)[0];
           in: Record<string, Value>;
-          out: OutputSchema;
+          out: OutSchema;
           module: { path: string; bundleHash: string | null };
           retry: GraphRetry;
           timeout: Duration | null;
@@ -144,7 +152,7 @@ export type Node = Expand<
       | {
           kind: (typeof NODE_KINDS)[1];
           key: string;
-          out: OutputSchema;
+          out: OutSchema;
           argv: Value[];
           flags: Record<string, Value>;
           flagSpec?: CommandFlagSpec;
@@ -170,7 +178,7 @@ export type Node = Expand<
           onError: (typeof MAP_ERROR_MODES)[number];
         }
       | { kind: (typeof NODE_KINDS)[5]; branches: Record<string, NodeId> }
-      | { kind: (typeof NODE_KINDS)[6]; timeout: Duration | null; payload: OutputSchema }
+      | { kind: (typeof NODE_KINDS)[6]; timeout: Duration | null; payload: OutSchema }
       | { kind: (typeof NODE_KINDS)[7]; duration: Duration }
       | { kind: (typeof NODE_KINDS)[8]; body: NodeId; cleanup: NodeId }
       | { kind: (typeof NODE_KINDS)[9]; body: NodeId; handler: NodeId; error: RefId }

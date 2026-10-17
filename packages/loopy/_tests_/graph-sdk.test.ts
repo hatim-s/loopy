@@ -80,12 +80,16 @@ test("approve-demo reproduces the canonical graph exactly", () => {
     run: ({ input }) => {
       const draft = code("draft", {
         in: { subject: input.get("subject") },
-        out: { words: "number" },
+        out: { kind: "record", fields: { words: "number" } },
         module: "./draft.ts",
       });
 
       log("Draft ready");
-      const approval = wait("approve", { timeout: "1h", payload: { approved: "boolean" } });
+
+      const approval = wait("approve", {
+        timeout: "1h",
+        payload: { kind: "record", fields: { approved: "boolean" } },
+      });
 
       const applied = branch(eq(approval.get("approved"), true), {
         yes: () =>
@@ -108,11 +112,15 @@ const simple = [
   [
     "code",
     () =>
-      code("work", { in: { nested: { count: 1 } }, out: { words: "number" }, module: "./work.ts" }),
+      code("work", {
+        in: { nested: { count: 1 } },
+        out: { kind: "record", fields: { words: "number" } },
+        module: "./work.ts",
+      }),
     {
       in: { nested: { count: 1 } },
       module: { path: "./work.ts", bundleHash: null },
-      out: { words: "number" },
+      out: { kind: "record", fields: { words: "number" } },
     },
   ],
   [
@@ -122,8 +130,12 @@ const simple = [
   ],
   [
     "wait",
-    () => wait("approval", { timeout: "1h", payload: { approved: "boolean" } }),
-    { timeout: "1h", payload: { approved: "boolean" } },
+    () =>
+      wait("approval", {
+        timeout: "1h",
+        payload: { kind: "record", fields: { approved: "boolean" } },
+      }),
+    { timeout: "1h", payload: { kind: "record", fields: { approved: "boolean" } } },
   ],
   ["sleep", () => sleep("1m"), { duration: "1m" }],
   ["format", () => format("{n}", { n: 3 }), { template: "{n}", values: { n: 3 } }],
@@ -150,8 +162,11 @@ test("fail is terminal and never receives a scope join", () => {
 });
 
 test("branch carries each successful arm result in its own join", () => {
-  const graph = compile(() => branch(eq(1, 1), { yes: () => "yes", no: () => 3 }));
-  expect(graph.nodes.map((node) => node.kind)).toEqual(["branch", "join", "join", "join"]);
+  const graph = compile(() =>
+    branch({ op: "eq", left: 1, right: 1 }, { yes: () => "yes", no: () => 3 }),
+  );
+
+  expect(graph.nodes.map((node) => node.kind)).toEqual(["branch", "join", "join", "join", "join"]);
   expect(graph.nodes[1]).toMatchObject({ scope: "0:branch", result: "yes" });
   expect(graph.nodes[2]).toMatchObject({ scope: "0:branch", result: 3 });
   expect<unknown>(graph.edges).toEqual([
@@ -159,13 +174,18 @@ test("branch carries each successful arm result in its own join", () => {
     { from: "0:branch", to: "2:join", kind: "no" },
     { from: "1:join", to: "3:join", kind: "join" },
     { from: "2:join", to: "3:join", kind: "join" },
+    { from: "3:join", to: "4:join", kind: "next" },
   ]);
 });
 
 test("map binds item and index, collects errors, and joins back to its owner", () => {
   const graph = compile(() =>
     map(
-      code("files", { in: {}, out: { paths: "string[]" }, module: "./files.ts" }).get("paths"),
+      code("files", {
+        in: {},
+        out: { kind: "record", fields: { paths: "string[]" } },
+        module: "./files.ts",
+      }).get("paths"),
       (item, index) => format("{index}:{item}", { index, item }),
       {
         onError: "collect",
@@ -198,6 +218,7 @@ test("parallel expands two independent branches", () => {
     { from: "2:join", to: "5:join", kind: "join" },
     { from: "3:now", to: "4:join", kind: "next" },
     { from: "4:join", to: "5:join", kind: "join" },
+    { from: "5:join", to: "6:join", kind: "next" },
   ]);
 });
 
@@ -261,13 +282,16 @@ test("all shell namespaces use descriptors and record parsers without executing 
     text: text.wc({}, { label: "wc" }),
     net: net.curl({ args: ["https://example.com"] }, { label: "curl" }),
     archive: archive.tar({ args: ["file"], flags: { list: true } }, { label: "tar" }),
-    custom: defineCommand({
-      key: "custom",
-      program: "echo",
-      parse: () => {
-        throw new Error("Parser executed.");
+    custom: defineCommand(
+      {
+        key: "custom",
+        program: "echo",
+        parse: () => {
+          throw new Error("Parser executed.");
+        },
       },
-    })({}, { label: "custom" }),
+      { kind: "value", type: "json" },
+    )({}, { label: "custom" }),
   }));
 
   const commands = graph.nodes.filter((node) => node.kind === "command");
@@ -315,14 +339,17 @@ test("refs cannot escape a branch or cross parallel siblings", () => {
   let leaked: Ref<string> | undefined;
   rejects("out_of_scope_ref", () =>
     compile(() => {
-      branch(eq(1, 1), {
-        yes: () => {
-          leaked = uuid();
+      branch(
+        { op: "eq", left: 1, right: 1 },
+        {
+          yes: () => {
+            leaked = uuid();
 
-          return leaked;
+            return leaked;
+          },
+          no: () => null,
         },
-        no: () => null,
-      });
+      );
 
       return log("leaked", leaked);
     }),
@@ -371,9 +398,9 @@ test("an enclosing earlier ref is visible within nested scopes", () => {
 test("labels are unique per scope and builders restore activation after errors", () => {
   rejects("duplicate_label", () =>
     compile(() => {
-      wait("same", { payload: {} });
+      wait("same", { payload: { kind: "record", fields: {} } });
 
-      return wait("same", { payload: {} });
+      return wait("same", { payload: { kind: "record", fields: {} } });
     }),
   );
   rejects("inactive_builder", uuid);
@@ -381,15 +408,24 @@ test("labels are unique per scope and builders restore activation after errors",
   expect(compile(uuid).nodes[0]?.kind).toBe("uuid");
   expect(
     compile(() =>
-      parallel({ a: () => wait("same", { payload: {} }), b: () => wait("same", { payload: {} }) }),
+      parallel({
+        a: () => wait("same", { payload: { kind: "record", fields: {} } }),
+        b: () => wait("same", { payload: { kind: "record", fields: {} } }),
+      }),
     ).nodes,
-  ).toHaveLength(6);
+  ).toHaveLength(7);
 });
 
 test("declared predicate types reject mismatched operands at the call site", () => {
   rejects("predicate_type", () =>
     compile(() => {
-      const n = code("n", { in: {}, out: { n: "number" }, module: "./n.ts" });
+      const n = code("n", {
+        in: {},
+        out: { kind: "record", fields: { n: "number" } },
+        module: "./n.ts",
+      });
+
+      // @ts-expect-error Runtime validation also protects untyped callers.
       eq(n.get("n"), "wrong");
 
       return null;
@@ -397,6 +433,7 @@ test("declared predicate types reject mismatched operands at the call site", () 
   );
   rejects("predicate_type", () =>
     compile(() => {
+      // @ts-expect-error Runtime validation also protects untyped callers.
       in_(uuid(), [1]);
 
       return null;
@@ -411,15 +448,15 @@ test("predicates serialize the closed vocabulary and size only in comparisons", 
     return branch(
       and(
         eq(value, "a"),
-        ne(1, 2),
+        ne(value, "b"),
         lt(1, 2),
         lte(1, 2),
         gt(size(value), 0),
         gte(2, 1),
         exists(value),
-        isNull(null),
+        isNull(value),
         in_(value, ["a"]),
-        or(not(eq(1, 2))),
+        or(not(eq(value, "b"))),
       ),
       { yes: () => 1, no: () => 0 },
     );
@@ -445,13 +482,18 @@ test("schemas determine output refs, unknown keys fail, and branch results form 
   compile(() => {
     const output = code("typed", {
       in: {},
-      out: { words: "number", "title?": "string" },
+      out: { kind: "record", fields: { words: "number", "title?": "string" } },
       module: "./typed.ts",
     });
 
     expectTypeOf(output.get("words")).toEqualTypeOf<Ref<number>>();
     expectTypeOf(output.get("title")).toEqualTypeOf<Ref<string | undefined>>();
-    const result = branch(eq(1, 1), { yes: () => output.get("words"), no: () => "none" });
+
+    const result = branch(
+      { op: "eq", left: 1, right: 1 },
+      { yes: () => output.get("words"), no: () => "none" },
+    );
+
     expectTypeOf(result).toEqualTypeOf<Ref<number | "none">>();
     rejects("unresolved_ref", () => {
       // @ts-expect-error declared output has no unknown key.
@@ -488,14 +530,17 @@ test("deferred predicates retain builder and lexical scope provenance", () => {
   );
   rejects("out_of_scope_ref", () =>
     compile(() => {
-      branch(eq(1, 1), {
-        yes: () => {
-          captured = gt(size(uuid()), 0);
+      branch(
+        { op: "eq", left: 1, right: 1 },
+        {
+          yes: () => {
+            captured = gt(size(uuid()), 0);
 
-          return null;
+            return null;
+          },
+          no: () => null,
         },
-        no: () => null,
-      });
+      );
 
       return captured ? branch(captured, { yes: () => 1, no: () => 0 }) : null;
     }),
@@ -507,7 +552,11 @@ test("map and rescue bindings cannot escape their callbacks", () => {
   rejects("out_of_scope_ref", () =>
     compile(() => {
       map(
-        code("files", { in: {}, out: { paths: "string[]" }, module: "./files.ts" }).get("paths"),
+        code("files", {
+          in: {},
+          out: { kind: "record", fields: { paths: "string[]" } },
+          module: "./files.ts",
+        }).get("paths"),
         (entry) => {
           item = entry;
 
@@ -537,7 +586,10 @@ test("map and rescue bindings cannot escape their callbacks", () => {
 });
 
 test("subgraph invocations reuse labels without sharing their label namespace", () => {
-  const task = subgraph("task", () => code("work", { in: {}, out: {}, module: "./work.ts" }));
+  const task = subgraph("task", () =>
+    code("work", { in: {}, out: { kind: "record", fields: {} }, module: "./work.ts" }),
+  );
+
   const graph = compile(() => [task(), task()]);
   expect(graph.nodes.map((node) => String(node.id))).toEqual([
     "0:task/work",
@@ -564,7 +616,7 @@ test("dynamic flags preserve all descriptor rendering rules for the executor", (
 
   const graph = compile(() => {
     const values = wait("values", {
-      payload: { enabled: "boolean", count: "number", tag: "string" },
+      payload: { kind: "record", fields: { enabled: "boolean", count: "number", tag: "string" } },
     });
 
     return command({
@@ -606,7 +658,7 @@ test("dynamic flags preserve all descriptor rendering rules for the executor", (
 test("size rejects declared non-string scalars and unknown fields are errors", () => {
   rejects("invalid_size", () =>
     compile(() => {
-      const output = wait("number", { payload: { count: "number" } });
+      const output = wait("number", { payload: { kind: "record", fields: { count: "number" } } });
       // @ts-expect-error size accepts only string and array refs.
       gt(size(output.get("count")), 1);
 
@@ -720,9 +772,90 @@ test("reserved value keys and opaque JSON comparisons are rejected", () => {
   rejects("unresolved_ref", () => compile(() => log("bad", { nested: { ref: "reserved" } })));
   rejects("predicate_type", () =>
     compile(() => {
-      const value = code("opaque", { in: {}, out: { value: "json" }, module: "./opaque.ts" });
+      const value = code("opaque", {
+        in: {},
+        out: { kind: "record", fields: { value: "json" } },
+        module: "./opaque.ts",
+      });
 
+      // @ts-expect-error Opaque JSON is not a scalar comparison operand.
       return branch(eq(value.get("value"), 1), { yes: () => true, no: () => false });
     }),
   );
 });
+
+for (const [kind, control] of [
+  ["branch", () => branch(eq(uuid(), "yes"), { yes: uuid, no: uuid })],
+  ["switch", () => switch_(uuid(), { first: uuid, default: uuid })],
+  ["parallel", () => parallel({ a: uuid, b: now })],
+  ["map", () => map(fs.ls(), (item) => item, { onError: "fail" })],
+  ["rescue", () => rescue(uuid, (error) => error.get("message"))],
+  ["finally", () => finally_(uuid, () => log("cleanup"))],
+] as const) {
+  test(`${kind} joins its result before the next executable node`, () => {
+    const graph = compile(() => {
+      const result = control();
+      log("after");
+
+      return result;
+    });
+
+    const after = graph.nodes.find((node) => node.kind === "log" && node.message === "after");
+    const edge = graph.edges.find((edge) => edge.to === after?.id);
+    const join = graph.nodes.find((node) => node.id === edge?.from);
+    const owner = graph.nodes.find((node) => node.kind === kind);
+    expect(edge?.kind).toBe("next");
+    expect(join).toMatchObject({ kind: "join", scope: null, result: { ref: owner?.id, path: [] } });
+  });
+}
+
+test("parallel projections and rescue error fields retain their core types", () => {
+  compile(() => {
+    const result = parallel({ a: uuid, n: random });
+    eq(result.get("a"), "id");
+    gt(result.get("n"), 0);
+
+    return rescue(
+      () => fail("failed"),
+      (error) => {
+        expectTypeOf(error.get("message")).toEqualTypeOf<Ref<string>>();
+        expectTypeOf(error.get("code")).toEqualTypeOf<Ref<string>>();
+
+        return branch(eq(error.get("code"), "failed"), {
+          yes: () => format("{message}", { message: error.get("message") }),
+          no: () => log("failure data", error.get("data")),
+        });
+      },
+    );
+  });
+});
+
+for (const [kind, control] of [
+  ["branch", () => branch(eq(uuid(), "yes"), { yes: () => fail("yes"), no: () => fail("no") })],
+  ["switch", () => switch_(uuid(), { default: () => fail("default") })],
+  ["parallel", () => parallel({})],
+  [
+    "rescue",
+    () =>
+      rescue(
+        () => fail("body"),
+        () => fail("handler"),
+      ),
+  ],
+  [
+    "finally",
+    () =>
+      finally_(
+        () => fail("body"),
+        () => fail("cleanup"),
+      ),
+  ],
+] as const) {
+  test(`${kind} with no successful arm tails still records a reachable control join`, () => {
+    compile(() => {
+      control();
+
+      return log("after");
+    });
+  });
+}
