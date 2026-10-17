@@ -78,7 +78,7 @@ test("API returns run records, step traces and cursor logs", async () => {
   expect(await (await request("/runs")).json()).toMatchObject([{ id: run.id }]);
 });
 
-test("the daemon server requires its token and origin, serves pinned assets and exposes read-only data", async () => {
+test("the daemon server requires its token and origin, serves pinned assets and serves authenticated API reads", async () => {
   const f = fixture("dashboard", "run: () => 1");
   await save(f);
   const assets = join(f.cwd, "assets");
