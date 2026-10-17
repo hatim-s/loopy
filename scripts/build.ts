@@ -20,19 +20,19 @@ if ((await compiled.exited) !== 0) {
   throw new Error("Package JavaScript build failed");
 }
 
-const result = Bun.spawn([process.execPath, "run", "--cwd", "apps/studio", "build"], {
+const result = Bun.spawn([process.execPath, "run", "--cwd", "apps/dashboard", "build"], {
   cwd: root,
   stdout: "inherit",
   stderr: "inherit",
 });
 
 if ((await result.exited) !== 0) {
-  throw new Error("Studio build failed");
+  throw new Error("Dashboard build failed");
 }
 
 await mkdir(packageDist, { recursive: true });
 
-await cp(resolve(root, "apps/studio/dist"), resolve(packageDist, "studio"), {
+await cp(resolve(root, "apps/dashboard/dist"), resolve(packageDist, "dashboard"), {
   recursive: true,
 });
 
@@ -42,4 +42,4 @@ await cp(resolve(root, "README.md"), resolve(root, "packages/loopy/README.md"));
 
 await chmod(resolve(packageDist, "cli/index.js"), 0o755);
 
-console.log("Built loopy with Studio.");
+console.log("Built loopy with the dashboard.");

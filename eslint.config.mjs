@@ -5,7 +5,13 @@ import antiSlopConfig from "./tools/anti-slop/config.mjs";
 
 export default tseslint.config(
   {
-    ignores: ["**/node_modules/**", "**/dist/**", "coverage/**", ".loopy/**"],
+    ignores: [
+      "**/node_modules/**",
+      "**/dist/**",
+      "coverage/**",
+      ".loopy/**",
+      "**/routeTree.gen.ts",
+    ],
   },
   ...antiSlopConfig,
   ...tseslint.configs.recommended,

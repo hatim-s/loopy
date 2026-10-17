@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+/* Studio's dark tokens, with a light set derived for daylight use. Status colours carry
+   meaning; everything else stays neutral so they are the first thing the eye finds. */
+:root {
+  --page: #f6f8fb;
+  --panel: #ffffff;
+  --raised: #eef1f5;
+  --ink: #161b22;
+  --muted: #5b6573;
+  --line: #dde2e8;
+  --active: #3d5bd9;
+  --success: #1d8556;
+  --danger: #c4413a;
+  --attention: #9a6400;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: #0d1014;
+    --panel: #11151a;
+    --raised: #161b21;
+    --ink: #e6eaf0;
+    --muted: #98a2ae;
+    --line: #222931;
+    --active: #8fa8ff;
+    --success: #5cd39b;
+    --danger: #f2877e;
+    --attention: #f0c46c;
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --color-page: var(--page);
+  --color-panel: var(--panel);
+  --color-raised: var(--raised);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-active: var(--active);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-attention: var(--attention);
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-page font-sans text-[13px] leading-[1.55] text-ink antialiased;
+    font-synthesis: none;
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-active;
+  }
+
+  ::selection {
+    @apply bg-active/25;
+  }
+}

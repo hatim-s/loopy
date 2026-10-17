@@ -5,7 +5,7 @@ import ts from "typescript";
 
 const SOURCE = resolve(import.meta.dir, "../src");
 
-const STUDIO = resolve(import.meta.dir, "../../../apps/studio/src");
+const DASHBOARD = resolve(import.meta.dir, "../../../apps/dashboard/src");
 
 const LAYERS = ["core", "runtime", "contract", "sdk", "local", "cli"] as const;
 
@@ -149,18 +149,21 @@ test("layers import downward, and only through the target layer's index", () => 
   expect(violations).toEqual([]);
 });
 
-test("studio reaches the package only through the SDK entry", () => {
+test("the dashboard reaches the package only through the contract entry", () => {
   const violations: string[] = [];
 
-  for (const file of sourceFiles(STUDIO)) {
-    const name = relative(STUDIO, file);
+  for (const file of sourceFiles(DASHBOARD)) {
+    const name = relative(DASHBOARD, file);
 
     for (const specifier of importsOf(file)) {
-      if (specifier.startsWith("loopy/")) {
-        violations.push(`${name} imports a non-portable entry (${specifier}).`);
+      if (
+        (specifier === "loopy" || specifier.startsWith("loopy/")) &&
+        specifier !== "loopy/contract"
+      ) {
+        violations.push(`${name} imports an entry other than loopy/contract (${specifier}).`);
       } else if (
         specifier.startsWith(".") &&
-        relative(STUDIO, resolve(file, "..", specifier)).startsWith("..")
+        relative(DASHBOARD, resolve(file, "..", specifier)).startsWith("..")
       ) {
         violations.push(`${name} reaches outside the app (${specifier}).`);
       }

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { LogRecord, StepRecord } from "loopy";
+import type { LogRecord, StepRecord } from "loopy/contract";
 import { groupTimeline } from "../src/lib/timeline.ts";
 
 function step(seq: number): StepRecord {
