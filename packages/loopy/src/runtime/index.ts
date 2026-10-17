@@ -16,6 +16,8 @@ export type { ActivationOptions } from "./engine.js";
 
 export { activate } from "./engine.js";
 
+export { EVENT_RETENTION, EventListeners, type EventTransaction } from "./event-outbox.js";
+
 export type { Executor, ResolvedCommand } from "./executor.js";
 
 export { CommandExecutionError, CommandExitError } from "./executor.js";

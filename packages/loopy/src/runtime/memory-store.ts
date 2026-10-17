@@ -12,12 +12,11 @@ import type {
   StepRecord,
   WaitingHookStep,
 } from "../core/index.js";
+import { EVENT_RETENTION, EventListeners, type EventTransaction } from "./event-outbox.js";
 import { canResolveHook, earliestWake } from "./hook-state.js";
 import { acquireWindow, type RateLimitResult, type RateLimitWindow } from "./rate-limit.js";
 import { sameStepRecord } from "./step-record.js";
 import { OwnershipError, type RunStore } from "./store.js";
-
-type EventTransaction = { id: string; events: RuntimeEvent[] };
 
 export class MemoryRunStore implements RunStore {
   private readonly hooks = new Map<string, HookRecord>();
@@ -454,14 +453,10 @@ export class MemoryRunStore implements RunStore {
   private eventLog: RuntimeEvent[] = [];
   private sequence = 0;
   private readonly storeEpoch = crypto.randomUUID();
-  private readonly listeners = new Set<(events: RuntimeEvent[]) => void>();
+  private readonly listeners = new EventListeners();
 
   subscribe(listener: (events: RuntimeEvent[]) => void): () => void {
-    this.listeners.add(listener);
-
-    return () => {
-      this.listeners.delete(listener);
-    };
+    return this.listeners.subscribe(listener);
   }
 
   async events(after: number, limit: number): Promise<RuntimeEvent[]> {
@@ -492,8 +487,12 @@ export class MemoryRunStore implements RunStore {
   }
 
   async pruneEvents(now: string): Promise<number> {
-    const cutoff = Date.parse(now) - 86_400_000;
-    const kept = this.eventLog.slice(-100_000).filter((event) => Date.parse(event.at) >= cutoff);
+    const cutoff = Date.parse(now) - EVENT_RETENTION.maxAgeMs;
+
+    const kept = this.eventLog
+      .slice(-EVENT_RETENTION.maxRows)
+      .filter((event) => Date.parse(event.at) >= cutoff);
+
     const deleted = this.eventLog.length - kept.length;
     this.eventLog = kept;
 
@@ -505,15 +504,7 @@ export class MemoryRunStore implements RunStore {
     const result = change(txn);
     this.eventLog.push(...txn.events);
 
-    if (txn.events.length > 0) {
-      for (const listener of this.listeners) {
-        try {
-          listener(structuredClone(txn.events));
-        } catch {
-          continue;
-        }
-      }
-    }
+    this.listeners.publish(txn.events);
 
     return result;
   }

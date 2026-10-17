@@ -3,6 +3,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
+import { z } from "zod";
 import type { LogRecord, StepRecord } from "../src/core/index.js";
 import { SqliteRunStore } from "../src/local/index.js";
 import { newRun } from "./fixture.js";
@@ -422,7 +423,7 @@ test("SQLite event reads reject malformed entity records at the JSON boundary", 
     database
       .query("UPDATE events SET record=?")
       .run(JSON.stringify({ ...newRun(), status: "unknown" }));
-    await expect(store.events(0, 10)).rejects.toThrow("Event run status must be one of");
+    await expect(store.events(0, 10)).rejects.toThrow(z.ZodError);
     database.query("UPDATE events SET record=?").run(
       JSON.stringify({
         ...newRun(),
@@ -430,11 +431,9 @@ test("SQLite event reads reject malformed entity records at the JSON boundary", 
         owner: { token: "owner", pid: "wrong", host: "host", heartbeatAt: newRun().createdAt },
       }),
     );
-    await expect(store.events(0, 10)).rejects.toThrow(
-      "Event record.pid must be a nonnegative integer.",
-    );
+    await expect(store.events(0, 10)).rejects.toThrow(z.ZodError);
     database.query("UPDATE events SET record=?").run("[]");
-    await expect(store.events(0, 10)).rejects.toThrow("Event record must be an object.");
+    await expect(store.events(0, 10)).rejects.toThrow(z.ZodError);
     database.query("UPDATE events SET record=?").run("{");
     await expect(store.events(0, 10)).rejects.toThrow(SyntaxError);
   } finally {
