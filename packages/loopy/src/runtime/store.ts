@@ -25,6 +25,7 @@ export interface RunStore {
   oldestEventSequence(): number | undefined;
   events(after: number, limit: number): Promise<RuntimeEvent[]>;
   epoch(): Promise<string>;
+  eventCursor(): Promise<{ cursor: number; epoch: string }>;
   snapshotRun(id: string): Promise<RunSnapshot | undefined>;
   pruneEvents(now: string): Promise<number>;
   subscribe(listener: (events: RuntimeEvent[]) => void): () => void;

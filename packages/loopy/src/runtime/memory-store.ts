@@ -471,6 +471,10 @@ export class MemoryRunStore implements RunStore {
     return this.storeEpoch;
   }
 
+  async eventCursor(): Promise<{ cursor: number; epoch: string }> {
+    return { cursor: this.sequence, epoch: this.storeEpoch };
+  }
+
   async snapshotRun(id: string): Promise<RunSnapshot | undefined> {
     const run = this.runs.get(id);
 

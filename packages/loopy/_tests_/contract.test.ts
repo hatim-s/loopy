@@ -398,3 +398,22 @@ test("run cursors preserve timestamp ties and reject timestamp-only paging", asy
   expect(runsQuerySchema.safeParse({ before: "2026-10-17T00:00:00.000Z" }).success).toBe(false);
   expect(runsQuerySchema.safeParse({ before: `${cursor}|extra` }).success).toBe(false);
 });
+
+test("cursor route rejects invalid cursors and extra response fields", () => {
+  expect(contract.routes.cursor.method).toBe("GET");
+  expect(contract.routes.cursor.path).toBe("/cursor");
+  expect(contract.routes.cursor.response.parse({ cursor: 0, epoch: "epoch" })).toEqual({
+    cursor: 0,
+    epoch: "epoch",
+  });
+
+  for (const value of [
+    { cursor: -1, epoch: "epoch" },
+    { cursor: 0.5, epoch: "epoch" },
+    { cursor: "0", epoch: "epoch" },
+    { cursor: 0 },
+    { cursor: 0, epoch: "epoch", extra: true },
+  ]) {
+    expect(contract.cursorViewSchema.safeParse(value).success).toBe(false);
+  }
+});

@@ -179,3 +179,14 @@ test("service hook resolution returns the woken run and rejects duplicate resolu
   });
   await expect(service.resolveHook("hook", null)).rejects.toMatchObject({ code: "unknown_hook" });
 });
+
+test("service cursor follows the last event without requiring a run snapshot", async () => {
+  const { service, store, root } = await fixture();
+  const initial = await service.cursor();
+  expect(initial).toEqual({ cursor: 0, epoch: await store.epoch() });
+  await service.startRun("service", { name: "Hatim" }, root);
+  const current = await service.cursor();
+  const events = await store.events(0, 100);
+  expect(events.at(-1)?.sequence).toBe(current.cursor);
+  expect(current).toEqual({ cursor: initial.cursor + 1, epoch: initial.epoch });
+});

@@ -38,6 +38,8 @@ export {
 } from "./records.js";
 
 export {
+  type CursorView,
+  cursorViewSchema,
   type DaemonView,
   daemonViewSchema,
   type LoopyView,
