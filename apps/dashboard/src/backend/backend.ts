@@ -6,9 +6,11 @@ import {
   type Json,
   type LogRecord,
   type LoopyView,
+  type PutScheduleBody,
   type RunSnapshotView,
   type RunView,
   type runsQuerySchema,
+  type ScheduleView,
   type ServerEvent,
 } from "loopy/contract";
 import type { z } from "zod";
@@ -44,6 +46,10 @@ export type LoopyBackend = {
   cancelRun(id: string): Promise<RunView>;
   resolveHook(token: string, payload: Json): Promise<RunView>;
   daemon(): Promise<DaemonView>;
+  schedules(): Promise<ScheduleView[]>;
+  putSchedule(slug: string, body: PutScheduleBody): Promise<ScheduleView>;
+  setScheduleEnabled(slug: string, enabled: boolean): Promise<ScheduleView>;
+  deleteSchedule(slug: string): Promise<{ deleted: true }>;
   events(subscription: EventSubscription): Promise<StreamEnd>;
 };
 

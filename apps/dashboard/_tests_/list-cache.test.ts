@@ -105,6 +105,7 @@ function pagedCache() {
   const backend = fakeBackend({
     epoch: "e1",
     loopies: [],
+    schedules: [],
     runs: runs.map(snapshot),
     batches: [],
     intervalMs: 0,

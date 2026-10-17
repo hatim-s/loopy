@@ -30,7 +30,7 @@ export function ConnectionStatus() {
         aria-hidden="true"
         className={`size-1.5 rounded-full bg-current ${state === "live" ? "motion-safe:animate-pulse" : ""}`}
       />
-      {text}
+      <span className="max-sm:sr-only">{text}</span>
     </p>
   );
 }

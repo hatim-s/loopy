@@ -1,5 +1,5 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { type LoopyView, runsQuerySchema } from "loopy/contract";
 import { z } from "zod";
 import { Countdown } from "../components/countdown.tsx";
@@ -33,6 +33,33 @@ function useLoopy(slug: string): LoopyView | undefined {
   return data.find((loopy) => loopy.slug === slug);
 }
 
+function ScheduleLine({ schedule, now }: { schedule: LoopyView["schedule"]; now: number }) {
+  if (schedule === null) {
+    return null;
+  }
+
+  if (schedule.nextFireAt === null) {
+    return (
+      <span title={schedule.tz}>
+        Declares <code className="font-mono">{schedule.cron}</code>, not scheduled.
+      </span>
+    );
+  }
+
+  return (
+    <span title={schedule.tz}>
+      Scheduled <code className="font-mono">{schedule.cron}</code>
+      {schedule.enabled ? (
+        <>
+          , next fire <Countdown at={schedule.nextFireAt} now={now} />.
+        </>
+      ) : (
+        ", paused."
+      )}
+    </span>
+  );
+}
+
 function LoopyHeader({ loopy, now }: { loopy: LoopyView; now: number }) {
   const { schedule } = loopy;
 
@@ -41,19 +68,14 @@ function LoopyHeader({ loopy, now }: { loopy: LoopyView; now: number }) {
       <h1 className="text-xl font-semibold tracking-tight">{loopy.slug}</h1>
       {loopy.description && <p className="text-muted">{loopy.description}</p>}
       <p className="text-xs text-muted">
-        {SCOPE[loopy.scope]}, {loopy.mode} mode.{" "}
-        {schedule && (
-          <span title={schedule.tz}>
-            Scheduled <code className="font-mono">{schedule.cron}</code>
-            {schedule.enabled && schedule.nextFireAt !== null ? (
-              <>
-                , next fire <Countdown at={schedule.nextFireAt} now={now} />.
-              </>
-            ) : (
-              ", paused."
-            )}
-          </span>
-        )}
+        {SCOPE[loopy.scope]}, {loopy.mode} mode. <ScheduleLine schedule={schedule} now={now} />{" "}
+        <Link
+          to="/schedules"
+          search={{ slug: loopy.slug }}
+          className="text-ink underline underline-offset-2 hover:text-active"
+        >
+          {schedule?.nextFireAt ? "Edit schedule" : "Schedule"}
+        </Link>
       </p>
     </header>
   );

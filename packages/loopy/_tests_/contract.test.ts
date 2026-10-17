@@ -483,3 +483,15 @@ test("cursor route rejects invalid cursors and extra response fields", () => {
     expect(contract.cursorViewSchema.safeParse(value).success).toBe(false);
   }
 });
+
+test("schedule validation errors cross the contract with default messages", () => {
+  for (const code of ["invalid_cron", "invalid_timezone"] satisfies contract.ErrorCode[]) {
+    const error = {
+      code,
+      message: contract.DEFAULT_ERROR_MESSAGES[contract.errorCodeSchema.parse(code)],
+    };
+
+    expect(contract.errorBodySchema.parse({ error })).toEqual({ error });
+    expect(error.message.length).toBeGreaterThan(0);
+  }
+});

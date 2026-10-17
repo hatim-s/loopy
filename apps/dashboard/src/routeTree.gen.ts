@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DaemonRouteImport } from './routes/daemon'
 import { Route as InboxRouteImport } from './routes/inbox'
+import { Route as SchedulesRouteImport } from './routes/schedules'
 import { Route as LoopiesSlugRouteImport } from './routes/loopies.$slug'
 import { Route as RunsRunIdRouteImport } from './routes/runs.$runId'
 
@@ -30,6 +31,11 @@ const InboxRoute = InboxRouteImport.update({
   path: '/inbox',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SchedulesRoute = SchedulesRouteImport.update({
+  id: '/schedules',
+  path: '/schedules',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoopiesSlugRoute = LoopiesSlugRouteImport.update({
   id: '/loopies/$slug',
   path: '/loopies/$slug',
@@ -45,6 +51,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/daemon': typeof DaemonRoute
   '/inbox': typeof InboxRoute
+  '/schedules': typeof SchedulesRoute
   '/loopies/$slug': typeof LoopiesSlugRoute
   '/runs/$runId': typeof RunsRunIdRoute
 }
@@ -52,6 +59,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/daemon': typeof DaemonRoute
   '/inbox': typeof InboxRoute
+  '/schedules': typeof SchedulesRoute
   '/loopies/$slug': typeof LoopiesSlugRoute
   '/runs/$runId': typeof RunsRunIdRoute
 }
@@ -60,22 +68,42 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/daemon': typeof DaemonRoute
   '/inbox': typeof InboxRoute
+  '/schedules': typeof SchedulesRoute
   '/loopies/$slug': typeof LoopiesSlugRoute
   '/runs/$runId': typeof RunsRunIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/daemon' | '/inbox' | '/loopies/$slug' | '/runs/$runId'
+  fullPaths:
+    | '/'
+    | '/daemon'
+    | '/inbox'
+    | '/schedules'
+    | '/loopies/$slug'
+    | '/runs/$runId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/daemon' | '/inbox' | '/loopies/$slug' | '/runs/$runId'
+  to:
+    | '/'
+    | '/daemon'
+    | '/inbox'
+    | '/schedules'
+    | '/loopies/$slug'
+    | '/runs/$runId'
   id:
-    '__root__' | '/' | '/daemon' | '/inbox' | '/loopies/$slug' | '/runs/$runId'
+    | '__root__'
+    | '/'
+    | '/daemon'
+    | '/inbox'
+    | '/schedules'
+    | '/loopies/$slug'
+    | '/runs/$runId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DaemonRoute: typeof DaemonRoute
   InboxRoute: typeof InboxRoute
+  SchedulesRoute: typeof SchedulesRoute
   LoopiesSlugRoute: typeof LoopiesSlugRoute
   RunsRunIdRoute: typeof RunsRunIdRoute
 }
@@ -103,6 +131,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InboxRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/schedules': {
+      id: '/schedules'
+      path: '/schedules'
+      fullPath: '/schedules'
+      preLoaderRoute: typeof SchedulesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/loopies/$slug': {
       id: '/loopies/$slug'
       path: '/loopies/$slug'
@@ -124,6 +159,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DaemonRoute: DaemonRoute,
   InboxRoute: InboxRoute,
+  SchedulesRoute: SchedulesRoute,
   LoopiesSlugRoute: LoopiesSlugRoute,
   RunsRunIdRoute: RunsRunIdRoute,
 }

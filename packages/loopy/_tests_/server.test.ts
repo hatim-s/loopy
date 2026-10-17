@@ -517,6 +517,8 @@ test("service error codes serialize with their HTTP status", async () => {
     ["unauthorized", 401],
     ["forbidden", 403],
     ["internal", 500],
+    ["invalid_cron", 400],
+    ["invalid_timezone", 400],
   ];
 
   const list = spyOn(service, "listRuns");
@@ -909,12 +911,17 @@ test("schedule routes round trip validated views and report status codes", async
     expect(
       await (await request(`${path}/enabled`, "POST", { enabled: false })).json(),
     ).toMatchObject({ enabled: false });
-    const invalidBodies: Json[] = [{ cron: "invalid" }, { cron: "* * * * *", tz: "Bad/Zone" }];
 
-    for (const body of invalidBodies) {
+    const invalidBodies: { body: Json; code: ErrorCode }[] = [
+      { body: { cron: "invalid" }, code: "invalid_cron" },
+      { body: { cron: "* * * * *", tz: "Bad/Zone" }, code: "invalid_timezone" },
+      { body: {}, code: "invalid_schedule" },
+    ];
+
+    for (const { body, code } of invalidBodies) {
       const invalid = await request(path, "PUT", body);
       expect(invalid.status).toBe(400);
-      expect(errorBodySchema.parse(await invalid.json()).error.code).toBe("invalid_schedule");
+      expect(errorBodySchema.parse(await invalid.json()).error.code).toBe(code);
     }
 
     const malformed = await request(path, "PUT", { enabled: "no" });

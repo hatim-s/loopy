@@ -16,7 +16,7 @@ export function InboxLink() {
   return (
     <Link
       to="/inbox"
-      className="mr-4 ml-auto flex items-center gap-1.5 rounded-md px-2 py-1 text-muted hover:bg-raised hover:text-ink"
+      className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-muted hover:bg-raised hover:text-ink sm:px-2"
       activeProps={{ className: "bg-raised text-ink" }}
       aria-label={count > 0 ? `Inbox, ${count} waiting` : "Inbox"}
     >

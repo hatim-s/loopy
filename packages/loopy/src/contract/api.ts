@@ -22,6 +22,8 @@ export const ERROR_CODES = [
   "unauthorized",
   "forbidden",
   "internal",
+  "invalid_cron",
+  "invalid_timezone",
 ] as const;
 
 export const errorCodeSchema = z.enum(ERROR_CODES);
@@ -39,6 +41,8 @@ export const DEFAULT_ERROR_MESSAGES = {
   unauthorized: "Open the viewer URL printed by loopy ui to authenticate.",
   forbidden: "Cross-origin access is disabled.",
   internal: "An internal server error occurred.",
+  invalid_cron: "The cron expression is invalid. Provide five valid fields or a supported alias.",
+  invalid_timezone: "The time zone is invalid. Provide an IANA time zone such as Asia/Kolkata.",
 } satisfies Record<ErrorCode, string>;
 
 export const errorBodySchema = z.strictObject({

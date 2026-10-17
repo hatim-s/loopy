@@ -238,14 +238,17 @@ test("service schedules create, replace, toggle, delete and emit persisted event
 test("service rejects invalid schedule semantics before writing", async () => {
   const { service, store } = await fixture();
 
-  for (const body of [
-    { cron: "bad" },
-    { cron: "* * * * *", tz: "Invalid/Zone" },
-    {},
-    { cron: "* * * * *", input: {} },
-  ]) {
+  const cases = [
+    { body: { cron: "bad" }, code: "invalid_cron" },
+    { body: { cron: "" }, code: "invalid_cron" },
+    { body: { cron: "* * * * *", tz: "Invalid/Zone" }, code: "invalid_timezone" },
+    { body: {}, code: "invalid_schedule" },
+    { body: { cron: "* * * * *", input: {} }, code: "bad_request" },
+  ];
+
+  for (const { body, code } of cases) {
     await expect(service.putSchedule("service", body)).rejects.toMatchObject({
-      code: "invalid_schedule",
+      code,
     });
   }
 
