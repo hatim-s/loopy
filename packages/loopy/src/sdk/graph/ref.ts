@@ -1,5 +1,5 @@
 import type { Ref as GraphRef, OutSchema, RefId, Value } from "../../core/index.js";
-import { refuse } from "./validate.js";
+import { refuse, validateLabel } from "./validate.js";
 
 export const REF = Symbol("loopy.graph.ref");
 
@@ -100,7 +100,11 @@ export function serialize(value: AuthorValue, context: RefContext): Value {
   }
 
   return Object.fromEntries(
-    Object.entries(value).map(([key, item]) => [key, serialize(item, context)]),
+    Object.entries(value).map(([key, item]) => {
+      validateLabel(key);
+
+      return [key, serialize(item, context)];
+    }),
   );
 }
 
@@ -109,7 +113,11 @@ export function serializeValues(
   context: RefContext,
 ) {
   return Object.fromEntries(
-    Object.entries(values).map(([key, value]) => [key, serialize(value, context)]),
+    Object.entries(values).map(([key, value]) => {
+      validateLabel(key);
+
+      return [key, serialize(value, context)];
+    }),
   );
 }
 

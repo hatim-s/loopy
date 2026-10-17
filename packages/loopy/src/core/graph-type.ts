@@ -90,6 +90,32 @@ function literalPathType(context: Context, value: Value, path: string[]): string
   return literalPathType(context, value[field] ?? null, rest);
 }
 
+function parallelType(
+  context: Context,
+  node: Extract<Node, { kind: "parallel" }>,
+  path: string[],
+): string | null {
+  const entries = Object.values(node.branches);
+
+  if (
+    entries.length > 0 &&
+    entries.every((entry) => bodyResultType(context, node, entry, []) === "never")
+  ) {
+    return "never";
+  }
+
+  if (path.length === 0) {
+    return "object";
+  }
+
+  const [label, ...rest] = path;
+
+  const entry =
+    label !== undefined && Object.hasOwn(node.branches, label) ? node.branches[label] : undefined;
+
+  return entry === undefined ? null : bodyResultType(context, node, entry, rest);
+}
+
 function derivedType(context: Context, node: Node, path: string[]): string | null {
   switch (node.kind) {
     case "branch":
@@ -110,23 +136,13 @@ function derivedType(context: Context, node: Node, path: string[]): string | nul
       return arms.every((type) => type === arms[0]) ? (arms[0] ?? null) : "json";
     }
 
-    case "parallel": {
-      if (path.length === 0) {
-        return "object";
-      }
-
-      const [label, ...rest] = path;
-
-      const entry =
-        label !== undefined && Object.hasOwn(node.branches, label)
-          ? node.branches[label]
-          : undefined;
-
-      return entry === undefined ? null : bodyResultType(context, node, entry, rest);
-    }
+    case "parallel":
+      return parallelType(context, node, path);
 
     case "join":
-      return literalPathType(context, node.result, path);
+      return node.result.kind === "none"
+        ? "never"
+        : literalPathType(context, node.result.value, path);
     case "finally":
       return bodyResultType(context, node, node.body, path);
     case "map":

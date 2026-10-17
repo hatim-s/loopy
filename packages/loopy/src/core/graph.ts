@@ -189,7 +189,10 @@ export type Node = Expand<
       | { kind: (typeof NODE_KINDS)[14] }
       | { kind: (typeof NODE_KINDS)[15] }
       // Joins make a scope's result explicit without inventing an executable callback.
-      | { kind: (typeof NODE_KINDS)[16]; result: Value | null }
+      | {
+          kind: (typeof NODE_KINDS)[16];
+          result: { kind: "value"; value: Value } | { kind: "none" };
+        }
     )
 >;
 
@@ -215,6 +218,7 @@ export type Edge = Expand<
 
 export const DIAGNOSTIC_CODES = [
   "duplicate_label",
+  "reserved_name",
   "inactive_builder",
   "duplicate_node",
   "duplicate_ref",

@@ -195,7 +195,7 @@ export function values(node: Node): Value[] {
     case "log":
       return [node.message, node.data];
     case "join":
-      return [node.result];
+      return node.result.kind === "none" ? [] : [node.result.value];
     default:
       return [];
   }

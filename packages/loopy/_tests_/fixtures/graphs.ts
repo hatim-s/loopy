@@ -64,7 +64,7 @@ export const approveDemoGraph = graphSchema.parse({
       kind: "join",
       label: null,
       scope: "3:branch",
-      result: { ref: "5:apply", path: [] },
+      result: { kind: "value", value: { ref: "5:apply", path: [] } },
     },
     { id: "7:fail", kind: "fail", label: null, scope: "3:branch", message: "Rejected" },
     {
@@ -72,14 +72,17 @@ export const approveDemoGraph = graphSchema.parse({
       kind: "join",
       label: null,
       scope: null,
-      result: { ref: "3:branch", path: [] },
+      result: { kind: "value", value: { ref: "3:branch", path: [] } },
     },
     {
       id: "9:join",
       kind: "join",
       label: null,
       scope: null,
-      result: { draft: { ref: "0:draft", path: [] }, applied: { ref: "3:branch", path: [] } },
+      result: {
+        kind: "value",
+        value: { draft: { ref: "0:draft", path: [] }, applied: { ref: "3:branch", path: [] } },
+      },
     },
   ],
   edges: [

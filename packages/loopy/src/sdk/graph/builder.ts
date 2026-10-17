@@ -2,15 +2,17 @@ import {
   type Edge,
   type Graph,
   type GraphRetry,
+  graphTypeResolver,
   type Node,
   type NodeId,
   type NodeKind,
+  nodeNames,
   type OutSchema,
   type RecordSpec,
   type RefId,
 } from "../../core/index.js";
 import { type AuthorValue, REF, type Ref, Reference, type RefValue, serialize } from "./ref.js";
-import { refuse, validate } from "./validate.js";
+import { refuse, validate, validateLabel } from "./validate.js";
 
 type Tail = { id: NodeId; kind: "next" | "join" };
 
@@ -76,7 +78,9 @@ export class GraphBuilder {
   constructor(
     readonly name: string,
     readonly input: RecordSpec,
-  ) {}
+  ) {
+    Object.keys(input).forEach(validateLabel);
+  }
 
   get scope(): Frame {
     const value = this.frames.at(-1);
@@ -105,6 +109,7 @@ export class GraphBuilder {
   }
 
   expand<T>(label: string, callback: () => T): T {
+    validateLabel(label);
     const scope = this.scope;
     const labels = scope.labels;
     scope.labels = new Set();
@@ -120,6 +125,11 @@ export class GraphBuilder {
 
   // PR 3 checks label literals in the AST; construction accepts the already typed string.
   allocate(kind: NodeKind, label: string | null, fallback: string = kind) {
+    if (label !== null) {
+      validateLabel(label);
+    }
+
+    validateLabel(fallback);
     const name = [...this.prefixes, label ?? fallback].join("/");
 
     if (label !== null && this.scope.labels.has(name)) {
@@ -145,6 +155,7 @@ export class GraphBuilder {
   }
 
   record(node: Node) {
+    nodeNames(node).forEach(validateLabel);
     this.nodes.push(node);
     this.scope.first ??= node.id;
 
@@ -160,6 +171,7 @@ export class GraphBuilder {
   }
 
   caseEdge(from: NodeId, to: NodeId, label: string) {
+    validateLabel(label);
     this.edges.push({ from, to, kind: "case", label });
   }
 
@@ -194,7 +206,20 @@ export class GraphBuilder {
       const result = callback();
 
       if (child.first === null || child.tails.length > 0) {
-        this.add({ kind: "join", result: serialize(result, this) });
+        const nonReturning =
+          child.tails.length > 0 &&
+          child.tails.every((tail) =>
+            this.nodes.some(
+              (node) => node.id === tail.id && node.kind === "join" && node.result.kind === "none",
+            ),
+          );
+
+        this.add({
+          kind: "join",
+          result: nonReturning
+            ? { kind: "none" }
+            : { kind: "value", value: serialize(result, this) },
+        });
       }
 
       return { entry: child.first ?? owner, tails: child.tails.map((tail) => tail.id) };
@@ -209,7 +234,16 @@ export class GraphBuilder {
         ? [{ id: owner, kind: "next" }]
         : tails.map((nodeId) => ({ id: nodeId, kind }));
 
-    return this.add({ kind: "join", result: { ref: bindingId(owner), path: [] } });
+    const value = { ref: bindingId(owner), path: [] };
+
+    const type = graphTypeResolver({ input: this.input, nodes: this.nodes, edges: this.edges })(
+      value,
+    );
+
+    return this.add({
+      kind: "join",
+      result: type === "never" ? { kind: "none" } : { kind: "value", value },
+    });
   }
 
   snapshot(entry: NodeId): Graph {
@@ -227,7 +261,11 @@ export class GraphBuilder {
 
   finish(result: AuthorValue) {
     const terminal = this.scope.first !== null && this.scope.tails.length === 0;
-    const output = terminal ? null : this.add({ kind: "join", result: serialize(result, this) });
+
+    const output = terminal
+      ? null
+      : this.add({ kind: "join", result: { kind: "value", value: serialize(result, this) } });
+
     const entry = this.scope.first;
 
     if (entry === null) {

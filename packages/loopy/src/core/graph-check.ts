@@ -9,6 +9,7 @@ import {
   scopeReaches,
   values,
 } from "./graph-context.js";
+import { isReservedGraphName, nodeNames } from "./graph-names.js";
 import { checkPredicate, hasSize } from "./graph-predicate.js";
 import { structureRules } from "./graph-structure.js";
 import { graphTypeResolver } from "./graph-type.js";
@@ -151,6 +152,24 @@ function bindings({ graph }: Context): Diagnostic[] {
   });
 }
 
+function reservedNames({ graph }: Context): Diagnostic[] {
+  const names = [
+    ...(graph.input === "schema"
+      ? []
+      : Object.keys(graph.input).map((name) => ({ name, node: null }))),
+    ...graph.nodes.flatMap((node) => nodeNames(node).map((name) => ({ name, node: node.id }))),
+    ...graph.edges.flatMap((edge) =>
+      edge.kind === "case" ? [{ name: edge.label, node: edge.from }] : [],
+    ),
+  ];
+
+  return names.flatMap(({ name, node }) =>
+    isReservedGraphName(name)
+      ? [diagnostic("reserved_name", node, `Label "${name}" is reserved`)]
+      : [],
+  );
+}
+
 export function validateGraph(graph: Graph): Diagnostic[] {
   const context: Context = {
     graph,
@@ -158,7 +177,7 @@ export function validateGraph(graph: Graph): Diagnostic[] {
     resolveType: graphTypeResolver(graph),
   };
 
-  return [...structureRules, bindings, references, predicates, formats].flatMap((rule) =>
-    rule(context),
+  return [...structureRules, reservedNames, bindings, references, predicates, formats].flatMap(
+    (rule) => rule(context),
   );
 }

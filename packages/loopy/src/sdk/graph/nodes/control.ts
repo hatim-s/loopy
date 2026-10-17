@@ -4,6 +4,7 @@ import { recordPredicate } from "../predicates.js";
 import type { Ref } from "../ref.js";
 import { type AuthorValue, serialize, serializeRef } from "../ref.js";
 import type { InferRecord, Result } from "../types.js";
+import { validateLabel } from "../validate.js";
 
 type Arm = () => AuthorValue;
 
@@ -50,20 +51,23 @@ export function switch_<A extends Record<string, Arm>>(
 
   builder.record(node);
   const tails = [];
+  const entries = [];
 
   for (const [label, callback] of Object.entries(arms)) {
+    validateLabel(label);
     const arm = builder.arm(base.id, callback);
 
     if (label === "default") {
       node.default = arm.entry;
     } else {
-      Object.assign(node.cases, { [label]: arm.entry });
+      entries.push([label, arm.entry]);
     }
 
     builder.caseEdge(base.id, arm.entry, label);
     tails.push(...arm.tails);
   }
 
+  node.cases = Object.fromEntries(entries);
   builder.continueFrom(base.id, tails);
 
   return builder.ref(base.id);
@@ -116,14 +120,17 @@ export function parallel<A extends Record<string, Arm>>(
   const node = { ...base, kind: "parallel" as const, branches: {} };
   builder.record(node);
   const tails = [];
+  const entries = [];
 
   for (const [label, callback] of Object.entries(arms)) {
+    validateLabel(label);
     const arm = builder.arm(base.id, callback);
-    Object.assign(node.branches, { [label]: arm.entry });
+    entries.push([label, arm.entry]);
     builder.caseEdge(base.id, arm.entry, label);
     tails.push(...arm.tails);
   }
 
+  node.branches = Object.fromEntries(entries);
   builder.continueFrom(base.id, tails);
 
   return builder.ref(base.id);

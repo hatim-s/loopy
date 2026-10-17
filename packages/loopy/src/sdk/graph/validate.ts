@@ -4,6 +4,7 @@ import {
   type DiagnosticCode,
   type Graph,
   graphTypeResolver,
+  isReservedGraphName,
   type NodeId,
   type Predicate,
   validateGraph,
@@ -32,5 +33,11 @@ export function validatePredicate(
 
   if (error) {
     throw new GraphBuildError({ ...error, node: null, source: null });
+  }
+}
+
+export function validateLabel(label: string): void {
+  if (isReservedGraphName(label)) {
+    refuse("reserved_name", `Label "${label}" is reserved`);
   }
 }
