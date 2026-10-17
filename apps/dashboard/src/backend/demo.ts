@@ -146,6 +146,19 @@ export function demoScript(): FakeScript {
     epoch: "demo",
     intervalMs: 1200,
     loopies: [loopy],
+    schedules: [
+      {
+        workspace: queued.workspace,
+        slug: loopy.slug,
+        cron: "0 9 * * 1-5",
+        tz: "Europe/London",
+        enabled: true,
+        input: { mailbox: "support@acme.dev", since: "24h" },
+        nextFireAt: minutes(600),
+        lastFireKey: "triage-inbox@2026-10-16T08:00Z",
+        revision: 3,
+      },
+    ],
     runs: [{ run: queued, steps: [], logs: [], hooks: [], cursor: 0, epoch: "demo" }],
     batches: [
       [{ entity: "run", kind: "claimed", runId: RUN_ID, record: running() }],

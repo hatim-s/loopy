@@ -60,3 +60,7 @@ export function inboxQuery(backend: LoopyBackend) {
     select: inboxGroups,
   });
 }
+
+export function schedulesQuery(backend: LoopyBackend) {
+  return queryOptions({ queryKey: keys.schedules, queryFn: () => backend.schedules() });
+}

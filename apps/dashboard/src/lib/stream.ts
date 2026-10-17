@@ -4,6 +4,7 @@ import type {
   LogRecord,
   RunSnapshotView,
   RunView,
+  ScheduleView,
   ServerEvent,
   StepRecord,
 } from "loopy/contract";
@@ -12,6 +13,10 @@ import { keys } from "./keys.ts";
 import type { RunPage } from "./queries.ts";
 
 type HookEvent = Extract<ServerEvent, { entity: "hook" }>;
+
+type ScheduleEvent = Extract<ServerEvent, { entity: "schedule" }>;
+
+type ScheduleId = Pick<ScheduleView, "workspace" | "slug">;
 
 /** A `["runs", ...]` cache entry: one page from `useQuery`, or the pages of `useInfiniteQuery`. */
 type RunList = RunView[] | InfiniteData<RunPage, unknown>;
@@ -146,7 +151,7 @@ function applyHookToList(
   );
 }
 
-type BatchChanges = { lists: Set<string>; loopies: boolean };
+type BatchChanges = { lists: Set<string>; loopies: boolean; schedules: boolean };
 
 type RunEvent = Extract<ServerEvent, { entity: "run" }>;
 
@@ -320,6 +325,7 @@ function applyEvent(context: BatchContext, event: ServerEvent): void {
 
   if (event.entity === "schedule") {
     changes.loopies = true;
+    changes.schedules ||= !applyScheduleEvent(client, event);
 
     return;
   }
@@ -345,7 +351,7 @@ export function applyBatch(client: QueryClient, batch: ServerEvent[]): void {
   };
 
   histories.set(client, history);
-  const changes: BatchChanges = { lists: new Set(), loopies: false };
+  const changes: BatchChanges = { lists: new Set(), loopies: false, schedules: false };
 
   for (const event of batch) {
     applyEvent({ client, history, changes }, event);
@@ -361,6 +367,76 @@ export function applyBatch(client: QueryClient, batch: ServerEvent[]): void {
   if (changes.loopies) {
     void client.invalidateQueries({ queryKey: keys.loopies });
   }
+
+  if (changes.schedules) {
+    void client.invalidateQueries({ queryKey: keys.schedules });
+  }
+}
+
+function sameSchedule(a: ScheduleId, b: ScheduleId): boolean {
+  return a.workspace === b.workspace && a.slug === b.slug;
+}
+
+/** A lower revision is older than what the list holds; a fire keeps the revision it fired. */
+function withSchedule(list: ScheduleView[], next: ScheduleView): ScheduleView[] {
+  const current = list.find((item) => sameSchedule(item, next));
+
+  if (current && current.revision > next.revision) {
+    return list;
+  }
+
+  return current
+    ? list.map((item) => (item === current ? next : item))
+    : [...list, next].sort((a, b) => a.slug.localeCompare(b.slug));
+}
+
+/**
+ * Writes a schedule event into the list and reports whether the list now holds the truth.
+ * GET /schedules covers one workspace and an event does not say whether it is that one, so
+ * a schedule the list has not seen yet is left for a refetch instead of inserted.
+ */
+function applyScheduleEvent(client: QueryClient, event: ScheduleEvent): boolean {
+  const list = client.getQueryData<ScheduleView[]>(keys.schedules);
+
+  if (list === undefined) {
+    return true;
+  }
+
+  if (event.kind === "deleted") {
+    client.setQueryData<ScheduleView[]>(keys.schedules, (current) =>
+      current?.filter((item) => !sameSchedule(item, event.record)),
+    );
+
+    return true;
+  }
+
+  if (!list.some((item) => sameSchedule(item, event.record))) {
+    return false;
+  }
+
+  const view = { ...event.record, lastFireKey: event.record.lastFireKey ?? null };
+  client.setQueryData<ScheduleView[]>(
+    keys.schedules,
+    (current) => current && withSchedule(current, view),
+  );
+
+  return true;
+}
+
+/** Writes a schedule returned by a mutation. It belongs to the listed workspace, so it may insert. */
+export function applyScheduleView(client: QueryClient, view: ScheduleView): void {
+  client.setQueryData<ScheduleView[]>(
+    keys.schedules,
+    (current) => current && withSchedule(current, view),
+  );
+  void client.invalidateQueries({ queryKey: keys.loopies });
+}
+
+export function removeScheduleView(client: QueryClient, slug: string): void {
+  client.setQueryData<ScheduleView[]>(keys.schedules, (current) =>
+    current?.filter((item) => item.slug !== slug),
+  );
+  void client.invalidateQueries({ queryKey: keys.loopies });
 }
 
 /** Writes a run returned by a mutation; the stream later confirms or supersedes it. */

@@ -290,6 +290,12 @@ export function localHttpBackend({ origin, token }: LocalHttpOptions): LoopyBack
     resolveHook: (token, payload) =>
       send(routes.resolveHook, { params: { token }, query: {}, body: { payload } }),
     daemon: () => send(routes.daemon, { params: {}, query: {}, body: undefined }),
+    schedules: () => send(routes.schedules, { params: {}, query: {}, body: undefined }),
+    putSchedule: (slug, body) => send(routes.putSchedule, { params: { slug }, query: {}, body }),
+    setScheduleEnabled: (slug, enabled) =>
+      send(routes.setScheduleEnabled, { params: { slug }, query: {}, body: { enabled } }),
+    deleteSchedule: (slug) =>
+      send(routes.deleteSchedule, { params: { slug }, query: {}, body: undefined }),
     events,
   };
 }

@@ -1,6 +1,6 @@
 import { expect, spyOn, test } from "bun:test";
 import { type InfiniteData, QueryClient } from "@tanstack/react-query";
-import type { RunSnapshotView, RunView, ServerEvent } from "loopy/contract";
+import type { RunSnapshotView, RunView, Schedule, ScheduleView, ServerEvent } from "loopy/contract";
 import type { EventSubscription, StreamEnd } from "../src/backend/backend.ts";
 import { type EventDraft, fakeBackend } from "../src/backend/fake.ts";
 import { INBOX_QUERY, inboxGroups } from "../src/lib/inbox.ts";
@@ -218,6 +218,7 @@ test("a reset from the backend invalidates every query and resubscribes from a f
   const backend = fakeBackend({
     epoch: "e2",
     loopies: [],
+    schedules: [],
     runs: [fresh],
     batches: [],
     intervalMs: 0,
@@ -326,6 +327,7 @@ test("abort during reset cursor fetch cancels the request and settles followSess
   const backend = fakeBackend({
     epoch: "e1",
     loopies: [],
+    schedules: [],
     runs: [snapshot()],
     batches: [],
     intervalMs: 10,
@@ -380,6 +382,7 @@ test("fake playback cancels its last subscriber's timer and resumes on subscribe
   const backend = fakeBackend({
     epoch: "e1",
     loopies: [],
+    schedules: [],
     runs: [snapshot()],
     batches: [[{ entity: "run", kind: "claimed", runId: run.id, record: running }]],
     intervalMs: 20,
@@ -428,6 +431,7 @@ test("aborting as a subscription opens prevents replay and playback", async () =
   const backend = fakeBackend({
     epoch: "e1",
     loopies: [],
+    schedules: [],
     runs: [snapshot()],
     batches: [[{ entity: "run", kind: "claimed", runId: run.id, record: running }]],
     intervalMs: 1,
@@ -575,4 +579,85 @@ test("a newer detail cursor cannot hide a fresh list event or summary transition
   expect(client.getQueryData<RunView[]>(keys.runs({}))).toEqual([running]);
   expect(client.getQueryState(keys.loopies)?.isInvalidated).toBe(true);
   expect(client.getQueryData<RunSnapshotView>(keys.run(run.id))?.cursor).toBe(20);
+});
+
+/** A schedule as the store emits it; the view adds a null lastFireKey. */
+const record: Schedule = {
+  workspace: "/work",
+  slug: "triage",
+  cron: "*/5 * * * *",
+  tz: "UTC",
+  input: {},
+  enabled: true,
+  nextFireAt: "2026-10-17T10:05:00.000Z",
+  revision: 2,
+};
+
+const scheduled: ScheduleView = { ...record, lastFireKey: null };
+
+function scheduleSaved(sequence: number, saved: Schedule) {
+  return event(sequence, { entity: "schedule", kind: "saved", runId: null, record: saved });
+}
+
+test("a saved schedule replaces its row, and an older revision leaves the row alone", () => {
+  const client = new QueryClient();
+  const other = { ...scheduled, slug: "digest" };
+  client.setQueryData(keys.schedules, [scheduled, other]);
+
+  applyBatch(client, [scheduleSaved(11, { ...record, enabled: false, revision: 3 })]);
+  expect(client.getQueryData<ScheduleView[]>(keys.schedules)).toEqual([
+    { ...scheduled, enabled: false, revision: 3 },
+    other,
+  ]);
+
+  applyBatch(client, [scheduleSaved(12, { ...record, cron: "@daily", revision: 1 })]);
+  expect(client.getQueryData<ScheduleView[]>(keys.schedules)?.[0]?.cron).toBe("*/5 * * * *");
+  expect(client.getQueryState(keys.schedules)?.isInvalidated).toBe(false);
+});
+
+test("a fired schedule keeps its revision and carries the fire key into the row", () => {
+  const client = new QueryClient();
+  client.setQueryData(keys.schedules, [scheduled]);
+  const next = "2026-10-17T10:10:00.000Z";
+
+  applyBatch(client, [
+    event(11, {
+      entity: "schedule",
+      kind: "fired",
+      runId: null,
+      record: { ...record, nextFireAt: next, lastFireKey: "triage@2026-10-17T10:05Z" },
+    }),
+  ]);
+
+  expect(client.getQueryData<ScheduleView[]>(keys.schedules)).toEqual([
+    { ...scheduled, nextFireAt: next, lastFireKey: "triage@2026-10-17T10:05Z" },
+  ]);
+});
+
+test("a schedule the list has not seen refetches it instead of joining a list for another workspace", () => {
+  const client = new QueryClient();
+  client.setQueryData(keys.schedules, []);
+
+  applyBatch(client, [scheduleSaved(11, { ...record, workspace: "/elsewhere" })]);
+
+  expect(client.getQueryData<ScheduleView[]>(keys.schedules)).toEqual([]);
+  expect(client.getQueryState(keys.schedules)?.isInvalidated).toBe(true);
+});
+
+test("a deleted schedule leaves the list without a refetch, and only for its workspace", () => {
+  const client = new QueryClient();
+  const elsewhere = { ...scheduled, workspace: "/elsewhere" };
+  client.setQueryData(keys.schedules, [scheduled, elsewhere]);
+
+  applyBatch(client, [
+    event(11, {
+      entity: "schedule",
+      kind: "deleted",
+      runId: null,
+      record: { workspace: "/work", slug: "triage" },
+    }),
+  ]);
+
+  expect(client.getQueryData<ScheduleView[]>(keys.schedules)).toEqual([elsewhere]);
+  expect(client.getQueryState(keys.schedules)?.isInvalidated).toBe(false);
 });

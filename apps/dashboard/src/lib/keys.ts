@@ -11,6 +11,7 @@ export const keys = {
   runPages: (filters: RunFilters) => ["runs", "pages", filters] as const,
   run: (id: string) => ["run", id] as const,
   daemon: ["daemon"],
+  schedules: ["schedules"],
 } as const;
 
 type DashboardKey = (typeof keys)[keyof typeof keys];

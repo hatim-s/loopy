@@ -5,6 +5,7 @@ import {
   type LoopyView,
   type RunSnapshotView,
   type RunView,
+  type ScheduleView,
   type ServerEvent,
 } from "loopy/contract";
 import { applyToSnapshot } from "../lib/stream.ts";
@@ -20,6 +21,7 @@ export type FakeScript = {
   loopies: LoopyView[];
   /** Runs as they stand before the first batch plays. */
   runs: RunSnapshotView[];
+  schedules: ScheduleView[];
   /** Played in order. A batch that creates a hook holds playback until it is resolved. */
   batches: EventDraft[][];
   intervalMs: number;
@@ -27,9 +29,12 @@ export type FakeScript = {
 
 const ACTIVE = new Set<RunView["status"]>(["queued", "running", "suspended"]);
 
+const HOUR_MS = 3_600_000;
+
 /** An in-memory backend that plays a scripted run, for tests and `VITE_BACKEND=fake`. */
 export function fakeBackend(script: FakeScript): LoopyBackend {
   const snapshots = new Map(script.runs.map((snapshot) => [snapshot.run.id, snapshot]));
+  const schedules = new Map(script.schedules.map((schedule) => [schedule.slug, schedule]));
   const pending = [...script.batches];
   const released: ServerEvent[][] = [];
   const listeners = new Set<(batch: ServerEvent[]) => void>();
@@ -47,7 +52,8 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
     return found;
   }
 
-  function release(drafts: EventDraft[]): void {
+  /** Stamps and delivers one transaction without touching playback. */
+  function publish(drafts: EventDraft[]): ServerEvent[] {
     const txn = `txn-${released.length + 1}`;
     const at = new Date().toISOString();
 
@@ -68,11 +74,63 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
     }
 
     released.push(batch);
-    held = batch.some((event) => event.entity === "hook" && event.kind === "created");
 
     for (const listener of listeners) {
       listener(batch);
     }
+
+    return batch;
+  }
+
+  function release(drafts: EventDraft[]): void {
+    held = publish(drafts).some((event) => event.entity === "hook" && event.kind === "created");
+  }
+
+  function schedule(slug: string): ScheduleView {
+    const found = schedules.get(slug);
+
+    if (!found) {
+      throw new BackendError("not_found");
+    }
+
+    return found;
+  }
+
+  function saveSchedule(view: ScheduleView): ScheduleView {
+    const saved = { ...view, revision: view.revision + 1 };
+    const { lastFireKey, ...record } = saved;
+    schedules.set(saved.slug, saved);
+    publish([
+      {
+        entity: "schedule",
+        kind: "saved",
+        runId: null,
+        record: lastFireKey === null ? record : { ...record, lastFireKey },
+      },
+    ]);
+
+    return saved;
+  }
+
+  /** The fake has no cron engine: a new schedule fires in an hour and edits keep the time. */
+  function newSchedule(slug: string): ScheduleView {
+    const declared = script.loopies.find((loopy) => loopy.slug === slug)?.schedule;
+
+    if (!declared) {
+      throw new BackendError("invalid_schedule", `No schedule for '${slug}'. Pass a cron.`);
+    }
+
+    return {
+      workspace: "fake",
+      slug,
+      cron: declared.cron,
+      tz: declared.tz,
+      enabled: true,
+      input: {},
+      nextFireAt: new Date(Date.now() + HOUR_MS).toISOString(),
+      lastFireKey: null,
+      revision: 0,
+    };
   }
 
   function play(): void {
@@ -197,6 +255,27 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
       return snapshot(run.id).run;
     },
     daemon: async () => daemon,
+    schedules: async () => [...schedules.values()],
+    putSchedule: async (slug, body) =>
+      saveSchedule({ ...(schedules.get(slug) ?? newSchedule(slug)), ...body }),
+    setScheduleEnabled: async (slug, enabled) => saveSchedule({ ...schedule(slug), enabled }),
+    deleteSchedule: async (slug) => {
+      const existing = schedules.get(slug);
+
+      if (existing) {
+        schedules.delete(slug);
+        publish([
+          {
+            entity: "schedule",
+            kind: "deleted",
+            runId: null,
+            record: { workspace: existing.workspace, slug },
+          },
+        ]);
+      }
+
+      return { deleted: true };
+    },
     events: ({ after, epoch, signal, onBatch, onState }: EventSubscription) => {
       if (signal.aborted) {
         return Promise.resolve("aborted");
