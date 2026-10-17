@@ -19,6 +19,9 @@ export const ERROR_CODES = [
   "bad_request",
   "invalid_schedule",
   "stale_cursor",
+  "unauthorized",
+  "forbidden",
+  "internal",
 ] as const;
 
 export const errorCodeSchema = z.enum(ERROR_CODES);
@@ -33,6 +36,9 @@ export const DEFAULT_ERROR_MESSAGES = {
   bad_request: "The request is invalid. Check its parameters and body.",
   invalid_schedule: "The schedule is invalid. Check its cron expression, timezone and input.",
   stale_cursor: "The event cursor is stale. Fetch a fresh snapshot.",
+  unauthorized: "Open the viewer URL printed by loopy ui to authenticate.",
+  forbidden: "Cross-origin access is disabled.",
+  internal: "An internal server error occurred.",
 } satisfies Record<ErrorCode, string>;
 
 export const errorBodySchema = z.strictObject({
@@ -51,7 +57,7 @@ export const runsQuerySchema = z.strictObject({
   waiting: z
     .union([z.boolean(), z.enum(["true", "false"]).transform((value) => value === "true")])
     .optional(),
-  limit: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().positive().max(200).optional(),
   before: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\|[^|]+$/)

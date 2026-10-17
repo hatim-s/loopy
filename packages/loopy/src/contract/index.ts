@@ -1,3 +1,5 @@
+export { isTerminalRun } from "../core/index.js";
+
 export {
   DEFAULT_ERROR_MESSAGES,
   decodeRunCursor,

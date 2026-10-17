@@ -39,7 +39,6 @@ async function fixture(definition = "") {
   const store = openRunStore(home);
 
   const service = new LoopyService({
-    home,
     store,
     registry: () => registry,
     clock,
@@ -128,10 +127,13 @@ test("service resumes queued, suspended and abandoned runs and rejects terminal 
   await expect(service.resumeRun(owned.id)).rejects.toMatchObject({ code: "owned_elsewhere" });
   await store.release(owned.id, "owner");
   expect(await service.cancelRun(owned.id)).toMatchObject({ status: "cancelled", owner: null });
-  await expect(service.cancelRun("missing")).rejects.toMatchObject({ code: "not_found" });
+  await expect(service.cancelRun("missing")).rejects.toMatchObject({
+    code: "not_found",
+    message: "No run 'missing'. Use loopy runs to list run ids.",
+  });
 });
 
-test("service pages newest runs by createdAt and caps the page size", async () => {
+test("service pages newest runs by createdAt with default and maximum page sizes", async () => {
   const { service, store, root, advance } = await fixture();
   const first = await service.startRun("service", { name: "first" }, root);
   advance();
@@ -154,7 +156,7 @@ test("service pages newest runs by createdAt and caps the page size", async () =
   }
 
   expect(await service.listRuns({ slug: "page" })).toHaveLength(50);
-  expect(await service.listRuns({ slug: "page", limit: 300 })).toHaveLength(200);
+  expect(await service.listRuns({ slug: "page", limit: 200 })).toHaveLength(200);
 });
 
 test("service hook resolution returns the woken run and rejects duplicate resolution", async () => {
@@ -270,7 +272,7 @@ test("definition defaults apply and workspace schedule mutations stay isolated",
   const other = join(root, "other");
   mkdirSync(join(other, ".loopy", "loopies"), { recursive: true });
   const otherRegistry = new Registry(home, other);
-  const otherService = new LoopyService({ home, store, clock, registry: () => otherRegistry });
+  const otherService = new LoopyService({ store, clock, registry: () => otherRegistry });
   await store.putSchedule({
     workspace: other,
     slug: "service",
@@ -296,6 +298,7 @@ test("disabled schedules stay dormant and re-enabling waits for the next slot", 
   const { service, store, clock, advance } = await fixture();
 
   const daemon = new Daemon({
+    concurrency: 4,
     store,
     clock,
     bundleHashFor: () => "bundle",
@@ -330,7 +333,6 @@ test("global schedules use the service workspace and preserve other workspaces",
   mkdirSync(join(other, ".loopy", "loopies"), { recursive: true });
 
   const otherService = new LoopyService({
-    home,
     store,
     clock,
     registry: () => new Registry(home, other),
@@ -357,6 +359,7 @@ function pausedScheduleDaemon(f: Awaited<ReturnType<typeof fixture>>) {
   const bundle = Promise.withResolvers<string>();
 
   const daemon = new Daemon({
+    concurrency: 4,
     store: f.store,
     clock: f.clock,
     bundleHashFor: () => {
@@ -452,4 +455,64 @@ test("waiting filter runs before the page cap and preserves cursor order", async
       (run) => run.id,
     ),
   ).toEqual([first.id]);
+});
+
+test("service maps completion between requireRun and claim to not_claimable", async () => {
+  const { service, store, root } = await fixture();
+  const run = await service.startRun("service", { name: "Hatim" }, root);
+  const claim = store.claim.bind(store);
+  store.claim = async (id, token) => {
+    await claim(id, "finisher");
+    await store.finishRun(id, "finisher", { status: "succeeded", output: 1 });
+    await store.release(id, "finisher");
+
+    return claim(id, token);
+  };
+
+  await expect(service.cancelRun(run.id)).rejects.toMatchObject({
+    code: "not_claimable",
+    message: "The run cannot be claimed in its current state.",
+  });
+});
+
+test("listLoopies reads each workspace registry once per call", async () => {
+  const { service, store, root, home, clock } = await fixture();
+  await service.startRun("service", { name: "Hatim" }, root);
+  const other = join(root, "other");
+  mkdirSync(join(other, ".loopy", "loopies"), { recursive: true });
+  await store.createRun({
+    id: "other-workspace",
+    slug: "service",
+    workspace: other,
+    bundleHash: "a".repeat(64),
+    input: {},
+    status: "queued",
+    createdAt: new Date(clock.now()).toISOString(),
+    updatedAt: new Date(clock.now()).toISOString(),
+  });
+  const reads = new Map<string, number>();
+
+  class CountingRegistry extends Registry {
+    override list() {
+      reads.set(this.project, (reads.get(this.project) ?? 0) + 1);
+
+      return super.list();
+    }
+  }
+
+  const countingService = new LoopyService({
+    store,
+    clock,
+    registry: (workspace) => new CountingRegistry(home, workspace === "" ? root : workspace),
+  });
+
+  for (const count of [1, 2]) {
+    expect(await countingService.listLoopies()).toHaveLength(1);
+    expect(reads).toEqual(
+      new Map([
+        [root, count],
+        [other, count],
+      ]),
+    );
+  }
 });

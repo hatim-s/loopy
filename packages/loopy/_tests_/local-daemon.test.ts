@@ -73,6 +73,7 @@ test("Daemon.tick executes a bundled SDK command with activation-time secrets an
     const errors: string[] = [];
 
     const daemon = localDaemon({
+      concurrency: 4,
       home,
       cwd: directory(),
       store,
@@ -111,7 +112,7 @@ test("Daemon.tick pins the registry bundle when a schedule creates a run", async
   const bundle = await bundleLoopy(source, home);
   new Registry(home, cwd).save(await loadLoopy(bundle.path), { source, bundleHash: bundle.hash });
   const store = openRunStore(home);
-  const daemon = localDaemon({ home, cwd: directory(), store });
+  const daemon = localDaemon({ concurrency: 4, home, cwd: directory(), store });
 
   try {
     await store.putSchedule({
@@ -151,6 +152,7 @@ for (const missing of ["secret", "bundle"]) {
     const errors: { message: string; runId?: string }[] = [];
 
     const daemon = localDaemon({
+      concurrency: 4,
       home,
       cwd,
       store,
@@ -210,7 +212,7 @@ test("local daemon loads configured per-key limits for bundled workflows", async
   const loopy = await loadLoopy(bundle.path);
   const store = openRunStore(home);
   await Bun.write(join(home, "config.json"), JSON.stringify({ rateLimits: { codex: "2/1m" } }));
-  const daemon = localDaemon({ home, cwd, store });
+  const daemon = localDaemon({ concurrency: 4, home, cwd, store });
 
   try {
     await createLoopyRun({

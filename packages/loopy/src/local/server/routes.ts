@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { type ErrorCode, errorBodySchema, routes } from "../../contract/index.js";
+import {
+  type DaemonView,
+  DEFAULT_ERROR_MESSAGES,
+  type ErrorCode,
+  type Json,
+  routes,
+} from "../../contract/index.js";
 import { type LoopyService, ServiceError } from "../service.js";
 import type { SqliteRunStore } from "../store.js";
 import { eventStream } from "./events.js";
@@ -12,45 +18,45 @@ const STATUS: Record<ErrorCode, number> = {
   bad_request: 400,
   invalid_schedule: 400,
   stale_cursor: 410,
+  unauthorized: 401,
+  forbidden: 403,
+  internal: 500,
 };
 
-// BOUNDARY: HTTP responses contain contract views or sanitized errors.
-export function json(data: unknown, status = 200): Response {
+export function json(data: Json, status = 200): Response {
   return Response.json(data, {
     status,
     headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" },
   });
 }
 
-type Dependencies = { service: LoopyService; store: SqliteRunStore; cwd: string };
+export function errorResponse(code: ErrorCode, message = DEFAULT_ERROR_MESSAGES[code]): Response {
+  return json({ error: { code, message } }, STATUS[code]);
+}
 
-type Schemas<P extends z.ZodType, Q extends z.ZodType, B extends z.ZodType, R extends z.ZodType> = {
-  method: string;
-  path: string;
-  params: P;
-  query: Q;
-  body: B;
-  response: R;
+type Dependencies = {
+  service: LoopyService;
+  store: SqliteRunStore;
+  cwd: string;
+  daemon: Pick<DaemonView, "startedAt" | "concurrency">;
 };
 
-function endpoint<
-  P extends z.ZodType,
-  Q extends z.ZodType,
-  B extends z.ZodType,
-  R extends z.ZodType,
->(
+type Schemas<P, Q, B, R extends Json> = {
+  method: string;
+  path: string;
+  params: z.ZodType<P>;
+  query: z.ZodType<Q>;
+  body: z.ZodType<B>;
+  response: z.ZodType<R>;
+};
+
+function endpoint<P, Q, B, R extends Json>(
   route: Schemas<P, Q, B, R>,
-  handle: (context: {
-    params: z.output<P>;
-    query: z.output<Q>;
-    body: z.output<B>;
-    request: Request;
-  }) => Promise<z.input<R> | Response>,
+  handle: (context: { params: P; query: Q; body: B; request: Request }) => Promise<R | Response>,
 ) {
   return {
     ...route,
-    // BOUNDARY: Path captures enter their route schema with the HTTP request.
-    async handle(params: unknown, request: Request, url: URL) {
+    async handle(params: Record<string, string>, request: Request, url: URL) {
       const parsed = await parseRequest(route, params, request, url);
       const result = await handle({ ...parsed, request });
 
@@ -58,19 +64,18 @@ function endpoint<
         return result;
       }
 
-      // Strict response schemas reject a view that grew a field the contract does not know.
       return json(route.response.parse(result));
     },
   };
 }
 
 // BOUNDARY: URL captures, search values and JSON enter the contract here.
-async function parseRequest<
-  P extends z.ZodType,
-  Q extends z.ZodType,
-  B extends z.ZodType,
-  R extends z.ZodType,
->(route: Schemas<P, Q, B, R>, params: unknown, request: Request, url: URL) {
+async function parseRequest<P, Q, B>(
+  route: Omit<Schemas<P, Q, B, Json>, "method" | "response">,
+  params: Record<string, string>,
+  request: Request,
+  url: URL,
+) {
   try {
     const query = Object.fromEntries(url.searchParams);
 
@@ -99,7 +104,7 @@ async function parseRequest<
   }
 }
 
-export function apiRoutes({ service, store, cwd }: Dependencies) {
+export function apiRoutes({ service, store, cwd, daemon }: Dependencies) {
   return [
     endpoint(routes.schedules, async () => service.listSchedules()),
     endpoint(routes.putSchedule, async ({ params: { slug }, body }) =>
@@ -111,15 +116,7 @@ export function apiRoutes({ service, store, cwd }: Dependencies) {
     endpoint(routes.deleteSchedule, async ({ params: { slug } }) => service.deleteSchedule(slug)),
     endpoint(routes.loopies, async () => service.listLoopies()),
     endpoint(routes.runs, async ({ query }) => service.listRuns(query)),
-    endpoint(routes.run, async ({ params: { id } }) => {
-      const snapshot = await service.runSnapshot(id);
-
-      if (!snapshot) {
-        throw new ServiceError("not_found");
-      }
-
-      return snapshot;
-    }),
+    endpoint(routes.run, async ({ params: { id } }) => service.runSnapshot(id)),
     endpoint(routes.logs, async ({ params: { id }, query }) => {
       await service.requireRun(id);
 
@@ -133,7 +130,13 @@ export function apiRoutes({ service, store, cwd }: Dependencies) {
     endpoint(routes.resolveHook, async ({ params: { token }, body }) =>
       service.resolveHook(token, body.payload),
     ),
-    endpoint(routes.daemon, async () => service.daemon()),
+    endpoint(routes.daemon, async () => ({
+      pid: process.pid,
+      startedAt: daemon.startedAt,
+      concurrency: daemon.concurrency,
+      running: (await store.listRuns({ status: "running" })).length,
+      nextWakeAt: (await store.nextWakeAt()) ?? null,
+    })),
     endpoint(routes.events, async ({ query, request }) =>
       eventStream(store, service, query, request.signal),
     ),
@@ -141,7 +144,7 @@ export function apiRoutes({ service, store, cwd }: Dependencies) {
   ];
 }
 
-function match(pattern: string, path: string): object | undefined {
+function match(pattern: string, path: string): Record<string, string> | undefined {
   const expected = pattern.split("/");
   const actual = path.slice("/api".length).split("/");
 
@@ -168,13 +171,10 @@ function match(pattern: string, path: string): object | undefined {
   return Object.fromEntries(pairs);
 }
 
-export async function dispatch(
-  table: ReturnType<typeof apiRoutes>,
-  request: Request,
-  url: URL,
-  path: string,
-) {
+export async function dispatch(table: ReturnType<typeof apiRoutes>, request: Request, url: URL) {
   try {
+    const path = decodeURIComponent(url.pathname);
+
     for (const route of table) {
       const params = match(route.path, path);
 
@@ -186,10 +186,7 @@ export async function dispatch(
     throw new ServiceError("not_found");
   } catch (error) {
     if (error instanceof ServiceError) {
-      return json(
-        errorBodySchema.parse({ error: { code: error.code, message: error.message } }),
-        STATUS[error.code],
-      );
+      return errorResponse(error.code, error.message);
     }
 
     throw error;

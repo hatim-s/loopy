@@ -1,25 +1,26 @@
 import {
   type CursorView,
   DEFAULT_ERROR_MESSAGES,
-  decodeRunCursor,
   type ErrorCode,
   encodeRunCursor,
+  isTerminalRun,
   type Json,
   type LoopyView,
   loopyView,
   type PutScheduleBody,
-  type RunSnapshotView,
   type RunsQuery,
   type RunView,
   runView,
   type ScheduleView,
+  serverEvent,
 } from "../contract/index.js";
-import { errorMessage, type RunRecord, type Schedule } from "../core/index.js";
+import { errorMessage, type RunRecord, type RuntimeEvent, type Schedule } from "../core/index.js";
 import { assertJson, type Clock, nextFire, OwnershipError, parseCron } from "../runtime/index.js";
 import { createLoopyRun } from "../sdk/host.js";
 import { loadLoopy } from "./bundle.js";
 import { canonicalPath } from "./fs.js";
 import type { Registry } from "./registry.js";
+import type { SavedLoopy } from "./saved-loopy.js";
 import type { SqliteRunStore } from "./store.js";
 
 export class ServiceError extends Error {
@@ -33,19 +34,13 @@ export class ServiceError extends Error {
 }
 
 export class LoopyService {
-  readonly startedAt: string;
-  concurrency = 4;
-
   constructor(
     private readonly options: {
-      home: string;
       store: SqliteRunStore;
       registry: (workspace: string) => Registry;
       clock: Clock;
     },
-  ) {
-    this.startedAt = this.now();
-  }
+  ) {}
 
   private now() {
     return new Date(this.options.clock.now()).toISOString();
@@ -179,19 +174,17 @@ export class LoopyService {
     const run = await this.options.store.getRun(id);
 
     if (!run) {
-      throw new ServiceError("not_found");
+      throw new ServiceError("not_found", `No run '${id}'. Use loopy runs to list run ids.`);
     }
 
     return run;
   }
 
   async view(run: RunRecord): Promise<RunView> {
-    const resolve = await this.viewResolver([run.id]);
-
-    return resolve(run);
+    return (await this.viewResolver([run.id]))(run);
   }
 
-  async viewResolver(ids: string[]) {
+  private async viewResolver(ids: string[], registries = new Map<string, SavedLoopy[]>()) {
     const records = await Promise.all(
       ids.map(async (id) => {
         const [steps, hooks] = await Promise.all([
@@ -216,7 +209,7 @@ export class LoopyService {
       return runView({
         ...snapshot,
         run,
-        loopy: this.loopySummary(run),
+        loopy: this.loopySummary(run, registries),
         now,
         leaseMs: this.options.store.leaseMs,
       });
@@ -224,19 +217,29 @@ export class LoopyService {
   }
 
   // A run outlives its registry entry, so a deleted loopy leaves the description empty.
-  private loopySummary(run: RunRecord) {
-    const saved = this.options
-      .registry(run.workspace)
-      .list()
-      .find((entry) => entry.slug === run.slug);
+  private loopySummary(run: RunRecord, registries = new Map<string, SavedLoopy[]>()) {
+    const entries = this.registryEntries(this.options.registry(run.workspace), registries);
+
+    const saved = entries.find((entry) => entry.slug === run.slug);
 
     return { slug: run.slug, description: saved?.description ?? null };
+  }
+
+  private registryEntries(registry: Registry, registries: Map<string, SavedLoopy[]>) {
+    let entries = registries.get(registry.project);
+
+    if (!entries) {
+      entries = registry.list();
+      registries.set(registry.project, entries);
+    }
+
+    return entries;
   }
 
   private async claim(id: string, token: string) {
     const run = await this.requireRun(id);
 
-    if (run.status !== "queued" && run.status !== "suspended" && run.status !== "running") {
+    if (isTerminalRun(run.status)) {
       throw new ServiceError("not_claimable");
     }
 
@@ -250,13 +253,10 @@ export class LoopyService {
         );
       }
 
-      const current = await this.requireRun(id);
+      // Completion can win the race after requireRun but before the store claims ownership.
+      const current = await this.options.store.getRun(id);
 
-      if (
-        current.status !== "queued" &&
-        current.status !== "suspended" &&
-        current.status !== "running"
-      ) {
+      if (current && isTerminalRun(current.status)) {
         throw new ServiceError("not_claimable");
       }
 
@@ -290,10 +290,6 @@ export class LoopyService {
   async resolveNamedHook(id: string, name: string, payload: Json): Promise<RunView> {
     const snapshot = await this.runSnapshot(id);
 
-    if (!snapshot) {
-      throw new ServiceError("not_found");
-    }
-
     const waiting = new Set(
       snapshot.steps.filter((step) => step.status === "waiting").map((step) => step.seq),
     );
@@ -322,11 +318,11 @@ export class LoopyService {
     return this.view(await this.requireRun(hook.runId));
   }
 
-  async runSnapshot(id: string): Promise<RunSnapshotView | undefined> {
+  async runSnapshot(id: string) {
     const snapshot = await this.options.store.snapshotRun(id);
 
     if (!snapshot) {
-      return undefined;
+      throw new ServiceError("not_found", `No run '${id}'. Use loopy runs to list run ids.`);
     }
 
     return {
@@ -341,28 +337,20 @@ export class LoopyService {
   }
 
   async listRuns(query: RunsQuery): Promise<RunView[]> {
-    const before = query.before === undefined ? undefined : decodeRunCursor(query.before);
-
     const runs = (await this.options.store.listRuns(query))
-      .filter(
-        (run) =>
-          !before ||
-          run.createdAt < before.createdAt ||
-          (run.createdAt === before.createdAt && run.id < before.id),
-      )
-      .sort((a, b) =>
-        encodeRunCursor(a) < encodeRunCursor(b)
-          ? 1
-          : encodeRunCursor(a) > encodeRunCursor(b)
-            ? -1
-            : 0,
+      .filter((run) => query.before === undefined || encodeRunCursor(run) < query.before)
+      .sort(
+        (a, b) =>
+          Number(encodeRunCursor(a) < encodeRunCursor(b)) -
+          Number(encodeRunCursor(a) > encodeRunCursor(b)),
       );
 
-    const limit = Math.min(query.limit ?? 50, 200);
+    const limit = query.limit ?? 50;
     const selected = query.waiting === undefined ? runs.slice(0, limit) : runs;
-    const views = await Promise.all(selected.map((run) => this.view(run)));
+    const resolve = await this.viewResolver(selected.map((run) => run.id));
 
-    return views
+    return selected
+      .map(resolve)
       .filter((run) => query.waiting === undefined || (run.waitingOn !== null) === query.waiting)
       .slice(0, limit);
   }
@@ -373,7 +361,14 @@ export class LoopyService {
       this.options.store.listSchedules(),
     ]);
 
-    const runs = await Promise.all(records.map((run) => this.view(run)));
+    const registries = new Map<string, SavedLoopy[]>();
+
+    const resolve = await this.viewResolver(
+      records.map((run) => run.id),
+      registries,
+    );
+
+    const runs = records.map(resolve);
 
     const workspaces = new Set([
       "",
@@ -386,7 +381,12 @@ export class LoopyService {
     for (const workspace of workspaces) {
       const registry = this.options.registry(workspace);
 
-      for (const view of this.registryViews(registry, schedules, runs)) {
+      for (const view of this.registryViews(
+        registry,
+        this.registryEntries(registry, registries),
+        schedules,
+        runs,
+      )) {
         if (!views.has(view.slug)) {
           views.set(view.slug, view);
         }
@@ -396,8 +396,13 @@ export class LoopyService {
     return [...views.values()];
   }
 
-  private registryViews(registry: Registry, schedules: Schedule[], runs: RunView[]): LoopyView[] {
-    return registry.list().map((saved) =>
+  private registryViews(
+    registry: Registry,
+    entries: SavedLoopy[],
+    schedules: Schedule[],
+    runs: RunView[],
+  ): LoopyView[] {
+    return entries.map((saved) =>
       loopyView(
         saved,
         schedules.find((item) => item.slug === saved.slug && item.workspace === registry.project) ??
@@ -407,14 +412,14 @@ export class LoopyService {
     );
   }
 
-  async daemon() {
-    return {
-      pid: process.pid,
-      startedAt: this.startedAt,
-      concurrency: this.concurrency,
-      running: (await this.options.store.listRuns({ status: "running" })).length,
-      nextWakeAt: (await this.options.store.nextWakeAt()) ?? null,
-    };
+  async events(transaction: RuntimeEvent[]) {
+    const ids = [
+      ...new Set(transaction.flatMap((event) => (event.entity === "run" ? [event.record.id] : []))),
+    ];
+
+    const view = await this.viewResolver(ids);
+
+    return transaction.map((event) => serverEvent(event, view));
   }
 
   async cursor(): Promise<CursorView> {

@@ -14,7 +14,7 @@ type DaemonOptions = {
   home: string;
   cwd: string;
   store: SqliteRunStore;
-  concurrency?: number;
+  concurrency: number;
   port?: number;
   assets?: string;
   onError?: (error: Error, run?: RunRecord) => void;
@@ -45,6 +45,8 @@ function runtimeDaemon(options: DaemonOptions) {
 }
 
 class LocalDaemon {
+  readonly startedAt = new Date(SYSTEM_CLOCK.now()).toISOString();
+  readonly concurrency: number;
   private readonly daemon: Daemon;
   private readonly service: LoopyService;
   private readonly token = crypto.randomUUID();
@@ -54,12 +56,11 @@ class LocalDaemon {
   constructor(private readonly options: DaemonOptions) {
     this.daemon = runtimeDaemon(options);
     this.service = new LoopyService({
-      home: options.home,
       store: options.store,
       registry: (workspace) => new Registry(options.home, workspace || options.cwd),
       clock: SYSTEM_CLOCK,
     });
-    this.service.concurrency = options.concurrency ?? 4;
+    this.concurrency = options.concurrency;
   }
 
   tick() {
@@ -82,6 +83,7 @@ class LocalDaemon {
 
     const server = startServer({
       service: this.service,
+      daemon: this,
       store,
       token: this.token,
       cwd,
@@ -94,7 +96,7 @@ class LocalDaemon {
         pid: process.pid,
         port: server.port,
         token: this.token,
-        startedAt: this.service.startedAt,
+        startedAt: this.startedAt,
       });
     } catch (error) {
       void server.stop();

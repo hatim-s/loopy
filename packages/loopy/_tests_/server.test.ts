@@ -30,6 +30,8 @@ import { SYSTEM_CLOCK } from "../src/runtime/index.js";
 import { CLI, cli, fixture, object, roots, save } from "./cli-fixture.js";
 import { newRun } from "./fixture.js";
 
+const daemonMetadata = { startedAt: new Date(0).toISOString(), concurrency: 4 };
+
 const servers: ReturnType<typeof startDaemon>[] = [];
 
 afterEach(async () => {
@@ -42,7 +44,7 @@ afterEach(async () => {
 
 function startDaemon(options: { home: string; cwd: string; port: number; assets?: string }) {
   const store = openRunStore(options.home);
-  const daemon = localDaemon({ ...options, store });
+  const daemon = localDaemon({ concurrency: 4, ...options, store });
 
   return {
     url: daemon.start(),
@@ -89,17 +91,20 @@ test("the daemon server requires its token and origin, serves pinned assets and 
   const url = new URL(server.url);
   const token = new URLSearchParams(url.hash.slice(1)).get("token");
   const headers = { Authorization: `Bearer ${token}` };
-  expect((await fetch(`${url.origin}/api/runs`)).status).toBe(401);
-  expect(
-    (await fetch(`${url.origin}/api/runs`, { headers: { Authorization: "Bearer wrong" } })).status,
-  ).toBe(401);
-  expect(
-    (
-      await fetch(`${url.origin}/api/runs`, {
-        headers: { ...headers, Origin: "https://other.example" },
-      })
-    ).status,
-  ).toBe(403);
+
+  const rejections: [HeadersInit, number, ErrorCode][] = [
+    [{}, 401, "unauthorized"],
+    [{ Authorization: "Bearer wrong" }, 401, "unauthorized"],
+    [{ ...headers, Origin: "https://other.example" }, 403, "forbidden"],
+    [{ ...headers, Host: "evil.example" }, 403, "forbidden"],
+  ];
+
+  for (const [headers, status, code] of rejections) {
+    const response = await fetch(`${url.origin}/api/runs`, { headers });
+    expect(response.status).toBe(status);
+    expect(errorBodySchema.parse(await response.json()).error.code).toBe(code);
+  }
+
   expect(await (await fetch(`${url.origin}/api/loopies`, { headers })).json()).toMatchObject([
     { slug: "dashboard" },
   ]);
@@ -119,11 +124,17 @@ test("API distinguishes invalid cursors from registry failures", async () => {
   const url = new URL(server.url);
   const token = new URLSearchParams(url.hash.slice(1)).get("token");
   const headers = { Authorization: `Bearer ${token}` };
-  expect((await fetch(`${url.origin}/api/runs/${run.id}/logs?after=bad`, { headers })).status).toBe(
-    400,
-  );
+
+  for (const path of [`/api/runs/${run.id}/logs?after=bad`, "/api/runs?limit=300"]) {
+    const response = await fetch(`${url.origin}${path}`, { headers });
+    expect(response.status).toBe(400);
+    expect(errorBodySchema.parse(await response.json()).error.code).toBe("bad_request");
+  }
+
   writeFileSync(join(f.cwd, ".loopy", "loopies", "server-errors.json"), "invalid JSON");
-  expect((await fetch(`${url.origin}/api/loopies`, { headers })).status).toBe(500);
+  const failed = await fetch(`${url.origin}/api/loopies`, { headers });
+  expect(failed.status).toBe(500);
+  expect(errorBodySchema.parse(await failed.json()).error.code).toBe("internal");
   expect((await fetch(`${url.origin}/api/config`, { headers })).status).toBe(404);
 });
 
@@ -253,7 +264,6 @@ async function serviceFixture(name: string) {
   const store = openRunStore(f.home);
 
   const service = new LoopyService({
-    home: f.home,
     store,
     registry: () => new Registry(f.home, f.cwd),
     clock: SYSTEM_CLOCK,
@@ -396,7 +406,7 @@ test("SSE delivers exact transactions across replay, cross-process writes and La
   const f = fixture("events", "run: () => 1");
   await save(f);
   const store = openRunStore(f.home);
-  const daemon = localDaemon({ ...f, store, port: 0 });
+  const daemon = localDaemon({ concurrency: 4, ...f, store, port: 0 });
   const url = new URL(daemon.start());
 
   const headers = {
@@ -480,10 +490,9 @@ test("response validation rejects a view with extra fields", async () => {
   try {
     await expect(
       dispatch(
-        apiRoutes({ service, store, cwd: f.cwd }),
+        apiRoutes({ service, store, cwd: f.cwd, daemon: daemonMetadata }),
         request,
         new URL(request.url),
-        "/api/loopies",
       ),
     ).rejects.toThrow("unrecognized_keys");
   } finally {
@@ -505,6 +514,9 @@ test("service error codes serialize with their HTTP status", async () => {
     ["bad_request", 400],
     ["invalid_schedule", 400],
     ["stale_cursor", 410],
+    ["unauthorized", 401],
+    ["forbidden", 403],
+    ["internal", 500],
   ];
 
   const list = spyOn(service, "listRuns");
@@ -514,10 +526,9 @@ test("service error codes serialize with their HTTP status", async () => {
       list.mockRejectedValue(new ServiceError(code));
 
       const response = await dispatch(
-        apiRoutes({ service, store, cwd: f.cwd }),
+        apiRoutes({ service, store, cwd: f.cwd, daemon: daemonMetadata }),
         request,
         new URL(request.url),
-        "/api/runs",
       );
 
       expect(response.status).toBe(status);
@@ -661,7 +672,7 @@ test("hook POST wakes a run to completion while the daemon runs", async () => {
   await save(f);
   const run = object((await cli(f, "run", "hook-completion")).stdout);
   const store = openRunStore(f.home);
-  const daemon = localDaemon({ ...f, store, port: 0 });
+  const daemon = localDaemon({ concurrency: 4, ...f, store, port: 0 });
   const origin = new URL(daemon.start()).origin;
   const running = daemon.run();
 
@@ -693,7 +704,7 @@ test("hook POST wakes a run to completion while the daemon runs", async () => {
 
 async function httpEvents(name: string) {
   const { f, store } = await serviceFixture(name);
-  const daemon = localDaemon({ ...f, store, port: 0 });
+  const daemon = localDaemon({ concurrency: 4, ...f, store, port: 0 });
   const url = new URL(daemon.start());
   const headers = { Authorization: `Bearer ${readDaemonFile(f.home)!.token}` };
   const endpoint = `${url.origin}/api/events?after=0&epoch=${await store.epoch()}`;
@@ -851,7 +862,7 @@ test("SSE HTTP reconnect from a closed client's last id has no gap", async () =>
 test("local server leaves event pruning to the runtime daemon", async () => {
   const { f, store } = await serviceFixture("retention-owner");
   const prune = spyOn(store, "pruneEvents");
-  const daemon = localDaemon({ ...f, store, port: 0 });
+  const daemon = localDaemon({ concurrency: 4, ...f, store, port: 0 });
 
   try {
     daemon.start();
@@ -869,7 +880,7 @@ test("local server leaves event pruning to the runtime daemon", async () => {
 
 async function scheduleApi() {
   const { f, store, service } = await serviceFixture("schedule-api");
-  const table = apiRoutes({ service, store, cwd: f.cwd });
+  const table = apiRoutes({ service, store, cwd: f.cwd, daemon: daemonMetadata });
 
   const request = (path: string, method = "GET", body?: Json) => {
     const url = new URL(`http://localhost/api${path}`);
@@ -878,7 +889,6 @@ async function scheduleApi() {
       table,
       new Request(url, { method, body: body === undefined ? undefined : JSON.stringify(body) }),
       url,
-      url.pathname,
     );
   };
 
