@@ -78,12 +78,12 @@ test("API returns run records, step traces and cursor logs", async () => {
   expect(await (await request("/runs")).json()).toMatchObject([{ id: run.id }]);
 });
 
-test("the daemon server requires its token and origin, serves pinned assets and exposes read-only data", async () => {
-  const f = fixture("studio", "run: () => 1");
+test("the daemon server requires its token and origin, serves pinned assets and serves authenticated API reads", async () => {
+  const f = fixture("dashboard", "run: () => 1");
   await save(f);
   const assets = join(f.cwd, "assets");
   mkdirSync(assets);
-  writeFileSync(join(assets, "index.html"), "original Studio");
+  writeFileSync(join(assets, "index.html"), "original dashboard");
   const server = startDaemon({ home: f.home, cwd: f.cwd, assets, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
@@ -101,12 +101,12 @@ test("the daemon server requires its token and origin, serves pinned assets and 
     ).status,
   ).toBe(403);
   expect(await (await fetch(`${url.origin}/api/loopies`, { headers })).json()).toMatchObject([
-    { slug: "studio" },
+    { slug: "dashboard" },
   ]);
   expect((await fetch(`${url.origin}/api/runs`, { method: "POST", headers })).status).toBe(404);
-  writeFileSync(join(assets, "index.html"), "changed Studio");
+  writeFileSync(join(assets, "index.html"), "changed dashboard");
   const page = await fetch(url.origin);
-  expect(await page.text()).toBe("original Studio");
+  expect(await page.text()).toBe("original dashboard");
   expect(page.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
 });
 

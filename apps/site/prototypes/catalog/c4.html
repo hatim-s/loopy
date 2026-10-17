@@ -134,13 +134,13 @@
   .dbstack { margin-top: 18px; display: grid; gap: 6px; }
   .dbstack div { background: var(--cobalt); color: #fff; border-radius: 12px; padding: 10px 14px; display: flex; justify-content: space-between; gap: 10px; font-size: 15px; }
   .dbstack div span:last-child { font-family: "Fira Code", monospace; font-size: 13px; opacity: .8; }
-  .studio { grid-column: span 3; }
-  .studio .shot { margin-top: 18px; background: #fff; color: var(--night); border-radius: 14px; padding: 14px; display: grid; grid-template-columns: 110px 1fr; gap: 12px; min-height: 180px; }
-  .studio .side { display: grid; gap: 6px; align-content: start; font-size: 13px; }
-  .studio .side span { background: var(--pale); border-radius: 6px; padding: 4px 8px; }
-  .studio .canvas { background: radial-gradient(circle, #c9d0ff 1px, transparent 1.5px) 0 0 / 14px 14px; border-radius: 10px; position: relative; }
-  .studio .canvas i { position: absolute; width: 58px; height: 26px; border-radius: 6px; background: var(--cobalt); }
-  .studio .canvas i:nth-child(2) { background: var(--coral); } .studio .canvas i:nth-child(4) { background: var(--mint); }
+  .dashboard { grid-column: span 3; }
+  .dashboard .shot { margin-top: 18px; background: #fff; color: var(--night); border-radius: 14px; padding: 14px; display: grid; grid-template-columns: 110px 1fr; gap: 12px; min-height: 180px; }
+  .dashboard .side { display: grid; gap: 6px; align-content: start; font-size: 13px; }
+  .dashboard .side span { background: var(--pale); border-radius: 6px; padding: 4px 8px; }
+  .dashboard .canvas { background: radial-gradient(circle, #c9d0ff 1px, transparent 1.5px) 0 0 / 14px 14px; border-radius: 10px; position: relative; }
+  .dashboard .canvas i { position: absolute; width: 58px; height: 26px; border-radius: 6px; background: var(--cobalt); }
+  .dashboard .canvas i:nth-child(2) { background: var(--coral); } .dashboard .canvas i:nth-child(4) { background: var(--mint); }
 
   .qs { grid-column: 1 / 7; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 30px; align-items: center; }
   .qs h2 { font-size: clamp(30px, 3.6vw, 52px); font-weight: 900; }
@@ -157,7 +157,7 @@
     .how { grid-column: span 3; }
     .how:nth-child(4) { grid-column: span 6; min-height: 0; }
     .controls, .kinds { grid-column: span 6; }
-    .local, .studio { grid-column: span 6; }
+    .local, .dashboard { grid-column: span 6; }
     .qs { grid-template-columns: 1fr; }
   }
   @media (max-width: 640px) {
@@ -260,9 +260,9 @@
         <div><span>Approvals and schedules</span><span>.loopy/loopy.db</span></div>
       </div>
     </section>
-    <section class="tile studio">
-      <h2>Studio, on localhost</h2>
-      <p>Run <code>loopy ui</code> to open a local Studio. Read the graph, edit nodes and edges, and watch runs.</p>
+    <section class="tile dashboard">
+      <h2>Dashboard, on localhost</h2>
+      <p>Run <code>loopy ui</code> to open a local Dashboard. Read the graph, edit nodes and edges, and watch runs.</p>
       <div class="shot" aria-hidden="true">
         <div class="side"><span>cve-patch</span><span>rebase-prs</span><span>runs</span><span>schedules</span></div>
         <div class="canvas"><i style="left:8%;top:18%"></i><i style="left:40%;top:18%"></i><i style="left:40%;top:58%"></i><i style="left:72%;top:38%"></i></div>

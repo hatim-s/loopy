@@ -10,8 +10,6 @@ export type {
   LogLevel,
   LogPosition,
   LogRecord,
-  LoopySummary,
-  RunDetail,
   RunOutcome,
   RunRecord,
   RunSnapshot,

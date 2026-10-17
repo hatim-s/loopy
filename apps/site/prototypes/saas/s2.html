@@ -185,7 +185,7 @@ h2{font-size:clamp(32px,4.2vw,48px);line-height:1.06;letter-spacing:-.035em;font
 @media (max-width:980px){.bento{grid-template-columns:1fr 1fr}.s3{grid-column:span 2}}
 @media (max-width:640px){.bento{grid-template-columns:1fr}.s2,.s3{grid-column:span 1}.bc{min-height:0}.bc .tx{padding:0 22px 22px}.bc.row{flex-direction:column}.bc.row .tx{width:auto;padding:0 22px 22px;order:3}}
 
-/* studio card: add-step library over a dotted canvas */
+/* dashboard card: add-step library over a dotted canvas */
 .stu{position:absolute;inset:0;background-image:radial-gradient(circle,#2a323c 1px,transparent 1.2px);background-size:20px 20px;-webkit-mask:linear-gradient(#000 70%,transparent);mask:linear-gradient(#000 70%,transparent)}
 .lib{position:absolute;left:28px;top:28px;width:272px;border-radius:14px;background:var(--surface);box-shadow:var(--float)}
 .lib .srch{margin:8px 8px 4px;height:32px;border-radius:6px;background:var(--bg);display:flex;align-items:center;padding:0 10px;font-size:13px;color:var(--text-subtle)}
@@ -429,7 +429,7 @@ footer .brand{color:var(--text)}
             <div class="cn ghost" id="ghost" data-kind="verify" style="left:calc(100% - 224px);top:150px"><span class="kt" id="ghostKt"><svg><use href="#k-verify"/></svg></span><span class="tt"><strong id="ghostName">Verification</strong><small>New step</small></span></div>
           </div>
         </div>
-        <div class="tx"><h3>Studio, a local graph editor</h3><p><code>loopy ui</code> opens the editor in your browser. Add steps from seven kinds, wire them up, save a version, and run it with a console that shows each attempt.</p></div>
+        <div class="tx"><h3>Dashboard, a local graph editor</h3><p><code>loopy ui</code> opens the editor in your browser. Add steps from seven kinds, wire them up, save a version, and run it with a console that shows each attempt.</p></div>
       </article>
       <article class="bc">
         <div class="ill" id="apIll">
@@ -501,7 +501,7 @@ footer .brand{color:var(--text)}
 <span class="pr">$ </span>loopy extract <span class="ar">--import &lt;import-id&gt;</span>
 <span class="pr">$ </span>loopy approve <span class="ar">&lt;proposal-id&gt;</span>
 
-<span class="cm"># run it and watch it in Studio</span>
+<span class="cm"># run it and watch it in Dashboard</span>
 <span class="pr">$ </span>loopy run <span class="ar">&lt;workflow-id&gt;</span>
 <span class="pr">$ </span>loopy ui</pre>
       </div>
@@ -514,7 +514,7 @@ footer .brand{color:var(--text)}
   <svg class="fl" viewBox="0 0 1100 360" aria-hidden="true"><path id="finalLoop" d="M550 180C470 60 380 20 280 20 170 20 90 90 90 180s80 160 190 160c100 0 190-40 270-160Zm0 0c80 120 170 160 270 160 110 0 190-70 190-160S930 20 820 20C720 20 630 60 550 180Z"/><circle r="3.5"><animateMotion dur="16s" repeatCount="indefinite"><mpath href="#finalLoop"/></animateMotion></circle></svg>
   <div class="wrap">
     <h2>Do it once. Then let it loop.</h2>
-    <p>Install the CLI, finish one task the way you normally would, and open Studio to see the graph it leaves behind.</p>
+    <p>Install the CLI, finish one task the way you normally would, and open Dashboard to see the graph it leaves behind.</p>
     <div class="cta">
       <div class="cmd"><span><span class="p">$ </span>bun add -g loopy</span><button type="button" data-copy="bun add -g loopy">Copy</button></div>
       <a class="btn btn-lg" href="https://github.com/hatim-s/loopy"><svg aria-hidden="true"><use href="#u-gh"/></svg>View on GitHub</a>
@@ -775,7 +775,7 @@ footer .brand{color:var(--text)}
     addEventListener('resize', layout); document.fonts?.ready.then(layout); layout();
   }
 
-  // ---------- studio library card ----------
+  // ---------- dashboard library card ----------
   {
     const STEPS = [['agent', 'Agent call', 'Give an installed agent a task'], ['shell', 'Shell module', 'Pipe Bash commands together'], ['route', 'Condition', 'Choose a branch from a result'], ['verify', 'Verification', 'Check the work with commands'], ['approval', 'Approval', 'Wait for a human decision'], ['join', 'Join', 'Collect completed branches'], ['transform', 'Transform', 'Map values between steps']];
     const box = $('#libItems');

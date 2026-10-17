@@ -8,7 +8,7 @@ const CMDS = [
   { cmd: INSTALL, note: "Install the CLI", copy: true },
   { cmd: "loopy import session.json --provider codex", note: "Bring in the session" },
   { cmd: "loopy extract --import <id>", note: "Get a graph back" },
-  { cmd: "loopy studio", note: "Read it, edit it, run it" },
+  { cmd: "loopy ui", note: "Read it, edit it, run it" },
 ];
 
 export function Start() {

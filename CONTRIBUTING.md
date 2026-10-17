@@ -2,7 +2,7 @@
 
 Bun 1.4 or newer. Run `bun install`, then `bun run check` before pushing. It builds, lints, typechecks and runs the tests. Read [AGENTS.md](AGENTS.md) for code ownership and conventions.
 
-One package, `packages/loopy`, exposes `loopy` for authors, `loopy/runtime` for the replay engine and `loopy/local` for OS adapters. Studio views saved loopies, runs, step traces and logs. Author definitions in TypeScript.
+One package, `packages/loopy`, exposes `loopy` for authors, `loopy/runtime` for the replay engine, `loopy/local` for OS adapters and `loopy/contract` for wire schemas. The dashboard views saved loopies, runs, step traces and logs. Author definitions in TypeScript.
 
 Core and runtime stay portable. The portable typecheck, browser-bundle test and architecture test enforce this. SDK imports core and runtime, with one `node:async_hooks` import for shared activation scope. Local owns SQLite, paths, subprocesses, sandboxing and secrets. The CLI wires these pieces together. Another execution host implements `RunStore` and `Executor`.
 

@@ -189,7 +189,7 @@ footer .grow{flex:1;border-right:0}
 <header class="nav">
   <div class="nav-in">
     <a class="mark" href="#top" aria-label="Loopy home"><svg width="24" height="24" aria-hidden="true"><use href="#g-mark"/></svg>loopy</a>
-    <div class="path" aria-hidden="true">~/work/api $ loopy studio</div>
+    <div class="path" aria-hidden="true">~/work/api $ loopy ui</div>
     <nav class="nav-links" aria-label="Primary">
       <a href="#docs">Docs</a><a class="hide-sm" href="#example">Examples</a><a class="hide-sm" href="#github">GitHub</a><a class="install-link" href="#install">Install</a>
     </nav>
@@ -223,7 +223,7 @@ footer .grow{flex:1;border-right:0}
   <table class="spec">
     <thead><tr><th scope="col"></th><th scope="col">Capture<small>loopy import</small></th><th scope="col">Extract<small>loopy extract</small></th><th scope="col">Run<small>loopy run</small></th></tr></thead>
     <tbody>
-      <tr><th scope="row">You do</th><td>Finish a task once in Codex, Claude Code, OpenCode or Pi.</td><td>Review the proposed graph. Edit it. Approve it.</td><td>Start it by hand, from Studio, or on cron.</td></tr>
+      <tr><th scope="row">You do</th><td>Finish a task once in Codex, Claude Code, OpenCode or Pi.</td><td>Review the proposed graph. Edit it. Approve it.</td><td>Start it by hand, from Dashboard, or on cron.</td></tr>
       <tr><th scope="row">Loopy does</th><td>Records the session, or imports one you already ran, as a trace.</td><td>Proposes nodes and edges. Every node links to the trace events behind it.</td><td>Calls the same CLIs, node by node, and owns branching, retries and approvals.</td></tr>
       <tr><th scope="row">Model calls</th><td class="none">None</td><td class="none">None. The extractor is deterministic.</td><td>Only inside agent nodes, through your CLI.</td></tr>
       <tr><th scope="row">Writes</th><td>A trace, exportable as <code>.jsonl</code></td><td>A graph proposal, then an approved loopy</td><td>Runs and checkpoints in local SQLite</td></tr>
@@ -293,7 +293,7 @@ footer .grow{flex:1;border-right:0}
 
 <section class="sec" id="docs">
   <div class="cta">
-    <div><h2>Install it, then do one task.</h2><p class="sub">Open <code>loopy studio</code> afterwards and the graph is already waiting.</p></div>
+    <div><h2>Install it, then do one task.</h2><p class="sub">Open <code>loopy ui</code> afterwards and the graph is already waiting.</p></div>
     <div class="row"><div class="cmd"><span><span class="p">$ </span>bun add -g loopy</span><button type="button" data-copy="bun add -g loopy">Copy</button></div></div>
   </div>
 </section>
@@ -466,7 +466,7 @@ footer .grow{flex:1;border-right:0}
     [null, 'pending', 'node "Approve before push"'],
     [0, 'running', 'waiting on a person'],
     [1, 'waiting', 'approval requested'],
-    [2, 'running', 'approved in loopy studio'],
+    [2, 'running', 'approved in loopy ui'],
     [3, 'paused', 'paused by you at 09:14'],
     [4, 'running', 'resumed at 09:20'],
     [5, 'succeeded', 'gh pr create --fill'],

@@ -451,7 +451,7 @@ footer .brand{color:var(--text)}
       <div class="hsteps" id="hsteps">
         <span class="rail" aria-hidden="true"><i id="hRail"></i></span>
         <button class="hs on" type="button" data-i="0"><span class="n">1</span><span><h3>Record</h3><p>Finish the task once in Codex or Claude Code, the way you normally would. Loopy imports the session trace.</p></span></button>
-        <button class="hs" type="button" data-i="1"><span class="n">2</span><span><h3>Extract</h3><p>The extractor proposes a graph. No model calls. You review it in Studio and approve it.</p></span></button>
+        <button class="hs" type="button" data-i="1"><span class="n">2</span><span><h3>Extract</h3><p>The extractor proposes a graph. No model calls. You review it in Dashboard and approve it.</p></span></button>
         <button class="hs" type="button" data-i="2"><span class="n">3</span><span><h3>Run</h3><p>The graph runs through the same CLI. Loopy handles order, checks, approvals and history.</p></span></button>
       </div>
       <div class="term" aria-live="off">
@@ -513,7 +513,7 @@ footer .brand{color:var(--text)}
             <div class="who" id="apWho"><span class="sd" data-s="waiting" id="apDot"></span><span id="apTxt">Downstream steps are on hold</span></div>
           </div></div>
         </div>
-        <div class="tx"><h3>Human approvals</h3><p>An approval node pauses the run until a person approves or rejects it in Studio.</p></div>
+        <div class="tx"><h3>Human approvals</h3><p>An approval node pauses the run until a person approves or rejects it in Dashboard.</p></div>
       </article>
       <article class="bc">
         <div class="ill"><div class="cr" aria-hidden="true"><svg viewBox="-100 -100 200 200" id="dial"></svg><span class="expr">0 9 * * *</span></div></div>
@@ -540,7 +540,7 @@ footer .brand{color:var(--text)}
       </article>
       <article class="bc">
         <div class="ill"><div class="kinds" id="kinds" aria-hidden="true"></div></div>
-        <div class="tx"><h3>Studio</h3><p><code>loopy ui</code> opens a local editor for graphs, runs and sessions, with seven step kinds.</p></div>
+        <div class="tx"><h3>Dashboard</h3><p><code>loopy ui</code> opens a local editor for graphs, runs and sessions, with seven step kinds.</p></div>
       </article>
     </div>
   </div>
@@ -556,7 +556,7 @@ footer .brand{color:var(--text)}
         <li><code>loopy import</code><span>Brings in a session trace</span></li>
         <li><code>loopy extract</code><span>Proposes a graph from the trace</span></li>
         <li><code>loopy run</code><span>Runs the approved graph</span></li>
-        <li><code>loopy ui</code><span>Opens Studio in your browser</span></li>
+        <li><code>loopy ui</code><span>Opens Dashboard in your browser</span></li>
       </ul>
     </div>
     <div class="code">
@@ -570,7 +570,7 @@ footer .brand{color:var(--text)}
 <span class="pr">$ </span>loopy extract <span class="ar">--import &lt;import-id&gt;</span>
 <span class="pr">$ </span>loopy approve <span class="ar">&lt;proposal-id&gt;</span>
 
-<span class="cm"># run it, then open Studio</span>
+<span class="cm"># run it, then open Dashboard</span>
 <span class="pr">$ </span>loopy run <span class="ar">&lt;workflow-id&gt;</span>
 <span class="pr">$ </span>loopy ui</pre>
     </div>
@@ -579,7 +579,7 @@ footer .brand{color:var(--text)}
 
 <section class="wrap" aria-label="Get started">
   <div class="band"><div class="band-in">
-    <div><h2>Do it once. Then let it loop.</h2><p>Install the CLI, finish one task the way you normally would, and open Studio to see the graph it leaves behind.</p></div>
+    <div><h2>Do it once. Then let it loop.</h2><p>Install the CLI, finish one task the way you normally would, and open Dashboard to see the graph it leaves behind.</p></div>
     <div class="acts">
       <div class="cmd"><span><span class="p">$ </span>bun add -g loopy</span><button type="button" data-copy="bun add -g loopy">Copy</button></div>
       <a class="btn btn-lg" href="https://github.com/hatim-s/loopy"><svg aria-hidden="true"><use href="#u-gh"/></svg>View on GitHub</a>
@@ -862,7 +862,7 @@ footer .brand{color:var(--text)}
     $('#dial').innerHTML = g;
   }
 
-  // ---------- studio kinds ----------
+  // ---------- dashboard kinds ----------
   {
     const K = [['agent', 'Agent call'], ['shell', 'Shell'], ['route', 'Condition'], ['verify', 'Verification'], ['approval', 'Approval'], ['join', 'Join'], ['transform', 'Transform']];
     const box = $('#kinds');

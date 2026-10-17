@@ -76,7 +76,7 @@ h1{font-size:clamp(40px,6.2vw,72px);line-height:1.02;letter-spacing:-.04em;font-
 .frame-in{border-radius:13px;overflow:hidden;background:var(--bg);position:relative}
 .visual .fade{position:absolute;left:-1px;right:-1px;bottom:-1px;height:22%;background:linear-gradient(transparent,var(--bg));pointer-events:none;border-radius:0 0 14px 14px}
 
-/* ---------- studio mock, all sizes are design pixels ---------- */
+/* ---------- dashboard mock, all sizes are design pixels ---------- */
 .mock{position:relative;transform-origin:0 0;font-size:13px;line-height:1.4;text-align:left;color:var(--text);user-select:none}
 .m-bar{height:34px;display:flex;align-items:center;gap:7px;padding:0 14px;background:#0f1216;border-bottom:1px solid var(--line)}
 .m-bar i{width:10px;height:10px;border-radius:50%;background:#262d36}
@@ -280,7 +280,7 @@ h2{font-size:clamp(32px,4.2vw,48px);line-height:1.06;letter-spacing:-.035em;font
 .lc .lbl{font:500 11px var(--sans);fill:var(--text-subtle)}
 .lc .pk{fill:var(--aqua);filter:drop-shadow(0 0 4px rgba(110,224,210,.8))}
 
-/* studio / library card */
+/* dashboard / library card */
 .lib{position:absolute;inset:28px 28px 0;display:grid;grid-template-columns:repeat(7,1fr);gap:10px;align-content:center}
 .lib div{display:grid;gap:10px;padding:14px 12px;border:1px solid var(--line);border-radius:10px;background:rgba(13,16,20,.6);transition:border-color 300ms var(--ease),background 300ms var(--ease)}
 .lib div.on{border-color:color-mix(in srgb,var(--na) 40%,transparent);background:color-mix(in srgb,var(--na) 6%,var(--bg))}
@@ -414,7 +414,7 @@ footer .brand{color:var(--text)}
   <div class="wrap">
     <div class="visual" id="visual">
       <div class="tilt" id="tilt">
-        <div class="frame"><div class="frame-in" id="mframe" role="img" aria-label="Loopy Studio graph editor running the Patch dependency CVEs graph. The run moves through the nodes and stops at an approval step until someone approves it.">
+        <div class="frame"><div class="frame-in" id="mframe" role="img" aria-label="Loopy Dashboard graph editor running the Patch dependency CVEs graph. The run moves through the nodes and stops at an approval step until someone approves it.">
           <div class="mock" id="mock" aria-hidden="true">
             <div class="m-bar"><i></i><i></i><i></i></div>
             <div class="m-head">
@@ -516,7 +516,7 @@ footer .brand{color:var(--text)}
             <svg class="cur2" id="apCur"><use href="#u-cursor"/></svg>
           </div></div>
         </div>
-        <div class="tx"><h3>A person signs off first</h3><p>An approval node stops the run and waits. Approve or reject it in Studio.</p></div>
+        <div class="tx"><h3>A person signs off first</h3><p>An approval node stops the run and waits. Approve or reject it in Dashboard.</p></div>
       </article>
       <article class="bc c2">
         <div class="ill">
@@ -564,7 +564,7 @@ footer .brand{color:var(--text)}
       </article>
       <article class="bc c6" style="min-height:300px">
         <div class="ill" style="min-height:150px"><div class="lib" id="lib" aria-hidden="true"></div></div>
-        <div class="tx"><h3>Read and edit every graph in Studio</h3><p><code>loopy ui</code> opens a local editor with seven step kinds, version history, and a run console that shows each attempt as it happens.</p></div>
+        <div class="tx"><h3>Read and edit every graph in Dashboard</h3><p><code>loopy ui</code> opens a local editor with seven step kinds, version history, and a run console that shows each attempt as it happens.</p></div>
       </article>
     </div>
   </div>
@@ -579,7 +579,7 @@ footer .brand{color:var(--text)}
     <div class="how" id="howRow">
       <div class="conn" aria-hidden="true"><i></i><b></b></div>
       <div class="st"><span class="n">1</span><h3>Record</h3><p>Do the task once in Codex or Claude Code, the way you normally would. Loopy imports the session as a trace.</p><code class="c"><span>$</span>loopy import</code></div>
-      <div class="st"><span class="n">2</span><h3>Extract</h3><p>Loopy proposes a graph from the trace. Open it in Studio, change what you disagree with, then approve it.</p><code class="c"><span>$</span>loopy extract</code></div>
+      <div class="st"><span class="n">2</span><h3>Extract</h3><p>Loopy proposes a graph from the trace. Open it in Dashboard, change what you disagree with, then approve it.</p><code class="c"><span>$</span>loopy extract</code></div>
       <div class="st"><span class="n">3</span><h3>Run</h3><p>The graph runs through the same CLI you recorded with. Loopy owns the order, the checks and the approvals.</p><code class="c"><span>$</span>loopy run</code></div>
     </div>
   </div>
@@ -589,7 +589,7 @@ footer .brand{color:var(--text)}
   <div class="wrap qs">
     <div>
       <h2>Try it on a session you already have</h2>
-      <p class="sub" style="font-size:18px;color:var(--text-muted);margin:18px 0 0">From install to a running graph in Studio, with a review step in the middle.</p>
+      <p class="sub" style="font-size:18px;color:var(--text-muted);margin:18px 0 0">From install to a running graph in Dashboard, with a review step in the middle.</p>
       <ul>
         <li><span>Needs Bun and a signed-in Codex or Claude Code CLI</span></li>
         <li><span><code>loopy init</code> creates <code>.loopy/</code> in your repo</span></li>
@@ -608,7 +608,7 @@ footer .brand{color:var(--text)}
 <span class="pr">$ </span>loopy import trace.jsonl <span class="ar">--provider codex</span>
 <span class="pr">$ </span>loopy extract <span class="ar">--import &lt;import-id&gt;</span>
 
-<span class="cm"># review the proposal, run it, open Studio</span>
+<span class="cm"># review the proposal, run it, open Dashboard</span>
 <span class="pr">$ </span>loopy approve <span class="ar">&lt;proposal-id&gt;</span>
 <span class="pr">$ </span>loopy run <span class="ar">&lt;workflow-id&gt;</span>
 <span class="pr">$ </span>loopy ui</pre>
@@ -620,7 +620,7 @@ footer .brand{color:var(--text)}
   <div class="band"><div class="band-in">
     <svg class="loopbg" viewBox="0 0 40 40" aria-hidden="true"><path id="bandLoop" d="M20 20c-4.5-7-8-10-11.5-10C5.5 10 3 12.7 3 16.5v7C3 27.3 5.5 30 8.5 30 12 30 15.5 27 20 20Zm0 0c4.5 7 8 10 11.5 10 3 0 5.5-2.7 5.5-6.5v-7C37 12.7 34.5 10 31.5 10 28 10 24.5 13 20 20Z"/><circle r=".22" class="bandTok"><animateMotion dur="14s" repeatCount="indefinite"><mpath href="#bandLoop"/></animateMotion></circle></svg>
     <h2>Do it once. Then let it loop.</h2>
-    <p>Install the CLI, finish one task the way you normally would, and open Studio to see the graph it leaves behind.</p>
+    <p>Install the CLI, finish one task the way you normally would, and open Dashboard to see the graph it leaves behind.</p>
     <div class="cta">
       <div class="cmd"><span><span class="p">$ </span>bun add -g loopy</span><button type="button" data-copy="bun add -g loopy">Copy</button></div>
       <a class="btn btn-lg" href="https://github.com/hatim-s/loopy"><svg aria-hidden="true"><use href="#u-gh"/></svg>View on GitHub</a>
@@ -674,7 +674,7 @@ footer .brand{color:var(--text)}
     onScroll(); addEventListener('scroll', onScroll, { passive: true });
   }
 
-  // ---------- studio mock ----------
+  // ---------- dashboard mock ----------
   const K = { agent: 'Agent call', shell: 'Shell module', route: 'Condition', verify: 'Verification', approval: 'Approval', join: 'Join', transform: 'Transform' };
   const NODES = [
     { id: 'audit', kind: 'shell', name: 'Audit dependencies', sub: '2 Bash stages', x: 0, y: 105 },
@@ -889,7 +889,7 @@ footer .brand{color:var(--text)}
     $('#dial').innerHTML = g;
   }
 
-  // ---------- studio step library ----------
+  // ---------- dashboard step library ----------
   {
     const STEPS = [['agent', 'Agent call', 'Give an installed agent a task'], ['shell', 'Shell module', 'Pipe Bash commands together'], ['route', 'Condition', 'Choose a branch from a result'], ['verify', 'Verification', 'Check the work with commands'], ['approval', 'Approval', 'Wait for a human decision'], ['join', 'Join', 'Collect completed branches'], ['transform', 'Transform', 'Map values between steps']];
     const lib = $('#lib');

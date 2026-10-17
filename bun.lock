@@ -53,25 +53,9 @@
         "vite": "7.1.2",
       },
     },
-    "apps/studio": {
-      "name": "@loopy/studio",
-      "version": "0.2.0",
-      "dependencies": {
-        "@fontsource-variable/geist": "5.3.0",
-        "@fontsource-variable/geist-mono": "5.3.0",
-        "react": "19.1.1",
-        "react-dom": "19.1.1",
-      },
-      "devDependencies": {
-        "@types/react": "19.1.10",
-        "@types/react-dom": "19.1.7",
-        "@vitejs/plugin-react": "5.0.2",
-        "vite": "7.1.2",
-      },
-    },
     "packages/loopy": {
       "name": "loopy",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "bin": {
         "loopy": "./dist/cli/index.js",
       },
@@ -233,8 +217,6 @@
     "@loopy/dashboard": ["@loopy/dashboard@workspace:apps/dashboard"],
 
     "@loopy/site": ["@loopy/site@workspace:apps/site"],
-
-    "@loopy/studio": ["@loopy/studio@workspace:apps/studio"],
 
     "@napi-rs/lzma-linux-x64-gnu": ["@napi-rs/lzma-linux-x64-gnu@1.5.1", "", { "os": "linux", "cpu": "x64" }, "sha512-oTXEIha4SsuXdTA4Iyskj0kpdx2yVXdhd75c2v3xGrHFfVMsbhTPZU/nMPL4sWKo4pBHm3aucLaqGlF696dTyQ=="],
 
