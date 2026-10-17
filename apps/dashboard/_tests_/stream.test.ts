@@ -1,5 +1,5 @@
 import { expect, spyOn, test } from "bun:test";
-import { QueryClient } from "@tanstack/react-query";
+import { type InfiniteData, QueryClient } from "@tanstack/react-query";
 import type { RunSnapshotView, RunView, ServerEvent } from "loopy/contract";
 import type { EventSubscription, StreamEnd } from "../src/backend/backend.ts";
 import { type EventDraft, fakeBackend } from "../src/backend/fake.ts";
@@ -95,6 +95,31 @@ test("a run event replaces the snapshot run and every list entry for that run", 
   expect(client.getQueryData<RunSnapshotView>(keys.run("run-1"))?.run).toEqual(running);
   expect(client.getQueryData<RunView[]>(keys.runs({}))).toEqual([running, other]);
   expect(client.getQueryData<RunView[]>(keys.runs({ slug: "triage" }))).toEqual([running]);
+});
+
+test("a run event updates its run inside every page of a paged list", () => {
+  const client = new QueryClient();
+  const older = { ...run, id: "run-0" };
+  const paged = { pages: [[{ ...run, id: "run-2" }], [older, run]], pageParams: [undefined, "c1"] };
+  client.setQueryData(keys.runPages({ slug: "triage" }), paged);
+
+  applyBatch(client, [runEvent(11, running)]);
+
+  expect(client.getQueryData<InfiniteData<RunView[]>>(keys.runPages({ slug: "triage" }))).toEqual({
+    pages: [[{ ...run, id: "run-2" }], [older, running]],
+    pageParams: [undefined, "c1"],
+  });
+});
+
+test("hook creation without steps invalidates a paged list that holds its run", () => {
+  const client = new QueryClient();
+  const holding = keys.runPages({});
+  const other = keys.runPages({ slug: "other" });
+  client.setQueryData(holding, { pages: [[], [run]], pageParams: [undefined, "c1"] });
+  client.setQueryData(other, { pages: [[{ ...run, id: "other" }]], pageParams: [undefined] });
+  applyBatch(client, [hookEvent(11, "created")]);
+  expect(client.getQueryState(holding)?.isInvalidated).toBe(true);
+  expect(client.getQueryState(other)?.isInvalidated).toBe(false);
 });
 
 test("a list keeps a run that is newer than the event", () => {
