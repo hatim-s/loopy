@@ -48,6 +48,9 @@ const runParamsSchema = z.strictObject({ id: z.string() });
 export const runsQuerySchema = z.strictObject({
   slug: z.string().optional(),
   status: runStatusSchema.optional(),
+  waiting: z
+    .union([z.boolean(), z.enum(["true", "false"]).transform((value) => value === "true")])
+    .optional(),
   limit: z.coerce.number().int().positive().optional(),
   before: z
     .string()

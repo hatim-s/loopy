@@ -25,3 +25,8 @@ export function timestamp(value: string): string {
 export function clockTime(value: string): string {
   return new Date(value).toLocaleTimeString(undefined, { hour12: false });
 }
+
+/** How long ago a moment was, against a clock the caller owns: "42s ago", "3h 10m ago". */
+export function ago(value: string, now: number): string {
+  return `${span(now - Date.parse(value))} ago`;
+}

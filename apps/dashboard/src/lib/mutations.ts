@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { RunView } from "loopy/contract";
+import type { Json, RunView } from "loopy/contract";
 import type { LoopyBackend } from "../backend/backend.ts";
 import { useBackend } from "../router-context.ts";
 import { applyRunView } from "./stream.ts";
@@ -15,4 +15,8 @@ export function useRunMutation<Variables = void>(
     mutationFn: (variables: Variables) => action(backend, variables),
     onSuccess: (run) => applyRunView(client, run),
   });
+}
+
+export function useResolveHook(token: string) {
+  return useRunMutation((backend, payload: Json) => backend.resolveHook(token, payload));
 }

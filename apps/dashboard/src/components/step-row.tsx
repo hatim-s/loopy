@@ -1,5 +1,6 @@
 import type { LogRecord, StepRecord } from "loopy/contract";
 import { duration } from "../lib/format.ts";
+import { hookInput } from "../lib/hook-input.ts";
 import { Countdown } from "./countdown.tsx";
 import { JsonPreview } from "./json-preview.tsx";
 import { LogLines } from "./log-lines.tsx";
@@ -58,11 +59,12 @@ function StepTiming({ step, now }: { step: StepRecord; now: number }) {
 
 export function StepRow({ step, logs, now }: { step: StepRecord; logs: LogRecord[]; now: number }) {
   const end = "endedAt" in step ? Date.parse(step.endedAt) : now;
+  const hook = step.kind === "hook" ? hookInput(step.input) : null;
 
   return (
     <article className={`space-y-1.5 border-l-2 py-1.5 pl-4 ${RAIL[step.status]}`}>
       <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h3 className="font-medium break-all">{step.key}</h3>
+        <h3 className="font-medium break-all">{hook ? hook.name : step.key}</h3>
         <span className="text-xs text-muted">{step.kind}</span>
         <span className="ml-auto flex items-baseline gap-3">
           <StatusBadge status={step.status} />
@@ -75,7 +77,9 @@ export function StepRow({ step, logs, now }: { step: StepRecord; logs: LogRecord
       {"error" in step && (
         <pre className="font-mono text-xs whitespace-pre-wrap text-danger">{step.error}</pre>
       )}
-      {step.status === "succeeded" && <JsonPreview label="Output" value={step.output} />}
+      {step.status === "succeeded" && (
+        <JsonPreview label={hook ? "Payload" : "Output"} value={step.output} />
+      )}
       <LogLines logs={logs} />
     </article>
   );

@@ -38,7 +38,13 @@ function waitingOn({ run, steps, hooks, now }: RunViewOptions): RunView["waiting
     return null;
   }
 
-  return { hook: hook.name, token: hook.token, seq: hook.seq, expiresAt: latest.wakeAt ?? null };
+  return {
+    hook: hook.name,
+    token: hook.token,
+    seq: hook.seq,
+    expiresAt: latest.wakeAt ?? null,
+    since: hook.createdAt,
+  };
 }
 
 function outcome(run: RunRecord) {

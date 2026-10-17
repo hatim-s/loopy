@@ -1,10 +1,12 @@
 import { expect, spyOn, test } from "bun:test";
-import { QueryClient } from "@tanstack/react-query";
+import { type InfiniteData, QueryClient } from "@tanstack/react-query";
 import type { RunSnapshotView, RunView, ServerEvent } from "loopy/contract";
 import type { EventSubscription, StreamEnd } from "../src/backend/backend.ts";
 import { type EventDraft, fakeBackend } from "../src/backend/fake.ts";
+import { INBOX_QUERY, inboxGroups } from "../src/lib/inbox.ts";
 import { keys } from "../src/lib/keys.ts";
-import { applyBatch, applyToSnapshot, followRun } from "../src/lib/stream.ts";
+import type { RunPage } from "../src/lib/queries.ts";
+import { applyBatch, applyToSnapshot, followSession } from "../src/lib/stream.ts";
 
 const AT = "2026-10-17T10:00:00.000Z";
 
@@ -21,6 +23,10 @@ const run: RunView = {
   waitingOn: null,
   status: "queued",
 };
+
+function page(runs: RunView[]): RunPage {
+  return { runs, nextCursor: undefined };
+}
 
 function snapshot(overrides: Partial<RunSnapshotView> = {}): RunSnapshotView {
   return { run, steps: [], logs: [], hooks: [], cursor: 10, epoch: "e1", ...overrides };
@@ -97,6 +103,36 @@ test("a run event replaces the snapshot run and every list entry for that run", 
   expect(client.getQueryData<RunView[]>(keys.runs({ slug: "triage" }))).toEqual([running]);
 });
 
+test("a run event updates its run inside every page of a paged list", () => {
+  const client = new QueryClient();
+  const older = { ...run, id: "run-0" };
+
+  const paged = {
+    pages: [page([{ ...run, id: "run-2" }]), page([older, run])],
+    pageParams: [undefined, "c1"],
+  };
+
+  client.setQueryData(keys.runPages({ slug: "triage" }), paged);
+
+  applyBatch(client, [runEvent(11, running)]);
+
+  expect(client.getQueryData<InfiniteData<RunPage>>(keys.runPages({ slug: "triage" }))).toEqual({
+    pages: [page([{ ...run, id: "run-2" }]), page([older, running])],
+    pageParams: [undefined, "c1"],
+  });
+});
+
+test("hook creation without steps invalidates a paged list that holds its run", () => {
+  const client = new QueryClient();
+  const holding = keys.runPages({});
+  const other = keys.runPages({ slug: "other" });
+  client.setQueryData(holding, { pages: [page([]), page([run])], pageParams: [undefined, "c1"] });
+  client.setQueryData(other, { pages: [page([{ ...run, id: "other" }])], pageParams: [undefined] });
+  applyBatch(client, [hookEvent(11, "created")]);
+  expect(client.getQueryState(holding)?.isInvalidated).toBe(true);
+  expect(client.getQueryState(other)?.isInvalidated).toBe(false);
+});
+
 test("a list keeps a run that is newer than the event", () => {
   const client = new QueryClient();
   client.setQueryData(keys.runs({}), [running]);
@@ -151,6 +187,7 @@ test("a created hook sets waitingOn with the step expiry and resolving it clears
     token: "tok",
     seq: 1,
     expiresAt: "2026-10-17T11:00:00.000Z",
+    since: AT,
   });
 
   const resolved = applyToSnapshot(waiting, hookEvent(13, "resolved"));
@@ -173,7 +210,7 @@ test("hook events update waitingOn on list entries too", () => {
   expect(client.getQueryData<RunView[]>(keys.runs({}))?.[0]?.waitingOn?.token).toBe("tok");
 });
 
-test("a reset from the backend invalidates every query and resubscribes from a fresh snapshot", async () => {
+test("a reset from the backend invalidates every query and resubscribes from a fresh global cursor", async () => {
   const client = new QueryClient();
   const controller = new AbortController();
   const fresh = snapshot({ epoch: "e2", cursor: 40 });
@@ -210,10 +247,9 @@ test("a reset from the backend invalidates every query and resubscribes from a f
 
   const states: string[] = [];
 
-  const following = followRun({
+  const following = followSession({
     client,
     backend: bounded,
-    runId: "run-1",
     signal: controller.signal,
     onState: (state) => {
       states.push(state);
@@ -226,7 +262,7 @@ test("a reset from the backend invalidates every query and resubscribes from a f
 
   await following;
 
-  expect(client.getQueryData<RunSnapshotView>(keys.run("run-1"))).toEqual(fresh);
+  expect(client.getQueryState(keys.run("run-1"))?.isInvalidated).toBe(true);
   expect(client.getQueryState(keys.loopies)?.isInvalidated).toBe(true);
   expect(subscriptions).toBe(2);
   expect(states).toEqual(["reconnecting", "live"]);
@@ -282,7 +318,7 @@ test("run creation and completion invalidate the lists and loopy summaries", () 
   expect(client.getQueryState(keys.loopies)?.isInvalidated).toBe(true);
 });
 
-test("abort during reset refetch cancels the snapshot request and settles followRun", async () => {
+test("abort during reset cursor fetch cancels the request and settles followSession", async () => {
   const client = new QueryClient();
   client.setQueryData(keys.run(run.id), snapshot());
   const controller = new AbortController();
@@ -297,10 +333,10 @@ test("abort during reset refetch cancels the snapshot request and settles follow
 
   let pending = false;
   let subscriptions = 0;
+  let cursors = 0;
 
-  const following = followRun({
+  const following = followSession({
     client,
-    runId: run.id,
     signal: controller.signal,
     onState: () => undefined,
     backend: {
@@ -310,12 +346,17 @@ test("abort during reset refetch cancels the snapshot request and settles follow
 
         return "reset";
       },
-      run: (_id, signal) =>
-        new Promise<RunSnapshotView>((resolve, reject) => {
-          expect(_id).toBe(run.id);
+      cursor: (signal) => {
+        cursors++;
+
+        if (cursors === 1) {
+          return backend.cursor(signal);
+        }
+
+        return new Promise((resolve, reject) => {
           void resolve;
           pending = true;
-          signal?.addEventListener(
+          signal.addEventListener(
             "abort",
             () => {
               pending = false;
@@ -324,7 +365,8 @@ test("abort during reset refetch cancels the snapshot request and settles follow
             { once: true },
           );
           queueMicrotask(() => controller.abort());
-        }),
+        });
+      },
     },
   });
 
@@ -414,4 +456,123 @@ test("aborting as a subscription opens prevents replay and playback", async () =
 
   expect(end).toBe("aborted");
   expect(replayed).toBe(0);
+});
+
+const waiting: RunView = {
+  ...run,
+  status: "suspended",
+  wakeAt: null,
+  waitingOn: { hook: "approve", token: "tok", seq: 1, expiresAt: null, since: AT },
+};
+
+test("a resolved hook drops the run from the inbox in place, without a refetch", () => {
+  const client = new QueryClient();
+  client.setQueryData(keys.runs(INBOX_QUERY), [waiting]);
+
+  applyBatch(client, [hookEvent(11, "resolved")]);
+
+  const runs = client.getQueryData<RunView[]>(keys.runs(INBOX_QUERY)) ?? [];
+  expect(runs.map((item) => item.id)).toEqual(["run-1"]);
+  expect(inboxGroups(runs)).toEqual([]);
+  expect(client.getQueryState(keys.runs(INBOX_QUERY))?.isInvalidated).toBe(false);
+});
+
+test("a run entering a status refetches the lists for that status that lack it", () => {
+  const client = new QueryClient();
+  const other = { ...waiting, id: "run-2" };
+  client.setQueryData(keys.runs(INBOX_QUERY), [other]);
+  client.setQueryData(keys.runs({ status: "suspended", slug: "triage" }), [waiting]);
+  client.setQueryData(keys.runs({ status: "failed" }), []);
+
+  applyBatch(client, [
+    event(11, { entity: "run", kind: "suspended", runId: waiting.id, record: waiting }),
+  ]);
+
+  expect(client.getQueryState(keys.runs(INBOX_QUERY))?.isInvalidated).toBe(true);
+  expect(
+    client.getQueryState(keys.runs({ status: "suspended", slug: "triage" }))?.isInvalidated,
+  ).toBe(false);
+  expect(client.getQueryState(keys.runs({ status: "failed" }))?.isInvalidated).toBe(false);
+});
+
+test("an unseen run invalidates matching array and infinite lists once per fresh batch", () => {
+  const client = new QueryClient();
+  const array = keys.runs({ status: "running", slug: run.slug });
+  const pages = keys.runPages({ status: "running", slug: run.slug });
+  const unrelated = keys.runPages({ status: "running", slug: "other" });
+  client.setQueryData(array, []);
+  client.setQueryData(pages, { pages: [page([])], pageParams: [undefined] });
+  client.setQueryData(unrelated, { pages: [page([])], pageParams: [undefined] });
+  const invalidations = spyOn(client, "invalidateQueries");
+  const batch = [runEvent(11, running), runEvent(12, running)];
+  applyBatch(client, batch);
+  expect(client.getQueryState(array)?.isInvalidated).toBe(true);
+  expect(client.getQueryState(pages)?.isInvalidated).toBe(true);
+  expect(client.getQueryState(unrelated)?.isInvalidated).toBe(false);
+  expect(client.getQueryData(keys.run(run.id))).toBeUndefined();
+  expect(invalidations).toHaveBeenCalledTimes(2);
+  client.setQueryData(array, []);
+  client.setQueryData(pages, { pages: [page([])], pageParams: [undefined] });
+  invalidations.mockClear();
+  applyBatch(client, batch);
+  expect(invalidations).not.toHaveBeenCalled();
+  expect(client.getQueryState(array)?.isInvalidated).toBe(false);
+  expect(client.getQueryState(pages)?.isInvalidated).toBe(false);
+  invalidations.mockRestore();
+});
+
+test("queued to running removes old membership and refetches the destination pages", () => {
+  const client = new QueryClient();
+  const queued = keys.runPages({ status: "queued", slug: run.slug });
+  const active = keys.runPages({ status: "running", slug: run.slug });
+  const array = keys.runs({ status: "queued" });
+  client.setQueryData(queued, { pages: [page([run])], pageParams: [undefined] });
+  client.setQueryData(active, { pages: [page([])], pageParams: [undefined] });
+  client.setQueryData(array, [run]);
+  applyBatch(client, [runEvent(11, running)]);
+  expect(client.getQueryData<InfiniteData<RunPage>>(queued)?.pages).toEqual([page([])]);
+  expect(client.getQueryData<RunView[]>(array)).toEqual([]);
+  expect(client.getQueryState(active)?.isInvalidated).toBe(true);
+  expect(client.getQueryState(queued)?.isInvalidated).toBe(false);
+});
+
+test("status transitions and schedule events invalidate summaries once while heartbeat and replay do not", () => {
+  const client = new QueryClient();
+  client.setQueryData(keys.loopies, []);
+  client.setQueryData(keys.runs({}), [run]);
+  const invalidations = spyOn(client, "invalidateQueries");
+
+  const schedule = event(13, {
+    entity: "schedule",
+    kind: "deleted",
+    runId: null,
+    record: { workspace: "/work", slug: "triage" },
+  });
+
+  applyBatch(client, [runEvent(11, running), runEvent(12, waiting), schedule]);
+  expect(invalidations).toHaveBeenCalledTimes(1);
+  expect(client.getQueryState(keys.loopies)?.isInvalidated).toBe(true);
+  invalidations.mockClear();
+  client.setQueryData(keys.loopies, []);
+  applyBatch(client, [
+    schedule,
+    runEvent(11, running),
+    event(14, { entity: "run", kind: "heartbeat", runId: run.id, record: waiting }),
+  ]);
+  expect(invalidations).not.toHaveBeenCalled();
+  expect(client.getQueryState(keys.loopies)?.isInvalidated).toBe(false);
+  applyBatch(client, [{ ...schedule, sequence: 15 }]);
+  expect(invalidations).toHaveBeenCalledTimes(1);
+  invalidations.mockRestore();
+});
+
+test("a newer detail cursor cannot hide a fresh list event or summary transition", () => {
+  const client = new QueryClient();
+  client.setQueryData(keys.run(run.id), snapshot({ run: running, cursor: 20 }));
+  client.setQueryData(keys.runs({}), [run]);
+  client.setQueryData(keys.loopies, []);
+  applyBatch(client, [runEvent(11, running)]);
+  expect(client.getQueryData<RunView[]>(keys.runs({}))).toEqual([running]);
+  expect(client.getQueryState(keys.loopies)?.isInvalidated).toBe(true);
+  expect(client.getQueryData<RunSnapshotView>(keys.run(run.id))?.cursor).toBe(20);
 });

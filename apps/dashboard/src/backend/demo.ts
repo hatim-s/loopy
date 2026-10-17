@@ -118,7 +118,13 @@ const approval: EventDraft[] = [
       owner: null,
       status: "suspended",
       wakeAt: minutes(30),
-      waitingOn: { hook: "approve-replies", token: hookToken, seq: 3, expiresAt: minutes(30) },
+      waitingOn: {
+        hook: "approve-replies",
+        token: hookToken,
+        seq: 3,
+        expiresAt: minutes(30),
+        since: minutes(0),
+      },
     },
   },
 ];

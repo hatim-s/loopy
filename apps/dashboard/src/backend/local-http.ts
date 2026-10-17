@@ -23,7 +23,7 @@ const RETRY_MS = { first: 500, max: 10_000 } as const;
 function routeUrl(
   path: string,
   params: Record<string, string>,
-  query: Record<string, string | number | undefined>,
+  query: Record<string, string | number | boolean | undefined>,
 ): string {
   const filled = path
     .split("/")
@@ -278,6 +278,7 @@ export function localHttpBackend({ origin, token }: LocalHttpOptions): LoopyBack
   }
 
   return {
+    cursor: (signal) => send(routes.cursor, { params: {}, query: {}, body: undefined }, signal),
     loopies: () => send(routes.loopies, { params: {}, query: {}, body: undefined }),
     runs: (query) => send(routes.runs, { params: {}, query, body: undefined }),
     run: (id, signal) => send(routes.run, { params: { id }, query: {}, body: undefined }, signal),

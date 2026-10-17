@@ -7,8 +7,13 @@ import { ErrorBanner } from "./error-banner.tsx";
 import { StatusBadge } from "./status-badge.tsx";
 
 function LoopyItem({ loopy }: { loopy: LoopyView }) {
-  const body = (
-    <>
+  return (
+    <Link
+      to="/loopies/$slug"
+      params={{ slug: loopy.slug }}
+      className="flex flex-col gap-0.5 rounded-md px-2.5 py-2 hover:bg-raised"
+      activeProps={{ className: "bg-raised" }}
+    >
       <span className="flex items-baseline justify-between gap-2">
         <span className="truncate font-medium">{loopy.slug}</span>
         {loopy.lastRun && <StatusBadge status={loopy.lastRun.status} />}
@@ -16,22 +21,7 @@ function LoopyItem({ loopy }: { loopy: LoopyView }) {
       {loopy.description && (
         <span className="line-clamp-2 text-xs text-muted">{loopy.description}</span>
       )}
-    </>
-  );
-
-  const className = "flex flex-col gap-0.5 rounded-md px-2.5 py-2";
-
-  return loopy.lastRun ? (
-    <Link
-      to="/runs/$runId"
-      params={{ runId: loopy.lastRun.id }}
-      className={`${className} hover:bg-raised`}
-      activeProps={{ className: "bg-raised" }}
-    >
-      {body}
     </Link>
-  ) : (
-    <div className={className}>{body}</div>
   );
 }
 

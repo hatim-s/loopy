@@ -2,9 +2,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useSyncExternalStore } from "react";
 import type { StreamState } from "../backend/backend.ts";
 import { useBackend } from "../router-context.ts";
-import { followRun } from "./stream.ts";
+import { followSession } from "./stream.ts";
 
-/** idle: no page holds a stream open. */
+/** idle: the application stream has not mounted yet. */
 export type ConnectionState = StreamState | "idle";
 
 let current: ConnectionState = "idle";
@@ -29,15 +29,14 @@ export function useConnectionState(): ConnectionState {
   return useSyncExternalStore(subscribe, () => current);
 }
 
-/** Holds one event stream open for as long as the run page is mounted. */
-export function useRunStream(runId: string): void {
+export function useSessionStream(): void {
   const client = useQueryClient();
   const backend = useBackend();
 
   useEffect(() => {
     const controller = new AbortController();
 
-    followRun({ client, backend, runId, signal: controller.signal, onState: publish }).catch(() => {
+    followSession({ client, backend, signal: controller.signal, onState: publish }).catch(() => {
       if (!controller.signal.aborted) {
         publish("stale");
       }
@@ -47,5 +46,5 @@ export function useRunStream(runId: string): void {
       controller.abort();
       publish("idle");
     };
-  }, [client, backend, runId]);
+  }, [client, backend]);
 }

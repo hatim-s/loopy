@@ -1,4 +1,5 @@
 import {
+  type CursorView,
   type DaemonView,
   DEFAULT_ERROR_MESSAGES,
   type ErrorCode,
@@ -33,6 +34,7 @@ export type StreamEnd = "aborted" | "reset";
 
 /** The one seam between the UI and wherever runs live. Components never call fetch. */
 export type LoopyBackend = {
+  cursor(signal: AbortSignal): Promise<CursorView>;
   loopies(): Promise<LoopyView[]>;
   runs(query: RunsQuery): Promise<RunView[]>;
   run(id: string, signal: AbortSignal): Promise<RunSnapshotView>;
