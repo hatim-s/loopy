@@ -23,13 +23,19 @@ const runBaseSchema = z.strictObject({
   input: jsonSchema,
   createdAt: z.string(),
   updatedAt: z.string(),
-  owner: z.strictObject({ pid: z.number(), host: z.string(), heartbeatAt: z.string() }).nullable(),
+  owner: z
+    .strictObject({
+      pid: z.number().int().nonnegative(),
+      host: z.string(),
+      heartbeatAt: z.string(),
+    })
+    .nullable(),
   ownerStale: z.boolean(),
   waitingOn: z
     .strictObject({
       hook: z.string(),
       token: z.string(),
-      seq: z.number(),
+      seq: z.number().int().nonnegative(),
       expiresAt: z.string().nullable(),
     })
     .nullable(),
@@ -64,7 +70,7 @@ export const loopyViewSchema = z.strictObject({
     })
     .nullable(),
   lastRun: runViewSchema.nullable(),
-  counts: z.record(runStatusSchema, z.number()),
+  counts: z.record(runStatusSchema, z.number().int().nonnegative()),
 });
 
 export type LoopyView = z.infer<typeof loopyViewSchema>;
@@ -74,24 +80,24 @@ export const runSnapshotViewSchema = z.strictObject({
   steps: z.array(stepRecordSchema),
   logs: z.array(logRecordSchema),
   hooks: z.array(hookRecordSchema),
-  cursor: z.number(),
+  cursor: z.number().int().nonnegative(),
   epoch: z.string(),
 });
 
 export type RunSnapshotView = z.infer<typeof runSnapshotViewSchema>;
 
 export const daemonViewSchema = z.strictObject({
-  pid: z.number(),
+  pid: z.number().int().nonnegative(),
   startedAt: z.string(),
-  concurrency: z.number(),
-  running: z.number(),
+  concurrency: z.number().int().positive(),
+  running: z.number().int().nonnegative(),
   nextWakeAt: z.string().nullable(),
 });
 
 export type DaemonView = z.infer<typeof daemonViewSchema>;
 
 const eventBaseSchema = z.strictObject({
-  sequence: z.number(),
+  sequence: z.number().int().nonnegative(),
   at: z.string(),
   txn: z.string(),
   runId: z.string().nullable(),

@@ -9,6 +9,20 @@ import { SqliteRunStore } from "../src/local/index.js";
 import { newRun } from "./fixture.js";
 import { storeContract } from "./store-contract.js";
 
+function runningStep(): Extract<StepRecord, { status: "running" }> {
+  return {
+    runId: "run",
+    seq: 1,
+    key: "step-1",
+    kind: "function",
+    input: null,
+    status: "running",
+    attempt: 1,
+    maxAttempts: 3,
+    startedAt: newRun().createdAt,
+  };
+}
+
 const clock = () => Date.parse("2026-10-16T00:00:00.000Z");
 
 storeContract("SqliteRunStore", (options) => new SqliteRunStore(":memory:", options?.now, options));
@@ -433,6 +447,16 @@ test("SQLite event reads reject malformed entity records at the JSON boundary", 
     );
     await expect(store.events(0, 10)).rejects.toThrow(z.ZodError);
     database.query("UPDATE events SET record=?").run("[]");
+    await expect(store.events(0, 10)).rejects.toThrow(z.ZodError);
+    await store.claim("run", "owner");
+    await store.putStep("run", "owner", runningStep());
+    database
+      .query("UPDATE events SET record=? WHERE entity='step'")
+      .run(JSON.stringify({ ...runningStep(), seq: -1 }));
+    await expect(store.events(0, 10)).rejects.toThrow(z.ZodError);
+    database
+      .query("UPDATE events SET record=? WHERE entity='step'")
+      .run(JSON.stringify({ ...runningStep(), attempt: 1.5 }));
     await expect(store.events(0, 10)).rejects.toThrow(z.ZodError);
     database.query("UPDATE events SET record=?").run("{");
     await expect(store.events(0, 10)).rejects.toThrow(SyntaxError);

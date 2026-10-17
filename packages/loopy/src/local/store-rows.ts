@@ -345,7 +345,7 @@ const runRecordSchema = z.strictObject({
 });
 
 const eventBaseSchema = z.strictObject({
-  sequence: z.number(),
+  sequence: z.number().int().positive(),
   at: z.string(),
   txn: z.string(),
   runId: z.string().nullable(),
