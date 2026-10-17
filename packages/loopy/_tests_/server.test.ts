@@ -168,7 +168,7 @@ test("API distinguishes invalid cursors from registry failures", async () => {
   expect((await fetch(`${url.origin}/api/config`, { headers })).status).toBe(404);
 });
 
-test("API always returns the contract snapshot and keeps separate cursor log reads", async () => {
+test("API returns the contract snapshot, rejects unknown query keys and keeps cursor log reads", async () => {
   const f = fixture(
     "summary",
     'run: ({ log }) => step("work", () => { log.info("hello"); return 1; })',
@@ -183,13 +183,13 @@ test("API always returns the contract snapshot and keeps separate cursor log rea
   const headers = { Authorization: `Bearer ${token}` };
   const path = `${url.origin}/api/runs/${run.id}`;
   const full = object(await (await fetch(path, { headers })).text());
-  const summary = object(await (await fetch(`${path}?logs=false`, { headers })).text());
   expect(full.steps).toHaveLength(1);
   expect(full.logs).toHaveLength(1);
-  expect(summary).toEqual(full);
+  // The old viewer's logs=false switch is gone; strict query parsing rejects it.
+  expect((await fetch(`${path}?logs=false`, { headers })).status).toBe(400);
   expect(await (await fetch(`${path}/logs?after=0`, { headers })).json()).toEqual(full.logs);
   expect(await (await fetch(`${path}/logs?after=1`, { headers })).json()).toEqual([]);
-  expect((await fetch(`${url.origin}/api/runs/missing?logs=false`, { headers })).status).toBe(404);
+  expect((await fetch(`${url.origin}/api/runs/missing`, { headers })).status).toBe(404);
 });
 
 test("hook API applies auth and origin checks and resolves JSON exactly once", async () => {
@@ -447,7 +447,7 @@ test("response validation rejects a view with extra fields", async () => {
         new URL(request.url),
         "/api/loopies",
       ),
-    ).rejects.toThrow("Response contains fields outside its contract.");
+    ).rejects.toThrow("unrecognized_keys");
   } finally {
     list.mockRestore();
     store.close();

@@ -115,8 +115,24 @@ export class LoopyService {
         throw new ServiceError("not_found");
       }
 
-      return runView({ ...snapshot, run, now, leaseMs: this.options.store.leaseMs });
+      return runView({
+        ...snapshot,
+        run,
+        loopy: this.loopySummary(run),
+        now,
+        leaseMs: this.options.store.leaseMs,
+      });
     };
+  }
+
+  // A run outlives its registry entry, so a deleted loopy leaves the description empty.
+  private loopySummary(run: RunRecord) {
+    const saved = this.options
+      .registry(run.workspace)
+      .list()
+      .find((entry) => entry.slug === run.slug);
+
+    return { slug: run.slug, description: saved?.description ?? null };
   }
 
   private async claim(id: string, token: string) {
@@ -217,7 +233,12 @@ export class LoopyService {
 
     return {
       ...snapshot,
-      run: runView({ ...snapshot, now: this.now(), leaseMs: this.options.store.leaseMs }),
+      run: runView({
+        ...snapshot,
+        loopy: this.loopySummary(snapshot.run),
+        now: this.now(),
+        leaseMs: this.options.store.leaseMs,
+      }),
     };
   }
 

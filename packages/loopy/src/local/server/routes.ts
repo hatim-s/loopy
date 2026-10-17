@@ -1,4 +1,3 @@
-import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import { type ErrorCode, errorBodySchema, routes } from "../../contract/index.js";
 import { type LoopyService, ServiceError } from "../service.js";
@@ -58,15 +57,8 @@ function endpoint<
         return result;
       }
 
-      const output = route.response.parse(result);
-
-      if (
-        !isDeepStrictEqual(JSON.parse(JSON.stringify(result)), JSON.parse(JSON.stringify(output)))
-      ) {
-        throw new Error("Response contains fields outside its contract. Fix the service view.");
-      }
-
-      return json(output);
+      // Strict response schemas reject a view that grew a field the contract does not know.
+      return json(route.response.parse(result));
     },
   };
 }
