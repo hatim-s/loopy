@@ -1,52 +1,70 @@
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
-import { basename, dirname, extname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { parseSync, Visitor } from "oxc-parser";
 import type { RunRecord } from "../core/index.js";
 import { isLoopy, type Loopy } from "../sdk/host.js";
 import { defaultHome } from "./home.js";
 import { Registry } from "./registry.js";
 
-const LOADERS = new Map<string, Bun.JavaScriptLoader>([
-  [".ts", "ts"],
-  [".mts", "ts"],
-  [".cts", "ts"],
-  [".js", "js"],
-  [".mjs", "js"],
-  [".cjs", "js"],
-]);
-
 // A saved bundle runs from <home>/bundles, so each module's import.meta must keep
-// naming the file it was written in. Loopies locate sibling scripts with it. Bun's
-// transpiler applies the substitutions to parsed expressions only, so strings and
-// regexes that mention import.meta stay intact. Destructuring import.meta is not
-// rewritten; JSX modules are left alone because transpiling them here would drop
-// the runtime import the bundler adds later.
-function inlineImportMeta(path: string, loader: Bun.JavaScriptLoader, source: string) {
-  const define = {
-    "import.meta.url": JSON.stringify(pathToFileURL(path).href),
-    "import.meta.path": JSON.stringify(path),
-    "import.meta.filename": JSON.stringify(path),
-    "import.meta.file": JSON.stringify(basename(path)),
-    "import.meta.dir": JSON.stringify(dirname(path)),
-    "import.meta.dirname": JSON.stringify(dirname(path)),
-  };
+// naming the file it was written in. Loopies locate sibling scripts with it. Only
+// the parsed `import.meta.<key>` expressions are spliced, so strings, comments,
+// loaders and type elision stay exactly as Bun would otherwise see them.
+// Destructuring and computed access such as import.meta["url"] are not rewritten.
+function inlineImportMeta(path: string, source: string) {
+  const values = new Map([
+    ["url", pathToFileURL(path).href],
+    ["path", path],
+    ["filename", path],
+    ["file", basename(path)],
+    ["dir", dirname(path)],
+    ["dirname", dirname(path)],
+  ]);
 
-  return new Bun.Transpiler({ loader, define, target: "bun" }).transformSync(source);
+  const { program, errors } = parseSync(path, source);
+
+  if (errors.length > 0) {
+    return source;
+  }
+
+  const edits: { start: number; end: number; text: string }[] = [];
+
+  new Visitor({
+    MemberExpression(node) {
+      if (
+        node.object.type !== "MetaProperty" ||
+        node.computed ||
+        node.property.type !== "Identifier"
+      ) {
+        return;
+      }
+
+      const value = values.get(node.property.name);
+
+      if (value !== undefined) {
+        edits.push({ start: node.start, end: node.end, text: JSON.stringify(value) });
+      }
+    },
+  }).visit(program);
+
+  return edits
+    .sort((a, b) => b.start - a.start)
+    .reduce((text, edit) => text.slice(0, edit.start) + edit.text + text.slice(edit.end), source);
 }
 
 const sourcePaths: Bun.BunPlugin = {
   name: "loopy-source-paths",
   setup(build) {
-    build.onLoad({ filter: /\.[cm]?[jt]s$/ }, async ({ path }) => {
-      const loader = LOADERS.get(extname(path));
+    build.onLoad({ filter: /\.[cm]?[jt]sx?$/ }, async ({ path, loader }) => {
       const source = await Bun.file(path).text();
 
-      if (loader === undefined || !source.includes("import.meta")) {
+      if (!/\bimport\s*\.\s*meta\b/.test(source)) {
         return undefined;
       }
 
-      return { contents: inlineImportMeta(path, loader, source), loader: "js" };
+      return { contents: inlineImportMeta(path, source), loader };
     });
   },
 };
