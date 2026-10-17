@@ -1,8 +1,9 @@
 import {
-  isBoolean,
-  isNumber,
+  FIELD_TYPES,
+  isFieldValue,
   isRecord,
-  isString,
+  type Json,
+  type RecordSpec,
   requireOneOf,
   requireRecord,
   setOwnProperty,
@@ -29,21 +30,28 @@ type StandardSchemaV1<Input = unknown, Output = Input> = {
 
 export type { StandardSchemaV1 };
 
-export type RecordSpec = Readonly<Record<string, "string" | "number" | "boolean">>;
+export type { RecordSpec } from "../core/index.js";
 
 export type InputSchema = StandardSchemaV1 | RecordSpec;
 
-type Primitive = { string: string; number: number; boolean: boolean };
+type Primitive = { string: string; number: number; boolean: boolean; json: Json };
+
+type FieldValue<Kind extends RecordSpec[string]> =
+  Kind extends `${infer Element extends keyof Primitive}[]`
+    ? Primitive[Element][]
+    : Kind extends keyof Primitive
+      ? Primitive[Kind]
+      : never;
 
 type Simplify<T> = { [K in keyof T]: T[K] } & {};
 
 type RecordInput<Spec extends RecordSpec> = Simplify<
   {
-    -readonly [Key in keyof Spec as Key extends `${string}?` ? never : Key]: Primitive[Spec[Key]];
+    -readonly [Key in keyof Spec as Key extends `${string}?` ? never : Key]: FieldValue<Spec[Key]>;
   } & {
-    -readonly [Key in keyof Spec as Key extends `${infer Name}?`
-      ? Name
-      : never]?: Primitive[Spec[Key]];
+    -readonly [Key in keyof Spec as Key extends `${infer Name}?` ? Name : never]?: FieldValue<
+      Spec[Key]
+    >;
   }
 >;
 
@@ -68,12 +76,6 @@ export function isStandardSchema<Value>(value: Value): value is Value & Standard
   );
 }
 
-const GUARDS = {
-  string: isString,
-  number: (value: unknown): value is number => isNumber(value) && Number.isFinite(value),
-  boolean: isBoolean,
-};
-
 // BOUNDARY: Record schema input comes from argv or external JSON and must match each declared primitive.
 function validateRecord(spec: RecordSpec, value: unknown): StandardResult<unknown> {
   if (!isRecord(value)) {
@@ -86,7 +88,7 @@ function validateRecord(spec: RecordSpec, value: unknown): StandardResult<unknow
     .filter((key) => !keys.has(key))
     .map((key) => ({ message: "Unknown field", path: [key] }));
 
-  const output: Record<string, string | number | boolean> = {};
+  const output: Record<string, Json> = {};
 
   for (const [field, kind] of Object.entries(spec)) {
     const optional = field.endsWith("?");
@@ -97,7 +99,7 @@ function validateRecord(spec: RecordSpec, value: unknown): StandardResult<unknow
       continue;
     }
 
-    if (!GUARDS[kind](item)) {
+    if (!isFieldValue(kind, item)) {
       issues.push({ message: `Expected ${kind}`, path: [key] });
       continue;
     }
@@ -114,7 +116,7 @@ function recordSchema<const Spec extends RecordSpec>(
   const fields = Object.freeze({ ...spec });
 
   for (const kind of Object.values(fields)) {
-    requireOneOf(kind, ["string", "number", "boolean"], "Input field type");
+    requireOneOf(kind, FIELD_TYPES, "Input field type");
   }
 
   return {

@@ -43,7 +43,7 @@ export async function createLoopyRun<Input, Output extends Json>(
   await store.createRun({
     id: runId,
     slug: loopy.name,
-    bundleHash,
+    revision: bundleHash,
     workspace,
     input,
     status: "queued",

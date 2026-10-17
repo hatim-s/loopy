@@ -1,4 +1,4 @@
-export { isTerminalRun } from "../core/index.js";
+export { isFieldValue, isTerminalRun } from "../core/index.js";
 
 export {
   DEFAULT_ERROR_MESSAGES,
@@ -15,7 +15,9 @@ export {
   scheduleEnabledBodySchema,
 } from "./api.js";
 
-export { loopyView, runView, serverEvent } from "./derive.js";
+export { graphView, loopyView, runView, serverEvent } from "./derive.js";
+
+export * from "./graph.js";
 
 export { type Json, jsonSchema } from "./json.js";
 

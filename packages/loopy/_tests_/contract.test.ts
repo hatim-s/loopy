@@ -31,7 +31,11 @@ test("schema outputs exactly match core records and the wire owner projection", 
   > | null>();
 
   type WireEvent =
-    | Exclude<core.RuntimeEvent, { entity: "run" | "step" }>
+    | Exclude<core.RuntimeEvent, { entity: "run" | "step" | "node" }>
+    | (Omit<Extract<core.RuntimeEvent, { entity: "node" }>, "record"> & {
+        record: Flatten<core.NodeRun>;
+      })
+    | Exclude<never, never>
     | (Omit<Extract<core.RuntimeEvent, { entity: "step" }>, "record"> & {
         record: Flatten<core.StepRecord>;
       })

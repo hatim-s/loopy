@@ -1,4 +1,12 @@
-import type { HookRecord, RunRecord, RuntimeEvent, Schedule, StepRecord } from "../core/index.js";
+import type {
+  Graph as CoreGraph,
+  HookRecord,
+  RunRecord,
+  RuntimeEvent,
+  Schedule,
+  StepRecord,
+} from "../core/index.js";
+import type { GraphView } from "./graph.js";
 import type { LoopyView, RunView, ServerEvent } from "./views.js";
 
 type RunViewOptions = {
@@ -170,4 +178,23 @@ export function serverEvent(event: RuntimeEvent, view: (run: RunRecord) => RunVi
   }
 
   return event;
+}
+
+export function graphView(graph: CoreGraph): GraphView {
+  return {
+    ...graph,
+    nodes: graph.nodes.map((node) => {
+      if (node.kind === "code") {
+        return { ...node, module: { name: node.module.path.split("/").at(-1) ?? "" } };
+      }
+
+      return node.kind === "command" ? { ...node, parse: node.parse === null ? null : {} } : node;
+    }),
+    warnings: graph.warnings.map(({ code, message, node }) => ({
+      code,
+      message,
+      nodeId: node,
+      label: graph.nodes.find((entry) => entry.id === node)?.label ?? null,
+    })),
+  };
 }

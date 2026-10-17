@@ -1,6 +1,6 @@
-import { isNumber } from "../core/index.js";
+import { type Duration, isNumber } from "../core/index.js";
 
-export type Duration = number | `${number}${"s" | "m" | "h" | "d"}`;
+export type { Duration } from "../core/index.js";
 
 const UNITS = new Map([
   ["s", 1000],

@@ -1,4 +1,4 @@
-import { type Json, jsonSchema, type LoopyView } from "loopy/contract";
+import { isFieldValue, type Json, jsonSchema, type LoopyView } from "loopy/contract";
 
 export type RecordSpec = Exclude<LoopyView["input"], "schema">;
 
@@ -31,12 +31,26 @@ export function initialValues(fields: InputField[]): FieldValues {
   );
 }
 
-type Primitive = string | number | boolean;
-
-type FieldResult = { valid: true; value: Primitive } | { valid: false; message: string };
+type FieldResult = { valid: true; value: Json } | { valid: false; message: string };
 
 function coerceField(kind: InputField["kind"], text: string): FieldResult {
   switch (kind) {
+    case "string[]":
+    case "number[]":
+    case "boolean[]":
+    case "json[]":
+    case "json": {
+      const parsed = parseJsonInput(text);
+
+      if (!parsed.valid) {
+        return { valid: false, message: "Enter valid JSON." };
+      }
+
+      return isFieldValue(kind, parsed.value)
+        ? parsed
+        : { valid: false, message: `Enter a ${kind} as JSON.` };
+    }
+
     case "string": {
       return { valid: true, value: text };
     }
@@ -60,7 +74,7 @@ function coerceField(kind: InputField["kind"], text: string): FieldResult {
  * field is left out of the object; an empty required one is an issue.
  */
 export function coerceInput(fields: InputField[], values: FieldValues): Coerced {
-  const entries: [string, Primitive][] = [];
+  const entries: [string, Json][] = [];
   const issues: FieldIssue[] = [];
 
   for (const field of fields) {

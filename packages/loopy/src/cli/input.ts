@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
-import { type Json, setOwnProperty } from "../core/index.js";
+import { isFieldValue, type Json, setOwnProperty } from "../core/index.js";
 import { assertJson } from "../runtime/index.js";
 import { isStandardSchema, type Loopy, type RecordSpec } from "../sdk/host.js";
 import type { CliContext } from "./context.js";
@@ -24,6 +24,20 @@ export async function jsonInput(context: CliContext): Promise<Json> {
 }
 
 function coerce(value: string, kind: RecordSpec[string], key: string) {
+  if (kind === "json" || kind.endsWith("[]")) {
+    try {
+      const parsed: unknown = JSON.parse(value);
+
+      if (isFieldValue(kind, parsed)) {
+        return parsed;
+      }
+    } catch {
+      throw new Error(`Input --${key} must be valid JSON.`);
+    }
+
+    throw new Error(`Input --${key} must be a ${kind}. Provide a valid value.`);
+  }
+
   if (kind === "string") {
     return value;
   }
@@ -39,7 +53,7 @@ function coerce(value: string, kind: RecordSpec[string], key: string) {
   throw new Error(`Input --${key} must be a ${kind}. Provide a valid value.`);
 }
 
-type NamedInput = Record<string, string | number | boolean>;
+type NamedInput = Record<string, Json>;
 
 async function recordInput(spec: RecordSpec, context: CliContext) {
   const input: NamedInput = {};

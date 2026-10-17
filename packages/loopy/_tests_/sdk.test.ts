@@ -73,7 +73,7 @@ test("a Standard Schema validates input and infers the workflow input type", asy
   });
   expect(await f.store.getRun(f.runId)).toMatchObject({
     slug: "schema",
-    bundleHash: "",
+    revision: "",
     input: { name: "Hatim" },
   });
 });
@@ -546,3 +546,38 @@ function compileOnlyChecks() {
 }
 
 void compileOnlyChecks;
+
+test("record json fields preserve nested JSON and reject host values", async () => {
+  const definition = loopy({
+    name: "json-input",
+    input: { data: "json" },
+    run: ({ input }) => input.data,
+  });
+
+  const data = { nested: [null, true, 2, "value"] };
+  expect(await startLoopy({ ...fixture(), loopy: definition, input: { data } })).toEqual({
+    status: "succeeded",
+    output: data,
+  });
+
+  class HostValue {
+    value = "host";
+  }
+
+  for (const data of [
+    () => "host",
+    new Date(),
+    new Map(),
+    new Set(),
+    new Uint8Array(),
+    new HostValue(),
+  ]) {
+    await expect(startLoopy({ ...fixture(), loopy: definition, input: { data } })).rejects.toThrow(
+      "Expected json",
+    );
+  }
+
+  expect(
+    await startLoopy({ ...fixture(), loopy: definition, input: { data: Object.create(null) } }),
+  ).toEqual({ status: "succeeded", output: {} });
+});

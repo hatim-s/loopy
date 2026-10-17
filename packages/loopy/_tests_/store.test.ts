@@ -49,7 +49,7 @@ test("schema version mismatch recreates tables", async () => {
     });
     original.close();
     const database = new Database(file);
-    database.exec("CREATE TABLE obsolete (value TEXT); PRAGMA user_version=4");
+    database.exec("CREATE TABLE obsolete (value TEXT); PRAGMA user_version=11");
     database.close();
     const store = new SqliteRunStore(file, clock);
 
@@ -59,7 +59,7 @@ test("schema version mismatch recreates tables", async () => {
       const inspection = new Database(file);
 
       try {
-        expect(inspection.query("PRAGMA user_version").get()).toEqual({ user_version: 11 });
+        expect(inspection.query("PRAGMA user_version").get()).toEqual({ user_version: 12 });
         expect(
           inspection.query("SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name").all(),
         ).toEqual(
@@ -463,6 +463,28 @@ test("SQLite event reads reject malformed entity records at the JSON boundary", 
   } finally {
     database.close();
     store.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("run event revisions survive closing and reopening the store", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "loopy-event-revision-"));
+  const file = join(directory, "runs.sqlite");
+
+  try {
+    const store = new SqliteRunStore(file, clock);
+    await store.createRun({ ...newRun(), revision: "graph-revision" });
+    store.close();
+    const reopened = new SqliteRunStore(file, clock);
+
+    try {
+      expect(await reopened.events(0, 10)).toMatchObject([
+        { entity: "run", record: { revision: "graph-revision" } },
+      ]);
+    } finally {
+      reopened.close();
+    }
+  } finally {
     rmSync(directory, { recursive: true, force: true });
   }
 });

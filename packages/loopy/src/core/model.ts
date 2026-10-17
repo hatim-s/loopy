@@ -1,3 +1,5 @@
+import type { NodeRun } from "./graph.js";
+
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 
 export const EXECUTION_MODES = ["sandbox", "full"] as const;
@@ -40,7 +42,7 @@ export type RunOutcome =
 export type RunRecord = {
   id: string;
   slug: string;
-  bundleHash: string;
+  revision: string;
   workspace: string;
   input: Json;
   status: RunStatus;
@@ -171,6 +173,7 @@ type Event<E extends string, K extends string, R> = {
 
 export type RuntimeEvent =
   | Event<"run", (typeof RUN_EVENT_KINDS)[number], RunRecord>
+  | Event<"node", NodeRun["status"], NodeRun>
   | Event<"step", StepRecord["status"], StepRecord>
   | Event<"log", "written", LogRecord>
   | Event<"hook", (typeof HOOK_EVENT_KINDS)[number], HookRecord>

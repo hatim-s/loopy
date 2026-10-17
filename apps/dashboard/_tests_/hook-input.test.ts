@@ -11,7 +11,7 @@ async function storedHookInput() {
   await store.createRun({
     id: "run",
     slug: "approve",
-    bundleHash: "bundle",
+    revision: "bundle",
     workspace: "/workspace",
     input: null,
     status: "queued",

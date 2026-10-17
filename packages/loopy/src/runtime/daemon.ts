@@ -192,7 +192,7 @@ export class Daemon {
     const run: RunRecord = {
       id: crypto.randomUUID(),
       slug: schedule.slug,
-      bundleHash: await this.options.bundleHashFor(schedule),
+      revision: await this.options.bundleHashFor(schedule),
       workspace: schedule.workspace,
       input: schedule.input,
       status: "queued",

@@ -63,7 +63,7 @@ export function newRun(): RunRecord {
   return {
     id: "run",
     slug: "test",
-    bundleHash: "bundle",
+    revision: "bundle",
     workspace: "/workspace",
     input: { value: 42 },
     status: "queued",

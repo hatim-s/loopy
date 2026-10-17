@@ -2,6 +2,12 @@ export { parseArgv } from "./argv.js";
 
 export { errorMessage } from "./errors.js";
 
+export { isFieldValue } from "./field-value.js";
+
+export * from "./graph.js";
+
+export { validateGraph } from "./graph-check.js";
+
 export type {
   CommandResult,
   ExecutionMode,

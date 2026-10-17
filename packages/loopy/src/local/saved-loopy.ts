@@ -1,4 +1,5 @@
 import {
+  FIELD_TYPES,
   isStringArray,
   requireOneOf,
   requireRecord,
@@ -31,7 +32,7 @@ function inputSummary(value: unknown) {
   const fields: RecordSpec = {};
 
   for (const [key, kind] of Object.entries(spec)) {
-    setOwnProperty(fields, key, requireOneOf(kind, ["string", "number", "boolean"], "Input kind"));
+    setOwnProperty(fields, key, requireOneOf(kind, FIELD_TYPES, "Input kind"));
   }
 
   return fields;
