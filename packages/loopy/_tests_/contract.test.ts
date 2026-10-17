@@ -386,3 +386,15 @@ test("strict edges reject misspelled request keys and injected view tokens", () 
 
   expect(described.loopy).toEqual({ slug: "test", description: "Review approvals" });
 });
+
+test("run cursors preserve timestamp ties and reject timestamp-only paging", async () => {
+  const { encodeRunCursor, decodeRunCursor, runsQuerySchema } = await import(
+    "../src/contract/index.js"
+  );
+
+  const cursor = encodeRunCursor({ createdAt: "2026-10-17T00:00:00.000Z", id: "run-b" });
+  expect(decodeRunCursor(cursor)).toEqual({ createdAt: "2026-10-17T00:00:00.000Z", id: "run-b" });
+  expect(runsQuerySchema.parse({ before: cursor })).toEqual({ before: cursor });
+  expect(runsQuerySchema.safeParse({ before: "2026-10-17T00:00:00.000Z" }).success).toBe(false);
+  expect(runsQuerySchema.safeParse({ before: `${cursor}|extra` }).success).toBe(false);
+});

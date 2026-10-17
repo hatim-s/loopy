@@ -23,10 +23,13 @@ export async function eventStream(
 
   const feed = new EventFeed(store, service, query.after, signal);
 
-  const stream = new ReadableStream<Uint8Array>({
-    start: (controller) => feed.start(controller),
-    cancel: () => feed.close(),
-  });
+  const stream = new ReadableStream<Uint8Array>(
+    {
+      start: (controller) => feed.start(controller),
+      cancel: () => feed.close(),
+    },
+    new ByteLengthQueuingStrategy({ highWaterMark: 1024 * 1024 }),
+  );
 
   return new Response(stream, {
     headers: {
@@ -39,7 +42,8 @@ export async function eventStream(
 
 class EventFeed {
   private closed = false;
-  private pending = Promise.resolve();
+  private pending = false;
+  private dirty = false;
   private version: number;
   private tail?: ReturnType<typeof setInterval>;
   private heartbeat?: ReturnType<typeof setInterval>;
@@ -99,26 +103,52 @@ class EventFeed {
   };
 
   private send(text: string): void {
-    if (!this.closed) {
-      this.controller?.enqueue(new TextEncoder().encode(text));
+    const controller = this.controller;
+
+    if (this.closed || !controller) {
+      return;
     }
+
+    const bytes = new TextEncoder().encode(text);
+
+    if ((controller.desiredSize ?? 0) < bytes.byteLength) {
+      this.close();
+      controller.error(new Error("SSE client fell behind. Reconnect from the last event ID."));
+
+      return;
+    }
+
+    controller.enqueue(bytes);
   }
 
   private readonly enqueue = () => {
-    this.pending = this.pending
-      .then(() => this.drain())
-      .catch((error: Error) => {
-        if (this.closed) {
-          return;
-        }
+    this.dirty = true;
 
+    if (!this.pending) {
+      this.pending = true;
+      queueMicrotask(() => void this.flush());
+    }
+  };
+
+  private async flush(): Promise<void> {
+    try {
+      while (this.dirty && !this.closed) {
+        this.dirty = false;
+        await this.drain();
+      }
+    } catch (error) {
+      if (!this.closed) {
         this.close();
         this.controller?.error(error);
-      });
-  };
+      }
+    } finally {
+      this.pending = false;
+    }
+  }
 
   private async drain(): Promise<void> {
     while (!this.closed) {
+      this.dirty = false;
       const events = await this.store.events(this.cursor, 500);
 
       const last = events.at(-1);

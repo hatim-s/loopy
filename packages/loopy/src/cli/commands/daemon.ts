@@ -70,7 +70,12 @@ async function installService(context: CliContext): Promise<void> {
   });
 }
 
-export async function runForeground(context: CliContext): Promise<void> {
+function reportAddress(url: string): void {
+  printLine(new URL(url).origin);
+  printLine("Run loopy ui to open the dashboard.");
+}
+
+export async function runForeground(context: CliContext, onStarted = reportAddress): Promise<void> {
   await withRunStore(context, async (store) => {
     const daemon = localDaemon({
       ...context,
@@ -88,7 +93,7 @@ export async function runForeground(context: CliContext): Promise<void> {
     const cleanup = onTermination(stop);
 
     try {
-      printLine(daemon.start());
+      onStarted(daemon.start());
       await daemon.run();
     } finally {
       cleanup();

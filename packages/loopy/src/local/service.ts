@@ -1,13 +1,14 @@
-import type { z } from "zod";
 import {
   DEFAULT_ERROR_MESSAGES,
+  decodeRunCursor,
   type ErrorCode,
+  encodeRunCursor,
   type Json,
   type LoopyView,
   loopyView,
   type RunSnapshotView,
+  type RunsQuery,
   type RunView,
-  type runsQuerySchema,
   runView,
 } from "../contract/index.js";
 import { errorMessage, type RunRecord, type Schedule } from "../core/index.js";
@@ -17,8 +18,6 @@ import { loadLoopy } from "./bundle.js";
 import { canonicalPath } from "./fs.js";
 import type { Registry } from "./registry.js";
 import type { SqliteRunStore } from "./store.js";
-
-export type RunsQuery = z.infer<typeof runsQuerySchema>;
 
 export class ServiceError extends Error {
   constructor(
@@ -243,9 +242,22 @@ export class LoopyService {
   }
 
   async listRuns(query: RunsQuery): Promise<RunView[]> {
+    const before = query.before === undefined ? undefined : decodeRunCursor(query.before);
+
     const runs = (await this.options.store.listRuns(query))
-      .filter((run) => !query.before || run.createdAt < query.before)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      .filter(
+        (run) =>
+          !before ||
+          run.createdAt < before.createdAt ||
+          (run.createdAt === before.createdAt && run.id < before.id),
+      )
+      .sort((a, b) =>
+        encodeRunCursor(a) < encodeRunCursor(b)
+          ? 1
+          : encodeRunCursor(a) > encodeRunCursor(b)
+            ? -1
+            : 0,
+      );
 
     return Promise.all(
       runs.slice(0, Math.min(query.limit ?? 50, 200)).map((run) => this.view(run)),

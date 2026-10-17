@@ -47,7 +47,6 @@ class LocalDaemon {
   private readonly service: LoopyService;
   private readonly token = crypto.randomUUID();
   private server?: ReturnType<typeof startServer>;
-  private retention?: ReturnType<typeof setInterval>;
   private stopping?: Promise<void>;
 
   constructor(private readonly options: DaemonOptions) {
@@ -101,8 +100,6 @@ class LocalDaemon {
     }
 
     this.server = server;
-    this.prune();
-    this.retention = setInterval(() => this.prune(), 3_600_000);
 
     return server.url;
   }
@@ -115,19 +112,12 @@ class LocalDaemon {
 
   stop(): Promise<void> {
     this.stopping ??= (async () => {
-      clearInterval(this.retention);
       await this.server?.stop();
       await this.daemon.stop();
       removeDaemonFile(this.options.home, this.token);
     })();
 
     return this.stopping;
-  }
-
-  private prune(): void {
-    void this.options.store
-      .pruneEvents(new Date().toISOString())
-      .catch((error: Error) => this.options.onError?.(error));
   }
 }
 

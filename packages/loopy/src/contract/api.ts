@@ -45,8 +45,24 @@ export const runsQuerySchema = z.strictObject({
   slug: z.string().optional(),
   status: runStatusSchema.optional(),
   limit: z.coerce.number().int().positive().optional(),
-  before: z.string().optional(),
+  before: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\|[^|]+$/)
+    .optional(),
 });
+
+export type RunsQuery = z.infer<typeof runsQuerySchema>;
+
+/** The ID breaks timestamp ties so every run remains reachable. */
+export function encodeRunCursor(run: { createdAt: string; id: string }): string {
+  return `${run.createdAt}|${run.id}`;
+}
+
+export function decodeRunCursor(cursor: NonNullable<RunsQuery["before"]>) {
+  const separator = cursor.indexOf("|");
+
+  return { createdAt: cursor.slice(0, separator), id: cursor.slice(separator + 1) };
+}
 
 export const logsQuerySchema = z.strictObject({
   after: z.coerce.number().int().nonnegative().optional(),

@@ -69,7 +69,7 @@ export function startServer(options: ServerOptions) {
 
         const path = decodeURIComponent(url.pathname);
 
-        if (!path.startsWith("/api/")) {
+        if (path !== "/api" && !path.startsWith("/api/")) {
           return serveAsset(assets, request, path);
         }
 
