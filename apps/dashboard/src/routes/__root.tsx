@@ -26,6 +26,13 @@ function Shell() {
         </Link>
         <div className="flex items-center gap-4">
           <InboxLink />
+          <Link
+            to="/schedules"
+            className="mr-4 -ml-2 hidden rounded-md px-2 sm:block py-1 text-muted hover:bg-raised hover:text-ink"
+            activeProps={{ className: "bg-raised text-ink" }}
+          >
+            Schedules
+          </Link>
           <ConnectionStatus />
           <DaemonIndicator />
         </div>
