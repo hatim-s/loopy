@@ -1,46 +1,40 @@
+import { recordField } from "./field-value.js";
 import {
   ERROR_FIELDS,
-  type Graph,
   type Node,
   type NodeId,
+  type OutSchema,
   type RecordSpec,
+  type Ref,
   type Value,
+  type ValueType,
 } from "./graph.js";
-import { binding, type Context as GraphContext, scopeReaches, targets } from "./graph-context.js";
-import { operandType } from "./graph-predicate.js";
-import { isRef, projectValue } from "./graph-ref.js";
-import { isString } from "./validation.js";
+import {
+  binding,
+  createContext,
+  type Context as GraphContext,
+  isTail,
+  scopeReaches,
+  targets,
+} from "./graph-context.js";
+import { arrayType, elementType, operandType } from "./graph-predicate.js";
+import { isRef, projectValue } from "./graph-values.js";
 
-type Context = GraphContext & { refTypes: Map<string, string | null>; resolving: Set<string> };
+type Context = GraphContext & { refTypes: Map<string, ValueType | null>; resolving: Set<string> };
 
-function declaredSchema(context: Context, ref: { ref: string; path: string[] }) {
-  if (ref.ref === "input") {
-    return context.graph.input === "schema"
-      ? null
-      : { kind: "record" as const, fields: context.graph.input };
-  }
-
-  const node = context.nodes.get(ref.ref);
-
-  if (node?.kind === "code" || node?.kind === "command") {
-    return node.out;
-  }
-
-  return node?.kind === "wait" ? node.payload : null;
-}
-
-function recordPathType(schema: RecordSpec, path: string[]): string | null {
+function recordPathType(schema: RecordSpec, path: string[]): ValueType | null {
   if (path.length === 0) {
     return "object";
   }
+  const [key] = path;
+  return path.length === 1 && key !== undefined ? (recordField(schema, key)?.type ?? null) : null;
+}
 
-  if (path.length !== 1) {
-    return null;
+function schemaType(schema: OutSchema, path: string[]): ValueType | null {
+  if (schema.kind === "record") {
+    return recordPathType(schema.fields, path);
   }
-
-  const type = projectValue(schema, path) ?? projectValue(schema, [`${path[0]}?`]);
-
-  return isString(type) ? type : null;
+  return path.length === 0 ? schema.type : null;
 }
 
 function bodyResultType(
@@ -48,183 +42,146 @@ function bodyResultType(
   owner: Node,
   entry: NodeId,
   path: string[],
-): string | null {
+): ValueType | null {
   const result = context.graph.nodes.find(
     (child) =>
       child.scope === owner.id &&
       (child.kind === "join" || child.kind === "fail") &&
-      !context.graph.edges.some((edge) => edge.from === child.id && edge.kind === "next") &&
+      isTail(context, child) &&
       scopeReaches(context, entry, child.id),
   );
-
-  return resolveRefType(context, { ref: result?.id ?? entry, path });
+  const node = result ?? context.nodes.get(entry);
+  return node ? nodeType(context, node, path) : null;
 }
 
-function literalPathType(context: Context, value: Value, path: string[]): string | null {
+function literalPathType(context: Context, value: Value, path: string[]): ValueType | null {
   if (isRef(value)) {
     return resolveRefType(context, { ref: value.ref, path: [...value.path, ...path] });
   }
-
   if (path.length === 0) {
     return operandType(value, (ref) => resolveRefType(context, ref));
   }
-
   const [field, ...rest] = path;
-
   const member = field === undefined ? undefined : projectValue(value, [field]);
-
-  if (member === undefined) {
-    return null;
-  }
-
-  return literalPathType(context, member, rest);
+  return member === undefined ? null : literalPathType(context, member, rest);
 }
 
 function parallelType(
   context: Context,
   node: Extract<Node, { kind: "parallel" }>,
   path: string[],
-): string | null {
+): ValueType | null {
   const entries = Object.values(node.branches);
-
   if (entries.some((entry) => bodyResultType(context, node, entry, []) === "never")) {
     return "never";
   }
-
   if (path.length === 0) {
     return "object";
   }
-
   const [label, ...rest] = path;
-
   const entry =
     label !== undefined && Object.hasOwn(node.branches, label) ? node.branches[label] : undefined;
-
   return entry === undefined ? null : bodyResultType(context, node, entry, rest);
 }
 
-function derivedType(context: Context, node: Node, path: string[]): string | null {
+function assertNever(node: never): never {
+  throw new Error(`Unknown node kind: ${JSON.stringify(node)}`);
+}
+
+function nodeType(context: Context, node: Node, path: string[]): ValueType | null {
   switch (node.kind) {
+    case "code":
+    case "command":
+      return schemaType(node.out, path);
+    case "wait":
+      return schemaType(node.payload, path);
     case "branch":
     case "switch":
     case "rescue": {
       const arms = targets(node)
         .map((entry) => bodyResultType(context, node, entry, path))
         .filter((type) => type !== "never");
-
       if (arms.length === 0) {
         return "never";
       }
-
       if (path.length > 0 && arms.some((type) => type === null)) {
         return null;
       }
-
       return arms.every((type) => type === arms[0]) ? (arms[0] ?? null) : "json";
     }
-
     case "parallel":
       return parallelType(context, node, path);
-
     case "join":
-      return node.result.kind === "none"
-        ? "never"
-        : literalPathType(context, node.result.value, path);
+      if (node.result.kind === "none") {
+        return "never";
+      }
+      return literalPathType(context, node.result.value, path);
     case "finally":
       return bodyResultType(context, node, node.body, path);
-    case "map":
-      return path.length === 0
-        ? `${node.onError === "collect" ? "json" : (bodyResultType(context, node, node.body, []) ?? "json")}[]`
-        : null;
+    case "map": {
+      if (path.length !== 0) {
+        return null;
+      }
+      const body = bodyResultType(context, node, node.body, []);
+      if (body === "never") {
+        return "never";
+      }
+      return node.onError === "collect" ? "json[]" : arrayType(body);
+    }
+    case "fail":
+      return "never";
+    case "format":
+    case "now":
+    case "uuid":
+      return path.length === 0 ? "string" : null;
+    case "random":
+      return path.length === 0 ? "number" : null;
+    case "log":
+    case "sleep":
+      return path.length === 0 ? "null" : null;
     default:
-      return null;
+      return assertNever(node);
   }
 }
 
-function resolveRefType(context: Context, ref: { ref: string; path: string[] }): string | null {
-  const key = JSON.stringify([ref.ref, ref.path]);
+function declaredRefType(context: Context, ref: Ref): ValueType | null {
+  const owner = binding(context, ref.ref);
+  if (owner?.kind === "map") {
+    if (ref.path.length !== 0) {
+      return null;
+    }
+    if (owner.index === ref.ref) {
+      return "number";
+    }
+    return elementType(resolveRefType(context, owner.over));
+  }
+  if (owner?.kind === "rescue") {
+    return recordPathType(ERROR_FIELDS, ref.path);
+  }
+  if (ref.ref === "input") {
+    return recordPathType(context.graph.input, ref.path);
+  }
+  const node = context.nodes.get(ref.ref);
+  return node ? nodeType(context, node, ref.path) : null;
+}
 
+function resolveRefType(context: Context, ref: Ref): ValueType | null {
+  const key = JSON.stringify([ref.ref, ref.path]);
   if (context.refTypes.has(key)) {
     return context.refTypes.get(key) ?? null;
   }
-
   // Track ids because cyclic field projections can grow the path on each traversal.
   if (context.resolving.has(ref.ref)) {
     return null;
   }
-
   context.resolving.add(ref.ref);
   const type = declaredRefType(context, ref);
   context.resolving.delete(ref.ref);
   context.refTypes.set(key, type);
-
   return type;
 }
 
-function declaredRefType(context: Context, ref: { ref: string; path: string[] }): string | null {
-  const node = context.nodes.get(ref.ref);
-  const owner = binding(context, ref);
-
-  if (node?.kind === "fail") {
-    return "never";
-  }
-
-  if (owner?.kind === "map" && ref.ref !== "input") {
-    const array = resolveRefType(context, owner.over);
-
-    const type =
-      owner.index === ref.ref ? "number" : array?.endsWith("[]") ? array.slice(0, -2) : "json";
-
-    return ref.path.length === 0 ? (type ?? "json") : null;
-  }
-
-  if (owner?.kind === "rescue") {
-    return recordPathType(ERROR_FIELDS, ref.path);
-  }
-
-  const schema = declaredSchema(context, ref);
-
-  if (schema) {
-    return schema.kind === "record"
-      ? recordPathType(schema.fields, ref.path)
-      : ref.path.length === 0
-        ? schema.type
-        : null;
-  }
-
-  if (
-    node &&
-    ["branch", "switch", "rescue", "join", "finally", "map", "parallel"].includes(node.kind)
-  ) {
-    return derivedType(context, node, ref.path);
-  }
-
-  return ref.path.length === 0 ? scalarNodeType(node) : null;
-}
-
-function scalarNodeType(node: Node | undefined): string | null {
-  if (node?.kind === "format" || node?.kind === "now" || node?.kind === "uuid") {
-    return "string";
-  }
-
-  if (node?.kind === "random") {
-    return "number";
-  }
-
-  if (node?.kind === "log" || node?.kind === "sleep") {
-    return "null";
-  }
-
-  return null;
-}
-
-export function graphTypeResolver(graph: Pick<Graph, "input" | "nodes" | "edges">) {
-  const context: Context = {
-    graph,
-    nodes: new Map(graph.nodes.map((node) => [node.id, node])),
-    refTypes: new Map(),
-    resolving: new Set(),
-  };
-
-  return (ref: { ref: string; path: string[] }) => resolveRefType(context, ref);
+export function graphTypeResolver(graph: GraphContext["graph"], topology = createContext(graph)) {
+  const context: Context = { ...topology, refTypes: new Map(), resolving: new Set() };
+  return (ref: Ref) => resolveRefType(context, ref);
 }
