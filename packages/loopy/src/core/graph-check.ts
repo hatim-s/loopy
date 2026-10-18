@@ -1,18 +1,18 @@
-import type { Diagnostic, DiagnosticCode } from "./diagnostics.js";
+import type { Diagnostic } from "./diagnostics.js";
 import { diagnostic } from "./diagnostics.js";
-import type { Graph, Node, Ref } from "./graph.js";
+import { type Graph, type Node, type Ref, SCALAR_TYPES } from "./graph.js";
 import type { ValidationContext as Context } from "./graph-context.js";
 import { ancestors, binding, bodyEntries, sameBody, scopeReaches } from "./graph-context.js";
 import { isReservedGraphName, nodeNames } from "./graph-names.js";
 import { checkPredicate } from "./graph-predicate.js";
-import { isRef, refs, values } from "./graph-ref.js";
 import { structureRules } from "./graph-structure.js";
 import { graphTypeResolver } from "./graph-type.js";
+import { isRef, refs, values } from "./graph-values.js";
 
 function visible(context: Context, producer: Node, consumer: Node): boolean {
   const chain = [consumer, ...ancestors(consumer, context.nodes)];
 
-  if (chain.slice(1).some((node) => node.id === producer.id)) {
+  if (isWithin(context, consumer, producer.id)) {
     return false;
   }
 
@@ -25,7 +25,7 @@ function visible(context: Context, producer: Node, consumer: Node): boolean {
   );
 }
 
-function validPath(context: Context, ref: { ref: string; path: string[] }): boolean {
+function validPath(context: Context, ref: Ref): boolean {
   if (context.resolveType(ref) === "never") {
     return false;
   }
@@ -39,58 +39,49 @@ function validPath(context: Context, ref: { ref: string; path: string[] }): bool
 
 function refError(context: Context, ref: Ref, consumer: Node | null): Diagnostic[] {
   if (!validPath(context, ref)) {
-    return [
-      diagnostic(
-        "unresolved_ref",
-        consumer?.id ?? null,
-        "Reference paths must match the declared output schema.",
-      ),
-    ];
+    return [diagnostic("unresolved_ref", consumer?.id ?? null)];
   }
 
-  // The compiler reserves 'input' as the graph's external-input binding.
+  // Core reserves 'input' as the graph's external-input binding.
   if (ref.ref === "input") {
     return [];
   }
 
   const producer = context.nodes.get(ref.ref);
-  const owner = binding(context, ref);
+  const owner = binding(context, ref.ref);
 
   if (!producer && !owner) {
-    return [
-      diagnostic(
-        "unresolved_ref",
-        consumer?.id ?? null,
-        "References must name an output or a scope binding.",
-      ),
-    ];
+    return [diagnostic("unresolved_ref", consumer?.id ?? null)];
   }
 
-  const local =
-    owner && consumer && ancestors(consumer, context.nodes).some((node) => node.id === owner.id);
-
-  const handler =
-    owner?.kind !== "rescue" ||
-    (consumer &&
-      [consumer, ...ancestors(consumer, context.nodes)].some((node) => {
-        const entries = bodyEntries(context, node);
-
-        return node.scope === owner.id && entries.length === 1 && entries[0] === owner.handler;
-      }));
-
   const allowed = owner
-    ? local && handler
-    : producer && (consumer ? visible(context, producer, consumer) : producer.scope === null);
+    ? bindingVisible(context, owner, consumer)
+    : producer !== undefined && outputVisible(context, producer, consumer);
 
-  return allowed
-    ? []
-    : [
-        diagnostic(
-          "out_of_scope_ref",
-          consumer?.id ?? null,
-          "Reference is unavailable in this scope.",
-        ),
-      ];
+  return allowed ? [] : [diagnostic("out_of_scope_ref", consumer?.id ?? null)];
+}
+
+function bindingVisible(context: Context, owner: Node, consumer: Node | null): boolean {
+  if (consumer === null || !isWithin(context, consumer, owner.id)) {
+    return false;
+  }
+  if (owner.kind !== "rescue") {
+    return true;
+  }
+  const handler = context.nodes.get(owner.handler);
+  return (
+    handler !== undefined &&
+    [consumer, ...ancestors(consumer, context.nodes)].some(
+      (node) => node.scope === owner.id && sameBody(context, node, handler),
+    )
+  );
+}
+
+function outputVisible(context: Context, producer: Node, consumer: Node | null): boolean {
+  if (consumer === null) {
+    return producer.scope === null;
+  }
+  return visible(context, producer, consumer);
 }
 
 function references(context: Context): Diagnostic[] {
@@ -119,10 +110,9 @@ function formats(context: Context): Diagnostic[] {
   return context.graph.nodes.flatMap((node) =>
     node.kind === "format" &&
     Object.values(node.values).some(
-      (value) =>
-        isRef(value) && !["string", "number", "boolean"].includes(context.resolveType(value) ?? ""),
+      (value) => isRef(value) && !SCALAR_TYPES.some((type) => type === context.resolveType(value)),
     )
-      ? [diagnostic("predicate_type", node.id, "Format operands must have a declared scalar type.")]
+      ? [diagnostic("operand_type", node.id)]
       : [],
   );
 }
@@ -138,39 +128,30 @@ function bindings({ graph }: Context): Diagnostic[] {
       const duplicate = seen.has(id);
       seen.add(id);
 
-      return duplicate
-        ? [diagnostic("duplicate_ref", node.id, "Scope bindings must have unique reference ids.")]
-        : [];
+      return duplicate ? [diagnostic("duplicate_ref", node.id)] : [];
     });
   });
 }
 
 function reservedNames({ graph }: Context): Diagnostic[] {
   const names = [
-    ...(graph.input === "schema"
-      ? []
-      : Object.keys(graph.input).map((name) => ({ name, node: null }))),
+    ...Object.keys(graph.input).map((name) => ({ name, node: null })),
     ...graph.nodes.flatMap((node) => nodeNames(node).map((name) => ({ name, node: node.id }))),
-    ...graph.edges.flatMap((edge) =>
-      edge.kind === "case" ? [{ name: edge.label, node: edge.from }] : [],
-    ),
   ];
 
   return names.flatMap(({ name, node }) =>
-    isReservedGraphName(name)
-      ? [diagnostic("reserved_name", node, `Label "${name}" is reserved`)]
-      : [],
+    isReservedGraphName(name) ? [diagnostic("reserved_name", node)] : [],
   );
 }
 
 export function validateGraph(graph: Graph): Diagnostic[] {
-  const context: Context = {
-    graph,
-    nodes: new Map(graph.nodes.map((node) => [node.id, node])),
-    resolveType: graphTypeResolver(graph),
-  };
-
-  return [...structureRules, reservedNames, bindings, references, predicates, formats].flatMap(
-    (rule) => rule(context),
+  const topology = createContext(graph);
+  const context: Context = { ...topology, graph, resolveType: graphTypeResolver(graph, topology) };
+  const structural = structureRules.flatMap((rule) => rule(context));
+  if (structural.length) {
+    return structural;
+  }
+  return [reservedNames, bindings, references, predicates, formats].flatMap((rule) =>
+    rule(context),
   );
 }

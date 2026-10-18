@@ -227,25 +227,9 @@ export type Node = Expand<
     )
 >;
 
-export const EDGE_KINDS = [
-  "next",
-  "yes",
-  "no",
-  "case",
-  "each",
-  "join",
-  "cleanup",
-  "rescue",
-] as const;
-
-export type EdgeKind = (typeof EDGE_KINDS)[number];
-
-export type Edge = Expand<
-  { from: NodeId; to: NodeId } & (
-    | { kind: Exclude<EdgeKind, (typeof EDGE_KINDS)[3]> }
-    | { kind: (typeof EDGE_KINDS)[3]; label: string }
-  )
->;
+export const EDGE_KINDS = ["next", "join"] as const;
+type EdgeKind = (typeof EDGE_KINDS)[number];
+export type Edge = { from: NodeId; to: NodeId; kind: EdgeKind };
 
 export const LOOPY_SCOPES = ["project", "global"] as const;
 

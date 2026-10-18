@@ -172,11 +172,6 @@ export class GraphBuilder {
     return bindingId(`${owner}:${name}`);
   }
 
-  caseEdge(from: NodeId, to: NodeId, label: string) {
-    validateLabel(label);
-    this.edges.push({ from, to, kind: "case", label });
-  }
-
   ref<T, Fields = never>(refId: string, schema?: OutSchema | null): Ref<T, Fields>;
   ref(refId: string, schema: OutSchema | null = null): RefValue {
     const referenceId = bindingId(refId);
@@ -196,7 +191,7 @@ export class GraphBuilder {
     return { attempts: 3, backoff: "exponential", retryOnExit: false, ...retry };
   }
 
-  edge(from: NodeId, to: NodeId, kind: Exclude<Edge["kind"], "case">) {
+  edge(from: NodeId, to: NodeId, kind: Edge["kind"]) {
     this.edges.push({ from, to, kind });
   }
 
@@ -258,7 +253,6 @@ export class GraphBuilder {
       edges: this.edges,
       entry,
       outputs: null,
-      warnings: [],
     };
   }
 

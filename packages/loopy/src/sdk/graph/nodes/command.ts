@@ -153,6 +153,7 @@ function shell({
       out: commandOutput,
       argv: argv.map((arg) => serialize(arg, builder)),
       flags: {},
+      flagSpec: null,
       options: {
         cwd: serialize(options.cwd, builder),
         env: serializeValues(options.env ?? {}, builder),

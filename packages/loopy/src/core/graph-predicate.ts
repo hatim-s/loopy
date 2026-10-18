@@ -8,7 +8,7 @@ import {
   type Value,
   type ValueType,
 } from "./graph.js";
-import { isRef, refs } from "./graph-ref.js";
+import { isRef, refs } from "./graph-values.js";
 import { isBoolean, isNumber, isString } from "./validation.js";
 
 export type ResolveType = (ref: Ref) => ValueType | null;

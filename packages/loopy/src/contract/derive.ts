@@ -1,10 +1,11 @@
-import type {
-  Graph as CoreGraph,
-  HookRecord,
-  RunRecord,
-  RuntimeEvent,
-  Schedule,
-  StepRecord,
+import {
+  type Graph as CoreGraph,
+  type HookRecord,
+  type Node,
+  type RunRecord,
+  type RuntimeEvent,
+  type Schedule,
+  type StepRecord,
 } from "../core/index.js";
 import type { GraphView } from "./graph.js";
 import type { LoopyView, RunView, ServerEvent } from "./views.js";
@@ -192,11 +193,45 @@ export function graphView(graph: CoreGraph): GraphView {
         ? { ...node, parse: node.parse === null ? null : { input: node.parse.input } }
         : node;
     }),
-    warnings: graph.warnings.map(({ code, message, node }) => ({
-      code,
-      message,
-      nodeId: node,
-      label: graph.nodes.find((entry) => entry.id === node)?.label ?? null,
-    })),
+    edges: [...graph.edges, ...graph.nodes.flatMap(controlEdges)],
   };
+}
+
+function controlEdges(node: Node): GraphView["edges"] {
+  const edge = (to: Node["id"], kind: "yes" | "no" | "each" | "cleanup" | "rescue") => ({
+    from: node.id,
+    to,
+    kind,
+  });
+  switch (node.kind) {
+    case "branch":
+      return [edge(node.arms.yes, "yes"), edge(node.arms.no, "no")];
+    case "switch":
+      return [
+        ...Object.entries(node.cases).map(([label, to]) => ({
+          from: node.id,
+          to,
+          kind: "case" as const,
+          label,
+        })),
+        ...(node.default === null
+          ? []
+          : [{ from: node.id, to: node.default, kind: "case" as const, label: "default" }]),
+      ];
+    case "parallel":
+      return Object.entries(node.branches).map(([label, to]) => ({
+        from: node.id,
+        to,
+        kind: "case" as const,
+        label,
+      }));
+    case "map":
+      return [edge(node.body, "each")];
+    case "finally":
+      return [edge(node.cleanup, "cleanup")];
+    case "rescue":
+      return [edge(node.handler, "rescue")];
+    default:
+      return [];
+  }
 }

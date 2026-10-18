@@ -27,8 +27,6 @@ export function branch<Y extends AuthorValue, N extends AuthorValue>(
   const yes = builder.arm(base.id, arms.yes);
   const no = builder.arm(base.id, arms.no);
   node.arms = { yes: yes.entry, no: no.entry };
-  builder.edge(base.id, yes.entry, "yes");
-  builder.edge(base.id, no.entry, "no");
   builder.continueFrom(base.id, [...yes.tails, ...no.tails]);
 
   return builder.ref(base.id);
@@ -63,7 +61,6 @@ export function switch_<A extends Record<string, Arm>>(
       entries.push([label, arm.entry]);
     }
 
-    builder.caseEdge(base.id, arm.entry, label);
     tails.push(...arm.tails);
   }
 
@@ -101,7 +98,6 @@ export function map<T, R extends AuthorValue, M extends "fail" | "collect">(
   builder.record(node);
   const arm = builder.arm(base.id, () => body(builder.ref(item), builder.ref(index)));
   node.body = arm.entry;
-  builder.edge(base.id, arm.entry, "each");
 
   for (const tail of arm.tails) {
     builder.edge(tail, base.id, "join");
@@ -126,7 +122,6 @@ export function parallel<A extends Record<string, Arm>>(
     validateLabel(label);
     const arm = builder.arm(base.id, callback);
     entries.push([label, arm.entry]);
-    builder.caseEdge(base.id, arm.entry, label);
     tails.push(...arm.tails);
   }
 
@@ -146,7 +141,6 @@ export function finally_<R extends AuthorValue>(body: () => R, cleanup: Arm): Re
   node.body = main.entry;
   node.cleanup = final.entry;
   builder.edge(base.id, main.entry, "next");
-  builder.edge(base.id, final.entry, "cleanup");
   builder.continueFrom(base.id, [...main.tails, ...final.tails]);
 
   return builder.ref(base.id);
@@ -170,7 +164,6 @@ export function rescue<R extends AuthorValue, H extends AuthorValue>(
   node.body = main.entry;
   node.handler = caught.entry;
   builder.edge(base.id, main.entry, "next");
-  builder.edge(base.id, caught.entry, "rescue");
   builder.continueFrom(base.id, [...main.tails, ...caught.tails]);
 
   return builder.ref(base.id);
