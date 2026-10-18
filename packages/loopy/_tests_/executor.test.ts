@@ -262,6 +262,7 @@ test("a missing declared secret persists and reports its stable preparation code
   const service = new LoopyService({ store, registry: () => registry, clock: SYSTEM_CLOCK });
   const run = await service.startRun(graph.name, {}, f.workspace);
   const errors: Error[] = [];
+
   const daemon = localDaemon({
     home: f.home,
     cwd: f.workspace,
@@ -270,7 +271,9 @@ test("a missing declared secret persists and reports its stable preparation code
     concurrency: 1,
     onError: (error) => errors.push(error),
   });
+
   const running = daemon.run();
+
   try {
     await until(async () => (await store.getRun(run.id))?.status === "failed");
     expect((await store.getRun(run.id))?.error).toBe(

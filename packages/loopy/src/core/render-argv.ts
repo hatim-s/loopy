@@ -22,11 +22,20 @@ export class CommandArgumentError extends Error {
   }
 }
 
+type RenderValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | readonly RenderValue[]
+  | { readonly [key: string]: RenderValue };
+
 export type RenderInput = {
   args?: readonly string[];
   revisions?: readonly string[];
   paths?: readonly string[];
-  flags?: Readonly<Record<string, unknown>>;
+  flags?: Readonly<Record<string, RenderValue>>;
 };
 
 // BOUNDARY: JavaScript callers supply untyped flag values at this public API.

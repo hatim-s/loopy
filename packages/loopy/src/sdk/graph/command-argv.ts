@@ -4,6 +4,7 @@ import {
   isNumber,
   isRecord,
   isString,
+  type RenderInput,
   renderOperands,
 } from "../../core/index.js";
 import {
@@ -26,7 +27,7 @@ type Input = {
 class Preparation {
   private readonly values = new Map<string, AuthorValue>();
 
-  encode = (value: AuthorValue): AuthorValue => {
+  encode = (value: AuthorValue): NonNullable<RenderInput["flags"]>[string] => {
     if (isRef(value) || isString(value)) {
       const key = `\u0000${this.values.size}\u0000`;
       this.values.set(key, value);
@@ -44,7 +45,15 @@ class Preparation {
       );
     }
 
-    return value;
+    if (value === undefined) {
+      return undefined;
+    }
+
+    if (value === null || isNumber(value) || isBoolean(value)) {
+      return value;
+    }
+
+    return refuse("unresolved_ref", "Descriptor preparation requires literals or references.");
   };
 
   // BOUNDARY: Legacy descriptor prepare returns RenderInput's unknown flag values.

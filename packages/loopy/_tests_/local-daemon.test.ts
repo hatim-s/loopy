@@ -113,6 +113,7 @@ test("stop during startup waits for discovery publication and closes its listeni
   const home = directory();
   const store = openRunStore(home);
   const daemon = localDaemon({ home, cwd: directory(), store, port: 0, concurrency: 1 });
+
   try {
     const starting = daemon.start();
     await daemon.stop();

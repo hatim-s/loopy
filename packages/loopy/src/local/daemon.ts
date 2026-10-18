@@ -61,7 +61,6 @@ class LocalDaemon {
   private readonly token = crypto.randomUUID();
   private server?: ReturnType<typeof startServer>;
   private starting?: Promise<string>;
-  private starting?: Promise<string>;
   private stopping?: Promise<void>;
 
   constructor(private readonly options: DaemonOptions) {
@@ -145,12 +144,6 @@ class LocalDaemon {
       try {
         await this.starting;
       } finally {
-        try {
-          await this.starting;
-        } catch {
-          // Failed startup already closes its server. Shutdown still drains the host.
-        }
-
         await this.server?.stop();
         await this.daemon.stop();
         removeDaemonFile(this.options.home, this.token);
