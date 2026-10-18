@@ -243,7 +243,7 @@ test("only declared secrets reach bundles and receipts contain redacted results 
 });
 
 for (const failure of ["timeout", "output_limit", "nonzero"] as const) {
-  test(`bundle ${failure} decodes escaped secrets before storing logs, node failures and receipts`, async () => {
+  test(`bundle ${failure} masks escaped secrets before storing logs, node failures and receipts`, async () => {
     const f = await fixture();
     const secret = 'alpha"beta';
     const escaped = JSON.stringify(secret).slice(1, -1);
@@ -316,7 +316,7 @@ for (const failure of ["timeout", "output_limit", "nonzero"] as const) {
   });
 }
 
-test("truncated bundle records decode secret escapes at every capture boundary", () => {
+test("truncated bundle records mask secret escapes at every capture boundary", () => {
   const secret = 'alpha"beta';
   const escaped = JSON.stringify(secret).slice(1, -1);
   const record = JSON.stringify({ message: escaped, data: { nested: [escaped] } });
@@ -329,5 +329,111 @@ test("truncated bundle records decode secret escapes at every capture boundary",
     );
 
     expect(JSON.stringify(result)).not.toContain("alpha");
+  }
+});
+
+for (const ending of ["success", "timeout", "output_limit", "nonzero"] as const) {
+  test(`bundle ${ending} masks secrets printed as plain text on stdout and stderr`, async () => {
+    const f = await fixture();
+    const secrets = { TOKEN: 'alpha"beta', WINDOWS: "C:\\new", MULTILINE: "line1\nline2" };
+    const store = new SecretStore(f.home);
+
+    for (const [name, value] of Object.entries(secrets)) {
+      store.set(name, value);
+    }
+
+    const executor = new LocalExecutor({
+      home: f.home,
+      workspace: f.workspace,
+      mode: "sandbox",
+      secrets: Object.keys(secrets),
+      bundlePath: () => f.bundle,
+    });
+
+    const tail = {
+      success: "console.log(JSON.stringify({words: 1}));",
+      timeout: "await Bun.sleep(10000);",
+      output_limit: 'process.stdout.write("x".repeat(3 * 1024 * 1024));',
+      nonzero: "process.exit(2);",
+    }[ending];
+
+    await writeFile(
+      f.bundle,
+      `const escaped = JSON.stringify(process.env.TOKEN).slice(1,-1); console.log(escaped); console.error(escaped); console.log('say "hi there"'); console.log('token="' + process.env.WINDOWS + '"'); console.error('token="' + process.env.WINDOWS + '"'); console.error(process.env.MULTILINE); ${tail}`,
+    );
+    const graph = structuredClone(approveDemoGraph);
+    const node = graph.nodes[0];
+
+    if (node?.kind !== "code") {
+      throw new Error("Expected code fixture.");
+    }
+
+    node.module.bundleHash = "a".repeat(64);
+    node.timeout = 500;
+    node.retry = { attempts: 1, backoff: "exponential", retryOnExit: false };
+    const runs = new MemoryStore();
+    await runs.createRun({ ...newRun(), input: { subject: "test" } });
+
+    const outcome = await activate({
+      store: runs,
+      executor,
+      graph: graphSchema.parse(graph),
+      runId: "run",
+    });
+
+    const nodes = await runs.getNodeRuns("run");
+    expect(nodes[0]?.status).toBe(ending === "success" ? "succeeded" : "failed");
+    const logs = await runs.getLogs("run");
+    const key = nodes[0]?.key;
+
+    if (!key) {
+      throw new Error("Missing stored execution key.");
+    }
+
+    const receipt = JSON.parse(await readFile(await receiptPath(f.home, key, 1), "utf8"));
+    const events = await runs.events(0, 1000);
+
+    for (const value of [nodes, logs, events, outcome, receipt]) {
+      const serialized = JSON.stringify(value);
+
+      for (const fragment of ["alpha", "C:", "line1", "line2"]) {
+        expect(serialized).not.toContain(fragment);
+      }
+    }
+
+    expect(logs).toContainEqual(
+      expect.objectContaining({
+        message: "stderr",
+        data: '[redacted]\ntoken="[redacted]"\n[redacted]\n',
+      }),
+    );
+
+    if (ending === "success") {
+      expect(logs).toContainEqual(
+        expect.objectContaining({
+          message: "stdout",
+          data: '[redacted]\nsay "hi there"\ntoken="[redacted]"\n',
+        }),
+      );
+    }
+  });
+}
+
+test("complete log records keep keys and values that end in a secret prefix", () => {
+  const record = { message: "status", data: { s: 1, su: 2, sup: 3, kept: "pass" } };
+
+  for (const failure of [undefined, { code: "output_limit" as const, message: "Capture limit" }]) {
+    const result = bundleResult(
+      {
+        stdout: JSON.stringify({ ok: true }),
+        stderr: `${JSON.stringify(record)}\n`,
+        exitCode: 0,
+        durationMs: 0,
+      },
+      secretRedactor(["supersecret"]),
+      failure,
+    );
+
+    expect(result.logs[0]).toEqual(record);
   }
 });

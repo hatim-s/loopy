@@ -9,74 +9,81 @@ import {
 } from "../core/index.js";
 import { redactValue } from "./redact.js";
 
+type Redact = (text: string, truncated?: boolean) => string;
+
 const logSchema = z.strictObject({ message: z.string(), data: jsonSchema });
 
-function decodeFragment(text: string): string {
-  // A killed writer can leave an unfinished record. Decode its string tokens before masking secrets.
-  return text.replace(/"(?:\\.|[^"\\])*(?:"|\\?$)/gu, (token) => {
-    try {
-      return JSON.parse(token);
-    } catch {
-      return token
-        .slice(1)
-        .replace(/\\(?:u[\da-f]{4}|["\\/bfnrt])|\\(?:u[\da-f]{0,3})?$/giu, (escape) => {
-          try {
-            return JSON.parse(`"${escape}"`);
-          } catch {
-            return "";
-          }
-        });
+function parseRecord(line: string): AttemptLog | undefined {
+  try {
+    return logSchema.parse(JSON.parse(line));
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Only whole log records are parsed. Everything else stays raw text, and consecutive raw lines
+ * form one block so a secret spanning lines is still matched by the raw redactor.
+ */
+function stderrLogs(stderr: string, redact: Redact, cut: boolean): AttemptLog[] {
+  const logs: AttemptLog[] = [];
+  let block: string[] = [];
+
+  const flush = (final: boolean) => {
+    const text = block.join("\n");
+    block = [];
+
+    if (text.trim()) {
+      logs.push({ message: "stderr", data: redact(text, cut && final) });
     }
-  });
+  };
+
+  for (const line of stderr.split("\n")) {
+    const record = parseRecord(line);
+
+    if (!record) {
+      block.push(line);
+      continue;
+    }
+
+    flush(false);
+    logs.push({ message: redact(record.message), data: redactValue(record.data, redact) });
+  }
+
+  flush(true);
+
+  return logs;
+}
+
+function parseOutput(line: string) {
+  try {
+    return jsonSchema.parse(JSON.parse(line));
+  } catch {
+    return undefined;
+  }
 }
 
 export function bundleResult(
   raw: CommandResult,
-  redact: (text: string, truncated?: boolean) => string,
+  redact: Redact,
   failure?: Extract<ExecutionResult, { kind: "failed" }>["error"],
 ): ExecutionResult {
-  const lines = raw.stdout.trimEnd().split("\n");
-  const last = lines.pop() ?? "";
+  // A killed process can stop mid-write, so the end of each stream may hold part of a secret.
+  const cut = failure !== undefined;
+  const failed = cut || raw.exitCode !== 0;
+  const logs = stderrLogs(raw.stderr, redact, cut);
+  const lastBreak = raw.stdout.trimEnd().lastIndexOf("\n");
+  const output = parseOutput(raw.stdout.slice(lastBreak + 1));
+  const stdout = output === undefined || failed ? raw.stdout : raw.stdout.slice(0, lastBreak + 1);
 
-  const logs: AttemptLog[] = raw.stderr
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => {
-      try {
-        return logSchema.parse(JSON.parse(line));
-      } catch {
-        return { message: "stderr", data: decodeFragment(line) };
-      }
-    });
-
-  let output;
-
-  try {
-    output = jsonSchema.parse(JSON.parse(last));
-  } catch {
-    lines.push(last);
+  if (stdout.trim()) {
+    logs.push({ message: "stdout", data: redact(stdout, cut) });
   }
 
-  if (output !== undefined && (failure || raw.exitCode !== 0)) {
-    lines.push(last);
-  }
+  const bounded = limitLogs(logs);
 
-  if (lines.some(Boolean)) {
-    logs.push({
-      message: "stdout",
-      data: lines.map(decodeFragment).join("\n") + (raw.stdout.endsWith("\n") ? "\n" : ""),
-    });
-  }
-
-  const masked = logs.map((log) => ({
-    message: redact(log.message, true),
-    data: redactValue(log.data, (text) => redact(text, true)),
-  }));
-
-  const bounded = limitLogs(masked);
-
-  if (failure || raw.exitCode !== 0) {
-    const diagnostic = masked
+  if (failed) {
+    const diagnostic = logs
       .map((log) => `${log.message}: ${isString(log.data) ? log.data : JSON.stringify(log.data)}`)
       .join("\n")
       .slice(-500);

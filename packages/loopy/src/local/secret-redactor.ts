@@ -16,10 +16,16 @@ function trailingSecretPrefix(text: string, secrets: string[]): number {
   return boundary;
 }
 
-/** Exact values are masked. Truncated output also masks a secret prefix at the stream boundary. */
+const escape = (value: string) => JSON.stringify(value).slice(1, -1);
+
+/**
+ * Exact values are masked. Raw output can carry a secret JSON-escaped once (a log record) or twice
+ * (serialized JSON inside a record), so both forms count. Truncated output also masks a secret
+ * prefix at the stream boundary.
+ */
 export function secretRedactor(values: string[]) {
   const secrets = [
-    ...new Set(values.flatMap((value) => [value, JSON.stringify(value).slice(1, -1)])),
+    ...new Set(values.flatMap((value) => [value, escape(value), escape(escape(value))])),
   ]
     .filter(Boolean)
     .sort((a, b) => b.length - a.length);
