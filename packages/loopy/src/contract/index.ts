@@ -1,4 +1,4 @@
-export { isFieldValue, isTerminalRun } from "../core/index.js";
+export { isFieldValue, isTerminalRun, recordFields } from "../core/index.js";
 
 export {
   DEFAULT_ERROR_MESSAGES,

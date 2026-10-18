@@ -42,7 +42,7 @@ export async function lookupFile(path: string) {
   try {
     return receiptSchema.parse(JSON.parse(await readFile(path, "utf8")));
   } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+    if (errnoCode(error) === "ENOENT") {
       return { kind: "none" as const };
     }
 

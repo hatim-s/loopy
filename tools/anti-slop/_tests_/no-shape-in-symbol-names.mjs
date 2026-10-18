@@ -4,6 +4,8 @@ const tester = new RuleTester();
 const error = { messageId: "forbiddenSymbolName" };
 tester.run("anti-slop/no-shape-in-symbol-names", noForbiddenTermInSymbolNamesRule, {
   valid: [
+    "type PredicateShape = typeof PREDICATE_SHAPES[keyof typeof PREDICATE_SHAPES]; function matches(shape: PredicateShape) { return shape; }",
+    "const PREDICATE_SHAPES = { eq: 'comparison' }; const grammar = PREDICATE_SHAPES;",
     "declare const schema: ExternalSchema; const field = schema.shape.id;",
     "declare const outer: External; const value = outer.inner.shape;",
     "declare const schema: ExternalSchema; schema.shape.id.parse('x');",
@@ -16,7 +18,7 @@ tester.run("anti-slop/no-shape-in-symbol-names", noForbiddenTermInSymbolNamesRul
     { code: "type Payload = { shape: string };", errors: [error] },
     {
       code: "declare const owner: External; const shape = 'field'; const value = owner[shape];",
-      errors: 2
+      errors: 1
     }
   ]
 });

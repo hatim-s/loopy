@@ -52,15 +52,6 @@ export default tseslint.config(
     rules: { "no-console": "off" },
   },
   {
-    files: [
-      "packages/loopy/src/core/graph.ts",
-      "packages/loopy/src/core/graph-predicate.ts",
-      "packages/loopy/_tests_/contract.test.ts",
-    ],
-    // Predicate shapes name the shared operator grammar, not a placeholder abstraction.
-    rules: { "anti-slop/no-shape-in-symbol-names": "off" },
-  },
-  {
     files: ["packages/loopy/_tests_/**", "examples/**"],
     rules: { "sonarjs/cognitive-complexity": "off", "no-console": "off" },
   },

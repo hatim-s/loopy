@@ -6,6 +6,7 @@ import {
   type ExecutionResult,
   type ExecutionSpec,
   type Executor,
+  errnoCode,
   executionKeyString,
 } from "../core/index.js";
 import { spawnCaptured } from "../local/execution-host.js";
@@ -42,7 +43,7 @@ export class LocalExecutor implements Executor {
 
       return { kind: "started" as const };
     } catch (cause) {
-      if (!(cause instanceof Error && "code" in cause && cause.code === "ESRCH")) {
+      if (errnoCode(cause) !== "ESRCH") {
         throw cause;
       }
 

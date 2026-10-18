@@ -1,4 +1,4 @@
-import { isFieldValue, type Json, jsonSchema, type LoopyView } from "loopy/contract";
+import { isFieldValue, type Json, jsonSchema, type LoopyView, recordFields } from "loopy/contract";
 
 export type RecordSpec = LoopyView["input"];
 
@@ -15,13 +15,8 @@ export type FieldIssue = { key: string; message: string };
 
 export type Coerced = { valid: true; value: Json } | { valid: false; issues: FieldIssue[] };
 
-/** A key ending in "?" is optional; the input object uses the key without it. */
 export function inputFields(spec: RecordSpec): InputField[] {
-  return Object.entries(spec).map(([field, kind]) => {
-    const optional = field.endsWith("?");
-
-    return { key: optional ? field.slice(0, -1) : field, kind, optional };
-  });
+  return recordFields(spec).map(({ key, type, optional }) => ({ key, kind: type, optional }));
 }
 
 /** Required booleans start false so the form is submittable without touching them. */

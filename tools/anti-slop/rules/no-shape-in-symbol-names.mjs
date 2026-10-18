@@ -1,18 +1,30 @@
 const FORBIDDEN_SYMBOL_NAME = "shape";
 function containsForbiddenSymbolName(name) {
-  return name.toLowerCase().includes(FORBIDDEN_SYMBOL_NAME);
+  return name.toLowerCase().includes(FORBIDDEN_SYMBOL_NAME) && !/^[A-Z][A-Z0-9_]*_SHAPES$/.test(name);
 }
-function isBorrowedMemberName(node) {
+function isStructuralDeclaration(node) {
   const parent = node.parent;
-  if (parent === null || parent.type !== "MemberExpression")
-    return false;
-  return parent.property === node && parent.computed === false;
+  if (!parent) return false;
+  switch (parent.type) {
+    case "VariableDeclarator":
+      return parent.id === node;
+    case "FunctionDeclaration":
+    case "ClassDeclaration":
+      return parent.id === node;
+    case "TSTypeAliasDeclaration":
+      return parent.id === node && parent.typeAnnotation.type === "TSTypeLiteral";
+    case "TSPropertySignature":
+    case "PropertyDefinition":
+      return parent.key === node && !parent.computed;
+    default:
+      return false;
+  }
 }
 export const noForbiddenTermInSymbolNamesRule = {
   meta: {
     type: "problem",
     docs: {
-      description: 'Disallow the case-insensitive substring "shape" in JavaScript, TypeScript, private, and JSX symbol names.'
+      description: 'Disallow vague structural declaration names; grammar vocabularies and their categories are allowed.'
     },
     messages: {
       forbiddenSymbolName: 'Rename symbol "{{name}}" for its domain role; "shape" describes structure rather than ownership.'
@@ -20,7 +32,7 @@ export const noForbiddenTermInSymbolNamesRule = {
   },
   create(context) {
     const reportForbiddenSymbolName = (node) => {
-      if (!containsForbiddenSymbolName(node.name) || isBorrowedMemberName(node))
+      if (!containsForbiddenSymbolName(node.name) || !isStructuralDeclaration(node))
         return;
       context.report({
         node,
