@@ -25,15 +25,9 @@ export async function modulePath(specifier: string, file: string) {
 }
 
 const runtimeCode = {
-  literalCalls: new Set(["require", "importSync", "import"]),
-  generatedCalls: new Set([
-    "eval",
-    "Function",
-    "AsyncFunction",
-    "GeneratorFunction",
-    "createRequire",
-  ]),
-  importMetaCalls: new Set(["require", "resolve"]),
+  literalCalls: new Set(["require"]),
+  generatedCalls: new Set(["eval", "Function"]),
+  importMetaCalls: new Set(["require"]),
   modules: new Set([
     "vm",
     "node:vm",

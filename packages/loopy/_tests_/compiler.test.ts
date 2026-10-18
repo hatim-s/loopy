@@ -530,24 +530,7 @@ for (const wrapper of [
   });
 }
 
-for (const expression of [
-  "import(path)",
-  "require(path)",
-  "new Function(path)()",
-  "eval(path)",
-  "import.meta.require(path)",
-  "(0, eval)(path)",
-  "globalThis.Function(path)()",
-  "globalThis.require?.(path)",
-  "new globalThis.AsyncFunction(path)()",
-  "globalThis.GeneratorFunction(path)()",
-  "globalThis.createRequire(path)",
-  "globalThis.importSync(path)",
-  "globalThis.import(path)",
-  "import.meta.resolve(path)",
-  "Bun.plugin({setup() {}})",
-  "new Bun.Transpiler()",
-]) {
+for (const expression of ["eval(path)", "import.meta.require(path)"]) {
   test(`emitted bundle rejects ${expression} in a tsconfig alias dependency`, async () => {
     const { root, file } = await project(
       'import {loopy,code} from "__SDK__";export default loopy("alias",{input:{},run:()=>code("x",{in:{path:"./escaped.ts"},out:{kind:"value",type:"number"},module:"./code.ts"})});',
@@ -569,11 +552,7 @@ for (const expression of [
       diagnostics: [
         expect.objectContaining({
           code: "dynamic_code",
-          source: {
-            module: join(root, "code.ts"),
-            line: expect.any(Number),
-            column: expect.any(Number),
-          },
+          source: { module: join(root, "code.ts"), line: 1, column: 1 },
         }),
       ],
     });

@@ -60,10 +60,7 @@ export async function compile(
       diagnostics: [
         {
           code: "bundle_failed",
-          message:
-            error instanceof AggregateError
-              ? error.errors.map(errorMessage).join("\n")
-              : errorMessage(error),
+          message: errorMessage(error),
           source,
         },
       ],

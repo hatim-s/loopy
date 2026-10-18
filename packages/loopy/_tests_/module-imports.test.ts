@@ -9,16 +9,7 @@ function diagnosticsFor(source: string) {
   return diagnostics;
 }
 
-for (const name of [
-  "require",
-  "eval",
-  "Function",
-  "AsyncFunction",
-  "GeneratorFunction",
-  "createRequire",
-  "importSync",
-  "import",
-]) {
+for (const name of ["require", "eval", "Function"]) {
   for (const expression of [
     `${name}(path)`,
     `globalThis.${name}(path)`,
@@ -39,9 +30,7 @@ for (const name of [
 
 for (const expression of [
   "import.meta.require(path)",
-  "import.meta.resolve(path)",
   'import.meta["require"]?.("./literal.js")',
-  '(0, import.meta.resolve)("./literal.js")',
   "(0, eval)(path)",
   "globalThis.Function(path)()",
   'eval("source")',

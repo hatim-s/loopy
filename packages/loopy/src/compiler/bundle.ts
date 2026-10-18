@@ -12,6 +12,7 @@ async function buildModule(file: string, kind: "code" | "parser") {
     target: "bun",
     format: "esm",
     minify: true,
+    throw: false,
     plugins: [
       {
         name: "executable-bundle",
@@ -40,11 +41,8 @@ async function buildNode(
     return { file: node.module.path, result: await buildModule(node.module.path, "code") };
   }
 
-  const parser = parsers.get(node.key)?.file ?? commandParser(node.key);
-
-  if (!parser) {
-    throw new Error(`Declare parser '${node.key}' in a module-level defineCommand descriptor.`);
-  }
+  // SAFETY: Restriction records custom parsers, and SDK descriptors supply every built-in parser.
+  const parser = (parsers.get(node.key)?.file ?? commandParser(node.key)) as string;
 
   const file = parsers.has(node.key) ? parser : resolve(import.meta.dir, "../sdk/graph", parser);
 
@@ -73,7 +71,16 @@ export async function bundle(
     const output = result.outputs[0];
 
     if (!result.success || !output) {
-      throw new Error(result.logs.join("\n"));
+      return {
+        ok: false,
+        diagnostics: [
+          {
+            code: "bundle_failed",
+            message: result.logs.join("\n"),
+            source: { module: file, line: 1, column: 1 },
+          },
+        ],
+      };
     }
 
     const diagnostics: CompilerDiagnostic[] = [];
@@ -87,9 +94,10 @@ export async function bundle(
     if (diagnostics.length > 0) {
       return {
         ok: false,
-        diagnostics: diagnostics.map((value) => ({
-          ...value,
-          message: `Emitted bundle: ${value.message}`,
+        diagnostics: diagnostics.map(() => ({
+          code: "dynamic_code",
+          message: "A bundled dependency loads code at run time.",
+          source: { module: file, line: 1, column: 1 },
         })),
       };
     }

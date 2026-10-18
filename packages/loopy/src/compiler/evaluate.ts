@@ -48,6 +48,7 @@ export async function evaluate(
       entrypoints: [entry],
       target: "bun",
       format: "esm",
+      throw: false,
       plugins: [
         typescriptPaths,
         {
