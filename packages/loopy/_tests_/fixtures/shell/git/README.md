@@ -1,8 +1,8 @@
 # Git parser fixtures
 
 Captured on Darwin on 2026-10-17 with `git version 2.50.1 (Apple Git-155)` from disposable repositories.
-The `.linux.txt` files are byte-for-byte copies of the Darwin captures: these explicit
-machine formats are identical across platforms. They are not separate Linux runs.
+The shared machine-format cases use the Darwin captures.
+`status-stash.linux.txt` is a separate stash-header fixture.
 NUL bytes and final blank worktree record separators are intentional.
 Worktree paths retain the temporary capture root.
 

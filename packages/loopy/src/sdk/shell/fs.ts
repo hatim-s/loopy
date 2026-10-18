@@ -11,6 +11,8 @@ import {
   parseStatOut,
   parseTreeOut,
   parseWhichOut,
+  STAT_DARWIN_FORMAT,
+  STAT_LINUX_FORMAT,
 } from "./parse/fs.js";
 
 export const fsDescriptors = {
@@ -215,12 +217,12 @@ export const fsDescriptors = {
     },
   },
   stat: {
-    preset: { flags: { format: "%N\u0001%z\u0001%m\u0001%HT\u0001%Lp" } },
+    preset: { flags: { format: STAT_DARWIN_FORMAT } },
     program: "stat",
     flags: { format: { cli: "-f", kind: "string" }, follow: { cli: "-L", kind: "boolean" } },
     variants: {
       linux: {
-        preset: { flags: { format: "%n\u0001%s\u0001%Y\u0001%F\u0001%a" } },
+        preset: { flags: { format: STAT_LINUX_FORMAT } },
         flags: { format: { cli: "-c", kind: "string" } },
       },
     },

@@ -1,7 +1,7 @@
 import type { CommandDescriptor } from "../define-command.js";
 import { defineCommands } from "../graph/nodes/command.js";
 import { refuse } from "../graph/validate.js";
-import { parseCurlOut } from "./parse/net.js";
+import { CURL_WRITE_OUT, parseCurlOut } from "./parse/net.js";
 
 export const netDescriptors = {
   curl: {
@@ -10,7 +10,7 @@ export const netDescriptors = {
         silent: true,
         showError: true,
         dumpHeader: "-",
-        writeOut: "\n__LOOPY_CURL__%{json}",
+        writeOut: CURL_WRITE_OUT,
       },
     },
     exclude: ["output", "include", "head"],

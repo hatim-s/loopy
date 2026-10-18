@@ -1,21 +1,31 @@
 import { expect, expectTypeOf, test } from "bun:test";
 import type { Json } from "../src/core/index.js";
+import type { CommandInput } from "../src/sdk/graph/command-input.js";
 import {
+  branch,
   code,
   defineCommand,
   eq,
   exists,
+  fail,
+  finally_,
   fs,
   gt,
   gte,
   in_,
   isNull,
+  log,
   loopy,
   lt,
   lte,
   ne,
+  parallel,
   type Ref,
+  rescue,
   size,
+  subgraph,
+  switch_,
+  wait,
 } from "../src/sdk/index.js";
 
 // This function is checked by tsc but never evaluated. Invalid author programs must not run.
@@ -111,10 +121,85 @@ function schemaTypes() {
   record.get("data").get("arbitrary");
 }
 
-test("typecheck fixtures are present and parsed array outputs remain measurable", () => {
-  expect(operandTypes).toBeFunction();
-  expect(schemaTypes).toBeFunction();
+function controlTypes(text: Ref<string>, number: Ref<number>) {
+  const record = () => code("record", { in: {}, out: { count: "number" }, module: "./record.ts" });
+  const selected = branch(eq(number, 1), { yes: record, no: record });
+  expectTypeOf(selected.get("count")).toEqualTypeOf<Ref<number>>();
+  // @ts-expect-error Raw predicates have no SDK brand.
+  branch({ op: "eq", left: 1, right: 1 }, { yes: () => 1, no: () => 0 });
 
+  const switched = switch_(text, { first: record, default: record });
+  expectTypeOf(switched).toEqualTypeOf<Ref<{ count: number }, { count: number }>>();
+  // @ts-expect-error Every switch arm declares only count.
+  switched.get("missing");
+
+  const grouped = parallel({ text: () => text, count: () => number });
+  expectTypeOf(grouped).toEqualTypeOf<
+    Ref<{ text: string; count: number }, { text: string; count: number }>
+  >();
+  // @ts-expect-error Parallel exposes only declared arm names.
+  grouped.get("missing");
+
+  const cleaned = finally_(record, () => log("cleanup"));
+  expectTypeOf(cleaned).toEqualTypeOf<Ref<{ count: number }, { count: number }>>();
+  // @ts-expect-error Cleanup does not add output fields.
+  cleaned.get("cleanup");
+
+  const caught = rescue(
+    () => number,
+    () => text,
+  );
+
+  expectTypeOf(caught).toEqualTypeOf<Ref<number | string>>();
+  // @ts-expect-error Scalar rescue unions have no record projection.
+  caught.get("count");
+  const recoveredRecord = rescue(record, record);
+  expectTypeOf(recoveredRecord.get("count")).toEqualTypeOf<Ref<number>>();
+
+  const passthrough = subgraph("passthrough", (value: Ref<number>) => value);
+  expectTypeOf(passthrough(number)).toEqualTypeOf<Ref<number>>();
+  // @ts-expect-error Subgraph parameters retain their declared ref type.
+  passthrough(text);
+
+  const descriptor = {
+    key: "tuple",
+    program: "tool",
+    operands: {
+      kind: "positional",
+      parts: [{ name: "source" }, { name: "targets", variadic: true }],
+      separator: true,
+    },
+  } as const;
+
+  const command = defineCommand(descriptor);
+
+  expectTypeOf<CommandInput<typeof descriptor>["args"]>().toEqualTypeOf<
+    readonly [string | Ref<string>, string | Ref<string>, ...(string | Ref<string>)[]]
+  >();
+  // @ts-expect-error A variadic target still requires its first operand.
+  command({ args: ["source"] });
+
+  const failed = branch(eq(number, 1), { yes: () => fail("yes"), no: () => fail("no") });
+  // @ts-expect-error A never result cannot be authored as log data.
+  log("failed", failed);
+  // @ts-expect-error Refs have no runtime output property.
+  void number.output;
+  // @ts-expect-error Paths are private ref metadata.
+  void number.path;
+
+  const optional = defineCommand({ key: "null", program: "true" });
+  expectTypeOf(optional()).toEqualTypeOf<Ref<null>>();
+  expectTypeOf(code("effect", { in: {}, module: "./effect.ts" })).toEqualTypeOf<Ref<null>>();
+  expectTypeOf(wait("signal")).toEqualTypeOf<Ref<null>>();
+}
+
+void operandTypes;
+
+void schemaTypes;
+
+void controlTypes;
+
+test("parsed array outputs remain measurable", () => {
   const result = loopy("array-parser", {
     input: {},
     run: () => {

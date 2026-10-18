@@ -77,7 +77,6 @@ type CallArguments<I> = I extends { args: readonly unknown[] }
 
 export type CommandCall<D extends CommandDescriptor, S extends OutSchema> = {
   (...args: CallArguments<CommandInput<D>>): SchemaRef<S>;
-  readonly descriptor: D;
   raw: (
     ...args: CallArguments<
       CommandRawInput<D extends { readonly raw: infer R extends CommandDescriptor } ? R : D>
@@ -98,7 +97,6 @@ export function defineCommand(
 ): {
   (...args: never[]): RefValue;
   raw: (...args: never[]) => RefValue;
-  descriptor: CommandDescriptor;
 } {
   validateCommandDescriptor(descriptor);
   const out = normalizeOut(schema === undefined ? descriptor.out : schema);
@@ -127,7 +125,6 @@ export function defineCommand(
 
   return Object.assign(factory("parsed", out), {
     raw: factory("raw", RAW_COMMAND_OUTPUT),
-    descriptor,
   });
 }
 

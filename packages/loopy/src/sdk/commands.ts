@@ -33,10 +33,6 @@ function calls(value: SdkMember, prefix = "", ancestors = new Set<SdkMember>()):
   const entries: [string, SdkMember][] = Object.entries(value);
 
   return entries.flatMap(([key, member]) => {
-    if (key === "descriptor") {
-      return [];
-    }
-
     const path = prefix ? `${prefix}.${key}` : key;
 
     if (isFunction(member)) {

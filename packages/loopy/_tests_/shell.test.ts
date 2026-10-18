@@ -2,8 +2,8 @@ import { expect, test } from "bun:test";
 import { archive, fs, git, loopy, net, sh, text } from "../src/sdk/index.js";
 import { capture } from "./fixtures/command-capture.js";
 
-test("zip exclusions trail archive operands", async () => {
-  const { executor, result } = await capture(() =>
+test("zip exclusions trail archive operands", () => {
+  const { executor, result } = capture(() =>
     archive.zip({
       args: ["test.zip", "src/a.ts"],
       flags: { exclude: "*.txt" },
@@ -14,8 +14,8 @@ test("zip exclusions trail archive operands", async () => {
   expect(executor.calls[0]?.args).toEqual(["test.zip", "src/a.ts", "-x", "*.txt"]);
 });
 
-test("find predicates precede actions regardless of caller property order", async () => {
-  const { executor, result } = await capture(() => {
+test("find predicates precede actions regardless of caller property order", () => {
+  const { executor, result } = capture(() => {
     fs.find.raw({ args: ["."], flags: { print0: true, name: "*.ts", type: "f" } });
     fs.find.raw({ args: ["."], flags: { type: "f", name: "*.ts", print0: true } });
     fs.find.raw({
@@ -32,8 +32,8 @@ test("find predicates precede actions regardless of caller property order", asyn
   ]);
 });
 
-test("git inspection separates revisions from paths", async () => {
-  const { executor, result } = await capture(() => {
+test("git inspection separates revisions from paths", () => {
+  const { executor, result } = capture(() => {
     git.diff.raw({ revisions: ["HEAD~1", "HEAD"], paths: ["src"], flags: { stat: true } });
     git.log.raw({ revisions: ["main..HEAD"], paths: ["src"], flags: { oneline: true } });
     git.show({ revisions: ["HEAD"], paths: ["src"], flags: { stat: true } });
@@ -49,8 +49,8 @@ test("git inspection separates revisions from paths", async () => {
   ]);
 });
 
-test("jq named pairs retain separate keys and values", async () => {
-  const { executor, result } = await capture(() =>
+test("jq named pairs retain separate keys and values", () => {
+  const { executor, result } = capture(() =>
     text.jq.raw({
       args: ["$name"],
       flags: {
@@ -96,7 +96,7 @@ test("required positionals reject missing and short JavaScript inputs at constru
   }
 });
 
-function revisedCompileOnlyChecks() {
+function commandInputTypes() {
   // @ts-expect-error Git revisions and paths use separate fields.
   git.diff.raw({ args: ["HEAD"] });
   // @ts-expect-error Git revisions and paths use separate fields.
@@ -113,7 +113,7 @@ function revisedCompileOnlyChecks() {
   archive.gunzip();
 }
 
-void revisedCompileOnlyChecks;
+void commandInputTypes;
 
 test("typed shell graphs retain exact argv, command identities and execution options", () => {
   const f = capture(() => {

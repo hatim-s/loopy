@@ -1,4 +1,4 @@
-import { resolve } from "node:path";
+import { extname, resolve } from "node:path";
 import { bundleRefs, type Graph, type Node, sha256Hex } from "../core/index.js";
 import { commandParser } from "../sdk/commands.js";
 import { diagnostic } from "./ast.js";
@@ -48,7 +48,10 @@ async function buildNode(
     throw new Error(`No parser recorded for command '${node.key}'.`);
   }
 
-  const file = parsers.has(node.key) ? parser : resolve(import.meta.dir, "../sdk/graph", parser);
+  // Built-ins ship as JavaScript; source checkouts keep TypeScript parser entries.
+  const file = parsers.has(node.key)
+    ? parser
+    : resolve(import.meta.dir, "../sdk/graph", parser.replace(/\.ts$/, extname(import.meta.path)));
 
   return { file, result: await buildModule(file, "parser") };
 }

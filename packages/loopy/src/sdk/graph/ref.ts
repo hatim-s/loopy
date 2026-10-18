@@ -36,19 +36,21 @@ export class RefValue {
   }
 }
 
-export class Reference<T, Fields = never> extends RefValue {
+export class ScalarReference<T, Fields = never> extends RefValue {
   declare readonly [OUTPUT]: {
     value: T;
     fields: Fields;
     returns: [T] extends [never] ? false : true;
   };
+}
 
+export class Reference<T, Fields = never> extends ScalarReference<T, Fields> {
   get<K extends keyof Fields & string>(key: K): Ref<Fields[K]> {
     return new Reference({ ...this[REF], path: [...this[REF].path, key] });
   }
 }
 
-export type Ref<T, Fields = never> = Omit<Reference<T, Fields>, "get"> &
+export type Ref<T, Fields = never> = ScalarReference<T, Fields> &
   ([Fields] extends [never] ? object : Pick<Reference<T, Fields>, "get">);
 
 export type AuthorData<R> =

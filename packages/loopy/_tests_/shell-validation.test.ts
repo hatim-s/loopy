@@ -40,8 +40,8 @@ test.each([
     () => text.grep.raw({ flags: { q: true, w: true, o: true, A: 1, B: 2, C: 3 } }),
     ["-q", "-w", "-o", "-A", "1", "-B", "2", "-C", "3"],
   ],
-] as const)("added shell flags preserve their CLI spelling: %#", async (run, expected) => {
-  const { executor, result } = await capture(run);
+] as const)("added shell flags preserve their CLI spelling: %#", (run, expected) => {
+  const { executor, result } = capture(run);
   expect(result.status).toBe("succeeded");
   expect(executor.calls[0]?.args).toEqual([...expected]);
 });
@@ -75,8 +75,8 @@ test.each(["e", "f"] as const)("parsed grepCount rejects -%s during graph constr
   );
 });
 
-test("raw grepCount keeps explicit patterns and pattern files", async () => {
-  const { executor, result } = await capture(() => {
+test("raw grepCount keeps explicit patterns and pattern files", () => {
+  const { executor, result } = capture(() => {
     text.grepCount.raw({ args: ["one", "two"], flags: { e: "pattern" } });
     text.grepCount.raw({ args: ["one", "two"], flags: { f: "patterns.txt" } });
   });
@@ -105,8 +105,8 @@ test("parsed realpath requires exactly one path during graph construction", () =
   }
 });
 
-test("raw realpath keeps variadic paths", async () => {
-  const { executor, result } = await capture(() => fs.realpath.raw({ args: ["one", "two"] }));
+test("raw realpath keeps variadic paths", () => {
+  const { executor, result } = capture(() => fs.realpath.raw({ args: ["one", "two"] }));
   expect(result.status).toBe("succeeded");
   expect(executor.calls[0]?.args).toEqual(["one", "two"]);
 });

@@ -61,17 +61,15 @@ test("grep separates text matches from binary filenames", async () => {
   expect(parseGrepCount(result("0\n", 1))).toBe(0);
 });
 
-for (const platform of ["darwin", "linux"]) {
-  test(`sha256 parses hashes and filenames (${platform})`, async () => {
-    const entries = parseSha256(result(await fixture("text", "sha256", platform)));
-    expect(entries).toHaveLength(2);
-    expect(entries[0]).toEqual({
-      hash: Bun.CryptoHasher.hash("sha256", "hello world\nhello world\nbye\n", "hex"),
-      file: "words.txt",
-    });
-    expect(entries[1]?.file).toBe("space name.txt");
+test(`sha256 parses hashes and filenames`, async () => {
+  const entries = parseSha256(result(await fixture("text", "sha256")));
+  expect(entries).toHaveLength(2);
+  expect(entries[0]).toEqual({
+    hash: Bun.CryptoHasher.hash("sha256", "hello world\nhello world\nbye\n", "hex"),
+    file: "words.txt",
   });
-}
+  expect(entries[1]?.file).toBe("space name.txt");
+});
 
 test("checksum escaping and jq JSON streams retain their values", async () => {
   expect(parseSha256(result(`\\${"a".repeat(64)}  line\\nbreak\\\\file\n`))).toEqual([

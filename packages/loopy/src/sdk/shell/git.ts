@@ -2,6 +2,7 @@ import { RAW_COMMAND_OUTPUT } from "../../core/index.js";
 import type { CommandDescriptor } from "../define-command.js";
 import { defineCommands } from "../graph/nodes/command.js";
 import {
+  LOG_FORMAT,
   parseBranchOut,
   parseDiffNamesOut,
   parseDiffOut,
@@ -88,7 +89,7 @@ export const gitDescriptors = {
   },
   log: {
     exclude: ["graph", "oneline"],
-    preset: { flags: { format: "%H%x00%h%x00%an%x00%ae%x00%aI%x00%s%x00%b", z: true } },
+    preset: { flags: { format: LOG_FORMAT, z: true } },
     program: "git",
     path: ["log"],
     flags: {

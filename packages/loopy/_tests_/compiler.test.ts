@@ -632,17 +632,34 @@ test("node_modules dependencies with literal dynamic imports bundle their helper
   expect(await run()).toBe(42);
 });
 
-test("the public SDK entry compiles through the same graph builder", async () => {
+test("the public SDK entry bundles built-in parsers from source and the emitted package", async () => {
   const f = await project(
-    'import {loopy,log} from "loopy"; export default loopy("public-entry", {input: {}, run: () => {log("hello"); return 1;}});',
+    'import {loopy,log,fs} from "loopy"; export default loopy("public-entry", {input: {}, run: () => {log("hello"); return fs.ls();}});',
   );
 
   const result = await compile(f.file);
   expect(result.ok).toBe(true);
 
   if (result.ok) {
-    expect(result.graph.nodes.map((node) => node.kind)).toEqual(["log", "join"]);
+    expect(result.graph.nodes.map((node) => node.kind)).toEqual(["log", "command", "join"]);
+    expect(result.bundles).toHaveLength(1);
   }
+
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      "--eval",
+      `import {compile} from ${JSON.stringify(resolve(import.meta.dir, "../dist/compiler/index.js"))};
+const result = await compile(${JSON.stringify(f.file)}, { home: ${JSON.stringify(join(f.root, "home"))} });
+console.log(JSON.stringify(result.ok ? {ok: true, kinds: result.graph.nodes.map(node => node.kind), bundles: result.bundles.length} : result));
+process.exitCode = result.ok ? 0 : 1;`,
+    ],
+    { stdout: "pipe", stderr: "pipe" },
+  );
+
+  const stdout = await new Response(child.stdout).text();
+  expect(JSON.parse(stdout)).toEqual({ ok: true, kinds: ["log", "command", "join"], bundles: 1 });
+  expect(await child.exited).toBe(0);
 });
 
 test("a misplaced bundled loader reports the executable entry at 1:1 without a bundle offset", async () => {

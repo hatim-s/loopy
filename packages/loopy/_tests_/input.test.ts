@@ -1,10 +1,11 @@
 import { expect, test } from "bun:test";
+import { coerceInput, inputFields } from "../../../apps/dashboard/src/lib/input-form.js";
+import { graphInput } from "../src/cli/input.js";
+import { graphSchema, outputSchema } from "../src/contract/index.js";
+import { FIELD_TYPES } from "../src/core/index.js";
+import { approveDemoGraph } from "./fixtures/graphs.js";
 
-test("dashboard json field coercion parses values and reports invalid JSON", async () => {
-  const { coerceInput, inputFields } = await import(
-    "../../../apps/dashboard/src/lib/input-form.js"
-  );
-
+test("dashboard json field coercion parses values and reports invalid JSON", () => {
   const fields = inputFields({ data: "json", "extra?": "json" });
   expect(coerceInput(fields, { data: '{"nested":[true,null,2]}' })).toEqual({
     valid: true,
@@ -40,15 +41,6 @@ const allValues = {
 };
 
 test("RecordSpec round-trips every field type through contracts and input boundaries", async () => {
-  const { FIELD_TYPES } = await import("../src/core/index.js");
-  const { graphSchema, outputSchema } = await import("../src/contract/index.js");
-  const { graphInput } = await import("../src/cli/input.js");
-  const { approveDemoGraph } = await import("./fixtures/graphs.js");
-
-  const { coerceInput, inputFields } = await import(
-    "../../../apps/dashboard/src/lib/input-form.js"
-  );
-
   const output = outputSchema.parse({
     kind: "record",
     fields: JSON.parse(JSON.stringify(allFields)),
@@ -92,12 +84,6 @@ for (const [kind, invalid] of [
   ["json[]", {}],
 ] as const) {
   test(`${kind} rejects wrong elements or non-arrays at each input boundary`, async () => {
-    const { graphInput } = await import("../src/cli/input.js");
-
-    const { coerceInput, inputFields } = await import(
-      "../../../apps/dashboard/src/lib/input-form.js"
-    );
-
     const spec = { items: kind };
     await expect(
       graphInput(spec, {

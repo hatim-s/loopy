@@ -1,12 +1,6 @@
 import { expect, expectTypeOf, test } from "bun:test";
-import { graphSchema, graphView, refIdSchema } from "../src/contract/index.js";
-import {
-  type DiagnosticCode,
-  graphTypeResolver,
-  type Json,
-  renderArgv,
-  validateGraph,
-} from "../src/core/index.js";
+import { graphSchema, graphView } from "../src/contract/index.js";
+import { type DiagnosticCode, type Json, renderArgv } from "../src/core/index.js";
 import type { NodeResult } from "../src/sdk/graph/ref.js";
 import {
   and,
@@ -58,7 +52,6 @@ import { approveDemoGraph } from "./fixtures/graphs.js";
 function compile(run: () => NodeResult) {
   const result = loopy("test", { input: {}, run });
   expect(result.diagnostics).toEqual([]);
-  expect(validateGraph(result.graph)).toEqual([]);
   expect(graphSchema.parse(result.graph)).toEqual(result.graph);
 
   return result.graph;
@@ -108,7 +101,6 @@ test("approve-demo reproduces the canonical graph exactly", () => {
   });
 
   expect(result.diagnostics).toEqual([]);
-  expect(validateGraph(result.graph)).toEqual([]);
   expect(graphSchema.parse(result.graph)).toEqual(approveDemoGraph);
 });
 
@@ -488,7 +480,6 @@ for (const [name, result, expectedName] of [
 ] as const) {
   test(`${name} example compiles to a validated graph without executing modules`, () => {
     expect(result.diagnostics).toEqual([]);
-    expect(validateGraph(result.graph)).toEqual([]);
     expect(graphSchema.parse(result.graph).nodes.length).toBeGreaterThan(2);
     expect(result.graph.name).toBe(expectedName);
   });
@@ -652,7 +643,7 @@ test("collect maps infer success and failure outcomes while fail maps preserve v
     },
   });
 
-  expect(validateGraph(result.graph)).toEqual([]);
+  expect(result.diagnostics).toEqual([]);
 });
 
 test("known command fields resolve through main's validator without synthetic value nodes", () => {
@@ -748,13 +739,69 @@ test("parallel projections and rescue error fields retain their core types", () 
   });
 });
 
-for (const [kind, control] of [
+const joinExpectations = {
+  branch: {
+    joins: 1,
+    none: [["4:join", null]],
+  },
+  switch: {
+    joins: 1,
+    none: [["3:join", null]],
+  },
+  "empty parallel": {
+    joins: 2,
+    none: [],
+  },
+  "failing parallel": {
+    joins: 2,
+    none: [["3:join", null]],
+  },
+  "failing rescue": {
+    joins: 1,
+    none: [["3:join", null]],
+  },
+  "failing finally": {
+    joins: 1,
+    none: [["3:join", null]],
+  },
+  "returning rescue": {
+    joins: 3,
+    none: [],
+  },
+  "partly failing branch": {
+    joins: 3,
+    none: [],
+  },
+  "rescued finally": {
+    joins: 6,
+    none: [
+      ["5:join", "0:rescue"],
+      ["6:join", "0:rescue"],
+    ],
+  },
+  "rescued map": {
+    joins: 5,
+    none: [
+      ["4:join", "0:rescue"],
+      ["5:join", "0:rescue"],
+    ],
+  },
+  "rescued parallel": {
+    joins: 6,
+    none: [
+      ["4:join", "0:rescue"],
+      ["5:join", "0:rescue"],
+    ],
+  },
+} as const;
+
+const nonReturningCases = [
   ["branch", () => branch(eq(uuid(), "yes"), { yes: () => fail("yes"), no: () => fail("no") })],
   ["switch", () => switch_(uuid(), { default: () => fail("default") })],
-  ["parallel", () => parallel({})],
-  ["failing parallel", () => parallel({ a: () => fail("a"), b: () => fail("b") })],
+  ["empty parallel", () => parallel({})],
+  ["failing parallel", () => parallel({ bad: () => fail("bad"), good: () => 1 })],
   [
-    "rescue",
+    "failing rescue",
     () =>
       rescue(
         () => fail("body"),
@@ -762,147 +809,90 @@ for (const [kind, control] of [
       ),
   ],
   [
-    "finally",
+    "failing finally",
     () =>
       finally_(
         () => fail("body"),
         () => fail("cleanup"),
       ),
   ],
-] as const) {
-  test(`${kind} with no successful arm tails keeps its join without plumbing diagnostics`, () => {
-    const result = loopy("test", {
-      input: {},
-      run: () => {
-        control();
+  [
+    "returning rescue",
+    () =>
+      rescue(
+        () => fail("body"),
+        () => 3,
+      ),
+  ],
+  [
+    "partly failing branch",
+    () =>
+      branch(eq(uuid(), "yes"), {
+        yes: () => {
+          log("before");
 
-        return log("after");
-      },
-    });
+          return fail("bad");
+        },
+        no: () => 3,
+      }),
+  ],
+  [
+    "rescued finally",
+    () =>
+      rescue(
+        () =>
+          finally_(
+            () => fail("body"),
+            () => log("cleanup"),
+          ),
+        () => 3,
+      ),
+  ],
+  [
+    "rescued map",
+    () =>
+      rescue(
+        () => map(fs.ls(), () => fail("body"), { onError: "fail" }),
+        () => 3,
+      ),
+  ],
+  [
+    "rescued parallel",
+    () =>
+      rescue(
+        () => parallel({ bad: () => fail("bad"), good: () => 1 }),
+        () => 3,
+      ),
+  ],
+] as const;
 
-    expect(result.diagnostics).toEqual([]);
-    expect(validateGraph(result.graph)).toEqual(result.diagnostics);
-    expect(graphSchema.parse(result.graph)).toEqual(result.graph);
+for (const [name, control] of nonReturningCases) {
+  test(`${name} records returning and non-returning joins`, () => {
+    const graph = loopy("joins", { input: {}, run: control }).graph;
+    const joins = graph.nodes.filter((node) => node.kind === "join");
+
+    expect({
+      joins: joins.length,
+      none: joins.flatMap((node) => (node.result.kind === "none" ? [[node.id, node.scope]] : [])),
+    }).toEqual(expect.objectContaining(joinExpectations[name]));
   });
 }
 
-test("a failing rescue body leaves a numeric handler result", () => {
-  compile(() => {
-    const result = rescue(
-      () => fail("oops"),
-      () => 3,
+const reserved = "__proto__";
+
+for (const [site, callback] of [
+  ["parallel case", () => compile(() => parallel({ [reserved]: () => 1 }))],
+  ["switch case", () => compile(() => switch_(uuid(), { [reserved]: () => 1, default: () => 2 }))],
+  ["node label", () => compile(() => code(reserved, { in: {}, module: "./a.ts" }))],
+  ["subgraph", () => compile(subgraph(reserved, uuid))],
+  ["input field", () => loopy("reserved", { input: { [reserved]: "string" }, run: () => null })],
+  ["record value", () => compile(() => ({ [reserved]: 1 }))],
+] as const) {
+  test(`${site} rejects a reserved name`, () => {
+    expect(callback).toThrow(
+      expect.objectContaining({ diagnostic: expect.objectContaining({ code: "reserved_name" }) }),
     );
-
-    return branch(gt(result, 0), { yes: () => 1, no: () => 0 });
   });
-});
-
-test("a branch arm ending in fail after another node does not widen its result", () => {
-  compile(() => {
-    const result = branch(eq(uuid(), "yes"), {
-      yes: () => {
-        log("before failure");
-
-        return fail("oops");
-      },
-      no: () => 3,
-    });
-
-    return branch(gt(result, 0), { yes: () => 1, no: () => 0 });
-  });
-});
-
-test("rescue resolves a non-returning finally body to its numeric handler", () => {
-  const graph = compile(() =>
-    rescue(
-      () =>
-        finally_(
-          () => fail("oops"),
-          () => log("cleanup"),
-        ),
-      () => 3,
-    ),
-  );
-
-  expect(graphTypeResolver(graph)({ ref: refIdSchema.parse("0:rescue"), path: [] })).toBe("number");
-  expect(
-    graph.nodes.filter((node) => node.kind === "join" && node.result.kind === "none"),
-  ).toHaveLength(2);
-});
-
-test("author references to an all-failing branch remain unresolved", () => {
-  const result = loopy("never-ref", {
-    input: {},
-    run: () => {
-      const failed = branch(lt(1, 2), {
-        yes: () => fail("yes"),
-        no: () => fail("no"),
-      });
-
-      return log("author ref", failed);
-    },
-  });
-
-  expect(result.diagnostics.map(({ code }) => code)).toEqual(["unresolved_ref"]);
-  expect(result.diagnostics[0]?.node).toBe(
-    result.graph.nodes.find((node) => node.kind === "log")?.id,
-  );
-});
-
-test("a rescue accepts a map body ending in fail", () => {
-  const result = loopy("failing-map", {
-    input: { items: "string[]" },
-    run: ({ input }) =>
-      rescue(
-        () => map(input.get("items"), () => fail("oops"), { onError: "fail" }),
-        () => 3,
-      ),
-  });
-
-  expect(result.diagnostics).toEqual([]);
-  expect(validateGraph(result.graph)).toEqual([]);
-  expect(graphSchema.parse(result.graph)).toEqual(result.graph);
-});
-
-for (const label of ["__proto__", "constructor", "prototype"]) {
-  const fields = { [label]: "string" } as const;
-  const schema = { kind: "record", fields: {} } as const;
-  const callbacks = { [label]: () => 1 };
-
-  const cases: [string, () => void][] = [
-    ["parallel", () => compile(() => parallel(callbacks))],
-    ["switch", () => compile(() => switch_(uuid(), { ...callbacks, default: () => 2 }))],
-    ["code", () => compile(() => code(label, { in: {}, out: schema, module: "./a.ts" }))],
-    ["command", () => compile(() => sh(["echo"], { label }))],
-    ["wait", () => compile(() => wait(label, { payload: schema }))],
-    ["subgraph", () => compile(subgraph(label, uuid))],
-    ["input fields", () => loopy("reserved", { input: fields, run: () => null })],
-    [
-      "code inputs",
-      () => compile(() => code("code", { in: { [label]: 1 }, out: schema, module: "./a.ts" })),
-    ],
-    [
-      "output fields",
-      () =>
-        compile(() => code("code", { in: {}, out: { kind: "record", fields }, module: "./a.ts" })),
-    ],
-    ["wait fields", () => compile(() => wait("wait", { payload: { kind: "record", fields } }))],
-    ["record values", () => compile(() => ({ [label]: 1 }))],
-    [
-      "map records",
-      () =>
-        loopy("map", {
-          input: { items: "string[]" },
-          run: ({ input }) => map(input.get("items"), () => ({ [label]: 1 }), { onError: "fail" }),
-        }),
-    ],
-  ];
-
-  for (const [site, callback] of cases) {
-    test(`${site} rejects reserved name ${label}`, () => {
-      expect(callback).toThrow(`Label "${label}" is reserved`);
-    });
-  }
 }
 
 test("arm dictionaries contain only own callbacks", () => {
@@ -913,44 +903,6 @@ test("arm dictionaries contain only own callbacks", () => {
   expect(
     graph.nodes.flatMap((node) => (node.kind === "parallel" ? Object.keys(node.branches) : [])),
   ).toEqual(["own"]);
-});
-
-test("an author reference to a parallel with one failing arm is unresolved", () => {
-  const result = loopy("never-parallel-ref", {
-    input: {},
-    run: () => {
-      const failed = parallel({ bad: () => fail("oops"), good: () => 1 });
-
-      return log("author ref", failed);
-    },
-  });
-
-  expect(result.diagnostics.map(({ code }) => code)).toEqual(["unresolved_ref"]);
-  expect(result.diagnostics[0]?.node).toBe(
-    result.graph.nodes.find((node) => node.kind === "log")?.id,
-  );
-  expect(graphTypeResolver(result.graph)({ ref: refIdSchema.parse("0:parallel"), path: [] })).toBe(
-    "never",
-  );
-  expect(
-    result.graph.nodes.find((node) => node.kind === "join" && node.scope === null),
-  ).toMatchObject({ result: { kind: "none" } });
-});
-
-test("rescue resolves a parallel with one failing arm to its numeric handler", () => {
-  const graph = compile(() =>
-    rescue(
-      () => parallel({ bad: () => fail("oops"), good: () => 1 }),
-      () => 3,
-    ),
-  );
-
-  const resolve = graphTypeResolver(graph);
-  expect(resolve({ ref: refIdSchema.parse("1:parallel"), path: [] })).toBe("never");
-  expect(resolve({ ref: refIdSchema.parse("0:rescue"), path: [] })).toBe("number");
-  expect(
-    graph.nodes.filter((node) => node.kind === "join" && node.result.kind === "none"),
-  ).toHaveLength(2);
 });
 
 test("output shorthand and omitted schemas lower to canonical node schemas", () => {

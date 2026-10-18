@@ -1,6 +1,6 @@
 import { type COMPARISON_OPS, type ComparisonOperand, type Predicate } from "../../core/index.js";
 import {
-  type AuthorValue,
+  type AuthorData,
   type Ref,
   type RefContext,
   type RefValue,
@@ -11,7 +11,7 @@ import {
 
 const PREDICATE = Symbol("loopy.predicate");
 
-type Operand = AuthorValue | Size;
+type Operand = AuthorData<RefValue> | Size;
 
 type Scalar = string | number | boolean;
 
