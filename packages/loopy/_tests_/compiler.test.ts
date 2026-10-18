@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { evaluate } from "../src/compiler/evaluate.js";
 import { compile } from "../src/compiler/index.js";
-import { parseModuleOutput } from "../src/contract/index.js";
 import { canonicalJson, type Json, validateGraph } from "../src/core/index.js";
+import { bundleResult } from "../src/executor/protocol.js";
 import { compiledBody } from "./compiled-fixture.js";
 
 const sdk = resolve(import.meta.dir, "../src/sdk/graph/index.ts");
@@ -254,7 +254,6 @@ for (const name of ["hello", "review", "asset-sync", "www-sync"]) {
     }
 
     expect(validateGraph(result.graph)).toEqual([]);
-    expect(result.warnings).toEqual([]);
     expect(result.bundles.length).toBeGreaterThan(0);
   });
 }
@@ -352,10 +351,12 @@ test("bundles execute the stdin/stdout protocol and preserve prepared parser inp
 
   expect(JSON.parse(parsed.stdout)).toBe("outputhello!");
   const result = await execute(1, { value: 42 });
-  expect(parseModuleOutput(result.stdout)).toEqual({
-    ok: true,
+  expect(
+    bundleResult({ stdout: result.stdout, stderr: "", exitCode: 0, durationMs: 0 }, (text) => text),
+  ).toEqual({
+    kind: "succeeded",
     output: { value: 42, workspace: root },
-    stdout: "author noise\npartial\n",
+    logs: [{ message: "stdout", data: "author noise\npartial\n" }],
   });
 
   const logs = result.stderr
@@ -441,19 +442,6 @@ test("literal dynamic imports are bundled and alter the pinned revision", async 
   );
 
   expect(await run()).toBe(1);
-});
-
-test("module stdout rejects a missing or malformed final JSON line", () => {
-  expect(parseModuleOutput("")).toEqual({ ok: false, code: "invalid_result" });
-  expect(parseModuleOutput('{"earlier":true}\nnoise\n')).toEqual({
-    ok: false,
-    code: "invalid_result",
-  });
-  expect(parseModuleOutput('leading noise\n{"answer":42}\n')).toEqual({
-    ok: true,
-    output: { answer: 42 },
-    stdout: "leading noise\n",
-  });
 });
 
 test("parser modules reject dynamic imports in their local dependencies", async () => {

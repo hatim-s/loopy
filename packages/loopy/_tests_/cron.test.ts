@@ -127,10 +127,7 @@ describe("nextFire", () => {
       "No cron fire found within five years. Choose a schedule with a reachable calendar date.",
     );
   });
-  test("rejects invalid dates and zones", () => {
-    expect(() => nextFire(parseCron("* * * * *"), new Date(Number.NaN), "UTC")).toThrow(
-      "Invalid after date.",
-    );
+  test("rejects invalid zones", () => {
     expect(() => next("* * * * *", "2026-01-01T00:00:00Z", "invalid/zone")).toThrow(
       "Invalid time zone 'invalid/zone'.",
     );

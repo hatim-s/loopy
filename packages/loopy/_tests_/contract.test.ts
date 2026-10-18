@@ -1,11 +1,17 @@
 import { expect, expectTypeOf, test } from "bun:test";
+import type { z } from "zod";
 import * as contract from "../src/contract/index.js";
 import type * as core from "../src/core/index.js";
+import { NODE_RUN_STATUSES, PREDICATE_SHAPES } from "../src/core/index.js";
 import type { SavedLoopy } from "../src/local/saved-loopy.js";
 import { newRun } from "./fixture.js";
 import { approveDemoGraph } from "./fixtures/graphs.js";
 
 type Flatten<T> = T extends unknown ? { [Key in keyof T]: T[Key] } : never;
+
+type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+  ? true
+  : false;
 
 const now = newRun().createdAt;
 
@@ -18,18 +24,28 @@ function view(run: core.RunRecord, steps: core.StepRecord[] = [], hooks: core.Ho
 }
 
 test("schema outputs exactly match core records and the wire owner projection", () => {
-  expectTypeOf<contract.Json>().toEqualTypeOf<core.Json>();
-  expectTypeOf<contract.RunStatus>().toEqualTypeOf<core.RunStatus>();
-  expectTypeOf<contract.RunOutcome>().toEqualTypeOf<core.RunOutcome>();
-  expectTypeOf<contract.StepRecord>().toEqualTypeOf<Flatten<core.StepRecord>>();
-  expectTypeOf<contract.LogPosition>().toEqualTypeOf<core.LogPosition>();
-  expectTypeOf<contract.LogRecord>().toEqualTypeOf<core.LogRecord>();
-  expectTypeOf<contract.HookRecord>().toEqualTypeOf<core.HookRecord>();
-  expectTypeOf<contract.Schedule>().toEqualTypeOf<core.Schedule>();
+  expectTypeOf<z.infer<typeof contract.jsonSchema>>().toEqualTypeOf<core.Json>();
+  expectTypeOf<z.infer<typeof contract.runStatusSchema>>().toEqualTypeOf<core.RunStatus>();
+  expectTypeOf<z.infer<typeof contract.runOutcomeSchema>>().toEqualTypeOf<core.RunOutcome>();
+  expectTypeOf<z.infer<typeof contract.stepRecordSchema>>().toEqualTypeOf<
+    Flatten<core.StepRecord>
+  >();
+  expectTypeOf<z.infer<typeof contract.logPositionSchema>>().toEqualTypeOf<core.LogPosition>();
+  expectTypeOf<z.infer<typeof contract.logRecordSchema>>().toEqualTypeOf<core.LogRecord>();
+  expectTypeOf<z.infer<typeof contract.hookRecordSchema>>().toEqualTypeOf<core.HookRecord>();
+  expectTypeOf<z.infer<typeof contract.scheduleSchema>>().toEqualTypeOf<core.Schedule>();
   expectTypeOf<contract.RunView["owner"]>().toEqualTypeOf<Omit<
     NonNullable<core.RunRecord["owner"]>,
     "token"
   > | null>();
+
+  expectTypeOf<z.infer<typeof contract.runRecordSchema>>().toEqualTypeOf<core.RunRecord>();
+  expectTypeOf<z.infer<typeof contract.attemptLogSchema>>().toEqualTypeOf<core.AttemptLog>();
+  expectTypeOf<
+    z.infer<typeof contract.executionResultSchema>
+  >().toEqualTypeOf<core.ExecutionResult>();
+  expectTypeOf<z.infer<typeof contract.executionSpecSchema>>().toEqualTypeOf<core.ExecutionSpec>();
+  expectTypeOf<z.infer<typeof contract.durationSchema>>().toEqualTypeOf<core.Duration>();
 
   type WireEvent =
     | Exclude<core.RuntimeEvent, { entity: "run" | "step" | "node" }>
@@ -331,7 +347,7 @@ test("loopy declared schedule is visible until a persisted schedule overrides it
     scope: "project",
     mode: "sandbox",
     input: {},
-    schedule: { cron: "0 * * * *" },
+    schedule: { cron: "0 * * * *", tz: "UTC" },
   } satisfies Parameters<typeof contract.loopyView>[0];
 
   expect(contract.loopyView(saved, null, []).schedule).toEqual({
@@ -397,4 +413,238 @@ test("runs queries default to 50 and cap pages at 200", () => {
   expectTypeOf(query.limit).toEqualTypeOf<number>();
   expect(contract.routes.runs.query.parse({ limit: "200" }).limit).toBe(200);
   expect(contract.routes.runs.query.safeParse({ limit: 201 }).success).toBe(false);
+});
+
+test("graph schemas exactly match the portable model", () => {
+  expectTypeOf<core.Node["kind"]>().toEqualTypeOf<(typeof core.NODE_KINDS)[number]>();
+  expectTypeOf<core.Edge["kind"]>().toEqualTypeOf<(typeof core.EDGE_KINDS)[number]>();
+  expectTypeOf<core.NodeRun["status"]>().toEqualTypeOf<(typeof core.NODE_RUN_STATUSES)[number]>();
+  expectTypeOf<core.NodeRun["receipt"]>().toEqualTypeOf<(typeof core.RECEIPT_KINDS)[number]>();
+  expectTypeOf<core.Predicate["op"]>().toEqualTypeOf<(typeof core.PREDICATE_OPS)[number]>();
+  expectTypeOf<Extract<core.Predicate, { left: core.ComparisonOperand }>["op"]>().toEqualTypeOf<
+    (typeof core.COMPARISON_OPS)[number]
+  >();
+  expectTypeOf<core.GraphRetry["backoff"]>().toEqualTypeOf<(typeof core.RETRY_BACKOFFS)[number]>();
+  expectTypeOf<Extract<core.Node, { kind: "map" }>["onError"]>().toEqualTypeOf<
+    (typeof core.MAP_ERROR_MODES)[number]
+  >();
+  expectTypeOf<core.CommandFlag["kind"]>().toEqualTypeOf<(typeof core.FLAG_KINDS)[number]>();
+  expectTypeOf<NonNullable<core.CommandFlag["style"]>>().toEqualTypeOf<
+    (typeof core.FLAG_STYLES)[number]
+  >();
+  expectTypeOf<NonNullable<core.CommandFlag["position"]>>().toEqualTypeOf<
+    (typeof core.FLAG_POSITIONS)[number]
+  >();
+  expectTypeOf<Extract<core.FieldType, "string" | "number" | "boolean">>().toEqualTypeOf<
+    (typeof core.SCALAR_TYPES)[number]
+  >();
+
+  expectTypeOf<Equal<z.infer<typeof contract.graphSchema>, core.Graph>>().toEqualTypeOf<true>();
+  expectTypeOf<z.infer<typeof contract.predicateSchema>>().toEqualTypeOf<core.Predicate>();
+  expectTypeOf<z.infer<typeof contract.graphSchema>>().toEqualTypeOf<core.Graph>();
+  expectTypeOf<z.infer<typeof contract.nodeSchema>>().toEqualTypeOf<Flatten<core.Node>>();
+  expectTypeOf<z.infer<typeof contract.edgeSchema>>().toEqualTypeOf<Flatten<core.Edge>>();
+  expectTypeOf<z.infer<typeof contract.valueSchema>>().toEqualTypeOf<core.Value>();
+  expectTypeOf<z.infer<typeof contract.refSchema>>().toEqualTypeOf<core.Ref>();
+  expectTypeOf<z.infer<typeof contract.outputSchema>>().toEqualTypeOf<core.OutSchema>();
+  expectTypeOf<z.infer<typeof contract.diagnosticSchema>>().toEqualTypeOf<core.Diagnostic>();
+  expectTypeOf<z.infer<typeof contract.executionKeySchema>>().toEqualTypeOf<core.ExecutionKey>();
+  expectTypeOf<z.infer<typeof contract.nodeRunSchema>>().toEqualTypeOf<Flatten<core.NodeRun>>();
+});
+
+test("strict value boundaries reject malformed refs instead of accepting them as literals", () => {
+  for (const value of [
+    { ref: "draft", path: [], extra: true },
+    { ref: "draft", path: [1] },
+    { ref: "draft" },
+    { ref: 1, path: [] },
+    { nested: { ref: "draft", path: [], size: true } },
+  ]) {
+    expect(contract.valueSchema.safeParse(value).success).toBe(false);
+  }
+
+  expect(contract.valueSchema.parse({ nested: { ref: "draft", path: [] } })).toEqual({
+    nested: { ref: "draft", path: [] },
+  });
+});
+
+test("graph wire views reject paths and hashes, including command parser hashes", () => {
+  const nodes = approveDemoGraph.nodes.map((node) => {
+    if (node.kind === "code") {
+      return { ...node, module: { name: "draft.ts" } };
+    }
+
+    if (node.kind === "command") {
+      return { ...node, parse: node.parse === null ? null : { input: node.parse.input } };
+    }
+
+    return node;
+  });
+
+  const view = { ...contract.graphView(approveDemoGraph), nodes };
+  expect(contract.graphViewSchema.parse(view)).toEqual(view);
+  expect(contract.graphViewSchema.safeParse(approveDemoGraph).success).toBe(false);
+  expect(
+    contract.graphViewSchema.safeParse({
+      ...view,
+      nodes: nodes.map((node) =>
+        node.kind === "command" ? { ...node, parse: { bundleHash: "secret" } } : node,
+      ),
+    }).success,
+  ).toBe(false);
+});
+
+test("every node run status round-trips without optional state fields", () => {
+  const base = {
+    key: { runId: "run", nodeId: contract.nodeIdSchema.parse("0:draft"), scope: [] },
+    attempt: 1,
+    maxAttempts: 3,
+    receipt: "none" as const,
+    startedAt: "2026-10-18T00:00:00.000Z",
+  };
+
+  const states = {
+    running: { status: "running" },
+    succeeded: { status: "succeeded", output: null, endedAt: base.startedAt },
+    failed: {
+      status: "failed",
+      error: { code: "execution", message: "failed" },
+      endedAt: base.startedAt,
+    },
+    retrying: {
+      status: "retrying",
+      error: { code: "execution", message: "failed" },
+      nextRetryAt: base.startedAt,
+      endedAt: base.startedAt,
+    },
+    waiting: { status: "waiting", wakeAt: null },
+    sleeping: { status: "sleeping", wakeAt: base.startedAt },
+    cancelled: { status: "cancelled", endedAt: base.startedAt },
+    rate_limited: { status: "rate_limited", nextRetryAt: base.startedAt },
+  } satisfies {
+    [S in core.NodeRun["status"]]: Omit<Extract<core.NodeRun, { status: S }>, keyof typeof base>;
+  };
+
+  for (const status of NODE_RUN_STATUSES) {
+    const state = states[status];
+    const record = { ...base, ...state };
+    expect(contract.nodeRunSchema.parse(record)).toEqual(record);
+    expect(
+      contract.serverEventSchema.parse({
+        entity: "node",
+        kind: state.status,
+        sequence: 1,
+        at: base.startedAt,
+        txn: "txn",
+        runId: "run",
+        record,
+      }).record,
+    ).toEqual(record);
+  }
+
+  expect(contract.nodeRunSchema.safeParse({ ...base, status: "waiting" }).success).toBe(false);
+  expect(
+    contract.nodeRunSchema.safeParse({ ...base, status: "running", output: null }).success,
+  ).toBe(false);
+});
+
+test("predicate wire schema parses the complete vocabulary and rejects unknown ops", () => {
+  for (const [op, shape] of Object.entries(PREDICATE_SHAPES)) {
+    const comparison = { op: "eq", left: 1, right: 1 };
+
+    const fields = {
+      equality: { left: 1, right: 1 },
+      ordering: { left: 1, right: 1 },
+      membership: { left: 1, right: [1] },
+      presence: { value: null },
+      group: { predicates: [comparison] },
+      negation: { predicate: comparison },
+    };
+
+    const predicate = { op, ...fields[shape] };
+    expect(JSON.stringify(contract.predicateSchema.parse(predicate))).toBe(
+      JSON.stringify(predicate),
+    );
+  }
+
+  expect(contract.predicateSchema.safeParse({ op: "unknown" }).success).toBe(false);
+});
+
+for (const name of ["__proto__", "constructor", "prototype"]) {
+  const base = { id: "node", label: null, scope: null };
+
+  for (const label of [name, `${name}?`]) {
+    const sites = [
+      [
+        "join value",
+        contract.nodeSchema,
+        { ...base, kind: "join", result: { kind: "value", value: { [label]: 1 } } },
+      ],
+      ["node label", contract.nodeSchema, { ...base, kind: "uuid", label }],
+      [
+        "case-edge label",
+        contract.graphViewSchema,
+        {
+          ...contract.graphView(approveDemoGraph),
+          edges: [{ from: "node", to: "arm", kind: "case", label }],
+        },
+      ],
+      [
+        "parallel arm",
+        contract.nodeSchema,
+        { ...base, kind: "parallel", branches: { [label]: "arm" } },
+      ],
+      [
+        "switch arm",
+        contract.nodeSchema,
+        {
+          ...base,
+          kind: "switch",
+          on: { ref: "input", path: [] },
+          cases: { [label]: "arm" },
+          default: null,
+        },
+      ],
+      ["input field", contract.graphSchema, { ...approveDemoGraph, input: { [label]: "number" } }],
+      ["output field", contract.outputSchema, { kind: "record", fields: { [label]: "number" } }],
+      [
+        "wait field",
+        contract.nodeSchema,
+        {
+          ...base,
+          kind: "wait",
+          timeout: null,
+          payload: { kind: "record", fields: { [label]: "number" } },
+        },
+      ],
+    ] as const;
+
+    for (const [site, schema, value] of sites) {
+      test(`wire rejects reserved ${site} ${label}`, () => {
+        expect(schema.safeParse(value).success).toBe(false);
+      });
+    }
+  }
+}
+
+test("wire timestamps normalize offsets on run and node records", () => {
+  const offset = "2026-10-18T05:30:00.000+05:30";
+  const utc = "2026-10-18T00:00:00.000Z";
+  const run = contract.runRecordSchema.parse({ ...newRun(), createdAt: offset, updatedAt: offset });
+  expect([run.createdAt, run.updatedAt]).toEqual([utc, utc]);
+
+  const node = contract.nodeRunSchema.parse({
+    key: { runId: run.id, nodeId: "node", scope: [] },
+    attempt: 1,
+    maxAttempts: 1,
+    receipt: "none",
+    startedAt: offset,
+    status: "retrying",
+    error: { code: "execution", message: "failed" },
+    endedAt: offset,
+    nextRetryAt: offset,
+  });
+
+  expect(node).toMatchObject({ startedAt: utc, endedAt: utc, nextRetryAt: utc });
+  expect(contract.utcTimestamp.safeParse("yesterday").success).toBe(false);
 });

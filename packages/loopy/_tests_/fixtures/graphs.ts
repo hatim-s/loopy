@@ -1,6 +1,6 @@
 import { graphSchema } from "../../src/contract/index.js";
 
-// This boundary fixture fixes the builder's call-order ids and explicit scope joins for H2.
+// This boundary fixture fixes the builder's call-order ids and explicit scope joins the builder must reproduce.
 export const approveDemoGraph = graphSchema.parse({
   version: 1,
   meta: { description: null, schedule: null, secrets: [], mode: "sandbox", scope: "project" },
@@ -8,7 +8,6 @@ export const approveDemoGraph = graphSchema.parse({
   input: { "subject?": "string" },
   entry: "0:draft",
   outputs: { ref: "9:join", path: [] },
-  warnings: [],
   nodes: [
     {
       id: "0:draft",
@@ -56,6 +55,7 @@ export const approveDemoGraph = graphSchema.parse({
       out: { kind: "record", fields: { stdout: "string", stderr: "string", exitCode: "number" } },
       argv: ["bun", "apply.ts", { ref: "4:format", path: [] }],
       flags: {},
+      flagSpec: null,
       options: { cwd: null, env: {}, stdin: null },
       rateLimit: null,
       retry: { attempts: 3, backoff: "exponential", retryOnExit: false },
@@ -92,8 +92,6 @@ export const approveDemoGraph = graphSchema.parse({
     { from: "0:draft", to: "1:log", kind: "next" },
     { from: "1:log", to: "2:approve", kind: "next" },
     { from: "2:approve", to: "3:branch", kind: "next" },
-    { from: "3:branch", to: "4:format", kind: "yes" },
-    { from: "3:branch", to: "7:fail", kind: "no" },
     { from: "4:format", to: "5:apply", kind: "next" },
     { from: "5:apply", to: "6:join", kind: "next" },
     { from: "6:join", to: "8:join", kind: "join" },

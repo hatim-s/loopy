@@ -483,7 +483,6 @@ test("service error codes serialize with their HTTP status", async () => {
 
   const cases: [ErrorCode, number][] = [
     ["not_found", 404],
-    ["unknown_hook", 404],
     ["not_claimable", 409],
     ["owned_elsewhere", 409],
     ["bad_request", 400],
