@@ -1,5 +1,8 @@
 import { expect, test } from "bun:test";
-import { daemonPlist, daemonUnit } from "../src/local/daemon-install.js";
+import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { daemonPlist, daemonUnit, installDaemon } from "../src/local/daemon-install.js";
 
 test("macOS plist retains argv boundaries, escaped paths, environment and logs", () => {
   const content = daemonPlist(
@@ -48,4 +51,40 @@ test("Linux unit escapes command expansion and supplies environment and persiste
   );
   expect(content).toContain("StandardOutput=append:/data/loopy %% $HOME/logs/daemon.log");
   expect(content).toContain("StandardError=append:/data/loopy %% $HOME/logs/daemon.log");
+});
+
+test("installer refuses invalid service values before writing files or starting services", async () => {
+  const root = await mkdtemp(join(tmpdir(), "loopy-install-boundary-"));
+
+  const options = {
+    platform: "darwin",
+    userHome: join(root, "user"),
+    uid: 1000,
+    home: join(root, "home"),
+    executable: "/opt/bun",
+    path: "/usr/bin",
+  } as const;
+
+  try {
+    await expect(installDaemon({ ...options, executable: "relative-bun" })).rejects.toThrow(
+      "Daemon paths must be absolute.",
+    );
+
+    for (const value of ["bad\nvalue", "bad\rvalue", "bad\0value"]) {
+      for (const invalid of [
+        { args: [value] },
+        { path: value },
+        { home: `${root}/${value}` },
+        { executable: `/opt/${value}` },
+      ]) {
+        await expect(installDaemon({ ...options, ...invalid })).rejects.toThrow(
+          "Service values cannot contain NUL or line breaks.",
+        );
+      }
+    }
+
+    expect(await readdir(root)).toEqual([]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
 import { basename } from "node:path";
 import type { CommandFlag } from "../../core/index.js";
+import { sha256Hex } from "../../core/index.js";
 import type { CommandDescriptor, PositionalDefinition } from "../../sdk/define-command.js";
 import { ServiceError } from "../service-error.js";
 import { identifier } from "./names.js";
@@ -341,7 +341,11 @@ function operandLayout(
     : { kind: "positional", parts, separator: false };
 }
 
-export function parseCliHelp(binary: string, path: readonly string[], help: string): ParsedHelp {
+export async function parseCliHelp(
+  binary: string,
+  path: readonly string[],
+  help: string,
+): Promise<ParsedHelp> {
   const normalized = help.replaceAll("\r\n", "\n").replace(/.\x08/g, "");
   const lines = normalized.split("\n");
   const warnings: string[] = [];
@@ -377,7 +381,7 @@ export function parseCliHelp(binary: string, path: readonly string[], help: stri
     program: binary,
     path,
     flags,
-    helpHash: createHash("sha256").update(help).digest("hex"),
+    helpHash: await sha256Hex(new TextEncoder().encode(help)),
   };
 
   return { descriptor, warnings };

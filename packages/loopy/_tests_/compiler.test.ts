@@ -687,3 +687,14 @@ test("a misplaced bundled loader reports the executable entry at 1:1 without a b
     ],
   });
 });
+
+test("compiler preserves invalid_definition when the author omits run", async () => {
+  const { file } = await project(
+    'import {loopy} from "__SDK__"; export default loopy("probe", {input:{}});',
+  );
+
+  expect(await compile(file)).toMatchObject({
+    ok: false,
+    diagnostics: [{ code: "invalid_definition" }],
+  });
+});

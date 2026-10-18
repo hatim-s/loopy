@@ -11,6 +11,7 @@ import {
   applyScheduleView,
   applyToSnapshot,
   followSession,
+  removeScheduleView,
 } from "../src/lib/stream.ts";
 
 const AT = "2026-10-17T10:00:00.000Z";
@@ -631,9 +632,11 @@ test("an equal-version schedule with the same fire time leaves the cached row un
   expect(client.getQueryData<ScheduleView[]>(keys.schedules)?.[0]).toBe(current);
 });
 
-test("an unseen save cannot skip a later delete in the same batch", () => {
+test("an unknown cache cannot skip a later known delete in the same batch", () => {
   const client = new QueryClient();
   client.setQueryData(keys.schedules, [scheduled]);
+  const unknown = keys.schedulesIn("/work/nested");
+  client.setQueryData(unknown, []);
   applyBatch(client, [
     scheduleSaved(11, { ...record, slug: "unseen" }),
     event(12, {
@@ -644,6 +647,75 @@ test("an unseen save cannot skip a later delete in the same batch", () => {
     }),
   ]);
 
-  expect(client.getQueryData<ScheduleView[]>(keys.schedules)).toEqual([]);
-  expect(client.getQueryState(keys.schedules)?.isInvalidated).toBe(true);
+  expect(client.getQueryData<ScheduleView[]>(keys.schedules)).toEqual([
+    { ...scheduled, slug: "unseen" },
+  ]);
+  expect(client.getQueryState(unknown)?.isInvalidated).toBe(true);
 });
+
+for (const source of ["mutation", "saved", "fired", "deleted", "remove"] as const) {
+  test(`${source} schedules update subdirectory caches by resolved root without touching another project`, () => {
+    const client = new QueryClient();
+    const nested = keys.schedulesIn("/work/nested");
+    const root = keys.schedulesIn("/work");
+    const elsewhere = keys.schedulesIn("/elsewhere");
+    const other = { ...scheduled, workspace: "/elsewhere" };
+
+    const next = {
+      ...scheduled,
+      enabled: false,
+      version: 3,
+      nextFireAt: "2026-10-17T10:10:00.000Z",
+    };
+
+    client.setQueryData(nested, [scheduled]);
+    client.setQueryData(root, [scheduled]);
+    client.setQueryData(elsewhere, [other]);
+
+    if (source === "mutation") {
+      applyScheduleView(client, next);
+    } else if (source === "remove") {
+      removeScheduleView(client, scheduled.slug, "/work/nested");
+    } else if (source === "deleted") {
+      applyBatch(client, [event(11, { entity: "schedule", kind: "deleted", runId: null, record })]);
+    } else {
+      applyBatch(client, [
+        event(11, {
+          entity: "schedule",
+          kind: source,
+          runId: null,
+          record: { ...next, lastFireKey: undefined },
+        }),
+      ]);
+    }
+
+    for (const key of [nested, root]) {
+      expect(client.getQueryData<ScheduleView[]>(key)).toEqual(
+        source === "deleted" || source === "remove" ? [] : [next],
+      );
+      expect(client.getQueryState(key)?.isInvalidated).toBe(false);
+    }
+
+    expect(client.getQueryData<ScheduleView[]>(elsewhere)).toEqual([other]);
+    expect(client.getQueryState(elsewhere)?.isInvalidated).toBe(false);
+  });
+
+  test(`${source} schedules refetch a subdirectory cache with unknown ownership`, () => {
+    const client = new QueryClient();
+    const nested = keys.schedulesIn("/work/nested");
+    client.setQueryData(nested, []);
+
+    if (source === "mutation") {
+      applyScheduleView(client, scheduled);
+    } else if (source === "remove") {
+      removeScheduleView(client, scheduled.slug, "/work/nested");
+    } else if (source === "deleted") {
+      applyBatch(client, [event(11, { entity: "schedule", kind: "deleted", runId: null, record })]);
+    } else {
+      applyBatch(client, [event(11, { entity: "schedule", kind: source, runId: null, record })]);
+    }
+
+    expect(client.getQueryData<ScheduleView[]>(nested)).toEqual([]);
+    expect(client.getQueryState(nested)?.isInvalidated).toBe(true);
+  });
+}

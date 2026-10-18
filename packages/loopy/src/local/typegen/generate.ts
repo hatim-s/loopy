@@ -28,7 +28,7 @@ export async function generateCommand(
 ): Promise<{ source: string; warnings: string[] }> {
   const help = await outputOf(binary, [...path, "--help"], options);
   const version = await outputOf(binary, ["--version"], options).catch(() => "unknown");
-  const parsed = parseCliHelp(binary, path, help);
+  const parsed = await parseCliHelp(binary, path, help);
   const name = options.name ?? identifier([basename(binary), ...path].join("-"));
   const descriptor = { ...parsed.descriptor, observedVersion: version.split("\n")[0] ?? version };
 

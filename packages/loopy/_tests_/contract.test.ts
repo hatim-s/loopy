@@ -26,6 +26,9 @@ function view(run: core.RunRecord, steps: core.StepRecord[] = [], hooks: core.Ho
 test("schema outputs exactly match core records and the wire owner projection", () => {
   expectTypeOf<z.infer<typeof contract.jsonSchema>>().toEqualTypeOf<core.Json>();
   expectTypeOf<z.infer<typeof contract.runStatusSchema>>().toEqualTypeOf<core.RunStatus>();
+  expectTypeOf<
+    Equal<z.infer<typeof contract.runRecordSchema>, core.RunRecord>
+  >().toEqualTypeOf<true>();
   expectTypeOf<z.infer<typeof contract.runOutcomeSchema>>().toEqualTypeOf<core.RunOutcome>();
   expectTypeOf<z.infer<typeof contract.stepRecordSchema>>().toEqualTypeOf<
     Flatten<core.StepRecord>
@@ -637,4 +640,36 @@ test("wire timestamps normalize offsets on node records", () => {
 
   expect(node).toMatchObject({ startedAt: utc, endedAt: utc, nextRetryAt: utc });
   expect(contract.utcTimestamp.safeParse("yesterday").success).toBe(false);
+});
+
+test("run record boundaries retain project ownership and normalize every timestamp", () => {
+  const offset = "2026-10-18T05:30:00.000+05:30";
+  const utc = "2026-10-18T00:00:00.000Z";
+
+  const record = {
+    ...newRun(),
+    projectRoot: "/project",
+    runDirectory: "/project/nested",
+    createdAt: offset,
+    updatedAt: offset,
+    wakeAt: offset,
+    owner: { token: "owner", pid: 1, host: "host", heartbeatAt: offset },
+  };
+
+  expect(contract.runRecordSchema.parse(record)).toEqual({
+    ...record,
+    createdAt: utc,
+    updatedAt: utc,
+    wakeAt: utc,
+    owner: { ...record.owner, heartbeatAt: utc },
+  });
+  expect(contract.runRecordSchema.safeParse({ ...record, createdAt: "yesterday" }).success).toBe(
+    false,
+  );
+  expect(contract.runRecordSchema.safeParse({ ...record, projectRoot: undefined }).success).toBe(
+    false,
+  );
+  expect(contract.runRecordSchema.safeParse({ ...record, runDirectory: undefined }).success).toBe(
+    false,
+  );
 });

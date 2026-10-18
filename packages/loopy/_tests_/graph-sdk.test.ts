@@ -940,3 +940,17 @@ test("output shorthand and omitted schemas lower to canonical node schemas", () 
     null,
   ]);
 });
+
+test("JavaScript definitions require a callable run before graph construction", () => {
+  for (const run of [undefined, null, false, 1, "run", {}]) {
+    rejects("invalid_definition", () => {
+      // @ts-expect-error JavaScript author modules do not enforce the callback type.
+      loopy("probe", { input: {}, run });
+    });
+  }
+
+  rejects("invalid_definition", () => {
+    // @ts-expect-error JavaScript author modules can omit required properties.
+    loopy("probe", { input: {} });
+  });
+});

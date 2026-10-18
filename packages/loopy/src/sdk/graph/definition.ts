@@ -40,6 +40,10 @@ export function parseDefinitionMeta(name: string, value: unknown) {
     }
   }
 
+  if (typeof definition.run !== "function") {
+    refuse("invalid_definition", "Supply a synchronous run callback in the loopy definition.");
+  }
+
   const secrets = definition.secrets ?? [];
 
   if (

@@ -27,8 +27,8 @@ Options:
 `;
 
 describe("CLI help generation", () => {
-  test("extracts positional and flag types with a pinned help hash", () => {
-    const parsed = parseCliHelp("codex", ["exec"], help);
+  test("extracts positional and flag types with a pinned help hash", async () => {
+    const parsed = await parseCliHelp("codex", ["exec"], help);
     expect(parsed.warnings).toContain(
       "Help may omit which valued flags can repeat; review repeatable flag metadata",
     );
@@ -47,7 +47,9 @@ describe("CLI help generation", () => {
       json: { cli: "--json", kind: "boolean" },
       config: { cli: "--config", kind: "string", repeatable: true },
     });
-    expect(parsed.descriptor.helpHash).toHaveLength(64);
+    expect(parsed.descriptor.helpHash).toBe(
+      "17787983b6949f3ba63a66c851db0ab1e6bed78db804e48a580f1fe08e596d94",
+    );
     const source = renderCommandSource("codexExec", parsed.descriptor);
     expect(source.split("\n")[0]).toBe(
       'import { type CommandDescriptor, defineCommand } from "loopy";',
@@ -56,8 +58,8 @@ describe("CLI help generation", () => {
     expect(source).toContain('"read-only"');
   });
 
-  test("generated descriptors produce graph command dispatches", () => {
-    const descriptor = parseCliHelp("codex", ["exec"], help).descriptor;
+  test("generated descriptors produce graph command dispatches", async () => {
+    const descriptor = (await parseCliHelp("codex", ["exec"], help)).descriptor;
     const { parse, ...data } = descriptor;
     expect(parse).toBeUndefined();
     const codexExec = defineCommand(data);
@@ -120,7 +122,7 @@ describe("CLI help generation", () => {
     try {
       await writeFile(
         join(directory, "command.ts"),
-        renderCommandSource("codexExec", parseCliHelp("codex", ["exec"], help).descriptor),
+        renderCommandSource("codexExec", (await parseCliHelp("codex", ["exec"], help)).descriptor),
       );
       const file = join(directory, "generated.loopy.ts");
       await writeFile(
@@ -147,14 +149,14 @@ describe("CLI help generation", () => {
 
     const source = renderCommandSource(
       "codexExec",
-      parseCliHelp("codex", ["exec"], help).descriptor,
+      (await parseCliHelp("codex", ["exec"], help)).descriptor,
     );
 
     const gitHelp = await Bun.file(resolve(import.meta.dir, "fixtures/help/git-log.txt")).text();
 
     const gitSource = renderCommandSource(
       "gitLog",
-      parseCliHelp("git", ["log"], gitHelp).descriptor,
+      (await parseCliHelp("git", ["log"], gitHelp)).descriptor,
     )
       .replace('import { type CommandDescriptor, defineCommand } from "loopy";', "")
       .replaceAll("descriptor", "logDescriptor");
@@ -165,10 +167,12 @@ describe("CLI help generation", () => {
         `${source}
       ${renderCommandSource(
         "noFlags",
-        parseCliHelp(
-          "tool",
-          [],
-          "Usage: tool [flags]\nOptions:\n  --help  Show help\n  --version  Show version",
+        (
+          await parseCliHelp(
+            "tool",
+            [],
+            "Usage: tool [flags]\nOptions:\n  --help  Show help\n  --version  Show version",
+          )
         ).descriptor,
       )
         .replace('import { type CommandDescriptor, defineCommand } from "loopy";', "")
@@ -211,8 +215,8 @@ describe("CLI help generation", () => {
     }
   });
 
-  test("reports option lines it cannot parse", () => {
-    const parsed = parseCliHelp(
+  test("reports option lines it cannot parse", async () => {
+    const parsed = await parseCliHelp(
       "tool",
       [],
       "Usage: tool [OPTIONS]\n\nOptions:\n  --bad=<strange token>\n",
@@ -223,8 +227,8 @@ describe("CLI help generation", () => {
     );
   });
 
-  test("reads a single line Usage synopsis when there is no Arguments section", () => {
-    const parsed = parseCliHelp(
+  test("reads a single line Usage synopsis when there is no Arguments section", async () => {
+    const parsed = await parseCliHelp(
       "tool",
       ["run"],
       "Usage: tool run [OPTIONS] <FILE> [LABEL]\n\nOptions:\n  --json\n",
@@ -240,8 +244,8 @@ describe("CLI help generation", () => {
     ]);
   });
 
-  test("reads bracketed, lowercase, and variadic positional syntax", () => {
-    const parsed = parseCliHelp(
+  test("reads bracketed, lowercase, and variadic positional syntax", async () => {
+    const parsed = await parseCliHelp(
       "tool",
       [],
       "Usage: tool [OPTIONS] [<file>...]\n\nOptions:\n  --help  Show help\n",
@@ -254,8 +258,8 @@ describe("CLI help generation", () => {
     ).toEqual([{ name: "file", optional: true, variadic: true }]);
   });
 
-  test("models flags with optional values and rejects reserved export names", () => {
-    const parsed = parseCliHelp(
+  test("models flags with optional values and rejects reserved export names", async () => {
+    const parsed = await parseCliHelp(
       "tool",
       [],
       "Usage: tool [OPTIONS]\n\nOptions:\n  --inspect[=<PORT>]  Inspect a process\n",
@@ -272,8 +276,8 @@ describe("CLI help generation", () => {
     );
   });
 
-  test("reads inline choices", () => {
-    const parsed = parseCliHelp(
+  test("reads inline choices", async () => {
+    const parsed = await parseCliHelp(
       "tool",
       [],
       "Usage: tool [OPTIONS] [NAME]\n\nOptions:\n  --mode <MODE>  Choose [possible values: safe, fast]\n",
@@ -326,7 +330,7 @@ for (const fixture of [
       resolve(import.meta.dir, "fixtures/help", `${fixture.file}.txt`),
     ).text();
 
-    const { descriptor } = parseCliHelp(fixture.binary, fixture.path, help);
+    const { descriptor } = await parseCliHelp(fixture.binary, fixture.path, help);
 
     if (descriptor.operands?.kind === "positional") {
       expect(descriptor.operands.parts?.[0]?.name).toBe(fixture.positional);
@@ -352,8 +356,8 @@ for (const fixture of [
   });
 }
 
-test("man-page overstrikes retain the advertised positional separator", () => {
-  const { descriptor } = parseCliHelp(
+test("man-page overstrikes retain the advertised positional separator", async () => {
+  const { descriptor } = await parseCliHelp(
     "git",
     ["log"],
     "SYNOPSIS\n       g\bgit log [[-\b--\b-] <path>...]\nOPTIONS\n       --follow\n",
@@ -365,9 +369,9 @@ test("man-page overstrikes retain the advertised positional separator", () => {
   ).toEqual([{ name: "path", optional: true, variadic: true }]);
 });
 
-test("only path-only usage receives an automatic positional separator", () => {
+test("only path-only usage receives an automatic positional separator", async () => {
   for (const operand of ["pathspec", "path", "file"]) {
-    const { descriptor } = parseCliHelp(
+    const { descriptor } = await parseCliHelp(
       "tool",
       [],
       `Usage: tool [--] <${operand}>...\nOptions:\n  --json  JSON output`,
@@ -376,7 +380,7 @@ test("only path-only usage receives an automatic positional separator", () => {
     expect(descriptor.operands?.kind === "positional" && descriptor.operands.separator).toBe(true);
   }
 
-  const { descriptor } = parseCliHelp(
+  const { descriptor } = await parseCliHelp(
     "tool",
     [],
     "Usage: tool <name> [[--] <path>...]\nOptions:\n  --json  JSON output",
@@ -386,8 +390,8 @@ test("only path-only usage receives an automatic positional separator", () => {
   expect(descriptor.operands?.kind === "revisionPaths").toBe(false);
 });
 
-test("comma aliases retain value styles and repeatable placeholder metadata", () => {
-  const { descriptor, warnings } = parseCliHelp(
+test("comma aliases retain value styles and repeatable placeholder metadata", async () => {
+  const { descriptor, warnings } = await parseCliHelp(
     "git",
     ["log"],
     `Usage: git [-C <path>] log [<revision-range>] [[--] <path>...]
@@ -418,7 +422,7 @@ test("captured gh flags accept repeated labels, assignees and reviewers", async 
     resolve(import.meta.dir, "fixtures/help/gh-pr-create.txt"),
   ).text();
 
-  const { descriptor, warnings } = parseCliHelp("gh", ["pr", "create"], captured);
+  const { descriptor, warnings } = await parseCliHelp("gh", ["pr", "create"], captured);
   expect(descriptor.flags).toMatchObject({
     assignee: { repeatable: true },
     label: { repeatable: true },

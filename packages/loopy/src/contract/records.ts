@@ -8,6 +8,29 @@ const counter = z.number().int().nonnegative();
 
 export const runStatusSchema = z.enum(RUN_STATUSES);
 
+export const runRecordSchema = z.strictObject({
+  id: z.string(),
+  slug: z.string(),
+  revision: z.string(),
+  projectRoot: z.string(),
+  runDirectory: z.string(),
+  input: jsonSchema,
+  status: runStatusSchema,
+  output: jsonSchema.optional(),
+  error: z.string().optional(),
+  wakeAt: utcTimestamp.optional(),
+  createdAt: utcTimestamp,
+  updatedAt: utcTimestamp,
+  owner: z
+    .strictObject({
+      token: z.string(),
+      pid: counter,
+      host: z.string(),
+      heartbeatAt: utcTimestamp,
+    })
+    .optional(),
+});
+
 export const runOutcomeSchema = z.discriminatedUnion("status", [
   z.strictObject({ status: z.literal("succeeded"), output: jsonSchema }),
   z.strictObject({ status: z.literal("failed"), error: z.string() }),

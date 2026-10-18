@@ -127,7 +127,7 @@ function applyHookToList(
   );
 }
 
-type BatchChanges = { lists: Set<string>; loopies: boolean; schedules: boolean };
+type BatchChanges = { lists: Set<string>; loopies: boolean; schedules: Set<string> };
 
 type RunEvent = Extract<ServerEvent, { entity: "run" }>;
 
@@ -302,7 +302,10 @@ function applyEvent(context: BatchContext, event: ServerEvent): void {
   if (event.entity === "schedule") {
     changes.loopies = true;
     const applied = applyScheduleEvent(client, event);
-    changes.schedules ||= !applied;
+
+    for (const hash of applied) {
+      changes.schedules.add(hash);
+    }
 
     return;
   }
@@ -328,7 +331,7 @@ export function applyBatch(client: QueryClient, batch: ServerEvent[]): void {
   };
 
   histories.set(client, history);
-  const changes: BatchChanges = { lists: new Set(), loopies: false, schedules: false };
+  const changes: BatchChanges = { lists: new Set(), loopies: false, schedules: new Set() };
 
   for (const event of batch) {
     applyEvent({ client, history, changes }, event);
@@ -345,8 +348,11 @@ export function applyBatch(client: QueryClient, batch: ServerEvent[]): void {
     void client.invalidateQueries({ queryKey: keys.loopies });
   }
 
-  if (changes.schedules) {
-    void client.invalidateQueries({ queryKey: keys.schedules });
+  if (changes.schedules.size > 0) {
+    void client.invalidateQueries({
+      queryKey: keys.schedules,
+      predicate: (query) => changes.schedules.has(query.queryHash),
+    });
   }
 }
 
@@ -371,52 +377,66 @@ function withSchedule(list: ScheduleView[], next: ScheduleView): ScheduleView[] 
     : [...list, next].sort((a, b) => a.slug.localeCompare(b.slug));
 }
 
-/**
- * Writes a schedule event into the list and reports whether the list now holds the truth.
- * GET /schedules covers one workspace and an event does not say whether it is that one, so
- * a schedule the list has not seen yet is left for a refetch instead of inserted.
- */
-function applyScheduleEvent(client: QueryClient, event: ScheduleEvent): boolean {
-  let known = true;
+/** Cached rows carry the resolved project root; query keys carry the requested directory. */
+function updateScheduleLists(
+  client: QueryClient,
+  workspace: string,
+  update: (list: ScheduleView[]) => ScheduleView[],
+): Set<string> {
+  const unknown = new Set<string>();
 
-  for (const [key, list] of client.getQueriesData<ScheduleView[]>({ queryKey: keys.schedules })) {
-    if (!list || (key[1] !== undefined && key[1] !== event.record.workspace)) {
-      continue;
-    }
+  for (const query of client.getQueryCache().findAll({ queryKey: keys.schedules })) {
+    const list = client.getQueryData<ScheduleView[]>(query.queryKey);
 
-    if (event.kind === "deleted") {
-      client.setQueryData<ScheduleView[]>(key, (current) =>
-        current?.filter((item) => !sameSchedule(item, event.record)),
-      );
-    } else if (key[1] !== undefined || list.some((item) => sameSchedule(item, event.record))) {
-      const view = { ...event.record, lastFireKey: event.record.lastFireKey ?? null };
-      client.setQueryData<ScheduleView[]>(key, (current) => current && withSchedule(current, view));
-    } else {
-      known = false;
+    if (
+      list &&
+      (query.queryKey[1] === workspace || list.some((item) => item.workspace === workspace))
+    ) {
+      client.setQueryData<ScheduleView[]>(query.queryKey, (current) => current && update(current));
+    } else if (!list?.length) {
+      // An empty list cannot tell us which project owns the requested directory.
+      unknown.add(query.queryHash);
     }
   }
 
-  return known;
+  return unknown;
+}
+
+function applyScheduleEvent(client: QueryClient, event: ScheduleEvent): Set<string> {
+  return updateScheduleLists(client, event.record.workspace, (list) =>
+    event.kind === "deleted"
+      ? list.filter((item) => !sameSchedule(item, event.record))
+      : withSchedule(list, { ...event.record, lastFireKey: event.record.lastFireKey ?? null }),
+  );
 }
 
 export function applyScheduleView(client: QueryClient, view: ScheduleView): void {
-  for (const [key] of client.getQueriesData<ScheduleView[]>({ queryKey: keys.schedules })) {
-    if (key[1] !== undefined && key[1] !== view.workspace) {
-      continue;
-    }
-
-    client.setQueryData<ScheduleView[]>(key, (current) => current && withSchedule(current, view));
-  }
-
+  const unknown = updateScheduleLists(client, view.workspace, (list) => withSchedule(list, view));
+  void client.invalidateQueries({
+    queryKey: keys.schedules,
+    predicate: (query) => unknown.has(query.queryHash),
+  });
   void client.invalidateQueries({ queryKey: keys.loopies });
 }
 
 export function removeScheduleView(client: QueryClient, slug: string, workspace?: string): void {
-  client.setQueriesData<ScheduleView[]>({ queryKey: keys.schedules }, (current) =>
-    current?.filter(
-      (item) => item.slug !== slug || (workspace !== undefined && item.workspace !== workspace),
-    ),
-  );
+  const key = workspace === undefined ? keys.schedules : keys.schedulesIn(workspace);
+  const schedule = client.getQueryData<ScheduleView[]>(key)?.find((item) => item.slug === slug);
+
+  if (schedule) {
+    const unknown = updateScheduleLists(client, schedule.workspace, (list) =>
+      list.filter((item) => !sameSchedule(item, schedule)),
+    );
+
+    void client.invalidateQueries({
+      queryKey: keys.schedules,
+      predicate: (query) => unknown.has(query.queryHash),
+    });
+  } else {
+    // DELETE returns no resolved identity, so an uncached request needs fresh lists.
+    void client.invalidateQueries({ queryKey: keys.schedules });
+  }
+
   void client.invalidateQueries({ queryKey: keys.loopies });
 }
 
