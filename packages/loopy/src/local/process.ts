@@ -2,8 +2,11 @@ import { mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { CommandResult, ExecutionMode } from "../core/index.js";
-import { requirePositiveInteger } from "../core/index.js";
-import { CommandExecutionError, type ResolvedCommand } from "../runtime/index.js";
+import {
+  CommandExecutionError,
+  type ResolvedCommand,
+  requirePositiveInteger,
+} from "../core/index.js";
 import { sandboxLauncher } from "./sandbox/launcher.js";
 import { envArgs, resolveProgram, within } from "./sandbox/paths.js";
 import type { Launch, Limits } from "./spawn.js";
