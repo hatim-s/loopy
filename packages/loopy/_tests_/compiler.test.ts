@@ -378,7 +378,7 @@ for (const name of [
   "transitive-helper",
   "absolute-helper",
 ]) {
-  test(`code modules reject ${name} with a located dynamic_import diagnostic`, async () => {
+  test(`code modules reject ${name} with a located dynamic_code diagnostic`, async () => {
     const { root, file } = await project(
       'import {loopy,code} from "__SDK__";export default loopy("dynamic",{input:{},run:()=>code("x",{in:{},out:{kind:"value",type:"number"},module:"./code.ts"})});',
     );
@@ -399,7 +399,7 @@ for (const name of [
       ok: false,
       diagnostics: [
         expect.objectContaining({
-          code: "dynamic_import",
+          code: "dynamic_code",
           file: join(
             root,
             name.endsWith("transitive-helper") || name === "absolute-helper"
@@ -472,9 +472,7 @@ test("parser modules reject dynamic imports in their local dependencies", async 
   const result = await compile(file);
   expect(result).toMatchObject({
     ok: false,
-    diagnostics: [
-      expect.objectContaining({ code: "dynamic_import", file: join(root, "helper.ts") }),
-    ],
+    diagnostics: [expect.objectContaining({ code: "dynamic_code", file: join(root, "helper.ts") })],
   });
 });
 
@@ -502,7 +500,24 @@ for (const wrapper of [
   });
 }
 
-for (const expression of ["import(path)", "require(path)", "new Function(path)()", "eval(path)"]) {
+for (const expression of [
+  "import(path)",
+  "require(path)",
+  "new Function(path)()",
+  "eval(path)",
+  "import.meta.require(path)",
+  "(0, eval)(path)",
+  "globalThis.Function(path)()",
+  "globalThis.require?.(path)",
+  "new globalThis.AsyncFunction(path)()",
+  "globalThis.GeneratorFunction(path)()",
+  "globalThis.createRequire(path)",
+  "globalThis.importSync(path)",
+  "globalThis.import(path)",
+  "import.meta.resolve(path)",
+  "Bun.plugin({setup() {}})",
+  "new Bun.Transpiler()",
+]) {
   test(`emitted bundle rejects ${expression} in a tsconfig alias dependency`, async () => {
     const { root, file } = await project(
       'import {loopy,code} from "__SDK__";export default loopy("alias",{input:{},run:()=>code("x",{in:{path:"./escaped.ts"},out:{kind:"value",type:"number"},module:"./code.ts"})});',
@@ -523,7 +538,7 @@ for (const expression of ["import(path)", "require(path)", "new Function(path)()
       ok: false,
       diagnostics: [
         expect.objectContaining({
-          code: "dynamic_import",
+          code: "dynamic_code",
           file: join(root, "code.ts"),
           line: expect.any(Number),
           column: expect.any(Number),

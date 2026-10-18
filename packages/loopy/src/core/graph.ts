@@ -310,7 +310,7 @@ export type NodeRun = Expand<
 >;
 
 export const COMPILER_DIAGNOSTIC_CODES = [
-  "dynamic_import",
+  "dynamic_code",
   "options_not_literal",
   "unknown_sdk_call",
   "default_loopy",
