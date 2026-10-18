@@ -1,6 +1,6 @@
 import { routes } from "../../contract/index.js";
 import type { Json } from "../../core/index.js";
-import { assertJson } from "../../runtime/index.js";
+import { assertJson } from "../../core/index.js";
 import { request } from "../client.js";
 import { type CliContext, requireHead, requireTarget } from "../context.js";
 import { printLine } from "../output.js";

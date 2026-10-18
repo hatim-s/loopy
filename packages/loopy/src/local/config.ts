@@ -1,7 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { requireRecord } from "../core/index.js";
-import { parseRateLimits, type RateLimits } from "../runtime/index.js";
+import { parseRateLimits, type RateLimits, requireRecord } from "../core/index.js";
 import { errnoCode } from "./fs.js";
 
 export function readRateLimits(home: string): RateLimits {

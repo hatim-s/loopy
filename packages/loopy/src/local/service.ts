@@ -18,20 +18,22 @@ import {
   serverEvent,
 } from "../contract/index.js";
 import {
+  assertJson,
   errorMessage,
   isFieldValue,
   isRecord,
+  OwnershipError,
   type RunRecord,
   type RuntimeEvent,
   type Schedule,
+  type Store,
 } from "../core/index.js";
-import { assertJson, type Clock, nextFire, OwnershipError, parseCron } from "../runtime/index.js";
+import { type Clock, nextFire, parseCron } from "../host/index.js";
 import { canonicalPath } from "./fs.js";
 import type { Registry } from "./registry.js";
 import { saveCompiled } from "./save-compiled.js";
 import type { SavedLoopy } from "./saved-loopy.js";
 import { SecretStore } from "./secrets.js";
-import type { SqliteRunStore } from "./store.js";
 import { generateCommand } from "./typegen/generate.js";
 
 export class ServiceError extends Error {
@@ -47,7 +49,7 @@ export class ServiceError extends Error {
 export class LoopyService {
   constructor(
     private readonly options: {
-      store: SqliteRunStore;
+      store: Store;
       registry: (workspace: string) => Registry;
       clock: Clock;
     },
@@ -272,10 +274,7 @@ export class LoopyService {
   private async viewResolver(ids: string[], registries = new Map<string, SavedLoopy[]>()) {
     const records = await Promise.all(
       ids.map(async (id) => {
-        const [steps, hooks] = await Promise.all([
-          this.options.store.getSteps(id),
-          this.options.store.listHooks(id),
-        ]);
+        const [steps, hooks] = await Promise.all([Promise.resolve([]), Promise.resolve([])]);
 
         return [id, { steps, hooks }] as const;
       }),
@@ -372,36 +371,12 @@ export class LoopyService {
     return this.view(await this.requireRun(id));
   }
 
-  async resolveNamedHook(id: string, name: string, payload: Json): Promise<RunView> {
-    const snapshot = await this.runSnapshot(id);
-
-    const waiting = new Set(
-      snapshot.steps.filter((step) => step.status === "waiting").map((step) => step.seq),
-    );
-
-    const hook = snapshot.hooks
-      .reverse()
-      .find((item) => item.name === name && item.resolvedAt === undefined && waiting.has(item.seq));
-
-    if (!hook) {
-      throw new ServiceError(
-        "unknown_hook",
-        `Hook '${name}' is not waiting in run '${id}'. Run loopy inspect ${id} to find waiting hooks.`,
-      );
-    }
-
-    return this.resolveHook(hook.token, payload);
-  }
-
-  async resolveHook(token: string, payload: Json): Promise<RunView> {
-    const hook = await this.options.store.hook(token);
-
-    if (!hook || !(await this.options.store.resolveHook(token, payload))) {
-      throw new ServiceError("unknown_hook");
-    }
-
-    return this.view(await this.requireRun(hook.runId));
-  }
+  resolveNamedHook: (id: string, name: string, payload: Json) => Promise<RunView> = async () => {
+    throw new ServiceError("not_yet", "Wait signals arrive in PR 4c.");
+  };
+  resolveHook: (token: string, payload: Json) => Promise<RunView> = async () => {
+    throw new ServiceError("not_yet", "Wait signals arrive in PR 4c.");
+  };
 
   async runSnapshot(id: string) {
     const snapshot = await this.options.store.snapshotRun(id);
