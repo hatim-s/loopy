@@ -1,0 +1,1 @@
+import {loopy,code as action} from "__SDK__"; export default loopy("alias",{input:{},run:()=>null});

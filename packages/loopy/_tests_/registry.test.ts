@@ -97,3 +97,23 @@ test("changing scope removes only the other entry owned by the same source", asy
   );
   expect(registry.get("saved").revision).toBe(definition.revision);
 });
+
+test("registry open deletes invalid project and global entries while retaining schema-valid entries", async () => {
+  const f = fixture();
+  const registry = new Registry(f.home, f.project);
+  const saved = await registry.save(await compiledBody("saved", f.source));
+
+  for (const directory of [registry.projectDirectory, registry.globalDirectory]) {
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, "pre-v2.json"), JSON.stringify({ slug: "pre-v2" }));
+    writeFileSync(join(directory, "malformed.json"), "{");
+  }
+
+  const reopened = new Registry(f.home, f.project);
+  expect(reopened.list()).toEqual([saved]);
+
+  for (const directory of [registry.projectDirectory, registry.globalDirectory]) {
+    expect(existsSync(join(directory, "pre-v2.json"))).toBe(false);
+    expect(existsSync(join(directory, "malformed.json"))).toBe(false);
+  }
+});

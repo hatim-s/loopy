@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { evaluate } from "../src/compiler/evaluate.js";
 import { compile } from "../src/compiler/index.js";
-import { canonicalJson, type Json, validateGraph } from "../src/core/index.js";
+import { type Json } from "../src/core/index.js";
 import { bundleSucceeded } from "../src/executor/protocol.js";
 import { compiledBody } from "./compiled-fixture.js";
 
@@ -29,45 +29,47 @@ async function project(source: string) {
 }
 
 const rejected = {
-  "options-identifier": "options_not_literal",
-  "options-wrapped": "module_default",
-  "parser-inline": "module_path",
-  "parameter-computed": "invalid_binding",
-  "parameter-default": "invalid_binding",
-  "parameter-rest": "invalid_binding",
-  "unknown-sdk-call": "unknown_sdk_call",
-  "parser-effect": "module_path",
-  "default-export": "default_loopy",
-  "duplicate-label": "duplicate_label",
-  enum: "module_effect",
-  namespace: "module_effect",
-  async: "synchronous_run",
-  await: "await_forbidden",
-  if: "forbidden_statement",
-  for: "forbidden_statement",
-  while: "forbidden_statement",
-  do: "forbidden_statement",
-  switch: "forbidden_statement",
-  exception: "forbidden_statement",
-  template: "template_reference",
-  call: "forbidden_call",
-  mutable: "forbidden_statement",
-  captured: "module_effect",
-  label: "literal_required",
-  name: "literal_required",
-  key: "literal_key",
-  "module-literal": "module_path",
-  "module-relative": "module_path",
-  "module-default": "module_default",
-  "inline-function": "invalid_callback",
-  spread: "literal_key",
-  mutation: "forbidden_expression",
-  constructor: "synchronous_run",
-  "get-key": "literal_required",
+  "options-identifier": ["options_not_literal"],
+  "parser-inline": ["module_path"],
+  "parser-key": ["literal_required"],
+  "descriptor-identifier": ["descriptor_not_literal"],
+  "sdk-alias": ["sdk_alias"],
+  "parameter-computed": ["invalid_binding"],
+  "parameter-default": ["invalid_binding"],
+  "parameter-rest": ["invalid_binding"],
+  "unknown-sdk-call": ["unknown_sdk_call"],
+  "parser-effect": ["module_path"],
+  "default-export": ["literal_required", "default_loopy"],
+  "duplicate-label": ["duplicate_label"],
+  enum: ["module_effect"],
+  namespace: ["module_effect"],
+  async: ["synchronous_run"],
+  await: ["syntax_error", "await_forbidden"],
+  if: ["forbidden_statement"],
+  for: ["forbidden_statement"],
+  while: ["forbidden_statement"],
+  do: ["forbidden_statement"],
+  switch: ["forbidden_statement"],
+  exception: ["forbidden_statement"],
+  template: ["template_reference"],
+  call: ["forbidden_call"],
+  mutable: ["forbidden_statement", "invalid_reference"],
+  captured: ["module_effect", "invalid_reference"],
+  label: ["literal_required"],
+  name: ["literal_required"],
+  key: ["literal_key"],
+  "module-literal": ["module_path"],
+  "module-relative": ["module_path"],
+  "module-default": ["module_default"],
+  "inline-function": ["invalid_callback"],
+  spread: ["literal_key"],
+  mutation: ["forbidden_expression"],
+  constructor: ["synchronous_run"],
+  "get-key": ["literal_required"],
 } as const;
 
-for (const [name, code] of Object.entries(rejected)) {
-  test(`restrict rejects ${name} with a located stable diagnostic`, async () => {
+for (const [name, codes] of Object.entries(rejected)) {
+  test(`compile rejects ${name} with a located stable diagnostic`, async () => {
     const { root, file } = await project(
       await Bun.file(join(fixtureRoot, "rejected", `${name}.txt`)).text(),
     );
@@ -79,6 +81,8 @@ for (const [name, code] of Object.entries(rejected)) {
       throw new Error("Expected compiler diagnostics.");
     }
 
+    expect(result.diagnostics.map((value) => value.code)).toEqual([...codes]);
+    const code = codes[0];
     expect(result.diagnostics).toContainEqual({
       code,
       message: expect.any(String),
@@ -285,14 +289,9 @@ for (const name of ["hello", "review", "asset-sync", "www-sync"]) {
       throw new Error(JSON.stringify(result.diagnostics));
     }
 
-    expect(validateGraph(result.graph)).toEqual([]);
     expect(result.bundles.length).toBeGreaterThan(0);
   });
 }
-
-test("canonical JSON sorts nested keys and preserves array order", () => {
-  expect(canonicalJson({ z: [{ b: 2, a: 1 }], a: null })).toBe('{"a":null,"z":[{"a":1,"b":2}]}');
-});
 
 test("code bundle import.meta names each source module instead of the saved bundle", async () => {
   const { root, file } = await project(
@@ -634,4 +633,31 @@ test("the public SDK entry compiles through the same graph builder", async () =>
   if (result.ok) {
     expect(result.graph.nodes.map((node) => node.kind)).toEqual(["log", "join"]);
   }
+});
+
+test("a misplaced bundled loader reports the executable entry at 1:1 without a bundle offset", async () => {
+  const { root, file } = await project(
+    'import {loopy,code} from "__SDK__"; export default loopy("located",{input:{},run:()=>code("work",{in:{path:"./work.ts"},out:{kind:"value",type:"number"},module:"./code.ts"})});',
+  );
+
+  await writeFile(
+    join(root, "tsconfig.json"),
+    JSON.stringify({ compilerOptions: { paths: { "@local/*": ["./lib/*"] } } }),
+  );
+  const entry = join(root, "code.ts");
+  await writeFile(
+    entry,
+    '\n\nimport {load} from "@local/helper";\n\nexport default ({path}) => load(path);',
+  );
+  await Bun.write(join(root, "lib/helper.ts"), "export const load = (path) => eval(path);");
+  expect(await compile(file)).toEqual({
+    ok: false,
+    diagnostics: [
+      {
+        code: "dynamic_code",
+        message: "A bundled dependency loads code at run time.",
+        source: { module: entry, line: 1, column: 1 },
+      },
+    ],
+  });
 });

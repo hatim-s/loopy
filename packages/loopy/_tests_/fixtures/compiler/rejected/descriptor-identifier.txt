@@ -1,0 +1,1 @@
+import {loopy,defineCommand} from "__SDK__"; const options={key:"parser",program:"echo",parse:"./not-function.ts"}; const command=defineCommand(options,{kind:"value",type:"number"}); export default loopy("parser",{input:{},run:()=>command()});

@@ -1006,6 +1006,24 @@ test("compiled save route verifies artifacts, stores private bundles and returns
       })
     ).status,
   ).toBe(400);
+
+  const conflict = await put({
+    ...body,
+    replace: false,
+    source: { ...body.source, path: `${source}-other` },
+  });
+
+  expect(conflict.status).toBe(409);
+  expect(errorBodySchema.parse(await conflict.json()).error.code).toBe("source_conflict");
+  const lock = join(registry.projectDirectory, "compiled-save.json.lock");
+  mkdirSync(lock);
+
+  try {
+    await expect(put(body)).rejects.toThrow("Another save holds");
+  } finally {
+    rmSync(lock, { recursive: true });
+  }
+
   const globalGraph = { ...body.graph, meta: { ...body.graph.meta, scope: "global" as const } };
 
   const globalBody = {

@@ -7,15 +7,15 @@ export async function compiledBody(
   path: string,
   meta: Partial<PutLoopyBody["graph"]["meta"]> & Partial<PutLoopyBody["source"]> = {},
 ): Promise<PutLoopyBody> {
-  const { graph } = loopy(name, { input: {}, run: () => null });
-
-  graph.meta = {
-    description: meta.description ?? null,
-    schedule: meta.schedule ?? null,
-    secrets: meta.secrets ?? [],
-    mode: meta.mode ?? "sandbox",
-    scope: meta.scope ?? "project",
-  };
+  const { graph } = loopy(name, {
+    input: {},
+    description: meta.description ?? undefined,
+    schedule: meta.schedule ?? undefined,
+    secrets: meta.secrets,
+    mode: meta.mode,
+    scope: meta.scope,
+    run: () => null,
+  });
 
   return {
     graph,

@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import * as contract from "../src/contract/index.js";
 import type * as core from "../src/core/index.js";
 import {
+  canonicalJson,
   checkPredicate,
   type DiagnosticCode,
   ERROR_FIELDS,
@@ -1162,4 +1163,8 @@ test("record matching distinguishes input keys from JSON output extensions", () 
   expect(matchesRecord({ values: "json[]" }, { values: Array(1) }, { extraKeys: "reject" })).toBe(
     false,
   );
+});
+
+test("canonical JSON sorts nested keys and preserves array order", () => {
+  expect(canonicalJson({ z: [{ b: 2, a: 1 }], a: null })).toBe('{"a":null,"z":[{"a":1,"b":2}]}');
 });
