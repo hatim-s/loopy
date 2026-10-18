@@ -1,7 +1,6 @@
 import { code, loopy, now, uuid } from "../../../src/sdk/graph/index.js";
 
-export default loopy({
-  name: "uacode-asset-sync",
+export default loopy("uacode-asset-sync", {
   input: { repository: "string", base: "string", dryRun: "boolean", request: "json" },
   run: ({ input }) => {
     const base = code("prerequisites", {

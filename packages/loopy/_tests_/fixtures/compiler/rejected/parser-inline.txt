@@ -1,0 +1,2 @@
+import {loopy,code,defineCommand,sh} from "__SDK__";
+const command=defineCommand({key:"inline",program:"echo",parse:()=>1},{kind:"value",type:"number"});export default loopy("bad",{input:{},run:()=>command()});

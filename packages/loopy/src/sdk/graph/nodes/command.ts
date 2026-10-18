@@ -36,7 +36,7 @@ function record({
   out,
 }: {
   label: string | null;
-  descriptor: CommandDescriptor;
+  descriptor: GraphCommandDescriptor;
   input: Input;
   options: Options;
   mode: "parsed" | "raw";
@@ -61,7 +61,10 @@ function record({
       },
       retry: builder.retry(options.retry),
       okExitCodes: [...(descriptor.okExitCodes ?? [0])],
-      parse: mode === "parsed" && descriptor.parse ? { bundleHash: null } : null,
+      parse:
+        mode === "parsed" && descriptor.parse
+          ? { bundleHash: null, input: serializeValues(rendered.parseInput, builder) }
+          : null,
     },
     label,
   );
@@ -78,23 +81,22 @@ type CallArguments<I> = I extends { args: readonly unknown[] }
   ? [input: I, options?: Options]
   : [input?: I, options?: Options];
 
-type Parsed<S extends OutSchema> = {
-  parse: (...args: Parameters<NonNullable<CommandDescriptor["parse"]>>) => Infer<S>;
-};
+type GraphCommandDescriptor = Omit<CommandDescriptor, "parse"> & { parse?: string };
 
-type CommandCall<D extends CommandDescriptor, S extends OutSchema> = {
+type CommandCall<D extends GraphCommandDescriptor, S extends OutSchema> = {
   (...args: CallArguments<CommandInput<D>>): Ref<Infer<S>, SchemaFields<S>>;
+  readonly descriptor: D;
   raw: (...args: CallArguments<CommandRawInput<D>>) => Ref<CommandResult, CommandResult>;
 };
 
-export function defineCommand<const D extends CommandDescriptor>(
+export function defineCommand<const D extends GraphCommandDescriptor>(
   descriptor: D & { parse?: never },
 ): CommandCall<D, typeof commandOutput>;
-export function defineCommand<const S extends OutSchema, const D extends CommandDescriptor>(
-  descriptor: D & Parsed<NoInfer<S>>,
+export function defineCommand<const S extends OutSchema, const D extends GraphCommandDescriptor>(
+  descriptor: D & { parse: string },
   out: S,
 ): CommandCall<D, S>;
-export function defineCommand<const S extends OutSchema, const D extends CommandDescriptor>(
+export function defineCommand<const S extends OutSchema, const D extends GraphCommandDescriptor>(
   descriptor: D,
   schema?: S,
 ) {
@@ -122,7 +124,7 @@ export function defineCommand<const S extends OutSchema, const D extends Command
     );
   }
 
-  return Object.assign(call, { raw });
+  return Object.assign(call, { raw, descriptor });
 }
 
 function shell({

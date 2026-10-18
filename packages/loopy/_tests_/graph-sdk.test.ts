@@ -51,7 +51,7 @@ import wwwSync from "./fixtures/graph-examples/www-sync.js";
 import { approveDemoGraph } from "./fixtures/graphs.js";
 
 function compile(run: () => AuthorValue) {
-  const result = loopy({ name: "test", input: {}, run });
+  const result = loopy("test", { input: {}, run });
   expect(result.diagnostics).toEqual([]);
   expect(validateGraph(result.graph)).toEqual([]);
   expect(graphSchema.parse(result.graph)).toEqual(result.graph);
@@ -74,8 +74,7 @@ function rejects(code: DiagnosticCode, run: () => void) {
 }
 
 test("approve-demo reproduces the canonical graph exactly", () => {
-  const result = loopy({
-    name: "approve-demo",
+  const result = loopy("approve-demo", {
     input: { "subject?": "string" },
     run: ({ input }) => {
       const draft = code("draft", {
@@ -295,9 +294,7 @@ test("all shell namespaces use descriptors and record parsers without executing 
       {
         key: "custom",
         program: "echo",
-        parse: () => {
-          throw new Error("Parser executed.");
-        },
+        parse: "./not-executed.ts",
       },
       { kind: "value", type: "json" },
     )({}, { label: "custom" }),
@@ -312,7 +309,9 @@ test("all shell namespaces use descriptors and record parsers without executing 
     "archive.tar",
     "custom",
   ]);
-  expect(commands.map((node) => node.parse)).toEqual([
+  expect(
+    commands.map((node) => (node.parse === null ? null : { bundleHash: node.parse.bundleHash })),
+  ).toEqual([
     { bundleHash: null },
     { bundleHash: null },
     { bundleHash: null },
@@ -379,8 +378,7 @@ test("refs cannot escape a branch or cross parallel siblings", () => {
 
 test("refs cannot cross builders, including input refs", () => {
   let foreign: Ref<string> | undefined;
-  loopy({
-    name: "first",
+  loopy("first", {
     input: { value: "string" },
     run: ({ input }) => {
       foreign = input.get("value");
@@ -727,8 +725,7 @@ test("stored descriptor data renders false booleans, attached values and ordered
 });
 
 test("collect maps infer success and failure outcomes while fail maps preserve values", () => {
-  const result = loopy({
-    name: "map-types",
+  const result = loopy("map-types", {
     input: { names: "string[]", counts: "number[]", flags: "boolean[]", records: "json[]" },
     run: ({ input }) => {
       expectTypeOf(input.get("names")).toEqualTypeOf<Ref<string[]>>();
@@ -866,8 +863,7 @@ for (const [kind, control] of [
   ],
 ] as const) {
   test(`${kind} with no successful arm tails keeps its join without plumbing diagnostics`, () => {
-    const result = loopy({
-      name: "test",
+    const result = loopy("test", {
       input: {},
       run: () => {
         control();
@@ -927,8 +923,7 @@ test("rescue resolves a non-returning finally body to its numeric handler", () =
 });
 
 test("author references to an all-failing branch remain unresolved", () => {
-  const result = loopy({
-    name: "never-ref",
+  const result = loopy("never-ref", {
     input: {},
     run: () => {
       const failed = branch(
@@ -950,8 +945,7 @@ test("author references to an all-failing branch remain unresolved", () => {
 });
 
 test("a rescue accepts a map body ending in fail", () => {
-  const result = loopy({
-    name: "failing-map",
+  const result = loopy("failing-map", {
     input: { items: "string[]" },
     run: ({ input }) =>
       rescue(
@@ -977,7 +971,7 @@ for (const label of ["__proto__", "constructor", "prototype"]) {
     ["command", () => compile(() => sh(["echo"], { label }))],
     ["wait", () => compile(() => wait(label, { payload: schema }))],
     ["subgraph", () => subgraph(label, uuid)],
-    ["input fields", () => loopy({ name: "reserved", input: fields, run: () => null })],
+    ["input fields", () => loopy("reserved", { input: fields, run: () => null })],
     [
       "code inputs",
       () => compile(() => code("code", { in: { [label]: 1 }, out: schema, module: "./a.ts" })),
@@ -992,8 +986,7 @@ for (const label of ["__proto__", "constructor", "prototype"]) {
     [
       "map records",
       () =>
-        loopy({
-          name: "map",
+        loopy("map", {
           input: { items: "string[]" },
           run: ({ input }) => map(input.get("items"), () => ({ [label]: 1 }), { onError: "fail" }),
         }),
@@ -1018,8 +1011,7 @@ test("arm dictionaries contain only own callbacks", () => {
 });
 
 test("an author reference to a parallel with one failing arm is unresolved", () => {
-  const result = loopy({
-    name: "never-parallel-ref",
+  const result = loopy("never-parallel-ref", {
     input: {},
     run: () => {
       const failed = parallel({ bad: () => fail("oops"), good: () => 1 });

@@ -1,7 +1,6 @@
 import { code, log, loopy, uuid } from "../../../src/sdk/graph/index.js";
 
-export default loopy({
-  name: "www-uacode-sync",
+export default loopy("www-uacode-sync", {
   input: {
     repository: "string",
     dryRun: "boolean",

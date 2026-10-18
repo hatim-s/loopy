@@ -78,23 +78,23 @@ function operandTypes(
 
 function schemaTypes() {
   const command = defineCommand(
-    { key: "count", program: "count", parse: () => 1 },
+    { key: "count", program: "count", parse: "./parse-count.ts" },
     { kind: "value", type: "number" },
   );
 
   expectTypeOf(command()).toEqualTypeOf<Ref<number>>();
   defineCommand(
-    // @ts-expect-error The parser must return the declared scalar type.
+    // @ts-expect-error Inline parser functions are not supported.
     { key: "wrong", program: "wrong", parse: () => "text" },
     { kind: "value", type: "number" },
   );
   defineCommand(
-    // @ts-expect-error The parser must return the declared record fields.
+    // @ts-expect-error Inline parser functions are not supported.
     { key: "wrong", program: "wrong", parse: () => ({ count: "text" }) },
     { kind: "record", fields: { count: "number" } },
   );
   // @ts-expect-error Parsed commands require an explicit output schema.
-  defineCommand({ key: "missing", program: "missing", parse: () => 1 });
+  defineCommand({ key: "missing", program: "missing", parse: "./parse-count.ts" });
 
   const record = code("record", {
     in: {},
@@ -116,8 +116,7 @@ test("typecheck fixtures are present and parsed array outputs remain measurable"
   expect(operandTypes).toBeFunction();
   expect(schemaTypes).toBeFunction();
 
-  const result = loopy({
-    name: "array-parser",
+  const result = loopy("array-parser", {
     input: {},
     run: () => {
       const files = fs.ls();

@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { isFieldValue, type Json, setOwnProperty } from "../core/index.js";
 import { assertJson } from "../runtime/index.js";
-import { isStandardSchema, type Loopy, type RecordSpec } from "../sdk/host.js";
+import { type RecordSpec } from "../sdk/host.js";
 import type { CliContext } from "./context.js";
 
 // BOUNDARY: JSON input must be validated by the loopy schema before creating a run.
@@ -84,17 +84,14 @@ async function recordInput(spec: RecordSpec, context: CliContext) {
   }
 }
 
-// BOUNDARY: The SDK validates CLI input against the author's schema.
-export async function sdkInput(loopy: Loopy, context: CliContext): Promise<Json> {
+export async function graphInput(spec: RecordSpec | "schema", context: CliContext): Promise<Json> {
   if (context.values["input-json"] !== undefined || context.values["input-file"] !== undefined) {
     return jsonInput(context);
   }
 
-  if (isStandardSchema(loopy.input)) {
-    throw new Error(
-      "This loopy uses a Standard Schema. Supply --input-json '<json>' or --input-file <path>.",
-    );
+  if (spec === "schema") {
+    throw new Error("Graph input requires a record schema.");
   }
 
-  return recordInput(loopy.input ?? {}, context);
+  return recordInput(spec, context);
 }

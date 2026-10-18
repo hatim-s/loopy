@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { putLoopyBodySchema } from "./compiled-loopy.js";
+import { graphViewSchema } from "./graph.js";
 import { jsonSchema } from "./json.js";
 import { logRecordSchema, runStatusSchema } from "./records.js";
 import {
@@ -52,6 +54,8 @@ export const errorBodySchema = z.strictObject({
 export type ErrorBody = z.infer<typeof errorBodySchema>;
 
 const emptySchema = z.strictObject({});
+
+const workspaceQuerySchema = z.strictObject({ workspace: z.string().optional() });
 
 const runParamsSchema = z.strictObject({ id: z.string() });
 
@@ -120,11 +124,75 @@ type Route = {
 };
 
 export const routes = {
+  secrets: {
+    method: "GET",
+    path: "/secrets",
+    params: emptySchema,
+    query: emptySchema,
+    body: z.undefined(),
+    response: z.array(z.string()),
+  },
+  putSecret: {
+    method: "PUT",
+    path: "/secrets/:name",
+    params: z.strictObject({ name: z.string() }),
+    query: emptySchema,
+    body: z.strictObject({ value: z.string() }),
+    response: z.strictObject({ name: z.string(), saved: z.literal(true) }),
+  },
+  deleteSecret: {
+    method: "DELETE",
+    path: "/secrets/:name",
+    params: z.strictObject({ name: z.string() }),
+    query: emptySchema,
+    body: z.undefined(),
+    response: z.strictObject({ name: z.string(), removed: z.literal(true) }),
+  },
+  generateTypes: {
+    method: "POST",
+    path: "/types",
+    params: emptySchema,
+    query: emptySchema,
+    body: z.strictObject({
+      binary: z.string(),
+      path: z.array(z.string()),
+      name: z.string().nullable(),
+    }),
+    response: z.strictObject({
+      source: z.string(),
+      warnings: z.array(z.string()),
+      help: z.string(),
+    }),
+  },
+  resolveNamedHook: {
+    method: "POST",
+    path: "/runs/:id/hooks/:name",
+    params: z.strictObject({ id: z.string(), name: z.string() }),
+    query: emptySchema,
+    body: resolveHookBodySchema,
+    response: runViewSchema,
+  },
+  putLoopy: {
+    method: "PUT",
+    path: "/loopies/:slug",
+    params: scheduleParamsSchema,
+    query: emptySchema,
+    body: putLoopyBodySchema,
+    response: graphViewSchema,
+  },
+  graph: {
+    method: "GET",
+    path: "/loopies/:slug/graph",
+    params: scheduleParamsSchema,
+    query: z.strictObject({ workspace: z.string().optional() }),
+    body: z.undefined(),
+    response: graphViewSchema,
+  },
   schedules: {
     method: "GET",
     path: "/schedules",
     params: emptySchema,
-    query: emptySchema,
+    query: workspaceQuerySchema,
     body: z.undefined(),
     response: z.array(scheduleViewSchema),
   },
@@ -132,7 +200,7 @@ export const routes = {
     method: "PUT",
     path: "/loopies/:slug/schedule",
     params: scheduleParamsSchema,
-    query: emptySchema,
+    query: workspaceQuerySchema,
     body: putScheduleBodySchema,
     response: scheduleViewSchema,
   },
@@ -140,7 +208,7 @@ export const routes = {
     method: "POST",
     path: "/loopies/:slug/schedule/enabled",
     params: scheduleParamsSchema,
-    query: emptySchema,
+    query: workspaceQuerySchema,
     body: scheduleEnabledBodySchema,
     response: scheduleViewSchema,
   },
@@ -148,7 +216,7 @@ export const routes = {
     method: "DELETE",
     path: "/loopies/:slug/schedule",
     params: scheduleParamsSchema,
-    query: emptySchema,
+    query: workspaceQuerySchema,
     body: z.undefined(),
     response: z.strictObject({ deleted: z.literal(true) }),
   },
@@ -156,7 +224,7 @@ export const routes = {
     method: "GET",
     path: "/loopies",
     params: emptySchema,
-    query: emptySchema,
+    query: workspaceQuerySchema,
     body: z.undefined(),
     response: z.array(loopyViewSchema),
   },

@@ -1,0 +1,1 @@
+export default async () => (await import(import.meta.dir + "/helper.ts")).value;

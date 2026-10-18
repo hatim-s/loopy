@@ -1,0 +1,2 @@
+import {loopy, log, wait, code} from "__SDK__";
+export default loopy("invalid", {input:{}, run: () => { switch (1) { case 1: return 1; } }});

@@ -1,10 +1,12 @@
+import { routes } from "../../contract/index.js";
 import { validateSecretName } from "../../core/index.js";
-import { SecretStore, validateSecretValue } from "../../local/index.js";
+import { validateSecretValue } from "../../local/index.js";
+import { request } from "../client.js";
 import { type CliContext, optionalTarget, requireHead } from "../context.js";
 import { printJson } from "../output.js";
 import { readSecret } from "../secret-entry.js";
 
-async function storeSecret(context: CliContext, store: SecretStore, name: string | undefined) {
+async function storeSecret(context: CliContext, name: string | undefined) {
   if (!name) {
     throw new Error("Pass a secret name, e.g. loopy secrets set NPM_TOKEN.");
   }
@@ -12,8 +14,12 @@ async function storeSecret(context: CliContext, store: SecretStore, name: string
   validateSecretName(name);
   const value = await readSecret(context.values.stdin ?? false);
   validateSecretValue(value);
-  store.set(name, value);
-  printJson({ name, saved: true });
+  printJson(
+    await request(context, `/secrets/${encodeURIComponent(name)}`, routes.putSecret.response, {
+      method: "PUT",
+      body: { value },
+    }),
+  );
 }
 
 export async function runSecrets(context: CliContext): Promise<void> {
@@ -24,19 +30,17 @@ export async function runSecrets(context: CliContext): Promise<void> {
     throw new Error("--stdin is only supported by loopy secrets set.");
   }
 
-  const store = new SecretStore(context.home);
-
   switch (action) {
     case "list":
       if (name) {
         throw new Error("loopy secrets list takes no name.");
       }
 
-      printJson(store.list());
+      printJson(await request(context, "/secrets", routes.secrets.response));
 
       return;
     case "set":
-      await storeSecret(context, store, name);
+      await storeSecret(context, name);
 
       return;
     case "remove":
@@ -44,8 +48,14 @@ export async function runSecrets(context: CliContext): Promise<void> {
         throw new Error("Pass a secret name, e.g. loopy secrets set NPM_TOKEN.");
       }
 
-      store.remove(name);
-      printJson({ name, removed: true });
+      printJson(
+        await request(
+          context,
+          `/secrets/${encodeURIComponent(name)}`,
+          routes.deleteSecret.response,
+          { method: "DELETE" },
+        ),
+      );
 
       return;
     default:

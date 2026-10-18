@@ -1,7 +1,8 @@
+import { routes } from "../../contract/index.js";
+import { request } from "../client.js";
 import { type CliContext, requireTarget } from "../context.js";
 import { jsonInput } from "../input.js";
 import { printJson } from "../output.js";
-import { runService, withRunStore } from "../store.js";
 
 export async function runSchedule(context: CliContext): Promise<void> {
   const slug = requireTarget(context, "Slug");
@@ -16,21 +17,35 @@ export async function runSchedule(context: CliContext): Promise<void> {
     throw new Error("Choose one schedule action: --cron, --off, --enable, or --disable.");
   }
 
-  await withRunStore(context, async (store) => {
-    const service = runService(context, store);
+  const path = `/loopies/${encodeURIComponent(slug)}/schedule`;
 
-    if (off) {
-      printJson(await service.deleteSchedule(slug));
+  const workspace = `?workspace=${encodeURIComponent(context.cwd)}`;
 
-      return;
-    }
+  if (off) {
+    printJson(
+      await request(context, `${path}${workspace}`, routes.deleteSchedule.response, {
+        method: "DELETE",
+      }),
+    );
 
-    if (enable || disable) {
-      printJson(await service.setScheduleEnabled(slug, !!enable));
+    return;
+  }
 
-      return;
-    }
+  if (enable || disable) {
+    printJson(
+      await request(context, `${path}/enabled${workspace}`, routes.setScheduleEnabled.response, {
+        method: "POST",
+        body: { enabled: !!enable },
+      }),
+    );
 
-    printJson(await service.putSchedule(slug, { cron, tz, input: await jsonInput(context) }));
-  });
+    return;
+  }
+
+  printJson(
+    await request(context, `${path}${workspace}`, routes.putSchedule.response, {
+      method: "PUT",
+      body: { cron, tz, input: await jsonInput(context) },
+    }),
+  );
 }

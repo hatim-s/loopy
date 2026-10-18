@@ -1,33 +1,37 @@
 import { setTimeout } from "node:timers/promises";
+import { routes } from "../../contract/index.js";
 import { isTerminalRun } from "../../core/index.js";
+import { request } from "../client.js";
 import { type CliContext, requireTarget } from "../context.js";
 import { printJson, printLine } from "../output.js";
-import { requireRun, withRunStore } from "../store.js";
 
 export async function runLogs(context: CliContext): Promise<void> {
   const id = requireTarget(context, "Run ID");
-  await withRunStore(context, async (store) => {
-    let after = 0;
+  let after = 0;
 
-    while (true) {
-      const run = await requireRun(store, id);
-      const logs = await store.getLogs(id, after);
+  while (true) {
+    const snapshot = await request(context, `/runs/${encodeURIComponent(id)}`, routes.run.response);
 
-      for (const log of logs) {
-        if (context.values.follow) {
-          printLine(JSON.stringify(log));
-        } else {
-          printJson(log);
-        }
+    const logs = await request(
+      context,
+      `/runs/${encodeURIComponent(id)}/logs?after=${after}`,
+      routes.logs.response,
+    );
 
-        after = log.seq;
+    for (const log of logs) {
+      if (context.values.follow) {
+        printLine(JSON.stringify(log));
+      } else {
+        printJson(log);
       }
 
-      if (!context.values.follow || isTerminalRun(run.status)) {
-        return;
-      }
-
-      await setTimeout(500);
+      after = log.seq;
     }
-  });
+
+    if (!context.values.follow || isTerminalRun(snapshot.run.status)) {
+      return;
+    }
+
+    await setTimeout(500);
+  }
 }

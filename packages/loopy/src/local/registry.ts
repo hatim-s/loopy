@@ -1,12 +1,26 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { validateSlug } from "../core/index.js";
-import { isStandardSchema, type Loopy } from "../sdk/host.js";
+import type { PutLoopyBody } from "../contract/index.js";
+import { canonicalJson, isRecord, validateSlug } from "../core/index.js";
 import { canonicalPath, withLockDirectory, writeFileAtomically } from "./fs.js";
 import { parseSavedLoopy, type SavedLoopy } from "./saved-loopy.js";
 
 function readEntry(file: string) {
-  return parseSavedLoopy(JSON.parse(readFileSync(file, "utf8")));
+  const value: unknown = JSON.parse(readFileSync(file, "utf8"));
+
+  if (isRecord(value) && "version" in value && value.version === 2) {
+    return parseSavedLoopy(value);
+  }
+
+  return null;
+}
+
+function sameSave(previous: SavedLoopy, body: PutLoopyBody) {
+  return (
+    previous.source === canonicalPath(body.source.path) &&
+    previous.revision === body.revision &&
+    canonicalJson(previous.graph.meta) === canonicalJson(body.graph.meta)
+  );
 }
 
 export class Registry {
@@ -32,13 +46,19 @@ export class Registry {
   }
 
   get(slug: string): SavedLoopy {
-    const file = this.files(slug).find((candidate) => existsSync(candidate));
+    for (const file of this.files(slug)) {
+      if (!existsSync(file)) {
+        continue;
+      }
 
-    if (!file) {
-      throw new Error(`No saved loopy '${slug}'. Use loopy save <file.ts> first.`);
+      const entry = readEntry(file);
+
+      if (entry) {
+        return entry;
+      }
     }
 
-    return readEntry(file);
+    throw new Error(`No saved loopy '${slug}'. Use loopy save <file.ts> first.`);
   }
 
   list(): SavedLoopy[] {
@@ -51,40 +71,68 @@ export class Registry {
 
       for (const file of readdirSync(directory).filter((name) => name.endsWith(".json"))) {
         const entry = readEntry(join(directory, file));
-        entries.set(entry.slug, entry);
+
+        if (entry) {
+          entries.set(entry.slug, entry);
+        }
       }
     }
 
     return [...entries.values()].sort((a, b) => a.slug.localeCompare(b.slug));
   }
 
-  save(
-    loopy: Loopy,
-    {
-      source,
-      bundleHash,
-      replace = false,
-    }: { source: string; bundleHash: string; replace?: boolean },
-  ): SavedLoopy {
-    const owner = canonicalPath(source);
-    const files = this.files(loopy.name);
-    const directory = loopy.scope === "project" ? this.projectDirectory : this.globalDirectory;
-    const file = join(directory, `${loopy.name}.json`);
+  unchanged(body: PutLoopyBody) {
+    const files = this.files(body.graph.name);
+    const file = body.graph.meta.scope === "project" ? files[0] : files[1];
+    const previous = file && existsSync(file) ? readEntry(file) : null;
 
+    return previous && sameSave(previous, body)
+      ? { ok: true as const, entry: previous }
+      : { ok: false as const };
+  }
+
+  save(body: PutLoopyBody): SavedLoopy {
+    const { graph, revision, source, replace, bundles } = body;
+    const meta = graph.meta;
+    const owner = canonicalPath(source.path);
+    const files = this.files(graph.name);
+    const directory = meta.scope === "project" ? this.projectDirectory : this.globalDirectory;
+    const file = join(directory, `${graph.name}.json`);
     mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
 
     return withLockDirectory(`${file}.lock`, "save", () => {
-      if (existsSync(file) && readEntry(file).source !== owner && !replace) {
+      const previous = existsSync(file) ? readEntry(file) : null;
+
+      if (previous && previous.source !== owner && !replace) {
         throw new Error(
-          `Slug '${loopy.name}' belongs to another source. Rename it or use --replace.`,
+          `Slug '${graph.name}' belongs to another source. Rename it or use --replace.`,
         );
       }
 
-      const entry = savedEntry(loopy, owner, bundleHash);
+      if (previous && sameSave(previous, body)) {
+        return previous;
+      }
+
+      const entry: SavedLoopy = {
+        version: 2,
+        slug: graph.name,
+        scope: meta.scope,
+        graph,
+        revision,
+        bundles: bundles.map(({ nodeId, bundleHash }) => ({ nodeId, bundleHash })),
+        source: owner,
+        description: meta.description,
+        input: graph.input,
+        schedule: meta.schedule,
+        mode: meta.mode,
+        secrets: meta.secrets,
+        savedAt: new Date().toISOString(),
+      };
+
       writeFileAtomically(file, `${JSON.stringify(entry, null, 2)}\n`, 0o600);
 
       for (const other of files.filter((candidate) => candidate !== file)) {
-        if (existsSync(other) && readEntry(other).source === owner) {
+        if (existsSync(other) && readEntry(other)?.source === owner) {
           rmSync(other);
         }
       }
@@ -93,28 +141,21 @@ export class Registry {
     });
   }
 
-  bundlePath(hash: string): string {
+  private artifactPath(directory: string, hash: string, extension: string): string {
     if (!/^[a-f0-9]{64}$/.test(hash)) {
-      throw new Error("Invalid bundle hash. Save the loopy again.");
+      throw new Error("Invalid artifact hash. Save the loopy again.");
     }
 
-    return join(this.home, "bundles", `${hash}.js`);
+    return join(this.home, directory, `${hash}.${extension}`);
   }
-}
 
-function savedEntry(loopy: Loopy, source: string, bundleHash: string): SavedLoopy {
-  return {
-    slug: loopy.name,
-    scope: loopy.scope,
-    bundleHash,
-    source,
-    description: loopy.description,
-    input: isStandardSchema(loopy.input) ? "schema" : (loopy.input ?? {}),
-    schedule: loopy.schedule,
-    mode: loopy.mode,
-    secrets: loopy.secrets,
-    savedAt: new Date().toISOString(),
-  };
+  bundlePath(hash: string): string {
+    return this.artifactPath("bundles", hash, "js");
+  }
+
+  graphPath(revision: string): string {
+    return this.artifactPath("graphs", revision, "json");
+  }
 }
 
 export function projectRoot(cwd: string): string {

@@ -47,7 +47,7 @@ test("graph schemas exactly match the portable model", () => {
           | Exclude<Flatten<core.Node>, { kind: "code" | "command" }>
           | (Omit<Extract<core.Node, { kind: "code" }>, "module"> & { module: { name: string } })
           | (Omit<Extract<core.Node, { kind: "command" }>, "parse"> & {
-              parse: Record<string, never> | null;
+              parse: { input: Record<string, core.Value> } | null;
             })
         >[];
       }
@@ -227,6 +227,7 @@ test("declared ref fields resolve and predicate size has a numeric comparison ty
 
 const mapGraph = contract.graphSchema.parse({
   version: 1,
+  meta: { description: null, schedule: null, secrets: [], mode: "sandbox", scope: "project" },
   name: "map",
   input: { items: "json" },
   entry: "map",
@@ -300,6 +301,7 @@ test("map bindings stay inside the body and only scope joins can iterate", () =>
 test("parallel siblings cannot consume one another's results", () => {
   const graph = contract.graphSchema.parse({
     version: 1,
+    meta: { description: null, schedule: null, secrets: [], mode: "sandbox", scope: "project" },
     name: "parallel",
     input: {},
     entry: "parallel",
@@ -326,6 +328,7 @@ test("parallel siblings cannot consume one another's results", () => {
 test("rescue error binding is visible only to the handler", () => {
   const graph = contract.graphSchema.parse({
     version: 1,
+    meta: { description: null, schedule: null, secrets: [], mode: "sandbox", scope: "project" },
     name: "rescue",
     input: {},
     entry: "rescue",
@@ -370,7 +373,7 @@ test("graph wire views reject paths and hashes, including command parser hashes"
     }
 
     if (node.kind === "command") {
-      return { ...node, parse: node.parse === null ? null : {} };
+      return { ...node, parse: node.parse === null ? null : { input: node.parse.input } };
     }
 
     return node;
@@ -734,6 +737,7 @@ test("array refs use the declared map result type for size and membership", () =
 function numericBranchGraph(): Graph {
   return contract.graphSchema.parse({
     version: 1,
+    meta: { description: null, schedule: null, secrets: [], mode: "sandbox", scope: "project" },
     name: "derived-types",
     input: {},
     entry: "branch",
@@ -851,6 +855,7 @@ test("switch results resolve through each arm's terminal join", () => {
 test("format accepts a scalar join result", () => {
   const graph = contract.graphSchema.parse({
     version: 1,
+    meta: { description: null, schedule: null, secrets: [], mode: "sandbox", scope: "project" },
     name: "scalar-join",
     input: {},
     entry: "join",
@@ -977,6 +982,7 @@ test("control edges must match their owner's declared target", () => {
 test("cyclic join field projections produce diagnostics without recursing forever", () => {
   const graph = contract.graphSchema.parse({
     version: 1,
+    meta: { description: null, schedule: null, secrets: [], mode: "sandbox", scope: "project" },
     name: "cyclic-ref",
     input: {},
     entry: "join",
@@ -1061,6 +1067,7 @@ for (const result of [
   test(`format resolves literal join paths through ${JSON.stringify(result)}`, () => {
     const graph = contract.graphSchema.parse({
       version: 1,
+      meta: { description: null, schedule: null, secrets: [], mode: "sandbox", scope: "project" },
       name: "literal-path",
       input: { count: "number" },
       entry: "join",
@@ -1433,6 +1440,7 @@ for (const label of ["__proto__", "constructor", "prototype"]) {
 test("none joins resolve to never without a plumbing reference", () => {
   const graph = contract.graphSchema.parse({
     version: 1,
+    meta: { description: null, schedule: null, secrets: [], mode: "sandbox", scope: "project" },
     name: "none",
     input: {},
     entry: "none",
@@ -1524,3 +1532,22 @@ for (const name of ["__proto__", "constructor", "prototype"]) {
     }
   }
 }
+
+test("parser input references use the same graph visibility checks as command arguments", () => {
+  const graph = {
+    ...approveDemoGraph,
+    nodes: approveDemoGraph.nodes.map((node) =>
+      node.kind === "command"
+        ? {
+            ...node,
+            parse: {
+              bundleHash: null,
+              input: { args: [{ ref: contract.refIdSchema.parse("missing"), path: [] }] },
+            },
+          }
+        : node,
+    ),
+  };
+
+  expect(validateGraph(graph).map((value) => value.code)).toContain("unresolved_ref");
+});

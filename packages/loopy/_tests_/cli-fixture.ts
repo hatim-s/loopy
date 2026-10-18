@@ -1,8 +1,11 @@
-import { expect } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { requireRecord } from "../src/core/index.js";
+import { LocalExecutor, openRunStore, Registry } from "../src/local/index.js";
+import type { Loopy } from "../src/sdk/host.js";
+import { compiledBody } from "./compiled-fixture.js";
+import { startLoopy } from "./fixture.js";
 
 export const roots: string[] = [];
 
@@ -11,7 +14,7 @@ export const CLI = resolve(import.meta.dir, "../src/cli/index.ts");
 export const SDK = resolve(import.meta.dir, "../src/sdk/index.ts");
 
 export function fixture(name: string, definition: string) {
-  const root = mkdtempSync(join(tmpdir(), "loopy-cli-sdk-"));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "loopy-cli-sdk-")));
   roots.push(root);
   const home = join(root, "home");
   const file = join(root, `${name}.loopy.ts`);
@@ -45,9 +48,41 @@ export function object(text: string) {
 }
 
 export async function save(f: ReturnType<typeof fixture>) {
-  const result = await cli(f, "save", f.file);
-  expect(result.stderr).toBe("");
-  expect(result.code).toBe(0);
+  const { default: definition }: { default: Loopy } = await import(f.file);
 
-  return object(result.stdout);
+  const body = await compiledBody(definition.name, f.file, {
+    scope: definition.scope,
+    mode: definition.mode,
+    secrets: [...definition.secrets],
+    schedule: definition.schedule ?? null,
+    description: definition.description ?? null,
+  });
+
+  if (definition.input && !("~standard" in definition.input)) {
+    body.graph.input = definition.input;
+  }
+
+  return new Registry(f.home, f.cwd).save(body);
+}
+
+export async function runFixture(f: ReturnType<typeof fixture>) {
+  const { default: definition }: { default: Loopy } = await import(f.file);
+  const store = openRunStore(f.home);
+  const id = crypto.randomUUID();
+
+  try {
+    await startLoopy({
+      loopy: definition,
+      input: {},
+      store,
+      executor: new LocalExecutor({ home: f.home, secrets: definition.secrets }),
+      runId: id,
+      bundleHash: "a".repeat(64),
+      workspace: f.cwd,
+    });
+
+    return { stdout: JSON.stringify(await store.getRun(id)), stderr: "", code: 0 };
+  } finally {
+    store.close();
+  }
 }

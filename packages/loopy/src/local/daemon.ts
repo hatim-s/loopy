@@ -1,10 +1,8 @@
+import { join } from "node:path";
 import type { RunRecord } from "../core/index.js";
 import { Daemon, SYSTEM_CLOCK } from "../runtime/index.js";
-import { loopyActivation } from "../sdk/host.js";
-import { loadRunLoopy } from "./bundle.js";
-import { readRateLimits } from "./config.js";
 import { readDaemonFile, removeDaemonFile, writeDaemonFile } from "./daemon-file.js";
-import { LocalExecutor } from "./executor.js";
+import { withLockDirectory } from "./fs.js";
 import { Registry } from "./registry.js";
 import { startServer } from "./server/start-server.js";
 import { LoopyService } from "./service.js";
@@ -22,24 +20,14 @@ type DaemonOptions = {
 
 function runtimeDaemon(options: DaemonOptions) {
   const { home, store, concurrency, onError } = options;
-  const rateLimits = readRateLimits(home);
 
   return new Daemon({
     store,
     concurrency,
     onError,
-    bundleHashFor: (schedule) =>
-      new Registry(home, schedule.workspace).get(schedule.slug).bundleHash,
-    prepare: async (run) => {
-      const loopy = await loadRunLoopy(home, run);
-
-      return {
-        ...loopyActivation(loopy),
-        rateLimits,
-        executor: new LocalExecutor({ home, secrets: loopy.secrets }),
-        mode: loopy.mode,
-        cwd: run.workspace,
-      };
+    bundleHashFor: (schedule) => new Registry(home, schedule.workspace).get(schedule.slug).revision,
+    prepare: async () => {
+      throw new Error("Graph execution requires the v2 engine in PR 4a.");
     },
   });
 }
@@ -71,6 +59,16 @@ class LocalDaemon {
   }
 
   start(): string {
+    if (this.server) {
+      return this.server.url;
+    }
+
+    return withLockDirectory(join(this.options.home, "daemon-start.lock"), "daemon startup", () =>
+      this.startLocked(),
+    );
+  }
+
+  private startLocked(): string {
     if (this.server) {
       return this.server.url;
     }

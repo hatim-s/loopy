@@ -4,9 +4,11 @@ import {
   DIAGNOSTIC_CODES,
   type Duration,
   EDGE_KINDS,
+  EXECUTION_MODES,
   FIELD_TYPES,
   isRecord,
   type Json,
+  LOOPY_SCOPES,
   MAP_ERROR_MODES,
   NODE_KINDS,
   NODE_RUN_STATUSES,
@@ -158,7 +160,9 @@ const command = base.extend({
   }),
   retry: retrySchema,
   okExitCodes: z.array(z.number().int()),
-  parse: z.strictObject({ bundleHash: z.string().nullable() }).nullable(),
+  parse: z
+    .strictObject({ bundleHash: z.string().nullable(), input: graphRecord(valueSchema) })
+    .nullable(),
 });
 
 const otherNodes = [
@@ -248,7 +252,16 @@ export const diagnosticSchema = z.strictObject({
     .nullable(),
 });
 
+export const graphMetaSchema = z.strictObject({
+  description: z.string().nullable(),
+  schedule: z.strictObject({ cron: z.string(), tz: z.string().optional() }).nullable(),
+  secrets: z.array(z.string()),
+  mode: z.enum(EXECUTION_MODES),
+  scope: z.enum(LOOPY_SCOPES),
+});
+
 export const graphSchema = z.strictObject({
+  meta: graphMetaSchema,
   version: z.literal(1),
   name: z.string(),
   input: z.union([graphRecord(z.enum(FIELD_TYPES)).readonly(), z.literal("schema")]),
@@ -297,7 +310,7 @@ export const nodeRunSchema = z.discriminatedUnion("status", [
 
 const nodeViewSchema = z.discriminatedUnion("kind", [
   code.extend({ module: z.strictObject({ name: z.string() }) }),
-  command.extend({ parse: z.strictObject({}).nullable() }),
+  command.extend({ parse: z.strictObject({ input: graphRecord(valueSchema) }).nullable() }),
   ...otherNodes,
 ]);
 

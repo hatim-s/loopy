@@ -1,0 +1,2 @@
+import {loopy,wait} from "__SDK__";
+export default loopy("invalid", {input:{},run:()=>{wait("duplicate",{payload:{kind:"record",fields:{}}});return wait("duplicate",{payload:{kind:"record",fields:{}}});}});

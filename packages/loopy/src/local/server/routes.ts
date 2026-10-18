@@ -3,7 +3,6 @@ import {
   type DaemonView,
   DEFAULT_ERROR_MESSAGES,
   type ErrorCode,
-  type Json,
   routes,
 } from "../../contract/index.js";
 import { type LoopyService, ServiceError } from "../service.js";
@@ -25,7 +24,8 @@ const STATUS: Record<ErrorCode, number> = {
   invalid_timezone: 400,
 };
 
-export function json(data: Json, status = 200): Response {
+// BOUNDARY: Route schemas validate response data before JSON serialization.
+export function json(data: unknown, status = 200): Response {
   return Response.json(data, {
     status,
     headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" },
@@ -43,7 +43,7 @@ type Dependencies = {
   daemon: Pick<DaemonView, "startedAt" | "concurrency">;
 };
 
-type Schemas<P, Q, B, R extends Json> = {
+type Schemas<P, Q, B, R> = {
   method: string;
   path: string;
   params: z.ZodType<P>;
@@ -52,7 +52,7 @@ type Schemas<P, Q, B, R extends Json> = {
   response: z.ZodType<R>;
 };
 
-function endpoint<P, Q, B, R extends Json>(
+function endpoint<P, Q, B, R>(
   route: Schemas<P, Q, B, R>,
   handle: (context: { params: P; query: Q; body: B; request: Request }) => Promise<R | Response>,
 ) {
@@ -73,7 +73,7 @@ function endpoint<P, Q, B, R extends Json>(
 
 // BOUNDARY: URL captures, search values and JSON enter the contract here.
 async function parseRequest<P, Q, B>(
-  route: Omit<Schemas<P, Q, B, Json>, "method" | "response">,
+  route: Omit<Schemas<P, Q, B, unknown>, "method" | "response">,
   params: Record<string, string>,
   request: Request,
   url: URL,
@@ -108,15 +108,30 @@ async function parseRequest<P, Q, B>(
 
 export function apiRoutes({ service, store, cwd, daemon }: Dependencies) {
   return [
-    endpoint(routes.schedules, async () => service.listSchedules()),
-    endpoint(routes.putSchedule, async ({ params: { slug }, body }) =>
-      service.putSchedule(slug, body),
+    endpoint(routes.secrets, async () => service.listSecrets()),
+    endpoint(routes.putSecret, async ({ params, body }) =>
+      service.putSecret(params.name, body.value),
     ),
-    endpoint(routes.setScheduleEnabled, async ({ params: { slug }, body }) =>
-      service.setScheduleEnabled(slug, body.enabled),
+    endpoint(routes.deleteSecret, async ({ params }) => service.deleteSecret(params.name)),
+    endpoint(routes.generateTypes, async ({ body }) => service.generateTypes(body)),
+    endpoint(routes.resolveNamedHook, async ({ params, body }) =>
+      service.resolveNamedHook(params.id, params.name, body.payload),
     ),
-    endpoint(routes.deleteSchedule, async ({ params: { slug } }) => service.deleteSchedule(slug)),
-    endpoint(routes.loopies, async () => service.listLoopies()),
+    endpoint(routes.putLoopy, async ({ params: { slug }, body }) => service.putLoopy(slug, body)),
+    endpoint(routes.graph, async ({ params: { slug }, query }) =>
+      service.graph(slug, query.workspace ?? cwd),
+    ),
+    endpoint(routes.schedules, async ({ query }) => service.listSchedules(query.workspace)),
+    endpoint(routes.putSchedule, async ({ params: { slug }, body, query }) =>
+      service.putSchedule(slug, body, query.workspace),
+    ),
+    endpoint(routes.setScheduleEnabled, async ({ params: { slug }, body, query }) =>
+      service.setScheduleEnabled(slug, body.enabled, query.workspace),
+    ),
+    endpoint(routes.deleteSchedule, async ({ params: { slug }, query }) =>
+      service.deleteSchedule(slug, query.workspace),
+    ),
+    endpoint(routes.loopies, async ({ query }) => service.listLoopies(query.workspace)),
     endpoint(routes.runs, async ({ query }) => service.listRuns(query)),
     endpoint(routes.run, async ({ params: { id } }) => service.runSnapshot(id)),
     endpoint(routes.logs, async ({ params: { id }, query }) => {

@@ -50,7 +50,7 @@ export function startServer(options: ServerOptions) {
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: options.port ?? DEFAULT_PORT,
-    maxRequestBodySize: 1024 * 1024,
+    maxRequestBodySize: 64 * 1024 * 1024,
     fetch: (request, server) => respond(request, { assets, table, token }, server),
   });
 

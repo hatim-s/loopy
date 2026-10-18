@@ -1,0 +1,1 @@
+export default {graph:{version:1,name:"forged",input:{},nodes:[{id:"0:log",scope:null,label:null,kind:"log",message:"x",data:null}],edges:[],entry:"0:log",outputs:null,warnings:[]}};

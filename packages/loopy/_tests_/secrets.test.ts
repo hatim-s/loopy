@@ -12,10 +12,13 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { localDaemon, openRunStore } from "../src/local/index.js";
 import { secretRedactor } from "../src/local/secret-redactor.js";
 import { SecretStore } from "../src/local/secrets.js";
 
 const directories: string[] = [];
+
+const daemons: { stop(): Promise<void> }[] = [];
 
 function setup() {
   const directory = mkdtempSync(join(tmpdir(), "loopy-secrets-"));
@@ -24,7 +27,9 @@ function setup() {
   return { directory, store: new SecretStore(join(directory, "home")) };
 }
 
-afterEach(() => {
+afterEach(async () => {
+  await Promise.all(daemons.splice(0).map((daemon) => daemon.stop()));
+
   for (const directory of directories.splice(0)) {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -92,6 +97,23 @@ test("malformed stores and invalid values never echo secret contents", () => {
 
 test("CLI stdin entry and name-only listing do not disclose values", async () => {
   const { store } = setup();
+  const runStore = openRunStore(store.directory);
+
+  const daemon = localDaemon({
+    home: store.directory,
+    cwd: process.cwd(),
+    store: runStore,
+    concurrency: 4,
+    port: 0,
+  });
+
+  daemon.start();
+  daemons.push({
+    async stop() {
+      await daemon.stop();
+      runStore.close();
+    },
+  });
   const command = [process.execPath, "packages/loopy/src/cli/index.ts"];
 
   const child = Bun.spawn(

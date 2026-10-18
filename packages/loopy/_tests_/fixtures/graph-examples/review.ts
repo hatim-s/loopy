@@ -1,7 +1,6 @@
 import { branch, code, git, log, loopy, lte, sh, size } from "../../../src/sdk/graph/index.js";
 
-export default loopy({
-  name: "review",
+export default loopy("review", {
   input: { "instructions?": "string" },
   run: ({ input }) => {
     const changes = git.diff.raw({}, { label: "changes" });

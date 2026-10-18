@@ -15,11 +15,20 @@ export {
   scheduleEnabledBodySchema,
 } from "./api.js";
 
+export {
+  type PutLoopyBody,
+  putLoopyBodySchema,
+  type SavedLoopy,
+  savedLoopySchema,
+} from "./compiled-loopy.js";
+
 export { graphView, loopyView, runView, serverEvent } from "./derive.js";
 
 export * from "./graph.js";
 
 export { type Json, jsonSchema } from "./json.js";
+
+export { parseModuleOutput } from "./module-output.js";
 
 export {
   type HookRecord,

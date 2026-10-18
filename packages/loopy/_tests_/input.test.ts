@@ -44,8 +44,7 @@ test("RecordSpec round-trips every field type through contracts and input bounda
   const { expectTypeOf } = await import("bun:test");
   const { FIELD_TYPES } = await import("../src/core/index.js");
   const { graphSchema, outputSchema } = await import("../src/contract/index.js");
-  const { sdkInput } = await import("../src/cli/input.js");
-  const { loopy } = await import("../src/sdk/index.js");
+  const { graphInput } = await import("../src/cli/input.js");
   const { inputValidator } = await import("../src/sdk/schema.js");
   const { approveDemoGraph } = await import("./fixtures/graphs.js");
 
@@ -74,13 +73,7 @@ test("RecordSpec round-trips every field type through contracts and input bounda
     ]),
   );
 
-  const definition = loopy({
-    name: "all-fields",
-    input: allFields,
-    run: async ({ input }) => input,
-  });
-
-  const input = await sdkInput(definition, {
+  const input = await graphInput(spec, {
     home: "/unused",
     cwd: "/unused",
     values: {},
@@ -114,8 +107,7 @@ for (const [kind, invalid] of [
   ["json[]", {}],
 ] as const) {
   test(`${kind} rejects wrong elements or non-arrays at each input boundary`, async () => {
-    const { sdkInput } = await import("../src/cli/input.js");
-    const { loopy } = await import("../src/sdk/index.js");
+    const { graphInput } = await import("../src/cli/input.js");
     const { inputValidator } = await import("../src/sdk/schema.js");
 
     const { coerceInput, inputFields } = await import(
@@ -123,12 +115,11 @@ for (const [kind, invalid] of [
     );
 
     const spec = { items: kind };
-    const definition = loopy({ name: "array-input", input: spec, run: async ({ input }) => input });
     await expect(inputValidator(spec)({ items: invalid })).rejects.toThrow(
       `items: Expected ${kind}`,
     );
     await expect(
-      sdkInput(definition, {
+      graphInput(spec, {
         home: "/unused",
         cwd: "/unused",
         values: {},
