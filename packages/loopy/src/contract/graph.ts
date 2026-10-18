@@ -4,6 +4,7 @@ import {
   DIAGNOSTIC_CODES,
   type Duration,
   EDGE_KINDS,
+  EXECUTION_ERROR_CODES,
   EXECUTION_MODES,
   FIELD_TYPES,
   isRecord,
@@ -14,6 +15,7 @@ import {
   NODE_RUN_STATUSES,
   type NodeId,
   PREDICATE_OPS,
+  RECEIPT_KINDS,
   RESERVED_GRAPH_NAMES,
   RETRY_BACKOFFS,
   type RefId,
@@ -283,10 +285,18 @@ const runBase = z.strictObject({
   attempt: z.number().int().positive(),
   maxAttempts: z.number().int().positive(),
   startedAt: z.string(),
+  receipt: z.enum(RECEIPT_KINDS),
+});
+
+export const executionErrorSchema = z.strictObject({
+  code: z.enum(EXECUTION_ERROR_CODES),
+  message: z.string(),
 });
 
 export const nodeRunSchema = z.discriminatedUnion("status", [
   runBase.extend({ status: z.literal(NODE_RUN_STATUSES[0]) }),
+  runBase.extend({ status: z.literal(NODE_RUN_STATUSES[7]) }),
+  runBase.extend({ status: z.literal(NODE_RUN_STATUSES[8]), endedAt: z.string() }),
   runBase.extend({
     status: z.literal(NODE_RUN_STATUSES[1]),
     output: jsonSchema,
@@ -294,12 +304,12 @@ export const nodeRunSchema = z.discriminatedUnion("status", [
   }),
   runBase.extend({
     status: z.literal(NODE_RUN_STATUSES[2]),
-    error: z.string(),
+    error: executionErrorSchema,
     endedAt: z.string(),
   }),
   runBase.extend({
     status: z.literal(NODE_RUN_STATUSES[3]),
-    error: z.string(),
+    error: executionErrorSchema,
     nextRetryAt: z.string(),
     endedAt: z.string(),
   }),

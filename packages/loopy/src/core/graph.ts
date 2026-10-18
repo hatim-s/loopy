@@ -1,3 +1,4 @@
+import type { ExecutionError } from "./executor.js";
 import type { ExecutionMode, Json, Schedule } from "./model.js";
 
 declare const brand: unique symbol;
@@ -288,9 +289,13 @@ export const NODE_RUN_STATUSES = [
   "waiting",
   "sleeping",
   "cancelled",
+  "queued",
+  "skipped",
 ] as const;
 
 export type NodeRunStatus = (typeof NODE_RUN_STATUSES)[number];
+
+export const RECEIPT_KINDS = ["none", "started", "finished"] as const;
 
 export type NodeRun = Expand<
   {
@@ -298,14 +303,22 @@ export type NodeRun = Expand<
     attempt: number;
     maxAttempts: number;
     startedAt: string;
+    receipt: (typeof RECEIPT_KINDS)[number];
   } & (
     | { status: (typeof NODE_RUN_STATUSES)[0] }
+    | { status: (typeof NODE_RUN_STATUSES)[7] }
     | { status: (typeof NODE_RUN_STATUSES)[1]; output: Json; endedAt: string }
-    | { status: (typeof NODE_RUN_STATUSES)[2]; error: string; endedAt: string }
-    | { status: (typeof NODE_RUN_STATUSES)[3]; error: string; nextRetryAt: string; endedAt: string }
+    | { status: (typeof NODE_RUN_STATUSES)[2]; error: ExecutionError; endedAt: string }
+    | {
+        status: (typeof NODE_RUN_STATUSES)[3];
+        error: ExecutionError;
+        nextRetryAt: string;
+        endedAt: string;
+      }
     | { status: (typeof NODE_RUN_STATUSES)[4]; wakeAt: string | null }
     | { status: (typeof NODE_RUN_STATUSES)[5]; wakeAt: string }
     | { status: (typeof NODE_RUN_STATUSES)[6]; endedAt: string }
+    | { status: (typeof NODE_RUN_STATUSES)[8]; endedAt: string }
   )
 >;
 

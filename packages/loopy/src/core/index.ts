@@ -2,7 +2,13 @@ export { parseArgv } from "./argv.js";
 
 export { canonicalJson } from "./canonical-json.js";
 
-export { errorMessage } from "./errors.js";
+export * from "./duration.js";
+
+export * from "./effects.js";
+
+export { errnoCode, errorMessage } from "./errors.js";
+
+export * from "./executor.js";
 
 export { isFieldValue } from "./field-value.js";
 
@@ -17,6 +23,10 @@ export { isReservedGraphName, nodeNames, RESERVED_GRAPH_NAMES } from "./graph-na
 export { checkPredicate } from "./graph-predicate.js";
 
 export { graphTypeResolver } from "./graph-type.js";
+
+export { assertJson } from "./json.js";
+
+export { limitLogs } from "./logs.js";
 
 export type {
   CommandResult,
@@ -53,7 +63,13 @@ export {
 
 export { validateSecretName, validateSlug } from "./names.js";
 
+export * from "./process.js";
+
+export * from "./rate-limit.js";
+
 export { revision, revisionInput } from "./revision.js";
+
+export * from "./store.js";
 
 export {
   allowKeys,

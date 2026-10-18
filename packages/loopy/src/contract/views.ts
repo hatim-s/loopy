@@ -85,6 +85,7 @@ export type LoopyView = z.infer<typeof loopyViewSchema>;
 
 export const runSnapshotViewSchema = z.strictObject({
   run: runViewSchema,
+  nodeRuns: z.array(nodeRunViewSchema),
   steps: z.array(stepRecordSchema),
   logs: z.array(logRecordSchema),
   hooks: z.array(hookRecordSchema),
