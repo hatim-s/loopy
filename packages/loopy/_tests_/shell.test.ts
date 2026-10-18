@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { archive, fs, git, net, sh, text } from "../src/sdk/graph/index.js";
+import { archive, fs, git, loopy, net, sh, text } from "../src/sdk/graph/index.js";
 import { capture } from "./fixtures/command-capture.js";
 
 test("zip exclusions trail archive operands", async () => {
@@ -79,21 +79,20 @@ test("jq named pairs retain separate keys and values", async () => {
   ]);
 });
 
-test("required positionals reject missing and short JavaScript inputs", async () => {
-  // @ts-expect-error JavaScript callers can omit the required input.
-  const missing = await capture(() => fs.chmod());
-  // @ts-expect-error JavaScript callers can omit required args.
-  const empty = await capture(() => fs.chmod({}));
-  // @ts-expect-error JavaScript callers can supply too few operands.
-  const short = await capture(() => fs.chmod({ args: ["755"] }));
+test("required positionals reject missing and short JavaScript inputs at construction", () => {
+  const cases = [
+    // @ts-expect-error JavaScript callers can omit the required input.
+    () => fs.chmod(),
+    // @ts-expect-error JavaScript callers can omit required args.
+    () => fs.chmod({}),
+    // @ts-expect-error JavaScript callers can supply too few operands.
+    () => fs.chmod({ args: ["755"] }),
+  ];
 
-  for (const { result, executor } of [missing, empty, short]) {
-    expect(result).toEqual({
-      status: "failed",
-      error:
-        "Command 'fs.chmod' expected at least 2 positional arguments. Supply args with the expected count.",
-    });
-    expect(executor.calls).toEqual([]);
+  for (const run of cases) {
+    expect(() => loopy("test", { input: {}, run })).toThrow(
+      expect.objectContaining({ diagnostic: expect.objectContaining({ code: "arity" }) }),
+    );
   }
 });
 

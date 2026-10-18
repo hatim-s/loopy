@@ -1,4 +1,5 @@
 import type { CommandFlag, OutSchema } from "../core/index.js";
+import { refuse } from "./graph/validate.js";
 
 export type FlagDefinition = CommandFlag;
 
@@ -147,7 +148,8 @@ export function parsedFlags<Value>(
 
   for (const name of Object.keys(input.flags ?? {})) {
     if (descriptor.exclude?.includes(name) || protectedOptions.has(optionIdentity(flags[name]))) {
-      throw new Error(
+      refuse(
+        "protected_flag",
         `Flag '${name}' changes the parsed output format. Use .raw() to supply this flag.`,
       );
     }
@@ -173,7 +175,8 @@ export function validateCommandDescriptor(descriptor: CommandDescriptor): void {
       const previous = seen.get(identity);
 
       if (previous !== undefined) {
-        throw new Error(
+        refuse(
+          "duplicate_flag",
           `Flags '${previous}' and '${name}' share CLI option '${flag.cli}'. Give each flag a unique CLI option.`,
         );
       }

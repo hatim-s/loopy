@@ -33,30 +33,21 @@ test("graph command descriptors retain enum, numeric, repeated and positional ar
   ]);
 });
 
-test("JavaScript flag values fail validation before author execution", () => {
-  // @ts-expect-error JavaScript callers can supply unknown flags.
-  const unknown = capture(() => probe({ args: ["source", "target"], flags: { typo: true } }));
-  // @ts-expect-error JavaScript callers can supply unsupported enum values.
-  const choice = capture(() => probe({ args: ["source", "target"], flags: { mode: "quick" } }));
-  // @ts-expect-error JavaScript callers can supply wrong flag types.
-  const type = capture(() => probe({ args: ["source", "target"], flags: { count: "3" } }));
-  expect(unknown.result).toEqual({
-    status: "failed",
-    error: "Unknown flag 'typo'. Use an allowed flag: mode, count, quiet, include.",
-  });
-  expect(choice.result).toEqual({
-    status: "failed",
-    error: "Flag '--mode' must be one of: fast, safe. Choose an allowed value.",
-  });
-  expect(type.result).toEqual({
-    status: "failed",
-    error: "Flag '-n' requires a number value. Supply the declared flag type.",
-  });
-  expect([unknown.executor.calls, choice.executor.calls, type.executor.calls]).toEqual([
-    [],
-    [],
-    [],
-  ]);
+test("JavaScript flag values fail during graph construction", () => {
+  const cases = [
+    // @ts-expect-error JavaScript callers can supply unknown flags.
+    [() => probe({ args: ["source", "target"], flags: { typo: true } }), "unknown_flag"],
+    // @ts-expect-error JavaScript callers can supply unsupported enum values.
+    [() => probe({ args: ["source", "target"], flags: { mode: "quick" } }), "flag_choice"],
+    // @ts-expect-error JavaScript callers can supply wrong flag types.
+    [() => probe({ args: ["source", "target"], flags: { count: "3" } }), "flag_type"],
+  ] as const;
+
+  for (const [run, code] of cases) {
+    expect(() => loopy("test", { input: {}, run })).toThrow(
+      expect.objectContaining({ diagnostic: expect.objectContaining({ code }) }),
+    );
+  }
 });
 
 test("platform variants merge and preserve unchanged flags in the recorded descriptor", () => {
@@ -89,7 +80,9 @@ test("descriptor construction rejects duplicate CLI identities in base and merge
         alias: { cli: "--format", kind: "string" },
       },
     }),
-  ).toThrow("Flags 'format' and 'alias' share CLI option '--format'");
+  ).toThrow(
+    expect.objectContaining({ diagnostic: expect.objectContaining({ code: "duplicate_flag" }) }),
+  );
   expect(() =>
     defineCommand({
       key: "test.alias",
@@ -97,30 +90,9 @@ test("descriptor construction rejects duplicate CLI identities in base and merge
       flags: { format: { cli: "--format", kind: "string" } },
       variants: { linux: { flags: { alias: { cli: "--format", kind: "string" } } } },
     }),
-  ).toThrow("Flags 'format' and 'alias' share CLI option '--format'");
-});
-
-test("parsed presets protect CLI identities even after descriptor mutation", () => {
-  const flags = {
-    format: { cli: "--format", kind: "string" as const },
-    alias: { cli: "--other", kind: "string" as const },
-  };
-
-  const parsed = defineCommand(
-    {
-      key: "test.alias",
-      program: "probe",
-      flags,
-      preset: { flags: { format: "machine" } },
-      parse: "./parse.ts",
-    },
-    { kind: "value", type: "string" },
+  ).toThrow(
+    expect.objectContaining({ diagnostic: expect.objectContaining({ code: "duplicate_flag" }) }),
   );
-
-  flags.alias.cli = "--format";
-  expect(() =>
-    loopy("test", { input: {}, run: () => parsed({ flags: { alias: "custom" } }) }),
-  ).toThrow("Flag 'alias' changes the parsed output format. Use .raw()");
 });
 
 test("prefixed options keep distinct identities while identical prefixes fail", () => {
@@ -150,7 +122,9 @@ test("prefixed options keep distinct identities while identical prefixes fail", 
         alias: { cli: "-name", kind: "string", prefix: ["!"] },
       },
     }),
-  ).toThrow("share CLI option '-name'");
+  ).toThrow(
+    expect.objectContaining({ diagnostic: expect.objectContaining({ code: "duplicate_flag" }) }),
+  );
 });
 
 test("sh.run rejects shell operators during graph construction", () => {

@@ -2,6 +2,7 @@ import {
   checkPredicate,
   type Diagnostic,
   type DiagnosticCode,
+  diagnostic,
   type Graph,
   graphTypeResolver,
   isReservedGraphName,
@@ -15,8 +16,8 @@ export class GraphBuildError extends Error {
   }
 }
 
-export function refuse(code: DiagnosticCode, message?: string): never {
-  throw new GraphBuildError({ code, message: message ?? code, node: null, source: null });
+export function refuse(code: DiagnosticCode, detail?: string): never {
+  throw new GraphBuildError(diagnostic(code, null, detail));
 }
 
 export function validatePredicate(

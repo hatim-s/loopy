@@ -42,9 +42,7 @@ type Activation = { builder: GraphBuilder | null };
 const activation: Activation = { builder: null };
 
 export function currentBuilder(): GraphBuilder {
-  return (
-    activation.builder ?? refuse("inactive_builder", "Create nodes inside a synchronous loopy run.")
-  );
+  return activation.builder ?? refuse("inactive_builder");
 }
 
 export class GraphBuilder {
@@ -101,7 +99,7 @@ export class GraphBuilder {
     const name = [...this.prefixes, label ?? fallback].join("/");
 
     if (label !== null && this.scope.labels.has(name)) {
-      refuse("duplicate_label", "Labels must be unique inside one scope.");
+      refuse("duplicate_label");
     }
 
     if (label !== null) {
@@ -149,7 +147,7 @@ export class GraphBuilder {
     const metadata = ref[REF];
 
     if (metadata.owner !== this) {
-      refuse("out_of_scope_ref", "Reference is unavailable in this scope.");
+      refuse("out_of_scope_ref");
     }
   }
 

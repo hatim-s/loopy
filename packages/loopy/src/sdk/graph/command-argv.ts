@@ -32,68 +32,70 @@ function flagSpec(descriptor: CommandDefinition): CommandFlagSpec {
 }
 
 export function commandArgv(original: CommandDescriptor, input: Input, mode: "parsed" | "raw") {
-  const descriptor = platformVariant(
-    mode === "raw" ? (original.raw ?? original) : original,
-    process.platform,
-  );
+  try {
+    const descriptor = platformVariant(
+      mode === "raw" ? (original.raw ?? original) : original,
+      process.platform,
+    );
 
-  const key = original.key;
+    const key = original.key;
 
-  const args =
-    mode === "parsed" && !input.args?.length ? (descriptor.defaultArgs ?? input.args) : input.args;
+    const args =
+      mode === "parsed" && !input.args?.length
+        ? (descriptor.defaultArgs ?? input.args)
+        : input.args;
 
-  const flags = mode === "parsed" ? parsedFlags(descriptor, input) : input.flags;
-  const prepared = { ...input, args, flags: { ...flags } };
+    const flags = mode === "parsed" ? parsedFlags(descriptor, input) : input.flags;
+    const prepared = { ...input, args, flags: { ...flags } };
 
-  if (mode === "parsed") {
-    const counts = {
-      args: args?.length ?? 0,
-      flags: new Set(
-        Object.entries(prepared.flags)
-          .filter(([, value]) => value !== undefined)
-          .map(([name]) => name),
-      ),
-    };
+    if (mode === "parsed") {
+      const counts = {
+        args: args?.length ?? 0,
+        flags: new Set(
+          Object.entries(prepared.flags)
+            .filter(([, value]) => value !== undefined)
+            .map(([name]) => name),
+        ),
+      };
 
-    Object.assign(prepared.flags, descriptor.prepare?.(counts).flags);
-  }
-
-  for (const [name, value] of Object.entries(prepared.flags)) {
-    const flag = descriptor.flags?.[name];
-
-    if (!flag) {
-      refuse(
-        "unknown_flag",
-        `Unknown flag '${name}'. Use an allowed flag: ${Object.keys(descriptor.flags ?? {}).join(", ") || "none"}.`,
-      );
+      Object.assign(prepared.flags, descriptor.prepare?.(counts).flags);
     }
 
-    try {
-      validateCommandFlag(flag, value, isRef);
-    } catch (error) {
-      if (error instanceof CommandArgumentError) {
-        refuse(error.code, error.message);
+    for (const [name, value] of Object.entries(prepared.flags)) {
+      const flag = descriptor.flags?.[name];
+
+      if (!flag) {
+        refuse(
+          "unknown_flag",
+          `Unknown flag '${name}'. Use an allowed flag: ${Object.keys(descriptor.flags ?? {}).join(", ") || "none"}.`,
+        );
       }
 
-      throw error;
+      validateCommandFlag(flag, value, isRef);
     }
+
+    const operands = {
+      ...descriptor,
+      positionals:
+        mode === "parsed"
+          ? (descriptor.parsedPositionals ?? descriptor.positionals)
+          : descriptor.positionals,
+    };
+
+    return {
+      parseInput: Object.fromEntries(
+        Object.entries(prepared).filter(([, value]) => value !== undefined),
+      ),
+      program: descriptor.program,
+      argv: renderOperands(operands, prepared, key),
+      flagSpec: flagSpec(descriptor),
+      flags: prepared.flags,
+    };
+  } catch (error) {
+    if (error instanceof CommandArgumentError) {
+      refuse(error.code, error.message);
+    }
+
+    throw error;
   }
-
-  const operands = {
-    ...descriptor,
-    positionals:
-      mode === "parsed"
-        ? (descriptor.parsedPositionals ?? descriptor.positionals)
-        : descriptor.positionals,
-  };
-
-  return {
-    parseInput: Object.fromEntries(
-      Object.entries(prepared).filter(([, value]) => value !== undefined),
-    ),
-    program: descriptor.program,
-    argv: renderOperands(operands, prepared, key),
-    flagSpec: flagSpec(descriptor),
-    flags: prepared.flags,
-  };
 }

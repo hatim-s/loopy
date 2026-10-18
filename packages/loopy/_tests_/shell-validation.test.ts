@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { fs, git, text } from "../src/sdk/graph/index.js";
+import { fs, git, loopy, text } from "../src/sdk/graph/index.js";
 import { capture } from "./fixtures/command-capture.js";
 
 test.each([
@@ -46,29 +46,33 @@ test.each([
   expect(executor.calls[0]?.args).toEqual([...expected]);
 });
 
-test("jq rejects malformed named pairs before execution", async () => {
-  // @ts-expect-error JavaScript callers can supply non-string named values.
-  const { executor, result } = await capture(() => text.jq.raw({ flags: { arg: { count: 2 } } }));
-  expect(result).toEqual({
-    status: "failed",
-    error: "Flag '--arg' requires string values. Supply a record of strings.",
-  });
-  expect(executor.calls).toEqual([]);
+test("jq rejects malformed named pairs during graph construction", () => {
+  expect(() =>
+    loopy("test", {
+      input: {},
+      run: () => {
+        // @ts-expect-error JavaScript callers can supply non-string named values.
+        text.jq.raw({ flags: { arg: { count: 2 } } });
+      },
+    }),
+  ).toThrow(
+    expect.objectContaining({ diagnostic: expect.objectContaining({ code: "flag_type" }) }),
+  );
 });
 
-test.each(["e", "f"] as const)("parsed grepCount rejects -%s before execution", async (flag) => {
+test.each(["e", "f"] as const)("parsed grepCount rejects -%s during graph construction", (flag) => {
   const flags = flag === "e" ? { e: "pattern" } : { f: "patterns.txt" };
-
-  const { executor, result } = await capture(() => {
-    // @ts-expect-error JavaScript callers can supply flags that change operand interpretation.
-    text.grepCount({ args: ["one", "two"], flags });
-  });
-
-  expect(result).toEqual({
-    status: "failed",
-    error: `Flag '${flag}' changes the parsed output format. Use .raw() to supply this flag.`,
-  });
-  expect(executor.calls).toEqual([]);
+  expect(() =>
+    loopy("test", {
+      input: {},
+      run: () => {
+        // @ts-expect-error JavaScript callers can supply flags that change operand interpretation.
+        text.grepCount({ args: ["one", "two"], flags });
+      },
+    }),
+  ).toThrow(
+    expect.objectContaining({ diagnostic: expect.objectContaining({ code: "protected_flag" }) }),
+  );
 });
 
 test("raw grepCount keeps explicit patterns and pattern files", async () => {
@@ -84,29 +88,20 @@ test("raw grepCount keeps explicit patterns and pattern files", async () => {
   ]);
 });
 
-test("parsed realpath requires exactly one path before execution", async () => {
-  const missing = await capture(() => {
+test("parsed realpath requires exactly one path during graph construction", () => {
+  const cases = [
     // @ts-expect-error JavaScript callers can omit the required path.
-    fs.realpath();
-  });
-
-  const empty = await capture(() => {
+    () => fs.realpath(),
     // @ts-expect-error JavaScript callers can supply no paths.
-    fs.realpath({ args: [] });
-  });
-
-  const multiple = await capture(() => {
+    () => fs.realpath({ args: [] }),
     // @ts-expect-error JavaScript callers can supply several paths.
-    fs.realpath({ args: ["one", "two"] });
-  });
+    () => fs.realpath({ args: ["one", "two"] }),
+  ];
 
-  for (const { executor, result } of [missing, empty, multiple]) {
-    expect(result).toEqual({
-      status: "failed",
-      error:
-        "Command 'fs.realpath' expected 1 to 1 positional arguments. Supply args with the expected count.",
-    });
-    expect(executor.calls).toEqual([]);
+  for (const run of cases) {
+    expect(() => loopy("test", { input: {}, run })).toThrow(
+      expect.objectContaining({ diagnostic: expect.objectContaining({ code: "arity" }) }),
+    );
   }
 });
 
