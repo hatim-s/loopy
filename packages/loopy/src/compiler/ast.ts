@@ -7,7 +7,7 @@ import {
   isReservedGraphName,
   isString,
 } from "../core/index.js";
-import { sdkCalls } from "../sdk/graph-host.js";
+import { builtinCommandKeys, commandKey, sdkCalls } from "../sdk/graph-host.js";
 import { diagnostic } from "./diagnostic.js";
 import type { CompilerDiagnostic, ParserSource } from "./types.js";
 
@@ -281,7 +281,73 @@ function callRule(
     literal(context, node.arguments[0]);
   }
 
+  const before = context.diagnostics.length;
   callArguments(context, node, scope, call);
+
+  if (call === "defineCommand" && context.diagnostics.length === before) {
+    const argument = node.arguments[0];
+    const descriptor = argument && argument.type !== "SpreadElement" ? unwrap(argument) : argument;
+
+    if (descriptor?.type !== "ObjectExpression") {
+      return;
+    }
+
+    recordParser(context, node, descriptor);
+  }
+}
+
+function recordParser(
+  context: Context,
+  node: Node,
+  descriptor: Extract<Expression, { type: "ObjectExpression" }>,
+) {
+  const fields = new Map<string, string>();
+
+  for (const property of descriptor.properties) {
+    if (
+      property.type === "Property" &&
+      property.value.type === "Literal" &&
+      isString(property.value.value)
+    ) {
+      fields.set(name(property.key) ?? "", property.value.value);
+    }
+  }
+
+  const path = fields.get("parse");
+
+  if (path === undefined) {
+    return;
+  }
+
+  if (!fields.has("key") && !(fields.has("namespace") && fields.has("name"))) {
+    refuse(
+      context,
+      node,
+      "command_key",
+      "Custom parsers require a literal command key or namespace and name.",
+    );
+
+    return;
+  }
+
+  const id = commandKey({
+    key: fields.get("key"),
+    namespace: fields.get("namespace"),
+    name: fields.get("name"),
+  });
+
+  if (context.parsers.has(id) || builtinCommandKeys.includes(id)) {
+    refuse(
+      context,
+      node,
+      "command_key",
+      "Custom parser keys must be unique and cannot replace built-in commands.",
+    );
+
+    return;
+  }
+
+  context.parsers.set(id, { file: resolve(dirname(context.file), path) });
 }
 
 function callArguments(

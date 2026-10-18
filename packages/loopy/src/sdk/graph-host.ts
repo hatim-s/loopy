@@ -20,10 +20,12 @@ function descriptors(commands: Commands): Descriptor[] {
 
 const builtins = descriptors({ archive, fs, git, net, text });
 
-export const builtinCommandKeys = builtins.map(
-  (value) => value.key ?? `${value.namespace}.${value.name}`,
-);
+export function commandKey(descriptor: Descriptor) {
+  return descriptor.key ?? `${descriptor.namespace}.${descriptor.name}`;
+}
+
+export const builtinCommandKeys = builtins.map(commandKey);
 
 export function commandParser(key: string) {
-  return builtins.find((value) => (value.key ?? `${value.namespace}.${value.name}`) === key)?.parse;
+  return builtins.find((value) => commandKey(value) === key)?.parse;
 }

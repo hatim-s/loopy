@@ -1,78 +1,10 @@
 import { dirname, resolve } from "node:path";
-import { type Expression, parseSync, type Statement } from "oxc-parser";
-import { builtinCommandKeys } from "../sdk/graph-host.js";
-import {
-  type Context,
-  callable,
-  declarationKind,
-  expressionRule,
-  literal,
-  name,
-  refuse,
-  type Scope,
-  unwrap,
-} from "./ast.js";
+import { parseSync, type Statement } from "oxc-parser";
+import { type Context, declarationKind, expressionRule, name, refuse, type Scope } from "./ast.js";
 import { diagnostic } from "./diagnostic.js";
 import { checkCodeModule } from "./module.js";
 import { modulePath } from "./module-imports.js";
 import type { AuthorModule, CompilerDiagnostic, ParserSource, Restricted } from "./types.js";
-
-function parserSource(context: Context, node: Expression) {
-  if (
-    node.type === "TSAsExpression" ||
-    node.type === "TSSatisfiesExpression" ||
-    node.type === "TSNonNullExpression"
-  ) {
-    parserSource(context, node.expression);
-
-    return;
-  }
-
-  if (node.type !== "CallExpression" || callable(node.callee, context.scope) !== "defineCommand") {
-    return;
-  }
-
-  const argument = node.arguments[0];
-  const descriptor = argument && argument.type !== "SpreadElement" ? unwrap(argument) : argument;
-
-  if (descriptor?.type !== "ObjectExpression") {
-    refuse(context, node, "command_descriptor", "defineCommand requires a literal descriptor.");
-
-    return;
-  }
-
-  const properties = descriptor.properties.filter((property) => property.type === "Property");
-  const parser = properties.find((property) => name(property.key) === "parse");
-
-  if (!parser) {
-    return;
-  }
-
-  const key = properties.find((property) => name(property.key) === "key");
-  const namespace = properties.find((property) => name(property.key) === "namespace");
-  const command = properties.find((property) => name(property.key) === "name");
-
-  const id = key
-    ? literal(context, key.value, "command_key")
-    : `${literal(context, namespace?.value, "command_key")}.${literal(context, command?.value, "command_key")}`;
-
-  if (id !== null) {
-    if (context.parsers.has(id) || builtinCommandKeys.includes(id)) {
-      refuse(
-        context,
-        node,
-        "command_key",
-        "Custom parser keys must be unique and cannot replace built-in commands.",
-      );
-    }
-
-    const path = literal(context, parser.value, "module_path");
-
-    if (path !== null) {
-      context.parsers.set(id, { file: resolve(dirname(context.file), path) });
-    }
-  }
-}
 
 function declarations(statement: Statement) {
   return statement.type === "ExportNamedDeclaration" ? statement.declaration : statement;
@@ -103,11 +35,6 @@ function importBindings(
     }
 
     const original = name(item.imported) ?? "";
-
-    // SDK aliases would hide literal positions and callback roles from this pass.
-    if (sdk && item.local.name !== original) {
-      refuse(context, item, "sdk_alias", "Import SDK exports under their original names.");
-    }
 
     const binding = sdk ? "sdk" : (imported.get(original) ?? "function");
 
@@ -182,7 +109,6 @@ function inspectConstants(
     }
 
     expressionRule(context, declaration.init, context.scope);
-    parserSource(context, declaration.init);
     const kind = declarationKind(declaration.init, context.scope);
     context.scope.set(declaration.id.name, kind);
   }
@@ -238,10 +164,6 @@ function inspectStatements(context: Context, statements: Statement[], requireLoo
     }
 
     if (node.type === "FunctionDeclaration") {
-      if (node.id) {
-        context.scope.set(node.id.name, "function");
-      }
-
       continue;
     }
 
