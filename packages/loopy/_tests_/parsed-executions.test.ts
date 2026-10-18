@@ -59,7 +59,7 @@ export default loopy("parsed", {input: {}, mode: "full", run: () => {
       home: f.home,
       workspace: f.workspace,
       mode: "full",
-      secrets: [],
+      secrets: {},
       bundlePath: (hash) => join(f.home, "bundles", `${hash}.js`),
     });
 

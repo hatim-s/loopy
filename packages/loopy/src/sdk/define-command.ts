@@ -1,5 +1,5 @@
 import type { CommandFlag, CommandResult, Json } from "../core/index.js";
-import { type RenderInput } from "./render-argv.js";
+import { type RenderInput } from "../core/index.js";
 
 export type FlagDefinition = CommandFlag;
 

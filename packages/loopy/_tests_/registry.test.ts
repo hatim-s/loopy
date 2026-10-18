@@ -29,7 +29,7 @@ test("registry lookup uses the nearest project root and falls back to global ent
   const f = fixture();
   const registry = new Registry(f.home, f.project);
   const definition = await compiledBody("saved", f.source);
-  registry.save({
+  await registry.save({
     ...definition,
     revision: "a".repeat(64),
     graph: { ...definition.graph, meta: { ...definition.graph.meta, scope: "global" } },
@@ -37,7 +37,7 @@ test("registry lookup uses the nearest project root and falls back to global ent
   });
   const projectSource = join(f.project, "local.ts");
   writeFileSync(projectSource, "");
-  registry.save({
+  await registry.save({
     ...definition,
     revision: "b".repeat(64),
     source: { ...definition.source, path: projectSource },
@@ -54,19 +54,19 @@ test("changing scope removes only the other entry owned by the same source", asy
   const f = fixture();
   const registry = new Registry(f.home, f.project);
   const definition = await compiledBody("saved", f.source);
-  registry.save({
+  await registry.save({
     ...definition,
     revision: "a".repeat(64),
     graph: { ...definition.graph, meta: { ...definition.graph.meta, scope: "global" } },
     source: { ...definition.source, path: f.source },
   });
-  registry.save({
+  await registry.save({
     ...definition,
     revision: "b".repeat(64),
     source: { ...definition.source, path: f.source },
   });
   expect(existsSync(join(f.home, "loopies", "saved.json"))).toBe(false);
-  registry.save({
+  await registry.save({
     ...definition,
     revision: "c".repeat(64),
     graph: { ...definition.graph, meta: { ...definition.graph.meta, scope: "global" } },
@@ -75,7 +75,7 @@ test("changing scope removes only the other entry owned by the same source", asy
   expect(existsSync(join(f.project, ".loopy", "loopies", "saved.json"))).toBe(false);
   const other = join(f.project, "other.ts");
   writeFileSync(other, "");
-  registry.save({
+  await registry.save({
     ...definition,
     revision: "d".repeat(64),
     source: { ...definition.source, path: other },
@@ -92,7 +92,7 @@ test("stale registry entries are ignored and replaced without preserving the old
   writeFileSync(file, JSON.stringify({ slug: "saved", source: "different", bundleHash: "old" }));
   expect(registry.list()).toEqual([]);
   expect(() => registry.get("saved")).toThrow("No saved loopy");
-  registry.save(await compiledBody("saved", f.source));
+  await registry.save(await compiledBody("saved", f.source));
   expect(registry.get("saved")).toMatchObject({ version: 2, graph: { name: "saved" } });
   expect(registry.get("saved")).not.toHaveProperty("bundleHash");
 });

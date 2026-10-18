@@ -3,43 +3,26 @@ import {
   CommandExecutionError,
   DEFAULT_EXECUTION_TIMEOUT_MS,
   type ExecutionKey,
-  type ExecutionMode,
   type ExecutionResult,
   type ExecutionSpec,
-  type Executor,
   errorMessage,
   type Json,
   limitLogs,
 } from "../core/index.js";
-import {
-  executeLocalCommand,
-  renderCommand,
-  SecretStore,
-  secretRedactor,
-  spawnCaptured,
-  withBundleSandbox,
-} from "../local/execution-host.js";
+import type { Options } from "./options.js";
+import { executeLocalCommand } from "./process.js";
 import { bundleResult } from "./protocol.js";
-import { finishReceipt, lookupFile, receiptPath, startReceipt } from "./receipts.js";
+import { finishReceipt, receiptPath, startReceipt } from "./receipts.js";
+import { secretRedactor } from "./redact.js";
+import { withBundleSandbox } from "./sandbox/launch.js";
+import { spawnCaptured } from "./spawn.js";
 
-type Options = {
-  home: string;
-  workspace: string;
-  mode: ExecutionMode;
-  secrets: readonly string[];
-  bundlePath: (hash: string) => string;
-};
-
-export class ExecutionWorker implements Executor {
+export class ExecutionWorker {
   private readonly env: Record<string, string>;
   private readonly redact: ReturnType<typeof secretRedactor>;
   constructor(private readonly options: Options) {
-    const store = new SecretStore(options.home);
-    this.env = Object.fromEntries(options.secrets.map((name) => [name, store.get(name)]));
+    this.env = options.secrets;
     this.redact = secretRedactor(Object.values(this.env));
-  }
-  async lookup(key: ExecutionKey, attempt: number) {
-    return lookupFile(await receiptPath(this.options.home, key, attempt));
   }
   async execute(
     key: ExecutionKey,
@@ -98,9 +81,7 @@ export class ExecutionWorker implements Executor {
               },
               stdin: JSON.stringify(input),
             },
-            { timeoutMs, maxOutputBytes: 2 * 1024 * 1024 },
-            signal,
-            performance.now(),
+            { timeoutMs, maxOutputBytes: 2 * 1024 * 1024, signal },
           ),
       );
 
@@ -118,7 +99,7 @@ export class ExecutionWorker implements Executor {
       return this.bundle(spec.bundleHash, spec.input, spec.timeoutMs, signal);
     }
 
-    const [program, ...args] = renderCommand(spec);
+    const [program, ...args] = spec.argv;
 
     if (!program) {
       throw new Error("Command argv is empty.");
@@ -172,7 +153,7 @@ export class ExecutionWorker implements Executor {
       { message: "stderr", data: stderr },
     ];
 
-    if (!spec.node.okExitCodes.includes(result.exitCode)) {
+    if (!spec.okExitCodes.includes(result.exitCode)) {
       return {
         kind: "failed",
         error: {

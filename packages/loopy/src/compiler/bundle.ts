@@ -1,10 +1,9 @@
 import { resolve } from "node:path";
 import { bundleRefs, type Graph, type Node, sha256Hex } from "../core/index.js";
-import { sourcePaths } from "../local/index.js";
 import { commandParser } from "../sdk/graph-host.js";
 import { checkImports } from "./module-imports.js";
 import { runnerSource } from "./runner.js";
-import { typescriptPaths } from "./source.js";
+import { sourcePaths, typescriptPaths } from "./source.js";
 import type { Bundle, CompilerDiagnostic, ParserSource } from "./types.js";
 
 async function buildModule(file: string, kind: "code" | "parser") {

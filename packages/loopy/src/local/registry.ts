@@ -2,7 +2,8 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:f
 import { dirname, join } from "node:path";
 import type { PutLoopyBody } from "../contract/index.js";
 import { canonicalJson, isRecord, validateSlug } from "../core/index.js";
-import { canonicalPath, withLockDirectory, writeFileAtomically } from "./fs.js";
+import { writeFileAtomically } from "../executor/index.js";
+import { canonicalPath, withLockDirectory } from "./fs.js";
 import { parseSavedLoopy, type SavedLoopy } from "./saved-loopy.js";
 
 function readEntry(file: string) {
@@ -91,7 +92,7 @@ export class Registry {
       : { ok: false as const };
   }
 
-  save(body: PutLoopyBody): SavedLoopy {
+  async save(body: PutLoopyBody): Promise<SavedLoopy> {
     const { graph, revision, source, replace, bundles } = body;
     const meta = graph.meta;
     const owner = canonicalPath(source.path);
@@ -100,7 +101,7 @@ export class Registry {
     const file = join(directory, `${graph.name}.json`);
     mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
 
-    return withLockDirectory(`${file}.lock`, "save", () => {
+    return withLockDirectory(`${file}.lock`, "save", async () => {
       const previous = existsSync(file) ? readEntry(file) : null;
 
       if (previous && previous.source !== owner && !replace) {
@@ -129,7 +130,10 @@ export class Registry {
         savedAt: new Date().toISOString(),
       };
 
-      writeFileAtomically(file, `${JSON.stringify(entry, null, 2)}\n`, 0o600);
+      await writeFileAtomically(file, `${JSON.stringify(entry, null, 2)}\n`, {
+        mode: 0o600,
+        syncDirectory: true,
+      });
 
       for (const other of files.filter((candidate) => candidate !== file)) {
         if (existsSync(other) && readEntry(other)?.source === owner) {

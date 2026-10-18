@@ -1,11 +1,17 @@
-import { type CommandFlagSpec, isBoolean, isNumber, isRecord, isString } from "../../core/index.js";
+import {
+  type CommandFlagSpec,
+  isBoolean,
+  isNumber,
+  isRecord,
+  isString,
+  renderOperands,
+} from "../../core/index.js";
 import {
   type CommandDefinition,
   type CommandDescriptor,
   parsedFlags,
   platformVariant,
 } from "../define-command.js";
-import { renderOperands } from "../render-argv.js";
 import { type AuthorValue, isRef, type RefValue } from "./ref.js";
 import { refuse } from "./validate.js";
 

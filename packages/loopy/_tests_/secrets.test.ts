@@ -12,8 +12,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { secretRedactor } from "../src/executor/redact.js";
 import { localDaemon, openRunStore } from "../src/local/index.js";
-import { secretRedactor } from "../src/local/secret-redactor.js";
 import { SecretStore } from "../src/local/secrets.js";
 
 const directories: string[] = [];
@@ -35,24 +35,24 @@ afterEach(async () => {
   }
 });
 
-test("private CRUD preserves other secrets and lists names only", () => {
+test("private CRUD preserves other secrets and lists names only", async () => {
   const { store } = setup();
   expect(store.list()).toEqual([]);
-  store.set("orbit-cookie", "private-cookie");
-  store.set("other", "other-value");
-  store.set("orbit-cookie", "rotated-cookie");
+  await store.set("orbit-cookie", "private-cookie");
+  await store.set("other", "other-value");
+  await store.set("orbit-cookie", "rotated-cookie");
   expect(store.get("orbit-cookie")).toBe("rotated-cookie");
   expect(store.list()).toEqual(["orbit-cookie", "other"]);
   expect(statSync(store.directory).mode & 0o777).toBe(0o700);
   expect(statSync(store.file).mode & 0o777).toBe(0o600);
-  store.remove("orbit-cookie");
+  await store.remove("orbit-cookie");
   expect(store.get("other")).toBe("other-value");
   expect(() => store.get("orbit-cookie")).toThrow("No stored secret");
 });
 
-test("repairs permissive permissions before reading", () => {
+test("repairs permissive permissions before reading", async () => {
   const { store } = setup();
-  store.set("one", "value");
+  await store.set("one", "value");
   chmodSync(store.directory, 0o755);
   chmodSync(store.file, 0o644);
   expect(store.get("one")).toBe("value");
@@ -60,12 +60,12 @@ test("repairs permissive permissions before reading", () => {
   expect(statSync(store.file).mode & 0o777).toBe(0o600);
 });
 
-test("refuses symlink directories, symlink files, and hard links", () => {
+test("refuses symlink directories, symlink files, and hard links", async () => {
   const { directory, store } = setup();
   const target = join(directory, "target");
   mkdirSync(target);
   symlinkSync(target, store.directory);
-  expect(() => store.set("one", "value")).toThrow("real directory");
+  await expect(store.set("one", "value")).rejects.toThrow("real directory");
   rmSync(store.directory);
   mkdirSync(store.directory);
   const original = join(directory, "original.json");
@@ -78,21 +78,21 @@ test("refuses symlink directories, symlink files, and hard links", () => {
   expect(readFileSync(original, "utf8")).toContain("private-value");
 });
 
-test("a competing writer cannot overwrite the store", () => {
+test("a competing writer cannot overwrite the store", async () => {
   const { store } = setup();
-  store.set("one", "value");
+  await store.set("one", "value");
   mkdirSync(join(store.directory, ".secrets.lock"));
-  expect(() => store.set("two", "value")).toThrow("Another secret update");
+  await expect(store.set("two", "value")).rejects.toThrow("Another secret update");
   expect(store.list()).toEqual(["one"]);
 });
 
-test("malformed stores and invalid values never echo secret contents", () => {
+test("malformed stores and invalid values never echo secret contents", async () => {
   const { store } = setup();
-  store.set("one", "value");
+  await store.set("one", "value");
   writeFileSync(store.file, '{"one":"sensitive-marker" BROKEN}');
   expect(() => store.snapshot()).toThrow("The secret store contains invalid JSON.");
-  expect(() => store.set("../bad", "value")).toThrow("Secret names");
-  expect(() => store.set("one", "\0sensitive-marker")).toThrow("no NUL");
+  await expect(store.set("../bad", "value")).rejects.toThrow("Secret names");
+  await expect(store.set("one", "\0sensitive-marker")).rejects.toThrow("no NUL");
 });
 
 test("CLI stdin entry and name-only listing do not disclose values", async () => {
@@ -107,7 +107,7 @@ test("CLI stdin entry and name-only listing do not disclose values", async () =>
     port: 0,
   });
 
-  daemon.start();
+  await daemon.start();
   daemons.push({
     async stop() {
       await daemon.stop();
@@ -137,7 +137,7 @@ test("CLI stdin entry and name-only listing do not disclose values", async () =>
   expect(JSON.parse(await new Response(listed.stdout).text())).toEqual(["orbit-cookie"]);
 });
 
-test("redaction handles overlapping values, regex punctuation and truncated secrets", () => {
+test("redaction handles overlapping values, regex punctuation and truncated secrets", async () => {
   expect(secretRedactor(["abc", "abcdef", "a.b?"])("abcdef abc a.b?")).toBe(
     "[redacted] [redacted] [redacted]",
   );

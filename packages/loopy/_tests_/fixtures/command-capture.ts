@@ -1,6 +1,5 @@
 import type { ExecutionResult, ExecutionSpec, RunOutcome } from "../../src/core/index.js";
 import { initialState, step } from "../../src/engine/index.js";
-import { renderCommand } from "../../src/local/execution-host.js";
 import { loopy } from "../../src/sdk/graph/index.js";
 
 type Capture = {
@@ -42,7 +41,7 @@ export function capture(run: () => void): Capture {
       }
 
       specs.push(dispatch.spec);
-      const [program, ...args] = renderCommand(dispatch.spec);
+      const [program, ...args] = dispatch.spec.argv;
       calls.push({ program: program ?? "", args });
 
       const result: Extract<ExecutionResult, { kind: "succeeded" }> = {

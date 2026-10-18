@@ -462,9 +462,9 @@ export class LoopyService {
     return new SecretStore(this.options.registry("").home).list();
   }
 
-  putSecret(name: string, value: string) {
+  async putSecret(name: string, value: string) {
     try {
-      new SecretStore(this.options.registry("").home).set(name, value);
+      await new SecretStore(this.options.registry("").home).set(name, value);
 
       return { name, saved: true as const };
     } catch (error) {
@@ -472,9 +472,9 @@ export class LoopyService {
     }
   }
 
-  deleteSecret(name: string) {
+  async deleteSecret(name: string) {
     try {
-      new SecretStore(this.options.registry("").home).remove(name);
+      await new SecretStore(this.options.registry("").home).remove(name);
 
       return { name, removed: true as const };
     } catch (error) {

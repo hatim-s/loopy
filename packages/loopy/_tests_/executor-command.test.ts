@@ -13,14 +13,16 @@ for (const mode of ["sandbox", "full"] as const) {
   test(`${mode} commands receive only declared secrets and redact stdout, stderr, errors and receipts`, async () => {
     const f = await fixture();
     const secrets = new SecretStore(f.home);
-    secrets.set("TOKEN", 'private"with\nnewline');
-    secrets.set("OTHER", "undeclared");
+    await secrets.set("TOKEN", 'private"with\nnewline');
+    await secrets.set("OTHER", "undeclared");
 
     const executor = new LocalExecutor({
       home: f.home,
       workspace: f.workspace,
       mode,
-      secrets: ["TOKEN"],
+      secrets: Object.fromEntries(
+        ["TOKEN"].map((name) => [name, new SecretStore(f.home).get(name)]),
+      ),
       bundlePath: () => f.bundle,
     });
 
@@ -54,7 +56,7 @@ for (const mode of ["sandbox", "full"] as const) {
       home: f.home,
       workspace: f.workspace,
       mode,
-      secrets: [],
+      secrets: {},
       bundlePath: () => f.bundle,
     });
 
@@ -108,13 +110,13 @@ test("literal command arguments retain shell characters without evaluation", asy
 
 test("stderr secrets are redacted before the diagnostic tail is trimmed", async () => {
   const f = await fixture();
-  new SecretStore(f.home).set("TOKEN", `start-${"private".repeat(100)}-end`);
+  await new SecretStore(f.home).set("TOKEN", `start-${"private".repeat(100)}-end`);
 
   const executor = new LocalExecutor({
     home: f.home,
     workspace: f.workspace,
     mode: "sandbox",
-    secrets: ["TOKEN"],
+    secrets: Object.fromEntries(["TOKEN"].map((name) => [name, new SecretStore(f.home).get(name)])),
     bundlePath: () => f.bundle,
   });
 
@@ -140,7 +142,7 @@ for (const accepted of [false, true]) {
       throw new Error("Expected command spec");
     }
 
-    spec.node.okExitCodes = accepted ? [0, 2] : [0];
+    spec.okExitCodes = accepted ? [0, 2] : [0];
     spec.parse = { bundleHash: "a".repeat(64), input: {} };
     const result = await f.executor.execute(f.key, 1, spec, new AbortController().signal);
     expect(result).toMatchObject(

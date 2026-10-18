@@ -28,12 +28,13 @@ const ALLOWED_IMPORTS: Record<Layer, readonly Layer[]> = {
   engine: ["core"],
   host: ["core", "engine"],
   store: ["core", "contract"],
-  executor: ["core", "contract", "local"],
+  executor: ["core", "contract"],
   contract: ["core"],
   local: ["core", "engine", "host", "store", "executor", "sdk", "contract"],
   sdk: ["core"],
   cli: ["core", "engine", "host", "store", "executor", "local", "sdk", "contract", "compiler"],
-  compiler: ["core", "contract", "local", "sdk"],
+  // Compilation uses the executor leaf for its sandboxed evaluation process.
+  compiler: ["core", "contract", "executor", "sdk"],
 };
 
 function sourceFiles(directory: string): string[] {
@@ -158,10 +159,7 @@ test("layers import downward, and only through the target layer's index", () => 
       if (!ALLOWED_IMPORTS[layer].includes(target)) {
         violations.push(`${name} (${layer}) may not import ${target} (${specifier}).`);
       } else if (
-        target === "sdk"
-          ? !/\/(?:host|graph-host)\.js$/.test(specifier)
-          : !isBarrel(specifier) &&
-            !(layer === "executor" && specifier === "../local/execution-host.js")
+        target === "sdk" ? !/\/(?:host|graph-host)\.js$/.test(specifier) : !isBarrel(specifier)
       ) {
         violations.push(
           `${name} must import ${target} through ${target === "sdk" ? "sdk/host.js" : `${target}/index.js`} (${specifier}).`,

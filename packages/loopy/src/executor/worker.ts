@@ -8,7 +8,7 @@ const requestSchema = z.object({
     home: z.string(),
     workspace: z.string(),
     mode: z.enum(EXECUTION_MODES),
-    secrets: z.array(z.string()),
+    secrets: z.record(z.string(), z.string()),
     bundles: z.record(z.string(), z.string()),
   }),
   key: executionKeySchema,

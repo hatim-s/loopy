@@ -3,6 +3,7 @@ import {
   durationMs,
   type ExecutionSpec,
   type Node,
+  renderArgv,
 } from "../core/index.js";
 import { resolve, resolveValues } from "./resolve.js";
 import type { EngineState } from "./state.js";
@@ -28,11 +29,23 @@ export function executionSpec(
     throw new Error("Parser bundle is missing. Save the graph again.");
   }
 
+  const [program, ...args] = node.argv.map((value) => String(resolve(value, state)));
+
+  if (!program) {
+    throw new Error("Command argv is empty.");
+  }
+
   return {
     kind: "command",
-    node,
-    argv: node.argv.map((value) => String(resolve(value, state))),
-    flags: resolveValues(node.flags, state),
+    argv: [
+      program,
+      ...renderArgv(
+        { program, ...node.flagSpec },
+        { args, flags: resolveValues(node.flags, state) },
+        node.key,
+      ),
+    ],
+    okExitCodes: node.okExitCodes,
     cwd: node.options.cwd === null ? null : String(resolve(node.options.cwd, state)),
     env: Object.fromEntries(
       Object.entries(resolveValues(node.options.env, state)).map(([key, value]) => [

@@ -11,13 +11,15 @@ import { fixture } from "./fixtures/executor.js";
 for (const secret of ['quote"and\nnewline', "42"]) {
   test(`decoded result and log strings redact ${JSON.stringify(secret)} without changing numeric values`, async () => {
     const f = await fixture();
-    new SecretStore(f.home).set("TOKEN", secret);
+    await new SecretStore(f.home).set("TOKEN", secret);
 
     const executor = new LocalExecutor({
       home: f.home,
       workspace: f.workspace,
       mode: "sandbox",
-      secrets: ["TOKEN"],
+      secrets: Object.fromEntries(
+        ["TOKEN"].map((name) => [name, new SecretStore(f.home).get(name)]),
+      ),
       bundlePath: () => f.bundle,
     });
 
@@ -55,7 +57,7 @@ process.stdout.write(JSON.stringify(results)+"\\n");`,
       home: f.home,
       workspace: f.workspace,
       mode,
-      secrets: [],
+      secrets: {},
       bundlePath: () => f.bundle,
     });
 

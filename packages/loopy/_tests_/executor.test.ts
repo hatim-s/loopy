@@ -6,6 +6,7 @@ import { graphSchema } from "../src/contract/index.js";
 import { LocalExecutor } from "../src/executor/index.js";
 import { bundleResult } from "../src/executor/protocol.js";
 import { receiptPath } from "../src/executor/receipts.js";
+import { secretRedactor } from "../src/executor/redact.js";
 import { activate, SYSTEM_CLOCK } from "../src/host/index.js";
 import {
   LoopyService,
@@ -14,7 +15,6 @@ import {
   Registry,
   SecretStore,
 } from "../src/local/index.js";
-import { secretRedactor } from "../src/local/secret-redactor.js";
 import { MemoryStore } from "../src/store/index.js";
 import { newRun } from "./fixture.js";
 import { fixture } from "./fixtures/executor.js";
@@ -58,7 +58,7 @@ test("code sandbox cannot read a sibling host file or write outside the workspac
       home: join(f.root, "home"),
       workspace: f.workspace,
       mode,
-      secrets: [],
+      secrets: {},
       bundlePath: () => f.bundle,
     });
 
@@ -179,7 +179,7 @@ test("a worker finishes its receipt after the caller process is killed", async (
   const caller = join(f.root, "caller.ts");
   await writeFile(
     caller,
-    `import {LocalExecutor} from ${JSON.stringify(resolve(import.meta.dir, "../src/executor/index.ts"))}; const executor = new LocalExecutor({home: ${JSON.stringify(join(f.root, "home"))}, workspace: ${JSON.stringify(f.workspace)}, mode: "sandbox", secrets: [], bundlePath: () => ${JSON.stringify(f.bundle)}}); await executor.execute(${JSON.stringify(f.key)}, 1, ${JSON.stringify(f.spec)}, new AbortController().signal);`,
+    `import {LocalExecutor} from ${JSON.stringify(resolve(import.meta.dir, "../src/executor/index.ts"))}; const executor = new LocalExecutor({home: ${JSON.stringify(join(f.root, "home"))}, workspace: ${JSON.stringify(f.workspace)}, mode: "sandbox", secrets: {}, bundlePath: () => ${JSON.stringify(f.bundle)}}); await executor.execute(${JSON.stringify(f.key)}, 1, ${JSON.stringify(f.spec)}, new AbortController().signal);`,
   );
 
   const process = Bun.spawn([Bun.which("bun") ?? "bun", "--no-env-file", caller], {
@@ -217,8 +217,8 @@ test("only declared secrets reach bundles and receipts contain redacted results 
   const f = await fixture();
   const home = join(f.root, "home");
   const secrets = new SecretStore(home);
-  secrets.set("LOOPY_EXPOSED", "super-private");
-  secrets.set("LOOPY_UNDECLARED", "also-private");
+  await secrets.set("LOOPY_EXPOSED", "super-private");
+  await secrets.set("LOOPY_UNDECLARED", "also-private");
   await writeFile(
     f.bundle,
     'process.stderr.write(JSON.stringify({message: process.env.LOOPY_EXPOSED,data:null})+"\\n"); process.stdout.write(JSON.stringify({token:process.env.LOOPY_EXPOSED,other:process.env.LOOPY_UNDECLARED ?? null})+"\\n");',
@@ -228,7 +228,9 @@ test("only declared secrets reach bundles and receipts contain redacted results 
     home,
     workspace: f.workspace,
     mode: "sandbox",
-    secrets: ["LOOPY_EXPOSED"],
+    secrets: Object.fromEntries(
+      ["LOOPY_EXPOSED"].map((name) => [name, new SecretStore(f.home).get(name)]),
+    ),
     bundlePath: () => f.bundle,
   });
 
@@ -247,13 +249,15 @@ for (const failure of ["timeout", "output_limit", "nonzero"] as const) {
     const f = await fixture();
     const secret = 'alpha"beta';
     const escaped = JSON.stringify(secret).slice(1, -1);
-    new SecretStore(f.home).set("TOKEN", secret);
+    await new SecretStore(f.home).set("TOKEN", secret);
 
     const executor = new LocalExecutor({
       home: f.home,
       workspace: f.workspace,
       mode: "sandbox",
-      secrets: ["TOKEN"],
+      secrets: Object.fromEntries(
+        ["TOKEN"].map((name) => [name, new SecretStore(f.home).get(name)]),
+      ),
       bundlePath: () => f.bundle,
     });
 
@@ -319,13 +323,15 @@ for (const failure of ["timeout", "output_limit", "nonzero"] as const) {
 for (const ending of ["timeout", "success"] as const) {
   test(`bundle ${ending} masks a secret nested two JSON levels inside a log string`, async () => {
     const f = await fixture();
-    new SecretStore(f.home).set("TOKEN", 'alpha"beta');
+    await new SecretStore(f.home).set("TOKEN", 'alpha"beta');
 
     const executor = new LocalExecutor({
       home: f.home,
       workspace: f.workspace,
       mode: "sandbox",
-      secrets: ["TOKEN"],
+      secrets: Object.fromEntries(
+        ["TOKEN"].map((name) => [name, new SecretStore(f.home).get(name)]),
+      ),
       bundlePath: () => f.bundle,
     });
 
@@ -382,13 +388,13 @@ for (const ending of ["timeout", "success"] as const) {
 
 test("bundle results redact once, so a secret inside the marker leaves it intact", async () => {
   const f = await fixture();
-  new SecretStore(f.home).set("TOKEN", "a");
+  await new SecretStore(f.home).set("TOKEN", "a");
 
   const executor = new LocalExecutor({
     home: f.home,
     workspace: f.workspace,
     mode: "sandbox",
-    secrets: ["TOKEN"],
+    secrets: Object.fromEntries(["TOKEN"].map((name) => [name, new SecretStore(f.home).get(name)])),
     bundlePath: () => f.bundle,
   });
 
@@ -436,14 +442,14 @@ for (const ending of ["success", "timeout", "output_limit", "nonzero"] as const)
     const store = new SecretStore(f.home);
 
     for (const [name, value] of Object.entries(secrets)) {
-      store.set(name, value);
+      await store.set(name, value);
     }
 
     const executor = new LocalExecutor({
       home: f.home,
       workspace: f.workspace,
       mode: "sandbox",
-      secrets: Object.keys(secrets),
+      secrets,
       bundlePath: () => f.bundle,
     });
 

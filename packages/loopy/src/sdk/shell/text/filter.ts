@@ -1,5 +1,5 @@
+import type { RenderInput } from "../../../core/index.js";
 import { descriptorCommand } from "../../descriptor.js";
-import type { RenderInput } from "../../render-argv.js";
 import { parseGrep, parseGrepCount, parseUniqCount } from "../parse/text.js";
 
 const GREP_FLAGS = {

@@ -1,6 +1,11 @@
 import { expect, expectTypeOf, test } from "bun:test";
 import { graphSchema, graphView, refIdSchema } from "../src/contract/index.js";
-import { type DiagnosticCode, graphTypeResolver, validateGraph } from "../src/core/index.js";
+import {
+  type DiagnosticCode,
+  graphTypeResolver,
+  renderArgv,
+  validateGraph,
+} from "../src/core/index.js";
 import {
   and,
   archive,
@@ -43,7 +48,6 @@ import {
   wait,
 } from "../src/sdk/graph/index.js";
 import type { AuthorValue } from "../src/sdk/graph/ref.js";
-import { renderArgv } from "../src/sdk/render-argv.js";
 import assetSync from "./fixtures/graph-examples/asset-sync.js";
 import hello from "./fixtures/graph-examples/hello.js";
 import review from "./fixtures/graph-examples/review.js";

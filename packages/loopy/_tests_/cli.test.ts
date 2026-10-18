@@ -16,7 +16,7 @@ afterEach(async () => {
   }
 });
 
-function graphFixture(name = "compiled") {
+async function graphFixture(name = "compiled") {
   const f = fixture(name, "run: () => null");
   writeFileSync(
     f.file,
@@ -24,7 +24,7 @@ function graphFixture(name = "compiled") {
   );
   const store = openRunStore(f.home);
   const daemon = localDaemon({ ...f, store, concurrency: 4, port: 0 });
-  daemon.start();
+  await daemon.start();
   daemons.push({
     async stop() {
       await daemon.stop();
@@ -36,7 +36,7 @@ function graphFixture(name = "compiled") {
 }
 
 test("save posts a compiled graph and graph prints the same redacted view by file and name", async () => {
-  const f = graphFixture();
+  const f = await graphFixture();
   const saved = await cli(f, "save", f.file);
   expect(saved).toMatchObject({ code: 0, stderr: "" });
   const view = object(saved.stdout);
@@ -57,7 +57,7 @@ test("save posts a compiled graph and graph prints the same redacted view by fil
 });
 
 test("HTTP commands queue schema-validated graph runs and pin the saved revision", async () => {
-  const f = graphFixture();
+  const f = await graphFixture();
   expect((await cli(f, "save", f.file)).code).toBe(0);
   expect((await cli(f, "run", "compiled", "--count", "bad")).code).toBe(1);
   expect(await f.store.listRuns()).toEqual([]);
@@ -77,7 +77,7 @@ test("HTTP commands queue schema-validated graph runs and pin the saved revision
 });
 
 test("save rejects another source until --replace and locates absolute files beside their source", async () => {
-  const f = graphFixture();
+  const f = await graphFixture();
   expect((await cli(f, "save", f.file)).code).toBe(0);
   const other = join(f.cwd, "other.ts");
   writeFileSync(other, await Bun.file(f.file).text());
@@ -91,7 +91,7 @@ test("save rejects another source until --replace and locates absolute files bes
 });
 
 test("compiler diagnostics include locations and do not create registry entries", async () => {
-  const f = graphFixture();
+  const f = await graphFixture();
   writeFileSync(
     f.file,
     `import {loopy} from "loopy/graph"; export default loopy("bad", {input:{},run:async()=>1});`,
@@ -103,7 +103,7 @@ test("compiler diagnostics include locations and do not create registry entries"
 });
 
 test("CLI rejects invalid graph formats and short leases", async () => {
-  const f = graphFixture();
+  const f = await graphFixture();
   expect((await cli(f, "graph", f.file, "--format", "svg")).stderr).toContain(
     "--format json or --format text",
   );
@@ -138,7 +138,7 @@ test("save starts the daemon on demand and leaves artifact writes to the service
 });
 
 test("list and schedules use the caller workspace when the daemon started elsewhere", async () => {
-  const f = graphFixture();
+  const f = await graphFixture();
   const other = join(f.cwd, "other");
   mkdirSync(other);
   const file = join(other, "other.ts");
@@ -153,14 +153,14 @@ test("list and schedules use the caller workspace when the daemon started elsewh
 });
 
 test("types uses the daemon's command-help endpoint and writes the returned source", async () => {
-  const f = graphFixture();
+  const f = await graphFixture();
   const result = await cli(f, "types", "git", "--out", "git.ts");
   expect(result.code).toBe(0);
   expect(await Bun.file(join(f.cwd, "git.ts")).text()).toContain("defineCommand");
 });
 
 test("an absolute source in another project is registered beside that source", async () => {
-  const source = graphFixture("external-source");
+  const source = await graphFixture("external-source");
   const caller = fixture("unrelated-caller", "run: () => null");
   const saved = await cli({ ...caller, home: source.home }, "save", source.file);
   expect(saved).toMatchObject({ code: 0, stderr: "" });
@@ -169,7 +169,7 @@ test("an absolute source in another project is registered beside that source", a
 });
 
 test("save preserves every author option from graph meta", async () => {
-  const f = graphFixture("metadata");
+  const f = await graphFixture("metadata");
 
   const meta = {
     description: "Author metadata",
@@ -189,7 +189,7 @@ test("save preserves every author option from graph meta", async () => {
 });
 
 test("HTTP schedule enable, disable and off persist their state", async () => {
-  const f = graphFixture();
+  const f = await graphFixture();
   expect((await cli(f, "save", f.file)).code).toBe(0);
   expect(
     await cli(f, "schedule", "compiled", "--cron", "0 * * * *", "--input-json", '{"count":2}'),
@@ -213,7 +213,7 @@ test("HTTP schedule enable, disable and off persist their state", async () => {
 });
 
 test("HTTP cancel refuses an active owner and inspect diagnoses a missing run", async () => {
-  const f = graphFixture();
+  const f = await graphFixture();
   await f.store.createRun({ ...newRun(), id: "owned", slug: "compiled", workspace: f.cwd });
   await f.store.claim("owned", "active-owner");
   const cancelled = await cli(f, "cancel", "owned");
@@ -229,7 +229,7 @@ test("HTTP cancel refuses an active owner and inspect diagnoses a missing run", 
 });
 
 test("HTTP logs follow prints each log as a separate JSON line", async () => {
-  const f = graphFixture();
+  const f = await graphFixture();
   await f.store.createRun({ ...newRun(), id: "logged", slug: "compiled", workspace: f.cwd });
   await f.store.claim("logged", "log-owner");
 
@@ -262,7 +262,7 @@ test("HTTP logs follow prints each log as a separate JSON line", async () => {
 });
 
 test("HTTP run reports named JSON input errors before creating a run", async () => {
-  const f = graphFixture();
+  const f = await graphFixture();
   writeFileSync(
     f.file,
     'import {loopy} from "loopy/graph"; export default loopy("compiled",{input:{payload:"json",values:"number[]"},run:()=>null});',

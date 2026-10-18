@@ -1,17 +1,5 @@
-import {
-  chmodSync,
-  closeSync,
-  constants,
-  existsSync,
-  fsyncSync,
-  mkdirSync,
-  openSync,
-  realpathSync,
-  renameSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { existsSync, mkdirSync, realpathSync, rmSync } from "node:fs";
+import { resolve } from "node:path";
 import { errnoCode } from "../core/index.js";
 
 /** The `code` of a Node filesystem error, or undefined for anything else. */
@@ -26,7 +14,11 @@ export function canonicalPath(path: string): string {
  * Serialises writers with a lock directory, since mkdir is atomic on every
  * filesystem. `holder` names the kind of work in the busy message.
  */
-export function withLockDirectory<T>(lock: string, holder: string, work: () => T): T {
+export async function withLockDirectory<T>(
+  lock: string,
+  holder: string,
+  work: () => T | Promise<T>,
+): Promise<T> {
   try {
     mkdirSync(lock, { mode: 0o700 });
   } catch (error) {
@@ -40,37 +32,8 @@ export function withLockDirectory<T>(lock: string, holder: string, work: () => T
   }
 
   try {
-    return work();
+    return await work();
   } finally {
     rmSync(lock, { recursive: true });
-  }
-}
-
-/** Writes through a sibling temp file so a reader sees the old or the new content, never half. */
-export function writeFileAtomically(
-  file: string,
-  contents: string | Uint8Array,
-  mode: number,
-): void {
-  const temporary = join(dirname(file), `.${basename(file)}.${crypto.randomUUID()}.tmp`);
-
-  try {
-    const fd = openSync(
-      temporary,
-      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
-      mode,
-    );
-
-    try {
-      writeFileSync(fd, contents);
-      fsyncSync(fd);
-    } finally {
-      closeSync(fd);
-    }
-
-    renameSync(temporary, file);
-    chmodSync(file, mode);
-  } finally {
-    rmSync(temporary, { force: true });
   }
 }

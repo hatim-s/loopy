@@ -90,10 +90,10 @@ function trySpawn(launch: Launch): ChildProcessWithoutNullStreams {
 /** Runs the process in its own group, bounds output and time, and captures both streams. */
 export function spawnCaptured(
   launch: Launch,
-  limits: Limits,
-  signal: AbortSignal | undefined,
-  started: number,
+  { signal, ...limits }: Limits & { signal?: AbortSignal },
 ): Promise<CommandResult> {
+  const started = performance.now();
+
   return new Promise((resolveOutput, rejectOutput) => {
     let child: ChildProcessWithoutNullStreams;
 

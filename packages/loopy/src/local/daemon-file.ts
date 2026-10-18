@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
-import { errnoCode, writeFileAtomically } from "./fs.js";
+import { processAlive, writeFileAtomically } from "../executor/index.js";
 
 const daemonFileSchema = z.object({
   pid: z.number().int().positive(),
@@ -21,21 +21,18 @@ export function readDaemonFile(home: string): DaemonFile | undefined {
 
   const record = daemonFileSchema.parse(JSON.parse(readFileSync(file, "utf8")));
 
-  try {
-    process.kill(record.pid, 0);
-  } catch (error) {
-    if (errnoCode(error) === "ESRCH") {
-      return undefined;
-    }
-
-    throw error;
+  if (!processAlive(record.pid)) {
+    return undefined;
   }
 
   return record;
 }
 
-export function writeDaemonFile(home: string, record: DaemonFile): void {
-  writeFileAtomically(join(home, "daemon.json"), `${JSON.stringify(record)}\n`, 0o600);
+export async function writeDaemonFile(home: string, record: DaemonFile): Promise<void> {
+  await writeFileAtomically(join(home, "daemon.json"), `${JSON.stringify(record)}\n`, {
+    mode: 0o600,
+    syncDirectory: true,
+  });
 }
 
 export function removeDaemonFile(home: string, token: string): void {

@@ -90,7 +90,7 @@ export async function runForeground(
     const cleanup = onTermination(stop);
 
     try {
-      onStarted(daemon.start());
+      onStarted(await daemon.start());
       await daemon.run();
     } finally {
       cleanup();

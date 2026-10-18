@@ -5,15 +5,15 @@ import type { CommandResult, ExecutionMode } from "../core/index.js";
 import {
   CommandExecutionError,
   DEFAULT_EXECUTION_TIMEOUT_MS,
+  errnoCode,
   type ResolvedCommand,
-  requirePositiveInteger,
 } from "../core/index.js";
-import { sandboxLauncher } from "./sandbox/launcher.js";
-import { envArgs, resolveProgram, within } from "./sandbox/paths.js";
+import { envArgs, resolveProgram, within } from "./paths.js";
+import { sandboxLauncher } from "./sandbox/launch.js";
 import type { Launch, Limits } from "./spawn.js";
 import { emptyOutput, spawnCaptured, unstarted } from "./spawn.js";
 
-type ProcessCommand = ResolvedCommand & { maxOutputBytes?: number };
+type ProcessCommand = ResolvedCommand;
 
 type SandboxContext = {
   program: string;
@@ -22,7 +22,7 @@ type SandboxContext = {
   scratch: string;
   env: NodeJS.ProcessEnv;
   sensitiveEnv?: Record<string, string>;
-  protectedHome?: string;
+  protectedHome: string;
   mode: ExecutionMode;
 };
 
@@ -33,7 +33,7 @@ export type LocalExecutionOptions = {
   mode: ExecutionMode;
   signal?: AbortSignal;
   sensitiveEnv?: Record<string, string>;
-  protectedHome?: string;
+  protectedHome: string;
 };
 
 // Runs inside the sandbox. Credentials arrive through stdin, never launcher argv.
@@ -49,14 +49,8 @@ process.exit(await child.exited);
 
 function commandLimits(command: ProcessCommand): Limits {
   return {
-    timeoutMs: requirePositiveInteger(
-      command.timeoutMs ?? DEFAULT_EXECUTION_TIMEOUT_MS,
-      "timeoutMs",
-    ),
-    maxOutputBytes: requirePositiveInteger(
-      command.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES,
-      "maxOutputBytes",
-    ),
+    timeoutMs: command.timeoutMs ?? DEFAULT_EXECUTION_TIMEOUT_MS,
+    maxOutputBytes: DEFAULT_MAX_OUTPUT_BYTES,
   };
 }
 
@@ -144,14 +138,6 @@ export async function prepareLaunch(
   envArgs(options.sensitiveEnv ?? {});
   const program = await resolveProgram(command.program, cwd, effectiveEnv.PATH ?? "");
 
-  if (options.mode === "full" && !options.protectedHome) {
-    return { cwd, env: effectiveEnv, program, args: command.args, stdin: command.stdin };
-  }
-
-  if (options.mode !== "sandbox" && options.mode !== "full") {
-    throw new Error(`Execution mode '${options.mode}' is unknown. Choose full or sandbox.`);
-  }
-
   return prepareSandbox(command, options, { program, workspace, cwd });
 }
 
@@ -209,10 +195,24 @@ export async function executeLocalCommand(
       throw aborted();
     }
 
-    return await spawnCaptured(launch, limits, options.signal, performance.now());
+    return await spawnCaptured(launch, { ...limits, signal: options.signal });
   } finally {
     if (launch.scratch) {
       await rm(launch.scratch, { recursive: true, force: true });
     }
+  }
+}
+
+export function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+
+    return true;
+  } catch (cause) {
+    if (errnoCode(cause) === "ESRCH") {
+      return false;
+    }
+
+    throw cause;
   }
 }

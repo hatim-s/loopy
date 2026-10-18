@@ -3,11 +3,11 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import ts from "typescript";
+import { renderArgv } from "../src/core/index.js";
 import { initialState, step } from "../src/engine/index.js";
 import { parseCliHelp } from "../src/local/typegen/parse-help";
 import { renderCommandSource } from "../src/local/typegen/render";
 import { defineCommand, loopy } from "../src/sdk/index.js";
-import { renderArgv } from "../src/sdk/render-argv.js";
 
 const help = `Run Codex non-interactively
 

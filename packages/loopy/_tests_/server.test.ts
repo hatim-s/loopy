@@ -33,7 +33,7 @@ import { newRun } from "./fixture.js";
 
 const daemonMetadata = { startedAt: new Date(0).toISOString(), concurrency: 4 };
 
-const servers: ReturnType<typeof startDaemon>[] = [];
+const servers: Awaited<ReturnType<typeof startDaemon>>[] = [];
 
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => server.stop()));
@@ -43,12 +43,12 @@ afterEach(async () => {
   }
 });
 
-function startDaemon(options: { home: string; cwd: string; port: number; assets?: string }) {
+async function startDaemon(options: { home: string; cwd: string; port: number; assets?: string }) {
   const store = openRunStore(options.home);
   const daemon = localDaemon({ concurrency: 4, ...options, store });
 
   return {
-    url: daemon.start(),
+    url: await daemon.start(),
     async stop() {
       await daemon.stop();
       store.close();
@@ -61,7 +61,7 @@ test("API returns run records, step traces and cursor logs", async () => {
 
   await save(f);
   const run = object((await runFixture(f)).stdout);
-  const server = startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
+  const server = await startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
   const token = new URLSearchParams(url.hash.slice(1)).get("token");
@@ -88,7 +88,7 @@ test("the daemon server requires its token and origin, serves pinned assets and 
   const assets = join(f.cwd, "assets");
   mkdirSync(assets);
   writeFileSync(join(assets, "index.html"), "original dashboard");
-  const server = startDaemon({ home: f.home, cwd: f.cwd, assets, port: 0 });
+  const server = await startDaemon({ home: f.home, cwd: f.cwd, assets, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
   const token = new URLSearchParams(url.hash.slice(1)).get("token");
@@ -121,7 +121,7 @@ test("API distinguishes invalid cursors from registry failures", async () => {
   const f = fixture("server-errors", "run: () => 1");
   await save(f);
   const run = object((await runFixture(f)).stdout);
-  const server = startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
+  const server = await startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
   const token = new URLSearchParams(url.hash.slice(1)).get("token");
@@ -145,7 +145,7 @@ test("API returns the contract snapshot, rejects unknown query keys and keeps cu
 
   await save(f);
   const run = object((await runFixture(f)).stdout);
-  const server = startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
+  const server = await startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
   const token = new URLSearchParams(url.hash.slice(1)).get("token");
@@ -168,7 +168,7 @@ test("contract routes start, snapshot, resume and cancel without exposing owner 
   await initialStore.createRun({ ...newRun(), id: "initial", slug: "contract", workspace: f.cwd });
   initialStore.close();
   const initial = { id: "initial" };
-  const server = startDaemon({ ...f, port: 0 });
+  const server = await startDaemon({ ...f, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
 
@@ -220,7 +220,7 @@ test("SPA routes fall back to pinned index but missing files stay 404", async ()
   const assets = join(f.cwd, "assets");
   mkdirSync(assets);
   writeFileSync(join(assets, "index.html"), "SPA");
-  const server = startDaemon({ ...f, port: 0, assets });
+  const server = await startDaemon({ ...f, port: 0, assets });
   servers.push(server);
   const origin = new URL(server.url).origin;
   expect(await (await fetch(`${origin}/runs/some-run`)).text()).toBe("SPA");
@@ -382,7 +382,7 @@ test("SSE delivers exact transactions across replay, cross-process writes and La
   await save(f);
   const store = openRunStore(f.home);
   const daemon = localDaemon({ concurrency: 4, ...f, store, port: 0 });
-  const url = new URL(daemon.start());
+  const url = new URL(await daemon.start());
 
   const headers = {
     Authorization: `Bearer ${new URLSearchParams(url.hash.slice(1)).get("token")}`,
@@ -637,7 +637,7 @@ test("run paging includes every run sharing a timestamp", async () => {
 async function httpEvents(name: string) {
   const { f, store } = await serviceFixture(name);
   const daemon = localDaemon({ concurrency: 4, ...f, store, port: 0 });
-  const url = new URL(daemon.start());
+  const url = new URL(await daemon.start());
   const headers = { Authorization: `Bearer ${readDaemonFile(f.home)!.token}` };
   const endpoint = `${url.origin}/api/events?after=0&epoch=${await store.epoch()}`;
 
@@ -797,7 +797,7 @@ test("local server leaves event pruning to the runtime daemon", async () => {
   const daemon = localDaemon({ concurrency: 4, ...f, store, port: 0 });
 
   try {
-    daemon.start();
+    await daemon.start();
     expect(prune).not.toHaveBeenCalled();
     await daemon.tick();
     expect(prune).toHaveBeenCalledTimes(1);
@@ -898,7 +898,7 @@ test("schedule PUT publishes a saved SSE frame", async () => {
 
 test("cursor endpoint bootstraps an empty dashboard and follows new events", async () => {
   const f = fixture("cursor", "run: () => 1");
-  const server = startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
+  const server = await startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
   const token = new URLSearchParams(url.hash.slice(1)).get("token");

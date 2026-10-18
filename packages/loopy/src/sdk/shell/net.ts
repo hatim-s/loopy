@@ -1,5 +1,5 @@
+import type { RenderInput } from "../../core/index.js";
 import { descriptorCommand } from "../descriptor.js";
-import type { RenderInput } from "../render-argv.js";
 import { CURL_WRITE_OUT, parseCurl } from "./parse/net.js";
 
 function curlInput(input: RenderInput): RenderInput {

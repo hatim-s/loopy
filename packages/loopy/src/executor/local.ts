@@ -2,23 +2,15 @@ import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   type ExecutionKey,
-  type ExecutionMode,
   type ExecutionResult,
   type ExecutionSpec,
   type Executor,
-  errnoCode,
   executionKeyString,
 } from "../core/index.js";
-import { spawnCaptured } from "../local/execution-host.js";
+import type { Options } from "./options.js";
+import { processAlive } from "./process.js";
 import { finishReceipt, lookupFile, receiptPath } from "./receipts.js";
-
-type Options = {
-  home: string;
-  workspace: string;
-  mode: ExecutionMode;
-  secrets: readonly string[];
-  bundlePath: (hash: string) => string;
-};
+import { spawnCaptured } from "./spawn.js";
 
 export class LocalExecutor implements Executor {
   constructor(private readonly options: Options) {}
@@ -38,15 +30,11 @@ export class LocalExecutor implements Executor {
       return receipt;
     }
 
-    try {
-      process.kill(receipt.pid, 0);
-
+    if (processAlive(receipt.pid)) {
       return { kind: "started" as const };
-    } catch (cause) {
-      if (errnoCode(cause) !== "ESRCH") {
-        throw cause;
-      }
+    }
 
+    {
       const latest = await lookupFile(path);
 
       if (latest.kind === "finished") {
@@ -102,9 +90,7 @@ export class LocalExecutor implements Executor {
         env: { PATH: process.env.PATH },
         stdin: JSON.stringify({ options: { ...this.options, bundles }, key, attempt, spec }),
       },
-      { timeoutMs: 24 * 60 * 60_000, maxOutputBytes: 64 * 1024 },
-      signal,
-      performance.now(),
+      { timeoutMs: 24 * 60 * 60_000, maxOutputBytes: 64 * 1024, signal },
     );
 
     const receipt = await this.lookup(key, attempt);

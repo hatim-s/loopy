@@ -10,7 +10,8 @@ import {
 } from "node:fs";
 import { join, resolve } from "node:path";
 import { isString, requireRecord, setOwnProperty, validateSecretName } from "../core/index.js";
-import { errnoCode, withLockDirectory, writeFileAtomically } from "./fs.js";
+import { writeFileAtomically } from "../executor/index.js";
+import { errnoCode, withLockDirectory } from "./fs.js";
 import { defaultHome } from "./home.js";
 
 const MAX_VALUE_BYTES = 64 * 1024;
@@ -152,24 +153,27 @@ export class SecretStore {
     return value;
   }
 
-  private update(change: (values: Record<string, string>) => void): void {
+  private async update(change: (values: Record<string, string>) => void): Promise<void> {
     this.directoryExists(true);
-    withLockDirectory(join(this.directory, ".secrets.lock"), "secret update", () => {
+    await withLockDirectory(join(this.directory, ".secrets.lock"), "secret update", async () => {
       const values = this.snapshot();
       change(values);
-      writeFileAtomically(this.file, `${JSON.stringify(values)}\n`, 0o600);
+      await writeFileAtomically(this.file, `${JSON.stringify(values)}\n`, {
+        mode: 0o600,
+        syncDirectory: true,
+      });
     });
   }
 
-  set(name: string, value: string): void {
+  async set(name: string, value: string): Promise<void> {
     validateSecretName(name);
     validateSecretValue(value);
-    this.update((values) => setOwnProperty(values, name, value));
+    await this.update((values) => setOwnProperty(values, name, value));
   }
 
-  remove(name: string): void {
+  async remove(name: string): Promise<void> {
     validateSecretName(name);
-    this.update((values) => {
+    await this.update((values) => {
       delete values[name];
     });
   }

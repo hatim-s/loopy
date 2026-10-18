@@ -1,8 +1,9 @@
-import { lstat, mkdir, open, readFile, realpath, rename } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { lstat, mkdir, open, readFile, realpath } from "node:fs/promises";
+import { join } from "node:path";
 import { z } from "zod";
 import { executionKeySchema, executionResultSchema } from "../contract/index.js";
 import { type ExecutionKey, errnoCode, executionKeyString } from "../core/index.js";
+import { syncDirectory, writeFileAtomically } from "./fs.js";
 
 const identity = { executionKey: executionKeySchema, attempt: z.number().int().positive() };
 
@@ -50,16 +51,6 @@ export async function lookupFile(path: string) {
   }
 }
 
-async function syncDirectory(path: string) {
-  const directory = await open(dirname(path), "r");
-
-  try {
-    await directory.sync();
-  } finally {
-    await directory.close();
-  }
-}
-
 export async function startReceipt(path: string, executionKey: ExecutionKey, attempt: number) {
   const file = await open(path, "wx", 0o600);
 
@@ -76,16 +67,5 @@ export async function startReceipt(path: string, executionKey: ExecutionKey, att
 }
 
 export async function finishReceipt(path: string, value: z.infer<typeof receiptSchema>) {
-  const temporary = `${path}.${process.pid}.tmp`;
-  const file = await open(temporary, "wx", 0o600);
-
-  try {
-    await file.writeFile(JSON.stringify(value));
-    await file.sync();
-  } finally {
-    await file.close();
-  }
-
-  await rename(temporary, path);
-  await syncDirectory(path);
+  await writeFileAtomically(path, JSON.stringify(value), { mode: 0o600, syncDirectory: true });
 }

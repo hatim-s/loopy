@@ -8,6 +8,7 @@ import type { SqliteRunStore } from "../store/index.js";
 import { readDaemonFile, removeDaemonFile, writeDaemonFile } from "./daemon-file.js";
 import { withLockDirectory } from "./fs.js";
 import { Registry } from "./registry.js";
+import { SecretStore } from "./secrets.js";
 import { startServer } from "./server/start-server.js";
 import { LoopyService } from "./service.js";
 
@@ -42,7 +43,9 @@ function runtimeDaemon(options: DaemonOptions) {
           home,
           workspace: run.workspace,
           mode: graph.meta.mode,
-          secrets: graph.meta.secrets,
+          secrets: Object.fromEntries(
+            graph.meta.secrets.map((name) => [name, new SecretStore(home).get(name)]),
+          ),
           bundlePath: (hash) => registry.bundlePath(hash),
         }),
       };
@@ -76,7 +79,7 @@ class LocalDaemon {
     this.daemon.wake();
   }
 
-  start(): string {
+  async start(): Promise<string> {
     if (this.server) {
       return this.server.url;
     }
@@ -86,7 +89,7 @@ class LocalDaemon {
     );
   }
 
-  private startLocked(): string {
+  private async startLocked(): Promise<string> {
     if (this.server) {
       return this.server.url;
     }
@@ -108,7 +111,7 @@ class LocalDaemon {
     });
 
     try {
-      writeDaemonFile(home, {
+      await writeDaemonFile(home, {
         pid: process.pid,
         port: server.port,
         token: this.token,
@@ -124,8 +127,8 @@ class LocalDaemon {
     return server.url;
   }
 
-  run(): Promise<void> {
-    this.start();
+  async run(): Promise<void> {
+    await this.start();
 
     return this.daemon.run();
   }

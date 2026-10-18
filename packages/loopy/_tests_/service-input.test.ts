@@ -21,7 +21,7 @@ async function setup() {
   });
 
   const registry = new Registry(f.home, f.workspace);
-  registry.save({
+  await registry.save({
     graph,
     revision: await revision(graph),
     bundles: [],

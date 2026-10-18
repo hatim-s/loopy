@@ -2,7 +2,7 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { PutLoopyBody } from "../contract/index.js";
 import { bundleRefs, canonicalJson, revision, sha256Hex, validateGraph } from "../core/index.js";
-import { writeFileAtomically } from "./fs.js";
+import { writeFileAtomically } from "../executor/index.js";
 import type { Registry } from "./registry.js";
 
 export async function saveCompiled(registry: Registry, body: PutLoopyBody) {
@@ -50,11 +50,17 @@ export async function saveCompiled(registry: Registry, body: PutLoopyBody) {
   await mkdir(join(registry.home, "bundles"), { recursive: true, mode: 0o700 });
 
   for (const value of bundles) {
-    writeFileAtomically(registry.bundlePath(value.bundleHash), value.bytes, 0o600);
+    await writeFileAtomically(registry.bundlePath(value.bundleHash), value.bytes, {
+      mode: 0o600,
+      syncDirectory: true,
+    });
   }
 
   await mkdir(join(registry.home, "graphs"), { recursive: true, mode: 0o700 });
-  writeFileAtomically(registry.graphPath(body.revision), canonicalJson(body.graph), 0o600);
+  await writeFileAtomically(registry.graphPath(body.revision), canonicalJson(body.graph), {
+    mode: 0o600,
+    syncDirectory: true,
+  });
 
   return registry.save(body);
 }

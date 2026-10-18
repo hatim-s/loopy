@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { commandNodeSchema, executionErrorSchema } from "./graph.js";
+import { executionErrorSchema } from "./graph.js";
 import { jsonSchema } from "./json.js";
 
 export const attemptLogSchema = z.strictObject({ message: z.string(), data: jsonSchema });
@@ -29,9 +29,8 @@ export const executionSpecSchema = z.discriminatedUnion("kind", [
   }),
   z.strictObject({
     kind: z.literal("command"),
-    node: commandNodeSchema,
     argv: z.array(z.string()),
-    flags: dictionary,
+    okExitCodes: z.array(z.number()),
     cwd: z.string().nullable(),
     env: z.record(z.string(), z.string()),
     stdin: z.string().nullable(),

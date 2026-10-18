@@ -1,4 +1,15 @@
-import type { CommandDefinition, FlagDefinition } from "./define-command.js";
+import type { CommandFlag, CommandFlagSpec } from "./graph.js";
+
+type FlagDefinition = CommandFlag;
+
+type CommandDefinition = Partial<Omit<CommandFlagSpec, "path" | "flags">> & {
+  readonly path?: readonly string[];
+  readonly flags?: Readonly<Record<string, CommandFlag>>;
+} & {
+  readonly program: string;
+  readonly revisionPaths?: boolean;
+  readonly positionals?: readonly { readonly optional?: boolean; readonly variadic?: boolean }[];
+};
 
 // BOUNDARY: JavaScript command inputs are checked against descriptor flags and arity below.
 export type RenderInput = {

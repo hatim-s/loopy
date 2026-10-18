@@ -26,7 +26,7 @@ test("daemon publishes a private discovery file and removes it on clean shutdown
   const daemon = localDaemon({ home, cwd, store, port: 0, concurrency: 2 });
 
   try {
-    const url = new URL(daemon.start());
+    const url = new URL(await daemon.start());
     expect(statSync(join(home, "daemon.json")).mode & 0o777).toBe(0o600);
     const record = readDaemonFile(home);
     expect(record).toMatchObject({

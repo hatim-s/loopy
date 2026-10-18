@@ -72,11 +72,9 @@ export * from "./node-run.js";
 export * from "./process.js";
 
 export * from "./rate-limit.js";
-
+export { type RenderInput, renderArgv, renderOperands } from "./render-argv.js";
 export { bundleRefs, revision, sha256Hex } from "./revision.js";
-
 export * from "./store.js";
-
 export {
   allowKeys,
   isBoolean,

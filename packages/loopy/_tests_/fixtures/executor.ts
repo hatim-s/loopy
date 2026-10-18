@@ -28,7 +28,7 @@ export async function fixture() {
     home,
     workspace,
     mode: "sandbox",
-    secrets: [],
+    secrets: {},
     bundlePath: () => bundle,
   });
 

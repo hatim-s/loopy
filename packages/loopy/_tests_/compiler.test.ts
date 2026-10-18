@@ -166,6 +166,19 @@ for (const effect of ["network", "write"]) {
   });
 }
 
+test("compiler sandbox denies reads of daemon secrets inside the workspace", async () => {
+  const { root, file } = await project("export default {};");
+  const graph = JSON.stringify((await compiledBody("isolated", file)).graph);
+  const home = join(root, "home");
+  const secrets = join(home, "secrets.json");
+  await Bun.write(secrets, '{"TOKEN":"private"}');
+  const source = `await Bun.file(${JSON.stringify(secrets)}).text(); export default {graph:${graph}};`;
+  await writeFile(file, source);
+  await expect(evaluate(file, [{ file, source, evaluated: source }], home)).rejects.toThrow(
+    /permitted|denied|EACCES|EPERM/i,
+  );
+});
+
 test("evaluation has a hard ten second timeout", async () => {
   const { file } = await project("while(true){} export default {};");
   const source = await Bun.file(file).text();

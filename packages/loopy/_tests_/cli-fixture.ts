@@ -6,6 +6,7 @@ import { requireRecord } from "../src/core/index.js";
 import { LocalExecutor } from "../src/executor/index.js";
 import { activate, SYSTEM_CLOCK } from "../src/host/index.js";
 import { LoopyService, openRunStore, Registry } from "../src/local/index.js";
+import { SecretStore } from "../src/local/secrets.js";
 
 export const roots: string[] = [];
 
@@ -104,7 +105,9 @@ export async function runFixture(f: ReturnType<typeof fixture>) {
         home: f.home,
         workspace: f.cwd,
         mode: saved.mode,
-        secrets: saved.secrets,
+        secrets: Object.fromEntries(
+          saved.secrets.map((name) => [name, new SecretStore(f.home).get(name)]),
+        ),
         bundlePath: (hash) => new Registry(f.home, f.cwd).bundlePath(hash),
       }),
     });

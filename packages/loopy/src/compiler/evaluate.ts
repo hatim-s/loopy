@@ -1,9 +1,9 @@
 import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { diagnosticSchema, graphSchema } from "../contract/index.js";
 import type { Diagnostic } from "../core/index.js";
-import { compilerLauncher, spawnCaptured } from "../local/index.js";
+import { spawnCaptured, withBundleSandbox } from "../executor/index.js";
 import { typescriptPaths } from "./source.js";
 import type { AuthorModule } from "./types.js";
 
@@ -21,7 +21,11 @@ function reportedDiagnostic(stderr: string) {
   }
 }
 
-export async function evaluate(file: string, modules: AuthorModule[]) {
+export async function evaluate(
+  file: string,
+  modules: AuthorModule[],
+  home = resolve(process.env.LOOPY_HOME ?? join(homedir(), ".loopy")),
+) {
   const scratch = await realpath(await mkdtemp(join(tmpdir(), "loopy-compiler-")));
 
   try {
@@ -81,18 +85,19 @@ export async function evaluate(file: string, modules: AuthorModule[]) {
     const executable = join(scratch, "evaluate.js");
     await writeFile(executable, new Uint8Array(await output.arrayBuffer()));
     const cwd = await realpath(dirname(file));
-    const [program, args] = await compilerLauncher(await realpath(process.execPath), cwd);
 
-    const captured = await spawnCaptured(
+    const captured = await withBundleSandbox(
       {
-        program,
-        args: [...args, "--smol", executable],
-        cwd,
-        env: { PATH: "/usr/bin:/bin", HOME: cwd, TMPDIR: cwd },
+        bundle: executable,
+        workspace: cwd,
+        network: false,
+        home,
       },
-      { timeoutMs: 10_000, maxOutputBytes: 16 * 1024 * 1024 },
-      undefined,
-      performance.now(),
+      ({ program, args }) =>
+        spawnCaptured(
+          { program, args, cwd, env: { PATH: "/usr/bin:/bin", HOME: cwd, TMPDIR: cwd } },
+          { timeoutMs: 10_000, maxOutputBytes: 16 * 1024 * 1024 },
+        ),
     );
 
     if (captured.exitCode !== 0) {

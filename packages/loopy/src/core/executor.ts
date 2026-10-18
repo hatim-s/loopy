@@ -1,4 +1,3 @@
-import type { Node } from "./graph.js";
 import type { Json } from "./model.js";
 import type { ExecutionKey } from "./node-run.js";
 
@@ -6,9 +5,8 @@ export type ExecutionSpec =
   | { kind: "code"; bundleHash: string; input: Record<string, Json>; timeoutMs: number }
   | {
       kind: "command";
-      node: Extract<Node, { kind: "command" }>;
       argv: string[];
-      flags: Record<string, Json>;
+      okExitCodes: number[];
       cwd: string | null;
       env: Record<string, string>;
       stdin: string | null;

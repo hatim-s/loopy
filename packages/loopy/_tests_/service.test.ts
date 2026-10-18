@@ -41,7 +41,7 @@ async function fixture(definition = "") {
 
   body.graph.input = { name: "string" };
   body.revision = await revision(body.graph);
-  registry.save(body);
+  await registry.save(body);
   let now = Date.parse("2026-10-17T00:00:00.000Z");
   const clock = { ...SYSTEM_CLOCK, now: () => now };
   const store = openRunStore(home);
