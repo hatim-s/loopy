@@ -1,27 +1,53 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { PutLoopyBody } from "../contract/index.js";
-import { canonicalJson, isRecord, validateSlug } from "../core/index.js";
+import {
+  graphSchema,
+  hashSchema,
+  type PutLoopyBody,
+  type SavedLoopy,
+  savedLoopySchema,
+} from "../contract/index.js";
+import {
+  bundleRefs,
+  canonicalJson,
+  type Graph,
+  revision,
+  sha256Hex,
+  validateGraph,
+} from "../core/index.js";
 import { writeFileAtomically } from "../executor/index.js";
 import { canonicalPath, withLockDirectory } from "./fs.js";
-import { parseSavedLoopy, type SavedLoopy } from "./saved-loopy.js";
+import { ServiceError } from "./service-error.js";
 
 function readEntry(file: string) {
-  const value: unknown = JSON.parse(readFileSync(file, "utf8"));
-
-  if (isRecord(value) && "version" in value && value.version === 2) {
-    return parseSavedLoopy(value);
-  }
-
-  return null;
+  return savedLoopySchema.parse(JSON.parse(readFileSync(file, "utf8")));
 }
 
-function sameSave(previous: SavedLoopy, body: PutLoopyBody) {
-  return (
-    previous.source === canonicalPath(body.source.path) &&
-    previous.revision === body.revision &&
-    canonicalJson(previous.graph.meta) === canonicalJson(body.graph.meta)
-  );
+function cleanEntries(directory: string) {
+  if (!existsSync(directory)) {
+    return;
+  }
+
+  for (const name of readdirSync(directory).filter((name) => name.endsWith(".json"))) {
+    const file = join(directory, name);
+    const contents = readFileSync(file, "utf8");
+    let value: unknown;
+
+    try {
+      value = JSON.parse(contents);
+    } catch (error) {
+      if (!(error instanceof SyntaxError)) {
+        throw error;
+      }
+
+      rmSync(file);
+      continue;
+    }
+
+    if (!savedLoopySchema.safeParse(value).success) {
+      rmSync(file);
+    }
+  }
 }
 
 export class Registry {
@@ -36,30 +62,27 @@ export class Registry {
     this.project = projectRoot(cwd);
     this.projectDirectory = join(this.project, ".loopy", "loopies");
     this.globalDirectory = join(home, "loopies");
+    cleanEntries(this.projectDirectory);
+    cleanEntries(this.globalDirectory);
   }
 
-  private files(slug: string) {
-    validateSlug(slug);
-
-    return [this.projectDirectory, this.globalDirectory].map((directory) =>
-      join(directory, `${slug}.json`),
-    );
+  private entryFile(slug: string, scope: Graph["meta"]["scope"]) {
+    return join(scope === "project" ? this.projectDirectory : this.globalDirectory, `${slug}.json`);
   }
 
   get(slug: string): SavedLoopy {
-    for (const file of this.files(slug)) {
-      if (!existsSync(file)) {
-        continue;
-      }
+    for (const scope of ["project", "global"] as const) {
+      const file = this.entryFile(slug, scope);
 
-      const entry = readEntry(file);
-
-      if (entry) {
-        return entry;
+      if (existsSync(file)) {
+        return readEntry(file);
       }
     }
 
-    throw new Error(`No saved loopy '${slug}'. Use loopy save <file.ts> first.`);
+    throw new ServiceError(
+      "not_found",
+      `No saved loopy '${slug}'. Use loopy save <file.ts> first.`,
+    );
   }
 
   list(): SavedLoopy[] {
@@ -72,61 +95,70 @@ export class Registry {
 
       for (const file of readdirSync(directory).filter((name) => name.endsWith(".json"))) {
         const entry = readEntry(join(directory, file));
-
-        if (entry) {
-          entries.set(entry.slug, entry);
-        }
+        entries.set(entry.graph.name, entry);
       }
     }
 
-    return [...entries.values()].sort((a, b) => a.slug.localeCompare(b.slug));
-  }
-
-  unchanged(body: PutLoopyBody) {
-    const files = this.files(body.graph.name);
-    const file = body.graph.meta.scope === "project" ? files[0] : files[1];
-    const previous = file && existsSync(file) ? readEntry(file) : null;
-
-    return previous && sameSave(previous, body)
-      ? { ok: true as const, entry: previous }
-      : { ok: false as const };
+    return [...entries.values()].sort((a, b) => a.graph.name.localeCompare(b.graph.name));
   }
 
   async save(body: PutLoopyBody): Promise<SavedLoopy> {
-    const { graph, revision, source, replace, bundles } = body;
-    const meta = graph.meta;
+    const { graph, source, replace } = body;
+    const diagnostics = validateGraph(graph);
+
+    if (diagnostics.length > 0) {
+      throw new ServiceError("bad_request", diagnostics.map((item) => item.message).join("\n"));
+    }
+
+    const expected = bundleRefs(graph);
+
+    if (expected.length !== body.bundles.length) {
+      throw new ServiceError(
+        "bad_request",
+        "Supply exactly one bundle for each code node and parser in node order.",
+      );
+    }
+
+    if ((await revision(graph)) !== body.revision) {
+      throw new ServiceError("bad_request", "The graph revision does not match its contents.");
+    }
+
+    const bundles = await Promise.all(
+      body.bundles.map(async (encoded) => {
+        const bytes = Buffer.from(encoded, "base64");
+
+        return { bytes, bundleHash: await sha256Hex(bytes) };
+      }),
+    );
+
+    if (bundles.some((bundle, index) => bundle.bundleHash !== expected[index]?.bundleHash)) {
+      throw new ServiceError("bad_request", "Bundle bytes do not match their hash.");
+    }
+
+    await this.writeArtifacts(bundles, body.revision, graph);
     const owner = canonicalPath(source.path);
-    const files = this.files(graph.name);
-    const directory = meta.scope === "project" ? this.projectDirectory : this.globalDirectory;
-    const file = join(directory, `${graph.name}.json`);
+    const file = this.entryFile(graph.name, graph.meta.scope);
     mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
 
     return withLockDirectory(`${file}.lock`, "save", async () => {
       const previous = existsSync(file) ? readEntry(file) : null;
 
       if (previous && previous.source !== owner && !replace) {
-        throw new Error(
+        throw new ServiceError(
+          "source_conflict",
           `Slug '${graph.name}' belongs to another source. Rename it or use --replace.`,
         );
       }
 
-      if (previous && sameSave(previous, body)) {
+      if (previous && previous.source === owner && previous.revision === body.revision) {
         return previous;
       }
 
       const entry: SavedLoopy = {
         version: 2,
-        slug: graph.name,
-        scope: meta.scope,
-        graph,
-        revision,
-        bundles: bundles.map(({ nodeId, bundleHash }) => ({ nodeId, bundleHash })),
+        revision: body.revision,
         source: owner,
-        description: meta.description,
-        input: graph.input,
-        schedule: meta.schedule,
-        mode: meta.mode,
-        secrets: meta.secrets,
+        graph,
         savedAt: new Date().toISOString(),
       };
 
@@ -135,29 +167,56 @@ export class Registry {
         syncDirectory: true,
       });
 
-      for (const other of files.filter((candidate) => candidate !== file)) {
-        if (existsSync(other) && readEntry(other)?.source === owner) {
-          rmSync(other);
-        }
+      const other = this.entryFile(
+        graph.name,
+        graph.meta.scope === "project" ? "global" : "project",
+      );
+
+      if (existsSync(other) && readEntry(other).source === owner) {
+        rmSync(other);
       }
 
       return entry;
     });
   }
 
-  private artifactPath(directory: string, hash: string, extension: string): string {
-    if (!/^[a-f0-9]{64}$/.test(hash)) {
-      throw new Error("Invalid artifact hash. Save the loopy again.");
-    }
-
-    return join(this.home, directory, `${hash}.${extension}`);
+  async readGraph(revision: string) {
+    return graphSchema.parse(await Bun.file(this.graphPath(revision)).json());
   }
 
-  bundlePath(hash: string): string {
+  async writeArtifacts(
+    bundles: readonly { bundleHash: string; bytes: Uint8Array }[],
+    revision: string,
+    graph: Graph,
+  ) {
+    for (const directory of ["bundles", "graphs"]) {
+      mkdirSync(join(this.home, directory), { recursive: true, mode: 0o700 });
+    }
+
+    for (const bundle of bundles) {
+      const file = this.bundlePath(bundle.bundleHash);
+
+      if (!existsSync(file)) {
+        await writeFileAtomically(file, bundle.bytes, { mode: 0o600, syncDirectory: true });
+      }
+    }
+
+    const file = this.graphPath(revision);
+
+    if (!existsSync(file)) {
+      await writeFileAtomically(file, canonicalJson(graph), { mode: 0o600, syncDirectory: true });
+    }
+  }
+
+  private artifactPath(directory: string, hash: string, extension: string) {
+    return join(this.home, directory, `${hashSchema.parse(hash)}.${extension}`);
+  }
+
+  bundlePath(hash: string) {
     return this.artifactPath("bundles", hash, "js");
   }
 
-  graphPath(revision: string): string {
+  private graphPath(revision: string) {
     return this.artifactPath("graphs", revision, "json");
   }
 }

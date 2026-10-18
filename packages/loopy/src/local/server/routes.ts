@@ -16,6 +16,7 @@ const STATUS: Record<ErrorCode, number> = {
   not_claimable: 409,
   owned_elsewhere: 409,
   bad_request: 400,
+  source_conflict: 409,
   missing_secret: 400,
   invalid_schedule: 400,
   stale_cursor: 410,

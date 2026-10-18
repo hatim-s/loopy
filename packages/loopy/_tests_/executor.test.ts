@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { compile } from "../src/compiler/index.js";
+import { revision } from "../src/core/index.js";
 import { LocalExecutor } from "../src/executor/index.js";
 import { bundleStopped, bundleSucceeded } from "../src/executor/protocol.js";
 import { receiptPath } from "../src/executor/receipts.js";
@@ -66,10 +67,7 @@ export default loopy("sequence", {input: {}, run: () => {sh.exec(["printf", "raw
     await service.putLoopy("sequence", {
       graph: compiled.graph,
       revision: compiled.revision,
-      bundles: compiled.bundles.map((bundle) => ({
-        ...bundle,
-        bytes: Buffer.from(bundle.bytes).toString("base64"),
-      })),
+      bundles: compiled.bundles.map((bundle) => Buffer.from(bundle.bytes).toString("base64")),
       replace: false,
       source: { path: source, workspace: f.workspace },
     });
@@ -87,10 +85,7 @@ export default loopy("sequence", {input: {}, run: () => {sh.exec(["printf", "raw
     await service.putLoopy("sequence", {
       graph: replacement.graph,
       revision: replacement.revision,
-      bundles: replacement.bundles.map((bundle) => ({
-        ...bundle,
-        bytes: Buffer.from(bundle.bytes).toString("base64"),
-      })),
+      bundles: replacement.bundles.map((bundle) => Buffer.from(bundle.bytes).toString("base64")),
       replace: false,
       source: { path: source, workspace: f.workspace },
     });
@@ -250,8 +245,7 @@ test("a missing declared secret persists and reports its stable preparation code
   const store = openRunStore(f.home);
   const registry = new Registry(f.home, f.workspace);
   const graph = loopy("missing-secret", { input: {}, secrets: ["TOKEN"], run: () => null }).graph;
-  const rev = "b".repeat(64);
-  await Bun.write(registry.graphPath(rev), JSON.stringify(graph));
+  const rev = await revision(graph);
   await registry.save({
     graph,
     revision: rev,

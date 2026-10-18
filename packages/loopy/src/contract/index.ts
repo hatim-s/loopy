@@ -16,6 +16,7 @@ export {
 } from "./api.js";
 
 export {
+  hashSchema,
   type PutLoopyBody,
   putLoopyBodySchema,
   type SavedLoopy,

@@ -33,10 +33,7 @@ export async function runSave(context: CliContext): Promise<void> {
         body: {
           graph: result.graph,
           revision: result.revision,
-          bundles: result.bundles.map((value) => ({
-            ...value,
-            bytes: Buffer.from(value.bytes).toString("base64"),
-          })),
+          bundles: result.bundles.map((value) => Buffer.from(value.bytes).toString("base64")),
           source: {
             path: source,
             workspace,

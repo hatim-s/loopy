@@ -1,6 +1,4 @@
-import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { graphSchema } from "../contract/index.js";
 import type { RunRecord } from "../core/index.js";
 import { LocalExecutor } from "../executor/index.js";
 import { Daemon, SYSTEM_CLOCK } from "../host/index.js";
@@ -33,9 +31,7 @@ function runtimeDaemon(options: DaemonOptions) {
     prepare: async (run) => {
       const registry = new Registry(home, run.workspace);
 
-      const graph = graphSchema.parse(
-        JSON.parse(await readFile(registry.graphPath(run.revision), "utf8")),
-      );
+      const graph = await registry.readGraph(run.revision);
 
       return {
         graph,

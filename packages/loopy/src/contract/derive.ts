@@ -7,6 +7,7 @@ import {
   type Schedule,
   type StepRecord,
 } from "../core/index.js";
+import type { SavedLoopy } from "./compiled-loopy.js";
 import type { GraphView } from "./graph.js";
 import type { LoopyView, RunView, ServerEvent } from "./views.js";
 
@@ -110,15 +111,9 @@ export function runView(options: RunViewOptions): RunView {
   };
 }
 
-type SavedLoopyInput = Pick<LoopyView, "slug" | "scope" | "mode"> & {
-  description?: string | null;
-  input: Readonly<LoopyView["input"]>;
-  schedule?: { cron: string; tz: string } | null;
-};
-
 function scheduleView(
   schedule: Schedule | null,
-  declared: SavedLoopyInput["schedule"],
+  declared: SavedLoopy["graph"]["meta"]["schedule"],
 ): LoopyView["schedule"] {
   if (schedule === null) {
     // LoopyView can show a schedule declared in the definition, not scheduled yet.
@@ -136,11 +131,11 @@ function scheduleView(
 }
 
 export function loopyView(
-  saved: SavedLoopyInput,
+  saved: Pick<SavedLoopy, "graph">,
   schedule: Schedule | null,
   runs: RunView[],
 ): LoopyView {
-  const matching = runs.filter((run) => run.slug === saved.slug);
+  const matching = runs.filter((run) => run.slug === saved.graph.name);
 
   const counts: LoopyView["counts"] = {
     queued: 0,
@@ -162,12 +157,12 @@ export function loopyView(
   }
 
   return {
-    slug: saved.slug,
-    description: saved.description ?? null,
-    scope: saved.scope,
-    mode: saved.mode,
-    input: saved.input,
-    schedule: scheduleView(schedule, saved.schedule),
+    slug: saved.graph.name,
+    description: saved.graph.meta.description ?? null,
+    scope: saved.graph.meta.scope,
+    mode: saved.graph.meta.mode,
+    input: saved.graph.input,
+    schedule: scheduleView(schedule, saved.graph.meta.schedule),
     lastRun,
     counts,
   };

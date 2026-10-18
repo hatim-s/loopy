@@ -1,9 +1,9 @@
 import { expect, expectTypeOf, test } from "bun:test";
 import type { z } from "zod";
+import type { SavedLoopy } from "../src/contract/index.js";
 import * as contract from "../src/contract/index.js";
 import type * as core from "../src/core/index.js";
 import { NODE_RUN_STATUSES, PREDICATE_SHAPES } from "../src/core/index.js";
-import type { SavedLoopy } from "../src/local/saved-loopy.js";
 import { newRun } from "./fixture.js";
 import { approveDemoGraph } from "./fixtures/graphs.js";
 
@@ -153,18 +153,15 @@ test("waitingOn uses only the latest waiting hook step and an unresolved unexpir
 
 test("loopy views count matching runs and choose the newest without leaking registry fields", () => {
   const saved: SavedLoopy = {
-    slug: "test",
-    scope: "project",
-    input: { value: "number" },
-    mode: "sandbox",
     source: "/private/source",
-    secrets: ["SECRET"],
     version: 2,
-    graph: approveDemoGraph,
+    graph: {
+      ...approveDemoGraph,
+      name: "test",
+      input: { value: "number" },
+      meta: { ...approveDemoGraph.meta, secrets: ["SECRET"] },
+    },
     revision: "private",
-    bundles: [],
-    description: null,
-    schedule: null,
     savedAt: now,
   };
 
@@ -246,18 +243,15 @@ test("serialized loopy and snapshot views exclude private registry and owner key
   });
 
   const saved: SavedLoopy = {
-    slug: "test",
-    scope: "project",
-    mode: "sandbox",
-    input: {},
     source: "/private/source",
-    secrets: ["SECRET"],
     version: 2,
-    graph: approveDemoGraph,
+    graph: {
+      ...approveDemoGraph,
+      name: "test",
+      input: { value: "number" },
+      meta: { ...approveDemoGraph.meta, secrets: ["SECRET"] },
+    },
     revision: "private",
-    bundles: [],
-    description: null,
-    schedule: null,
     savedAt: now,
   };
 
@@ -342,11 +336,11 @@ test("schedule wire fields normalize core nullability and preserve every field",
 
 test("loopy declared schedule is visible until a persisted schedule overrides it", () => {
   const saved = {
-    slug: "test",
-    scope: "project",
-    mode: "sandbox",
-    input: {},
-    schedule: { cron: "0 * * * *", tz: "UTC" },
+    graph: {
+      ...approveDemoGraph,
+      name: "test",
+      meta: { ...approveDemoGraph.meta, schedule: { cron: "0 * * * *", tz: "UTC" } },
+    },
   } satisfies Parameters<typeof contract.loopyView>[0];
 
   expect(contract.loopyView(saved, null, []).schedule).toEqual({

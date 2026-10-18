@@ -52,7 +52,6 @@ test("save posts a compiled graph and graph prints the same redacted view by fil
     version: 2,
     graph: { name: "compiled" },
     revision: expect.stringMatching(/^[a-f0-9]{64}$/),
-    bundles: [],
   });
   expect(entry).not.toHaveProperty("bundleHash");
 });
@@ -186,7 +185,7 @@ test("save preserves every author option from graph meta", async () => {
   );
   expect(await cli(f, "save", f.file)).toMatchObject({ code: 0, stderr: "" });
   const saved = new Registry(f.home, f.cwd).get("metadata");
-  expect(saved).toMatchObject({ ...meta, input: { count: "number" }, graph: { meta } });
+  expect(saved.graph).toMatchObject({ meta, input: { count: "number" } });
 });
 
 test("HTTP schedule enable, disable and off persist their state", async () => {

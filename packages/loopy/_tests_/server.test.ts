@@ -133,7 +133,9 @@ test("API distinguishes invalid cursors from registry failures", async () => {
     expect(errorBodySchema.parse(await response.json()).error.code).toBe("bad_request");
   }
 
-  writeFileSync(join(f.cwd, ".loopy", "loopies", "server-errors.json"), "invalid JSON");
+  const entry = join(f.cwd, ".loopy", "loopies", "server-errors.json");
+  rmSync(entry);
+  mkdirSync(entry);
   const failed = await fetch(`${url.origin}/api/loopies`, { headers });
   expect(failed.status).toBe(500);
   expect(errorBodySchema.parse(await failed.json()).error.code).toBe("internal");
@@ -955,10 +957,7 @@ test("compiled save route verifies artifacts, stores private bundles and returns
     replace: true,
     graph: result.graph,
     revision: result.revision,
-    bundles: result.bundles.map((bundle) => ({
-      ...bundle,
-      bytes: Buffer.from(bundle.bytes).toString("base64"),
-    })),
+    bundles: result.bundles.map((bundle) => Buffer.from(bundle.bytes).toString("base64")),
   };
 
   const table = apiRoutes({ service, store, cwd: f.cwd, daemon: daemonMetadata });
@@ -978,10 +977,7 @@ test("compiled save route verifies artifacts, stores private bundles and returns
     (
       await put({
         ...body,
-        bundles: body.bundles.map((bundle) => ({
-          ...bundle,
-          bytes: Buffer.from("changed").toString("base64"),
-        })),
+        bundles: body.bundles.map(() => Buffer.from("changed").toString("base64")),
       })
     ).status,
   ).toBe(400);
@@ -994,8 +990,8 @@ test("compiled save route verifies artifacts, stores private bundles and returns
 
   const paths = [
     join(registry.projectDirectory, "compiled-save.json"),
-    registry.graphPath(saved.revision),
-    ...saved.bundles.map((bundle) => registry.bundlePath(bundle.bundleHash)),
+    join(registry.home, "graphs", `${saved.revision}.json`),
+    ...result.bundles.map((bundle) => registry.bundlePath(bundle.bundleHash)),
   ];
 
   const before = artifactState(paths);
@@ -1006,10 +1002,7 @@ test("compiled save route verifies artifacts, stores private bundles and returns
     (
       await put({
         ...body,
-        bundles: body.bundles.map((bundle) => ({
-          ...bundle,
-          bytes: Buffer.from("forged").toString("base64"),
-        })),
+        bundles: body.bundles.map(() => Buffer.from("forged").toString("base64")),
       })
     ).status,
   ).toBe(400);
@@ -1026,8 +1019,8 @@ test("compiled save route verifies artifacts, stores private bundles and returns
 
   const globalPaths = [
     join(registry.globalDirectory, "compiled-save.json"),
-    registry.graphPath(globalBody.revision),
-    ...saved.bundles.map((bundle) => registry.bundlePath(bundle.bundleHash)),
+    join(registry.home, "graphs", `${globalBody.revision}.json`),
+    ...result.bundles.map((bundle) => registry.bundlePath(bundle.bundleHash)),
   ];
 
   const globalBefore = artifactState(globalPaths);
@@ -1035,9 +1028,6 @@ test("compiled save route verifies artifacts, stores private bundles and returns
   expect(artifactState(globalPaths)).toEqual(globalBefore);
   expect(registry.get("compiled-save")).toEqual(saved);
   expect(saved.revision).toBe(result.revision);
-  expect(saved.bundles).toEqual(
-    result.bundles.map(({ nodeId, bundleHash }) => ({ nodeId, bundleHash })),
-  );
 
   for (const bundle of result.bundles) {
     expect(statSync(registry.bundlePath(bundle.bundleHash)).mode & 0o777).toBe(0o600);
@@ -1072,10 +1062,7 @@ test("saving another revision retains the earlier graph and executable artifacts
       replace: true,
       graph: compiled.graph,
       revision: compiled.revision,
-      bundles: compiled.bundles.map((bundle) => ({
-        ...bundle,
-        bytes: Buffer.from(bundle.bytes).toString("base64"),
-      })),
+      bundles: compiled.bundles.map((bundle) => Buffer.from(bundle.bytes).toString("base64")),
     });
     revisions.push(compiled.revision);
   }
@@ -1083,9 +1070,9 @@ test("saving another revision retains the earlier graph and executable artifacts
   expect(revisions[0]).not.toBe(revisions[1]);
 
   for (const revision of revisions) {
-    const graph = await Bun.file(registry.graphPath(revision)).json();
+    const graph = await Bun.file(join(registry.home, "graphs", `${revision}.json`)).json();
     expect(graph.name).toBe("revisions");
-    expect(statSync(registry.graphPath(revision)).mode & 0o777).toBe(0o600);
+    expect(statSync(join(registry.home, "graphs", `${revision}.json`)).mode & 0o777).toBe(0o600);
   }
 
   expect(revisions.at(-1)).toBe(registry.get("revisions").revision);

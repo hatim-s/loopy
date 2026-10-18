@@ -67,10 +67,7 @@ export async function save(f: ReturnType<typeof fixture>) {
 
     await service.putLoopy(result.graph.name, {
       ...result,
-      bundles: result.bundles.map((bundle) => ({
-        ...bundle,
-        bytes: Buffer.from(bundle.bytes).toString("base64"),
-      })),
+      bundles: result.bundles.map((bundle) => Buffer.from(bundle.bytes).toString("base64")),
       source: { path: f.file, workspace: f.cwd },
       replace: false,
     });
@@ -97,7 +94,7 @@ export async function runFixture(f: ReturnType<typeof fixture>) {
   });
 
   try {
-    const run = await service.startRun(saved.slug, {}, f.cwd);
+    const run = await service.startRun(saved.graph.name, {}, f.cwd);
     await activate({
       store,
       runId: run.id,
@@ -105,9 +102,9 @@ export async function runFixture(f: ReturnType<typeof fixture>) {
       executor: new LocalExecutor({
         home: f.home,
         workspace: f.cwd,
-        mode: saved.mode,
+        mode: saved.graph.meta.mode,
         secrets: Object.fromEntries(
-          saved.secrets.map((name) => [name, new SecretStore(f.home).get(name)]),
+          saved.graph.meta.secrets.map((name) => [name, new SecretStore(f.home).get(name)]),
         ),
         bundlePath: (hash) => new Registry(f.home, f.cwd).bundlePath(hash),
       }),

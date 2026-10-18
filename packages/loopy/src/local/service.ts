@@ -11,6 +11,7 @@ import {
   type RunView,
   type routes,
   runView,
+  type SavedLoopy,
   type ScheduleView,
   serverEvent,
 } from "../contract/index.js";
@@ -30,8 +31,6 @@ import {
 import { type Clock } from "../host/index.js";
 import { canonicalPath } from "./fs.js";
 import type { Registry } from "./registry.js";
-import { saveCompiled } from "./save-compiled.js";
-import type { SavedLoopy } from "./saved-loopy.js";
 import { SecretStore } from "./secrets.js";
 import { ServiceError } from "./service-error.js";
 import { generateCommand } from "./typegen/generate.js";
@@ -51,7 +50,7 @@ export class LoopyService {
 
   private scheduleTarget(slug: string, callerWorkspace = "") {
     const registry = this.options.registry(callerWorkspace);
-    const saved = registry.list().find((entry) => entry.slug === slug);
+    const saved = registry.list().find((entry) => entry.graph.name === slug);
 
     if (!saved) {
       throw new ServiceError("not_found");
@@ -78,7 +77,7 @@ export class LoopyService {
     callerWorkspace = "",
   ): Promise<ScheduleView> {
     const { saved, workspace } = this.scheduleTarget(slug, callerWorkspace);
-    const cron = body.cron ?? saved.schedule?.cron;
+    const cron = body.cron ?? saved.graph.meta.schedule?.cron;
 
     if (cron === undefined) {
       throw new ServiceError(
@@ -87,7 +86,7 @@ export class LoopyService {
       );
     }
 
-    const tz = body.tz ?? saved.schedule?.tz ?? "UTC";
+    const tz = body.tz ?? saved.graph.meta.schedule?.tz ?? "UTC";
     this.validateTimezone(tz);
     const nextFireAt = this.scheduleNextFire(cron, tz);
     const input = await this.scheduleInput(saved, body);
@@ -178,7 +177,7 @@ export class LoopyService {
 
   async startRun(slug: string, input: Json, workspace: string): Promise<RunView> {
     const registry = this.options.registry(workspace);
-    const saved = registry.list().find((entry) => entry.slug === slug);
+    const saved = registry.list().find((entry) => entry.graph.name === slug);
 
     if (!saved) {
       throw new ServiceError("not_found");
@@ -215,21 +214,13 @@ export class LoopyService {
       throw new ServiceError("bad_request", "The URL name must match the graph name.");
     }
 
-    try {
-      await saveCompiled(this.options.registry(body.source.workspace), body);
+    await this.options.registry(body.source.workspace).save(body);
 
-      return graphView(body.graph);
-    } catch (error) {
-      throw new ServiceError("bad_request", errorMessage(error));
-    }
+    return graphView(body.graph);
   }
 
   graph(slug: string, workspace: string) {
-    try {
-      return graphView(this.options.registry(workspace).get(slug).graph);
-    } catch (error) {
-      throw new ServiceError("not_found", errorMessage(error));
-    }
+    return graphView(this.options.registry(workspace).get(slug).graph);
   }
 
   async requireRun(id: string): Promise<RunRecord> {
@@ -279,9 +270,9 @@ export class LoopyService {
   private loopySummary(run: RunRecord, registries = new Map<string, SavedLoopy[]>()) {
     const entries = this.registryEntries(this.options.registry(run.workspace), registries);
 
-    const saved = entries.find((entry) => entry.slug === run.slug);
+    const saved = entries.find((entry) => entry.graph.name === run.slug);
 
-    return { slug: run.slug, description: saved?.description ?? null };
+    return { slug: run.slug, description: saved?.graph.meta.description ?? null };
   }
 
   private registryEntries(registry: Registry, registries: Map<string, SavedLoopy[]>) {
@@ -432,9 +423,12 @@ export class LoopyService {
     return entries.map((saved) =>
       loopyView(
         saved,
-        schedules.find((item) => item.slug === saved.slug && item.workspace === registry.project) ??
-          null,
-        runs.filter((run) => saved.scope === "global" || run.workspace === registry.project),
+        schedules.find(
+          (item) => item.slug === saved.graph.name && item.workspace === registry.project,
+        ) ?? null,
+        runs.filter(
+          (run) => saved.graph.meta.scope === "global" || run.workspace === registry.project,
+        ),
       ),
     );
   }
