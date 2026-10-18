@@ -428,7 +428,7 @@ test("labels are unique per scope and builders restore activation after errors",
 });
 
 test("declared predicate types reject mismatched operands at the call site", () => {
-  rejects("predicate_type", () =>
+  rejects("operand_type", () =>
     compile(() => {
       const n = code("n", {
         in: {},
@@ -442,7 +442,7 @@ test("declared predicate types reject mismatched operands at the call site", () 
       return null;
     }),
   );
-  rejects("predicate_type", () =>
+  rejects("operand_type", () =>
     compile(() => {
       // @ts-expect-error Runtime validation also protects untyped callers.
       in_(uuid(), [1]);
@@ -780,7 +780,7 @@ test("known command fields resolve through main's validator without synthetic va
 
 test("reserved value keys and opaque JSON comparisons are rejected", () => {
   rejects("unresolved_ref", () => compile(() => log("bad", { nested: { ref: "reserved" } })));
-  rejects("predicate_type", () =>
+  rejects("operand_type", () =>
     compile(() => {
       const value = code("opaque", {
         in: {},

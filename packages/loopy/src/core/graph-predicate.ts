@@ -124,7 +124,7 @@ function comparisonErrors(
       break;
   }
 
-  return mismatch ? [issue("predicate_type")] : [];
+  return mismatch ? [issue("operand_type")] : [];
 }
 
 export function checkPredicate(predicate: Predicate, resolveType: ResolveType): PredicateIssue[] {

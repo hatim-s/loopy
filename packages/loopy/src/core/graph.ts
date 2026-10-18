@@ -95,7 +95,7 @@ export type Predicate =
 export function predicateIs<S extends PredicateShape>(
   predicate: Predicate,
   shape: S,
-): predicate is Extract<Predicate, { op: OpsOf<S> }> {
+): predicate is Predicate & { op: OpsOf<S> } {
   return PREDICATE_SHAPES[predicate.op] === shape;
 }
 

@@ -10,7 +10,6 @@ export const DIAGNOSTIC_CODES = [
   "missing_entry",
   "unresolved_ref",
   "out_of_scope_ref",
-  "predicate_type",
   "operand_type",
   "invalid_size",
   "missing_arm",
@@ -81,8 +80,7 @@ export const DIAGNOSTIC_MESSAGES = {
   unresolved_ref:
     "References must name an available output or binding and match its declared schema.",
   out_of_scope_ref: "Reference is unavailable in this scope.",
-  predicate_type: "Predicate operands must have matching declared types.",
-  operand_type: "Operands must have a declared scalar type.",
+  operand_type: "Operands must have the declared types required by their operation.",
   invalid_size: "Size requires a string or array reference in a comparison.",
   missing_arm: "Branch arms must name nodes.",
   invalid_scope: "Control bodies must belong to their enclosing scope.",

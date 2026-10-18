@@ -51,7 +51,7 @@ broken("out_of_scope_ref", (graph) => ({
   outputs: { ref: contract.refIdSchema.parse("5:apply"), path: [] },
 }));
 
-broken("predicate_type", (graph) => ({
+broken("operand_type", (graph) => ({
   ...graph,
   nodes: graph.nodes.map((node) =>
     node.kind === "branch"
@@ -330,7 +330,7 @@ for (const op of ["lt", "lte", "gt", "gte"] as const) {
     ]) {
       const predicate = contract.predicateSchema.parse({ op, left, right });
       expect(validateGraph(withPredicate(predicate)).map((error) => error.code)).toContain(
-        "predicate_type",
+        "operand_type",
       );
     }
 
@@ -356,7 +356,7 @@ test("size requires declared string or array and in requires matching array elem
       validateGraph(withPredicate(contract.predicateSchema.parse({ op: "in", left, right }))).map(
         (error) => error.code,
       ),
-    ).toEqual(["predicate_type"]);
+    ).toEqual(["operand_type"]);
   }
 
   expect(validateGraph(withPredicate({ op: "in", left: 1, right: [1, 2] }))).toEqual([]);
@@ -528,7 +528,7 @@ test("array refs use the declared map result type for size and membership", () =
     };
 
     expect(validateGraph(changed).map((error) => error.code)).toEqual(
-      predicate.op === "in" ? ["predicate_type"] : [],
+      predicate.op === "in" ? ["operand_type"] : [],
     );
   }
 });
@@ -605,7 +605,7 @@ test("numeric branch results allow ordering and reject string equality", () => {
         }
       : node,
   );
-  expect(validateGraph(graph).map((error) => error.code)).toEqual(["predicate_type"]);
+  expect(validateGraph(graph).map((error) => error.code)).toEqual(["operand_type"]);
 });
 
 test("a branch with mismatched arm results rejects ordering", () => {
@@ -615,7 +615,7 @@ test("a branch with mismatched arm results rejects ordering", () => {
       ? { ...node, result: { kind: "value" as const, value: "wrong" } }
       : node,
   );
-  expect(validateGraph(graph).map((error) => error.code)).toEqual(["predicate_type"]);
+  expect(validateGraph(graph).map((error) => error.code)).toEqual(["operand_type"]);
 });
 
 test("switch results resolve through each arm's terminal join", () => {
@@ -640,7 +640,7 @@ test("switch results resolve through each arm's terminal join", () => {
       ? { ...node, result: { kind: "value" as const, value: "wrong" } }
       : node,
   );
-  expect(validateGraph(graph).map((error) => error.code)).toEqual(["predicate_type"]);
+  expect(validateGraph(graph).map((error) => error.code)).toEqual(["operand_type"]);
 });
 
 test("format accepts a scalar join result", () => {
@@ -780,7 +780,7 @@ test("rescue results use the common body and handler type", () => {
       ? { ...node, result: { kind: "value" as const, value: "different" } }
       : node,
   );
-  expect(validateGraph(graph).map((error) => error.code)).toEqual(["predicate_type"]);
+  expect(validateGraph(graph).map((error) => error.code)).toEqual(["operand_type"]);
 });
 
 for (const [yes, no, member] of [
@@ -807,7 +807,7 @@ for (const [yes, no, member] of [
         : node,
     );
     expect(validateGraph(graph).map((error) => error.code)).toEqual(
-      member === null ? ["predicate_type"] : [],
+      member === null ? ["operand_type"] : [],
     );
   });
 }
