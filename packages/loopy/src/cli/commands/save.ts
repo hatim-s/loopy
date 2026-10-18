@@ -1,5 +1,5 @@
 import { dirname, relative, resolve } from "node:path";
-import { compile } from "../../compiler/index.js";
+import { compile, formatDiagnostics } from "../../compiler/index.js";
 import { routes } from "../../contract/index.js";
 import { request } from "../client.js";
 import { type CliContext, requireTarget } from "../context.js";
@@ -10,14 +10,7 @@ export async function runSave(context: CliContext): Promise<void> {
   const result = await compile(source, { home: context.home });
 
   if (!result.ok) {
-    throw new Error(
-      result.diagnostics
-        .map(
-          (value) =>
-            `${value.source.module}:${value.source.line}:${value.source.column} [${value.code}] ${value.message}`,
-        )
-        .join("\n"),
-    );
+    throw new Error(formatDiagnostics(result.diagnostics));
   }
 
   const path = relative(context.cwd, source);

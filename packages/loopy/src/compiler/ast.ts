@@ -25,6 +25,15 @@ export function diagnostic(
   };
 }
 
+export function formatDiagnostics(diagnostics: readonly CompilerDiagnostic[]) {
+  return diagnostics
+    .map(
+      ({ source, code, message }) =>
+        `${source.module}:${source.line}:${source.column} [${code}] ${message}`,
+    )
+    .join("\n");
+}
+
 export function parseModule(file: string, source: string, diagnostics: CompilerDiagnostic[]) {
   const parsed = parseSync(file, source, { sourceType: "module", preserveParens: false });
 

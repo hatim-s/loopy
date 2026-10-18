@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { compile } from "../../compiler/index.js";
+import { compile, formatDiagnostics } from "../../compiler/index.js";
 import { type GraphView, graphView, routes } from "../../contract/index.js";
 import { request } from "../client.js";
 import { type CliContext, requireTarget } from "../context.js";
@@ -40,14 +40,7 @@ export async function runGraph(context: CliContext): Promise<void> {
     const result = await compile(resolve(context.cwd, target), { home: context.home });
 
     if (!result.ok) {
-      throw new Error(
-        result.diagnostics
-          .map(
-            (value) =>
-              `${value.source.module}:${value.source.line}:${value.source.column} [${value.code}] ${value.message}`,
-          )
-          .join("\n"),
-      );
+      throw new Error(formatDiagnostics(result.diagnostics));
     }
 
     graph = graphView(result.graph);

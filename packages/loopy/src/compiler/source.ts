@@ -50,7 +50,7 @@ function metaValues(path: string) {
   ]);
 }
 
-export function inlineImportMeta(path: string, lang: Lang, source: string) {
+function inlineImportMeta(path: string, lang: Lang, source: string) {
   const values = metaValues(path);
 
   const { program, errors } = parseSync(path, source, {
