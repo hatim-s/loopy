@@ -158,3 +158,26 @@ export function parsedFlags<Value>(
 function optionIdentity(flag: FlagDefinition | undefined): string {
   return JSON.stringify([...(flag?.prefix ?? []), flag?.cli]);
 }
+
+export function validateCommandDescriptor(descriptor: Omit<CommandDescriptor, "parse">): void {
+  for (const definition of [
+    descriptor,
+    platformVariant(descriptor, "darwin"),
+    platformVariant(descriptor, "linux"),
+  ]) {
+    const seen = new Map<string, string>();
+
+    for (const [name, flag] of Object.entries(definition.flags ?? {})) {
+      const identity = optionIdentity(flag);
+      const previous = seen.get(identity);
+
+      if (previous !== undefined) {
+        throw new Error(
+          `Flags '${previous}' and '${name}' share CLI option '${flag.cli}'. Give each flag a unique CLI option.`,
+        );
+      }
+
+      seen.set(identity, name);
+    }
+  }
+}

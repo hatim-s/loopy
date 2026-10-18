@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { nodeIdSchema } from "../src/contract/index.js";
 import { localDaemon, openRunStore, Registry, readDaemonFile } from "../src/local/index.js";
 import { cli, fixture, object, roots } from "./cli-fixture.js";
 import { newRun } from "./fixture.js";
@@ -238,20 +239,11 @@ test("HTTP logs follow prints each log as a separate JSON line", async () => {
       token: "log-owner",
       effects: [
         {
-          kind: "emit_event",
-          event: {
-            entity: "log",
-            kind: "written",
-            runId: "logged",
-            record: {
-              runId: "logged",
-              seq: index + 1,
-              position: { kind: "node", executionKey: "logged/node", attempt: 1, index },
-              level: "info",
-              message: `line ${index}`,
-              at: new Date().toISOString(),
-            },
-          },
+          kind: "write_log",
+          executionKey: { runId: "logged", nodeId: nodeIdSchema.parse("0:log"), scope: [] },
+          attempt: 1,
+          log: { message: `line ${index}`, data: null },
+          at: new Date().toISOString(),
         },
       ],
     });

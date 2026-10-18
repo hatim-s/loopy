@@ -1,11 +1,4 @@
-import {
-  executionKeyString,
-  type Json,
-  limitLogs,
-  MAX_OUTPUT_BYTES,
-  type Node,
-  outputBytes,
-} from "../core/index.js";
+import { type Json, limitLogs, MAX_OUTPUT_BYTES, type Node, outputBytes } from "../core/index.js";
 import { failNode } from "./failure.js";
 import { type Transition, write } from "./node-run.js";
 import { resolve } from "./resolve.js";
@@ -45,21 +38,6 @@ export function immediate(transition: Transition, node: Node, output: Json, at: 
   });
 
   if (log) {
-    transition.effects.push({
-      kind: "emit_event",
-      event: {
-        entity: "log",
-        kind: "written",
-        runId: key.runId,
-        record: {
-          runId: key.runId,
-          seq: 0,
-          position: { kind: "node", executionKey: executionKeyString(key), attempt: 1, index: 0 },
-          level: "info",
-          ...log,
-          at,
-        },
-      },
-    });
+    transition.effects.push({ kind: "write_log", executionKey: key, attempt: 1, log, at });
   }
 }

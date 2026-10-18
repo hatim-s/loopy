@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import type { Executor } from "../src/core/index.js";
 import { initialState, step } from "../src/engine/index.js";
 import { activate, type Clock } from "../src/host/index.js";
-import { code, loopy } from "../src/sdk/graph/index.js";
+import { code, loopy, sh } from "../src/sdk/graph/index.js";
 import { MemoryStore } from "../src/store/index.js";
 import { newRun } from "./fixture.js";
 
@@ -138,4 +138,62 @@ test("retry retains ownership and running status, persists its deadline and keep
     ["first", 1],
     ["second", 2],
   ]);
+});
+
+test("a shared window of two delays the third dispatch without consuming an attempt", async () => {
+  let now = Date.parse(newRun().createdAt);
+  const waiting = Promise.withResolvers<() => void>();
+
+  const clock: Clock = {
+    now: () => now,
+    timeout: (callback, ms) => {
+      waiting.resolve(() => {
+        now += ms;
+        callback();
+      });
+
+      return () => {};
+    },
+  };
+
+  const store = new MemoryStore(clock.now);
+  const rateLimit = { key: "shared", limit: 2, window: "1m" } as const;
+
+  const plan = loopy("limited", {
+    input: {},
+    run: () => {
+      sh(["printf", "first"], { rateLimit });
+      sh(["printf", "second"], { rateLimit });
+
+      return sh(["printf", "third"], { rateLimit });
+    },
+  }).graph;
+
+  const attempts: number[] = [];
+
+  const executor: Executor = {
+    lookup: async () => ({ kind: "none" }),
+    execute: async (...[, attempt]) => {
+      attempts.push(attempt);
+
+      return { kind: "succeeded", output: { stdout: "ok", stderr: "", exitCode: 0 }, logs: [] };
+    },
+  };
+
+  await store.createRun(newRun());
+  const running = activate({ runId: "run", store, graph: plan, executor, clock });
+  const resume = await waiting.promise;
+  expect(attempts).toEqual([1, 1]);
+  expect(await store.getNodeRuns("run")).toMatchObject([
+    { status: "succeeded" },
+    { status: "succeeded" },
+    { status: "rate_limited", attempt: 1 },
+  ]);
+  expect(await store.getRun("run")).toMatchObject({
+    status: "running",
+    nextRetryAt: "2026-10-16T00:01:00.000Z",
+  });
+  resume();
+  expect(await running).toMatchObject({ status: "succeeded" });
+  expect(attempts).toEqual([1, 1, 1]);
 });

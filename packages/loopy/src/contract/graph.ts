@@ -3,6 +3,7 @@ import {
   COMPARISON_OPS,
   DIAGNOSTIC_CODES,
   type Duration,
+  durationMs,
   EDGE_KINDS,
   EXECUTION_ERROR_CODES,
   EXECUTION_MODES,
@@ -102,6 +103,12 @@ const durationSchema = z.custom<Duration>((value): value is Duration =>
     : typeof value === "string" && /^\d+(?:\.\d+)?[smhd]$/.test(value),
 );
 
+const rateLimitSchema = z.strictObject({
+  key: z.string().min(1),
+  limit: z.number().int().positive(),
+  window: durationSchema.refine((value) => durationMs(value) > 0),
+});
+
 const retrySchema = z.strictObject({
   attempts: z.number().int().positive(),
   backoff: z.enum(RETRY_BACKOFFS),
@@ -119,6 +126,7 @@ const code = base.extend({
   in: graphRecord(valueSchema),
   out: outputSchema,
   module: z.strictObject({ path: z.string(), bundleHash: z.string().nullable() }),
+  rateLimit: rateLimitSchema.nullable(),
   retry: retrySchema,
   timeout: durationSchema.nullable(),
 });
@@ -160,6 +168,7 @@ const command = base.extend({
     env: graphRecord(valueSchema),
     stdin: valueSchema.nullable(),
   }),
+  rateLimit: rateLimitSchema.nullable(),
   retry: retrySchema,
   okExitCodes: z.array(z.number().int()),
   parse: z
@@ -296,6 +305,7 @@ export const executionErrorSchema = z.strictObject({
 export const nodeRunSchema = z.discriminatedUnion("status", [
   runBase.extend({ status: z.literal(NODE_RUN_STATUSES[0]) }),
   runBase.extend({ status: z.literal(NODE_RUN_STATUSES[7]) }),
+  runBase.extend({ status: z.literal(NODE_RUN_STATUSES[9]), nextRetryAt: z.string() }),
   runBase.extend({ status: z.literal(NODE_RUN_STATUSES[8]), endedAt: z.string() }),
   runBase.extend({
     status: z.literal(NODE_RUN_STATUSES[1]),

@@ -1,5 +1,6 @@
+import type { RateLimit } from "../../../core/index.js";
 import { type GraphRetry, type OutSchema, parseArgv } from "../../../core/index.js";
-import type { CommandDescriptor } from "../../define-command.js";
+import { type CommandDescriptor, validateCommandDescriptor } from "../../define-command.js";
 import { currentBuilder } from "../builder.js";
 import { commandArgv } from "../command-argv.js";
 import type { CommandInput, CommandRawInput } from "../command-input.js";
@@ -13,6 +14,7 @@ type Options = {
   env?: Record<string, string | Ref<string>>;
   stdin?: string | Ref<string>;
   retry?: Partial<GraphRetry>;
+  rateLimit?: RateLimit;
 };
 
 type Input = {
@@ -54,6 +56,7 @@ function record({
         env: serializeValues(options.env ?? {}, builder),
         stdin: serialize(options.stdin, builder),
       },
+      rateLimit: options.rateLimit ?? null,
       retry: builder.retry(options.retry),
       okExitCodes: [...(descriptor.okExitCodes ?? [0])],
       parse:
@@ -97,6 +100,7 @@ export function defineCommand<const S extends OutSchema, const D extends GraphCo
   descriptor: D,
   schema?: S,
 ) {
+  validateCommandDescriptor(descriptor);
   const out = schema ?? commandOutput;
   function call(...args: CallArguments<CommandInput<D>>): Ref<Infer<S>, SchemaFields<S>>;
   function call(input: Input = {}, options: Options = {}): Ref<Infer<S>, SchemaFields<S>> {
@@ -154,6 +158,7 @@ function shell({
         env: serializeValues(options.env ?? {}, builder),
         stdin: serialize(options.stdin, builder),
       },
+      rateLimit: options.rateLimit ?? null,
       retry: builder.retry(options.retry),
       okExitCodes: [0],
       parse: null,

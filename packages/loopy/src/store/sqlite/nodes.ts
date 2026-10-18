@@ -2,7 +2,7 @@ import { nodeRunSchema } from "../../contract/index.js";
 import type { LogRecord, RunSnapshot } from "../../core/index.js";
 import { executionKeyString, type NodeRun, type StoreEffect } from "../../core/index.js";
 import { type EventTransaction } from "../event-outbox.js";
-import { checkLogWrite, checkNodeWrite } from "../node-write.js";
+import { checkLogWrite, checkNodeWrite, logRecord } from "../node-write.js";
 import { SqliteRuns } from "./runs.js";
 import { rowToLog, rowToRun, SQL } from "./store-rows.js";
 import { type LogRow } from "./store-schema.js";
@@ -91,55 +91,39 @@ export class SqliteNodes extends SqliteRuns {
         break;
       }
 
-      case "emit_event": {
-        if (effect.event.runId !== runId) {
-          throw new Error("Event belongs to another run.");
+      case "write_log": {
+        if (effect.executionKey.runId !== runId) {
+          throw new Error("Log belongs to another run.");
         }
 
-        if (effect.event.entity === "log") {
-          this.writeLog(txn, effect.event.record);
-        } else {
-          this.emit(txn, effect.event);
-        }
-
+        this.writeLog(txn, effect);
         break;
       }
     }
   }
 
-  protected writeLog(txn: EventTransaction, log: LogRecord): void {
-    if (log.position.kind !== "node") {
-      throw new Error("Attempt logs require a node execution key.");
-    }
+  protected writeLog(
+    txn: EventTransaction,
+    effect: Extract<StoreEffect, { kind: "write_log" }>,
+  ): void {
+    const previous = this.db
+      .query<LogRow, [string, number]>(SQL.logs)
+      .all(effect.executionKey.runId, 0)
+      .map(rowToLog);
 
-    const seq =
-      this.db
-        .query<{ seq: number }, [string]>(
-          "SELECT COALESCE(MAX(seq),0)+1 AS seq FROM logs WHERE run_id=?",
-        )
-        .get(log.runId)?.seq ?? 1;
-
-    checkLogWrite(
-      this.db
-        .query<LogRow, [string, number]>(
-          "SELECT record FROM logs WHERE execution_key=? AND attempt=?",
-        )
-        .all(log.position.executionKey, log.position.attempt)
-        .map(rowToLog),
-      log,
-    );
-    const record = { ...log, seq };
+    const record = logRecord(previous, effect);
+    checkLogWrite(previous, record);
     this.db
       .query(SQL.appendLog)
       .run(
-        log.runId,
-        log.position.executionKey,
-        log.position.attempt,
-        log.position.index,
-        seq,
+        record.runId,
+        record.position.executionKey,
+        record.position.attempt,
+        record.position.index,
+        record.seq,
         JSON.stringify(record),
       );
-    this.emit(txn, { entity: "log", kind: "written", runId: log.runId, record });
+    this.emit(txn, { entity: "log", kind: "written", runId: record.runId, record });
   }
 
   async getLogs(runId: string, after = 0): Promise<LogRecord[]> {

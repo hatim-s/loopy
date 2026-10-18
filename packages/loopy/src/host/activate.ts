@@ -1,20 +1,16 @@
 import {
   type ExecutionResult,
   type Executor,
-  executionKeyString,
+  errorMessage,
   type Graph,
+  type RunOutcome,
   type Store,
   type StoreEffect,
 } from "../core/index.js";
-import {
-  type Effect,
-  type EngineEvent,
-  initialState,
-  step,
-  validateOutput,
-} from "../engine/index.js";
+import { type Effect, type EngineEvent, initialState, step } from "../engine/index.js";
 import { type Clock, SYSTEM_CLOCK } from "./clock.js";
 import { withHeartbeat } from "./heartbeat.js";
+import { acquireDispatch } from "./rate-limit.js";
 
 export type ActivationOptions = {
   store: Store;
@@ -26,26 +22,20 @@ export type ActivationOptions = {
 };
 
 function completionEvent(
-  graph: Graph,
   dispatch: Extract<Effect, { kind: "dispatch" }>,
   result: ExecutionResult,
   at: string,
 ): EngineEvent {
   const base = { executionKey: dispatch.executionKey, attempt: dispatch.attempt, at };
 
-  if (result.kind === "failed") {
-    return { ...base, kind: "execution_failed", error: result.error, exitCode: result.exitCode };
-  }
-
-  const node = graph.nodes.find((node) => node.id === dispatch.executionKey.nodeId);
-
-  const error =
-    node && (node.kind === "code" || node.kind === "command")
-      ? validateOutput(result.output, node.out)
-      : null;
-
-  return error
-    ? { ...base, kind: "execution_failed", error, exitCode: null }
+  return result.kind === "failed"
+    ? {
+        ...base,
+        kind: "execution_failed",
+        error: result.error,
+        exitCode: result.exitCode,
+        logs: result.logs,
+      }
     : { ...base, kind: "execution_completed", result };
 }
 
@@ -111,17 +101,19 @@ async function drive(options: ActivationOptions, token: string) {
   let state = initialState(runId, run.input, await store.getNodeRuns(runId));
   let event: EngineEvent = { kind: "run_started", at: new Date(clock.now()).toISOString() };
   const signal = options.signal ?? new AbortController().signal;
-  let pendingLogs: StoreEffect[] = [];
 
   while (true) {
-    const transition = step(graph, state, event);
+    const transition = await acquireDispatch({
+      ...options,
+      transition: step(graph, state, event),
+      at: event.at,
+    });
 
     const durable = transition.effects.filter(
       (effect): effect is StoreEffect => effect.kind !== "dispatch",
     );
 
-    await store.apply({ runId, token, effects: [...pendingLogs, ...durable] });
-    pendingLogs = [];
+    await store.apply({ runId, token, effects: durable });
     state = transition.state;
 
     if (state.phase.kind === "finished") {
@@ -143,29 +135,7 @@ async function drive(options: ActivationOptions, token: string) {
     }
 
     const result = await execute(options, dispatch, signal);
-    event = completionEvent(graph, dispatch, result, new Date(clock.now()).toISOString());
-    const at = event.at;
-    pendingLogs = result.logs.map((log, index) => ({
-      kind: "emit_event",
-      event: {
-        entity: "log",
-        kind: "written",
-        runId,
-        record: {
-          ...log,
-          runId,
-          seq: 0,
-          level: "info",
-          at,
-          position: {
-            kind: "node",
-            executionKey: executionKeyString(dispatch.executionKey),
-            attempt: dispatch.attempt,
-            index,
-          },
-        },
-      },
-    }));
+    event = completionEvent(dispatch, result, new Date(clock.now()).toISOString());
   }
 }
 
@@ -173,9 +143,37 @@ export async function activate(options: ActivationOptions) {
   const token = crypto.randomUUID();
   await options.store.claim(options.runId, token);
 
+  let outcome: { kind: "completed"; value: RunOutcome } | { kind: "failed"; cause: Error };
+
   try {
-    return await withHeartbeat(options.store, options.runId, token, () => drive(options, token));
-  } finally {
-    await options.store.release(options.runId, token);
+    outcome = {
+      kind: "completed",
+      value: await withHeartbeat(options.store, options.runId, token, () => drive(options, token)),
+    };
+  } catch (cause) {
+    outcome = {
+      kind: "failed",
+      cause: cause instanceof Error ? cause : new Error(errorMessage(cause)),
+    };
   }
+
+  try {
+    await options.store.release(options.runId, token);
+  } catch (cause) {
+    if (outcome.kind === "failed") {
+      throw new Error(errorMessage(outcome.cause), { cause });
+    }
+
+    if (outcome.value.status === "failed") {
+      throw new Error(outcome.value.error, { cause });
+    }
+
+    throw cause;
+  }
+
+  if (outcome.kind === "failed") {
+    throw outcome.cause;
+  }
+
+  return outcome.value;
 }

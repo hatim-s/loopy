@@ -1,4 +1,5 @@
 import type {
+  AttemptLog,
   ExecutionError,
   ExecutionKey,
   ExecutionResult,
@@ -28,7 +29,9 @@ export type EngineEvent = { at: string } & (
       attempt: number;
       error: ExecutionError;
       exitCode: number | null;
+      logs: AttemptLog[];
     }
+  | { kind: "rate_limited"; executionKey: ExecutionKey; attempt: number; retryAt: string }
   | { kind: "retry_due" }
   | { kind: "cancel_requested" }
 );

@@ -1,9 +1,11 @@
 import {
+  executionKeyString,
   type LogRecord,
   MAX_LOG_BYTES,
   MAX_OUTPUT_BYTES,
   type NodeRun,
   outputBytes,
+  type StoreEffect,
 } from "../core/index.js";
 
 export function checkNodeWrite(runId: string, node: NodeRun) {
@@ -38,4 +40,33 @@ export function checkLogWrite(previous: LogRecord[], log: LogRecord) {
   if (bytes > MAX_LOG_BYTES) {
     throw new Error("Attempt logs exceed the 64 KiB limit.");
   }
+}
+
+export function logRecord(
+  previous: LogRecord[],
+  effect: Extract<StoreEffect, { kind: "write_log" }>,
+) {
+  const executionKey = executionKeyString(effect.executionKey);
+
+  const indices = previous.flatMap((log) =>
+    log.position.kind === "node" &&
+    log.position.executionKey === executionKey &&
+    log.position.attempt === effect.attempt
+      ? [log.position.index]
+      : [],
+  );
+
+  return {
+    ...effect.log,
+    runId: effect.executionKey.runId,
+    seq: Math.max(0, ...previous.map((log) => log.seq)) + 1,
+    position: {
+      kind: "node" as const,
+      executionKey,
+      attempt: effect.attempt,
+      index: Math.max(-1, ...indices) + 1,
+    },
+    level: "info" as const,
+    at: effect.at,
+  };
 }

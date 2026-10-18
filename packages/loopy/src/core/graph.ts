@@ -1,5 +1,6 @@
 import type { ExecutionError } from "./executor.js";
 import type { ExecutionMode, Json, Schedule } from "./model.js";
+import type { RateLimit } from "./rate-limit.js";
 
 declare const brand: unique symbol;
 
@@ -147,6 +148,7 @@ export type Node = Expand<
           in: Record<string, Value>;
           out: OutSchema;
           module: { path: string; bundleHash: string | null };
+          rateLimit: RateLimit | null;
           retry: GraphRetry;
           timeout: Duration | null;
         }
@@ -158,6 +160,7 @@ export type Node = Expand<
           flags: Record<string, Value>;
           flagSpec?: CommandFlagSpec;
           options: { cwd: Value | null; env: Record<string, Value>; stdin: Value | null };
+          rateLimit: RateLimit | null;
           retry: GraphRetry;
           okExitCodes: number[];
           parse: { bundleHash: string | null; input: Record<string, Value> } | null;
@@ -291,6 +294,7 @@ export const NODE_RUN_STATUSES = [
   "cancelled",
   "queued",
   "skipped",
+  "rate_limited",
 ] as const;
 
 export type NodeRunStatus = (typeof NODE_RUN_STATUSES)[number];
@@ -307,6 +311,7 @@ export type NodeRun = Expand<
   } & (
     | { status: (typeof NODE_RUN_STATUSES)[0] }
     | { status: (typeof NODE_RUN_STATUSES)[7] }
+    | { status: (typeof NODE_RUN_STATUSES)[9]; nextRetryAt: string }
     | { status: (typeof NODE_RUN_STATUSES)[1]; output: Json; endedAt: string }
     | { status: (typeof NODE_RUN_STATUSES)[2]; error: ExecutionError; endedAt: string }
     | {

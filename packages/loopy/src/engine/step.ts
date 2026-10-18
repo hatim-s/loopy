@@ -17,8 +17,15 @@ function dispatch(
   const spec = executionSpec(node, transition.state);
 
   const nodeRun: NodeRun =
-    previous?.status === "running"
-      ? previous
+    previous?.status === "running" || previous?.status === "rate_limited"
+      ? {
+          key: previous.key,
+          attempt: previous.attempt,
+          maxAttempts: previous.maxAttempts,
+          startedAt: previous.startedAt,
+          receipt: previous.receipt,
+          status: "running",
+        }
       : {
           key: { runId: transition.state.runId, nodeId: node.id, scope: [] },
           status: "running",
@@ -93,7 +100,10 @@ function advance(graph: Graph, transition: Transition, at: string) {
       return;
     }
 
-    if (previous?.status === "retrying" && previous.nextRetryAt > at) {
+    if (
+      (previous?.status === "retrying" || previous?.status === "rate_limited") &&
+      previous.nextRetryAt > at
+    ) {
       transition.effects.push({ kind: "schedule_retry", at: previous.nextRetryAt });
 
       return;
@@ -130,6 +140,17 @@ function completion(
   if (node?.kind !== "code" && node?.kind !== "command") {
     return false;
   }
+
+  const logs = event.kind === "execution_completed" ? event.result.logs : event.logs;
+  transition.effects.push(
+    ...logs.map((log) => ({
+      kind: "write_log" as const,
+      executionKey: previous.key,
+      attempt: previous.attempt,
+      log,
+      at: event.at,
+    })),
+  );
 
   const error =
     event.kind === "execution_failed" ? event.error : validateOutput(event.result.output, node.out);
@@ -185,6 +206,19 @@ export function step(graph: Graph, state: EngineState, event: EngineEvent): Tran
       throw new Error(
         "Cancellation is not_yet supported. PR 4c adds process cancellation and cleanup.",
       );
+    }
+
+    if (event.kind === "rate_limited") {
+      const previous = transition.state.nodeRuns.find((run) =>
+        sameExecution(run.key, event.executionKey),
+      );
+
+      if (previous?.status === "running" && previous.attempt === event.attempt) {
+        write(transition, { ...previous, status: "rate_limited", nextRetryAt: event.retryAt });
+        transition.effects.push({ kind: "schedule_retry", at: event.retryAt });
+      }
+
+      return transition;
     }
 
     if (

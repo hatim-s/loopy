@@ -2,8 +2,6 @@ export { openRunStore, SqliteRunStore } from "../store/index.js";
 
 export { compilerLauncher } from "./compiler-launcher.js";
 
-export { readRateLimits } from "./config.js";
-
 export { localDaemon } from "./daemon.js";
 
 export { daemonUrl, readDaemonFile } from "./daemon-file.js";

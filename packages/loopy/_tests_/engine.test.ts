@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { graphSchema } from "../src/contract/index.js";
-import { type ExecutionKey, type Json } from "../src/core/index.js";
-import { initialState, step } from "../src/engine/index.js";
+import { type ExecutionKey, type ExecutionResult, type Json } from "../src/core/index.js";
+import { type EngineEvent, initialState, step } from "../src/engine/index.js";
 import { approveDemoGraph } from "./fixtures/graphs.js";
 
 const at = "2026-10-18T00:00:00.000Z";
@@ -55,13 +55,17 @@ function start() {
   return { graph, ...transition, dispatch };
 }
 
-function completed(executionKey: ExecutionKey, attempt: number, output: Json) {
+function completed(
+  executionKey: ExecutionKey,
+  attempt: number,
+  output: Json,
+): Extract<EngineEvent, { kind: "execution_completed" }> {
   return {
     kind: "execution_completed" as const,
     executionKey,
     attempt,
     at,
-    result: { kind: "succeeded" as const, output, logs: [] },
+    result: { kind: "succeeded" as const, output, logs: [] } satisfies ExecutionResult,
   };
 }
 
@@ -82,8 +86,8 @@ test("approve sequence prefix dispatches resolved code, records log and final jo
   ]);
   expect(result.effects).toContainEqual(
     expect.objectContaining({
-      kind: "emit_event",
-      event: expect.objectContaining({ entity: "log" }),
+      kind: "write_log",
+      log: expect.objectContaining({ message: "Draft ready" }),
     }),
   );
   expect(f.state.nodeRuns[0]?.status).toBe("running");
@@ -101,6 +105,7 @@ test("retry backoff persists the deadline, does not dispatch early, increments t
     attempt: 1,
     error: { code: "execution", message: "Temporary failure." },
     exitCode: null,
+    logs: [],
     at,
   });
 
@@ -172,4 +177,42 @@ test("a missing input reference fails its consuming node before dispatch", () =>
     },
   ]);
   expect(result.effects.some((effect) => effect.kind === "dispatch")).toBe(false);
+});
+
+test("rate denial fences stale decisions and reserves the same attempt until the deadline", () => {
+  const f = start();
+
+  const event = {
+    kind: "rate_limited" as const,
+    executionKey: f.dispatch.executionKey,
+    attempt: 1,
+    retryAt: "2026-10-18T00:01:00.000Z",
+    at,
+  };
+
+  const limited = step(f.graph, f.state, event);
+  expect(limited.state.nodeRuns[0]).toMatchObject({
+    status: "rate_limited",
+    attempt: 1,
+    nextRetryAt: event.retryAt,
+  });
+  expect(limited.effects).toContainEqual({ kind: "schedule_retry", at: event.retryAt });
+  expect(step(f.graph, limited.state, { kind: "retry_due", at }).effects).toEqual([
+    { kind: "schedule_retry", at: event.retryAt },
+  ]);
+  const due = step(f.graph, limited.state, { kind: "retry_due", at: event.retryAt });
+  expect(due.effects).toContainEqual(f.dispatch);
+  expect(step(f.graph, due.state, { ...event, attempt: 2 }).effects).toEqual([]);
+});
+
+test("stale completions emit no logs and completion and log nodes use write_log", () => {
+  const f = start();
+  const event = completed(f.dispatch.executionKey, 1, { words: 42 });
+  event.result.logs.push({ message: "attempt", data: { count: 1 } });
+  const result = step(f.graph, f.state, event);
+  expect(result.effects.filter((effect) => effect.kind === "write_log")).toMatchObject([
+    { log: { message: "attempt", data: { count: 1 } }, attempt: 1 },
+    { log: { message: "Draft ready" }, attempt: 1 },
+  ]);
+  expect(step(f.graph, f.state, { ...event, attempt: 2 }).effects).toEqual([]);
 });

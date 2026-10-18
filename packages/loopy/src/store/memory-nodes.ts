@@ -2,7 +2,7 @@ import type { LogRecord, RunSnapshot } from "../core/index.js";
 import { executionKeyString, type NodeRun, type StoreEffect } from "../core/index.js";
 import { type EventTransaction } from "./event-outbox.js";
 import { MemoryRuns } from "./memory-runs.js";
-import { checkLogWrite, checkNodeWrite } from "./node-write.js";
+import { checkLogWrite, checkNodeWrite, logRecord } from "./node-write.js";
 
 export class MemoryNodes extends MemoryRuns {
   async getNodeRuns(runId: string): Promise<NodeRun[]> {
@@ -72,35 +72,17 @@ export class MemoryNodes extends MemoryRuns {
         break;
       }
 
-      case "emit_event": {
-        if (effect.event.runId !== runId) {
-          throw new Error("Event belongs to another run.");
+      case "write_log": {
+        if (effect.executionKey.runId !== runId) {
+          throw new Error("Log belongs to another run.");
         }
 
-        if (effect.event.entity === "log") {
-          const logs = this.logs.get(runId) ?? new Map<number, LogRecord>();
-          const log = { ...effect.event.record, seq: Math.max(0, ...logs.keys()) + 1 };
-
-          if (log.position.kind !== "node") {
-            throw new Error("Attempt logs require a node execution key.");
-          }
-
-          checkLogWrite([...logs.values()], log);
-          const position = JSON.stringify(log.position);
-
-          if (
-            [...logs.values()].some((previous) => JSON.stringify(previous.position) === position)
-          ) {
-            throw new Error("Attempt log already exists.");
-          }
-
-          logs.set(log.seq, structuredClone(log));
-          this.logs.set(runId, logs);
-          this.emit(txn, { ...effect.event, record: log });
-        } else {
-          this.emit(txn, effect.event);
-        }
-
+        const logs = this.logs.get(runId) ?? new Map<number, LogRecord>();
+        const record = logRecord([...logs.values()], effect);
+        checkLogWrite([...logs.values()], record);
+        logs.set(record.seq, structuredClone(record));
+        this.logs.set(runId, logs);
+        this.emit(txn, { entity: "log", kind: "written", runId, record });
         break;
       }
     }
