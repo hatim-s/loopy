@@ -25,6 +25,8 @@ test("macOS plist retains argv boundaries, escaped paths, environment and logs",
   expect(content).toContain("<string>/data/hatim &amp; loopy</string>");
   expect(content).toContain("<string>--concurrency</string><string>7</string>");
   expect(content).toContain("<key>WorkingDirectory</key><string>/data/hatim &amp; loopy</string>");
+  expect(content).toContain("<key>RunAtLoad</key><true/>");
+  expect(content).toContain("<key>KeepAlive</key><true/>");
   expect(content).toContain("<key>PATH</key><string>/opt/bin:/usr/bin</string>");
 
   for (const key of ["StandardOutPath", "StandardErrorPath"]) {
@@ -44,6 +46,7 @@ test("Linux unit escapes command expansion and supplies environment and persiste
   expect(content).toContain(
     'ExecStart="/opt/bun" "/opt/cli with spaces.js" "daemon" "run" "--home" "/data/loopy %% $$HOME"',
   );
+  expect(content).toContain("Restart=always");
   expect(content).toContain("WorkingDirectory=/data/loopy %% $HOME");
   expect(content).toContain(
     'Environment="LOOPY_HOME=/data/loopy %% $HOME" "PATH=/opt/bin:/usr/bin"',

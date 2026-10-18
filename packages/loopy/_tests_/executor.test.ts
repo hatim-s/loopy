@@ -226,6 +226,68 @@ test("complete log records keep keys and values that end in a secret prefix", ()
   }
 });
 
+test("code bundles cannot read siblings, dynamically import, or write outside the workspace", async () => {
+  const f = await fixture();
+  const sibling = join(f.root, "sibling.ts");
+  await writeFile(sibling, 'export default "private";');
+  const outside = join(f.root, "outside.txt");
+  await writeFile(
+    f.bundle,
+    `import {readFile, writeFile} from "node:fs/promises";
+const results = [];
+for (const action of [() => readFile(${JSON.stringify(sibling)}), () => import(${JSON.stringify(sibling)}), () => writeFile(${JSON.stringify(outside)}, "escaped")]) {try {await action(); results.push(true);} catch {results.push(false);}}
+process.stdout.write(JSON.stringify(results)+"\\n");`,
+  );
+  expect(await f.executor.execute(f.key, 1, f.spec, new AbortController().signal)).toEqual({
+    kind: "succeeded",
+    output: [false, false, false],
+    logs: [],
+  });
+});
+
+test("a missing declared secret persists and reports its stable preparation code", async () => {
+  const f = await fixture();
+  const store = openRunStore(f.home);
+  const registry = new Registry(f.home, f.workspace);
+  const graph = loopy("missing-secret", { input: {}, secrets: ["TOKEN"], run: () => null }).graph;
+  const rev = "b".repeat(64);
+  await Bun.write(registry.graphPath(rev), JSON.stringify(graph));
+  await registry.save({
+    graph,
+    revision: rev,
+    bundles: [],
+    replace: false,
+    source: { path: join(f.workspace, "source.ts"), workspace: f.workspace },
+  });
+  const service = new LoopyService({ store, registry: () => registry, clock: SYSTEM_CLOCK });
+  const run = await service.startRun(graph.name, {}, f.workspace);
+  const errors: Error[] = [];
+  const daemon = localDaemon({
+    home: f.home,
+    cwd: f.workspace,
+    store,
+    port: 0,
+    concurrency: 1,
+    onError: (error) => errors.push(error),
+  });
+  const running = daemon.run();
+  try {
+    await until(async () => (await store.getRun(run.id))?.status === "failed");
+    expect((await store.getRun(run.id))?.error).toBe(
+      "[missing_secret] No stored secret 'TOKEN'. Use loopy secrets set TOKEN.",
+    );
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatchObject({
+      code: "missing_secret",
+      message: "No stored secret 'TOKEN'. Use loopy secrets set TOKEN.",
+    });
+  } finally {
+    await daemon.stop();
+    await running;
+    store.close();
+  }
+});
+
 for (const mode of ["sandbox", "full"] as const) {
   test(`${mode} bundle cannot read, replace, remove or create daemon receipts`, async () => {
     const f = await fixture();

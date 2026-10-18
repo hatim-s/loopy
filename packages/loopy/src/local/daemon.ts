@@ -60,6 +60,8 @@ class LocalDaemon {
   private readonly service: LoopyService;
   private readonly token = crypto.randomUUID();
   private server?: ReturnType<typeof startServer>;
+  private starting?: Promise<string>;
+  private starting?: Promise<string>;
   private stopping?: Promise<void>;
 
   constructor(private readonly options: DaemonOptions) {
@@ -81,9 +83,17 @@ class LocalDaemon {
       return this.server.url;
     }
 
-    return withLockDirectory(join(this.options.home, "daemon-start.lock"), "daemon startup", () =>
-      this.startLocked(),
+    if (this.stopping) {
+      throw new Error("The daemon is stopping.");
+    }
+
+    this.starting ??= withLockDirectory(
+      join(this.options.home, "daemon-start.lock"),
+      "daemon startup",
+      () => this.startLocked(),
     );
+
+    return this.starting;
   }
 
   private async startLocked(): Promise<string> {
@@ -115,7 +125,7 @@ class LocalDaemon {
         startedAt: this.startedAt,
       });
     } catch (error) {
-      void server.stop();
+      await server.stop();
       throw error;
     }
 
@@ -132,9 +142,19 @@ class LocalDaemon {
 
   stop(): Promise<void> {
     this.stopping ??= (async () => {
-      await this.server?.stop();
-      await this.daemon.stop();
-      removeDaemonFile(this.options.home, this.token);
+      try {
+        await this.starting;
+      } finally {
+        try {
+          await this.starting;
+        } catch {
+          // Failed startup already closes its server. Shutdown still drains the host.
+        }
+
+        await this.server?.stop();
+        await this.daemon.stop();
+        removeDaemonFile(this.options.home, this.token);
+      }
     })();
 
     return this.stopping;

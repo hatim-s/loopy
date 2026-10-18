@@ -1,8 +1,6 @@
 import type { z } from "zod";
 import {
   type CursorView,
-  DEFAULT_ERROR_MESSAGES,
-  type ErrorCode,
   encodeRunCursor,
   graphView,
   type Json,
@@ -35,17 +33,8 @@ import type { Registry } from "./registry.js";
 import { saveCompiled } from "./save-compiled.js";
 import type { SavedLoopy } from "./saved-loopy.js";
 import { SecretStore } from "./secrets.js";
+import { ServiceError } from "./service-error.js";
 import { generateCommand } from "./typegen/generate.js";
-
-export class ServiceError extends Error {
-  constructor(
-    readonly code: ErrorCode,
-    message = DEFAULT_ERROR_MESSAGES[code],
-  ) {
-    super(message);
-    this.name = "ServiceError";
-  }
-}
 
 export class LoopyService {
   constructor(

@@ -1,4 +1,5 @@
 import {
+  errnoCode,
   errorMessage,
   type RunRecord,
   type Schedule,
@@ -145,6 +146,8 @@ export class Daemon {
       return await this.options.prepare(run);
     } catch (error) {
       const { store } = this.options;
+      const code = errnoCode(error);
+      const message = code ? `[${code}] ${errorMessage(error)}` : errorMessage(error);
       const token = crypto.randomUUID();
       await store.claim(run.id, token);
 
@@ -155,7 +158,7 @@ export class Daemon {
           effects: [
             {
               kind: "finish_run",
-              outcome: { status: "failed", error: errorMessage(error) },
+              outcome: { status: "failed", error: message },
               at: new Date(this.clock.now()).toISOString(),
             },
           ],

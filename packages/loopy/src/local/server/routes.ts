@@ -6,7 +6,8 @@ import {
   routes,
 } from "../../contract/index.js";
 import type { SqliteRunStore } from "../../store/index.js";
-import { type LoopyService, ServiceError } from "../service.js";
+import type { LoopyService } from "../service.js";
+import { ServiceError } from "../service-error.js";
 import { eventStream } from "./events.js";
 
 const STATUS: Record<ErrorCode, number> = {
@@ -15,6 +16,7 @@ const STATUS: Record<ErrorCode, number> = {
   not_claimable: 409,
   owned_elsewhere: 409,
   bad_request: 400,
+  missing_secret: 400,
   invalid_schedule: 400,
   stale_cursor: 410,
   unauthorized: 401,

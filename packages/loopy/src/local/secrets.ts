@@ -13,6 +13,7 @@ import { isString, requireRecord, setOwnProperty, validateSecretName } from "../
 import { writeFileAtomically } from "../executor/index.js";
 import { errnoCode, withLockDirectory } from "./fs.js";
 import { defaultHome } from "./home.js";
+import { ServiceError } from "./service-error.js";
 
 const MAX_VALUE_BYTES = 64 * 1024;
 
@@ -147,7 +148,10 @@ export class SecretStore {
     const value = Object.hasOwn(values, name) ? values[name] : undefined;
 
     if (value === undefined) {
-      throw new Error(`No stored secret '${name}'. Use loopy secrets set ${name}.`);
+      throw new ServiceError(
+        "missing_secret",
+        `No stored secret '${name}'. Use loopy secrets set ${name}.`,
+      );
     }
 
     return value;

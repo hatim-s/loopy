@@ -2,7 +2,8 @@ import type { z } from "zod";
 import { routes } from "../../contract/index.js";
 import type { RuntimeEvent } from "../../core/index.js";
 import type { SqliteRunStore } from "../../store/index.js";
-import { type LoopyService, ServiceError } from "../service.js";
+import type { LoopyService } from "../service.js";
+import { ServiceError } from "../service-error.js";
 
 // A full queue is normal while a reader drains; two seconds without a pull is a reader that stopped.
 const STALLED_READER_MS = 2000;

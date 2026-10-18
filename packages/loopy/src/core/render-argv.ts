@@ -22,7 +22,6 @@ export class CommandArgumentError extends Error {
   }
 }
 
-// BOUNDARY: JavaScript command inputs are checked against descriptor flags and arity below.
 export type RenderInput = {
   args?: readonly string[];
   revisions?: readonly string[];

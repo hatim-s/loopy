@@ -108,3 +108,19 @@ test("ui starts the foreground daemon when discovery is absent and removes it on
     await child.exited;
   }
 });
+
+test("stop during startup waits for discovery publication and closes its listening server", async () => {
+  const home = directory();
+  const store = openRunStore(home);
+  const daemon = localDaemon({ home, cwd: directory(), store, port: 0, concurrency: 1 });
+  try {
+    const starting = daemon.start();
+    await daemon.stop();
+    const url = new URL(await starting);
+    expect(existsSync(join(home, "daemon.json"))).toBe(false);
+    await expect(fetch(url.origin)).rejects.toThrow();
+  } finally {
+    await daemon.stop();
+    store.close();
+  }
+});
