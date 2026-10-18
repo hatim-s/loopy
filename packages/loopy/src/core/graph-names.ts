@@ -7,6 +7,7 @@ export const RESERVED_GRAPH_NAMES = ["__proto__", "constructor", "prototype"] as
 
 export function isReservedGraphName(name: string): boolean {
   const [field] = recordFields({ [name]: "json" });
+
   return RESERVED_GRAPH_NAMES.some((reserved) => reserved === field?.key);
 }
 

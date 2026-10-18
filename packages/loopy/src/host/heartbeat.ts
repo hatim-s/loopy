@@ -1,4 +1,4 @@
-import { errorMessage, OwnershipError, type Store } from "../core/index.js";
+import { OwnershipError, type Store, toError } from "../core/index.js";
 
 export async function withHeartbeat<T>(
   store: Store,
@@ -18,7 +18,7 @@ export async function withHeartbeat<T>(
           }
         })
         .catch((cause) => {
-          failure = cause instanceof Error ? cause : new Error(errorMessage(cause));
+          failure = toError(cause);
         });
     },
     Math.max(250, store.leaseMs / 4),

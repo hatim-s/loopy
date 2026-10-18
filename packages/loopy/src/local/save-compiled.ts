@@ -36,6 +36,7 @@ export async function saveCompiled(registry: Registry, body: PutLoopyBody) {
   }));
 
   const hashes = await Promise.all(bundles.map((value) => sha256Hex(value.bytes)));
+
   if (bundles.some((value, index) => hashes[index] !== value.bundleHash)) {
     throw new Error("Bundle bytes do not match their hash.");
   }

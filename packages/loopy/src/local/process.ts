@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import type { CommandResult, ExecutionMode } from "../core/index.js";
 import {
   CommandExecutionError,
+  DEFAULT_EXECUTION_TIMEOUT_MS,
   type ResolvedCommand,
   requirePositiveInteger,
 } from "../core/index.js";
@@ -24,8 +25,6 @@ type SandboxContext = {
   protectedHome?: string;
   mode: ExecutionMode;
 };
-
-const DEFAULT_TIMEOUT_MS = 5 * 60_000;
 
 const DEFAULT_MAX_OUTPUT_BYTES = 8 * 1024 * 1024;
 
@@ -50,7 +49,10 @@ process.exit(await child.exited);
 
 function commandLimits(command: ProcessCommand): Limits {
   return {
-    timeoutMs: requirePositiveInteger(command.timeoutMs ?? DEFAULT_TIMEOUT_MS, "timeoutMs"),
+    timeoutMs: requirePositiveInteger(
+      command.timeoutMs ?? DEFAULT_EXECUTION_TIMEOUT_MS,
+      "timeoutMs",
+    ),
     maxOutputBytes: requirePositiveInteger(
       command.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES,
       "maxOutputBytes",

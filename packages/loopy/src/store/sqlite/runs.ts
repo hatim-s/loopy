@@ -31,7 +31,7 @@ export class SqliteRuns extends SqliteOwnership {
         const window =
           this.db.query<RateLimitWindow, [string]>(SQL.rateLimit).get(key) ?? undefined;
 
-        const acquired = acquireWindow(window, count, windowMs, now);
+        const acquired = acquireWindow(window ?? null, { limit: count, windowMs }, now);
         this.db
           .query(SQL.putRateLimit)
           .run(key, acquired.window.windowStart, acquired.window.count);

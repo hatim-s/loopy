@@ -6,6 +6,7 @@ import {
   type RunOutcome,
   type Store,
   type StoreEffect,
+  toError,
 } from "../core/index.js";
 import { type Effect, type EngineEvent, initialState, step } from "../engine/index.js";
 import { type Clock, SYSTEM_CLOCK } from "./clock.js";
@@ -153,7 +154,7 @@ export async function activate(options: ActivationOptions) {
   } catch (cause) {
     outcome = {
       kind: "failed",
-      cause: cause instanceof Error ? cause : new Error(errorMessage(cause)),
+      cause: toError(cause),
     };
   }
 

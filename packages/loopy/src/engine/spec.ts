@@ -1,4 +1,9 @@
-import { durationMs, type ExecutionSpec, type Node } from "../core/index.js";
+import {
+  DEFAULT_EXECUTION_TIMEOUT_MS,
+  durationMs,
+  type ExecutionSpec,
+  type Node,
+} from "../core/index.js";
 import { resolve, resolveValues } from "./resolve.js";
 import type { EngineState } from "./state.js";
 
@@ -15,7 +20,7 @@ export function executionSpec(
       kind: "code",
       bundleHash: node.module.bundleHash,
       input: resolveValues(node.in, state),
-      timeoutMs: node.timeout === null ? 300_000 : durationMs(node.timeout),
+      timeoutMs: node.timeout === null ? DEFAULT_EXECUTION_TIMEOUT_MS : durationMs(node.timeout),
     };
   }
 

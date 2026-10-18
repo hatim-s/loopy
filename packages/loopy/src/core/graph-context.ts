@@ -17,36 +17,32 @@ export function createContext(graph: Context["graph"]): Context {
   const outgoing = new Map<NodeId, Edge[]>();
   const bindings = new Map<RefId, Node>();
   const scopeExits = new Map<NodeId, Edge[]>();
+
   for (const edge of graph.edges) {
-    outgoing.set(edge.from, [...(outgoing.get(edge.from) ?? []), edge]);
+    const edges = outgoing.get(edge.from) ?? [];
+    edges.push(edge);
+    outgoing.set(edge.from, edges);
     const scope = nodes.get(edge.from)?.scope;
+
     if (edge.kind === "join" && scope !== null && scope !== undefined) {
-      scopeExits.set(scope, [...(scopeExits.get(scope) ?? []), edge]);
+      const exits = scopeExits.get(scope) ?? [];
+      exits.push(edge);
+      scopeExits.set(scope, exits);
     }
   }
+
   for (const node of graph.nodes) {
     if (node.kind === "map") {
       bindings.set(node.item, node);
       bindings.set(node.index, node);
     }
+
     if (node.kind === "rescue") {
       bindings.set(node.error, node);
     }
   }
-  return { graph, nodes, outgoing, bindings, scopeExits };
-}
 
-export function switchTarget(
-  node: Extract<Node, { kind: "switch" }>,
-  label: string,
-): NodeId | null {
-  if (label === "default") {
-    return node.default;
-  }
-  if (Object.hasOwn(node.cases, label)) {
-    return node.cases[label] ?? null;
-  }
-  return null;
+  return { graph, nodes, outgoing, bindings, scopeExits };
 }
 
 export function targets(node: Node): NodeId[] {
@@ -72,11 +68,13 @@ export function ancestors(node: Node, nodes: Context["nodes"]): Node[] {
   const result: Node[] = [];
   const seen = new Set<NodeId>([node.id]);
   let parent = node.scope === null ? undefined : nodes.get(node.scope);
+
   while (parent && !seen.has(parent.id)) {
     result.push(parent);
     seen.add(parent.id);
     parent = parent.scope === null ? undefined : nodes.get(parent.scope);
   }
+
   return result;
 }
 
@@ -86,6 +84,7 @@ export function isWithin(context: Context, node: Node, ownerId: NodeId): boolean
 
 export function bodyEntries(context: Context, node: Node): NodeId[] {
   const owner = node.scope === null ? undefined : context.nodes.get(node.scope);
+
   return owner ? targets(owner).filter((entry) => scopeReaches(context, entry, node.id)) : [];
 }
 
@@ -93,34 +92,46 @@ export function sameBody(context: Context, left: Node, right: Node): boolean {
   if (left.scope === null && right.scope === null) {
     return true;
   }
+
   const entries = bodyEntries(context, left);
   const other = bodyEntries(context, right);
+
   return entries.length === 1 && other.length === 1 && entries[0] === other[0];
 }
 
 export function walk(
-  start: NodeId,
+  start: NodeId | NodeId[],
   next: (id: NodeId) => NodeId[],
-  target: (id: NodeId) => boolean,
+  target: (id: NodeId, path: ReadonlySet<NodeId>) => boolean,
 ): boolean {
   const seen = new Set<NodeId>();
+  const path = new Set<NodeId>();
+
   function visit(id: NodeId): boolean {
-    if (target(id)) {
+    if (target(id, path)) {
       return true;
     }
+
     if (seen.has(id)) {
       return false;
     }
+
     seen.add(id);
-    return next(id).some(visit);
+    path.add(id);
+    const found = next(id).some(visit);
+    path.delete(id);
+
+    return found;
   }
-  return visit(start);
+
+  return (Array.isArray(start) ? start : [start]).some(visit);
 }
 
 export function scopeReaches(context: Context, from: NodeId, to: NodeId): boolean {
   const scope = context.nodes.get(from)?.scope;
   const owner = scope === null || scope === undefined ? undefined : context.nodes.get(scope);
   const entries = owner ? targets(owner) : [];
+
   // Visibility follows completed control scopes back into their owner's body.
   // Entering another body would let sibling arms observe one another's outputs.
   return walk(
@@ -146,6 +157,7 @@ export function scopeReaches(context: Context, from: NodeId, to: NodeId): boolea
 function isScopeJoin(context: Context, edge: Edge): boolean {
   const source = context.nodes.get(edge.from);
   const owner = context.nodes.get(edge.to);
+
   return (
     edge.kind === "join" &&
     owner?.kind === "map" &&
@@ -160,6 +172,7 @@ export function isTail(context: Context, node: Node): boolean {
 
 export function successors(context: Context, id: NodeId): NodeId[] {
   const node = context.nodes.get(id);
+
   return [
     ...(context.outgoing.get(id) ?? [])
       .filter((edge) => !isScopeJoin(context, edge))

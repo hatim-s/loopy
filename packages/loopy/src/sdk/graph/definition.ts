@@ -1,4 +1,5 @@
 import {
+  assertTimeZone,
   EXECUTION_MODES,
   FIELD_TYPES,
   type GraphMeta,
@@ -68,21 +69,12 @@ function parseSchedule(schedule: Record<string, unknown>): NonNullable<GraphMeta
 
   const parsed: NonNullable<GraphMeta["schedule"]> = {
     cron: requireString(schedule.cron, "Schedule cron"),
+    tz: requireString(schedule.tz ?? "UTC", "Schedule timezone"),
   };
 
   parseCron(parsed.cron);
 
-  if (schedule.tz !== undefined) {
-    parsed.tz = requireString(schedule.tz, "Schedule timezone");
-
-    try {
-      new Intl.DateTimeFormat("en", { timeZone: parsed.tz });
-    } catch {
-      throw new Error(
-        `Invalid time zone '${parsed.tz}'. Provide an IANA time zone such as 'Asia/Kolkata'.`,
-      );
-    }
-  }
+  assertTimeZone(parsed.tz);
 
   return parsed;
 }

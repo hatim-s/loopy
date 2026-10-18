@@ -1,6 +1,5 @@
 import type { Diagnostic } from "./diagnostics.js";
 import { diagnostic } from "./diagnostics.js";
-import type { NodeId } from "./graph.js";
 import type { ValidationContext as Context } from "./graph-context.js";
 import { isTail, isWithin, reaches, sameBody, successors, targets, walk } from "./graph-context.js";
 
@@ -45,6 +44,7 @@ function endpoints({ graph, nodes }: Context): Diagnostic[] {
 
 function scopes(context: Context): Diagnostic[] {
   const { graph, nodes } = context;
+
   return graph.nodes.flatMap((node) => {
     const parent = node.scope === null ? undefined : nodes.get(node.scope);
 
@@ -101,15 +101,12 @@ function connectivity(context: Context): Diagnostic[] {
 }
 
 function cycles(context: Context): Diagnostic[] {
-  const cyclic = context.graph.nodes.some((node) =>
-    successors(context, node.id).some((start) =>
-      walk(
-        start,
-        (id) => successors(context, id),
-        (id) => id === node.id,
-      ),
-    ),
+  const cyclic = walk(
+    context.graph.nodes.map((node) => node.id),
+    (id) => successors(context, id),
+    (id, path) => path.has(id),
   );
+
   return cyclic ? [diagnostic("cycle", null)] : [];
 }
 

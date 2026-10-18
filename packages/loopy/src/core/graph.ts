@@ -11,6 +11,7 @@ export type NodeId = Brand<string, "NodeId">;
 export type RefId = Brand<string, "RefId">;
 
 export const SCALAR_TYPES = ["string", "number", "boolean"] as const;
+
 export type ScalarType = (typeof SCALAR_TYPES)[number];
 
 export const FIELD_TYPES = [
@@ -60,7 +61,9 @@ export const PREDICATE_SHAPES = {
 } as const;
 
 type PredicateOp = keyof typeof PREDICATE_SHAPES;
+
 type PredicateShape = (typeof PREDICATE_SHAPES)[PredicateOp];
+
 type OpsOf<S extends PredicateShape> = {
   [K in PredicateOp]: (typeof PREDICATE_SHAPES)[K] extends S ? K : never;
 }[PredicateOp];
@@ -129,10 +132,15 @@ export type GraphRetry = {
 };
 
 export const FLAG_KINDS = ["boolean", "string", "number"] as const;
+
 export const FLAG_STYLES = ["equals", "space", "attached", "positional"] as const;
+
 export const FLAG_POSITIONS = ["before", "after"] as const;
+
 export type FlagKind = (typeof FLAG_KINDS)[number];
+
 export type FlagStyle = (typeof FLAG_STYLES)[number];
+
 export type FlagPosition = (typeof FLAG_POSITIONS)[number];
 
 export type CommandFlag = {
@@ -228,7 +236,9 @@ export type Node = Expand<
 >;
 
 export const EDGE_KINDS = ["next", "join"] as const;
+
 type EdgeKind = (typeof EDGE_KINDS)[number];
+
 export type Edge = { from: NodeId; to: NodeId; kind: EdgeKind };
 
 export const LOOPY_SCOPES = ["project", "global"] as const;

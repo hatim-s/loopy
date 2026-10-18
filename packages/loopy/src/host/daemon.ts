@@ -4,6 +4,7 @@ import {
   type RunRecord,
   type Schedule,
   type Store,
+  toError,
 } from "../core/index.js";
 import { type ActivationOptions, activate } from "./activate.js";
 import { type Clock, SYSTEM_CLOCK } from "./clock.js";
@@ -203,7 +204,7 @@ export class Daemon {
   }
 
   private report(cause: unknown, run?: RunRecord): void {
-    const error = cause instanceof Error ? cause : new Error(errorMessage(cause));
+    const error = toError(cause);
     this.options.onError?.(error, run);
   }
 

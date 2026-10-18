@@ -46,3 +46,5 @@ export interface Executor {
   ): Promise<ExecutionResult>;
   lookup(executionKey: ExecutionKey, attempt: number): Promise<Receipt>;
 }
+
+export const DEFAULT_EXECUTION_TIMEOUT_MS = 5 * 60_000;

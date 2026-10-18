@@ -16,7 +16,7 @@ export class MemoryRuns extends MemoryEvents {
     windowMs: number,
     now: string,
   ): Promise<RateLimitResult> {
-    const acquired = acquireWindow(this.limits.get(key), count, windowMs, now);
+    const acquired = acquireWindow(this.limits.get(key) ?? null, { limit: count, windowMs }, now);
     this.limits.set(key, acquired.window);
 
     return acquired.result;

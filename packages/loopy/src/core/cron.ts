@@ -24,7 +24,7 @@ const MINUTE_MS = 60_000;
 
 const DAY_MS = 86_400_000;
 
-type FieldSpec = { name: string; min: number; max: number; names: string[] };
+type FieldSpec = { name: string; min: number; max: number; names: string[]; wrap?: number };
 
 function invalid(spec: FieldSpec, token: string): never {
   throw new Error(
@@ -80,7 +80,7 @@ function tokenValues(token: string, spec: FieldSpec): number[] {
   const values: number[] = [];
 
   for (let value = start; value <= end; value += step) {
-    values.push(spec.name === "day-of-week" ? value % 7 : value);
+    values.push(spec.wrap === undefined ? value : value % spec.wrap);
   }
 
   return values;
@@ -109,7 +109,13 @@ export function parseCron(expression: string): CronSchedule {
     hour: parseField(hour, { name: "hour", min: 0, max: 23, names: [] }),
     dayOfMonth: parseField(dayOfMonth, { name: "day-of-month", min: 1, max: 31, names: [] }),
     month: parseField(month, { name: "month", min: 1, max: 12, names: MONTHS }),
-    dayOfWeek: parseField(dayOfWeek, { name: "day-of-week", min: 0, max: 7, names: WEEKDAYS }),
+    dayOfWeek: parseField(dayOfWeek, {
+      name: "day-of-week",
+      min: 0,
+      max: 7,
+      names: WEEKDAYS,
+      wrap: 7,
+    }),
   };
 }
 
@@ -178,29 +184,19 @@ function* calendarCandidates(schedule: CronSchedule, start: Date, end: Date) {
 }
 
 export function nextFire(schedule: CronSchedule, after: Date, timeZone: string): Date {
-  if (!Number.isFinite(after.getTime())) {
-    throw new Error("Invalid after date. Provide a valid Date to find the next cron fire.");
-  }
+  assertTimeZone(timeZone);
 
-  let formatter: Intl.DateTimeFormat;
-
-  try {
-    formatter = new Intl.DateTimeFormat("en-GB", {
-      timeZone,
-      calendar: "gregory",
-      numberingSystem: "latn",
-      hourCycle: "h23",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    throw new Error(
-      `Invalid time zone '${timeZone}'. Provide an IANA time zone such as 'Asia/Kolkata'.`,
-    );
-  }
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    calendar: "gregory",
+    numberingSystem: "latn",
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
   const limit = new Date(after);
   limit.setUTCFullYear(limit.getUTCFullYear() + 5);
@@ -219,4 +215,12 @@ export function nextFire(schedule: CronSchedule, after: Date, timeZone: string):
   throw new Error(
     "No cron fire found within five years. Choose a schedule with a reachable calendar date.",
   );
+}
+
+export function assertTimeZone(tz: string): void {
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: tz });
+  } catch {
+    throw new Error(`Invalid time zone '${tz}'. Provide an IANA time zone such as 'Asia/Kolkata'.`);
+  }
 }

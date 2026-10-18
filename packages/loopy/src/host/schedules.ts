@@ -1,10 +1,10 @@
 import {
-  errorMessage,
   nextFire,
   parseCron,
   type RunRecord,
   type Schedule,
   type Store,
+  toError,
 } from "../core/index.js";
 
 type Options = {
@@ -48,7 +48,7 @@ export class ScheduleScheduler {
           fired += Number(await this.fire(schedule, now));
         }
       } catch (error) {
-        this.options.onError(error instanceof Error ? error : new Error(errorMessage(error)));
+        this.options.onError(toError(error));
       }
     }
 

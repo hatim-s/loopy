@@ -2,7 +2,14 @@ import type { Diagnostic } from "./diagnostics.js";
 import { diagnostic } from "./diagnostics.js";
 import { type Graph, type Node, type Ref, SCALAR_TYPES } from "./graph.js";
 import type { ValidationContext as Context } from "./graph-context.js";
-import { ancestors, binding, bodyEntries, sameBody, scopeReaches } from "./graph-context.js";
+import {
+  ancestors,
+  binding,
+  createContext,
+  isWithin,
+  sameBody,
+  scopeReaches,
+} from "./graph-context.js";
 import { isReservedGraphName, nodeNames } from "./graph-names.js";
 import { checkPredicate } from "./graph-predicate.js";
 import { structureRules } from "./graph-structure.js";
@@ -65,10 +72,13 @@ function bindingVisible(context: Context, owner: Node, consumer: Node | null): b
   if (consumer === null || !isWithin(context, consumer, owner.id)) {
     return false;
   }
+
   if (owner.kind !== "rescue") {
     return true;
   }
+
   const handler = context.nodes.get(owner.handler);
+
   return (
     handler !== undefined &&
     [consumer, ...ancestors(consumer, context.nodes)].some(
@@ -81,6 +91,7 @@ function outputVisible(context: Context, producer: Node, consumer: Node | null):
   if (consumer === null) {
     return producer.scope === null;
   }
+
   return visible(context, producer, consumer);
 }
 
@@ -100,6 +111,7 @@ function predicates(context: Context): Diagnostic[] {
     if (node.kind !== "branch") {
       return [];
     }
+
     return checkPredicate(node.predicate, context.resolveType).map((error) =>
       diagnostic(error.code, node.id),
     );
@@ -121,8 +133,7 @@ function bindings({ graph }: Context): Diagnostic[] {
   const seen = new Set<string>(["input", ...graph.nodes.map((node) => node.id)]);
 
   return graph.nodes.flatMap((node) => {
-    const ids =
-      node.kind === "map" ? [node.item, node.index] : node.kind === "rescue" ? [node.error] : [];
+    const ids = bindingIds(node);
 
     return ids.flatMap((id) => {
       const duplicate = seen.has(id);
@@ -140,7 +151,9 @@ function reservedNames({ graph }: Context): Diagnostic[] {
   ];
 
   return names.flatMap(({ name, node }) =>
-    isReservedGraphName(name) ? [diagnostic("reserved_name", node)] : [],
+    isReservedGraphName(name)
+      ? [diagnostic("reserved_name", node, `Name: ${JSON.stringify(name)}.`)]
+      : [],
   );
 }
 
@@ -148,10 +161,28 @@ export function validateGraph(graph: Graph): Diagnostic[] {
   const topology = createContext(graph);
   const context: Context = { ...topology, graph, resolveType: graphTypeResolver(graph, topology) };
   const structural = structureRules.flatMap((rule) => rule(context));
+
   if (structural.length) {
     return structural;
   }
-  return [reservedNames, bindings, references, predicates, formats].flatMap((rule) =>
-    rule(context),
-  );
+
+  const declarations = [reservedNames, bindings].flatMap((rule) => rule(context));
+
+  if (declarations.length) {
+    return declarations;
+  }
+
+  return [references, predicates, formats].flatMap((rule) => rule(context));
+}
+
+function bindingIds(node: Node) {
+  if (node.kind === "map") {
+    return [node.item, node.index];
+  }
+
+  if (node.kind === "rescue") {
+    return [node.error];
+  }
+
+  return [];
 }

@@ -51,27 +51,34 @@ export function operandType(value: ComparisonOperand, resolveType: ResolveType):
   if (isRef(value)) {
     return "size" in value ? "number" : resolveType(value);
   }
+
   if (value === null) {
     return "null";
   }
+
   if (Array.isArray(value)) {
     const elements = value.map((item) => operandType(item, resolveType));
     const type = elements[0] ?? null;
+
     return elements.every((element) => element === type) ? arrayType(type) : "json[]";
   }
+
   if (isString(value)) {
     return "string";
   }
+
   if (isNumber(value)) {
     return "number";
   }
+
   if (isBoolean(value)) {
     return "boolean";
   }
+
   return "object";
 }
 
-export function hasSize(value: Value): boolean {
+function hasSize(value: Value): boolean {
   return refs(value).some((ref) => "size" in ref);
 }
 
@@ -83,15 +90,20 @@ function comparisonErrors(
     if (!isRef(operand) || !("size" in operand)) {
       return hasSize(operand);
     }
+
     const type = resolveType(operand);
+
     return type !== "string" && !type?.endsWith("[]");
   });
+
   if (invalidSize) {
     return [issue("invalid_size")];
   }
+
   const left = operandType(predicate.left, resolveType);
   const right = operandType(predicate.right, resolveType);
   let mismatch: boolean;
+
   switch (PREDICATE_SHAPES[predicate.op]) {
     case "membership":
       if (Array.isArray(predicate.right)) {
@@ -102,6 +114,7 @@ function comparisonErrors(
       } else {
         mismatch = !right?.endsWith("[]") || elementType(right) !== left || left === "json";
       }
+
       break;
     case "ordering":
       mismatch = left !== right || (left !== "number" && left !== "string");
@@ -110,6 +123,7 @@ function comparisonErrors(
       mismatch = left !== null && right !== null && left !== right;
       break;
   }
+
   return mismatch ? [issue("predicate_type")] : [];
 }
 
@@ -117,12 +131,15 @@ export function checkPredicate(predicate: Predicate, resolveType: ResolveType): 
   if (predicateIs(predicate, "group")) {
     return predicate.predicates.flatMap((child) => checkPredicate(child, resolveType));
   }
+
   if (predicateIs(predicate, "negation")) {
     return checkPredicate(predicate.predicate, resolveType);
   }
+
   if (predicateIs(predicate, "presence")) {
     return [];
   }
+
   return comparisonErrors(resolveType, predicate);
 }
 
@@ -130,11 +147,14 @@ export function predicateValues(predicate: Predicate): ComparisonOperand[] {
   if (predicateIs(predicate, "group")) {
     return predicate.predicates.flatMap(predicateValues);
   }
+
   if (predicateIs(predicate, "negation")) {
     return predicateValues(predicate.predicate);
   }
+
   if (predicateIs(predicate, "presence")) {
     return [predicate.value];
   }
+
   return [predicate.left, predicate.right];
 }

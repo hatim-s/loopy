@@ -8,3 +8,7 @@ export function errorMessage(cause: unknown): string {
 export function errnoCode(cause: unknown): string | undefined {
   return isRecord(cause) && isString(cause.code) ? cause.code : undefined;
 }
+
+export function toError(cause: unknown): Error {
+  return cause instanceof Error ? cause : new Error(String(cause));
+}

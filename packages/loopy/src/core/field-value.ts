@@ -14,9 +14,12 @@ export function recordFields(spec: RecordSpec) {
 export function recordField(spec: RecordSpec, key: string) {
   if (Object.hasOwn(spec, key)) {
     const type = spec[key];
+
     return type === undefined ? undefined : { key, type, optional: false };
   }
+
   const type = Object.hasOwn(spec, `${key}?`) ? spec[`${key}?`] : undefined;
+
   return type === undefined ? undefined : { key, type, optional: true };
 }
 
@@ -28,13 +31,16 @@ export function matchesRecord(
   if (!isRecord(value) || !isJson(value)) {
     return false;
   }
+
   const fields = recordFields(spec);
+
   if (
     extraKeys === "reject" &&
     Object.keys(value).some((key) => !fields.some((field) => field.key === key))
   ) {
     return false;
   }
+
   return fields.every(
     ({ key, type, optional }) =>
       (optional && !Object.hasOwn(value, key)) ||

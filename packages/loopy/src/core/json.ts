@@ -69,6 +69,7 @@ export function assertJson(
 export function isJson(value: unknown): value is Json {
   try {
     assertJson(value);
+
     return true;
   } catch {
     return false;

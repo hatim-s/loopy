@@ -1,6 +1,7 @@
 import { realpath } from "node:fs/promises";
 import {
   CommandExecutionError,
+  DEFAULT_EXECUTION_TIMEOUT_MS,
   type ExecutionKey,
   type ExecutionMode,
   type ExecutionResult,
@@ -196,7 +197,7 @@ export class ExecutionWorker implements Executor {
     const parsed = await this.bundle(
       spec.parse.bundleHash,
       { result, input: spec.parse.input },
-      300_000,
+      DEFAULT_EXECUTION_TIMEOUT_MS,
       signal,
     );
 

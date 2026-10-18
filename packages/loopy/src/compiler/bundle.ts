@@ -64,6 +64,7 @@ export async function bundle(
 
   for (const { nodeId } of bundleRefs(graph)) {
     const node = graph.nodes.find((candidate) => candidate.id === nodeId);
+
     if (!node || (node.kind !== "code" && node.kind !== "command")) {
       continue;
     }

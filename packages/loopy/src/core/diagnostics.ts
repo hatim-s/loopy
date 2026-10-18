@@ -110,15 +110,15 @@ export const COMPILER_MESSAGES = {
   evaluation_failed: "The author module could not be evaluated.",
   bundle_failed: "The executable bundle could not be built.",
   syntax_error: "The module has invalid syntax.",
-  literal_required: "ref.get takes one literal key.",
+  literal_required: "Use a literal value in graph construction.",
   synchronous_run: "Use a synchronous arrow function for graph construction.",
-  invalid_binding: "Use unique const declarations.",
+  invalid_binding: "Use unique immutable bindings and simple callback parameters.",
   literal_key: "Object keys must be strings.",
-  module_path: "Code modules must use a relative file path.",
-  module_default: "Code modules must default-export one function.",
+  module_path: "Executable modules must use a relative file path.",
+  module_default: "Executable modules must default-export one function.",
   invalid_callback: "Callbacks belong to control nodes or command parsers.",
   forbidden_call: "Call an SDK export or a declared subgraph only.",
-  forbidden_expression: "Spread arguments are unavailable in graph builders.",
+  forbidden_expression: "Use immutable JSON values and graph references in graph construction.",
   invalid_reference: "Use a literal or an immutable graph reference.",
   await_forbidden: "Graph construction cannot await.",
   template_reference: "Use format() to interpolate graph references.",
@@ -133,5 +133,6 @@ export const COMPILER_MESSAGES = {
 
 export function diagnostic(code: DiagnosticCode, node: NodeId | null, detail?: string): Diagnostic {
   const message = detail ? `${DIAGNOSTIC_MESSAGES[code]} ${detail}` : DIAGNOSTIC_MESSAGES[code];
+
   return { code, node, message, source: null };
 }
