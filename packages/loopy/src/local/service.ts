@@ -19,9 +19,9 @@ import {
 } from "../contract/index.js";
 import {
   assertJson,
+  assertTimeZone,
   errorMessage,
-  isFieldValue,
-  isRecord,
+  matchesRecord,
   nextFire,
   OwnershipError,
   parseCron,
@@ -119,7 +119,7 @@ export class LoopyService {
 
   private validateTimezone(tz: string): void {
     try {
-      new Intl.DateTimeFormat("en", { timeZone: tz });
+      assertTimeZone(tz);
     } catch (error) {
       throw new ServiceError("invalid_timezone", errorMessage(error));
     }
@@ -215,22 +215,7 @@ export class LoopyService {
   private validateInput(saved: SavedLoopy, input: Json): Json {
     const spec = saved.graph.input;
 
-    if (spec === "schema" || !isRecord(input)) {
-      throw new ServiceError("bad_request", "Graph input requires a record schema and an object.");
-    }
-
-    const keys = Object.keys(spec).map((key) => key.replace(/\?$/, ""));
-
-    if (
-      Object.keys(input).some((key) => !keys.includes(key)) ||
-      Object.entries(spec).some(([field, kind]) => {
-        const key = field.replace(/\?$/, "");
-
-        return (
-          !(field.endsWith("?") && input[key] === undefined) && !isFieldValue(kind, input[key])
-        );
-      })
-    ) {
+    if (!matchesRecord(spec, input, { extraKeys: "reject" })) {
       throw new ServiceError("bad_request", "Input does not match the saved graph schema.");
     }
 

@@ -1,29 +1,48 @@
-import type { RecordSpec } from "./graph.js";
+import type { FieldType, RecordSpec } from "./graph.js";
+import { isJson } from "./json.js";
 import type { Json } from "./model.js";
 import { isBoolean, isNumber, isRecord, isString } from "./validation.js";
 
-// BOUNDARY: Record inputs may contain arbitrary external JSON, but not host values.
-function isJson(value: unknown): value is Json {
-  if (value === null || typeof value === "string" || typeof value === "boolean") {
-    return true;
-  }
+export function recordFields(spec: RecordSpec) {
+  return Object.entries(spec).map(([field, type]) => ({
+    key: field.replace(/\?$/, ""),
+    type,
+    optional: field.endsWith("?"),
+  }));
+}
 
-  if (typeof value === "number") {
-    return Number.isFinite(value);
+export function recordField(spec: RecordSpec, key: string) {
+  if (Object.hasOwn(spec, key)) {
+    const type = spec[key];
+    return type === undefined ? undefined : { key, type, optional: false };
   }
+  const type = Object.hasOwn(spec, `${key}?`) ? spec[`${key}?`] : undefined;
+  return type === undefined ? undefined : { key, type, optional: true };
+}
 
-  if (Array.isArray(value)) {
-    return value.every(isJson);
+export function matchesRecord(
+  spec: RecordSpec,
+  value: unknown,
+  { extraKeys }: { extraKeys: "reject" | "allow" },
+): value is Record<string, Json> {
+  if (!isRecord(value) || !isJson(value)) {
+    return false;
   }
-
-  return (
-    isRecord(value) &&
-    [Object.prototype, null].includes(Object.getPrototypeOf(value)) &&
-    Object.values(value).every(isJson)
+  const fields = recordFields(spec);
+  if (
+    extraKeys === "reject" &&
+    Object.keys(value).some((key) => !fields.some((field) => field.key === key))
+  ) {
+    return false;
+  }
+  return fields.every(
+    ({ key, type, optional }) =>
+      (optional && !Object.hasOwn(value, key)) ||
+      (Object.hasOwn(value, key) && isFieldValue(type, value[key])),
   );
 }
 
-export function isFieldValue(kind: RecordSpec[string], value: unknown): value is Json {
+export function isFieldValue(kind: FieldType, value: unknown): value is Json {
   switch (kind) {
     case "string":
     case "boolean":
@@ -33,12 +52,16 @@ export function isFieldValue(kind: RecordSpec[string], value: unknown): value is
     case "json":
       return isJson(value);
     case "string[]":
-      return Array.isArray(value) && value.every(isString);
+      return Array.isArray(value) && value.every(isString) && isJson(value);
     case "number[]":
-      return Array.isArray(value) && value.every((item) => isNumber(item) && Number.isFinite(item));
+      return (
+        Array.isArray(value) &&
+        value.every((item) => isNumber(item) && Number.isFinite(item)) &&
+        isJson(value)
+      );
     case "boolean[]":
-      return Array.isArray(value) && value.every(isBoolean);
+      return Array.isArray(value) && value.every(isBoolean) && isJson(value);
     case "json[]":
-      return Array.isArray(value) && value.every(isJson);
+      return Array.isArray(value) && isJson(value);
   }
 }

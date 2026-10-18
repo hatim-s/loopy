@@ -8,14 +8,14 @@ export * from "./duration.js";
 export * from "./effects.js";
 export { errnoCode, errorMessage } from "./errors.js";
 export * from "./executor.js";
-export { isFieldValue } from "./field-value.js";
+export { isFieldValue, matchesRecord, recordField, recordFields } from "./field-value.js";
 export * from "./graph.js";
 export { validateGraph } from "./graph-check.js";
 export { isReservedGraphName, nodeNames, RESERVED_GRAPH_NAMES } from "./graph-names.js";
 export { checkPredicate } from "./graph-predicate.js";
-export { isRef, projectValue } from "./graph-ref.js";
 export { graphTypeResolver } from "./graph-type.js";
-export { assertJson } from "./json.js";
+export { isRef, projectValue } from "./graph-values.js";
+export { assertJson, isJson } from "./json.js";
 export { limitLogs } from "./logs.js";
 export type {
   CommandResult,

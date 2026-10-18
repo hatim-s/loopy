@@ -65,3 +65,12 @@ export function assertJson(
 
   seen.delete(value);
 }
+
+export function isJson(value: unknown): value is Json {
+  try {
+    assertJson(value);
+    return true;
+  } catch {
+    return false;
+  }
+}

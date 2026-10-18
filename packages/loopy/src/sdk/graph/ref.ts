@@ -1,8 +1,8 @@
 import {
   type Ref as GraphRef,
   type OutSchema,
-  projectValue,
   type RefId,
+  recordField,
   type Value,
 } from "../../core/index.js";
 import { refuse, validateLabel } from "./validate.js";
@@ -44,8 +44,7 @@ export class Reference<T, Fields = never> extends RefValue {
       schema !== null &&
       schema.kind === "record" &&
       this.path.length === 0 &&
-      projectValue(schema.fields, [key]) === undefined &&
-      projectValue(schema.fields, [`${String(key)}?`]) === undefined
+      recordField(schema.fields, key) === undefined
     ) {
       refuse("unresolved_ref", "Reference paths must match the declared output schema.");
     }

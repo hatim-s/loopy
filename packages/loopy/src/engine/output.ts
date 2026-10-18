@@ -1,9 +1,9 @@
 import {
   type ExecutionError,
   isFieldValue,
-  isRecord,
   type Json,
   MAX_OUTPUT_BYTES,
+  matchesRecord,
   type OutSchema,
   outputBytes,
 } from "../core/index.js";
@@ -16,14 +16,7 @@ export function validateOutput(output: Json, schema: OutSchema): ExecutionError 
   const valid =
     schema.kind === "value"
       ? isFieldValue(schema.type, output)
-      : isRecord(output) &&
-        Object.entries(schema.fields).every(([field, type]) => {
-          const key = field.replace(/\?$/, "");
-
-          return (
-            (field.endsWith("?") && output[key] === undefined) || isFieldValue(type, output[key])
-          );
-        });
+      : matchesRecord(schema.fields, output, { extraKeys: "allow" });
 
   return valid
     ? null

@@ -1,11 +1,13 @@
-import type { Node, Value } from "./graph.js";
-import { values } from "./graph-ref.js";
+import { recordFields } from "./field-value.js";
+import type { Node, OutSchema, Value } from "./graph.js";
+import { values } from "./graph-values.js";
 import { isRecord } from "./validation.js";
 
 export const RESERVED_GRAPH_NAMES = ["__proto__", "constructor", "prototype"] as const;
 
 export function isReservedGraphName(name: string): boolean {
-  return RESERVED_GRAPH_NAMES.some((reserved) => reserved === name.replace(/\?$/, ""));
+  const [field] = recordFields({ [name]: "json" });
+  return RESERVED_GRAPH_NAMES.some((reserved) => reserved === field?.key);
 }
 
 function valueNames(value: Value): string[] {
@@ -19,12 +21,7 @@ function valueNames(value: Value): string[] {
 }
 
 export function nodeNames(node: Node): string[] {
-  const schema =
-    node.kind === "code" || node.kind === "command"
-      ? node.out
-      : node.kind === "wait"
-        ? node.payload
-        : null;
+  const schema = nodeSchema(node);
 
   return [
     ...(node.label === null ? [] : [node.label]),
@@ -38,4 +35,16 @@ export function nodeNames(node: Node): string[] {
     ...(node.kind === "format" ? Object.keys(node.values) : []),
     ...values(node).flatMap(valueNames),
   ];
+}
+
+function nodeSchema(node: Node): OutSchema | null {
+  switch (node.kind) {
+    case "code":
+    case "command":
+      return node.out;
+    case "wait":
+      return node.payload;
+    default:
+      return null;
+  }
 }

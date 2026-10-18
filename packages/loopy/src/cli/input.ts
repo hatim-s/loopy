@@ -5,6 +5,7 @@ import {
   isFieldValue,
   type Json,
   type RecordSpec,
+  recordFields,
   setOwnProperty,
 } from "../core/index.js";
 import type { CliContext } from "./context.js";
@@ -69,13 +70,11 @@ async function recordInput(spec: RecordSpec, context: CliContext) {
       : undefined;
 
   try {
-    for (const [field, kind] of Object.entries(spec)) {
-      const key = field.replace(/\?$/, "");
+    for (const { key, type: kind, optional } of recordFields(spec)) {
       const supplied = context.namedInput?.[key];
 
       const value =
-        supplied ??
-        (!field.endsWith("?") && prompt ? await prompt.question(`${key}: `) : undefined);
+        supplied ?? (!optional && prompt ? await prompt.question(`${key}: `) : undefined);
 
       if (value !== undefined) {
         setOwnProperty(input, key, coerce(value, kind, key));
@@ -88,13 +87,9 @@ async function recordInput(spec: RecordSpec, context: CliContext) {
   }
 }
 
-export async function graphInput(spec: RecordSpec | "schema", context: CliContext): Promise<Json> {
+export async function graphInput(spec: RecordSpec, context: CliContext): Promise<Json> {
   if (context.values["input-json"] !== undefined || context.values["input-file"] !== undefined) {
     return jsonInput(context);
-  }
-
-  if (spec === "schema") {
-    throw new Error("Graph input requires a record schema.");
   }
 
   return recordInput(spec, context);
