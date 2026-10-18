@@ -1,5 +1,4 @@
 import type { StoreEffect } from "./effects.js";
-import type { NodeRun } from "./graph.js";
 import type {
   LogRecord,
   RunOutcome,
@@ -9,6 +8,7 @@ import type {
   RuntimeEvent,
   Schedule,
 } from "./model.js";
+import type { NodeRun } from "./node-run.js";
 import type { RateLimitResult } from "./rate-limit.js";
 
 export class OwnershipError extends Error {
@@ -18,7 +18,9 @@ export class OwnershipError extends Error {
   }
 }
 
-export type WakeError = "not_found" | "owned_elsewhere" | "not_claimable";
+export const WAKE_ERRORS = ["not_found", "owned_elsewhere", "not_claimable"] as const;
+
+export type WakeError = (typeof WAKE_ERRORS)[number];
 
 export interface Store {
   wakeRun(runId: string, at: string): Promise<WakeError | undefined>;

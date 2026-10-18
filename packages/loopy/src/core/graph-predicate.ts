@@ -1,4 +1,5 @@
-import type { ComparisonOperand, DiagnosticCode, Predicate, Value } from "./graph.js";
+import type { Diagnostic, DiagnosticCode } from "./diagnostics.js";
+import type { ComparisonOperand, Predicate, Value } from "./graph.js";
 import { refs } from "./graph-context.js";
 import { isRef } from "./graph-ref.js";
 import { isBoolean, isNumber, isString } from "./validation.js";
@@ -7,7 +8,7 @@ export type ResolveType = (ref: { ref: string; path: string[] }) => string | nul
 
 type PredicateIssue = { code: DiagnosticCode; message: string };
 
-function issue(code: DiagnosticCode, message: string): PredicateIssue {
+function issue(code: message: string): PredicateIssue {
   return { code, message };
 }
 

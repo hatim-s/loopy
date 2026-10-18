@@ -1,16 +1,17 @@
-import type { ExecutionError } from "./executor.js";
+import type { Duration } from "./duration.js";
 import type { ExecutionMode, Json, Schedule } from "./model.js";
 import type { RateLimit } from "./rate-limit.js";
 
 declare const brand: unique symbol;
 
-export type Brand<T, Name extends string> = T & { readonly [brand]: Name };
+type Brand<T, Name extends string> = T & { readonly [brand]: Name };
 
 export type NodeId = Brand<string, "NodeId">;
 
 export type RefId = Brand<string, "RefId">;
 
-export type Duration = number | `${number}${"s" | "m" | "h" | "d"}`;
+export const SCALAR_TYPES = ["string", "number", "boolean"] as const;
+export type ScalarType = (typeof SCALAR_TYPES)[number];
 
 export const FIELD_TYPES = [
   "string",
@@ -24,6 +25,8 @@ export const FIELD_TYPES = [
 ] as const;
 
 export type FieldType = (typeof FIELD_TYPES)[number];
+
+export type ValueType = FieldType | "object" | "null" | "never";
 
 export type RecordSpec = Readonly<Record<string, FieldType>>;
 
@@ -39,7 +42,7 @@ export type Ref = { ref: RefId; path: string[] };
 
 export type Value = Json | Ref;
 
-export type FormatOperand = string | number | boolean | Ref;
+type FormatOperand = string | number | boolean | Ref;
 
 export const PREDICATE_OPS = [
   "eq",
@@ -104,19 +107,26 @@ export const RETRY_BACKOFFS = ["exponential"] as const;
 
 export type GraphRetry = {
   attempts: number;
-  backoff: (typeof RETRY_BACKOFFS)[number];
+  backoff: "exponential";
   retryOnExit: boolean;
 };
 
+export const FLAG_KINDS = ["boolean", "string", "number"] as const;
+export const FLAG_STYLES = ["equals", "space", "attached", "positional"] as const;
+export const FLAG_POSITIONS = ["before", "after"] as const;
+export type FlagKind = (typeof FLAG_KINDS)[number];
+export type FlagStyle = (typeof FLAG_STYLES)[number];
+export type FlagPosition = (typeof FLAG_POSITIONS)[number];
+
 export type CommandFlag = {
   readonly cli: string;
-  readonly kind: "boolean" | "string" | "number";
+  readonly kind: FlagKind;
   readonly repeatable?: boolean;
   readonly optionalValue?: boolean;
   readonly choices?: readonly string[];
   readonly supported?: boolean;
-  readonly style?: "equals" | "space" | "attached" | "positional";
-  readonly position?: "before" | "after";
+  readonly style?: FlagStyle;
+  readonly position?: FlagPosition;
   readonly order?: number;
   readonly prefix?: readonly string[];
   readonly pairs?: boolean;
@@ -144,7 +154,7 @@ export type Node = Expand<
   NodeBase &
     (
       | {
-          kind: (typeof NODE_KINDS)[0];
+          kind: "code";
           in: Record<string, Value>;
           out: OutSchema;
           module: { path: string; bundleHash: string | null };
@@ -153,48 +163,48 @@ export type Node = Expand<
           timeout: Duration | null;
         }
       | {
-          kind: (typeof NODE_KINDS)[1];
+          kind: "command";
           key: string;
           out: OutSchema;
           argv: Value[];
           flags: Record<string, Value>;
-          flagSpec?: CommandFlagSpec;
+          flagSpec: CommandFlagSpec | null;
           options: { cwd: Value | null; env: Record<string, Value>; stdin: Value | null };
           rateLimit: RateLimit | null;
           retry: GraphRetry;
           okExitCodes: number[];
           parse: { bundleHash: string | null; input: Record<string, Value> } | null;
         }
-      | { kind: (typeof NODE_KINDS)[2]; predicate: Predicate; arms: { yes: NodeId; no: NodeId } }
+      | { kind: "branch"; predicate: Predicate; arms: { yes: NodeId; no: NodeId } }
       | {
-          kind: (typeof NODE_KINDS)[3];
+          kind: "switch";
           on: Ref;
           cases: Record<string, NodeId>;
           default: NodeId | null;
         }
       | {
-          kind: (typeof NODE_KINDS)[4];
+          kind: "map";
           over: Ref;
           body: NodeId;
           item: RefId;
           index: RefId;
           concurrency: number;
-          onError: (typeof MAP_ERROR_MODES)[number];
+          onError: "fail" | "collect";
         }
-      | { kind: (typeof NODE_KINDS)[5]; branches: Record<string, NodeId> }
-      | { kind: (typeof NODE_KINDS)[6]; timeout: Duration | null; payload: OutSchema }
-      | { kind: (typeof NODE_KINDS)[7]; duration: Duration }
-      | { kind: (typeof NODE_KINDS)[8]; body: NodeId; cleanup: NodeId }
-      | { kind: (typeof NODE_KINDS)[9]; body: NodeId; handler: NodeId; error: RefId }
-      | { kind: (typeof NODE_KINDS)[10]; message: Value }
-      | { kind: (typeof NODE_KINDS)[11]; template: string; values: Record<string, FormatOperand> }
-      | { kind: (typeof NODE_KINDS)[12]; message: Value; data: Value | null }
-      | { kind: (typeof NODE_KINDS)[13] }
-      | { kind: (typeof NODE_KINDS)[14] }
-      | { kind: (typeof NODE_KINDS)[15] }
+      | { kind: "parallel"; branches: Record<string, NodeId> }
+      | { kind: "wait"; timeout: Duration | null; payload: OutSchema }
+      | { kind: "sleep"; duration: Duration }
+      | { kind: "finally"; body: NodeId; cleanup: NodeId }
+      | { kind: "rescue"; body: NodeId; handler: NodeId; error: RefId }
+      | { kind: "fail"; message: Value }
+      | { kind: "format"; template: string; values: Record<string, FormatOperand> }
+      | { kind: "log"; message: Value; data: Value | null }
+      | { kind: "now" }
+      | { kind: "uuid" }
+      | { kind: "random" }
       // Joins make a scope's result explicit without inventing an executable callback.
       | {
-          kind: (typeof NODE_KINDS)[16];
+          kind: "join";
           result: { kind: "value"; value: Value } | { kind: "none" };
         }
     )
@@ -220,37 +230,11 @@ export type Edge = Expand<
   )
 >;
 
-export const DIAGNOSTIC_CODES = [
-  "duplicate_label",
-  "reserved_name",
-  "inactive_builder",
-  "duplicate_node",
-  "duplicate_ref",
-  "missing_endpoint",
-  "missing_entry",
-  "unresolved_ref",
-  "out_of_scope_ref",
-  "predicate_type",
-  "invalid_size",
-  "missing_arm",
-  "invalid_scope",
-  "cycle",
-] as const;
-
-export type DiagnosticCode = (typeof DIAGNOSTIC_CODES)[number];
-
-export type Diagnostic = {
-  code: DiagnosticCode;
-  message: string;
-  node: NodeId | null;
-  source: { module: string; line: number; column: number } | null;
-};
-
 export const LOOPY_SCOPES = ["project", "global"] as const;
 
 export type GraphMeta = {
   description: string | null;
-  schedule: { cron: Schedule["cron"]; tz?: Schedule["tz"] } | null;
+  schedule: { cron: Schedule["cron"]; tz: Schedule["tz"] } | null;
   secrets: string[];
   mode: ExecutionMode;
   scope: (typeof LOOPY_SCOPES)[number];
@@ -260,101 +244,9 @@ export type Graph = {
   meta: GraphMeta;
   version: 1;
   name: string;
-  input: RecordSpec | "schema";
+  input: RecordSpec;
   nodes: Node[];
   edges: Edge[];
   entry: NodeId;
   outputs: Ref | null;
-  warnings: Diagnostic[];
 };
-
-export type ExecutionKey = {
-  runId: string;
-  nodeId: NodeId;
-  scope: { nodeId: NodeId; index: number }[];
-};
-
-export function executionKeyString(key: ExecutionKey): string {
-  // JSON-quoted run/node ids and scope tuples are joined by '/'. Quoting keeps ids
-  // unambiguous so stores and wire consumers share one execution identity.
-  return [
-    JSON.stringify(key.runId),
-    JSON.stringify(key.nodeId),
-    ...key.scope.map(({ nodeId, index }) => JSON.stringify([nodeId, index])),
-  ].join("/");
-}
-
-export const NODE_RUN_STATUSES = [
-  "running",
-  "succeeded",
-  "failed",
-  "retrying",
-  "waiting",
-  "sleeping",
-  "cancelled",
-  "queued",
-  "skipped",
-  "rate_limited",
-] as const;
-
-export type NodeRunStatus = (typeof NODE_RUN_STATUSES)[number];
-
-export const RECEIPT_KINDS = ["none", "started", "finished"] as const;
-
-export type NodeRun = Expand<
-  {
-    key: ExecutionKey;
-    attempt: number;
-    maxAttempts: number;
-    startedAt: string;
-    receipt: (typeof RECEIPT_KINDS)[number];
-  } & (
-    | { status: (typeof NODE_RUN_STATUSES)[0] }
-    | { status: (typeof NODE_RUN_STATUSES)[7] }
-    | { status: (typeof NODE_RUN_STATUSES)[9]; nextRetryAt: string }
-    | { status: (typeof NODE_RUN_STATUSES)[1]; output: Json; endedAt: string }
-    | { status: (typeof NODE_RUN_STATUSES)[2]; error: ExecutionError; endedAt: string }
-    | {
-        status: (typeof NODE_RUN_STATUSES)[3];
-        error: ExecutionError;
-        nextRetryAt: string;
-        endedAt: string;
-      }
-    | { status: (typeof NODE_RUN_STATUSES)[4]; wakeAt: string | null }
-    | { status: (typeof NODE_RUN_STATUSES)[5]; wakeAt: string }
-    | { status: (typeof NODE_RUN_STATUSES)[6]; endedAt: string }
-    | { status: (typeof NODE_RUN_STATUSES)[8]; endedAt: string }
-  )
->;
-
-export const COMPILER_DIAGNOSTIC_CODES = [
-  "dynamic_code",
-  "options_not_literal",
-  "unknown_sdk_call",
-  "default_loopy",
-  "source_error",
-  "evaluation_failed",
-  "bundle_failed",
-  "syntax_error",
-  "literal_required",
-  "synchronous_run",
-  "invalid_binding",
-  "literal_key",
-  "module_path",
-  "module_default",
-  "invalid_callback",
-  "forbidden_call",
-  "forbidden_expression",
-  "invalid_reference",
-  "await_forbidden",
-  "template_reference",
-  "forbidden_statement",
-  "command_descriptor",
-  "command_key",
-  "module_import",
-  "cyclic_import",
-  "sdk_alias",
-  "module_effect",
-] as const;
-
-export type CompilerDiagnosticCode = (typeof COMPILER_DIAGNOSTIC_CODES)[number] | DiagnosticCode;

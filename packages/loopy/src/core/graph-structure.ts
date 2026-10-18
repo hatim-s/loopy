@@ -1,6 +1,8 @@
-import type { Diagnostic, Edge, Node, NodeId } from "./graph.js";
+import type { Diagnostic, DiagnosticCode } from "./diagnostics.js";
+import { diagnostic } from "./diagnostics.js";
+import type { Edge, Node, NodeId } from "./graph.js";
+import type { ValidationContext as Context } from "./graph-context.js";
 import { ancestors, reaches, sameBody, successors, targets } from "./graph-context.js";
-import { type ValidationContext as Context, diagnostic } from "./graph-validation.js";
 
 function identity({ graph, nodes }: Context): Diagnostic[] {
   const seen = new Set<string>(["input"]);

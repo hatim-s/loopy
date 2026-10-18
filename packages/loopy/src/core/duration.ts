@@ -1,7 +1,6 @@
-import type { Duration } from "./graph.js";
 import { isNumber } from "./validation.js";
 
-export type { Duration } from "./graph.js";
+export type Duration = number | `${number}${"s" | "m" | "h" | "d"}`;
 
 const UNITS = new Map([
   ["s", 1000],
@@ -10,10 +9,10 @@ const UNITS = new Map([
   ["d", 86_400_000],
 ]);
 
-const DURATION = /^(\d+(?:\.\d+)?)([smhd])$/;
+export const DURATION_PATTERN = /^(\d+(?:\.\d+)?)([smhd])$/;
 
 export function durationMs(duration: Duration): number {
-  const match = isNumber(duration) ? null : DURATION.exec(duration);
+  const match = isNumber(duration) ? null : DURATION_PATTERN.exec(duration);
 
   const multiplier = UNITS.get(match?.[2] ?? "");
 

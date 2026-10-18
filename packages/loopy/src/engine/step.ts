@@ -1,9 +1,9 @@
-import { errorMessage, type Graph, type Node, type NodeRun } from "../core/index.js";
+import { errorMessage, type Graph, type Node, type NodeRun, sameExecution } from "../core/index.js";
 import { failNode } from "./failure.js";
 import { immediate } from "./immediate.js";
 import { finish, type Transition, write } from "./node-run.js";
 import { validateOutput } from "./output.js";
-import { resolve, sameExecution } from "./resolve.js";
+import { resolve } from "./resolve.js";
 import { retryDelayMs, shouldRetry } from "./retry.js";
 import { executionSpec } from "./spec.js";
 import type { EngineEvent, EngineState } from "./state.js";

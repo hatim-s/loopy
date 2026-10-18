@@ -1,4 +1,5 @@
 import type { ComparisonOperand, Graph, Node, NodeId, Predicate, Ref, Value } from "./graph.js";
+import type { ResolveType } from "./graph-predicate.js";
 import { isRef } from "./graph-ref.js";
 import { isRecord } from "./validation.js";
 
@@ -218,3 +219,5 @@ export function binding(context: Context, ref: { ref: string; path: string[] }):
       (node.kind === "rescue" && node.error === ref.ref),
   );
 }
+
+export type ValidationContext = Context & { graph: Graph; resolveType: ResolveType };

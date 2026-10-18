@@ -1,4 +1,7 @@
-import type { Diagnostic, Graph, Node, Ref } from "./graph.js";
+import type { Diagnostic, DiagnosticCode } from "./diagnostics.js";
+import { diagnostic } from "./diagnostics.js";
+import type { Graph, Node, Ref } from "./graph.js";
+import type { ValidationContext as Context } from "./graph-context.js";
 import {
   ancestors,
   binding,
@@ -13,7 +16,6 @@ import { checkPredicate, hasSize } from "./graph-predicate.js";
 import { isRef } from "./graph-ref.js";
 import { structureRules } from "./graph-structure.js";
 import { graphTypeResolver } from "./graph-type.js";
-import { type ValidationContext as Context, diagnostic } from "./graph-validation.js";
 
 function visible(context: Context, producer: Node, consumer: Node): boolean {
   const chain = [consumer, ...ancestors(consumer, context.nodes)];
