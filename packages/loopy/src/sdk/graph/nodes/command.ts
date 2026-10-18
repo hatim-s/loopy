@@ -17,6 +17,7 @@ import { commandArgv } from "../command-argv.js";
 import type { CommandInput, CommandRawInput } from "../command-input.js";
 import { type AuthorData, type Ref, type RefValue, type SchemaRef, serialize } from "../ref.js";
 import { type Normalized, normalizeOut, type Output } from "../schema.js";
+import { refuse } from "../validate.js";
 import { retry } from "./code.js";
 
 type Options = {
@@ -84,13 +85,18 @@ export type CommandCall<D extends CommandDescriptor, S extends OutSchema> = {
   ) => SchemaRef<typeof RAW_COMMAND_OUTPUT>;
 };
 
+// A parser's result is only kept when the command declares what it returns.
+type ParsedOutput<D> = D extends { readonly parse: string }
+  ? { readonly out: Exclude<Output, null | undefined> }
+  : unknown;
+
 export function defineCommand<const D extends CommandDescriptor>(
-  descriptor: D,
+  descriptor: D & ParsedOutput<D>,
 ): CommandCall<D, D extends { readonly out: infer S extends Output } ? Normalized<S> : null>;
-export function defineCommand<const S extends Output, const D extends CommandDescriptor>(
-  descriptor: D & { parse: string },
-  out: S,
-): CommandCall<D, Normalized<S>>;
+export function defineCommand<
+  const S extends Exclude<Output, null | undefined>,
+  const D extends CommandDescriptor & { readonly parse: string; readonly out?: never },
+>(descriptor: D, out: S): CommandCall<D, Normalized<S>>;
 export function defineCommand(
   descriptor: CommandDescriptor,
   schema?: Output,
@@ -99,7 +105,16 @@ export function defineCommand(
   raw: (...args: never[]) => RefValue;
 } {
   validateCommandDescriptor(descriptor);
-  const out = normalizeOut(schema === undefined ? descriptor.out : schema);
+
+  if (schema !== undefined && descriptor.out !== undefined) {
+    refuse("invalid_schema", "Declare out on the descriptor or as the second argument, not both.");
+  }
+
+  const out = normalizeOut(schema ?? descriptor.out);
+
+  if (descriptor.parse !== undefined && out === null) {
+    refuse("invalid_schema", `Command '${descriptor.key}' has a parser, so it must declare out.`);
+  }
 
   function factory(mode: "parsed" | "raw", output: OutSchema) {
     return (input: Input = {}, options: Options = {}): RefValue => {

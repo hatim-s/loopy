@@ -7,6 +7,7 @@ import {
   graphTypeResolver,
   isReservedGraphName,
   type Predicate,
+  toError,
 } from "../../core/index.js";
 
 export class GraphBuildError extends Error {
@@ -18,6 +19,19 @@ export class GraphBuildError extends Error {
 
 export function refuse(code: DiagnosticCode, detail?: string): never {
   throw new GraphBuildError(diagnostic(code, null, detail));
+}
+
+/** Runs a core check over author data and reports its failure as a coded build error. */
+export function checked<T>(code: DiagnosticCode, read: () => T): T {
+  try {
+    return read();
+  } catch (error) {
+    if (error instanceof GraphBuildError) {
+      throw error;
+    }
+
+    return refuse(code, toError(error).message);
+  }
 }
 
 export function validatePredicate(

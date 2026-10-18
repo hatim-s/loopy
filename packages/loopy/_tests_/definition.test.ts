@@ -1,33 +1,48 @@
 import { expect, test } from "bun:test";
-import { loopy } from "../src/sdk/index.js";
+import { code, loopy } from "../src/sdk/index.js";
 
-test("graph definitions validate names, modes, scopes, schedules, secrets and input schemas for JavaScript callers", () => {
-  expect(() => loopy("Bad name", { input: {}, run: () => null })).toThrow(
-    "A slug must contain 1-80",
+function rejects(build: () => void, expected: string) {
+  expect(build).toThrow(
+    expect.objectContaining({ diagnostic: expect.objectContaining({ code: expected }) }),
   );
-  // @ts-expect-error JavaScript can supply an invalid mode.
-  expect(() => loopy("test", { input: {}, mode: "unsafe", run: () => null })).toThrow(
-    "Loopy mode must be one of sandbox, full.",
+}
+
+test("graph definitions validate names, modes, scopes, schedules, secrets and schemas for JavaScript callers", () => {
+  rejects(() => loopy("Bad name", { input: {}, run: () => null }), "invalid_definition");
+  rejects(
+    // @ts-expect-error JavaScript can supply an invalid mode.
+    () => loopy("test", { input: {}, mode: "unsafe", run: () => null }),
+    "invalid_definition",
   );
-  // @ts-expect-error JavaScript can supply an invalid scope.
-  expect(() => loopy("test", { input: {}, scope: "remote", run: () => null })).toThrow(
-    "Loopy scope must be one of project, global.",
+  rejects(
+    // @ts-expect-error JavaScript can supply an invalid scope.
+    () => loopy("test", { input: {}, scope: "remote", run: () => null }),
+    "invalid_definition",
   );
-  // @ts-expect-error JavaScript can supply a malformed schedule.
-  expect(() => loopy("test", { input: {}, schedule: { cron: 42 }, run: () => null })).toThrow(
-    expect.objectContaining({ diagnostic: expect.objectContaining({ code: "invalid_schedule" }) }),
+  rejects(
+    // @ts-expect-error JavaScript can supply a non-string description.
+    () => loopy("test", { input: {}, description: 1, run: () => null }),
+    "invalid_definition",
+  );
+  rejects(
+    // @ts-expect-error JavaScript can supply a malformed schedule.
+    () => loopy("test", { input: {}, schedule: { cron: 42 }, run: () => null }),
+    "invalid_schedule",
   );
   // @ts-expect-error JavaScript can supply malformed secret names.
-  expect(() => loopy("test", { input: {}, secrets: [42], run: () => null })).toThrow(
-    expect.objectContaining({ diagnostic: expect.objectContaining({ code: "invalid_secret" }) }),
-  );
+  rejects(() => loopy("test", { input: {}, secrets: [42], run: () => null }), "invalid_secret");
   // @ts-expect-error JavaScript can supply a non-object schema.
-  expect(() => loopy("test", { input: 42, run: () => null })).toThrow(
-    "Input schema must be an object.",
-  );
+  rejects(() => loopy("test", { input: 42, run: () => null }), "invalid_schema");
   // @ts-expect-error JavaScript can supply unknown field types.
-  expect(() => loopy("test", { input: { count: "integer" }, run: () => null })).toThrow(
-    "Input field 'count' must be one of",
+  rejects(() => loopy("test", { input: { count: "integer" }, run: () => null }), "invalid_schema");
+  rejects(
+    () =>
+      loopy("test", {
+        input: {},
+        // @ts-expect-error JavaScript can supply an unknown output type.
+        run: () => code("bad", { in: {}, out: "strng", module: "./m.ts" }),
+      }),
+    "invalid_schema",
   );
 });
 

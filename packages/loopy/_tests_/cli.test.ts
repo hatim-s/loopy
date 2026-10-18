@@ -2,6 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { nodeIdSchema } from "../src/contract/index.js";
+import { processAlive } from "../src/executor/index.js";
 import { localDaemon, Registry, readDaemonFile } from "../src/local/index.js";
 import { openRunStore } from "../src/store/index.js";
 import { cli, fixture, object, roots } from "./cli-fixture.js";
@@ -16,6 +17,29 @@ afterEach(async () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+async function stopProcess(pid: number) {
+  process.kill(pid, "SIGTERM");
+
+  for (let attempt = 0; attempt < 250 && processAlive(pid); attempt++) {
+    await Bun.sleep(20);
+  }
+}
+
+// A daemon started on demand is a detached process, so the test stops it by its discovery record.
+async function stopDiscoveredDaemons(home: string) {
+  const first = readDaemonFile(home);
+
+  if (first) {
+    await stopProcess(first.pid);
+  }
+
+  const second = readDaemonFile(home);
+
+  if (second) {
+    await stopProcess(second.pid);
+  }
+}
 
 async function graphFixture(name = "compiled") {
   const f = fixture(name, "run: () => null");
@@ -116,20 +140,10 @@ test("save starts the daemon on demand and leaves artifact writes to the service
     f.file,
     `import {loopy} from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/index.ts"))}; export default loopy("on-demand", {input:{},run:()=>null});`,
   );
-  const [result, concurrent] = await Promise.all([cli(f, "save", f.file), cli(f, "save", f.file)]);
+  daemons.push({ stop: () => stopDiscoveredDaemons(f.home) });
+  // Two commands race to start the daemon; list takes no save lock, so both must succeed.
+  const [result, concurrent] = await Promise.all([cli(f, "save", f.file), cli(f, "list")]);
   const record = readDaemonFile(f.home);
-
-  if (record) {
-    daemons.push({
-      async stop() {
-        process.kill(record.pid, "SIGTERM");
-
-        for (let attempt = 0; attempt < 100 && readDaemonFile(f.home); attempt++) {
-          await Bun.sleep(20);
-        }
-      },
-    });
-  }
 
   expect(result).toMatchObject({ code: 0, stderr: "" });
   expect(concurrent).toMatchObject({ code: 0, stderr: "" });

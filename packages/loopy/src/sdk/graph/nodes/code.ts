@@ -1,7 +1,6 @@
 import type { Duration, GraphRetry, RateLimit } from "../../../core/index.js";
 import { currentBuilder } from "../builder.js";
-import type { Ref, RefValue, SchemaRef } from "../ref.js";
-import { type AuthorValue, serialize } from "../ref.js";
+import { type AuthorValue, type Ref, type RefValue, type SchemaRef, serialize } from "../ref.js";
 import { type Normalized, normalizeOut, type Output } from "../schema.js";
 
 type Options = {

@@ -35,12 +35,18 @@ async function daemon(context: ClientContext) {
     const record = readDaemonFile(context.home);
 
     if (record) {
+      // A concurrent CLI call started the daemon that won; this child lost the startup race.
+      if (record.pid !== child.pid) {
+        child.kill();
+      }
+
       return record;
     }
 
     await Bun.sleep(50);
   }
 
+  child.kill();
   throw new Error("The daemon did not start. Run loopy daemon run to inspect the error.");
 }
 

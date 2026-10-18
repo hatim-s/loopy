@@ -20,6 +20,7 @@ import {
   RECEIPT_KINDS,
   RETRY_BACKOFFS,
   type RefId,
+  SCALAR_FLAG_STYLES,
 } from "../core/index.js";
 import { jsonSchema } from "./json.js";
 import { secretNameSchema, slugSchema, utcTimestamp } from "./primitives.js";
@@ -140,7 +141,7 @@ const flagOptions = z.strictObject({
 });
 
 const scalarFlagOptions = {
-  style: z.enum(["space", "equals", "attached", "positional"]).optional(),
+  style: z.enum(SCALAR_FLAG_STYLES).optional(),
   repeatable: z.literal(true).optional(),
 };
 

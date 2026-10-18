@@ -8,6 +8,7 @@ import {
   requireRecord,
 } from "../../core/index.js";
 import { parseDefinitionInput } from "./definition.js";
+import { checked } from "./validate.js";
 
 export type Output = OutSchema | RecordSpec | FieldType | undefined;
 
@@ -28,17 +29,23 @@ export function normalizeOut(value: Output): OutSchema {
   }
 
   if (isString(value)) {
-    return { kind: "value", type: requireOneOf(value, FIELD_TYPES, "Output type") };
+    return {
+      kind: "value",
+      type: checked("invalid_schema", () => requireOneOf(value, FIELD_TYPES, "Output type")),
+    };
   }
 
-  const record = requireRecord(value, "Output schema");
+  const record = checked("invalid_schema", () => requireRecord(value, "Output schema"));
 
   if (record.kind === "record") {
     return { kind: "record", fields: parseDefinitionInput(record.fields) };
   }
 
   if (record.kind === "value") {
-    return { kind: "value", type: requireOneOf(record.type, FIELD_TYPES, "Output type") };
+    return {
+      kind: "value",
+      type: checked("invalid_schema", () => requireOneOf(record.type, FIELD_TYPES, "Output type")),
+    };
   }
 
   return { kind: "record", fields: parseDefinitionInput(record) };

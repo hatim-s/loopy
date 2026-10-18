@@ -98,6 +98,21 @@ test("descriptor construction rejects duplicate CLI identities in base and merge
   );
 });
 
+test("a parser requires one declared output", () => {
+  const parsed = { key: "test.parsed", program: "probe", parse: "./parse.ts" } as const;
+
+  for (const build of [
+    // @ts-expect-error A parser needs a declared output.
+    () => defineCommand(parsed),
+    // @ts-expect-error Output is declared in one place only.
+    () => defineCommand({ ...parsed, out: "number" }, "number"),
+  ]) {
+    expect(build).toThrow(
+      expect.objectContaining({ diagnostic: expect.objectContaining({ code: "invalid_schema" }) }),
+    );
+  }
+});
+
 test("prefixed options keep distinct identities while identical prefixes fail", () => {
   const parsed = defineCommand({
     key: "test.prefixed",

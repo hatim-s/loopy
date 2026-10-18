@@ -1,5 +1,5 @@
 import type { GraphMeta, RecordSpec } from "../../core/index.js";
-import { GraphBuilder } from "./builder.js";
+import { build, GraphBuilder } from "./builder.js";
 import { parseDefinitionInput, parseDefinitionMeta } from "./definition.js";
 import { inputRef } from "./input.js";
 import type { NodeResult, SchemaRef } from "./ref.js";
@@ -19,7 +19,7 @@ export function loopy<const S extends RecordSpec>(
     parseDefinitionMeta(name, definition),
   );
 
-  return builder.run(() =>
+  return build(builder, () =>
     builder.finish(definition.run({ input: inputRef(builder, definition.input) })),
   );
 }

@@ -25,6 +25,8 @@ export const DIAGNOSTIC_CODES = [
   "unknown_property",
   "invalid_schedule",
   "invalid_secret",
+  "invalid_schema",
+  "invalid_definition",
   "cycle",
 ] as const;
 
@@ -92,10 +94,12 @@ export const DIAGNOSTIC_MESSAGES = {
   flag_choice: "The flag value must be one of its declared choices.",
   arity: "The command has the wrong number of arguments.",
   protected_flag: "This flag is controlled by the command descriptor.",
-  duplicate_flag: "Supply each non-repeatable flag only once.",
+  duplicate_flag: "Give each descriptor flag its own CLI option.",
   unknown_property: "The definition contains an unknown property.",
   invalid_schedule: "Supply a valid cron expression and time zone.",
   invalid_secret: "Supply valid secret names.",
+  invalid_schema: "Declare input and output schemas with supported field types.",
+  invalid_definition: "Supply a valid slug, description, mode and scope.",
 } as const satisfies Record<DiagnosticCode, string>;
 
 export const COMPILER_MESSAGES = {

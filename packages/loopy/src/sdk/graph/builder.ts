@@ -48,6 +48,21 @@ export function currentBuilder(): GraphBuilder {
   return activation ?? refuse("inactive_builder");
 }
 
+export function build<T>(builder: GraphBuilder, callback: () => T): T {
+  if (activation) {
+    refuse("inactive_builder", "Finish the active builder before starting another loopy.");
+  }
+
+  // Construction is synchronous; one active builder also catches accidental nested builds.
+  activation = builder;
+
+  try {
+    return callback();
+  } finally {
+    activation = null;
+  }
+}
+
 export class GraphBuilder {
   readonly nodes: Node[] = [];
   readonly edges: Edge[] = [];
@@ -65,21 +80,6 @@ export class GraphBuilder {
 
   get scope(): Frame {
     return this.frames[0];
-  }
-
-  run<T>(callback: () => T): T {
-    if (activation) {
-      refuse("inactive_builder", "Finish the active builder before starting another loopy.");
-    }
-
-    // Construction is synchronous; one active builder also catches accidental nested builds.
-    activation = this;
-
-    try {
-      return callback();
-    } finally {
-      activation = null;
-    }
   }
 
   expand<T>(label: string, callback: () => T): T {

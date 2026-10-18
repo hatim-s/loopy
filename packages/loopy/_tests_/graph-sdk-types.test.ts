@@ -103,7 +103,13 @@ function schemaTypes() {
     { key: "wrong", program: "wrong", parse: () => ({ count: "text" }) },
     { kind: "record", fields: { count: "number" } },
   );
+  // @ts-expect-error A parser needs a declared output.
   defineCommand({ key: "missing", program: "missing", parse: "./parse-count.ts" });
+  defineCommand(
+    // @ts-expect-error Output is declared in one place only.
+    { key: "twice", program: "twice", parse: "./parse-count.ts", out: "number" },
+    "number",
+  );
 
   const record = code("record", {
     in: {},

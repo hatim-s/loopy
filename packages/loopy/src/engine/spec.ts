@@ -68,7 +68,7 @@ export function executionSpec(
   let rendered: string[];
 
   try {
-    rendered = renderArgv(node.flagSpec ?? {}, { args, flags, references: node.flags });
+    rendered = renderArgv(node.flagSpec ?? {}, { args, flags });
   } catch (cause) {
     if (cause instanceof CommandArgumentError) {
       return { code: "validation", message: cause.message };

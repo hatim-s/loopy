@@ -421,7 +421,6 @@ test("graph schemas exactly match the portable model", () => {
   expectTypeOf<Extract<core.Node, { kind: "map" }>["onError"]>().toEqualTypeOf<
     (typeof core.MAP_ERROR_MODES)[number]
   >();
-  expectTypeOf<core.CommandFlag["kind"]>().toEqualTypeOf<(typeof core.FLAG_KINDS)[number]>();
   expectTypeOf<NonNullable<core.CommandFlag["style"]>>().toEqualTypeOf<
     (typeof core.FLAG_STYLES)[number]
   >();

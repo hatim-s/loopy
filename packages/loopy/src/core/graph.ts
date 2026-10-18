@@ -149,22 +149,11 @@ export type GraphRetry = {
   retryOnExit: boolean;
 };
 
-export const FLAG_KINDS = ["boolean", "string", "number"] as const;
+export const SCALAR_FLAG_STYLES = ["space", "equals", "attached", "positional"] as const;
 
-export const FLAG_STYLES = [
-  "equals",
-  "space",
-  "attached",
-  "positional",
-  "pairs",
-  "terminated",
-] as const;
+export const FLAG_STYLES = [...SCALAR_FLAG_STYLES, "pairs", "terminated"] as const;
 
 export const FLAG_POSITIONS = ["before", "after"] as const;
-
-export type FlagKind = (typeof FLAG_KINDS)[number];
-
-export type FlagStyle = (typeof FLAG_STYLES)[number];
 
 export type FlagPosition = (typeof FLAG_POSITIONS)[number];
 
@@ -177,7 +166,7 @@ type FlagOptions = {
 };
 
 type ScalarFlagOptions = {
-  readonly style?: "space" | "equals" | "attached" | "positional";
+  readonly style?: (typeof SCALAR_FLAG_STYLES)[number];
   readonly repeatable?: true;
 };
 

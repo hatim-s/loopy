@@ -1,6 +1,5 @@
 import type { DiagnosticCode } from "./diagnostics.js";
-import type { CommandFlag, CommandFlagSpec, Value } from "./graph.js";
-import { isRef, refs } from "./graph-values.js";
+import type { CommandFlag, CommandFlagSpec } from "./graph.js";
 import { isBoolean, isNumber, isRecord, isString } from "./validation.js";
 
 type CommandDefinition = Partial<Omit<CommandFlagSpec, "path" | "flags">> & {
@@ -30,12 +29,40 @@ type RenderValue =
 type ResolvedCommandInput = {
   args?: readonly string[];
   flags?: Readonly<Record<string, RenderValue>>;
-  references?: Readonly<Record<string, Value>>;
 };
 
-function scalar<T>(flag: CommandFlag, value: T, isReference: <R>(value: R) => boolean) {
-  if (isReference(value) || value === undefined || (value === false && flag.kind === "boolean")) {
-    return;
+type Scalar = string | number | boolean;
+
+export type FlagArgument<R = never> =
+  | { form: "scalar"; value: Scalar | R }
+  | { form: "pairs"; value: Readonly<Record<string, string | R>> }
+  | { form: "repeated"; value: readonly (Scalar | R)[] };
+
+type IsReference<R> = (value: unknown) => value is R;
+
+// Resolved run-time values hold no references, and nothing is an instance of this private class.
+class Unresolvable {}
+
+const NO_REFERENCES: IsReference<never> = (value): value is never => value instanceof Unresolvable;
+
+function flagType(flag: CommandFlag, detail: string) {
+  return new CommandArgumentError("flag_type", `Flag '${flag.cli}' requires ${detail}.`);
+}
+
+function choice(flag: CommandFlag, value: string) {
+  if ("choices" in flag && flag.choices && !flag.choices.includes(value)) {
+    throw new CommandArgumentError(
+      "flag_choice",
+      `Flag '${flag.cli}' must be one of: ${flag.choices.join(", ")}. Choose an allowed value.`,
+    );
+  }
+
+  return value;
+}
+
+function typedScalar<T>(flag: CommandFlag, value: T): Scalar {
+  if (value === false && flag.kind === "boolean") {
+    return false;
   }
 
   if (flag.supported === false) {
@@ -49,80 +76,74 @@ function scalar<T>(flag: CommandFlag, value: T, isReference: <R>(value: R) => bo
     value === true &&
     (flag.kind === "boolean" || ("optionalValue" in flag && flag.optionalValue))
   ) {
-    return;
+    return true;
   }
 
-  if (
-    !{ string: isString, number: isNumber, boolean: isBoolean }[flag.kind](value) ||
-    (isNumber(value) && !Number.isFinite(value))
-  ) {
-    throw new CommandArgumentError(
-      "flag_type",
-      `Flag '${flag.cli}' requires a ${flag.kind} value. Supply the declared flag type.`,
-    );
+  switch (flag.kind) {
+    case "string":
+      if (isString(value)) {
+        return choice(flag, value);
+      }
+
+      break;
+    case "number":
+      if (isNumber(value) && Number.isFinite(value)) {
+        return value;
+      }
+
+      break;
+    case "boolean":
+      if (isBoolean(value)) {
+        return value;
+      }
   }
 
-  if ("choices" in flag && flag.choices && !flag.choices.includes(String(value))) {
-    throw new CommandArgumentError(
-      "flag_choice",
-      `Flag '${flag.cli}' must be one of: ${flag.choices.join(", ")}. Choose an allowed value.`,
-    );
-  }
+  throw flagType(flag, `a ${flag.kind} value. Supply the declared flag type`);
 }
 
-export function validateCommandFlag<T>(
+function scalar<T, R>(flag: CommandFlag, value: T, isReference: IsReference<R>): Scalar | R {
+  return isReference(value) ? value : typedScalar(flag, value);
+}
+
+/**
+ * Checks a flag value against its declaration and returns it in render form. The SDK passes its
+ * reference guard so unresolved refs pass through; null means there is nothing to render yet.
+ */
+export function validateCommandFlag<T, R = never>(
   flag: CommandFlag,
   value: T,
-  isReference: <R>(value: R) => boolean = () => false,
-): void {
+  isReference: IsReference<R> = NO_REFERENCES,
+): FlagArgument<R> | null {
   if (value === undefined || isReference(value)) {
-    return;
+    return null;
   }
 
   if (flag.style === "pairs") {
     if (!isRecord(value)) {
-      throw new CommandArgumentError(
-        "flag_type",
-        `Flag '${flag.cli}' requires named values. Supply a record of strings.`,
-      );
+      throw flagType(flag, "named values. Supply a record of strings");
     }
 
-    for (const item of Object.values(value)) {
+    const pairs = Object.entries(value).map(([key, item]) => {
       if (!isString(item) && !isReference(item)) {
-        throw new CommandArgumentError(
-          "flag_type",
-          `Flag '${flag.cli}' requires string values. Supply a record of strings.`,
-        );
+        throw flagType(flag, "string values. Supply a record of strings");
       }
-    }
 
-    return;
+      return [key, item] as const;
+    });
+
+    return { form: "pairs", value: Object.fromEntries(pairs) };
   }
 
   if (flag.style === "terminated" || ("repeatable" in flag && flag.repeatable)) {
     if (!Array.isArray(value) || (flag.style === "terminated" && value.length === 0)) {
-      throw new CommandArgumentError(
-        "flag_type",
-        `Flag '${flag.cli}' requires an array of values.`,
-      );
+      throw flagType(flag, "an array of values");
     }
 
-    for (const item of value) {
-      scalar(flag, item, isReference);
-    }
-
-    return;
+    return { form: "repeated", value: value.map((item) => scalar(flag, item, isReference)) };
   }
 
-  scalar(flag, value, isReference);
+  return { form: "scalar", value: scalar(flag, value, isReference) };
 }
-
-type Scalar = string | number | boolean;
-
-type FlagArgument =
-  | { form: "scalar"; value: Scalar }
-  | { form: "pairs"; value: Record<string, string> }
-  | { form: "repeated"; value: readonly Scalar[] };
 
 function tokens(flag: CommandFlag, value: Scalar, style: CommandDefinition["style"]) {
   if (value === false && flag.kind === "boolean") {
@@ -154,21 +175,11 @@ function renderFlag(
   value: RenderValue,
   style: CommandDefinition["style"],
 ): string[] {
-  if (value === undefined) {
-    return [];
-  }
+  const argument = validateCommandFlag(flag, value);
 
-  const form =
-    flag.style === "pairs"
-      ? "pairs"
-      : ("repeatable" in flag && flag.repeatable) || flag.style === "terminated"
-        ? "repeated"
-        : "scalar";
-
-  // SAFETY: The SDK checked literals, and renderArgv checks resolved refs before formatting.
-  const argument = { form, value } as FlagArgument;
-
-  switch (argument.form) {
+  switch (argument?.form) {
+    case undefined:
+      return [];
     case "pairs":
       return Object.entries(argument.value).flatMap(([key, item]) => [flag.cli, key, item]);
     case "repeated":
@@ -185,37 +196,6 @@ function renderFlag(
   }
 }
 
-// BOUNDARY: Resolved refs can change flag types after the author has built the graph.
-function validateResolvedFlag(flag: CommandFlag, value: RenderValue, original: Value) {
-  if (isRef(original)) {
-    validateCommandFlag(flag, value);
-
-    return;
-  }
-
-  if (Array.isArray(original) && Array.isArray(value)) {
-    const resolved = original.flatMap((child, index) => (isRef(child) ? [value[index]] : []));
-
-    if (resolved.length) {
-      validateCommandFlag(flag, resolved);
-    }
-
-    return;
-  }
-
-  if (isRecord(original) && isRecord(value)) {
-    const resolved = Object.fromEntries(
-      Object.entries(original)
-        .filter(([, child]) => refs(child).length > 0)
-        .map(([key]) => [key, value[key]]),
-    );
-
-    if (Object.keys(resolved).length) {
-      validateCommandFlag(flag, resolved);
-    }
-  }
-}
-
 function buildFlags(descriptor: CommandDefinition, input: ResolvedCommandInput) {
   const before: string[] = [];
   const after: string[] = [];
@@ -226,8 +206,6 @@ function buildFlags(descriptor: CommandDefinition, input: ResolvedCommandInput) 
 
   for (const [name, flag] of flags) {
     const value = input.flags?.[name];
-
-    validateResolvedFlag(flag, value, input.references?.[name] ?? null);
 
     const target =
       (flag.position ?? (descriptor.flagsAfterPositionals ? "after" : "before")) === "after"

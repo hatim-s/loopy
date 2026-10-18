@@ -1,10 +1,14 @@
-import type { MAP_ERROR_MODES } from "../../../core/index.js";
-import { type Collected, ERROR_FIELDS, type Node } from "../../../core/index.js";
+// Every control node kind lives here on purpose: they share arm, join and result construction.
+import {
+  type Collected,
+  ERROR_FIELDS,
+  type MAP_ERROR_MODES,
+  type Node,
+} from "../../../core/index.js";
 import { currentBuilder, type GraphBuilder } from "../builder.js";
 import { type AuthorPredicate, serializePredicate } from "../predicates.js";
-import type { Ref } from "../ref.js";
-import { type NodeResult, serialize, serializeRef } from "../ref.js";
-import type { ControlRef, InferRecord, Result } from "../types.js";
+import { type NodeResult, type Ref, type SchemaRef, serialize, serializeRef } from "../ref.js";
+import type { ControlRef, Result } from "../types.js";
 import { validatePredicate } from "../validate.js";
 
 type Arm = () => NodeResult;
@@ -125,7 +129,7 @@ export function finally_<R extends NodeResult>(body: () => R, cleanup: Arm): Con
 
 export function rescue<R extends NodeResult, H extends NodeResult>(
   body: () => R,
-  handler: (error: Ref<InferRecord<typeof ERROR_FIELDS>, InferRecord<typeof ERROR_FIELDS>>) => H,
+  handler: (error: SchemaRef<{ kind: "record"; fields: typeof ERROR_FIELDS }>) => H,
 ): ControlRef<R | H> {
   const builder = currentBuilder();
   const base = builder.allocate("rescue", { fallback: "rescue" });

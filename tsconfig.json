@@ -15,7 +15,6 @@
     "paths": {
       "loopy": ["./packages/loopy/src/sdk/index.ts"],
       "loopy/local": ["./packages/loopy/src/local/index.ts"],
-      "loopy/graph": ["./packages/loopy/src/sdk/graph/index.ts"],
       "loopy/contract": ["./packages/loopy/src/contract/index.ts"],
       "loopy/engine": ["./packages/loopy/src/engine/index.ts"]
     },
