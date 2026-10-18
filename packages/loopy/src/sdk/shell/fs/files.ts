@@ -1,7 +1,7 @@
-import { type CommandOptions, defineCommand } from "../../define-command.js";
+import { descriptorCommand } from "../../descriptor.js";
 import { parseLs } from "../parse/fs.js";
 
-const rawLs = defineCommand({
+const rawLs = descriptorCommand({
   namespace: "fs",
   name: "ls",
   program: "ls",
@@ -21,7 +21,7 @@ const rawLs = defineCommand({
   positionalSeparator: true,
 });
 
-const parsedLs = defineCommand({
+const parsedLs = descriptorCommand({
   namespace: "fs",
   name: "ls",
   program: "find",
@@ -37,14 +37,10 @@ const parsedLs = defineCommand({
   prepare: (input) => ({ ...input, args: input.args?.length ? input.args : ["."] }),
 });
 
-function listDirectory(input?: Parameters<typeof parsedLs>[0], options?: CommandOptions) {
-  return parsedLs(input, options);
-}
-
 export const files = {
   /** Lists immediate basenames using find, including hidden entries. .raw runs ls. */
-  ls: Object.assign(listDirectory, { raw: rawLs, descriptor: parsedLs.descriptor }),
-  cat: defineCommand({
+  ls: { raw: rawLs, descriptor: parsedLs.descriptor },
+  cat: descriptorCommand({
     namespace: "fs",
     name: "cat",
     program: "cat",
@@ -56,7 +52,7 @@ export const files = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
     positionalSeparator: true,
   }),
-  cp: defineCommand({
+  cp: descriptorCommand({
     namespace: "fs",
     name: "cp",
     program: "cp",
@@ -78,7 +74,7 @@ export const files = {
     ],
     positionalSeparator: true,
   }),
-  mv: defineCommand({
+  mv: descriptorCommand({
     namespace: "fs",
     name: "mv",
     program: "mv",
@@ -90,7 +86,7 @@ export const files = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
     positionalSeparator: true,
   }),
-  rm: defineCommand({
+  rm: descriptorCommand({
     namespace: "fs",
     name: "rm",
     program: "rm",
@@ -103,7 +99,7 @@ export const files = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
     positionalSeparator: true,
   }),
-  mkdir: defineCommand({
+  mkdir: descriptorCommand({
     namespace: "fs",
     name: "mkdir",
     program: "mkdir",
@@ -115,7 +111,7 @@ export const files = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
     positionalSeparator: true,
   }),
-  touch: defineCommand({
+  touch: descriptorCommand({
     namespace: "fs",
     name: "touch",
     program: "touch",

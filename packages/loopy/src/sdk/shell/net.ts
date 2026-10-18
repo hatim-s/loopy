@@ -1,4 +1,4 @@
-import { defineCommand } from "../define-command.js";
+import { descriptorCommand } from "../descriptor.js";
 import type { RenderInput } from "../render-argv.js";
 import { CURL_WRITE_OUT, parseCurl } from "./parse/net.js";
 
@@ -13,7 +13,7 @@ function curlInput(input: RenderInput): RenderInput {
 }
 
 export const net = {
-  curl: defineCommand({
+  curl: descriptorCommand({
     parse: parseCurl,
     prepare: curlInput,
     preset: { flags: { silent: true, showError: true, dumpHeader: "-", writeOut: CURL_WRITE_OUT } },

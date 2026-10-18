@@ -1,8 +1,8 @@
-import { defineCommand } from "../../define-command.js";
+import { descriptorCommand } from "../../descriptor.js";
 import { parseStashList } from "../parse/git.js";
 
 export const stash = {
-  push: defineCommand({
+  push: descriptorCommand({
     namespace: "git",
     name: "stash.push",
     program: "git",
@@ -15,7 +15,7 @@ export const stash = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
     positionalSeparator: true,
   }),
-  pop: defineCommand({
+  pop: descriptorCommand({
     namespace: "git",
     name: "stash.pop",
     program: "git",
@@ -25,7 +25,7 @@ export const stash = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  list: defineCommand({
+  list: descriptorCommand({
     parse: parseStashList,
     preset: { flags: { format: "%gd%x00%H%x00%gs" } },
     namespace: "git",

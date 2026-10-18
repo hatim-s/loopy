@@ -1,4 +1,4 @@
-import { defineCommand } from "../../define-command.js";
+import { descriptorCommand } from "../../descriptor.js";
 import type { RenderInput } from "../../render-argv.js";
 import { parseGrep, parseGrepCount, parseUniqCount } from "../parse/text.js";
 
@@ -37,7 +37,7 @@ function grepInput(input: RenderInput): RenderInput {
 }
 
 export const filter = {
-  grep: defineCommand({
+  grep: descriptorCommand({
     parse: parseGrep,
     okExitCodes: [0, 1],
     preset: { flags: { n: true } },
@@ -50,7 +50,7 @@ export const filter = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
     positionalSeparator: true,
   }),
-  grepCount: defineCommand({
+  grepCount: descriptorCommand({
     namespace: "text",
     name: "grepCount",
     program: "grep",
@@ -62,7 +62,7 @@ export const filter = {
     positionals: [{ name: "pattern" }, { name: "path", optional: true }],
     positionalSeparator: true,
   }),
-  sed: defineCommand({
+  sed: descriptorCommand({
     namespace: "text",
     name: "sed",
     program: "sed",
@@ -90,7 +90,7 @@ export const filter = {
       },
     },
   }),
-  awk: defineCommand({
+  awk: descriptorCommand({
     namespace: "text",
     name: "awk",
     program: "awk",
@@ -105,7 +105,7 @@ export const filter = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  cut: defineCommand({
+  cut: descriptorCommand({
     namespace: "text",
     name: "cut",
     program: "cut",
@@ -117,7 +117,7 @@ export const filter = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  sort: defineCommand({
+  sort: descriptorCommand({
     namespace: "text",
     name: "sort",
     program: "sort",
@@ -130,7 +130,7 @@ export const filter = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  uniq: defineCommand({
+  uniq: descriptorCommand({
     namespace: "text",
     name: "uniq",
     program: "uniq",
@@ -142,7 +142,7 @@ export const filter = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  uniqCount: defineCommand({
+  uniqCount: descriptorCommand({
     namespace: "text",
     name: "uniqCount",
     parse: parseUniqCount,
@@ -156,7 +156,7 @@ export const filter = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  head: defineCommand({
+  head: descriptorCommand({
     namespace: "text",
     name: "head",
     program: "head",
@@ -166,7 +166,7 @@ export const filter = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  tail: defineCommand({
+  tail: descriptorCommand({
     namespace: "text",
     name: "tail",
     program: "tail",

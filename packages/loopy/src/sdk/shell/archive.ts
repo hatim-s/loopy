@@ -1,7 +1,7 @@
-import { defineCommand } from "../define-command.js";
+import { descriptorCommand } from "../descriptor.js";
 
 export const archive = {
-  tar: defineCommand({
+  tar: descriptorCommand({
     namespace: "archive",
     name: "tar",
     program: "tar",
@@ -17,7 +17,7 @@ export const archive = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  gzip: defineCommand({
+  gzip: descriptorCommand({
     namespace: "archive",
     name: "gzip",
     program: "gzip",
@@ -30,7 +30,7 @@ export const archive = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  zip: defineCommand({
+  zip: descriptorCommand({
     namespace: "archive",
     name: "zip",
     program: "zip",
@@ -42,7 +42,7 @@ export const archive = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  unzip: defineCommand({
+  unzip: descriptorCommand({
     namespace: "archive",
     name: "unzip",
     program: "unzip",

@@ -1,4 +1,4 @@
-import { defineCommand } from "../../define-command.js";
+import { descriptorCommand } from "../../descriptor.js";
 import {
   LOG_FORMAT,
   parseDiff,
@@ -10,7 +10,7 @@ import {
 } from "../parse/git.js";
 
 export const inspect = {
-  status: defineCommand({
+  status: descriptorCommand({
     parse: parseStatus,
     exclude: ["short"],
     preset: { flags: { porcelain: "v2", z: true, branch: true } },
@@ -39,7 +39,7 @@ export const inspect = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
     positionalSeparator: true,
   }),
-  diff: defineCommand({
+  diff: descriptorCommand({
     parse: parseDiff,
     exclude: ["stat", "quiet", "unified", "nameOnly", "nameStatus"],
     preset: { flags: { numstat: true, z: true } },
@@ -60,7 +60,7 @@ export const inspect = {
     },
     revisionPaths: true,
   }),
-  diffNames: defineCommand({
+  diffNames: descriptorCommand({
     parse: parseDiffNames,
     exclude: ["stat", "quiet", "unified", "nameOnly", "numstat"],
     preset: { flags: { nameStatus: true, z: true } },
@@ -81,7 +81,7 @@ export const inspect = {
     },
     revisionPaths: true,
   }),
-  log: defineCommand({
+  log: descriptorCommand({
     parse: parseLog,
     exclude: ["graph", "oneline"],
     preset: { flags: { format: LOG_FORMAT, z: true } },
@@ -105,7 +105,7 @@ export const inspect = {
     style: "equals",
     revisionPaths: true,
   }),
-  revParse: defineCommand({
+  revParse: descriptorCommand({
     parse: parseRevParse,
     preset: { flags: {} },
     namespace: "git",
@@ -120,7 +120,7 @@ export const inspect = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  lsFiles: defineCommand({
+  lsFiles: descriptorCommand({
     parse: parseLsFiles,
     preset: { flags: { z: true } },
     namespace: "git",
@@ -137,7 +137,7 @@ export const inspect = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
     positionalSeparator: true,
   }),
-  show: defineCommand({
+  show: descriptorCommand({
     namespace: "git",
     name: "show",
     program: "git",

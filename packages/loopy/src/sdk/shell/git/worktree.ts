@@ -1,8 +1,8 @@
-import { defineCommand } from "../../define-command.js";
+import { descriptorCommand } from "../../descriptor.js";
 import { parseWorktreeList } from "../parse/git.js";
 
 export const worktree = {
-  add: defineCommand({
+  add: descriptorCommand({
     namespace: "git",
     name: "worktree.add",
     program: "git",
@@ -14,7 +14,7 @@ export const worktree = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  list: defineCommand({
+  list: descriptorCommand({
     parse: parseWorktreeList,
     preset: { flags: { porcelain: true, z: false } },
     namespace: "git",
@@ -26,7 +26,7 @@ export const worktree = {
       z: { cli: "-z", kind: "boolean" },
     },
   }),
-  remove: defineCommand({
+  remove: descriptorCommand({
     namespace: "git",
     name: "worktree.remove",
     program: "git",

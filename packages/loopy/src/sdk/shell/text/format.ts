@@ -1,4 +1,4 @@
-import { type CommandDescriptor, defineCommand } from "../../define-command.js";
+import { type CommandDescriptor, descriptorCommand } from "../../descriptor.js";
 import { parseJq, parseSha256, parseWc } from "../parse/text.js";
 
 export const base64Descriptor = {
@@ -24,7 +24,7 @@ export const base64Descriptor = {
 } as const satisfies CommandDescriptor;
 
 export const format = {
-  wc: defineCommand({
+  wc: descriptorCommand({
     parse: parseWc,
     exclude: ["lines", "words", "bytes", "characters"],
     preset: { flags: {} },
@@ -39,7 +39,7 @@ export const format = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  tr: defineCommand({
+  tr: descriptorCommand({
     namespace: "text",
     name: "tr",
     program: "tr",
@@ -50,7 +50,7 @@ export const format = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  diff: defineCommand({
+  diff: descriptorCommand({
     namespace: "text",
     name: "diff",
     program: "diff",
@@ -62,7 +62,7 @@ export const format = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  jq: defineCommand({
+  jq: descriptorCommand({
     parse: parseJq,
     exclude: ["rawOutput", "rawOutput0"],
     preset: { flags: { compactOutput: true } },
@@ -82,7 +82,7 @@ export const format = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  yq: defineCommand({
+  yq: descriptorCommand({
     namespace: "text",
     name: "yq",
     program: "yq",
@@ -93,8 +93,8 @@ export const format = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  base64: defineCommand(base64Descriptor),
-  sha256sum: defineCommand({
+  base64: descriptorCommand(base64Descriptor),
+  sha256sum: descriptorCommand({
     parse: parseSha256,
     exclude: ["check"],
     preset: { flags: {} },

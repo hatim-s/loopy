@@ -40,6 +40,7 @@ export default tseslint.config(
   },
   {
     files: ["**/*.{ts,tsx}"],
+    ignores: ["examples/**"],
     languageOptions: { parserOptions: { projectService: true } },
     rules: {
       "@typescript-eslint/consistent-type-exports": "error",
@@ -55,7 +56,7 @@ export default tseslint.config(
     rules: { "sonarjs/cognitive-complexity": "off", "no-console": "off" },
   },
   {
-    files: ["packages/loopy/src/core/**", "packages/loopy/src/runtime/**"],
+    files: ["packages/loopy/src/core/**", "packages/loopy/src/engine/**"],
     rules: {
       "no-restricted-imports": [
         "error",

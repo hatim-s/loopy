@@ -1,4 +1,4 @@
-import { defineCommand } from "../../define-command.js";
+import { descriptorCommand } from "../../descriptor.js";
 import {
   parseDf,
   parseDu,
@@ -13,7 +13,7 @@ import {
 } from "../parse/fs.js";
 
 export const metadata = {
-  find: defineCommand({
+  find: descriptorCommand({
     parse: parseFind,
     prepare: (input) => ({ ...input, args: input.args?.length ? input.args : ["."] }),
     preset: { flags: { print0: true } },
@@ -55,7 +55,7 @@ export const metadata = {
       },
     },
   }),
-  tree: defineCommand({
+  tree: descriptorCommand({
     parse: parseTree,
     preset: { flags: { json: true, noReport: true } },
     exclude: ["f", "indent", "noIndent", "color", "classify"],
@@ -77,7 +77,7 @@ export const metadata = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  stat: defineCommand({
+  stat: descriptorCommand({
     parse: parseStat,
     preset: { flags: { format: STAT_DARWIN_FORMAT } },
     namespace: "fs",
@@ -97,7 +97,7 @@ export const metadata = {
       },
     },
   }),
-  chmod: defineCommand({
+  chmod: descriptorCommand({
     namespace: "fs",
     name: "chmod",
     program: "chmod",
@@ -115,7 +115,7 @@ export const metadata = {
       },
     ],
   }),
-  ln: defineCommand({
+  ln: descriptorCommand({
     namespace: "fs",
     name: "ln",
     program: "ln",
@@ -128,7 +128,7 @@ export const metadata = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
     positionalSeparator: true,
   }),
-  realpath: defineCommand({
+  realpath: descriptorCommand({
     parse: parseRealpath,
     parsedPositionals: [{ name: "path" }],
     preset: { flags: {} },
@@ -140,7 +140,7 @@ export const metadata = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  which: defineCommand({
+  which: descriptorCommand({
     namespace: "fs",
     name: "which",
     program: "which",
@@ -149,7 +149,7 @@ export const metadata = {
     preset: { flags: {} },
     positionals: [{ name: "program" }],
   }),
-  mktemp: defineCommand({
+  mktemp: descriptorCommand({
     parse: parseMktemp,
     preset: { flags: {} },
     namespace: "fs",
@@ -166,7 +166,7 @@ export const metadata = {
       },
     ],
   }),
-  du: defineCommand({
+  du: descriptorCommand({
     parse: parseDu,
     preset: { flags: { kilobytes: true } },
     exclude: ["humanReadable"],
@@ -181,7 +181,7 @@ export const metadata = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  df: defineCommand({
+  df: descriptorCommand({
     parse: parseDf,
     preset: { flags: { kilobytes: true, portable: true } },
     exclude: ["humanReadable"],

@@ -131,7 +131,10 @@ async function inspectImports(context: Context, statements: Statement[], state: 
     const specifier = statement.source.value;
 
     const sdk =
+      specifier === "loopy" ||
       specifier === "loopy/graph" ||
+      resolve(dirname(file), specifier) === resolve(import.meta.dir, "../sdk/index.ts") ||
+      resolve(dirname(file), specifier) === resolve(import.meta.dir, "../sdk/index.js") ||
       resolve(dirname(file), specifier) === resolve(import.meta.dir, "../sdk/graph/index.ts") ||
       resolve(dirname(file), specifier) === resolve(import.meta.dir, "../sdk/graph/index.js");
 
@@ -143,7 +146,7 @@ async function inspectImports(context: Context, statements: Statement[], state: 
           context,
           statement,
           "module_import",
-          "Builder imports must be loopy/graph or relative author modules.",
+          "Builder imports must be loopy, loopy/graph or relative author modules.",
         );
         continue;
       }

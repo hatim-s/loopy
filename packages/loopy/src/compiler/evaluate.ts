@@ -47,7 +47,7 @@ export async function evaluate(file: string, modules: AuthorModule[]) {
         {
           name: "restricted-author-source",
           setup(build) {
-            build.onResolve({ filter: /^loopy\/graph$/ }, async () => {
+            build.onResolve({ filter: /^loopy(?:\/graph)?$/ }, async () => {
               const javascript = resolve(import.meta.dir, "../sdk/graph/index.js");
 
               return {

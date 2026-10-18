@@ -1,9 +1,4 @@
-import {
-  type CommandResult,
-  type GraphRetry,
-  type OutSchema,
-  parseArgv,
-} from "../../../core/index.js";
+import { type GraphRetry, type OutSchema, parseArgv } from "../../../core/index.js";
 import type { CommandDescriptor } from "../../define-command.js";
 import { currentBuilder } from "../builder.js";
 import { commandArgv } from "../command-argv.js";
@@ -81,12 +76,14 @@ type CallArguments<I> = I extends { args: readonly unknown[] }
   ? [input: I, options?: Options]
   : [input?: I, options?: Options];
 
-type GraphCommandDescriptor = Omit<CommandDescriptor, "parse"> & { parse?: string };
+export type GraphCommandDescriptor = Omit<CommandDescriptor, "parse"> & { parse?: string };
 
 type CommandCall<D extends GraphCommandDescriptor, S extends OutSchema> = {
   (...args: CallArguments<CommandInput<D>>): Ref<Infer<S>, SchemaFields<S>>;
   readonly descriptor: D;
-  raw: (...args: CallArguments<CommandRawInput<D>>) => Ref<CommandResult, CommandResult>;
+  raw: (
+    ...args: CallArguments<CommandRawInput<D>>
+  ) => Ref<Infer<typeof commandOutput>, SchemaFields<typeof commandOutput>>;
 };
 
 export function defineCommand<const D extends GraphCommandDescriptor>(
@@ -109,8 +106,13 @@ export function defineCommand<const S extends OutSchema, const D extends GraphCo
     );
   }
 
-  function raw(...args: CallArguments<CommandRawInput<D>>): Ref<CommandResult, CommandResult>;
-  function raw(input: Input = {}, options: Options = {}): Ref<CommandResult, CommandResult> {
+  function raw(
+    ...args: CallArguments<CommandRawInput<D>>
+  ): Ref<Infer<typeof commandOutput>, SchemaFields<typeof commandOutput>>;
+  function raw(
+    input: Input = {},
+    options: Options = {},
+  ): Ref<Infer<typeof commandOutput>, SchemaFields<typeof commandOutput>> {
     return currentBuilder().ref(
       record({
         label: options.label ?? null,
@@ -159,7 +161,10 @@ function shell({
     label,
   );
 
-  return builder.ref<CommandResult, CommandResult>(node.id, commandOutput);
+  return builder.ref<Infer<typeof commandOutput>, SchemaFields<typeof commandOutput>>(
+    node.id,
+    commandOutput,
+  );
 }
 
 function exec(argv: readonly (string | RefValue)[], options: Options = {}) {
