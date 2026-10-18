@@ -25,7 +25,7 @@ apps/dashboard/src/
 
 Tests live under `packages/loopy/_tests_` and `apps/dashboard/_tests_`. The real workflows in `examples/` use the removed step SDK. PR 7 owns their migration; they are outside semantic TypeScript checking until then. Graph example fixtures remain compiled and checked.
 
-The public entries are `loopy` for the builder, `loopy/engine` for the reducer, `loopy/local` and `loopy/contract`. The old runtime entry and executable step SDK are deleted. The dashboard imports only `loopy/contract`.
+The public entries are `loopy` for the builder, `loopy/engine` for the reducer and `loopy/contract`. The old runtime entry and executable step SDK are deleted. The dashboard imports only `loopy/contract`.
 
 Layers import downward through their target's index, except the SDK's compiler command catalog and descriptor types. Core, engine and contract bundle without host dependencies. Host imports core and engine. Store imports core and the executor PID helper. Executor imports core and contract. Local composes host, store and executor. Compiler imports core, contract, the executor sandbox and the trusted SDK command catalog. CLI imports the owners it calls. Same-layer imports name the file.
 
@@ -36,7 +36,7 @@ Layers import downward through their target's index, except the SDK's compiler c
 - `engine/state.ts` owns reducer state and input events; `step.ts` owns transitions; `node-run.ts` owns node writes; `resolve.ts` resolves data; `policy.ts` owns backoff, out-schema validation and the inline cap. Transitions separate durable writes from dispatch, wait and finished instructions.
 - `host/activate.ts` reconstructs state from persisted node runs, reconciles receipts, calls the reducer, commits durable effects once, then dispatches work. Validation failures do not retry. Retries retain the running lease and persist `nextRetryAt`.
 - `host/daemon.ts`, `pool.ts`, `schedules.ts` and `heartbeat.ts` coordinate due work and leases without author callbacks.
-- `store/sqlite/` separates events, runs, nodes and schedules. `apply` fences the owner and commits node writes, logs, run outcomes and outbox rows in one transaction. Schema 14 resets old databases. SQLite in memory runs the store contract tests. One store class delegates to per-table functions; `open.ts` owns the schema gate.
+- `store/sqlite/` separates events, runs, nodes and schedules. `apply` fences the owner and commits node writes, logs, run outcomes and outbox rows in one transaction. Schema 15 resets old databases. SQLite in memory runs the store contract tests. One store class delegates to per-table functions; `open.ts` owns the schema gate.
 - `executor/local.ts` starts a trusted worker. `execution.ts` owns executions, `receipts.ts` owns exclusive started and atomic finished receipt files, and `protocol.ts` decodes stdout results and stderr logs. Finished receipts prevent repeating lost completions. A dead worker with an unfinished receipt fails as uncertain.
 - `executor/process.ts`, `spawn.ts` and `sandbox/` own OS processes, bounded capture, process groups and sandbox profiles. Bundles always have restricted filesystem access; mode controls network. Only declared secrets are injected into bundle environments.
 - `sdk/graph/` owns compile-only construction. `sdk/shell/` supplies descriptor data and parser implementations, with no executable step path.

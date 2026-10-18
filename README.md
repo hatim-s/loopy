@@ -90,21 +90,21 @@ loopy logs <run-id> --follow
 loopy resume <run-id>
 loopy cancel <run-id>
 
-loopy run review --detach
+loopy run review
 loopy daemon run --concurrency 4
-loopy schedule review --cron '0 9 * * 1-5' --tz Asia/Kolkata
-loopy schedule review --disable
-loopy schedule review --enable
-loopy schedule review --off
+loopy schedule review set --cron '0 9 * * 1-5' --tz Asia/Kolkata
+loopy schedule review disable
+loopy schedule review enable
+loopy schedule review off
 ```
 
-An inline run activates until it finishes or suspends without a wake time. For a timed sleep or retry, it waits and activates again. Ctrl-C and SIGTERM leave unfinished work resumable. `--detach` creates a queued run without executing it; the foreground daemon claims queued and due runs. `resume` continues queued, suspended or abandoned runs. A finished run stays finished; start a new run to try a failed workflow again. Cancellation requires a claimable run. Stop its runner before cancelling an actively owned run.
+`loopy run` creates a queued run and returns its record; the daemon claims queued and due runs. Keep `loopy daemon run` running to execute them. `resume` continues queued, suspended or abandoned runs. A finished run stays finished; start a new run to try a failed workflow again. Cancellation requires a claimable run. Stop its runner before cancelling an actively owned run.
 
 `runs [slug]` prints the stored runs as a JSON array. Dashboard run lists page newest first and load older runs on request. The HTTP API accepts `slug`, `status`, `limit` and `before` filters.
 
 `inspect` returns a snapshot with the run, ordered steps, logs, hooks, event cursor and store epoch. Run statuses are `queued`, `running`, `suspended`, `succeeded`, `failed` and `cancelled`. Each step records its sequence, key, kind, attempt, status and result or error. Logs carry their workflow position or step attempt. `logs --follow` emits one JSON object per line.
 
-A definition can include `schedule: { cron: "0 9 * * 1-5", tz: "Asia/Kolkata" }`. `loopy schedule <slug>` uses those defaults; flags override them. Pass schedule input with `--input-json`. `--disable` pauses a saved schedule; `--enable` resumes it. `--off` deletes it. These actions cannot be combined with each other or with cron, timezone or input flags. Schedules retain their workspace, even when the daemon starts elsewhere. Missed fires are not backfilled. Scheduling stores the next fire time; keep `loopy daemon run` running to execute it. Cron uses five fields and defaults to UTC. Command options are scoped: `--follow` belongs to logs, `--concurrency` to daemon run and install, and `--cron`, `--tz`, `--enable`, `--disable` and `--off` to schedule.
+A definition can include `schedule: { cron: "0 9 * * 1-5", tz: "Asia/Kolkata" }`. `loopy schedule <slug> set` uses those defaults; flags override them. Omitting `set` has the same effect. Pass schedule input with `--input-json`. `disable` pauses a saved schedule; `enable` resumes it. `off` deletes it. Choose one positional action. Only `set` accepts cron, timezone or input flags. Schedules retain their workspace, even when the daemon starts elsewhere. Missed fires are not backfilled. Scheduling stores the next fire time; keep `loopy daemon run` running to execute it. Cron uses five fields and defaults to UTC. Command options are scoped: `--follow` belongs to logs, `--concurrency` to daemon run and install, `--lease-ms` only to daemon run, and `--cron`, `--tz` and `--input-json` to schedule set.
 
 ### Run the daemon as a service
 
@@ -160,7 +160,7 @@ const first = await race([() => queryPrimary(), () => queryReplica()]);
 
 The default is three attempts with exponential delays starting at one second, doubling to a 60-second cap without jitter. Function failures, spawn failures and timeouts can retry. Nonzero command exits require `retry: { retryOn: "exit" }`; parser errors and non-JSON outputs fail without retry. Set `retry: { attempts: 1 }` to disable automatic retries. Durations accept milliseconds or strings such as `"30s"`, `"10m"`, `"1h"` and `"2d"`.
 
-Runners heartbeat every 15 seconds while holding a run. After a crash, resume or the daemon can reclaim ownership once its heartbeat is more than 60 seconds old. On the same host, a dead PID permits immediate recovery. The `--lease-ms` global option overrides the lease duration. Unfinished running steps retry with the next attempt number. A process can finish an effect before its result is persisted. Crash recovery can execute that unfinished step again. Use idempotent operations or external idempotency keys for publication and other effects that must not repeat.
+Runners heartbeat every 15 seconds while holding a run. After a crash, resume or the daemon can reclaim ownership once its heartbeat is more than 60 seconds old. On the same host, a dead PID permits immediate recovery. The `loopy daemon run --lease-ms <milliseconds>` option overrides the daemon's lease duration. Unfinished running steps retry with the next attempt number. A process can finish an effect before its result is persisted. Crash recovery can execute that unfinished step again. Use idempotent operations or external idempotency keys for publication and other effects that must not repeat.
 
 ## Execution and secrets
 
