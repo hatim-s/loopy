@@ -3,13 +3,13 @@ import {
   FIELD_TYPES,
   type GraphMeta,
   LOOPY_SCOPES,
+  parseCron,
   requireOneOf,
   requireRecord,
   requireString,
   validateSecretName,
   validateSlug,
 } from "../../core/index.js";
-import { parseCron } from "../../host/index.js";
 
 // BOUNDARY: JavaScript author modules can pass malformed field schemas to the public builder.
 export function parseDefinitionInput(value: unknown) {
@@ -60,6 +60,12 @@ export function parseDefinitionMeta(name: string, value: unknown) {
 
 // BOUNDARY: A validated object still contains untyped schedule fields from the author module.
 function parseSchedule(schedule: Record<string, unknown>): NonNullable<GraphMeta["schedule"]> {
+  for (const key of Object.keys(schedule)) {
+    if (key !== "cron" && key !== "tz") {
+      throw new Error(`Unknown schedule property '${key}'. Use only 'cron' and 'tz'.`);
+    }
+  }
+
   const parsed: NonNullable<GraphMeta["schedule"]> = {
     cron: requireString(schedule.cron, "Schedule cron"),
   };

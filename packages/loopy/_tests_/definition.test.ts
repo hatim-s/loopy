@@ -66,6 +66,10 @@ test("graph definitions validate timezones and reject unknown properties", () =>
   expect(() => loopy("test", { input: {}, typo: true, run: () => null })).toThrow(
     "Unknown definition property 'typo'",
   );
+  expect(() =>
+    // @ts-expect-error JavaScript callers can pass unknown schedule properties.
+    loopy("test", { input: {}, schedule: { cron: "@daily", timezone: "UTC" }, run: () => null }),
+  ).toThrow("Unknown schedule property 'timezone'");
   expect(
     loopy("test", { input: {}, schedule: { cron: "@daily", tz: "Asia/Kolkata" }, run: () => null })
       .graph.meta.schedule,

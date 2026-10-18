@@ -2,6 +2,8 @@ export { parseArgv } from "./argv.js";
 
 export { canonicalJson } from "./canonical-json.js";
 
+export { nextFire, parseCron } from "./cron.js";
+
 export * from "./duration.js";
 
 export * from "./effects.js";
