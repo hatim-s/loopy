@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { lstat, mkdir, open, readFile, realpath, rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { z } from "zod";
@@ -31,10 +30,15 @@ export const receiptSchema = z.discriminatedUnion("kind", [
   z.object({ ...identity, kind: z.literal("finished"), result: resultSchema }),
 ]);
 
-export async function receiptPath(workspace: string, key: ExecutionKey, attempt: number) {
-  let directory = await realpath(workspace);
+export async function receiptPath(home: string, key: ExecutionKey, attempt: number) {
+  await mkdir(home, { recursive: true, mode: 0o700 });
+  let directory = await realpath(home);
 
-  for (const segment of [".loopy", "scratch", "receipts"]) {
+  for (const segment of [
+    "receipts",
+    encodeURIComponent(key.runId).replaceAll(".", "%2E"),
+    encodeURIComponent(executionKeyString(key)),
+  ]) {
     directory = join(directory, segment);
 
     try {
@@ -46,14 +50,11 @@ export async function receiptPath(workspace: string, key: ExecutionKey, attempt:
     }
 
     if (!(await lstat(directory)).isDirectory()) {
-      throw new Error("Receipt scratch directories must be real directories inside the workspace.");
+      throw new Error("Receipt directories must be real directories inside the daemon home.");
     }
   }
 
-  return join(
-    directory,
-    `${createHash("sha256").update(executionKeyString(key)).digest("hex")}-${attempt}.json`,
-  );
+  return join(directory, `${attempt}.json`);
 }
 
 export async function lookupFile(path: string) {

@@ -1,11 +1,13 @@
 import { dirname } from "node:path";
+import type { BundleSandboxOptions } from "./bundle.js";
 
-export function macBundle(
-  bundle: string,
-  workspace: string,
-  bun: string,
-  network: boolean,
-): [string, string[]] {
+export function macBundle({
+  bundle,
+  workspace,
+  bun,
+  network,
+  home,
+}: BundleSandboxOptions): [string, string[]] {
   const quote = JSON.stringify;
   const directories = new Set<string>();
 
@@ -31,6 +33,8 @@ export function macBundle(
     `(allow file-read* (literal ${quote(bundle)}) (literal ${quote(bun)}) (subpath ${quote(workspace)}) (subpath "/usr/lib") (subpath "/System/Library") (subpath "/private/var/db/dyld") (subpath "/private/var/db/timezone"))`,
     `(allow file-write* (subpath ${quote(workspace)}) (literal "/dev/null"))`,
     '(allow file-read* (literal "/dev/null") (literal "/dev/zero") (literal "/dev/urandom") (literal "/dev/random"))',
+    `(deny file-write* (subpath ${quote(dirname(bundle))}))`,
+    `(deny file-read* file-write* (subpath ${quote(home)}))`,
     network ? "(allow network*)" : "(deny network*)",
   ].join("\n");
 

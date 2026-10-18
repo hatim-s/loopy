@@ -22,7 +22,7 @@ type Options = {
 export class LocalExecutor implements Executor {
   constructor(private readonly options: Options) {}
   async lookup(key: ExecutionKey, attempt: number) {
-    const path = await receiptPath(this.options.workspace, key, attempt);
+    const path = await receiptPath(this.options.home, key, attempt);
     const receipt = await lookupFile(path);
 
     if (

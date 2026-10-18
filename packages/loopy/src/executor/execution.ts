@@ -11,15 +11,16 @@ import {
   limitLogs,
 } from "../core/index.js";
 import {
-  bundleLauncher,
   executeLocalCommand,
   renderCommand,
   SecretStore,
   secretRedactor,
   spawnCaptured,
+  withBundleSandbox,
 } from "../local/execution-host.js";
 import { bundleResult } from "./protocol.js";
 import { finishReceipt, lookupFile, receiptPath, startReceipt } from "./receipts.js";
+import { redactResult } from "./redact.js";
 
 type Options = {
   home: string;
@@ -38,7 +39,7 @@ export class ExecutionWorker implements Executor {
     this.redact = secretRedactor(Object.values(this.env));
   }
   async lookup(key: ExecutionKey, attempt: number) {
-    return lookupFile(await receiptPath(this.options.workspace, key, attempt));
+    return lookupFile(await receiptPath(this.options.home, key, attempt));
   }
   async execute(
     key: ExecutionKey,
@@ -46,7 +47,7 @@ export class ExecutionWorker implements Executor {
     spec: ExecutionSpec,
     signal: AbortSignal,
   ): Promise<ExecutionResult> {
-    const path = await receiptPath(this.options.workspace, key, attempt);
+    const path = await receiptPath(this.options.home, key, attempt);
     await startReceipt(path, key, attempt);
     let result: ExecutionResult;
 
@@ -70,6 +71,7 @@ export class ExecutionWorker implements Executor {
       };
     }
 
+    result = redactResult(result, this.redact);
     await finishReceipt(path, { kind: "finished", result, executionKey: key, attempt });
 
     return result;
@@ -77,32 +79,36 @@ export class ExecutionWorker implements Executor {
   private async bundle(hash: string, input: Json, timeoutMs: number, signal: AbortSignal) {
     const bundle = await realpath(this.options.bundlePath(hash));
     const workspace = await realpath(this.options.workspace);
-    const [program, args] = await bundleLauncher(bundle, workspace, this.options.mode === "full");
 
-    const raw = await spawnCaptured(
+    const raw = await withBundleSandbox(
       {
-        program,
-        args,
-        cwd: workspace,
-        env: {
-          PATH: process.env.PATH,
-          LANG: "C.UTF-8",
-          HOME: workspace,
-          TMPDIR: workspace,
-          ...this.env,
-        },
-        stdin: JSON.stringify(input),
+        bundle,
+        workspace,
+        network: this.options.mode === "full",
+        home: await realpath(this.options.home),
       },
-      { timeoutMs, maxOutputBytes: 2 * 1024 * 1024 },
-      signal,
-      performance.now(),
+      ({ program, args }) =>
+        spawnCaptured(
+          {
+            program,
+            args,
+            cwd: workspace,
+            env: {
+              PATH: process.env.PATH,
+              LANG: "C.UTF-8",
+              HOME: workspace,
+              TMPDIR: workspace,
+              ...this.env,
+            },
+            stdin: JSON.stringify(input),
+          },
+          { timeoutMs, maxOutputBytes: 2 * 1024 * 1024 },
+          signal,
+          performance.now(),
+        ),
     );
 
-    return bundleResult({
-      ...raw,
-      stdout: this.redact(raw.stdout),
-      stderr: this.redact(raw.stderr),
-    });
+    return bundleResult(raw, this.redact);
   }
   private async perform(spec: ExecutionSpec, signal: AbortSignal): Promise<ExecutionResult> {
     if (spec.kind === "code") {
@@ -117,24 +123,34 @@ export class ExecutionWorker implements Executor {
 
     const raw = await executeLocalCommand(
       { program, args, cwd: spec.cwd ?? undefined, env: spec.env, stdin: spec.stdin ?? undefined },
-      { ...this.options, sensitiveEnv: this.env, signal },
+      {
+        ...this.options,
+        protectedHome: await realpath(this.options.home),
+        sensitiveEnv: this.env,
+        signal,
+      },
     );
 
     const result = {
-      stdout: this.redact(raw.stdout),
-      stderr: this.redact(raw.stderr),
+      stdout: raw.stdout,
+      stderr: raw.stderr,
       exitCode: raw.exitCode,
     };
 
-    const logs = limitLogs([
+    const logs = [
       { message: "stdout", data: result.stdout },
       { message: "stderr", data: result.stderr },
-    ]);
+    ];
 
     if (!spec.node.okExitCodes.includes(result.exitCode)) {
       return {
         kind: "failed",
-        error: { code: "exit", message: `Command exited with code ${result.exitCode}.` },
+        error: {
+          code: "exit",
+          message: result.stderr
+            ? `Command exited with code ${result.exitCode}: ${this.redact(result.stderr).slice(-500)}. Inspect stderr and correct the command.`
+            : `Command exited with code ${result.exitCode}. Correct the command.`,
+        },
         exitCode: result.exitCode,
         logs,
       };
@@ -155,6 +171,6 @@ export class ExecutionWorker implements Executor {
       signal,
     );
 
-    return { ...parsed, logs: limitLogs([...logs, ...parsed.logs]) };
+    return { ...parsed, logs: [...logs, ...parsed.logs] };
   }
 }

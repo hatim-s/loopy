@@ -1,10 +1,7 @@
-import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { expect, test } from "bun:test";
+import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { compile } from "../src/compiler/index.js";
-import { nodeIdSchema } from "../src/contract/index.js";
-import { type ExecutionSpec } from "../src/core/index.js";
 import { LocalExecutor } from "../src/executor/index.js";
 import { receiptPath } from "../src/executor/receipts.js";
 import { SYSTEM_CLOCK } from "../src/host/index.js";
@@ -15,51 +12,19 @@ import {
   Registry,
   SecretStore,
 } from "../src/local/index.js";
+import { fixture } from "./fixtures/executor.js";
 
-const roots: string[] = [];
-
-afterEach(async () => {
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
-});
-
-async function fixture() {
-  const root = await realpath(await mkdtemp(join(tmpdir(), "loopy-executor-")));
-  roots.push(root);
-  const workspace = join(root, "workspace");
-  await Bun.write(join(workspace, "seed"), "workspace");
-  const bundle = join(root, "bundle.js");
-  const key = { runId: "run", nodeId: nodeIdSchema.parse("0:code"), scope: [] };
-
-  const executor = new LocalExecutor({
-    home: join(root, "home"),
-    workspace,
-    mode: "sandbox",
-    secrets: [],
-    bundlePath: () => bundle,
-  });
-
-  const spec: ExecutionSpec = {
-    kind: "code",
-    bundleHash: "a".repeat(64),
-    input: { name: "Hatim" },
-    timeoutMs: 3000,
-  };
-
-  return { root, workspace, bundle, key, executor, spec };
-}
-
-test("code protocol captures stderr logs and leading stdout, with a receipt before the effect", async () => {
+test("code protocol captures stderr logs and leading stdout, and retains its trusted completion receipt", async () => {
   const f = await fixture();
-  const receipt = await receiptPath(f.workspace, f.key, 1);
   await writeFile(
     f.bundle,
-    `const input = await Bun.stdin.json(); const receipt = await Bun.file(${JSON.stringify(receipt)}).json(); process.stdout.write("noise\\n"); process.stderr.write(JSON.stringify({message: "hello", data: input}) + "\\n"); process.stdout.write(JSON.stringify({input, receipt: receipt.kind})+"\\n");`,
+    `const input = await Bun.stdin.json(); process.stdout.write("noise\\n"); process.stderr.write(JSON.stringify({message: "hello", data: input}) + "\\n"); process.stdout.write(JSON.stringify({input})+"\\n");`,
   );
   expect(await f.executor.lookup(f.key, 1)).toEqual({ kind: "none" });
   const result = await f.executor.execute(f.key, 1, f.spec, new AbortController().signal);
   expect(result).toEqual({
     kind: "succeeded",
-    output: { input: { name: "Hatim" }, receipt: "started" },
+    output: { input: { name: "Hatim" } },
     logs: [
       { message: "hello", data: { name: "Hatim" } },
       { message: "stdout", data: "noise\n" },
@@ -266,7 +231,7 @@ test("only declared secrets reach bundles and receipts contain redacted results 
     output: { token: "[redacted]", other: null },
     logs: [{ message: "[redacted]", data: null }],
   });
-  expect(await readFile(await receiptPath(f.workspace, f.key, 1), "utf8")).not.toContain(
+  expect(await readFile(await receiptPath(join(f.root, "home"), f.key, 1), "utf8")).not.toContain(
     "super-private",
   );
 });

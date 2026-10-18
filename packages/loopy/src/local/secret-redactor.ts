@@ -18,7 +18,11 @@ function trailingSecretPrefix(text: string, secrets: string[]): number {
 
 /** Exact values are masked. Truncated output also masks a secret prefix at the stream boundary. */
 export function secretRedactor(values: string[]) {
-  const secrets = [...new Set(values)].filter(Boolean).sort((a, b) => b.length - a.length);
+  const secrets = [
+    ...new Set(values.flatMap((value) => [value, JSON.stringify(value).slice(1, -1)])),
+  ]
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
 
   const pattern = secrets.length
     ? new RegExp(

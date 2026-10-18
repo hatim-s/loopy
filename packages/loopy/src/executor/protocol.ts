@@ -1,15 +1,13 @@
 import { z } from "zod";
 import { jsonSchema } from "../contract/index.js";
-import {
-  type AttemptLog,
-  type CommandResult,
-  type ExecutionResult,
-  limitLogs,
-} from "../core/index.js";
+import { type AttemptLog, type CommandResult, type ExecutionResult } from "../core/index.js";
 
 const logSchema = z.strictObject({ message: z.string(), data: jsonSchema });
 
-export function bundleResult(raw: CommandResult): ExecutionResult {
+export function bundleResult(
+  raw: CommandResult,
+  redact: (text: string) => string,
+): ExecutionResult {
   const lines = raw.stdout.trimEnd().split("\n");
   const last = lines.pop() ?? "";
   const leading = raw.stdout.slice(0, raw.stdout.lastIndexOf(last));
@@ -34,21 +32,21 @@ export function bundleResult(raw: CommandResult): ExecutionResult {
       kind: "failed",
       error: {
         code: "execution",
-        message: `Bundle exited with code ${raw.exitCode}. ${raw.stderr.slice(-500)}`,
+        message: `Bundle exited with code ${raw.exitCode}. ${redact(raw.stderr).slice(-500)}`,
       },
       exitCode: raw.exitCode,
-      logs: limitLogs(logs),
+      logs,
     };
   }
 
   try {
-    return { kind: "succeeded", output: jsonSchema.parse(JSON.parse(last)), logs: limitLogs(logs) };
+    return { kind: "succeeded", output: jsonSchema.parse(JSON.parse(last)), logs };
   } catch {
     return {
       kind: "failed",
       error: { code: "protocol", message: "Bundle stdout must end with one JSON result line." },
       exitCode: null,
-      logs: limitLogs(logs),
+      logs,
     };
   }
 }

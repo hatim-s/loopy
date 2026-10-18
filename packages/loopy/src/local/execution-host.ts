@@ -3,7 +3,7 @@ import { renderArgv } from "../sdk/host.js";
 
 export { executeLocalCommand } from "./process.js";
 
-export { bundleLauncher } from "./sandbox/bundle.js";
+export { withBundleSandbox } from "./sandbox/bundle.js";
 
 export { secretRedactor } from "./secret-redactor.js";
 

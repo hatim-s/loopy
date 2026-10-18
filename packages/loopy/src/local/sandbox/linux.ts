@@ -1,6 +1,7 @@
 import { realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, relative, sep } from "node:path";
+import type { SandboxOptions } from "./launcher.js";
 import { ENV_EXEC, envArgs, executable, packageDirectory, within } from "./paths.js";
 
 const BWRAP_CANDIDATES = ["/usr/bin/bwrap", "/bin/bwrap"];
@@ -109,15 +110,45 @@ async function bindProgram(
  * Read-only root, tmpfs over /tmp, /run and the home directory, then the
  * workspace (and the program's package, if it lives under home) bound back in.
  */
-export async function linuxSandbox(
-  program: string,
-  workspace: string,
-  cwd: string,
-  env: NodeJS.ProcessEnv,
-  scratch: string,
-  helper?: string,
-): Promise<[string, string[]]> {
+export async function linuxSandbox({
+  program,
+  workspace,
+  cwd,
+  env,
+  scratch,
+  helper,
+  protectedHome,
+  mode,
+}: SandboxOptions): Promise<[string, string[]]> {
   const bwrap = await findBwrap();
+
+  if (mode === "full") {
+    return [
+      bwrap,
+      [
+        "--die-with-parent",
+        "--unshare-all",
+        "--share-net",
+        "--bind",
+        "/",
+        "/",
+        ...(protectedHome ? ["--tmpfs", protectedHome, "--remount-ro", protectedHome] : []),
+        "--proc",
+        "/proc",
+        "--dev",
+        "/dev",
+        "--chdir",
+        cwd,
+        "--",
+        ENV_EXEC,
+        "-i",
+        "--",
+        ...envArgs(env),
+        helper ?? program,
+      ],
+    ];
+  }
+
   const home = await realpath(homedir());
 
   if (home === "/") {
@@ -138,6 +169,11 @@ export async function linuxSandbox(
   await bindProgram(plan, { program, workspace, home, helper });
   prepareUnderTmpfs(plan, scratch, true);
   args.push("--bind", scratch, scratch, "--bind", workspace, workspace);
+
+  if (protectedHome) {
+    args.push("--tmpfs", protectedHome, "--remount-ro", protectedHome);
+  }
+
   args.push("--chdir", cwd, "--", ENV_EXEC, "-i", "--", ...envArgs(env), helper ?? program);
 
   return [bwrap, args];
