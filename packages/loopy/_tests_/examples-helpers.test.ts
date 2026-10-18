@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 import type { Json } from "loopy";
+import { requestSchema } from "../../../examples/uacode-asset-sync/request.js";
 import {
   type Files,
   object,
@@ -282,4 +283,25 @@ test("JSON patch rejects values that cannot survive JSON serialization", () => {
     "JSON patch did not produce the intended value",
   );
   expect(files["asset.json"]).toBe('{"version":1}');
+});
+
+test("asset request rejects malformed identities, paths and options", () => {
+  const input = {
+    repository: "/fixture/uacode",
+    assets: [{ assetClass: "WORKFLOW_DEFINITION", assetId: "fixture" }],
+  };
+
+  expect(requestSchema["~standard"].validate(input).value?.feature).toBe("ai-agents");
+
+  for (const invalid of [
+    { assets: [] },
+    { assets: [{ assetClass: "", assetId: "a" }] },
+    { dryRun: "false" },
+    { indexPath: "../escape.json" },
+    { feature: "../escape" },
+    { typo: true },
+    { repository: "relative" },
+  ]) {
+    expect(requestSchema["~standard"].validate({ ...input, ...invalid }).issues).toHaveLength(1);
+  }
 });

@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { graphSchema } from "../src/contract/index.js";
 import { type ExecutionKey, type ExecutionResult, type Json } from "../src/core/index.js";
 import { type EngineEvent, initialState, step } from "../src/engine/index.js";
+import { loopy, sh } from "../src/sdk/graph/index.js";
 import { approveDemoGraph } from "./fixtures/graphs.js";
 
 const at = "2026-10-18T00:00:00.000Z";
@@ -215,4 +216,78 @@ test("stale completions emit no logs and completion and log nodes use write_log"
     { log: { message: "Draft ready" }, attempt: 1 },
   ]);
   expect(step(f.graph, f.state, { ...event, attempt: 2 }).effects).toEqual([]);
+});
+
+for (const retryOnExit of [false, true]) {
+  test(`command exit retry policy honors retryOnExit=${retryOnExit}`, () => {
+    const graph = loopy("exit-policy", {
+      input: {},
+      run: () => sh(["false"], { retry: { attempts: 3, retryOnExit } }),
+    }).graph;
+
+    const started = step(graph, initialState("run", {}), { kind: "run_started", at });
+    const dispatch = started.effects.find((effect) => effect.kind === "dispatch");
+
+    if (dispatch?.kind !== "dispatch") {
+      throw new Error("Expected command dispatch");
+    }
+
+    const failed = step(graph, started.state, {
+      kind: "execution_failed",
+      executionKey: dispatch.executionKey,
+      attempt: 1,
+      at,
+      error: { code: "exit", message: "Command exited with code 2" },
+      exitCode: 2,
+      logs: [],
+    });
+
+    expect(failed.state.nodeRuns[0]?.status).toBe(retryOnExit ? "retrying" : "failed");
+    expect(failed.effects.some((effect) => effect.kind === "schedule_retry")).toBe(retryOnExit);
+  });
+}
+
+test("graph retry delay caps at sixty seconds across repeated failures", () => {
+  const f = start();
+  const node = f.graph.nodes[0];
+
+  if (node?.kind !== "code") {
+    throw new Error("Expected code fixture");
+  }
+
+  node.retry.attempts = 10;
+  let state = f.state;
+  let time = Date.parse(at);
+
+  for (let attempt = 1; attempt < 10; attempt++) {
+    const failed = step(f.graph, state, {
+      kind: "execution_failed",
+      executionKey: f.dispatch.executionKey,
+      attempt,
+      at: new Date(time).toISOString(),
+      error: { code: "execution", message: "retry" },
+      exitCode: null,
+      logs: [],
+    });
+
+    const retry = failed.effects.find((effect) => effect.kind === "schedule_retry");
+
+    if (retry?.kind !== "schedule_retry") {
+      throw new Error("Expected retry deadline");
+    }
+
+    const delay = Date.parse(retry.at) - time;
+    expect(delay).toBe(Math.min(1000 * 2 ** (attempt - 1), 60_000));
+
+    if (attempt >= 7) {
+      expect(delay).toBe(60_000);
+    }
+
+    time = Date.parse(retry.at);
+    const resumed = step(f.graph, failed.state, { kind: "retry_due", at: retry.at });
+    expect(resumed.effects).toContainEqual(
+      expect.objectContaining({ kind: "dispatch", attempt: attempt + 1 }),
+    );
+    state = resumed.state;
+  }
 });

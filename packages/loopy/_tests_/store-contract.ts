@@ -1,9 +1,33 @@
 import { describe, expect, test } from "bun:test";
 import { nodeIdSchema } from "../src/contract/index.js";
-import { type NodeRun, OwnershipError, type Schedule, type Store } from "../src/core/index.js";
+import {
+  type NodeRun,
+  OwnershipError,
+  type RunOutcome,
+  type Schedule,
+  type Store,
+} from "../src/core/index.js";
 import { newRun } from "./fixture.js";
+import { storeRecordContract } from "./store-record-contract.js";
 
 type StoreFactory = (options?: { now?: () => number; leaseMs?: number }) => Store | Promise<Store>;
+
+const OUTCOMES: RunOutcome[] = [
+  { status: "succeeded", output: 42 },
+  { status: "failed", error: "Failed. Fix it." },
+  { status: "cancelled" },
+];
+
+function runningNode(): NodeRun {
+  return {
+    key: { runId: "run", nodeId: nodeIdSchema.parse("0:code"), scope: [] },
+    attempt: 1,
+    maxAttempts: 3,
+    startedAt: newRun().createdAt,
+    status: "running",
+    receipt: "none",
+  };
+}
 
 const LOG = { at: newRun().createdAt };
 
@@ -257,8 +281,145 @@ function eventCursors(makeStore: StoreFactory): void {
   });
 }
 
+function stateMachine(makeStore: StoreFactory): void {
+  test("claim heartbeat suspend release and reclaim follow the state machine", async () => {
+    const store = await fixture(makeStore);
+    expect(await store.heartbeat("run", "owner")).toBe(false);
+    const run = await store.claim("run", "owner");
+    expect(run).toMatchObject({ status: "running", owner: { token: "owner" } });
+    expect(await store.heartbeat("run", "owner")).toBe(true);
+    await expect(store.claim("run", "other")).rejects.toBeInstanceOf(OwnershipError);
+    await store.suspend("run", "owner", LOG.at);
+    await expect(store.suspend("run", "owner")).rejects.toThrow(
+      "cannot transition from 'suspended'",
+    );
+    await expect(
+      store.finishRun("run", "owner", { status: "succeeded", output: 42 }),
+    ).rejects.toThrow("cannot transition from 'suspended'");
+    await store.release("run", "owner");
+    expect((await store.getRun("run"))?.owner).toBeUndefined();
+    expect((await store.claim("run", "next")).status).toBe("running");
+  });
+}
+
+function releaseRunning(makeStore: StoreFactory): void {
+  test("release of a running run suspends it at release time and permits reclaim", async () => {
+    const store = await fixture(makeStore);
+    await store.claim("run", "owner");
+    const before = new Date().toISOString();
+    await store.release("run", "owner");
+    const after = new Date().toISOString();
+    const run = await store.getRun("run");
+    expect(run?.status).toBe("suspended");
+    expect(run?.owner).toBeUndefined();
+    expect(run?.wakeAt).toBe(run?.updatedAt);
+    expect(run?.wakeAt).toBeDefined();
+    expect(run?.wakeAt?.localeCompare(before)).toBeGreaterThanOrEqual(0);
+    expect(run?.wakeAt?.localeCompare(after)).toBeLessThanOrEqual(0);
+    expect((await store.dueRuns(after)).map((due) => due.id)).toEqual(["run"]);
+    expect((await store.claim("run", "next")).status).toBe("running");
+  });
+}
+
+function terminalTransitions(makeStore: StoreFactory): void {
+  for (const outcome of OUTCOMES) {
+    test(`terminal ${outcome.status} cannot be overwritten or suspended`, async () => {
+      const store = await fixture(makeStore);
+      await store.claim("run", "owner");
+      await store.finishRun("run", "owner", outcome);
+      await expect(store.finishRun("run", "owner", outcome)).rejects.toThrow(
+        `cannot transition from '${outcome.status}'`,
+      );
+      await expect(store.suspend("run", "owner")).rejects.toThrow(
+        `cannot transition from '${outcome.status}'`,
+      );
+      expect(await store.getRun("run")).toMatchObject(outcome);
+      await store.release("run", "owner");
+      await expect(store.claim("run", "owner")).rejects.toThrow("cannot be claimed");
+    });
+  }
+}
+
+function ownershipFencing(makeStore: StoreFactory): void {
+  test("ownership fences stale writes and heartbeat reports lost ownership", async () => {
+    const store = await fixture(makeStore);
+    await store.claim("run", "old");
+    await store.suspend("run", "old");
+    await store.release("run", "old");
+    await store.claim("run", "new");
+    expect(await store.heartbeat("run", "old")).toBe(false);
+
+    const node = runningNode();
+
+    const writes = [
+      () => store.suspend("run", "old"),
+      () => store.finishRun("run", "old", { status: "cancelled" }),
+      () => store.release("run", "old"),
+      () =>
+        store.apply({
+          runId: "run",
+          token: "old",
+          effects: [{ kind: "write_node_run", nodeRun: node }],
+        }),
+      () =>
+        store.apply({
+          runId: "run",
+          token: "old",
+          effects: [
+            {
+              kind: "write_log",
+              executionKey: node.key,
+              attempt: 1,
+              log: { message: "hello", data: null },
+              at: LOG.at,
+            },
+          ],
+        }),
+      () =>
+        store.apply({
+          runId: "run",
+          token: "old",
+          effects: [{ kind: "schedule_retry", at: LOG.at }],
+        }),
+      () =>
+        store.apply({
+          runId: "run",
+          token: "old",
+          effects: [{ kind: "finish_run", outcome: { status: "cancelled" }, at: LOG.at }],
+        }),
+    ];
+
+    for (const write of writes) {
+      await expect(write()).rejects.toBeInstanceOf(OwnershipError);
+    }
+  });
+}
+
+function dueRuns(makeStore: StoreFactory): void {
+  test("dueRuns includes queued and due suspensions but excludes owned and future runs", async () => {
+    const store = await fixture(makeStore);
+    expect((await store.dueRuns(LOG.at)).map((run) => run.id)).toEqual(["run"]);
+    await store.claim("run", "owner");
+    expect(await store.dueRuns(LOG.at)).toEqual([]);
+    await store.suspend("run", "owner");
+    await store.release("run", "owner");
+    expect(await store.dueRuns(LOG.at)).toEqual([]);
+    await store.claim("run", "owner");
+    await store.suspend("run", "owner", "2026-10-16T01:00:00.000Z");
+    await store.release("run", "owner");
+    expect(await store.dueRuns(LOG.at)).toEqual([]);
+    expect((await store.dueRuns("2026-10-16T01:00:00.000Z")).map((run) => run.id)).toEqual(["run"]);
+  });
+}
+
 export function storeContract(name: string, makeStore: StoreFactory): void {
   describe(name, () => {
+    storeRecordContract(makeStore);
+    stateMachine(makeStore);
+    releaseRunning(makeStore);
+    terminalTransitions(makeStore);
+    ownershipFencing(makeStore);
+    dueRuns(makeStore);
     schedules(makeStore);
     scheduleFires(makeStore);
     scheduleFireFailures(makeStore);

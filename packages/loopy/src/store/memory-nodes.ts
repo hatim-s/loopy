@@ -3,6 +3,7 @@ import { executionKeyString, type NodeRun, type StoreEffect } from "../core/inde
 import { type EventTransaction } from "./event-outbox.js";
 import { MemoryRuns } from "./memory-runs.js";
 import { checkLogWrite, checkNodeWrite, logRecord } from "./node-write.js";
+import { normalizeNode, utc } from "./timestamps.js";
 
 export class MemoryNodes extends MemoryRuns {
   async getNodeRuns(runId: string): Promise<NodeRun[]> {
@@ -32,7 +33,7 @@ export class MemoryNodes extends MemoryRuns {
 
     switch (effect.kind) {
       case "write_node_run": {
-        const node = effect.nodeRun;
+        const node = normalizeNode(effect.nodeRun);
 
         checkNodeWrite(runId, node);
 
@@ -61,14 +62,14 @@ export class MemoryNodes extends MemoryRuns {
 
         delete run.wakeAt;
         delete run.nextRetryAt;
-        run.updatedAt = effect.at;
+        run.updatedAt = utc(effect.at);
         this.emit(txn, { entity: "run", kind: "finished", runId, record: run });
         break;
       }
 
       case "schedule_retry": {
-        run.nextRetryAt = effect.at;
-        run.wakeAt = effect.at;
+        run.nextRetryAt = utc(effect.at);
+        run.wakeAt = utc(effect.at);
         break;
       }
 

@@ -7,6 +7,7 @@ import {
 } from "../core/index.js";
 import { type EventTransaction } from "./event-outbox.js";
 import { MemoryEvents } from "./memory-events.js";
+import { normalizeRun, utc } from "./timestamps.js";
 
 export class MemoryRuns extends MemoryEvents {
   async acquireRateLimit(
@@ -27,8 +28,9 @@ export class MemoryRuns extends MemoryEvents {
         throw new Error(`Run '${run.id}' already exists. Use a new run ID.`);
       }
 
-      this.runs.set(run.id, structuredClone(run));
-      this.emit(txn, { entity: "run", kind: "created", runId: run.id, record: run });
+      const record = structuredClone(normalizeRun(run));
+      this.runs.set(run.id, record);
+      this.emit(txn, { entity: "run", kind: "created", runId: run.id, record });
     });
   }
 
@@ -97,8 +99,8 @@ export class MemoryRuns extends MemoryEvents {
         return "not_claimable";
       }
 
-      run.wakeAt = at;
-      run.updatedAt = at;
+      run.wakeAt = utc(at);
+      run.updatedAt = utc(at);
       this.emit(txn, { entity: "run", kind: "woken", runId: id, record: run });
 
       return undefined;
@@ -130,7 +132,7 @@ export class MemoryRuns extends MemoryEvents {
       delete run.wakeAt;
 
       if (wakeAt !== undefined) {
-        run.wakeAt = wakeAt;
+        run.wakeAt = utc(wakeAt);
       }
 
       run.updatedAt = this.timestamp();
@@ -187,16 +189,18 @@ export class MemoryRuns extends MemoryEvents {
 
   async dueRuns(now: string): Promise<RunRecord[]> {
     return structuredClone(
-      [...this.runs.values()].filter(
-        (run) =>
-          this.stale(run, Date.parse(now)) ||
-          (run.owner === undefined &&
-            (run.status === "queued" ||
-              run.status === "running" ||
-              (run.status === "suspended" &&
-                run.wakeAt !== undefined &&
-                Date.parse(run.wakeAt) <= Date.parse(now)))),
-      ),
+      [...this.runs.values()]
+        .filter(
+          (run) =>
+            this.stale(run, Date.parse(now)) ||
+            (run.owner === undefined &&
+              (run.status === "queued" ||
+                run.status === "running" ||
+                (run.status === "suspended" &&
+                  run.wakeAt !== undefined &&
+                  Date.parse(run.wakeAt) <= Date.parse(now)))),
+        )
+        .sort((left, right) => Date.parse(left.createdAt) - Date.parse(right.createdAt)),
     );
   }
 

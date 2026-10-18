@@ -7,6 +7,7 @@ import {
   outputBytes,
   type StoreEffect,
 } from "../core/index.js";
+import { utc } from "./timestamps.js";
 
 export function checkNodeWrite(runId: string, node: NodeRun) {
   if (node.key.runId !== runId) {
@@ -67,6 +68,6 @@ export function logRecord(
       index: Math.max(-1, ...indices) + 1,
     },
     level: "info" as const,
-    at: effect.at,
+    at: utc(effect.at),
   };
 }

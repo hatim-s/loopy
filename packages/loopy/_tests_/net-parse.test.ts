@@ -22,3 +22,23 @@ test.each([
     /Unexpected curl output line: [\s\S]*\. Report this with the curl version\./,
   );
 });
+
+test("curl skips proxy and repeated redirect statuses without consuming a body header", () => {
+  const metadata = JSON.stringify({
+    http_code: 302,
+    num_redirects: 1,
+    time_total: 0.1,
+    size_download: 4,
+    url_effective: "http://localhost/final",
+  });
+
+  const stdout = `HTTP/1.1 200 Connection established\r\n\r\nHTTP/1.1 302 Found\r\nLocation: /final\r\n\r\nHTTP/1.1 302 Found\r\nX-Value: first\r\nX-Value: second\r\n\r\nHTTP/body\n__LOOPY_CURL__${
+    metadata
+  }`;
+
+  expect(parseCurl(result(stdout))).toMatchObject({
+    status: 302,
+    headers: { "x-value": "first, second" },
+    body: "HTTP/body",
+  });
+});

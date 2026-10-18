@@ -14,6 +14,7 @@ import {
   type RateLimitWindow,
 } from "../../core/index.js";
 import { type EventTransaction } from "../event-outbox.js";
+import { utc } from "../timestamps.js";
 import { SqliteOwnership } from "./ownership.js";
 import { rowToRun, SQL } from "./store-rows.js";
 import { type RunRow } from "./store-schema.js";
@@ -122,7 +123,7 @@ export class SqliteRuns extends SqliteOwnership {
         return "not_claimable";
       }
 
-      this.db.query(SQL.wakeRun).run(at, at, id);
+      this.db.query(SQL.wakeRun).run(utc(at), utc(at), id);
       this.emitRun(txn, id, "woken");
 
       return undefined;
@@ -150,7 +151,9 @@ export class SqliteRuns extends SqliteOwnership {
       const run = this.owned(runId, token);
       this.requireRunning(run);
 
-      this.db.query(SQL.suspend).run(wakeAt ?? null, this.timestamp(), runId, token);
+      this.db
+        .query(SQL.suspend)
+        .run(wakeAt === undefined ? null : utc(wakeAt), this.timestamp(), runId, token);
       this.emitRun(txn, runId, "suspended");
     });
   }

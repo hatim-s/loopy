@@ -92,3 +92,85 @@ test("shutdown drains the active graph execution and leaves queued work untouche
   expect((await f.store.getRun("run"))?.status).toBe("succeeded");
   expect((await f.store.getRun("pending"))?.status).toBe("queued");
 });
+
+test("a held activation does not stop the running loop from processing new work and overdue schedules", async () => {
+  let time = Date.parse("2026-10-18T00:00:00.000Z");
+  const store = new MemoryStore(() => time);
+  const held = Promise.withResolvers<void>();
+  const entered = Promise.withResolvers<void>();
+  const completed = Promise.withResolvers<void>();
+  const calls: string[] = [];
+  const errors: Error[] = [];
+  const executor = new FakeExecutor();
+  executor.execute = async (key) => {
+    calls.push(key.runId);
+
+    if (key.runId === "held") {
+      entered.resolve();
+      await held.promise;
+    }
+
+    return { kind: "succeeded", output: { stdout: "done", stderr: "", exitCode: 0 }, logs: [] };
+  };
+
+  const graph = loopy("test", { input: {}, run: () => sh(["printf", "done"]) }).graph;
+
+  const daemon = new Daemon({
+    store,
+    concurrency: 2,
+    clock: { now: () => time, timeout: () => () => {} },
+    revisionFor: () => "bundle",
+    prepare: async () => ({ graph, executor }),
+    onError: (error) => errors.push(error),
+  });
+
+  const unsubscribe = store.subscribe((events) => {
+    if (
+      events.some(
+        (event) =>
+          event.entity === "run" && event.kind === "finished" && event.record.id !== "held",
+      )
+    ) {
+      void store.listRuns({ status: "succeeded" }).then((runs) => {
+        if (runs.length === 2) {
+          completed.resolve();
+        }
+      });
+    }
+  });
+
+  await store.createRun({ ...newRun(), id: "held" });
+  const running = daemon.run();
+
+  try {
+    await entered.promise;
+    await store.createRun({ ...newRun(), id: "new" });
+    await store.putSchedule({
+      workspace: "/workspace",
+      slug: "test",
+      cron: "* * * * *",
+      tz: "UTC",
+      input: {},
+      enabled: true,
+      nextFireAt: "2026-10-18T00:01:00.000Z",
+    });
+    time += 65_000;
+    daemon.wake();
+    await Promise.race([
+      completed.promise,
+      Bun.sleep(3000).then(() => {
+        throw new Error("New work and overdue schedule did not finish while held");
+      }),
+    ]);
+    expect((await store.getRun("held"))?.status).toBe("running");
+    expect(await store.listRuns({ status: "succeeded" })).toHaveLength(2);
+    expect(new Set(calls).size).toBe(3);
+    expect((await store.listSchedules())[0]?.nextFireAt).toBe("2026-10-18T00:02:00.000Z");
+    expect(errors).toEqual([]);
+  } finally {
+    unsubscribe();
+    held.resolve();
+    await daemon.stop();
+    await running;
+  }
+});

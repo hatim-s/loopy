@@ -1,8 +1,12 @@
 import { expect, test } from "bun:test";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { LocalExecutor } from "../src/executor/index.js";
 import { receiptPath } from "../src/executor/receipts.js";
+import { activate } from "../src/host/index.js";
 import { SecretStore } from "../src/local/index.js";
+import { loopy, sh } from "../src/sdk/graph/index.js";
+import { MemoryStore } from "../src/store/index.js";
+import { newRun } from "./fixture.js";
 import { commandSpec, fixture } from "./fixtures/executor.js";
 
 for (const mode of ["sandbox", "full"] as const) {
@@ -121,4 +125,63 @@ test("stderr secrets are redacted before the diagnostic tail is trimmed", async 
       message: "Command exited with code 2: [redacted]. Inspect stderr and correct the command.",
     },
   });
+});
+
+for (const accepted of [false, true]) {
+  test(`declared successful exit codes are checked before parser execution, accepted=${accepted}`, async () => {
+    const f = await fixture();
+    await writeFile(
+      f.bundle,
+      'const {result} = await Bun.stdin.json(); process.stdout.write(JSON.stringify({parsedExit: result.exitCode}) + "\\n");',
+    );
+    const spec = commandSpec(["/bin/sh", "-c", "exit 2"]);
+
+    if (spec.kind !== "command") {
+      throw new Error("Expected command spec");
+    }
+
+    spec.node.okExitCodes = accepted ? [0, 2] : [0];
+    spec.parse = { bundleHash: "a".repeat(64), input: {} };
+    const result = await f.executor.execute(f.key, 1, spec, new AbortController().signal);
+    expect(result).toMatchObject(
+      accepted
+        ? { kind: "succeeded", output: { parsedExit: 2 } }
+        : { kind: "failed", error: { code: "exit" }, exitCode: 2 },
+    );
+  });
+}
+
+test("parser execution failures propagate to the stored graph node and run", async () => {
+  const f = await fixture();
+  await writeFile(f.bundle, 'throw new Error("Parser rejected command output");');
+
+  const graph = loopy("parser-failure", {
+    input: {},
+    run: () => sh(["printf", "raw"], { retry: { attempts: 1 } }),
+  }).graph;
+
+  const node = graph.nodes.find((node) => node.kind === "command");
+
+  if (node?.kind !== "command") {
+    throw new Error("Expected command node");
+  }
+
+  node.parse = { bundleHash: "a".repeat(64), input: {} };
+  const store = new MemoryStore();
+  await store.createRun(newRun());
+  expect(await activate({ store, executor: f.executor, graph, runId: "run" })).toMatchObject({
+    status: "failed",
+    error: expect.stringContaining("Parser rejected command output"),
+  });
+  expect((await store.getNodeRuns("run"))[0]).toMatchObject({
+    status: "failed",
+    attempt: 1,
+    error: {
+      code: "execution",
+      message: expect.stringContaining("Parser rejected command output"),
+    },
+  });
+  expect(await store.getLogs("run")).toContainEqual(
+    expect.objectContaining({ message: "stdout", data: "raw" }),
+  );
 });

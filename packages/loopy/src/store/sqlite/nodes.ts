@@ -3,6 +3,7 @@ import type { LogRecord, RunSnapshot } from "../../core/index.js";
 import { executionKeyString, type NodeRun, type StoreEffect } from "../../core/index.js";
 import { type EventTransaction } from "../event-outbox.js";
 import { checkLogWrite, checkNodeWrite, logRecord } from "../node-write.js";
+import { normalizeNode, utc } from "../timestamps.js";
 import { SqliteRuns } from "./runs.js";
 import { rowToLog, rowToRun, SQL } from "./store-rows.js";
 import { type LogRow } from "./store-schema.js";
@@ -42,7 +43,7 @@ export class SqliteNodes extends SqliteRuns {
   protected applyEffect(txn: EventTransaction, runId: string, effect: StoreEffect): void {
     switch (effect.kind) {
       case "write_node_run": {
-        const node = effect.nodeRun;
+        const node = normalizeNode(effect.nodeRun);
 
         checkNodeWrite(runId, node);
 
@@ -76,7 +77,7 @@ export class SqliteNodes extends SqliteRuns {
             outcome.status,
             outcome.status === "succeeded" ? JSON.stringify(outcome.output) : null,
             outcome.status === "failed" ? outcome.error : null,
-            effect.at,
+            utc(effect.at),
             runId,
             this.requireRow(runId).owner_token,
           );
@@ -87,7 +88,7 @@ export class SqliteNodes extends SqliteRuns {
       case "schedule_retry": {
         this.db
           .query("UPDATE runs SET next_retry_at=?,wake_at=?,updated_at=? WHERE id=?")
-          .run(effect.at, effect.at, this.timestamp(), runId);
+          .run(utc(effect.at), utc(effect.at), this.timestamp(), runId);
         break;
       }
 
