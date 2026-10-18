@@ -3,6 +3,7 @@ import {
   type Graph,
   type GraphMeta,
   type GraphRetry,
+  graphId,
   graphTypeResolver,
   type Node,
   type NodeId,
@@ -11,9 +12,10 @@ import {
   type OutSchema,
   type RecordSpec,
   type RefId,
+  validateGraph,
 } from "../../core/index.js";
 import { type AuthorValue, REF, type Ref, Reference, type RefValue, serialize } from "./ref.js";
-import { refuse, validate, validateLabel } from "./validate.js";
+import { refuse, validateLabel } from "./validate.js";
 
 type Tail = { id: NodeId; kind: "next" | "join" };
 
@@ -30,30 +32,6 @@ type NodeData = Node extends infer N
     ? Omit<N, "id" | "scope" | "label">
     : never
   : never;
-
-function isNodeId(value: string): value is NodeId {
-  return value.length > 0;
-}
-
-function isRefId(value: string): value is RefId {
-  return value.length > 0;
-}
-
-function id(value: string): NodeId {
-  if (isNodeId(value)) {
-    return value;
-  }
-
-  return refuse("unresolved_ref", "Identifiers must be nonempty.");
-}
-
-function bindingId(value: string): RefId {
-  if (isRefId(value)) {
-    return value;
-  }
-
-  return refuse("unresolved_ref", "Identifiers must be nonempty.");
-}
 
 function frame(scope: NodeId | null): Frame {
   return { scope, token: Symbol(), labels: new Set(), first: null, tails: [] };
@@ -72,7 +50,7 @@ export function currentBuilder(): GraphBuilder {
 export class GraphBuilder {
   readonly nodes: Node[] = [];
   readonly edges: Edge[] = [];
-  readonly frames: Frame[] = [frame(null)];
+  readonly frames: [Frame, ...Frame[]] = [frame(null)];
   readonly prefixes: string[] = [];
   private readonly order = new Map<NodeId, number>();
 
@@ -85,16 +63,9 @@ export class GraphBuilder {
   }
 
   get scope(): Frame {
-    const value = this.frames.at(-1);
-
-    if (!value) {
-      return refuse("invalid_scope", "The builder requires an active scope.");
-    }
-
-    return value;
+    return this.frames[0];
   }
 
-  // BOUNDARY: Synchronous author evaluation owns the module-level activation until it returns.
   run<T>(callback: () => T): T {
     if (activation.builder) {
       refuse("inactive_builder", "Finish the active builder before starting another loopy.");
@@ -127,11 +98,6 @@ export class GraphBuilder {
 
   // PR 3 checks label literals in the AST; construction accepts the already typed string.
   allocate(kind: NodeKind, label: string | null, fallback: string = kind) {
-    if (label !== null) {
-      validateLabel(label);
-    }
-
-    validateLabel(fallback);
     const name = [...this.prefixes, label ?? fallback].join("/");
 
     if (label !== null && this.scope.labels.has(name)) {
@@ -142,7 +108,7 @@ export class GraphBuilder {
       this.scope.labels.add(name);
     }
 
-    const nodeId = id(`${this.order.size}:${name}`);
+    const nodeId = graphId<NodeId>(`${this.order.size}:${name}`);
     this.order.set(nodeId, this.order.size);
 
     return { id: nodeId, label, scope: this.scope.scope };
@@ -169,12 +135,12 @@ export class GraphBuilder {
   }
 
   binding(owner: NodeId, name: string) {
-    return bindingId(`${owner}:${name}`);
+    return graphId<RefId>(`${owner}:${name}`);
   }
 
   ref<T, Fields = never>(refId: string, schema?: OutSchema | null): Ref<T, Fields>;
   ref(refId: string, schema: OutSchema | null = null): RefValue {
-    const referenceId = bindingId(refId);
+    const referenceId = graphId<RefId>(refId);
 
     return new Reference({ owner: this, scope: this.scope.token, id: referenceId, schema });
   }
@@ -182,7 +148,7 @@ export class GraphBuilder {
   check(ref: RefValue) {
     const metadata = ref[REF];
 
-    if (metadata.owner !== this || !this.frames.some((scope) => scope.token === metadata.scope)) {
+    if (metadata.owner !== this) {
       refuse("out_of_scope_ref", "Reference is unavailable in this scope.");
     }
   }
@@ -197,7 +163,7 @@ export class GraphBuilder {
 
   arm(owner: NodeId, callback: () => AuthorValue) {
     const child = frame(owner);
-    this.frames.push(child);
+    this.frames.unshift(child);
 
     try {
       const result = callback();
@@ -221,7 +187,7 @@ export class GraphBuilder {
 
       return { entry: child.first ?? owner, tails: child.tails.map((tail) => tail.id) };
     } finally {
-      this.frames.pop();
+      this.frames.shift();
     }
   }
 
@@ -231,7 +197,7 @@ export class GraphBuilder {
         ? [{ id: owner, kind: "next" }]
         : tails.map((nodeId) => ({ id: nodeId, kind }));
 
-    const value = { ref: bindingId(owner), path: [] };
+    const value = { ref: graphId<RefId>(owner), path: [] };
 
     const type = graphTypeResolver({ input: this.input, nodes: this.nodes, edges: this.edges })(
       value,
@@ -270,9 +236,9 @@ export class GraphBuilder {
     }
 
     const graph = this.snapshot(entry);
-    graph.outputs = output === null ? null : { ref: bindingId(output.id), path: [] };
+    graph.outputs = output === null ? null : { ref: graphId<RefId>(output.id), path: [] };
     graph.edges.sort((a, b) => (this.order.get(a.from) ?? 0) - (this.order.get(b.from) ?? 0));
 
-    return { graph, diagnostics: validate(graph) };
+    return { graph, diagnostics: validateGraph(graph) };
   }
 }

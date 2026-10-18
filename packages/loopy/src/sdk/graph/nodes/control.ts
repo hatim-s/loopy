@@ -1,25 +1,27 @@
-import { ERROR_FIELDS, type Predicate } from "../../../core/index.js";
+import { ERROR_FIELDS } from "../../../core/index.js";
 import { currentBuilder } from "../builder.js";
-import { recordPredicate } from "../predicates.js";
+import { type AuthorPredicate, serializePredicate } from "../predicates.js";
 import type { Ref } from "../ref.js";
 import { type AuthorValue, serialize, serializeRef } from "../ref.js";
 import type { InferRecord, Result } from "../types.js";
-import { validateLabel } from "../validate.js";
+import { validateLabel, validatePredicate } from "../validate.js";
 
 type Arm = () => AuthorValue;
 
 export function branch<Y extends AuthorValue, N extends AuthorValue>(
-  predicate: Predicate,
+  predicate: AuthorPredicate,
   arms: { yes: () => Y; no: () => N },
 ): Ref<Result<Y> | Result<N>> {
   const builder = currentBuilder();
   const base = builder.allocate("branch", null);
+  const recorded = serializePredicate(predicate, builder);
+  validatePredicate(recorded, builder);
 
   // Install the control before expanding callbacks so nested nodes keep call-order identity.
   const node = {
     ...base,
     kind: "branch" as const,
-    predicate: recordPredicate(predicate),
+    predicate: recorded,
     arms: { yes: base.id, no: base.id },
   };
 

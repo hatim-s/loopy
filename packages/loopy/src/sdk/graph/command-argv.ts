@@ -1,11 +1,18 @@
-import { type CommandFlagSpec, renderOperands } from "../../core/index.js";
+import {
+  CommandArgumentError,
+  type CommandFlagSpec,
+  renderOperands,
+  validateCommandFlag,
+} from "../../core/index.js";
 import {
   type CommandDefinition,
   type CommandDescriptor,
   parsedFlags,
   platformVariant,
 } from "../define-command.js";
-import { type AuthorValue, type RefValue } from "./ref.js";
+import { type AuthorValue, isRef, type RefValue } from "./ref.js";
+
+import { refuse } from "./validate.js";
 
 type Input = {
   args?: readonly (string | RefValue)[];
@@ -49,6 +56,27 @@ export function commandArgv(original: CommandDescriptor, input: Input, mode: "pa
     };
 
     Object.assign(prepared.flags, descriptor.prepare?.(counts).flags);
+  }
+
+  for (const [name, value] of Object.entries(prepared.flags)) {
+    const flag = descriptor.flags?.[name];
+
+    if (!flag) {
+      refuse(
+        "unknown_flag",
+        `Unknown flag '${name}'. Use an allowed flag: ${Object.keys(descriptor.flags ?? {}).join(", ") || "none"}.`,
+      );
+    }
+
+    try {
+      validateCommandFlag(flag, value, isRef);
+    } catch (error) {
+      if (error instanceof CommandArgumentError) {
+        refuse(error.code, error.message);
+      }
+
+      throw error;
+    }
   }
 
   const operands = {

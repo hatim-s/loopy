@@ -1,12 +1,11 @@
 import type { DiagnosticCode } from "./diagnostics.js";
-import type { CommandFlag, CommandFlagSpec } from "./graph.js";
-
-type FlagDefinition = CommandFlag;
+import type { CommandFlag, CommandFlagSpec, Value } from "./graph.js";
+import { refs } from "./graph-values.js";
+import { isBoolean, isNumber, isRecord, isString } from "./validation.js";
 
 type CommandDefinition = Partial<Omit<CommandFlagSpec, "path" | "flags">> & {
   readonly path?: readonly string[];
   readonly flags?: Readonly<Record<string, CommandFlag>>;
-} & {
   readonly program: string;
   readonly revisionPaths?: boolean;
   readonly positionals?: readonly { readonly optional?: boolean; readonly variadic?: boolean }[];
@@ -36,16 +35,12 @@ export type RenderInput = {
   revisions?: readonly string[];
   paths?: readonly string[];
   flags?: Readonly<Record<string, RenderValue>>;
+  references?: Readonly<Record<string, Value>>;
 };
 
-// BOUNDARY: JavaScript callers supply untyped flag values at this public API.
-function flagTokens(
-  flag: FlagDefinition,
-  value: unknown,
-  style: CommandDefinition["style"],
-): string[] {
-  if (value === undefined || (value === false && flag.kind === "boolean")) {
-    return [];
+function scalar<T>(flag: CommandFlag, value: T, isReference: <R>(value: R) => boolean) {
+  if (isReference(value) || value === undefined || (value === false && flag.kind === "boolean")) {
+    return;
   }
 
   if (flag.supported === false) {
@@ -56,10 +51,13 @@ function flagTokens(
   }
 
   if (value === true && (flag.kind === "boolean" || flag.optionalValue)) {
-    return [flag.cli];
+    return;
   }
 
-  if (typeof value !== flag.kind || (typeof value === "number" && !Number.isFinite(value))) {
+  if (
+    !{ string: isString, number: isNumber, boolean: isBoolean }[flag.kind](value) ||
+    (isNumber(value) && !Number.isFinite(value))
+  ) {
     throw new CommandArgumentError(
       "flag_type",
       `Flag '${flag.cli}' requires a ${flag.kind} value. Supply the declared flag type.`,
@@ -72,133 +70,136 @@ function flagTokens(
       `Flag '${flag.cli}' must be one of: ${flag.choices.join(", ")}. Choose an allowed value.`,
     );
   }
-
-  return formatValue(flag, String(value), style);
 }
 
-function formatValue(
-  flag: FlagDefinition,
-  value: string,
-  style: CommandDefinition["style"],
-): string[] {
+// BOUNDARY: Literal flags enter through the SDK; resolved reference values enter before dispatch.
+export function validateCommandFlag<T>(
+  flag: CommandFlag,
+  value: T,
+  isReference: <R>(value: R) => boolean = () => false,
+): void {
+  if (value === undefined || isReference(value)) {
+    return;
+  }
+
+  if (flag.pairs) {
+    if (!isRecord(value)) {
+      throw new CommandArgumentError(
+        "flag_type",
+        `Flag '${flag.cli}' requires named values. Supply a record of strings.`,
+      );
+    }
+
+    for (const item of Object.values(value)) {
+      if (!isString(item) && !isReference(item)) {
+        throw new CommandArgumentError(
+          "flag_type",
+          `Flag '${flag.cli}' requires string values. Supply a record of strings.`,
+        );
+      }
+    }
+
+    return;
+  }
+
+  if (flag.repeatable) {
+    if (!Array.isArray(value) || (flag.terminator && value.length === 0)) {
+      throw new CommandArgumentError(
+        "flag_type",
+        `Flag '${flag.cli}' requires an array of values.`,
+      );
+    }
+
+    for (const item of value) {
+      scalar(flag, item, isReference);
+    }
+
+    return;
+  }
+
+  scalar(flag, value, isReference);
+}
+
+type Scalar = string | number | boolean;
+
+type FlagArgument =
+  | { form: "scalar"; value: Scalar }
+  | { form: "pairs"; value: Record<string, string> }
+  | { form: "repeated"; value: readonly Scalar[] };
+
+function tokens(flag: CommandFlag, value: Scalar, style: CommandDefinition["style"]) {
+  if (value === false && flag.kind === "boolean") {
+    return [];
+  }
+
+  if (value === true && (flag.kind === "boolean" || flag.optionalValue)) {
+    return [flag.cli];
+  }
+
   const format = flag.style ?? style ?? "space";
 
   if (format === "positional") {
-    return [value];
+    return [String(value)];
   }
 
   if (format === "space") {
-    return [flag.cli, value];
+    return [flag.cli, String(value)];
   }
 
   return [`${flag.cli}${format === "equals" ? "=" : ""}${value}`];
 }
 
-// BOUNDARY: JavaScript flag values are checked against their declared scalar, pair or array shape.
 function renderFlag(
-  flag: FlagDefinition,
-  value: unknown,
+  flag: CommandFlag,
+  value: RenderValue,
   style: CommandDefinition["style"],
 ): string[] {
   if (value === undefined) {
     return [];
   }
 
-  if (flag.pairs) {
-    return namedPairs(flag, value);
-  }
+  const form = flag.pairs ? "pairs" : flag.repeatable ? "repeated" : "scalar";
+  // SAFETY: The SDK checked literals, and renderArgv checks resolved refs before formatting.
+  const argument = { form, value } as FlagArgument;
 
-  if (flag.repeatable) {
-    return repeatedTokens(flag, value, style);
-  }
+  switch (argument.form) {
+    case "pairs":
+      return Object.entries(argument.value).flatMap(([key, item]) => [flag.cli, key, item]);
+    case "repeated":
+      if (flag.terminator) {
+        return [flag.cli, ...argument.value.map(String), flag.terminator];
+      }
 
-  const tokens = flagTokens(flag, value, style);
+      return argument.value.flatMap((item) => tokens(flag, item, style));
+    case "scalar": {
+      const result = tokens(flag, argument.value, style);
 
-  return tokens.length ? [...(flag.prefix ?? []), ...tokens] : [];
-}
-
-// BOUNDARY: JavaScript named flag values must be an object containing string values.
-function namedPairs(flag: FlagDefinition, value: unknown): string[] {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new CommandArgumentError(
-      "flag_type",
-      `Flag '${flag.cli}' requires named values. Supply a record of strings.`,
-    );
-  }
-
-  const tokens: string[] = [];
-
-  for (const [key, item] of Object.entries(value)) {
-    if (typeof item !== "string") {
-      throw new CommandArgumentError(
-        "flag_type",
-        `Flag '${flag.cli}' requires string values. Supply a record of strings.`,
-      );
-    }
-
-    tokens.push(flag.cli, key, item);
-  }
-
-  return tokens;
-}
-
-// BOUNDARY: JavaScript repeated flag values must be arrays of the declared scalar type.
-function repeatedTokens(
-  flag: FlagDefinition,
-  value: unknown,
-  style: CommandDefinition["style"],
-): string[] {
-  if (!Array.isArray(value)) {
-    throw new CommandArgumentError(
-      "flag_type",
-      `Flag '${flag.cli}' is repeatable. Supply an array of values.`,
-    );
-  }
-
-  const items: readonly unknown[] = value;
-
-  if (flag.terminator) {
-    if (!items.length) {
-      throw new CommandArgumentError(
-        "flag_type",
-        `Flag '${flag.cli}' requires arguments. Supply a nonempty array of strings.`,
-      );
-    }
-
-    const tokens = items.flatMap((item) =>
-      flagTokens({ ...flag, style: "positional" }, item, style),
-    );
-
-    return [flag.cli, ...tokens, flag.terminator];
-  }
-
-  return items.flatMap((item) => flagTokens(flag, item, style));
-}
-
-// BOUNDARY: JavaScript callers can supply unknown flags and omit required operands.
-function buildFlags(descriptor: CommandDefinition, values: Readonly<Record<string, unknown>>) {
-  const allowed = descriptor.flags ?? {};
-
-  for (const name of Object.keys(values)) {
-    if (!Object.hasOwn(allowed, name)) {
-      throw new CommandArgumentError(
-        "unknown_flag",
-        `Unknown flag '${name}'. Use an allowed flag: ${Object.keys(allowed).join(", ") || "none"}.`,
-      );
+      return result.length ? [...(flag.prefix ?? []), ...result] : [];
     }
   }
+}
 
+function buildFlags(descriptor: CommandDefinition, input: RenderInput) {
   const before: string[] = [];
   const after: string[] = [];
-  const flags = Object.entries(allowed).sort(([, a], [, b]) => (a.order ?? 0) - (b.order ?? 0));
+
+  const flags = Object.entries(descriptor.flags ?? {}).sort(
+    ([, a], [, b]) => (a.order ?? 0) - (b.order ?? 0),
+  );
 
   for (const [name, flag] of flags) {
+    const value = input.flags?.[name];
+
+    if (refs(input.references?.[name] ?? null).length > 0) {
+      validateCommandFlag(flag, value);
+    }
+
     const target =
       (flag.position ?? (descriptor.flagsAfterPositionals ? "after" : "before")) === "after"
         ? after
         : before;
 
-    target.push(...renderFlag(flag, values[name], descriptor.style));
+    target.push(...renderFlag(flag, value, descriptor.style));
   }
 
   return { before, after };
@@ -229,7 +230,7 @@ export function renderArgv(
   input: RenderInput,
   key: string,
 ): string[] {
-  const flags = buildFlags(descriptor, input.flags ?? {});
+  const flags = buildFlags(descriptor, input);
   const operands = renderOperands(descriptor, input, key);
 
   const separator =

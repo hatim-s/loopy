@@ -20,6 +20,8 @@ export { isFieldValue, matchesRecord, recordField, recordFields } from "./field-
 
 export * from "./graph.js";
 
+export { graphId } from "./graph.js";
+
 export { validateGraph } from "./graph-check.js";
 
 export { isReservedGraphName, nodeNames, RESERVED_GRAPH_NAMES } from "./graph-names.js";
@@ -81,6 +83,7 @@ export {
   type RenderInput,
   renderArgv,
   renderOperands,
+  validateCommandFlag,
 } from "./render-argv.js";
 
 export { bundleRefs, revision, sha256Hex } from "./revision.js";

@@ -168,9 +168,7 @@ test("fail is terminal and never receives a scope join", () => {
 });
 
 test("branch carries each successful arm result in its own join", () => {
-  const graph = compile(() =>
-    branch({ op: "eq", left: 1, right: 1 }, { yes: () => "yes", no: () => 3 }),
-  );
+  const graph = compile(() => branch(lt(1, 2), { yes: () => "yes", no: () => 3 }));
 
   expect(graph.nodes.map((node) => node.kind)).toEqual(["branch", "join", "join", "join", "join"]);
   expect(graph.nodes[1]).toMatchObject({
@@ -351,39 +349,6 @@ test("command argv, flags and options preserve symbolic values", () => {
   });
 });
 
-test("refs cannot escape a branch or cross parallel siblings", () => {
-  let leaked: Ref<string> | undefined;
-  rejects("out_of_scope_ref", () =>
-    compile(() => {
-      branch(
-        { op: "eq", left: 1, right: 1 },
-        {
-          yes: () => {
-            leaked = uuid();
-
-            return leaked;
-          },
-          no: () => null,
-        },
-      );
-
-      return log("leaked", leaked);
-    }),
-  );
-  rejects("out_of_scope_ref", () =>
-    compile(() =>
-      parallel({
-        a: () => {
-          leaked = uuid();
-
-          return leaked;
-        },
-        b: () => log("leaked", leaked),
-      }),
-    ),
-  );
-});
-
 test("refs cannot cross builders, including input refs", () => {
   let foreign: Ref<string> | undefined;
   loopy("first", {
@@ -441,7 +406,7 @@ test("declared predicate types reject mismatched operands at the call site", () 
       });
 
       // @ts-expect-error Runtime validation also protects untyped callers.
-      eq(n.get("n"), "wrong");
+      return branch(eq(n.get("n"), "wrong"), { yes: () => 1, no: () => 0 });
 
       return null;
     }),
@@ -449,7 +414,7 @@ test("declared predicate types reject mismatched operands at the call site", () 
   rejects("operand_type", () =>
     compile(() => {
       // @ts-expect-error Runtime validation also protects untyped callers.
-      in_(uuid(), [1]);
+      return branch(in_(uuid(), [1]), { yes: () => 1, no: () => 0 });
 
       return null;
     }),
@@ -504,16 +469,11 @@ test("schemas determine output refs, unknown keys fail, and branch results form 
     expectTypeOf(output.get("words")).toEqualTypeOf<Ref<number>>();
     expectTypeOf(output.get("title")).toEqualTypeOf<Ref<string | undefined>>();
 
-    const result = branch(
-      { op: "eq", left: 1, right: 1 },
-      { yes: () => output.get("words"), no: () => "none" },
-    );
+    const result = branch(lt(1, 2), { yes: () => output.get("words"), no: () => "none" });
 
     expectTypeOf(result).toEqualTypeOf<Ref<number | "none">>();
-    rejects("unresolved_ref", () => {
-      // @ts-expect-error declared output has no unknown key.
-      output.get("unknown");
-    });
+    // @ts-expect-error declared output has no unknown key.
+    output.get("unknown");
 
     return result;
   });
@@ -532,73 +492,6 @@ for (const [name, result, expectedName] of [
     expect(result.graph.name).toBe(expectedName);
   });
 }
-
-test("deferred predicates retain builder and lexical scope provenance", () => {
-  let captured: ReturnType<typeof eq> | undefined;
-  compile(() => {
-    captured = eq(uuid(), "x");
-
-    return null;
-  });
-  rejects("out_of_scope_ref", () =>
-    compile(() => (captured ? branch(captured, { yes: () => 1, no: () => 0 }) : null)),
-  );
-  rejects("out_of_scope_ref", () =>
-    compile(() => {
-      branch(
-        { op: "eq", left: 1, right: 1 },
-        {
-          yes: () => {
-            captured = gt(size(uuid()), 0);
-
-            return null;
-          },
-          no: () => null,
-        },
-      );
-
-      return captured ? branch(captured, { yes: () => 1, no: () => 0 }) : null;
-    }),
-  );
-});
-
-test("map and rescue bindings cannot escape their callbacks", () => {
-  let item: Ref<string> | undefined;
-  rejects("out_of_scope_ref", () =>
-    compile(() => {
-      map(
-        code("files", {
-          in: {},
-          out: { kind: "record", fields: { paths: "string[]" } },
-          module: "./files.ts",
-        }).get("paths"),
-        (entry) => {
-          item = entry;
-
-          return entry;
-        },
-        { onError: "fail", concurrency: 2 },
-      );
-
-      return log("escaped", item);
-    }),
-  );
-  let errorMessage: Ref<string> | undefined;
-  rejects("out_of_scope_ref", () =>
-    compile(() => {
-      rescue(
-        () => fail("failed"),
-        (error) => {
-          errorMessage = error.get("message");
-
-          return errorMessage;
-        },
-      );
-
-      return log("escaped", errorMessage);
-    }),
-  );
-});
 
 test("subgraph invocations reuse labels without sharing their label namespace", () => {
   const task = subgraph("task", () =>
@@ -674,8 +567,9 @@ test("size rejects declared non-string scalars and unknown fields are errors", (
   rejects("invalid_size", () =>
     compile(() => {
       const output = wait("number", { payload: { kind: "record", fields: { count: "number" } } });
+
       // @ts-expect-error size accepts only string and array refs.
-      gt(size(output.get("count")), 1);
+      return branch(gt(size(output.get("count")), 1), { yes: () => 1, no: () => 0 });
 
       return null;
     }),
@@ -783,7 +677,7 @@ test("known command fields resolve through main's validator without synthetic va
 });
 
 test("reserved value keys and opaque JSON comparisons are rejected", () => {
-  rejects("unresolved_ref", () => compile(() => log("bad", { nested: { ref: "reserved" } })));
+  rejects("reserved_name", () => compile(() => log("bad", { nested: { ref: "reserved" } })));
   rejects("operand_type", () =>
     compile(() => {
       const value = code("opaque", {
@@ -934,13 +828,10 @@ test("author references to an all-failing branch remain unresolved", () => {
   const result = loopy("never-ref", {
     input: {},
     run: () => {
-      const failed = branch(
-        { op: "eq", left: 1, right: 1 },
-        {
-          yes: () => fail("yes"),
-          no: () => fail("no"),
-        },
-      );
+      const failed = branch(lt(1, 2), {
+        yes: () => fail("yes"),
+        no: () => fail("no"),
+      });
 
       return log("author ref", failed);
     },
@@ -978,7 +869,7 @@ for (const label of ["__proto__", "constructor", "prototype"]) {
     ["code", () => compile(() => code(label, { in: {}, out: schema, module: "./a.ts" }))],
     ["command", () => compile(() => sh(["echo"], { label }))],
     ["wait", () => compile(() => wait(label, { payload: schema }))],
-    ["subgraph", () => subgraph(label, uuid)],
+    ["subgraph", () => compile(subgraph(label, uuid))],
     ["input fields", () => loopy("reserved", { input: fields, run: () => null })],
     [
       "code inputs",

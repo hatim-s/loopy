@@ -10,6 +10,11 @@ export type NodeId = Brand<string, "NodeId">;
 
 export type RefId = Brand<string, "RefId">;
 
+export function graphId<T extends NodeId | RefId>(value: string): T {
+  // SAFETY: The builder constructs nonempty ids; wire ids are checked by the contract.
+  return value as T;
+}
+
 export const SCALAR_TYPES = ["string", "number", "boolean"] as const;
 
 export type ScalarType = (typeof SCALAR_TYPES)[number];

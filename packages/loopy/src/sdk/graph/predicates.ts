@@ -1,16 +1,15 @@
 import { type COMPARISON_OPS, type ComparisonOperand, type Predicate } from "../../core/index.js";
-import { currentBuilder } from "./builder.js";
 import {
   type AuthorValue,
-  checkSerialized,
   type Ref,
+  type RefContext,
   type RefValue,
-  SIZE,
-  type Size,
+  Size,
   serialize,
   serializeSize,
 } from "./ref.js";
-import { validatePredicate } from "./validate.js";
+
+const PREDICATE = Symbol("loopy.predicate");
 
 type Operand = AuthorValue | Size;
 
@@ -22,43 +21,48 @@ type Numeric = Ref<number> | number | Size;
 
 type Text = Ref<string> | string;
 
+type PredicateData =
+  | { op: Comparison; left: Operand; right: Operand }
+  | { op: "exists" | "isNull"; value: RefValue }
+  | { op: "and" | "or"; predicates: AuthorPredicate[] }
+  | { op: "not"; predicate: AuthorPredicate };
+
+export type AuthorPredicate = PredicateData & { readonly [PREDICATE]: true };
+
 type Ordering = {
-  (left: Numeric, right: Numeric): Predicate;
-  (left: Text, right: Text): Predicate;
+  (left: Numeric, right: Numeric): AuthorPredicate;
+  (left: Text, right: Text): AuthorPredicate;
 };
 
-// BOUNDARY: A comparison lowers either an author value or the private size marker.
-function operand(value: Operand): ComparisonOperand {
-  const builder = currentBuilder();
-
-  if (value !== null && typeof value === "object" && SIZE in value && value[SIZE] !== undefined) {
-    return serializeSize(value[SIZE], builder);
-  }
-
-  return serialize(value, builder);
+function predicate(value: PredicateData): AuthorPredicate {
+  return { ...value, [PREDICATE]: true };
 }
 
-export function recordPredicate(predicate: Predicate): Predicate {
-  const builder = currentBuilder();
-
-  if (predicate.op === "and" || predicate.op === "or") {
-    predicate.predicates.forEach(recordPredicate);
-  } else if (predicate.op === "not") {
-    recordPredicate(predicate.predicate);
-  } else if ("value" in predicate) {
-    checkSerialized(predicate.value, builder);
-  } else if ("left" in predicate) {
-    checkSerialized(predicate.left, builder);
-    checkSerialized(predicate.right, builder);
-  }
-
-  validatePredicate(predicate, builder);
-
-  return predicate;
+function operand(value: Operand, context: RefContext): ComparisonOperand {
+  return value instanceof Size ? serializeSize(value.ref, context) : serialize(value, context);
 }
 
-function compare(op: Comparison, left: Operand, right: Operand): Predicate {
-  return recordPredicate({ op, left: operand(left), right: operand(right) });
+export function serializePredicate(value: AuthorPredicate, context: RefContext): Predicate {
+  if ("predicates" in value) {
+    return {
+      op: value.op,
+      predicates: value.predicates.map((child) => serializePredicate(child, context)),
+    };
+  }
+
+  if ("predicate" in value) {
+    return { op: value.op, predicate: serializePredicate(value.predicate, context) };
+  }
+
+  if ("value" in value) {
+    return { op: value.op, value: serialize(value.value, context) };
+  }
+
+  return { op: value.op, left: operand(value.left, context), right: operand(value.right, context) };
+}
+
+function compare(op: Comparison, left: Operand, right: Operand) {
+  return predicate({ op, left, right });
 }
 
 export function eq<T extends Scalar>(left: Ref<T>, right: Ref<NoInfer<T>> | NoInfer<T>) {
@@ -81,26 +85,26 @@ export function in_<T extends Scalar>(left: Ref<T>, right: Ref<NoInfer<T>[]> | N
   return compare("in", left, right);
 }
 
-export function exists(value: RefValue): Predicate {
-  return recordPredicate({ op: "exists", value: serialize(value, currentBuilder()) });
+export function exists(value: RefValue) {
+  return predicate({ op: "exists", value });
 }
 
-export function isNull(value: RefValue): Predicate {
-  return recordPredicate({ op: "isNull", value: serialize(value, currentBuilder()) });
+export function isNull(value: RefValue) {
+  return predicate({ op: "isNull", value });
 }
 
 export function size(value: Ref<string> | Ref<unknown[]>): Size {
-  return { [SIZE]: value };
+  return new Size(value);
 }
 
-export function and(...predicates: Predicate[]): Predicate {
-  return recordPredicate({ op: "and", predicates });
+export function and(...predicates: AuthorPredicate[]) {
+  return predicate({ op: "and", predicates });
 }
 
-export function or(...predicates: Predicate[]): Predicate {
-  return recordPredicate({ op: "or", predicates });
+export function or(...predicates: AuthorPredicate[]) {
+  return predicate({ op: "or", predicates });
 }
 
-export function not(predicate: Predicate): Predicate {
-  return recordPredicate({ op: "not", predicate });
+export function not(value: AuthorPredicate) {
+  return predicate({ op: "not", predicate: value });
 }

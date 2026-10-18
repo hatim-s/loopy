@@ -5,9 +5,7 @@ import {
   type Graph,
   graphTypeResolver,
   isReservedGraphName,
-  type NodeId,
   type Predicate,
-  validateGraph,
 } from "../../core/index.js";
 
 export class GraphBuildError extends Error {
@@ -17,12 +15,8 @@ export class GraphBuildError extends Error {
   }
 }
 
-export function refuse(code: DiagnosticCode, message: string, node: NodeId | null = null): never {
-  throw new GraphBuildError({ code, message, node, source: null });
-}
-
-export function validate(graph: Graph): Diagnostic[] {
-  return validateGraph(graph);
+export function refuse(code: DiagnosticCode, message?: string): never {
+  throw new GraphBuildError({ code, message: message ?? code, node: null, source: null });
 }
 
 export function validatePredicate(

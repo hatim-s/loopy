@@ -1,17 +1,19 @@
 import {
   type Ref as GraphRef,
+  isBoolean,
+  isNumber,
+  isString,
   type OutSchema,
   type RefId,
-  recordField,
   type Value,
 } from "../../core/index.js";
-import { refuse, validateLabel } from "./validate.js";
+import { refuse } from "./validate.js";
 
 export const REF = Symbol("loopy.graph.ref");
 
-export const SIZE = Symbol("loopy.graph.size");
-
-const origins = new WeakMap<object, RefValue>();
+export class Size {
+  constructor(readonly ref: RefValue) {}
+}
 
 export type RefContext = {
   check(ref: RefValue): void;
@@ -37,18 +39,7 @@ export class RefValue {
 export class Reference<T, Fields = never> extends RefValue {
   declare readonly output: T;
 
-  get<K extends [Fields] extends [never] ? never : keyof Fields & string>(key: K): Ref<Fields[K]> {
-    const { schema } = this[REF];
-
-    if (
-      schema !== null &&
-      schema.kind === "record" &&
-      this.path.length === 0 &&
-      recordField(schema.fields, key) === undefined
-    ) {
-      refuse("unresolved_ref", "Reference paths must match the declared output schema.");
-    }
-
+  get<K extends keyof Fields & string>(key: K): Ref<Fields[K]> {
     return new Reference(this[REF], [...this.path, String(key)]);
   }
 }
@@ -65,26 +56,20 @@ export type AuthorValue =
   | void
   | RefValue
   | readonly AuthorValue[]
-  | { readonly [key: string]: AuthorValue; readonly [SIZE]?: never; readonly [REF]?: never };
-
-export type Size = { readonly [SIZE]: RefValue };
+  | { readonly [key: string]: AuthorValue };
 
 export function serializeRef(ref: RefValue, context: RefContext): GraphRef {
   context.check(ref);
 
-  const value = { ref: ref[REF].id, path: [...ref.path] };
-  origins.set(value, ref);
-
-  return value;
+  return { ref: ref[REF].id, path: [...ref.path] };
 }
 
-// BOUNDARY: Author literals and branded refs are lowered to JSON with one recursive set of rules.
 export function serialize(value: AuthorValue, context: RefContext): Value {
   if (value === undefined) {
     return null;
   }
 
-  if (value === null || typeof value !== "object") {
+  if (value === null || isString(value) || isNumber(value) || isBoolean(value)) {
     return value;
   }
 
@@ -92,7 +77,7 @@ export function serialize(value: AuthorValue, context: RefContext): Value {
     return serializeRef(value, context);
   }
 
-  if (SIZE in value) {
+  if (value instanceof Size) {
     refuse("invalid_size", "Size is allowed only in comparisons.");
   }
 
@@ -101,13 +86,11 @@ export function serialize(value: AuthorValue, context: RefContext): Value {
   }
 
   if ("ref" in value) {
-    refuse("unresolved_ref", "The 'ref' key is reserved for references.");
+    refuse("reserved_name", "The 'ref' key is reserved for references.");
   }
 
   return Object.fromEntries(
     Object.entries(value).map(([key, item]) => {
-      validateLabel(key);
-
       return [key, serialize(item, context)];
     }),
   );
@@ -119,47 +102,15 @@ export function serializeValues(
 ) {
   return Object.fromEntries(
     Object.entries(values).map(([key, value]) => {
-      validateLabel(key);
-
       return [key, serialize(value, context)];
     }),
   );
 }
 
-export function isRef(value: AuthorValue): value is RefValue {
-  return value !== null && typeof value === "object" && REF in value;
-}
-
-// BOUNDARY: Predicate JSON retains its originating handles for scope checks before graph emission.
-export function checkSerialized(value: Value, context: RefContext): void {
-  if (value === null || typeof value !== "object") {
-    return;
-  }
-
-  const origin = origins.get(value);
-
-  if (origin) {
-    context.check(origin);
-
-    return;
-  }
-
-  if (Array.isArray(value)) {
-    for (const child of value) {
-      checkSerialized(child, context);
-    }
-
-    return;
-  }
-
-  for (const child of Object.values(value)) {
-    checkSerialized(child, context);
-  }
+export function isRef<T>(value: T): value is T & RefValue {
+  return value instanceof RefValue;
 }
 
 export function serializeSize(ref: RefValue, context: RefContext) {
-  const value = { ...serializeRef(ref, context), size: true as const };
-  origins.set(value, ref);
-
-  return value;
+  return { ...serializeRef(ref, context), size: true as const };
 }
