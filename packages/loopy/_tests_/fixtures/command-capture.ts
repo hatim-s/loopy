@@ -29,12 +29,12 @@ export function capture(run: () => void): Capture {
     }
 
     let transition = step(graph, initialState("capture", {}), {
-      kind: "run_started",
+      kind: "resume",
       at: "2026-10-18T00:00:00.000Z",
     });
 
     while (transition.state.phase.kind !== "finished") {
-      const dispatch = transition.effects.find((effect) => effect.kind === "dispatch");
+      const dispatch = transition.next;
 
       if (dispatch?.kind !== "dispatch" || dispatch.spec.kind !== "command") {
         throw new Error("Expected command dispatch");
@@ -51,7 +51,7 @@ export function capture(run: () => void): Capture {
       };
 
       transition = step(graph, transition.state, {
-        kind: "execution_completed",
+        kind: "execution_finished",
         executionKey: dispatch.executionKey,
         attempt: dispatch.attempt,
         result,

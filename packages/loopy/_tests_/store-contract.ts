@@ -379,12 +379,6 @@ function ownershipFencing(makeStore: StoreFactory): void {
         store.apply({
           runId: "run",
           token: "old",
-          effects: [{ kind: "schedule_retry", at: LOG.at }],
-        }),
-      () =>
-        store.apply({
-          runId: "run",
-          token: "old",
           effects: [{ kind: "finish_run", outcome: { status: "cancelled" }, at: LOG.at }],
         }),
     ];

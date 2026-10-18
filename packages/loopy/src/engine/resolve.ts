@@ -1,9 +1,21 @@
 import { isRecord, isRef, type Json, projectValue, type Value } from "../core/index.js";
-import type { EngineState } from "./state.js";
+import { type EngineState, nodeRunFor } from "./state.js";
 
-export function resolve(value: Value, state: EngineState): Json {
+export function resolve(value: Value, state: EngineState): Json | undefined {
   if (Array.isArray(value)) {
-    return value.map((item) => resolve(item, state));
+    const result: Json[] = [];
+
+    for (const item of value) {
+      const resolved = resolve(item, state);
+
+      if (resolved === undefined) {
+        return undefined;
+      }
+
+      result.push(resolved);
+    }
+
+    return result;
   }
 
   if (!isRecord(value)) {
@@ -11,31 +23,32 @@ export function resolve(value: Value, state: EngineState): Json {
   }
 
   if (isRef(value)) {
-    const run = state.nodeRuns.find(
-      (run) => String(run.key.nodeId) === value.ref && run.key.scope.length === 0,
-    );
+    const run = nodeRunFor(state, value.ref);
 
-    const output = projectValue(
+    return projectValue(
       value.ref === "input" ? state.input : run?.status === "succeeded" ? run.output : undefined,
       value.path,
     );
-
-    if (output === undefined) {
-      throw new Error(
-        `Reference '${[value.ref, ...value.path].join(".")}' has no completed output.`,
-      );
-    }
-
-    return output;
   }
 
-  return Object.fromEntries(
-    Object.entries(value).map(([key, item]) => [key, resolve(item, state)]),
-  );
+  return resolveValues(value, state);
 }
 
-export function resolveValues(values: Record<string, Value>, state: EngineState) {
-  return Object.fromEntries(
-    Object.entries(values).map(([name, value]) => [name, resolve(value, state)]),
-  );
+export function resolveValues(
+  values: Record<string, Value>,
+  state: EngineState,
+): Record<string, Json> | undefined {
+  const entries: [string, Json][] = [];
+
+  for (const [key, value] of Object.entries(values)) {
+    const resolved = resolve(value, state);
+
+    if (resolved === undefined) {
+      return undefined;
+    }
+
+    entries.push([key, resolved]);
+  }
+
+  return Object.fromEntries(entries);
 }

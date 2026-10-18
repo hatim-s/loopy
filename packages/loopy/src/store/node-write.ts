@@ -3,6 +3,7 @@ import {
   type LogRecord,
   MAX_LOG_BYTES,
   MAX_OUTPUT_BYTES,
+  OUTPUT_LIMIT_MESSAGE,
   type NodeRun,
   outputBytes,
   type StoreEffect,
@@ -15,7 +16,7 @@ export function checkNodeWrite(runId: string, node: NodeRun) {
   }
 
   if (node.status === "succeeded" && outputBytes(node.output) > MAX_OUTPUT_BYTES) {
-    throw new Error("Node output exceeds the 1 MiB inline limit.");
+    throw new Error(OUTPUT_LIMIT_MESSAGE);
   }
 }
 

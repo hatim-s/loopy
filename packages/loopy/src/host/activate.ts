@@ -1,17 +1,15 @@
 import {
-  type ExecutionResult,
+  durationMs,
   type Executor,
   errorMessage,
   type Graph,
   type RunOutcome,
   type Store,
-  type StoreEffect,
   toError,
 } from "../core/index.js";
-import { type Effect, type EngineEvent, initialState, step } from "../engine/index.js";
+import { type EngineEvent, initialState, step, type Transition } from "../engine/index.js";
 import { type Clock, SYSTEM_CLOCK } from "./clock.js";
 import { withHeartbeat } from "./heartbeat.js";
-import { acquireDispatch } from "./rate-limit.js";
 
 export type ActivationOptions = {
   store: Store;
@@ -22,52 +20,61 @@ export type ActivationOptions = {
   signal?: AbortSignal;
 };
 
-function completionEvent(
-  dispatch: Extract<Effect, { kind: "dispatch" }>,
-  result: ExecutionResult,
-  at: string,
-): EngineEvent {
-  const base = { executionKey: dispatch.executionKey, attempt: dispatch.attempt, at };
-
-  return result.kind === "failed"
-    ? {
-        ...base,
-        kind: "execution_failed",
-        error: result.error,
-        exitCode: result.exitCode,
-        logs: result.logs,
-      }
-    : { ...base, kind: "execution_completed", result };
-}
-
 async function execute(
   options: ActivationOptions,
-  dispatch: Extract<Effect, { kind: "dispatch" }>,
+  dispatch: Extract<Transition["next"], { kind: "dispatch" }>,
   signal: AbortSignal,
-): Promise<ExecutionResult> {
-  const { executor, store, runId } = options;
+): Promise<EngineEvent> {
+  const { executor, store, runId, graph } = options;
+  const clock = options.clock ?? SYSTEM_CLOCK;
+  const node = graph.nodes.find((node) => node.id === dispatch.executionKey.nodeId);
+  const rule = node?.kind === "code" || node?.kind === "command" ? node.rateLimit : null;
 
   while (true) {
     const receipt = await executor.lookup(dispatch.executionKey, dispatch.attempt);
+    const at = new Date(clock.now()).toISOString();
+    const identity = { executionKey: dispatch.executionKey, attempt: dispatch.attempt, at };
 
     if (receipt.kind === "finished") {
-      return receipt.result;
+      return { ...identity, kind: "execution_finished", result: receipt.result };
     }
 
     if (receipt.kind === "none") {
-      return executor.execute(dispatch.executionKey, dispatch.attempt, dispatch.spec, signal);
+      if (rule) {
+        const acquired = await store.acquireRateLimit(
+          rule.key,
+          rule.limit,
+          durationMs(rule.window),
+          at,
+        );
+
+        if (!acquired.ok) {
+          return { ...identity, kind: "rate_limited", retryAt: acquired.retryAt };
+        }
+      }
+
+      const result = await executor.execute(
+        dispatch.executionKey,
+        dispatch.attempt,
+        dispatch.spec,
+        signal,
+      );
+
+      return {
+        ...identity,
+        kind: "execution_finished",
+        at: new Date(clock.now()).toISOString(),
+        result,
+      };
     }
 
-    // A started receipt is uncertain. Keep reconciling while the executor owns the attempt.
-    if (signal.aborted) {
-      throw new Error("Execution reconciliation interrupted. Resume the run.");
-    }
+    signal.throwIfAborted();
 
     if (!(await store.getRun(runId))?.owner) {
       throw new Error("Run lost ownership during reconciliation.");
     }
 
-    await new Promise<void>((resolve) => setTimeout(resolve, 100));
+    await waitForRetry(clock, new Date(clock.now() + 100).toISOString(), signal);
   }
 }
 
@@ -100,43 +107,25 @@ async function drive(options: ActivationOptions, token: string) {
   }
 
   let state = initialState(runId, run.input, await store.getNodeRuns(runId));
-  let event: EngineEvent = { kind: "run_started", at: new Date(clock.now()).toISOString() };
+  let event: EngineEvent = { kind: "resume", at: new Date(clock.now()).toISOString() };
   const signal = options.signal ?? new AbortController().signal;
 
   while (true) {
-    const transition = await acquireDispatch({
-      ...options,
-      transition: step(graph, state, event),
-      at: event.at,
-    });
-
-    const durable = transition.effects.filter(
-      (effect): effect is StoreEffect => effect.kind !== "dispatch",
-    );
-
-    await store.apply({ runId, token, effects: durable });
+    const transition = step(graph, state, event);
+    await store.apply({ runId, token, effects: transition.writes });
     state = transition.state;
 
-    if (state.phase.kind === "finished") {
-      return state.phase.outcome;
+    switch (transition.next.kind) {
+      case "finished":
+        return transition.next.outcome;
+      case "wait":
+        await waitForRetry(clock, transition.next.at, signal);
+        event = { kind: "resume", at: new Date(clock.now()).toISOString() };
+        break;
+      case "dispatch":
+        event = await execute(options, transition.next, signal);
+        break;
     }
-
-    const retry = transition.effects.find((effect) => effect.kind === "schedule_retry");
-
-    if (retry?.kind === "schedule_retry") {
-      await waitForRetry(clock, retry.at, signal);
-      event = { kind: "retry_due", at: new Date(clock.now()).toISOString() };
-      continue;
-    }
-
-    const dispatch = transition.effects.find((effect) => effect.kind === "dispatch");
-
-    if (dispatch?.kind !== "dispatch") {
-      throw new Error("Active run has no pending execution.");
-    }
-
-    const result = await execute(options, dispatch, signal);
-    event = completionEvent(dispatch, result, new Date(clock.now()).toISOString());
   }
 }
 

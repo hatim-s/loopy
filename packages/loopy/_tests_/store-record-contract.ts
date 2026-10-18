@@ -182,7 +182,6 @@ export function storeRecordContract(makeStore: () => Store | Promise<Store>) {
           log: { message: "hello", data: null },
           at: offset,
         },
-        { kind: "schedule_retry", at: offset },
       ],
     });
     expect(await store.getNodeRuns("run")).toMatchObject([

@@ -85,13 +85,6 @@ export class SqliteNodes extends SqliteRuns {
         break;
       }
 
-      case "schedule_retry": {
-        this.db
-          .query("UPDATE runs SET next_retry_at=?,wake_at=?,updated_at=? WHERE id=?")
-          .run(utc(effect.at), utc(effect.at), this.timestamp(), runId);
-        break;
-      }
-
       case "write_log": {
         if (effect.executionKey.runId !== runId) {
           throw new Error("Log belongs to another run.");

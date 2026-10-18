@@ -63,10 +63,10 @@ describe("CLI help generation", () => {
 
     expect(
       step(graph, initialState("generated", {}), {
-        kind: "run_started",
+        kind: "resume",
         at: new Date(0).toISOString(),
-      }).effects,
-    ).toContainEqual(
+      }).next,
+    ).toEqual(
       expect.objectContaining({
         kind: "dispatch",
         spec: expect.objectContaining({ argv: ["codex", "--help"] }),

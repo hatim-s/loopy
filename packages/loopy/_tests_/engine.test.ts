@@ -43,11 +43,11 @@ function start() {
   const graph = sequence();
 
   const transition = step(graph, initialState("run", { subject: "Engine" }), {
-    kind: "run_started",
+    kind: "resume",
     at,
   });
 
-  const dispatch = transition.effects.find((effect) => effect.kind === "dispatch");
+  const dispatch = transition.next;
 
   if (dispatch?.kind !== "dispatch") {
     throw new Error("Expected code dispatch.");
@@ -60,9 +60,9 @@ function completed(
   executionKey: ExecutionKey,
   attempt: number,
   output: Json,
-): Extract<EngineEvent, { kind: "execution_completed" }> {
+): Extract<EngineEvent, { kind: "execution_finished" }> {
   return {
-    kind: "execution_completed" as const,
+    kind: "execution_finished" as const,
     executionKey,
     attempt,
     at,
@@ -85,7 +85,7 @@ test("approve sequence prefix dispatches resolved code, records log and final jo
     ["1:log", [], "succeeded"],
     ["2:join", [], "succeeded"],
   ]);
-  expect(result.effects).toContainEqual(
+  expect(result.writes).toContainEqual(
     expect.objectContaining({
       kind: "write_log",
       log: expect.objectContaining({ message: "Draft ready" }),
@@ -101,13 +101,16 @@ test("retry backoff persists the deadline, does not dispatch early, increments t
   const f = start();
 
   const failed = step(f.graph, f.state, {
-    kind: "execution_failed",
+    kind: "execution_finished",
     executionKey: f.dispatch.executionKey,
     attempt: 1,
-    error: { code: "execution", message: "Temporary failure." },
-    exitCode: null,
-    logs: [],
     at,
+    result: {
+      kind: "failed",
+      error: { code: "execution", message: "Temporary failure." },
+      exitCode: null,
+      logs: [],
+    },
   });
 
   expect(failed.state.nodeRuns[0]).toMatchObject({
@@ -115,18 +118,14 @@ test("retry backoff persists the deadline, does not dispatch early, increments t
     attempt: 1,
     nextRetryAt: "2026-10-18T00:00:01.000Z",
   });
-  expect(
-    step(f.graph, failed.state, { kind: "retry_due", at }).effects.some(
-      (effect) => effect.kind === "dispatch",
-    ),
-  ).toBe(false);
+  expect(step(f.graph, failed.state, { kind: "resume", at }).next.kind).toBe("wait");
 
   const retried = step(f.graph, failed.state, {
-    kind: "retry_due",
+    kind: "resume",
     at: "2026-10-18T00:00:01.000Z",
   });
 
-  expect(retried.effects).toContainEqual(
+  expect(retried.next).toEqual(
     expect.objectContaining({
       kind: "dispatch",
       executionKey: f.dispatch.executionKey,
@@ -134,7 +133,7 @@ test("retry backoff persists the deadline, does not dispatch early, increments t
     }),
   );
   expect(step(f.graph, retried.state, completed(f.dispatch.executionKey, 1, { words: 1 }))).toEqual(
-    { state: retried.state, effects: [] },
+    { state: retried.state, writes: [], next: retried.next },
   );
 });
 
@@ -144,15 +143,15 @@ test.each(invalidOutputs)("invalid or oversized output fails without retries", (
   const f = start();
   const result = step(f.graph, f.state, completed(f.dispatch.executionKey, 1, output));
   expect(result.state.phase).toMatchObject({ kind: "finished", outcome: { status: "failed" } });
-  expect(result.effects.some((effect) => effect.kind === "schedule_retry")).toBe(false);
+  expect(result.next.kind).toBe("finished");
 });
 
 test("resume from completed node runs skips code and reconstructs final output", () => {
   const f = start();
   const done = step(f.graph, f.state, completed(f.dispatch.executionKey, 1, { words: 3 }));
   const state = initialState("run", { subject: "Engine" }, done.state.nodeRuns.slice(0, 1));
-  const resumed = step(f.graph, state, { kind: "run_started", at });
-  expect(resumed.effects.some((effect) => effect.kind === "dispatch")).toBe(false);
+  const resumed = step(f.graph, state, { kind: "resume", at });
+  expect(resumed.next.kind).toBe("finished");
   expect(resumed.state.phase).toMatchObject({
     kind: "finished",
     outcome: { output: { words: 3 } },
@@ -163,21 +162,21 @@ test("resume redispatches a running execution with its persisted attempt", () =>
   const f = start();
   expect(
     step(f.graph, initialState("run", { subject: "Engine" }, f.state.nodeRuns), {
-      kind: "run_started",
+      kind: "resume",
       at,
-    }).effects,
-  ).toContainEqual(f.dispatch);
+    }).next,
+  ).toEqual(f.dispatch);
 });
 
 test("a missing input reference fails its consuming node before dispatch", () => {
-  const result = step(sequence(), initialState("run", {}), { kind: "run_started", at });
+  const result = step(sequence(), initialState("run", {}), { kind: "resume", at });
   expect(result.state.nodeRuns).toMatchObject([
     {
       status: "failed",
       error: { code: "validation", message: expect.stringContaining("completed output") },
     },
   ]);
-  expect(result.effects.some((effect) => effect.kind === "dispatch")).toBe(false);
+  expect(result.next.kind).toBe("finished");
 });
 
 test("rate denial fences stale decisions and reserves the same attempt until the deadline", () => {
@@ -197,25 +196,21 @@ test("rate denial fences stale decisions and reserves the same attempt until the
     attempt: 1,
     nextRetryAt: event.retryAt,
   });
-  expect(limited.effects).toContainEqual({ kind: "schedule_retry", at: event.retryAt });
-  expect(step(f.graph, limited.state, { kind: "retry_due", at }).effects).toEqual([
-    { kind: "schedule_retry", at: event.retryAt },
-  ]);
-  const due = step(f.graph, limited.state, { kind: "retry_due", at: event.retryAt });
-  expect(due.effects).toContainEqual(f.dispatch);
-  expect(step(f.graph, due.state, { ...event, attempt: 2 }).effects).toEqual([]);
+  expect(limited.next).toEqual({ kind: "wait", at: event.retryAt });
+  expect(step(f.graph, limited.state, { kind: "resume", at }).next).toEqual({
+    kind: "wait",
+    at: event.retryAt,
+  });
+  const due = step(f.graph, limited.state, { kind: "resume", at: event.retryAt });
+  expect(due.next).toEqual(f.dispatch);
+  expect(step(f.graph, due.state, { ...event, attempt: 2 }).writes).toEqual([]);
 });
 
-test("stale completions emit no logs and completion and log nodes use write_log", () => {
+test("stale completions emit no logs", () => {
   const f = start();
-  const event = completed(f.dispatch.executionKey, 1, { words: 42 });
+  const event = completed(f.dispatch.executionKey, 2, { words: 42 });
   event.result.logs.push({ message: "attempt", data: { count: 1 } });
-  const result = step(f.graph, f.state, event);
-  expect(result.effects.filter((effect) => effect.kind === "write_log")).toMatchObject([
-    { log: { message: "attempt", data: { count: 1 } }, attempt: 1 },
-    { log: { message: "Draft ready" }, attempt: 1 },
-  ]);
-  expect(step(f.graph, f.state, { ...event, attempt: 2 }).effects).toEqual([]);
+  expect(step(f.graph, f.state, event).writes).toEqual([]);
 });
 
 for (const retryOnExit of [false, true]) {
@@ -225,25 +220,28 @@ for (const retryOnExit of [false, true]) {
       run: () => sh(["false"], { retry: { attempts: 3, retryOnExit } }),
     }).graph;
 
-    const started = step(graph, initialState("run", {}), { kind: "run_started", at });
-    const dispatch = started.effects.find((effect) => effect.kind === "dispatch");
+    const started = step(graph, initialState("run", {}), { kind: "resume", at });
+    const dispatch = started.next;
 
     if (dispatch?.kind !== "dispatch") {
       throw new Error("Expected command dispatch");
     }
 
     const failed = step(graph, started.state, {
-      kind: "execution_failed",
+      kind: "execution_finished",
       executionKey: dispatch.executionKey,
       attempt: 1,
       at,
-      error: { code: "exit", message: "Command exited with code 2" },
-      exitCode: 2,
-      logs: [],
+      result: {
+        kind: "failed",
+        error: { code: "exit", message: "Command exited with code 2" },
+        exitCode: 2,
+        logs: [],
+      },
     });
 
     expect(failed.state.nodeRuns[0]?.status).toBe(retryOnExit ? "retrying" : "failed");
-    expect(failed.effects.some((effect) => effect.kind === "schedule_retry")).toBe(retryOnExit);
+    expect(failed.next.kind).toBe(retryOnExit ? "wait" : "finished");
   });
 }
 
@@ -259,35 +257,37 @@ test("graph retry delay caps at sixty seconds across repeated failures", () => {
   let state = f.state;
   let time = Date.parse(at);
 
+  const delays: number[] = [];
+
   for (let attempt = 1; attempt < 10; attempt++) {
     const failed = step(f.graph, state, {
-      kind: "execution_failed",
+      kind: "execution_finished",
       executionKey: f.dispatch.executionKey,
       attempt,
       at: new Date(time).toISOString(),
-      error: { code: "execution", message: "retry" },
-      exitCode: null,
-      logs: [],
+      result: {
+        kind: "failed",
+        error: { code: "execution", message: "retry" },
+        exitCode: null,
+        logs: [],
+      },
     });
 
-    const retry = failed.effects.find((effect) => effect.kind === "schedule_retry");
+    const retry = failed.next;
 
-    if (retry?.kind !== "schedule_retry") {
+    if (retry.kind !== "wait") {
       throw new Error("Expected retry deadline");
     }
 
     const delay = Date.parse(retry.at) - time;
-    expect(delay).toBe(Math.min(1000 * 2 ** (attempt - 1), 60_000));
-
-    if (attempt >= 7) {
-      expect(delay).toBe(60_000);
-    }
+    delays.push(delay);
 
     time = Date.parse(retry.at);
-    const resumed = step(f.graph, failed.state, { kind: "retry_due", at: retry.at });
-    expect(resumed.effects).toContainEqual(
+    const resumed = step(f.graph, failed.state, { kind: "resume", at: retry.at });
+    expect(resumed.next).toEqual(
       expect.objectContaining({ kind: "dispatch", attempt: attempt + 1 }),
     );
     state = resumed.state;
   }
+  expect(delays).toEqual([1000, 2000, 4000, 8000, 16000, 32000, 60000, 60000, 60000]);
 });

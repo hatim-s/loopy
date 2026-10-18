@@ -67,12 +67,6 @@ export class MemoryNodes extends MemoryRuns {
         break;
       }
 
-      case "schedule_retry": {
-        run.nextRetryAt = utc(effect.at);
-        run.wakeAt = utc(effect.at);
-        break;
-      }
-
       case "write_log": {
         if (effect.executionKey.runId !== runId) {
           throw new Error("Log belongs to another run.");

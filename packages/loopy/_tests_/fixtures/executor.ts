@@ -46,9 +46,9 @@ export function commandSpec(argv: readonly string[]): ExecutionSpec {
   const graph = loopy("command", { input: {}, run: () => sh(argv) }).graph;
 
   const dispatch = step(graph, initialState("run", {}), {
-    kind: "run_started",
+    kind: "resume",
     at: "2026-10-18T00:00:00.000Z",
-  }).effects.find((effect) => effect.kind === "dispatch");
+  }).next;
 
   if (dispatch?.kind !== "dispatch") {
     throw new Error("Expected command dispatch");

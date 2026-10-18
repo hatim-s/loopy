@@ -1,11 +1,11 @@
 import type {
-  AttemptLog,
-  ExecutionError,
   ExecutionKey,
   ExecutionResult,
+  ExecutionSpec,
   Json,
   NodeRun,
   RunOutcome,
+  StoreEffect,
 } from "../core/index.js";
 
 export type EngineState = {
@@ -16,25 +16,30 @@ export type EngineState = {
 };
 
 export type EngineEvent = { at: string } & (
-  | { kind: "run_started" }
+  | { kind: "resume" }
   | {
-      kind: "execution_completed";
+      kind: "execution_finished";
       executionKey: ExecutionKey;
       attempt: number;
-      result: Extract<ExecutionResult, { kind: "succeeded" }>;
-    }
-  | {
-      kind: "execution_failed";
-      executionKey: ExecutionKey;
-      attempt: number;
-      error: ExecutionError;
-      exitCode: number | null;
-      logs: AttemptLog[];
+      result: ExecutionResult;
     }
   | { kind: "rate_limited"; executionKey: ExecutionKey; attempt: number; retryAt: string }
-  | { kind: "retry_due" }
-  | { kind: "cancel_requested" }
 );
+
+export type Transition = {
+  state: EngineState;
+  writes: StoreEffect[];
+  next:
+    | { kind: "dispatch"; executionKey: ExecutionKey; attempt: number; spec: ExecutionSpec }
+    | { kind: "wait"; at: string }
+    | { kind: "finished"; outcome: RunOutcome };
+};
+
+export type Changes = Pick<Transition, "state" | "writes">;
+
+export function nodeRunFor(state: EngineState, nodeId: string) {
+  return state.nodeRuns.find((run) => run.key.nodeId === nodeId && run.key.scope.length === 0);
+}
 
 export function initialState(runId: string, input: Json, nodeRuns: NodeRun[] = []): EngineState {
   return { runId, input, nodeRuns, phase: { kind: "active" } };

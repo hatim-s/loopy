@@ -33,7 +33,7 @@ test.each(["none", "finished"] as const)(
     await store.claim("run", "old");
 
     const started = step(plan, initialState("run", {}), {
-      kind: "run_started",
+      kind: "resume",
       at: newRun().createdAt,
     });
 
@@ -123,12 +123,10 @@ test("retry retains ownership and running status, persists its deadline and keep
   expect(await store.getRun("run")).toMatchObject({
     status: "running",
     owner: { token: expect.any(String) },
-    nextRetryAt: "2026-10-16T00:00:01.000Z",
   });
   expect(await store.getNodeRuns("run")).toMatchObject([{ status: "retrying", attempt: 1 }]);
   resume();
   expect(await running).toEqual({ status: "succeeded", output: 42 });
-  expect((await store.getRun("run"))?.nextRetryAt).toBeUndefined();
   expect(
     (await store.getLogs("run")).map((log) => [
       log.message,
@@ -191,7 +189,6 @@ test("a shared window of two delays the third dispatch without consuming an atte
   ]);
   expect(await store.getRun("run")).toMatchObject({
     status: "running",
-    nextRetryAt: "2026-10-16T00:01:00.000Z",
   });
   resume();
   expect(await running).toMatchObject({ status: "succeeded" });
