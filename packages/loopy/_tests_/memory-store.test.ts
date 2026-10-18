@@ -1,4 +1,4 @@
-import { MemoryRunStore } from "../src/runtime/index.js";
+import { MemoryStore } from "../src/store/index.js";
 import { storeContract } from "./store-contract.js";
 
-storeContract("MemoryRunStore", (options) => new MemoryRunStore(options?.now, options?.leaseMs));
+storeContract("memory", (options) => new MemoryStore(options?.now, options?.leaseMs));

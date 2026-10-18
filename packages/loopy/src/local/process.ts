@@ -2,8 +2,11 @@ import { mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { CommandResult, ExecutionMode } from "../core/index.js";
-import { requirePositiveInteger } from "../core/index.js";
-import { CommandExecutionError, type ResolvedCommand } from "../runtime/index.js";
+import {
+  CommandExecutionError,
+  type ResolvedCommand,
+  requirePositiveInteger,
+} from "../core/index.js";
 import { sandboxLauncher } from "./sandbox/launcher.js";
 import { envArgs, resolveProgram, within } from "./sandbox/paths.js";
 import type { Launch, Limits } from "./spawn.js";
@@ -18,6 +21,8 @@ type SandboxContext = {
   scratch: string;
   env: NodeJS.ProcessEnv;
   sensitiveEnv?: Record<string, string>;
+  protectedHome?: string;
+  mode: ExecutionMode;
 };
 
 const DEFAULT_TIMEOUT_MS = 5 * 60_000;
@@ -29,6 +34,7 @@ export type LocalExecutionOptions = {
   mode: ExecutionMode;
   signal?: AbortSignal;
   sensitiveEnv?: Record<string, string>;
+  protectedHome?: string;
 };
 
 // Runs inside the sandbox. Credentials arrive through stdin, never launcher argv.
@@ -79,7 +85,16 @@ async function sandboxLaunch(command: ProcessCommand, context: SandboxContext): 
     }
   }
 
-  const [launcher, prefix] = await sandboxLauncher(program, workspace, cwd, env, scratch, helper);
+  const [launcher, prefix] = await sandboxLauncher({
+    program,
+    workspace,
+    cwd,
+    env,
+    scratch,
+    helper,
+    protectedHome: context.protectedHome,
+    mode: context.mode,
+  });
 
   const launch: Launch = {
     cwd,
@@ -127,11 +142,11 @@ export async function prepareLaunch(
   envArgs(options.sensitiveEnv ?? {});
   const program = await resolveProgram(command.program, cwd, effectiveEnv.PATH ?? "");
 
-  if (options.mode === "full") {
+  if (options.mode === "full" && !options.protectedHome) {
     return { cwd, env: effectiveEnv, program, args: command.args, stdin: command.stdin };
   }
 
-  if (options.mode !== "sandbox") {
+  if (options.mode !== "sandbox" && options.mode !== "full") {
     throw new Error(`Execution mode '${options.mode}' is unknown. Choose full or sandbox.`);
   }
 
@@ -146,13 +161,15 @@ async function prepareSandbox(
   const scratch = await realpath(await mkdtemp(join(tmpdir(), "loopy-run-")));
 
   try {
-    const env = { ...launchEnvironment(command, "sandbox"), HOME: scratch, TMPDIR: scratch };
+    const env = { ...launchEnvironment(command, options.mode), HOME: scratch, TMPDIR: scratch };
 
     const launch = await sandboxLaunch(command, {
       ...paths,
       env,
       scratch,
       sensitiveEnv: options.sensitiveEnv,
+      protectedHome: options.protectedHome,
+      mode: options.mode,
     });
 
     return { ...launch, scratch };

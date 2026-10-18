@@ -1,17 +1,17 @@
 import { mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { compile } from "../src/compiler/index.js";
 import { requireRecord } from "../src/core/index.js";
-import { LocalExecutor, openRunStore, Registry } from "../src/local/index.js";
-import type { Loopy } from "../src/sdk/host.js";
-import { compiledBody } from "./compiled-fixture.js";
-import { startLoopy } from "./fixture.js";
+import { LocalExecutor } from "../src/executor/index.js";
+import { activate, SYSTEM_CLOCK } from "../src/host/index.js";
+import { LoopyService, openRunStore, Registry } from "../src/local/index.js";
 
 export const roots: string[] = [];
 
 export const CLI = resolve(import.meta.dir, "../src/cli/index.ts");
 
-export const SDK = resolve(import.meta.dir, "../src/sdk/index.ts");
+export const SDK = resolve(import.meta.dir, "../src/sdk/graph/index.ts");
 
 export function fixture(name: string, definition: string) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "loopy-cli-sdk-")));
@@ -20,8 +20,8 @@ export function fixture(name: string, definition: string) {
   const file = join(root, `${name}.loopy.ts`);
   writeFileSync(
     file,
-    `import { loopy, step, sleep, hook, command } from ${JSON.stringify(SDK)};
-export default loopy({ name: ${JSON.stringify(name)}, ${definition} });`,
+    `import { loopy, log, sh, code, sleep, wait } from ${JSON.stringify(SDK)};
+export default loopy(${JSON.stringify(name)}, { input: {}, ${definition} });`,
   );
 
   return { cwd: root, home, file };
@@ -48,40 +48,68 @@ export function object(text: string) {
 }
 
 export async function save(f: ReturnType<typeof fixture>) {
-  const { default: definition }: { default: Loopy } = await import(f.file);
+  const result = await compile(f.file);
 
-  const body = await compiledBody(definition.name, f.file, {
-    scope: definition.scope,
-    mode: definition.mode,
-    secrets: [...definition.secrets],
-    schedule: definition.schedule ?? null,
-    description: definition.description ?? null,
-  });
-
-  if (definition.input && !("~standard" in definition.input)) {
-    body.graph.input = definition.input;
+  if (!result.ok) {
+    throw new Error(JSON.stringify(result.diagnostics));
   }
 
-  return new Registry(f.home, f.cwd).save(body);
+  const store = openRunStore(f.home);
+
+  try {
+    const service = new LoopyService({
+      store,
+      registry: () => new Registry(f.home, f.cwd),
+      clock: SYSTEM_CLOCK,
+    });
+
+    await service.putLoopy(result.graph.name, {
+      ...result,
+      bundles: result.bundles.map((bundle) => ({
+        ...bundle,
+        bytes: Buffer.from(bundle.bytes).toString("base64"),
+      })),
+      source: { path: f.file, workspace: f.cwd },
+      replace: false,
+    });
+
+    return new Registry(f.home, f.cwd).get(result.graph.name);
+  } finally {
+    store.close();
+  }
 }
 
 export async function runFixture(f: ReturnType<typeof fixture>) {
-  const { default: definition }: { default: Loopy } = await import(f.file);
+  const saved = new Registry(f.home, f.cwd).list()[0];
+
+  if (!saved) {
+    throw new Error("Save fixture before running it.");
+  }
+
   const store = openRunStore(f.home);
-  const id = crypto.randomUUID();
+
+  const service = new LoopyService({
+    store,
+    registry: () => new Registry(f.home, f.cwd),
+    clock: SYSTEM_CLOCK,
+  });
 
   try {
-    await startLoopy({
-      loopy: definition,
-      input: {},
+    const run = await service.startRun(saved.slug, {}, f.cwd);
+    await activate({
       store,
-      executor: new LocalExecutor({ home: f.home, secrets: definition.secrets }),
-      runId: id,
-      bundleHash: "a".repeat(64),
-      workspace: f.cwd,
+      runId: run.id,
+      graph: saved.graph,
+      executor: new LocalExecutor({
+        home: f.home,
+        workspace: f.cwd,
+        mode: saved.mode,
+        secrets: saved.secrets,
+        bundlePath: (hash) => new Registry(f.home, f.cwd).bundlePath(hash),
+      }),
     });
 
-    return { stdout: JSON.stringify(await store.getRun(id)), stderr: "", code: 0 };
+    return { stdout: JSON.stringify(await store.getRun(run.id)), stderr: "", code: 0 };
   } finally {
     store.close();
   }

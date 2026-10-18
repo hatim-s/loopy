@@ -12,10 +12,6 @@
       "types": "./dist/types/sdk/index.d.ts",
       "default": "./dist/sdk/index.js"
     },
-    "./runtime": {
-      "types": "./dist/types/runtime/index.d.ts",
-      "default": "./dist/runtime/index.js"
-    },
     "./local": {
       "types": "./dist/types/local/index.d.ts",
       "default": "./dist/local/index.js"
@@ -27,6 +23,10 @@
     "./graph": {
       "types": "./dist/types/sdk/graph/index.d.ts",
       "default": "./dist/sdk/graph/index.js"
+    },
+    "./engine": {
+      "types": "./dist/types/engine/index.d.ts",
+      "default": "./dist/engine/index.js"
     }
   },
   "bin": {

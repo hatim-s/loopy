@@ -14,6 +14,7 @@ import {
 } from "./views.js";
 
 export const ERROR_CODES = [
+  "not_yet",
   "not_found",
   "not_claimable",
   "owned_elsewhere",
@@ -33,6 +34,7 @@ export const errorCodeSchema = z.enum(ERROR_CODES);
 export type ErrorCode = z.infer<typeof errorCodeSchema>;
 
 export const DEFAULT_ERROR_MESSAGES = {
+  not_yet: "This operation is not implemented yet.",
   not_found: "The requested resource was not found.",
   not_claimable: "The run cannot be claimed in its current state.",
   owned_elsewhere: "Another worker owns this run. Try again after its lease expires.",

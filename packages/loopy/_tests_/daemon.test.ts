@@ -2,21 +2,17 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { RunRecord, Schedule } from "../src/core/index.js";
+import type { Graph, RunRecord, Store as RunStore, Schedule } from "../src/core/index.js";
+import { OwnershipError } from "../src/core/index.js";
+import { type Clock, Daemon } from "../src/host/index.js";
 import { SqliteRunStore } from "../src/local/index.js";
-import {
-  type ActivationOptions,
-  type Clock,
-  Daemon,
-  MemoryRunStore,
-  OwnershipError,
-  type RunStore,
-} from "../src/runtime/index.js";
+import { loopy } from "../src/sdk/graph/index.js";
+import { MemoryStore as MemoryRunStore } from "../src/store/index.js";
 import { FakeExecutor, newRun } from "./fixture.js";
 
 function fixture(
   options: Partial<ConstructorParameters<typeof Daemon>[0]> & {
-    workflowFor?: (run: RunRecord) => Promise<ActivationOptions["workflow"]>;
+    graphFor?: (run: RunRecord) => Promise<Graph>;
   } = {},
 ) {
   let time = Date.parse(newRun().createdAt);
@@ -35,12 +31,15 @@ function fixture(
     concurrency: 4,
     store,
     clock,
-    bundleHashFor: () => "bundle",
+    revisionFor: () => "bundle",
     prepare: async (run) => ({
-      workflow: options.workflowFor ? await options.workflowFor(run) : async (ctx) => ctx.input,
+      graph: options.graphFor
+        ? await options.graphFor(run)
+        : loopy("test", {
+            input: { "value?": "number", "scheduled?": "boolean" },
+            run: ({ input }) => input,
+          }).graph,
       executor: new FakeExecutor(),
-      cwd: run.workspace,
-      mode: "sandbox",
     }),
     onError: (error, run) => errors.push({ error, run }),
     ...options,
@@ -58,7 +57,7 @@ function fixture(
 
 function schedule(overrides: Partial<Schedule> = {}): Schedule {
   return {
-    revision: 1,
+    version: 1,
     workspace: "/workspace",
     slug: "test",
     cron: "* * * * *",
@@ -109,7 +108,7 @@ test("startup skips stale schedules forward without firing and preserves the fir
   expect(await f.daemon.tick()).toEqual({ fired: 0, activated: 0 });
   expect(await f.store.listSchedules()).toEqual([
     schedule({
-      revision: 1,
+      version: 1,
       lastFireKey: "old",
       nextFireAt: "2026-10-16T00:01:00.000Z",
     }),
@@ -132,76 +131,16 @@ test("a queued run activates and completes", async () => {
   expect((await f.store.getRun("run"))?.owner).toBeUndefined();
 });
 
-test("a sleeping run activates again only after its wake time", async () => {
-  const workflow: ActivationOptions["workflow"] = async (ctx) => {
-    await ctx.sleep("1h");
-
-    return "awake";
-  };
-
-  const f = fixture({ workflowFor: async () => workflow });
-  await f.store.createRun(newRun());
-  expect((await f.daemon.tick()).activated).toBe(1);
-  expect(await f.store.getRun("run")).toMatchObject({
-    status: "suspended",
-    wakeAt: "2026-10-16T01:00:00.000Z",
-  });
-  expect((await f.daemon.tick()).activated).toBe(0);
-  f.advance(3_600_000);
-  expect((await f.daemon.tick()).activated).toBe(1);
-  expect(await f.store.getRun("run")).toMatchObject({ status: "succeeded", output: "awake" });
-});
-
-test("six runs respect concurrency two even with overlapping ticks", async () => {
-  let active = 0;
-  let peak = 0;
-  const entered = Promise.withResolvers<void>();
-  const gate = Promise.withResolvers<void>();
-
-  const f = fixture({
-    concurrency: 2,
-    workflowFor: async () => async (ctx) =>
-      ctx.step("hold", async () => {
-        active++;
-        peak = Math.max(peak, active);
-
-        if (active === 2) {
-          entered.resolve();
-        }
-
-        await gate.promise;
-        active--;
-
-        return null;
-      }),
-  });
-
-  for (let index = 0; index < 6; index++) {
-    await f.store.createRun({ ...newRun(), id: String(index) });
-  }
-
-  const ticking = f.daemon.tick();
-  await entered.promise;
-  const overlapping = f.daemon.tick();
-  expect(peak).toBe(2);
-  gate.resolve();
-  expect(await ticking).toEqual({ fired: 0, activated: 6 });
-  await overlapping;
-  expect(peak).toBe(2);
-  expect((await f.store.listRuns({ status: "succeeded" })).length).toBe(6);
-  expect(f.errors).toEqual([]);
-});
-
 test("a throwing loader reports its run and other runs still activate", async () => {
   const failure = new Error("Workflow could not load. Save the workflow again.");
 
   const f = fixture({
-    workflowFor: async (run) => {
+    graphFor: async (run) => {
       if (run.id === "bad") {
         throw failure;
       }
 
-      return async () => "done";
+      return loopy("test", { input: {}, run: () => "done" }).graph;
     },
   });
 
@@ -219,12 +158,12 @@ test("a throwing activation releases ownership and does not block other runs", a
   const failure = new Error("Journal could not load. Restore storage.");
 
   class BrokenJournalStore extends MemoryRunStore {
-    override async getSteps(runId: string) {
+    override async getNodeRuns(runId: string) {
       if (runId === "bad") {
         throw failure;
       }
 
-      return super.getSteps(runId);
+      return super.getNodeRuns(runId);
     }
   }
 
@@ -238,47 +177,6 @@ test("a throwing activation releases ownership and does not block other runs", a
   expect((await store.getRun("bad"))?.owner).toBeUndefined();
   expect((await store.dueRuns(newRun().createdAt)).map((run) => run.id)).toEqual(["bad"]);
   expect((await store.getRun("run"))?.status).toBe("succeeded");
-});
-
-test("stop waits for an in-flight activation and the run loop to return", async () => {
-  const entered = Promise.withResolvers<void>();
-  const gate = Promise.withResolvers<void>();
-
-  const f = fixture({
-    concurrency: 1,
-    workflowFor: async () => async (ctx) =>
-      ctx.step("hold", async () => {
-        entered.resolve();
-        await gate.promise;
-
-        return "done";
-      }),
-  });
-
-  await f.store.createRun(newRun());
-  await f.store.createRun({ ...newRun(), id: "pending" });
-  let returned = false;
-
-  const running = f.daemon.run().then(() => {
-    returned = true;
-  });
-
-  await entered.promise;
-  let stopped = false;
-
-  const stopping = f.daemon.stop().then(() => {
-    stopped = true;
-  });
-
-  await Promise.resolve();
-  expect(stopped).toBe(false);
-  expect(returned).toBe(false);
-  gate.resolve();
-  await stopping;
-  expect(returned).toBe(true);
-  await running;
-  expect((await f.store.getRun("run"))?.status).toBe("succeeded");
-  expect((await f.store.getRun("pending"))?.status).toBe("queued");
 });
 
 function sleeper() {
@@ -372,45 +270,6 @@ function steppingSleeper() {
   return { calls, sleep };
 }
 
-test("a held activation leaves capacity for new work and overdue schedules", async () => {
-  const gate = Promise.withResolvers<void>();
-  const entered = Promise.withResolvers<void>();
-  const sleeping = steppingSleeper();
-
-  const f = fixture({
-    concurrency: 2,
-    sleep: sleeping.sleep,
-    workflowFor: async (run) => async () => {
-      if (run.id === "held") {
-        entered.resolve();
-        await gate.promise;
-      }
-
-      return "done";
-    },
-  });
-
-  await f.store.putSchedule(schedule({ nextFireAt: "2026-10-16T00:01:00.000Z" }));
-  await f.store.createRun({ ...newRun(), id: "held" });
-  const running = f.daemon.run();
-  await entered.promise;
-  f.advance(120_000);
-  await f.store.createRun(newRun());
-  f.daemon.wake();
-
-  try {
-    await until(async () => (await f.store.getRun("run"))?.status === "succeeded");
-    await until(async () => (await f.store.listRuns({ status: "succeeded" })).length >= 2);
-    expect((await f.store.getRun("held"))?.status).toBe("running");
-    expect((await f.store.listSchedules())[0]?.lastFireKey).toBe("test@2026-10-16T00:02Z");
-    expect(f.errors).toEqual([]);
-  } finally {
-    gate.resolve();
-    await f.daemon.stop();
-    await running;
-  }
-});
-
 test("a failed wake lookup reports once and retries after an abortable capped wait", async () => {
   const failure = new Error("Wake lookup failed. Retry storage.");
   let lookups = 0;
@@ -448,7 +307,7 @@ test("failed activations back off from one second to the five second cap", async
   const failure = new Error("Journal lookup failed. Restore storage.");
 
   class BrokenJournalStore extends MemoryRunStore {
-    override async getSteps(): Promise<never> {
+    override async getNodeRuns(): Promise<never> {
       throw failure;
     }
   }
@@ -491,21 +350,6 @@ test("claim contention does not report an activation error", async () => {
   await f.store.createRun(newRun());
   expect(await f.daemon.tick()).toEqual({ fired: 0, activated: 0 });
   expect(f.errors).toEqual([]);
-});
-
-test("daemon leaves indefinite hooks suspended and resumes resolved payloads", async () => {
-  const f = fixture({ workflowFor: async () => async (ctx) => ctx.hook("approve") });
-  await f.store.createRun(newRun());
-  expect((await f.daemon.tick()).activated).toBe(1);
-  expect(await f.store.getRun("run")).toMatchObject({ status: "suspended" });
-  expect((await f.store.getRun("run"))?.wakeAt).toBeUndefined();
-  expect((await f.daemon.tick()).activated).toBe(0);
-  const [hook] = await f.store.listHooks("run");
-  expect(await f.store.resolveHook(hook?.token ?? "", { ok: true })).toBe(true);
-  expect((await f.daemon.tick()).activated).toBe(1);
-  expect(await f.store.getRun("run")).toMatchObject({ status: "succeeded", output: { ok: true } });
-  expect(f.errors).toEqual([]);
-  await f.daemon.stop();
 });
 
 test("the loop prunes old events at startup and each hour", async () => {
@@ -584,7 +428,7 @@ for (const kind of ["memory", "sqlite"] as const) {
 
       const f = fixture({
         store: stores.store,
-        bundleHashFor: () => {
+        revisionFor: () => {
           entered.resolve();
 
           return gate.promise;

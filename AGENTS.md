@@ -1,65 +1,61 @@
 # Working in this repo
 
-Read this before changing code. `bun run check` builds the package and dashboard, lints, typechecks and runs the tests. It must pass before a PR. The architecture test enforces layer imports.
+Read this before changing code. `bun run check` builds the package and dashboard, lints, typechecks and runs the tests. It must pass before a push. The architecture test enforces layer imports.
 
 ## Where code goes
 
 ```text
 packages/loopy/src/
-  core/      shared record types, argv parsing and boundary validation. Pure.
-  contract/  browser-safe wire schemas, route table and view derivations.
-  runtime/   replay engine, journal, retries, store contract and daemon scheduling. Pure.
-  sdk/       loopy(), ambient steps, defineCommand and typed shell wrappers.
-  compiler/  restricted author evaluation, code and parser bundles, canonical revisions.
-  local/     SQLite store, graph registry, processes, secrets and HTTP server.
-  cli/       commands and argument parsing. One file per command in commands/.
+  core/       graph, execution identity, records, Store and Executor contracts, validation.
+  contract/   browser-safe wire schemas, routes and view derivations.
+  engine/     pure graph state machine, reference resolution and retry policy.
+  host/       daemon scheduling, activation pool, leases, heartbeat and clock.
+  store/      memory store, SQLite schema and transactions, event outbox.
+  executor/   local execution worker, receipts and executable bundle protocol.
+  sdk/        compile-only graph builder, refs, command descriptors and parsers.
+  compiler/   restricted author evaluation, executable bundles and graph revisions.
+  local/      home, registry, secrets, service, HTTP server and process sandbox launchers.
+  cli/        thin HTTP commands, local compilation and daemon control.
 apps/dashboard/src/
-  backend/     contract-backed HTTP and event stream adapter
-  routes/      dashboard pages
-  components/  shared display and action components
-  lib/         query cache, event reducer and formatting
-apps/dashboard/_tests_/  dashboard logic tests
-packages/loopy/_tests_/   package tests, including shell fixtures
-examples/                 canonical loopies and automation helpers
+  backend/    contract-backed HTTP and event stream adapter.
+  routes/     dashboard pages.
+  components/ shared display and action components.
+  lib/        cache, event reducer and formatting.
 ```
 
-The public package entries are `loopy` for the SDK, `loopy/runtime`, `loopy/local` and `loopy/contract`, plus the compile-only `loopy/graph`. The dashboard imports only `"loopy/contract"` and uses the daemon HTTP API and event stream for data.
+Tests live under `packages/loopy/_tests_` and `apps/dashboard/_tests_`. The real workflows in `examples/` use the removed step SDK. PR 7 owns their migration; they are outside semantic TypeScript checking until then. Graph example fixtures remain compiled and checked.
 
-Layers import downward. Contract imports core and zod; local and CLI may import contract through its index. Runtime imports core; SDK imports core and runtime; local imports core, runtime and `sdk/host.ts`; CLI imports core, runtime, local and `sdk/host.ts`. Compiler imports core, contract and local through their indexes. Its trusted parser entry uses `sdk/graph-host.ts`. CLI may import compiler through its index. Cross-layer imports go through the target layer's `index.ts`, except the explicit SDK host entry. Same-layer imports use file paths. The trusted `sdk/graph-host.ts` entry reads `sdk/graph/index.ts` to derive compiler call paths and built-in descriptors from the runtime exports. Core and runtime have no Node or Bun dependencies. SDK permits `node:async_hooks` only in `current.ts` to share activation scope with bundled definitions.
+The public entries are `loopy` and `loopy/graph` for the builder, `loopy/engine` for the reducer, `loopy/local` and `loopy/contract`. The old runtime entry and executable step SDK are deleted. The dashboard imports only `loopy/contract`.
+
+Layers import downward through their target's index, except the SDK's trusted `host.ts` and `graph-host.ts` entries and the executor's narrow `local/execution-host.ts` OS bridge. Core, engine and contract bundle without host dependencies. Host imports core and engine. Store imports core and contract. Executor imports core, contract and its OS bridge. Local composes host, store and executor. Compiler imports core, contract, local and the trusted SDK entries. CLI imports the owners it calls. Same-layer imports name the file.
 
 ## Ownership
 
-- `core/model.ts` defines RunRecord, StepRecord, LogRecord and run statuses.
-- `contract/records.ts` owns record schemas; `views.ts` owns wire views, `api.ts` the route table and errors, and `derive.ts` pure view derivations.
-- `runtime/engine.ts` claims an activation, replays it, persists its outcome and releases ownership.
-- `runtime/journal.ts` checks step sequence and keys; `step-runner.ts` owns attempts and terminal writes.
-- `runtime/daemon.ts` coordinates schedules, due runs and the concurrency pool.
-- `sdk/loopy.ts` validates runtime definitions; `sdk/schema.ts` validates author input.
-- `sdk/graph/builder.ts` owns graph ids, scopes, refs and edges; `ref.ts` owns value serialization; `types.ts` maps schemas to author types; `validate.ts` owns build errors and graph validation.
-- `sdk/graph/nodes/` records nodes without executing commands, modules, parsers, clocks or randomness. `command-argv.ts` adapts existing descriptors to positional argv, named flags and rendering data. The compiler in PR 3 enforces literal labels and bundles code and parsers.
-- `sdk/define-command.ts` and `render-argv.ts` turn typed descriptors into command steps.
-- `sdk/shell/` owns command descriptors and parsers.
-- `local/store.ts` owns SQLite transactions, fencing and queries; `store-schema.ts` defines the schema and row types; `store-rows.ts` defines queries and maps rows.
-- `local/registry.ts` resolves project and global loopies, source ownership and bundle paths.
-- `compiler/restrict.ts` walks author modules; `ast.ts` enforces builder syntax; `module.ts` checks code-module exports. `evaluate.ts` imports the restricted source snapshot once in an OS sandbox. `bundle.ts` builds code and parser modules; `runner.ts` defines JSON stdin/stdout execution; `core/revision.ts` constructs and hashes the canonical graph and ordered bundle hashes; `compile.ts` composes the pipeline.
-- Command parsers are relative literal module paths, bundled like code nodes. Inline parsers and closure extraction are rejected. Command parsers carry prepared `parse.input` values alongside the hash. PR 4a must resolve these values and send `{ result, input }` to the parser bundle. Code bundles receive the resolved input directly, expose cwd as `context.workspace`, and write `context.log` and console output as JSON lines on stderr. The last stdout line is the JSON result; PR 4a captures preceding stdout as attempt output.
-- `local/save-compiled.ts` verifies hashes and stores private artifacts before publishing registry metadata. The daemon never imports author definitions. Graph execution is pending PR 4a.
-- `local/process.ts` and `spawn.ts` launch and capture processes. `executor.ts` injects declared secrets and redacts results through `secret-redactor.ts`.
-- `local/service.ts` owns shared CLI and HTTP mutations and contract views. `local/daemon-file.ts` owns private daemon discovery.
-- `local/server/routes.ts` dispatches the contract route table; `events.ts` owns SSE replay and live delivery. `start-server.ts` owns authentication and the loopback server inside the daemon.
-
-Adding a feature: put shared records in core, replay behavior in runtime, author-facing calls in SDK, OS work in local, and commands in `cli/commands/<name>.ts` registered in `cli/index.ts`. Scope flags in `cli/args.ts`. A new store column needs SQL, row conversion and queries; bump the schema version instead of adding a migration. A dashboard panel consumes contract views and API data. Give each new file one responsibility and a kebab-case name.
+- `core/graph.ts` owns graph nodes, edges, refs, execution keys and node runs. Run ids pin one revision; execution keys include ordered scope tuples.
+- `core/executor.ts`, `effects.ts` and `store.ts` own execution results, durable effects and the persistence contract. A failed node stores its error code and message for future rescue handling.
+- `engine/state.ts` owns reducer state and input events; `step.ts` owns transitions; `effects.ts` adds dispatch effects; `resolve.ts` resolves data; `retry.ts` owns backoff; `output.ts` validates out schemas and the inline cap.
+- `host/activate.ts` reconstructs state from persisted node runs, reconciles receipts, calls the reducer, commits durable effects once, then dispatches work. Validation failures do not retry. Retries retain the running lease and persist `nextRetryAt`.
+- `host/daemon.ts`, `pool.ts`, `cron.ts` and `heartbeat.ts` coordinate due work and leases without author callbacks.
+- `store/sqlite/` separates events, runs, nodes and schedules. `apply` fences the owner and commits node writes, logs, retry deadlines, run outcomes and outbox rows in one transaction. Schema 13 resets old databases. `store/memory-*` implements the same contract with rollback.
+- `executor/local.ts` starts a trusted worker. `execution.ts` owns executions, `receipts.ts` owns exclusive started and atomic finished receipt files, and `protocol.ts` decodes stdout results and stderr logs. Finished receipts prevent repeating lost completions. A dead worker with an unfinished receipt fails as uncertain.
+- `local/process.ts`, `spawn.ts` and `sandbox/` own OS processes, bounded capture, process groups and sandbox profiles. Bundles always have restricted filesystem access; mode controls network. Only declared secrets are injected into bundle environments.
+- `sdk/graph/` owns compile-only construction. `sdk/shell/` supplies descriptor data and parser implementations, with no executable step path.
+- `compiler/restrict.ts` and `ast.ts` enforce builder syntax. `module.ts` checks code exports, `evaluate.ts` imports one restricted snapshot, `bundle.ts` produces executable bundles, and `core/revision.ts` hashes the canonical graph and bundles.
+- `local/save-compiled.ts` validates and stores private bundles and historical graphs before publishing registry metadata. `local/registry.ts` owns paths and source identity.
+- `local/service.ts` owns mutations and wire views. Hook signals return `not_yet` until PR 4c. Snapshots expose node runs; their empty steps and hooks fields keep the existing dashboard compiling until PR 5.
+- `contract/` owns the shared wire shapes. Logs retain a per-run sequence for HTTP cursors and use execution key, attempt and index for identity. Schedules use `version` for optimistic concurrency; `revision` names graph hashes.
+- `local/server/` owns authenticated HTTP, SSE replay and live transaction delivery. `local/daemon-file.ts` owns daemon discovery.
 
 ## Patterns to follow
 
-Validate untyped data once at its boundary. Reuse `requireRecord`, `requireOneOf`, `validateSlug`, `errorMessage` and the filesystem helpers. Search for existing behavior before adding a helper. Infer types where possible. Use `type` for shapes and `interface` for contracts implemented by classes.
+Validate untyped data once at its boundary. Reuse core validators and filesystem helpers. Infer types where possible. Schemas own wire types. Use interfaces for contracts implemented by classes. Use explicit unions for states, events, effects and outcomes. Avoid casts and `any`.
 
-Use braces for every branch and loop. Check failure cases first and return or throw. Keep functions around 40 lines or less and split responsibilities when complexity grows. Errors end with a period and explain what to do next. Comments explain why; avoid em dashes. Casts require a nearby `SAFETY` comment except `as const`. Do not use `any`.
+Use braces for branches and loops. Keep files near 250 lines, with one responsibility each. Comments explain the reason for a choice. Use plain prose without em dashes. Errors explain what failed and what to do next.
 
-Each CLI command exports `run<Name>(context: CliContext)`, reads positionals through the context helpers and prints through `printJson` or `report`. Do not parse argv inside commands. Data commands use the daemon HTTP client; only daemon control opens the run store. Save compiles locally and sends graph artifacts to the daemon.
+Every CLI data command uses the daemon HTTP client. Save compiles locally and transfers graph artifacts. Only daemon control opens SQLite. No command imports author definitions into the daemon.
 
-The replay engine runs user code from the top. Keep code between steps deterministic, preserve sequence and completion order, never nest steps, and fence every durable write with the owner token. Successful steps replay from stored JSON. Recovery may repeat an unfinished effect; it does not promise exactly-once external execution.
+The reducer accepts time through events and performs no I/O, clock reads or randomness. Persist an execution before dispatch. Fence completions by execution key and attempt and writes by owner token. Never repeat an effect with a started receipt. Reconcile it first.
 
-Tests belong in `_tests_` directories. Reserve them for durable state transitions, type guarantees, parsers, sandbox confinement, secret handling and CLI behavior. Use temporary homes and fake or recording executors. Run example definitions through `createLoopyRun` and `activateLoopy`. Do not add UI tests or glue tests for reversible edits.
+Tests cover core transitions and durable boundaries. Use temporary homes and injected executors and clocks. Keep server, SSE, schedule and CLI tests passing when contracts change. Remove tests for deleted behavior with their implementation. Do not add compatibility paths or migrations for discarded databases.
 
-Delete unused paths with their callers and tests. Do not add compatibility aliases or export symbols without a consumer. Preserve user work and keep unrelated automation checkouts untouched.
+PR 4b owns control and value nodes. PR 4c owns waits, sleep, cleanup, rescue and active cancellation. PR 5 owns the dashboard adaptation and the local-to-host rename. Preserve these boundaries and concurrent user work.

@@ -1,4 +1,10 @@
-import type { Ref as GraphRef, OutSchema, RefId, Value } from "../../core/index.js";
+import {
+  type Ref as GraphRef,
+  type OutSchema,
+  projectValue,
+  type RefId,
+  type Value,
+} from "../../core/index.js";
 import { refuse, validateLabel } from "./validate.js";
 
 export const REF = Symbol("loopy.graph.ref");
@@ -38,8 +44,8 @@ export class Reference<T, Fields = never> extends RefValue {
       schema !== null &&
       schema.kind === "record" &&
       this.path.length === 0 &&
-      !Object.hasOwn(schema.fields, key) &&
-      !Object.hasOwn(schema.fields, `${String(key)}?`)
+      projectValue(schema.fields, [key]) === undefined &&
+      projectValue(schema.fields, [`${String(key)}?`]) === undefined
     ) {
       refuse("unresolved_ref", "Reference paths must match the declared output schema.");
     }

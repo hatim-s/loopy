@@ -12,12 +12,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { isRecord, isString } from "../core/index.js";
+import { errnoCode } from "../core/index.js";
 
 /** The `code` of a Node filesystem error, or undefined for anything else. */
-export function errnoCode(cause: unknown): string | undefined {
-  return isRecord(cause) && isString(cause.code) ? cause.code : undefined;
-}
+export { errnoCode } from "../core/index.js";
 
 /** Canonical path for ownership checks: symlinks resolve, missing files stay absolute. */
 export function canonicalPath(path: string): string {

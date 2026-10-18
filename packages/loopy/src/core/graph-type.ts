@@ -6,15 +6,10 @@ import {
   type RecordSpec,
   type Value,
 } from "./graph.js";
-import {
-  binding,
-  type Context as GraphContext,
-  isRef,
-  scopeReaches,
-  targets,
-} from "./graph-context.js";
+import { binding, type Context as GraphContext, scopeReaches, targets } from "./graph-context.js";
 import { operandType } from "./graph-predicate.js";
-import { isRecord } from "./validation.js";
+import { isRef, projectValue } from "./graph-ref.js";
+import { isString } from "./validation.js";
 
 type Context = GraphContext & { refTypes: Map<string, string | null>; resolving: Set<string> };
 
@@ -39,20 +34,13 @@ function recordPathType(schema: RecordSpec, path: string[]): string | null {
     return "object";
   }
 
-  const field = path[0] ?? "";
-  const optional = `${field}?`;
-
-  const type = Object.hasOwn(schema, field)
-    ? schema[field]
-    : Object.hasOwn(schema, optional)
-      ? schema[optional]
-      : null;
-
   if (path.length !== 1) {
     return null;
   }
 
-  return type ?? null;
+  const type = projectValue(schema, path) ?? projectValue(schema, [`${path[0]}?`]);
+
+  return isString(type) ? type : null;
 }
 
 function bodyResultType(
@@ -83,11 +71,13 @@ function literalPathType(context: Context, value: Value, path: string[]): string
 
   const [field, ...rest] = path;
 
-  if (field === undefined || !isRecord(value) || !Object.hasOwn(value, field)) {
+  const member = field === undefined ? undefined : projectValue(value, [field]);
+
+  if (member === undefined) {
     return null;
   }
 
-  return literalPathType(context, value[field] ?? null, rest);
+  return literalPathType(context, member, rest);
 }
 
 function parallelType(

@@ -1,10 +1,6 @@
-import {
-  type CommandResult,
-  type GraphRetry,
-  type OutSchema,
-  parseArgv,
-} from "../../../core/index.js";
-import type { CommandDescriptor } from "../../define-command.js";
+import type { RateLimit } from "../../../core/index.js";
+import { type GraphRetry, type OutSchema, parseArgv } from "../../../core/index.js";
+import { type CommandDescriptor, validateCommandDescriptor } from "../../define-command.js";
 import { currentBuilder } from "../builder.js";
 import { commandArgv } from "../command-argv.js";
 import type { CommandInput, CommandRawInput } from "../command-input.js";
@@ -18,6 +14,7 @@ type Options = {
   env?: Record<string, string | Ref<string>>;
   stdin?: string | Ref<string>;
   retry?: Partial<GraphRetry>;
+  rateLimit?: RateLimit;
 };
 
 type Input = {
@@ -59,6 +56,7 @@ function record({
         env: serializeValues(options.env ?? {}, builder),
         stdin: serialize(options.stdin, builder),
       },
+      rateLimit: options.rateLimit ?? null,
       retry: builder.retry(options.retry),
       okExitCodes: [...(descriptor.okExitCodes ?? [0])],
       parse:
@@ -81,12 +79,14 @@ type CallArguments<I> = I extends { args: readonly unknown[] }
   ? [input: I, options?: Options]
   : [input?: I, options?: Options];
 
-type GraphCommandDescriptor = Omit<CommandDescriptor, "parse"> & { parse?: string };
+export type GraphCommandDescriptor = Omit<CommandDescriptor, "parse"> & { parse?: string };
 
 type CommandCall<D extends GraphCommandDescriptor, S extends OutSchema> = {
   (...args: CallArguments<CommandInput<D>>): Ref<Infer<S>, SchemaFields<S>>;
   readonly descriptor: D;
-  raw: (...args: CallArguments<CommandRawInput<D>>) => Ref<CommandResult, CommandResult>;
+  raw: (
+    ...args: CallArguments<CommandRawInput<D>>
+  ) => Ref<Infer<typeof commandOutput>, SchemaFields<typeof commandOutput>>;
 };
 
 export function defineCommand<const D extends GraphCommandDescriptor>(
@@ -100,6 +100,7 @@ export function defineCommand<const S extends OutSchema, const D extends GraphCo
   descriptor: D,
   schema?: S,
 ) {
+  validateCommandDescriptor(descriptor);
   const out = schema ?? commandOutput;
   function call(...args: CallArguments<CommandInput<D>>): Ref<Infer<S>, SchemaFields<S>>;
   function call(input: Input = {}, options: Options = {}): Ref<Infer<S>, SchemaFields<S>> {
@@ -109,8 +110,13 @@ export function defineCommand<const S extends OutSchema, const D extends GraphCo
     );
   }
 
-  function raw(...args: CallArguments<CommandRawInput<D>>): Ref<CommandResult, CommandResult>;
-  function raw(input: Input = {}, options: Options = {}): Ref<CommandResult, CommandResult> {
+  function raw(
+    ...args: CallArguments<CommandRawInput<D>>
+  ): Ref<Infer<typeof commandOutput>, SchemaFields<typeof commandOutput>>;
+  function raw(
+    input: Input = {},
+    options: Options = {},
+  ): Ref<Infer<typeof commandOutput>, SchemaFields<typeof commandOutput>> {
     return currentBuilder().ref(
       record({
         label: options.label ?? null,
@@ -152,6 +158,7 @@ function shell({
         env: serializeValues(options.env ?? {}, builder),
         stdin: serialize(options.stdin, builder),
       },
+      rateLimit: options.rateLimit ?? null,
       retry: builder.retry(options.retry),
       okExitCodes: [0],
       parse: null,
@@ -159,7 +166,10 @@ function shell({
     label,
   );
 
-  return builder.ref<CommandResult, CommandResult>(node.id, commandOutput);
+  return builder.ref<Infer<typeof commandOutput>, SchemaFields<typeof commandOutput>>(
+    node.id,
+    commandOutput,
+  );
 }
 
 function exec(argv: readonly (string | RefValue)[], options: Options = {}) {

@@ -1,8 +1,7 @@
 import { expect, test } from "bun:test";
-import { MemoryRunStore } from "../src/runtime/index.js";
-import { defineCommand, type Json, loopy } from "../src/sdk/index.js";
+import { defineCommand, loopy, sh } from "../src/sdk/graph/index.js";
 import { base64Descriptor } from "../src/sdk/shell/text/format.js";
-import { FakeExecutor, startLoopy } from "./fixture.js";
+import { capture } from "./fixtures/command-capture.js";
 
 const probe = defineCommand({
   key: "test.probe",
@@ -17,32 +16,8 @@ const probe = defineCommand({
   },
 });
 
-async function execute(run: () => Promise<Json | void>) {
-  const executor = new FakeExecutor();
-  const store = new MemoryRunStore();
-
-  const result = await startLoopy({
-    store,
-    executor,
-    input: {},
-    runId: "probe",
-    bundleHash: "",
-    workspace: "/workspace",
-    loopy: loopy({
-      name: "probe",
-      run: async () => {
-        await run();
-
-        return null;
-      },
-    }),
-  });
-
-  return { executor, store, result };
-}
-
-test("defineCommand builds enum, numeric, repeated and positional arguments", async () => {
-  const f = await execute(() =>
+test("graph command descriptors retain enum, numeric, repeated and positional arguments", () => {
+  const f = capture(() =>
     probe({
       args: ["source", "one", "two"],
       flags: { mode: "safe", count: 3, quiet: false, include: ["lib", "src"] },
@@ -50,92 +25,61 @@ test("defineCommand builds enum, numeric, repeated and positional arguments", as
   );
 
   expect(f.result).toMatchObject({ status: "succeeded" });
-  expect(f.executor.calls[0]).toMatchObject({
-    program: "probe",
-    args: ["--mode=safe", "-n", "3", "-Ilib", "-Isrc", "--", "source", "one", "two"],
-  });
+  expect(f.executor.calls).toEqual([
+    {
+      program: "probe",
+      args: ["--mode=safe", "-n", "3", "-Ilib", "-Isrc", "--", "source", "one", "two"],
+    },
+  ]);
 });
 
-test("enum values are validated for JavaScript callers", async () => {
-  // @ts-expect-error JavaScript can supply an unsupported enum value.
-  const f = await execute(() => probe({ flags: { mode: "quick" } }));
-  expect(f.result).toEqual({
-    status: "failed",
-    error: "Flag '--mode' must be one of: fast, safe. Choose an allowed value.",
-  });
-  expect(f.executor.calls).toEqual([]);
-});
-
-test("unknown flags report the allowed list", async () => {
-  // @ts-expect-error JavaScript can supply unknown flags.
-  const f = await execute(() => probe({ flags: { typo: true } }));
-  expect(f.result).toEqual({
+test("JavaScript flag values fail validation before author execution", () => {
+  // @ts-expect-error JavaScript callers can supply unknown flags.
+  const unknown = capture(() => probe({ args: ["source", "target"], flags: { typo: true } }));
+  // @ts-expect-error JavaScript callers can supply unsupported enum values.
+  const choice = capture(() => probe({ args: ["source", "target"], flags: { mode: "quick" } }));
+  // @ts-expect-error JavaScript callers can supply wrong flag types.
+  const type = capture(() => probe({ args: ["source", "target"], flags: { count: "3" } }));
+  expect(unknown.result).toEqual({
     status: "failed",
     error: "Unknown flag 'typo'. Use an allowed flag: mode, count, quiet, include.",
   });
-});
-
-test("runtime flag types are validated before execution", async () => {
-  // @ts-expect-error JavaScript can supply the wrong flag type.
-  const f = await execute(() => probe({ flags: { count: "3" } }));
-  expect(f.result).toEqual({
+  expect(choice.result).toEqual({
+    status: "failed",
+    error: "Flag '--mode' must be one of: fast, safe. Choose an allowed value.",
+  });
+  expect(type.result).toEqual({
     status: "failed",
     error: "Flag '-n' requires a number value. Supply the declared flag type.",
   });
+  expect([unknown.executor.calls, choice.executor.calls, type.executor.calls]).toEqual([
+    [],
+    [],
+    [],
+  ]);
 });
 
-test("platform variants merge at call time and preserve unchanged flags", async () => {
-  let platform = "darwin";
-
-  const stat = defineCommand(
-    {
-      namespace: "test",
-      name: "stat",
-      program: "stat",
-      flags: { format: { cli: "-f", kind: "string" }, follow: { cli: "-L", kind: "boolean" } },
-      variants: {
-        linux: { flags: { format: { cli: "--format", kind: "string", style: "equals" } } },
-      },
+test("platform variants merge and preserve unchanged flags in the recorded descriptor", () => {
+  const stat = defineCommand({
+    key: "test.stat",
+    program: "stat",
+    flags: { format: { cli: "-f", kind: "string" }, follow: { cli: "-L", kind: "boolean" } },
+    variants: {
+      linux: { flags: { format: { cli: "--format", kind: "string", style: "equals" } } },
     },
-    { platform: () => platform },
-  );
-
-  const f = await execute(async () => {
-    await stat({ flags: { format: "%s", follow: true } });
-    platform = "linux";
-    await stat({ flags: { format: "%s", follow: true } });
   });
 
-  expect(f.executor.calls.map(({ args }) => args)).toEqual([
-    ["-f", "%s", "-L"],
-    ["--format=%s", "-L"],
-  ]);
-  expect((await f.store.getSteps("probe")).map(({ key }) => key)).toEqual([
-    "test.stat",
-    "test.stat",
-  ]);
+  const f = capture(() => stat({ flags: { format: "%s", follow: true } }));
+  expect(f.executor.calls[0]?.args).toEqual(
+    process.platform === "linux" ? ["--format=%s", "-L"] : ["-f", "%s", "-L"],
+  );
+  const base64 = defineCommand(base64Descriptor);
+  expect(
+    capture(() => base64({ flags: { input: "input", decode: true } })).executor.calls[0]?.args,
+  ).toEqual(process.platform === "darwin" ? ["-D", "-i", "input"] : ["-d", "input"]);
 });
 
-function compileOnlyChecks() {
-  // @ts-expect-error Required variadic targets need at least one value after source.
-  probe({ args: ["source"] });
-  // @ts-expect-error Fixed positionals must also be strings.
-  probe({ args: [42, "target"] });
-}
-
-void compileOnlyChecks;
-
-test.each([
-  ["darwin", ["-D", "-i", "input"]],
-  ["linux", ["-d", "input"]],
-])("base64 renders typed input on %s", async (platform, expected) => {
-  const base64 = defineCommand(base64Descriptor, { platform: () => platform });
-  const f = await execute(() => base64({ flags: { input: "input", decode: true } }));
-  expect(f.result.status).toBe("succeeded");
-  expect(f.executor.calls[0]?.args).toEqual(expected);
-});
-
-test("descriptor construction rejects flag aliases sharing a CLI option", () => {
+test("descriptor construction rejects duplicate CLI identities in base and merged platform flags", () => {
   expect(() =>
     defineCommand({
       key: "test.alias",
@@ -144,15 +88,8 @@ test("descriptor construction rejects flag aliases sharing a CLI option", () => 
         format: { cli: "--format", kind: "string" },
         alias: { cli: "--format", kind: "string" },
       },
-      preset: { flags: { format: "machine" } },
-      parse: ({ stdout }) => stdout,
     }),
-  ).toThrow(
-    "Flags 'format' and 'alias' share CLI option '--format'. Give each flag a unique CLI option.",
-  );
-});
-
-test("descriptor construction validates merged platform flag identities", () => {
+  ).toThrow("Flags 'format' and 'alias' share CLI option '--format'");
   expect(() =>
     defineCommand({
       key: "test.alias",
@@ -160,33 +97,33 @@ test("descriptor construction validates merged platform flag identities", () => 
       flags: { format: { cli: "--format", kind: "string" } },
       variants: { linux: { flags: { alias: { cli: "--format", kind: "string" } } } },
     }),
-  ).toThrow(
-    "Flags 'format' and 'alias' share CLI option '--format'. Give each flag a unique CLI option.",
-  );
+  ).toThrow("Flags 'format' and 'alias' share CLI option '--format'");
 });
 
-test("parsed input protects preset CLI options even if a descriptor gains an alias", async () => {
-  const alias = { cli: "--other-format", kind: "string" as const };
-  const flags = { format: { cli: "--format", kind: "string" } as const, alias: { ...alias } };
+test("parsed presets protect CLI identities even after descriptor mutation", () => {
+  const flags = {
+    format: { cli: "--format", kind: "string" as const },
+    alias: { cli: "--other", kind: "string" as const },
+  };
 
-  const parsed = defineCommand({
-    key: "test.alias",
-    program: "probe",
-    flags,
-    preset: { flags: { format: "machine" } },
-    parse: ({ stdout }) => stdout,
-  });
+  const parsed = defineCommand(
+    {
+      key: "test.alias",
+      program: "probe",
+      flags,
+      preset: { flags: { format: "machine" } },
+      parse: "./parse.ts",
+    },
+    { kind: "value", type: "string" },
+  );
 
   flags.alias.cli = "--format";
-  const f = await execute(() => parsed({ flags: { alias: "custom" } }));
-  expect(f.result).toEqual({
-    status: "failed",
-    error: "Flag 'alias' changes the parsed output format. Use .raw() to supply this flag.",
-  });
-  expect(f.executor.calls).toHaveLength(0);
+  expect(() =>
+    loopy("test", { input: {}, run: () => parsed({ flags: { alias: "custom" } }) }),
+  ).toThrow("Flag 'alias' changes the parsed output format. Use .raw()");
 });
 
-test("prefixed options have distinct identities for validation and presets", async () => {
+test("prefixed options keep distinct identities while identical prefixes fail", () => {
   const parsed = defineCommand({
     key: "test.prefixed",
     program: "probe",
@@ -195,15 +132,15 @@ test("prefixed options have distinct identities for validation and presets", asy
       notName: { cli: "-name", kind: "string", prefix: ["!"] },
     },
     preset: { flags: { name: "machine" } },
-    parse: ({ stdout }) => stdout,
   });
 
-  const f = await execute(() => parsed({ flags: { notName: "custom" } }));
-  expect(f.result).toMatchObject({ status: "succeeded" });
-  expect(f.executor.calls[0]?.args).toEqual(["-name", "machine", "!", "-name", "custom"]);
-});
-
-test("identical prefixed CLI options are rejected on unparsed descriptors", () => {
+  expect(capture(() => parsed({ flags: { notName: "custom" } })).executor.calls[0]?.args).toEqual([
+    "-name",
+    "machine",
+    "!",
+    "-name",
+    "custom",
+  ]);
   expect(() =>
     defineCommand({
       key: "test.prefixed",
@@ -213,7 +150,11 @@ test("identical prefixed CLI options are rejected on unparsed descriptors", () =
         alias: { cli: "-name", kind: "string", prefix: ["!"] },
       },
     }),
-  ).toThrow(
-    "Flags 'name' and 'alias' share CLI option '-name'. Give each flag a unique CLI option.",
+  ).toThrow("share CLI option '-name'");
+});
+
+test("sh.run rejects shell operators during graph construction", () => {
+  expect(() => loopy("test", { input: {}, run: () => sh.run("cat file | grep TODO") })).toThrow(
+    "Unsupported shell character '|'. Pass stdin or use separate commands instead.",
   );
 });

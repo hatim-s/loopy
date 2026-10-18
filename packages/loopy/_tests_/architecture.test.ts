@@ -7,18 +7,32 @@ const SOURCE = resolve(import.meta.dir, "../src");
 
 const DASHBOARD = resolve(import.meta.dir, "../../../apps/dashboard/src");
 
-const LAYERS = ["core", "runtime", "contract", "sdk", "local", "compiler", "cli"] as const;
+const LAYERS = [
+  "core",
+  "engine",
+  "host",
+  "store",
+  "executor",
+  "contract",
+  "sdk",
+  "local",
+  "compiler",
+  "cli",
+] as const;
 
 type Layer = (typeof LAYERS)[number];
 
 /** Each layer may import only the layers listed, and only through their index.ts. */
 const ALLOWED_IMPORTS: Record<Layer, readonly Layer[]> = {
   core: [],
-  runtime: ["core"],
+  engine: ["core"],
+  host: ["core", "engine"],
+  store: ["core", "contract"],
+  executor: ["core", "contract", "local"],
   contract: ["core"],
-  local: ["core", "runtime", "sdk", "contract"],
-  sdk: ["core", "runtime"],
-  cli: ["core", "runtime", "local", "sdk", "contract", "compiler"],
+  local: ["core", "engine", "host", "store", "executor", "sdk", "contract"],
+  sdk: ["core"],
+  cli: ["core", "engine", "host", "store", "executor", "local", "sdk", "contract", "compiler"],
   compiler: ["core", "contract", "local", "sdk"],
 };
 
@@ -86,9 +100,9 @@ function isBarrel(specifier: string): boolean {
   return /\/index(\.[jt]s)?$/.test(specifier);
 }
 
-test("core, runtime and contract exports bundle without host dependencies", async () => {
+test("core, engine and contract exports bundle without host dependencies", async () => {
   const result = await Bun.build({
-    entrypoints: ["core", "runtime", "contract"].map((name) => resolve(SOURCE, `${name}/index.ts`)),
+    entrypoints: ["core", "engine", "contract"].map((name) => resolve(SOURCE, `${name}/index.ts`)),
     target: "browser",
   });
 
@@ -112,16 +126,14 @@ test("layers import downward, and only through the target layer's index", () => 
       if (!specifier.startsWith(".")) {
         if (
           layer === "core" ||
-          layer === "runtime" ||
+          layer === "engine" ||
           (layer === "contract" && specifier !== "zod")
         ) {
           violations.push(`${name} may only import relative specifiers (${specifier}).`);
         }
 
-        if (layer === "sdk" && !(name === "sdk/current.ts" && specifier === "node:async_hooks")) {
-          violations.push(
-            `${name} may only import core, runtime, or node:async_hooks (${specifier}).`,
-          );
+        if (layer === "sdk") {
+          violations.push(`${name} may only import core (${specifier}).`);
         }
 
         continue;
@@ -132,7 +144,10 @@ test("layers import downward, and only through the target layer's index", () => 
       if (target === layer) {
         if (
           isBarrel(specifier) &&
-          !(name === "sdk/graph-host.ts" && specifier === "./graph/index.js")
+          !(
+            (name === "sdk/graph-host.ts" || name === "sdk/index.ts") &&
+            specifier === "./graph/index.js"
+          )
         ) {
           violations.push(`${name} imports its own barrel (${specifier}).`);
         }
@@ -143,7 +158,10 @@ test("layers import downward, and only through the target layer's index", () => 
       if (!ALLOWED_IMPORTS[layer].includes(target)) {
         violations.push(`${name} (${layer}) may not import ${target} (${specifier}).`);
       } else if (
-        target === "sdk" ? !/\/(?:host|graph-host)\.js$/.test(specifier) : !isBarrel(specifier)
+        target === "sdk"
+          ? !/\/(?:host|graph-host)\.js$/.test(specifier)
+          : !isBarrel(specifier) &&
+            !(layer === "executor" && specifier === "../local/execution-host.js")
       ) {
         violations.push(
           `${name} must import ${target} through ${target === "sdk" ? "sdk/host.js" : `${target}/index.js`} (${specifier}).`,

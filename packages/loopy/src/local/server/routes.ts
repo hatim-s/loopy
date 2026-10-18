@@ -5,11 +5,12 @@ import {
   type ErrorCode,
   routes,
 } from "../../contract/index.js";
+import type { SqliteRunStore } from "../../store/index.js";
 import { type LoopyService, ServiceError } from "../service.js";
-import type { SqliteRunStore } from "../store.js";
 import { eventStream } from "./events.js";
 
 const STATUS: Record<ErrorCode, number> = {
+  not_yet: 501,
   not_found: 404,
   unknown_hook: 404,
   not_claimable: 409,

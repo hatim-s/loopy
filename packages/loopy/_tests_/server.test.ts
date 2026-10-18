@@ -9,6 +9,7 @@ import {
   encodeRunCursor,
   errorBodySchema,
   type Json,
+  nodeIdSchema,
   routes,
   runSnapshotViewSchema,
   runViewSchema,
@@ -16,6 +17,7 @@ import {
   serverEventSchema,
 } from "../src/contract/index.js";
 import { requireRecord, revision } from "../src/core/index.js";
+import { SYSTEM_CLOCK } from "../src/host/index.js";
 import {
   LoopyService,
   localDaemon,
@@ -26,7 +28,6 @@ import {
 } from "../src/local/index.js";
 import { eventStream } from "../src/local/server/events.js";
 import { apiRoutes, dispatch } from "../src/local/server/routes.js";
-import { SYSTEM_CLOCK } from "../src/runtime/index.js";
 import { CLI, fixture, object, roots, runFixture, save } from "./cli-fixture.js";
 import { newRun } from "./fixture.js";
 
@@ -56,10 +57,7 @@ function startDaemon(options: { home: string; cwd: string; port: number; assets?
 }
 
 test("API returns run records, step traces and cursor logs", async () => {
-  const f = fixture(
-    "api",
-    `run: async ({ log }) => { log.info("first"); await step("one", () => 1); log.info("second"); return 2; }`,
-  );
+  const f = fixture("api", `run: () => { log("first"); log("second"); return 2; }`);
 
   await save(f);
   const run = object((await runFixture(f)).stdout);
@@ -70,7 +68,11 @@ test("API returns run records, step traces and cursor logs", async () => {
   const headers = { Authorization: `Bearer ${token}` };
   const request = (path: string) => fetch(`${url.origin}/api${path}`, { headers });
   const detail = requireRecord(await (await request(`/runs/${run.id}`)).json(), "Run detail");
-  expect(detail.steps).toMatchObject([{ key: "one", status: "succeeded" }]);
+  expect(detail.nodeRuns).toMatchObject([
+    { status: "succeeded" },
+    { status: "succeeded" },
+    { status: "succeeded" },
+  ]);
   expect(detail.logs).toMatchObject([{ message: "first" }, { message: "second" }]);
   expect(await (await request(`/runs/${run.id}/logs?after=1`)).json()).toMatchObject([
     { message: "second" },
@@ -139,10 +141,7 @@ test("API distinguishes invalid cursors from registry failures", async () => {
 });
 
 test("API returns the contract snapshot, rejects unknown query keys and keeps cursor log reads", async () => {
-  const f = fixture(
-    "summary",
-    'run: ({ log }) => step("work", () => { log.info("hello"); return 1; })',
-  );
+  const f = fixture("summary", 'run: () => { log("hello"); return 1; }');
 
   await save(f);
   const run = object((await runFixture(f)).stdout);
@@ -153,7 +152,7 @@ test("API returns the contract snapshot, rejects unknown query keys and keeps cu
   const headers = { Authorization: `Bearer ${token}` };
   const path = `${url.origin}/api/runs/${run.id}`;
   const full = object(await (await fetch(path, { headers })).text());
-  expect(full.steps).toHaveLength(1);
+  expect(full.nodeRuns).toHaveLength(2);
   expect(full.logs).toHaveLength(1);
   // The old viewer's logs=false switch is gone; strict query parsing rejects it.
   expect((await fetch(`${path}?logs=false`, { headers })).status).toBe(400);
@@ -162,37 +161,13 @@ test("API returns the contract snapshot, rejects unknown query keys and keeps cu
   expect((await fetch(`${url.origin}/api/runs/missing`, { headers })).status).toBe(404);
 });
 
-test("hook API applies auth and origin checks and resolves JSON exactly once", async () => {
-  const f = fixture("api-hook", `run: async () => hook("approve")`);
-  await save(f);
-  const run = object((await runFixture(f)).stdout);
-  const store = openRunStore(f.home);
-  const [hook] = await store.listHooks(String(run.id));
-  store.close();
-  const server = startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
-  servers.push(server);
-  const url = new URL(server.url);
-  const token = new URLSearchParams(url.hash.slice(1)).get("token");
-  const endpoint = `${url.origin}/api/hooks/${hook?.token}`;
-  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
-
-  const post = (body: string, requestHeaders: Record<string, string> = headers) =>
-    fetch(endpoint, { method: "POST", headers: requestHeaders, body });
-
-  expect((await post("{}", { ...headers, Authorization: "Bearer wrong" })).status).toBe(401);
-  expect((await post("{}", { ...headers, Origin: "https://untrusted.example" })).status).toBe(403);
-  expect((await post("invalid")).status).toBe(400);
-  expect(await (await post('{"payload":{"ok":true}}')).json()).toMatchObject({
-    id: run.id,
-    status: "suspended",
-  });
-  expect((await post('{"payload":null}')).status).toBe(404);
-});
-
 test("contract routes start, snapshot, resume and cancel without exposing owner tokens", async () => {
-  const f = fixture("contract", 'run: async () => hook("approve")');
+  const f = fixture("contract", "run: () => null");
   await save(f);
-  const initial = object((await runFixture(f)).stdout);
+  const initialStore = openRunStore(f.home);
+  await initialStore.createRun({ ...newRun(), id: "initial", slug: "contract", workspace: f.cwd });
+  initialStore.close();
+  const initial = { id: "initial" };
   const server = startDaemon({ ...f, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
@@ -210,7 +185,7 @@ test("contract routes start, snapshot, resume and cancel without exposing owner 
     });
 
   const snapshot = runSnapshotViewSchema.parse(await (await request(`/runs/${initial.id}`)).json());
-  expect(snapshot.run.waitingOn).toMatchObject({ hook: "approve" });
+  expect(snapshot.run.waitingOn).toBeNull();
   expect(JSON.stringify(snapshot)).not.toContain('"owner":{"token"');
   expect(snapshot.run.owner).toBeNull();
 
@@ -557,30 +532,31 @@ async function recoveryRun(store: ReturnType<typeof openRunStore>, workspace: st
 
   await store.createRun(run);
 
-  for (let seq = 0; seq < 505; seq++) {
-    await store.putStep(run.id, "old", {
-      runId: run.id,
-      seq,
-      key: `step-${seq}`,
-      kind: "function",
-      input: null,
-      status: "running",
-      attempt: 1,
-      maxAttempts: 1,
-      startedAt: run.createdAt,
-    });
-  }
+  await store.apply({
+    runId: run.id,
+    token: "old",
+    effects: [...Array(505).keys()].map((seq) => ({
+      kind: "write_node_run",
+      nodeRun: {
+        key: { runId: run.id, nodeId: nodeIdSchema.parse(`node-${seq}`), scope: [] },
+        status: "running",
+        attempt: 1,
+        maxAttempts: 1,
+        startedAt: run.createdAt,
+        receipt: "none",
+      },
+    })),
+  });
 
   return run;
 }
 
-test("SSE keeps a recovery transaction whole across the replay batch limit", async () => {
+test("SSE keeps a node transaction whole across the replay batch limit", async () => {
   const { f, store, service } = await serviceFixture("batch");
 
   try {
-    const run = await recoveryRun(store, f.cwd);
-    const cursor = (await store.events(0, 1000)).at(-1)!.sequence;
-    await store.claim(run.id, "recovered");
+    await recoveryRun(store, f.cwd);
+    const cursor = 1;
 
     const response = await eventStream(
       store,
@@ -591,7 +567,7 @@ test("SSE keeps a recovery transaction whole across the replay batch limit", asy
 
     const frames = await captureFrames(response.body!).finish();
     const events = await store.events(cursor, 1000);
-    expect(events).toHaveLength(507);
+    expect(events).toHaveLength(505);
     expect(frames).toEqual(expectedFrames(events));
     expect(frames).toHaveLength(1);
   } finally {

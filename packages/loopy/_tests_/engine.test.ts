@@ -1,803 +1,293 @@
 import { expect, test } from "bun:test";
-import type { Json, RunOutcome, StepRecord } from "../src/core/index.js";
-import {
-  CommandExitError,
-  MemoryRunStore,
-  map,
-  parallel,
-  race,
-  StepFailedError,
-  type WorkflowContext,
-} from "../src/runtime/index.js";
-import { delay, fixture } from "./fixture.js";
-
-test("engine succeeds and releases ownership", async () => {
-  const f = await fixture();
-  expect(
-    await f.execute(async (ctx) => ctx.command("echo", { program: "echo", args: ["ok"] })),
-  ).toEqual({ status: "succeeded", output: f.executor.result });
-  expect(await f.store.getRun("run")).toMatchObject({
-    status: "succeeded",
-    output: f.executor.result,
-  });
-  expect((await f.store.getRun("run"))?.owner).toBeUndefined();
-});
-
-test("workflow errors fail the run", async () => {
-  const f = await fixture();
-  expect(
-    await f.execute(async () => {
-      throw new Error("Workflow broke. Fix it.");
-    }),
-  ).toEqual({ status: "failed", error: "Workflow broke. Fix it." });
-});
-
-test("replay memoizes completed work without re-executing it", async () => {
-  const f = await fixture();
-  let calls = 0;
-
-  const workflow = async (ctx: WorkflowContext) => {
-    const value = await ctx.step("value", () => {
-      calls++;
-
-      return { answer: 42 };
-    });
-
-    await ctx.sleep("30s");
-
-    return value;
-  };
-
-  await f.execute(workflow);
-  await f.execute(workflow);
-  f.advance(30_000);
-  expect(await f.execute(workflow)).toEqual({ status: "succeeded", output: { answer: 42 } });
-  expect(calls).toBe(1);
-});
-
-test("replay detects a changed step key", async () => {
-  const f = await fixture();
-  await f.execute(async (ctx) => {
-    await ctx.step("original", () => 1);
-    await ctx.sleep("1h");
-
-    return null;
-  });
-  expect(await f.execute(async (ctx) => ctx.step("changed", () => 2))).toMatchObject({
-    status: "failed",
-    error: expect.stringContaining("Step 1 expected key 'original' but received 'changed'."),
-  });
-});
-
-test("user code cannot catch nondeterminism and succeed", async () => {
-  const f = await fixture();
-  await f.execute(async (ctx) => {
-    await ctx.step("original", () => 1);
-    await ctx.sleep("1h");
-
-    return null;
-  });
-
-  const result = await f.execute(async (ctx) => {
-    try {
-      await ctx.step("changed", () => 2);
-    } catch {
-      return "caught";
-    }
-
-    return "done";
-  });
-
-  expect(result).toMatchObject({
-    status: "failed",
-    error: expect.stringContaining("expected key 'original'"),
-  });
-  expect((await f.store.getRun("run"))?.status).toBe("failed");
-});
-
-test("retry suspends with nextRetryAt and resumes when due", async () => {
-  const f = await fixture();
-  f.executor.failure = new Error("Spawn failed. Check the executable.");
-
-  const workflow = async (ctx: WorkflowContext) =>
-    ctx.command("echo", { program: "echo", args: [] });
-
-  expect(await f.execute(workflow)).toEqual({
-    status: "suspended",
-    wakeAt: "2026-10-16T00:00:01.000Z",
-  });
-  expect((await f.store.getSteps("run"))[0]).toMatchObject({
-    status: "retrying",
-    attempt: 1,
-    nextRetryAt: "2026-10-16T00:00:01.000Z",
-  });
-  await f.execute(workflow);
-  expect(f.executor.calls).toHaveLength(1);
-  f.advance(1000);
-  delete f.executor.failure;
-  expect((await f.execute(workflow)).status).toBe("succeeded");
-  expect(f.executor.calls).toHaveLength(2);
-});
-
-test("default retry exhausts three attempts with exponential backoff", async () => {
-  const f = await fixture();
-
-  const workflow = async (ctx: WorkflowContext) =>
-    ctx.step("broken", () => {
-      throw new Error("Broken. Fix it.");
-    });
-
-  expect(await f.execute(workflow)).toEqual({
-    status: "suspended",
-    wakeAt: "2026-10-16T00:00:01.000Z",
-  });
-  f.advance(1000);
-  expect(await f.execute(workflow)).toEqual({
-    status: "suspended",
-    wakeAt: "2026-10-16T00:00:03.000Z",
-  });
-  f.advance(2000);
-  expect((await f.execute(workflow)).status).toBe("failed");
-  expect((await f.store.getSteps("run"))[0]).toMatchObject({
-    attempt: 3,
-    maxAttempts: 3,
-    status: "failed",
-  });
-});
-
-test("nonzero exit fails without retry and retains stderr", async () => {
-  const f = await fixture();
-  f.executor.result = {
-    stdout: "partial",
-    stderr: "permission denied",
-    exitCode: 1,
-    durationMs: 10,
-  };
-  expect(
-    await f.execute(async (ctx) => ctx.command("exit", { program: "false", args: [] })),
-  ).toMatchObject({ status: "failed", error: expect.stringContaining("permission denied") });
-  expect((await f.store.getSteps("run"))[0]).toMatchObject({ status: "failed", attempt: 1 });
-  expect(new CommandExitError(f.executor.result).output).toEqual(f.executor.result);
-});
-
-test("retryOn exit retries the command and succeeds", async () => {
-  const f = await fixture();
-  f.executor.result.exitCode = 1;
-
-  const workflow = async (ctx: WorkflowContext) =>
-    ctx.command("exit", { program: "false", args: [] }, { retry: { retryOn: "exit" } });
-
-  expect((await f.execute(workflow)).status).toBe("suspended");
-  f.advance(1000);
-  f.executor.result.exitCode = 0;
-  expect((await f.execute(workflow)).status).toBe("succeeded");
-  expect(f.executor.calls).toHaveLength(2);
-});
-
-test("sleep suspends and resumes without an in-process timer", async () => {
-  const f = await fixture();
-
-  const workflow = async (ctx: WorkflowContext) => {
-    await ctx.sleep("1h");
-
-    return "awake";
-  };
-
-  expect(await f.execute(workflow)).toEqual({
-    status: "suspended",
-    wakeAt: "2026-10-16T01:00:00.000Z",
-  });
-  expect(f.timers.size).toBe(0);
-  f.advance(3_600_000);
-  expect(await f.execute(workflow)).toEqual({ status: "succeeded", output: "awake" });
-  expect((await f.store.getSteps("run"))[0]?.attempt).toBe(1);
-});
-
-test("parallel replays two steps per branch in original finish order", async () => {
-  const f = await fixture();
-  const calls: string[] = [];
-
-  const workflow = async (ctx: WorkflowContext) => {
-    const values = await parallel(
-      ["A", "B"].map((branch) => async () => {
-        await ctx.step(`${branch}1`, async () => {
-          calls.push(`${branch}1`);
-          await delay(branch === "A" ? 20 : 1);
-
-          return branch;
-        });
-
-        return ctx.step(`${branch}2`, () => {
-          calls.push(`${branch}2`);
-
-          return branch;
-        });
-      }),
-    );
-
-    await ctx.sleep("1s");
-
-    return values;
-  };
-
-  await f.execute(workflow);
-  expect((await f.store.getSteps("run")).map((step) => step.key)).toEqual([
-    "A1",
-    "B1",
-    "B2",
-    "A2",
-    "sleep",
-  ]);
-  f.advance(1000);
-  expect(await f.execute(workflow)).toEqual({ status: "succeeded", output: ["A", "B"] });
-  expect(calls).toEqual(["A1", "B1", "B2", "A2"]);
-});
-
-test("map replays three multi-step callbacks with varied delays", async () => {
-  const f = await fixture();
-  const calls: string[] = [];
-
-  const workflow = async (ctx: WorkflowContext) => {
-    const values = await map(
-      [20, 1, 8],
-      async (wait, index) => {
-        await ctx.step(`${index}:first`, async () => {
-          calls.push(`${index}:first`);
-          await delay(wait);
-
-          return index;
-        });
-
-        return ctx.step(`${index}:second`, () => {
-          calls.push(`${index}:second`);
-
-          return index * 2;
-        });
-      },
-      { concurrency: 3 },
-    );
-
-    await ctx.sleep("1s");
-
-    return values;
-  };
-
-  await f.execute(workflow);
-  const before = [...calls];
-  f.advance(1000);
-  expect(await f.execute(workflow)).toEqual({ status: "succeeded", output: [0, 2, 4] });
-  expect(calls).toEqual(before);
-  expect(calls).toHaveLength(6);
-});
-
-test("crash recovery re-executes a stored running step with attempt incremented", async () => {
-  const f = await fixture();
-  await f.store.claim("run", "crashed");
-  await f.store.putStep("run", "crashed", {
-    runId: "run",
-    seq: 1,
-    key: "recover",
-    kind: "function",
-    status: "running",
-    input: null,
-    attempt: 1,
-    maxAttempts: 3,
-    startedAt: f.run.createdAt,
-  });
-  await f.store.suspend("run", "crashed");
-  await f.store.release("run", "crashed");
-  let calls = 0;
-  expect(
-    await f.execute(async (ctx) =>
-      ctx.step("recover", () => {
-        calls++;
-
-        return 42;
-      }),
-    ),
-  ).toEqual({ status: "succeeded", output: 42 });
-  expect(calls).toBe(1);
-  expect((await f.store.getSteps("run"))[0]).toMatchObject({ status: "succeeded", attempt: 2 });
-});
-
-test("a caught step failure replays as the same failure", async () => {
-  const f = await fixture();
-  const errors: string[] = [];
-  let calls = 0;
-
-  const workflow = async (ctx: WorkflowContext) => {
-    try {
-      await ctx.step(
-        "broken",
-        () => {
-          calls++;
-          throw new Error("Broken. Fix it.");
-        },
-        { retry: { attempts: 1 } },
-      );
-    } catch (cause) {
-      expect(cause).toBeInstanceOf(StepFailedError);
-
-      if (cause instanceof Error) {
-        errors.push(cause.message);
-      }
-    }
-
-    await ctx.sleep("1s");
-
-    return "caught";
-  };
-
-  await f.execute(workflow);
-  f.advance(1000);
-  expect(await f.execute(workflow)).toEqual({ status: "succeeded", output: "caught" });
-  expect(calls).toBe(1);
-  expect(errors).toHaveLength(2);
-  expect(errors[0]).toBe(errors[1]);
-});
-
-test("timeout names the step and limit and cancels its timer", async () => {
-  const f = await fixture();
-  expect(
-    await f.execute(async (ctx) =>
-      ctx.step(
-        "slow",
-        () => {
-          f.advance(1000);
-
-          return new Promise<Json>(() => {});
-        },
-        { timeout: "1s", retry: { attempts: 1 } },
-      ),
-    ),
-  ).toMatchObject({
-    status: "failed",
-    error: expect.stringContaining("Step 'slow' exceeded its 1000ms timeout."),
-  });
-  expect(f.timers.size).toBe(0);
-});
-
-test("logs are not duplicated on replay", async () => {
-  const f = await fixture();
-
-  const workflow = async (ctx: WorkflowContext) => {
-    ctx.log.info("started");
-    ctx.log.warn("also started");
-    await ctx.sleep("1s");
-    ctx.log.error("resumed");
-
-    return null;
-  };
-
-  await f.execute(workflow);
-  await f.execute(workflow);
-  f.advance(1000);
-  await f.execute(workflow);
-  expect((await f.store.getLogs("run")).map((log) => log.message)).toEqual([
-    "started",
-    "also started",
-    "resumed",
-  ]);
-});
-
-test("logs inside a skipped step do not suppress workflow logs on replay", async () => {
-  const f = await fixture();
-
-  const workflow = async (ctx: WorkflowContext) => {
-    await ctx.step("value", ({ log }) => {
-      log.info("inside");
-
-      return 1;
-    });
-    ctx.log.info("after");
-    await ctx.sleep("1s");
-    ctx.log.info("resumed");
-
-    return null;
-  };
-
-  await f.execute(workflow);
-  await f.execute(workflow);
-  f.advance(1000);
-  await f.execute(workflow);
-  expect((await f.store.getLogs("run")).map((log) => [log.seq, log.message])).toEqual([
-    [1, "inside"],
-    [2, "after"],
-    [3, "resumed"],
-  ]);
-});
-
-test("non-JSON output fails without retry under the default policy", async () => {
-  const f = await fixture();
-  let calls = 0;
-  expect(
-    await f.execute(async (ctx) =>
-      ctx.step("invalid", () => {
-        calls++;
-
-        return Number.NaN;
-      }),
-    ),
-  ).toMatchObject({ status: "failed", error: expect.stringContaining("must be JSON data") });
-  expect((await f.store.getSteps("run"))[0]).toMatchObject({
-    status: "failed",
-    attempt: 1,
-    maxAttempts: 3,
-  });
-  expect(calls).toBe(1);
-});
-
-test("clock random and UUID are memoized across replay", async () => {
-  const f = await fixture();
-  const values: Json[] = [];
-
-  const workflow = async (ctx: WorkflowContext) => {
-    const value = { now: await ctx.now(), random: await ctx.random(), uuid: await ctx.uuid() };
-    values.push(value);
-    await ctx.sleep("1s");
-
-    return value;
-  };
-
-  await f.execute(workflow);
-  f.advance(1000);
-  expect(await f.execute(workflow)).toEqual({ status: "succeeded", output: values[0] ?? null });
-  expect(values[1]).toEqual(values[0]);
-});
-
-test("race returns the first branch result", async () => {
-  expect(await race([async () => 1, async () => 2])).toBe(1);
-});
-
-class WriteFailureStore extends MemoryRunStore {
-  override async putStep(runId: string, token: string, step: StepRecord): Promise<void> {
-    if (step.status === "succeeded") {
-      throw new Error("Step write failed. Restore storage.");
-    }
-
-    return super.putStep(runId, token, step);
+import { graphSchema } from "../src/contract/index.js";
+import { type ExecutionKey, type ExecutionResult, type Json } from "../src/core/index.js";
+import { type EngineEvent, initialState, step } from "../src/engine/index.js";
+import { loopy, sh } from "../src/sdk/graph/index.js";
+import { approveDemoGraph } from "./fixtures/graphs.js";
+
+const at = "2026-10-18T00:00:00.000Z";
+
+function sequence() {
+  const graph = structuredClone(approveDemoGraph);
+  const draft = graph.nodes[0];
+  const log = graph.nodes[1];
+
+  if (draft?.kind !== "code" || log?.kind !== "log") {
+    throw new Error("Approve fixture changed.");
   }
+
+  draft.module.bundleHash = "a".repeat(64);
+
+  return graphSchema.parse({
+    ...graph,
+    nodes: [
+      draft,
+      log,
+      {
+        id: "2:join",
+        label: null,
+        scope: null,
+        kind: "join",
+        result: { kind: "value", value: { ref: draft.id, path: [] } },
+      },
+    ],
+    edges: [
+      { from: draft.id, to: log.id, kind: "next" },
+      { from: log.id, to: "2:join", kind: "next" },
+    ],
+    outputs: { ref: "2:join", path: [] },
+  });
 }
 
-test("a failed success write does not become a retried step failure", async () => {
-  const f = await fixture(new WriteFailureStore());
-  expect(
-    await f.execute(async (ctx) => {
-      try {
-        await ctx.step("value", () => 42);
-      } catch {
-        return "caught";
-      }
+function start() {
+  const graph = sequence();
 
-      return null;
-    }),
-  ).toEqual({ status: "failed", error: "Step write failed. Restore storage." });
-  expect((await f.store.getSteps("run"))[0]).toMatchObject({ status: "running", attempt: 1 });
-});
+  const transition = step(graph, initialState("run", { subject: "Engine" }), {
+    kind: "run_started",
+    at,
+  });
 
-class LogFailureStore extends MemoryRunStore {
-  override async appendLog(): Promise<void> {
-    throw new Error("Log write failed. Restore storage.");
+  const dispatch = transition.effects.find((effect) => effect.kind === "dispatch");
+
+  if (dispatch?.kind !== "dispatch") {
+    throw new Error("Expected code dispatch.");
   }
+
+  return { graph, ...transition, dispatch };
 }
 
-test("log flush failure fails the outcome and releases ownership", async () => {
-  const f = await fixture(new LogFailureStore());
-  expect(
-    await f.execute(async (ctx) => {
-      ctx.log.info("hello");
-
-      return null;
-    }),
-  ).toEqual({ status: "failed", error: "Log write failed. Restore storage." });
-  expect(await f.store.getRun("run")).toMatchObject({ status: "failed" });
-  expect((await f.store.getRun("run"))?.owner).toBeUndefined();
-});
-
-class SuspendFailureStore extends MemoryRunStore {
-  override async suspend(): Promise<void> {
-    throw new Error("Suspend failed. Restore storage.");
-  }
+function completed(
+  executionKey: ExecutionKey,
+  attempt: number,
+  output: Json,
+): Extract<EngineEvent, { kind: "execution_completed" }> {
+  return {
+    kind: "execution_completed" as const,
+    executionKey,
+    attempt,
+    at,
+    result: { kind: "succeeded" as const, output, logs: [] } satisfies ExecutionResult,
+  };
 }
 
-test("suspend failure persists a failed outcome and releases ownership", async () => {
-  const f = await fixture(new SuspendFailureStore());
+test("approve sequence prefix dispatches resolved code, records log and final join", () => {
+  const f = start();
+  expect(f.dispatch.spec).toMatchObject({ kind: "code", input: { subject: "Engine" } });
+  const result = step(f.graph, f.state, completed(f.dispatch.executionKey, 1, { words: 42 }));
+  expect(result.state.phase).toEqual({
+    kind: "finished",
+    outcome: { status: "succeeded", output: { words: 42 } },
+  });
   expect(
-    await f.execute(async (ctx) => {
-      await ctx.sleep("1s");
-
-      return null;
-    }),
-  ).toEqual({ status: "failed", error: "Suspend failed. Restore storage." });
-  expect((await f.store.getRun("run"))?.status).toBe("failed");
-  expect((await f.store.getRun("run"))?.owner).toBeUndefined();
-});
-
-class FinishFailureStore extends MemoryRunStore {
-  override async finishRun(runId: string, token: string, outcome: RunOutcome): Promise<void> {
-    if (outcome.status === "succeeded") {
-      throw new Error("Finish failed. Restore storage.");
-    }
-
-    await super.finishRun(runId, token, outcome);
-  }
-}
-
-test("finish failure persists a failed outcome and releases ownership", async () => {
-  const f = await fixture(new FinishFailureStore());
-  expect(await f.execute(async () => 42)).toEqual({
-    status: "failed",
-    error: "Finish failed. Restore storage.",
-  });
-  expect((await f.store.getRun("run"))?.status).toBe("failed");
-  expect((await f.store.getRun("run"))?.owner).toBeUndefined();
-});
-
-test("retry delay is capped at sixty seconds", async () => {
-  const f = await fixture();
-
-  const workflow = async (ctx: WorkflowContext) =>
-    ctx.step(
-      "broken",
-      () => {
-        throw new Error("Broken. Fix it.");
-      },
-      { retry: { attempts: 10 } },
-    );
-
-  let elapsed = 0;
-
-  for (const delayMs of [1000, 2000, 4000, 8000, 16_000, 32_000, 60_000, 60_000]) {
-    elapsed += delayMs;
-    expect(await f.execute(workflow)).toEqual({
-      status: "suspended",
-      wakeAt: new Date(Date.parse(f.run.createdAt) + elapsed).toISOString(),
-    });
-    f.advance(delayMs);
-  }
-});
-
-test("sleep parses durations in days", async () => {
-  const f = await fixture();
-  expect(
-    await f.execute(async (ctx) => {
-      await ctx.sleep("2d");
-
-      return null;
-    }),
-  ).toEqual({ status: "suspended", wakeAt: "2026-10-18T00:00:00.000Z" });
-});
-
-test("invalid durations name the rejected input", async () => {
-  const f = await fixture();
-  expect(
-    await f.execute(async (ctx) => {
-      await ctx.sleep(-1);
-
-      return null;
-    }),
-  ).toMatchObject({
-    status: "failed",
-    error: expect.stringContaining("Duration '-1' is invalid."),
-  });
-});
-
-test("command exit policy accepts only declared success codes before parsing", async () => {
-  for (const [exitCode, okExitCodes, expected] of [
-    [1, [0, 1], "succeeded"],
-    [1, undefined, "failed"],
-    [2, [0, 1], "failed"],
-  ] as const) {
-    const f = await fixture();
-    f.executor.result = { ...f.executor.result, exitCode };
-
-    const outcome = await f.execute((ctx) =>
-      ctx.command("lookup", { program: "which", args: ["missing"] }, { okExitCodes }, (output) =>
-        output.exitCode === 1 ? null : output.stdout,
-      ),
-    );
-
-    expect(outcome.status).toBe(expected);
-
-    if (expected === "succeeded") {
-      expect((await f.store.getSteps("run"))[0]).toMatchObject({
-        status: "succeeded",
-        output: null,
-      });
-    }
-  }
-});
-
-test("command parsers can distinguish an absent ref from a retryable exit", async () => {
-  const f = await fixture();
-  f.executor.result = { ...f.executor.result, exitCode: 1, stderr: "network unavailable" };
-
-  const workflow = (ctx: WorkflowContext) =>
-    ctx.command(
-      "remote-ref",
-      { program: "gh", args: ["api", "ref"] },
-      { okExitCodes: [0, 1], retry: { attempts: 3, retryOn: "exit" } },
-      (result) => {
-        if (result.exitCode === 1) {
-          if (result.stderr === "not found") {
-            return null;
-          }
-
-          throw new Error("Ref lookup failed. Retry the read.");
-        }
-
-        return result.stdout;
-      },
-    );
-
-  expect((await f.execute(workflow)).status).toBe("suspended");
-  expect((await f.store.getSteps("run"))[0]).toMatchObject({
-    status: "retrying",
-    maxAttempts: 3,
-    attempt: 1,
-  });
-  f.advance(10_000);
-  f.executor.result = { ...f.executor.result, stderr: "not found" };
-  expect(await f.execute(workflow)).toEqual({ status: "succeeded", output: null });
-  expect(f.executor.calls).toHaveLength(2);
-});
-
-test("rate limits suspend the third step without an attempt and skip memoized steps", async () => {
-  const f = await fixture();
-  const options = { rateLimits: { codex: { count: 2, windowMs: 60_000 } } };
-
-  const workflow = async (ctx: WorkflowContext) => {
-    await ctx.step("one", () => 1, { rateLimit: "codex" });
-    await ctx.step("two", () => 2, { rateLimit: "codex" });
-
-    return ctx.command("three", { program: "echo", args: [] }, { rateLimit: "codex" });
-  };
-
-  const suspended = { status: "suspended", wakeAt: "2026-10-16T00:01:00.000Z" } as const;
-  expect(await f.execute(workflow, undefined, options)).toEqual(suspended);
-  expect((await f.store.getSteps("run"))[2]).toMatchObject({
-    status: "retrying",
-    attempt: 0,
-    nextRetryAt: suspended.wakeAt,
-    error: `Rate limit 'codex' reached. Retrying at ${suspended.wakeAt}.`,
-  });
-  expect(await f.execute(workflow, undefined, options)).toEqual(suspended);
-  expect((await f.store.getSteps("run"))[2]?.attempt).toBe(0);
-  expect(f.executor.calls).toHaveLength(0);
-  f.advance(60_000);
-  expect(await f.execute(workflow, undefined, options)).toEqual({
-    status: "succeeded",
-    output: f.executor.result,
-  });
-  expect((await f.store.getSteps("run")).map((step) => step.attempt)).toEqual([1, 1, 1]);
-  expect(f.executor.calls).toHaveLength(1);
-});
-
-test("an unknown rate limit fails the step without retrying", async () => {
-  const f = await fixture();
-  expect(
-    await f.execute(async (ctx) => ctx.step("limited", () => 1, { rateLimit: "codex" })),
-  ).toMatchObject({
-    status: "failed",
-    error:
-      "Step 'limited' failed: Rate limit 'codex' is not configured. Add it to rateLimits in config.json.",
-  });
-  expect((await f.store.getSteps("run"))[0]).toMatchObject({ status: "failed" });
-});
-
-test("hook suspends indefinitely, keeps its token and replays the resolved payload", async () => {
-  const f = await fixture();
-
-  const workflow = async (ctx: WorkflowContext) => {
-    const approval = await ctx.hook("approve");
-    await ctx.sleep("1s");
-
-    return approval;
-  };
-
-  expect(await f.execute(workflow)).toEqual({ status: "suspended", wakeAt: undefined });
-  const hooks = await f.store.listHooks("run");
-  const [hook] = hooks;
-  expect(hook?.token).toMatch(/^[0-9a-f-]{36}$/);
-  expect((await f.store.getSteps("run"))[0]).toMatchObject({
-    kind: "hook",
-    status: "waiting",
-    attempt: 1,
-    input: { name: "approve", token: hook?.token },
-  });
-  expect(await f.execute(workflow)).toEqual({ status: "suspended", wakeAt: undefined });
-  expect(await f.store.listHooks("run")).toEqual(hooks);
-  expect(await f.store.resolveHook(hook?.token ?? "", { ok: true })).toBe(true);
-  expect((await f.execute(workflow)).status).toBe("suspended");
-  f.advance(1000);
-  expect(await f.execute(workflow)).toEqual({ status: "succeeded", output: { ok: true } });
-  expect((await f.store.getSteps("run"))[0]?.attempt).toBe(1);
-});
-
-test("hook timeout fails once with no retry or in-process timer", async () => {
-  const f = await fixture();
-  const workflow = async (ctx: WorkflowContext) => ctx.hook("approve", { timeout: "1m" });
-  const suspended = { status: "suspended", wakeAt: "2026-10-16T00:01:00.000Z" } as const;
-  expect(await f.execute(workflow)).toEqual(suspended);
-  f.advance(59_999);
-  expect(await f.execute(workflow)).toEqual(suspended);
-  f.advance(1);
-  expect(await f.execute(workflow)).toMatchObject({
-    status: "failed",
-    error: expect.stringContaining(
-      "Hook 'approve' timed out at 2026-10-16T00:01:00.000Z. Resolve the hook before its deadline in a new run.",
-    ),
-  });
-  expect((await f.store.getSteps("run"))[0]).toMatchObject({
-    status: "failed",
-    error:
-      "Hook 'approve' timed out at 2026-10-16T00:01:00.000Z. Resolve the hook before its deadline in a new run.",
-    attempt: 1,
-    maxAttempts: 1,
-  });
-  expect(f.timers.size).toBe(0);
-});
-
-test("hook signals arriving during another branch preserve completion order on replay", async () => {
-  const f = await fixture();
-
-  const workflow = async (ctx: WorkflowContext) => {
-    const values = await parallel([
-      async () => {
-        const approval = await ctx.hook("approve");
-
-        return ctx.step("approved", () => approval);
-      },
-      async () => {
-        await ctx.step("resolve", async () => {
-          const [hook] = await f.store.listHooks("run");
-          expect(await f.store.resolveHook(hook?.token ?? "", 42)).toBe(true);
-
-          return 7;
-        });
-
-        return ctx.step("next", () => 8);
-      },
-    ]);
-
-    await ctx.sleep("1s");
-
-    return values;
-  };
-
-  expect((await f.execute(workflow)).status).toBe("suspended");
-  const steps = await f.store.getSteps("run");
-  expect(steps.map((step) => step.key)).toEqual(["hook:approve", "resolve", "next"]);
-  expect(steps.flatMap((step) => (step.status === "succeeded" ? [step.finishOrder] : []))).toEqual([
-    1, 2,
+    result.state.nodeRuns.map((node) => [String(node.key.nodeId), node.key.scope, node.status]),
+  ).toEqual([
+    ["0:draft", [], "succeeded"],
+    ["1:log", [], "succeeded"],
+    ["2:join", [], "succeeded"],
   ]);
-  expect((await f.execute(workflow)).status).toBe("suspended");
-  f.advance(1000);
-  expect(await f.execute(workflow)).toEqual({ status: "succeeded", output: [42, 8] });
-});
-
-test("an external hook can release another running branch", async () => {
-  const f = await fixture();
-  let release = () => {};
-
-  const gate = new Promise<number>((resolve) => {
-    release = () => resolve(7);
-  });
-
-  const pending = f.execute(async (ctx) =>
-    parallel([
-      async () => {
-        const result = await ctx.hook("approve");
-        release();
-
-        return result;
-      },
-      async () => ctx.step("wait", () => gate),
-    ]),
+  expect(result.effects).toContainEqual(
+    expect.objectContaining({
+      kind: "write_log",
+      log: expect.objectContaining({ message: "Draft ready" }),
+    }),
   );
+  expect(f.state.nodeRuns[0]?.status).toBe("running");
+  expect(step(f.graph, f.state, completed(f.dispatch.executionKey, 1, { words: 42 }))).toEqual(
+    result,
+  );
+});
 
-  await delay(10);
-  const [hook] = await f.store.listHooks("run");
-  expect(await f.store.resolveHook(hook?.token ?? "", 42)).toBe(true);
-  expect(await pending).toEqual({ status: "succeeded", output: [42, 7] });
+test("retry backoff persists the deadline, does not dispatch early, increments the same key", () => {
+  const f = start();
+
+  const failed = step(f.graph, f.state, {
+    kind: "execution_failed",
+    executionKey: f.dispatch.executionKey,
+    attempt: 1,
+    error: { code: "execution", message: "Temporary failure." },
+    exitCode: null,
+    logs: [],
+    at,
+  });
+
+  expect(failed.state.nodeRuns[0]).toMatchObject({
+    status: "retrying",
+    attempt: 1,
+    nextRetryAt: "2026-10-18T00:00:01.000Z",
+  });
+  expect(
+    step(f.graph, failed.state, { kind: "retry_due", at }).effects.some(
+      (effect) => effect.kind === "dispatch",
+    ),
+  ).toBe(false);
+
+  const retried = step(f.graph, failed.state, {
+    kind: "retry_due",
+    at: "2026-10-18T00:00:01.000Z",
+  });
+
+  expect(retried.effects).toContainEqual(
+    expect.objectContaining({
+      kind: "dispatch",
+      executionKey: f.dispatch.executionKey,
+      attempt: 2,
+    }),
+  );
+  expect(step(f.graph, retried.state, completed(f.dispatch.executionKey, 1, { words: 1 }))).toEqual(
+    { state: retried.state, effects: [] },
+  );
+});
+
+const invalidOutputs: Json[] = [{ words: "invalid" }, { words: 2, text: "x".repeat(1024 * 1024) }];
+
+test.each(invalidOutputs)("invalid or oversized output fails without retries", (output) => {
+  const f = start();
+  const result = step(f.graph, f.state, completed(f.dispatch.executionKey, 1, output));
+  expect(result.state.phase).toMatchObject({ kind: "finished", outcome: { status: "failed" } });
+  expect(result.effects.some((effect) => effect.kind === "schedule_retry")).toBe(false);
+});
+
+test("resume from completed node runs skips code and reconstructs final output", () => {
+  const f = start();
+  const done = step(f.graph, f.state, completed(f.dispatch.executionKey, 1, { words: 3 }));
+  const state = initialState("run", { subject: "Engine" }, done.state.nodeRuns.slice(0, 1));
+  const resumed = step(f.graph, state, { kind: "run_started", at });
+  expect(resumed.effects.some((effect) => effect.kind === "dispatch")).toBe(false);
+  expect(resumed.state.phase).toMatchObject({
+    kind: "finished",
+    outcome: { output: { words: 3 } },
+  });
+});
+
+test("resume redispatches a running execution with its persisted attempt", () => {
+  const f = start();
+  expect(
+    step(f.graph, initialState("run", { subject: "Engine" }, f.state.nodeRuns), {
+      kind: "run_started",
+      at,
+    }).effects,
+  ).toContainEqual(f.dispatch);
+});
+
+test("a missing input reference fails its consuming node before dispatch", () => {
+  const result = step(sequence(), initialState("run", {}), { kind: "run_started", at });
+  expect(result.state.nodeRuns).toMatchObject([
+    {
+      status: "failed",
+      error: { code: "validation", message: expect.stringContaining("completed output") },
+    },
+  ]);
+  expect(result.effects.some((effect) => effect.kind === "dispatch")).toBe(false);
+});
+
+test("rate denial fences stale decisions and reserves the same attempt until the deadline", () => {
+  const f = start();
+
+  const event = {
+    kind: "rate_limited" as const,
+    executionKey: f.dispatch.executionKey,
+    attempt: 1,
+    retryAt: "2026-10-18T00:01:00.000Z",
+    at,
+  };
+
+  const limited = step(f.graph, f.state, event);
+  expect(limited.state.nodeRuns[0]).toMatchObject({
+    status: "rate_limited",
+    attempt: 1,
+    nextRetryAt: event.retryAt,
+  });
+  expect(limited.effects).toContainEqual({ kind: "schedule_retry", at: event.retryAt });
+  expect(step(f.graph, limited.state, { kind: "retry_due", at }).effects).toEqual([
+    { kind: "schedule_retry", at: event.retryAt },
+  ]);
+  const due = step(f.graph, limited.state, { kind: "retry_due", at: event.retryAt });
+  expect(due.effects).toContainEqual(f.dispatch);
+  expect(step(f.graph, due.state, { ...event, attempt: 2 }).effects).toEqual([]);
+});
+
+test("stale completions emit no logs and completion and log nodes use write_log", () => {
+  const f = start();
+  const event = completed(f.dispatch.executionKey, 1, { words: 42 });
+  event.result.logs.push({ message: "attempt", data: { count: 1 } });
+  const result = step(f.graph, f.state, event);
+  expect(result.effects.filter((effect) => effect.kind === "write_log")).toMatchObject([
+    { log: { message: "attempt", data: { count: 1 } }, attempt: 1 },
+    { log: { message: "Draft ready" }, attempt: 1 },
+  ]);
+  expect(step(f.graph, f.state, { ...event, attempt: 2 }).effects).toEqual([]);
+});
+
+for (const retryOnExit of [false, true]) {
+  test(`command exit retry policy honors retryOnExit=${retryOnExit}`, () => {
+    const graph = loopy("exit-policy", {
+      input: {},
+      run: () => sh(["false"], { retry: { attempts: 3, retryOnExit } }),
+    }).graph;
+
+    const started = step(graph, initialState("run", {}), { kind: "run_started", at });
+    const dispatch = started.effects.find((effect) => effect.kind === "dispatch");
+
+    if (dispatch?.kind !== "dispatch") {
+      throw new Error("Expected command dispatch");
+    }
+
+    const failed = step(graph, started.state, {
+      kind: "execution_failed",
+      executionKey: dispatch.executionKey,
+      attempt: 1,
+      at,
+      error: { code: "exit", message: "Command exited with code 2" },
+      exitCode: 2,
+      logs: [],
+    });
+
+    expect(failed.state.nodeRuns[0]?.status).toBe(retryOnExit ? "retrying" : "failed");
+    expect(failed.effects.some((effect) => effect.kind === "schedule_retry")).toBe(retryOnExit);
+  });
+}
+
+test("graph retry delay caps at sixty seconds across repeated failures", () => {
+  const f = start();
+  const node = f.graph.nodes[0];
+
+  if (node?.kind !== "code") {
+    throw new Error("Expected code fixture");
+  }
+
+  node.retry.attempts = 10;
+  let state = f.state;
+  let time = Date.parse(at);
+
+  for (let attempt = 1; attempt < 10; attempt++) {
+    const failed = step(f.graph, state, {
+      kind: "execution_failed",
+      executionKey: f.dispatch.executionKey,
+      attempt,
+      at: new Date(time).toISOString(),
+      error: { code: "execution", message: "retry" },
+      exitCode: null,
+      logs: [],
+    });
+
+    const retry = failed.effects.find((effect) => effect.kind === "schedule_retry");
+
+    if (retry?.kind !== "schedule_retry") {
+      throw new Error("Expected retry deadline");
+    }
+
+    const delay = Date.parse(retry.at) - time;
+    expect(delay).toBe(Math.min(1000 * 2 ** (attempt - 1), 60_000));
+
+    if (attempt >= 7) {
+      expect(delay).toBe(60_000);
+    }
+
+    time = Date.parse(retry.at);
+    const resumed = step(f.graph, failed.state, { kind: "retry_due", at: retry.at });
+    expect(resumed.effects).toContainEqual(
+      expect.objectContaining({ kind: "dispatch", attempt: attempt + 1 }),
+    );
+    state = resumed.state;
+  }
 });

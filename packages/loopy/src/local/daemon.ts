@@ -1,12 +1,15 @@
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { graphSchema } from "../contract/index.js";
 import type { RunRecord } from "../core/index.js";
-import { Daemon, SYSTEM_CLOCK } from "../runtime/index.js";
+import { LocalExecutor } from "../executor/index.js";
+import { Daemon, SYSTEM_CLOCK } from "../host/index.js";
+import type { SqliteRunStore } from "../store/index.js";
 import { readDaemonFile, removeDaemonFile, writeDaemonFile } from "./daemon-file.js";
 import { withLockDirectory } from "./fs.js";
 import { Registry } from "./registry.js";
 import { startServer } from "./server/start-server.js";
 import { LoopyService } from "./service.js";
-import type { SqliteRunStore } from "./store.js";
 
 type DaemonOptions = {
   home: string;
@@ -25,9 +28,24 @@ function runtimeDaemon(options: DaemonOptions) {
     store,
     concurrency,
     onError,
-    bundleHashFor: (schedule) => new Registry(home, schedule.workspace).get(schedule.slug).revision,
-    prepare: async () => {
-      throw new Error("Graph execution requires the v2 engine in PR 4a.");
+    revisionFor: (schedule) => new Registry(home, schedule.workspace).get(schedule.slug).revision,
+    prepare: async (run) => {
+      const registry = new Registry(home, run.workspace);
+
+      const graph = graphSchema.parse(
+        JSON.parse(await readFile(registry.graphPath(run.revision), "utf8")),
+      );
+
+      return {
+        graph,
+        executor: new LocalExecutor({
+          home,
+          workspace: run.workspace,
+          mode: graph.meta.mode,
+          secrets: graph.meta.secrets,
+          bundlePath: (hash) => registry.bundlePath(hash),
+        }),
+      };
     },
   });
 }

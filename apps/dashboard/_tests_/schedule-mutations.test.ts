@@ -13,7 +13,7 @@ const schedule: ScheduleView = {
   tz: "UTC",
   input: {},
   enabled: true,
-  revision: 2,
+  version: 2,
   nextFireAt: "2026-10-17T11:00:00.000Z",
   lastFireKey: null,
 };
@@ -62,12 +62,12 @@ function saved(client: QueryClient, view: ScheduleView) {
   ]);
 }
 
-test("a failed toggle preserves revision 4 delivered while its POST is pending", async () => {
+test("a failed toggle preserves version 4 delivered while its POST is pending", async () => {
   const client = new QueryClient();
   client.setQueryData(keys.schedules, [schedule]);
   const pending = pendingToggle(client);
   await pending.started;
-  const newer = { ...schedule, revision: 4, enabled: false };
+  const newer = { ...schedule, version: 4, enabled: false };
   saved(client, newer);
   pending.reply.reject(new Error("POST failed."));
   await expect(pending.request).rejects.toThrow("POST failed.");
@@ -80,14 +80,14 @@ test("a failed toggle restores only its row and preserves another row's stream u
   client.setQueryData(keys.schedules, [schedule, other]);
   const pending = pendingToggle(client);
   await pending.started;
-  const newer = { ...other, revision: 4 };
+  const newer = { ...other, version: 4 };
   saved(client, newer);
   pending.reply.reject(new Error("POST failed."));
   await expect(pending.request).rejects.toThrow("POST failed.");
   expect(client.getQueryData<ScheduleView[]>(keys.schedules)).toEqual([schedule, newer]);
 });
 
-test("a failed toggle preserves a same-revision fire delivered during its POST", async () => {
+test("a failed toggle preserves a same-version fire delivered during its POST", async () => {
   const client = new QueryClient();
   client.setQueryData(keys.schedules, [schedule]);
   const pending = pendingToggle(client);

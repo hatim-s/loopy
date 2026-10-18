@@ -1,5 +1,6 @@
 import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
+import type { SandboxOptions } from "./launcher.js";
 import { ENV_EXEC, envArgs, executable, packageDirectory, within } from "./paths.js";
 
 const SANDBOX_EXEC = "/usr/bin/sandbox-exec";
@@ -19,13 +20,15 @@ function sbpl(path: string): string {
  * Hides the user's home and denies network access. The workspace and scratch
  * directory are writable; the program and its package stay readable under home.
  */
-export async function macSandbox(
-  program: string,
-  workspace: string,
-  env: NodeJS.ProcessEnv,
-  scratch: string,
-  helper?: string,
-): Promise<[string, string[]]> {
+export async function macSandbox({
+  program,
+  workspace,
+  env,
+  scratch,
+  helper,
+  protectedHome,
+  mode,
+}: SandboxOptions): Promise<[string, string[]]> {
   if (!(await executable(SANDBOX_EXEC))) {
     throw new Error("Sandbox mode requires /usr/bin/sandbox-exec on macOS.");
   }
@@ -38,12 +41,14 @@ export async function macSandbox(
 
   const profile = [
     "(version 1)",
-    "(deny default)",
+    mode === "full" ? "(allow default)" : "(deny default)",
     "(allow process-exec)",
     "(allow process-fork)",
     "(allow sysctl-read)",
     "(allow file-read*)",
-    ...(within(workspace, home) ? [] : [`(deny file-read* (subpath ${sbpl(home)}))`]),
+    ...(mode === "sandbox" && !within(workspace, home)
+      ? [`(deny file-read* (subpath ${sbpl(home)}))`]
+      : []),
     `(allow file-read* (subpath ${sbpl(workspace)}))`,
     `(allow file-read* (literal ${sbpl(program)}))`,
     ...(helper ? [`(allow file-read* (literal ${sbpl(helper)}))`] : []),
@@ -53,7 +58,8 @@ export async function macSandbox(
     `(allow file-write* (subpath ${sbpl(workspace)}))`,
     '(allow file-write* (literal "/dev/null") (literal "/dev/tty"))',
     '(allow file-read* (literal "/dev/null") (literal "/dev/zero") (literal "/dev/tty"))',
-    "(deny network*)",
+    ...(protectedHome ? [`(deny file-read* file-write* (subpath ${sbpl(protectedHome)}))`] : []),
+    ...(mode === "full" ? [] : ["(deny network*)"]),
   ].join("\n");
 
   return [SANDBOX_EXEC, ["-p", profile, ENV_EXEC, "-i", "--", ...envArgs(env), helper ?? program]];

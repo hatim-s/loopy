@@ -397,14 +397,20 @@ test("every node run status round-trips without optional state fields", () => {
     key: { runId: "run", nodeId: contract.nodeIdSchema.parse("0:draft"), scope: [] },
     attempt: 1,
     maxAttempts: 3,
+    receipt: "none" as const,
     startedAt: "2026-10-18T00:00:00.000Z",
   };
 
   const states = [
     { status: "running" },
     { status: "succeeded", output: null, endedAt: base.startedAt },
-    { status: "failed", error: "failed", endedAt: base.startedAt },
-    { status: "retrying", error: "failed", nextRetryAt: base.startedAt, endedAt: base.startedAt },
+    { status: "failed", error: { code: "execution", message: "failed" }, endedAt: base.startedAt },
+    {
+      status: "retrying",
+      error: { code: "execution", message: "failed" },
+      nextRetryAt: base.startedAt,
+      endedAt: base.startedAt,
+    },
     { status: "waiting", wakeAt: null },
     { status: "sleeping", wakeAt: base.startedAt },
     { status: "cancelled", endedAt: base.startedAt },

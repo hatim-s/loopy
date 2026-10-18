@@ -1,10 +1,11 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { spawn } from "node:child_process";
 import type { CommandResult } from "../core/index.js";
-import { errorMessage } from "../core/index.js";
-import { CommandExecutionError } from "../runtime/index.js";
+import { CommandExecutionError, errorMessage } from "../core/index.js";
 
-const KILL_GRACE_MS = 250;
+const KILL_GRACE_MS = 5000;
+
+const PIPE_DRAIN_MS = 250;
 
 export type Launch = {
   program: string;
@@ -108,17 +109,19 @@ export function spawnCaptured(
     const stderr: Buffer[] = [];
     const budget = { bytes: 0 };
     let failure: Error | undefined;
+    let failureCode: "execution" | "output_limit" = "execution";
     let settled = false;
     let exited = false;
     let killTimer: ReturnType<typeof setTimeout> | undefined;
     let drainTimer: ReturnType<typeof setTimeout> | undefined;
 
-    const stop = (error: Error) => {
+    const stop = (error: Error, code: "execution" | "output_limit" = "execution") => {
       if (failure) {
         return;
       }
 
       failure = error;
+      failureCode = code;
       killTree(child, "SIGTERM");
 
       if (!exited) {
@@ -168,9 +171,7 @@ export function spawnCaptured(
 
       if (reason) {
         rejectOutput(
-          new CommandExecutionError(reason.message, output, {
-            cause: reason,
-          }),
+          new CommandExecutionError(reason.message, output, { cause: reason }, failureCode),
         );
 
         return;
@@ -181,7 +182,7 @@ export function spawnCaptured(
 
     const collect = (destination: Buffer[]) => (chunk: Buffer) => {
       if (capture(destination, budget, chunk, limits.maxOutputBytes)) {
-        stop(new Error(`Command output exceeded ${limits.maxOutputBytes} bytes.`));
+        stop(new Error(`Command output exceeded ${limits.maxOutputBytes} bytes.`), "output_limit");
       }
     };
 
@@ -197,7 +198,7 @@ export function spawnCaptured(
         child.stdout.destroy();
         child.stderr.destroy();
         finish(code, exitSignal);
-      }, KILL_GRACE_MS);
+      }, PIPE_DRAIN_MS);
       drainTimer.unref();
     });
     child.once("error", (error) => finish(null, null, error));

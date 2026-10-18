@@ -156,10 +156,10 @@ export function demoScript(): FakeScript {
         input: { mailbox: "support@acme.dev", since: "24h" },
         nextFireAt: minutes(600),
         lastFireKey: "triage-inbox@2026-10-16T08:00Z",
-        revision: 3,
+        version: 3,
       },
     ],
-    runs: [{ run: queued, steps: [], logs: [], hooks: [], cursor: 0, epoch: "demo" }],
+    runs: [{ run: queued, nodeRuns: [], steps: [], logs: [], hooks: [], cursor: 0, epoch: "demo" }],
     batches: [
       [{ entity: "run", kind: "claimed", runId: RUN_ID, record: running() }],
       [started(1, "fetch-unread", "command")],

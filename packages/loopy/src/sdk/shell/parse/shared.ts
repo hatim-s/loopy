@@ -1,5 +1,5 @@
 import type { Json } from "../../../core/index.js";
-import { assertJson } from "../../../runtime/index.js";
+import { assertJson } from "../../../core/index.js";
 
 export function unexpected(command: string, line: string): never {
   throw new Error(

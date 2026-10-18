@@ -1,8 +1,12 @@
 import { resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
-import { isFieldValue, type Json, setOwnProperty } from "../core/index.js";
-import { assertJson } from "../runtime/index.js";
-import { type RecordSpec } from "../sdk/host.js";
+import {
+  assertJson,
+  isFieldValue,
+  type Json,
+  type RecordSpec,
+  setOwnProperty,
+} from "../core/index.js";
 import type { CliContext } from "./context.js";
 
 // BOUNDARY: JSON input must be validated by the loopy schema before creating a run.

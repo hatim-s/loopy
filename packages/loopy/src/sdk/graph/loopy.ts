@@ -1,5 +1,6 @@
 import type { GraphMeta, RecordSpec } from "../../core/index.js";
 import { GraphBuilder } from "./builder.js";
+import { parseDefinitionInput, parseDefinitionMeta } from "./definition.js";
 import { inputRef } from "./input.js";
 import type { AuthorValue } from "./ref.js";
 
@@ -10,13 +11,11 @@ export function loopy<const S extends RecordSpec>(
     run(context: { input: ReturnType<typeof inputRef<S>> }): AuthorValue;
   },
 ) {
-  const builder = new GraphBuilder(name, definition.input, {
-    description: definition.description ?? null,
-    schedule: definition.schedule ?? null,
-    secrets: definition.secrets ?? [],
-    mode: definition.mode ?? "sandbox",
-    scope: definition.scope ?? "project",
-  });
+  const builder = new GraphBuilder(
+    name,
+    parseDefinitionInput(definition.input),
+    parseDefinitionMeta(name, definition),
+  );
 
   return builder.run(() =>
     builder.finish(definition.run({ input: inputRef(builder, definition.input) })),

@@ -1,8 +1,8 @@
-import { defineCommand } from "../../define-command.js";
+import { descriptorCommand } from "../../descriptor.js";
 import { parseBranch, parseRemote, parseTag } from "../parse/git.js";
 
 export const change = {
-  add: defineCommand({
+  add: descriptorCommand({
     namespace: "git",
     name: "add",
     program: "git",
@@ -16,7 +16,7 @@ export const change = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
     positionalSeparator: true,
   }),
-  commit: defineCommand({
+  commit: descriptorCommand({
     namespace: "git",
     name: "commit",
     program: "git",
@@ -34,7 +34,7 @@ export const change = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
     positionalSeparator: true,
   }),
-  push: defineCommand({
+  push: descriptorCommand({
     namespace: "git",
     name: "push",
     program: "git",
@@ -51,7 +51,7 @@ export const change = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  pull: defineCommand({
+  pull: descriptorCommand({
     namespace: "git",
     name: "pull",
     program: "git",
@@ -63,7 +63,7 @@ export const change = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  fetch: defineCommand({
+  fetch: descriptorCommand({
     namespace: "git",
     name: "fetch",
     program: "git",
@@ -77,7 +77,7 @@ export const change = {
     style: "equals",
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  checkout: defineCommand({
+  checkout: descriptorCommand({
     namespace: "git",
     name: "checkout",
     program: "git",
@@ -90,7 +90,7 @@ export const change = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  switch: defineCommand({
+  switch: descriptorCommand({
     namespace: "git",
     name: "switch",
     program: "git",
@@ -102,7 +102,7 @@ export const change = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  branch: defineCommand({
+  branch: descriptorCommand({
     parse: parseBranch,
     exclude: ["showCurrent", "delete", "force"],
     preset: {
@@ -126,7 +126,7 @@ export const change = {
     style: "equals",
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  remote: defineCommand({
+  remote: descriptorCommand({
     parse: parseRemote,
     preset: { flags: { verbose: true } },
     namespace: "git",
@@ -138,7 +138,7 @@ export const change = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  tag: defineCommand({
+  tag: descriptorCommand({
     parse: parseTag,
     exclude: ["delete", "annotate", "message"],
     preset: { flags: { format: "%(refname:short)%00%(objectname)%00%(taggerdate:iso-strict)" } },

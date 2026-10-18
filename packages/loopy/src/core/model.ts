@@ -49,6 +49,7 @@ export type RunRecord = {
   output?: Json;
   error?: string;
   wakeAt?: string;
+  nextRetryAt?: string;
   createdAt: string;
   updatedAt: string;
   owner?: RunOwner;
@@ -94,6 +95,7 @@ export type HookRecord = {
 };
 
 export type LogPosition =
+  | { kind: "node"; executionKey: string; attempt: number; index: number }
   | { kind: "workflow"; afterStep: number; afterFinish: number; index: number }
   | { kind: "step"; seq: number; attempt: number; index: number };
 
@@ -108,7 +110,7 @@ export type LogRecord = {
 };
 
 export type Schedule = {
-  revision: number;
+  version: number;
   workspace: string;
   slug: string;
   cron: string;
@@ -121,6 +123,7 @@ export type Schedule = {
 
 export type RunSnapshot = {
   run: RunRecord;
+  nodeRuns: NodeRun[];
   steps: StepRecord[];
   logs: LogRecord[];
   hooks: HookRecord[];

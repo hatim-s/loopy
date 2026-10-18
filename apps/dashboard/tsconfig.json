@@ -16,8 +16,7 @@
     "noFallthroughCasesInSwitch": true,
     "types": ["bun-types", "vite/client"],
     "paths": {
-      "loopy/contract": ["../../packages/loopy/src/contract/index.ts"],
-      "loopy/runtime": ["../../packages/loopy/src/runtime/index.ts"]
+      "loopy/contract": ["../../packages/loopy/src/contract/index.ts"]
     }
   },
   "include": ["src", "_tests_", "vite.config.ts"]

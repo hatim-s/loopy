@@ -56,6 +56,12 @@ export type StepRecord = z.infer<typeof stepRecordSchema>;
 
 export const logPositionSchema = z.discriminatedUnion("kind", [
   z.strictObject({
+    kind: z.literal("node"),
+    executionKey: z.string(),
+    attempt: counter,
+    index: counter,
+  }),
+  z.strictObject({
     kind: z.literal("workflow"),
     afterStep: counter,
     afterFinish: counter,
@@ -97,7 +103,7 @@ export const hookRecordSchema = z.strictObject({
 export type HookRecord = z.infer<typeof hookRecordSchema>;
 
 export const scheduleSchema = z.strictObject({
-  revision: z.number().int(),
+  version: z.number().int(),
   workspace: z.string(),
   slug: z.string(),
   cron: z.string(),

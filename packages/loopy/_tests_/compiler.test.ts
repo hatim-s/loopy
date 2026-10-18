@@ -611,3 +611,16 @@ test("node_modules dependencies with literal dynamic imports bundle their helper
   const { default: run }: { default: () => Promise<number> } = await import(saved);
   expect(await run()).toBe(42);
 });
+
+test("the public SDK entry compiles through the same graph builder", async () => {
+  const f = await project(
+    'import {loopy,log} from "loopy"; export default loopy("public-entry", {input: {}, run: () => {log("hello"); return 1;}});',
+  );
+
+  const result = await compile(f.file);
+  expect(result.ok).toBe(true);
+
+  if (result.ok) {
+    expect(result.graph.nodes.map((node) => node.kind)).toEqual(["log", "join"]);
+  }
+});

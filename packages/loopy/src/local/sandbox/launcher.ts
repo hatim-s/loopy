@@ -1,21 +1,25 @@
+import type { ExecutionMode } from "../../core/index.js";
 import { macSandbox } from "./darwin.js";
 import { linuxSandbox } from "./linux.js";
 
-/** The platform's sandbox program and the argv prefix that runs `program` inside it. */
-export async function sandboxLauncher(
-  program: string,
-  workspace: string,
-  cwd: string,
-  env: NodeJS.ProcessEnv,
-  scratch: string,
-  helper?: string,
-): Promise<[string, string[]]> {
+export type SandboxOptions = {
+  program: string;
+  workspace: string;
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+  scratch: string;
+  helper?: string;
+  protectedHome?: string;
+  mode: ExecutionMode;
+};
+
+export async function sandboxLauncher(options: SandboxOptions): Promise<[string, string[]]> {
   if (process.platform === "darwin") {
-    return macSandbox(program, workspace, env, scratch, helper);
+    return macSandbox(options);
   }
 
   if (process.platform === "linux") {
-    return linuxSandbox(program, workspace, cwd, env, scratch, helper);
+    return linuxSandbox(options);
   }
 
   throw new Error(`Sandbox mode is unavailable on ${process.platform}.`);
