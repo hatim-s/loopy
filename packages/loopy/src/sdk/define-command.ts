@@ -78,7 +78,7 @@ type FlagInput<F extends FlagDefinition> = F extends { readonly pairs: true }
     ? FlagValue<F> | true
     : FlagValue<F>;
 
-type Flags<D extends CommandDescriptor> = D extends {
+type Flags<D extends Omit<CommandDescriptor, "parse">> = D extends {
   readonly flags: infer F extends Readonly<Record<string, FlagDefinition>>;
 }
   ? keyof F extends never
@@ -90,13 +90,15 @@ type Flags<D extends CommandDescriptor> = D extends {
       }
   : Record<string, never>;
 
-type Args<D extends CommandDescriptor> = D extends {
+type Args<D extends Omit<CommandDescriptor, "parse">> = D extends {
   readonly positionals: infer P extends readonly PositionalDefinition[];
 }
   ? Positionals<P>
   : readonly string[];
 
-type Operands<D extends CommandDescriptor> = D extends { readonly revisionPaths: true }
+type Operands<D extends Omit<CommandDescriptor, "parse">> = D extends {
+  readonly revisionPaths: true;
+}
   ? {
       revisions?: readonly string[];
       paths?: readonly string[];
@@ -114,19 +116,21 @@ type ExcludedKeys<D> = D extends { readonly exclude: readonly (infer K extends s
 
 type ProtectedKeys<D> = PresetKeys<D> | ExcludedKeys<D>;
 
-type ParsedDescriptor<D extends CommandDescriptor> = D extends {
+type ParsedDescriptor<D extends Omit<CommandDescriptor, "parse">> = D extends {
   readonly parsedPositionals: infer P extends readonly PositionalDefinition[];
 }
   ? Omit<D, "positionals"> & { readonly positionals: P }
   : D;
 
-export type Input<D extends CommandDescriptor> = Operands<ParsedDescriptor<D>> & {
+export type Input<D extends Omit<CommandDescriptor, "parse">> = Operands<ParsedDescriptor<D>> & {
   flags?: Omit<Flags<D>, ProtectedKeys<D>> & { readonly [K in ProtectedKeys<D>]?: never };
 };
 
-export type RawInput<D extends CommandDescriptor> = Operands<D> & { flags?: Flags<D> };
+export type RawInput<D extends Omit<CommandDescriptor, "parse">> = Operands<D> & {
+  flags?: Flags<D>;
+};
 
-type CommandCall<D extends CommandDescriptor> = D extends {
+type CommandCall<D extends Omit<CommandDescriptor, "parse">> = D extends {
   readonly parse: (result: CommandResult, input: RenderInput) => infer T extends Json;
 }
   ? ((...args: CallArguments<Input<D>>) => Promise<T>) & {

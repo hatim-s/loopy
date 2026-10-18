@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { PutLoopyBody } from "../contract/index.js";
-import { canonicalJson, validateGraph } from "../core/index.js";
+import { canonicalJson, revision, validateGraph } from "../core/index.js";
 import { writeFileAtomically } from "./fs.js";
 import type { Registry } from "./registry.js";
 
@@ -33,12 +33,7 @@ export async function saveCompiled(registry: Registry, body: PutLoopyBody) {
     throw new Error("Supply exactly one bundle for each code node and parser in node order.");
   }
 
-  const revision = createHash("sha256")
-    .update(canonicalJson(body.graph))
-    .update(body.bundles.map((value) => value.bundleHash).join(""))
-    .digest("hex");
-
-  if (revision !== body.revision) {
+  if ((await revision(body.graph)) !== body.revision) {
     throw new Error("The graph revision does not match its contents.");
   }
 
@@ -53,6 +48,12 @@ export async function saveCompiled(registry: Registry, body: PutLoopyBody) {
     )
   ) {
     throw new Error("Bundle bytes do not match their hash.");
+  }
+
+  const unchanged = registry.unchanged(body);
+
+  if (unchanged.ok) {
+    return unchanged.entry;
   }
 
   await mkdir(join(registry.home, "bundles"), { recursive: true, mode: 0o700 });

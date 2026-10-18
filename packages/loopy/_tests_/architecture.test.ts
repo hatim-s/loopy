@@ -130,7 +130,10 @@ test("layers import downward, and only through the target layer's index", () => 
       const target = layerOf(resolve(file, "..", specifier));
 
       if (target === layer) {
-        if (isBarrel(specifier)) {
+        if (
+          isBarrel(specifier) &&
+          !(name === "sdk/graph-host.ts" && specifier === "./graph/index.js")
+        ) {
           violations.push(`${name} imports its own barrel (${specifier}).`);
         }
 

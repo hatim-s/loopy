@@ -50,7 +50,7 @@ export function object(text: string) {
 export async function save(f: ReturnType<typeof fixture>) {
   const { default: definition }: { default: Loopy } = await import(f.file);
 
-  const body = compiledBody(definition.name, f.file, {
+  const body = await compiledBody(definition.name, f.file, {
     scope: definition.scope,
     mode: definition.mode,
     secrets: [...definition.secrets],

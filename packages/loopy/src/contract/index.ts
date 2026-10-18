@@ -28,6 +28,8 @@ export * from "./graph.js";
 
 export { type Json, jsonSchema } from "./json.js";
 
+export { parseModuleOutput } from "./module-output.js";
+
 export {
   type HookRecord,
   hookRecordSchema,

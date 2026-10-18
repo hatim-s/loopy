@@ -14,7 +14,7 @@ export type CompileResult =
   | { ok: true; graph: Graph; bundles: Bundle[]; revision: string; warnings: Diagnostic[] }
   | { ok: false; diagnostics: CompilerDiagnostic[] };
 
-export type ParserSource = { file: string; source: string };
+export type ParserSource = { file: string };
 
 export type AuthorModule = { file: string; source: string; evaluated: string };
 

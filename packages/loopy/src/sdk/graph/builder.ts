@@ -1,6 +1,7 @@
 import {
   type Edge,
   type Graph,
+  type GraphMeta,
   type GraphRetry,
   graphTypeResolver,
   type Node,
@@ -78,6 +79,7 @@ export class GraphBuilder {
   constructor(
     readonly name: string,
     readonly input: RecordSpec,
+    readonly meta: GraphMeta,
   ) {
     Object.keys(input).forEach(validateLabel);
   }
@@ -248,6 +250,7 @@ export class GraphBuilder {
 
   snapshot(entry: NodeId): Graph {
     return {
+      meta: this.meta,
       version: 1,
       name: this.name,
       input: this.input,

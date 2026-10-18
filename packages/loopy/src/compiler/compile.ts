@@ -1,10 +1,14 @@
 import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
-import { type CompilerDiagnosticCode, errorMessage, validateGraph } from "../core/index.js";
+import {
+  type CompilerDiagnosticCode,
+  errorMessage,
+  revision,
+  validateGraph,
+} from "../core/index.js";
 import { bundle } from "./bundle.js";
 import { EvaluationError, evaluate } from "./evaluate.js";
 import { restrict } from "./restrict.js";
-import { revision } from "./revision.js";
 import type { CompileResult } from "./types.js";
 
 export async function compile(path: string): Promise<CompileResult> {
@@ -42,10 +46,7 @@ export async function compile(path: string): Promise<CompileResult> {
       ok: true,
       graph,
       bundles,
-      revision: revision(
-        graph,
-        bundles.map((value) => value.bundleHash),
-      ),
+      revision: await revision(graph),
       warnings: graph.warnings,
     };
   } catch (error) {

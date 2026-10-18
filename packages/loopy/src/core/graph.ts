@@ -1,4 +1,4 @@
-import type { Json } from "./model.js";
+import type { ExecutionMode, Json, Schedule } from "./model.js";
 
 declare const brand: unique symbol;
 
@@ -242,7 +242,18 @@ export type Diagnostic = {
   source: { module: string; line: number; column: number } | null;
 };
 
+export const LOOPY_SCOPES = ["project", "global"] as const;
+
+export type GraphMeta = {
+  description: string | null;
+  schedule: { cron: Schedule["cron"]; tz?: Schedule["tz"] } | null;
+  secrets: string[];
+  mode: ExecutionMode;
+  scope: (typeof LOOPY_SCOPES)[number];
+};
+
 export type Graph = {
+  meta: GraphMeta;
   version: 1;
   name: string;
   input: RecordSpec | "schema";
@@ -299,6 +310,9 @@ export type NodeRun = Expand<
 >;
 
 export const COMPILER_DIAGNOSTIC_CODES = [
+  "dynamic_import",
+  "options_not_literal",
+  "unknown_sdk_call",
   "default_loopy",
   "source_error",
   "evaluation_failed",

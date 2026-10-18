@@ -1,7 +1,6 @@
 import { code, log, loopy } from "../../../src/sdk/graph/index.js";
 
-export default loopy({
-  name: "hello",
+export default loopy("hello", {
   input: { name: "string", "enthusiastic?": "boolean" },
   run: ({ input }) => {
     const greeting = code("greet", {

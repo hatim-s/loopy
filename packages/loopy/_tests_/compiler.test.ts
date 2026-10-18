@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { evaluate } from "../src/compiler/evaluate.js";
 import { compile } from "../src/compiler/index.js";
+import { parseModuleOutput } from "../src/contract/index.js";
 import { canonicalJson, type Json, validateGraph } from "../src/core/index.js";
 import { compiledBody } from "./compiled-fixture.js";
 
@@ -28,7 +29,14 @@ async function project(source: string) {
 }
 
 const rejected = {
-  "parser-effect": "forbidden_expression",
+  "options-identifier": "options_not_literal",
+  "options-wrapped": "module_default",
+  "parser-inline": "module_path",
+  "parameter-computed": "invalid_binding",
+  "parameter-default": "invalid_binding",
+  "parameter-rest": "invalid_binding",
+  "unknown-sdk-call": "unknown_sdk_call",
+  "parser-effect": "module_path",
   "default-export": "default_loopy",
   "duplicate-label": "duplicate_label",
   enum: "module_effect",
@@ -60,7 +68,7 @@ const rejected = {
 
 for (const [name, code] of Object.entries(rejected)) {
   test(`restrict rejects ${name} with a located stable diagnostic`, async () => {
-    const { file } = await project(
+    const { root, file } = await project(
       await Bun.file(join(fixtureRoot, "rejected", `${name}.txt`)).text(),
     );
 
@@ -74,7 +82,7 @@ for (const [name, code] of Object.entries(rejected)) {
     expect(result.diagnostics).toContainEqual({
       code,
       message: expect.any(String),
-      file,
+      file: code === "module_default" ? join(root, "not-function.ts") : file,
       line: expect.any(Number),
       column: expect.any(Number),
     });
@@ -84,7 +92,7 @@ for (const [name, code] of Object.entries(rejected)) {
 
 test("restrictions traverse imported author modules before any author evaluation", async () => {
   const { root, file } = await project(
-    'import {loopy} from "__SDK__"; import {value} from "./effect.ts"; export default loopy({name:"safe",input:{},run:()=>value});',
+    'import {loopy} from "__SDK__"; import {value} from "./effect.ts"; export default loopy("safe", {input:{},run:()=>value});',
   );
 
   const marker = join(root, "ran");
@@ -107,7 +115,7 @@ test("restrictions traverse imported author modules before any author evaluation
 
 test("subgraphs expand in each author module's directory", async () => {
   const { root, file } = await project(
-    'import {loopy} from "__SDK__"; import {child} from "./child/graph.ts"; export default loopy({name:"scoped",input:{},run:()=>child()});',
+    'import {loopy} from "__SDK__"; import {child} from "./child/graph.ts"; export default loopy("scoped", {input:{},run:()=>child()});',
   );
 
   await Bun.write(
@@ -139,7 +147,7 @@ for (const effect of ["network", "write"]) {
       fetch: () => new Response("reachable"),
     });
 
-    const graph = JSON.stringify(compiledBody("isolated", file).graph);
+    const graph = JSON.stringify((await compiledBody("isolated", file)).graph);
 
     const source =
       effect === "network"
@@ -170,7 +178,7 @@ test("evaluation has a hard ten second timeout", async () => {
 
 test("bundle hashes are stable, code changes alter revisions and whitespace does not", async () => {
   const { root, file } = await project(
-    'import {loopy,code,fs} from "__SDK__"; export default loopy({name:"hashes",input:{},run:()=>{fs.ls();return code("value",{in:{},out:{kind:"value",type:"number"},module:"./value.ts"});}});',
+    'import {loopy,code,fs} from "__SDK__"; export default loopy("hashes", {input:{},run:()=>{fs.ls();return code("value",{in:{},out:{kind:"value",type:"number"},module:"./value.ts"});}});',
   );
 
   const module = join(root, "value.ts");
@@ -206,14 +214,14 @@ test("bundle hashes are stable, code changes alter revisions and whitespace does
   expect(first.bundles).toHaveLength(2);
 });
 
-test("parser bundles preserve imported functions and immutable lexical data", async () => {
+test("parser module bundles are hashed and preserve their module bindings", async () => {
   const { root, file } = await project(
-    'import {loopy,defineCommand} from "__SDK__"; import {parse} from "./parse.ts"; const cmd=defineCommand({key:"custom",program:"echo",parse:(result)=>parse(result.stdout)+suffix},{kind:"value",type:"string"}); const suffix="!"; export default loopy({name:"parser",input:{},run:()=>cmd()});',
+    'import {loopy,defineCommand} from "__SDK__"; const cmd=defineCommand({key:"custom",program:"echo",parse:"./parse.ts"},{kind:"value",type:"string"}); export default loopy("parser", {input:{},run:()=>cmd()});',
   );
 
   await writeFile(
     join(root, "parse.ts"),
-    "export function parse(value: string) { return value.trim(); }",
+    'const suffix="!"; export default (result: {stdout:string}) => result.stdout.trim()+suffix;',
   );
   const result = await compile(file);
 
@@ -257,7 +265,7 @@ test("canonical JSON sorts nested keys and preserves array order", () => {
 
 test("code bundle import.meta names each source module instead of the saved bundle", async () => {
   const { root, file } = await project(
-    'import {loopy,code} from "__SDK__"; export default loopy({name:"paths",input:{},run:()=>code("paths",{in:{},out:{kind:"record",fields:{entry:"string",helper:"string"}},module:"./code.ts"})});',
+    'import {loopy,code} from "__SDK__"; export default loopy("paths", {input:{},run:()=>code("paths",{in:{},out:{kind:"record",fields:{entry:"string",helper:"string"}},module:"./code.ts"})});',
   );
 
   await writeFile(
@@ -289,12 +297,16 @@ test("code bundle import.meta names each source module instead of the saved bund
 
 test("bundles execute the stdin/stdout protocol and preserve prepared parser input", async () => {
   const { root, file } = await project(
-    'import {loopy,defineCommand,code} from "__SDK__"; const command=defineCommand({namespace:"custom",name:"parse",program:"echo",flags:{suffix:{cli:"-s",kind:"string"}},parse:(result,input)=>result.stdout.trim()+input.args[0]+input.flags.suffix},{kind:"value",type:"string"}); export default loopy({name:"executable",input:{},run:()=>{command({args:["hello"],flags:{suffix:"!"}});return code("context",{in:{value:42},out:{kind:"record",fields:{value:"number",workspace:"string"}},module:"./context.ts"});}});',
+    'import {loopy,defineCommand,code} from "__SDK__"; const command=defineCommand({namespace:"custom",name:"parse",program:"echo",flags:{suffix:{cli:"-s",kind:"string"}},parse:"./parse.ts"},{kind:"value",type:"string"}); export default loopy("executable", {input:{},run:()=>{command({args:["hello"],flags:{suffix:"!"}});return code("context",{in:{value:42},out:{kind:"record",fields:{value:"number",workspace:"string"}},module:"./context.ts"});}});',
   );
 
   await writeFile(
+    join(root, "parse.ts"),
+    "export default (result,input)=>result.stdout.trim()+input.args[0]+input.flags.suffix;",
+  );
+  await writeFile(
     join(root, "context.ts"),
-    'console.log("module loaded"); export default (input,context)=>{context.log("ready",{value:input.value}); console.log("captured"); return {value:input.value,workspace:context.workspace};};',
+    'console.log("module loaded"); export default (input,context)=>{context.log("ready",{value:input.value}); console.log("captured"); console.debug("debug"); console.trace("trace"); console.table("table"); console.dir("dir"); process.stdout.write("author noise\\npartial"); return {value:input.value,workspace:context.workspace};};',
   );
   const compiled = await compile(file);
 
@@ -340,8 +352,152 @@ test("bundles execute the stdin/stdout protocol and preserve prepared parser inp
 
   expect(JSON.parse(parsed.stdout)).toBe("outputhello!");
   const result = await execute(1, { value: 42 });
-  expect(JSON.parse(result.stdout)).toEqual({ value: 42, workspace: root });
+  expect(parseModuleOutput(result.stdout)).toEqual({
+    ok: true,
+    output: { value: 42, workspace: root },
+    stdout: "author noise\npartial\n",
+  });
+
+  const logs = result.stderr
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line));
+
+  for (const message of ["debug", "trace", "table", "dir"]) {
+    expect(logs).toContainEqual({ message, data: null });
+  }
+
   expect(result.stderr).toContain('"message":"ready"');
   expect(result.stderr).toContain('"message":"captured"');
   expect(result.stderr).toContain('"message":"module loaded"');
 });
+
+for (const name of [
+  "import-meta-helper",
+  "require-helper",
+  "transitive-helper",
+  "absolute-helper",
+]) {
+  test(`code modules reject ${name} with a located dynamic_import diagnostic`, async () => {
+    const { root, file } = await project(
+      'import {loopy,code} from "__SDK__";export default loopy("dynamic",{input:{},run:()=>code("x",{in:{},out:{kind:"value",type:"number"},module:"./code.ts"})});',
+    );
+
+    await writeFile(
+      join(root, "code.ts"),
+      (await Bun.file(join(fixtureRoot, "modules", `${name}.txt`)).text()).replace(
+        "__HELPER__",
+        join(root, "helper.ts"),
+      ),
+    );
+    await writeFile(
+      join(root, "helper.ts"),
+      'export const value=()=>import(import.meta.dir + "/escaped.ts");',
+    );
+    const result = await compile(file);
+    expect(result).toMatchObject({
+      ok: false,
+      diagnostics: [
+        expect.objectContaining({
+          code: "dynamic_import",
+          file: join(
+            root,
+            name.endsWith("transitive-helper") || name === "absolute-helper"
+              ? "helper.ts"
+              : "code.ts",
+          ),
+          line: 1,
+          column: expect.any(Number),
+        }),
+      ],
+    });
+  });
+}
+
+test("literal dynamic imports are bundled and alter the pinned revision", async () => {
+  const { root, file } = await project(
+    'import {loopy,code} from "__SDK__";export default loopy("literal",{input:{},run:()=>code("x",{in:{},out:{kind:"value",type:"number"},module:"./code.ts"})});',
+  );
+
+  await writeFile(
+    join(root, "code.ts"),
+    'export default async () => (await import("./helper.ts")).value;',
+  );
+  await writeFile(join(root, "helper.ts"), "export const value=1;");
+  const first = await compile(file);
+  await writeFile(join(root, "helper.ts"), "export const value=2;");
+  const second = await compile(file);
+
+  if (!first.ok || !second.ok) {
+    throw new Error(JSON.stringify({ first, second }));
+  }
+
+  expect(first.revision).not.toBe(second.revision);
+  await writeFile(join(root, "pinned.js"), first.bundles[0]?.bytes ?? new Uint8Array());
+  await rm(join(root, "helper.ts"));
+
+  const { default: run }: { default: () => Promise<number> } = await import(
+    join(root, "pinned.js")
+  );
+
+  expect(await run()).toBe(1);
+});
+
+test("module stdout rejects a missing or malformed final JSON line", () => {
+  expect(parseModuleOutput("")).toEqual({ ok: false, code: "invalid_result" });
+  expect(parseModuleOutput('{"earlier":true}\nnoise\n')).toEqual({
+    ok: false,
+    code: "invalid_result",
+  });
+  expect(parseModuleOutput('leading noise\n{"answer":42}\n')).toEqual({
+    ok: true,
+    output: { answer: 42 },
+    stdout: "leading noise\n",
+  });
+});
+
+test("parser modules reject dynamic imports in their local dependencies", async () => {
+  const { root, file } = await project(
+    'import {loopy,defineCommand} from "__SDK__";const cmd=defineCommand({key:"custom",program:"echo",parse:"./parse.ts"},{kind:"value",type:"number"});export default loopy("parser",{input:{},run:()=>cmd()});',
+  );
+
+  await writeFile(
+    join(root, "parse.ts"),
+    'import {value} from "./helper.ts";export default ()=>value();',
+  );
+  await writeFile(
+    join(root, "helper.ts"),
+    'export const value=()=>import(import.meta.dir+"/escaped.ts");',
+  );
+  const result = await compile(file);
+  expect(result).toMatchObject({
+    ok: false,
+    diagnostics: [
+      expect.objectContaining({ code: "dynamic_import", file: join(root, "helper.ts") }),
+    ],
+  });
+});
+
+for (const wrapper of [
+  "({options} as const)",
+  "({options} satisfies object)",
+  "({options})!",
+  "((({options})))",
+]) {
+  test(`options retain module validation through ${wrapper}`, async () => {
+    const options = wrapper.replace(
+      "{options}",
+      '{in:{},out:{kind:"value",type:"number"},module:"./not-function.ts"}',
+    );
+
+    const { file } = await project(
+      `import {loopy,code} from "__SDK__";export default loopy("wrapped",{input:{},run:()=>code("x",${options})});`,
+    );
+
+    const result = await compile(file);
+    expect(result).toMatchObject({
+      ok: false,
+      diagnostics: [expect.objectContaining({ code: "module_default" })],
+    });
+  });
+}

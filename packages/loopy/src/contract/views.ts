@@ -3,6 +3,7 @@ import {
   EXECUTION_MODES,
   FIELD_TYPES,
   HOOK_EVENT_KINDS,
+  LOOPY_SCOPES,
   NODE_RUN_STATUSES,
   RUN_EVENT_KINDS,
   SCHEDULE_EVENT_KINDS,
@@ -65,7 +66,7 @@ export type ScheduleView = z.infer<typeof scheduleViewSchema>;
 export const loopyViewSchema = z.strictObject({
   slug: z.string(),
   description: z.string().nullable(),
-  scope: z.enum(["project", "global"]),
+  scope: z.enum(LOOPY_SCOPES),
   mode: z.enum(EXECUTION_MODES),
   input: z.union([z.record(z.string(), z.enum(FIELD_TYPES)), z.literal("schema")]),
   schedule: z

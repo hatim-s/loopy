@@ -1,2 +1,2 @@
 import {loopy, log, wait, code} from "__SDK__";
-export default loopy({name:"invalid",input:{}, run: ({input}) => { const key="x"; return input.get(key); }});
+export default loopy("invalid", {input:{}, run: ({input}) => { const key="x"; return input.get(key); }});

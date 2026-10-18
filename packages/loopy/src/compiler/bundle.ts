@@ -1,15 +1,13 @@
 import { createHash } from "node:crypto";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import type { Graph, Node } from "../core/index.js";
-import { inlineImportMeta, sourcePaths } from "../local/index.js";
-import { builtinCommandKeys } from "../sdk/graph-host.js";
+import { sourcePaths } from "../local/index.js";
+import { commandParser } from "../sdk/graph-host.js";
 import { runnerSource } from "./runner.js";
 import { typescriptPaths } from "./source.js";
 import type { Bundle, ParserSource } from "./types.js";
 
-async function buildModule(file: string, parser: ParserSource | null) {
-  const virtual = resolve(dirname(file), ".loopy-command-parser.ts");
-
+async function buildModule(file: string, kind: "code" | "parser") {
   return Bun.build({
     entrypoints: ["loopy-runner:entry"],
     target: "bun",
@@ -24,24 +22,9 @@ async function buildModule(file: string, parser: ParserSource | null) {
             namespace: "loopy-runner",
           }));
           build.onLoad({ filter: /.*/, namespace: "loopy-runner" }, () => ({
-            contents: runnerSource(
-              parser === null ? file : virtual,
-              parser === null ? "code" : "parser",
-            ),
+            contents: runnerSource(file, kind),
             loader: "ts",
           }));
-
-          if (parser !== null) {
-            build.onResolve({ filter: /\.loopy-command-parser\.ts$/ }, () => ({
-              path: virtual,
-              namespace: "loopy-parser",
-            }));
-            build.onLoad({ filter: /.*/, namespace: "loopy-parser" }, () => ({
-              contents: inlineImportMeta(parser.file, "ts", parser.source),
-              loader: "ts",
-              resolveDir: dirname(parser.file),
-            }));
-          }
         },
       },
       typescriptPaths,
@@ -55,19 +38,19 @@ async function buildNode(
   parsers: Map<string, ParserSource>,
 ) {
   if (node.kind === "code") {
-    return buildModule(node.module.path, null);
+    return buildModule(node.module.path, "code");
   }
 
-  if (!parsers.has(node.key) && !builtinCommandKeys.includes(node.key)) {
+  const parser = parsers.get(node.key)?.file ?? commandParser(node.key);
+
+  if (!parser) {
     throw new Error(`Declare parser '${node.key}' in a module-level defineCommand descriptor.`);
   }
 
-  const parser = parsers.get(node.key) ?? {
-    file: resolve(import.meta.dir, "parser.ts"),
-    source: `import {commandParser} from ${JSON.stringify(resolve(import.meta.dir, "../sdk/graph-host.js"))}; export default commandParser(${JSON.stringify(node.key)}, ${JSON.stringify(process.platform)});`,
-  };
-
-  return buildModule(parser.file, parser);
+  return buildModule(
+    parsers.has(node.key) ? parser : resolve(import.meta.dir, "../sdk/graph", parser),
+    "parser",
+  );
 }
 
 export async function bundle(graph: Graph, parsers: Map<string, ParserSource>): Promise<Bundle[]> {

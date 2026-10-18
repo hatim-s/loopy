@@ -3,6 +3,7 @@ import { graphSchema } from "../../src/contract/index.js";
 // This boundary fixture fixes the builder's call-order ids and explicit scope joins for H2.
 export const approveDemoGraph = graphSchema.parse({
   version: 1,
+  meta: { description: null, schedule: null, secrets: [], mode: "sandbox", scope: "project" },
   name: "approve-demo",
   input: { "subject?": "string" },
   entry: "0:draft",

@@ -1,17 +1,32 @@
 import { parseSync } from "oxc-parser";
+import { diagnostic } from "./diagnostic.js";
+import { checkModuleImports } from "./module-imports.js";
+import type { CompilerDiagnostic } from "./types.js";
 
 export async function checkCodeModule(path: string) {
+  const diagnostics: CompilerDiagnostic[] = [];
+  await checkModuleImports(path, diagnostics);
   const source = await Bun.file(path).text();
   const { program, errors } = parseSync(path, source, { sourceType: "module" });
 
   if (errors.length > 0) {
-    throw new Error(errors.map((error) => error.message).join("\n"));
+    return { ok: false as const, diagnostics };
   }
 
   const exported = program.body.find((node) => node.type === "ExportDefaultDeclaration");
 
   if (exported?.type !== "ExportDefaultDeclaration") {
-    throw new Error("Code modules must default-export one function.");
+    diagnostics.push(
+      diagnostic(
+        path,
+        source,
+        0,
+        "module_default",
+        "Code modules must default-export one function.",
+      ),
+    );
+
+    return { ok: false as const, diagnostics };
   }
 
   let declaration = exported.declaration;
@@ -42,6 +57,20 @@ export async function checkCodeModule(path: string) {
       declaration.type,
     )
   ) {
-    throw new Error("Code modules must default-export one function.");
+    diagnostics.push(
+      diagnostic(
+        path,
+        source,
+        0,
+        "module_default",
+        "Code modules must default-export one function.",
+      ),
+    );
+
+    return { ok: false as const, diagnostics };
   }
+
+  return diagnostics.length > 0
+    ? { ok: false as const, diagnostics }
+    : { ok: true as const, diagnostics };
 }

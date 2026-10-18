@@ -2,9 +2,9 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { revision } from "../src/compiler/revision.js";
 import { encodeRunCursor, routes } from "../src/contract/index.js";
 import type { RunRecord } from "../src/core/index.js";
+import { revision } from "../src/core/index.js";
 import { LoopyService, openRunStore, Registry } from "../src/local/index.js";
 import { Daemon, SYSTEM_CLOCK } from "../src/runtime/index.js";
 import type { Loopy } from "../src/sdk/host.js";
@@ -33,14 +33,14 @@ async function fixture(definition = "") {
 
   const registry = new Registry(home, root);
 
-  const body = compiledBody("service", source, {
+  const body = await compiledBody("service", source, {
     scope: definitionValue.scope,
     schedule: definitionValue.schedule ?? null,
     secrets: ["PRIVATE"],
   });
 
   body.graph.input = { name: "string" };
-  body.revision = revision(body.graph, []);
+  body.revision = await revision(body.graph);
   registry.save(body);
   let now = Date.parse("2026-10-17T00:00:00.000Z");
   const clock = { ...SYSTEM_CLOCK, now: () => now };

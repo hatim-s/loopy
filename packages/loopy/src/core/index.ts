@@ -53,6 +53,8 @@ export {
 
 export { validateSecretName, validateSlug } from "./names.js";
 
+export { revision, revisionInput } from "./revision.js";
+
 export {
   allowKeys,
   isBoolean,

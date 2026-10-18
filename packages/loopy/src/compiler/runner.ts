@@ -10,17 +10,16 @@ export function runnerSource(module: string, kind: "code" | "parser") {
     const main = process.argv[1] === fileURLToPath(import.meta.url);
     const log = (message, data = null) => process.stderr.write(JSON.stringify({message, data}) + "\\n");
     if (main) {
-      console.log = (...values) => log(values.map(String).join(" "));
-      console.info = console.log;
-      console.warn = console.log;
-      console.error = console.log;
+      for (const method of ["log", "info", "debug", "warn", "error", "trace", "table", "dir"]) {
+        console[method] = (...values) => log(values.map(String).join(" "));
+      }
     }
     const {default: run} = await import(${JSON.stringify(module)});
     export default run;
     if (main) {
       const input = await Bun.stdin.json();
       const output = await ${invocation};
-      process.stdout.write(JSON.stringify(output ?? null));
+      process.stdout.write("\\n" + JSON.stringify(output ?? null) + "\\n");
     }
   `;
 }

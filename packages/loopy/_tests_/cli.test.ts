@@ -3,6 +3,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { localDaemon, openRunStore, Registry, readDaemonFile } from "../src/local/index.js";
 import { cli, fixture, object, roots } from "./cli-fixture.js";
+import { newRun } from "./fixture.js";
 
 const daemons: { stop(): Promise<void> }[] = [];
 
@@ -18,7 +19,7 @@ function graphFixture(name = "compiled") {
   const f = fixture(name, "run: () => null");
   writeFileSync(
     f.file,
-    `import { loopy, log } from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/graph/index.ts"))}; export default loopy({name:${JSON.stringify(name)}, input: {count: "number"}, run: ({input}) => {log("ready"); return input.get("count");}});`,
+    `import { loopy, log } from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/graph/index.ts"))}; export default loopy(${JSON.stringify(name)}, { input: {count: "number"}, run: ({input}) => {log("ready"); return input.get("count");}});`,
   );
   const store = openRunStore(f.home);
   const daemon = localDaemon({ ...f, store, concurrency: 4, port: 0 });
@@ -92,7 +93,7 @@ test("compiler diagnostics include locations and do not create registry entries"
   const f = graphFixture();
   writeFileSync(
     f.file,
-    `import {loopy} from "loopy/graph"; export default loopy({name:"bad",input:{},run:async()=>1});`,
+    `import {loopy} from "loopy/graph"; export default loopy("bad", {input:{},run:async()=>1});`,
   );
   const result = await cli(f, "save", f.file);
   expect(result.code).toBe(1);
@@ -112,7 +113,7 @@ test("save starts the daemon on demand and leaves artifact writes to the service
   const f = fixture("on-demand", "run: () => null");
   writeFileSync(
     f.file,
-    `import {loopy} from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/graph/index.ts"))}; export default loopy({name:"on-demand",input:{},run:()=>null});`,
+    `import {loopy} from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/graph/index.ts"))}; export default loopy("on-demand", {input:{},run:()=>null});`,
   );
   const [result, concurrent] = await Promise.all([cli(f, "save", f.file), cli(f, "save", f.file)]);
   const record = readDaemonFile(f.home);
@@ -142,7 +143,7 @@ test("list and schedules use the caller workspace when the daemon started elsewh
   const file = join(other, "other.ts");
   writeFileSync(
     file,
-    `import {loopy} from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/graph/index.ts"))}; export default loopy({name:"other",input:{},run:()=>null});`,
+    `import {loopy} from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/graph/index.ts"))}; export default loopy("other", {input:{},run:()=>null});`,
   );
   const caller = { ...f, cwd: other };
   expect((await cli(caller, "save", file, "--cwd", other)).code).toBe(0);
@@ -164,4 +165,112 @@ test("an absolute source in another project is registered beside that source", a
   expect(saved).toMatchObject({ code: 0, stderr: "" });
   expect(new Registry(source.home, source.cwd).get("external-source").source).toBe(source.file);
   expect(new Registry(source.home, caller.cwd).list()).toEqual([]);
+});
+
+test("save preserves every author option from graph meta", async () => {
+  const f = graphFixture("metadata");
+
+  const meta = {
+    description: "Author metadata",
+    schedule: { cron: "0 9 * * *", tz: "Asia/Kolkata" },
+    secrets: ["TOKEN"],
+    mode: "full",
+    scope: "global",
+  };
+
+  writeFileSync(
+    f.file,
+    `import {loopy} from "loopy/graph"; export default loopy("metadata", {${JSON.stringify(meta).slice(1, -1)},input:{count:"number"},run:({input})=>input.get("count")});`,
+  );
+  expect(await cli(f, "save", f.file)).toMatchObject({ code: 0, stderr: "" });
+  const saved = new Registry(f.home, f.cwd).get("metadata");
+  expect(saved).toMatchObject({ ...meta, input: { count: "number" }, graph: { meta } });
+});
+
+test("HTTP schedule enable, disable and off persist their state", async () => {
+  const f = graphFixture();
+  expect((await cli(f, "save", f.file)).code).toBe(0);
+  expect(
+    await cli(f, "schedule", "compiled", "--cron", "0 * * * *", "--input-json", '{"count":2}'),
+  ).toMatchObject({ code: 0, stderr: "" });
+
+  for (const [action, enabled] of [
+    ["--disable", false],
+    ["--enable", true],
+  ] as const) {
+    expect(object((await cli(f, "schedule", "compiled", action)).stdout)).toMatchObject({
+      enabled,
+    });
+    expect(await f.store.listSchedules()).toMatchObject([
+      { enabled, input: { count: 2 }, cron: "0 * * * *" },
+    ]);
+    expect(JSON.parse((await cli(f, "list")).stdout)).toMatchObject([{ schedule: { enabled } }]);
+  }
+
+  expect((await cli(f, "schedule", "compiled", "--off")).code).toBe(0);
+  expect(await f.store.listSchedules()).toEqual([]);
+});
+
+test("HTTP cancel refuses an active owner and inspect diagnoses a missing run", async () => {
+  const f = graphFixture();
+  await f.store.createRun({ ...newRun(), id: "owned", slug: "compiled", workspace: f.cwd });
+  await f.store.claim("owned", "active-owner");
+  const cancelled = await cli(f, "cancel", "owned");
+  expect(cancelled.code).toBe(1);
+  expect(cancelled.stderr).toContain("owned");
+  expect(await f.store.getRun("owned")).toMatchObject({
+    status: "running",
+    owner: { token: "active-owner" },
+  });
+  const missing = await cli(f, "inspect", "missing-run");
+  expect(missing.code).toBe(1);
+  expect(missing.stderr).toContain("No run 'missing-run'");
+});
+
+test("HTTP logs follow prints each log as a separate JSON line", async () => {
+  const f = graphFixture();
+  await f.store.createRun({ ...newRun(), id: "logged", slug: "compiled", workspace: f.cwd });
+  await f.store.claim("logged", "log-owner");
+
+  for (const index of [0, 1]) {
+    await f.store.appendLog("logged", "log-owner", {
+      runId: "logged",
+      seq: index + 1,
+      position: { kind: "workflow", afterStep: 0, afterFinish: 0, index },
+      level: "info",
+      message: `line ${index}`,
+      at: new Date().toISOString(),
+    });
+  }
+
+  await f.store.finishRun("logged", "log-owner", { status: "succeeded", output: null });
+  await f.store.release("logged", "log-owner");
+  const result = await cli(f, "logs", "logged", "--follow");
+  expect(result).toMatchObject({ code: 0, stderr: "" });
+  expect(
+    result.stdout
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line)),
+  ).toMatchObject([{ message: "line 0" }, { message: "line 1" }]);
+});
+
+test("HTTP run reports named JSON input errors before creating a run", async () => {
+  const f = graphFixture();
+  writeFileSync(
+    f.file,
+    'import {loopy} from "loopy/graph"; export default loopy("compiled",{input:{payload:"json",values:"number[]"},run:()=>null});',
+  );
+  expect((await cli(f, "save", f.file)).code).toBe(0);
+
+  for (const [field, value, message] of [
+    ["payload", "{", "Input --payload must be valid JSON."],
+    ["values", '[1,"two"]', "Input --values must be a number[]."],
+  ]) {
+    const result = await cli(f, "run", "compiled", `--${field}`, value ?? "");
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain(message ?? "");
+  }
+
+  expect(await f.store.listRuns()).toEqual([]);
 });

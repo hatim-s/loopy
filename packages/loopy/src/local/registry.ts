@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { PutLoopyBody } from "../contract/index.js";
-import { isRecord, validateSlug } from "../core/index.js";
+import { canonicalJson, isRecord, validateSlug } from "../core/index.js";
 import { canonicalPath, withLockDirectory, writeFileAtomically } from "./fs.js";
 import { parseSavedLoopy, type SavedLoopy } from "./saved-loopy.js";
 
@@ -13,6 +13,14 @@ function readEntry(file: string) {
   }
 
   return null;
+}
+
+function sameSave(previous: SavedLoopy, body: PutLoopyBody) {
+  return (
+    previous.source === canonicalPath(body.source.path) &&
+    previous.revision === body.revision &&
+    canonicalJson(previous.graph.meta) === canonicalJson(body.graph.meta)
+  );
 }
 
 export class Registry {
@@ -73,11 +81,22 @@ export class Registry {
     return [...entries.values()].sort((a, b) => a.slug.localeCompare(b.slug));
   }
 
+  unchanged(body: PutLoopyBody) {
+    const files = this.files(body.graph.name);
+    const file = body.graph.meta.scope === "project" ? files[0] : files[1];
+    const previous = file && existsSync(file) ? readEntry(file) : null;
+
+    return previous && sameSave(previous, body)
+      ? { ok: true as const, entry: previous }
+      : { ok: false as const };
+  }
+
   save(body: PutLoopyBody): SavedLoopy {
     const { graph, revision, source, replace, bundles } = body;
+    const meta = graph.meta;
     const owner = canonicalPath(source.path);
     const files = this.files(graph.name);
-    const directory = source.scope === "project" ? this.projectDirectory : this.globalDirectory;
+    const directory = meta.scope === "project" ? this.projectDirectory : this.globalDirectory;
     const file = join(directory, `${graph.name}.json`);
     mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
 
@@ -90,19 +109,23 @@ export class Registry {
         );
       }
 
+      if (previous && sameSave(previous, body)) {
+        return previous;
+      }
+
       const entry: SavedLoopy = {
         version: 2,
         slug: graph.name,
-        scope: source.scope,
+        scope: meta.scope,
         graph,
         revision,
         bundles: bundles.map(({ nodeId, bundleHash }) => ({ nodeId, bundleHash })),
         source: owner,
-        description: source.description,
+        description: meta.description,
         input: graph.input,
-        schedule: source.schedule,
-        mode: source.mode,
-        secrets: source.secrets,
+        schedule: meta.schedule,
+        mode: meta.mode,
+        secrets: meta.secrets,
         savedAt: new Date().toISOString(),
       };
 

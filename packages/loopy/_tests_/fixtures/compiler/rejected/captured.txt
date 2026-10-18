@@ -1,3 +1,3 @@
 import {loopy, log, wait, code} from "__SDK__";
 let count=0;
-export default loopy({name:"invalid",input:{}, run: () => count});
+export default loopy("invalid", {input:{}, run: () => count});

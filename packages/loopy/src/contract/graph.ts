@@ -4,9 +4,11 @@ import {
   DIAGNOSTIC_CODES,
   type Duration,
   EDGE_KINDS,
+  EXECUTION_MODES,
   FIELD_TYPES,
   isRecord,
   type Json,
+  LOOPY_SCOPES,
   MAP_ERROR_MODES,
   NODE_KINDS,
   NODE_RUN_STATUSES,
@@ -250,7 +252,16 @@ export const diagnosticSchema = z.strictObject({
     .nullable(),
 });
 
+export const graphMetaSchema = z.strictObject({
+  description: z.string().nullable(),
+  schedule: z.strictObject({ cron: z.string(), tz: z.string().optional() }).nullable(),
+  secrets: z.array(z.string()),
+  mode: z.enum(EXECUTION_MODES),
+  scope: z.enum(LOOPY_SCOPES),
+});
+
 export const graphSchema = z.strictObject({
+  meta: graphMetaSchema,
   version: z.literal(1),
   name: z.string(),
   input: z.union([graphRecord(z.enum(FIELD_TYPES)).readonly(), z.literal("schema")]),

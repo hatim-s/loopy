@@ -1,7 +1,6 @@
 import { code, fs, loopy } from "../../../src/sdk/graph/index.js";
 
-export default loopy({
-  name: "compiled",
+export default loopy("compiled", {
   input: {},
   run: () => {
     const files = fs.ls();

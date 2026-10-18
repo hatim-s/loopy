@@ -39,11 +39,6 @@ export async function runSave(context: CliContext): Promise<void> {
           source: {
             path: source,
             workspace,
-            scope: "project",
-            description: null,
-            mode: "sandbox",
-            secrets: [],
-            schedule: null,
           },
           replace: context.values.replace ?? false,
         },

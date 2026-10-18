@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { graphSchema, nodeIdSchema } from "./graph.js";
+import { graphMetaSchema, graphSchema, nodeIdSchema } from "./graph.js";
 
 export const hashSchema = z.string().regex(/^[a-f0-9]{64}$/);
 
@@ -11,11 +11,6 @@ export const bundleReferenceSchema = z.strictObject({
 export const sourceMetadataSchema = z.strictObject({
   path: z.string(),
   workspace: z.string(),
-  scope: z.enum(["project", "global"]),
-  description: z.string().nullable(),
-  mode: z.enum(["sandbox", "full"]),
-  secrets: z.array(z.string()),
-  schedule: z.strictObject({ cron: z.string(), tz: z.string().optional() }).nullable(),
 });
 
 export const putLoopyBodySchema = z.strictObject({
@@ -35,16 +30,16 @@ export type PutLoopyBody = z.infer<typeof putLoopyBodySchema>;
 export const savedLoopySchema = z.strictObject({
   version: z.literal(2),
   slug: z.string(),
-  scope: sourceMetadataSchema.shape.scope,
+  scope: graphMetaSchema.shape.scope,
   graph: graphSchema,
   revision: hashSchema,
   bundles: z.array(bundleReferenceSchema),
   source: z.string(),
   description: z.string().nullable(),
   input: graphSchema.shape.input,
-  schedule: sourceMetadataSchema.shape.schedule,
-  mode: sourceMetadataSchema.shape.mode,
-  secrets: sourceMetadataSchema.shape.secrets,
+  schedule: graphMetaSchema.shape.schedule,
+  mode: graphMetaSchema.shape.mode,
+  secrets: graphMetaSchema.shape.secrets,
   savedAt: z.string(),
 });
 

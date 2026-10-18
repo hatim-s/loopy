@@ -1,7 +1,5 @@
-import { realpath, stat } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { type Expression, parseSync, type Statement } from "oxc-parser";
-import { errorMessage } from "../core/index.js";
 import { builtinCommandKeys } from "../sdk/graph-host.js";
 import {
   type Context,
@@ -12,9 +10,11 @@ import {
   name,
   refuse,
   type Scope,
+  unwrap,
 } from "./ast.js";
 import { diagnostic } from "./diagnostic.js";
 import { checkCodeModule } from "./module.js";
+import { modulePath } from "./module-imports.js";
 import type { AuthorModule, CompilerDiagnostic, ParserSource, Restricted } from "./types.js";
 
 function parserSource(context: Context, node: Expression) {
@@ -32,7 +32,8 @@ function parserSource(context: Context, node: Expression) {
     return;
   }
 
-  const descriptor = node.arguments[0];
+  const argument = node.arguments[0];
+  const descriptor = argument && argument.type !== "SpreadElement" ? unwrap(argument) : argument;
 
   if (descriptor?.type !== "ObjectExpression") {
     refuse(context, node, "command_descriptor", "defineCommand requires a literal descriptor.");
@@ -65,35 +66,16 @@ function parserSource(context: Context, node: Expression) {
       );
     }
 
-    context.parsers.set(id, {
-      file: context.file,
-      source: context.source.slice(parser.value.start, parser.value.end),
-    });
+    const path = literal(context, parser.value, "module_path");
+
+    if (path !== null) {
+      context.parsers.set(id, { file: resolve(dirname(context.file), path) });
+    }
   }
 }
 
 function declarations(statement: Statement) {
   return statement.type === "ExportNamedDeclaration" ? statement.declaration : statement;
-}
-
-async function authorPath(specifier: string, file: string) {
-  const path = resolve(dirname(file), specifier);
-
-  const candidates = [
-    path,
-    path.replace(/\.js$/, ".ts"),
-    ...[".ts", ".tsx", ".js", "/index.ts", "/index.js"].map((suffix) => `${path}${suffix}`),
-  ];
-
-  for (const candidate of candidates) {
-    const info = await stat(candidate).catch(() => null);
-
-    if (info?.isFile()) {
-      return realpath(candidate);
-    }
-  }
-
-  throw new Error(`Cannot resolve author module '${specifier}' from '${file}'.`);
 }
 
 type Inspection = {
@@ -166,7 +148,7 @@ async function inspectImports(context: Context, statements: Statement[], state: 
         continue;
       }
 
-      const dependency = await authorPath(specifier, file);
+      const dependency = await modulePath(specifier, file);
 
       if (scopes.has(dependency)) {
         imported = scopes.get(dependency) ?? new Map();
@@ -200,10 +182,6 @@ function inspectConstants(
     parserSource(context, declaration.init);
     const kind = declarationKind(declaration.init, context.scope);
     context.scope.set(declaration.id.name, kind);
-
-    if (kind === "value") {
-      context.parserPrelude += `\nconst ${context.source.slice(declaration.start, declaration.end)};`;
-    }
   }
 }
 
@@ -300,19 +278,9 @@ async function inspectModule(file: string, state: Inspection): Promise<Scope> {
     diagnostics,
     edits: [],
     parsers,
-    parserPrelude: "",
   };
 
   await inspectImports(context, parsed.program.body, state);
-
-  context.parserPrelude = parsed.program.body
-    .filter(
-      (statement) =>
-        statement.type === "ImportDeclaration" ||
-        declarations(statement)?.type === "FunctionDeclaration",
-    )
-    .map((statement) => source.slice(statement.start, statement.end))
-    .join("\n");
 
   for (const statement of parsed.program.body) {
     const node = declarations(statement);
@@ -333,21 +301,12 @@ async function inspectModule(file: string, state: Inspection): Promise<Scope> {
     );
   }
 
-  for (const parser of parsers.values()) {
-    if (parser.file === file) {
-      parser.source = `${context.parserPrelude}\nexport default ${parser.source};`;
-    }
-  }
-
   for (const edit of context.edits) {
     // BOUNDARY: The edit text was produced by JSON.stringify from a resolved module path.
     const modulePath: string = JSON.parse(edit.text);
 
-    try {
-      await checkCodeModule(modulePath);
-    } catch (error) {
-      diagnostics.push(diagnostic(file, source, edit.start, "module_default", errorMessage(error)));
-    }
+    const checked = await checkCodeModule(modulePath);
+    diagnostics.push(...checked.diagnostics);
   }
 
   const evaluated = context.edits
@@ -367,6 +326,11 @@ export async function restrict(
   const parsers = new Map<string, ParserSource>();
   const diagnostics: CompilerDiagnostic[] = [];
   await inspectModule(file, { modules, parsers, diagnostics, scopes: new Map(), entry: file });
+
+  for (const parser of parsers.values()) {
+    const checked = await checkCodeModule(parser.file);
+    diagnostics.push(...checked.diagnostics);
+  }
 
   return diagnostics.length > 0
     ? { ok: false, diagnostics }

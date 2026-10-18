@@ -7,6 +7,7 @@ import {
   isReservedGraphName,
   isString,
 } from "../core/index.js";
+import { sdkCalls } from "../sdk/graph-host.js";
 import { diagnostic } from "./diagnostic.js";
 import type { CompilerDiagnostic, ParserSource } from "./types.js";
 
@@ -26,7 +27,6 @@ export type Context = {
   diagnostics: CompilerDiagnostic[];
   edits: { start: number; end: number; text: string }[];
   parsers: Map<string, ParserSource>;
-  parserPrelude: string;
 };
 
 export function refuse(
@@ -118,7 +118,12 @@ function callback(context: Context, node: Expression, scope: Scope) {
       local.set(parameter.name, "ref");
     } else if (parameter.type === "ObjectPattern") {
       for (const property of parameter.properties) {
-        if (property.type === "Property" && property.value.type === "Identifier") {
+        if (
+          property.type === "Property" &&
+          !property.computed &&
+          name(property.key) !== null &&
+          property.value.type === "Identifier"
+        ) {
           local.set(property.value.name, "ref");
         } else {
           refuse(context, property, "invalid_binding", "Use simple reference bindings.");
@@ -158,25 +163,6 @@ function moduleProperty(context: Context, property: Property) {
   });
 }
 
-function parserProperty(context: Context, property: Property, scope: Scope) {
-  const value = property.value;
-
-  if (
-    value.type === "ArrowFunctionExpression" ||
-    value.type === "FunctionExpression" ||
-    (value.type === "Identifier" && scope.get(value.name) === "function")
-  ) {
-    return;
-  }
-
-  refuse(
-    context,
-    property,
-    "forbidden_expression",
-    "A parser must be a function literal or a declared function binding.",
-  );
-}
-
 function propertyValue(context: Context, property: Property, scope: Scope, owner: string) {
   const key = name(property.key);
 
@@ -207,7 +193,7 @@ function propertyValue(context: Context, property: Property, scope: Scope, owner
   }
 
   if (key === "parse" && owner === "defineCommand") {
-    parserProperty(context, property, scope);
+    parserProperty(context, property);
 
     return;
   }
@@ -285,11 +271,41 @@ function callRule(
 
   const root = call.split(".")[0] ?? call;
 
-  if (["code", "wait", "subgraph"].includes(root)) {
+  if (scope.get(root) === "sdk" && !sdkCalls.includes(call)) {
+    refuse(context, node, "unknown_sdk_call", "Call an exported SDK function or namespace member.");
+
+    return;
+  }
+
+  if (["loopy", "code", "wait", "subgraph"].includes(root)) {
     literal(context, node.arguments[0]);
   }
 
-  for (const argument of node.arguments) {
+  callArguments(context, node, scope, call);
+}
+
+function callArguments(
+  context: Context,
+  node: Extract<Expression, { type: "CallExpression" }>,
+  scope: Scope,
+  call: string,
+) {
+  const root = call.split(".")[0] ?? call;
+
+  for (const [index, original] of node.arguments.entries()) {
+    const argument = original.type === "SpreadElement" ? original : unwrap(original);
+    const options = optionsArgument(call, index, scope);
+
+    if (options && argument.type !== "ObjectExpression") {
+      refuse(
+        context,
+        argument,
+        "options_not_literal",
+        "Use an inline object literal for SDK options.",
+      );
+      continue;
+    }
+
     if (argument.type === "SpreadElement") {
       refuse(
         context,
@@ -455,4 +471,42 @@ export function declarationKind(expression: Expression | null, scope: Scope): Bi
       : call === "loopy"
         ? "graph"
         : "ref";
+}
+
+export function unwrap(node: Expression): Expression {
+  switch (node.type) {
+    case "TSAsExpression":
+    case "TSSatisfiesExpression":
+    case "TSNonNullExpression":
+    case "ParenthesizedExpression":
+      return unwrap(node.expression);
+    default:
+      return node;
+  }
+}
+
+function optionsArgument(call: string, index: number, scope: Scope) {
+  const root = call.split(".")[0] ?? call;
+
+  if (["loopy", "code", "wait", "branch", "switch_"].includes(root)) {
+    return index === 1;
+  }
+
+  if (["defineCommand", "parallel"].includes(root)) {
+    return true;
+  }
+
+  if (root === "map") {
+    return index === 2;
+  }
+
+  return index === 1 && (root === "sh" || call.includes(".") || scope.get(root) === "command");
+}
+
+function parserProperty(context: Context, property: Property) {
+  const path = literal(context, property.value, "module_path");
+
+  if (path !== null && !path.startsWith("./") && !path.startsWith("../")) {
+    refuse(context, property, "module_path", "Parser modules must use a relative file path.");
+  }
 }

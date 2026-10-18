@@ -15,7 +15,7 @@ import {
   scheduleViewSchema,
   serverEventSchema,
 } from "../src/contract/index.js";
-import { requireRecord } from "../src/core/index.js";
+import { requireRecord, revision } from "../src/core/index.js";
 import {
   LoopyService,
   localDaemon,
@@ -946,6 +946,14 @@ test("cursor endpoint bootstraps an empty dashboard and follows new events", asy
   }
 });
 
+function artifactState(paths: string[]) {
+  return paths.map((path) => {
+    const { ino, mtimeMs, ctimeMs, size, mode } = statSync(path);
+
+    return { ino, mtimeMs, ctimeMs, size, mode };
+  });
+}
+
 test("compiled save route verifies artifacts, stores private bundles and returns only GraphView", async () => {
   const { f, service, store } = await serviceFixture("compiled-save");
   const { compile } = await import("../src/compiler/index.js");
@@ -954,7 +962,7 @@ test("compiled save route verifies artifacts, stores private bundles and returns
   const sdk = resolve(import.meta.dir, "../src/sdk/graph/index.ts");
   await Bun.write(
     source,
-    `import {loopy,code} from ${JSON.stringify(sdk)}; export default loopy({name:"compiled-save",input:{},run:()=>code("answer",{in:{},out:{kind:"value",type:"number"},module:"./answer.ts"})});`,
+    `import {loopy,code} from ${JSON.stringify(sdk)}; export default loopy("compiled-save", {input:{},run:()=>code("answer",{in:{},out:{kind:"value",type:"number"},module:"./answer.ts"})});`,
   );
   await Bun.write(
     join(f.cwd, "answer.ts"),
@@ -967,7 +975,7 @@ test("compiled save route verifies artifacts, stores private bundles and returns
   }
 
   const body = {
-    ...compiledBody("compiled-save", source),
+    ...(await compiledBody("compiled-save", source)),
     replace: true,
     graph: result.graph,
     revision: result.revision,
@@ -1007,6 +1015,49 @@ test("compiled save route verifies artifacts, stores private bundles and returns
   expect(serialized).not.toMatch(/"(?:bytes|bundleHash|source|revision)":/);
   const registry = new Registry(f.home, f.cwd);
   const saved = registry.get("compiled-save");
+
+  const paths = [
+    join(registry.projectDirectory, "compiled-save.json"),
+    registry.graphPath(saved.revision),
+    ...saved.bundles.map((bundle) => registry.bundlePath(bundle.bundleHash)),
+  ];
+
+  const before = artifactState(paths);
+  expect((await put(body)).status).toBe(200);
+  expect(registry.get("compiled-save")).toEqual(saved);
+  expect(artifactState(paths)).toEqual(before);
+  expect(
+    (
+      await put({
+        ...body,
+        bundles: body.bundles.map((bundle) => ({
+          ...bundle,
+          bytes: Buffer.from("forged").toString("base64"),
+        })),
+      })
+    ).status,
+  ).toBe(400);
+  const globalGraph = { ...body.graph, meta: { ...body.graph.meta, scope: "global" as const } };
+
+  const globalBody = {
+    ...body,
+    graph: globalGraph,
+    revision: await revision(globalGraph),
+    source: { ...body.source, path: `${source}-global` },
+  };
+
+  expect((await put(globalBody)).status).toBe(200);
+
+  const globalPaths = [
+    join(registry.globalDirectory, "compiled-save.json"),
+    registry.graphPath(globalBody.revision),
+    ...saved.bundles.map((bundle) => registry.bundlePath(bundle.bundleHash)),
+  ];
+
+  const globalBefore = artifactState(globalPaths);
+  expect((await put(globalBody)).status).toBe(200);
+  expect(artifactState(globalPaths)).toEqual(globalBefore);
+  expect(registry.get("compiled-save")).toEqual(saved);
   expect(saved.revision).toBe(result.revision);
   expect(saved.bundles).toEqual(
     result.bundles.map(({ nodeId, bundleHash }) => ({ nodeId, bundleHash })),
@@ -1027,7 +1078,7 @@ test("saving another revision retains the earlier graph and executable artifacts
   const source = join(f.cwd, "revision.ts");
   await Bun.write(
     source,
-    `import {loopy,code} from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/graph/index.ts"))}; export default loopy({name:"revisions",input:{},run:()=>code("value",{in:{},out:{kind:"value",type:"number"},module:"./value.ts"})});`,
+    `import {loopy,code} from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/graph/index.ts"))}; export default loopy("revisions", {input:{},run:()=>code("value",{in:{},out:{kind:"value",type:"number"},module:"./value.ts"})});`,
   );
   const registry = new Registry(f.home, f.cwd);
   const revisions: string[] = [];
@@ -1041,7 +1092,7 @@ test("saving another revision retains the earlier graph and executable artifacts
     }
 
     await service.putLoopy("revisions", {
-      ...compiledBody("revisions", source),
+      ...(await compiledBody("revisions", source)),
       replace: true,
       graph: compiled.graph,
       revision: compiled.revision,

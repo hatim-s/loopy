@@ -1,0 +1,2 @@
+import {loopy,code,defineCommand,sh} from "__SDK__";
+const options={in:{},out:{kind:"value",type:"number"},module:"./not-function.ts"}; export default loopy("bad",{input:{},run:()=>code("x",options)});

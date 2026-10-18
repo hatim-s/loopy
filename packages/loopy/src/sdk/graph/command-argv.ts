@@ -86,7 +86,11 @@ function flagSpec(descriptor: CommandDefinition): CommandFlagSpec {
   };
 }
 
-export function commandArgv(original: CommandDescriptor, input: Input, mode: "parsed" | "raw") {
+export function commandArgv(
+  original: Omit<CommandDescriptor, "parse">,
+  input: Input,
+  mode: "parsed" | "raw",
+) {
   const descriptor = platformVariant(original, process.platform);
   const key = original.key ?? `${original.namespace}.${original.name}`;
   const codec = new Preparation();
