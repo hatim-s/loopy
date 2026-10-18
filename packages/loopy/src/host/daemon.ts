@@ -13,6 +13,8 @@ import { ScheduleScheduler } from "./schedules.js";
 
 const PRUNE_INTERVAL_MS = 3_600_000;
 
+const IDLE_CAP_MS = 5000;
+
 type DaemonOptions = {
   store: Store;
   prepare: (run: RunRecord) => Promise<Pick<ActivationOptions, "graph" | "executor" | "signal">>;
@@ -20,39 +22,15 @@ type DaemonOptions = {
   concurrency: number;
   revisionFor: (schedule: Schedule) => string | Promise<string>;
   onError?: (error: Error, run?: RunRecord) => void;
-  sleep?: (milliseconds: number, signal: AbortSignal) => Promise<void>;
 };
-
-type TickResult = { fired: number; activated: number };
-
-function sleep(milliseconds: number, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve) => {
-    if (signal.aborted) {
-      resolve();
-
-      return;
-    }
-
-    const finish = () => {
-      clearTimeout(timer);
-      signal.removeEventListener("abort", finish);
-      resolve();
-    };
-
-    const timer = setTimeout(finish, milliseconds);
-    signal.addEventListener("abort", finish, { once: true });
-  });
-}
 
 export class Daemon {
   private readonly clock: Clock;
   private readonly pool: ActivationPool;
   private readonly schedules: ScheduleScheduler;
   private nextPruneAt = 0;
-  private stopped = false;
-  private wakeRequested = false;
-  private waiting?: AbortController;
-  private ticking?: Promise<TickResult>;
+  private status: "idle" | "waiting" | "stopping" = "idle";
+  private wakeController = new AbortController();
   private running?: Promise<void>;
 
   constructor(private readonly options: DaemonOptions) {
@@ -76,18 +54,6 @@ export class Daemon {
     );
   }
 
-  tick(): Promise<TickResult> {
-    if (this.stopped) {
-      return Promise.resolve({ fired: 0, activated: 0 });
-    }
-
-    this.ticking ??= this.performTick().finally(() => {
-      this.ticking = undefined;
-    });
-
-    return this.ticking;
-  }
-
   run(): Promise<void> {
     this.running ??= this.loop().finally(() => {
       this.running = undefined;
@@ -97,14 +63,12 @@ export class Daemon {
   }
 
   wake(): void {
-    this.wakeRequested = true;
-    this.waiting?.abort();
+    this.wakeController.abort();
   }
 
   async stop(): Promise<void> {
-    this.stopped = true;
+    this.status = "stopping";
     this.wake();
-    await this.ticking;
     await this.running;
     await this.pool.drain();
   }
@@ -122,10 +86,10 @@ export class Daemon {
 
         const progress = fired + this.pool.takeProgress();
         await this.wait({ minimum: progress > 0 ? 0 : delay });
-        delay = progress > 0 ? 1000 : Math.min(5000, delay * 2);
+        delay = progress > 0 ? 1000 : Math.min(IDLE_CAP_MS, delay * 2);
       } catch (error) {
         this.report(error);
-        await this.wait({ milliseconds: 5000 });
+        await this.wait({ milliseconds: IDLE_CAP_MS });
       }
     }
 
@@ -145,13 +109,6 @@ export class Daemon {
     const runs = await this.options.store.dueRuns(now);
 
     return { fired, runs };
-  }
-
-  private async performTick(): Promise<TickResult> {
-    const { fired, runs } = await this.dueWork();
-    const activated = await this.pool.activateAll(runs);
-
-    return { fired, activated };
   }
 
   private async activateRun(run: RunRecord): Promise<boolean> {
@@ -219,22 +176,33 @@ export class Daemon {
   }
 
   private async wait(delay: { milliseconds: number } | { minimum: number }): Promise<void> {
-    const controller = new AbortController();
-    this.waiting = controller;
+    const controller = this.wakeController;
 
     try {
-      if (this.stopped || this.wakeRequested) {
+      if (this.stopped || controller.signal.aborted) {
         return;
       }
 
       const milliseconds =
         "milliseconds" in delay ? delay.milliseconds : await this.waitDuration(delay.minimum);
 
-      await (this.options.sleep ?? sleep)(milliseconds, controller.signal);
+      if (this.stopped) {
+        return;
+      }
+
+      this.status = "waiting";
+      await this.clock.sleep(milliseconds, controller.signal);
     } finally {
-      this.waiting = undefined;
-      this.wakeRequested = false;
+      if (!this.stopped) {
+        this.status = "idle";
+      }
+
+      this.wakeController = new AbortController();
     }
+  }
+
+  private get stopped() {
+    return this.status === "stopping";
   }
 
   private async waitDuration(minimum: number): Promise<number> {
@@ -251,12 +219,8 @@ export class Daemon {
       deadlines.push(Date.parse(wakeAt));
     }
 
-    return Math.max(
-      minimum,
-      Math.min(
-        this.pool.active > 0 && minimum > 0 ? minimum : 5000,
-        ...deadlines.map((at) => at - this.clock.now()),
-      ),
-    );
+    const idleCap = this.pool.active > 0 && minimum > 0 ? minimum : IDLE_CAP_MS;
+
+    return Math.max(minimum, Math.min(idleCap, ...deadlines.map((at) => at - this.clock.now())));
   }
 }

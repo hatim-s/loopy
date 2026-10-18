@@ -92,7 +92,12 @@ test("ui starts the foreground daemon when discovery is absent and removes it on
     expect(record?.pid).toBe(child.pid);
     const reader = child.stdout.getReader();
     const chunk = await reader.read();
-    expect(new TextDecoder().decode(chunk.value).trim()).toBe(daemonUrl(record!));
+
+    if (!record) {
+      throw new Error("Daemon discovery was not published.");
+    }
+
+    expect(new TextDecoder().decode(chunk.value).trim()).toBe(daemonUrl(record));
     reader.releaseLock();
     child.kill("SIGTERM");
     expect(await child.exited).toBe(0);

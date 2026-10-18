@@ -31,32 +31,6 @@ export class ActivationPool {
     return activation;
   }
 
-  async activateAll(runs: RunRecord[]): Promise<number> {
-    let activated = 0;
-    let pending: Promise<boolean>[] = [];
-
-    for (const run of runs) {
-      if (this.pending.has(run.id)) {
-        continue;
-      }
-
-      let activation = this.start(run);
-
-      if (!activation) {
-        activated += (await Promise.all(pending)).filter(Boolean).length;
-        pending = [];
-        await this.drain();
-        activation = this.start(run);
-      }
-
-      if (activation) {
-        pending.push(activation);
-      }
-    }
-
-    return activated + (await Promise.all(pending)).filter(Boolean).length;
-  }
-
   get active(): number {
     return this.pending.size;
   }

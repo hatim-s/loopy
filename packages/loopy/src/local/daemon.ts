@@ -72,9 +72,6 @@ class LocalDaemon {
     this.concurrency = options.concurrency;
   }
 
-  tick() {
-    return this.daemon.tick();
-  }
   wake() {
     this.daemon.wake();
   }

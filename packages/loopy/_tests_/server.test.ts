@@ -29,7 +29,7 @@ import {
 import { eventStream } from "../src/local/server/events.js";
 import { apiRoutes, dispatch } from "../src/local/server/routes.js";
 import { CLI, fixture, object, roots, runFixture, save } from "./cli-fixture.js";
-import { newRun } from "./fixture.js";
+import { newRun, until } from "./fixture.js";
 
 const daemonMetadata = { startedAt: new Date(0).toISOString(), concurrency: 4 };
 
@@ -799,9 +799,8 @@ test("local server leaves event pruning to the runtime daemon", async () => {
   try {
     await daemon.start();
     expect(prune).not.toHaveBeenCalled();
-    await daemon.tick();
-    expect(prune).toHaveBeenCalledTimes(1);
-    await daemon.tick();
+    void daemon.run();
+    await until(() => prune.mock.calls.length === 1);
     expect(prune).toHaveBeenCalledTimes(1);
   } finally {
     await daemon.stop();

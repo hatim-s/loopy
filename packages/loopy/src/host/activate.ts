@@ -68,27 +68,8 @@ async function execute(
       throw new Error("Run lost ownership during reconciliation.");
     }
 
-    await waitForRetry(clock, new Date(clock.now() + 100).toISOString(), signal);
+    await clock.sleep(100, signal);
   }
-}
-
-async function waitForRetry(clock: Clock, at: string, signal: AbortSignal): Promise<void> {
-  signal.throwIfAborted();
-  await new Promise<void>((resolve, reject) => {
-    const cancel = clock.timeout(finish, Math.max(0, Date.parse(at) - clock.now()));
-
-    function finish() {
-      signal.removeEventListener("abort", abort);
-      resolve();
-    }
-
-    function abort() {
-      cancel();
-      reject(new Error("Retry interrupted. Resume the run."));
-    }
-
-    signal.addEventListener("abort", abort, { once: true });
-  });
 }
 
 async function drive(options: ActivationOptions, token: string) {
@@ -113,7 +94,9 @@ async function drive(options: ActivationOptions, token: string) {
       case "finished":
         return transition.next.outcome;
       case "wait":
-        await waitForRetry(clock, transition.next.at, signal);
+        signal.throwIfAborted();
+        await clock.sleep(Math.max(0, Date.parse(transition.next.at) - clock.now()), signal);
+        signal.throwIfAborted();
         event = { kind: "resume", at: new Date(clock.now()).toISOString() };
         break;
       case "dispatch":
@@ -132,7 +115,13 @@ export async function activate(options: ActivationOptions) {
   try {
     outcome = {
       kind: "completed",
-      value: await withHeartbeat(options.store, options.runId, token, () => drive(options, token)),
+      value: await withHeartbeat(
+        options.store,
+        options.runId,
+        token,
+        () => drive(options, token),
+        options.clock ?? SYSTEM_CLOCK,
+      ),
     };
   } catch (cause) {
     outcome = {

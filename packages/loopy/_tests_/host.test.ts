@@ -1,34 +1,16 @@
 import { expect, test } from "bun:test";
-import type { Executor } from "../src/core/index.js";
+import type { Executor, Store } from "../src/core/index.js";
 import { initialState, step } from "../src/engine/index.js";
-import { activate, type Clock } from "../src/host/index.js";
-import { code, loopy, sh } from "../src/sdk/graph/index.js";
+import { activate } from "../src/host/index.js";
+import { loopy, sh } from "../src/sdk/graph/index.js";
 import { SqliteRunStore } from "../src/store/index.js";
-import { newRun } from "./fixture.js";
-
-function graph() {
-  const graph = loopy("test", {
-    input: {},
-    run: () =>
-      code("work", { in: {}, out: { kind: "value", type: "number" }, module: "./work.ts" }),
-  }).graph;
-
-  const node = graph.nodes[0];
-
-  if (node?.kind !== "code") {
-    throw new Error("Expected code node.");
-  }
-
-  node.module.bundleHash = "a".repeat(64);
-
-  return graph;
-}
+import { codeGraph, FakeClock, FakeExecutor, newRun, until } from "./fixture.js";
 
 test.each(["none", "finished"] as const)(
   "host resumes the same persisted attempt from a %s receipt",
   async (kind) => {
     const store = new SqliteRunStore(":memory:");
-    const plan = graph();
+    const plan = codeGraph();
     await store.createRun(newRun());
     await store.claim("run", "old");
 
@@ -49,7 +31,8 @@ test.each(["none", "finished"] as const)(
       effects: [{ kind: "write_node_run", nodeRun: { ...node, attempt: 2 } }],
     });
     await store.release("run", "old");
-    let executions = 0;
+    const lookups: Parameters<Executor["lookup"]>[] = [];
+    const executions: Parameters<Executor["execute"]>[] = [];
 
     const result = {
       kind: "succeeded" as const,
@@ -58,16 +41,13 @@ test.each(["none", "finished"] as const)(
     };
 
     const executor: Executor = {
-      lookup: async (key, attempt) => {
-        expect(key).toEqual(node.key);
-        expect(attempt).toBe(2);
+      lookup: async (...args) => {
+        lookups.push(args);
 
         return kind === "finished" ? { kind, result } : { kind };
       },
-      execute: async (key, attempt) => {
-        expect(key).toEqual(node.key);
-        expect(attempt).toBe(2);
-        executions++;
+      execute: async (...args) => {
+        executions.push(args);
 
         return result;
       },
@@ -77,7 +57,11 @@ test.each(["none", "finished"] as const)(
       status: "succeeded",
       output: 42,
     });
-    expect(executions).toBe(kind === "none" ? 1 : 0);
+    expect(executions).toHaveLength(kind === "none" ? 1 : 0);
+    expect(lookups).toEqual([[node.key, 2]]);
+    expect(executions.map(([key, attempt]) => [key, attempt])).toEqual(
+      kind === "none" ? [[node.key, 2]] : [],
+    );
     expect(await store.getNodeRuns("run")).toMatchObject([
       { attempt: 2, status: "succeeded", receipt: "finished" },
       { status: "succeeded" },
@@ -87,20 +71,7 @@ test.each(["none", "finished"] as const)(
 );
 
 test("retry retains ownership and running status, persists its deadline and keeps logs per attempt", async () => {
-  let now = Date.parse(newRun().createdAt);
-  const waiting = Promise.withResolvers<() => void>();
-
-  const clock: Clock = {
-    now: () => now,
-    timeout: (callback, milliseconds) => {
-      waiting.resolve(() => {
-        now += milliseconds;
-        callback();
-      });
-
-      return () => {};
-    },
-  };
+  const clock = new FakeClock();
 
   const store = new SqliteRunStore(":memory:", clock.now);
   await store.createRun(newRun());
@@ -118,14 +89,16 @@ test("retry retains ownership and running status, persists its deadline and keep
         : { kind: "succeeded", output: 42, logs: [{ message: "second", data: null }] },
   };
 
-  const running = activate({ runId: "run", store, executor, graph: graph(), clock });
-  const resume = await waiting.promise;
+  const running = activate({ runId: "run", store, executor, graph: codeGraph(), clock });
+  await until(async () =>
+    (await store.getNodeRuns("run")).some((node) => node.status === "retrying"),
+  );
   expect(await store.getRun("run")).toMatchObject({
     status: "running",
     owner: { token: expect.any(String) },
   });
   expect(await store.getNodeRuns("run")).toMatchObject([{ status: "retrying", attempt: 1 }]);
-  resume();
+  clock.advance(1000);
   expect(await running).toEqual({ status: "succeeded", output: 42 });
   expect(
     (await store.getLogs("run")).map((log) => [
@@ -139,20 +112,7 @@ test("retry retains ownership and running status, persists its deadline and keep
 });
 
 test("a shared window of two delays the third dispatch without consuming an attempt", async () => {
-  let now = Date.parse(newRun().createdAt);
-  const waiting = Promise.withResolvers<() => void>();
-
-  const clock: Clock = {
-    now: () => now,
-    timeout: (callback, ms) => {
-      waiting.resolve(() => {
-        now += ms;
-        callback();
-      });
-
-      return () => {};
-    },
-  };
+  const clock = new FakeClock();
 
   const store = new SqliteRunStore(":memory:", clock.now);
   const rateLimit = { key: "shared", limit: 2, window: "1m" } as const;
@@ -180,7 +140,9 @@ test("a shared window of two delays the third dispatch without consuming an atte
 
   await store.createRun(newRun());
   const running = activate({ runId: "run", store, graph: plan, executor, clock });
-  const resume = await waiting.promise;
+  await until(async () =>
+    (await store.getNodeRuns("run")).some((node) => node.status === "rate_limited"),
+  );
   expect(attempts).toEqual([1, 1]);
   expect(await store.getNodeRuns("run")).toMatchObject([
     { status: "succeeded" },
@@ -190,7 +152,89 @@ test("a shared window of two delays the third dispatch without consuming an atte
   expect(await store.getRun("run")).toMatchObject({
     status: "running",
   });
-  resume();
+  clock.advance(60_000);
   expect(await running).toMatchObject({ status: "succeeded" });
   expect(attempts).toEqual([1, 1, 1]);
+});
+
+async function execute(store: Store, executor = new FakeExecutor()) {
+  await store.createRun(newRun());
+
+  return activate({ store, executor, graph: codeGraph(), runId: "run" });
+}
+
+class ReadFailureStore extends SqliteRunStore {
+  override async getNodeRuns(): Promise<never> {
+    throw new Error("Nodes unavailable. Restore storage.");
+  }
+}
+
+class ReleaseFailureStore extends ReadFailureStore {
+  override async release(runId: string, token: string) {
+    await super.release(runId, token);
+    throw new Error("Release unavailable. Restore storage.");
+  }
+}
+
+test("node read failure releases ownership into a claimable suspension", async () => {
+  const store = new ReadFailureStore(":memory:");
+  await expect(execute(store)).rejects.toThrow("Nodes unavailable");
+  expect(await store.getRun("run")).toMatchObject({ status: "suspended" });
+  expect((await store.getRun("run"))?.owner).toBeUndefined();
+  expect((await store.claim("run", "next")).status).toBe("running");
+});
+
+test("release failure remains the cause of the primary read failure", async () => {
+  await expect(execute(new ReleaseFailureStore(":memory:"))).rejects.toMatchObject({
+    message: "Nodes unavailable. Restore storage.",
+    cause: new Error("Release unavailable. Restore storage."),
+  });
+});
+
+for (const operation of ["dispatch", "finish"] as const) {
+  test(`${operation} persistence failure releases ownership and does not dispatch uncommitted work`, async () => {
+    class WriteFailureStore extends SqliteRunStore {
+      override async apply(batch: Parameters<Store["apply"]>[0]) {
+        if (
+          operation === "dispatch" ||
+          batch.effects.some((effect) => effect.kind === "finish_run")
+        ) {
+          throw new Error("Write unavailable. Restore storage.");
+        }
+
+        return super.apply(batch);
+      }
+    }
+
+    const store = new WriteFailureStore(":memory:");
+    const executor = new FakeExecutor();
+    executor.result = { kind: "succeeded", output: 42, logs: [] };
+    await expect(execute(store, executor)).rejects.toThrow("Write unavailable");
+    expect(executor.calls).toHaveLength(operation === "dispatch" ? 0 : 1);
+    expect((await store.getRun("run"))?.owner).toBeUndefined();
+    expect((await store.dueRuns(new Date().toISOString())).map((run) => run.id)).toEqual(["run"]);
+  });
+}
+
+test("release failure preserves a failed graph outcome as the primary message", async () => {
+  class TerminalReleaseFailureStore extends SqliteRunStore {
+    override async release(runId: string, token: string) {
+      await super.release(runId, token);
+      throw new Error("Release unavailable");
+    }
+  }
+
+  const executor = new FakeExecutor();
+  executor.result = {
+    kind: "failed",
+    error: { code: "protocol", message: "Invalid bundle protocol" },
+    exitCode: null,
+    logs: [],
+  };
+  await expect(
+    execute(new TerminalReleaseFailureStore(":memory:"), executor),
+  ).rejects.toMatchObject({
+    message: "Invalid bundle protocol",
+    cause: new Error("Release unavailable"),
+  });
 });

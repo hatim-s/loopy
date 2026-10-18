@@ -1,33 +1,25 @@
 import { expect, test } from "bun:test";
 import { withHeartbeat } from "../src/host/heartbeat.js";
 import { SqliteRunStore } from "../src/store/index.js";
-import { newRun } from "./fixture.js";
+import { FakeClock, newRun } from "./fixture.js";
 
-test("activation renews ownership at a quarter of its lease while a step is running", async () => {
-  const renewed = Promise.withResolvers<void>();
-  let heartbeats = 0;
+test("heartbeat rejects a held activation when another token takes ownership", async () => {
+  const clock = new FakeClock();
+  const store = new SqliteRunStore(":memory:", clock.now, { leaseMs: 2000 });
+  const held = Promise.withResolvers<void>();
 
-  class RecordingStore extends SqliteRunStore {
-    override async heartbeat(runId: string, token: string) {
-      const owned = await super.heartbeat(runId, token);
-      heartbeats++;
-      renewed.resolve();
-
-      return owned;
-    }
+  try {
+    await store.createRun(newRun());
+    await store.claim("run", "owner");
+    const active = withHeartbeat(store, "run", "owner", () => held.promise, clock);
+    clock.advance(499);
+    await store.release("run", "owner");
+    await store.claim("run", "other");
+    clock.advance(1);
+    await expect(active).rejects.toMatchObject({ code: "owned_elsewhere" });
+    expect((await store.getRun("run"))?.owner?.token).toBe("other");
+  } finally {
+    held.resolve();
+    store.close();
   }
-
-  const store = new RecordingStore(undefined, 2000);
-  await store.createRun(newRun());
-  await store.claim("run", "owner");
-  expect(
-    await withHeartbeat(store, "run", "owner", async () => {
-      await renewed.promise;
-
-      return 42;
-    }),
-  ).toBe(42);
-  await store.release("run", "owner");
-  expect(heartbeats).toBe(1);
-  expect((await store.getRun("run"))?.owner).toBeUndefined();
-}, 2_000);
+});

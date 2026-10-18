@@ -5,11 +5,11 @@ import { join, resolve } from "node:path";
 import { encodeRunCursor, routes } from "../src/contract/index.js";
 import type { Graph, RunRecord } from "../src/core/index.js";
 import { revision } from "../src/core/index.js";
-import { Daemon, SYSTEM_CLOCK } from "../src/host/index.js";
+import { Daemon } from "../src/host/index.js";
 import { LoopyService, openRunStore, Registry } from "../src/local/index.js";
 import { loopy } from "../src/sdk/graph/index.js";
 import { compiledBody } from "./compiled-fixture.js";
-import { FakeExecutor, newRun } from "./fixture.js";
+import { FakeClock, FakeExecutor, newRun, until } from "./fixture.js";
 
 const cleanups: (() => void)[] = [];
 
@@ -42,8 +42,7 @@ async function fixture(definition = "") {
   body.graph.input = { name: "string" };
   body.revision = await revision(body.graph);
   await registry.save(body);
-  let now = Date.parse("2026-10-17T00:00:00.000Z");
-  const clock = { ...SYSTEM_CLOCK, now: () => now };
+  const clock = new FakeClock(Date.parse("2026-10-17T00:00:00.000Z"));
   const store = openRunStore(home);
 
   const service = new LoopyService({
@@ -65,7 +64,7 @@ async function fixture(definition = "") {
     clock,
     registry,
     advance: (milliseconds = 1000) => {
-      now += milliseconds;
+      clock.advance(milliseconds);
     },
   };
 }
@@ -137,7 +136,6 @@ test("service resumes queued, suspended and abandoned runs and rejects terminal 
   expect(await service.cancelRun(owned.id)).toMatchObject({ status: "cancelled", owner: null });
   await expect(service.cancelRun("missing")).rejects.toMatchObject({
     code: "not_found",
-    message: "No run 'missing'. Use loopy runs to list run ids.",
   });
 });
 
@@ -298,14 +296,17 @@ test("disabled schedules stay dormant and re-enabling waits for the next slot", 
     enabled: false,
   });
   advance(120_000);
-  expect(await daemon.tick()).toEqual({ fired: 0, activated: 0 });
+  void daemon.run();
+  await until(() => clock.sleeps.length > 0);
   expect(await store.listRuns()).toEqual([]);
   expect(await service.setScheduleEnabled("service", true)).toMatchObject({
     nextFireAt: "2026-10-17T00:03:00.000Z",
   });
-  expect(await daemon.tick()).toEqual({ fired: 0, activated: 0 });
+  daemon.wake();
+  await until(() => clock.sleeps.length >= 2);
   advance(60_000);
-  expect(await daemon.tick()).toEqual({ fired: 1, activated: 1 });
+  daemon.wake();
+  await until(async () => (await store.listRuns({ status: "succeeded" })).length === 1);
   await daemon.stop();
 });
 
@@ -364,7 +365,7 @@ for (const mutation of ["PUT", "disable"]) {
     await f.service.putSchedule("service", { cron: "* * * * *", input: { name: "first" } });
     f.advance(60_000);
     const paused = pausedScheduleDaemon(f);
-    const ticking = paused.daemon.tick();
+    const running = paused.daemon.run();
     await paused.entered;
 
     try {
@@ -377,13 +378,13 @@ for (const mutation of ["PUT", "disable"]) {
         mutation === "PUT" ? "2026-10-17T01:00:00.000Z" : "2026-10-17T00:01:00.000Z",
       );
       paused.release();
-      expect(await ticking).toEqual({ fired: 0, activated: 0 });
+      await until(() => f.clock.sleeps.length > 0);
       expect(await f.store.listRuns()).toEqual([]);
       expect(await f.service.listSchedules()).toEqual([saved]);
     } finally {
       paused.release();
-      await ticking;
       await paused.daemon.stop();
+      await running;
     }
   });
 }

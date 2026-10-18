@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { nodeIdSchema, utcTimestamp } from "../src/contract/index.js";
+import type { RuntimeEvent } from "../src/core/index.js";
 import { type NodeRun, type RunOutcome, type Schedule, type Store } from "../src/core/index.js";
 import { newRun } from "./fixture.js";
 
