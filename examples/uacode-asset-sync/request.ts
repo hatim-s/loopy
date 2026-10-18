@@ -1,5 +1,4 @@
 import { isAbsolute } from "node:path";
-import type { StandardSchemaV1 } from "loopy";
 
 export const script = "scripts/platform-feature-assets/sync-t2w-assets.mjs";
 
@@ -138,9 +137,9 @@ function validatePaths(input: {
   }
 }
 
-export const requestSchema: StandardSchemaV1<unknown, Request> = {
+export const requestSchema = {
   "~standard": {
-    version: 1,
+    version: 1 as const,
     vendor: "loopy-asset-sync",
     // BOUNDARY: Standard Schema receives untyped CLI JSON and returns issues before commands run.
     validate(value: unknown) {
