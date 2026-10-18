@@ -1,4 +1,4 @@
-import type { CompilerDiagnosticCode, Diagnostic, Graph, NodeId } from "../core/index.js";
+import type { CompilerDiagnosticCode, Graph, NodeId } from "../core/index.js";
 
 export type CompilerDiagnostic = {
   code: CompilerDiagnosticCode;
@@ -11,7 +11,7 @@ export type CompilerDiagnostic = {
 export type Bundle = { nodeId: NodeId; bundleHash: string; bytes: Uint8Array };
 
 export type CompileResult =
-  | { ok: true; graph: Graph; bundles: Bundle[]; revision: string; warnings: Diagnostic[] }
+  | { ok: true; graph: Graph; bundles: Bundle[]; revision: string }
   | { ok: false; diagnostics: CompilerDiagnostic[] };
 
 export type ParserSource = { file: string };

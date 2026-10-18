@@ -24,20 +24,26 @@ export {
 
 export { graphView, loopyView, runView, serverEvent } from "./derive.js";
 
+export * from "./executor.js";
+
 export * from "./graph.js";
 
 export { type Json, jsonSchema } from "./json.js";
 
-export { parseModuleOutput } from "./module-output.js";
+export * from "./primitives.js";
 
 export {
   type HookRecord,
   hookRecordSchema,
   type LogPosition,
   type LogRecord,
+  logPositionSchema,
   logRecordSchema,
   type RunOutcome,
+  type RunRecord,
   type RunStatus,
+  runOutcomeSchema,
+  runRecordSchema,
   runStatusSchema,
   type Schedule,
   type StepRecord,

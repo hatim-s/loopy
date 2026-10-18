@@ -1,33 +1,14 @@
 import { lstat, mkdir, open, readFile, realpath, rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { z } from "zod";
-import { executionKeySchema, jsonSchema } from "../contract/index.js";
-import {
-  EXECUTION_ERROR_CODES,
-  type ExecutionKey,
-  errnoCode,
-  executionKeyString,
-} from "../core/index.js";
-
-const resultSchema = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("succeeded"),
-    output: jsonSchema,
-    logs: z.array(z.object({ message: z.string(), data: jsonSchema })),
-  }),
-  z.object({
-    kind: z.literal("failed"),
-    error: z.object({ code: z.enum(EXECUTION_ERROR_CODES), message: z.string() }),
-    exitCode: z.number().nullable(),
-    logs: z.array(z.object({ message: z.string(), data: jsonSchema })),
-  }),
-]);
+import { executionKeySchema, executionResultSchema } from "../contract/index.js";
+import { type ExecutionKey, errnoCode, executionKeyString } from "../core/index.js";
 
 const identity = { executionKey: executionKeySchema, attempt: z.number().int().positive() };
 
 export const receiptSchema = z.discriminatedUnion("kind", [
   z.object({ ...identity, kind: z.literal("started"), pid: z.number().int().positive() }),
-  z.object({ ...identity, kind: z.literal("finished"), result: resultSchema }),
+  z.object({ ...identity, kind: z.literal("finished"), result: executionResultSchema }),
 ]);
 
 export async function receiptPath(home: string, key: ExecutionKey, attempt: number) {

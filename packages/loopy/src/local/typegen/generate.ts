@@ -36,7 +36,7 @@ export async function generateCommand(
   binary: string,
   path: string[],
   options: { name?: string } = {},
-): Promise<{ source: string; help: string; warnings: string[] }> {
+): Promise<{ source: string; warnings: string[] }> {
   const help = await outputOf(binary, [...path, "--help"]);
   const version = await outputOf(binary, ["--version"]).catch(() => "unknown");
   const parsed = parseCliHelp(binary, path, help);
@@ -45,7 +45,6 @@ export async function generateCommand(
 
   return {
     source: renderCommandSource(name, descriptor),
-    help,
     warnings: parsed.warnings,
   };
 }

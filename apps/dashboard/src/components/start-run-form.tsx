@@ -7,7 +7,6 @@ import {
   type InputField,
   initialValues,
   inputFields,
-  parseJsonInput,
   type RecordSpec,
 } from "../lib/input-form.ts";
 import { useRunMutation } from "../lib/mutations.ts";
@@ -98,40 +97,6 @@ function RecordFields({ spec, onSubmit }: { spec: RecordSpec; onSubmit: (input: 
   );
 }
 
-function JsonEditor({ onSubmit }: { onSubmit: (input: Json) => void }) {
-  const [text, setText] = useState("{}");
-  const parsed = parseJsonInput(text);
-
-  return (
-    <form
-      id="start-run"
-      className="space-y-1"
-      onSubmit={(event) => {
-        event.preventDefault();
-
-        if (parsed.valid) {
-          onSubmit(parsed.value);
-        }
-      }}
-    >
-      <label className="block space-y-1">
-        <span className="text-xs text-muted">
-          Input, as JSON. The loopy validates it against its schema.
-        </span>
-        <textarea
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          rows={5}
-          spellCheck={false}
-          aria-invalid={!parsed.valid}
-          className="block w-full resize-y rounded-md border border-line bg-panel p-2.5 font-mono text-xs aria-invalid:border-danger"
-        />
-      </label>
-      {!parsed.valid && <p className="text-xs text-danger">The input is not valid JSON.</p>}
-    </form>
-  );
-}
-
 export function StartRunForm({ loopy }: { loopy: LoopyView }) {
   const navigate = useNavigate();
 
@@ -142,7 +107,7 @@ export function StartRunForm({ loopy }: { loopy: LoopyView }) {
       onSuccess: (run) => void navigate({ to: "/runs/$runId", params: { runId: run.id } }),
     });
 
-  const empty = loopy.input !== "schema" && Object.keys(loopy.input).length === 0;
+  const empty = Object.keys(loopy.input).length === 0;
 
   return (
     <section aria-labelledby="start-heading" className="space-y-3">
@@ -150,11 +115,7 @@ export function StartRunForm({ loopy }: { loopy: LoopyView }) {
         Start run
       </h2>
       {empty && <p className="text-xs text-muted">This loopy takes no input.</p>}
-      {loopy.input === "schema" ? (
-        <JsonEditor onSubmit={submit} />
-      ) : (
-        <RecordFields spec={loopy.input} onSubmit={submit} />
-      )}
+      <RecordFields spec={loopy.input} onSubmit={submit} />
       <Button type="submit" form="start-run" variant="primary" disabled={start.isPending}>
         {start.isPending ? "Starting" : "Start run"}
       </Button>

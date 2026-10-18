@@ -2,47 +2,46 @@ import { z } from "zod";
 import {
   COMPARISON_OPS,
   DIAGNOSTIC_CODES,
-  type Duration,
+  DURATION_PATTERN,
   durationMs,
   EDGE_KINDS,
   EXECUTION_ERROR_CODES,
   EXECUTION_MODES,
   FIELD_TYPES,
+  FLAG_KINDS,
+  FLAG_POSITIONS,
+  FLAG_STYLES,
   isRecord,
+  isReservedGraphName,
   type Json,
   LOOPY_SCOPES,
   MAP_ERROR_MODES,
-  NODE_KINDS,
-  NODE_RUN_STATUSES,
   type NodeId,
   predicateOps,
   RECEIPT_KINDS,
-  RESERVED_GRAPH_NAMES,
   RETRY_BACKOFFS,
   type RefId,
 } from "../core/index.js";
 import { jsonSchema } from "./json.js";
+import { secretNameSchema, slugSchema, utcTimestamp } from "./primitives.js";
 
-// BOUNDARY: Graph ids are branded only after the wire has supplied nonempty strings.
+// Graph ids are branded only after the wire has supplied nonempty strings.
 export const nodeIdSchema = z.custom<NodeId>(
   (value): value is NodeId => typeof value === "string" && value.length > 0,
 );
 
-// BOUNDARY: Reference ids use their own brand at the graph boundary.
+// Reference ids use their own brand at the graph boundary.
 export const refIdSchema = z.custom<RefId>(
   (value): value is RefId => typeof value === "string" && value.length > 0,
 );
 
-const labelSchema = z
-  .string()
-  .refine(
-    (name) => !RESERVED_GRAPH_NAMES.some((reserved) => reserved === name.replace(/\?$/, "")),
-    { message: "Reserved graph names cannot be labels or record keys." },
-  );
+export const labelSchema = z.string().refine((name) => !isReservedGraphName(name), {
+  message: "Reserved graph names cannot be labels or record keys.",
+});
 
 export const refSchema = z.strictObject({ ref: refIdSchema, path: z.array(z.string()) });
 
-// BOUNDARY: Zod records skip __proto__ before validating keys, so inspect raw own keys first.
+// Zod records skip __proto__ before validating keys, so inspect raw own keys first.
 function graphRecord<T extends z.ZodType>(schema: T) {
   return z
     .unknown()
@@ -96,12 +95,12 @@ export const predicateSchema = z.discriminatedUnion("op", [
   }),
 ]);
 
-// BOUNDARY: Durations arrive as JSON numbers or unit-suffixed strings.
-const durationSchema = z.custom<Duration>((value): value is Duration =>
-  typeof value === "number"
-    ? Number.isFinite(value) && value >= 0
-    : typeof value === "string" && /^\d+(?:\.\d+)?[smhd]$/.test(value),
-);
+export const durationSchema = z.union([
+  z.number().nonnegative(),
+  z
+    .templateLiteral([z.number().nonnegative(), z.enum(["s", "m", "h", "d"])])
+    .refine((value) => DURATION_PATTERN.test(value)),
+]);
 
 const rateLimitSchema = z.strictObject({
   key: z.string().min(1),
@@ -122,7 +121,7 @@ const base = z.strictObject({
 });
 
 const code = base.extend({
-  kind: z.literal(NODE_KINDS[0]),
+  kind: z.literal("code"),
   in: graphRecord(valueSchema),
   out: outputSchema,
   module: z.strictObject({ path: z.string(), bundleHash: z.string().nullable() }),
@@ -134,13 +133,13 @@ const code = base.extend({
 const commandFlagSchema = z
   .strictObject({
     cli: z.string(),
-    kind: z.enum(["boolean", "string", "number"]),
+    kind: z.enum(FLAG_KINDS),
     repeatable: z.boolean().optional(),
     optionalValue: z.boolean().optional(),
     choices: z.array(z.string()).readonly().optional(),
     supported: z.boolean().optional(),
-    style: z.enum(["equals", "space", "attached", "positional"]).optional(),
-    position: z.enum(["before", "after"]).optional(),
+    style: z.enum(FLAG_STYLES).optional(),
+    position: z.enum(FLAG_POSITIONS).optional(),
     order: z.number().optional(),
     prefix: z.array(z.string()).readonly().optional(),
     pairs: z.boolean().optional(),
@@ -151,18 +150,18 @@ const commandFlagSchema = z
 const commandFlagSpecSchema = z.strictObject({
   path: z.array(z.string()),
   flags: graphRecord(commandFlagSchema),
-  style: z.enum(["equals", "space"]),
+  style: z.enum(FLAG_STYLES.filter((style) => style === "equals" || style === "space")),
   positionalSeparator: z.boolean(),
   flagsAfterPositionals: z.boolean(),
 });
 
-const command = base.extend({
-  kind: z.literal(NODE_KINDS[1]),
+export const commandNodeSchema = base.extend({
+  kind: z.literal("command"),
   key: z.string(),
   out: outputSchema,
   argv: z.array(valueSchema),
   flags: graphRecord(valueSchema),
-  flagSpec: commandFlagSpecSchema.optional(),
+  flagSpec: commandFlagSpecSchema.nullable(),
   options: z.strictObject({
     cwd: valueSchema.nullable(),
     env: graphRecord(valueSchema),
@@ -178,18 +177,18 @@ const command = base.extend({
 
 const otherNodes = [
   base.extend({
-    kind: z.literal(NODE_KINDS[2]),
+    kind: z.literal("branch"),
     predicate: predicateSchema,
     arms: z.strictObject({ yes: nodeIdSchema, no: nodeIdSchema }),
   }),
   base.extend({
-    kind: z.literal(NODE_KINDS[3]),
+    kind: z.literal("switch"),
     on: refSchema,
     cases: graphRecord(nodeIdSchema),
     default: nodeIdSchema.nullable(),
   }),
   base.extend({
-    kind: z.literal(NODE_KINDS[4]),
+    kind: z.literal("map"),
     over: refSchema,
     body: nodeIdSchema,
     item: refIdSchema,
@@ -197,36 +196,36 @@ const otherNodes = [
     concurrency: z.number().int().positive(),
     onError: z.enum(MAP_ERROR_MODES),
   }),
-  base.extend({ kind: z.literal(NODE_KINDS[5]), branches: graphRecord(nodeIdSchema) }),
+  base.extend({ kind: z.literal("parallel"), branches: graphRecord(nodeIdSchema) }),
   base.extend({
-    kind: z.literal(NODE_KINDS[6]),
+    kind: z.literal("wait"),
     timeout: durationSchema.nullable(),
     payload: outputSchema,
   }),
-  base.extend({ kind: z.literal(NODE_KINDS[7]), duration: durationSchema }),
-  base.extend({ kind: z.literal(NODE_KINDS[8]), body: nodeIdSchema, cleanup: nodeIdSchema }),
+  base.extend({ kind: z.literal("sleep"), duration: durationSchema }),
+  base.extend({ kind: z.literal("finally"), body: nodeIdSchema, cleanup: nodeIdSchema }),
   base.extend({
-    kind: z.literal(NODE_KINDS[9]),
+    kind: z.literal("rescue"),
     body: nodeIdSchema,
     handler: nodeIdSchema,
     error: refIdSchema,
   }),
-  base.extend({ kind: z.literal(NODE_KINDS[10]), message: valueSchema }),
+  base.extend({ kind: z.literal("fail"), message: valueSchema }),
   base.extend({
-    kind: z.literal(NODE_KINDS[11]),
+    kind: z.literal("format"),
     template: z.string(),
     values: graphRecord(z.union([z.string(), z.number(), z.boolean(), refSchema])),
   }),
   base.extend({
-    kind: z.literal(NODE_KINDS[12]),
+    kind: z.literal("log"),
     message: valueSchema,
     data: valueSchema.nullable(),
   }),
-  base.extend({ kind: z.literal(NODE_KINDS[13]) }),
-  base.extend({ kind: z.literal(NODE_KINDS[14]) }),
-  base.extend({ kind: z.literal(NODE_KINDS[15]) }),
+  base.extend({ kind: z.literal("now") }),
+  base.extend({ kind: z.literal("uuid") }),
+  base.extend({ kind: z.literal("random") }),
   base.extend({
-    kind: z.literal(NODE_KINDS[16]),
+    kind: z.literal("join"),
     result: z.discriminatedUnion("kind", [
       z.strictObject({ kind: z.literal("value"), value: valueSchema }),
       z.strictObject({ kind: z.literal("none") }),
@@ -234,13 +233,20 @@ const otherNodes = [
   }),
 ] as const;
 
-export const nodeSchema = z.discriminatedUnion("kind", [code, command, ...otherNodes]);
+export const nodeSchema = z.discriminatedUnion("kind", [code, commandNodeSchema, ...otherNodes]);
 
-export const edgeSchema = z.discriminatedUnion("kind", [
+export const edgeSchema = z.strictObject({
+  from: nodeIdSchema,
+  to: nodeIdSchema,
+  kind: z.enum(EDGE_KINDS),
+});
+
+const viewEdgeSchema = z.union([
+  edgeSchema,
   z.strictObject({
     from: nodeIdSchema,
     to: nodeIdSchema,
-    kind: z.enum(EDGE_KINDS.filter((kind) => kind !== "case")),
+    kind: z.enum(["yes", "no", "each", "cleanup", "rescue"]),
   }),
   z.strictObject({
     from: nodeIdSchema,
@@ -265,8 +271,8 @@ export const diagnosticSchema = z.strictObject({
 
 export const graphMetaSchema = z.strictObject({
   description: z.string().nullable(),
-  schedule: z.strictObject({ cron: z.string(), tz: z.string().optional() }).nullable(),
-  secrets: z.array(z.string()),
+  schedule: z.strictObject({ cron: z.string(), tz: z.string() }).nullable(),
+  secrets: z.array(secretNameSchema),
   mode: z.enum(EXECUTION_MODES),
   scope: z.enum(LOOPY_SCOPES),
 });
@@ -274,13 +280,12 @@ export const graphMetaSchema = z.strictObject({
 export const graphSchema = z.strictObject({
   meta: graphMetaSchema,
   version: z.literal(1),
-  name: z.string(),
-  input: z.union([graphRecord(z.enum(FIELD_TYPES)).readonly(), z.literal("schema")]),
+  name: slugSchema,
+  input: graphRecord(z.enum(FIELD_TYPES)).readonly(),
   nodes: z.array(nodeSchema),
   edges: z.array(edgeSchema),
   entry: nodeIdSchema,
   outputs: refSchema.nullable(),
-  warnings: z.array(diagnosticSchema),
 });
 
 export const executionKeySchema = z.strictObject({
@@ -293,7 +298,7 @@ const runBase = z.strictObject({
   key: executionKeySchema,
   attempt: z.number().int().positive(),
   maxAttempts: z.number().int().positive(),
-  startedAt: z.string(),
+  startedAt: utcTimestamp,
   receipt: z.enum(RECEIPT_KINDS),
 });
 
@@ -303,69 +308,52 @@ export const executionErrorSchema = z.strictObject({
 });
 
 export const nodeRunSchema = z.discriminatedUnion("status", [
-  runBase.extend({ status: z.literal(NODE_RUN_STATUSES[0]) }),
-  runBase.extend({ status: z.literal(NODE_RUN_STATUSES[7]) }),
-  runBase.extend({ status: z.literal(NODE_RUN_STATUSES[9]), nextRetryAt: z.string() }),
-  runBase.extend({ status: z.literal(NODE_RUN_STATUSES[8]), endedAt: z.string() }),
+  runBase.extend({ status: z.literal("running") }),
+  runBase.extend({ status: z.literal("rate_limited"), nextRetryAt: utcTimestamp }),
   runBase.extend({
-    status: z.literal(NODE_RUN_STATUSES[1]),
+    status: z.literal("succeeded"),
     output: jsonSchema,
-    endedAt: z.string(),
+    endedAt: utcTimestamp,
   }),
   runBase.extend({
-    status: z.literal(NODE_RUN_STATUSES[2]),
+    status: z.literal("failed"),
     error: executionErrorSchema,
-    endedAt: z.string(),
+    endedAt: utcTimestamp,
   }),
   runBase.extend({
-    status: z.literal(NODE_RUN_STATUSES[3]),
+    status: z.literal("retrying"),
     error: executionErrorSchema,
-    nextRetryAt: z.string(),
-    endedAt: z.string(),
+    nextRetryAt: utcTimestamp,
+    endedAt: utcTimestamp,
   }),
-  runBase.extend({ status: z.literal(NODE_RUN_STATUSES[4]), wakeAt: z.string().nullable() }),
-  runBase.extend({ status: z.literal(NODE_RUN_STATUSES[5]), wakeAt: z.string() }),
-  runBase.extend({ status: z.literal(NODE_RUN_STATUSES[6]), endedAt: z.string() }),
+  runBase.extend({ status: z.literal("waiting"), wakeAt: utcTimestamp.nullable() }),
+  runBase.extend({ status: z.literal("sleeping"), wakeAt: utcTimestamp }),
+  runBase.extend({ status: z.literal("cancelled"), endedAt: utcTimestamp }),
 ]);
 
 const nodeViewSchema = z.discriminatedUnion("kind", [
   code.extend({ module: z.strictObject({ name: z.string() }) }),
-  command.extend({ parse: z.strictObject({ input: graphRecord(valueSchema) }).nullable() }),
+  commandNodeSchema.extend({
+    parse: z.strictObject({ input: graphRecord(valueSchema) }).nullable(),
+  }),
   ...otherNodes,
 ]);
 
 export const graphViewSchema = graphSchema.extend({
   nodes: z.array(nodeViewSchema),
-  warnings: z.array(
-    z.strictObject({
-      code: z.enum(DIAGNOSTIC_CODES),
-      message: z.string(),
-      nodeId: nodeIdSchema.nullable(),
-      label: z.string().nullable(),
-    }),
-  ),
+  edges: z.array(viewEdgeSchema),
 });
-
-export const nodeRunViewSchema = nodeRunSchema;
 
 export type GraphView = z.infer<typeof graphViewSchema>;
 
-export type NodeRunView = z.infer<typeof nodeRunViewSchema>;
-
-export type Graph = z.infer<typeof graphSchema>;
-
-export type Node = z.infer<typeof nodeSchema>;
-
-export type Edge = z.infer<typeof edgeSchema>;
-
-export type Value = z.infer<typeof valueSchema>;
-
-export type Ref = z.infer<typeof refSchema>;
-
-export type OutSchema = z.infer<typeof outputSchema>;
-
-export type Diagnostic = z.infer<typeof diagnosticSchema>;
-
-export type ExecutionKey = z.infer<typeof executionKeySchema>;
-
-export type NodeRun = z.infer<typeof nodeRunSchema>;
+export type {
+  Diagnostic,
+  Edge,
+  ExecutionKey,
+  Graph,
+  Node,
+  NodeRun,
+  OutSchema,
+  Ref,
+  Value,
+} from "../core/index.js";

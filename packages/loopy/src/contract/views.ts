@@ -9,8 +9,9 @@ import {
   SCHEDULE_EVENT_KINDS,
   STEP_STATUSES,
 } from "../core/index.js";
-import { nodeRunViewSchema } from "./graph.js";
+import { nodeRunSchema } from "./graph.js";
 import { jsonSchema } from "./json.js";
+import { utcTimestamp } from "./primitives.js";
 import {
   hookRecordSchema,
   logRecordSchema,
@@ -25,13 +26,13 @@ const runBaseSchema = z.strictObject({
   workspace: z.string(),
   loopy: z.strictObject({ slug: z.string(), description: z.string().nullable() }),
   input: jsonSchema,
-  createdAt: z.string(),
-  updatedAt: z.string(),
+  createdAt: utcTimestamp,
+  updatedAt: utcTimestamp,
   owner: z
     .strictObject({
       pid: z.number().int().nonnegative(),
       host: z.string(),
-      heartbeatAt: z.string(),
+      heartbeatAt: utcTimestamp,
     })
     .nullable(),
   ownerStale: z.boolean(),
@@ -40,8 +41,8 @@ const runBaseSchema = z.strictObject({
       hook: z.string(),
       token: z.string(),
       seq: z.number().int().nonnegative(),
-      expiresAt: z.string().nullable(),
-      since: z.string(),
+      expiresAt: utcTimestamp.nullable(),
+      since: utcTimestamp,
     })
     .nullable(),
 });
@@ -52,7 +53,7 @@ export const runViewSchema = z.discriminatedUnion("status", [
   runBaseSchema.extend({ status: z.literal("cancelled") }),
   runBaseSchema.extend({ status: z.literal("succeeded"), output: jsonSchema }),
   runBaseSchema.extend({ status: z.literal("failed"), error: z.string() }),
-  runBaseSchema.extend({ status: z.literal("suspended"), wakeAt: z.string().nullable() }),
+  runBaseSchema.extend({ status: z.literal("suspended"), wakeAt: utcTimestamp.nullable() }),
 ]);
 
 export type RunView = z.infer<typeof runViewSchema>;
@@ -68,13 +69,13 @@ export const loopyViewSchema = z.strictObject({
   description: z.string().nullable(),
   scope: z.enum(LOOPY_SCOPES),
   mode: z.enum(EXECUTION_MODES),
-  input: z.union([z.record(z.string(), z.enum(FIELD_TYPES)), z.literal("schema")]),
+  input: z.record(z.string(), z.enum(FIELD_TYPES)),
   schedule: z
     .strictObject({
       cron: z.string(),
       tz: z.string(),
       enabled: z.boolean(),
-      nextFireAt: z.string().nullable(),
+      nextFireAt: utcTimestamp.nullable(),
     })
     .nullable(),
   lastRun: runViewSchema.nullable(),
@@ -85,7 +86,7 @@ export type LoopyView = z.infer<typeof loopyViewSchema>;
 
 export const runSnapshotViewSchema = z.strictObject({
   run: runViewSchema,
-  nodeRuns: z.array(nodeRunViewSchema),
+  nodeRuns: z.array(nodeRunSchema),
   steps: z.array(stepRecordSchema),
   logs: z.array(logRecordSchema),
   hooks: z.array(hookRecordSchema),
@@ -97,7 +98,7 @@ export type RunSnapshotView = z.infer<typeof runSnapshotViewSchema>;
 
 export const daemonViewSchema = z.strictObject({
   pid: z.number().int().nonnegative(),
-  startedAt: z.string(),
+  startedAt: utcTimestamp,
   concurrency: z.number().int().positive(),
   running: z.number().int().nonnegative(),
   nextWakeAt: z.string().nullable(),
@@ -107,7 +108,7 @@ export type DaemonView = z.infer<typeof daemonViewSchema>;
 
 const eventBaseSchema = z.strictObject({
   sequence: z.number().int().nonnegative(),
-  at: z.string(),
+  at: utcTimestamp,
   txn: z.string(),
   runId: z.string().nullable(),
 });
@@ -121,7 +122,7 @@ export const serverEventSchema = z.discriminatedUnion("entity", [
   eventBaseSchema.extend({
     entity: z.literal("node"),
     kind: z.enum(NODE_RUN_STATUSES),
-    record: nodeRunViewSchema,
+    record: nodeRunSchema,
   }),
   eventBaseSchema.extend({
     entity: z.literal("step"),

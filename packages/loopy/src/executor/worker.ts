@@ -1,9 +1,7 @@
 import { z } from "zod";
-import { executionKeySchema, jsonSchema, nodeSchema } from "../contract/index.js";
+import { executionKeySchema, executionSpecSchema } from "../contract/index.js";
 import { EXECUTION_MODES } from "../core/index.js";
 import { ExecutionWorker } from "./execution.js";
-
-const dictionary = z.record(z.string(), jsonSchema);
 
 const requestSchema = z.object({
   options: z.object({
@@ -15,24 +13,7 @@ const requestSchema = z.object({
   }),
   key: executionKeySchema,
   attempt: z.number().int().positive(),
-  spec: z.discriminatedUnion("kind", [
-    z.object({
-      kind: z.literal("code"),
-      bundleHash: z.string(),
-      input: dictionary,
-      timeoutMs: z.number().nonnegative(),
-    }),
-    z.object({
-      kind: z.literal("command"),
-      node: nodeSchema,
-      argv: z.array(z.string()),
-      flags: dictionary,
-      cwd: z.string().nullable(),
-      env: z.record(z.string(), z.string()),
-      stdin: z.string().nullable(),
-      parse: z.object({ bundleHash: z.string(), input: dictionary }).nullable(),
-    }),
-  ]),
+  spec: executionSpecSchema,
 });
 
 const request = requestSchema.parse(await Bun.stdin.json());
@@ -56,15 +37,4 @@ const executor = new ExecutionWorker({
   },
 });
 
-if (request.spec.kind === "code") {
-  await executor.execute(request.key, request.attempt, request.spec, controller.signal);
-} else if (request.spec.node.kind === "command") {
-  await executor.execute(
-    request.key,
-    request.attempt,
-    { ...request.spec, node: request.spec.node },
-    controller.signal,
-  );
-} else {
-  throw new Error("Execution requires a command node.");
-}
+await executor.execute(request.key, request.attempt, request.spec, controller.signal);

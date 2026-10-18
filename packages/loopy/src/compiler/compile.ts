@@ -51,7 +51,6 @@ export async function compile(path: string): Promise<CompileResult> {
       graph,
       bundles: bundled.bundles,
       revision: await revision(graph),
-      warnings: graph.warnings,
     };
   } catch (error) {
     if (error instanceof EvaluationError) {

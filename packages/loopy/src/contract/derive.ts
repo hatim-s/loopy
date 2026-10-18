@@ -112,8 +112,8 @@ export function runView(options: RunViewOptions): RunView {
 
 type SavedLoopyInput = Pick<LoopyView, "slug" | "scope" | "mode"> & {
   description?: string | null;
-  input: Readonly<Exclude<LoopyView["input"], "schema">> | "schema";
-  schedule?: { cron: string; tz?: string } | null;
+  input: Readonly<LoopyView["input"]>;
+  schedule?: { cron: string; tz: string } | null;
 };
 
 function scheduleView(
@@ -123,7 +123,7 @@ function scheduleView(
   if (schedule === null) {
     // LoopyView can show a schedule declared in the definition, not scheduled yet.
     return declared
-      ? { cron: declared.cron, tz: declared.tz ?? "UTC", enabled: false, nextFireAt: null }
+      ? { cron: declared.cron, tz: declared.tz, enabled: false, nextFireAt: null }
       : null;
   }
 
@@ -203,6 +203,7 @@ function controlEdges(node: Node): GraphView["edges"] {
     to,
     kind,
   });
+
   switch (node.kind) {
     case "branch":
       return [edge(node.arms.yes, "yes"), edge(node.arms.no, "no")];

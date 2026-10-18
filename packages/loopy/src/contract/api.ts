@@ -2,6 +2,7 @@ import { z } from "zod";
 import { putLoopyBodySchema } from "./compiled-loopy.js";
 import { graphViewSchema } from "./graph.js";
 import { jsonSchema } from "./json.js";
+import { secretNameSchema, secretValueSchema, slugSchema } from "./primitives.js";
 import { logRecordSchema, runStatusSchema } from "./records.js";
 import {
   cursorViewSchema,
@@ -18,7 +19,6 @@ export const ERROR_CODES = [
   "not_found",
   "not_claimable",
   "owned_elsewhere",
-  "unknown_hook",
   "bad_request",
   "invalid_schedule",
   "stale_cursor",
@@ -38,7 +38,6 @@ export const DEFAULT_ERROR_MESSAGES = {
   not_found: "The requested resource was not found.",
   not_claimable: "The run cannot be claimed in its current state.",
   owned_elsewhere: "Another worker owns this run. Try again after its lease expires.",
-  unknown_hook: "The hook is unknown or no longer pending.",
   bad_request: "The request is invalid. Check its parameters and body.",
   invalid_schedule: "The schedule is invalid. Check its cron expression, timezone and input.",
   stale_cursor: "The event cursor is stale. Fetch a fresh snapshot.",
@@ -62,7 +61,7 @@ const workspaceQuerySchema = z.strictObject({ workspace: z.string().optional() }
 const runParamsSchema = z.strictObject({ id: z.string() });
 
 export const runsQuerySchema = z.strictObject({
-  slug: z.string().optional(),
+  slug: slugSchema.optional(),
   status: runStatusSchema.optional(),
   waiting: z
     .union([z.boolean(), z.enum(["true", "false"]).transform((value) => value === "true")])
@@ -114,7 +113,7 @@ export type PutScheduleBody = z.infer<typeof putScheduleBodySchema>;
 
 export const scheduleEnabledBodySchema = z.strictObject({ enabled: z.boolean() });
 
-const scheduleParamsSchema = z.strictObject({ slug: z.string() });
+const scheduleParamsSchema = z.strictObject({ slug: slugSchema });
 
 type Route = {
   method: "GET" | "POST" | "PUT" | "DELETE";
@@ -137,15 +136,15 @@ export const routes = {
   putSecret: {
     method: "PUT",
     path: "/secrets/:name",
-    params: z.strictObject({ name: z.string() }),
+    params: z.strictObject({ name: secretNameSchema }),
     query: emptySchema,
-    body: z.strictObject({ value: z.string() }),
+    body: z.strictObject({ value: secretValueSchema }),
     response: z.strictObject({ name: z.string(), saved: z.literal(true) }),
   },
   deleteSecret: {
     method: "DELETE",
     path: "/secrets/:name",
-    params: z.strictObject({ name: z.string() }),
+    params: z.strictObject({ name: secretNameSchema }),
     query: emptySchema,
     body: z.undefined(),
     response: z.strictObject({ name: z.string(), removed: z.literal(true) }),
@@ -163,7 +162,6 @@ export const routes = {
     response: z.strictObject({
       source: z.string(),
       warnings: z.array(z.string()),
-      help: z.string(),
     }),
   },
   resolveNamedHook: {
@@ -257,7 +255,7 @@ export const routes = {
   startRun: {
     method: "POST",
     path: "/loopies/:slug/runs",
-    params: z.strictObject({ slug: z.string() }),
+    params: z.strictObject({ slug: slugSchema }),
     query: emptySchema,
     body: startRunBodySchema,
     response: runViewSchema,

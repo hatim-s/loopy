@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { graphMetaSchema, graphSchema, nodeIdSchema } from "./graph.js";
+import { slugSchema, utcTimestamp } from "./primitives.js";
 
 export const hashSchema = z.string().regex(/^[a-f0-9]{64}$/);
 
@@ -29,7 +30,7 @@ export type PutLoopyBody = z.infer<typeof putLoopyBodySchema>;
 
 export const savedLoopySchema = z.strictObject({
   version: z.literal(2),
-  slug: z.string(),
+  slug: slugSchema,
   scope: graphMetaSchema.shape.scope,
   graph: graphSchema,
   revision: hashSchema,
@@ -40,7 +41,7 @@ export const savedLoopySchema = z.strictObject({
   schedule: graphMetaSchema.shape.schedule,
   mode: graphMetaSchema.shape.mode,
   secrets: graphMetaSchema.shape.secrets,
-  savedAt: z.string(),
+  savedAt: utcTimestamp,
 });
 
 export type SavedLoopy = z.infer<typeof savedLoopySchema>;

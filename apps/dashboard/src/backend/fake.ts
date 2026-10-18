@@ -168,7 +168,7 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
       }
     }
 
-    throw new BackendError("unknown_hook");
+    throw new BackendError("not_found");
   }
 
   const daemon: DaemonView = {

@@ -1,5 +1,4 @@
-import { z } from "zod";
-import { jsonSchema } from "../contract/index.js";
+import { attemptLogSchema, jsonSchema } from "../contract/index.js";
 import {
   type AttemptLog,
   type CommandResult,
@@ -11,11 +10,9 @@ import { redactValue } from "./redact.js";
 
 type Redact = (text: string, truncated?: boolean) => string;
 
-const logSchema = z.strictObject({ message: z.string(), data: jsonSchema });
-
 function parseRecord(line: string): AttemptLog | undefined {
   try {
-    return logSchema.parse(JSON.parse(line));
+    return attemptLogSchema.parse(JSON.parse(line));
   } catch {
     return undefined;
   }

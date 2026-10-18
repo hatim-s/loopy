@@ -6,7 +6,7 @@ import { Button } from "./button.tsx";
 
 type Resolve = ReturnType<typeof useResolveHook>;
 
-/** Server codes stay visible: unknown_hook means someone or something resolved it first. */
+/** Server codes stay visible: not_found means someone or something resolved it first. */
 export function ResolveError({ error }: { error: Error }) {
   return (
     <p role="alert" className="border-l-2 border-danger bg-danger/8 px-3 py-2 text-danger">

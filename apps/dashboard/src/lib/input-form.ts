@@ -1,6 +1,6 @@
 import { isFieldValue, type Json, jsonSchema, type LoopyView } from "loopy/contract";
 
-export type RecordSpec = Exclude<LoopyView["input"], "schema">;
+export type RecordSpec = LoopyView["input"];
 
 export type InputField = {
   key: string;
