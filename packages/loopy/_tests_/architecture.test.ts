@@ -31,7 +31,7 @@ const ALLOWED_IMPORTS: Record<Layer, readonly Layer[]> = {
   executor: ["core", "contract", "local"],
   contract: ["core"],
   local: ["core", "engine", "host", "store", "executor", "sdk", "contract"],
-  sdk: ["core", "host"],
+  sdk: ["core"],
   cli: ["core", "engine", "host", "store", "executor", "local", "sdk", "contract", "compiler"],
   compiler: ["core", "contract", "local", "sdk"],
 };
