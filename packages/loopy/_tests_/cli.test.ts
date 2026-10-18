@@ -233,13 +233,27 @@ test("HTTP logs follow prints each log as a separate JSON line", async () => {
   await f.store.claim("logged", "log-owner");
 
   for (const index of [0, 1]) {
-    await f.store.appendLog("logged", "log-owner", {
+    await f.store.apply({
       runId: "logged",
-      seq: index + 1,
-      position: { kind: "workflow", afterStep: 0, afterFinish: 0, index },
-      level: "info",
-      message: `line ${index}`,
-      at: new Date().toISOString(),
+      token: "log-owner",
+      effects: [
+        {
+          kind: "emit_event",
+          event: {
+            entity: "log",
+            kind: "written",
+            runId: "logged",
+            record: {
+              runId: "logged",
+              seq: index + 1,
+              position: { kind: "node", executionKey: "logged/node", attempt: 1, index },
+              level: "info",
+              message: `line ${index}`,
+              at: new Date().toISOString(),
+            },
+          },
+        },
+      ],
     });
   }
 

@@ -354,14 +354,14 @@ function sameSchedule(a: ScheduleId, b: ScheduleId): boolean {
   return a.workspace === b.workspace && a.slug === b.slug;
 }
 
-/** A lower revision is older than what the list holds; a fire keeps the revision it fired. */
+/** A lower version is older than what the list holds; a fire keeps the version it fired. */
 function withSchedule(list: ScheduleView[], next: ScheduleView): ScheduleView[] {
   const current = list.find((item) => sameSchedule(item, next));
 
   if (
     current &&
-    (current.revision > next.revision ||
-      (current.revision === next.revision && current.nextFireAt >= next.nextFireAt))
+    (current.version > next.version ||
+      (current.version === next.version && current.nextFireAt >= next.nextFireAt))
   ) {
     return list;
   }

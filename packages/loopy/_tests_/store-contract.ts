@@ -1,205 +1,21 @@
 import { describe, expect, test } from "bun:test";
-import type {
-  LogRecord,
-  RunOutcome,
-  Schedule,
-  StepRecord,
-  WaitingHookStep,
-} from "../src/core/index.js";
-import { OwnershipError, type RunStore } from "../src/runtime/index.js";
+import { nodeIdSchema } from "../src/contract/index.js";
+import { type NodeRun, OwnershipError, type Schedule, type Store } from "../src/core/index.js";
 import { newRun } from "./fixture.js";
 
-const STEP: StepRecord = {
-  runId: "run",
-  seq: 1,
-  key: "test",
-  kind: "function",
-  status: "running",
-  input: null,
-  attempt: 1,
-  maxAttempts: 3,
-  startedAt: "2026-10-16T00:00:00.000Z",
-};
+type StoreFactory = (options?: { now?: () => number; leaseMs?: number }) => Store | Promise<Store>;
 
-const LOG: LogRecord = {
-  runId: "run",
-  seq: 1,
-  position: { kind: "workflow", afterStep: 0, afterFinish: 0, index: 1 },
-  level: "info",
-  message: "hello",
-  at: STEP.startedAt,
-};
-
-const OUTCOMES: RunOutcome[] = [
-  { status: "succeeded", output: 42 },
-  { status: "failed", error: "Failed. Fix it." },
-  { status: "cancelled" },
-];
-
-type StoreFactory = (options?: {
-  now: () => number;
-  leaseMs: number;
-}) => RunStore | Promise<RunStore>;
+const LOG = { at: newRun().createdAt };
 
 async function fixture(makeStore: StoreFactory) {
   const store = await makeStore();
   await store.createRun(newRun());
-  expect((await store.getRun("run"))?.workspace).toBe("/workspace");
 
   return store;
 }
 
-function stateMachine(makeStore: StoreFactory): void {
-  test("claim heartbeat suspend release and reclaim follow the state machine", async () => {
-    const store = await fixture(makeStore);
-    expect(await store.heartbeat("run", "owner")).toBe(false);
-    const run = await store.claim("run", "owner");
-    expect(run).toMatchObject({ status: "running", owner: { token: "owner" } });
-    expect(await store.heartbeat("run", "owner")).toBe(true);
-    await expect(store.claim("run", "other")).rejects.toBeInstanceOf(OwnershipError);
-    await store.suspend("run", "owner", LOG.at);
-    await expect(store.suspend("run", "owner")).rejects.toThrow(
-      "cannot transition from 'suspended'",
-    );
-    await expect(
-      store.finishRun("run", "owner", { status: "succeeded", output: 42 }),
-    ).rejects.toThrow("cannot transition from 'suspended'");
-    await store.release("run", "owner");
-    expect((await store.getRun("run"))?.owner).toBeUndefined();
-    expect((await store.claim("run", "next")).status).toBe("running");
-  });
-}
-
-function releaseRunning(makeStore: StoreFactory): void {
-  test("release of a running run suspends it at release time and permits reclaim", async () => {
-    const store = await fixture(makeStore);
-    await store.claim("run", "owner");
-    const before = new Date().toISOString();
-    await store.release("run", "owner");
-    const after = new Date().toISOString();
-    const run = await store.getRun("run");
-    expect(run?.status).toBe("suspended");
-    expect(run?.owner).toBeUndefined();
-    expect(run?.wakeAt).toBe(run?.updatedAt);
-    expect(run?.wakeAt).toBeDefined();
-    expect(run?.wakeAt?.localeCompare(before)).toBeGreaterThanOrEqual(0);
-    expect(run?.wakeAt?.localeCompare(after)).toBeLessThanOrEqual(0);
-    expect((await store.dueRuns(after)).map((due) => due.id)).toEqual(["run"]);
-    expect((await store.claim("run", "next")).status).toBe("running");
-  });
-}
-
-function terminalTransitions(makeStore: StoreFactory): void {
-  for (const outcome of OUTCOMES) {
-    test(`terminal ${outcome.status} cannot be overwritten or suspended`, async () => {
-      const store = await fixture(makeStore);
-      await store.claim("run", "owner");
-      await store.finishRun("run", "owner", outcome);
-      await expect(store.finishRun("run", "owner", outcome)).rejects.toThrow(
-        `cannot transition from '${outcome.status}'`,
-      );
-      await expect(store.suspend("run", "owner")).rejects.toThrow(
-        `cannot transition from '${outcome.status}'`,
-      );
-      expect(await store.getRun("run")).toMatchObject(outcome);
-      await store.release("run", "owner");
-      await expect(store.claim("run", "owner")).rejects.toThrow("cannot be claimed");
-    });
-  }
-}
-
-function ownershipFencing(makeStore: StoreFactory): void {
-  test("ownership fences stale writes and heartbeat reports lost ownership", async () => {
-    const store = await fixture(makeStore);
-    await store.claim("run", "old");
-    await store.suspend("run", "old");
-    await store.release("run", "old");
-    await store.claim("run", "new");
-    expect(await store.heartbeat("run", "old")).toBe(false);
-
-    const writes = [
-      () => store.suspend("run", "old"),
-      () => store.finishRun("run", "old", { status: "cancelled" }),
-      () => store.release("run", "old"),
-      () => store.putStep("run", "old", STEP),
-      () => store.appendLog("run", "old", LOG),
-    ];
-
-    for (const write of writes) {
-      await expect(write()).rejects.toBeInstanceOf(OwnershipError);
-    }
-  });
-}
-
-function logSequences(makeStore: StoreFactory): void {
-  test("duplicate log sequence is rejected and getLogs supports a cursor", async () => {
-    const store = await fixture(makeStore);
-    await store.claim("run", "owner");
-    await store.appendLog("run", "owner", LOG);
-    await expect(
-      store.appendLog("run", "owner", { ...LOG, message: "replacement" }),
-    ).rejects.toThrow("Log sequence 1 already exists");
-    await store.appendLog("run", "owner", { ...LOG, seq: 2 });
-    expect(await store.getLogs("run")).toEqual([LOG, { ...LOG, seq: 2 }]);
-    expect(await store.getLogs("run", 1)).toEqual([{ ...LOG, seq: 2 }]);
-  });
-}
-
-function stepUpsert(makeStore: StoreFactory): void {
-  test("putStep upserts by sequence", async () => {
-    const store = await fixture(makeStore);
-    await store.claim("run", "owner");
-    await store.putStep("run", "owner", STEP);
-
-    const completed: StepRecord = {
-      ...STEP,
-      status: "succeeded",
-      output: 42,
-      endedAt: LOG.at,
-      finishOrder: 1,
-    };
-
-    await store.putStep("run", "owner", completed);
-    expect(await store.getSteps("run")).toEqual([completed]);
-  });
-}
-
-function dueRuns(makeStore: StoreFactory): void {
-  test("dueRuns includes queued and due suspensions but excludes owned and future runs", async () => {
-    const store = await fixture(makeStore);
-    expect((await store.dueRuns(LOG.at)).map((run) => run.id)).toEqual(["run"]);
-    await store.claim("run", "owner");
-    expect(await store.dueRuns(LOG.at)).toEqual([]);
-    await store.suspend("run", "owner");
-    await store.release("run", "owner");
-    expect(await store.dueRuns(LOG.at)).toEqual([]);
-    await store.claim("run", "owner");
-    await store.suspend("run", "owner", "2026-10-16T01:00:00.000Z");
-    await store.release("run", "owner");
-    expect(await store.dueRuns(LOG.at)).toEqual([]);
-    expect((await store.dueRuns("2026-10-16T01:00:00.000Z")).map((run) => run.id)).toEqual(["run"]);
-  });
-}
-
-function recordIsolation(makeStore: StoreFactory): void {
-  test("returned records and write inputs are isolated from stored state", async () => {
-    const store = await fixture(makeStore);
-    const claimed = await store.claim("run", "owner");
-    claimed.status = "failed";
-    expect((await store.getRun("run"))?.status).toBe("running");
-    const step = { ...STEP };
-    await store.putStep("run", "owner", step);
-    step.key = "changed";
-    const logs = { ...LOG };
-    await store.appendLog("run", "owner", logs);
-    logs.message = "changed";
-    expect(await store.getSteps("run")).toEqual([STEP]);
-    expect(await store.getLogs("run")).toEqual([LOG]);
-  });
-}
-
 const SCHEDULE: Schedule = {
-  revision: 1,
+  version: 1,
   workspace: "/workspace",
   slug: "test",
   cron: "* * * * *",
@@ -225,7 +41,7 @@ function schedules(makeStore: StoreFactory): void {
     }
 
     expect(await store.listSchedules()).toEqual([SCHEDULE]);
-    const replacement = { ...SCHEDULE, revision: 2, enabled: false, lastFireKey: "old" };
+    const replacement = { ...SCHEDULE, version: 2, enabled: false, lastFireKey: "old" };
     await store.putSchedule(replacement);
     await store.putSchedule({ ...SCHEDULE, slug: "other" });
     expect(await store.listSchedules()).toEqual([replacement, { ...SCHEDULE, slug: "other" }]);
@@ -299,7 +115,7 @@ function scheduleRevisions(makeStore: StoreFactory): void {
     const original = await store.putSchedule(SCHEDULE);
     const nextFireAt = "2026-10-16T01:00:00.000Z";
     const replacement = await store.putSchedule({ ...original, cron: "0 * * * *", nextFireAt });
-    expect(replacement.revision).toBe(original.revision + 1);
+    expect(replacement.version).toBe(original.version + 1);
     const before = await store.events(0, 100);
     expect(await store.fireSchedule({ ...original, fireKey: "stale", run: newRun() })).toBe(false);
     expect(await store.listRuns()).toEqual([]);
@@ -361,16 +177,16 @@ function scheduleToggles(makeStore: StoreFactory): void {
     });
 
     const fired = { ...replacement, nextFireAt, lastFireKey: "current" };
-    expect(disabled).toEqual({ ...fired, enabled: false, revision: 3 });
+    expect(disabled).toEqual({ ...fired, enabled: false, version: 3 });
     const before = await store.events(0, 100);
     expect(await store.fireSchedule({ ...fire, fireKey: "stale" })).toBe(false);
     expect(
-      await store.fireSchedule({ ...fire, revision: disabled.revision, fireKey: "disabled" }),
+      await store.fireSchedule({ ...fire, version: disabled.version, fireKey: "disabled" }),
     ).toBe(false);
     expect(await store.listRuns()).toHaveLength(1);
     expect(await store.events(0, 100)).toEqual(before);
     const enabled = await store.setScheduleEnabled({ ...disabled, enabled: true, nextFireAt });
-    expect(enabled).toEqual({ ...disabled, enabled: true, revision: 4 });
+    expect(enabled).toEqual({ ...disabled, enabled: true, version: 4 });
   });
 }
 
@@ -403,92 +219,6 @@ function nextWakeAt(makeStore: StoreFactory): void {
   });
 }
 
-function staleTakeover(makeStore: StoreFactory): void {
-  test("stale takeover retries unfinished steps and fences the former owner", async () => {
-    let now = Date.parse(LOG.at);
-    const store = await makeStore({ now: () => now, leaseMs: 100 });
-    await store.createRun({
-      ...newRun(),
-      status: "running",
-      owner: { token: "old", host: "remote-host", pid: 0, heartbeatAt: LOG.at },
-    });
-    await store.putStep("run", "old", STEP);
-    now += 100;
-    expect(await store.dueRuns(new Date(now).toISOString())).toEqual([]);
-    await expect(store.claim("run", "new")).rejects.toBeInstanceOf(OwnershipError);
-    expect(await store.heartbeat("run", "old")).toBe(true);
-    now += 101;
-    expect((await store.dueRuns(new Date(now).toISOString())).map((run) => run.id)).toEqual([
-      "run",
-    ]);
-    expect(await store.claim("run", "new")).toMatchObject({
-      status: "running",
-      owner: { token: "new" },
-    });
-    expect(await store.getSteps("run")).toMatchObject([
-      { status: "retrying", attempt: 1, nextRetryAt: new Date(now).toISOString() },
-    ]);
-    expect(await store.heartbeat("run", "old")).toBe(false);
-    await expect(store.putStep("run", "old", STEP)).rejects.toBeInstanceOf(OwnershipError);
-    await expect(store.release("run", "old")).rejects.toBeInstanceOf(OwnershipError);
-  });
-
-  test("the same slug has independent schedules in different workspaces", async () => {
-    const store = await makeStore();
-    const other = { ...SCHEDULE, workspace: "/other" };
-    await store.putSchedule(SCHEDULE);
-    await store.putSchedule(other);
-    expect(await store.listSchedules()).toEqual([SCHEDULE, other]);
-    const at = "2026-10-16T00:01:00.000Z";
-    expect(
-      await store.fireSchedule({
-        ...SCHEDULE,
-        fireKey: "same",
-        run: newRun(),
-        nextFireAt: at,
-      }),
-    ).toBe(true);
-    expect(
-      await store.fireSchedule({
-        ...other,
-        fireKey: "same",
-        run: { ...newRun(), id: "other", workspace: other.workspace },
-        nextFireAt: at,
-      }),
-    ).toBe(true);
-    await store.deleteSchedule(SCHEDULE.workspace, SCHEDULE.slug);
-    expect(await store.listSchedules()).toEqual([
-      { ...other, lastFireKey: "same", nextFireAt: at },
-    ]);
-  });
-}
-
-export function storeContract(name: string, makeStore: StoreFactory): void {
-  describe(name, () => {
-    hooks(makeStore);
-    hookSignals(makeStore);
-    hookRejections(makeStore);
-    rateLimits(makeStore);
-    staleTakeover(makeStore);
-    stateMachine(makeStore);
-    releaseRunning(makeStore);
-    terminalTransitions(makeStore);
-    ownershipFencing(makeStore);
-    logSequences(makeStore);
-    stepUpsert(makeStore);
-    dueRuns(makeStore);
-    recordIsolation(makeStore);
-    schedules(makeStore);
-    scheduleFires(makeStore);
-    scheduleFireFailures(makeStore);
-    scheduleRevisions(makeStore);
-    scheduleToggles(makeStore);
-    scheduleAdvances(makeStore);
-    nextWakeAt(makeStore);
-    eventCursors(makeStore);
-  });
-}
-
 function rateLimits(makeStore: StoreFactory): void {
   test("rate limits share a fixed window and reset at its boundary", async () => {
     const store = await makeStore();
@@ -508,103 +238,6 @@ function rateLimits(makeStore: StoreFactory): void {
   });
 }
 
-function waitingHook(seq = 1): WaitingHookStep {
-  return {
-    ...STEP,
-    kind: "hook",
-    status: "waiting",
-    seq,
-    input: { name: "approve", token: `hook-${seq}` },
-    maxAttempts: 1,
-  };
-}
-
-async function hookStore(makeStore: StoreFactory, now = () => Date.parse(LOG.at)) {
-  const store = await makeStore({ now, leaseMs: 60_000 });
-  await store.createRun(newRun());
-  await store.claim("run", "owner");
-  await store.createHook("run", "owner", waitingHook());
-
-  return store;
-}
-
-function hooks(makeStore: StoreFactory): void {
-  test("hooks persist waiting steps atomically and isolate listed records", async () => {
-    const store = await hookStore(makeStore);
-    await expect(store.createHook("run", "owner", waitingHook())).rejects.toThrow(
-      "Hook already exists. Resume the run to use its waiting hook.",
-    );
-    await expect(store.createHook("run", "stale", waitingHook(2))).rejects.toBeInstanceOf(
-      OwnershipError,
-    );
-    const hook = { runId: "run", seq: 1, token: "hook-1", name: "approve", createdAt: LOG.at };
-    expect(await store.listHooks("run")).toEqual([hook]);
-    const [listed] = await store.listHooks("run");
-
-    if (listed) {
-      listed.name = "changed";
-    }
-
-    expect(await store.listHooks("run")).toEqual([hook]);
-    expect(await store.getSteps("run")).toEqual([waitingHook()]);
-    expect(await store.listHooks("missing")).toEqual([]);
-  });
-}
-
-function hookSignals(makeStore: StoreFactory): void {
-  test("resolving hooks wakes suspensions and preserves payloads without writing steps", async () => {
-    const store = await hookStore(makeStore);
-    await store.createHook("run", "owner", waitingHook(2));
-    const payload = { ok: true };
-    expect(await store.resolveHook("hook-2", payload)).toBe(true);
-    payload.ok = false;
-    await store.putStep("run", "owner", {
-      ...STEP,
-      seq: 3,
-      status: "succeeded",
-      output: 3,
-      endedAt: LOG.at,
-      finishOrder: 1,
-    });
-    await store.suspend("run", "owner", "2026-10-16T01:00:00.000Z");
-    await store.release("run", "owner");
-    expect((await store.getRun("run"))?.wakeAt).toBe(LOG.at);
-    expect(await store.resolveHook("hook-1", null)).toBe(true);
-    expect(await store.resolveHook("hook-2", "duplicate")).toBe(false);
-    expect(await store.getSteps("run")).toMatchObject([
-      { status: "waiting" },
-      { status: "waiting" },
-      { status: "succeeded", output: 3, finishOrder: 1 },
-    ]);
-    expect(await store.listHooks("run")).toMatchObject([
-      { payload: null, resolvedAt: LOG.at },
-      { payload: { ok: true }, resolvedAt: LOG.at },
-    ]);
-    expect((await store.dueRuns(LOG.at)).map((run) => run.id)).toEqual(["run"]);
-  });
-}
-
-function hookRejections(makeStore: StoreFactory): void {
-  test("expired and cancelled hooks reject signals without changing durable state", async () => {
-    let now = Date.parse(LOG.at);
-    const store = await hookStore(makeStore, () => now);
-    await store.createHook("run", "owner", {
-      ...waitingHook(2),
-      wakeAt: "2026-10-16T00:00:01.000Z",
-    });
-    now += 1000;
-    expect(await store.resolveHook("hook-2", 42)).toBe(false);
-    expect(await store.resolveHook("missing", 42)).toBe(false);
-    await store.finishRun("run", "owner", { status: "cancelled" });
-    await store.release("run", "owner");
-    expect(await store.resolveHook("hook-1", 42)).toBe(false);
-    expect((await store.listHooks("run")).every((hook) => hook.resolvedAt === undefined)).toBe(
-      true,
-    );
-    expect((await store.getSteps("run")).every((step) => step.status === "waiting")).toBe(true);
-  });
-}
-
 function eventCursors(makeStore: StoreFactory): void {
   test("global cursor survives pruning and agrees with run snapshots", async () => {
     const store = await makeStore();
@@ -621,5 +254,85 @@ function eventCursors(makeStore: StoreFactory): void {
     expect(await store.eventCursor()).toEqual(current);
     await store.createRun({ ...newRun(), id: "after-pruning" });
     expect(await store.eventCursor()).toEqual({ cursor: 3, epoch: initial.epoch });
+  });
+}
+
+export function storeContract(name: string, makeStore: StoreFactory): void {
+  describe(name, () => {
+    schedules(makeStore);
+    scheduleFires(makeStore);
+    scheduleFireFailures(makeStore);
+    scheduleRevisions(makeStore);
+    scheduleAdvances(makeStore);
+    scheduleToggles(makeStore);
+    nextWakeAt(makeStore);
+    rateLimits(makeStore);
+    eventCursors(makeStore);
+
+    test("wake rejects live ownership and terminal runs without publishing mutations", async () => {
+      const store = await fixture(makeStore);
+      expect(await store.wakeRun("missing", LOG.at)).toBe("not_found");
+      expect(await store.wakeRun("run", LOG.at)).toBeUndefined();
+      await store.claim("run", "owner");
+      const cursor = await store.eventCursor();
+      expect(await store.wakeRun("run", LOG.at)).toBe("owned_elsewhere");
+      expect(await store.eventCursor()).toEqual(cursor);
+      await store.finishRun("run", "owner", { status: "succeeded", output: null });
+      await store.release("run", "owner");
+      expect(await store.wakeRun("run", LOG.at)).toBe("not_claimable");
+    });
+
+    test("atomic effects roll back node writes, finish and outbox on failure", async () => {
+      const store = await fixture(makeStore);
+      await store.claim("run", "owner");
+
+      const node: NodeRun = {
+        key: { runId: "run", nodeId: nodeIdSchema.parse("0:code"), scope: [] },
+        attempt: 1,
+        maxAttempts: 3,
+        startedAt: LOG.at,
+        status: "running",
+        receipt: "none",
+      };
+
+      const before = await store.events(0, 100);
+      await expect(
+        store.apply({
+          runId: "run",
+          token: "owner",
+          effects: [
+            { kind: "write_node_run", nodeRun: node },
+            { kind: "finish_run", outcome: { status: "succeeded", output: 3 }, at: LOG.at },
+            {
+              kind: "write_node_run",
+              nodeRun: {
+                ...node,
+                status: "succeeded",
+                output: "x".repeat(1024 * 1024),
+                endedAt: LOG.at,
+              },
+            },
+          ],
+        }),
+      ).rejects.toThrow("1 MiB");
+      expect(await store.getNodeRuns("run")).toEqual([]);
+      expect(await store.events(0, 100)).toEqual(before);
+      expect((await store.getRun("run"))?.status).toBe("running");
+      await store.apply({
+        runId: "run",
+        token: "owner",
+        effects: [
+          { kind: "write_node_run", nodeRun: node },
+          { kind: "finish_run", outcome: { status: "succeeded", output: 3 }, at: LOG.at },
+        ],
+      });
+      expect(await store.getNodeRuns("run")).toEqual([node]);
+      const events = (await store.events(0, 100)).slice(before.length);
+      expect(events.map((event) => event.entity)).toEqual(["node", "run"]);
+      expect(new Set(events.map((event) => event.txn)).size).toBe(1);
+      await expect(store.apply({ runId: "run", token: "old", effects: [] })).rejects.toBeInstanceOf(
+        OwnershipError,
+      );
+    });
   });
 }

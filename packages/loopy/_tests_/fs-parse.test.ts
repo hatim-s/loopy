@@ -1,9 +1,4 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { MemoryRunStore } from "../src/runtime/index.js";
-import { fs, loopy } from "../src/sdk/index.js";
 import {
   parseDf,
   parseDu,
@@ -15,8 +10,7 @@ import {
   parseTree,
   parseWhich,
 } from "../src/sdk/shell/parse/fs.js";
-import { startLoopy } from "./fixture.js";
-import { fixture, result, SpawnExecutor } from "./shell-parse-fixture.js";
+import { fixture, result } from "./shell-parse-fixture.js";
 
 test("find and ls preserve NUL-delimited paths and list basenames", async () => {
   const paths = parseFind(result(await fixture("fs", "find")));
@@ -79,63 +73,6 @@ test.each([
     `Unexpected ${command} output line: invalid. Report this with the ${command} version.`,
   );
 });
-
-async function filesystemRun(cwd: string) {
-  return startLoopy({
-    loopy: loopy({
-      name: "fs-parsed",
-      run: async () => ({
-        find: await fs.find({ args: ["."], flags: { type: "f" } }),
-        ls: await fs.ls(),
-        realpath: await fs.realpath({ args: ["words.txt"] }),
-        stat: await fs.stat({ args: ["words.txt"] }),
-        du: await fs.du({ args: ["."], flags: { summary: true } }),
-        missing: await fs.which({ args: ["loopy-command-that-does-not-exist-6b"] }),
-      }),
-    }),
-    store: new MemoryRunStore(),
-    executor: new SpawnExecutor(),
-    workspace: cwd,
-    runId: "fs-parsed",
-    input: {},
-    bundleHash: "",
-  });
-}
-
-test("real filesystem commands persist typed results and which-not-found succeeds", async () => {
-  const cwd = await mkdtemp(join(tmpdir(), "loopy-fs-parse-"));
-
-  try {
-    await writeFile(join(cwd, "words.txt"), "hello\n");
-    expect(await filesystemRun(cwd)).toMatchObject({
-      status: "succeeded",
-      output: {
-        find: ["./words.txt"],
-        ls: ["words.txt"],
-        realpath: await realpath(join(cwd, "words.txt")),
-        missing: null,
-        stat: [{ path: "words.txt", size: 6, type: "file", mode: "644" }],
-        du: [{ path: ".", kilobytes: expect.any(Number) }],
-      },
-    });
-  } finally {
-    await rm(cwd, { recursive: true, force: true });
-  }
-});
-
-function compileOnlyChecks() {
-  // @ts-expect-error Deletion has no parsed output.
-  fs.find({ flags: { delete: true } });
-  fs.find.raw({ flags: { delete: true } });
-  // @ts-expect-error Parsed ls always returns immediate basenames.
-  fs.ls({ flags: { l: true } });
-  fs.ls.raw({ flags: { l: true } });
-  // @ts-expect-error Human-readable units change the du format.
-  fs.du({ flags: { humanReadable: true } });
-  fs.du.raw({ flags: { humanReadable: true } });
-}
-
-void compileOnlyChecks;
 
 test("stat preserves captured newlines and metadata separators inside filenames", async () => {
   expect(parseStat(result(await fixture("fs", "stat-paths")))).toEqual([

@@ -98,7 +98,7 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
   }
 
   function saveSchedule(view: ScheduleView): ScheduleView {
-    const saved = { ...view, revision: view.revision + 1 };
+    const saved = { ...view, version: view.version + 1 };
     const { lastFireKey, ...record } = saved;
     schedules.set(saved.slug, saved);
     publish([
@@ -132,7 +132,7 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
       input: {},
       nextFireAt: new Date(Date.now() + HOUR_MS).toISOString(),
       lastFireKey: null,
-      revision: 0,
+      version: 0,
     };
   }
 

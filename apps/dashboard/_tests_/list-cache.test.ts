@@ -30,7 +30,7 @@ const running: RunView = { ...queued, status: "running", updatedAt: "2026-10-17T
 const heartbeat: RunView = { ...running, updatedAt: "2026-10-17T10:00:02.000Z" };
 
 function snapshot(run: RunView): RunSnapshotView {
-  return { run, steps: [], logs: [], hooks: [], cursor: 10, epoch: "e1" };
+  return { run, nodeRuns: [], steps: [], logs: [], hooks: [], cursor: 10, epoch: "e1" };
 }
 
 function event(record: RunView, sequence: number, kind: "claimed" | "heartbeat"): ServerEvent {

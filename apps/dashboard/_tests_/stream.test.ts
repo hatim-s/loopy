@@ -34,7 +34,16 @@ function page(runs: RunView[]): RunPage {
 }
 
 function snapshot(overrides: Partial<RunSnapshotView> = {}): RunSnapshotView {
-  return { run, steps: [], logs: [], hooks: [], cursor: 10, epoch: "e1", ...overrides };
+  return {
+    run,
+    nodeRuns: [],
+    steps: [],
+    logs: [],
+    hooks: [],
+    cursor: 10,
+    epoch: "e1",
+    ...overrides,
+  };
 }
 
 function event(sequence: number, body: EventDraft): ServerEvent {
@@ -513,7 +522,7 @@ const record: Schedule = {
   input: {},
   enabled: true,
   nextFireAt: "2026-10-17T10:05:00.000Z",
-  revision: 2,
+  version: 2,
 };
 
 const scheduled: ScheduleView = { ...record, lastFireKey: null };
@@ -522,23 +531,23 @@ function scheduleSaved(sequence: number, saved: Schedule) {
   return event(sequence, { entity: "schedule", kind: "saved", runId: null, record: saved });
 }
 
-test("a saved schedule replaces its row, and an older revision leaves the row alone", () => {
+test("a saved schedule replaces its row, and an older version leaves the row alone", () => {
   const client = new QueryClient();
   const other = { ...scheduled, slug: "digest" };
   client.setQueryData(keys.schedules, [scheduled, other]);
 
-  applyBatch(client, [scheduleSaved(11, { ...record, enabled: false, revision: 3 })]);
+  applyBatch(client, [scheduleSaved(11, { ...record, enabled: false, version: 3 })]);
   expect(client.getQueryData<ScheduleView[]>(keys.schedules)).toEqual([
-    { ...scheduled, enabled: false, revision: 3 },
+    { ...scheduled, enabled: false, version: 3 },
     other,
   ]);
 
-  applyBatch(client, [scheduleSaved(12, { ...record, cron: "@daily", revision: 1 })]);
+  applyBatch(client, [scheduleSaved(12, { ...record, cron: "@daily", version: 1 })]);
   expect(client.getQueryData<ScheduleView[]>(keys.schedules)?.[0]?.cron).toBe("*/5 * * * *");
   expect(client.getQueryState(keys.schedules)?.isInvalidated).toBe(false);
 });
 
-test("a fired schedule keeps its revision and carries the fire key into the row", () => {
+test("a fired schedule keeps its version and carries the fire key into the row", () => {
   const client = new QueryClient();
   client.setQueryData(keys.schedules, [scheduled]);
   const next = "2026-10-17T10:10:00.000Z";
@@ -585,7 +594,7 @@ test("a deleted schedule leaves the list without a refetch, and only for its wor
   expect(client.getQueryState(keys.schedules)?.isInvalidated).toBe(false);
 });
 
-test("a delayed HTTP response cannot undo a fire at the same revision", () => {
+test("a delayed HTTP response cannot undo a fire at the same version", () => {
   const client = new QueryClient();
   client.setQueryData(keys.schedules, [scheduled]);
   const fired = { ...record, nextFireAt: "2026-10-17T10:10:00.000Z", lastFireKey: "fire-1" };
@@ -602,7 +611,7 @@ test("a delayed HTTP response cannot undo a fire at the same revision", () => {
   );
 });
 
-test("an equal-revision schedule with the same fire time leaves the cached row unchanged", () => {
+test("an equal-version schedule with the same fire time leaves the cached row unchanged", () => {
   const client = new QueryClient();
   const current = { ...scheduled, lastFireKey: "fire-1" };
   client.setQueryData(keys.schedules, [current]);

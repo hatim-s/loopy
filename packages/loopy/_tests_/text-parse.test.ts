@@ -1,9 +1,4 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { MemoryRunStore } from "../src/runtime/index.js";
-import { loopy, text } from "../src/sdk/index.js";
 import {
   parseGrep,
   parseGrepCount,
@@ -12,8 +7,7 @@ import {
   parseUniqCount,
   parseWc,
 } from "../src/sdk/shell/parse/text.js";
-import { startLoopy } from "./fixture.js";
-import { fixture, result, SpawnExecutor } from "./shell-parse-fixture.js";
+import { fixture, result } from "./shell-parse-fixture.js";
 
 test("wc drops only the aggregate row for multiple file operands", async () => {
   expect(
@@ -102,88 +96,3 @@ test.each([
     `Unexpected ${command} output line: invalid. Report this with the ${command} version.`,
   );
 });
-
-async function textRun(cwd: string) {
-  return startLoopy({
-    loopy: loopy({
-      name: "text-parsed",
-      run: async () => ({
-        wc: await text.wc({ args: ["words.txt"] }),
-        totalFile: await text.wc({ args: ["total"] }),
-        totals: await text.wc({ args: ["total", "other.txt"] }),
-        binary: await text.grep({ args: ["hello", "binary.bin"] }),
-        uniq: await text.uniqCount({ args: ["words.txt"] }),
-        grep: await text.grep({ args: ["hello", "words.txt"] }),
-        files: await text.grep({ args: ["hello", "words.txt", "other.txt"] }),
-        missing: await text.grep({ args: ["absent", "words.txt"] }),
-        count: await text.grepCount({ args: ["absent", "words.txt"] }),
-        sha: await text.sha256sum({ args: ["words.txt"] }),
-        jq: await text.jq({ args: [".[]", "data.json"] }),
-      }),
-    }),
-    executor: new SpawnExecutor(),
-    store: new MemoryRunStore(),
-    workspace: cwd,
-    runId: "text-parsed",
-    input: {},
-    bundleHash: "",
-  });
-}
-
-const TEXT_OUTPUT = {
-  wc: [{ lines: 3, words: 5, bytes: 28, file: "words.txt" }],
-  uniq: [
-    { count: 2, line: "hello world" },
-    { count: 1, line: "bye" },
-  ],
-  totalFile: [{ lines: 1, words: 1, bytes: 6, file: "total" }],
-  totals: [
-    { lines: 1, words: 1, bytes: 6, file: "total" },
-    { lines: 1, words: 1, bytes: 6, file: "other.txt" },
-  ],
-  grep: {
-    matches: [
-      { file: null, line: 1, text: "hello world" },
-      { file: null, line: 2, text: "hello world" },
-    ],
-    binaryMatches: [],
-  },
-  binary: { matches: [], binaryMatches: ["binary.bin"] },
-  missing: { matches: [], binaryMatches: [] },
-  count: 0,
-  files: {
-    matches: expect.arrayContaining([{ file: "other.txt", line: 1, text: "hello" }]),
-    binaryMatches: [],
-  },
-  sha: [{ hash: expect.stringMatching(/^[a-f0-9]{64}$/), file: "words.txt" }],
-  jq: [{ n: 1 }, { n: 2 }],
-};
-
-test("real text tools persist parsed outputs and grep-no-match succeeds", async () => {
-  const cwd = await mkdtemp(join(tmpdir(), "loopy-text-parse-"));
-
-  try {
-    await writeFile(join(cwd, "words.txt"), "hello world\nhello world\nbye\n");
-    await writeFile(join(cwd, "other.txt"), "hello\n");
-    await writeFile(join(cwd, "total"), "hello\n");
-    await writeFile(join(cwd, "binary.bin"), "hello\0world\n");
-    await writeFile(join(cwd, "data.json"), '[{"n":1},{"n":2}]');
-    expect(await textRun(cwd)).toMatchObject({ status: "succeeded", output: TEXT_OUTPUT });
-  } finally {
-    await rm(cwd, { recursive: true, force: true });
-  }
-});
-
-function compileOnlyChecks() {
-  // @ts-expect-error Count-only output does not contain lines.
-  text.grep({ flags: { c: true } });
-  text.grep.raw({ flags: { c: true } });
-  // @ts-expect-error Parsed wc requires all three counts.
-  text.wc({ flags: { bytes: true } });
-  text.wc.raw({ flags: { bytes: true } });
-  // @ts-expect-error Raw jq strings are not JSON.
-  text.jq({ flags: { rawOutput: true } });
-  text.jq.raw({ flags: { rawOutput: true } });
-}
-
-void compileOnlyChecks;

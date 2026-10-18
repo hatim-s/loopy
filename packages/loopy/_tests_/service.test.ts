@@ -3,11 +3,11 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { encodeRunCursor, routes } from "../src/contract/index.js";
-import type { RunRecord } from "../src/core/index.js";
+import type { Graph, RunRecord } from "../src/core/index.js";
 import { revision } from "../src/core/index.js";
+import { Daemon, SYSTEM_CLOCK } from "../src/host/index.js";
 import { LoopyService, openRunStore, Registry } from "../src/local/index.js";
-import { Daemon, SYSTEM_CLOCK } from "../src/runtime/index.js";
-import type { Loopy } from "../src/sdk/host.js";
+import { loopy } from "../src/sdk/graph/index.js";
 import { compiledBody } from "./compiled-fixture.js";
 import { FakeExecutor } from "./fixture.js";
 
@@ -26,16 +26,16 @@ async function fixture(definition = "") {
   await Bun.write(
     source,
     `import { loopy } from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/index.ts"))};
-  export default loopy({ name: "service", ${definition} input: { name: "string" }, secrets: ["PRIVATE"], run: () => 1 });`,
+  export default loopy("service", { ${definition} input: { name: "string" }, secrets: ["PRIVATE"], run: () => 1 });`,
   );
 
-  const { default: definitionValue }: { default: Loopy } = await import(source);
+  const { default: definitionValue }: { default: { graph: Graph } } = await import(source);
 
   const registry = new Registry(home, root);
 
   const body = await compiledBody("service", source, {
-    scope: definitionValue.scope,
-    schedule: definitionValue.schedule ?? null,
+    scope: definitionValue.graph.meta.scope,
+    schedule: definitionValue.graph.meta.schedule ?? null,
     secrets: ["PRIVATE"],
   });
 
@@ -169,35 +169,6 @@ test("service pages newest runs by createdAt with default and maximum page sizes
   expect(await service.listRuns({ slug: "page", limit: 200 })).toHaveLength(200);
 });
 
-test("service hook resolution returns the woken run and rejects duplicate resolution", async () => {
-  const { service, store, root } = await fixture();
-  const run = await service.startRun("service", { name: "Hatim" }, root);
-  await store.claim(run.id, "owner");
-  await store.createHook(run.id, "owner", {
-    runId: run.id,
-    seq: 0,
-    key: "approval",
-    kind: "hook",
-    input: { name: "approve", token: "hook" },
-    status: "waiting",
-    attempt: 1,
-    maxAttempts: 1,
-    startedAt: run.createdAt,
-  });
-  await store.suspend(run.id, "owner");
-  await store.release(run.id, "owner");
-  expect((await service.runSnapshot(run.id))?.run.waitingOn).toMatchObject({
-    hook: "approve",
-    token: "hook",
-  });
-  expect(await service.resolveHook("hook", { approved: true })).toMatchObject({
-    id: run.id,
-    status: "suspended",
-    wakeAt: expect.any(String),
-  });
-  await expect(service.resolveHook("hook", null)).rejects.toMatchObject({ code: "unknown_hook" });
-});
-
 test("service schedules create, replace, toggle, delete and emit persisted events", async () => {
   const { service, store, root, advance } = await fixture();
 
@@ -314,12 +285,10 @@ test("disabled schedules stay dormant and re-enabling waits for the next slot", 
     concurrency: 4,
     store,
     clock,
-    bundleHashFor: () => "bundle",
-    prepare: async (run) => ({
-      workflow: async () => run.input,
+    revisionFor: () => "bundle",
+    prepare: async () => ({
+      graph: loopy("test", { input: { name: "string" }, run: ({ input }) => input }).graph,
       executor: new FakeExecutor(),
-      cwd: run.workspace,
-      mode: "sandbox",
     }),
   });
 
@@ -375,16 +344,14 @@ function pausedScheduleDaemon(f: Awaited<ReturnType<typeof fixture>>) {
     concurrency: 4,
     store: f.store,
     clock: f.clock,
-    bundleHashFor: () => {
+    revisionFor: () => {
       entered.resolve();
 
       return bundle.promise;
     },
-    prepare: async (run) => ({
-      workflow: async () => run.input,
+    prepare: async () => ({
+      graph: loopy("test", { input: { name: "string" }, run: ({ input }) => input }).graph,
       executor: new FakeExecutor(),
-      cwd: run.workspace,
-      mode: "sandbox",
     }),
   });
 
@@ -430,44 +397,6 @@ test("service cursor follows the last event without requiring a run snapshot", a
   const events = await store.events(0, 100);
   expect(events.at(-1)?.sequence).toBe(current.cursor);
   expect(current).toEqual({ cursor: initial.cursor + 1, epoch: initial.epoch });
-});
-
-test("waiting filter runs before the page cap and preserves cursor order", async () => {
-  const { service, store, root, advance } = await fixture();
-  const first = await service.startRun("service", { name: "approval" }, root);
-  await store.claim(first.id, "owner");
-  await store.createHook(first.id, "owner", {
-    runId: first.id,
-    seq: 0,
-    key: "approval",
-    kind: "hook",
-    input: { name: "approve", token: "waiting-filter" },
-    status: "waiting",
-    attempt: 1,
-    maxAttempts: 1,
-    startedAt: first.createdAt,
-  });
-  await store.suspend(first.id, "owner");
-  await store.release(first.id, "owner");
-  advance();
-  const second = await service.startRun("service", { name: "sleep" }, root);
-  await store.claim(second.id, "sleeper");
-  await store.suspend(second.id, "sleeper", "2099-01-01T00:00:00.000Z");
-  await store.release(second.id, "sleeper");
-  const query = { status: "suspended", waiting: true, limit: 1 } as const;
-  const page = await service.listRuns(query);
-  expect(page.map((run) => run.id)).toEqual([first.id]);
-  expect((await service.listRuns({ ...query, waiting: false })).map((run) => run.id)).toEqual([
-    second.id,
-  ]);
-  expect(await service.listRuns({ ...query, before: `${first.createdAt}|${first.id}` })).toEqual(
-    [],
-  );
-  expect(
-    (await service.listRuns({ ...query, before: `${second.createdAt}|${second.id}` })).map(
-      (run) => run.id,
-    ),
-  ).toEqual([first.id]);
 });
 
 test("service maps completion between requireRun and claim to not_claimable", async () => {

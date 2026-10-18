@@ -1,7 +1,7 @@
 import type { Json } from "loopy/contract";
 import { z } from "zod";
 
-/** What runtime/hook.ts stores as a hook step's input. The timeout is kept only as wakeAt. */
+/** The step-shaped dashboard fixture remains until the waits UI arrives in PR 5. */
 const hookInputSchema = z.strictObject({ name: z.string(), token: z.string() });
 
 export type HookInput = z.infer<typeof hookInputSchema>;

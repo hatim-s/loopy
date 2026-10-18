@@ -2,7 +2,7 @@ import { expect, expectTypeOf, test } from "bun:test";
 import * as contract from "../src/contract/index.js";
 import type * as core from "../src/core/index.js";
 import type { SavedLoopy } from "../src/local/saved-loopy.js";
-import { fixture, newRun } from "./fixture.js";
+import { newRun } from "./fixture.js";
 import { approveDemoGraph } from "./fixtures/graphs.js";
 
 type Flatten<T> = T extends unknown ? { [Key in keyof T]: T[Key] } : never;
@@ -46,80 +46,6 @@ test("schema outputs exactly match core records and the wire owner projection", 
 
   expectTypeOf<contract.ServerEvent>().toEqualTypeOf<Flatten<WireEvent>>();
   expectTypeOf<SavedLoopy>().toMatchTypeOf<Parameters<typeof contract.loopyView>[0]>();
-});
-
-test("engine records and events round-trip through wire schemas across a hook replay", async () => {
-  const f = await fixture();
-
-  const workflow: Parameters<typeof f.execute>[0] = async (ctx) => {
-    await ctx.step("one", ({ log }) => {
-      log.info("working", { nested: [null, true, 1, "text"] });
-
-      return 1;
-    });
-    await ctx.hook("approve");
-
-    return ctx.step("two", () => 2);
-  };
-
-  expect((await f.execute(workflow)).status).toBe("suspended");
-  const suspended = await f.store.snapshotRun("run");
-
-  if (!suspended) {
-    throw new Error("Expected a persisted snapshot.");
-  }
-
-  expect(view(suspended.run, suspended.steps, suspended.hooks)).toMatchObject({
-    status: "suspended",
-    wakeAt: null,
-    waitingOn: { hook: "approve", expiresAt: null },
-  });
-  await f.store.resolveHook(suspended.hooks[0]?.token ?? "", { approved: true });
-  expect(await f.execute(workflow)).toEqual({ status: "succeeded", output: 2 });
-  const snapshot = await f.store.snapshotRun("run");
-
-  if (!snapshot) {
-    throw new Error("Expected a persisted snapshot.");
-  }
-
-  expect(snapshot.steps.find((step) => step.kind === "hook")?.input).toEqual(
-    suspended.steps.find((step) => step.kind === "hook")?.input,
-  );
-
-  for (const step of snapshot.steps) {
-    expect(contract.stepRecordSchema.parse(step)).toEqual(step);
-  }
-
-  for (const log of snapshot.logs) {
-    expect(contract.logRecordSchema.parse(log)).toEqual(log);
-  }
-
-  for (const hook of snapshot.hooks) {
-    expect(contract.hookRecordSchema.parse(hook)).toEqual(hook);
-  }
-
-  const wireSnapshot = { ...snapshot, run: view(snapshot.run, snapshot.steps, snapshot.hooks) };
-  expect(contract.runSnapshotViewSchema.parse(wireSnapshot)).toEqual(wireSnapshot);
-
-  await f.store.putSchedule({
-    workspace: "/workspace",
-    slug: "test",
-    cron: "* * * * *",
-    tz: "UTC",
-    input: null,
-    enabled: true,
-    nextFireAt: now,
-  });
-  await f.store.deleteSchedule("/workspace", "test");
-
-  for (const event of await f.store.events(0, 100)) {
-    const wire = contract.serverEvent(event, (run) => view(run, snapshot.steps, snapshot.hooks));
-    expect(contract.serverEventSchema.parse(wire)).toEqual(wire);
-
-    if (wire.entity === "run") {
-      expect(wire.record.owner).not.toHaveProperty("token");
-    }
-  }
 });
 
 const waiting: core.StepRecord = {
@@ -236,7 +162,7 @@ test("loopy views count matching runs and choose the newest without leaking regi
   });
 
   const schedule: core.Schedule = {
-    revision: 1,
+    version: 1,
     workspace: "/workspace",
     slug: "test",
     cron: "* * * * *",
@@ -298,31 +224,6 @@ test("route patterns are unique and every parameter has a schema", () => {
   }
 });
 
-test("cancelled engine runs no longer advertise their pending hook", async () => {
-  const f = await fixture();
-  expect((await f.execute((ctx) => ctx.hook("approve"))).status).toBe("suspended");
-  const suspended = await f.store.snapshotRun("run");
-
-  if (!suspended) {
-    throw new Error("Expected a suspended run snapshot.");
-  }
-
-  expect(view(suspended.run, suspended.steps, suspended.hooks).waitingOn?.hook).toBe("approve");
-  await f.store.claim("run", "canceller");
-  await f.store.finishRun("run", "canceller", { status: "cancelled" });
-  await f.store.release("run", "canceller");
-  const cancelled = await f.store.snapshotRun("run");
-
-  if (!cancelled) {
-    throw new Error("Expected a cancelled run snapshot.");
-  }
-
-  expect(cancelled.run.status).toBe("cancelled");
-  expect(cancelled.steps.some((step) => step.status === "waiting")).toBe(true);
-  expect(cancelled.hooks.some((hook) => hook.resolvedAt === undefined)).toBe(true);
-  expect(view(cancelled.run, cancelled.steps, cancelled.hooks).waitingOn).toBeNull();
-});
-
 test("serialized loopy and snapshot views exclude private registry and owner keys", () => {
   const run = view({
     ...newRun(),
@@ -348,6 +249,7 @@ test("serialized loopy and snapshot views exclude private registry and owner key
   const loopy = contract.loopyView(saved, null, [run]);
 
   const snapshot: contract.RunSnapshotView = {
+    nodeRuns: [],
     run,
     steps: [],
     logs: [],
@@ -442,7 +344,7 @@ test("loopy declared schedule is visible until a persisted schedule overrides it
     contract.loopyView(
       saved,
       {
-        revision: 1,
+        version: 1,
         workspace: "/workspace",
         slug: "test",
         cron: "*/5 * * * *",

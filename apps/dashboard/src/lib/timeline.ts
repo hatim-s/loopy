@@ -22,6 +22,8 @@ export function groupTimeline(steps: StepRecord[], logs: LogRecord[]): Timeline 
 
     if (position.kind === "step") {
       entries.get(position.seq)?.logs.push(log);
+    } else if (position.kind === "node") {
+      before.push(log);
     } else if (position.afterStep === 0) {
       before.push(log);
     } else {

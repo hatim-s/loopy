@@ -3,12 +3,11 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import ts from "typescript";
+import { initialState, step } from "../src/engine/index.js";
 import { parseCliHelp } from "../src/local/typegen/parse-help";
 import { renderCommandSource } from "../src/local/typegen/render";
-import { MemoryRunStore } from "../src/runtime/index.js";
 import { defineCommand, loopy } from "../src/sdk/index.js";
 import { renderArgv } from "../src/sdk/render-argv.js";
-import { FakeExecutor, startLoopy } from "./fixture.js";
 
 const help = `Run Codex non-interactively
 
@@ -51,29 +50,29 @@ describe("CLI help generation", () => {
     expect(source).toContain('"read-only"');
   });
 
-  test("generated descriptors execute through durable command steps", async () => {
-    const parsed = parseCliHelp("codex", ["exec"], help);
-    const codexExec = defineCommand(parsed.descriptor);
-    const executor = new FakeExecutor();
-    const store = new MemoryRunStore();
-    const definition = loopy({ name: "generated", run: () => codexExec({ args: ["--help"] }) });
-    expect(
-      await startLoopy({
-        loopy: definition,
-        input: {},
-        executor,
-        store,
-        runId: "generated",
-        bundleHash: "bundle",
-        workspace: "/workspace",
-      }),
-    ).toMatchObject({ status: "succeeded" });
-    expect(executor.calls).toMatchObject([{ program: "codex", args: ["exec", "--help"] }]);
-    expect(await store.getSteps("generated")).toMatchObject([
-      { key: "codex.exec", kind: "command" },
-    ]);
-  });
+  test("generated descriptors produce graph command dispatches", () => {
+    const descriptor = parseCliHelp("codex", ["exec"], help).descriptor;
+    const { parse, ...data } = descriptor;
+    expect(parse).toBeUndefined();
+    const codexExec = defineCommand(data);
 
+    const graph = loopy("generated", {
+      input: {},
+      run: () => codexExec({ args: ["--help"] }),
+    }).graph;
+
+    expect(
+      step(graph, initialState("generated", {}), {
+        kind: "run_started",
+        at: new Date(0).toISOString(),
+      }).effects,
+    ).toContainEqual(
+      expect.objectContaining({
+        kind: "dispatch",
+        spec: expect.objectContaining({ argv: ["codex", "--help"] }),
+      }),
+    );
+  });
   test("emitted source typechecks against the SDK with typed flags and arity", async () => {
     const directory = await mkdtemp(join(tmpdir(), "loopy-generated-"));
     const file = join(directory, "codex.ts");
@@ -286,48 +285,6 @@ test("man-page overstrikes retain the advertised positional separator", () => {
 
   expect(descriptor.positionalSeparator).toBe(true);
   expect(descriptor.positionals).toEqual([{ name: "path", optional: true, variadic: true }]);
-});
-
-test("generated git log keeps revision args before the path separator", async () => {
-  const captured = await Bun.file(resolve(import.meta.dir, "fixtures/help/git-log.txt")).text();
-  const { descriptor, warnings } = parseCliHelp("git", ["log"], captured);
-  expect(descriptor.flags?.maxCount).toMatchObject({ kind: "number", style: "equals" });
-  expect(warnings.some((warning) => warning.includes("max-count"))).toBe(false);
-  const oneline = descriptor.flags?.oneline;
-
-  if (!oneline || oneline.kind !== "boolean") {
-    throw new Error("Missing --oneline metadata. Check the captured help parser.");
-  }
-
-  const gitLog = defineCommand({
-    ...descriptor,
-    flags: { oneline: { ...oneline, kind: oneline.kind } },
-  });
-
-  const executor = new FakeExecutor();
-  const store = new MemoryRunStore();
-
-  const definition = loopy({
-    name: "log",
-    run: () => gitLog({ args: ["HEAD"], flags: { oneline: true } }),
-  });
-
-  await startLoopy({
-    loopy: definition,
-    input: {},
-    executor,
-    store,
-    runId: "log",
-    bundleHash: "bundle",
-    workspace: "/workspace",
-  });
-  expect(executor.calls).toMatchObject([{ program: "git", args: ["log", "--oneline", "HEAD"] }]);
-  expect(renderArgv(descriptor, { revisions: ["HEAD"], paths: ["src"] }, "git.log")).toEqual([
-    "log",
-    "HEAD",
-    "--",
-    "src",
-  ]);
 });
 
 test("only path-only usage receives an automatic positional separator", () => {

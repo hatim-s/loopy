@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { nextFire, parseCron } from "../src/runtime/index.js";
+import { nextFire, parseCron } from "../src/host/index.js";
 
 function next(expression: string, after: string, zone = "UTC") {
   return nextFire(parseCron(expression), new Date(after), zone).toISOString();

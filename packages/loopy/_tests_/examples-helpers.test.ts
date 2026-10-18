@@ -1,8 +1,6 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 import type { Json } from "loopy";
-import assetSync from "../../../examples/uacode-asset-sync/asset-sync-pr.loopy.ts";
-import { parseSummary } from "../../../examples/uacode-asset-sync/prompt.ts";
 import {
   type Files,
   object,
@@ -197,27 +195,6 @@ test("rejects malformed asset-specific frontmatter instead of replacing its name
   );
 });
 
-test("asset request rejects malformed identities, paths and options", async () => {
-  const input = {
-    repository: "/fixture/uacode",
-    assets: [{ assetClass: "WORKFLOW_DEFINITION", assetId: "fixture" }],
-  };
-
-  expect((await assetSync.validateInput(input)).feature).toBe("ai-agents");
-
-  for (const invalid of [
-    { assets: [] },
-    { assets: [{ assetClass: "", assetId: "a" }] },
-    { dryRun: "false" },
-    { indexPath: "../escape.json" },
-    { feature: "../escape" },
-    { typo: true },
-    { repository: "relative" },
-  ]) {
-    await expect(assetSync.validateInput({ ...input, ...invalid })).rejects.toThrow();
-  }
-});
-
 test("generated metadata rejects unknown commits and truncated PR lists", () => {
   const base = "a".repeat(40);
   expect(syncMetadata(syncCommitMessage(sourceSha, base))).toEqual({ source: sourceSha, base });
@@ -298,33 +275,6 @@ function assertPlannerName(files: Files) {
     },
   });
 }
-
-test("asset summary rejects outside paths, traversal, unsafe characters and unknown checks", async () => {
-  const request = await assetSync.validateInput({
-    repository: "/fixture/uacode",
-    assets: [{ assetClass: "asset", assetId: "id" }],
-  });
-
-  const path = "configs/platform-features/ai-agents/asset-repository/fixture.json";
-  expect(
-    parseSummary(JSON.stringify({ proposedFiles: [path], checks: ["sync-preview"] }), request),
-  ).toEqual({ proposedFiles: [path], checks: ["sync-preview"] });
-
-  for (const proposedFiles of [
-    ["outside.json"],
-    [path.replace("fixture", "../fixture")],
-    [path.replace("fixture", "unsafe name")],
-  ]) {
-    expect(() => parseSummary(JSON.stringify({ proposedFiles, checks: [] }), request)).toThrow(
-      "outside",
-    );
-  }
-
-  expect(() => parseSummary('{"proposedFiles":[],"checks":["invented"]}', request)).toThrow(
-    "Invalid check summary",
-  );
-  expect(() => parseSummary("not JSON", request)).toThrow("Missing or invalid Codex summary");
-});
 
 test("JSON patch rejects values that cannot survive JSON serialization", () => {
   const files = { "asset.json": '{"version":1}' };

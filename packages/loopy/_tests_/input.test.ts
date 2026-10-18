@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import type { Json } from "../src/core/index.js";
 
 test("dashboard json field coercion parses values and reports invalid JSON", async () => {
   const { coerceInput, inputFields } = await import(
@@ -41,11 +40,9 @@ const allValues = {
 };
 
 test("RecordSpec round-trips every field type through contracts and input boundaries", async () => {
-  const { expectTypeOf } = await import("bun:test");
   const { FIELD_TYPES } = await import("../src/core/index.js");
   const { graphSchema, outputSchema } = await import("../src/contract/index.js");
   const { graphInput } = await import("../src/cli/input.js");
-  const { inputValidator } = await import("../src/sdk/schema.js");
   const { approveDemoGraph } = await import("./fixtures/graphs.js");
 
   const { coerceInput, inputFields } = await import(
@@ -82,18 +79,6 @@ test("RecordSpec round-trips every field type through contracts and input bounda
   });
 
   expect(input).toEqual(allValues);
-  const validated = await inputValidator(allFields)(input);
-  expectTypeOf(validated).toEqualTypeOf<{
-    text: string;
-    count: number;
-    enabled: boolean;
-    data: Json;
-    texts: string[];
-    counts: number[];
-    flags: boolean[];
-    values: Json[];
-  }>();
-  expect(validated).toEqual(allValues);
   expect(coerceInput(inputFields(allFields), namedInput)).toEqual({
     valid: true,
     value: allValues,
@@ -108,16 +93,12 @@ for (const [kind, invalid] of [
 ] as const) {
   test(`${kind} rejects wrong elements or non-arrays at each input boundary`, async () => {
     const { graphInput } = await import("../src/cli/input.js");
-    const { inputValidator } = await import("../src/sdk/schema.js");
 
     const { coerceInput, inputFields } = await import(
       "../../../apps/dashboard/src/lib/input-form.js"
     );
 
     const spec = { items: kind };
-    await expect(inputValidator(spec)({ items: invalid })).rejects.toThrow(
-      `items: Expected ${kind}`,
-    );
     await expect(
       graphInput(spec, {
         home: "/unused",
@@ -131,6 +112,5 @@ for (const [kind, invalid] of [
       valid: false,
       issues: [{ key: "items", message: `Enter a ${kind} as JSON.` }],
     });
-    expect(await inputValidator(spec)({ items: [] })).toEqual({ items: [] });
   });
 }
