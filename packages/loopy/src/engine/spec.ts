@@ -1,4 +1,5 @@
 import {
+  CommandArgumentError,
   DEFAULT_EXECUTION_TIMEOUT_MS,
   durationMs,
   type ExecutionError,
@@ -64,9 +65,21 @@ export function executionSpec(
     return { code: "validation", message: "Command argv is empty." };
   }
 
+  let rendered: string[];
+
+  try {
+    rendered = renderArgv({ program, ...node.flagSpec }, { args, flags }, node.key);
+  } catch (cause) {
+    if (cause instanceof CommandArgumentError) {
+      return { code: "validation", message: cause.message };
+    }
+
+    throw cause;
+  }
+
   return {
     kind: "command",
-    argv: [program, ...renderArgv({ program, ...node.flagSpec }, { args, flags: flags }, node.key)],
+    argv: [program, ...rendered],
     okExitCodes: node.okExitCodes,
     cwd: cwd === null ? null : String(cwd),
     env: Object.fromEntries(Object.entries(env).map(([key, value]) => [key, String(value)])),

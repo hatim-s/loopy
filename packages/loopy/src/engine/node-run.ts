@@ -1,6 +1,15 @@
-import type { NodeRun, RunOutcome } from "../core/index.js";
-import { sameExecution } from "../core/index.js";
-
+import {
+  type ExecutionError,
+  type Json,
+  limitLogs,
+  type Node,
+  type NodeRun,
+  type RunOutcome,
+  sameExecution,
+} from "../core/index.js";
+import { outputLimitError } from "./policy.js";
+import { resolveValues } from "./resolve.js";
+import { MISSING_INPUT } from "./spec.js";
 import { type Changes, nodeRunFor } from "./state.js";
 
 export function write(transition: Changes, nodeRun: NodeRun) {
@@ -22,8 +31,6 @@ export function finish(transition: Changes, outcome: RunOutcome, at: string) {
   return { kind: "finished" as const, outcome };
 }
 
-import type { ExecutionError, Node } from "../core/index.js";
-
 export function failNode(transition: Changes, node: Node, error: ExecutionError, at: string) {
   const previous = nodeRunFor(transition.state, node.id);
 
@@ -42,11 +49,6 @@ export function failNode(transition: Changes, node: Node, error: ExecutionError,
 
   return finish(transition, { status: "failed", error: error.message }, at);
 }
-
-import { type Json, limitLogs } from "../core/index.js";
-import { outputLimitError } from "./policy.js";
-import { resolveValues } from "./resolve.js";
-import { MISSING_INPUT } from "./spec.js";
 
 export function immediate(transition: Changes, node: Node, output: Json, at: string) {
   const error = outputLimitError(output);

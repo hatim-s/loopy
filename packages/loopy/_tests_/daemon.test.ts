@@ -226,6 +226,7 @@ test("failed activations back off from one second to the five second cap", async
   const f = fixture({
     store: new BrokenJournalStore(":memory:", () => Date.parse(newRun().createdAt)),
   });
+
   await f.store.createRun(newRun());
   void f.daemon.run();
 

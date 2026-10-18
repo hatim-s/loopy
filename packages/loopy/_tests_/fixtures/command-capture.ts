@@ -42,7 +42,12 @@ export function capture(run: () => void): Capture {
 
       specs.push(dispatch.spec);
       const [program, ...args] = dispatch.spec.argv;
-      calls.push({ program: program ?? "", args });
+
+      if (!program) {
+        throw new Error("Command argv is empty.");
+      }
+
+      calls.push({ program, args });
 
       const result: Extract<ExecutionResult, { kind: "succeeded" }> = {
         kind: "succeeded",

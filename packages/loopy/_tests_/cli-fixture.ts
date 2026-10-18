@@ -5,8 +5,9 @@ import { compile } from "../src/compiler/index.js";
 import { requireRecord } from "../src/core/index.js";
 import { LocalExecutor } from "../src/executor/index.js";
 import { activate, SYSTEM_CLOCK } from "../src/host/index.js";
-import { LoopyService, openRunStore, Registry } from "../src/local/index.js";
+import { LoopyService, Registry } from "../src/local/index.js";
 import { SecretStore } from "../src/local/secrets.js";
+import { openRunStore } from "../src/store/index.js";
 
 export const roots: string[] = [];
 

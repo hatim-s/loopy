@@ -16,7 +16,14 @@ test("heartbeat rejects a held activation when another token takes ownership", a
     await store.release("run", "owner");
     await store.claim("run", "other");
     clock.advance(1);
-    await expect(active).rejects.toMatchObject({ code: "owned_elsewhere" });
+    await expect(
+      Promise.race([
+        active,
+        Bun.sleep(100).then(() => {
+          throw new Error("Ownership loss was not reported.");
+        }),
+      ]),
+    ).rejects.toMatchObject({ code: "owned_elsewhere" });
     expect((await store.getRun("run"))?.owner?.token).toBe("other");
   } finally {
     held.resolve();

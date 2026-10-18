@@ -21,13 +21,13 @@ import { SYSTEM_CLOCK } from "../src/host/index.js";
 import {
   LoopyService,
   localDaemon,
-  openRunStore,
   Registry,
   readDaemonFile,
   ServiceError,
 } from "../src/local/index.js";
 import { eventStream } from "../src/local/server/events.js";
 import { apiRoutes, dispatch } from "../src/local/server/routes.js";
+import { openRunStore } from "../src/store/index.js";
 import { CLI, fixture, object, roots, runFixture, save } from "./cli-fixture.js";
 import { newRun, until } from "./fixture.js";
 
@@ -256,7 +256,9 @@ function parseFrame(lines: string[]) {
     return undefined;
   }
 
-  const events = serverEventSchema.array().parse(JSON.parse(data));
+  const decoded = JSON.parse(data);
+  const events = serverEventSchema.array().parse(decoded);
+  expect(events).toEqual(decoded);
 
   return {
     id: Number(lines.find((line) => line.startsWith("id: "))?.slice(4)),
@@ -338,7 +340,7 @@ async function externalRun(
     [
       process.execPath,
       "-e",
-      `import { openRunStore } from ${JSON.stringify(resolve(import.meta.dir, "../src/local/index.ts"))}; const store = openRunStore(process.argv[1]); await store.createRun(JSON.parse(process.argv[2])); store.close();`,
+      `import { openRunStore } from ${JSON.stringify(resolve(import.meta.dir, "../src/store/index.ts"))}; const store = openRunStore(process.argv[1]); await store.createRun(JSON.parse(process.argv[2])); store.close();`,
       home,
       JSON.stringify(run),
     ],

@@ -289,5 +289,36 @@ test("graph retry delay caps at sixty seconds across repeated failures", () => {
     );
     state = resumed.state;
   }
+
   expect(delays).toEqual([1000, 2000, 4000, 8000, 16000, 32000, 60000, 60000, 60000]);
+});
+
+test("a missing graph node throws instead of becoming a failed run", () => {
+  const graph = sequence();
+  graph.nodes = [];
+  expect(() => step(graph, initialState("run", {}), { kind: "resume", at })).toThrow("is missing");
+});
+
+test("resolved command flags fail validation before dispatch", () => {
+  const graph = loopy("flags", { input: { mode: "string" }, run: () => sh(["tool"]) }).graph;
+  const node = graph.nodes[0];
+
+  if (node?.kind !== "command") {
+    throw new Error("Expected command node.");
+  }
+
+  node.flags = { mode: { ref: "input", path: ["mode"] } };
+  node.flagSpec = {
+    path: [],
+    flags: { mode: { cli: "--mode", kind: "string", choices: ["safe"] } },
+    style: "space",
+    positionalSeparator: false,
+    flagsAfterPositionals: false,
+  };
+  const transition = step(graph, initialState("run", { mode: "unknown" }), { kind: "resume", at });
+  expect(transition.next.kind).toBe("finished");
+  expect(transition.state.nodeRuns[0]).toMatchObject({
+    status: "failed",
+    error: { code: "validation" },
+  });
 });

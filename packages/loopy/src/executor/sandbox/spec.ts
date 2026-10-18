@@ -43,6 +43,7 @@ export async function bundleSpec(options: {
 
   const runtime = [
     "/usr/lib",
+    "/usr/share/icu",
     "/lib",
     "/lib64",
     "/System/Library",

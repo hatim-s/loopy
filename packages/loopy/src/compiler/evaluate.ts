@@ -90,7 +90,7 @@ export async function evaluate(
       {
         bundle: executable,
         workspace: cwd,
-        network: false,
+        purpose: "compiler",
         home,
       },
       ({ program, args }) =>

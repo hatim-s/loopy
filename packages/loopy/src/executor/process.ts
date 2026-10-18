@@ -13,8 +13,6 @@ import { sandboxLauncher } from "./sandbox/launch.js";
 import type { Launch, Limits } from "./spawn.js";
 import { emptyOutput, spawnCaptured, unstarted } from "./spawn.js";
 
-type ProcessCommand = ResolvedCommand;
-
 type SandboxContext = {
   program: string;
   workspace: string;
@@ -47,14 +45,14 @@ const child = Bun.spawn([config.program, ...config.args], {
 process.exit(await child.exited);
 `;
 
-function commandLimits(command: ProcessCommand): Limits {
+function commandLimits(command: ResolvedCommand): Limits {
   return {
     timeoutMs: command.timeoutMs ?? DEFAULT_EXECUTION_TIMEOUT_MS,
     maxOutputBytes: DEFAULT_MAX_OUTPUT_BYTES,
   };
 }
 
-function launchEnvironment(command: ProcessCommand, mode: ExecutionMode): NodeJS.ProcessEnv {
+function launchEnvironment(command: ResolvedCommand, mode: ExecutionMode): NodeJS.ProcessEnv {
   if (mode === "full") {
     return { ...process.env, ...command.env };
   }
@@ -70,7 +68,7 @@ function launchEnvironment(command: ProcessCommand, mode: ExecutionMode): NodeJS
  * Wraps the command in the platform sandbox. With private values the launcher
  * runs a Bun helper that reads them from stdin; `env -i` inside applies the rest.
  */
-async function sandboxLaunch(command: ProcessCommand, context: SandboxContext): Promise<Launch> {
+async function sandboxLaunch(command: ResolvedCommand, context: SandboxContext): Promise<Launch> {
   const { program, workspace, cwd, scratch, env, sensitiveEnv } = context;
   const privateEnvironment = sensitiveEnv !== undefined && Object.keys(sensitiveEnv).length > 0;
   const helper = privateEnvironment ? await realpath(process.execPath) : undefined;
@@ -116,7 +114,7 @@ async function sandboxLaunch(command: ProcessCommand, context: SandboxContext): 
 }
 
 export async function prepareLaunch(
-  command: ProcessCommand,
+  command: ResolvedCommand,
   options: LocalExecutionOptions,
 ): Promise<Launch & { scratch?: string }> {
   const workspace = await realpath(options.workspace);
@@ -142,7 +140,7 @@ export async function prepareLaunch(
 }
 
 async function prepareSandbox(
-  command: ProcessCommand,
+  command: ResolvedCommand,
   options: LocalExecutionOptions,
   paths: { program: string; workspace: string; cwd: string },
 ): Promise<Launch & { scratch: string }> {
@@ -168,7 +166,7 @@ async function prepareSandbox(
 }
 
 export async function executeLocalCommand(
-  command: ProcessCommand,
+  command: ResolvedCommand,
   options: LocalExecutionOptions,
 ): Promise<CommandResult> {
   const aborted = () =>

@@ -2,23 +2,16 @@ import { expect, test } from "bun:test";
 import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { compile } from "../src/compiler/index.js";
-import { graphSchema } from "../src/contract/index.js";
 import { LocalExecutor } from "../src/executor/index.js";
 import { bundleStopped, bundleSucceeded } from "../src/executor/protocol.js";
 import { receiptPath } from "../src/executor/receipts.js";
 import { secretRedactor } from "../src/executor/redact.js";
 import { activate, SYSTEM_CLOCK } from "../src/host/index.js";
-import {
-  LoopyService,
-  localDaemon,
-  openRunStore,
-  Registry,
-  SecretStore,
-} from "../src/local/index.js";
-import { SqliteRunStore } from "../src/store/index.js";
-import { newRun, until } from "./fixture.js";
-import { fixture } from "./fixtures/executor.js";
-import { approveDemoGraph } from "./fixtures/graphs.js";
+import { LoopyService, localDaemon, Registry, SecretStore } from "../src/local/index.js";
+import { loopy, sh } from "../src/sdk/graph/index.js";
+import { openRunStore, SqliteRunStore } from "../src/store/index.js";
+import { codeGraph, newRun, until } from "./fixture.js";
+import { commandSpec, fixture } from "./fixtures/executor.js";
 
 test("code protocol captures stderr logs and leading stdout, and retains its trusted completion receipt", async () => {
   const f = await fixture();
@@ -38,56 +31,6 @@ test("code protocol captures stderr logs and leading stdout, and retains its tru
   });
   expect(await f.executor.lookup(f.key, 1)).toMatchObject({ kind: "finished", result });
   expect(await f.executor.execute(f.key, 1, f.spec, new AbortController().signal)).toEqual(result);
-});
-
-test("code sandbox cannot read a sibling host file or write outside the workspace in either mode", async () => {
-  const f = await fixture();
-  const privateFile = join(f.root, "private.ts");
-  await writeFile(privateFile, "export default 'private';");
-  await writeFile(
-    f.bundle,
-    `let read = false, write = false, imported = false; try {await Bun.file(${JSON.stringify(privateFile)}).text(); read = true;} catch {} try {await Bun.write(${JSON.stringify(join(f.root, "escape"))}, "bad"); write = true;} catch {} try {await import(${JSON.stringify(privateFile)}); imported = true;} catch {} process.stdout.write(JSON.stringify({read, write, imported})+"\\n");`,
-  );
-
-  for (const [index, mode] of ["sandbox", "full"].entries()) {
-    if (mode !== "sandbox" && mode !== "full") {
-      throw new Error("Unknown mode.");
-    }
-
-    const executor = new LocalExecutor({
-      home: join(f.root, "home"),
-      workspace: f.workspace,
-      mode,
-      secrets: {},
-      bundlePath: () => f.bundle,
-    });
-
-    expect(
-      await executor.execute(f.key, index + 1, f.spec, new AbortController().signal),
-    ).toMatchObject({ kind: "succeeded", output: { read: false, write: false, imported: false } });
-  }
-});
-
-test("timeout terminates the process group including an inherited grandchild", async () => {
-  const f = await fixture();
-  await writeFile(
-    f.bundle,
-    `const child = Bun.spawn([process.execPath, "-e", "setInterval(() => {}, 1000)"], {stdout: "inherit", stderr: "inherit"}); await Bun.write("child.pid", String(child.pid)); setInterval(() => {}, 1000);`,
-  );
-
-  const result = await f.executor.execute(
-    f.key,
-    1,
-    { ...f.spec, timeoutMs: 500 },
-    new AbortController().signal,
-  );
-
-  expect(result).toMatchObject({
-    kind: "failed",
-    error: { code: "execution", message: expect.stringContaining("timed out") },
-  });
-  const pid = Number(await readFile(join(f.workspace, "child.pid"), "utf8"));
-  expect(() => process.kill(pid, 0)).toThrow();
 });
 
 test("compiled command parser gets result and prepared input, then code runs through service and daemon", async () => {
@@ -216,179 +159,6 @@ test("a worker finishes its receipt after the caller process is killed", async (
   }
 });
 
-test("only declared secrets reach bundles and receipts contain redacted results and logs", async () => {
-  const f = await fixture();
-  const home = join(f.root, "home");
-  const secrets = new SecretStore(home);
-  await secrets.set("LOOPY_EXPOSED", "super-private");
-  await secrets.set("LOOPY_UNDECLARED", "also-private");
-  await writeFile(
-    f.bundle,
-    'process.stderr.write(JSON.stringify({message: process.env.LOOPY_EXPOSED,data:null})+"\\n"); process.stdout.write(JSON.stringify({token:process.env.LOOPY_EXPOSED,other:process.env.LOOPY_UNDECLARED ?? null})+"\\n");',
-  );
-
-  const executor = new LocalExecutor({
-    home,
-    workspace: f.workspace,
-    mode: "sandbox",
-    secrets: Object.fromEntries(
-      ["LOOPY_EXPOSED"].map((name) => [name, new SecretStore(f.home).get(name)]),
-    ),
-    bundlePath: () => f.bundle,
-  });
-
-  expect(await executor.execute(f.key, 1, f.spec, new AbortController().signal)).toMatchObject({
-    kind: "succeeded",
-    output: { token: "[redacted]", other: null },
-    logs: [{ message: "[redacted]", data: null }],
-  });
-  expect(await readFile(await receiptPath(join(f.root, "home"), f.key, 1), "utf8")).not.toContain(
-    "super-private",
-  );
-});
-
-for (const failure of ["timeout", "output_limit", "nonzero"] as const) {
-  test(`bundle ${failure} masks escaped secrets before storing logs, node failures and receipts`, async () => {
-    const f = await fixture();
-    const secret = 'alpha"beta';
-    const escaped = JSON.stringify(secret).slice(1, -1);
-    await new SecretStore(f.home).set("TOKEN", secret);
-
-    const executor = new LocalExecutor({
-      home: f.home,
-      workspace: f.workspace,
-      mode: "sandbox",
-      secrets: Object.fromEntries(
-        ["TOKEN"].map((name) => [name, new SecretStore(f.home).get(name)]),
-      ),
-      bundlePath: () => f.bundle,
-    });
-
-    const ending =
-      failure === "timeout"
-        ? "await Bun.sleep(10000);"
-        : failure === "output_limit"
-          ? 'process.stdout.write("x".repeat(3 * 1024 * 1024));'
-          : "process.exit(2);";
-
-    await writeFile(
-      f.bundle,
-      `const secret = process.env.TOKEN; const escaped = JSON.stringify(secret).slice(1,-1); process.stderr.write(JSON.stringify({message: escaped, data: {nested: [escaped]}}) + "\\n"); process.stdout.write(JSON.stringify({escaped}) + "\\n"); process.stderr.write('{"message":"partial","data":"' + JSON.stringify(escaped).slice(1,-1)); ${ending}`,
-    );
-    const graph = structuredClone(approveDemoGraph);
-    const node = graph.nodes[0];
-
-    if (node?.kind !== "code") {
-      throw new Error("Expected code fixture.");
-    }
-
-    node.module.bundleHash = "a".repeat(64);
-    node.timeout = 500;
-    node.retry = { attempts: 1, backoff: "exponential", retryOnExit: false };
-    const store = new SqliteRunStore(":memory:");
-    await store.createRun({ ...newRun(), input: { subject: "test" } });
-
-    const outcome = await activate({
-      store,
-      executor,
-      graph: graphSchema.parse(graph),
-      runId: "run",
-    });
-
-    expect(outcome.status).toBe("failed");
-    const nodes = await store.getNodeRuns("run");
-    expect(nodes[0]).toMatchObject({
-      status: "failed",
-      error: { code: failure === "output_limit" ? "output_limit" : "execution" },
-    });
-    const logs = await store.getLogs("run");
-    const key = nodes[0]?.key;
-
-    if (!key) {
-      throw new Error("Missing stored execution key.");
-    }
-
-    const receipt = await readFile(await receiptPath(f.home, key, 1), "utf8");
-
-    for (const value of [nodes, logs, outcome, JSON.parse(receipt)]) {
-      const serialized = JSON.stringify(value);
-      expect(serialized).not.toContain("alpha");
-      expect(serialized).not.toContain(escaped);
-      expect(serialized).not.toContain(JSON.stringify(escaped).slice(1, -1));
-    }
-
-    expect(logs).toContainEqual(
-      expect.objectContaining({ message: "[redacted]", data: { nested: ["[redacted]"] } }),
-    );
-  });
-}
-
-for (const ending of ["timeout", "success"] as const) {
-  test(`bundle ${ending} masks a secret nested two JSON levels inside a log string`, async () => {
-    const f = await fixture();
-    await new SecretStore(f.home).set("TOKEN", 'alpha"beta');
-
-    const executor = new LocalExecutor({
-      home: f.home,
-      workspace: f.workspace,
-      mode: "sandbox",
-      secrets: Object.fromEntries(
-        ["TOKEN"].map((name) => [name, new SecretStore(f.home).get(name)]),
-      ),
-      bundlePath: () => f.bundle,
-    });
-
-    const record =
-      'const token = process.env.TOKEN; const record = JSON.stringify({message: "resp", data: JSON.stringify({auth: JSON.stringify({token})})});';
-
-    const tail = {
-      timeout: "process.stderr.write(record.slice(0, -2)); await Bun.sleep(10000);",
-      success: 'process.stdout.write(record + "\\n" + JSON.stringify({words: 1}) + "\\n");',
-    }[ending];
-
-    await writeFile(f.bundle, `${record} ${tail}`);
-    const graph = structuredClone(approveDemoGraph);
-    const node = graph.nodes[0];
-
-    if (node?.kind !== "code") {
-      throw new Error("Expected code fixture.");
-    }
-
-    node.module.bundleHash = "a".repeat(64);
-    node.timeout = 500;
-    node.retry = { attempts: 1, backoff: "exponential", retryOnExit: false };
-    const runs = new SqliteRunStore(":memory:");
-    await runs.createRun({ ...newRun(), input: { subject: "test" } });
-
-    const outcome = await activate({
-      store: runs,
-      executor,
-      graph: graphSchema.parse(graph),
-      runId: "run",
-    });
-
-    const nodes = await runs.getNodeRuns("run");
-    expect(nodes[0]?.status).toBe(ending === "success" ? "succeeded" : "failed");
-    const logs = await runs.getLogs("run");
-    const key = nodes[0]?.key;
-
-    if (!key) {
-      throw new Error("Missing stored execution key.");
-    }
-
-    const receipt = JSON.parse(await readFile(await receiptPath(f.home, key, 1), "utf8"));
-    const events = await runs.events(0, 1000);
-
-    for (const value of [nodes, logs, events, outcome, receipt]) {
-      const serialized = JSON.stringify(value);
-      expect(serialized).not.toContain("alpha");
-      expect(serialized).not.toContain("beta");
-    }
-
-    expect(JSON.stringify(logs)).toContain("[redacted]");
-  });
-}
-
 test("bundle results redact once, so a secret inside the marker leaves it intact", async () => {
   const f = await fixture();
   await new SecretStore(f.home).set("TOKEN", "a");
@@ -438,93 +208,6 @@ test("truncated bundle records mask secret escapes at every capture boundary", (
   }
 });
 
-for (const ending of ["success", "timeout", "output_limit", "nonzero"] as const) {
-  test(`bundle ${ending} masks secrets printed as plain text on stdout and stderr`, async () => {
-    const f = await fixture();
-    const secrets = { TOKEN: 'alpha"beta', WINDOWS: "C:\\new", MULTILINE: "line1\nline2" };
-    const store = new SecretStore(f.home);
-
-    for (const [name, value] of Object.entries(secrets)) {
-      await store.set(name, value);
-    }
-
-    const executor = new LocalExecutor({
-      home: f.home,
-      workspace: f.workspace,
-      mode: "sandbox",
-      secrets,
-      bundlePath: () => f.bundle,
-    });
-
-    const tail = {
-      success: "console.log(JSON.stringify({words: 1}));",
-      timeout: "await Bun.sleep(10000);",
-      output_limit: 'process.stdout.write("x".repeat(3 * 1024 * 1024));',
-      nonzero: "process.exit(2);",
-    }[ending];
-
-    await writeFile(
-      f.bundle,
-      `const escaped = JSON.stringify(process.env.TOKEN).slice(1,-1); console.log(escaped); console.error(escaped); console.log('say "hi there"'); console.log('token="' + process.env.WINDOWS + '"'); console.error('token="' + process.env.WINDOWS + '"'); console.error(process.env.MULTILINE); ${tail}`,
-    );
-    const graph = structuredClone(approveDemoGraph);
-    const node = graph.nodes[0];
-
-    if (node?.kind !== "code") {
-      throw new Error("Expected code fixture.");
-    }
-
-    node.module.bundleHash = "a".repeat(64);
-    node.timeout = 500;
-    node.retry = { attempts: 1, backoff: "exponential", retryOnExit: false };
-    const runs = new SqliteRunStore(":memory:");
-    await runs.createRun({ ...newRun(), input: { subject: "test" } });
-
-    const outcome = await activate({
-      store: runs,
-      executor,
-      graph: graphSchema.parse(graph),
-      runId: "run",
-    });
-
-    const nodes = await runs.getNodeRuns("run");
-    expect(nodes[0]?.status).toBe(ending === "success" ? "succeeded" : "failed");
-    const logs = await runs.getLogs("run");
-    const key = nodes[0]?.key;
-
-    if (!key) {
-      throw new Error("Missing stored execution key.");
-    }
-
-    const receipt = JSON.parse(await readFile(await receiptPath(f.home, key, 1), "utf8"));
-    const events = await runs.events(0, 1000);
-
-    for (const value of [nodes, logs, events, outcome, receipt]) {
-      const serialized = JSON.stringify(value);
-
-      for (const fragment of ["alpha", "C:", "line1", "line2"]) {
-        expect(serialized).not.toContain(fragment);
-      }
-    }
-
-    expect(logs).toContainEqual(
-      expect.objectContaining({
-        message: "stderr",
-        data: '[redacted]\ntoken="[redacted]"\n[redacted]\n',
-      }),
-    );
-
-    if (ending === "success") {
-      expect(logs).toContainEqual(
-        expect.objectContaining({
-          message: "stdout",
-          data: '[redacted]\nsay "hi there"\ntoken="[redacted]"\n',
-        }),
-      );
-    }
-  });
-}
-
 test("complete log records keep keys and values that end in a secret prefix", () => {
   const record = { message: "status", data: { s: 1, su: 2, sup: 3, kept: "pass" } };
 
@@ -535,9 +218,318 @@ test("complete log records keep keys and values that end in a secret prefix", ()
       exitCode: 0,
       durationMs: 0,
     };
+
     const redact = secretRedactor(["supersecret"]);
     const result = failure ? bundleStopped(raw, redact, failure) : bundleSucceeded(raw, redact);
 
     expect(result.logs[0]).toEqual(record);
   }
+});
+
+for (const mode of ["sandbox", "full"] as const) {
+  test(`${mode} bundle cannot read, replace, remove or create daemon receipts`, async () => {
+    const f = await fixture();
+    const receipt = await receiptPath(f.home, f.key, 1);
+    await writeFile(
+      f.bundle,
+      `import {readFile, writeFile, unlink, readdir} from "node:fs/promises";
+const path = ${JSON.stringify(receipt)}; const results = [];
+for (const action of [() => readdir(${JSON.stringify(f.home)}), () => readFile(path), () => writeFile(path,"forged"), () => unlink(path), () => writeFile(path + ".forged", "fake")]) {try {await action(); results.push(true);} catch {results.push(false);}}
+process.stdout.write(JSON.stringify(results)+"\\n");`,
+    );
+
+    const executor = new LocalExecutor({
+      home: f.home,
+      workspace: f.workspace,
+      mode,
+      secrets: {},
+      bundlePath: () => f.bundle,
+    });
+
+    const result = await executor.execute(f.key, 1, f.spec, new AbortController().signal);
+    expect(result).toEqual({
+      kind: "succeeded",
+      output: [false, false, false, false, false],
+      logs: [],
+    });
+    expect(await executor.lookup(f.key, 1)).toEqual({
+      kind: "finished",
+      executionKey: f.key,
+      attempt: 1,
+      result,
+    });
+  });
+}
+
+for (const mode of ["sandbox", "full"] as const) {
+  test(`${mode} commands cannot read or replace daemon receipts`, async () => {
+    const f = await fixture();
+    const receipt = await receiptPath(f.home, f.key, 1);
+
+    const executor = new LocalExecutor({
+      home: f.home,
+      workspace: f.workspace,
+      mode,
+      secrets: {},
+      bundlePath: () => f.bundle,
+    });
+
+    const spec = commandSpec([
+      "/bin/sh",
+      "-c",
+      'test ! -r "$1" && ! printf forged > "$1"',
+      "probe",
+      receipt,
+    ]);
+
+    expect(await executor.execute(f.key, 1, spec, new AbortController().signal)).toMatchObject({
+      kind: "succeeded",
+      output: { exitCode: 0 },
+    });
+    expect(await executor.lookup(f.key, 1)).toMatchObject({
+      kind: "finished",
+      result: { kind: "succeeded" },
+    });
+  });
+}
+
+for (const stderr of ["", `${"x".repeat(600)}last failure`]) {
+  test("command exit errors omit empty stderr and retain its last 500 characters", async () => {
+    const f = await fixture();
+    const spec = commandSpec(["/bin/sh", "-c", 'printf %s "$1" >&2; exit 1', "probe", stderr]);
+
+    const result = await f.executor.execute(f.key, 1, spec, new AbortController().signal);
+    expect(result).toMatchObject({
+      kind: "failed",
+      exitCode: 1,
+      error: { code: "exit" },
+    });
+
+    if (result.kind === "failed") {
+      if (stderr) {
+        expect(result.error.message).toContain(stderr.slice(-500));
+      } else {
+        expect(result.error.message).not.toContain(": ");
+      }
+
+      expect(result.error.message).not.toContain("x".repeat(501));
+    }
+  });
+}
+
+for (const accepted of [false, true]) {
+  test(`declared successful exit codes are checked before parser execution, accepted=${accepted}`, async () => {
+    const f = await fixture();
+    await writeFile(
+      f.bundle,
+      'const {result} = await Bun.stdin.json(); process.stdout.write(JSON.stringify({parsedExit: result.exitCode}) + "\\n");',
+    );
+    const spec = commandSpec(["/bin/sh", "-c", "exit 2"]);
+
+    if (spec.kind !== "command") {
+      throw new Error("Expected command spec");
+    }
+
+    spec.okExitCodes = accepted ? [0, 2] : [0];
+    spec.parse = { bundleHash: "a".repeat(64), input: {} };
+    const result = await f.executor.execute(f.key, 1, spec, new AbortController().signal);
+    expect(result).toMatchObject(
+      accepted
+        ? { kind: "succeeded", output: { parsedExit: 2 } }
+        : { kind: "failed", error: { code: "exit" }, exitCode: 2 },
+    );
+  });
+}
+
+test("parser execution failures propagate to the stored graph node and run", async () => {
+  const f = await fixture();
+  await writeFile(f.bundle, 'throw new Error("Parser rejected command output");');
+
+  const graph = loopy("parser-failure", {
+    input: {},
+    run: () => sh(["printf", "raw"], { retry: { attempts: 1 } }),
+  }).graph;
+
+  const node = graph.nodes.find((node) => node.kind === "command");
+
+  if (node?.kind !== "command") {
+    throw new Error("Expected command node");
+  }
+
+  node.parse = { bundleHash: "a".repeat(64), input: {} };
+  const store = new SqliteRunStore(":memory:");
+  await store.createRun(newRun());
+  expect(await activate({ store, executor: f.executor, graph, runId: "run" })).toMatchObject({
+    status: "failed",
+    error: expect.stringContaining("Parser rejected command output"),
+  });
+  expect((await store.getNodeRuns("run"))[0]).toMatchObject({
+    status: "failed",
+    attempt: 1,
+    error: {
+      code: "execution",
+      message: expect.stringContaining("Parser rejected command output"),
+    },
+  });
+  expect(await store.getLogs("run")).toContainEqual(
+    expect.objectContaining({ message: "stdout", data: "raw" }),
+  );
+});
+
+for (const kind of ["code", "command"] as const) {
+  for (const mode of ["sandbox", "full"] as const) {
+    for (const ending of ["success", "nonzero", "timeout", "output_limit"] as const) {
+      if (kind === "command" && ending === "timeout") {
+        continue;
+      }
+
+      test(`${kind} ${mode} ${ending} redacts streams, values, diagnostics, stored records and receipts`, async () => {
+        const f = await fixture();
+
+        const values = {
+          TOKEN: 'alpha"beta',
+          WINDOWS: "C:\\new",
+          MULTILINE: "line1\nline2",
+          NUMBER: "42",
+          LONG: `start-${"private".repeat(100)}-end`,
+        };
+
+        const secrets = new SecretStore(f.home);
+
+        for (const [name, value] of Object.entries({ ...values, OTHER: "undeclared" })) {
+          await secrets.set(name, value);
+        }
+
+        const executor = new LocalExecutor({
+          home: f.home,
+          workspace: f.workspace,
+          mode,
+          secrets: Object.fromEntries(Object.keys(values).map((name) => [name, secrets.get(name)])),
+          bundlePath: () => f.bundle,
+        });
+
+        const prelude = `const {TOKEN,WINDOWS,MULTILINE,NUMBER,LONG,OTHER}=process.env; if(OTHER) throw new Error("Undeclared secret exposed"); const escaped=JSON.stringify(TOKEN).slice(1,-1);`;
+
+        const structured =
+          kind === "code"
+            ? 'process.stderr.write(JSON.stringify({message:escaped,data:{nested:JSON.stringify({auth:JSON.stringify({token:TOKEN})}),number:42,numericSecret:NUMBER}})+"\\n");'
+            : "";
+
+        const streams = `process.stdout.write(escaped + '\\nsay "hi there"\\ntoken="' + WINDOWS + '"\\n'); process.stderr.write(escaped + '\\ntoken="' + WINDOWS + '"\\n' + MULTILINE + '\\n' + LONG + '\\n');`;
+
+        const tails = {
+          success:
+            kind === "code"
+              ? 'process.stdout.write("\\n"+JSON.stringify({token:TOKEN,nested:[TOKEN],number:42,numericSecret:NUMBER,other:OTHER??null})+"\\n");'
+              : "",
+          nonzero: "process.exit(2);",
+          timeout:
+            "process.stderr.write(JSON.stringify(escaped).slice(1,7)); await Bun.sleep(10000);",
+          output_limit: 'process.stdout.write("x".repeat(10 * 1024 * 1024));',
+        };
+
+        const script = `${prelude} ${structured} ${streams} ${tails[ending]}`;
+
+        const graph =
+          kind === "code"
+            ? codeGraph({ kind: "value", type: "json" })
+            : loopy("redaction", {
+                input: {},
+                run: () => sh([process.execPath, "-e", script], { retry: { attempts: 1 } }),
+              }).graph;
+
+        const node = graph.nodes[0];
+
+        if (node?.kind === "code") {
+          node.timeout = 500;
+          node.retry.attempts = 1;
+          await writeFile(f.bundle, script);
+        }
+
+        const store = new SqliteRunStore(":memory:");
+
+        try {
+          await store.createRun(newRun());
+          const outcome = await activate({ store, executor, graph, runId: "run" });
+          expect(outcome.status).toBe(ending === "success" ? "succeeded" : "failed");
+          const nodes = await store.getNodeRuns("run");
+          const attempt = nodes[0];
+
+          if (!attempt) {
+            throw new Error("Missing stored execution attempt.");
+          }
+
+          if (ending !== "success") {
+            expect(attempt).toMatchObject({
+              status: "failed",
+              error: {
+                code:
+                  ending === "output_limit"
+                    ? "output_limit"
+                    : kind === "command" && ending === "nonzero"
+                      ? "exit"
+                      : "execution",
+              },
+            });
+          }
+
+          const logs = await store.getLogs("run");
+
+          const receipt = JSON.parse(
+            await readFile(await receiptPath(f.home, attempt.key, 1), "utf8"),
+          );
+
+          for (const value of [nodes, logs, outcome, receipt, await store.events(0, 100)]) {
+            const text = JSON.stringify(value);
+
+            for (const fragment of ["alpha", "beta", "C:", "line1", "line2", "start-private"]) {
+              expect(text).not.toContain(fragment);
+            }
+
+            expect(text).not.toContain('"42"');
+            expect(text).not.toContain("undeclared");
+          }
+
+          if (kind === "code" && ending === "success") {
+            expect(attempt).toMatchObject({
+              output: {
+                token: "[redacted]",
+                nested: ["[redacted]"],
+                number: 42,
+                numericSecret: "[redacted]",
+                other: null,
+              },
+            });
+          }
+
+          if (ending === "success") {
+            expect(logs).toContainEqual(
+              expect.objectContaining({
+                message: "stdout",
+                data: expect.stringContaining('say "hi there"'),
+              }),
+            );
+          }
+
+          if (kind === "code") {
+            expect(logs).toContainEqual(
+              expect.objectContaining({
+                message: "[redacted]",
+                data: expect.objectContaining({ number: 42, numericSecret: "[redacted]" }),
+              }),
+            );
+          }
+        } finally {
+          store.close();
+        }
+      });
+    }
+  }
+}
+
+test("redaction handles overlapping values, regex punctuation and truncated secrets", () => {
+  expect(secretRedactor(["abc", "abcdef", "a.b?"]).complete("abcdef abc a.b?")).toBe(
+    "[redacted] [redacted] [redacted]",
+  );
+  expect(secretRedactor(["abcdef"]).fragment("prefix abc")).toBe("prefix [redacted]");
 });

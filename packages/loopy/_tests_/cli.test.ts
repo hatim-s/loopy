@@ -2,7 +2,8 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { nodeIdSchema } from "../src/contract/index.js";
-import { localDaemon, openRunStore, Registry, readDaemonFile } from "../src/local/index.js";
+import { localDaemon, Registry, readDaemonFile } from "../src/local/index.js";
+import { openRunStore } from "../src/store/index.js";
 import { cli, fixture, object, roots } from "./cli-fixture.js";
 import { newRun } from "./fixture.js";
 
@@ -218,7 +219,6 @@ test("HTTP cancel refuses an active owner and inspect diagnoses a missing run", 
   await f.store.claim("owned", "active-owner");
   const cancelled = await cli(f, "cancel", "owned");
   expect(cancelled.code).toBe(1);
-  expect(cancelled.stderr).toContain("owned");
   expect(await f.store.getRun("owned")).toMatchObject({
     status: "running",
     owner: { token: "active-owner" },

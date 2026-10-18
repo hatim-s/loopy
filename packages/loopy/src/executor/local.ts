@@ -34,28 +34,26 @@ export class LocalExecutor implements Executor {
       return { kind: "started" as const };
     }
 
-    {
-      const latest = await lookupFile(path);
+    const latest = await lookupFile(path);
 
-      if (latest.kind === "finished") {
-        return latest;
-      }
-
-      const result: ExecutionResult = {
-        kind: "failed",
-        error: {
-          code: "uncertain",
-          message:
-            "Executor stopped with an unfinished receipt. Inspect the workspace before starting a new run.",
-        },
-        exitCode: null,
-        logs: [],
-      };
-
-      await finishReceipt(path, { kind: "finished", executionKey: key, attempt, result });
-
-      return { kind: "finished" as const, result };
+    if (latest.kind === "finished") {
+      return latest;
     }
+
+    const result: ExecutionResult = {
+      kind: "failed",
+      error: {
+        code: "uncertain",
+        message:
+          "Executor stopped with an unfinished receipt. Inspect the workspace before starting a new run.",
+      },
+      exitCode: null,
+      logs: [],
+    };
+
+    await finishReceipt(path, { kind: "finished", executionKey: key, attempt, result });
+
+    return { kind: "finished" as const, result };
   }
   async execute(
     key: ExecutionKey,

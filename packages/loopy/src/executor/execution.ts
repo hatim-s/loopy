@@ -63,6 +63,7 @@ export class ExecutionWorker {
         {
           bundle,
           workspace,
+          purpose: "bundle",
           network: this.options.mode === "full",
           home: await realpath(this.options.home),
         },

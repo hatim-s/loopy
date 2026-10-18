@@ -10,11 +10,11 @@ packages/loopy/src/
   contract/   browser-safe wire schemas, routes and view derivations.
   engine/     pure graph state machine, reference resolution and retry policy.
   host/       daemon scheduling, activation pool, leases, heartbeat and clock.
-  store/      memory store, SQLite schema and transactions, event outbox.
-  executor/   local execution worker, receipts and executable bundle protocol.
+  store/      SQLite schema and transactions, event outbox.
+  executor/   process sandbox, local execution worker, receipts and bundle protocol.
   sdk/        compile-only graph builder, refs, command descriptors and parsers.
   compiler/   restricted author evaluation, executable bundles and graph revisions.
-  local/      home, registry, secrets, service, HTTP server and process sandbox launchers.
+  local/      home, registry, secrets, service and HTTP server.
   cli/        thin HTTP commands, local compilation and daemon control.
 apps/dashboard/src/
   backend/    contract-backed HTTP and event stream adapter.
@@ -27,18 +27,18 @@ Tests live under `packages/loopy/_tests_` and `apps/dashboard/_tests_`. The real
 
 The public entries are `loopy` and `loopy/graph` for the builder, `loopy/engine` for the reducer, `loopy/local` and `loopy/contract`. The old runtime entry and executable step SDK are deleted. The dashboard imports only `loopy/contract`.
 
-Layers import downward through their target's index, except the SDK's trusted `host.ts` and `graph-host.ts` entries and the executor's narrow `local/execution-host.ts` OS bridge. Core, engine and contract bundle without host dependencies. Host imports core and engine. Store imports core and contract. Executor imports core, contract and its OS bridge. Local composes host, store and executor. Compiler imports core, contract, local and the trusted SDK entries. CLI imports the owners it calls. Same-layer imports name the file.
+Layers import downward through their target's index, except the SDK's trusted `host.ts` and `graph-host.ts` entries. Core, engine and contract bundle without host dependencies. Host imports core and engine. Store imports core and the executor PID helper. Executor imports core and contract. Local composes host, store and executor. Compiler imports core, contract, the executor sandbox and the trusted SDK entries. CLI imports the owners it calls. Same-layer imports name the file.
 
 ## Ownership
 
-- `core/graph.ts` owns graph nodes, edges, refs, execution keys and node runs. Run ids pin one revision; execution keys include ordered scope tuples.
+- `core/graph.ts` owns graph nodes, edges and refs; `core/node-run.ts` owns execution keys and node runs. Run ids pin one revision; execution keys include ordered scope tuples.
 - `core/executor.ts`, `effects.ts` and `store.ts` own execution results, durable effects and the persistence contract. A failed node stores its error code and message for future rescue handling.
-- `engine/state.ts` owns reducer state and input events; `step.ts` owns transitions; `effects.ts` adds dispatch effects; `resolve.ts` resolves data; `retry.ts` owns backoff; `output.ts` validates out schemas and the inline cap.
+- `engine/state.ts` owns reducer state and input events; `step.ts` owns transitions; `node-run.ts` owns node writes; `resolve.ts` resolves data; `policy.ts` owns backoff, out-schema validation and the inline cap. Transitions separate durable writes from dispatch, wait and finished instructions.
 - `host/activate.ts` reconstructs state from persisted node runs, reconciles receipts, calls the reducer, commits durable effects once, then dispatches work. Validation failures do not retry. Retries retain the running lease and persist `nextRetryAt`.
-- `host/daemon.ts`, `pool.ts`, `cron.ts` and `heartbeat.ts` coordinate due work and leases without author callbacks.
-- `store/sqlite/` separates events, runs, nodes and schedules. `apply` fences the owner and commits node writes, logs, retry deadlines, run outcomes and outbox rows in one transaction. Schema 13 resets old databases. `store/memory-*` implements the same contract with rollback.
+- `host/daemon.ts`, `pool.ts`, `schedules.ts` and `heartbeat.ts` coordinate due work and leases without author callbacks.
+- `store/sqlite/` separates events, runs, nodes and schedules. `apply` fences the owner and commits node writes, logs, run outcomes and outbox rows in one transaction. Schema 14 resets old databases. SQLite in memory runs the store contract tests. One store class delegates to per-table functions; `open.ts` owns the schema gate.
 - `executor/local.ts` starts a trusted worker. `execution.ts` owns executions, `receipts.ts` owns exclusive started and atomic finished receipt files, and `protocol.ts` decodes stdout results and stderr logs. Finished receipts prevent repeating lost completions. A dead worker with an unfinished receipt fails as uncertain.
-- `local/process.ts`, `spawn.ts` and `sandbox/` own OS processes, bounded capture, process groups and sandbox profiles. Bundles always have restricted filesystem access; mode controls network. Only declared secrets are injected into bundle environments.
+- `executor/process.ts`, `spawn.ts` and `sandbox/` own OS processes, bounded capture, process groups and sandbox profiles. Bundles always have restricted filesystem access; mode controls network. Only declared secrets are injected into bundle environments.
 - `sdk/graph/` owns compile-only construction. `sdk/shell/` supplies descriptor data and parser implementations, with no executable step path.
 - `compiler/restrict.ts` and `ast.ts` enforce builder syntax. `module.ts` checks code exports, `evaluate.ts` imports one restricted snapshot, `bundle.ts` produces executable bundles, and `core/revision.ts` hashes the canonical graph and bundles.
 - `local/save-compiled.ts` validates and stores private bundles and historical graphs before publishing registry metadata. `local/registry.ts` owns paths and source identity.

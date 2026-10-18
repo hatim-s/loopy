@@ -1,8 +1,8 @@
 import { constants } from "node:fs";
 import { copyFile, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import type { CommandResult, ExecutionMode } from "../../core/index.js";
+import { join, resolve } from "node:path";
+import { type CommandResult, type ExecutionMode, errnoCode } from "../../core/index.js";
 import { ENV_EXEC, envArgs, executable } from "../paths.js";
 import { darwinProfile } from "./darwin.js";
 import { linuxArgs } from "./linux.js";
@@ -68,7 +68,10 @@ export async function sandboxLauncher(options: {
 }
 
 export async function withBundleSandbox(
-  options: { bundle: string; workspace: string; network: boolean; home: string },
+  options: { bundle: string; workspace: string; home: string } & (
+    | { purpose: "compiler" }
+    | { purpose: "bundle"; network: boolean }
+  ),
   execute: (launch: { program: string; args: string[] }) => Promise<CommandResult>,
 ): Promise<CommandResult> {
   const directory = await realpath(await mkdtemp(join(tmpdir(), "loopy-bundle-")));
@@ -79,9 +82,20 @@ export async function withBundleSandbox(
     await copyFile(options.bundle, bundle, constants.COPYFILE_EXCL);
     const bun = await realpath(process.execPath);
 
-    const spec = options.network
-      ? await bundleSpec({ ...options, bundle, bun })
-      : await compilerSpec({ ...options, bundle, bun });
+    const home = await realpath(options.home).catch((cause) => {
+      if (errnoCode(cause) === "ENOENT") {
+        return resolve(options.home);
+      }
+
+      throw cause;
+    });
+
+    const paths = { bundle, bun, workspace: options.workspace, home };
+
+    const spec =
+      options.purpose === "compiler"
+        ? await compilerSpec(paths)
+        : await bundleSpec({ ...paths, network: options.network });
 
     const [program, args] = await render(spec, options.workspace, bun, ["--smol", bundle]);
 

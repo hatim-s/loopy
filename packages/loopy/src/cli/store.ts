@@ -1,4 +1,4 @@
-import { openRunStore, type SqliteRunStore } from "../local/index.js";
+import { openRunStore, type SqliteRunStore } from "../store/index.js";
 import type { CliContext } from "./context.js";
 
 export async function withRunStore<T>(

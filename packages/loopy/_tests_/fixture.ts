@@ -1,4 +1,10 @@
-import type { ExecutionResult, ExecutionSpec, Executor, RunRecord } from "../src/core/index.js";
+import type {
+  ExecutionResult,
+  ExecutionSpec,
+  Executor,
+  OutSchema,
+  RunRecord,
+} from "../src/core/index.js";
 import { type Clock, SYSTEM_CLOCK } from "../src/host/index.js";
 import { code, loopy } from "../src/sdk/graph/index.js";
 
@@ -96,11 +102,10 @@ export async function until(ready: () => boolean | Promise<boolean>): Promise<vo
   throw new Error("The expected state was not reached.");
 }
 
-export function codeGraph() {
+export function codeGraph(out: OutSchema = { kind: "value", type: "number" }) {
   const graph = loopy("test", {
     input: {},
-    run: () =>
-      code("work", { in: {}, out: { kind: "value", type: "number" }, module: "./work.ts" }),
+    run: () => code("work", { in: {}, out, module: "./work.ts" }),
   }).graph;
 
   for (const node of graph.nodes) {

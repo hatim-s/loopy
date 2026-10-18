@@ -1,3 +1,4 @@
+import type { DiagnosticCode } from "./diagnostics.js";
 import type { CommandFlag, CommandFlagSpec } from "./graph.js";
 
 type FlagDefinition = CommandFlag;
@@ -10,6 +11,16 @@ type CommandDefinition = Partial<Omit<CommandFlagSpec, "path" | "flags">> & {
   readonly revisionPaths?: boolean;
   readonly positionals?: readonly { readonly optional?: boolean; readonly variadic?: boolean }[];
 };
+
+export class CommandArgumentError extends Error {
+  constructor(
+    readonly code: Extract<DiagnosticCode, "unknown_flag" | "flag_type" | "flag_choice" | "arity">,
+    message: string,
+  ) {
+    super(message);
+    this.name = "CommandArgumentError";
+  }
+}
 
 // BOUNDARY: JavaScript command inputs are checked against descriptor flags and arity below.
 export type RenderInput = {
@@ -30,7 +41,8 @@ function flagTokens(
   }
 
   if (flag.supported === false) {
-    throw new Error(
+    throw new CommandArgumentError(
+      "unknown_flag",
       `Flag '${flag.cli}' is unavailable on this platform. Use sh.exec with a platform-specific alternative.`,
     );
   }
@@ -40,13 +52,15 @@ function flagTokens(
   }
 
   if (typeof value !== flag.kind || (typeof value === "number" && !Number.isFinite(value))) {
-    throw new Error(
+    throw new CommandArgumentError(
+      "flag_type",
       `Flag '${flag.cli}' requires a ${flag.kind} value. Supply the declared flag type.`,
     );
   }
 
   if (flag.choices && !flag.choices.includes(String(value))) {
-    throw new Error(
+    throw new CommandArgumentError(
+      "flag_choice",
       `Flag '${flag.cli}' must be one of: ${flag.choices.join(", ")}. Choose an allowed value.`,
     );
   }
@@ -98,14 +112,20 @@ function renderFlag(
 // BOUNDARY: JavaScript named flag values must be an object containing string values.
 function namedPairs(flag: FlagDefinition, value: unknown): string[] {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error(`Flag '${flag.cli}' requires named values. Supply a record of strings.`);
+    throw new CommandArgumentError(
+      "flag_type",
+      `Flag '${flag.cli}' requires named values. Supply a record of strings.`,
+    );
   }
 
   const tokens: string[] = [];
 
   for (const [key, item] of Object.entries(value)) {
     if (typeof item !== "string") {
-      throw new Error(`Flag '${flag.cli}' requires string values. Supply a record of strings.`);
+      throw new CommandArgumentError(
+        "flag_type",
+        `Flag '${flag.cli}' requires string values. Supply a record of strings.`,
+      );
     }
 
     tokens.push(flag.cli, key, item);
@@ -121,14 +141,20 @@ function repeatedTokens(
   style: CommandDefinition["style"],
 ): string[] {
   if (!Array.isArray(value)) {
-    throw new Error(`Flag '${flag.cli}' is repeatable. Supply an array of values.`);
+    throw new CommandArgumentError(
+      "flag_type",
+      `Flag '${flag.cli}' is repeatable. Supply an array of values.`,
+    );
   }
 
   const items: readonly unknown[] = value;
 
   if (flag.terminator) {
     if (!items.length) {
-      throw new Error(`Flag '${flag.cli}' requires arguments. Supply a nonempty array of strings.`);
+      throw new CommandArgumentError(
+        "flag_type",
+        `Flag '${flag.cli}' requires arguments. Supply a nonempty array of strings.`,
+      );
     }
 
     const tokens = items.flatMap((item) =>
@@ -147,7 +173,8 @@ function buildFlags(descriptor: CommandDefinition, values: Readonly<Record<strin
 
   for (const name of Object.keys(values)) {
     if (!Object.hasOwn(allowed, name)) {
-      throw new Error(
+      throw new CommandArgumentError(
+        "unknown_flag",
         `Unknown flag '${name}'. Use an allowed flag: ${Object.keys(allowed).join(", ") || "none"}.`,
       );
     }
@@ -182,7 +209,8 @@ function validateArity<T>(descriptor: CommandDefinition, args: readonly T[], key
 
   if (args.length < minimum || args.length > maximum) {
     const count = maximum === Infinity ? `at least ${minimum}` : `${minimum} to ${maximum}`;
-    throw new Error(
+    throw new CommandArgumentError(
+      "arity",
       `Command '${key}' expected ${count} positional arguments. Supply args with the expected count.`,
     );
   }

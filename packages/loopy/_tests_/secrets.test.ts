@@ -11,10 +11,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { secretRedactor } from "../src/executor/redact.js";
-import { localDaemon, openRunStore } from "../src/local/index.js";
+import { join, resolve } from "node:path";
+import { readDaemonFile } from "../src/local/index.js";
 import { SecretStore } from "../src/local/secrets.js";
+import { until } from "./fixture.js";
 
 const directories: string[] = [];
 
@@ -96,29 +96,22 @@ test("malformed stores and invalid values never echo secret contents", async () 
 });
 
 test("CLI stdin entry and name-only listing do not disclose values", async () => {
-  const { store } = setup();
-  const runStore = openRunStore(store.directory);
-
-  const daemon = localDaemon({
-    home: store.directory,
-    cwd: process.cwd(),
-    store: runStore,
-    concurrency: 4,
-    port: 0,
-  });
-
-  await daemon.start();
+  const { directory, store } = setup();
   daemons.push({
-    async stop() {
-      await daemon.stop();
-      runStore.close();
+    stop: async () => {
+      const record = readDaemonFile(store.directory);
+
+      if (record) {
+        process.kill(record.pid, "SIGTERM");
+        await until(() => readDaemonFile(store.directory) === undefined);
+      }
     },
   });
-  const command = [process.execPath, "packages/loopy/src/cli/index.ts"];
+  const command = [process.execPath, resolve(import.meta.dir, "../src/cli/index.ts")];
 
   const child = Bun.spawn(
     [...command, "secrets", "set", "orbit-cookie", "--stdin", "--home", store.directory],
-    { stdin: "pipe", stdout: "pipe", stderr: "pipe" },
+    { cwd: directory, stdin: "pipe", stdout: "pipe", stderr: "pipe" },
   );
 
   child.stdin.write("sensitive-marker\n");
@@ -129,17 +122,11 @@ test("CLI stdin entry and name-only listing do not disclose values", async () =>
   expect(store.get("orbit-cookie")).toBe("sensitive-marker");
 
   const listed = Bun.spawn([...command, "secrets", "list", "--home", store.directory], {
+    cwd: directory,
     stdout: "pipe",
     stderr: "pipe",
   });
 
   expect(await listed.exited).toBe(0);
   expect(JSON.parse(await new Response(listed.stdout).text())).toEqual(["orbit-cookie"]);
-});
-
-test("redaction handles overlapping values, regex punctuation and truncated secrets", async () => {
-  expect(secretRedactor(["abc", "abcdef", "a.b?"]).complete("abcdef abc a.b?")).toBe(
-    "[redacted] [redacted] [redacted]",
-  );
-  expect(secretRedactor(["abcdef"]).fragment("prefix abc")).toBe("prefix [redacted]");
 });

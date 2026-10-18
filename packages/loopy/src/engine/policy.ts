@@ -1,5 +1,6 @@
 import {
   type ExecutionError,
+  type GraphRetry,
   isFieldValue,
   type Json,
   MAX_OUTPUT_BYTES,
@@ -31,8 +32,6 @@ export function outputLimitError(output: Json): ExecutionError | null {
     ? { code: "output_limit", message: OUTPUT_LIMIT_MESSAGE }
     : null;
 }
-
-import type { GraphRetry } from "../core/index.js";
 
 export function retryDelayMs(attempt: number): number {
   return Math.min(1000 * 2 ** (attempt - 1), 60_000);

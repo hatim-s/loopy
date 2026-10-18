@@ -2,7 +2,8 @@ import { afterEach, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { daemonUrl, localDaemon, openRunStore, readDaemonFile } from "../src/local/index.js";
+import { daemonUrl, localDaemon, readDaemonFile } from "../src/local/index.js";
+import { openRunStore } from "../src/store/index.js";
 
 const roots: string[] = [];
 
