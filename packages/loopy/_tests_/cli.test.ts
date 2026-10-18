@@ -21,7 +21,7 @@ async function graphFixture(name = "compiled") {
   const f = fixture(name, "run: () => null");
   writeFileSync(
     f.file,
-    `import { loopy, log } from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/graph/index.ts"))}; export default loopy(${JSON.stringify(name)}, { input: {count: "number"}, run: ({input}) => {log("ready"); return input.get("count");}});`,
+    `import { loopy, log } from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/index.ts"))}; export default loopy(${JSON.stringify(name)}, { input: {count: "number"}, run: ({input}) => {log("ready"); return input.get("count");}});`,
   );
   const store = openRunStore(f.home);
   const daemon = localDaemon({ ...f, store, concurrency: 4, port: 0 });
@@ -94,7 +94,7 @@ test("compiler diagnostics include locations and do not create registry entries"
   const f = await graphFixture();
   writeFileSync(
     f.file,
-    `import {loopy} from "loopy/graph"; export default loopy("bad", {input:{},run:async()=>1});`,
+    `import {loopy} from "loopy"; export default loopy("bad", {input:{},run:async()=>1});`,
   );
   const result = await cli(f, "save", f.file);
   expect(result.code).toBe(1);
@@ -114,7 +114,7 @@ test("save starts the daemon on demand and leaves artifact writes to the service
   const f = fixture("on-demand", "run: () => null");
   writeFileSync(
     f.file,
-    `import {loopy} from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/graph/index.ts"))}; export default loopy("on-demand", {input:{},run:()=>null});`,
+    `import {loopy} from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/index.ts"))}; export default loopy("on-demand", {input:{},run:()=>null});`,
   );
   const [result, concurrent] = await Promise.all([cli(f, "save", f.file), cli(f, "save", f.file)]);
   const record = readDaemonFile(f.home);
@@ -144,7 +144,7 @@ test("list and schedules use the caller workspace when the daemon started elsewh
   const file = join(other, "other.ts");
   writeFileSync(
     file,
-    `import {loopy} from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/graph/index.ts"))}; export default loopy("other", {input:{},run:()=>null});`,
+    `import {loopy} from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/index.ts"))}; export default loopy("other", {input:{},run:()=>null});`,
   );
   const caller = { ...f, cwd: other };
   expect((await cli(caller, "save", file, "--cwd", other)).code).toBe(0);
@@ -181,7 +181,7 @@ test("save preserves every author option from graph meta", async () => {
 
   writeFileSync(
     f.file,
-    `import {loopy} from "loopy/graph"; export default loopy("metadata", {${JSON.stringify(meta).slice(1, -1)},input:{count:"number"},run:({input})=>input.get("count")});`,
+    `import {loopy} from "loopy"; export default loopy("metadata", {${JSON.stringify(meta).slice(1, -1)},input:{count:"number"},run:({input})=>input.get("count")});`,
   );
   expect(await cli(f, "save", f.file)).toMatchObject({ code: 0, stderr: "" });
   const saved = new Registry(f.home, f.cwd).get("metadata");
@@ -274,7 +274,7 @@ test("HTTP run reports named JSON input errors before creating a run", async () 
   const f = await graphFixture();
   writeFileSync(
     f.file,
-    'import {loopy} from "loopy/graph"; export default loopy("compiled",{input:{payload:"json",values:"number[]"},run:()=>null});',
+    'import {loopy} from "loopy"; export default loopy("compiled",{input:{payload:"json",values:"number[]"},run:()=>null});',
   );
   expect((await cli(f, "save", f.file)).code).toBe(0);
 

@@ -36,7 +36,7 @@ test("real parsed git, filesystem, text and redirecting curl executions persist 
     const source = join(f.workspace, "parsed.ts");
     await writeFile(
       source,
-      `import {loopy, git, fs, text, net} from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/graph/index.ts"))};
+      `import {loopy, git, fs, text, net} from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/index.ts"))};
 export default loopy("parsed", {input: {}, mode: "full", run: () => {
   const repository = git.revParse({flags: {showToplevel: true}}, {label: "git"});
   const path = fs.realpath({args: ["words.txt"]}, {label: "filesystem"});

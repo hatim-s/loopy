@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { fs, git, loopy, text } from "../src/sdk/graph/index.js";
+import { fs, git, loopy, text } from "../src/sdk/index.js";
 import { capture } from "./fixtures/command-capture.js";
 
 test.each([

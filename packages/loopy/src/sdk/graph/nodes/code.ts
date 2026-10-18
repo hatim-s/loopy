@@ -1,7 +1,7 @@
 import type { Duration, GraphRetry, RateLimit } from "../../../core/index.js";
 import { currentBuilder } from "../builder.js";
 import type { Ref, RefValue, SchemaRef } from "../ref.js";
-import { type AuthorValue, serializeValues } from "../ref.js";
+import { type AuthorValue, serialize } from "../ref.js";
 import { type Normalized, normalizeOut, type Output } from "../schema.js";
 
 type Options = {
@@ -24,15 +24,19 @@ export function code(label: string, options: Options & { out?: Output }): RefVal
   const node = builder.add(
     {
       kind: "code",
-      in: serializeValues(options.in, builder),
+      in: serialize(options.in, builder),
       out,
       module: { path: options.module, bundleHash: null },
       rateLimit: options.rateLimit ?? null,
-      retry: builder.retry(options.retry),
+      retry: retry(options.retry),
       timeout: options.timeout ?? null,
     },
     label,
   );
 
   return builder.schemaRef(node.id, out);
+}
+
+export function retry(options?: Partial<GraphRetry>): GraphRetry {
+  return { attempts: 3, backoff: "exponential", retryOnExit: false, ...options };
 }

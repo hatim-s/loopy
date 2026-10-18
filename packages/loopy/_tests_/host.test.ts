@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import type { Executor, Store } from "../src/core/index.js";
 import { initialState, step } from "../src/engine/index.js";
 import { activate } from "../src/host/index.js";
-import { loopy, sh } from "../src/sdk/graph/index.js";
+import { loopy, sh } from "../src/sdk/index.js";
 import { SqliteRunStore } from "../src/store/index.js";
 import { codeGraph, FakeClock, FakeExecutor, newRun, until } from "./fixture.js";
 

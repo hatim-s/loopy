@@ -6,7 +6,7 @@ import type {
   RunRecord,
 } from "../src/core/index.js";
 import { type Clock, SYSTEM_CLOCK } from "../src/host/index.js";
-import { code, loopy } from "../src/sdk/graph/index.js";
+import { code, loopy } from "../src/sdk/index.js";
 
 export class FakeExecutor implements Executor {
   calls: ExecutionSpec[] = [];

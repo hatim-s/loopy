@@ -25,9 +25,9 @@ apps/dashboard/src/
 
 Tests live under `packages/loopy/_tests_` and `apps/dashboard/_tests_`. The real workflows in `examples/` use the removed step SDK. PR 7 owns their migration; they are outside semantic TypeScript checking until then. Graph example fixtures remain compiled and checked.
 
-The public entries are `loopy` and `loopy/graph` for the builder, `loopy/engine` for the reducer, `loopy/local` and `loopy/contract`. The old runtime entry and executable step SDK are deleted. The dashboard imports only `loopy/contract`.
+The public entries are `loopy` for the builder, `loopy/engine` for the reducer, `loopy/local` and `loopy/contract`. The old runtime entry and executable step SDK are deleted. The dashboard imports only `loopy/contract`.
 
-Layers import downward through their target's index, except the SDK's trusted `host.ts` and `graph-host.ts` entries. Core, engine and contract bundle without host dependencies. Host imports core and engine. Store imports core and the executor PID helper. Executor imports core and contract. Local composes host, store and executor. Compiler imports core, contract, the executor sandbox and the trusted SDK entries. CLI imports the owners it calls. Same-layer imports name the file.
+Layers import downward through their target's index, except the SDK's compiler command catalog and descriptor types. Core, engine and contract bundle without host dependencies. Host imports core and engine. Store imports core and the executor PID helper. Executor imports core and contract. Local composes host, store and executor. Compiler imports core, contract, the executor sandbox and the trusted SDK command catalog. CLI imports the owners it calls. Same-layer imports name the file.
 
 ## Ownership
 

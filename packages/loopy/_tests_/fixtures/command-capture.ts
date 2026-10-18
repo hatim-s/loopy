@@ -1,6 +1,6 @@
 import type { ExecutionResult, ExecutionSpec, RunOutcome } from "../../src/core/index.js";
 import { initialState, step } from "../../src/engine/index.js";
-import { loopy } from "../../src/sdk/graph/index.js";
+import { loopy } from "../../src/sdk/index.js";
 
 type Capture = {
   executor: { calls: { program: string; args: string[] }[] };

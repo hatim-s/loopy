@@ -80,9 +80,7 @@ export * from "./rate-limit.js";
 
 export {
   CommandArgumentError,
-  type RenderInput,
   renderArgv,
-  renderOperands,
   validateCommandFlag,
 } from "./render-argv.js";
 

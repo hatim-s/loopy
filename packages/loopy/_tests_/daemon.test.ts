@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Graph, type RunRecord, type Schedule, StoreError } from "../src/core/index.js";
 import { Daemon } from "../src/host/index.js";
-import { loopy, sh } from "../src/sdk/graph/index.js";
+import { loopy, sh } from "../src/sdk/index.js";
 import { SqliteRunStore } from "../src/store/index.js";
 import { FakeClock, FakeExecutor, newRun, until } from "./fixture.js";
 

@@ -1,9 +1,10 @@
-import type { RateLimit } from "../../../core/index.js";
 import {
+  type CommandFlagSpec,
   type GraphRetry,
   type OutSchema,
   parseArgv,
   RAW_COMMAND_OUTPUT,
+  type RateLimit,
 } from "../../../core/index.js";
 import {
   type CommandDescriptor,
@@ -11,12 +12,12 @@ import {
   commandKey,
   validateCommandDescriptor,
 } from "../../define-command.js";
-import { currentBuilder } from "../builder.js";
+import { currentBuilder, type GraphBuilder } from "../builder.js";
 import { commandArgv } from "../command-argv.js";
 import type { CommandInput, CommandRawInput } from "../command-input.js";
-import type { SchemaRef } from "../ref.js";
-import { type Ref, type RefValue, serialize, serializeValues } from "../ref.js";
+import { type AuthorData, type Ref, type RefValue, type SchemaRef, serialize } from "../ref.js";
 import { type Normalized, normalizeOut, type Output } from "../schema.js";
+import { retry } from "./code.js";
 
 type Options = {
   label?: string;
@@ -29,50 +30,45 @@ type Options = {
 
 type Input = CommandOperands<string | RefValue>;
 
-function record({
-  label,
-  descriptor,
-  input,
-  options,
-  mode,
-  out,
-}: {
-  label: string | null;
-  descriptor: CommandDescriptor;
-  input: Input;
-  options: Options;
-  mode: "parsed" | "raw";
-  out: OutSchema;
-}) {
-  const builder = currentBuilder();
-  const key = commandKey(descriptor);
-  const rendered = commandArgv(descriptor, input, mode);
+type Values = Readonly<Record<string, AuthorData<RefValue>>>;
 
+function commandNode<S extends OutSchema>(
+  builder: GraphBuilder,
+  command: {
+    key: string;
+    out: S;
+    argv: readonly AuthorData<RefValue>[];
+    flags: Values;
+    flagSpec: CommandFlagSpec | null;
+    okExitCodes: readonly number[];
+    parse: { input: Values } | null;
+  },
+  options: Options,
+) {
   const node = builder.add(
     {
       kind: "command",
-      key,
-      out,
-      argv: [rendered.program, ...rendered.argv].map((arg) => serialize(arg, builder)),
-      flags: serializeValues(rendered.flags, builder),
-      flagSpec: rendered.flagSpec,
+      key: command.key,
+      out: command.out,
+      argv: command.argv.map((value) => serialize(value, builder)),
+      flags: serialize(command.flags, builder),
+      flagSpec: command.flagSpec,
       options: {
         cwd: serialize(options.cwd, builder),
-        env: serializeValues(options.env ?? {}, builder),
+        env: serialize(options.env ?? {}, builder),
         stdin: serialize(options.stdin, builder),
       },
       rateLimit: options.rateLimit ?? null,
-      retry: builder.retry(options.retry),
-      okExitCodes: [...(descriptor.okExitCodes ?? [0])],
-      parse:
-        mode === "parsed" && descriptor.parse
-          ? { bundleHash: null, input: serializeValues(rendered.parseInput, builder) }
-          : null,
+      retry: retry(options.retry),
+      okExitCodes: [...command.okExitCodes],
+      parse: command.parse
+        ? { bundleHash: null, input: serialize(command.parse.input, builder) }
+        : null,
     },
-    label,
+    options.label ?? null,
   );
 
-  return node.id;
+  return builder.schemaRef(node.id, command.out);
 }
 
 type CallArguments<I> = I extends { args: readonly unknown[] }
@@ -107,73 +103,56 @@ export function defineCommand(
   validateCommandDescriptor(descriptor);
   const out = normalizeOut(schema === undefined ? descriptor.out : schema);
 
-  function call(input: Input = {}, options: Options = {}): RefValue {
-    return currentBuilder().schemaRef(
-      record({ label: options.label ?? null, descriptor, input, options, mode: "parsed", out }),
-      out,
-    );
-  }
+  function factory(mode: "parsed" | "raw", output: OutSchema) {
+    return (input: Input = {}, options: Options = {}): RefValue => {
+      const builder = currentBuilder();
+      const key = commandKey(descriptor);
+      const rendered = commandArgv(descriptor, input, { key, mode });
 
-  function raw(input: Input = {}, options: Options = {}): SchemaRef<typeof RAW_COMMAND_OUTPUT> {
-    return currentBuilder().schemaRef(
-      record({
-        label: options.label ?? null,
-        descriptor,
-        input,
+      return commandNode(
+        builder,
+        {
+          key,
+          out: output,
+          argv: [rendered.program, ...rendered.argv],
+          flags: rendered.flags,
+          flagSpec: rendered.flagSpec,
+          okExitCodes: descriptor.okExitCodes ?? [0],
+          parse: mode === "parsed" && descriptor.parse ? { input: rendered.parseInput } : null,
+        },
         options,
-        mode: "raw",
-        out: RAW_COMMAND_OUTPUT,
-      }),
-      RAW_COMMAND_OUTPUT,
-    );
+      );
+    };
   }
 
-  return Object.assign(call, { raw, descriptor });
+  return Object.assign(factory("parsed", out), {
+    raw: factory("raw", RAW_COMMAND_OUTPUT),
+    descriptor,
+  });
 }
 
-function shell({
-  label,
-  key,
-  argv,
-  options,
-}: {
-  label: string | null;
-  key: string;
-  argv: readonly (string | Ref<string>)[];
-  options: Options;
-}) {
-  const builder = currentBuilder();
-
-  const node = builder.add(
+function shell(key: string, argv: readonly (string | Ref<string>)[], options: Options) {
+  return commandNode(
+    currentBuilder(),
     {
-      kind: "command",
       key,
       out: RAW_COMMAND_OUTPUT,
-      argv: argv.map((arg) => serialize(arg, builder)),
+      argv,
       flags: {},
       flagSpec: null,
-      options: {
-        cwd: serialize(options.cwd, builder),
-        env: serializeValues(options.env ?? {}, builder),
-        stdin: serialize(options.stdin, builder),
-      },
-      rateLimit: options.rateLimit ?? null,
-      retry: builder.retry(options.retry),
       okExitCodes: [0],
       parse: null,
     },
-    label,
+    options,
   );
-
-  return builder.schemaRef(node.id, RAW_COMMAND_OUTPUT);
 }
 
 function exec(argv: readonly (string | Ref<string>)[], options: Options = {}) {
-  return shell({ label: options.label ?? null, key: "sh.exec", argv, options });
+  return shell("sh.exec", argv, options);
 }
 
 function run(line: string, options: Options = {}) {
-  return shell({ label: options.label ?? null, key: "sh.run", argv: parseArgv(line), options });
+  return shell("sh.run", parseArgv(line), options);
 }
 
 export const sh = Object.assign(exec, { exec, run });

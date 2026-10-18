@@ -9,7 +9,7 @@ import { receiptPath } from "../src/executor/receipts.js";
 import { secretRedactor } from "../src/executor/redact.js";
 import { activate, SYSTEM_CLOCK } from "../src/host/index.js";
 import { LoopyService, localDaemon, Registry, SecretStore } from "../src/local/index.js";
-import { loopy, sh } from "../src/sdk/graph/index.js";
+import { loopy, sh } from "../src/sdk/index.js";
 import { openRunStore, SqliteRunStore } from "../src/store/index.js";
 import { codeGraph, newRun, until } from "./fixture.js";
 import { commandSpec, fixture } from "./fixtures/executor.js";
@@ -47,7 +47,7 @@ test("compiled command parser gets result and prepared input, then code runs thr
   );
   await writeFile(
     source,
-    `import {loopy, defineCommand, code, sh} from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/graph/index.ts"))};
+    `import {loopy, defineCommand, code, sh} from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/index.ts"))};
 const echo = defineCommand({key: "fixture.echo", program: "printf", parse: "./parse.ts", positionals: [{name: "word"}]}, {kind: "record", fields: {word: "string", operand: "string"}});
 export default loopy("sequence", {input: {}, run: () => {sh.exec(["printf", "raw"], {label: "raw"}); const raw = echo({args: ["hello"]}); return code("greet", {in: {word: raw.get("word"), operand: raw.get("operand")}, out: {kind: "record", fields: {message: "string"}}, module: "./code.ts"});}});`,
   );

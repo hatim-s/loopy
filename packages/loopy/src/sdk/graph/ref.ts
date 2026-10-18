@@ -70,6 +70,15 @@ export function serializeRef(ref: RefValue, context: RefContext): GraphRef {
   return { ref: ref[REF].id, path: [...ref[REF].path] };
 }
 
+export function serialize(
+  value: Readonly<Record<string, string | number | boolean | RefValue>>,
+  context: RefContext,
+): Record<string, string | number | boolean | GraphRef>;
+export function serialize(
+  value: Readonly<Record<string, AuthorData<RefValue>>>,
+  context: RefContext,
+): Record<string, Value>;
+export function serialize(value: AuthorData<RefValue>, context: RefContext): Value;
 export function serialize(value: AuthorData<RefValue>, context: RefContext): Value {
   if (value === undefined) {
     return null;
@@ -98,17 +107,6 @@ export function serialize(value: AuthorData<RefValue>, context: RefContext): Val
   return Object.fromEntries(
     Object.entries(value).map(([key, item]) => {
       return [key, serialize(item, context)];
-    }),
-  );
-}
-
-export function serializeValues(
-  values: Readonly<Record<string, AuthorData<RefValue>>>,
-  context: RefContext,
-) {
-  return Object.fromEntries(
-    Object.entries(values).map(([key, value]) => {
-      return [key, serialize(value, context)];
     }),
   );
 }

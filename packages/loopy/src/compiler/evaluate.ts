@@ -7,7 +7,7 @@ import { spawnCaptured, withBundleSandbox } from "../executor/index.js";
 import { typescriptPaths } from "./source.js";
 import type { AuthorModule, CompilerDiagnostic } from "./types.js";
 
-const javascript = resolve(import.meta.dir, "../sdk/graph/index.js");
+const javascript = resolve(import.meta.dir, "../sdk/index.js");
 
 export const sdkEntry = await realpath(
   (await Bun.file(javascript).exists()) ? javascript : javascript.replace(/\.js$/, ".ts"),

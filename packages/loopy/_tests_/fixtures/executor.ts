@@ -6,7 +6,7 @@ import { nodeIdSchema } from "../../src/contract/index.js";
 import type { ExecutionSpec } from "../../src/core/index.js";
 import { initialState, step } from "../../src/engine/index.js";
 import { LocalExecutor } from "../../src/executor/index.js";
-import { loopy, sh } from "../../src/sdk/graph/index.js";
+import { loopy, sh } from "../../src/sdk/index.js";
 
 const roots: string[] = [];
 

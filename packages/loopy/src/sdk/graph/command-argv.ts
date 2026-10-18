@@ -1,7 +1,6 @@
 import {
   CommandArgumentError,
   type CommandFlagSpec,
-  renderOperands,
   validateCommandFlag,
 } from "../../core/index.js";
 import {
@@ -29,15 +28,13 @@ function flagSpec(descriptor: CommandDefinition): CommandFlagSpec {
 export function commandArgv(
   original: CommandDescriptor,
   input: CommandOperands<string | RefValue>,
-  mode: "parsed" | "raw",
+  { key, mode }: { key: string; mode: "parsed" | "raw" },
 ) {
   try {
     const descriptor = platformVariant(
       mode === "raw" ? (original.raw ?? original) : original,
       process.platform,
     );
-
-    const key = original.key;
 
     const args =
       mode === "parsed" && !input.args?.length
@@ -73,19 +70,12 @@ export function commandArgv(
       validateCommandFlag(flag, value, isRef);
     }
 
-    const operands = {
-      ...descriptor,
-      positionals:
-        descriptor.operands?.kind === "positional" ? descriptor.operands.parts : undefined,
-      revisionPaths: descriptor.operands?.kind === "revisionPaths",
-    };
-
     return {
       parseInput: Object.fromEntries(
         Object.entries(prepared).filter(([, value]) => value !== undefined),
       ),
       program: descriptor.program,
-      argv: renderOperands(operands, prepared, key),
+      argv: renderOperands(descriptor, prepared, key),
       flagSpec: flagSpec(descriptor),
       flags: prepared.flags,
     };
@@ -96,4 +86,31 @@ export function commandArgv(
 
     throw error;
   }
+}
+
+function renderOperands<T>(
+  descriptor: CommandDefinition,
+  input: CommandOperands<T>,
+  key: string,
+): (T | string)[] {
+  const args = input.args ?? [];
+  const operands = descriptor.operands;
+
+  if (operands?.kind === "revisionPaths") {
+    return [...(input.revisions ?? []), ...(input.paths?.length ? ["--", ...input.paths] : [])];
+  }
+
+  if (operands?.parts) {
+    const minimum = operands.parts.filter((part) => !part.optional).length;
+    const maximum = operands.parts.some((part) => part.variadic) ? Infinity : operands.parts.length;
+
+    if (args.length < minimum || args.length > maximum) {
+      refuse(
+        "arity",
+        `Command '${key}' expects ${maximum === Infinity ? `at least ${minimum}` : `${minimum} to ${maximum}`} positional arguments.`,
+      );
+    }
+  }
+
+  return [...args];
 }

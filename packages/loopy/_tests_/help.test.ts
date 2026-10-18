@@ -362,11 +362,9 @@ test("captured gh flags accept repeated labels, assignees and reviewers", async 
   });
   expect(warnings.some((warning) => warning.includes("Could not parse option"))).toBe(false);
   expect(
-    renderArgv(
-      descriptor,
-      { flags: { label: ["bug", "fix"], assignee: ["alice", "bob"], reviewer: ["carol", "dave"] } },
-      "gh.pr.create",
-    ),
+    renderArgv(descriptor, {
+      flags: { label: ["bug", "fix"], assignee: ["alice", "bob"], reviewer: ["carol", "dave"] },
+    }),
   ).toEqual([
     "pr",
     "create",

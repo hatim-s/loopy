@@ -7,7 +7,7 @@ import type { Graph, RunRecord } from "../src/core/index.js";
 import { revision } from "../src/core/index.js";
 import { Daemon } from "../src/host/index.js";
 import { LoopyService, Registry } from "../src/local/index.js";
-import { loopy } from "../src/sdk/graph/index.js";
+import { loopy } from "../src/sdk/index.js";
 import { openRunStore } from "../src/store/index.js";
 import { compiledBody } from "./compiled-fixture.js";
 import { FakeClock, FakeExecutor, newRun, until } from "./fixture.js";

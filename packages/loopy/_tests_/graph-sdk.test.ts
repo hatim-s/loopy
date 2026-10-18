@@ -7,6 +7,7 @@ import {
   renderArgv,
   validateGraph,
 } from "../src/core/index.js";
+import type { NodeResult } from "../src/sdk/graph/ref.js";
 import {
   and,
   archive,
@@ -47,8 +48,7 @@ import {
   text,
   uuid,
   wait,
-} from "../src/sdk/graph/index.js";
-import type { NodeResult } from "../src/sdk/graph/ref.js";
+} from "../src/sdk/index.js";
 import assetSync from "./fixtures/graph-examples/asset-sync.js";
 import hello from "./fixtures/graph-examples/hello.js";
 import review from "./fixtures/graph-examples/review.js";
@@ -619,11 +619,10 @@ test("stored descriptor data renders false booleans, attached values and ordered
   }
 
   expect(
-    renderArgv(
-      { program: "tool", ...node.flagSpec },
-      { args: ["resolved-id"], flags: { enabled: false, count: 7, tag: ["a", "b"] } },
-      node.key,
-    ),
+    renderArgv(node.flagSpec, {
+      args: ["resolved-id"],
+      flags: { enabled: false, count: 7, tag: ["a", "b"] },
+    }),
   ).toEqual(["sub", "--", "resolved-id", "-n7", "--tag=a", "--tag=b"]);
 });
 

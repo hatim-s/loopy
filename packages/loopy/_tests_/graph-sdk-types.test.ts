@@ -16,7 +16,7 @@ import {
   ne,
   type Ref,
   size,
-} from "../src/sdk/graph/index.js";
+} from "../src/sdk/index.js";
 
 // This function is checked by tsc but never evaluated. Invalid author programs must not run.
 function operandTypes(

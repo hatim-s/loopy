@@ -1,5 +1,5 @@
 import { currentBuilder } from "../builder.js";
-import { type AuthorValue, isRef, type Ref, serialize, serializeRef } from "../ref.js";
+import { type AuthorValue, type Ref, serialize } from "../ref.js";
 
 export function format(
   template: string,
@@ -13,12 +13,7 @@ export function format(
     builder.add({
       kind: "format",
       template,
-      values: Object.fromEntries(
-        Object.entries(values).map(([key, value]) => [
-          key,
-          isRef(value) ? serializeRef(value, builder) : value,
-        ]),
-      ),
+      values: serialize(values, builder),
     }).id,
   );
 }

@@ -13,7 +13,7 @@ export const roots: string[] = [];
 
 export const CLI = resolve(import.meta.dir, "../src/cli/index.ts");
 
-export const SDK = resolve(import.meta.dir, "../src/sdk/graph/index.ts");
+export const SDK = resolve(import.meta.dir, "../src/sdk/index.ts");
 
 export function fixture(name: string, definition: string) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "loopy-cli-sdk-")));

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { defineCommand, loopy, sh } from "../src/sdk/graph/index.js";
+import { defineCommand, loopy, sh } from "../src/sdk/index.js";
 import { textDescriptors } from "../src/sdk/shell/text.js";
 import { capture } from "./fixtures/command-capture.js";
 

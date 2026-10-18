@@ -2,7 +2,6 @@ import {
   type Edge,
   type Graph,
   type GraphMeta,
-  type GraphRetry,
   graphId,
   graphTypeResolver,
   type Node,
@@ -43,12 +42,10 @@ function frame(scope: NodeId | null): Frame {
   return { scope, labels: new Set(), first: null, tails: [] };
 }
 
-type Activation = { builder: GraphBuilder | null };
-
-const activation: Activation = { builder: null };
+let activation: GraphBuilder | null = null;
 
 export function currentBuilder(): GraphBuilder {
-  return activation.builder ?? refuse("inactive_builder");
+  return activation ?? refuse("inactive_builder");
 }
 
 export class GraphBuilder {
@@ -71,17 +68,17 @@ export class GraphBuilder {
   }
 
   run<T>(callback: () => T): T {
-    if (activation.builder) {
+    if (activation) {
       refuse("inactive_builder", "Finish the active builder before starting another loopy.");
     }
 
     // Construction is synchronous; one active builder also catches accidental nested builds.
-    activation.builder = this;
+    activation = this;
 
     try {
       return callback();
     } finally {
-      activation.builder = null;
+      activation = null;
     }
   }
 
@@ -191,12 +188,31 @@ export class GraphBuilder {
     }
   }
 
-  retry(retry?: Partial<GraphRetry>): GraphRetry {
-    return { attempts: 3, backoff: "exponential", retryOnExit: false, ...retry };
-  }
-
   edge(from: NodeId, to: NodeId, kind: Edge["kind"]) {
     this.edges.push({ from, to, kind });
+  }
+
+  arms(owner: NodeId, callbacks: Record<string, () => NodeResult>) {
+    const entries: [string, NodeId][] = [];
+    const tails: NodeId[] = [];
+
+    for (const [label, callback] of Object.entries(callbacks)) {
+      validateLabel(label);
+      const arm = this.arm(owner, callback);
+      entries.push([label, arm.entry]);
+      tails.push(...arm.tails);
+    }
+
+    return { entries, tails };
+  }
+
+  private returns(frame: Pick<Frame, "first" | "tails">) {
+    const resolve = graphTypeResolver({ input: this.input, nodes: this.nodes, edges: this.edges });
+
+    return (
+      frame.first === null ||
+      frame.tails.some((tail) => resolve({ ref: graphId<RefId>(tail.id), path: [] }) !== "never")
+    );
   }
 
   arm(owner: NodeId, callback: () => NodeResult) {
@@ -207,19 +223,11 @@ export class GraphBuilder {
       const result = callback();
 
       if (child.first === null || child.tails.length > 0) {
-        const nonReturning =
-          child.tails.length > 0 &&
-          child.tails.every((tail) =>
-            this.nodes.some(
-              (node) => node.id === tail.id && node.kind === "join" && node.result.kind === "none",
-            ),
-          );
-
         this.add({
           kind: "join",
-          result: nonReturning
-            ? { kind: "none" }
-            : { kind: "value", value: serialize(result, this) },
+          result: this.returns(child)
+            ? { kind: "value", value: serialize(result, this) }
+            : { kind: "none" },
         });
       }
 
@@ -237,13 +245,11 @@ export class GraphBuilder {
 
     const value = { ref: graphId<RefId>(owner), path: [] };
 
-    const type = graphTypeResolver({ input: this.input, nodes: this.nodes, edges: this.edges })(
-      value,
-    );
-
     return this.add({
       kind: "join",
-      result: type === "never" ? { kind: "none" } : { kind: "value", value },
+      result: this.returns({ first: owner, tails: [{ id: owner, kind: "next" }] })
+        ? { kind: "value", value }
+        : { kind: "none" },
     });
   }
 
@@ -261,7 +267,7 @@ export class GraphBuilder {
   }
 
   finish(result: NodeResult) {
-    const terminal = this.scope.first !== null && this.scope.tails.length === 0;
+    const terminal = !this.returns(this.scope);
 
     const output = terminal
       ? null

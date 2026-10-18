@@ -144,13 +144,7 @@ test("layers import downward, and only through the target layer's index", () => 
       const target = layerOf(resolve(file, "..", specifier));
 
       if (target === layer) {
-        if (
-          isBarrel(specifier) &&
-          !(
-            (name === "sdk/commands.ts" || name === "sdk/index.ts") &&
-            specifier === "./graph/index.js"
-          )
-        ) {
+        if (isBarrel(specifier)) {
           violations.push(`${name} imports its own barrel (${specifier}).`);
         }
 
@@ -160,7 +154,9 @@ test("layers import downward, and only through the target layer's index", () => 
       if (!ALLOWED_IMPORTS[layer].includes(target)) {
         violations.push(`${name} (${layer}) may not import ${target} (${specifier}).`);
       } else if (
-        target === "sdk" ? !/\/(?:host|commands)\.js$/.test(specifier) : !isBarrel(specifier)
+        target === "sdk"
+          ? !/\/(?:commands|define-command)\.js$/.test(specifier)
+          : !isBarrel(specifier)
       ) {
         violations.push(
           `${name} must import ${target} through ${target === "sdk" ? "sdk/commands.js" : `${target}/index.js`} (${specifier}).`,

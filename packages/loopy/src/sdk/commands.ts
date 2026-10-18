@@ -1,13 +1,12 @@
-import { commandKey } from "./define-command.js";
+import { type CommandDescriptor, commandKey } from "./define-command.js";
+import * as api from "./graph/api.js";
 import { archiveDescriptors } from "./shell/archive.js";
 import { fsDescriptors } from "./shell/fs.js";
 import { gitDescriptors } from "./shell/git.js";
 import { netDescriptors } from "./shell/net.js";
 import { textDescriptors } from "./shell/text.js";
 
-export { sdkCalls } from "./graph/index.js";
-
-const builtins = [
+const builtins: CommandDescriptor[] = [
   ...Object.values(archiveDescriptors),
   ...Object.values(fsDescriptors),
   ...Object.values(gitDescriptors),
@@ -18,7 +17,34 @@ const builtins = [
 export const builtinCommandKeys = builtins.map(commandKey);
 
 export function commandParser(key: string) {
-  const descriptor = builtins.find((value) => commandKey(value) === key);
-
-  return descriptor && "parse" in descriptor ? descriptor.parse : undefined;
+  return builtins.find((value) => commandKey(value) === key)?.parse;
 }
+
+type SdkFunction = (...args: never[]) => void;
+
+type SdkMember = SdkFunction | { [name: string]: SdkMember };
+
+function isFunction(value: SdkMember): value is SdkFunction {
+  return typeof value === "function";
+}
+
+function calls(value: SdkMember, prefix = "", ancestors = new Set<SdkMember>()): string[] {
+  const seen = new Set(ancestors).add(value);
+  const entries: [string, SdkMember][] = Object.entries(value);
+
+  return entries.flatMap(([key, member]) => {
+    if (key === "descriptor") {
+      return [];
+    }
+
+    const path = prefix ? `${prefix}.${key}` : key;
+
+    if (isFunction(member)) {
+      return [path, ...(seen.has(member) ? [] : calls(member, path, seen))];
+    }
+
+    return calls(member, path, seen);
+  });
+}
+
+export const sdkCalls = calls(api);

@@ -1,4 +1,5 @@
-import type { Json, RawCommandOutput, RenderInput } from "../../../core/index.js";
+import type { Json, RawCommandOutput } from "../../../core/index.js";
+import type { CommandOperands } from "../../define-command.js";
 import type { Infer } from "../../graph/types.js";
 import { jsonValue, lines, unexpected } from "./shared.js";
 
@@ -16,7 +17,7 @@ type Sha256 = { hash: string; file: string };
 
 type Jq = Json;
 
-export function parseWc({ stdout }: RawCommandOutput, input: RenderInput = {}): Wc[] {
+export function parseWc({ stdout }: RawCommandOutput, input: CommandOperands<string> = {}): Wc[] {
   const rows = lines(stdout);
 
   if ((input.args?.length ?? 0) > 1) {

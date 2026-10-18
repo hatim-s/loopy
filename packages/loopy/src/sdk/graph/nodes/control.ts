@@ -1,11 +1,11 @@
 import type { MAP_ERROR_MODES } from "../../../core/index.js";
-import { type Collected, ERROR_FIELDS, type NodeId } from "../../../core/index.js";
-import { currentBuilder } from "../builder.js";
+import { type Collected, ERROR_FIELDS, type Node } from "../../../core/index.js";
+import { currentBuilder, type GraphBuilder } from "../builder.js";
 import { type AuthorPredicate, serializePredicate } from "../predicates.js";
 import type { Ref } from "../ref.js";
 import { type NodeResult, serialize, serializeRef } from "../ref.js";
 import type { ControlRef, InferRecord, Result } from "../types.js";
-import { validateLabel, validatePredicate } from "../validate.js";
+import { validatePredicate } from "../validate.js";
 
 type Arm = () => NodeResult;
 
@@ -27,10 +27,7 @@ export function branch<Y extends NodeResult, N extends NodeResult>(
   };
 
   builder.record(node);
-  const yes = builder.arm(base.id, arms.yes);
-  const no = builder.arm(base.id, arms.no);
-  node.arms = { yes: yes.entry, no: no.entry };
-  builder.continueFrom(base.id, [...yes.tails, ...no.tails]);
+  twoArms(builder, node, [arms.yes, arms.no]);
 
   return builder.controlRef(base.id, arms);
 }
@@ -51,23 +48,18 @@ export function switch_<A extends Record<string, Arm>>(
   };
 
   builder.record(node);
-  const tails = [];
-  const entries: [string, NodeId][] = [];
+  const { entries, tails } = builder.arms(base.id, arms);
+  const cases: [string, Node["id"]][] = [];
 
-  for (const [label, callback] of Object.entries(arms)) {
-    validateLabel(label);
-    const arm = builder.arm(base.id, callback);
-
+  for (const [label, entry] of entries) {
     if (label === "default") {
-      node.default = arm.entry;
+      node.default = entry;
     } else {
-      entries.push([label, arm.entry]);
+      cases.push([label, entry]);
     }
-
-    tails.push(...arm.tails);
   }
 
-  node.cases = Object.fromEntries(entries);
+  node.cases = Object.fromEntries(cases);
   builder.continueFrom(base.id, tails);
 
   return builder.controlRef(base.id, arms);
@@ -114,16 +106,7 @@ export function parallel<A extends Record<string, Arm>>(
   const base = builder.allocate("parallel", { fallback: "parallel" });
   const node = { ...base, kind: "parallel" as const, branches: {} };
   builder.record(node);
-  const tails = [];
-  const entries: [string, NodeId][] = [];
-
-  for (const [label, callback] of Object.entries(arms)) {
-    validateLabel(label);
-    const arm = builder.arm(base.id, callback);
-    entries.push([label, arm.entry]);
-    tails.push(...arm.tails);
-  }
-
+  const { entries, tails } = builder.arms(base.id, arms);
   node.branches = Object.fromEntries(entries);
   builder.continueFrom(base.id, tails);
 
@@ -135,12 +118,7 @@ export function finally_<R extends NodeResult>(body: () => R, cleanup: Arm): Con
   const base = builder.allocate("finally", { fallback: "finally" });
   const node = { ...base, kind: "finally" as const, body: base.id, cleanup: base.id };
   builder.record(node);
-  const main = builder.arm(base.id, body);
-  const final = builder.arm(base.id, cleanup);
-  node.body = main.entry;
-  node.cleanup = final.entry;
-  builder.edge(base.id, main.entry, "next");
-  builder.continueFrom(base.id, [...main.tails, ...final.tails]);
+  twoArms(builder, node, [body, cleanup]);
 
   return builder.controlRef(base.id, { body });
 }
@@ -154,16 +132,10 @@ export function rescue<R extends NodeResult, H extends NodeResult>(
   const error = builder.binding(base.id, "error");
   const node = { ...base, kind: "rescue" as const, body: base.id, handler: base.id, error };
   builder.record(node);
-  const main = builder.arm(base.id, body);
-
-  const caught = builder.arm(base.id, () =>
-    handler(builder.schemaRef(error, { kind: "record", fields: ERROR_FIELDS })),
-  );
-
-  node.body = main.entry;
-  node.handler = caught.entry;
-  builder.edge(base.id, main.entry, "next");
-  builder.continueFrom(base.id, [...main.tails, ...caught.tails]);
+  twoArms(builder, node, [
+    body,
+    () => handler(builder.schemaRef(error, { kind: "record", fields: ERROR_FIELDS })),
+  ]);
 
   return builder.controlRef(base.id, { body, handler });
 }
@@ -172,4 +144,29 @@ export function fail(message: string | Ref<string>): Ref<never> {
   const builder = currentBuilder();
 
   return builder.scalarRef(builder.add({ kind: "fail", message: serialize(message, builder) }).id);
+}
+
+function twoArms(
+  builder: GraphBuilder,
+  node: Extract<Node, { kind: "branch" | "finally" | "rescue" }>,
+  callbacks: readonly [Arm, Arm],
+) {
+  const first = builder.arm(node.id, callbacks[0]);
+  const second = builder.arm(node.id, callbacks[1]);
+
+  if (node.kind === "branch") {
+    node.arms = { yes: first.entry, no: second.entry };
+  } else {
+    node.body = first.entry;
+
+    if (node.kind === "finally") {
+      node.cleanup = second.entry;
+    } else {
+      node.handler = second.entry;
+    }
+
+    builder.edge(node.id, first.entry, "next");
+  }
+
+  builder.continueFrom(node.id, [...first.tails, ...second.tails]);
 }

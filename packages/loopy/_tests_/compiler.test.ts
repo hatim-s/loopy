@@ -8,7 +8,7 @@ import { type Json } from "../src/core/index.js";
 import { bundleSucceeded } from "../src/executor/protocol.js";
 import { compiledBody } from "./compiled-fixture.js";
 
-const sdk = resolve(import.meta.dir, "../src/sdk/graph/index.ts");
+const sdk = resolve(import.meta.dir, "../src/sdk/index.ts");
 
 const fixtureRoot = resolve(import.meta.dir, "fixtures/compiler");
 

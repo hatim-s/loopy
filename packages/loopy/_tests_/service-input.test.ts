@@ -5,7 +5,7 @@ import type { Json } from "../src/core/index.js";
 import { revision } from "../src/core/index.js";
 import { activate, SYSTEM_CLOCK } from "../src/host/index.js";
 import { LoopyService, Registry } from "../src/local/index.js";
-import { loopy } from "../src/sdk/graph/index.js";
+import { loopy } from "../src/sdk/index.js";
 import { SqliteRunStore } from "../src/store/index.js";
 import { FakeExecutor } from "./fixture.js";
 import { fixture } from "./fixtures/executor.js";

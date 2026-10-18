@@ -1,4 +1,4 @@
-import { code, log, loopy } from "../../../src/sdk/graph/index.js";
+import { code, log, loopy } from "loopy";
 
 export default loopy("hello", {
   input: { name: "string", "enthusiastic?": "boolean" },

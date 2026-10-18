@@ -937,7 +937,7 @@ test("compiled save route verifies artifacts, stores private bundles and returns
   const { compile } = await import("../src/compiler/index.js");
   const { compiledBody } = await import("./compiled-fixture.js");
   const source = join(f.cwd, "compiled.ts");
-  const sdk = resolve(import.meta.dir, "../src/sdk/graph/index.ts");
+  const sdk = resolve(import.meta.dir, "../src/sdk/index.ts");
   await Bun.write(
     source,
     `import {loopy,code} from ${JSON.stringify(sdk)}; export default loopy("compiled-save", {input:{},run:()=>code("answer",{in:{},out:{kind:"value",type:"number"},module:"./answer.ts"})});`,
@@ -1062,7 +1062,7 @@ test("saving another revision retains the earlier graph and executable artifacts
   const source = join(f.cwd, "revision.ts");
   await Bun.write(
     source,
-    `import {loopy,code} from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/graph/index.ts"))}; export default loopy("revisions", {input:{},run:()=>code("value",{in:{},out:{kind:"value",type:"number"},module:"./value.ts"})});`,
+    `import {loopy,code} from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/index.ts"))}; export default loopy("revisions", {input:{},run:()=>code("value",{in:{},out:{kind:"value",type:"number"},module:"./value.ts"})});`,
   );
   const registry = new Registry(f.home, f.cwd);
   const revisions: string[] = [];

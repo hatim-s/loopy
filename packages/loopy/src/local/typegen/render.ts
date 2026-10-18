@@ -1,5 +1,7 @@
-import type { CommandDescriptor, CommandFlag, PositionalDefinition } from "../../sdk/host.js";
+import type { CommandFlag } from "../../core/index.js";
+import type { PositionalDefinition } from "../../sdk/define-command.js";
 import { isTypeScriptIdentifier } from "./names.js";
+import type { GeneratedCommandDescriptor } from "./parse-help.js";
 
 function key(name: string): string {
   return isTypeScriptIdentifier(name) ? name : JSON.stringify(name);
@@ -11,12 +13,14 @@ function descriptorObject(value: CommandFlag | PositionalDefinition): string {
     .join(", ")} }`;
 }
 
-export function renderCommandSource(name: string, descriptor: CommandDescriptor): string {
+export function renderCommandSource(name: string, descriptor: GeneratedCommandDescriptor): string {
   if (!isTypeScriptIdentifier(name)) {
     throw new Error(`'${name}' is not a valid TypeScript identifier.`);
   }
 
-  const fields = Object.entries(descriptor).map(([name, value]) => {
+  const { helpHash, observedVersion, ...command } = descriptor;
+
+  const fields = Object.entries(command).map(([name, value]) => {
     if (name === "flags") {
       const flags = Object.entries(descriptor.flags ?? {}).map(
         ([flag, definition]) => `    ${key(flag)}: ${descriptorObject(definition)},`,
@@ -31,6 +35,7 @@ export function renderCommandSource(name: string, descriptor: CommandDescriptor)
   return (
     `import { type CommandDescriptor, defineCommand } from "loopy";\n\n` +
     `const descriptor = {\n${fields.join("\n")}\n} as const satisfies CommandDescriptor;\n\n` +
-    `export const ${name} = defineCommand(descriptor);\n`
+    `export const ${name} = defineCommand(descriptor);\n\n` +
+    `export const ${name}Help = ${JSON.stringify({ helpHash, observedVersion })} as const;\n`
   );
 }

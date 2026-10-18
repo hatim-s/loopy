@@ -1,6 +1,6 @@
 import type { PutLoopyBody } from "../src/contract/index.js";
 import { revision } from "../src/core/index.js";
-import { loopy } from "../src/sdk/graph/index.js";
+import { loopy } from "../src/sdk/index.js";
 
 export async function compiledBody(
   name: string,

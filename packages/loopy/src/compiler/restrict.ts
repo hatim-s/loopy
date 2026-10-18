@@ -53,13 +53,13 @@ function importBindings(
 }
 
 async function isSdkSpecifier(specifier: string, file: string) {
-  if (specifier === "loopy" || specifier === "loopy/graph") {
+  if (specifier === "loopy") {
     return true;
   }
 
   const path = await modulePath(specifier, file);
 
-  return path === sdkEntry || path === sdkEntry.replace("/graph/index.", "/index.");
+  return path === sdkEntry;
 }
 
 async function inspectImports(context: Context, statements: Statement[], state: Inspection) {

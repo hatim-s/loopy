@@ -1,10 +1,16 @@
 import { createHash } from "node:crypto";
 import { basename } from "node:path";
-import type { CommandDescriptor, CommandFlag, PositionalDefinition } from "../../sdk/host.js";
+import type { CommandFlag } from "../../core/index.js";
+import type { CommandDescriptor, PositionalDefinition } from "../../sdk/define-command.js";
 import { identifier } from "./names.js";
 
+export type GeneratedCommandDescriptor = CommandDescriptor & {
+  helpHash: string;
+  observedVersion?: string;
+};
+
 export type ParsedHelp = {
-  descriptor: CommandDescriptor;
+  descriptor: GeneratedCommandDescriptor;
   warnings: string[];
 };
 
@@ -364,7 +370,7 @@ export function parseCliHelp(binary: string, path: readonly string[], help: stri
     warnings.push("Help may omit which valued flags can repeat; review repeatable flag metadata");
   }
 
-  const descriptor: CommandDescriptor = {
+  const descriptor: GeneratedCommandDescriptor = {
     key: [basename(binary), ...path].join("."),
     operands: operandLayout(lines, positionals),
     program: binary,

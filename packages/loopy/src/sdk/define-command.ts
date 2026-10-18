@@ -10,8 +10,6 @@ export type PositionalDefinition = {
 };
 
 export type CommandDefinition = {
-  readonly helpHash?: string;
-  readonly observedVersion?: string;
   readonly program: string;
   readonly path?: readonly string[];
   readonly flagsAfterPositionals?: boolean;

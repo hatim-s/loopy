@@ -30,6 +30,7 @@ export default tseslint.config(
       "no-param-reassign": "error",
       "no-negated-condition": "error",
       "unicorn/prefer-node-protocol": "error",
+      "@typescript-eslint/no-this-alias": ["error", { allowedNames: ["activation"] }],
       "@typescript-eslint/no-inferrable-types": "error",
       "@typescript-eslint/array-type": ["error", { default: "array" }],
       "unicorn/filename-case": ["error", { case: "kebabCase", ignore: ["^_tests_$"] }],
