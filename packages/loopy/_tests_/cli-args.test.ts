@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
+import { z } from "zod";
 import { parseCliArgs } from "../src/cli/args.ts";
+import { errorMessage } from "../src/core/index.js";
 
 test("named input preserves strings, equals signs, empty values, and own properties", () => {
   const parsed = parseCliArgs([
@@ -48,15 +50,69 @@ test("reserved options stay separate and separator allows colliding input keys",
 });
 
 test("ambiguous or incomplete inputs fail before execution", () => {
-  for (const args of [
-    ["run", "x", "--key"],
-    ["run", "x", "--key", "--full"],
-    ["run", "x", "--key=a", "--key=b"],
-    ["run", "x", "--input-file", "a.json", "--input-json", "{}"],
-    ["run", "x", "--input-json", "{}", "--key=a"],
-    ["resume", "id", "--args", "a.json"],
-    ["list", "--typo", "x"],
+  for (const { args, reason } of [
+    { args: ["run", "x", "--key"], reason: "Loopy input --key requires a value" },
+    { args: ["run", "x", "--key", "--full"], reason: "Loopy input --key requires a value" },
+    {
+      args: ["run", "x", "--key=a", "--key=b"],
+      reason: "Loopy input --key was provided more than once",
+    },
+    {
+      args: ["run", "x", "--input-file", "a.json", "--input-json", "{}"],
+      reason: "Choose one input source",
+    },
+    { args: ["run", "x", "--input-json", "{}", "--key=a"], reason: "Choose one input source" },
+    { args: ["resume", "id", "--args", "a.json"], reason: "Unknown option '--args'" },
+    { args: ["list", "--typo", "x"], reason: "Unknown option '--typo'" },
+    {
+      args: ["graph", "x", "--format", "svg"],
+      reason: 'Invalid option: expected one of "json"|"text"',
+    },
+    {
+      args: ["daemon", "run", "--lease-ms", "999"],
+      reason: "Too small: expected number to be >=1000",
+    },
+    {
+      args: ["daemon", "run", "--concurrency", "0"],
+      reason: "Too small: expected number to be >=1",
+    },
+    {
+      args: ["daemon", "run", "--port", "65536"],
+      reason: "Too big: expected number to be <=65535",
+    },
+    { args: ["schedule", "x", "--disable"], reason: "Unknown option '--disable'" },
+    {
+      args: ["schedule", "x", "disable", "--cron", "* * * * *"],
+      reason: "Only schedule set accepts cron, timezone and input",
+    },
+    {
+      args: ["schedule", "x", "restart"],
+      reason: 'Invalid option: expected one of "set"|"enable"|"disable"|"off"',
+    },
   ]) {
-    expect(() => parseCliArgs(args)).toThrow();
+    let failure: unknown;
+
+    try {
+      parseCliArgs(args);
+    } catch (error) {
+      failure = error;
+    }
+
+    const message =
+      failure instanceof z.ZodError
+        ? failure.issues.map((issue) => issue.message).join("\n")
+        : errorMessage(failure);
+
+    expect(message).toContain(reason);
   }
+});
+
+test("command schemas produce numeric options and positional schedule actions", () => {
+  expect(
+    parseCliArgs(["daemon", "run", "--port", "0", "--concurrency", "2", "--lease-ms", "1000"])
+      .values,
+  ).toMatchObject({ port: 0, concurrency: 2, "lease-ms": 1000 });
+  expect(parseCliArgs(["daemon", "run"]).values).toMatchObject({ port: 4310, concurrency: 4 });
+  expect(parseCliArgs(["schedule", "x", "disable"]).values.action).toBe("disable");
+  expect(parseCliArgs(["schedule", "x"]).values.action).toBe("set");
 });

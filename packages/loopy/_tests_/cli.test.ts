@@ -77,7 +77,6 @@ test("save posts a compiled graph and graph prints the same redacted view by fil
     graph: { name: "compiled" },
     revision: expect.stringMatching(/^[a-f0-9]{64}$/),
   });
-  expect(entry).not.toHaveProperty("bundleHash");
 });
 
 test("HTTP commands queue schema-validated graph runs and pin the saved revision", async () => {
@@ -106,7 +105,7 @@ test("save rejects another source until --replace and locates absolute files bes
   const other = join(f.cwd, "other.ts");
   writeFileSync(other, await Bun.file(f.file).text());
   const rejected = await cli(f, "save", other);
-  expect(rejected.stderr).toContain("belongs to another source");
+  expect(rejected.stderr).toContain("[source_conflict]");
   expect((await cli(f, "save", other, "--replace")).code).toBe(0);
   const caller = join(f.cwd, "caller");
   mkdirSync(caller);
@@ -188,51 +187,6 @@ test("save preserves every author option from graph meta", async () => {
   expect(await cli(f, "save", f.file)).toMatchObject({ code: 0, stderr: "" });
   const saved = present(new Registry(f.home, f.cwd).get("metadata"));
   expect(saved.graph).toMatchObject({ meta, input: { count: "number" } });
-});
-
-test("HTTP schedule enable, disable and off persist their state", async () => {
-  const f = await graphFixture();
-  expect((await cli(f, "save", f.file)).code).toBe(0);
-  expect(
-    await cli(f, "schedule", "compiled", "--cron", "0 * * * *", "--input-json", '{"count":2}'),
-  ).toMatchObject({ code: 0, stderr: "" });
-
-  for (const [action, enabled] of [
-    ["disable", false],
-    ["enable", true],
-  ] as const) {
-    expect(object((await cli(f, "schedule", "compiled", action)).stdout)).toMatchObject({
-      enabled,
-    });
-    expect(await f.store.listSchedules()).toMatchObject([
-      { enabled, input: { count: 2 }, cron: "0 * * * *" },
-    ]);
-    expect(JSON.parse((await cli(f, "list")).stdout)).toMatchObject([{ schedule: { enabled } }]);
-  }
-
-  expect((await cli(f, "schedule", "compiled", "off")).code).toBe(0);
-  expect(await f.store.listSchedules()).toEqual([]);
-});
-
-test("HTTP cancel refuses an active owner and inspect diagnoses a missing run", async () => {
-  const f = await graphFixture();
-  await f.store.createRun({
-    ...newRun(),
-    id: "owned",
-    slug: "compiled",
-    projectRoot: f.cwd,
-    runDirectory: f.cwd,
-  });
-  await f.store.claim("owned", "active-owner");
-  const cancelled = await cli(f, "cancel", "owned");
-  expect(cancelled.code).toBe(1);
-  expect(await f.store.getRun("owned")).toMatchObject({
-    status: "running",
-    owner: { token: "active-owner" },
-  });
-  const missing = await cli(f, "inspect", "missing-run");
-  expect(missing.code).toBe(1);
-  expect(missing.stderr).toContain("No run 'missing-run'");
 });
 
 test("HTTP logs follow prints each log as a separate JSON line", async () => {

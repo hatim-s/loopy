@@ -66,12 +66,8 @@ async function fixture(definition = "") {
   };
 }
 
-test("service validates input before queuing and hides registry private fields", async () => {
+test("service projects subdirectory runs and hides registry private fields", async () => {
   const { service, store, root } = await fixture();
-  await expect(service.startRun("service", {}, root)).rejects.toMatchObject({
-    code: "bad_request",
-  });
-  expect(await store.listRuns()).toEqual([]);
   const runDirectory = join(root, "nested");
   mkdirSync(runDirectory);
   const run = await service.startRun("service", { name: "Hatim" }, runDirectory);

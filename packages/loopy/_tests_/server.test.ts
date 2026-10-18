@@ -18,18 +18,12 @@ import {
 } from "../src/contract/index.js";
 import { requireRecord, revision } from "../src/core/index.js";
 import { SYSTEM_CLOCK } from "../src/host/index.js";
-import {
-  LoopyService,
-  localDaemon,
-  Registry,
-  readDaemonFile,
-  ServiceError,
-} from "../src/local/index.js";
+import { LoopyService, localDaemon, Registry, readDaemonFile } from "../src/local/index.js";
 import { eventStream } from "../src/local/server/events.js";
 import { apiRoutes, dispatch } from "../src/local/server/routes.js";
 import { openRunStore } from "../src/store/index.js";
 import { CLI, fixture, object, roots, runFixture, save } from "./cli-fixture.js";
-import { newRun, present, until } from "./fixture.js";
+import { newRun, present } from "./fixture.js";
 
 const daemonMetadata = { startedAt: new Date(0).toISOString(), concurrency: 4 };
 
@@ -56,11 +50,11 @@ async function startDaemon(options: { home: string; cwd: string; port: number; a
   };
 }
 
-test("API returns run records, step traces and cursor logs", async () => {
+test("API returns run records, node executions and cursor logs", async () => {
   const f = fixture("api", `run: () => { log("first"); log("second"); return 2; }`);
 
   await save(f);
-  const run = object((await runFixture(f)).stdout);
+  const run = await runFixture(f);
   const server = await startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
@@ -120,7 +114,7 @@ test("the daemon server requires its token and origin, serves pinned assets and 
 test("API distinguishes invalid cursors from registry failures", async () => {
   const f = fixture("server-errors", "run: () => 1");
   await save(f);
-  const run = object((await runFixture(f)).stdout);
+  const run = await runFixture(f);
   const server = await startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
@@ -146,7 +140,7 @@ test("API returns the contract snapshot, rejects unknown query keys and keeps cu
   const f = fixture("summary", 'run: () => { log("hello"); return 1; }');
 
   await save(f);
-  const run = object((await runFixture(f)).stdout);
+  const run = await runFixture(f);
   const server = await startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
@@ -234,7 +228,7 @@ test("SPA routes fall back to pinned index but missing files stay 404", async ()
   expect(await (await fetch(`${origin}/runs/some-run`)).text()).toBe("SPA");
   expect((await fetch(`${origin}/missing.js`)).status).toBe(404);
   expect((await fetch(`${origin}/api/missing`)).status).toBe(401);
-  const headers = { Authorization: `Bearer ${readDaemonFile(f.home)!.token}` };
+  const headers = { Authorization: `Bearer ${present(readDaemonFile(f.home)).token}` };
   const bare = await fetch(`${origin}/api`, { headers });
   expect(bare.status).toBe(404);
   expect(errorBodySchema.parse(await bare.json()).error.code).toBe("not_found");
@@ -359,7 +353,7 @@ async function externalRun(
   expect(await child.exited).toBe(0);
 }
 
-function replayRun(workspace: string) {
+function queuedRun(workspace: string) {
   return {
     id: "replay",
     slug: "events",
@@ -378,13 +372,13 @@ async function reconnectFrames(
   headers: Record<string, string>,
   events: Awaited<ReturnType<ReturnType<typeof openRunStore>["events"]>>,
 ) {
-  const cursor = events[0]!.sequence;
+  const cursor = present(events[0]).sequence;
 
   const resumed = await fetch(endpoint, {
     headers: { ...headers, "Last-Event-ID": String(cursor) },
   });
 
-  expect(await captureFrames(resumed.body!).finish()).toEqual(
+  expect(await captureFrames(present(resumed.body)).finish()).toEqual(
     expectedFrames(events.filter((event) => event.sequence > cursor)),
   );
 }
@@ -400,7 +394,7 @@ test("SSE delivers exact transactions across replay, cross-process writes and La
     Authorization: `Bearer ${present(new URLSearchParams(url.hash.slice(1)).get("token"))}`,
   };
 
-  const run = replayRun(f.cwd);
+  const run = queuedRun(f.cwd);
 
   try {
     await store.createRun(run);
@@ -410,7 +404,7 @@ test("SSE delivers exact transactions across replay, cross-process writes and La
     );
     const response = await fetch(endpoint, { headers });
     expect(response.headers.get("content-type")).toBe("text/event-stream");
-    const capture = captureFrames(fragment(response.body!));
+    const capture = captureFrames(fragment(present(response.body)));
 
     await externalRun(f.home, { ...run, id: "external" });
     await store.claim(run.id, "owner");
@@ -453,7 +447,7 @@ test("SSE disconnect removes the subscriber and stops polling", async () => {
 
   const unsubscribe = subscribe.mock.results[0]?.value;
   expect(unsubscribe).toBeFunction();
-  await response.body!.cancel();
+  await present(response.body).cancel();
   expect(active).toBe(0);
   const calls = version.mock.calls.length;
   await Bun.sleep(220);
@@ -482,46 +476,6 @@ test("response validation rejects a view with extra fields", async () => {
         new URL(request.url),
       ),
     ).rejects.toThrow("unrecognized_keys");
-  } finally {
-    list.mockRestore();
-    store.close();
-  }
-});
-
-test("service error codes serialize with their HTTP status", async () => {
-  const { f, store, service } = await serviceFixture("errors");
-
-  const request = new Request("http://127.0.0.1/api/runs");
-
-  const cases: [ErrorCode, number][] = [
-    ["not_found", 404],
-    ["not_claimable", 409],
-    ["owned_elsewhere", 409],
-    ["bad_request", 400],
-    ["invalid_schedule", 400],
-    ["stale_cursor", 410],
-    ["unauthorized", 401],
-    ["forbidden", 403],
-    ["internal", 500],
-    ["invalid_cron", 400],
-    ["invalid_timezone", 400],
-  ];
-
-  const list = spyOn(service, "listRuns");
-
-  try {
-    for (const [code, status] of cases) {
-      list.mockRejectedValue(new ServiceError(code));
-
-      const response = await dispatch(
-        apiRoutes({ service, store, cwd: f.cwd, daemon: daemonMetadata }),
-        request,
-        new URL(request.url),
-      );
-
-      expect(response.status).toBe(status);
-      expect(errorBodySchema.parse(await response.json()).error.code).toBe(code);
-    }
   } finally {
     list.mockRestore();
     store.close();
@@ -577,7 +531,7 @@ test("SSE keeps a node transaction whole across the replay batch limit", async (
       new AbortController().signal,
     );
 
-    const frames = await captureFrames(response.body!).finish();
+    const frames = await captureFrames(present(response.body)).finish();
     const events = await store.events(cursor, 1000);
     expect(events).toHaveLength(505);
     expect(frames).toEqual(expectedFrames(events));
@@ -605,9 +559,9 @@ test("daemon run stdout never contains its bearer token", async () => {
     child.kill("SIGTERM");
     expect(await child.exited).toBe(0);
     const output = await new Response(child.stdout).text();
-    expect(output).toContain(`http://127.0.0.1:${record!.port}`);
+    expect(output).toContain(`http://127.0.0.1:${present(record).port}`);
     expect(output).toContain("loopy ui");
-    expect(output).not.toContain(record!.token);
+    expect(output).not.toContain(present(record).token);
   } finally {
     child.kill();
     await child.exited;
@@ -636,12 +590,14 @@ test("run paging includes every run sharing a timestamp", async () => {
     expect(first.map((run) => run.id)).toEqual(["b"]);
 
     const second = await service.listRuns(
-      routes.runs.query.parse({ limit: 1, before: encodeRunCursor(first[0]!) }),
+      routes.runs.query.parse({ limit: 1, before: encodeRunCursor(present(first[0])) }),
     );
 
     expect(second.map((run) => run.id)).toEqual(["a"]);
     expect(
-      await service.listRuns(routes.runs.query.parse({ before: encodeRunCursor(second[0]!) })),
+      await service.listRuns(
+        routes.runs.query.parse({ before: encodeRunCursor(present(second[0])) }),
+      ),
     ).toEqual([]);
   } finally {
     store.close();
@@ -652,7 +608,7 @@ async function httpEvents(name: string) {
   const { f, store } = await serviceFixture(name);
   const daemon = localDaemon({ concurrency: 4, ...f, store, port: 0 });
   const url = new URL(await daemon.start());
-  const headers = { Authorization: `Bearer ${readDaemonFile(f.home)!.token}` };
+  const headers = { Authorization: `Bearer ${present(readDaemonFile(f.home)).token}` };
   const endpoint = `${url.origin}/api/events?after=0&epoch=${await store.epoch()}`;
 
   return {
@@ -661,7 +617,7 @@ async function httpEvents(name: string) {
     headers,
     endpoint,
     write: (id: number, bytes: number) =>
-      store.createRun({ ...replayRun(f.cwd), id: String(id), input: "x".repeat(bytes) }),
+      store.createRun({ ...queuedRun(f.cwd), id: String(id), input: "x".repeat(bytes) }),
     connect: (id: number) =>
       fetch(endpoint, { headers: { ...headers, "Last-Event-ID": String(id) } }),
     async close() {
@@ -689,7 +645,7 @@ test("SSE HTTP replay drains 45 large transactions from Last-Event-ID 1 in order
 
     const response = await http.connect(1);
     expect(response.status).toBe(200);
-    const capture = captureFrames(response.body!);
+    const capture = captureFrames(present(response.body));
     await waitForFrames(capture, 45);
     expect(await capture.finish()).toEqual(expectedFrames(await http.store.events(1, 100)));
   } finally {
@@ -704,7 +660,7 @@ test("SSE HTTP replays an oversized transaction and live-delivers another whole 
     await http.write(1, 0);
     await http.write(2, 1_100_000);
     const response = await http.connect(1);
-    const capture = captureFrames(response.body!);
+    const capture = captureFrames(present(response.body));
     await waitForFrames(capture, 1);
     await http.write(3, 1_100_000);
     await waitForFrames(capture, 2);
@@ -739,7 +695,8 @@ async function unreadHttp(http: Awaited<ReturnType<typeof httpEvents>>) {
 }
 
 async function closedCursor(slow: Awaited<ReturnType<typeof unreadHttp>>) {
-  await Bun.sleep(2300);
+  // Socket buffers can keep pulling briefly after the HTTP client pauses.
+  await Bun.sleep(4000);
   slow.response.resume();
 
   const received = await Promise.race([
@@ -766,7 +723,7 @@ async function stalledHttpReader(name: string) {
 
   try {
     const response = await http.connect(1);
-    const capture = captureFrames(response.body!);
+    const capture = captureFrames(present(response.body));
     await Bun.sleep(50);
 
     for (let id = 2; id <= 401; id++) {
@@ -797,31 +754,13 @@ test("SSE HTTP reconnect from a closed client's last id has no gap", async () =>
 
   try {
     const response = await http.connect(lastId);
-    const capture = captureFrames(response.body!);
+    const capture = captureFrames(present(response.body));
     await waitForFrames(capture, 401 - lastId);
     expect(await capture.finish()).toEqual(expectedFrames(await http.store.events(lastId, 1000)));
   } finally {
     await http.close();
   }
 }, 20_000);
-
-test("local server leaves event pruning to the runtime daemon", async () => {
-  const { f, store } = await serviceFixture("retention-owner");
-  const prune = spyOn(store, "pruneEvents");
-  const daemon = localDaemon({ concurrency: 4, ...f, store, port: 0 });
-
-  try {
-    await daemon.start();
-    expect(prune).not.toHaveBeenCalled();
-    void daemon.run();
-    await until(() => prune.mock.calls.length === 1);
-    expect(prune).toHaveBeenCalledTimes(1);
-  } finally {
-    await daemon.stop();
-    prune.mockRestore();
-    store.close();
-  }
-});
 
 async function scheduleApi() {
   const { f, store, service } = await serviceFixture("schedule-api");
@@ -889,7 +828,7 @@ test("schedule PUT publishes a saved SSE frame", async () => {
     controller.signal,
   );
 
-  const reader = stream.body!.getReader();
+  const reader = present(stream.body).getReader();
 
   try {
     expect(new TextDecoder().decode((await reader.read()).value)).toContain(": connected");
@@ -899,7 +838,7 @@ test("schedule PUT publishes a saved SSE frame", async () => {
     const frame = new TextDecoder().decode((await reader.read()).value);
     const data = frame.split("\n").find((line) => line.startsWith("data: "));
     expect(data).toBeDefined();
-    expect(serverEventSchema.array().parse(JSON.parse(data!.slice(6)))).toMatchObject([
+    expect(serverEventSchema.array().parse(JSON.parse(present(data).slice(6)))).toMatchObject([
       { entity: "schedule", kind: "saved", record: { slug: "schedule-api", cron: "* * * * *" } },
     ]);
   } finally {

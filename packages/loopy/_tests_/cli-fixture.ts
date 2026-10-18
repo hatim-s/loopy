@@ -116,7 +116,7 @@ export async function runFixture(f: ReturnType<typeof fixture>) {
       }),
     });
 
-    return { stdout: JSON.stringify(await store.getRun(run.id)), stderr: "", code: 0 };
+    return present(await store.getRun(run.id));
   } finally {
     store.close();
   }
