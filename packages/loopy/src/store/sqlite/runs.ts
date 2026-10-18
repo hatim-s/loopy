@@ -14,7 +14,7 @@ import {
   type RateLimitWindow,
 } from "../../core/index.js";
 import { type EventTransaction } from "../event-outbox.js";
-import { utc } from "../timestamps.js";
+import { normalizeRun, utc } from "../timestamps.js";
 import { SqliteOwnership } from "./ownership.js";
 import { rowToRun, SQL } from "./store-rows.js";
 import { type RunRow } from "./store-schema.js";
@@ -210,7 +210,9 @@ export class SqliteRuns extends SqliteOwnership {
     this.emit(txn, { entity: "run", kind, runId, record: rowToRun(this.requireRow(runId)) });
   }
 
-  protected insertRun(run: RunRecord): void {
+  protected insertRun(input: RunRecord): void {
+    const run = normalizeRun(input);
+
     this.db
       .query(SQL.createRun)
       .run(
@@ -222,14 +224,14 @@ export class SqliteRuns extends SqliteOwnership {
         run.status,
         run.output === undefined ? null : JSON.stringify(run.output),
         run.error ?? null,
-        run.wakeAt === undefined ? null : new Date(run.wakeAt).toISOString(),
+        run.wakeAt ?? null,
         run.nextRetryAt ?? null,
-        new Date(run.createdAt).toISOString(),
-        new Date(run.updatedAt).toISOString(),
+        run.createdAt,
+        run.updatedAt,
         run.owner?.token ?? null,
         run.owner?.pid ?? null,
         run.owner?.host ?? null,
-        run.owner === undefined ? null : new Date(run.owner.heartbeatAt).toISOString(),
+        run.owner?.heartbeatAt ?? null,
       );
   }
 }

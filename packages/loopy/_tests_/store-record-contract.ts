@@ -144,12 +144,14 @@ export function storeRecordContract(makeStore: () => Store | Promise<Store>) {
       updatedAt: offset,
       status: "suspended",
       wakeAt: offset,
+      nextRetryAt: offset,
       owner: { token: "owner", host: "test", pid: 1, heartbeatAt: offset },
     });
     expect(await store.getRun("run")).toMatchObject({
       createdAt: at,
       updatedAt: at,
       wakeAt: at,
+      nextRetryAt: at,
       owner: { heartbeatAt: at },
     });
     await store.release("run", "owner");
