@@ -22,6 +22,8 @@ export { isReservedGraphName, nodeNames, RESERVED_GRAPH_NAMES } from "./graph-na
 
 export { checkPredicate } from "./graph-predicate.js";
 
+export { isRef, projectValue } from "./graph-ref.js";
+
 export { graphTypeResolver } from "./graph-type.js";
 
 export { assertJson } from "./json.js";

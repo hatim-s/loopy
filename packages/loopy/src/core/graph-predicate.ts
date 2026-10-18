@@ -1,5 +1,6 @@
 import type { ComparisonOperand, DiagnosticCode, Predicate, Value } from "./graph.js";
-import { isRef, refs } from "./graph-context.js";
+import { refs } from "./graph-context.js";
+import { isRef } from "./graph-ref.js";
 import { isBoolean, isNumber, isString } from "./validation.js";
 
 export type ResolveType = (ref: { ref: string; path: string[] }) => string | null;

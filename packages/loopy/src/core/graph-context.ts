@@ -1,4 +1,5 @@
 import type { ComparisonOperand, Graph, Node, NodeId, Predicate, Ref, Value } from "./graph.js";
+import { isRef } from "./graph-ref.js";
 import { isRecord } from "./validation.js";
 
 export type Context = {
@@ -125,18 +126,6 @@ export function successors(context: Context, id: NodeId): NodeId[] {
       .map((edge) => edge.to),
     ...(node ? targets(node) : []),
   ];
-}
-
-export function isRef(value: Value): value is Ref {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    "ref" in value &&
-    typeof value.ref === "string" &&
-    "path" in value &&
-    Array.isArray(value.path)
-  );
 }
 
 export function refs(value: Value): Ref[] {

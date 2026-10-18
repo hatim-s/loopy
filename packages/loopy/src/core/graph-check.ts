@@ -3,7 +3,6 @@ import {
   ancestors,
   binding,
   bodyEntries,
-  isRef,
   refs,
   sameBody,
   scopeReaches,
@@ -11,6 +10,7 @@ import {
 } from "./graph-context.js";
 import { isReservedGraphName, nodeNames } from "./graph-names.js";
 import { checkPredicate, hasSize } from "./graph-predicate.js";
+import { isRef } from "./graph-ref.js";
 import { structureRules } from "./graph-structure.js";
 import { graphTypeResolver } from "./graph-type.js";
 import { type ValidationContext as Context, diagnostic } from "./graph-validation.js";

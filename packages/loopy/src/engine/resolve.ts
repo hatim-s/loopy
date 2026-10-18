@@ -1,9 +1,12 @@
-import { executionKeyString, isRecord, type Json, type Ref, type Value } from "../core/index.js";
+import {
+  executionKeyString,
+  isRecord,
+  isRef,
+  type Json,
+  projectValue,
+  type Value,
+} from "../core/index.js";
 import type { EngineState } from "./state.js";
-
-function isRef(value: Value): value is Ref {
-  return isRecord(value) && "ref" in value;
-}
 
 export function resolve(value: Value, state: EngineState): Json {
   if (Array.isArray(value)) {
@@ -19,12 +22,10 @@ export function resolve(value: Value, state: EngineState): Json {
       (run) => String(run.key.nodeId) === value.ref && run.key.scope.length === 0,
     );
 
-    let output =
-      value.ref === "input" ? state.input : run?.status === "succeeded" ? run.output : undefined;
-
-    for (const field of value.path) {
-      output = isRecord(output) ? output[String(field)] : undefined;
-    }
+    const output = projectValue(
+      value.ref === "input" ? state.input : run?.status === "succeeded" ? run.output : undefined,
+      value.path,
+    );
 
     if (output === undefined) {
       throw new Error(
