@@ -1,20 +1,4 @@
-import { type ExecutionResult, isRecord, isString, type Json, limitLogs } from "../core/index.js";
-
-export function redactResult(
-  result: ExecutionResult,
-  redact: (text: string) => string,
-): ExecutionResult {
-  const logs = limitLogs(
-    result.logs.map((log) => ({
-      message: redact(log.message),
-      data: redactValue(log.data, redact),
-    })),
-  );
-
-  return result.kind === "succeeded"
-    ? { ...result, output: redactValue(result.output, redact), logs }
-    : { ...result, error: { ...result.error, message: redact(result.error.message) }, logs };
-}
+import { isRecord, isString, type Json } from "../core/index.js";
 
 export function redactValue(input: Json, redact: (text: string) => string): Json {
   if (isString(input)) {

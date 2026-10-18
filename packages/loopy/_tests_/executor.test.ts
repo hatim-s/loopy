@@ -380,6 +380,34 @@ for (const ending of ["timeout", "success"] as const) {
   });
 }
 
+test("bundle results redact once, so a secret inside the marker leaves it intact", async () => {
+  const f = await fixture();
+  new SecretStore(f.home).set("TOKEN", "a");
+
+  const executor = new LocalExecutor({
+    home: f.home,
+    workspace: f.workspace,
+    mode: "sandbox",
+    secrets: ["TOKEN"],
+    bundlePath: () => f.bundle,
+  });
+
+  await writeFile(
+    f.bundle,
+    'process.stderr.write(JSON.stringify({message: "pet", data: "a cat"}) + "\\n"); process.stdout.write(JSON.stringify("a cat") + "\\n");',
+  );
+  const result = await executor.execute(f.key, 1, f.spec, new AbortController().signal);
+  const receipt = JSON.parse(await readFile(await receiptPath(f.home, f.key, 1), "utf8"));
+
+  expect(result).toEqual({
+    kind: "succeeded",
+    output: "[redacted] c[redacted]t",
+    logs: [{ message: "pet", data: "[redacted] c[redacted]t" }],
+  });
+  expect(receipt.result).toEqual(result);
+  expect(JSON.stringify(receipt)).not.toContain("[red[redacted]");
+});
+
 test("truncated bundle records mask secret escapes at every capture boundary", () => {
   const secret = 'alpha"beta';
   const escaped = JSON.stringify(secret).slice(1, -1);

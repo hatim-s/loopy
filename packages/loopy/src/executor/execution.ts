@@ -8,6 +8,7 @@ import {
   type Executor,
   errorMessage,
   type Json,
+  limitLogs,
 } from "../core/index.js";
 import {
   executeLocalCommand,
@@ -19,7 +20,6 @@ import {
 } from "../local/execution-host.js";
 import { bundleResult } from "./protocol.js";
 import { finishReceipt, lookupFile, receiptPath, startReceipt } from "./receipts.js";
-import { redactResult } from "./redact.js";
 
 type Options = {
   home: string;
@@ -64,7 +64,8 @@ export class ExecutionWorker implements Executor {
       };
     }
 
-    result = redactResult(result, this.redact);
+    // Every path redacts its own values exactly once, so a secret inside the marker cannot nest.
+    result = { ...result, logs: limitLogs(result.logs) };
     await finishReceipt(path, { kind: "finished", result, executionKey: key, attempt });
 
     return result;
@@ -162,9 +163,12 @@ export class ExecutionWorker implements Executor {
       exitCode: raw.exitCode,
     };
 
+    const stdout = this.redact(raw.stdout);
+    const stderr = this.redact(raw.stderr);
+
     const logs = [
-      { message: "stdout", data: result.stdout },
-      { message: "stderr", data: result.stderr },
+      { message: "stdout", data: stdout },
+      { message: "stderr", data: stderr },
     ];
 
     if (!spec.node.okExitCodes.includes(result.exitCode)) {
@@ -172,8 +176,8 @@ export class ExecutionWorker implements Executor {
         kind: "failed",
         error: {
           code: "exit",
-          message: result.stderr
-            ? `Command exited with code ${result.exitCode}: ${this.redact(result.stderr).slice(-500)}. Inspect stderr and correct the command.`
+          message: stderr
+            ? `Command exited with code ${result.exitCode}: ${stderr.slice(-500)}. Inspect stderr and correct the command.`
             : `Command exited with code ${result.exitCode}. Correct the command.`,
         },
         exitCode: result.exitCode,
@@ -184,7 +188,7 @@ export class ExecutionWorker implements Executor {
     if (spec.parse === null) {
       return {
         kind: "succeeded",
-        output: { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode },
+        output: { stdout, stderr, exitCode: result.exitCode },
         logs,
       };
     }
