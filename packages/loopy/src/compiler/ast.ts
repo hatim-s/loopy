@@ -9,7 +9,7 @@ import {
   isString,
 } from "../core/index.js";
 import { builtinCommandKeys, commandKey, sdkCalls } from "../sdk/graph-host.js";
-import type { CompilerDiagnostic, ParserSource } from "./types.js";
+import type { CompilerDiagnostic } from "./types.js";
 
 export function diagnostic(
   { file, source }: Pick<Context, "file" | "source">,
@@ -49,8 +49,8 @@ export type Context = {
   source: string;
   scope: Scope;
   diagnostics: CompilerDiagnostic[];
-  edits: { start: number; end: number; text: string }[];
-  parsers: Map<string, ParserSource>;
+  edits: { start: number; end: number; text: string; path: string }[];
+  parsers: Map<string, string>;
 };
 
 export function refuse(context: Context, node: Node, code: CompilerDiagnosticCode) {
@@ -171,6 +171,7 @@ function moduleProperty(context: Context, property: Property, owner: "code" | "d
     start: property.value.start,
     end: property.value.end,
     text: JSON.stringify(resolve(dirname(context.file), path)),
+    path: resolve(dirname(context.file), path),
   });
 }
 
@@ -337,7 +338,7 @@ function recordParser(
     return;
   }
 
-  context.parsers.set(id, { file: resolve(dirname(context.file), path) });
+  context.parsers.set(id, resolve(dirname(context.file), path));
 }
 
 function callArguments(

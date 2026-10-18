@@ -14,14 +14,15 @@ import {
 import { checkCodeModule, modulePath } from "./code-module.js";
 import { sdkEntry } from "./evaluate.js";
 import { applyEdits } from "./source.js";
-import type { AuthorModule, CompilerDiagnostic, ParserSource, Restricted } from "./types.js";
+import type { AuthorModule, CompilerDiagnostic, Restricted } from "./types.js";
 
 type Inspection = {
   modules: Map<string, AuthorModule>;
-  parsers: Map<string, ParserSource>;
+  parsers: Map<string, string>;
   diagnostics: CompilerDiagnostic[];
   scopes: Map<string, Scope>;
   entry: string;
+  visiting: Set<string>;
 };
 
 function importBindings(
@@ -63,7 +64,7 @@ async function isSdkSpecifier(specifier: string, file: string) {
 
 async function inspectImports(context: Context, statements: Statement[], state: Inspection) {
   const { file } = context;
-  const { scopes, modules } = state;
+  const { scopes, visiting } = state;
 
   for (const statement of statements) {
     if (statement.type !== "ImportDeclaration" || statement.importKind === "type") {
@@ -86,7 +87,7 @@ async function inspectImports(context: Context, statements: Statement[], state: 
 
       if (scopes.has(dependency)) {
         imported = scopes.get(dependency) ?? new Map();
-      } else if (modules.has(dependency)) {
+      } else if (visiting.has(dependency)) {
         refuse(context, statement, "cyclic_import");
         continue;
       } else {
@@ -99,12 +100,12 @@ async function inspectImports(context: Context, statements: Statement[], state: 
 }
 
 async function inspectModule(file: string, state: Inspection): Promise<Scope> {
-  const { modules, parsers, diagnostics, scopes } = state;
+  const { modules, parsers, diagnostics, scopes, visiting } = state;
   const source = await Bun.file(file).text();
   const program = parseModule(file, source, diagnostics);
 
   const scope: Scope = new Map();
-  modules.set(file, { file, source, evaluated: source });
+  visiting.add(file);
 
   const context: Context = {
     file,
@@ -136,16 +137,13 @@ async function inspectModule(file: string, state: Inspection): Promise<Scope> {
   }
 
   for (const edit of context.edits) {
-    // BOUNDARY: The edit text was produced by JSON.stringify from a resolved module path.
-    const modulePath: string = JSON.parse(edit.text);
-
-    const checked = await checkCodeModule(modulePath);
-    diagnostics.push(...checked.diagnostics);
+    diagnostics.push(...(await checkCodeModule(edit.path)));
   }
 
   const evaluated = applyEdits(source, context.edits);
 
-  modules.set(file, { file, source, evaluated });
+  visiting.delete(file);
+  modules.set(file, { file, evaluated });
   scopes.set(file, scope);
 
   return scope;
@@ -156,14 +154,20 @@ export async function restrict(
 ): Promise<Restricted | { ok: false; diagnostics: CompilerDiagnostic[] }> {
   try {
     const modules = new Map<string, AuthorModule>();
-    const parsers = new Map<string, ParserSource>();
+    const parsers = new Map<string, string>();
     const diagnostics: CompilerDiagnostic[] = [];
     const entry = await realpath(file);
-    await inspectModule(entry, { modules, parsers, diagnostics, scopes: new Map(), entry });
+    await inspectModule(entry, {
+      modules,
+      parsers,
+      diagnostics,
+      scopes: new Map(),
+      entry,
+      visiting: new Set(),
+    });
 
     for (const parser of parsers.values()) {
-      const checked = await checkCodeModule(parser.file);
-      diagnostics.push(...checked.diagnostics);
+      diagnostics.push(...(await checkCodeModule(parser)));
     }
 
     return diagnostics.length > 0

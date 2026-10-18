@@ -192,7 +192,7 @@ export async function checkCodeModule(path: string) {
   const entry = await checkModuleImports(path, diagnostics);
 
   if (!entry || diagnostics.some((value) => value.code === "syntax_error")) {
-    return { ok: false as const, diagnostics };
+    return diagnostics;
   }
 
   const { source, program } = entry;
@@ -202,7 +202,7 @@ export async function checkCodeModule(path: string) {
   if (exported?.type !== "ExportDefaultDeclaration") {
     diagnostics.push(diagnostic({ file: path, source }, 0, "module_default"));
 
-    return { ok: false as const, diagnostics };
+    return diagnostics;
   }
 
   let declaration = exported.declaration;
@@ -235,10 +235,8 @@ export async function checkCodeModule(path: string) {
   ) {
     diagnostics.push(diagnostic({ file: path, source }, 0, "module_default"));
 
-    return { ok: false as const, diagnostics };
+    return diagnostics;
   }
 
-  return diagnostics.length > 0
-    ? { ok: false as const, diagnostics }
-    : { ok: true as const, diagnostics };
+  return diagnostics;
 }

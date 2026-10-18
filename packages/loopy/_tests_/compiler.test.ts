@@ -164,7 +164,7 @@ for (const effect of ["network", "write"]) {
     await writeFile(file, source);
 
     try {
-      expect(await evaluate(file, [{ file, source, evaluated: source }])).toMatchObject({
+      expect(await evaluate(file, [{ file, evaluated: source }])).toMatchObject({
         ok: false,
         diagnostics: [{ code: "evaluation_failed" }],
       });
@@ -184,7 +184,7 @@ test("compiler sandbox denies reads of daemon secrets inside the workspace", asy
   await Bun.write(secrets, '{"TOKEN":"private"}');
   const source = `await Bun.file(${JSON.stringify(secrets)}).text(); export default {graph:${graph}};`;
   await writeFile(file, source);
-  expect(await evaluate(file, [{ file, source, evaluated: source }], home)).toMatchObject({
+  expect(await evaluate(file, [{ file, evaluated: source }], home)).toMatchObject({
     ok: false,
     diagnostics: [
       {
@@ -199,7 +199,7 @@ test("evaluation has a hard ten second timeout", async () => {
   const { file } = await project("while(true){} export default {};");
   const source = await Bun.file(file).text();
   const started = performance.now();
-  expect(await evaluate(file, [{ file, source, evaluated: source }])).toMatchObject({
+  expect(await evaluate(file, [{ file, evaluated: source }])).toMatchObject({
     ok: false,
     diagnostics: [
       { code: "evaluation_failed", message: expect.stringContaining("timed out after 10000 ms") },

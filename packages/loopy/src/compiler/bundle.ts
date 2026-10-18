@@ -4,7 +4,7 @@ import { commandParser } from "../sdk/graph-host.js";
 import { checkImports } from "./code-module.js";
 import { runnerSource } from "./runner.js";
 import { sourcePaths, typescriptPaths } from "./source.js";
-import type { Bundle, CompilerDiagnostic, ParserSource } from "./types.js";
+import type { Bundle, CompilerDiagnostic } from "./types.js";
 
 async function buildModule(file: string, kind: "code" | "parser") {
   return Bun.build({
@@ -35,14 +35,14 @@ async function buildModule(file: string, kind: "code" | "parser") {
 
 async function buildNode(
   node: Extract<Node, { kind: "code" | "command" }>,
-  parsers: Map<string, ParserSource>,
+  parsers: Map<string, string>,
 ) {
   if (node.kind === "code") {
     return { file: node.module.path, result: await buildModule(node.module.path, "code") };
   }
 
   // SAFETY: Restriction records custom parsers, and SDK descriptors supply every built-in parser.
-  const parser = (parsers.get(node.key)?.file ?? commandParser(node.key)) as string;
+  const parser = (parsers.get(node.key) ?? commandParser(node.key)) as string;
 
   const file = parsers.has(node.key) ? parser : resolve(import.meta.dir, "../sdk/graph", parser);
 
@@ -53,10 +53,7 @@ type BundleResult =
   | { ok: true; bundles: Bundle[] }
   | { ok: false; diagnostics: CompilerDiagnostic[] };
 
-export async function bundle(
-  graph: Graph,
-  parsers: Map<string, ParserSource>,
-): Promise<BundleResult> {
+export async function bundle(graph: Graph, parsers: Map<string, string>): Promise<BundleResult> {
   const bundles: Bundle[] = [];
 
   for (const { nodeId } of bundleRefs(graph)) {

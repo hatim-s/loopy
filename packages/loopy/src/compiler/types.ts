@@ -12,12 +12,10 @@ export type CompileResult =
   | { ok: true; graph: Graph; bundles: Bundle[]; revision: string }
   | { ok: false; diagnostics: CompilerDiagnostic[] };
 
-export type ParserSource = { file: string };
-
-export type AuthorModule = { file: string; source: string; evaluated: string };
+export type AuthorModule = { file: string; evaluated: string };
 
 export type Restricted = {
   ok: true;
   modules: AuthorModule[];
-  parsers: Map<string, ParserSource>;
+  parsers: Map<string, string>;
 };
