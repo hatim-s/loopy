@@ -62,7 +62,6 @@ test("install rejects relative paths and line injection before writing", async (
     writeFile: async (path) => {
       files.push(path);
     },
-    exists: async () => false,
     exec: async () => {
       throw new Error("Invalid service values reached the supervisor.");
     },

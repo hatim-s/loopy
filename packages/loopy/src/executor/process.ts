@@ -35,7 +35,7 @@ export type LocalExecutionOptions = {
 };
 
 // Runs inside the sandbox. Credentials arrive through stdin, never launcher argv.
-export const PRIVATE_ENV_LAUNCHER = `
+const PRIVATE_ENV_LAUNCHER = `
 const config = JSON.parse(await Bun.stdin.text());
 const child = Bun.spawn([config.program, ...config.args], {
   env: { ...process.env, ...config.env },
@@ -45,12 +45,10 @@ const child = Bun.spawn([config.program, ...config.args], {
 process.exit(await child.exited);
 `;
 
-function commandLimits(command: ResolvedCommand): Limits {
-  return {
-    timeoutMs: command.timeoutMs ?? DEFAULT_EXECUTION_TIMEOUT_MS,
-    maxOutputBytes: DEFAULT_MAX_OUTPUT_BYTES,
-  };
-}
+const COMMAND_LIMITS: Limits = {
+  timeoutMs: DEFAULT_EXECUTION_TIMEOUT_MS,
+  maxOutputBytes: DEFAULT_MAX_OUTPUT_BYTES,
+};
 
 function launchEnvironment(command: ResolvedCommand, mode: ExecutionMode): NodeJS.ProcessEnv {
   if (mode === "full") {
@@ -113,10 +111,10 @@ async function sandboxLaunch(command: ResolvedCommand, context: SandboxContext):
   };
 }
 
-export async function prepareLaunch(
+async function prepareLaunch(
   command: ResolvedCommand,
   options: LocalExecutionOptions,
-): Promise<Launch & { scratch?: string }> {
+): Promise<Launch & { scratch: string }> {
   const workspace = await realpath(options.workspace);
   const cwd = await realpath(resolve(workspace, command.cwd ?? "."));
 
@@ -179,10 +177,8 @@ export async function executeLocalCommand(
   }
 
   let launch: Awaited<ReturnType<typeof prepareLaunch>>;
-  let limits: Limits;
 
   try {
-    limits = commandLimits(command);
     launch = await prepareLaunch(command, options);
   } catch (error) {
     throw unstarted(error);
@@ -193,11 +189,9 @@ export async function executeLocalCommand(
       throw aborted();
     }
 
-    return await spawnCaptured(launch, { ...limits, signal: options.signal });
+    return await spawnCaptured(launch, { ...COMMAND_LIMITS, signal: options.signal });
   } finally {
-    if (launch.scratch) {
-      await rm(launch.scratch, { recursive: true, force: true });
-    }
+    await rm(launch.scratch, { recursive: true, force: true });
   }
 }
 

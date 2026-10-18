@@ -29,8 +29,8 @@ test("reserved options stay separate and separator allows colliding input keys",
     "/tmp/run",
     "run",
     "x",
-    "--lease-ms",
-    "2000",
+    "--cwd",
+    "/tmp/work",
     "--",
     "--full",
     "false",
@@ -38,7 +38,7 @@ test("reserved options stay separate and separator allows colliding input keys",
     "text",
   ]);
 
-  expect(parsed.values["lease-ms"]).toBe("2000");
+  expect(parsed.values.cwd).toBe("/tmp/work");
   expect(parsed.namedInput).toEqual({ full: "false", input: "text" });
   expect(parseCliArgs(["types", "tool", "--", "--help"]).positionals).toEqual([
     "types",

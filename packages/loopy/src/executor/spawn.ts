@@ -32,11 +32,7 @@ function killTree(child: ChildProcessWithoutNullStreams, signal: NodeJS.Signals)
   }
 
   try {
-    if (process.platform === "win32") {
-      child.kill(signal);
-    } else {
-      process.kill(-child.pid, signal);
-    }
+    process.kill(-child.pid, signal);
   } catch {
     if (!child.killed) {
       child.kill(signal);
@@ -82,7 +78,7 @@ function trySpawn(launch: Launch): ChildProcessWithoutNullStreams {
   return spawn(launch.program, launch.args, {
     cwd: launch.cwd,
     env: launch.env,
-    detached: process.platform !== "win32",
+    detached: true,
     stdio: ["pipe", "pipe", "pipe"],
   });
 }

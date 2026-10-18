@@ -21,8 +21,6 @@ type InstallOptions = ServiceOptions & {
   path?: string;
 };
 
-export type DaemonStatus = { state: "running" | "stopped" | "not-installed"; pid?: number };
-
 function service(options: ServiceOptions) {
   const platform = options.platform ?? process.platform;
 
@@ -68,21 +66,10 @@ async function startService(target: Service): Promise<void> {
     return;
   }
 
+  // bootout fails when nothing is loaded yet; bootstrap reports any real problem.
   await target.operations.exec(["launchctl", "bootout", target.target]);
   const domain = target.target.slice(0, target.target.lastIndexOf("/"));
-  const result = await target.operations.exec(["launchctl", "bootstrap", domain, target.file]);
-
-  if (result.code !== 0) {
-    await target.operations.exec(["launchctl", "unload", "-w", target.file]);
-    await checked(target, ["launchctl", "load", "-w", target.file]);
-    const loaded = await target.operations.exec(["launchctl", "print", target.target]);
-
-    if (loaded.code !== 0) {
-      throw new Error(
-        `Daemon did not load. Check launchctl print ${target.target} and the daemon logs, then retry installation.`,
-      );
-    }
-  }
+  await checked(target, ["launchctl", "bootstrap", domain, target.file]);
 }
 
 function validateInstall(options: InstallOptions, path: string): void {
@@ -133,16 +120,10 @@ export async function installDaemon(options: InstallOptions): Promise<void> {
 async function stopMacService(target: Service): Promise<void> {
   const result = await target.operations.exec(["launchctl", "bootout", target.target]);
 
-  if ([0, 3, 113].includes(result.code)) {
-    return;
-  }
-
-  await checked(target, ["launchctl", "unload", "-w", target.file]);
-  const loaded = await target.operations.exec(["launchctl", "print", target.target]);
-
-  if (loaded.code !== 113) {
+  // 3 and 113 mean the service was not loaded, which is what uninstall wants.
+  if (![0, 3, 113].includes(result.code)) {
     throw new Error(
-      `Cannot confirm the daemon was unloaded. Check launchctl print ${target.target} and retry uninstallation. The plist has been kept.`,
+      `launchctl bootout ${target.target} failed: ${result.stderr.trim() || result.code}. The plist has been kept.`,
     );
   }
 }
@@ -173,68 +154,4 @@ export async function uninstallDaemon(options: ServiceOptions = {}): Promise<voi
   if (target.platform === "linux") {
     await checked(target, ["systemctl", "--user", "daemon-reload"]);
   }
-}
-
-function status(state: DaemonStatus["state"], output: string): DaemonStatus {
-  const pid = Number(/(?:pid\s*=\s*|MainPID=)(\d+)/.exec(output)?.[1]);
-
-  if (state === "running" && pid > 0) {
-    return { state, pid };
-  }
-
-  return { state };
-}
-
-export async function daemonStatus(options: ServiceOptions = {}): Promise<DaemonStatus> {
-  const target = service(options);
-
-  if (target.platform === "darwin") {
-    const result = await target.operations.exec(["launchctl", "print", target.target]);
-
-    if (result.code === 113) {
-      return { state: (await target.operations.exists(target.file)) ? "stopped" : "not-installed" };
-    }
-
-    if (result.code !== 0) {
-      throw new Error(
-        "Cannot inspect the daemon. Check launchctl print for your user session and retry.",
-      );
-    }
-
-    return status(/state = running\b/.test(result.stdout) ? "running" : "stopped", result.stdout);
-  }
-
-  return linuxStatus(target);
-}
-
-async function linuxStatus(target: Service): Promise<DaemonStatus> {
-  const name = "loopy-daemon.service";
-  const active = await target.operations.exec(["systemctl", "--user", "is-active", name]);
-
-  const info = await target.operations.exec([
-    "systemctl",
-    "--user",
-    "show",
-    "-p",
-    "MainPID",
-    "-p",
-    "LoadState",
-    name,
-  ]);
-
-  if (/^LoadState=not-found$/m.test(info.stdout)) {
-    return { state: "not-installed" };
-  }
-
-  if (
-    info.code !== 0 ||
-    !/^LoadState=loaded$/m.test(info.stdout) ||
-    ![0, 3].includes(active.code)
-  ) {
-    throw new Error(
-      "Cannot inspect the daemon. Check systemctl --user status loopy-daemon.service and retry.",
-    );
-  }
-
-  return status(active.stdout.trim() === "active" ? "running" : "stopped", info.stdout);
 }

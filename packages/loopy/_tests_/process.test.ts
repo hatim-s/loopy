@@ -116,13 +116,14 @@ describe("process executor", () => {
   test("stops a timed out process and its descendants", async () => {
     const cwd = workspace();
     await expect(
-      executeLocalCommand(
+      spawnCaptured(
         {
           program: "/bin/sh",
           args: ["-c", "(sleep 1; touch child-survived) & wait"],
-          timeoutMs: 150,
+          cwd,
+          env: {},
         },
-        { workspace: cwd, protectedHome: join(cwd, "home"), mode: "full" },
+        { timeoutMs: 150, maxOutputBytes: 1024 },
       ),
     ).rejects.toThrow("timed out");
     await Bun.sleep(1_200);
@@ -156,9 +157,9 @@ describe("process executor", () => {
     `;
 
     await expect(
-      executeLocalCommand(
-        { program: process.execPath, args: ["-e", source], timeoutMs: 100 },
-        { workspace: cwd, protectedHome: join(cwd, "home"), mode: "full" },
+      spawnCaptured(
+        { program: process.execPath, args: ["-e", source], cwd, env: {} },
+        { timeoutMs: 100, maxOutputBytes: 1024 },
       ),
     ).rejects.toThrow("timed out");
     expect(Date.now() - started).toBeLessThan(1_500);
@@ -167,13 +168,14 @@ describe("process executor", () => {
   test("kills descendants that ignore termination", async () => {
     const cwd = workspace();
     await expect(
-      executeLocalCommand(
+      spawnCaptured(
         {
           program: "/bin/sh",
           args: ["-c", "(trap '' TERM; sleep 0.5; touch ignored) & wait"],
-          timeoutMs: 100,
+          cwd,
+          env: {},
         },
-        { workspace: cwd, protectedHome: join(cwd, "home"), mode: "full" },
+        { timeoutMs: 100, maxOutputBytes: 1024 },
       ),
     ).rejects.toThrow("timed out");
     await Bun.sleep(700);
@@ -260,7 +262,6 @@ describe("process executor", () => {
       const command = {
         program: process.execPath,
         args: ["-e", `console.log(await (await fetch('http://127.0.0.1:${server.port}')).text())`],
-        timeoutMs: 5_000,
       };
 
       expect(

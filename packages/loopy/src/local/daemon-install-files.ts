@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
@@ -7,7 +6,6 @@ export type DaemonExecResult = { code: number; stdout: string; stderr: string };
 export type DaemonOperations = {
   /** Undefined content removes the file. Writing content creates parent directories. */
   writeFile: (path: string, content: string | undefined) => Promise<void>;
-  exists: (path: string) => Promise<boolean>;
   exec: (argv: string[]) => Promise<DaemonExecResult>;
 };
 
@@ -22,7 +20,6 @@ export const daemonOperations: DaemonOperations = {
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, content);
   },
-  exists: async (path) => existsSync(path),
   exec: async (argv) => {
     const child = Bun.spawn(argv, { stdout: "pipe", stderr: "pipe" });
 

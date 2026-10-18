@@ -2,9 +2,6 @@ import { existsSync, mkdirSync, realpathSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { errnoCode } from "../core/index.js";
 
-/** The `code` of a Node filesystem error, or undefined for anything else. */
-export { errnoCode } from "../core/index.js";
-
 /** Canonical path for ownership checks: symlinks resolve, missing files stay absolute. */
 export function canonicalPath(path: string): string {
   return existsSync(path) ? realpathSync(path) : resolve(path);

@@ -4,7 +4,6 @@ const OPTIONS = {
   format: { type: "string" },
   "input-json": { type: "string" },
   "input-file": { type: "string" },
-  payload: { type: "string" },
   follow: { type: "boolean" },
   cron: { type: "string" },
   tz: { type: "string" },
@@ -23,16 +22,15 @@ const OPTIONS = {
   stdin: { type: "boolean" },
 } as const;
 
-const GLOBAL_OPTIONS = ["home", "cwd", "help", "lease-ms"] as const;
+const GLOBAL_OPTIONS = ["home", "cwd", "help"] as const;
 
 const COMMAND_OPTIONS = new Map<string, readonly (keyof typeof OPTIONS)[]>(
   Object.entries({
     run: ["input-json", "input-file"],
     resume: [],
-    hook: ["payload"],
     schedule: ["cron", "tz", "off", "enable", "disable", "input-json"],
     logs: ["follow"],
-    "daemon run": ["concurrency", "port"],
+    "daemon run": ["concurrency", "port", "lease-ms"],
     "daemon install": ["concurrency", "port"],
     save: ["replace"],
     graph: ["format"],

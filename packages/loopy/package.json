@@ -2,7 +2,7 @@
   "name": "loopy",
   "version": "0.4.0",
   "type": "module",
-  "description": "Replayable TypeScript workflows with durable runs, a local daemon and a live dashboard.",
+  "description": "Compiled TypeScript workflow graphs with durable runs, a local daemon and a live dashboard.",
   "license": "Apache-2.0",
   "engines": {
     "bun": ">=1.4.0"
@@ -11,10 +11,6 @@
     ".": {
       "types": "./dist/types/sdk/index.d.ts",
       "default": "./dist/sdk/index.js"
-    },
-    "./local": {
-      "types": "./dist/types/local/index.d.ts",
-      "default": "./dist/local/index.js"
     },
     "./contract": {
       "types": "./dist/types/contract/index.d.ts",

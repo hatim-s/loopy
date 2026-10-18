@@ -126,14 +126,6 @@ test("compiler diagnostics include locations and do not create registry entries"
   expect(new Registry(f.home, f.cwd).list()).toEqual([]);
 });
 
-test("CLI rejects invalid graph formats and short leases", async () => {
-  const f = await graphFixture();
-  expect((await cli(f, "graph", f.file, "--format", "svg")).stderr).toContain(
-    "--format json or --format text",
-  );
-  expect((await cli(f, "runs", "--lease-ms", "999")).stderr).toContain("at least 1000");
-});
-
 test("save starts the daemon on demand and leaves artifact writes to the service", async () => {
   const f = fixture("on-demand", "run: () => null");
   writeFileSync(

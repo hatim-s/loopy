@@ -18,7 +18,7 @@ export function redactValue(input: Json, redact: (text: string) => string): Json
   return input;
 }
 
-export const REDACTED = "[redacted]";
+const REDACTED = "[redacted]";
 
 /**
  * One character of a secret and every way it can appear in captured text. Authors can nest JSON

@@ -9,9 +9,15 @@ import {
   readFileSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
-import { isString, requireRecord, setOwnProperty, validateSecretName } from "../core/index.js";
+import {
+  errnoCode,
+  isString,
+  requireRecord,
+  setOwnProperty,
+  validateSecretName,
+} from "../core/index.js";
 import { writeFileAtomically } from "../executor/index.js";
-import { errnoCode, withLockDirectory } from "./fs.js";
+import { withLockDirectory } from "./fs.js";
 import { defaultHome } from "./home.js";
 import { ServiceError } from "./service-error.js";
 

@@ -18,5 +18,4 @@ export type ResolvedCommand = {
   stdin?: string;
   env?: Record<string, string>;
   cwd?: string;
-  timeoutMs?: number;
 };

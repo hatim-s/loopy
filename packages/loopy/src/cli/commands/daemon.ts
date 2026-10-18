@@ -7,10 +7,23 @@ import {
   readDaemonFile,
   uninstallDaemon,
 } from "../../local/index.js";
+import { openRunStore, type SqliteRunStore } from "../../store/index.js";
 import { type CliContext, requireTarget } from "../context.js";
 import { printJson, printLine, report } from "../output.js";
 import { onTermination } from "../signals.js";
-import { withRunStore } from "../store.js";
+
+async function withRunStore<T>(
+  context: Pick<CliContext, "home" | "leaseMs">,
+  fn: (store: SqliteRunStore) => Promise<T>,
+) {
+  const store = openRunStore(context.home, { leaseMs: context.leaseMs });
+
+  try {
+    return await fn(store);
+  } finally {
+    store.close();
+  }
+}
 
 export async function runDaemon(context: CliContext): Promise<void> {
   const action = requireTarget(context, "Daemon action");

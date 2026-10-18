@@ -2,7 +2,7 @@ export { localDaemon } from "./daemon.js";
 
 export { daemonUrl, readDaemonFile } from "./daemon-file.js";
 
-export { daemonStatus, installDaemon, uninstallDaemon } from "./daemon-install.js";
+export { installDaemon, uninstallDaemon } from "./daemon-install.js";
 
 export { defaultHome } from "./home.js";
 

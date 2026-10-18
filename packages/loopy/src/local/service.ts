@@ -233,57 +233,24 @@ export class LoopyService {
     return run;
   }
 
-  async view(run: RunRecord): Promise<RunView> {
-    return (await this.viewResolver([run.id]))(run);
+  view(run: RunRecord): RunView {
+    const saved = this.options
+      .registry(run.workspace)
+      .list()
+      .find((entry) => entry.graph.name === run.slug);
+
+    return this.runView(run, saved);
   }
 
-  private async viewResolver(ids: string[], registries = new Map<string, SavedLoopy[]>()) {
-    const records = await Promise.all(
-      ids.map(async (id) => {
-        const [steps, hooks] = await Promise.all([Promise.resolve([]), Promise.resolve([])]);
-
-        return [id, { steps, hooks }] as const;
-      }),
-    );
-
-    const snapshots = new Map(records);
-    const now = this.now();
-
-    return (run: RunRecord) => {
-      const snapshot = snapshots.get(run.id);
-
-      if (!snapshot) {
-        throw new ServiceError("not_found");
-      }
-
-      return runView({
-        ...snapshot,
-        run,
-        loopy: this.loopySummary(run, registries),
-        now,
-        leaseMs: this.options.store.leaseMs,
-      });
-    };
-  }
-
-  // A run outlives its registry entry, so a deleted loopy leaves the description empty.
-  private loopySummary(run: RunRecord, registries = new Map<string, SavedLoopy[]>()) {
-    const entries = this.registryEntries(this.options.registry(run.workspace), registries);
-
-    const saved = entries.find((entry) => entry.graph.name === run.slug);
-
-    return { slug: run.slug, description: saved?.graph.meta.description ?? null };
-  }
-
-  private registryEntries(registry: Registry, registries: Map<string, SavedLoopy[]>) {
-    let entries = registries.get(registry.project);
-
-    if (!entries) {
-      entries = registry.list();
-      registries.set(registry.project, entries);
-    }
-
-    return entries;
+  private runView(run: RunRecord, saved?: SavedLoopy): RunView {
+    return runView({
+      run,
+      steps: [],
+      hooks: [],
+      loopy: { slug: run.slug, description: saved?.graph.meta.description ?? null },
+      now: this.now(),
+      leaseMs: this.options.store.leaseMs,
+    });
   }
 
   private async claim(id: string, token: string) {
@@ -348,7 +315,7 @@ export class LoopyService {
       ...snapshot,
       run: runView({
         ...snapshot,
-        loopy: this.loopySummary(snapshot.run),
+        loopy: this.view(snapshot.run).loopy,
         now: this.now(),
         leaseMs: this.options.store.leaseMs,
       }),
@@ -365,10 +332,9 @@ export class LoopyService {
       );
 
     const selected = query.waiting === undefined ? runs.slice(0, query.limit) : runs;
-    const resolve = await this.viewResolver(selected.map((run) => run.id));
 
     return selected
-      .map(resolve)
+      .map((run) => this.view(run))
       .filter((run) => query.waiting === undefined || (run.waitingOn !== null) === query.waiting)
       .slice(0, query.limit);
   }
@@ -379,32 +345,33 @@ export class LoopyService {
       this.options.store.listSchedules(),
     ]);
 
-    const registries = new Map<string, SavedLoopy[]>();
-
-    const resolve = await this.viewResolver(
-      records.map((run) => run.id),
-      registries,
-    );
-
-    const runs = records.map(resolve);
-
     const workspaces = new Set([
       callerWorkspace,
-      ...runs.map((run) => run.workspace),
+      ...records.map((run) => run.workspace),
       ...schedules.map((schedule) => schedule.workspace),
     ]);
 
-    const views = new Map<string, LoopyView>();
+    const entries = new Map<string, SavedLoopy[]>();
 
     for (const workspace of workspaces) {
       const registry = this.options.registry(workspace);
 
-      for (const view of this.registryViews(
-        registry,
-        this.registryEntries(registry, registries),
-        schedules,
-        runs,
-      )) {
+      if (!entries.has(registry.project)) {
+        entries.set(registry.project, registry.list());
+      }
+    }
+
+    const runs = records.map((run) =>
+      this.runView(
+        run,
+        entries.get(run.workspace)?.find((entry) => entry.graph.name === run.slug),
+      ),
+    );
+
+    const views = new Map<string, LoopyView>();
+
+    for (const [project, saved] of entries) {
+      for (const view of this.registryViews(project, saved, schedules, runs)) {
         if (!views.has(view.slug)) {
           views.set(view.slug, view);
         }
@@ -415,7 +382,7 @@ export class LoopyService {
   }
 
   private registryViews(
-    registry: Registry,
+    project: string,
     entries: SavedLoopy[],
     schedules: Schedule[],
     runs: RunView[],
@@ -423,12 +390,9 @@ export class LoopyService {
     return entries.map((saved) =>
       loopyView(
         saved,
-        schedules.find(
-          (item) => item.slug === saved.graph.name && item.workspace === registry.project,
-        ) ?? null,
-        runs.filter(
-          (run) => saved.graph.meta.scope === "global" || run.workspace === registry.project,
-        ),
+        schedules.find((item) => item.slug === saved.graph.name && item.workspace === project) ??
+          null,
+        runs.filter((run) => saved.graph.meta.scope === "global" || run.workspace === project),
       ),
     );
   }
@@ -466,13 +430,7 @@ export class LoopyService {
   }
 
   async events(transaction: RuntimeEvent[]) {
-    const ids = [
-      ...new Set(transaction.flatMap((event) => (event.entity === "run" ? [event.record.id] : []))),
-    ];
-
-    const view = await this.viewResolver(ids);
-
-    return transaction.map((event) => serverEvent(event, view));
+    return transaction.map((event) => serverEvent(event, (run) => this.view(run)));
   }
 
   async cursor(): Promise<CursorView> {

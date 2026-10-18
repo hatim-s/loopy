@@ -1,8 +1,8 @@
 # Loopy
 
-A loopy is an async TypeScript function with durable steps. Save it by name, run it with typed input, and inspect its step trace and logs. The replay engine records completed steps in SQLite. After a sleep, retry or interrupted process, it runs the function from the top and returns recorded results for completed steps.
+A loopy is a compiled TypeScript workflow graph. Save it by name, run it with typed input, and inspect its node executions and logs. SQLite records the graph cursor and execution results so interrupted runs can continue.
 
-Requires Bun 1.4 or newer. The package root is the authoring SDK. `loopy/runtime` exposes the replay engine and store contracts; `loopy/local` provides SQLite, processes, bundling and the local daemon.
+Requires Bun 1.4 or newer. The package root is the authoring SDK. `loopy/engine` exposes the graph engine contracts; the CLI manages the local daemon.
 
 ## Try it
 
