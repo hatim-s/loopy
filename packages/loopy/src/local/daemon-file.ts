@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
 import { z } from "zod";
 import { processAlive, writeFileAtomically } from "../executor/index.js";
+import { homePaths } from "./home.js";
 
 const daemonFileSchema = z.object({
   pid: z.number().int().positive(),
@@ -13,7 +13,7 @@ const daemonFileSchema = z.object({
 type DaemonFile = z.infer<typeof daemonFileSchema>;
 
 export function readDaemonFile(home: string): DaemonFile | undefined {
-  const file = join(home, "daemon.json");
+  const file = homePaths(home).daemonFile;
 
   if (!existsSync(file)) {
     return undefined;
@@ -29,7 +29,7 @@ export function readDaemonFile(home: string): DaemonFile | undefined {
 }
 
 export async function writeDaemonFile(home: string, record: DaemonFile): Promise<void> {
-  await writeFileAtomically(join(home, "daemon.json"), `${JSON.stringify(record)}\n`, {
+  await writeFileAtomically(homePaths(home).daemonFile, `${JSON.stringify(record)}\n`, {
     mode: 0o600,
     syncDirectory: true,
   });
@@ -37,7 +37,7 @@ export async function writeDaemonFile(home: string, record: DaemonFile): Promise
 
 export function removeDaemonFile(home: string, token: string): void {
   if (readDaemonFile(home)?.token === token) {
-    rmSync(join(home, "daemon.json"));
+    rmSync(homePaths(home).daemonFile);
   }
 }
 

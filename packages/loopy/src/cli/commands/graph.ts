@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { compile, formatDiagnostics } from "../../compiler/index.js";
 import { type GraphView, graphView, routes } from "../../contract/index.js";
-import { request } from "../client.js";
+import { call } from "../client.js";
 import { type CliContext, requireTarget } from "../context.js";
 import { printJson, printLine } from "../output.js";
 
@@ -30,10 +30,6 @@ export async function runGraph(context: CliContext): Promise<void> {
   const target = requireTarget(context, "Name or file");
   const format = context.values.format ?? "json";
 
-  if (format !== "json" && format !== "text") {
-    throw new Error("Use --format json or --format text.");
-  }
-
   let graph: GraphView;
 
   if (/\.[cm]?[jt]sx?$/.test(target)) {
@@ -45,11 +41,11 @@ export async function runGraph(context: CliContext): Promise<void> {
 
     graph = graphView(result.graph);
   } else {
-    graph = await request(
-      context,
-      `/loopies/${encodeURIComponent(target)}/graph?workspace=${encodeURIComponent(context.cwd)}`,
-      routes.graph.response,
-    );
+    graph = await call(context, routes.graph, {
+      params: { slug: target },
+      query: { workspace: context.cwd },
+      body: undefined,
+    });
   }
 
   if (format === "text") {

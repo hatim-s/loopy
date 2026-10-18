@@ -7,9 +7,10 @@ import {
   routes,
 } from "../../contract/index.js";
 import type { SqliteRunStore } from "../../store/index.js";
-import type { LoopyService } from "../service.js";
+import type { LoopyService } from "../service/index.js";
 import { ServiceError } from "../service-error.js";
 import { eventStream } from "./events.js";
+import { NOSNIFF } from "./headers.js";
 
 const STATUS: Record<ErrorCode, number> = {
   not_yet: 501,
@@ -32,7 +33,7 @@ const STATUS: Record<ErrorCode, number> = {
 export function json(data: unknown, status = 200): Response {
   return Response.json(data, {
     status,
-    headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" },
+    headers: { "Cache-Control": "no-store", ...NOSNIFF },
   });
 }
 
@@ -84,14 +85,6 @@ async function parseRequest<P, Q, B>(
 ) {
   try {
     const query = Object.fromEntries(url.searchParams);
-
-    if (route.path === routes.events.path) {
-      const last = request.headers.get("Last-Event-ID");
-
-      if (last !== null) {
-        query.after = last;
-      }
-    }
 
     const body: unknown =
       ["POST", "PUT"].includes(request.method) && request.body ? await request.json() : undefined;
@@ -164,9 +157,21 @@ export function apiRoutes({ service, store, cwd, daemon }: Dependencies) {
       running: (await store.listRuns({ status: "running" })).length,
       nextWakeAt: (await store.nextWakeAt()) ?? null,
     })),
-    endpoint(routes.events, async ({ query, request }) =>
-      eventStream(store, service, query, request.signal),
-    ),
+    {
+      ...routes.events,
+      async handle(params: Record<string, string>, request: Request, url: URL) {
+        const last = request.headers.get("Last-Event-ID");
+        const queryUrl = new URL(url);
+
+        if (last !== null) {
+          queryUrl.searchParams.set("after", last);
+        }
+
+        const { query } = await parseRequest(routes.events, params, request, queryUrl);
+
+        return eventStream(store, service, query, request.signal);
+      },
+    },
     endpoint(routes.cursor, async () => service.cursor()),
   ];
 }

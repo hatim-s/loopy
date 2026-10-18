@@ -1,14 +1,15 @@
-import { join } from "node:path";
 import type { RunRecord } from "../core/index.js";
 import { LocalExecutor } from "../executor/index.js";
 import { Daemon, SYSTEM_CLOCK } from "../host/index.js";
 import type { SqliteRunStore } from "../store/index.js";
 import { readDaemonFile, removeDaemonFile, writeDaemonFile } from "./daemon-file.js";
 import { withLockDirectory } from "./fs.js";
+import { homePaths } from "./home.js";
 import { Registry } from "./registry.js";
 import { SecretStore } from "./secrets.js";
 import { startServer } from "./server/start-server.js";
-import { LoopyService } from "./service.js";
+import { requireLoopy } from "./service/context.js";
+import { LoopyService } from "./service/index.js";
 
 type DaemonOptions = {
   home: string;
@@ -27,7 +28,8 @@ function runtimeDaemon(options: DaemonOptions) {
     store,
     concurrency,
     onError,
-    revisionFor: (schedule) => new Registry(home, schedule.workspace).get(schedule.slug).revision,
+    revisionFor: (schedule) =>
+      requireLoopy(new Registry(home, schedule.workspace), schedule.slug).revision,
     prepare: async (run) => {
       const registry = new Registry(home, run.projectRoot);
 
@@ -84,7 +86,7 @@ class LocalDaemon {
     }
 
     this.starting ??= withLockDirectory(
-      join(this.options.home, "daemon-start.lock"),
+      homePaths(this.options.home).startLock,
       "daemon startup",
       () => this.startLocked(),
     ).catch((error) => {

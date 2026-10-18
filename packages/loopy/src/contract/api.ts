@@ -60,7 +60,7 @@ export type ErrorBody = z.infer<typeof errorBodySchema>;
 
 const emptySchema = z.strictObject({});
 
-const workspaceQuerySchema = z.strictObject({ workspace: z.string().optional() });
+const workspaceQuerySchema = z.strictObject({ workspace: z.string().min(1).optional() });
 
 const runParamsSchema = z.strictObject({ id: z.string() });
 
@@ -101,7 +101,7 @@ export const eventsQuerySchema = z.strictObject({
 
 export const startRunBodySchema = z.strictObject({
   input: jsonSchema,
-  workspace: z.string().optional(),
+  workspace: z.string().min(1).optional(),
 });
 
 export const resolveHookBodySchema = z.strictObject({ payload: jsonSchema });
@@ -188,7 +188,7 @@ export const routes = {
     method: "GET",
     path: "/loopies/:slug/graph",
     params: scheduleParamsSchema,
-    query: z.strictObject({ workspace: z.string().optional() }),
+    query: z.strictObject({ workspace: z.string().min(1).optional() }),
     body: z.undefined(),
     response: graphViewSchema,
   },

@@ -99,7 +99,8 @@ function importsOf(file: string): string[] {
 
 /** True for `./index`, `./index.js` and `./index.ts` alike. */
 function isBarrel(specifier: string): boolean {
-  return /\/index(\.[jt]s)?$/.test(specifier);
+  // The service index composes domain services rather than re-exporting a layer barrel.
+  return /\/index(\.[jt]s)?$/.test(specifier) && !/\/service\/index(\.[jt]s)?$/.test(specifier);
 }
 
 test("core, engine and contract exports bundle without host dependencies", async () => {

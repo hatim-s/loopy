@@ -377,45 +377,45 @@ function withSchedule(list: ScheduleView[], next: ScheduleView): ScheduleView[] 
  * a schedule the list has not seen yet is left for a refetch instead of inserted.
  */
 function applyScheduleEvent(client: QueryClient, event: ScheduleEvent): boolean {
-  const list = client.getQueryData<ScheduleView[]>(keys.schedules);
+  let known = true;
 
-  if (list === undefined) {
-    return true;
+  for (const [key, list] of client.getQueriesData<ScheduleView[]>({ queryKey: keys.schedules })) {
+    if (!list || (key[1] !== undefined && key[1] !== event.record.workspace)) {
+      continue;
+    }
+
+    if (event.kind === "deleted") {
+      client.setQueryData<ScheduleView[]>(key, (current) =>
+        current?.filter((item) => !sameSchedule(item, event.record)),
+      );
+    } else if (key[1] !== undefined || list.some((item) => sameSchedule(item, event.record))) {
+      const view = { ...event.record, lastFireKey: event.record.lastFireKey ?? null };
+      client.setQueryData<ScheduleView[]>(key, (current) => current && withSchedule(current, view));
+    } else {
+      known = false;
+    }
   }
 
-  if (event.kind === "deleted") {
-    client.setQueryData<ScheduleView[]>(keys.schedules, (current) =>
-      current?.filter((item) => !sameSchedule(item, event.record)),
-    );
-
-    return true;
-  }
-
-  if (!list.some((item) => sameSchedule(item, event.record))) {
-    return false;
-  }
-
-  const view = { ...event.record, lastFireKey: event.record.lastFireKey ?? null };
-  client.setQueryData<ScheduleView[]>(
-    keys.schedules,
-    (current) => current && withSchedule(current, view),
-  );
-
-  return true;
+  return known;
 }
 
-/** Writes a schedule returned by a mutation. It belongs to the listed workspace, so it may insert. */
 export function applyScheduleView(client: QueryClient, view: ScheduleView): void {
-  client.setQueryData<ScheduleView[]>(
-    keys.schedules,
-    (current) => current && withSchedule(current, view),
-  );
+  for (const [key] of client.getQueriesData<ScheduleView[]>({ queryKey: keys.schedules })) {
+    if (key[1] !== undefined && key[1] !== view.workspace) {
+      continue;
+    }
+
+    client.setQueryData<ScheduleView[]>(key, (current) => current && withSchedule(current, view));
+  }
+
   void client.invalidateQueries({ queryKey: keys.loopies });
 }
 
-export function removeScheduleView(client: QueryClient, slug: string): void {
-  client.setQueryData<ScheduleView[]>(keys.schedules, (current) =>
-    current?.filter((item) => item.slug !== slug),
+export function removeScheduleView(client: QueryClient, slug: string, workspace?: string): void {
+  client.setQueriesData<ScheduleView[]>({ queryKey: keys.schedules }, (current) =>
+    current?.filter(
+      (item) => item.slug !== slug || (workspace !== undefined && item.workspace !== workspace),
+    ),
   );
   void client.invalidateQueries({ queryKey: keys.loopies });
 }

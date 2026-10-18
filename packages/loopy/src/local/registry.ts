@@ -17,6 +17,7 @@ import {
 } from "../core/index.js";
 import { writeFileAtomically } from "../executor/index.js";
 import { canonicalPath, withLockDirectory } from "./fs.js";
+import { homePaths } from "./home.js";
 import { ServiceError } from "./service-error.js";
 
 function readEntry(file: string) {
@@ -61,7 +62,7 @@ export class Registry {
   ) {
     this.project = projectRoot(cwd);
     this.projectDirectory = join(this.project, ".loopy", "loopies");
-    this.globalDirectory = join(home, "loopies");
+    this.globalDirectory = homePaths(home).loopies;
     cleanEntries(this.projectDirectory);
     cleanEntries(this.globalDirectory);
   }
@@ -70,7 +71,7 @@ export class Registry {
     return join(scope === "project" ? this.projectDirectory : this.globalDirectory, `${slug}.json`);
   }
 
-  get(slug: string): SavedLoopy {
+  get(slug: string): SavedLoopy | null {
     for (const scope of ["project", "global"] as const) {
       const file = this.entryFile(slug, scope);
 
@@ -79,10 +80,7 @@ export class Registry {
       }
     }
 
-    throw new ServiceError(
-      "not_found",
-      `No saved loopy '${slug}'. Use loopy save <file.ts> first.`,
-    );
+    return null;
   }
 
   list(): SavedLoopy[] {
@@ -189,8 +187,8 @@ export class Registry {
     revision: string,
     graph: Graph,
   ) {
-    for (const directory of ["bundles", "graphs"]) {
-      mkdirSync(join(this.home, directory), { recursive: true, mode: 0o700 });
+    for (const directory of ["bundles", "graphs"] as const) {
+      mkdirSync(homePaths(this.home)[directory], { recursive: true, mode: 0o700 });
     }
 
     for (const bundle of bundles) {
@@ -208,8 +206,8 @@ export class Registry {
     }
   }
 
-  private artifactPath(directory: string, hash: string, extension: string) {
-    return join(this.home, directory, `${hashSchema.parse(hash)}.${extension}`);
+  private artifactPath(directory: "bundles" | "graphs", hash: string, extension: string) {
+    return join(homePaths(this.home)[directory], `${hashSchema.parse(hash)}.${extension}`);
   }
 
   bundlePath(hash: string) {

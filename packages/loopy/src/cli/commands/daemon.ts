@@ -1,29 +1,10 @@
 import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
-import {
-  DEFAULT_PORT,
-  installDaemon,
-  localDaemon,
-  readDaemonFile,
-  uninstallDaemon,
-} from "../../local/index.js";
-import { openRunStore, type SqliteRunStore } from "../../store/index.js";
+import { installDaemon, localDaemon, readDaemonFile, uninstallDaemon } from "../../local/index.js";
+import { openRunStore } from "../../store/index.js";
 import { type CliContext, requireTarget } from "../context.js";
 import { printJson, printLine, report } from "../output.js";
 import { onTermination } from "../signals.js";
-
-async function withRunStore<T>(
-  context: Pick<CliContext, "home" | "leaseMs">,
-  fn: (store: SqliteRunStore) => Promise<T>,
-) {
-  const store = openRunStore(context.home, { leaseMs: context.leaseMs });
-
-  try {
-    return await fn(store);
-  } finally {
-    store.close();
-  }
-}
 
 export async function runDaemon(context: CliContext): Promise<void> {
   const action = requireTarget(context, "Daemon action");
@@ -48,15 +29,11 @@ export async function runDaemon(context: CliContext): Promise<void> {
     return;
   }
 
-  if (action !== "run") {
-    throw new Error("Unknown daemon action. Use loopy daemon run, install, uninstall or status.");
-  }
-
   await runForeground(context, reportAddress);
 }
 
 async function installService(context: CliContext): Promise<void> {
-  const { port, concurrency } = daemonFlags(context);
+  const { port, concurrency } = context.values;
   const entry = process.argv[1];
 
   if (!entry) {
@@ -84,50 +61,31 @@ function reportAddress(url: string): void {
   printLine("Run loopy ui to open the dashboard.");
 }
 
-export async function runForeground(
-  context: CliContext,
-  onStarted: (url: string) => void,
-): Promise<void> {
-  const flags = daemonFlags(context);
-  await withRunStore(context, async (store) => {
-    const daemon = localDaemon({
-      ...context,
-      store,
-      ...flags,
-      onError: (error, run) => report(run ? `Run ${run.id}: ${error.message}` : error.message),
-    });
+async function runForeground(context: CliContext, onStarted: (url: string) => void): Promise<void> {
+  const { home, cwd, values } = context;
+  const store = openRunStore(home, { leaseMs: values["lease-ms"] });
 
-    const stop = () => {
-      void daemon.stop();
-    };
-
-    const cleanup = onTermination(stop);
-
-    try {
-      onStarted(await daemon.start());
-      await daemon.run();
-    } finally {
-      cleanup();
-      await daemon.stop();
-    }
+  const daemon = localDaemon({
+    home,
+    cwd,
+    store,
+    port: values.port,
+    concurrency: values.concurrency ?? 4,
+    onError: (error, run) => report(run ? `Run ${run.id}: ${error.message}` : error.message),
   });
-}
 
-function daemonFlags(context: CliContext) {
-  const port = context.values.port === undefined ? DEFAULT_PORT : Number(context.values.port);
+  const cleanup = onTermination(() => {
+    void daemon.stop();
+  });
 
-  const concurrency =
-    context.values.concurrency === undefined ? 4 : Number(context.values.concurrency);
-
-  if (!Number.isSafeInteger(concurrency) || concurrency < 1) {
-    throw new Error("Daemon concurrency must be a positive integer. Supply at least one worker.");
+  try {
+    onStarted(await daemon.start());
+    await daemon.run();
+  } finally {
+    cleanup();
+    await daemon.stop();
+    store.close();
   }
-
-  if (!Number.isInteger(port) || port < 0 || port > 65535) {
-    throw new Error("Port must be an integer from 0 to 65535.");
-  }
-
-  return { port, concurrency };
 }
 
 function serviceUid(): number {

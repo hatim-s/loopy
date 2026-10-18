@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { errorMessage } from "../../core/index.js";
 import { daemonUrl } from "../daemon-file.js";
 import { serveAsset, snapshotAssets } from "./assets.js";
-import { apiRoutes, dispatch, errorResponse, json } from "./routes.js";
+import { apiRoutes, dispatch, errorResponse } from "./routes.js";
 
 export const DEFAULT_PORT = 4310;
 
@@ -101,7 +101,7 @@ async function respond(
     return response;
   } catch (error) {
     return error instanceof URIError
-      ? json({ error: errorMessage(error) }, 400)
+      ? errorResponse("bad_request")
       : errorResponse("internal", errorMessage(error));
   }
 }

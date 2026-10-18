@@ -1,7 +1,5 @@
 import { routes } from "../../contract/index.js";
-import { validateSecretName } from "../../core/index.js";
-import { validateSecretValue } from "../../local/index.js";
-import { request } from "../client.js";
+import { call } from "../client.js";
 import { type CliContext, optionalTarget, requireHead } from "../context.js";
 import { printJson } from "../output.js";
 import { readHiddenSecret, readPipedSecret } from "../secret-entry.js";
@@ -11,14 +9,9 @@ async function storeSecret(context: CliContext, name: string | undefined) {
     throw new Error("Pass a secret name, e.g. loopy secrets set NPM_TOKEN.");
   }
 
-  validateSecretName(name);
   const value = await (context.values.stdin ? readPipedSecret() : readHiddenSecret());
-  validateSecretValue(value);
   printJson(
-    await request(context, `/secrets/${encodeURIComponent(name)}`, routes.putSecret.response, {
-      method: "PUT",
-      body: { value },
-    }),
+    await call(context, routes.putSecret, { params: { name }, query: {}, body: { value } }),
   );
 }
 
@@ -36,7 +29,7 @@ export async function runSecrets(context: CliContext): Promise<void> {
         throw new Error("loopy secrets list takes no name.");
       }
 
-      printJson(await request(context, "/secrets", routes.secrets.response));
+      printJson(await call(context, routes.secrets, { params: {}, query: {}, body: undefined }));
 
       return;
     case "set":
@@ -49,12 +42,7 @@ export async function runSecrets(context: CliContext): Promise<void> {
       }
 
       printJson(
-        await request(
-          context,
-          `/secrets/${encodeURIComponent(name)}`,
-          routes.deleteSecret.response,
-          { method: "DELETE" },
-        ),
+        await call(context, routes.deleteSecret, { params: { name }, query: {}, body: undefined }),
       );
 
       return;

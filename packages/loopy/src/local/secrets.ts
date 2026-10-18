@@ -8,25 +8,14 @@ import {
   openSync,
   readFileSync,
 } from "node:fs";
-import { join, resolve } from "node:path";
-import {
-  errnoCode,
-  isString,
-  requireRecord,
-  setOwnProperty,
-  validateSecretName,
-} from "../core/index.js";
+import { resolve } from "node:path";
+import { z } from "zod";
+import { secretNameSchema, secretValueSchema } from "../contract/index.js";
+import { errnoCode, setOwnProperty } from "../core/index.js";
 import { writeFileAtomically } from "../executor/index.js";
 import { withLockDirectory } from "./fs.js";
+import { homePaths } from "./home.js";
 import { ServiceError } from "./service-error.js";
-
-const MAX_VALUE_BYTES = 64 * 1024;
-
-export function validateSecretValue(value: string): void {
-  if (!value || value.includes("\0") || Buffer.byteLength(value) > MAX_VALUE_BYTES) {
-    throw new Error("A secret must be nonempty, contain no NUL bytes, and fit within 64 KiB.");
-  }
-}
 
 function assertOwned(stats: ReturnType<typeof fstatSync>, label: string): void {
   if (process.getuid && stats.uid !== process.getuid()) {
@@ -34,24 +23,7 @@ function assertOwned(stats: ReturnType<typeof fstatSync>, label: string): void {
   }
 }
 
-// BOUNDARY: The secrets.json file is checked for an object with valid secret names and bounded string values.
-function parseSecrets(value: unknown) {
-  const record = requireRecord(value, "The secret store");
-  const secrets: Record<string, string> = {};
-
-  for (const [name, secret] of Object.entries(record)) {
-    validateSecretName(name);
-
-    if (!isString(secret)) {
-      throw new Error(`The secret store value for '${name}' must be a string.`);
-    }
-
-    validateSecretValue(secret);
-    setOwnProperty(secrets, name, secret);
-  }
-
-  return secrets;
-}
+const secretsSchema = z.record(secretNameSchema, secretValueSchema);
 
 /** Plaintext storage protected by user-only permissions. No values are printed by the CLI. */
 export class SecretStore {
@@ -60,7 +32,7 @@ export class SecretStore {
 
   constructor(home: string) {
     this.directory = resolve(home);
-    this.file = join(this.directory, "secrets.json");
+    this.file = homePaths(this.directory).secrets;
   }
 
   private directoryExists(create: boolean): boolean {
@@ -140,7 +112,7 @@ export class SecretStore {
       closeSync(fd);
     }
 
-    return parseSecrets(value);
+    return secretsSchema.parse(value);
   }
 
   list(): string[] {
@@ -148,7 +120,7 @@ export class SecretStore {
   }
 
   get(name: string): string {
-    validateSecretName(name);
+    secretNameSchema.parse(name);
     const values = this.snapshot();
     const value = Object.hasOwn(values, name) ? values[name] : undefined;
 
@@ -164,7 +136,7 @@ export class SecretStore {
 
   private async update(change: (values: Record<string, string>) => void): Promise<void> {
     this.directoryExists(true);
-    await withLockDirectory(join(this.directory, ".secrets.lock"), "secret update", async () => {
+    await withLockDirectory(homePaths(this.directory).secretsLock, "secret update", async () => {
       const values = this.snapshot();
       change(values);
       await writeFileAtomically(this.file, `${JSON.stringify(values)}\n`, {
@@ -175,13 +147,13 @@ export class SecretStore {
   }
 
   async set(name: string, value: string): Promise<void> {
-    validateSecretName(name);
-    validateSecretValue(value);
+    secretNameSchema.parse(name);
+    secretValueSchema.parse(value);
     await this.update((values) => setOwnProperty(values, name, value));
   }
 
   async remove(name: string): Promise<void> {
-    validateSecretName(name);
+    secretNameSchema.parse(name);
     await this.update((values) => {
       delete values[name];
     });

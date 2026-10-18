@@ -1,4 +1,5 @@
 import { parseArgs } from "node:util";
+import { z } from "zod";
 
 const OPTIONS = {
   format: { type: "string" },
@@ -18,6 +19,73 @@ const OPTIONS = {
   replace: { type: "boolean" },
   stdin: { type: "boolean" },
 } as const;
+
+const optionValues = z.object({
+  home: z.string().optional(),
+  cwd: z.string().optional(),
+  help: z.boolean().optional(),
+  format: z.enum(["json", "text"]).optional(),
+  "input-json": z.string().optional(),
+  "input-file": z.string().optional(),
+  follow: z.boolean().optional(),
+  cron: z.string().optional(),
+  tz: z.string().optional(),
+  action: z.enum(["set", "enable", "disable", "off"]).optional(),
+  concurrency: z.coerce.number().int().min(1).optional(),
+  port: z.coerce.number().int().min(0).max(65535).optional(),
+  "lease-ms": z.coerce.number().int().min(1000).optional(),
+  out: z.string().optional(),
+  name: z.string().optional(),
+  replace: z.boolean().optional(),
+  stdin: z.boolean().optional(),
+});
+
+const globals = optionValues.pick({ home: true, cwd: true, help: true });
+
+const fields = optionValues.shape;
+
+const commandSchemas = {
+  run: globals.extend({ "input-json": fields["input-json"], "input-file": fields["input-file"] }),
+  resume: globals,
+  cancel: globals,
+  inspect: globals,
+  list: globals,
+  runs: globals,
+  logs: globals.extend({ follow: fields.follow }),
+  save: globals.extend({ replace: fields.replace }),
+  graph: globals.extend({ format: fields.format.default("json") }),
+  types: globals.extend({ out: fields.out.unwrap(), name: fields.name }),
+  ui: globals.extend({ port: fields.port }),
+  schedule: globals
+    .extend({
+      action: fields.action.default("set"),
+      cron: fields.cron,
+      tz: fields.tz,
+      "input-json": fields["input-json"],
+    })
+    .refine(
+      (value) =>
+        value.action === "set" ||
+        (value.cron === undefined && value.tz === undefined && value["input-json"] === undefined),
+      { message: "Only schedule set accepts cron, timezone and input." },
+    ),
+  "daemon run": globals.extend({
+    concurrency: fields.concurrency.default(4),
+    port: fields.port.default(4310),
+    "lease-ms": fields["lease-ms"],
+  }),
+  "daemon install": globals.extend({
+    concurrency: fields.concurrency.default(4),
+    port: fields.port.default(4310),
+  }),
+  "daemon uninstall": globals,
+  "daemon status": globals,
+  "secrets set": globals.extend({ stdin: fields.stdin }),
+  "secrets list": globals,
+  "secrets remove": globals,
+};
+
+const schemas = new Map(Object.entries(commandSchemas));
 
 const GLOBAL_OPTIONS = ["home", "cwd", "help"] as const;
 
@@ -227,8 +295,27 @@ export function parseCliArgs(args: string[]) {
   }
 
   return {
-    values: parsed.values,
+    values: valuesFor(scope, parsed),
     positionals: parsed.positionals,
     namedInput: inputs.size ? Object.fromEntries(inputs) : undefined,
   };
+}
+
+function valuesFor(
+  scope: string,
+  parsed: ReturnType<typeof parseArgs>,
+): z.output<typeof optionValues> {
+  if (parsed.values.help || !scope) {
+    return globals.parse(parsed.values);
+  }
+
+  const schema = schemas.get(scope);
+
+  if (!schema) {
+    throw new Error(`Unknown command '${scope}'. Run loopy --help.`);
+  }
+
+  const action = scope === "schedule" ? { action: parsed.positionals[2] } : {};
+
+  return schema.parse({ ...parsed.values, ...action });
 }

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { executionKeySchema, executionResultSchema } from "../contract/index.js";
 import { type ExecutionKey, errnoCode, executionKeyString } from "../core/index.js";
 import { syncDirectory, writeFileAtomically } from "./fs.js";
+import { homePaths } from "./paths.js";
 
 const identity = { executionKey: executionKeySchema, attempt: z.number().int().positive() };
 
@@ -19,15 +20,11 @@ function pathSegment(value: string) {
 
 export async function receiptPath(home: string, key: ExecutionKey, attempt: number) {
   await mkdir(home, { recursive: true, mode: 0o700 });
-  let directory = await realpath(home);
+  const receipts = homePaths(await realpath(home)).receipts;
+  const run = join(receipts, pathSegment(key.runId));
+  const execution = join(run, pathSegment(executionKeyString(key)));
 
-  for (const segment of [
-    "receipts",
-    pathSegment(key.runId),
-    pathSegment(executionKeyString(key)),
-  ]) {
-    directory = join(directory, segment);
-
+  for (const directory of [receipts, run, execution]) {
     try {
       await mkdir(directory, { mode: 0o700 });
     } catch (cause) {
@@ -41,7 +38,7 @@ export async function receiptPath(home: string, key: ExecutionKey, attempt: numb
     }
   }
 
-  return join(directory, `${attempt}.json`);
+  return join(execution, `${attempt}.json`);
 }
 
 export async function lookupFile(path: string) {

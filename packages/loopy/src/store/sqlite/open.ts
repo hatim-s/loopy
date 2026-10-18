@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { homePaths } from "../../executor/index.js";
 import { SqliteRunStore } from "./store.js";
 import { SCHEMA, SCHEMA_VERSION } from "./store-schema.js";
 
@@ -40,5 +40,5 @@ export function openDatabase(file: string) {
 export function openRunStore(home: string, options: { leaseMs?: number } = {}) {
   mkdirSync(home, { recursive: true, mode: 0o700 });
 
-  return new SqliteRunStore(join(home, "runs.sqlite"), Date.now, options);
+  return new SqliteRunStore(homePaths(home).runsDb, Date.now, options);
 }

@@ -8,11 +8,11 @@ export { defaultHome } from "./home.js";
 
 export { Registry } from "./registry.js";
 
-export { SecretStore, validateSecretValue } from "./secrets.js";
+export { SecretStore } from "./secrets.js";
 
 export { DEFAULT_PORT } from "./server/start-server.js";
 
-export { LoopyService } from "./service.js";
+export { LoopyService } from "./service/index.js";
 
 export { ServiceError } from "./service-error.js";
 

@@ -1,6 +1,7 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
+import { homePaths } from "./home.js";
 
 type ServiceOptions = {
   platform?: "darwin" | "linux";
@@ -98,7 +99,7 @@ export async function installDaemon(options: InstallOptions): Promise<void> {
     options.home,
   ];
 
-  await mkdir(join(options.home, "logs"), { recursive: true });
+  await mkdir(homePaths(options.home).logs, { recursive: true });
 
   const content =
     target.platform === "darwin"
@@ -179,7 +180,7 @@ function unitQuote(value: string): string {
 }
 
 export function daemonPlist(home: string, command: string[], path: string): string {
-  const log = xml(join(home, "logs/daemon.log"));
+  const log = xml(homePaths(home).daemonLog);
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -205,8 +206,8 @@ ExecStart=${command.map((arg) => unitQuote(arg.replaceAll("$", () => "$$"))).joi
 Restart=always
 WorkingDirectory=${home.replaceAll("%", "%%")}
 Environment=${unitQuote(`LOOPY_HOME=${home}`)} ${unitQuote(`PATH=${path}`)}
-StandardOutput=append:${join(home, "logs/daemon.log").replaceAll("%", "%%")}
-StandardError=append:${join(home, "logs/daemon.log").replaceAll("%", "%%")}
+StandardOutput=append:${homePaths(home).daemonLog.replaceAll("%", "%%")}
+StandardError=append:${homePaths(home).daemonLog.replaceAll("%", "%%")}
 
 [Install]
 WantedBy=default.target

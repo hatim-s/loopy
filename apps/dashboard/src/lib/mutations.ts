@@ -39,26 +39,25 @@ export async function toggleSchedule(
   change: { slug: string; enabled: boolean; workspace?: string },
 ) {
   const { slug, enabled, workspace } = change;
-  await client.cancelQueries({ queryKey: keys.schedules });
+  const queryKey = workspace === undefined ? keys.schedules : keys.schedulesIn(workspace);
+  await client.cancelQueries({ queryKey });
 
   const previous = client
-    .getQueryData<ScheduleView[]>(keys.schedules)
+    .getQueryData<ScheduleView[]>(queryKey)
     ?.find((item) => item.slug === slug);
 
   const optimistic = previous && { ...previous, enabled };
-  client.setQueryData<ScheduleView[]>(keys.schedules, (current) =>
+  client.setQueryData<ScheduleView[]>(queryKey, (current) =>
     current?.map((item) => (item === previous && optimistic ? optimistic : item)),
   );
 
   // React Query may structurally share an unchanged row, so keep the cached identity.
-  const written = client
-    .getQueryData<ScheduleView[]>(keys.schedules)
-    ?.find((item) => item.slug === slug);
+  const written = client.getQueryData<ScheduleView[]>(queryKey)?.find((item) => item.slug === slug);
 
   try {
     return await backend.setScheduleEnabled(slug, enabled, workspace);
   } catch (error) {
-    client.setQueryData<ScheduleView[]>(keys.schedules, (current) =>
+    client.setQueryData<ScheduleView[]>(queryKey, (current) =>
       current?.map((item) => (item === written && previous ? previous : item)),
     );
     throw error;
@@ -81,6 +80,6 @@ export function useRemoveSchedule(slug: string, workspace?: string) {
 
   return useMutation({
     mutationFn: () => backend.deleteSchedule(slug, workspace),
-    onSuccess: () => removeScheduleView(client, slug),
+    onSuccess: () => removeScheduleView(client, slug, workspace),
   });
 }

@@ -65,3 +65,19 @@ export function envArgs(env: NodeJS.ProcessEnv): string[] {
     return `${name}=${value ?? ""}`;
   });
 }
+
+export function homePaths(home: string) {
+  return {
+    daemonFile: join(home, "daemon.json"),
+    startLock: join(home, "daemon-start.lock"),
+    secrets: join(home, "secrets.json"),
+    secretsLock: join(home, ".secrets.lock"),
+    loopies: join(home, "loopies"),
+    bundles: join(home, "bundles"),
+    graphs: join(home, "graphs"),
+    receipts: join(home, "receipts"),
+    logs: join(home, "logs"),
+    daemonLog: join(home, "logs", "daemon.log"),
+    runsDb: join(home, "runs.sqlite"),
+  };
+}

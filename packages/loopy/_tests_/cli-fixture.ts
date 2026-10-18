@@ -8,6 +8,7 @@ import { activate, SYSTEM_CLOCK } from "../src/host/index.js";
 import { LoopyService, Registry } from "../src/local/index.js";
 import { SecretStore } from "../src/local/secrets.js";
 import { openRunStore } from "../src/store/index.js";
+import { present } from "./fixture.js";
 
 export const roots: string[] = [];
 
@@ -73,7 +74,7 @@ export async function save(f: ReturnType<typeof fixture>) {
       replace: false,
     });
 
-    return new Registry(f.home, f.cwd).get(result.graph.name);
+    return present(new Registry(f.home, f.cwd).get(result.graph.name));
   } finally {
     store.close();
   }
@@ -106,7 +107,10 @@ export async function runFixture(f: ReturnType<typeof fixture>) {
         workspace: f.cwd,
         mode: saved.graph.meta.mode,
         secrets: Object.fromEntries(
-          saved.graph.meta.secrets.map((name) => [name, new SecretStore(f.home).get(name)]),
+          saved.graph.meta.secrets.map((name) => [
+            name,
+            present(new SecretStore(f.home).get(name)),
+          ]),
         ),
         bundlePath: (hash) => new Registry(f.home, f.cwd).bundlePath(hash),
       }),

@@ -581,6 +581,13 @@ test("a deleted schedule leaves the list without a refetch, and only for its wor
   const client = new QueryClient();
   const elsewhere = { ...scheduled, workspace: "/elsewhere" };
   client.setQueryData(keys.schedules, [scheduled, elsewhere]);
+  client.setQueryData(keys.schedulesIn("/work"), [scheduled]);
+  client.setQueryData(keys.schedulesIn("/elsewhere"), [elsewhere]);
+  applyBatch(client, [scheduleSaved(10, { ...record, enabled: false, version: 3 })]);
+  expect(client.getQueryData<ScheduleView[]>(keys.schedulesIn("/work"))).toEqual([
+    { ...scheduled, enabled: false, version: 3 },
+  ]);
+  expect(client.getQueryData<ScheduleView[]>(keys.schedulesIn("/elsewhere"))).toEqual([elsewhere]);
 
   applyBatch(client, [
     event(11, {
@@ -593,6 +600,8 @@ test("a deleted schedule leaves the list without a refetch, and only for its wor
 
   expect(client.getQueryData<ScheduleView[]>(keys.schedules)).toEqual([elsewhere]);
   expect(client.getQueryState(keys.schedules)?.isInvalidated).toBe(false);
+  expect(client.getQueryData<ScheduleView[]>(keys.schedulesIn("/work"))).toEqual([]);
+  expect(client.getQueryData<ScheduleView[]>(keys.schedulesIn("/elsewhere"))).toEqual([elsewhere]);
 });
 
 test("a delayed HTTP response cannot undo a fire at the same version", () => {

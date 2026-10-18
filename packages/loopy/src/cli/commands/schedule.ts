@@ -1,55 +1,37 @@
 import { routes } from "../../contract/index.js";
-import { request } from "../client.js";
+import { call } from "../client.js";
 import { type CliContext, requireHead } from "../context.js";
 import { jsonInput } from "../input.js";
 import { printJson } from "../output.js";
 
 export async function runSchedule(context: CliContext): Promise<void> {
   const { head: slug, rest } = requireHead(context, "Slug");
-  const [action = "set", ...extra] = rest;
 
-  if (extra.length || !["set", "enable", "disable", "off"].includes(action)) {
-    throw new Error("Use schedule <slug> [set|enable|disable|off].");
+  if (rest.length > 1) {
+    throw new Error(`Unexpected arguments: ${rest.slice(1).join(" ")}.`);
   }
 
-  const { cron, tz } = context.values;
-
-  if (
-    action !== "set" &&
-    (cron !== undefined || tz !== undefined || context.values["input-json"] !== undefined)
-  ) {
-    throw new Error("Only schedule set accepts cron, timezone and input.");
-  }
-
-  const path = `/loopies/${encodeURIComponent(slug)}/schedule`;
-
-  const workspace = `?workspace=${encodeURIComponent(context.cwd)}`;
+  const { action, cron, tz } = context.values;
+  const params = { slug };
+  const query = { workspace: context.cwd };
 
   if (action === "off") {
+    printJson(await call(context, routes.deleteSchedule, { params, query, body: undefined }));
+  } else if (action === "enable" || action === "disable") {
     printJson(
-      await request(context, `${path}${workspace}`, routes.deleteSchedule.response, {
-        method: "DELETE",
-      }),
-    );
-
-    return;
-  }
-
-  if (action === "enable" || action === "disable") {
-    printJson(
-      await request(context, `${path}/enabled${workspace}`, routes.setScheduleEnabled.response, {
-        method: "POST",
+      await call(context, routes.setScheduleEnabled, {
+        params,
+        query,
         body: { enabled: action === "enable" },
       }),
     );
-
-    return;
+  } else {
+    printJson(
+      await call(context, routes.putSchedule, {
+        params,
+        query,
+        body: { cron, tz, input: await jsonInput(context) },
+      }),
+    );
   }
-
-  printJson(
-    await request(context, `${path}${workspace}`, routes.putSchedule.response, {
-      method: "PUT",
-      body: { cron, tz, input: await jsonInput(context) },
-    }),
-  );
 }

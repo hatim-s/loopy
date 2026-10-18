@@ -117,3 +117,11 @@ export function codeGraph(out: OutSchema = { kind: "value", type: "number" }) {
 
   return graph;
 }
+
+export function present<T>(value: T | null | undefined): T {
+  if (value === null || value === undefined) {
+    throw new Error("Expected a fixture value.");
+  }
+
+  return value;
+}

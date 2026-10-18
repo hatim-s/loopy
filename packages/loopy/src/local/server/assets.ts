@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { extname, join } from "node:path";
+import { NOSNIFF } from "./headers.js";
 
 export type Asset = { body: Blob; type: string };
 
@@ -53,7 +54,7 @@ export function serveAsset(assets: Map<string, Asset>, request: Request, path: s
   return new Response(request.method === "HEAD" ? null : file.body, {
     headers: {
       "Content-Type": file.type,
-      "X-Content-Type-Options": "nosniff",
+      ...NOSNIFF,
       "Referrer-Policy": "no-referrer",
       "Content-Security-Policy": CONTENT_SECURITY_POLICY,
     },

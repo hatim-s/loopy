@@ -40,7 +40,7 @@ test("reserved options stay separate and separator allows colliding input keys",
 
   expect(parsed.values.cwd).toBe("/tmp/work");
   expect(parsed.namedInput).toEqual({ full: "false", input: "text" });
-  expect(parseCliArgs(["types", "tool", "--", "--help"]).positionals).toEqual([
+  expect(parseCliArgs(["types", "tool", "--out", "tool.ts", "--", "--help"]).positionals).toEqual([
     "types",
     "tool",
     "--help",

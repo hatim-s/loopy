@@ -35,7 +35,12 @@ const HOUR_MS = 3_600_000;
 /** An in-memory backend that plays a scripted run, for tests and `VITE_BACKEND=fake`. */
 export function fakeBackend(script: FakeScript): LoopyBackend {
   const snapshots = new Map(script.runs.map((snapshot) => [snapshot.run.id, snapshot]));
-  const schedules = new Map(script.schedules.map((schedule) => [schedule.slug, schedule]));
+  const scheduleKey = (workspace: string, slug: string) => `${workspace}\0${slug}`;
+
+  const schedules = new Map(
+    script.schedules.map((schedule) => [scheduleKey(schedule.workspace, schedule.slug), schedule]),
+  );
+
   const pending = [...script.batches];
   const released: ServerEvent[][] = [];
   const listeners = new Set<(batch: ServerEvent[]) => void>();
@@ -87,8 +92,10 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
     held = publish(drafts).some((event) => event.entity === "hook" && event.kind === "created");
   }
 
-  function schedule(slug: string): ScheduleView {
-    const found = schedules.get(slug);
+  function schedule(slug: string, workspace?: string): ScheduleView {
+    const found = [...schedules.values()].find(
+      (item) => item.slug === slug && (workspace === undefined || item.workspace === workspace),
+    );
 
     if (!found) {
       throw new BackendError("not_found");
@@ -100,7 +107,7 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
   function saveSchedule(view: ScheduleView): ScheduleView {
     const saved = { ...view, version: view.version + 1 };
     const { lastFireKey, ...record } = saved;
-    schedules.set(saved.slug, saved);
+    schedules.set(scheduleKey(saved.workspace, saved.slug), saved);
     publish([
       {
         entity: "schedule",
@@ -114,7 +121,7 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
   }
 
   /** The fake has no cron engine: a new schedule fires in an hour and edits keep the time. */
-  function newSchedule(slug: string, body: PutScheduleBody): ScheduleView {
+  function newSchedule(slug: string, body: PutScheduleBody, workspace = "fake"): ScheduleView {
     const declared = script.loopies.find((loopy) => loopy.slug === slug)?.schedule;
 
     const cron = body.cron ?? declared?.cron;
@@ -124,7 +131,7 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
     }
 
     return {
-      workspace: "fake",
+      workspace,
       slug,
       cron,
       tz: body.tz ?? declared?.tz ?? "UTC",
@@ -265,14 +272,22 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
       [...schedules.values()].filter(
         (schedule) => workspace === undefined || schedule.workspace === workspace,
       ),
-    putSchedule: async (slug, body) =>
-      saveSchedule({ ...(schedules.get(slug) ?? newSchedule(slug, body)), ...body }),
-    setScheduleEnabled: async (slug, enabled) => saveSchedule({ ...schedule(slug), enabled }),
-    deleteSchedule: async (slug) => {
-      const existing = schedules.get(slug);
+    putSchedule: async (slug, body, workspace) => {
+      const previous = [...schedules.values()].find(
+        (item) => item.slug === slug && (workspace === undefined || item.workspace === workspace),
+      );
+
+      return saveSchedule({ ...(previous ?? newSchedule(slug, body, workspace)), ...body });
+    },
+    setScheduleEnabled: async (slug, enabled, workspace) =>
+      saveSchedule({ ...schedule(slug, workspace), enabled }),
+    deleteSchedule: async (slug, workspace) => {
+      const existing = [...schedules.values()].find(
+        (item) => item.slug === slug && (workspace === undefined || item.workspace === workspace),
+      );
 
       if (existing) {
-        schedules.delete(slug);
+        schedules.delete(scheduleKey(existing.workspace, slug));
         publish([
           {
             entity: "schedule",

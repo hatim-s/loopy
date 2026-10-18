@@ -2,6 +2,8 @@ export { writeFileAtomically } from "./fs.js";
 
 export { LocalExecutor } from "./local.js";
 
+export { homePaths } from "./paths.js";
+
 export { executeLocalCommand, processAlive, withCommandSandbox } from "./process.js";
 
 export { withBundleSandbox } from "./sandbox/launch.js";

@@ -50,9 +50,9 @@ const invalidInputs: Json[] = [
 for (const input of invalidInputs) {
   test("invalid graph input leaves no queued run", async () => {
     const f = await setup();
-    await expect(f.service.startRun("input", input, f.workspace)).rejects.toThrow(
-      "Input does not match the saved graph schema.",
-    );
+    await expect(f.service.startRun("input", input, f.workspace)).rejects.toMatchObject({
+      code: "bad_request",
+    });
     expect(await f.store.listRuns()).toEqual([]);
   });
 }

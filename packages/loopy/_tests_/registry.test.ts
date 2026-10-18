@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { revision } from "../src/core/index.js";
 import { Registry } from "../src/local/index.js";
 import { compiledBody } from "./compiled-fixture.js";
+import { present } from "./fixture.js";
 
 const roots: string[] = [];
 
@@ -49,8 +50,8 @@ test("registry lookup uses the nearest project root and falls back to global ent
   const child = join(f.project, "nested", "child");
   mkdirSync(child, { recursive: true });
   expect(new Registry(f.home, child).project).toBe(f.project);
-  expect(new Registry(f.home, child).get("saved").revision).toBe(definition.revision);
-  expect(new Registry(f.home, f.root).get("saved").revision).toBe(
+  expect(present(new Registry(f.home, child).get("saved")).revision).toBe(definition.revision);
+  expect(present(new Registry(f.home, f.root).get("saved")).revision).toBe(
     await revision({ ...definition.graph, meta: { ...definition.graph.meta, scope: "global" } }),
   );
   expect(new Registry(f.home, child).list()).toHaveLength(1);
@@ -92,10 +93,10 @@ test("changing scope removes only the other entry owned by the same source", asy
     revision: definition.revision,
     source: { ...definition.source, path: other },
   });
-  expect(new Registry(f.home, f.root).get("saved").revision).toBe(
+  expect(present(new Registry(f.home, f.root).get("saved")).revision).toBe(
     await revision({ ...definition.graph, meta: { ...definition.graph.meta, scope: "global" } }),
   );
-  expect(registry.get("saved").revision).toBe(definition.revision);
+  expect(present(registry.get("saved")).revision).toBe(definition.revision);
 });
 
 test("registry open deletes invalid project and global entries while retaining schema-valid entries", async () => {

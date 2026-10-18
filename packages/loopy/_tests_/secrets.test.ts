@@ -12,6 +12,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { z } from "zod";
 import { readDaemonFile } from "../src/local/index.js";
 import { SecretStore } from "../src/local/secrets.js";
 import { until } from "./fixture.js";
@@ -91,7 +92,7 @@ test("malformed stores and invalid values never echo secret contents", async () 
   await store.set("one", "value");
   writeFileSync(store.file, '{"one":"sensitive-marker" BROKEN}');
   expect(() => store.snapshot()).toThrow("The secret store contains invalid JSON.");
-  await expect(store.set("../bad", "value")).rejects.toThrow("Secret names");
+  await expect(store.set("../bad", "value")).rejects.toBeInstanceOf(z.ZodError);
   await expect(store.set("one", "\0sensitive-marker")).rejects.toThrow("no NUL");
 });
 

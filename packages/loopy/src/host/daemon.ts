@@ -44,10 +44,6 @@ export class Daemon {
     });
     const { concurrency } = options;
 
-    if (!Number.isSafeInteger(concurrency) || concurrency < 1) {
-      throw new Error("Daemon concurrency must be a positive integer. Supply at least one worker.");
-    }
-
     this.pool = new ActivationPool(
       concurrency,
       (run) => this.activateRun(run),

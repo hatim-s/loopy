@@ -5,3 +5,5 @@ import { join, resolve } from "node:path";
 export function defaultHome(): string {
   return resolve(process.env.LOOPY_HOME ?? join(homedir(), ".loopy"));
 }
+
+export { homePaths } from "../executor/index.js";

@@ -1,7 +1,7 @@
 import { createInterface } from "node:readline";
 import { Writable } from "node:stream";
 
-const SECRET_LIMIT_BYTES = 64 * 1024;
+import { SECRET_VALUE_MAX_BYTES } from "../contract/index.js";
 
 // A trailing CRLF is stripped after reading, so it does not count against the limit.
 const LINE_ENDING_BYTES = 2;
@@ -18,7 +18,7 @@ export async function readPipedSecret(): Promise<string> {
     const buffer = Buffer.from(chunk);
     bytes += buffer.length;
 
-    if (bytes > SECRET_LIMIT_BYTES + LINE_ENDING_BYTES) {
+    if (bytes > SECRET_VALUE_MAX_BYTES + LINE_ENDING_BYTES) {
       throw new Error("Secret input exceeds 64 KiB.");
     }
 

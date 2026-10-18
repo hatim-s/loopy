@@ -12,6 +12,7 @@ export const keys = {
   run: (id: string) => ["run", id] as const,
   daemon: ["daemon"],
   schedules: ["schedules"],
+  schedulesIn: (workspace: string) => ["schedules", workspace] as const,
 } as const;
 
 type DashboardKey = (typeof keys)[keyof typeof keys];

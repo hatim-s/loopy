@@ -2,8 +2,9 @@ import type { z } from "zod";
 import { routes } from "../../contract/index.js";
 import type { RuntimeEvent } from "../../core/index.js";
 import type { SqliteRunStore } from "../../store/index.js";
-import type { LoopyService } from "../service.js";
+import type { LoopyService } from "../service/index.js";
 import { ServiceError } from "../service-error.js";
+import { NOSNIFF } from "./headers.js";
 
 // A full queue is normal while a reader drains; two seconds without a pull is a reader that stopped.
 const STALLED_READER_MS = 2000;
@@ -39,7 +40,7 @@ export async function eventStream(
     headers: {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
-      "X-Content-Type-Options": "nosniff",
+      ...NOSNIFF,
     },
   });
 }

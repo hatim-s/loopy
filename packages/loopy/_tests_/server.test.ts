@@ -29,7 +29,7 @@ import { eventStream } from "../src/local/server/events.js";
 import { apiRoutes, dispatch } from "../src/local/server/routes.js";
 import { openRunStore } from "../src/store/index.js";
 import { CLI, fixture, object, roots, runFixture, save } from "./cli-fixture.js";
-import { newRun, until } from "./fixture.js";
+import { newRun, present, until } from "./fixture.js";
 
 const daemonMetadata = { startedAt: new Date(0).toISOString(), concurrency: 4 };
 
@@ -64,7 +64,7 @@ test("API returns run records, step traces and cursor logs", async () => {
   const server = await startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
-  const token = new URLSearchParams(url.hash.slice(1)).get("token");
+  const token = present(new URLSearchParams(url.hash.slice(1)).get("token"));
   const headers = { Authorization: `Bearer ${token}` };
   const request = (path: string) => fetch(`${url.origin}/api${path}`, { headers });
   const detail = requireRecord(await (await request(`/runs/${run.id}`)).json(), "Run detail");
@@ -91,7 +91,7 @@ test("the daemon server requires its token and origin, serves pinned assets and 
   const server = await startDaemon({ home: f.home, cwd: f.cwd, assets, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
-  const token = new URLSearchParams(url.hash.slice(1)).get("token");
+  const token = present(new URLSearchParams(url.hash.slice(1)).get("token"));
   const headers = { Authorization: `Bearer ${token}` };
 
   const rejections: [HeadersInit, number, ErrorCode][] = [
@@ -124,7 +124,7 @@ test("API distinguishes invalid cursors from registry failures", async () => {
   const server = await startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
-  const token = new URLSearchParams(url.hash.slice(1)).get("token");
+  const token = present(new URLSearchParams(url.hash.slice(1)).get("token"));
   const headers = { Authorization: `Bearer ${token}` };
 
   for (const path of [`/api/runs/${run.id}/logs?after=bad`, "/api/runs?limit=300"]) {
@@ -150,7 +150,7 @@ test("API returns the contract snapshot, rejects unknown query keys and keeps cu
   const server = await startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
-  const token = new URLSearchParams(url.hash.slice(1)).get("token");
+  const token = present(new URLSearchParams(url.hash.slice(1)).get("token"));
   const headers = { Authorization: `Bearer ${token}` };
   const path = `${url.origin}/api/runs/${run.id}`;
   const full = object(await (await fetch(path, { headers })).text());
@@ -181,7 +181,7 @@ test("contract routes start, snapshot, resume and cancel without exposing owner 
   const url = new URL(server.url);
 
   const headers = {
-    Authorization: `Bearer ${new URLSearchParams(url.hash.slice(1)).get("token")}`,
+    Authorization: `Bearer ${present(new URLSearchParams(url.hash.slice(1)).get("token"))}`,
     "Content-Type": "application/json",
   };
 
@@ -397,7 +397,7 @@ test("SSE delivers exact transactions across replay, cross-process writes and La
   const url = new URL(await daemon.start());
 
   const headers = {
-    Authorization: `Bearer ${new URLSearchParams(url.hash.slice(1)).get("token")}`,
+    Authorization: `Bearer ${present(new URLSearchParams(url.hash.slice(1)).get("token"))}`,
   };
 
   const run = replayRun(f.cwd);
@@ -914,7 +914,7 @@ test("cursor endpoint bootstraps an empty dashboard and follows new events", asy
   const server = await startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
-  const token = new URLSearchParams(url.hash.slice(1)).get("token");
+  const token = present(new URLSearchParams(url.hash.slice(1)).get("token"));
   const headers = { Authorization: `Bearer ${token}` };
   const request = () => fetch(`${url.origin}/api/cursor`, { headers });
   const response = await request();
@@ -996,7 +996,7 @@ test("compiled save route verifies artifacts, stores private bundles and returns
   const serialized = JSON.stringify(await response.json());
   expect(serialized).not.toMatch(/"(?:bytes|bundleHash|source|revision)":/);
   const registry = new Registry(f.home, f.cwd);
-  const saved = registry.get("compiled-save");
+  const saved = present(registry.get("compiled-save"));
 
   const paths = [
     join(registry.projectDirectory, "compiled-save.json"),
@@ -1006,7 +1006,7 @@ test("compiled save route verifies artifacts, stores private bundles and returns
 
   const before = artifactState(paths);
   expect((await put(body)).status).toBe(200);
-  expect(registry.get("compiled-save")).toEqual(saved);
+  expect(present(registry.get("compiled-save"))).toEqual(saved);
   expect(artifactState(paths)).toEqual(before);
   expect(
     (
@@ -1054,7 +1054,7 @@ test("compiled save route verifies artifacts, stores private bundles and returns
   const globalBefore = artifactState(globalPaths);
   expect((await put(globalBody)).status).toBe(200);
   expect(artifactState(globalPaths)).toEqual(globalBefore);
-  expect(registry.get("compiled-save")).toEqual(saved);
+  expect(present(registry.get("compiled-save"))).toEqual(saved);
   expect(saved.revision).toBe(result.revision);
 
   for (const bundle of result.bundles) {
@@ -1103,5 +1103,5 @@ test("saving another revision retains the earlier graph and executable artifacts
     expect(statSync(join(registry.home, "graphs", `${revision}.json`)).mode & 0o777).toBe(0o600);
   }
 
-  expect(revisions.at(-1)).toBe(registry.get("revisions").revision);
+  expect(revisions.at(-1)).toBe(present(registry.get("revisions")).revision);
 });

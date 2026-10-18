@@ -6,7 +6,7 @@ import { processAlive } from "../src/executor/index.js";
 import { localDaemon, Registry, readDaemonFile } from "../src/local/index.js";
 import { openRunStore } from "../src/store/index.js";
 import { cli, fixture, object, roots } from "./cli-fixture.js";
-import { newRun } from "./fixture.js";
+import { newRun, present } from "./fixture.js";
 
 const daemons: { stop(): Promise<void> }[] = [];
 
@@ -71,7 +71,7 @@ test("save posts a compiled graph and graph prints the same redacted view by fil
   const text = await cli(f, "graph", "compiled", "--format", "text");
   expect(text.code).toBe(0);
   expect(text.stdout).toContain("0:log log [next -> 1:join]");
-  const entry = new Registry(f.home, f.cwd).get("compiled");
+  const entry = present(new Registry(f.home, f.cwd).get("compiled"));
   expect(entry).toMatchObject({
     version: 2,
     graph: { name: "compiled" },
@@ -90,7 +90,7 @@ test("HTTP commands queue schema-validated graph runs and pin the saved revision
   const run = object(queued.stdout);
   expect(run).toMatchObject({ status: "queued", input: { count: 2 } });
   expect(await f.store.getRun(String(run.id))).toMatchObject({
-    revision: new Registry(f.home, f.cwd).get("compiled").revision,
+    revision: present(new Registry(f.home, f.cwd).get("compiled")).revision,
   });
   expect(object((await cli(f, "inspect", String(run.id))).stdout).run).toMatchObject({
     id: run.id,
@@ -111,7 +111,7 @@ test("save rejects another source until --replace and locates absolute files bes
   const caller = join(f.cwd, "caller");
   mkdirSync(caller);
   expect((await cli({ ...f, cwd: caller }, "save", other)).code).toBe(0);
-  expect(new Registry(f.home, f.cwd).get("compiled").source).toBe(other);
+  expect(present(new Registry(f.home, f.cwd).get("compiled")).source).toBe(other);
 });
 
 test("compiler diagnostics include locations and do not create registry entries", async () => {
@@ -139,8 +139,9 @@ test("save starts the daemon on demand and leaves artifact writes to the service
 
   expect(result).toMatchObject({ code: 0, stderr: "" });
   expect(concurrent).toMatchObject({ code: 0, stderr: "" });
+  expect(object(result.stdout)).toMatchObject({ name: "on-demand" });
   expect(record?.pid).not.toBe(process.pid);
-  expect(new Registry(f.home, f.cwd).get("on-demand").graph.name).toBe("on-demand");
+  expect(present(new Registry(f.home, f.cwd).get("on-demand")).graph.name).toBe("on-demand");
 });
 
 test("list and schedules use the caller workspace when the daemon started elsewhere", async () => {
@@ -163,7 +164,9 @@ test("an absolute source in another project is registered beside that source", a
   const caller = fixture("unrelated-caller", "run: () => null");
   const saved = await cli({ ...caller, home: source.home }, "save", source.file);
   expect(saved).toMatchObject({ code: 0, stderr: "" });
-  expect(new Registry(source.home, source.cwd).get("external-source").source).toBe(source.file);
+  expect(present(new Registry(source.home, source.cwd).get("external-source")).source).toBe(
+    source.file,
+  );
   expect(new Registry(source.home, caller.cwd).list()).toEqual([]);
 });
 
@@ -183,7 +186,7 @@ test("save preserves every author option from graph meta", async () => {
     `import {loopy} from "loopy"; export default loopy("metadata", {${JSON.stringify(meta).slice(1, -1)},input:{count:"number"},run:({input})=>input.get("count")});`,
   );
   expect(await cli(f, "save", f.file)).toMatchObject({ code: 0, stderr: "" });
-  const saved = new Registry(f.home, f.cwd).get("metadata");
+  const saved = present(new Registry(f.home, f.cwd).get("metadata"));
   expect(saved.graph).toMatchObject({ meta, input: { count: "number" } });
 });
 

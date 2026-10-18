@@ -2,7 +2,6 @@ import type { ParsedCliArgs } from "./args.js";
 
 export type CliContext = {
   home: string;
-  leaseMs?: number;
   cwd: string;
   values: ParsedCliArgs["values"];
   /** Positional arguments after the command name. */
