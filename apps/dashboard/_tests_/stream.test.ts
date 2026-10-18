@@ -18,7 +18,8 @@ const AT = "2026-10-17T10:00:00.000Z";
 const run: RunView = {
   id: "run-1",
   slug: "triage",
-  workspace: "/work",
+  projectRoot: "/work",
+  runDirectory: "/work",
   loopy: { slug: "triage", description: null },
   input: null,
   createdAt: AT,

@@ -14,7 +14,8 @@ import { applyBatch, applyToSnapshot } from "../src/lib/stream.ts";
 const queued: RunView = {
   id: "run-a",
   slug: "triage",
-  workspace: "/work",
+  projectRoot: "/work",
+  runDirectory: "/work",
   loopy: { slug: "triage", description: null },
   input: null,
   createdAt: "2026-10-17T10:00:00.000Z",

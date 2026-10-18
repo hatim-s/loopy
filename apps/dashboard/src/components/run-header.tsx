@@ -55,7 +55,7 @@ export function RunHeader({ run, now }: { run: RunView; now: number }) {
           {run.status === "suspended" && run.wakeAt !== null ? (
             <Countdown at={run.wakeAt} now={now} />
           ) : (
-            <span title={run.workspace}>{run.workspace}</span>
+            <span title={run.runDirectory}>{run.runDirectory}</span>
           )}
         </Fact>
         <Fact label="Created">

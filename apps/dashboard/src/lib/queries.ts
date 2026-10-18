@@ -61,6 +61,6 @@ export function inboxQuery(backend: LoopyBackend) {
   });
 }
 
-export function schedulesQuery(backend: LoopyBackend) {
-  return queryOptions({ queryKey: keys.schedules, queryFn: () => backend.schedules() });
+export function schedulesQuery(backend: LoopyBackend, workspace?: string) {
+  return queryOptions({ queryKey: keys.schedules, queryFn: () => backend.schedules(workspace) });
 }

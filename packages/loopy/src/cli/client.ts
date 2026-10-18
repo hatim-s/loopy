@@ -6,7 +6,7 @@ import type { CliContext } from "./context.js";
 
 type ClientContext = Pick<CliContext, "home" | "cwd">;
 
-async function daemon(context: ClientContext) {
+export async function ensureDaemon(context: ClientContext & { port?: string }) {
   const current = readDaemonFile(context.home);
 
   if (current) {
@@ -24,7 +24,7 @@ async function daemon(context: ClientContext) {
       "daemon",
       "run",
       "--port",
-      "0",
+      context.port ?? "0",
     ],
     { cwd: context.cwd, stdin: "ignore", stdout: "ignore", stderr: "ignore" },
   );
@@ -56,7 +56,7 @@ export async function request<T>(
   schema: z.ZodType<T>,
   options: { method: "GET" | "POST" | "PUT" | "DELETE"; body?: object } = { method: "GET" },
 ): Promise<T> {
-  const record = await daemon(context);
+  const record = await ensureDaemon(context);
 
   const response = await fetch(`http://127.0.0.1:${record.port}/api${path}`, {
     method: options.method,

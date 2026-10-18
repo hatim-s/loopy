@@ -6,7 +6,8 @@ function run(id: string, slug: string, updatedAt: string, waiting: boolean): Run
   return {
     id,
     slug,
-    workspace: "/work",
+    projectRoot: "/work",
+    runDirectory: "/work",
     loopy: { slug, description: null },
     input: null,
     createdAt: "2026-10-17T09:00:00.000Z",

@@ -10,7 +10,8 @@ const owner = { pid: 4242, host: "devbox", heartbeatAt: minutes(0) };
 const queued: RunView = {
   id: RUN_ID,
   slug: "triage-inbox",
-  workspace: "~/projects/support",
+  projectRoot: "~/projects/support",
+  runDirectory: "~/projects/support",
   loopy: { slug: "triage-inbox", description: "Triage the support inbox and draft replies." },
   input: { mailbox: "support@acme.dev", since: "24h" },
   createdAt: minutes(-1),
@@ -148,7 +149,7 @@ export function demoScript(): FakeScript {
     loopies: [loopy],
     schedules: [
       {
-        workspace: queued.workspace,
+        workspace: queued.projectRoot,
         slug: loopy.slug,
         cron: "0 9 * * 1-5",
         tz: "Europe/London",

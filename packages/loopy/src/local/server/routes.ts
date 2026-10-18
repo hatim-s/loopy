@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { z } from "zod";
 import {
   type DaemonView,
@@ -110,6 +111,8 @@ async function parseRequest<P, Q, B>(
 }
 
 export function apiRoutes({ service, store, cwd, daemon }: Dependencies) {
+  const workspace = (value: string | undefined) => resolve(cwd, value ?? ".");
+
   return [
     endpoint(routes.secrets, async () => service.listSecrets()),
     endpoint(routes.putSecret, async ({ params, body }) =>
@@ -117,26 +120,28 @@ export function apiRoutes({ service, store, cwd, daemon }: Dependencies) {
     ),
     endpoint(routes.deleteSecret, async ({ params }) => service.deleteSecret(params.name)),
     endpoint(routes.generateTypes, async ({ body, query }) =>
-      service.generateTypes(body, query.workspace ?? cwd),
+      service.generateTypes(body, workspace(query.workspace)),
     ),
     endpoint(routes.resolveNamedHook, async ({ params, body }) =>
       service.resolveNamedHook(params.id, params.name, body.payload),
     ),
     endpoint(routes.putLoopy, async ({ params: { slug }, body }) => service.putLoopy(slug, body)),
     endpoint(routes.graph, async ({ params: { slug }, query }) =>
-      service.graph(slug, query.workspace ?? cwd),
+      service.graph(slug, workspace(query.workspace)),
     ),
-    endpoint(routes.schedules, async ({ query }) => service.listSchedules(query.workspace)),
+    endpoint(routes.schedules, async ({ query }) =>
+      service.listSchedules(workspace(query.workspace)),
+    ),
     endpoint(routes.putSchedule, async ({ params: { slug }, body, query }) =>
-      service.putSchedule(slug, body, query.workspace),
+      service.putSchedule(slug, body, workspace(query.workspace)),
     ),
     endpoint(routes.setScheduleEnabled, async ({ params: { slug }, body, query }) =>
-      service.setScheduleEnabled(slug, body.enabled, query.workspace),
+      service.setScheduleEnabled(slug, body.enabled, workspace(query.workspace)),
     ),
     endpoint(routes.deleteSchedule, async ({ params: { slug }, query }) =>
-      service.deleteSchedule(slug, query.workspace),
+      service.deleteSchedule(slug, workspace(query.workspace)),
     ),
-    endpoint(routes.loopies, async ({ query }) => service.listLoopies(query.workspace)),
+    endpoint(routes.loopies, async ({ query }) => service.listLoopies(workspace(query.workspace))),
     endpoint(routes.runs, async ({ query }) => service.listRuns(query)),
     endpoint(routes.run, async ({ params: { id } }) => service.runSnapshot(id)),
     endpoint(routes.logs, async ({ params: { id }, query }) => {
@@ -145,7 +150,7 @@ export function apiRoutes({ service, store, cwd, daemon }: Dependencies) {
       return store.getLogs(id, query.after);
     }),
     endpoint(routes.startRun, async ({ params: { slug }, body }) =>
-      service.startRun(slug, body.input, body.workspace ?? cwd),
+      service.startRun(slug, body.input, workspace(body.workspace)),
     ),
     endpoint(routes.resumeRun, async ({ params: { id } }) => service.resumeRun(id)),
     endpoint(routes.cancelRun, async ({ params: { id } }) => service.cancelRun(id)),

@@ -1,6 +1,6 @@
 import type { RunRecord, RuntimeEvent } from "../../core/index.js";
 
-export const SCHEMA_VERSION = 14;
+export const SCHEMA_VERSION = 15;
 
 export const SCHEMA = `
   CREATE TABLE events (
@@ -10,7 +10,7 @@ export const SCHEMA = `
   CREATE INDEX events_run_sequence ON events(run_id, sequence);
   CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
   CREATE TABLE runs (
-    id TEXT PRIMARY KEY, slug TEXT NOT NULL, revision TEXT NOT NULL, workspace TEXT NOT NULL,
+    id TEXT PRIMARY KEY, slug TEXT NOT NULL, revision TEXT NOT NULL, project_root TEXT NOT NULL, run_directory TEXT NOT NULL,
     input_json TEXT NOT NULL, status TEXT NOT NULL, output_json TEXT, error TEXT,
     wake_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
     owner_token TEXT, owner_pid INTEGER, owner_host TEXT, heartbeat_at TEXT
@@ -41,7 +41,8 @@ export type RunRow = {
   id: string;
   slug: string;
   revision: string;
-  workspace: string;
+  project_root: string;
+  run_directory: string;
   input_json: string;
   status: RunRecord["status"];
   output_json: string | null;

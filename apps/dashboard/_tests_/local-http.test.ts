@@ -6,7 +6,8 @@ import { localHttpBackend } from "../src/backend/local-http.ts";
 const run: RunView = {
   id: "run/1",
   slug: "triage",
-  workspace: "/work",
+  projectRoot: "/work",
+  runDirectory: "/work",
   loopy: { slug: "triage", description: null },
   input: null,
   createdAt: "2026-10-17T10:00:00.000Z",
@@ -69,6 +70,8 @@ test("each call uses the method and path from the route table, with the token", 
   expect(last()?.path).toBe("/api/runs?slug=triage&limit=20");
 
   reply = () => Response.json([]);
+  await backend.schedules("/other project");
+  expect(last()?.path).toBe("/api/schedules?workspace=%2Fother+project");
   await backend.logs("run/1", 7);
   expect(last()?.path).toBe("/api/runs/run%2F1/logs?after=7");
 });

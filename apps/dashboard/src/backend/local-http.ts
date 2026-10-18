@@ -169,9 +169,10 @@ type LocalHttpOptions = {
   /** Absolute origin of the Loopy server; the browser passes its own. */
   origin: string;
   token: string | null;
+  workspace?: string;
 };
 
-export function localHttpBackend({ origin, token }: LocalHttpOptions): LoopyBackend {
+export function localHttpBackend({ origin, token, workspace }: LocalHttpOptions): LoopyBackend {
   const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
   async function request(url: string, init: RequestInit): Promise<Response> {
@@ -295,12 +296,22 @@ export function localHttpBackend({ origin, token }: LocalHttpOptions): LoopyBack
     resolveHook: (token, payload) =>
       send(routes.resolveHook, { params: { token }, query: {}, body: { payload } }),
     daemon: () => send(routes.daemon, { params: {}, query: {}, body: undefined }),
-    schedules: () => send(routes.schedules, { params: {}, query: {}, body: undefined }),
-    putSchedule: (slug, body) => send(routes.putSchedule, { params: { slug }, query: {}, body }),
-    setScheduleEnabled: (slug, enabled) =>
-      send(routes.setScheduleEnabled, { params: { slug }, query: {}, body: { enabled } }),
-    deleteSchedule: (slug) =>
-      send(routes.deleteSchedule, { params: { slug }, query: {}, body: undefined }),
+    schedules: (project = workspace) =>
+      send(routes.schedules, { params: {}, query: { workspace: project }, body: undefined }),
+    putSchedule: (slug, body, project = workspace) =>
+      send(routes.putSchedule, { params: { slug }, query: { workspace: project }, body }),
+    setScheduleEnabled: (slug, enabled, project = workspace) =>
+      send(routes.setScheduleEnabled, {
+        params: { slug },
+        query: { workspace: project },
+        body: { enabled },
+      }),
+    deleteSchedule: (slug, project = workspace) =>
+      send(routes.deleteSchedule, {
+        params: { slug },
+        query: { workspace: project },
+        body: undefined,
+      }),
     events,
   };
 }

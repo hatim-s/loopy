@@ -7,9 +7,6 @@ const OPTIONS = {
   follow: { type: "boolean" },
   cron: { type: "string" },
   tz: { type: "string" },
-  off: { type: "boolean" },
-  enable: { type: "boolean" },
-  disable: { type: "boolean" },
   concurrency: { type: "string" },
   help: { type: "boolean", short: "h" },
   home: { type: "string" },
@@ -28,7 +25,7 @@ const COMMAND_OPTIONS = new Map<string, readonly (keyof typeof OPTIONS)[]>(
   Object.entries({
     run: ["input-json", "input-file"],
     resume: [],
-    schedule: ["cron", "tz", "off", "enable", "disable", "input-json"],
+    schedule: ["cron", "tz", "input-json"],
     logs: ["follow"],
     "daemon run": ["concurrency", "port", "lease-ms"],
     "daemon install": ["concurrency", "port"],

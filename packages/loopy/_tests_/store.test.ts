@@ -22,8 +22,8 @@ storeContract("sqlite", (options) => {
   return store;
 });
 
-test("schema 14 resets old journal tables and rotates epoch, then survives reopen", async () => {
-  const root = mkdtempSync(join(tmpdir(), "loopy-schema14-"));
+test("schema 15 resets old journal tables and rotates epoch, then survives reopen", async () => {
+  const root = mkdtempSync(join(tmpdir(), "loopy-schema15-"));
   const file = join(root, "runs.sqlite");
 
   try {
@@ -37,7 +37,7 @@ test("schema 14 resets old journal tables and rotates epoch, then survives reope
     await store.createRun(newRun());
     store.close();
     const db = new Database(file);
-    expect(db.query("PRAGMA user_version").get()).toEqual({ user_version: 14 });
+    expect(db.query("PRAGMA user_version").get()).toEqual({ user_version: 15 });
 
     const tables = db
       .query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE type='table'")

@@ -63,7 +63,12 @@ export default loopy("parsed", {input: {}, mode: "full", run: () => {
       bundlePath: (hash) => join(f.home, "bundles", `${hash}.js`),
     });
 
-    await store.createRun({ ...newRun(), workspace: f.workspace, revision: compiled.revision });
+    await store.createRun({
+      ...newRun(),
+      projectRoot: f.workspace,
+      runDirectory: f.workspace,
+      revision: compiled.revision,
+    });
 
     const expected = {
       repository: f.workspace,

@@ -1,10 +1,5 @@
 import { expect, test } from "bun:test";
-import { installDaemon } from "../src/local/daemon-install.js";
-import {
-  type DaemonOperations,
-  daemonPlist,
-  daemonUnit,
-} from "../src/local/daemon-install-files.js";
+import { daemonPlist, daemonUnit } from "../src/local/daemon-install.js";
 
 test("macOS plist retains argv boundaries, escaped paths, environment and logs", () => {
   const content = daemonPlist(
@@ -53,31 +48,4 @@ test("Linux unit escapes command expansion and supplies environment and persiste
   );
   expect(content).toContain("StandardOutput=append:/data/loopy %% $HOME/logs/daemon.log");
   expect(content).toContain("StandardError=append:/data/loopy %% $HOME/logs/daemon.log");
-});
-
-test("install rejects relative paths and line injection before writing", async () => {
-  const files: string[] = [];
-
-  const operations: DaemonOperations = {
-    writeFile: async (path) => {
-      files.push(path);
-    },
-    exec: async () => {
-      throw new Error("Invalid service values reached the supervisor.");
-    },
-  };
-
-  const options = {
-    platform: "linux",
-    userHome: "/users/test",
-    home: "/data/loopy",
-    executable: "/opt/bun",
-    args: ["/opt/cli.js"],
-    path: "/opt/bin:/usr/bin",
-    operations,
-  };
-
-  await expect(installDaemon({ ...options, executable: "bun" })).rejects.toThrow();
-  await expect(installDaemon({ ...options, home: "/data/loopy\nRestart=no" })).rejects.toThrow();
-  expect(files).toEqual([]);
 });

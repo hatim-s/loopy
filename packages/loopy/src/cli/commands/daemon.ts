@@ -36,7 +36,7 @@ export async function runDaemon(context: CliContext): Promise<void> {
   }
 
   if (action === "uninstall") {
-    await uninstallDaemon();
+    await uninstallDaemon({ uid: serviceUid() });
     report("Uninstalled the daemon service.");
 
     return;
@@ -66,6 +66,7 @@ async function installService(context: CliContext): Promise<void> {
   }
 
   await installDaemon({
+    uid: serviceUid(),
     home: context.home,
     executable: await realpath(process.execPath),
     args: [
@@ -127,4 +128,12 @@ function daemonFlags(context: CliContext) {
   }
 
   return { port, concurrency };
+}
+
+function serviceUid(): number {
+  if (!process.getuid) {
+    throw new Error("Daemon services require macOS or Linux.");
+  }
+
+  return process.getuid();
 }

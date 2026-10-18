@@ -4,7 +4,7 @@ import { validateSecretValue } from "../../local/index.js";
 import { request } from "../client.js";
 import { type CliContext, optionalTarget, requireHead } from "../context.js";
 import { printJson } from "../output.js";
-import { readSecret } from "../secret-entry.js";
+import { readHiddenSecret, readPipedSecret } from "../secret-entry.js";
 
 async function storeSecret(context: CliContext, name: string | undefined) {
   if (!name) {
@@ -12,7 +12,7 @@ async function storeSecret(context: CliContext, name: string | undefined) {
   }
 
   validateSecretName(name);
-  const value = await readSecret(context.values.stdin ?? false);
+  const value = await (context.values.stdin ? readPipedSecret() : readHiddenSecret());
   validateSecretValue(value);
   printJson(
     await request(context, `/secrets/${encodeURIComponent(name)}`, routes.putSecret.response, {

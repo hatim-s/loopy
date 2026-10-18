@@ -60,7 +60,14 @@ export default loopy("sequence", {input: {}, run: () => {sh.exec(["printf", "raw
   const home = join(f.root, "home");
   const store = openRunStore(home);
   const registry = new Registry(home, f.workspace);
-  const service = new LoopyService({ store, registry: () => registry, clock: SYSTEM_CLOCK });
+
+  const service = new LoopyService({
+    home: f.home,
+    store,
+    registry: () => registry,
+    clock: SYSTEM_CLOCK,
+  });
+
   const daemon = localDaemon({ home, cwd: f.workspace, store, concurrency: 1, port: 0 });
 
   try {
@@ -253,7 +260,14 @@ test("a missing declared secret persists and reports its stable preparation code
     replace: false,
     source: { path: join(f.workspace, "source.ts"), workspace: f.workspace },
   });
-  const service = new LoopyService({ store, registry: () => registry, clock: SYSTEM_CLOCK });
+
+  const service = new LoopyService({
+    home: f.home,
+    store,
+    registry: () => registry,
+    clock: SYSTEM_CLOCK,
+  });
+
   const run = await service.startRun(graph.name, {}, f.workspace);
   const errors: Error[] = [];
 

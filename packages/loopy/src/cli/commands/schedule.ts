@@ -1,27 +1,31 @@
 import { routes } from "../../contract/index.js";
 import { request } from "../client.js";
-import { type CliContext, requireTarget } from "../context.js";
+import { type CliContext, requireHead } from "../context.js";
 import { jsonInput } from "../input.js";
 import { printJson } from "../output.js";
 
 export async function runSchedule(context: CliContext): Promise<void> {
-  const slug = requireTarget(context, "Slug");
-  const { off, enable, disable, cron, tz } = context.values;
-  const actions = Number(!!off) + Number(!!enable) + Number(!!disable);
+  const { head: slug, rest } = requireHead(context, "Slug");
+  const [action = "set", ...extra] = rest;
+
+  if (extra.length || !["set", "enable", "disable", "off"].includes(action)) {
+    throw new Error("Use schedule <slug> [set|enable|disable|off].");
+  }
+
+  const { cron, tz } = context.values;
 
   if (
-    actions > 1 ||
-    (actions > 0 &&
-      (cron !== undefined || tz !== undefined || context.values["input-json"] !== undefined))
+    action !== "set" &&
+    (cron !== undefined || tz !== undefined || context.values["input-json"] !== undefined)
   ) {
-    throw new Error("Choose one schedule action: --cron, --off, --enable, or --disable.");
+    throw new Error("Only schedule set accepts cron, timezone and input.");
   }
 
   const path = `/loopies/${encodeURIComponent(slug)}/schedule`;
 
   const workspace = `?workspace=${encodeURIComponent(context.cwd)}`;
 
-  if (off) {
+  if (action === "off") {
     printJson(
       await request(context, `${path}${workspace}`, routes.deleteSchedule.response, {
         method: "DELETE",
@@ -31,11 +35,11 @@ export async function runSchedule(context: CliContext): Promise<void> {
     return;
   }
 
-  if (enable || disable) {
+  if (action === "enable" || action === "disable") {
     printJson(
       await request(context, `${path}/enabled${workspace}`, routes.setScheduleEnabled.response, {
         method: "POST",
-        body: { enabled: !!enable },
+        body: { enabled: action === "enable" },
       }),
     );
 

@@ -19,7 +19,7 @@ const SQL = {
   nextWakeAt:
     "SELECT MIN(wake_at) AS wake_at FROM runs WHERE status='suspended' AND owner_token IS NULL",
   run: "SELECT * FROM runs WHERE id=?",
-  createRun: `INSERT INTO runs VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+  createRun: `INSERT INTO runs VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
   listRuns:
     "SELECT * FROM runs WHERE (?1 IS NULL OR slug=?1) AND (?2 IS NULL OR status=?2) ORDER BY rowid",
   claim: `UPDATE runs SET owner_token=?,owner_pid=?,owner_host=?,heartbeat_at=?,updated_at=?,status='running',wake_at=NULL WHERE id=? AND owner_token IS NULL AND status IN ('queued','suspended','running')`,
@@ -38,7 +38,8 @@ export function rowToRun(row: RunRow): RunRecord {
     id: row.id,
     slug: row.slug,
     revision: row.revision,
-    workspace: row.workspace,
+    projectRoot: row.project_root,
+    runDirectory: row.run_directory,
     input: JSON.parse(row.input_json),
     status: row.status,
     createdAt: row.created_at,
@@ -286,7 +287,8 @@ export function insertRun(context: StoreContext, input: RunRecord): void {
       run.id,
       run.slug,
       run.revision,
-      run.workspace,
+      run.projectRoot,
+      run.runDirectory,
       JSON.stringify(run.input),
       run.status,
       run.output === undefined ? null : JSON.stringify(run.output),

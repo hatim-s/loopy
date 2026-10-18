@@ -23,7 +23,8 @@ import {
 const runBaseSchema = z.strictObject({
   id: z.string(),
   slug: z.string(),
-  workspace: z.string(),
+  projectRoot: z.string(),
+  runDirectory: z.string(),
   loopy: z.strictObject({ slug: z.string(), description: z.string().nullable() }),
   input: jsonSchema,
   createdAt: utcTimestamp,

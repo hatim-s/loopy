@@ -42,14 +42,16 @@ function FieldError({ error }: { error: Error | null }) {
 /** Edits every field at once; PUT replaces the schedule and the daemon recomputes the next fire. */
 export function ScheduleForm({
   slug,
+  workspace,
   draft,
   onDone,
 }: {
   slug: string;
+  workspace?: string;
   draft: ScheduleDraft;
   onDone: () => void;
 }) {
-  const save = useSaveSchedule(slug);
+  const save = useSaveSchedule(slug, workspace);
   const [cron, setCron] = useState(draft.cron);
   const [tz, setTz] = useState(draft.tz);
   const [inputText, setInputText] = useState(() => JSON.stringify(draft.input, null, 2));

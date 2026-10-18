@@ -99,7 +99,8 @@ export function runView(options: RunViewOptions): RunView {
   return {
     id: run.id,
     slug: run.slug,
-    workspace: run.workspace,
+    projectRoot: run.projectRoot,
+    runDirectory: run.runDirectory,
     loopy: { slug: options.loopy.slug, description: options.loopy.description },
     input: run.input,
     createdAt: run.createdAt,

@@ -76,8 +76,8 @@ export function ScheduleRow({
   editing: boolean;
 }) {
   const reading = describeCron(schedule.cron);
-  const toggle = useToggleSchedule(schedule.slug);
-  const remove = useRemoveSchedule(schedule.slug);
+  const toggle = useToggleSchedule(schedule.slug, schedule.workspace);
+  const remove = useRemoveSchedule(schedule.slug, schedule.workspace);
   const error = toggle.error ?? remove.error;
 
   return (
@@ -120,7 +120,11 @@ export function ScheduleRow({
           <span className="flex justify-end gap-1.5">
             <Link
               to="/schedules"
-              search={editing ? {} : { slug: schedule.slug }}
+              search={
+                editing
+                  ? { workspace: schedule.workspace }
+                  : { slug: schedule.slug, workspace: schedule.workspace }
+              }
               className="inline-flex h-7 items-center rounded-md border border-line bg-panel px-2.5 text-[13px] font-medium hover:bg-raised"
               aria-expanded={editing}
             >
@@ -150,6 +154,7 @@ function EditRow({ schedule }: { schedule: ScheduleView }) {
       <td colSpan={SCHEDULE_COLUMNS} className="bg-raised/50 px-2 py-3 max-md:block">
         <ScheduleForm
           slug={schedule.slug}
+          workspace={schedule.workspace}
           draft={schedule}
           onDone={() => void navigate({ to: "/schedules", search: {} })}
         />

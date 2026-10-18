@@ -38,6 +38,7 @@ import { generateCommand } from "./typegen/generate.js";
 export class LoopyService {
   constructor(
     private readonly options: {
+      home: string;
       store: Store;
       registry: (workspace: string) => Registry;
       clock: Clock;
@@ -48,7 +49,7 @@ export class LoopyService {
     return new Date(this.options.clock.now()).toISOString();
   }
 
-  private scheduleTarget(slug: string, callerWorkspace = "") {
+  private scheduleTarget(slug: string, callerWorkspace: string) {
     const registry = this.options.registry(callerWorkspace);
     const saved = registry.list().find((entry) => entry.graph.name === slug);
 
@@ -59,7 +60,7 @@ export class LoopyService {
     return { registry, saved, workspace: registry.project };
   }
 
-  async listSchedules(callerWorkspace = ""): Promise<ScheduleView[]> {
+  async listSchedules(callerWorkspace: string): Promise<ScheduleView[]> {
     const workspace = this.options.registry(callerWorkspace).project;
 
     return (await this.options.store.listSchedules())
@@ -74,7 +75,7 @@ export class LoopyService {
   async putSchedule(
     slug: string,
     body: PutScheduleBody,
-    callerWorkspace = "",
+    callerWorkspace: string,
   ): Promise<ScheduleView> {
     const { saved, workspace } = this.scheduleTarget(slug, callerWorkspace);
     const cron = body.cron ?? saved.graph.meta.schedule?.cron;
@@ -148,7 +149,7 @@ export class LoopyService {
   async setScheduleEnabled(
     slug: string,
     enabled: boolean,
-    callerWorkspace = "",
+    callerWorkspace: string,
   ): Promise<ScheduleView> {
     const current = await this.requireSchedule(slug, callerWorkspace);
 
@@ -168,7 +169,7 @@ export class LoopyService {
     return this.scheduleView(schedule);
   }
 
-  async deleteSchedule(slug: string, callerWorkspace = ""): Promise<{ deleted: true }> {
+  async deleteSchedule(slug: string, callerWorkspace: string): Promise<{ deleted: true }> {
     const { workspace } = this.scheduleTarget(slug, callerWorkspace);
     await this.options.store.deleteSchedule(workspace, slug);
 
@@ -189,7 +190,8 @@ export class LoopyService {
       id: runId,
       slug,
       input: validated,
-      workspace: canonicalPath(workspace),
+      projectRoot: registry.project,
+      runDirectory: canonicalPath(workspace),
       revision: saved.revision,
       status: "queued",
       createdAt: this.now(),
@@ -235,7 +237,7 @@ export class LoopyService {
 
   view(run: RunRecord): RunView {
     const saved = this.options
-      .registry(run.workspace)
+      .registry(run.projectRoot)
       .list()
       .find((entry) => entry.graph.name === run.slug);
 
@@ -339,7 +341,7 @@ export class LoopyService {
       .slice(0, query.limit);
   }
 
-  async listLoopies(callerWorkspace = ""): Promise<LoopyView[]> {
+  async listLoopies(callerWorkspace: string): Promise<LoopyView[]> {
     const [records, schedules] = await Promise.all([
       this.options.store.listRuns(),
       this.options.store.listSchedules(),
@@ -347,7 +349,7 @@ export class LoopyService {
 
     const workspaces = new Set([
       callerWorkspace,
-      ...records.map((run) => run.workspace),
+      ...records.map((run) => run.projectRoot),
       ...schedules.map((schedule) => schedule.workspace),
     ]);
 
@@ -364,7 +366,7 @@ export class LoopyService {
     const runs = records.map((run) =>
       this.runView(
         run,
-        entries.get(run.workspace)?.find((entry) => entry.graph.name === run.slug),
+        entries.get(run.projectRoot)?.find((entry) => entry.graph.name === run.slug),
       ),
     );
 
@@ -392,18 +394,18 @@ export class LoopyService {
         saved,
         schedules.find((item) => item.slug === saved.graph.name && item.workspace === project) ??
           null,
-        runs.filter((run) => saved.graph.meta.scope === "global" || run.workspace === project),
+        runs.filter((run) => saved.graph.meta.scope === "global" || run.projectRoot === project),
       ),
     );
   }
 
   listSecrets() {
-    return new SecretStore(this.options.registry("").home).list();
+    return new SecretStore(this.options.home).list();
   }
 
   async putSecret(name: string, value: string) {
     try {
-      await new SecretStore(this.options.registry("").home).set(name, value);
+      await new SecretStore(this.options.home).set(name, value);
 
       return { name, saved: true as const };
     } catch (error) {
@@ -413,7 +415,7 @@ export class LoopyService {
 
   async deleteSecret(name: string) {
     try {
-      await new SecretStore(this.options.registry("").home).remove(name);
+      await new SecretStore(this.options.home).remove(name);
 
       return { name, removed: true as const };
     } catch (error) {
@@ -426,7 +428,7 @@ export class LoopyService {
       return await generateCommand(body.binary, body.path, {
         name: body.name,
         workspace,
-        home: this.options.registry(workspace).home,
+        home: this.options.home,
       });
     } catch (error) {
       throw new ServiceError("bad_request", errorMessage(error));

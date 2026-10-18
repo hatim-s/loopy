@@ -35,7 +35,11 @@ async function createBackend(): Promise<LoopyBackend> {
     return fakeBackend(demoScript());
   }
 
-  return localHttpBackend({ origin: window.location.origin, token: captureToken() });
+  return localHttpBackend({
+    origin: window.location.origin,
+    token: captureToken(),
+    workspace: new URLSearchParams(window.location.search).get("workspace") ?? undefined,
+  });
 }
 
 const queryClient = new QueryClient({

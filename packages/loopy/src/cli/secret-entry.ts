@@ -6,7 +6,7 @@ const SECRET_LIMIT_BYTES = 64 * 1024;
 // A trailing CRLF is stripped after reading, so it does not count against the limit.
 const LINE_ENDING_BYTES = 2;
 
-async function readPipedSecret(): Promise<string> {
+export async function readPipedSecret(): Promise<string> {
   if (process.stdin.isTTY) {
     throw new Error("--stdin requires piped input. Omit it to enter a secret privately.");
   }
@@ -30,7 +30,7 @@ async function readPipedSecret(): Promise<string> {
     .replace(/\r?\n$/, "");
 }
 
-async function readHiddenSecret(): Promise<string> {
+export async function readHiddenSecret(): Promise<string> {
   if (!process.stdin.isTTY || !process.stderr.isTTY) {
     throw new Error(
       "Secret entry requires a terminal. Pipe the value with --stdin for automation.",
@@ -64,8 +64,4 @@ async function readHiddenSecret(): Promise<string> {
     muted.end();
     process.stderr.write("\n");
   }
-}
-
-export function readSecret(fromStdin: boolean): Promise<string> {
-  return fromStdin ? readPipedSecret() : readHiddenSecret();
 }

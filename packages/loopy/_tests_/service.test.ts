@@ -46,11 +46,7 @@ async function fixture(definition = "") {
   const clock = new FakeClock(Date.parse("2026-10-17T00:00:00.000Z"));
   const store = openRunStore(home);
 
-  const service = new LoopyService({
-    store,
-    registry: () => registry,
-    clock,
-  });
+  const service = new LoopyService({ home, store, registry: () => registry, clock });
 
   cleanups.push(() => {
     store.close();
@@ -76,9 +72,12 @@ test("service validates input before queuing and hides registry private fields",
     code: "bad_request",
   });
   expect(await store.listRuns()).toEqual([]);
-  const run = await service.startRun("service", { name: "Hatim" }, root);
+  const runDirectory = join(root, "nested");
+  mkdirSync(runDirectory);
+  const run = await service.startRun("service", { name: "Hatim" }, runDirectory);
+  expect(await store.getRun(run.id)).toMatchObject({ projectRoot: root, runDirectory });
   expect(run).toMatchObject({ status: "queued", input: { name: "Hatim" }, owner: null });
-  const [loopy] = await service.listLoopies();
+  const [loopy] = await service.listLoopies(root);
   expect(loopy).toMatchObject({ slug: "service", lastRun: run, counts: { queued: 1 } });
 
   for (const privateField of ["source", "revision", "bundles", "secrets", "savedAt"]) {
@@ -100,7 +99,8 @@ test("service resumes queued, suspended and abandoned runs and rejects terminal 
     const run: RunRecord = {
       id: status,
       slug: "service",
-      workspace: root,
+      projectRoot: root,
+      runDirectory: root,
       revision: "a".repeat(64),
       input: {},
       status,
@@ -155,7 +155,8 @@ test("service pages newest runs by createdAt with default and maximum page sizes
     await store.createRun({
       id: `page-${i}`,
       slug: "page",
-      workspace: root,
+      projectRoot: root,
+      runDirectory: root,
       revision: "a".repeat(64),
       input: {},
       status: "queued",
@@ -171,27 +172,35 @@ test("service pages newest runs by createdAt with default and maximum page sizes
 test("service schedules create, replace, toggle, delete and emit persisted events", async () => {
   const { service, store, root, advance } = await fixture();
 
-  const first = await service.putSchedule("service", {
-    cron: "* * * * *",
-    input: { name: "first" },
-  });
+  const first = await service.putSchedule(
+    "service",
+    {
+      cron: "* * * * *",
+      input: { name: "first" },
+    },
+    root,
+  );
 
   expect(first).toMatchObject({ workspace: root, enabled: true, lastFireKey: null, tz: "UTC" });
-  expect(await service.listSchedules()).toEqual([first]);
+  expect(await service.listSchedules(root)).toEqual([first]);
   await store.putSchedule({ ...first, lastFireKey: "fired", nextFireAt: first.nextFireAt });
-  expect(await service.setScheduleEnabled("service", false)).toMatchObject({
+  expect(await service.setScheduleEnabled("service", false, root)).toMatchObject({
     enabled: false,
     lastFireKey: "fired",
   });
   advance();
-  const enabled = await service.setScheduleEnabled("service", true);
+  const enabled = await service.setScheduleEnabled("service", true, root);
   expect(enabled).toMatchObject({ enabled: true, input: { name: "first" }, lastFireKey: "fired" });
 
-  const replaced = await service.putSchedule("service", {
-    cron: "0 0 * * *",
-    input: { name: "second" },
-    enabled: false,
-  });
+  const replaced = await service.putSchedule(
+    "service",
+    {
+      cron: "0 0 * * *",
+      input: { name: "second" },
+      enabled: false,
+    },
+    root,
+  );
 
   expect(replaced).toMatchObject({
     cron: "0 0 * * *",
@@ -200,9 +209,9 @@ test("service schedules create, replace, toggle, delete and emit persisted event
     lastFireKey: null,
   });
   expect(replaced.nextFireAt).not.toBe(first.nextFireAt);
-  expect(await service.deleteSchedule("service")).toEqual({ deleted: true });
-  expect(await service.listSchedules()).toEqual([]);
-  await expect(service.setScheduleEnabled("service", true)).rejects.toMatchObject({
+  expect(await service.deleteSchedule("service", root)).toEqual({ deleted: true });
+  expect(await service.listSchedules(root)).toEqual([]);
+  await expect(service.setScheduleEnabled("service", true, root)).rejects.toMatchObject({
     code: "not_found",
   });
   expect((await store.events(0, 100)).map((event) => `${event.entity}.${event.kind}`)).toEqual([
@@ -216,7 +225,7 @@ test("service schedules create, replace, toggle, delete and emit persisted event
 });
 
 test("service rejects invalid schedule semantics before writing", async () => {
-  const { service, store } = await fixture();
+  const { service, store, root } = await fixture();
 
   const cases = [
     { body: { cron: "bad" }, code: "invalid_cron" },
@@ -227,15 +236,17 @@ test("service rejects invalid schedule semantics before writing", async () => {
   ];
 
   for (const { body, code } of cases) {
-    await expect(service.putSchedule("service", body)).rejects.toMatchObject({
+    await expect(service.putSchedule("service", body, root)).rejects.toMatchObject({
       code,
     });
   }
 
-  await expect(service.putSchedule("missing", { cron: "* * * * *" })).rejects.toMatchObject({
+  await expect(service.putSchedule("missing", { cron: "* * * * *" }, root)).rejects.toMatchObject({
     code: "not_found",
   });
-  await expect(service.deleteSchedule("missing")).rejects.toMatchObject({ code: "not_found" });
+  await expect(service.deleteSchedule("missing", root)).rejects.toMatchObject({
+    code: "not_found",
+  });
   expect(await store.listSchedules()).toEqual([]);
 });
 
@@ -244,18 +255,18 @@ test("definition defaults apply and workspace schedule mutations stay isolated",
     'schedule: { cron: "*/5 * * * *", tz: "Asia/Kolkata" },',
   );
 
-  expect((await service.listLoopies())[0]?.schedule).toEqual({
+  expect((await service.listLoopies(root))[0]?.schedule).toEqual({
     cron: "*/5 * * * *",
     tz: "Asia/Kolkata",
     enabled: false,
     nextFireAt: null,
   });
-  const saved = await service.putSchedule("service", { input: { name: "default" } });
+  const saved = await service.putSchedule("service", { input: { name: "default" } }, root);
   expect(saved).toMatchObject({ cron: "*/5 * * * *", tz: "Asia/Kolkata" });
   const other = join(root, "other");
   mkdirSync(join(other, ".loopy", "loopies"), { recursive: true });
   const otherRegistry = new Registry(home, other);
-  const otherService = new LoopyService({ store, clock, registry: () => otherRegistry });
+  const otherService = new LoopyService({ home, store, clock, registry: () => otherRegistry });
   await store.putSchedule({
     workspace: other,
     slug: "service",
@@ -265,20 +276,22 @@ test("definition defaults apply and workspace schedule mutations stay isolated",
     enabled: true,
     nextFireAt: "2026-10-17T00:01:00.000Z",
   });
-  expect(await otherService.listSchedules()).toMatchObject([{ workspace: other }]);
-  await expect(otherService.putSchedule("service", {})).rejects.toMatchObject({
+  expect(await otherService.listSchedules(other)).toMatchObject([{ workspace: other }]);
+  await expect(otherService.putSchedule("service", {}, other)).rejects.toMatchObject({
     code: "not_found",
   });
-  await expect(otherService.setScheduleEnabled("service", false)).rejects.toMatchObject({
+  await expect(otherService.setScheduleEnabled("service", false, other)).rejects.toMatchObject({
     code: "not_found",
   });
-  await expect(otherService.deleteSchedule("service")).rejects.toMatchObject({ code: "not_found" });
-  await service.deleteSchedule("service");
+  await expect(otherService.deleteSchedule("service", other)).rejects.toMatchObject({
+    code: "not_found",
+  });
+  await service.deleteSchedule("service", root);
   expect(await store.listSchedules()).toMatchObject([{ workspace: other }]);
 });
 
 test("disabled schedules stay dormant and re-enabling waits for the next slot", async () => {
-  const { service, store, clock, advance } = await fixture();
+  const { service, store, root, clock, advance } = await fixture();
 
   const daemon = new Daemon({
     concurrency: 4,
@@ -291,16 +304,20 @@ test("disabled schedules stay dormant and re-enabling waits for the next slot", 
     }),
   });
 
-  await service.putSchedule("service", {
-    cron: "* * * * *",
-    input: { name: "scheduled" },
-    enabled: false,
-  });
+  await service.putSchedule(
+    "service",
+    {
+      cron: "* * * * *",
+      input: { name: "scheduled" },
+      enabled: false,
+    },
+    root,
+  );
   advance(120_000);
   void daemon.run();
   await until(() => clock.sleeps.length > 0);
   expect(await store.listRuns()).toEqual([]);
-  expect(await service.setScheduleEnabled("service", true)).toMatchObject({
+  expect(await service.setScheduleEnabled("service", true, root)).toMatchObject({
     nextFireAt: "2026-10-17T00:03:00.000Z",
   });
   daemon.wake();
@@ -317,24 +334,29 @@ test("global schedules use the service workspace and preserve other workspaces",
   mkdirSync(join(other, ".loopy", "loopies"), { recursive: true });
 
   const otherService = new LoopyService({
+    home,
     store,
     clock,
     registry: () => new Registry(home, other),
   });
 
-  await service.putSchedule("service", { cron: "* * * * *", input: { name: "first" } });
+  await service.putSchedule("service", { cron: "* * * * *", input: { name: "first" } }, root);
 
-  const second = await otherService.putSchedule("service", {
-    cron: "0 * * * *",
-    input: { name: "second" },
-  });
+  const second = await otherService.putSchedule(
+    "service",
+    {
+      cron: "0 * * * *",
+      input: { name: "second" },
+    },
+    other,
+  );
 
   expect(second.workspace).toBe(other);
-  expect(await service.listSchedules()).toMatchObject([
+  expect(await service.listSchedules(root)).toMatchObject([
     { workspace: root, input: { name: "first" } },
   ]);
-  await otherService.setScheduleEnabled("service", false);
-  await otherService.deleteSchedule("service");
+  await otherService.setScheduleEnabled("service", false, other);
+  await otherService.deleteSchedule("service", other);
   expect(await store.listSchedules()).toMatchObject([{ workspace: root, enabled: true }]);
 });
 
@@ -363,7 +385,7 @@ function pausedScheduleDaemon(f: Awaited<ReturnType<typeof fixture>>) {
 for (const mutation of ["PUT", "disable"]) {
   test(`a ${mutation} during bundle resolution rejects the pending schedule fire`, async () => {
     const f = await fixture();
-    await f.service.putSchedule("service", { cron: "* * * * *", input: { name: "first" } });
+    await f.service.putSchedule("service", { cron: "* * * * *", input: { name: "first" } }, f.root);
     f.advance(60_000);
     const paused = pausedScheduleDaemon(f);
     const running = paused.daemon.run();
@@ -372,8 +394,12 @@ for (const mutation of ["PUT", "disable"]) {
     try {
       const saved =
         mutation === "PUT"
-          ? await f.service.putSchedule("service", { cron: "0 * * * *", input: { name: "new" } })
-          : await f.service.setScheduleEnabled("service", false);
+          ? await f.service.putSchedule(
+              "service",
+              { cron: "0 * * * *", input: { name: "new" } },
+              f.root,
+            )
+          : await f.service.setScheduleEnabled("service", false, f.root);
 
       expect(saved.nextFireAt).toBe(
         mutation === "PUT" ? "2026-10-17T01:00:00.000Z" : "2026-10-17T00:01:00.000Z",
@@ -381,7 +407,7 @@ for (const mutation of ["PUT", "disable"]) {
       paused.release();
       await until(() => f.clock.sleeps.length > 0);
       expect(await f.store.listRuns()).toEqual([]);
-      expect(await f.service.listSchedules()).toEqual([saved]);
+      expect(await f.service.listSchedules(f.root)).toEqual([saved]);
     } finally {
       paused.release();
       await paused.daemon.stop();
@@ -403,7 +429,10 @@ test("service cursor follows the last event without requiring a run snapshot", a
 
 test("service maps completion between requireRun and claim to not_claimable", async () => {
   const { service, store, root } = await fixture();
-  const run = await service.startRun("service", { name: "Hatim" }, root);
+  const runDirectory = join(root, "nested");
+  mkdirSync(runDirectory);
+  const run = await service.startRun("service", { name: "Hatim" }, runDirectory);
+  expect(await store.getRun(run.id)).toMatchObject({ projectRoot: root, runDirectory });
   const claim = store.claim.bind(store);
   store.claim = async (id, token) => {
     await claim(id, "finisher");

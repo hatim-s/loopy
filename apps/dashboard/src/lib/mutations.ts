@@ -22,12 +22,12 @@ export function useResolveHook(token: string) {
   return useRunMutation((backend, payload: Json) => backend.resolveHook(token, payload));
 }
 
-export function useSaveSchedule(slug: string) {
+export function useSaveSchedule(slug: string, workspace?: string) {
   const backend = useBackend();
   const client = useQueryClient();
 
   return useMutation({
-    mutationFn: (body: PutScheduleBody) => backend.putSchedule(slug, body),
+    mutationFn: (body: PutScheduleBody) => backend.putSchedule(slug, body, workspace),
     onSuccess: (schedule) => applyScheduleView(client, schedule),
   });
 }
@@ -36,9 +36,9 @@ export function useSaveSchedule(slug: string) {
 export async function toggleSchedule(
   client: QueryClient,
   backend: LoopyBackend,
-  change: { slug: string; enabled: boolean },
+  change: { slug: string; enabled: boolean; workspace?: string },
 ) {
-  const { slug, enabled } = change;
+  const { slug, enabled, workspace } = change;
   await client.cancelQueries({ queryKey: keys.schedules });
 
   const previous = client
@@ -56,7 +56,7 @@ export async function toggleSchedule(
     ?.find((item) => item.slug === slug);
 
   try {
-    return await backend.setScheduleEnabled(slug, enabled);
+    return await backend.setScheduleEnabled(slug, enabled, workspace);
   } catch (error) {
     client.setQueryData<ScheduleView[]>(keys.schedules, (current) =>
       current?.map((item) => (item === written && previous ? previous : item)),
@@ -65,22 +65,22 @@ export async function toggleSchedule(
   }
 }
 
-export function useToggleSchedule(slug: string) {
+export function useToggleSchedule(slug: string, workspace?: string) {
   const backend = useBackend();
   const client = useQueryClient();
 
   return useMutation({
-    mutationFn: (enabled: boolean) => toggleSchedule(client, backend, { slug, enabled }),
+    mutationFn: (enabled: boolean) => toggleSchedule(client, backend, { slug, enabled, workspace }),
     onSuccess: (schedule) => applyScheduleView(client, schedule),
   });
 }
 
-export function useRemoveSchedule(slug: string) {
+export function useRemoveSchedule(slug: string, workspace?: string) {
   const backend = useBackend();
   const client = useQueryClient();
 
   return useMutation({
-    mutationFn: () => backend.deleteSchedule(slug),
+    mutationFn: () => backend.deleteSchedule(slug, workspace),
     onSuccess: () => removeScheduleView(client, slug),
   });
 }

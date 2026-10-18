@@ -15,7 +15,7 @@ bun run loopy runs hello
 bun run loopy ui
 ```
 
-`loopy ui` prints the authenticated URL for the dashboard served by the daemon. Open it in your browser. If no daemon is running, the command starts one in the foreground. Keep that terminal open.
+`loopy ui` prints the authenticated URL for the dashboard served by the daemon. Open it in your browser. If no daemon is running, the command starts one on demand and exits. The URL selects the caller workspace.
 
 To install the CLI globally, run `bun run install:global`. The installer builds and packs the package into `~/.loopy/packages/loopy-<sha256>.tgz`, installs it with Bun, and prints a command for adding the same archive to a project. A project that imports `loopy` needs its own dependency. Put `bun pm bin -g` on your PATH.
 

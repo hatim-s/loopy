@@ -18,7 +18,6 @@ import {
 } from "../core/index.js";
 import { writeFileAtomically } from "../executor/index.js";
 import { withLockDirectory } from "./fs.js";
-import { defaultHome } from "./home.js";
 import { ServiceError } from "./service-error.js";
 
 const MAX_VALUE_BYTES = 64 * 1024;
@@ -59,7 +58,7 @@ export class SecretStore {
   readonly directory: string;
   readonly file: string;
 
-  constructor(home = defaultHome()) {
+  constructor(home: string) {
     this.directory = resolve(home);
     this.file = join(this.directory, "secrets.json");
   }

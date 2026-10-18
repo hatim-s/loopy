@@ -195,8 +195,8 @@ test("HTTP schedule enable, disable and off persist their state", async () => {
   ).toMatchObject({ code: 0, stderr: "" });
 
   for (const [action, enabled] of [
-    ["--disable", false],
-    ["--enable", true],
+    ["disable", false],
+    ["enable", true],
   ] as const) {
     expect(object((await cli(f, "schedule", "compiled", action)).stdout)).toMatchObject({
       enabled,
@@ -207,13 +207,19 @@ test("HTTP schedule enable, disable and off persist their state", async () => {
     expect(JSON.parse((await cli(f, "list")).stdout)).toMatchObject([{ schedule: { enabled } }]);
   }
 
-  expect((await cli(f, "schedule", "compiled", "--off")).code).toBe(0);
+  expect((await cli(f, "schedule", "compiled", "off")).code).toBe(0);
   expect(await f.store.listSchedules()).toEqual([]);
 });
 
 test("HTTP cancel refuses an active owner and inspect diagnoses a missing run", async () => {
   const f = await graphFixture();
-  await f.store.createRun({ ...newRun(), id: "owned", slug: "compiled", workspace: f.cwd });
+  await f.store.createRun({
+    ...newRun(),
+    id: "owned",
+    slug: "compiled",
+    projectRoot: f.cwd,
+    runDirectory: f.cwd,
+  });
   await f.store.claim("owned", "active-owner");
   const cancelled = await cli(f, "cancel", "owned");
   expect(cancelled.code).toBe(1);
@@ -228,7 +234,13 @@ test("HTTP cancel refuses an active owner and inspect diagnoses a missing run", 
 
 test("HTTP logs follow prints each log as a separate JSON line", async () => {
   const f = await graphFixture();
-  await f.store.createRun({ ...newRun(), id: "logged", slug: "compiled", workspace: f.cwd });
+  await f.store.createRun({
+    ...newRun(),
+    id: "logged",
+    slug: "compiled",
+    projectRoot: f.cwd,
+    runDirectory: f.cwd,
+  });
   await f.store.claim("logged", "log-owner");
 
   for (const index of [0, 1]) {

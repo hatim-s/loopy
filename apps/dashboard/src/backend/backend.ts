@@ -45,10 +45,10 @@ export type LoopyBackend = {
   cancelRun(id: string): Promise<RunView>;
   resolveHook(token: string, payload: Json): Promise<RunView>;
   daemon(): Promise<DaemonView>;
-  schedules(): Promise<ScheduleView[]>;
-  putSchedule(slug: string, body: PutScheduleBody): Promise<ScheduleView>;
-  setScheduleEnabled(slug: string, enabled: boolean): Promise<ScheduleView>;
-  deleteSchedule(slug: string): Promise<{ deleted: true }>;
+  schedules(workspace?: string): Promise<ScheduleView[]>;
+  putSchedule(slug: string, body: PutScheduleBody, workspace?: string): Promise<ScheduleView>;
+  setScheduleEnabled(slug: string, enabled: boolean, workspace?: string): Promise<ScheduleView>;
+  deleteSchedule(slug: string, workspace?: string): Promise<{ deleted: true }>;
   events(subscription: EventSubscription): Promise<StreamEnd>;
 };
 

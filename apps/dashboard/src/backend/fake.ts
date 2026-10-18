@@ -261,7 +261,10 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
       return snapshot(run.id).run;
     },
     daemon: async () => daemon,
-    schedules: async () => [...schedules.values()],
+    schedules: async (workspace) =>
+      [...schedules.values()].filter(
+        (schedule) => workspace === undefined || schedule.workspace === workspace,
+      ),
     putSchedule: async (slug, body) =>
       saveSchedule({ ...(schedules.get(slug) ?? newSchedule(slug, body)), ...body }),
     setScheduleEnabled: async (slug, enabled) => saveSchedule({ ...schedule(slug), enabled }),
@@ -332,12 +335,24 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
 
 /** The fields every run status shares, so a script can move a run to any status. */
 export function base(run: RunView) {
-  const { id, slug, workspace, loopy, input, createdAt, owner, ownerStale, waitingOn } = run;
+  const {
+    id,
+    slug,
+    projectRoot,
+    runDirectory,
+    loopy,
+    input,
+    createdAt,
+    owner,
+    ownerStale,
+    waitingOn,
+  } = run;
 
   return {
     id,
     slug,
-    workspace,
+    projectRoot,
+    runDirectory,
     loopy,
     input,
     createdAt,

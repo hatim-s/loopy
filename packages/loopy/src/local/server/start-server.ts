@@ -9,7 +9,7 @@ export const DEFAULT_PORT = 4310;
 
 export type ServerOptions = Omit<Parameters<typeof apiRoutes>[0], "cwd"> & {
   token: string;
-  cwd?: string;
+  cwd: string;
   port?: number;
   assets?: string;
 };
@@ -45,7 +45,7 @@ export function startServer(options: ServerOptions) {
     resolve(options.assets ?? resolve(import.meta.dir, "../../../dist/dashboard")),
   );
 
-  const table = apiRoutes({ ...options, cwd: resolve(options.cwd ?? process.cwd()) });
+  const table = apiRoutes(options);
 
   const server = Bun.serve({
     hostname: "127.0.0.1",

@@ -60,6 +60,7 @@ export async function save(f: ReturnType<typeof fixture>) {
 
   try {
     const service = new LoopyService({
+      home: f.home,
       store,
       registry: () => new Registry(f.home, f.cwd),
       clock: SYSTEM_CLOCK,
@@ -88,6 +89,7 @@ export async function runFixture(f: ReturnType<typeof fixture>) {
   const store = openRunStore(f.home);
 
   const service = new LoopyService({
+    home: f.home,
     store,
     registry: () => new Registry(f.home, f.cwd),
     clock: SYSTEM_CLOCK,

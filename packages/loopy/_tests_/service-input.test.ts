@@ -29,7 +29,13 @@ async function setup() {
     source: { path: source, workspace: f.workspace },
   });
   const store = new SqliteRunStore(":memory:");
-  const service = new LoopyService({ store, registry: () => registry, clock: SYSTEM_CLOCK });
+
+  const service = new LoopyService({
+    home: f.home,
+    store,
+    registry: () => registry,
+    clock: SYSTEM_CLOCK,
+  });
 
   return { ...f, graph, store, service };
 }

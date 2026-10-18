@@ -1,14 +1,15 @@
 import { afterEach, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { processAlive } from "../src/executor/index.js";
 import { daemonUrl, localDaemon, readDaemonFile } from "../src/local/index.js";
 import { openRunStore } from "../src/store/index.js";
 
 const roots: string[] = [];
 
 function directory() {
-  const root = mkdtempSync(join(tmpdir(), "loopy-local-daemon-"));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "loopy-local-daemon-")));
   roots.push(root);
 
   return root;
@@ -42,6 +43,7 @@ test("daemon publishes a private discovery file and removes it on clean shutdown
       { cwd, stdout: "pipe", stderr: "pipe" },
     );
 
+    url.searchParams.set("workspace", cwd);
     expect((await new Response(child.stdout).text()).trim()).toBe(url.toString());
     expect(await child.exited).toBe(0);
 
@@ -67,7 +69,7 @@ test("daemon publishes a private discovery file and removes it on clean shutdown
   expect(existsSync(join(home, "daemon.json"))).toBe(false);
 });
 
-test("ui starts the foreground daemon when discovery is absent and removes it on SIGTERM", async () => {
+test("ui starts a daemon on demand and exits with the caller workspace URL", async () => {
   const home = directory();
   const cwd = directory();
 
@@ -85,27 +87,34 @@ test("ui starts the foreground daemon when discovery is absent and removes it on
   );
 
   try {
-    for (let i = 0; i < 100 && !readDaemonFile(home); i++) {
-      await Bun.sleep(20);
-    }
-
+    const text = await new Response(child.stdout).text();
+    expect(await child.exited).toBe(0);
     const record = readDaemonFile(home);
-    expect(record?.pid).toBe(child.pid);
-    const reader = child.stdout.getReader();
-    const chunk = await reader.read();
 
     if (!record) {
       throw new Error("Daemon discovery was not published.");
     }
 
-    expect(new TextDecoder().decode(chunk.value).trim()).toBe(daemonUrl(record));
-    reader.releaseLock();
-    child.kill("SIGTERM");
-    expect(await child.exited).toBe(0);
-    expect(existsSync(join(home, "daemon.json"))).toBe(false);
+    expect(record.pid).not.toBe(child.pid);
+    const url = new URL(daemonUrl(record));
+    url.searchParams.set("workspace", cwd);
+    expect(text.trim()).toBe(url.toString());
   } finally {
     child.kill();
     await child.exited;
+    const record = readDaemonFile(home);
+
+    if (record) {
+      process.kill(record.pid, "SIGTERM");
+
+      for (let attempt = 0; attempt < 250 && processAlive(record.pid); attempt++) {
+        await Bun.sleep(20);
+      }
+
+      if (processAlive(record.pid)) {
+        throw new Error("Task daemon did not exit.");
+      }
+    }
   }
 });
 

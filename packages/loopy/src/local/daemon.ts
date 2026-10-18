@@ -29,7 +29,7 @@ function runtimeDaemon(options: DaemonOptions) {
     onError,
     revisionFor: (schedule) => new Registry(home, schedule.workspace).get(schedule.slug).revision,
     prepare: async (run) => {
-      const registry = new Registry(home, run.workspace);
+      const registry = new Registry(home, run.projectRoot);
 
       const graph = await registry.readGraph(run.revision);
 
@@ -37,7 +37,7 @@ function runtimeDaemon(options: DaemonOptions) {
         graph,
         executor: new LocalExecutor({
           home,
-          workspace: run.workspace,
+          workspace: run.runDirectory,
           mode: graph.meta.mode,
           secrets: Object.fromEntries(
             graph.meta.secrets.map((name) => [name, new SecretStore(home).get(name)]),
@@ -63,7 +63,8 @@ class LocalDaemon {
     this.daemon = runtimeDaemon(options);
     this.service = new LoopyService({
       store: options.store,
-      registry: (workspace) => new Registry(options.home, workspace || options.cwd),
+      home: options.home,
+      registry: (workspace) => new Registry(options.home, workspace),
       clock: SYSTEM_CLOCK,
     });
     this.concurrency = options.concurrency;

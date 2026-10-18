@@ -42,7 +42,8 @@ export type RunRecord = {
   id: string;
   slug: string;
   revision: string;
-  workspace: string;
+  projectRoot: string;
+  runDirectory: string;
   input: Json;
   status: RunStatus;
   output?: Json;

@@ -167,7 +167,13 @@ test("contract routes start, snapshot, resume and cancel without exposing owner 
   const f = fixture("contract", "run: () => null");
   await save(f);
   const initialStore = openRunStore(f.home);
-  await initialStore.createRun({ ...newRun(), id: "initial", slug: "contract", workspace: f.cwd });
+  await initialStore.createRun({
+    ...newRun(),
+    id: "initial",
+    slug: "contract",
+    projectRoot: f.cwd,
+    runDirectory: f.cwd,
+  });
   initialStore.close();
   const initial = { id: "initial" };
   const server = await startDaemon({ ...f, port: 0 });
@@ -241,6 +247,7 @@ async function serviceFixture(name: string) {
   const store = openRunStore(f.home);
 
   const service = new LoopyService({
+    home: f.home,
     store,
     registry: () => new Registry(f.home, f.cwd),
     clock: SYSTEM_CLOCK,
@@ -356,7 +363,8 @@ function replayRun(workspace: string) {
   return {
     id: "replay",
     slug: "events",
-    workspace,
+    projectRoot: workspace,
+    runDirectory: workspace,
     revision: "a".repeat(64),
     input: {},
     status: "queued",
@@ -458,7 +466,7 @@ test("SSE disconnect removes the subscriber and stops polling", async () => {
 test("response validation rejects a view with extra fields", async () => {
   const { f, store, service } = await serviceFixture("leak");
 
-  const leaking = (await service.listLoopies()).map((loopy) => ({
+  const leaking = (await service.listLoopies(f.cwd)).map((loopy) => ({
     ...loopy,
     secrets: ["private"],
   }));
@@ -524,7 +532,8 @@ async function recoveryRun(store: ReturnType<typeof openRunStore>, workspace: st
   const run = {
     id: "batch",
     slug: "batch",
-    workspace,
+    projectRoot: workspace,
+    runDirectory: workspace,
     revision: "a".repeat(64),
     input: {},
     status: "running",
@@ -613,7 +622,8 @@ test("run paging includes every run sharing a timestamp", async () => {
       await store.createRun({
         id,
         slug: "paging",
-        workspace: f.cwd,
+        projectRoot: f.cwd,
+        runDirectory: f.cwd,
         revision: "a".repeat(64),
         input: {},
         status: "queued",

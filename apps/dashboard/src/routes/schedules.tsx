@@ -11,6 +11,7 @@ import { useBackend } from "../router-context.ts";
 
 /** The loopy whose schedule form is open. */
 const searchSchema = z.object({
+  workspace: z.string().optional(),
   slug: routes.putSchedule.params.shape.slug.optional().catch(undefined),
 });
 
@@ -92,7 +93,7 @@ function SchedulePicker({ loopies }: { loopies: LoopyView[] }) {
 }
 
 /** A new schedule starts from what the definition declares, else every hour in UTC. */
-function NewSchedule({ loopy }: { loopy: LoopyView }) {
+function NewSchedule({ loopy, workspace }: { loopy: LoopyView; workspace?: string }) {
   const navigate = Route.useNavigate();
 
   return (
@@ -106,6 +107,7 @@ function NewSchedule({ loopy }: { loopy: LoopyView }) {
       <ScheduleForm
         key={loopy.slug}
         slug={loopy.slug}
+        workspace={workspace}
         draft={{
           cron: loopy.schedule?.cron ?? "@hourly",
           tz: loopy.schedule?.tz ?? "UTC",
@@ -120,8 +122,8 @@ function NewSchedule({ loopy }: { loopy: LoopyView }) {
 
 function SchedulesPage() {
   const backend = useBackend();
-  const { slug } = Route.useSearch();
-  const schedules = useQuery(schedulesQuery(backend));
+  const { slug, workspace } = Route.useSearch();
+  const schedules = useQuery(schedulesQuery(backend, workspace));
   const loopies = useQuery(loopiesQuery(backend));
   const scheduled = new Set(schedules.data?.map((schedule) => schedule.slug));
   const unscheduled = loopies.data?.filter((loopy) => !scheduled.has(loopy.slug)) ?? [];
@@ -136,7 +138,7 @@ function SchedulesPage() {
         <SchedulePicker loopies={unscheduled} />
       </header>
       {schedules.error && <ErrorBanner error={schedules.error} />}
-      {creating && <NewSchedule loopy={creating} />}
+      {creating && <NewSchedule loopy={creating} workspace={workspace} />}
       {schedules.isPending && <p className="text-muted">Loading schedules.</p>}
       {schedules.data?.length === 0 && !creating && (
         <p className="border-y border-line py-6 text-muted">No loopy runs on a schedule yet.</p>
