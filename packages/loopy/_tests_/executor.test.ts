@@ -316,19 +316,88 @@ for (const failure of ["timeout", "output_limit", "nonzero"] as const) {
   });
 }
 
+for (const ending of ["timeout", "success"] as const) {
+  test(`bundle ${ending} masks a secret nested two JSON levels inside a log string`, async () => {
+    const f = await fixture();
+    new SecretStore(f.home).set("TOKEN", 'alpha"beta');
+
+    const executor = new LocalExecutor({
+      home: f.home,
+      workspace: f.workspace,
+      mode: "sandbox",
+      secrets: ["TOKEN"],
+      bundlePath: () => f.bundle,
+    });
+
+    const record =
+      'const token = process.env.TOKEN; const record = JSON.stringify({message: "resp", data: JSON.stringify({auth: JSON.stringify({token})})});';
+
+    const tail = {
+      timeout: "process.stderr.write(record.slice(0, -2)); await Bun.sleep(10000);",
+      success: 'process.stdout.write(record + "\\n" + JSON.stringify({words: 1}) + "\\n");',
+    }[ending];
+
+    await writeFile(f.bundle, `${record} ${tail}`);
+    const graph = structuredClone(approveDemoGraph);
+    const node = graph.nodes[0];
+
+    if (node?.kind !== "code") {
+      throw new Error("Expected code fixture.");
+    }
+
+    node.module.bundleHash = "a".repeat(64);
+    node.timeout = 500;
+    node.retry = { attempts: 1, backoff: "exponential", retryOnExit: false };
+    const runs = new MemoryStore();
+    await runs.createRun({ ...newRun(), input: { subject: "test" } });
+
+    const outcome = await activate({
+      store: runs,
+      executor,
+      graph: graphSchema.parse(graph),
+      runId: "run",
+    });
+
+    const nodes = await runs.getNodeRuns("run");
+    expect(nodes[0]?.status).toBe(ending === "success" ? "succeeded" : "failed");
+    const logs = await runs.getLogs("run");
+    const key = nodes[0]?.key;
+
+    if (!key) {
+      throw new Error("Missing stored execution key.");
+    }
+
+    const receipt = JSON.parse(await readFile(await receiptPath(f.home, key, 1), "utf8"));
+    const events = await runs.events(0, 1000);
+
+    for (const value of [nodes, logs, events, outcome, receipt]) {
+      const serialized = JSON.stringify(value);
+      expect(serialized).not.toContain("alpha");
+      expect(serialized).not.toContain("beta");
+    }
+
+    expect(JSON.stringify(logs)).toContain("[redacted]");
+  });
+}
+
 test("truncated bundle records mask secret escapes at every capture boundary", () => {
   const secret = 'alpha"beta';
   const escaped = JSON.stringify(secret).slice(1, -1);
-  const record = JSON.stringify({ message: escaped, data: { nested: [escaped] } });
+  const nested = JSON.stringify({ auth: JSON.stringify({ token: secret }) });
 
-  for (let end = record.indexOf("alpha") + 5; end <= record.length; end++) {
-    const result = bundleResult(
-      { stdout: "", stderr: record.slice(0, end), exitCode: 1, durationMs: 0 },
-      secretRedactor([secret]),
-      { code: "output_limit", message: "Capture limit" },
-    );
+  for (const record of [
+    JSON.stringify({ message: escaped, data: { nested: [escaped] } }),
+    JSON.stringify({ message: "resp", data: nested }),
+  ]) {
+    for (let end = record.indexOf("alpha") + 5; end <= record.length; end++) {
+      const result = bundleResult(
+        { stdout: "", stderr: record.slice(0, end), exitCode: 1, durationMs: 0 },
+        secretRedactor([secret]),
+        { code: "output_limit", message: "Capture limit" },
+      );
 
-    expect(JSON.stringify(result)).not.toContain("alpha");
+      expect(JSON.stringify(result)).not.toContain("alpha");
+    }
   }
 });
 
