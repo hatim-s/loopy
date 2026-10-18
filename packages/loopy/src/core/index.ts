@@ -55,7 +55,7 @@ export * from "./process.js";
 
 export * from "./rate-limit.js";
 
-export { revision, revisionInput } from "./revision.js";
+export { bundleRefs, revision, sha256Hex } from "./revision.js";
 
 export * from "./store.js";
 

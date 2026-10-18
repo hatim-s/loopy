@@ -1,8 +1,7 @@
-import { createHash } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { PutLoopyBody } from "../contract/index.js";
-import { canonicalJson, revision, validateGraph } from "../core/index.js";
+import { bundleRefs, canonicalJson, revision, sha256Hex, validateGraph } from "../core/index.js";
 import { writeFileAtomically } from "./fs.js";
 import type { Registry } from "./registry.js";
 
@@ -13,13 +12,7 @@ export async function saveCompiled(registry: Registry, body: PutLoopyBody) {
     throw new Error(diagnostics.map((item) => item.message).join("\n"));
   }
 
-  const expected = body.graph.nodes.flatMap((node) =>
-    node.kind === "code"
-      ? [{ nodeId: node.id, bundleHash: node.module.bundleHash }]
-      : node.kind === "command" && node.parse
-        ? [{ nodeId: node.id, bundleHash: node.parse.bundleHash }]
-        : [],
-  );
+  const expected = bundleRefs(body.graph);
 
   if (
     expected.length !== body.bundles.length ||
@@ -42,11 +35,8 @@ export async function saveCompiled(registry: Registry, body: PutLoopyBody) {
     bytes: Buffer.from(value.bytes, "base64"),
   }));
 
-  if (
-    bundles.some(
-      (value) => createHash("sha256").update(value.bytes).digest("hex") !== value.bundleHash,
-    )
-  ) {
+  const hashes = await Promise.all(bundles.map((value) => sha256Hex(value.bytes)));
+  if (bundles.some((value, index) => hashes[index] !== value.bundleHash)) {
     throw new Error("Bundle bytes do not match their hash.");
   }
 

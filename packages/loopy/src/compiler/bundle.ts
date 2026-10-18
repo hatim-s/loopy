@@ -1,6 +1,5 @@
-import { createHash } from "node:crypto";
 import { resolve } from "node:path";
-import type { Graph, Node } from "../core/index.js";
+import { bundleRefs, type Graph, type Node, sha256Hex } from "../core/index.js";
 import { sourcePaths } from "../local/index.js";
 import { commandParser } from "../sdk/graph-host.js";
 import { checkImports } from "./module-imports.js";
@@ -63,8 +62,9 @@ export async function bundle(
 ): Promise<BundleResult> {
   const bundles: Bundle[] = [];
 
-  for (const node of graph.nodes) {
-    if (node.kind !== "code" && !(node.kind === "command" && node.parse !== null)) {
+  for (const { nodeId } of bundleRefs(graph)) {
+    const node = graph.nodes.find((candidate) => candidate.id === nodeId);
+    if (!node || (node.kind !== "code" && node.kind !== "command")) {
       continue;
     }
 
@@ -95,7 +95,7 @@ export async function bundle(
     }
 
     const bytes = new Uint8Array(await output.arrayBuffer());
-    const bundleHash = createHash("sha256").update(bytes).digest("hex");
+    const bundleHash = await sha256Hex(bytes);
     bundles.push({ nodeId: node.id, bundleHash, bytes });
 
     if (node.kind === "code") {
