@@ -34,8 +34,7 @@ export function renderCommandSource(name: string, descriptor: GeneratedCommandDe
 
   return (
     `import { type CommandDescriptor, defineCommand } from "loopy";\n\n` +
-    `const descriptor = {\n${fields.join("\n")}\n} as const satisfies CommandDescriptor;\n\n` +
-    `export const ${name} = defineCommand(descriptor);\n\n` +
+    `export const ${name} = defineCommand({\n${fields.join("\n")}\n} as const satisfies CommandDescriptor);\n\n` +
     `export const ${name}Help = ${JSON.stringify({ helpHash, observedVersion })} as const;\n`
   );
 }

@@ -116,7 +116,9 @@ export function apiRoutes({ service, store, cwd, daemon }: Dependencies) {
       service.putSecret(params.name, body.value),
     ),
     endpoint(routes.deleteSecret, async ({ params }) => service.deleteSecret(params.name)),
-    endpoint(routes.generateTypes, async ({ body }) => service.generateTypes(body)),
+    endpoint(routes.generateTypes, async ({ body, query }) =>
+      service.generateTypes(body, query.workspace ?? cwd),
+    ),
     endpoint(routes.resolveNamedHook, async ({ params, body }) =>
       service.resolveNamedHook(params.id, params.name, body.payload),
     ),

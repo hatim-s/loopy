@@ -163,9 +163,10 @@ async function prepareSandbox(
   }
 }
 
-export async function executeLocalCommand(
+export async function withCommandSandbox(
   command: ResolvedCommand,
   options: LocalExecutionOptions,
+  execute: (launch: Launch) => Promise<CommandResult>,
 ): Promise<CommandResult> {
   const aborted = () =>
     new CommandExecutionError("Command aborted.", emptyOutput(), {
@@ -189,10 +190,19 @@ export async function executeLocalCommand(
       throw aborted();
     }
 
-    return await spawnCaptured(launch, { ...COMMAND_LIMITS, signal: options.signal });
+    return await execute(launch);
   } finally {
     await rm(launch.scratch, { recursive: true, force: true });
   }
+}
+
+export function executeLocalCommand(
+  command: ResolvedCommand,
+  options: LocalExecutionOptions,
+): Promise<CommandResult> {
+  return withCommandSandbox(command, options, (launch) =>
+    spawnCaptured(launch, { ...COMMAND_LIMITS, signal: options.signal }),
+  );
 }
 
 export function processAlive(pid: number): boolean {

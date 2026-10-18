@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import ts from "typescript";
+import { compile } from "../src/compiler/index.js";
 import { renderArgv } from "../src/core/index.js";
 import { initialState, step } from "../src/engine/index.js";
 import { parseCliHelp } from "../src/local/typegen/parse-help";
@@ -77,6 +78,33 @@ describe("CLI help generation", () => {
       }),
     );
   });
+  test("a loopy importing generated source compiles through the restricted compiler", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "loopy-generated-"));
+
+    try {
+      await writeFile(
+        join(directory, "command.ts"),
+        renderCommandSource("codexExec", parseCliHelp("codex", ["exec"], help).descriptor),
+      );
+      const file = join(directory, "generated.loopy.ts");
+      await writeFile(
+        file,
+        'import {loopy} from "loopy"; import {codexExec} from "./command.ts"; export default loopy("generated", {input:{},run:()=>codexExec({args:["hi"],flags:{json:true}})});',
+      );
+      const result = await compile(file, { home: join(directory, "home") });
+      expect(result).toMatchObject({
+        ok: true,
+        graph: {
+          nodes: expect.arrayContaining([
+            expect.objectContaining({ kind: "command", key: "codex.exec" }),
+          ]),
+        },
+      });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   test("emitted source typechecks against the SDK with typed flags and arity", async () => {
     const directory = await mkdtemp(join(tmpdir(), "loopy-generated-"));
     const file = join(directory, "codex.ts");

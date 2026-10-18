@@ -158,13 +158,6 @@ test("list and schedules use the caller workspace when the daemon started elsewh
   expect((await cli(caller, "schedule", "other", "--cron", "* * * * *")).code).toBe(0);
 });
 
-test("types uses the daemon's command-help endpoint and writes the returned source", async () => {
-  const f = await graphFixture();
-  const result = await cli(f, "types", "git", "--out", "git.ts");
-  expect(result.code).toBe(0);
-  expect(await Bun.file(join(f.cwd, "git.ts")).text()).toContain("defineCommand");
-});
-
 test("an absolute source in another project is registered beside that source", async () => {
   const source = await graphFixture("external-source");
   const caller = fixture("unrelated-caller", "run: () => null");

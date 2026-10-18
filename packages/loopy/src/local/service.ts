@@ -421,9 +421,13 @@ export class LoopyService {
     }
   }
 
-  async generateTypes(body: z.output<typeof routes.generateTypes.body>) {
+  async generateTypes(body: z.output<typeof routes.generateTypes.body>, workspace: string) {
     try {
-      return await generateCommand(body.binary, body.path, { name: body.name ?? undefined });
+      return await generateCommand(body.binary, body.path, {
+        name: body.name,
+        workspace,
+        home: this.options.registry(workspace).home,
+      });
     } catch (error) {
       throw new ServiceError("bad_request", errorMessage(error));
     }

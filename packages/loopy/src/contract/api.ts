@@ -157,7 +157,7 @@ export const routes = {
     method: "POST",
     path: "/types",
     params: emptySchema,
-    query: emptySchema,
+    query: workspaceQuerySchema,
     body: z.strictObject({
       binary: z.string(),
       path: z.array(z.string()),
