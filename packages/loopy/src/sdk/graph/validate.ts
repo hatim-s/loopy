@@ -33,6 +33,6 @@ export function validatePredicate(
 
 export function validateLabel(label: string): void {
   if (isReservedGraphName(label)) {
-    refuse("reserved_name", `Label "${label}" is reserved`);
+    refuse("reserved_name", `Label "${label}" is reserved. Choose another name.`);
   }
 }

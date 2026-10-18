@@ -15,11 +15,11 @@ test("graph definitions validate names, modes, scopes, schedules, secrets and in
   );
   // @ts-expect-error JavaScript can supply a malformed schedule.
   expect(() => loopy("test", { input: {}, schedule: { cron: 42 }, run: () => null })).toThrow(
-    "Schedule cron must be a string.",
+    expect.objectContaining({ diagnostic: expect.objectContaining({ code: "invalid_schedule" }) }),
   );
   // @ts-expect-error JavaScript can supply malformed secret names.
   expect(() => loopy("test", { input: {}, secrets: [42], run: () => null })).toThrow(
-    "Secrets must be a list of strings.",
+    expect.objectContaining({ diagnostic: expect.objectContaining({ code: "invalid_secret" }) }),
   );
   // @ts-expect-error JavaScript can supply a non-object schema.
   expect(() => loopy("test", { input: 42, run: () => null })).toThrow(
@@ -53,7 +53,9 @@ test("normalized graph metadata and schema do not retain caller-owned arrays or 
 for (const cron of ["* * * *", "60 * * * *", "*/0 * * * *", "0 0 * wat *"]) {
   test(`graph definition rejects invalid cron ${cron}`, () => {
     expect(() => loopy("test", { input: {}, schedule: { cron }, run: () => null })).toThrow(
-      "Invalid",
+      expect.objectContaining({
+        diagnostic: expect.objectContaining({ code: "invalid_schedule" }),
+      }),
     );
   });
 }
@@ -61,15 +63,19 @@ for (const cron of ["* * * *", "60 * * * *", "*/0 * * * *", "0 0 * wat *"]) {
 test("graph definitions validate timezones and reject unknown properties", () => {
   expect(() =>
     loopy("test", { input: {}, schedule: { cron: "@daily", tz: "Mars/Olympus" }, run: () => null }),
-  ).toThrow("Invalid time zone 'Mars/Olympus'");
+  ).toThrow(
+    expect.objectContaining({ diagnostic: expect.objectContaining({ code: "invalid_schedule" }) }),
+  );
   // @ts-expect-error JavaScript callers can pass unknown properties.
   expect(() => loopy("test", { input: {}, typo: true, run: () => null })).toThrow(
-    "Unknown definition property 'typo'",
+    expect.objectContaining({ diagnostic: expect.objectContaining({ code: "unknown_property" }) }),
   );
   expect(() =>
     // @ts-expect-error JavaScript callers can pass unknown schedule properties.
     loopy("test", { input: {}, schedule: { cron: "@daily", timezone: "UTC" }, run: () => null }),
-  ).toThrow("Unknown schedule property 'timezone'");
+  ).toThrow(
+    expect.objectContaining({ diagnostic: expect.objectContaining({ code: "unknown_property" }) }),
+  );
   expect(
     loopy("test", { input: {}, schedule: { cron: "@daily", tz: "Asia/Kolkata" }, run: () => null })
       .graph.meta.schedule,
