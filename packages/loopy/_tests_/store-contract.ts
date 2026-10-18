@@ -1,14 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { nodeIdSchema } from "../src/contract/index.js";
-import {
-  type NodeRun,
-  OwnershipError,
-  type RunOutcome,
-  type Schedule,
-  type Store,
-} from "../src/core/index.js";
+import { nodeIdSchema, utcTimestamp } from "../src/contract/index.js";
+import { type NodeRun, type RunOutcome, type Schedule, type Store } from "../src/core/index.js";
 import { newRun } from "./fixture.js";
-import { storeRecordContract } from "./store-record-contract.js";
 
 type StoreFactory = (options?: { now?: () => number; leaseMs?: number }) => Store | Promise<Store>;
 
@@ -117,7 +110,7 @@ function scheduleFireFailures(makeStore: StoreFactory): void {
         run: newRun(),
         nextFireAt: LOG.at,
       }),
-    ).rejects.toThrow("Run 'run' already exists. Use a new run ID.");
+    ).rejects.toMatchObject({ code: "already_exists" });
     expect(await store.listSchedules()).toEqual([SCHEDULE]);
     expect(await store.listRuns()).toEqual([newRun()]);
     await store.deleteSchedule(SCHEDULE.workspace, "test");
@@ -128,7 +121,7 @@ function scheduleFireFailures(makeStore: StoreFactory): void {
         run: { ...newRun(), id: "missing" },
         nextFireAt: LOG.at,
       }),
-    ).rejects.toThrow("Schedule 'test' does not exist. Save the schedule before firing it.");
+    ).rejects.toMatchObject({ code: "schedule_not_found" });
     expect(await store.getRun("missing")).toBeUndefined();
   });
 }
@@ -250,15 +243,26 @@ function rateLimits(makeStore: StoreFactory): void {
     const retryAt = "2026-10-16T00:01:00.000Z";
     expect(
       await Promise.all(
-        Array.from({ length: 3 }, () => store.acquireRateLimit("codex", 2, 60_000, now)),
+        Array.from({ length: 3 }, () =>
+          store.acquireRateLimit({ key: "codex", limit: 2, window: "1m" }, now),
+        ),
       ),
     ).toEqual([{ ok: true }, { ok: true }, { ok: false, retryAt }]);
-    expect(await store.acquireRateLimit("gh", 2, 60_000, now)).toEqual({ ok: true });
-    expect(await store.acquireRateLimit("codex", 2, 60_000, "2026-10-16T00:00:59.999Z")).toEqual({
+    expect(await store.acquireRateLimit({ key: "gh", limit: 2, window: "1m" }, now)).toEqual({
+      ok: true,
+    });
+    expect(
+      await store.acquireRateLimit(
+        { key: "codex", limit: 2, window: "1m" },
+        "2026-10-16T00:00:59.999Z",
+      ),
+    ).toEqual({
       ok: false,
       retryAt,
     });
-    expect(await store.acquireRateLimit("codex", 2, 60_000, retryAt)).toEqual({ ok: true });
+    expect(await store.acquireRateLimit({ key: "codex", limit: 2, window: "1m" }, retryAt)).toEqual(
+      { ok: true },
+    );
   });
 }
 
@@ -282,20 +286,13 @@ function eventCursors(makeStore: StoreFactory): void {
 }
 
 function stateMachine(makeStore: StoreFactory): void {
-  test("claim heartbeat suspend release and reclaim follow the state machine", async () => {
+  test("claim heartbeat release and reclaim follow the state machine", async () => {
     const store = await fixture(makeStore);
     expect(await store.heartbeat("run", "owner")).toBe(false);
     const run = await store.claim("run", "owner");
     expect(run).toMatchObject({ status: "running", owner: { token: "owner" } });
     expect(await store.heartbeat("run", "owner")).toBe(true);
-    await expect(store.claim("run", "other")).rejects.toBeInstanceOf(OwnershipError);
-    await store.suspend("run", "owner", LOG.at);
-    await expect(store.suspend("run", "owner")).rejects.toThrow(
-      "cannot transition from 'suspended'",
-    );
-    await expect(
-      store.finishRun("run", "owner", { status: "succeeded", output: 42 }),
-    ).rejects.toThrow("cannot transition from 'suspended'");
+    await expect(store.claim("run", "other")).rejects.toMatchObject({ code: "owned_elsewhere" });
     await store.release("run", "owner");
     expect((await store.getRun("run"))?.owner).toBeUndefined();
     expect((await store.claim("run", "next")).status).toBe("running");
@@ -323,19 +320,24 @@ function releaseRunning(makeStore: StoreFactory): void {
 
 function terminalTransitions(makeStore: StoreFactory): void {
   for (const outcome of OUTCOMES) {
-    test(`terminal ${outcome.status} cannot be overwritten or suspended`, async () => {
+    test(`terminal ${outcome.status} cannot be overwritten`, async () => {
       const store = await fixture(makeStore);
       await store.claim("run", "owner");
-      await store.finishRun("run", "owner", outcome);
-      await expect(store.finishRun("run", "owner", outcome)).rejects.toThrow(
-        `cannot transition from '${outcome.status}'`,
-      );
-      await expect(store.suspend("run", "owner")).rejects.toThrow(
-        `cannot transition from '${outcome.status}'`,
-      );
+      await store.apply({
+        runId: "run",
+        token: "owner",
+        effects: [{ kind: "finish_run", outcome: outcome, at: newRun().createdAt }],
+      });
+      await expect(
+        store.apply({
+          runId: "run",
+          token: "owner",
+          effects: [{ kind: "finish_run", outcome: outcome, at: newRun().createdAt }],
+        }),
+      ).rejects.toMatchObject({ code: "not_running" });
       expect(await store.getRun("run")).toMatchObject(outcome);
       await store.release("run", "owner");
-      await expect(store.claim("run", "owner")).rejects.toThrow("cannot be claimed");
+      await expect(store.claim("run", "owner")).rejects.toMatchObject({ code: "not_claimable" });
     });
   }
 }
@@ -344,7 +346,6 @@ function ownershipFencing(makeStore: StoreFactory): void {
   test("ownership fences stale writes and heartbeat reports lost ownership", async () => {
     const store = await fixture(makeStore);
     await store.claim("run", "old");
-    await store.suspend("run", "old");
     await store.release("run", "old");
     await store.claim("run", "new");
     expect(await store.heartbeat("run", "old")).toBe(false);
@@ -352,8 +353,6 @@ function ownershipFencing(makeStore: StoreFactory): void {
     const node = runningNode();
 
     const writes = [
-      () => store.suspend("run", "old"),
-      () => store.finishRun("run", "old", { status: "cancelled" }),
       () => store.release("run", "old"),
       () =>
         store.apply({
@@ -384,31 +383,38 @@ function ownershipFencing(makeStore: StoreFactory): void {
     ];
 
     for (const write of writes) {
-      await expect(write()).rejects.toBeInstanceOf(OwnershipError);
+      await expect(write()).rejects.toMatchObject({ code: "owned_elsewhere" });
     }
   });
 }
 
 function dueRuns(makeStore: StoreFactory): void {
-  test("dueRuns includes queued and due suspensions but excludes owned and future runs", async () => {
-    const store = await fixture(makeStore);
-    expect((await store.dueRuns(LOG.at)).map((run) => run.id)).toEqual(["run"]);
-    await store.claim("run", "owner");
-    expect(await store.dueRuns(LOG.at)).toEqual([]);
-    await store.suspend("run", "owner");
-    await store.release("run", "owner");
-    expect(await store.dueRuns(LOG.at)).toEqual([]);
-    await store.claim("run", "owner");
-    await store.suspend("run", "owner", "2026-10-16T01:00:00.000Z");
-    await store.release("run", "owner");
-    expect(await store.dueRuns(LOG.at)).toEqual([]);
-    expect((await store.dueRuns("2026-10-16T01:00:00.000Z")).map((run) => run.id)).toEqual(["run"]);
+  test("dueRuns includes queued and due suspensions but excludes terminal, indefinite, owned and future runs", async () => {
+    const store = await makeStore();
+
+    for (const status of ["succeeded", "failed", "cancelled"] as const) {
+      await store.createRun({ ...newRun(), id: status, status, wakeAt: LOG.at });
+    }
+
+    await store.createRun({ ...newRun(), id: "indefinite", status: "suspended" });
+    await store.createRun({
+      ...newRun(),
+      id: "future",
+      status: "suspended",
+      wakeAt: "2100-01-01T00:00:00.000Z",
+    });
+    await store.createRun({ ...newRun(), id: "owned" });
+    await store.claim("owned", "owner");
+    await store.createRun({ ...newRun(), id: "due", status: "suspended", wakeAt: LOG.at });
+    await store.createRun({ ...newRun(), id: "queued" });
+    expect((await store.dueRuns(LOG.at)).map((run) => run.id)).toEqual(["due", "queued"]);
   });
 }
 
 export function storeContract(name: string, makeStore: StoreFactory): void {
   describe(name, () => {
-    storeRecordContract(makeStore);
+    recordWrites(makeStore);
+    eventRetention(makeStore);
     stateMachine(makeStore);
     releaseRunning(makeStore);
     terminalTransitions(makeStore);
@@ -432,7 +438,17 @@ export function storeContract(name: string, makeStore: StoreFactory): void {
       const cursor = await store.eventCursor();
       expect(await store.wakeRun("run", LOG.at)).toBe("owned_elsewhere");
       expect(await store.eventCursor()).toEqual(cursor);
-      await store.finishRun("run", "owner", { status: "succeeded", output: null });
+      await store.apply({
+        runId: "run",
+        token: "owner",
+        effects: [
+          {
+            kind: "finish_run",
+            outcome: { status: "succeeded", output: null },
+            at: newRun().createdAt,
+          },
+        ],
+      });
       await store.release("run", "owner");
       expect(await store.wakeRun("run", LOG.at)).toBe("not_claimable");
     });
@@ -469,7 +485,7 @@ export function storeContract(name: string, makeStore: StoreFactory): void {
             },
           ],
         }),
-      ).rejects.toThrow("1 MiB");
+      ).rejects.toMatchObject({ code: "output_limit" });
       expect(await store.getNodeRuns("run")).toEqual([]);
       expect(await store.events(0, 100)).toEqual(before);
       expect((await store.getRun("run"))?.status).toBe("running");
@@ -485,9 +501,128 @@ export function storeContract(name: string, makeStore: StoreFactory): void {
       const events = (await store.events(0, 100)).slice(before.length);
       expect(events.map((event) => event.entity)).toEqual(["node", "run"]);
       expect(new Set(events.map((event) => event.txn)).size).toBe(1);
-      await expect(store.apply({ runId: "run", token: "old", effects: [] })).rejects.toBeInstanceOf(
-        OwnershipError,
-      );
+      await expect(store.apply({ runId: "run", token: "old", effects: [] })).rejects.toMatchObject({
+        code: "owned_elsewhere",
+      });
     });
   });
+}
+
+function recordWrites(makeStore: StoreFactory) {
+  test("due runs sort by the UTC timestamps accepted at the contract edge", async () => {
+    const store = await makeStore();
+    await store.createRun({
+      ...newRun(),
+      id: "later",
+      createdAt: utcTimestamp.parse("2026-10-16T01:00:00.000Z"),
+    });
+    await store.createRun({
+      ...newRun(),
+      id: "earlier",
+      createdAt: utcTimestamp.parse("2026-10-16T05:00:00+05:00"),
+    });
+    expect((await store.dueRuns(LOG.at)).map((run) => run.id)).toEqual(["earlier", "later"]);
+  });
+  test("node retry and log timestamps persist the UTC input from the contract edge", async () => {
+    const store = await fixture(makeStore);
+    await store.claim("run", "owner");
+    const at = utcTimestamp.parse("2026-10-16T05:00:00+05:00");
+    const base = runningNode();
+    await store.apply({
+      runId: "run",
+      token: "owner",
+      effects: [
+        {
+          kind: "write_node_run",
+          nodeRun: {
+            ...base,
+            status: "retrying",
+            error: { code: "execution", message: "retry" },
+            endedAt: at,
+            nextRetryAt: at,
+          },
+        },
+        {
+          kind: "write_log",
+          executionKey: base.key,
+          attempt: 1,
+          at,
+          log: { message: "saved", data: null },
+        },
+      ],
+    });
+    expect(await store.getNodeRuns("run")).toMatchObject([
+      { startedAt: LOG.at, endedAt: LOG.at, nextRetryAt: LOG.at },
+    ]);
+    expect(await store.getLogs("run")).toMatchObject([{ at: LOG.at }]);
+  });
+}
+
+function eventRetention(makeStore: StoreFactory) {
+  const start = Date.parse(newRun().createdAt);
+  test("subscribers survive throwing listeners and unsubscribe after committed batches", async () => {
+    const store = await makeStore({ now: () => start });
+
+    const batches: RuntimeEvent[][] = [];
+    const reads: ReturnType<Store["getRun"]>[] = [];
+    store.subscribe(() => {
+      throw new Error("Listener failed.");
+    });
+
+    const unsubscribe = store.subscribe((events) => {
+      batches.push(events);
+      reads.push(store.getRun("run"));
+    });
+
+    await store.createRun(newRun());
+    expect(await reads[0]).toEqual(newRun());
+    await store.claim("run", "owner");
+    expect(batches.map((batch) => batch.length)).toEqual([1, 1]);
+    unsubscribe();
+    await store.apply({
+      runId: "run",
+      token: "owner",
+      effects: [
+        {
+          kind: "finish_run",
+          outcome: { status: "succeeded", output: null },
+          at: newRun().createdAt,
+        },
+      ],
+    });
+    expect(batches).toHaveLength(2);
+    expect(await store.events(0, 10)).toHaveLength(3);
+  });
+
+  test("retention keeps the exact 24-hour boundary and monotonic sequences", async () => {
+    let time = start;
+    const store = await makeStore({ now: () => time });
+
+    await store.createRun(newRun());
+    time++;
+    await store.claim("run", "owner");
+    time += 86_400_000;
+    expect(await store.pruneEvents(new Date(time).toISOString())).toBe(1);
+    expect((await store.events(0, 10)).map((event) => event.sequence)).toEqual([2]);
+    expect(await store.pruneEvents(new Date(time).toISOString())).toBe(0);
+    await store.heartbeat("run", "owner");
+    expect((await store.events(2, 10))[0]?.sequence).toBe(3);
+  });
+
+  test("retention bounds recent rows to the newest 100000", async () => {
+    const store = await makeStore({ now: () => start });
+
+    await store.createRun(newRun());
+    await store.claim("run", "owner");
+
+    for (let index = 0; index < 100_001; index++) {
+      await store.heartbeat("run", "owner");
+    }
+
+    expect(await store.pruneEvents(newRun().createdAt)).toBe(3);
+    const events = await store.events(0, 100_010);
+    expect(events).toHaveLength(100_000);
+    expect(events[0]?.sequence).toBe(4);
+    expect(events.at(-1)?.sequence).toBe(100_003);
+  }, 30_000);
 }

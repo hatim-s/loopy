@@ -5,7 +5,6 @@ import {
   type ErrorCode,
   encodeRunCursor,
   graphView,
-  isTerminalRun,
   type Json,
   type LoopyView,
   loopyView,
@@ -23,12 +22,12 @@ import {
   errorMessage,
   matchesRecord,
   nextFire,
-  OwnershipError,
   parseCron,
   type RunRecord,
   type RuntimeEvent,
   type Schedule,
   type Store,
+  StoreError,
 } from "../core/index.js";
 import { type Clock } from "../host/index.js";
 import { canonicalPath } from "./fs.js";
@@ -308,27 +307,16 @@ export class LoopyService {
   }
 
   private async claim(id: string, token: string) {
-    const run = await this.requireRun(id);
-
-    if (isTerminalRun(run.status)) {
-      throw new ServiceError("not_claimable");
-    }
-
     try {
       await this.options.store.claim(id, token);
     } catch (error) {
-      if (error instanceof OwnershipError) {
-        throw new ServiceError(
-          "owned_elsewhere",
-          `Run '${id}' is owned by PID ${run.owner?.pid} on ${run.owner?.host}. Stop its runner before retrying.`,
-        );
-      }
-
-      // Completion can win the race after requireRun but before the store claims ownership.
-      const current = await this.options.store.getRun(id);
-
-      if (current && isTerminalRun(current.status)) {
-        throw new ServiceError("not_claimable");
+      if (
+        error instanceof StoreError &&
+        (error.code === "not_found" ||
+          error.code === "owned_elsewhere" ||
+          error.code === "not_claimable")
+      ) {
+        throw new ServiceError(error.code);
       }
 
       throw error;
@@ -350,7 +338,11 @@ export class LoopyService {
     await this.claim(id, token);
 
     try {
-      await this.options.store.finishRun(id, token, { status: "cancelled" });
+      await this.options.store.apply({
+        runId: id,
+        token,
+        effects: [{ kind: "finish_run", outcome: { status: "cancelled" }, at: this.now() }],
+      });
     } finally {
       await this.options.store.release(id, token);
     }

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import type { Store } from "../src/core/index.js";
 import { activate, type Clock } from "../src/host/index.js";
 import { code, loopy } from "../src/sdk/graph/index.js";
-import { MemoryStore } from "../src/store/index.js";
+import { SqliteRunStore } from "../src/store/index.js";
 import { FakeExecutor, newRun } from "./fixture.js";
 
 function graph() {
@@ -27,7 +27,7 @@ async function execute(store: Store, executor = new FakeExecutor()) {
   return activate({ store, executor, graph: graph(), runId: "run" });
 }
 
-class ReadFailureStore extends MemoryStore {
+class ReadFailureStore extends SqliteRunStore {
   override async getNodeRuns(): Promise<never> {
     throw new Error("Nodes unavailable. Restore storage.");
   }
@@ -41,7 +41,7 @@ class ReleaseFailureStore extends ReadFailureStore {
 }
 
 test("node read failure releases ownership into a claimable suspension", async () => {
-  const store = new ReadFailureStore();
+  const store = new ReadFailureStore(":memory:");
   await expect(execute(store)).rejects.toThrow("Nodes unavailable");
   expect(await store.getRun("run")).toMatchObject({ status: "suspended" });
   expect((await store.getRun("run"))?.owner).toBeUndefined();
@@ -49,7 +49,7 @@ test("node read failure releases ownership into a claimable suspension", async (
 });
 
 test("release failure remains the cause of the primary read failure", async () => {
-  await expect(execute(new ReleaseFailureStore())).rejects.toMatchObject({
+  await expect(execute(new ReleaseFailureStore(":memory:"))).rejects.toMatchObject({
     message: "Nodes unavailable. Restore storage.",
     cause: new Error("Release unavailable. Restore storage."),
   });
@@ -57,7 +57,7 @@ test("release failure remains the cause of the primary read failure", async () =
 
 for (const operation of ["dispatch", "finish"] as const) {
   test(`${operation} persistence failure releases ownership and does not dispatch uncommitted work`, async () => {
-    class WriteFailureStore extends MemoryStore {
+    class WriteFailureStore extends SqliteRunStore {
       override async apply(batch: Parameters<Store["apply"]>[0]) {
         if (
           operation === "dispatch" ||
@@ -70,7 +70,7 @@ for (const operation of ["dispatch", "finish"] as const) {
       }
     }
 
-    const store = new WriteFailureStore();
+    const store = new WriteFailureStore(":memory:");
     const executor = new FakeExecutor();
     executor.result = { kind: "succeeded", output: 42, logs: [] };
     await expect(execute(store, executor)).rejects.toThrow("Write unavailable");
@@ -81,7 +81,7 @@ for (const operation of ["dispatch", "finish"] as const) {
 }
 
 test("release failure preserves a failed graph outcome as the primary message", async () => {
-  class TerminalReleaseFailureStore extends MemoryStore {
+  class TerminalReleaseFailureStore extends SqliteRunStore {
     override async release(runId: string, token: string) {
       await super.release(runId, token);
       throw new Error("Release unavailable");
@@ -95,7 +95,9 @@ test("release failure preserves a failed graph outcome as the primary message", 
     exitCode: null,
     logs: [],
   };
-  await expect(execute(new TerminalReleaseFailureStore(), executor)).rejects.toMatchObject({
+  await expect(
+    execute(new TerminalReleaseFailureStore(":memory:"), executor),
+  ).rejects.toMatchObject({
     message: "Invalid bundle protocol",
     cause: new Error("Release unavailable"),
   });
@@ -116,7 +118,7 @@ test("all three attempts retain their own logs and indices", async () => {
     },
   };
 
-  const store = new MemoryStore(clock.now);
+  const store = new SqliteRunStore(":memory:", clock.now);
   await store.createRun(newRun());
   const executor = new FakeExecutor();
   executor.execute = async (...[, attempt]) =>

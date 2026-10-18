@@ -15,7 +15,7 @@ import {
   Registry,
   SecretStore,
 } from "../src/local/index.js";
-import { MemoryStore } from "../src/store/index.js";
+import { SqliteRunStore } from "../src/store/index.js";
 import { newRun } from "./fixture.js";
 import { fixture } from "./fixtures/executor.js";
 import { approveDemoGraph } from "./fixtures/graphs.js";
@@ -282,7 +282,7 @@ for (const failure of ["timeout", "output_limit", "nonzero"] as const) {
     node.module.bundleHash = "a".repeat(64);
     node.timeout = 500;
     node.retry = { attempts: 1, backoff: "exponential", retryOnExit: false };
-    const store = new MemoryStore();
+    const store = new SqliteRunStore(":memory:");
     await store.createRun({ ...newRun(), input: { subject: "test" } });
 
     const outcome = await activate({
@@ -354,7 +354,7 @@ for (const ending of ["timeout", "success"] as const) {
     node.module.bundleHash = "a".repeat(64);
     node.timeout = 500;
     node.retry = { attempts: 1, backoff: "exponential", retryOnExit: false };
-    const runs = new MemoryStore();
+    const runs = new SqliteRunStore(":memory:");
     await runs.createRun({ ...newRun(), input: { subject: "test" } });
 
     const outcome = await activate({
@@ -474,7 +474,7 @@ for (const ending of ["success", "timeout", "output_limit", "nonzero"] as const)
     node.module.bundleHash = "a".repeat(64);
     node.timeout = 500;
     node.retry = { attempts: 1, backoff: "exponential", retryOnExit: false };
-    const runs = new MemoryStore();
+    const runs = new SqliteRunStore(":memory:");
     await runs.createRun({ ...newRun(), input: { subject: "test" } });
 
     const outcome = await activate({

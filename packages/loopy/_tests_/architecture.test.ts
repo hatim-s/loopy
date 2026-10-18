@@ -27,7 +27,8 @@ const ALLOWED_IMPORTS: Record<Layer, readonly Layer[]> = {
   core: [],
   engine: ["core"],
   host: ["core", "engine"],
-  store: ["core", "contract"],
+  // SQLite uses the shared host-side PID liveness helper.
+  store: ["core", "contract", "executor"],
   executor: ["core", "contract"],
   contract: ["core"],
   local: ["core", "engine", "host", "store", "executor", "sdk", "contract"],

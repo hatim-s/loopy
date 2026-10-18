@@ -3,7 +3,7 @@ import type { Executor } from "../src/core/index.js";
 import { initialState, step } from "../src/engine/index.js";
 import { activate, type Clock } from "../src/host/index.js";
 import { code, loopy, sh } from "../src/sdk/graph/index.js";
-import { MemoryStore } from "../src/store/index.js";
+import { SqliteRunStore } from "../src/store/index.js";
 import { newRun } from "./fixture.js";
 
 function graph() {
@@ -27,7 +27,7 @@ function graph() {
 test.each(["none", "finished"] as const)(
   "host resumes the same persisted attempt from a %s receipt",
   async (kind) => {
-    const store = new MemoryStore();
+    const store = new SqliteRunStore(":memory:");
     const plan = graph();
     await store.createRun(newRun());
     await store.claim("run", "old");
@@ -102,7 +102,7 @@ test("retry retains ownership and running status, persists its deadline and keep
     },
   };
 
-  const store = new MemoryStore(clock.now);
+  const store = new SqliteRunStore(":memory:", clock.now);
   await store.createRun(newRun());
 
   const executor: Executor = {
@@ -154,7 +154,7 @@ test("a shared window of two delays the third dispatch without consuming an atte
     },
   };
 
-  const store = new MemoryStore(clock.now);
+  const store = new SqliteRunStore(":memory:", clock.now);
   const rateLimit = { key: "shared", limit: 2, window: "1m" } as const;
 
   const plan = loopy("limited", {

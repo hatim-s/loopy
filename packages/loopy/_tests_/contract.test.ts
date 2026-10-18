@@ -39,7 +39,6 @@ test("schema outputs exactly match core records and the wire owner projection", 
     "token"
   > | null>();
 
-  expectTypeOf<z.infer<typeof contract.runRecordSchema>>().toEqualTypeOf<core.RunRecord>();
   expectTypeOf<z.infer<typeof contract.attemptLogSchema>>().toEqualTypeOf<core.AttemptLog>();
   expectTypeOf<
     z.infer<typeof contract.executionResultSchema>
@@ -627,14 +626,12 @@ for (const name of ["__proto__", "constructor", "prototype"]) {
   }
 }
 
-test("wire timestamps normalize offsets on run and node records", () => {
+test("wire timestamps normalize offsets on node records", () => {
   const offset = "2026-10-18T05:30:00.000+05:30";
   const utc = "2026-10-18T00:00:00.000Z";
-  const run = contract.runRecordSchema.parse({ ...newRun(), createdAt: offset, updatedAt: offset });
-  expect([run.createdAt, run.updatedAt]).toEqual([utc, utc]);
 
   const node = contract.nodeRunSchema.parse({
-    key: { runId: run.id, nodeId: "node", scope: [] },
+    key: { runId: "run", nodeId: "node", scope: [] },
     attempt: 1,
     maxAttempts: 1,
     receipt: "none",

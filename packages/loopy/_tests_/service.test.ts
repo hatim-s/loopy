@@ -9,7 +9,7 @@ import { Daemon, SYSTEM_CLOCK } from "../src/host/index.js";
 import { LoopyService, openRunStore, Registry } from "../src/local/index.js";
 import { loopy } from "../src/sdk/graph/index.js";
 import { compiledBody } from "./compiled-fixture.js";
-import { FakeExecutor } from "./fixture.js";
+import { FakeExecutor, newRun } from "./fixture.js";
 
 const cleanups: (() => void)[] = [];
 
@@ -405,7 +405,13 @@ test("service maps completion between requireRun and claim to not_claimable", as
   const claim = store.claim.bind(store);
   store.claim = async (id, token) => {
     await claim(id, "finisher");
-    await store.finishRun(id, "finisher", { status: "succeeded", output: 1 });
+    await store.apply({
+      runId: id,
+      token: "finisher",
+      effects: [
+        { kind: "finish_run", outcome: { status: "succeeded", output: 1 }, at: newRun().createdAt },
+      ],
+    });
     await store.release(id, "finisher");
 
     return claim(id, token);

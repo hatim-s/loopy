@@ -49,7 +49,6 @@ export type RunRecord = {
   output?: Json;
   error?: string;
   wakeAt?: string;
-  nextRetryAt?: string;
   createdAt: string;
   updatedAt: string;
   owner?: RunOwner;

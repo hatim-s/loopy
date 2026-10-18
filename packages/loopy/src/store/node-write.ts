@@ -3,20 +3,19 @@ import {
   type LogRecord,
   MAX_LOG_BYTES,
   MAX_OUTPUT_BYTES,
-  OUTPUT_LIMIT_MESSAGE,
   type NodeRun,
   outputBytes,
   type StoreEffect,
+  StoreError,
 } from "../core/index.js";
-import { utc } from "./timestamps.js";
 
 export function checkNodeWrite(runId: string, node: NodeRun) {
   if (node.key.runId !== runId) {
-    throw new Error("Node run belongs to another run.");
+    throw new StoreError("wrong_run");
   }
 
   if (node.status === "succeeded" && outputBytes(node.output) > MAX_OUTPUT_BYTES) {
-    throw new Error(OUTPUT_LIMIT_MESSAGE);
+    throw new StoreError("output_limit");
   }
 }
 
@@ -24,7 +23,7 @@ export function checkLogWrite(previous: LogRecord[], log: LogRecord) {
   const position = log.position;
 
   if (position.kind !== "node") {
-    throw new Error("Attempt logs require a node execution key.");
+    throw new StoreError("invalid_log_position");
   }
 
   const bytes = [...previous, log]
@@ -40,7 +39,7 @@ export function checkLogWrite(previous: LogRecord[], log: LogRecord) {
     );
 
   if (bytes > MAX_LOG_BYTES) {
-    throw new Error("Attempt logs exceed the 64 KiB limit.");
+    throw new StoreError("log_limit");
   }
 }
 
@@ -69,6 +68,6 @@ export function logRecord(
       index: Math.max(-1, ...indices) + 1,
     },
     level: "info" as const,
-    at: utc(effect.at),
+    at: effect.at,
   };
 }

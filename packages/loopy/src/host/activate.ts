@@ -1,5 +1,4 @@
 import {
-  durationMs,
   type Executor,
   errorMessage,
   type Graph,
@@ -41,12 +40,7 @@ async function execute(
 
     if (receipt.kind === "none") {
       if (rule) {
-        const acquired = await store.acquireRateLimit(
-          rule.key,
-          rule.limit,
-          durationMs(rule.window),
-          at,
-        );
+        const acquired = await store.acquireRateLimit(rule, at);
 
         if (!acquired.ok) {
           return { ...identity, kind: "rate_limited", retryAt: acquired.retryAt };

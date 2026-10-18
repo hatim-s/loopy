@@ -1,9 +1,9 @@
 import {
   errorMessage,
-  OwnershipError,
   type RunRecord,
   type Schedule,
   type Store,
+  StoreError,
   toError,
 } from "../core/index.js";
 import { type ActivationOptions, activate } from "./activate.js";
@@ -175,7 +175,7 @@ export class Daemon {
 
       return true;
     } catch (error) {
-      if (!(error instanceof OwnershipError)) {
+      if (!(error instanceof StoreError && error.code === "owned_elsewhere")) {
         this.report(error, run);
       }
 
@@ -192,7 +192,17 @@ export class Daemon {
       await store.claim(run.id, token);
 
       try {
-        await store.finishRun(run.id, token, { status: "failed", error: errorMessage(error) });
+        await store.apply({
+          runId: run.id,
+          token,
+          effects: [
+            {
+              kind: "finish_run",
+              outcome: { status: "failed", error: errorMessage(error) },
+              at: new Date(this.clock.now()).toISOString(),
+            },
+          ],
+        });
       } finally {
         await store.release(run.id, token);
       }

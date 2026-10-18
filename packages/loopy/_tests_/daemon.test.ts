@@ -3,11 +3,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Graph, RunRecord, Store as RunStore, Schedule } from "../src/core/index.js";
-import { OwnershipError } from "../src/core/index.js";
+import { StoreError } from "../src/core/index.js";
 import { type Clock, Daemon } from "../src/host/index.js";
 import { SqliteRunStore } from "../src/local/index.js";
 import { loopy } from "../src/sdk/graph/index.js";
-import { MemoryStore as MemoryRunStore } from "../src/store/index.js";
+import { SqliteRunStore as MemoryRunStore } from "../src/store/index.js";
 import { FakeExecutor, newRun } from "./fixture.js";
 
 function fixture(
@@ -24,7 +24,7 @@ function fixture(
     },
   };
 
-  const store = options.store ?? new MemoryRunStore(clock.now);
+  const store = options.store ?? new MemoryRunStore(":memory:", clock.now);
   const errors: { error: Error; run?: RunRecord }[] = [];
 
   const daemon = new Daemon({
@@ -167,7 +167,7 @@ test("a throwing activation releases ownership and does not block other runs", a
     }
   }
 
-  const store = new BrokenJournalStore(() => Date.parse(newRun().createdAt));
+  const store = new BrokenJournalStore(":memory:", () => Date.parse(newRun().createdAt));
   const f = fixture({ store });
   await store.createRun({ ...newRun(), id: "bad" });
   await store.createRun(newRun());
@@ -287,7 +287,7 @@ test("a failed wake lookup reports once and retries after an abortable capped wa
   }
 
   const sleeping = steppingSleeper();
-  const f = fixture({ store: new FlakyWakeStore(), sleep: sleeping.sleep });
+  const f = fixture({ store: new FlakyWakeStore(":memory:"), sleep: sleeping.sleep });
   const running = f.daemon.run();
 
   try {
@@ -315,7 +315,7 @@ test("failed activations back off from one second to the five second cap", async
   const sleeping = steppingSleeper();
 
   const f = fixture({
-    store: new BrokenJournalStore(() => Date.parse(newRun().createdAt)),
+    store: new BrokenJournalStore(":memory:", () => Date.parse(newRun().createdAt)),
     sleep: sleeping.sleep,
   });
 
@@ -342,11 +342,11 @@ test("failed activations back off from one second to the five second cap", async
 test("claim contention does not report an activation error", async () => {
   class ContendedStore extends MemoryRunStore {
     override async claim(runId: string): Promise<RunRecord> {
-      throw new OwnershipError(runId);
+      throw new StoreError("owned_elsewhere");
     }
   }
 
-  const f = fixture({ store: new ContendedStore() });
+  const f = fixture({ store: new ContendedStore(":memory:") });
   await f.store.createRun(newRun());
   expect(await f.daemon.tick()).toEqual({ fired: 0, activated: 0 });
   expect(f.errors).toEqual([]);
@@ -381,7 +381,7 @@ test("the loop prunes old events at startup and each hour", async () => {
 
 function catchUpStores(kind: "memory" | "sqlite") {
   if (kind === "memory") {
-    const store = new MemoryRunStore(() => Date.parse(newRun().createdAt));
+    const store = new MemoryRunStore(":memory:", () => Date.parse(newRun().createdAt));
 
     return { store, writer: store, close: () => {} };
   }

@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
 import { Daemon } from "../src/host/index.js";
 import { loopy, sh } from "../src/sdk/graph/index.js";
-import { MemoryStore } from "../src/store/index.js";
+import { SqliteRunStore } from "../src/store/index.js";
 import { FakeExecutor, newRun } from "./fixture.js";
 
 function fixture(concurrency: number) {
-  const store = new MemoryStore();
+  const store = new SqliteRunStore(":memory:");
   const entered = Promise.withResolvers<void>();
   const gate = Promise.withResolvers<void>();
   const active = new Set<string>();
@@ -95,7 +95,7 @@ test("shutdown drains the active graph execution and leaves queued work untouche
 
 test("a held activation does not stop the running loop from processing new work and overdue schedules", async () => {
   let time = Date.parse("2026-10-18T00:00:00.000Z");
-  const store = new MemoryStore(() => time);
+  const store = new SqliteRunStore(":memory:", () => time);
   const held = Promise.withResolvers<void>();
   const entered = Promise.withResolvers<void>();
   const completed = Promise.withResolvers<void>();

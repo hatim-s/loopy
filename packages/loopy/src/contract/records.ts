@@ -108,27 +108,8 @@ export type {
   LogPosition,
   LogRecord,
   RunOutcome,
+  RunRecord,
   RunStatus,
   Schedule,
   StepRecord,
 } from "../core/index.js";
-
-export const runRecordSchema = z.strictObject({
-  id: z.string(),
-  slug: z.string(),
-  revision: z.string(),
-  workspace: z.string(),
-  input: jsonSchema,
-  status: runStatusSchema,
-  output: jsonSchema.optional(),
-  error: z.string().optional(),
-  wakeAt: utcTimestamp.optional(),
-  nextRetryAt: utcTimestamp.optional(),
-  createdAt: utcTimestamp,
-  updatedAt: utcTimestamp,
-  owner: z
-    .strictObject({ token: z.string(), pid: counter, host: z.string(), heartbeatAt: utcTimestamp })
-    .optional(),
-});
-
-export type { RunRecord } from "../core/index.js";

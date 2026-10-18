@@ -3,7 +3,6 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
-import { z } from "zod";
 import { nodeIdSchema } from "../src/contract/index.js";
 import type { NodeRun } from "../src/core/index.js";
 import { SqliteRunStore } from "../src/store/index.js";
@@ -63,7 +62,7 @@ test("node runs, logs, event revisions and rate windows survive reopening", asyn
       },
     ],
   });
-  await f.store.acquireRateLimit("shared", 1, 60_000, newRun().createdAt);
+  await f.store.acquireRateLimit({ key: "shared", limit: 1, window: "1m" }, newRun().createdAt);
   const expected = await f.store.snapshotRun("run");
   f.store.close();
   const reopened = new SqliteRunStore(f.file);
@@ -71,7 +70,12 @@ test("node runs, logs, event revisions and rate windows survive reopening", asyn
   try {
     expect(await reopened.snapshotRun("run")).toEqual(expected);
     expect(await reopened.getNodeRuns("run")).toEqual([record]);
-    expect(await reopened.acquireRateLimit("shared", 1, 60_000, newRun().createdAt)).toEqual({
+    expect(
+      await reopened.acquireRateLimit(
+        { key: "shared", limit: 1, window: "1m" },
+        newRun().createdAt,
+      ),
+    ).toEqual({
       ok: false,
       retryAt: "2026-10-16T00:01:00.000Z",
     });
@@ -131,35 +135,9 @@ test("outbox insertion failure rolls back nodes, logs and outcomes without publi
   expect(deliveries).toBe(1);
 });
 
-for (const malformed of [
-  { ...newRun(), status: "unknown" },
-  {
-    ...newRun(),
-    owner: { token: "x", pid: "wrong", host: "host", heartbeatAt: newRun().createdAt },
-  },
-  [],
-]) {
-  test("event reads reject malformed run records", async () => {
-    const f = fixture();
-    await f.store.createRun(newRun());
-    f.db.query("UPDATE events SET record=?").run(JSON.stringify(malformed));
-    await expect(f.store.events(0, 10)).rejects.toBeInstanceOf(z.ZodError);
-  });
-}
-
-test("event reads reject malformed node attempts and invalid JSON", async () => {
+test("event reads reject invalid JSON", async () => {
   const f = fixture();
   await f.store.createRun(newRun());
-  await f.store.claim("run", "owner");
-  await f.store.apply({
-    runId: "run",
-    token: "owner",
-    effects: [{ kind: "write_node_run", nodeRun: node() }],
-  });
-  f.db
-    .query("UPDATE events SET record=? WHERE entity='node'")
-    .run(JSON.stringify({ ...node(), attempt: 1.5 }));
-  await expect(f.store.events(0, 10)).rejects.toBeInstanceOf(z.ZodError);
   f.db.query("UPDATE events SET record=?").run("{");
   await expect(f.store.events(0, 10)).rejects.toBeInstanceOf(SyntaxError);
 });
@@ -187,7 +165,7 @@ for (const alive of [true, false]) {
       expect((await store.dueRuns(new Date(now).toISOString())).length).toBe(alive ? 0 : 1);
 
       if (alive) {
-        await expect(store.claim("run", "new")).rejects.toThrow("not owned");
+        await expect(store.claim("run", "new")).rejects.toMatchObject({ code: "owned_elsewhere" });
       } else {
         expect(await store.claim("run", "new")).toMatchObject({
           owner: { token: "new", pid: process.pid },

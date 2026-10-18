@@ -1,6 +1,6 @@
-import type { RunRecord } from "../../core/index.js";
+import type { RunRecord, RuntimeEvent } from "../../core/index.js";
 
-export const SCHEMA_VERSION = 13;
+export const SCHEMA_VERSION = 14;
 
 export const SCHEMA = `
   CREATE TABLE events (
@@ -12,7 +12,7 @@ export const SCHEMA = `
   CREATE TABLE runs (
     id TEXT PRIMARY KEY, slug TEXT NOT NULL, revision TEXT NOT NULL, workspace TEXT NOT NULL,
     input_json TEXT NOT NULL, status TEXT NOT NULL, output_json TEXT, error TEXT,
-    wake_at TEXT, next_retry_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+    wake_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
     owner_token TEXT, owner_pid INTEGER, owner_host TEXT, heartbeat_at TEXT
   );
   CREATE INDEX runs_slug_created ON runs(slug, created_at);
@@ -47,7 +47,6 @@ export type RunRow = {
   output_json: string | null;
   error: string | null;
   wake_at: string | null;
-  next_retry_at: string | null;
   created_at: string;
   updated_at: string;
   owner_token: string | null;
@@ -72,10 +71,10 @@ export type EventRow = {
   sequence: number;
   at: string;
   txn: string;
-  entity: string;
-  kind: string;
   run_id: string | null;
   record: string;
-};
+} & {
+  [E in RuntimeEvent["entity"]]: Pick<Extract<RuntimeEvent, { entity: E }>, "entity" | "kind">;
+}[RuntimeEvent["entity"]];
 
 export type LogRow = { record: string };

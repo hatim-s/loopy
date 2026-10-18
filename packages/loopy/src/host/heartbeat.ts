@@ -1,4 +1,4 @@
-import { OwnershipError, type Store, toError } from "../core/index.js";
+import { type Store, StoreError, toError } from "../core/index.js";
 
 export async function withHeartbeat<T>(
   store: Store,
@@ -14,7 +14,7 @@ export async function withHeartbeat<T>(
       pending = pending
         .then(async () => {
           if (!(await store.heartbeat(runId, token))) {
-            throw new OwnershipError(runId);
+            throw new StoreError("owned_elsewhere");
           }
         })
         .catch((cause) => {

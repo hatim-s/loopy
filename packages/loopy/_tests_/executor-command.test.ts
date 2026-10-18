@@ -5,7 +5,7 @@ import { receiptPath } from "../src/executor/receipts.js";
 import { activate } from "../src/host/index.js";
 import { SecretStore } from "../src/local/index.js";
 import { loopy, sh } from "../src/sdk/graph/index.js";
-import { MemoryStore } from "../src/store/index.js";
+import { SqliteRunStore } from "../src/store/index.js";
 import { newRun } from "./fixture.js";
 import { commandSpec, fixture } from "./fixtures/executor.js";
 
@@ -169,7 +169,7 @@ test("parser execution failures propagate to the stored graph node and run", asy
   }
 
   node.parse = { bundleHash: "a".repeat(64), input: {} };
-  const store = new MemoryStore();
+  const store = new SqliteRunStore(":memory:");
   await store.createRun(newRun());
   expect(await activate({ store, executor: f.executor, graph, runId: "run" })).toMatchObject({
     status: "failed",

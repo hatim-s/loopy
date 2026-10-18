@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
 import { nodeIdSchema, runView, serverEvent, serverEventSchema } from "../src/contract/index.js";
-import { MemoryStore } from "../src/store/index.js";
+import { SqliteRunStore } from "../src/store/index.js";
 import { newRun } from "./fixture.js";
 
 test("node and run outbox events publish one isolated transaction and parse over SSE", async () => {
-  const store = new MemoryStore();
+  const store = new SqliteRunStore(":memory:");
   const batches: string[][] = [];
   store.subscribe((events) => {
     batches.push(events.map((event) => event.entity));

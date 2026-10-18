@@ -6,7 +6,7 @@ import { revision } from "../src/core/index.js";
 import { activate, SYSTEM_CLOCK } from "../src/host/index.js";
 import { LoopyService, Registry } from "../src/local/index.js";
 import { loopy } from "../src/sdk/graph/index.js";
-import { MemoryStore } from "../src/store/index.js";
+import { SqliteRunStore } from "../src/store/index.js";
 import { FakeExecutor } from "./fixture.js";
 import { fixture } from "./fixtures/executor.js";
 
@@ -28,7 +28,7 @@ async function setup() {
     replace: false,
     source: { path: source, workspace: f.workspace },
   });
-  const store = new MemoryStore();
+  const store = new SqliteRunStore(":memory:");
   const service = new LoopyService({ store, registry: () => registry, clock: SYSTEM_CLOCK });
 
   return { ...f, graph, store, service };

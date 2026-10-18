@@ -43,7 +43,6 @@ export {
   type RunRecord,
   type RunStatus,
   runOutcomeSchema,
-  runRecordSchema,
   runStatusSchema,
   type Schedule,
   type StepRecord,

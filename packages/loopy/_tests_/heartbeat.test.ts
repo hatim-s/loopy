@@ -1,13 +1,13 @@
 import { expect, test } from "bun:test";
 import { withHeartbeat } from "../src/host/heartbeat.js";
-import { MemoryStore } from "../src/store/index.js";
+import { SqliteRunStore } from "../src/store/index.js";
 import { newRun } from "./fixture.js";
 
 test("activation renews ownership at a quarter of its lease while a step is running", async () => {
   const renewed = Promise.withResolvers<void>();
   let heartbeats = 0;
 
-  class RecordingStore extends MemoryStore {
+  class RecordingStore extends SqliteRunStore {
     override async heartbeat(runId: string, token: string) {
       const owned = await super.heartbeat(runId, token);
       heartbeats++;

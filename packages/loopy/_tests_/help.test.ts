@@ -69,7 +69,7 @@ describe("CLI help generation", () => {
     ).toEqual(
       expect.objectContaining({
         kind: "dispatch",
-        spec: expect.objectContaining({ argv: ["codex", "--help"] }),
+        spec: expect.objectContaining({ argv: ["codex", "exec", "--help"] }),
       }),
     );
   });

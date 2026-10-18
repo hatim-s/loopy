@@ -249,7 +249,17 @@ test("HTTP logs follow prints each log as a separate JSON line", async () => {
     });
   }
 
-  await f.store.finishRun("logged", "log-owner", { status: "succeeded", output: null });
+  await f.store.apply({
+    runId: "logged",
+    token: "log-owner",
+    effects: [
+      {
+        kind: "finish_run",
+        outcome: { status: "succeeded", output: null },
+        at: newRun().createdAt,
+      },
+    ],
+  });
   await f.store.release("logged", "log-owner");
   const result = await cli(f, "logs", "logged", "--follow");
   expect(result).toMatchObject({ code: 0, stderr: "" });
