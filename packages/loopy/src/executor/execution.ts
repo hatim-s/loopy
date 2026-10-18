@@ -11,7 +11,7 @@ import {
 } from "../core/index.js";
 import type { Options } from "./options.js";
 import { executeLocalCommand } from "./process.js";
-import { bundleResult } from "./protocol.js";
+import { bundleStopped, bundleSucceeded } from "./protocol.js";
 import { finishReceipt, receiptPath, startReceipt } from "./receipts.js";
 import { secretRedactor } from "./redact.js";
 import { withBundleSandbox } from "./sandbox/launch.js";
@@ -41,14 +41,14 @@ export class ExecutionWorker {
         kind: "failed",
         error: {
           code: cause instanceof CommandExecutionError ? cause.code : "execution",
-          message: this.redact(errorMessage(cause)),
+          message: this.redact.complete(errorMessage(cause)),
         },
         exitCode: null,
         logs: [],
       };
     }
 
-    // Every path redacts its own values exactly once, so a secret inside the marker cannot nest.
+    // Values are already redacted; only bound the combined logs here.
     result = { ...result, logs: limitLogs(result.logs) };
     await finishReceipt(path, { kind: "finished", result, executionKey: key, attempt });
 
@@ -85,13 +85,13 @@ export class ExecutionWorker {
           ),
       );
 
-      return bundleResult(raw, this.redact);
+      return bundleSucceeded(raw, this.redact);
     } catch (cause) {
       if (!(cause instanceof CommandExecutionError)) {
         throw cause;
       }
 
-      return bundleResult(cause.output, this.redact, { code: cause.code, message: cause.message });
+      return bundleStopped(cause.output, this.redact, { code: cause.code, message: cause.message });
     }
   }
   private async perform(spec: ExecutionSpec, signal: AbortSignal): Promise<ExecutionResult> {
@@ -130,11 +130,11 @@ export class ExecutionWorker {
 
       return {
         kind: "failed",
-        error: { code: cause.code, message: this.redact(cause.message) },
+        error: { code: cause.code, message: this.redact.complete(cause.message) },
         exitCode: null,
         logs: [
-          { message: "stdout", data: this.redact(cause.output.stdout, true) },
-          { message: "stderr", data: this.redact(cause.output.stderr, true) },
+          { message: "stdout", data: this.redact.fragment(cause.output.stdout) },
+          { message: "stderr", data: this.redact.fragment(cause.output.stderr) },
         ],
       };
     }
@@ -145,8 +145,8 @@ export class ExecutionWorker {
       exitCode: raw.exitCode,
     };
 
-    const stdout = this.redact(raw.stdout);
-    const stderr = this.redact(raw.stderr);
+    const stdout = this.redact.complete(raw.stdout);
+    const stderr = this.redact.complete(raw.stderr);
 
     const logs = [
       { message: "stdout", data: stdout },

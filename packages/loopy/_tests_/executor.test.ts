@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { compile } from "../src/compiler/index.js";
 import { graphSchema } from "../src/contract/index.js";
 import { LocalExecutor } from "../src/executor/index.js";
-import { bundleResult } from "../src/executor/protocol.js";
+import { bundleStopped, bundleSucceeded } from "../src/executor/protocol.js";
 import { receiptPath } from "../src/executor/receipts.js";
 import { secretRedactor } from "../src/executor/redact.js";
 import { activate, SYSTEM_CLOCK } from "../src/host/index.js";
@@ -16,7 +16,7 @@ import {
   SecretStore,
 } from "../src/local/index.js";
 import { SqliteRunStore } from "../src/store/index.js";
-import { newRun } from "./fixture.js";
+import { newRun, until } from "./fixture.js";
 import { fixture } from "./fixtures/executor.js";
 import { approveDemoGraph } from "./fixtures/graphs.js";
 
@@ -153,7 +153,10 @@ export default loopy("sequence", {input: {}, run: () => {sh.exec(["printf", "raw
     });
     expect(replacement.revision).not.toBe(compiled.revision);
     expect((await store.getRun(run.id))?.revision).toBe(compiled.revision);
-    expect(await daemon.tick()).toEqual({ fired: 0, activated: 1 });
+    const running = daemon.run();
+    await until(async () => (await store.getRun(run.id))?.status === "succeeded");
+    await daemon.stop();
+    await running;
     const snapshot = await service.runSnapshot(run.id);
     expect(snapshot.run).toMatchObject({ status: "succeeded", output: { message: "hello hello" } });
     expect(snapshot.nodeRuns.map((node) => node.status)).toEqual([
@@ -424,7 +427,7 @@ test("truncated bundle records mask secret escapes at every capture boundary", (
     JSON.stringify({ message: "resp", data: nested }),
   ]) {
     for (let end = record.indexOf("alpha") + 5; end <= record.length; end++) {
-      const result = bundleResult(
+      const result = bundleStopped(
         { stdout: "", stderr: record.slice(0, end), exitCode: 1, durationMs: 0 },
         secretRedactor([secret]),
         { code: "output_limit", message: "Capture limit" },
@@ -526,16 +529,14 @@ test("complete log records keep keys and values that end in a secret prefix", ()
   const record = { message: "status", data: { s: 1, su: 2, sup: 3, kept: "pass" } };
 
   for (const failure of [undefined, { code: "output_limit" as const, message: "Capture limit" }]) {
-    const result = bundleResult(
-      {
-        stdout: JSON.stringify({ ok: true }),
-        stderr: `${JSON.stringify(record)}\n`,
-        exitCode: 0,
-        durationMs: 0,
-      },
-      secretRedactor(["supersecret"]),
-      failure,
-    );
+    const raw = {
+      stdout: JSON.stringify({ ok: true }),
+      stderr: `${JSON.stringify(record)}\n`,
+      exitCode: 0,
+      durationMs: 0,
+    };
+    const redact = secretRedactor(["supersecret"]);
+    const result = failure ? bundleStopped(raw, redact, failure) : bundleSucceeded(raw, redact);
 
     expect(result.logs[0]).toEqual(record);
   }

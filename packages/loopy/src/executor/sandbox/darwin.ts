@@ -1,7 +1,7 @@
 import type { PathRule, SandboxSpec } from "./spec.js";
 
 function sbpl(path: string): string {
-  if (/[\x00-\x1f\x7f]/.test(path)) {
+  if (/\p{Cc}/u.test(path)) {
     throw new Error("Paths with control characters cannot be sandboxed.");
   }
 

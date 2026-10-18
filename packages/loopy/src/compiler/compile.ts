@@ -11,7 +11,10 @@ import { EvaluationError, evaluate } from "./evaluate.js";
 import { restrict } from "./restrict.js";
 import type { CompileResult } from "./types.js";
 
-export async function compile(path: string): Promise<CompileResult> {
+export async function compile(
+  path: string,
+  options: { home?: string } = {},
+): Promise<CompileResult> {
   const file = resolve(path);
   let stage: CompilerDiagnosticCode = "source_error";
 
@@ -23,7 +26,7 @@ export async function compile(path: string): Promise<CompileResult> {
     }
 
     stage = "evaluation_failed";
-    const graph = await evaluate(await realpath(file), restricted.modules);
+    const graph = await evaluate(await realpath(file), restricted.modules, options.home);
     const diagnostics = validateGraph(graph);
 
     if (diagnostics.length > 0) {

@@ -161,13 +161,20 @@ export function secretRedactor(values: string[]) {
     ? new RegExp(secrets.map((secret) => secret.map(unitPattern).join("")).join("|"), "g")
     : undefined;
 
-  return (text: string, truncated = false): string => {
-    const cut = truncated
-      ? Math.min(text.length, ...secrets.map((secret) => trailingSecretStart(text, secret)))
-      : text.length;
+  const complete = (text: string) => (pattern ? text.replace(pattern, REDACTED) : text);
 
-    const head = pattern ? text.slice(0, cut).replace(pattern, REDACTED) : text.slice(0, cut);
+  const fragment = (text: string) => {
+    const cut = Math.min(
+      text.length,
+      ...secrets.map((secret) => trailingSecretStart(text, secret)),
+    );
+
+    const head = complete(text.slice(0, cut));
 
     return cut < text.length ? `${head}${REDACTED}` : head;
   };
+
+  return { complete, fragment };
 }
+
+export type Redactor = ReturnType<typeof secretRedactor>;

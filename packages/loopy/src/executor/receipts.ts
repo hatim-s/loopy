@@ -12,14 +12,19 @@ export const receiptSchema = z.discriminatedUnion("kind", [
   z.object({ ...identity, kind: z.literal("finished"), result: executionResultSchema }),
 ]);
 
+function pathSegment(value: string) {
+  // Encoding every dot prevents '.' and '..' from naming parent directories.
+  return encodeURIComponent(value).replaceAll(".", "%2E");
+}
+
 export async function receiptPath(home: string, key: ExecutionKey, attempt: number) {
   await mkdir(home, { recursive: true, mode: 0o700 });
   let directory = await realpath(home);
 
   for (const segment of [
     "receipts",
-    encodeURIComponent(key.runId).replaceAll(".", "%2E"),
-    encodeURIComponent(executionKeyString(key)),
+    pathSegment(key.runId),
+    pathSegment(executionKeyString(key)),
   ]) {
     directory = join(directory, segment);
 

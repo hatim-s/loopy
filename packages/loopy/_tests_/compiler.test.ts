@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { evaluate } from "../src/compiler/evaluate.js";
 import { compile } from "../src/compiler/index.js";
 import { canonicalJson, type Json, validateGraph } from "../src/core/index.js";
-import { bundleResult } from "../src/executor/protocol.js";
+import { bundleSucceeded } from "../src/executor/protocol.js";
 import { compiledBody } from "./compiled-fixture.js";
 
 const sdk = resolve(import.meta.dir, "../src/sdk/graph/index.ts");
@@ -365,7 +365,10 @@ test("bundles execute the stdin/stdout protocol and preserve prepared parser inp
   expect(JSON.parse(parsed.stdout)).toBe("outputhello!");
   const result = await execute(1, { value: 42 });
   expect(
-    bundleResult({ stdout: result.stdout, stderr: "", exitCode: 0, durationMs: 0 }, (text) => text),
+    bundleSucceeded(
+      { stdout: result.stdout, stderr: "", exitCode: 0, durationMs: 0 },
+      { complete: (text) => text, fragment: (text) => text },
+    ),
   ).toEqual({
     kind: "succeeded",
     output: { value: 42, workspace: root },

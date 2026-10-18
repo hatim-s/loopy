@@ -2,13 +2,13 @@ import { attemptLogSchema, jsonSchema } from "../contract/index.js";
 import {
   type AttemptLog,
   type CommandResult,
+  type ExecutionError,
   type ExecutionResult,
   isString,
   limitLogs,
+  splitResultLine,
 } from "../core/index.js";
-import { redactValue } from "./redact.js";
-
-type Redact = (text: string, truncated?: boolean) => string;
+import { type Redactor, redactValue } from "./redact.js";
 
 function parseRecord(line: string): AttemptLog | undefined {
   try {
@@ -18,20 +18,21 @@ function parseRecord(line: string): AttemptLog | undefined {
   }
 }
 
-/**
- * Only whole log records are parsed. Everything else stays raw text, and consecutive raw lines
- * form one block so a secret spanning lines is still matched by the raw redactor.
- */
-function stderrLogs(stderr: string, redact: Redact, cut: boolean): AttemptLog[] {
+/** Consecutive raw lines stay together so secrets spanning lines still match. */
+function stderrLogs(
+  stderr: string,
+  redact: Redactor,
+  tail: (text: string) => string,
+): AttemptLog[] {
   const logs: AttemptLog[] = [];
   let block: string[] = [];
 
-  const flush = (final: boolean) => {
+  const flush = (mask: (text: string) => string) => {
     const text = block.join("\n");
     block = [];
 
     if (text.trim()) {
-      logs.push({ message: "stderr", data: redact(text, cut && final) });
+      logs.push({ message: "stderr", data: mask(text) });
     }
   };
 
@@ -43,11 +44,28 @@ function stderrLogs(stderr: string, redact: Redact, cut: boolean): AttemptLog[] 
       continue;
     }
 
-    flush(false);
-    logs.push({ message: redact(record.message), data: redactValue(record.data, redact) });
+    flush(redact.complete);
+    logs.push({
+      message: redact.complete(record.message),
+      data: redactValue(record.data, redact.complete),
+    });
   }
 
-  flush(true);
+  flush(tail);
+
+  return logs;
+}
+
+function bundleLogs(
+  raw: CommandResult,
+  redact: Redactor,
+  options: { stdout: string; tail: (text: string) => string },
+) {
+  const logs = stderrLogs(raw.stderr, redact, options.tail);
+
+  if (options.stdout.trim()) {
+    logs.push({ message: "stdout", data: options.tail(options.stdout) });
+  }
 
   return logs;
 }
@@ -60,40 +78,41 @@ function parseOutput(line: string) {
   }
 }
 
-export function bundleResult(
-  raw: CommandResult,
-  redact: Redact,
-  failure?: Extract<ExecutionResult, { kind: "failed" }>["error"],
+function failed(
+  redact: Redactor,
+  options: { error: ExecutionError; logs: AttemptLog[]; exitCode: number | null },
 ): ExecutionResult {
-  // A killed process can stop mid-write, so the end of each stream may hold part of a secret.
-  const cut = failure !== undefined;
-  const failed = cut || raw.exitCode !== 0;
-  const logs = stderrLogs(raw.stderr, redact, cut);
-  const lastBreak = raw.stdout.trimEnd().lastIndexOf("\n");
-  const output = parseOutput(raw.stdout.slice(lastBreak + 1));
-  const stdout = output === undefined || failed ? raw.stdout : raw.stdout.slice(0, lastBreak + 1);
+  const diagnostic = options.logs
+    .map((log) => `${log.message}: ${isString(log.data) ? log.data : JSON.stringify(log.data)}`)
+    .join("\n")
+    .slice(-500);
 
-  if (stdout.trim()) {
-    logs.push({ message: "stdout", data: redact(stdout, cut) });
-  }
+  return {
+    kind: "failed",
+    error: {
+      code: options.error.code,
+      message: `${redact.complete(options.error.message)} ${diagnostic}`,
+    },
+    exitCode: options.exitCode,
+    logs: limitLogs(options.logs),
+  };
+}
 
-  const bounded = limitLogs(logs);
+export function bundleSucceeded(raw: CommandResult, redact: Redactor): ExecutionResult {
+  const { line, prefix } = splitResultLine(raw.stdout);
+  const output = parseOutput(line);
 
-  if (failed) {
-    const diagnostic = logs
-      .map((log) => `${log.message}: ${isString(log.data) ? log.data : JSON.stringify(log.data)}`)
-      .join("\n")
-      .slice(-500);
+  const logs = bundleLogs(raw, redact, {
+    stdout: raw.exitCode !== 0 || output === undefined ? raw.stdout : prefix,
+    tail: redact.complete,
+  });
 
-    return {
-      kind: "failed",
-      error: {
-        code: failure?.code ?? "execution",
-        message: `${failure ? redact(failure.message) : `Bundle exited with code ${raw.exitCode}.`} ${diagnostic}`,
-      },
-      exitCode: failure ? null : raw.exitCode,
-      logs: bounded,
-    };
+  if (raw.exitCode !== 0) {
+    return failed(redact, {
+      error: { code: "execution", message: `Bundle exited with code ${raw.exitCode}.` },
+      logs,
+      exitCode: raw.exitCode,
+    });
   }
 
   return output === undefined
@@ -101,7 +120,18 @@ export function bundleResult(
         kind: "failed",
         error: { code: "protocol", message: "Bundle stdout must end with one JSON result line." },
         exitCode: null,
-        logs: bounded,
+        logs: limitLogs(logs),
       }
-    : { kind: "succeeded", output: redactValue(output, redact), logs: bounded };
+    : { kind: "succeeded", output: redactValue(output, redact.complete), logs: limitLogs(logs) };
+}
+
+export function bundleStopped(
+  raw: CommandResult,
+  redact: Redactor,
+  error: ExecutionError,
+): ExecutionResult {
+  // Stopped streams can end partway through an encoded secret.
+  const logs = bundleLogs(raw, redact, { stdout: raw.stdout, tail: redact.fragment });
+
+  return failed(redact, { error, logs, exitCode: null });
 }

@@ -7,7 +7,7 @@ import { printJson } from "../output.js";
 
 export async function runSave(context: CliContext): Promise<void> {
   const source = resolve(context.cwd, requireTarget(context, "TypeScript file"));
-  const result = await compile(source);
+  const result = await compile(source, { home: context.home });
 
   if (!result.ok) {
     throw new Error(

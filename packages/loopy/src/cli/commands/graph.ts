@@ -37,7 +37,7 @@ export async function runGraph(context: CliContext): Promise<void> {
   let graph: GraphView;
 
   if (await Bun.file(resolve(context.cwd, target)).exists()) {
-    const result = await compile(resolve(context.cwd, target));
+    const result = await compile(resolve(context.cwd, target), { home: context.home });
 
     if (!result.ok) {
       throw new Error(

@@ -138,8 +138,8 @@ test("CLI stdin entry and name-only listing do not disclose values", async () =>
 });
 
 test("redaction handles overlapping values, regex punctuation and truncated secrets", async () => {
-  expect(secretRedactor(["abc", "abcdef", "a.b?"])("abcdef abc a.b?")).toBe(
+  expect(secretRedactor(["abc", "abcdef", "a.b?"]).complete("abcdef abc a.b?")).toBe(
     "[redacted] [redacted] [redacted]",
   );
-  expect(secretRedactor(["abcdef"])("prefix abc", true)).toBe("prefix [redacted]");
+  expect(secretRedactor(["abcdef"]).fragment("prefix abc")).toBe("prefix [redacted]");
 });
