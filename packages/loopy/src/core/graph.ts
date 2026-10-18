@@ -44,40 +44,57 @@ export type Value = Json | Ref;
 
 type FormatOperand = string | number | boolean | Ref;
 
-export const PREDICATE_OPS = [
-  "eq",
-  "ne",
-  "lt",
-  "lte",
-  "gt",
-  "gte",
-  "exists",
-  "isNull",
-  "in",
-  "and",
-  "or",
-  "not",
-] as const;
+export const PREDICATE_SHAPES = {
+  eq: "equality",
+  ne: "equality",
+  lt: "ordering",
+  lte: "ordering",
+  gt: "ordering",
+  gte: "ordering",
+  in: "membership",
+  exists: "presence",
+  isNull: "presence",
+  and: "group",
+  or: "group",
+  not: "negation",
+} as const;
 
-export type PredicateOp = (typeof PREDICATE_OPS)[number];
+type PredicateOp = keyof typeof PREDICATE_SHAPES;
+type PredicateShape = (typeof PREDICATE_SHAPES)[PredicateOp];
+type OpsOf<S extends PredicateShape> = {
+  [K in PredicateOp]: (typeof PREDICATE_SHAPES)[K] extends S ? K : never;
+}[PredicateOp];
 
-export const COMPARISON_OPS = [
-  PREDICATE_OPS[0],
-  PREDICATE_OPS[1],
-  PREDICATE_OPS[2],
-  PREDICATE_OPS[3],
-  PREDICATE_OPS[4],
-  PREDICATE_OPS[5],
-  PREDICATE_OPS[8],
-] as const;
+export const PREDICATE_OPS = Object.keys(PREDICATE_SHAPES).filter((op): op is PredicateOp =>
+  Object.hasOwn(PREDICATE_SHAPES, op),
+);
+
+export function predicateOps<S extends PredicateShape>(...shapes: S[]): OpsOf<S>[] {
+  return PREDICATE_OPS.filter((op): op is OpsOf<S> =>
+    shapes.some((shape) => shape === PREDICATE_SHAPES[op]),
+  );
+}
+
+export const COMPARISON_OPS = predicateOps("equality", "ordering", "membership");
 
 export type ComparisonOperand = Value | { ref: RefId; path: string[]; size: true };
 
 export type Predicate =
-  | { op: (typeof COMPARISON_OPS)[number]; left: ComparisonOperand; right: ComparisonOperand }
-  | { op: (typeof PREDICATE_OPS)[6 | 7]; value: Value }
-  | { op: (typeof PREDICATE_OPS)[9 | 10]; predicates: Predicate[] }
-  | { op: (typeof PREDICATE_OPS)[11]; predicate: Predicate };
+  | {
+      op: OpsOf<"equality" | "ordering" | "membership">;
+      left: ComparisonOperand;
+      right: ComparisonOperand;
+    }
+  | { op: OpsOf<"presence">; value: Value }
+  | { op: OpsOf<"group">; predicates: Predicate[] }
+  | { op: OpsOf<"negation">; predicate: Predicate };
+
+export function predicateIs<S extends PredicateShape>(
+  predicate: Predicate,
+  shape: S,
+): predicate is Extract<Predicate, { op: OpsOf<S> }> {
+  return PREDICATE_SHAPES[predicate.op] === shape;
+}
 
 export const NODE_KINDS = [
   "code",

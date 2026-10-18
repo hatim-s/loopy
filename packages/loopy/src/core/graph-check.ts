@@ -2,18 +2,10 @@ import type { Diagnostic, DiagnosticCode } from "./diagnostics.js";
 import { diagnostic } from "./diagnostics.js";
 import type { Graph, Node, Ref } from "./graph.js";
 import type { ValidationContext as Context } from "./graph-context.js";
-import {
-  ancestors,
-  binding,
-  bodyEntries,
-  refs,
-  sameBody,
-  scopeReaches,
-  values,
-} from "./graph-context.js";
+import { ancestors, binding, bodyEntries, sameBody, scopeReaches } from "./graph-context.js";
 import { isReservedGraphName, nodeNames } from "./graph-names.js";
-import { checkPredicate, hasSize } from "./graph-predicate.js";
-import { isRef } from "./graph-ref.js";
+import { checkPredicate } from "./graph-predicate.js";
+import { isRef, refs, values } from "./graph-ref.js";
 import { structureRules } from "./graph-structure.js";
 import { graphTypeResolver } from "./graph-type.js";
 
@@ -113,15 +105,14 @@ function references(context: Context): Diagnostic[] {
 }
 
 function predicates(context: Context): Diagnostic[] {
-  return context.graph.nodes.flatMap((node) =>
-    node.kind === "branch"
-      ? checkPredicate(node.predicate, (ref) => context.resolveType(ref)).map((error) =>
-          diagnostic(error.code, node.id, error.message),
-        )
-      : values(node).some(hasSize)
-        ? [diagnostic("invalid_size", node.id, "Size is allowed only in comparisons.")]
-        : [],
-  );
+  return context.graph.nodes.flatMap((node) => {
+    if (node.kind !== "branch") {
+      return [];
+    }
+    return checkPredicate(node.predicate, context.resolveType).map((error) =>
+      diagnostic(error.code, node.id),
+    );
+  });
 }
 
 function formats(context: Context): Diagnostic[] {

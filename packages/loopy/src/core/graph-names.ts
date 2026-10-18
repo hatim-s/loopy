@@ -1,5 +1,5 @@
 import type { Node, Value } from "./graph.js";
-import { values } from "./graph-context.js";
+import { values } from "./graph-ref.js";
 import { isRecord } from "./validation.js";
 
 export const RESERVED_GRAPH_NAMES = ["__proto__", "constructor", "prototype"] as const;

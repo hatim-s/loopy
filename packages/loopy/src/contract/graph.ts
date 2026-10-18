@@ -15,7 +15,7 @@ import {
   NODE_KINDS,
   NODE_RUN_STATUSES,
   type NodeId,
-  PREDICATE_OPS,
+  predicateOps,
   RECEIPT_KINDS,
   RESERVED_GRAPH_NAMES,
   RETRY_BACKOFFS,
@@ -81,15 +81,15 @@ const operandSchema = z.union([refSchema.extend({ size: z.literal(true) }), valu
 
 export const predicateSchema = z.discriminatedUnion("op", [
   z.strictObject({ op: z.enum(COMPARISON_OPS), left: operandSchema, right: operandSchema }),
-  z.strictObject({ op: z.enum([PREDICATE_OPS[6], PREDICATE_OPS[7]]), value: valueSchema }),
+  z.strictObject({ op: z.enum(predicateOps("presence")), value: valueSchema }),
   z.strictObject({
-    op: z.enum([PREDICATE_OPS[9], PREDICATE_OPS[10]]),
+    op: z.enum(predicateOps("group")),
     get predicates() {
       return z.array(predicateSchema);
     },
   }),
   z.strictObject({
-    op: z.literal(PREDICATE_OPS[11]),
+    op: z.enum(predicateOps("negation")),
     get predicate() {
       return predicateSchema;
     },

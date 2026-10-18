@@ -1,7 +1,5 @@
-import type { ComparisonOperand, Graph, Node, NodeId, Predicate, Ref, Value } from "./graph.js";
+import type { Graph, Node, NodeId, Ref } from "./graph.js";
 import type { ResolveType } from "./graph-predicate.js";
-import { isRef } from "./graph-ref.js";
-import { isRecord } from "./validation.js";
 
 export type Context = {
   graph: Pick<Graph, "input" | "nodes" | "edges">;
@@ -127,69 +125,6 @@ export function successors(context: Context, id: NodeId): NodeId[] {
       .map((edge) => edge.to),
     ...(node ? targets(node) : []),
   ];
-}
-
-export function refs(value: Value): Ref[] {
-  if (isRef(value)) {
-    return [value];
-  }
-
-  if (Array.isArray(value)) {
-    return value.flatMap(refs);
-  }
-
-  if (isRecord(value)) {
-    return Object.values(value).flatMap(refs);
-  }
-
-  return [];
-}
-
-export function predicateValues(predicate: Predicate): ComparisonOperand[] {
-  switch (predicate.op) {
-    case "and":
-    case "or":
-      return predicate.predicates.flatMap(predicateValues);
-    case "not":
-      return predicateValues(predicate.predicate);
-    case "exists":
-    case "isNull":
-      return [predicate.value];
-    default:
-      return [predicate.left, predicate.right];
-  }
-}
-
-export function values(node: Node): Value[] {
-  switch (node.kind) {
-    case "code":
-      return Object.values(node.in);
-    case "command":
-      return [
-        ...node.argv,
-        ...Object.values(node.parse?.input ?? {}),
-        ...Object.values(node.flags),
-        node.options.cwd,
-        ...Object.values(node.options.env),
-        node.options.stdin,
-      ];
-    case "branch":
-      return predicateValues(node.predicate);
-    case "switch":
-      return [node.on];
-    case "map":
-      return [node.over];
-    case "fail":
-      return [node.message];
-    case "format":
-      return Object.values(node.values);
-    case "log":
-      return [node.message, node.data];
-    case "join":
-      return node.result.kind === "none" ? [] : [node.result.value];
-    default:
-      return [];
-  }
 }
 
 export function reaches(context: Context, from: NodeId, to: NodeId): boolean {
