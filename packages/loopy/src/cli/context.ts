@@ -23,7 +23,6 @@ export function expectNoArguments(context: CliContext): void {
   }
 }
 
-/** The one positional a command accepts, or undefined when it was left out. */
 export function optionalTarget(context: CliContext): string | undefined {
   const [target, ...extra] = context.positionals;
 

@@ -109,11 +109,11 @@ export class RunsService extends ServiceContext {
   }
 
   resolveNamedHook: (id: string, name: string, payload: Json) => Promise<RunView> = async () => {
-    throw new ServiceError("not_yet", "Wait signals arrive in PR 4c.");
+    throw new ServiceError("not_yet");
   };
 
   resolveHook: (token: string, payload: Json) => Promise<RunView> = async () => {
-    throw new ServiceError("not_yet", "Wait signals arrive in PR 4c.");
+    throw new ServiceError("not_yet");
   };
 
   async runSnapshot(id: string) {

@@ -1,5 +1,14 @@
-// BOUNDARY: The output serializer accepts validated domain records of different shapes.
-export function printJson(value: unknown): void {
+import type { ApiResponse, LogRecord } from "../contract/index.js";
+import type { readDaemonFile } from "../local/index.js";
+
+type CliOutput =
+  | ApiResponse
+  | LogRecord
+  | NonNullable<ReturnType<typeof readDaemonFile>>
+  | { state: "stopped" }
+  | { file: string };
+
+export function printJson(value: CliOutput): void {
   console.log(JSON.stringify(value, null, 2));
 }
 

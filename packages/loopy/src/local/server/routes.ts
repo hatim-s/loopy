@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import { z } from "zod";
 import {
+  type ApiResponse,
   type DaemonView,
   DEFAULT_ERROR_MESSAGES,
   type ErrorCode,
@@ -29,8 +30,7 @@ const STATUS: Record<ErrorCode, number> = {
   invalid_timezone: 400,
 };
 
-// BOUNDARY: Route schemas validate response data before JSON serialization.
-export function json(data: unknown, status = 200): Response {
+export function json(data: ApiResponse, status = 200): Response {
   return Response.json(data, {
     status,
     headers: { "Cache-Control": "no-store", ...NOSNIFF },
@@ -57,7 +57,7 @@ type Schemas<P, Q, B, R> = {
   response: z.ZodType<R>;
 };
 
-function endpoint<P, Q, B, R>(
+function endpoint<P, Q, B, R extends ApiResponse>(
   route: Schemas<P, Q, B, R>,
   handle: (context: { params: P; query: Q; body: B; request: Request }) => Promise<R | Response>,
 ) {

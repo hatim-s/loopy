@@ -4,7 +4,6 @@ import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "no
 
 export const ENV_EXEC = "/usr/bin/env";
 
-/** True when `child` is `parent` or lives below it. */
 export function within(parent: string, child: string): boolean {
   const path = relative(parent, child);
 

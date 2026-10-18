@@ -1,6 +1,7 @@
 export { isFieldValue, isTerminalRun, recordFields } from "../core/index.js";
 
 export {
+  type ApiResponse,
   DEFAULT_ERROR_MESSAGES,
   decodeRunCursor,
   ERROR_CODES,

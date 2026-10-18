@@ -313,3 +313,5 @@ export const routes = {
     response: cursorViewSchema,
   },
 } as const satisfies Record<string, Route>;
+
+export type ApiResponse = z.output<(typeof routes)[keyof typeof routes]["response"]> | ErrorBody;

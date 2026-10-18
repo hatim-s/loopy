@@ -10,7 +10,6 @@ import {
 } from "../core/index.js";
 import type { CliContext } from "./context.js";
 
-// BOUNDARY: JSON input must be validated by the loopy schema before creating a run.
 export async function jsonInput(context: CliContext): Promise<Json> {
   const text = context.values["input-json"];
   const file = context.values["input-file"];
