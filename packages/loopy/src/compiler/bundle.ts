@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import { bundleRefs, type Graph, type Node, sha256Hex } from "../core/index.js";
 import { commandParser } from "../sdk/graph-host.js";
+import { diagnostic } from "./ast.js";
 import { checkImports } from "./code-module.js";
 import { runnerSource } from "./runner.js";
 import { sourcePaths, typescriptPaths } from "./source.js";
@@ -41,8 +42,11 @@ async function buildNode(
     return { file: node.module.path, result: await buildModule(node.module.path, "code") };
   }
 
-  // SAFETY: Restriction records custom parsers, and SDK descriptors supply every built-in parser.
-  const parser = (parsers.get(node.key) ?? commandParser(node.key)) as string;
+  const parser = parsers.get(node.key) ?? commandParser(node.key);
+
+  if (parser === undefined) {
+    throw new Error(`No parser recorded for command '${node.key}'.`);
+  }
 
   const file = parsers.has(node.key) ? parser : resolve(import.meta.dir, "../sdk/graph", parser);
 
@@ -91,11 +95,9 @@ export async function bundle(graph: Graph, parsers: Map<string, string>): Promis
     if (diagnostics.length > 0) {
       return {
         ok: false,
-        diagnostics: diagnostics.map(() => ({
-          code: "dynamic_code",
-          message: "A bundled dependency loads code at run time.",
-          source: { module: file, line: 1, column: 1 },
-        })),
+        diagnostics: diagnostics.map(() =>
+          diagnostic({ file, source: "" }, 0, "dynamic_code", "emitted_dynamic_code"),
+        ),
       };
     }
 

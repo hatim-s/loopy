@@ -86,7 +86,10 @@ class LocalDaemon {
       join(this.options.home, "daemon-start.lock"),
       "daemon startup",
       () => this.startLocked(),
-    );
+    ).catch((error) => {
+      this.starting = undefined;
+      throw error;
+    });
 
     return this.starting;
   }

@@ -273,6 +273,9 @@ test("a missing declared secret persists and reports its stable preparation code
     expect((await store.getRun(run.id))?.error).toBe(
       "[missing_secret] No stored secret 'TOKEN'. Use loopy secrets set TOKEN.",
     );
+    expect(await service.runSnapshot(run.id)).toMatchObject({
+      run: { error: "[missing_secret] No stored secret 'TOKEN'. Use loopy secrets set TOKEN." },
+    });
     expect(errors).toHaveLength(1);
     expect(errors[0]).toMatchObject({
       code: "missing_secret",

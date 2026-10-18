@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { daemonUrl, localDaemon, readDaemonFile } from "../src/local/index.js";
@@ -115,6 +115,10 @@ test("stop during startup waits for discovery publication and closes its listeni
   const daemon = localDaemon({ home, cwd: directory(), store, port: 0, concurrency: 1 });
 
   try {
+    const lock = join(home, "daemon-start.lock");
+    mkdirSync(lock);
+    await expect(daemon.start()).rejects.toThrow("Another daemon startup holds");
+    rmSync(lock, { recursive: true });
     const starting = daemon.start();
     await daemon.stop();
     const url = new URL(await starting);

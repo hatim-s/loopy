@@ -15,12 +15,13 @@ export function diagnostic(
   { file, source }: Pick<Context, "file" | "source">,
   start: number,
   code: CompilerDiagnosticCode,
+  message: keyof typeof COMPILER_MESSAGES = code,
 ): CompilerDiagnostic {
   const lines = source.slice(0, start).split("\n");
 
   return {
     code,
-    message: COMPILER_MESSAGES[code],
+    message: COMPILER_MESSAGES[message],
     source: { module: file, line: lines.length, column: (lines.at(-1)?.length ?? 0) + 1 },
   };
 }
@@ -314,12 +315,14 @@ function recordParser(
   const fields = new Map<string, string>();
 
   for (const property of descriptor.properties) {
-    if (
-      property.type === "Property" &&
-      property.value.type === "Literal" &&
-      isString(property.value.value)
-    ) {
-      fields.set(name(property.key) ?? "", property.value.value);
+    if (property.type !== "Property") {
+      continue;
+    }
+
+    const value = unwrap(property.value);
+
+    if (value.type === "Literal" && isString(value.value)) {
+      fields.set(name(property.key) ?? "", value.value);
     }
   }
 

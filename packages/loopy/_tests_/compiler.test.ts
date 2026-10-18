@@ -250,36 +250,46 @@ test("bundle hashes are stable, code changes alter revisions and whitespace does
   expect(first.bundles).toHaveLength(2);
 });
 
-test("parser module bundles are hashed and preserve their module bindings", async () => {
-  const { root, file } = await project(
-    'import {loopy,defineCommand} from "__SDK__"; const cmd=defineCommand({key:"custom",program:"echo",parse:"./parse.ts"},{kind:"value",type:"string"}); export default loopy("parser", {input:{},run:()=>cmd()});',
-  );
+for (const parserPath of [
+  '"./parse.ts"',
+  '("./parse.ts" as const)',
+  '("./parse.ts" satisfies string)',
+]) {
+  test(`parser module bundles preserve bindings with ${parserPath}`, async () => {
+    const { root, file } = await project(
+      `import {loopy,defineCommand} from "__SDK__"; const cmd=defineCommand({key:"custom",program:"echo",parse:${parserPath}},{kind:"value",type:"string"}); export default loopy("parser", {input:{},run:()=>cmd()});`,
+    );
 
-  await writeFile(
-    join(root, "parse.ts"),
-    'const suffix="!"; export default (result: {stdout:string}) => result.stdout.trim()+suffix;',
-  );
-  const result = await compile(file);
+    await writeFile(
+      join(root, "parse.ts"),
+      'const suffix="!"; export default (result: {stdout:string}) => result.stdout.trim()+suffix;',
+    );
+    const result = await compile(file);
 
-  if (!result.ok) {
-    throw new Error(JSON.stringify(result.diagnostics));
-  }
+    if (!result.ok) {
+      throw new Error(JSON.stringify(result.diagnostics));
+    }
 
-  const bundle = result.bundles[0];
+    const bundle = result.bundles[0];
 
-  if (!bundle) {
-    throw new Error("Missing parser bundle.");
-  }
+    if (!bundle) {
+      throw new Error("Missing parser bundle.");
+    }
 
-  const path = join(root, "parser.js");
-  await writeFile(path, bundle.bytes);
-  const { default: parse }: { default: (input: { stdout: string }) => string } = await import(path);
-  expect(parse({ stdout: "hello\n" })).toBe("hello!");
-  expect(result.graph.nodes[0]).toMatchObject({
-    kind: "command",
-    parse: { bundleHash: bundle.bundleHash },
+    const path = join(root, "parser.js");
+    await writeFile(path, bundle.bytes);
+
+    const { default: parse }: { default: (input: { stdout: string }) => string } = await import(
+      path
+    );
+
+    expect(parse({ stdout: "hello\n" })).toBe("hello!");
+    expect(result.graph.nodes[0]).toMatchObject({
+      kind: "command",
+      parse: { bundleHash: bundle.bundleHash },
+    });
   });
-});
+}
 
 for (const name of ["hello", "review", "asset-sync", "www-sync"]) {
   test(`compile the ${name} graph example with its module and parser bundles`, async () => {

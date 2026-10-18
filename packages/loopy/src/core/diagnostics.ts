@@ -100,6 +100,7 @@ export const DIAGNOSTIC_MESSAGES = {
 
 export const COMPILER_MESSAGES = {
   ...DIAGNOSTIC_MESSAGES,
+  emitted_dynamic_code: "A bundled dependency loads code at run time.",
   dynamic_code: "Use bundled modules instead of runtime loading or code generation.",
   options_not_literal: "Use an inline object literal for SDK options.",
   unknown_sdk_call: "Call an exported SDK function or namespace member.",
@@ -127,7 +128,7 @@ export const COMPILER_MESSAGES = {
   cyclic_import: "Builder imports cannot be cyclic.",
   sdk_alias: "Import SDK exports under their original names.",
   module_effect: "Builder modules allow imports, immutable data, descriptors and subgraphs only.",
-} as const satisfies Record<CompilerDiagnosticCode, string>;
+} as const satisfies Record<CompilerDiagnosticCode | "emitted_dynamic_code", string>;
 
 export function diagnostic(code: DiagnosticCode, node: NodeId | null, detail?: string): Diagnostic {
   const message = detail ? `${DIAGNOSTIC_MESSAGES[code]} ${detail}` : DIAGNOSTIC_MESSAGES[code];
