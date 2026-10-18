@@ -1,4 +1,5 @@
 import type { Duration } from "./duration.js";
+import type { InferRecord } from "./field-value.js";
 import type { ExecutionMode, Json, Schedule } from "./model.js";
 import type { RateLimit } from "./rate-limit.js";
 
@@ -126,6 +127,10 @@ export const NODE_KINDS = [
 
 export type NodeKind = (typeof NODE_KINDS)[number];
 
+export type Collected<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: InferRecord<typeof ERROR_FIELDS> };
+
 export const MAP_ERROR_MODES = ["fail", "collect"] as const;
 
 export const RETRY_BACKOFFS = ["exponential"] as const;
@@ -138,7 +143,14 @@ export type GraphRetry = {
 
 export const FLAG_KINDS = ["boolean", "string", "number"] as const;
 
-export const FLAG_STYLES = ["equals", "space", "attached", "positional"] as const;
+export const FLAG_STYLES = [
+  "equals",
+  "space",
+  "attached",
+  "positional",
+  "pairs",
+  "terminated",
+] as const;
 
 export const FLAG_POSITIONS = ["before", "after"] as const;
 
@@ -148,20 +160,33 @@ export type FlagStyle = (typeof FLAG_STYLES)[number];
 
 export type FlagPosition = (typeof FLAG_POSITIONS)[number];
 
-export type CommandFlag = {
+type FlagOptions = {
   readonly cli: string;
-  readonly kind: FlagKind;
-  readonly repeatable?: boolean;
-  readonly optionalValue?: boolean;
-  readonly choices?: readonly string[];
   readonly supported?: boolean;
-  readonly style?: FlagStyle;
   readonly position?: FlagPosition;
   readonly order?: number;
   readonly prefix?: readonly string[];
-  readonly pairs?: boolean;
-  readonly terminator?: string;
 };
+
+type ScalarFlagOptions = {
+  readonly style?: "space" | "equals" | "attached" | "positional";
+  readonly repeatable?: true;
+};
+
+export type CommandFlag = Expand<
+  FlagOptions &
+    (
+      | ({ readonly kind: "boolean" } & ScalarFlagOptions)
+      | ({ readonly kind: "number"; readonly optionalValue?: true } & ScalarFlagOptions)
+      | ({
+          readonly kind: "string";
+          readonly optionalValue?: true;
+          readonly choices?: readonly string[];
+        } & ScalarFlagOptions)
+      | { readonly kind: "string"; readonly style: "pairs" }
+      | { readonly kind: "string"; readonly style: "terminated"; readonly terminator: string }
+    )
+>;
 
 export type CommandFlagSpec = {
   path: string[];

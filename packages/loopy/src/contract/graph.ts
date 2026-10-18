@@ -8,7 +8,6 @@ import {
   EXECUTION_ERROR_CODES,
   EXECUTION_MODES,
   FIELD_TYPES,
-  FLAG_KINDS,
   FLAG_POSITIONS,
   FLAG_STYLES,
   isRecord,
@@ -130,21 +129,40 @@ const code = base.extend({
   timeout: durationSchema.nullable(),
 });
 
+const flagOptions = z.strictObject({
+  cli: z.string(),
+  supported: z.boolean().optional(),
+  position: z.enum(FLAG_POSITIONS).optional(),
+  order: z.number().optional(),
+  prefix: z.array(z.string()).readonly().optional(),
+});
+
+const scalarFlagOptions = {
+  style: z.enum(["space", "equals", "attached", "positional"]).optional(),
+  repeatable: z.literal(true).optional(),
+};
+
 const commandFlagSchema = z
-  .strictObject({
-    cli: z.string(),
-    kind: z.enum(FLAG_KINDS),
-    repeatable: z.boolean().optional(),
-    optionalValue: z.boolean().optional(),
-    choices: z.array(z.string()).readonly().optional(),
-    supported: z.boolean().optional(),
-    style: z.enum(FLAG_STYLES).optional(),
-    position: z.enum(FLAG_POSITIONS).optional(),
-    order: z.number().optional(),
-    prefix: z.array(z.string()).readonly().optional(),
-    pairs: z.boolean().optional(),
-    terminator: z.string().optional(),
-  })
+  .union([
+    flagOptions.extend({ kind: z.literal("boolean"), ...scalarFlagOptions }),
+    flagOptions.extend({
+      kind: z.literal("number"),
+      ...scalarFlagOptions,
+      optionalValue: z.literal(true).optional(),
+    }),
+    flagOptions.extend({
+      kind: z.literal("string"),
+      ...scalarFlagOptions,
+      optionalValue: z.literal(true).optional(),
+      choices: z.array(z.string()).readonly().optional(),
+    }),
+    flagOptions.extend({ kind: z.literal("string"), style: z.literal("pairs") }),
+    flagOptions.extend({
+      kind: z.literal("string"),
+      style: z.literal("terminated"),
+      terminator: z.string(),
+    }),
+  ])
   .readonly();
 
 const commandFlagSpecSchema = z.strictObject({

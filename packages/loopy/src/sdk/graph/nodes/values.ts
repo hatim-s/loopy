@@ -6,10 +6,10 @@ export function format(
   values: Readonly<
     Record<string, string | number | boolean | Ref<string | number | boolean | undefined>>
   >,
-) {
+): Ref<string> {
   const builder = currentBuilder();
 
-  return builder.ref<string>(
+  return builder.scalarRef<string>(
     builder.add({
       kind: "format",
       template,
@@ -23,10 +23,10 @@ export function format(
   );
 }
 
-export function log(message: string | Ref<string>, data?: AuthorValue) {
+export function log(message: string | Ref<string>, data?: AuthorValue): Ref<null> {
   const builder = currentBuilder();
 
-  return builder.ref<null>(
+  return builder.scalarRef<null>(
     builder.add({
       kind: "log",
       message: serialize(message, builder),
@@ -35,20 +35,20 @@ export function log(message: string | Ref<string>, data?: AuthorValue) {
   );
 }
 
-export function now() {
+export function now(): Ref<string> {
   const builder = currentBuilder();
 
-  return builder.ref<string>(builder.add({ kind: "now" }).id);
+  return builder.scalarRef<string>(builder.add({ kind: "now" }).id);
 }
 
-export function uuid() {
+export function uuid(): Ref<string> {
   const builder = currentBuilder();
 
-  return builder.ref<string>(builder.add({ kind: "uuid" }).id);
+  return builder.scalarRef<string>(builder.add({ kind: "uuid" }).id);
 }
 
-export function random() {
+export function random(): Ref<number> {
   const builder = currentBuilder();
 
-  return builder.ref<number>(builder.add({ kind: "random" }).id);
+  return builder.scalarRef<number>(builder.add({ kind: "random" }).id);
 }

@@ -14,27 +14,31 @@ import {
   type RefId,
   validateGraph,
 } from "../../core/index.js";
-import { type AuthorValue, REF, type Ref, Reference, type RefValue, serialize } from "./ref.js";
+import {
+  type AuthorValue,
+  REF,
+  Reference,
+  type RefValue,
+  type SchemaRef,
+  serialize,
+} from "./ref.js";
 import { refuse, validateLabel } from "./validate.js";
 
 type Tail = { id: NodeId; kind: "next" | "join" };
 
 type Frame = {
   scope: NodeId | null;
-  token: symbol;
   labels: Set<string>;
   first: NodeId | null;
   tails: Tail[];
 };
 
-type NodeData = Node extends infer N
-  ? N extends Node
-    ? Omit<N, "id" | "scope" | "label">
-    : never
+type NodeData<N extends Node = Node> = N extends unknown
+  ? Omit<N, "id" | "scope" | "label">
   : never;
 
 function frame(scope: NodeId | null): Frame {
-  return { scope, token: Symbol(), labels: new Set(), first: null, tails: [] };
+  return { scope, labels: new Set(), first: null, tails: [] };
 }
 
 type Activation = { builder: GraphBuilder | null };
@@ -95,7 +99,9 @@ export class GraphBuilder {
   }
 
   // PR 3 checks label literals in the AST; construction accepts the already typed string.
-  allocate(kind: NodeKind, label: string | null, fallback: string = kind) {
+  allocate(kind: NodeKind, naming: { label: string } | { fallback: string }) {
+    const label = "label" in naming ? naming.label : null;
+    const fallback = "fallback" in naming ? naming.fallback : kind;
     const name = [...this.prefixes, label ?? fallback].join("/");
 
     if (label !== null && this.scope.labels.has(name)) {
@@ -113,7 +119,11 @@ export class GraphBuilder {
   }
 
   add(data: NodeData, label: string | null = null) {
-    const base = this.allocate(data.kind, label, data.kind === "command" ? data.key : data.kind);
+    const base = this.allocate(
+      data.kind,
+      label === null ? { fallback: data.kind === "command" ? data.key : data.kind } : { label },
+    );
+
     const node = { ...base, ...data };
     this.record(node);
 
@@ -136,11 +146,18 @@ export class GraphBuilder {
     return graphId<RefId>(`${owner}:${name}`);
   }
 
-  ref<T, Fields = never>(refId: string, schema?: OutSchema | null): Ref<T, Fields>;
-  ref(refId: string, schema: OutSchema | null = null): RefValue {
-    const referenceId = graphId<RefId>(refId);
+  schemaRef<S extends OutSchema>(refId: string, schema: S): SchemaRef<S> {
+    return new Reference({
+      owner: this,
+      id: graphId<RefId>(refId),
+      schema,
+      path: [],
+    });
+  }
 
-    return new Reference({ owner: this, scope: this.scope.token, id: referenceId, schema });
+  // Node constructors declare T from the output they record; the phantom never stores a runtime value.
+  scalarRef<T>(refId: string): Reference<T> {
+    return new Reference<T>({ owner: this, id: graphId<RefId>(refId), schema: null, path: [] });
   }
 
   check(ref: RefValue) {

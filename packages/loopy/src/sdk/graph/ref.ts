@@ -7,9 +7,12 @@ import {
   type RefId,
   type Value,
 } from "../../core/index.js";
+import type { Infer, SchemaFields } from "./types.js";
 import { refuse } from "./validate.js";
 
 export const REF = Symbol("loopy.graph.ref");
+
+declare const OUTPUT: unique symbol;
 
 export class Size {
   constructor(readonly ref: RefValue) {}
@@ -21,26 +24,23 @@ export type RefContext = {
 
 export type RefMetadata = {
   owner: RefContext;
-  scope: symbol;
   id: RefId;
   schema: OutSchema | null;
+  path: string[];
 };
 
 export class RefValue {
   readonly [REF]: RefMetadata;
-  constructor(
-    metadata: RefMetadata,
-    readonly path: string[] = [],
-  ) {
+  constructor(metadata: RefMetadata) {
     this[REF] = metadata;
   }
 }
 
 export class Reference<T, Fields = never> extends RefValue {
-  declare readonly output: T;
+  declare readonly [OUTPUT]: T;
 
   get<K extends keyof Fields & string>(key: K): Ref<Fields[K]> {
-    return new Reference(this[REF], [...this.path, String(key)]);
+    return new Reference({ ...this[REF], path: [...this[REF].path, key] });
   }
 }
 
@@ -61,7 +61,7 @@ export type AuthorValue =
 export function serializeRef(ref: RefValue, context: RefContext): GraphRef {
   context.check(ref);
 
-  return { ref: ref[REF].id, path: [...ref.path] };
+  return { ref: ref[REF].id, path: [...ref[REF].path] };
 }
 
 export function serialize(value: AuthorValue, context: RefContext): Value {
@@ -114,3 +114,5 @@ export function isRef<T>(value: T): value is T & RefValue {
 export function serializeSize(ref: RefValue, context: RefContext) {
   return { ...serializeRef(ref, context), size: true as const };
 }
+
+export type SchemaRef<S extends OutSchema> = Ref<Infer<S>, SchemaFields<S>>;

@@ -1,11 +1,11 @@
-import type { CommandDescriptor, FlagDefinition, PositionalDefinition } from "../../sdk/host.js";
+import type { CommandDescriptor, CommandFlag, PositionalDefinition } from "../../sdk/host.js";
 import { isTypeScriptIdentifier } from "./names.js";
 
 function key(name: string): string {
   return isTypeScriptIdentifier(name) ? name : JSON.stringify(name);
 }
 
-function descriptorObject(value: FlagDefinition | PositionalDefinition): string {
+function descriptorObject(value: CommandFlag | PositionalDefinition): string {
   return `{ ${Object.entries(value)
     .map(([name, entry]) => `${key(name)}: ${JSON.stringify(entry)}`)
     .join(", ")} }`;
@@ -23,10 +23,6 @@ export function renderCommandSource(name: string, descriptor: CommandDescriptor)
       );
 
       return flags.length ? `  flags: {\n${flags.join("\n")}\n  },` : "  flags: {},";
-    }
-
-    if (name === "positionals") {
-      return `  positionals: [${descriptor.positionals?.map(descriptorObject).join(", ") ?? ""}],`;
     }
 
     return `  ${key(name)}: ${JSON.stringify(value)},`;

@@ -14,8 +14,12 @@ export const archiveDescriptors = {
       file: { cli: "-f", kind: "string" },
       directory: { cli: "-C", kind: "string" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
     key: "archive.tar",
+    operands: {
+      kind: "positional",
+      parts: [{ name: "paths", optional: true, variadic: true }],
+      separator: false,
+    },
   },
   gzip: {
     program: "gzip",
@@ -26,8 +30,12 @@ export const archiveDescriptors = {
       force: { cli: "-f", kind: "boolean" },
       recursive: { cli: "-r", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
     key: "archive.gzip",
+    operands: {
+      kind: "positional",
+      parts: [{ name: "paths", optional: true, variadic: true }],
+      separator: false,
+    },
   },
   zip: {
     program: "zip",
@@ -37,8 +45,12 @@ export const archiveDescriptors = {
       update: { cli: "-u", kind: "boolean" },
       exclude: { cli: "-x", kind: "string", position: "after" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
     key: "archive.zip",
+    operands: {
+      kind: "positional",
+      parts: [{ name: "paths", optional: true, variadic: true }],
+      separator: false,
+    },
   },
   unzip: {
     program: "unzip",
@@ -49,8 +61,12 @@ export const archiveDescriptors = {
       quiet: { cli: "-q", kind: "boolean" },
       directory: { cli: "-d", kind: "string" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
     key: "archive.unzip",
+    operands: {
+      kind: "positional",
+      parts: [{ name: "paths", optional: true, variadic: true }],
+      separator: false,
+    },
   },
 } as const satisfies Record<string, CommandDescriptor>;
 

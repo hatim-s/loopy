@@ -7,31 +7,30 @@ import {
 import {
   type CommandDefinition,
   type CommandDescriptor,
+  type CommandOperands,
   parsedFlags,
   platformVariant,
 } from "../define-command.js";
-import { type AuthorValue, isRef, type RefValue } from "./ref.js";
+import { isRef, type RefValue } from "./ref.js";
 
 import { refuse } from "./validate.js";
-
-type Input = {
-  args?: readonly (string | RefValue)[];
-  revisions?: readonly (string | RefValue)[];
-  paths?: readonly (string | RefValue)[];
-  flags?: Readonly<Record<string, AuthorValue>>;
-};
 
 function flagSpec(descriptor: CommandDefinition): CommandFlagSpec {
   return {
     path: [...(descriptor.path ?? [])],
     flags: { ...descriptor.flags },
     style: descriptor.style ?? "space",
-    positionalSeparator: Boolean(descriptor.positionalSeparator && !descriptor.revisionPaths),
+    positionalSeparator:
+      descriptor.operands?.kind === "positional" && descriptor.operands.separator,
     flagsAfterPositionals: descriptor.flagsAfterPositionals ?? false,
   };
 }
 
-export function commandArgv(original: CommandDescriptor, input: Input, mode: "parsed" | "raw") {
+export function commandArgv(
+  original: CommandDescriptor,
+  input: CommandOperands<string | RefValue>,
+  mode: "parsed" | "raw",
+) {
   try {
     const descriptor = platformVariant(
       mode === "raw" ? (original.raw ?? original) : original,
@@ -77,9 +76,8 @@ export function commandArgv(original: CommandDescriptor, input: Input, mode: "pa
     const operands = {
       ...descriptor,
       positionals:
-        mode === "parsed"
-          ? (descriptor.parsedPositionals ?? descriptor.positionals)
-          : descriptor.positionals,
+        descriptor.operands?.kind === "positional" ? descriptor.operands.parts : undefined,
+      revisionPaths: descriptor.operands?.kind === "revisionPaths",
     };
 
     return {

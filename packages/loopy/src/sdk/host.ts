@@ -1,1 +1,3 @@
-export type { CommandDescriptor, FlagDefinition, PositionalDefinition } from "./define-command.js";
+export type { CommandFlag } from "../core/index.js";
+
+export type { CommandDescriptor, PositionalDefinition } from "./define-command.js";

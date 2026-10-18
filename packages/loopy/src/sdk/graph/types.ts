@@ -1,25 +1,6 @@
-import type { Json, OutSchema, RecordSpec } from "../../core/index.js";
+import type { Field, InferRecord, OutSchema, RecordSpec } from "../../core/index.js";
 
-import type { RefValue } from "./ref.js";
-
-type Field = {
-  string: string;
-  number: number;
-  boolean: boolean;
-  json: Json;
-  "string[]": string[];
-  "number[]": number[];
-  "boolean[]": boolean[];
-  "json[]": Json[];
-};
-
-type ObjectOf<S extends RecordSpec> = {
-  -readonly [K in keyof S as K extends `${string}?` ? never : K]: Field[S[K]];
-} & {
-  -readonly [K in keyof S as K extends `${infer Name}?` ? Name : never]?: Field[S[K]];
-};
-
-export type InferRecord<S extends RecordSpec> = { [K in keyof ObjectOf<S>]: ObjectOf<S>[K] };
+import type { Ref } from "./ref.js";
 
 export type Infer<S extends OutSchema> = S extends {
   kind: "record";
@@ -32,10 +13,10 @@ export type Infer<S extends OutSchema> = S extends {
 
 export type SchemaFields<S extends OutSchema> = S extends { kind: "record" } ? Infer<S> : never;
 
-export type Result<T> = T extends RefValue & { readonly output: infer R }
+export type Result<T> = T extends Ref<infer R>
   ? R
-  : T extends readonly unknown[]
+  : T extends object
     ? { [K in keyof T]: Result<T[K]> }
-    : T extends object
-      ? { [K in keyof T]: Result<T[K]> }
-      : T;
+    : T;
+
+export type { InferRecord } from "../../core/index.js";

@@ -32,7 +32,6 @@ export const netDescriptors = {
       maxTime: { cli: "--max-time", kind: "number" },
       writeOut: { cli: "-w", kind: "string" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
     key: "net.curl",
     parse: "./parsers/net-curl.ts",
     out: parseCurlOut,
@@ -42,6 +41,11 @@ export const netDescriptors = {
       }
 
       return {};
+    },
+    operands: {
+      kind: "positional",
+      parts: [{ name: "paths", optional: true, variadic: true }],
+      separator: false,
     },
   },
 } as const satisfies Record<string, CommandDescriptor>;

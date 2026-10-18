@@ -50,7 +50,10 @@ function scalar<T>(flag: CommandFlag, value: T, isReference: <R>(value: R) => bo
     );
   }
 
-  if (value === true && (flag.kind === "boolean" || flag.optionalValue)) {
+  if (
+    value === true &&
+    (flag.kind === "boolean" || ("optionalValue" in flag && flag.optionalValue))
+  ) {
     return;
   }
 
@@ -64,7 +67,7 @@ function scalar<T>(flag: CommandFlag, value: T, isReference: <R>(value: R) => bo
     );
   }
 
-  if (flag.choices && !flag.choices.includes(String(value))) {
+  if ("choices" in flag && flag.choices && !flag.choices.includes(String(value))) {
     throw new CommandArgumentError(
       "flag_choice",
       `Flag '${flag.cli}' must be one of: ${flag.choices.join(", ")}. Choose an allowed value.`,
@@ -82,7 +85,7 @@ export function validateCommandFlag<T>(
     return;
   }
 
-  if (flag.pairs) {
+  if (flag.style === "pairs") {
     if (!isRecord(value)) {
       throw new CommandArgumentError(
         "flag_type",
@@ -102,8 +105,8 @@ export function validateCommandFlag<T>(
     return;
   }
 
-  if (flag.repeatable) {
-    if (!Array.isArray(value) || (flag.terminator && value.length === 0)) {
+  if (flag.style === "terminated" || ("repeatable" in flag && flag.repeatable)) {
+    if (!Array.isArray(value) || (flag.style === "terminated" && value.length === 0)) {
       throw new CommandArgumentError(
         "flag_type",
         `Flag '${flag.cli}' requires an array of values.`,
@@ -132,7 +135,10 @@ function tokens(flag: CommandFlag, value: Scalar, style: CommandDefinition["styl
     return [];
   }
 
-  if (value === true && (flag.kind === "boolean" || flag.optionalValue)) {
+  if (
+    value === true &&
+    (flag.kind === "boolean" || ("optionalValue" in flag && flag.optionalValue))
+  ) {
     return [flag.cli];
   }
 
@@ -158,7 +164,13 @@ function renderFlag(
     return [];
   }
 
-  const form = flag.pairs ? "pairs" : flag.repeatable ? "repeated" : "scalar";
+  const form =
+    flag.style === "pairs"
+      ? "pairs"
+      : ("repeatable" in flag && flag.repeatable) || flag.style === "terminated"
+        ? "repeated"
+        : "scalar";
+
   // SAFETY: The SDK checked literals, and renderArgv checks resolved refs before formatting.
   const argument = { form, value } as FlagArgument;
 
@@ -166,7 +178,7 @@ function renderFlag(
     case "pairs":
       return Object.entries(argument.value).flatMap(([key, item]) => [flag.cli, key, item]);
     case "repeated":
-      if (flag.terminator) {
+      if (flag.style === "terminated") {
         return [flag.cli, ...argument.value.map(String), flag.terminator];
       }
 

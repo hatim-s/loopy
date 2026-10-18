@@ -1,6 +1,6 @@
 import type { Duration, OutSchema } from "../../../core/index.js";
 import { currentBuilder } from "../builder.js";
-import type { Infer, SchemaFields } from "../types.js";
+import type { Ref } from "../ref.js";
 
 export function wait<const S extends OutSchema>(
   label: string,
@@ -13,11 +13,11 @@ export function wait<const S extends OutSchema>(
     label,
   );
 
-  return builder.ref<Infer<S>, SchemaFields<S>>(node.id, options.payload);
+  return builder.schemaRef(node.id, options.payload);
 }
 
-export function sleep(duration: Duration) {
+export function sleep(duration: Duration): Ref<null> {
   const builder = currentBuilder();
 
-  return builder.ref<null>(builder.add({ kind: "sleep", duration }).id);
+  return builder.scalarRef<null>(builder.add({ kind: "sleep", duration }).id);
 }

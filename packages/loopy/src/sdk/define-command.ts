@@ -1,7 +1,6 @@
 import type { CommandFlag, OutSchema } from "../core/index.js";
+import type { AuthorValue } from "./graph/ref.js";
 import { refuse } from "./graph/validate.js";
-
-export type FlagDefinition = CommandFlag;
 
 export type PositionalDefinition = {
   readonly name: string;
@@ -14,12 +13,15 @@ export type CommandDefinition = {
   readonly observedVersion?: string;
   readonly program: string;
   readonly path?: readonly string[];
-  readonly positionalSeparator?: boolean;
   readonly flagsAfterPositionals?: boolean;
-  readonly revisionPaths?: boolean;
-  readonly positionals?: readonly PositionalDefinition[];
-  readonly parsedPositionals?: readonly PositionalDefinition[];
-  readonly flags?: Readonly<Record<string, FlagDefinition>>;
+  readonly operands?:
+    | {
+        readonly kind: "positional";
+        readonly parts: readonly PositionalDefinition[] | undefined;
+        readonly separator: boolean;
+      }
+    | { readonly kind: "revisionPaths" };
+  readonly flags?: Readonly<Record<string, CommandFlag>>;
   readonly style?: "equals" | "space";
   readonly preset?: {
     readonly flags: Readonly<
@@ -58,7 +60,7 @@ type Positionals<Parts extends readonly PositionalDefinition[]> = Parts extends 
       : readonly [string, ...Positionals<Rest>]
   : readonly [];
 
-type FlagValue<F extends FlagDefinition> = F["kind"] extends "boolean"
+type FlagValue<F extends CommandFlag> = F["kind"] extends "boolean"
   ? boolean
   : F["kind"] extends "number"
     ? number
@@ -66,37 +68,42 @@ type FlagValue<F extends FlagDefinition> = F["kind"] extends "boolean"
       ? C[number]
       : string;
 
-type FlagInput<F extends FlagDefinition> = F extends { readonly pairs: true }
+type FlagInput<F extends CommandFlag> = F extends { readonly style: "pairs" }
   ? Record<string, string>
   : F extends { readonly optionalValue: true }
     ? FlagValue<F> | true
     : FlagValue<F>;
 
 type Flags<D extends CommandDescriptor> = D extends {
-  readonly flags: infer F extends Readonly<Record<string, FlagDefinition>>;
+  readonly flags: infer F extends Readonly<Record<string, CommandFlag>>;
 }
   ? keyof F extends never
     ? Record<string, never>
     : {
-        readonly [K in keyof F]?: F[K] extends { readonly repeatable: true }
+        readonly [K in keyof F]?: F[K] extends
+          | { readonly repeatable: true }
+          | { readonly style: "terminated" }
           ? readonly FlagInput<F[K]>[]
           : FlagInput<F[K]>;
       }
   : Record<string, never>;
 
 type Args<D extends CommandDescriptor> = D extends {
-  readonly positionals: infer P extends readonly PositionalDefinition[];
+  readonly operands: {
+    readonly kind: "positional";
+    readonly parts: infer P extends readonly PositionalDefinition[];
+  };
 }
   ? Positionals<P>
   : readonly string[];
 
 type Operands<D extends CommandDescriptor> = D extends {
-  readonly revisionPaths: true;
+  readonly operands: { readonly kind: "revisionPaths" };
 }
   ? {
       revisions?: readonly string[];
       paths?: readonly string[];
-      args?: D extends { readonly positionals: readonly PositionalDefinition[] } ? Args<D> : never;
+      args?: never;
     }
   : readonly [] extends Args<D>
     ? { args?: Args<D> }
@@ -110,13 +117,7 @@ type ExcludedKeys<D> = D extends { readonly exclude: readonly (infer K extends s
 
 type ProtectedKeys<D> = PresetKeys<D> | ExcludedKeys<D>;
 
-type ParsedDescriptor<D extends CommandDescriptor> = D extends {
-  readonly parsedPositionals: infer P extends readonly PositionalDefinition[];
-}
-  ? Omit<D, "positionals"> & { readonly positionals: P }
-  : D;
-
-export type Input<D extends CommandDescriptor> = Operands<ParsedDescriptor<D>> & {
+export type Input<D extends CommandDescriptor> = Operands<D> & {
   flags?: Omit<Flags<D>, ProtectedKeys<D>> & { readonly [K in ProtectedKeys<D>]?: never };
 };
 
@@ -158,7 +159,7 @@ export function parsedFlags<Value>(
   return { ...input.flags, ...preset };
 }
 
-function optionIdentity(flag: FlagDefinition | undefined): string {
+function optionIdentity(flag: CommandFlag | undefined): string {
   return JSON.stringify([...(flag?.prefix ?? []), flag?.cli]);
 }
 
@@ -189,3 +190,10 @@ export function validateCommandDescriptor(descriptor: CommandDescriptor): void {
 export function commandKey(descriptor: Pick<CommandDescriptor, "key">) {
   return descriptor.key;
 }
+
+export type CommandOperands<V> = {
+  args?: readonly V[];
+  revisions?: readonly V[];
+  paths?: readonly V[];
+  flags?: Readonly<Record<string, AuthorValue>>;
+};

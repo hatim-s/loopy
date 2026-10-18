@@ -16,11 +16,11 @@ export { errnoCode, errorMessage, toError } from "./errors.js";
 
 export * from "./executor.js";
 
+export type { Field, InferRecord } from "./field-value.js";
+
 export { isFieldValue, matchesRecord, recordField, recordFields } from "./field-value.js";
 
 export * from "./graph.js";
-
-export { graphId } from "./graph.js";
 
 export { validateGraph } from "./graph-check.js";
 

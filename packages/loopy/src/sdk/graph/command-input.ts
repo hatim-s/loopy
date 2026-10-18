@@ -3,11 +3,9 @@ import type { Ref } from "./ref.js";
 
 type WithRefs<T> = T extends string | number | boolean
   ? T | Ref<T>
-  : T extends readonly unknown[]
+  : T extends object
     ? { [K in keyof T]: WithRefs<T[K]> }
-    : T extends object
-      ? { [K in keyof T]: WithRefs<T[K]> }
-      : T;
+    : T;
 
 type Fields<T> = { [K in keyof T]: WithRefs<T[K]> };
 

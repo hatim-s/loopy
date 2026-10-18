@@ -2,7 +2,7 @@ import type { GraphMeta, RecordSpec } from "../../core/index.js";
 import { GraphBuilder } from "./builder.js";
 import { parseDefinitionInput, parseDefinitionMeta } from "./definition.js";
 import { inputRef } from "./input.js";
-import type { AuthorValue } from "./ref.js";
+import type { AuthorValue, SchemaRef } from "./ref.js";
 
 export function loopy<const S extends RecordSpec>(
   name: string,
@@ -10,7 +10,7 @@ export function loopy<const S extends RecordSpec>(
     schedule?: { cron: string; tz?: string };
   } & {
     input: S;
-    run(context: { input: ReturnType<typeof inputRef<S>> }): AuthorValue;
+    run(context: { input: SchemaRef<{ kind: "record"; fields: S }> }): AuthorValue;
   },
 ) {
   const builder = new GraphBuilder(

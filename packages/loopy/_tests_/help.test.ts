@@ -30,7 +30,11 @@ describe("CLI help generation", () => {
     expect(parsed.warnings).toContain(
       "Help may omit which valued flags can repeat; review repeatable flag metadata",
     );
-    expect(parsed.descriptor.positionals).toEqual([{ name: "prompt", optional: true }]);
+    expect(
+      parsed.descriptor.operands?.kind === "positional"
+        ? parsed.descriptor.operands.parts
+        : undefined,
+    ).toEqual([{ name: "prompt", optional: true }]);
     expect(parsed.descriptor.flags).toMatchObject({
       model: { cli: "--model", kind: "string" },
       sandbox: {
@@ -106,7 +110,7 @@ describe("CLI help generation", () => {
         .replace('import { type CommandDescriptor, defineCommand } from "loopy";', "")
         .replaceAll("descriptor", "emptyDescriptor")}
       ${gitSource}
-      gitLog({ args: ["HEAD"], flags: { oneline: true, maxCount: 1 } });
+      gitLog({ revisions: ["HEAD"], flags: { oneline: true, maxCount: 1 } });
       gitLog({ revisions: ["HEAD"], paths: ["src"] });
       // @ts-expect-error Generated boolean flags retain their type.
       gitLog({ args: ["HEAD"], flags: { oneline: "yes" } });
@@ -162,7 +166,11 @@ describe("CLI help generation", () => {
       "Usage: tool run [OPTIONS] <FILE> [LABEL]\n\nOptions:\n  --json\n",
     );
 
-    expect(parsed.descriptor.positionals).toEqual([
+    expect(
+      parsed.descriptor.operands?.kind === "positional"
+        ? parsed.descriptor.operands.parts
+        : undefined,
+    ).toEqual([
       { name: "file", optional: false },
       { name: "label", optional: true },
     ]);
@@ -175,9 +183,11 @@ describe("CLI help generation", () => {
       "Usage: tool [OPTIONS] [<file>...]\n\nOptions:\n  --help  Show help\n",
     );
 
-    expect(parsed.descriptor.positionals).toEqual([
-      { name: "file", optional: true, variadic: true },
-    ]);
+    expect(
+      parsed.descriptor.operands?.kind === "positional"
+        ? parsed.descriptor.operands.parts
+        : undefined,
+    ).toEqual([{ name: "file", optional: true, variadic: true }]);
   });
 
   test("models flags with optional values and rejects reserved export names", () => {
@@ -205,7 +215,7 @@ describe("CLI help generation", () => {
       "Usage: tool [OPTIONS] [NAME]\n\nOptions:\n  --mode <MODE>  Choose [possible values: safe, fast]\n",
     );
 
-    expect(parsed.descriptor.flags?.mode?.choices).toEqual(["safe", "fast"]);
+    expect(parsed.descriptor.flags?.mode).toMatchObject({ choices: ["safe", "fast"] });
   });
 });
 
@@ -253,25 +263,27 @@ for (const fixture of [
     ).text();
 
     const { descriptor } = parseCliHelp(fixture.binary, fixture.path, help);
-    expect(descriptor.positionals?.[0]?.name).toBe(fixture.positional);
+
+    if (descriptor.operands?.kind === "positional") {
+      expect(descriptor.operands.parts?.[0]?.name).toBe(fixture.positional);
+    }
+
     expect(descriptor.flags?.[fixture.flag]?.kind).toBe(fixture.kind);
-    expect(descriptor.positionalSeparator).toBe(fixture.separator);
+    expect(descriptor.operands?.kind === "positional" && descriptor.operands.separator).toBe(
+      fixture.separator,
+    );
     expect(descriptor.flags).not.toHaveProperty("help");
     expect(descriptor.flags).not.toHaveProperty("version");
     expect(
-      descriptor.positionals?.some((positional) => /^(options|flags)$/.test(positional.name)),
+      descriptor.operands?.kind === "positional" &&
+        descriptor.operands.parts?.some((positional) => /^(options|flags)$/.test(positional.name)),
     ).toBe(false);
     const source = renderCommandSource("generated", descriptor);
     expect(source).toContain(`${fixture.flag}: { cli: `);
     expect(source).not.toContain('"program":');
 
     if (fixture.binary === "git") {
-      expect(descriptor.revisionPaths).toBe(true);
-      expect(descriptor.positionals?.[1]).toMatchObject({
-        name: "path",
-        optional: true,
-        variadic: true,
-      });
+      expect(descriptor.operands?.kind === "revisionPaths").toBe(true);
     }
   });
 }
@@ -283,8 +295,10 @@ test("man-page overstrikes retain the advertised positional separator", () => {
     "SYNOPSIS\n       g\bgit log [[-\b--\b-] <path>...]\nOPTIONS\n       --follow\n",
   );
 
-  expect(descriptor.positionalSeparator).toBe(true);
-  expect(descriptor.positionals).toEqual([{ name: "path", optional: true, variadic: true }]);
+  expect(descriptor.operands?.kind === "positional" && descriptor.operands.separator).toBe(true);
+  expect(
+    descriptor.operands?.kind === "positional" ? descriptor.operands.parts : undefined,
+  ).toEqual([{ name: "path", optional: true, variadic: true }]);
 });
 
 test("only path-only usage receives an automatic positional separator", () => {
@@ -295,7 +309,7 @@ test("only path-only usage receives an automatic positional separator", () => {
       `Usage: tool [--] <${operand}>...\nOptions:\n  --json  JSON output`,
     );
 
-    expect(descriptor.positionalSeparator).toBe(true);
+    expect(descriptor.operands?.kind === "positional" && descriptor.operands.separator).toBe(true);
   }
 
   const { descriptor } = parseCliHelp(
@@ -304,8 +318,8 @@ test("only path-only usage receives an automatic positional separator", () => {
     "Usage: tool <name> [[--] <path>...]\nOptions:\n  --json  JSON output",
   );
 
-  expect(descriptor.positionalSeparator).toBe(false);
-  expect(descriptor.revisionPaths).toBe(false);
+  expect(descriptor.operands?.kind === "positional" && descriptor.operands.separator).toBe(false);
+  expect(descriptor.operands?.kind === "revisionPaths").toBe(false);
 });
 
 test("comma aliases retain value styles and repeatable placeholder metadata", () => {
@@ -332,10 +346,7 @@ Options:
     label: { repeatable: true },
     reviewer: { repeatable: true },
   });
-  expect(descriptor.positionals?.map((operand) => operand.name)).toEqual([
-    "revision-range",
-    "path",
-  ]);
+  expect(descriptor.operands).toEqual({ kind: "revisionPaths" });
 });
 
 test("captured gh flags accept repeated labels, assignees and reviewers", async () => {

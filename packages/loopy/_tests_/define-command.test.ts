@@ -6,13 +6,16 @@ import { capture } from "./fixtures/command-capture.js";
 const probe = defineCommand({
   key: "test.probe",
   program: "probe",
-  positionalSeparator: true,
-  positionals: [{ name: "source" }, { name: "targets", variadic: true }],
   flags: {
     mode: { cli: "--mode", kind: "string", choices: ["fast", "safe"], style: "equals" },
     count: { cli: "-n", kind: "number" },
     quiet: { cli: "-q", kind: "boolean" },
     include: { cli: "-I", kind: "string", repeatable: true, style: "attached" },
+  },
+  operands: {
+    kind: "positional",
+    parts: [{ name: "source" }, { name: "targets", variadic: true }],
+    separator: true,
   },
 });
 

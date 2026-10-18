@@ -71,3 +71,22 @@ export function isFieldValue(kind: FieldType, value: unknown): value is Json {
       return Array.isArray(value) && isJson(value);
   }
 }
+
+export type Field = {
+  string: string;
+  number: number;
+  boolean: boolean;
+  json: Json;
+  "string[]": string[];
+  "number[]": number[];
+  "boolean[]": boolean[];
+  "json[]": Json[];
+};
+
+type ObjectOf<S extends RecordSpec> = {
+  -readonly [K in keyof S as K extends `${string}?` ? never : K]: Field[S[K]];
+} & {
+  -readonly [K in keyof S as K extends `${infer Name}?` ? Name : never]?: Field[S[K]];
+};
+
+export type InferRecord<S extends RecordSpec> = { [K in keyof ObjectOf<S>]: ObjectOf<S>[K] };

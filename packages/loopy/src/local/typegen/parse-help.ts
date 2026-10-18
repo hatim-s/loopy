@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { basename } from "node:path";
-import type { CommandDescriptor, FlagDefinition, PositionalDefinition } from "../../sdk/host.js";
+import type { CommandDescriptor, CommandFlag, PositionalDefinition } from "../../sdk/host.js";
 import { identifier } from "./names.js";
 
 export type ParsedHelp = {
@@ -173,7 +173,7 @@ function descriptionLines(options: string[], index: number): string[] {
   return description;
 }
 
-function flagKind(placeholder: string | undefined): FlagDefinition["kind"] {
+function flagKind(placeholder: string | undefined): CommandFlag["kind"] {
   if (!placeholder) {
     return "boolean";
   }
@@ -181,7 +181,7 @@ function flagKind(placeholder: string | undefined): FlagDefinition["kind"] {
   return NUMERIC_PLACEHOLDER.test(placeholder) ? "number" : "string";
 }
 
-function parseFlagMatch(match: RegExpExecArray, options: string[], index: number): FlagDefinition {
+function parseFlagMatch(match: RegExpExecArray, options: string[], index: number): CommandFlag {
   const cli = match[1] ?? "";
   const placeholder = (match[3] ?? match[4])?.replace(/[<>[\]=]/g, "").toLowerCase();
   const optionalValue = Boolean(match[4] || match[3]?.startsWith("["));
@@ -196,29 +196,41 @@ function parseFlagMatch(match: RegExpExecArray, options: string[], index: number
       ),
   );
 
-  let flag: FlagDefinition = { cli, kind: flagKind(placeholder) };
+  let metadata: Pick<Extract<CommandFlag, { kind: "boolean" }>, "cli" | "style" | "repeatable"> = {
+    cli,
+  };
 
   if (repeatable) {
-    flag = { ...flag, repeatable: true };
-  }
-
-  if (optionalValue) {
-    flag = { ...flag, optionalValue: true };
+    metadata = { ...metadata, repeatable: true };
   }
 
   if (match[4] || match[2] === "=") {
-    flag = { ...flag, style: "equals" };
+    metadata = { ...metadata, style: "equals" };
   }
 
-  if (choices?.length) {
-    flag = { ...flag, choices };
+  const kind = flagKind(placeholder);
+
+  if (kind === "boolean") {
+    return { ...metadata, kind };
   }
 
-  return flag;
+  let valued: Pick<Extract<CommandFlag, { kind: "number" }>, "optionalValue"> = {};
+
+  if (optionalValue) {
+    valued = { optionalValue: true };
+  }
+
+  if (kind === "number") {
+    return { ...metadata, ...valued, kind };
+  }
+
+  return choices?.length
+    ? { ...metadata, ...valued, kind, choices }
+    : { ...metadata, ...valued, kind };
 }
 
 function parseFlags(lines: string[], warnings: string[]) {
-  const flags: Record<string, FlagDefinition> = {};
+  const flags: Record<string, CommandFlag> = {};
   const optionsSection = section(lines, "Options");
 
   const options = optionsSection.length
@@ -253,7 +265,7 @@ function parseFlags(lines: string[], warnings: string[]) {
   return flags;
 }
 
-function flagName(cli: string, flags: Record<string, FlagDefinition>, warnings: string[]) {
+function flagName(cli: string, flags: Record<string, CommandFlag>, warnings: string[]) {
   if (!cli || cli === "--help" || cli === "--version") {
     return undefined;
   }
@@ -300,12 +312,13 @@ function hasMultipleUsageForms(lines: string[], prefix: string): boolean {
 
 function operandLayout(
   lines: string[],
-): Pick<CommandDescriptor, "positionalSeparator" | "revisionPaths"> {
+  parts: readonly PositionalDefinition[],
+): CommandDescriptor["operands"] {
   const usage = usageLines(lines).find((line) => line.trim());
   const separator = usage && /\[--\]\s+<(?:pathspec|path|file)>/i.exec(usage);
 
   if (!usage || !separator) {
-    return { positionalSeparator: false };
+    return { kind: "positional", parts, separator: false };
   }
 
   const preceding = usageTokens(usage.slice(0, separator.index))
@@ -313,13 +326,12 @@ function operandLayout(
     .filter((operand) => operand !== undefined);
 
   if (!preceding.length) {
-    return { positionalSeparator: true };
+    return { kind: "positional", parts, separator: true };
   }
 
-  return {
-    positionalSeparator: false,
-    revisionPaths: preceding.every((operand) => /^revision(?:-range)?$/.test(operand.name)),
-  };
+  return preceding.every((operand) => /^revision(?:-range)?$/.test(operand.name))
+    ? { kind: "revisionPaths" }
+    : { kind: "positional", parts, separator: false };
 }
 
 export function parseCliHelp(binary: string, path: readonly string[], help: string): ParsedHelp {
@@ -344,16 +356,19 @@ export function parseCliHelp(binary: string, path: readonly string[], help: stri
     warnings.push("No positional arguments detected; verify the generated tuple");
   }
 
-  if (Object.values(flags).some((flag) => flag.kind !== "boolean" && !flag.repeatable)) {
+  if (
+    Object.values(flags).some(
+      (flag) => flag.kind !== "boolean" && !("repeatable" in flag && flag.repeatable),
+    )
+  ) {
     warnings.push("Help may omit which valued flags can repeat; review repeatable flag metadata");
   }
 
   const descriptor: CommandDescriptor = {
     key: [basename(binary), ...path].join("."),
-    ...operandLayout(lines),
+    operands: operandLayout(lines, positionals),
     program: binary,
     path,
-    positionals,
     flags,
     helpHash: createHash("sha256").update(help).digest("hex"),
   };

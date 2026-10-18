@@ -1,4 +1,5 @@
-import { ERROR_FIELDS } from "../../../core/index.js";
+import type { MAP_ERROR_MODES } from "../../../core/index.js";
+import { type Collected, ERROR_FIELDS, type NodeId } from "../../../core/index.js";
 import { currentBuilder } from "../builder.js";
 import { type AuthorPredicate, serializePredicate } from "../predicates.js";
 import type { Ref } from "../ref.js";
@@ -13,7 +14,7 @@ export function branch<Y extends AuthorValue, N extends AuthorValue>(
   arms: { yes: () => Y; no: () => N },
 ): Ref<Result<Y> | Result<N>> {
   const builder = currentBuilder();
-  const base = builder.allocate("branch", null);
+  const base = builder.allocate("branch", { fallback: "branch" });
   const recorded = serializePredicate(predicate, builder);
   validatePredicate(recorded, builder);
 
@@ -31,7 +32,7 @@ export function branch<Y extends AuthorValue, N extends AuthorValue>(
   node.arms = { yes: yes.entry, no: no.entry };
   builder.continueFrom(base.id, [...yes.tails, ...no.tails]);
 
-  return builder.ref(base.id);
+  return builder.scalarRef(base.id);
 }
 
 export function switch_<A extends Record<string, Arm>>(
@@ -39,7 +40,7 @@ export function switch_<A extends Record<string, Arm>>(
   arms: A & { default: Arm },
 ): Ref<Result<ReturnType<A[keyof A]>>> {
   const builder = currentBuilder();
-  const base = builder.allocate("switch", null);
+  const base = builder.allocate("switch", { fallback: "switch" });
 
   const node = {
     ...base,
@@ -51,7 +52,7 @@ export function switch_<A extends Record<string, Arm>>(
 
   builder.record(node);
   const tails = [];
-  const entries = [];
+  const entries: [string, NodeId][] = [];
 
   for (const [label, callback] of Object.entries(arms)) {
     validateLabel(label);
@@ -69,20 +70,16 @@ export function switch_<A extends Record<string, Arm>>(
   node.cases = Object.fromEntries(entries);
   builder.continueFrom(base.id, tails);
 
-  return builder.ref(base.id);
+  return builder.scalarRef(base.id);
 }
 
-type Collected<T> =
-  | { ok: true; value: T }
-  | { ok: false; error: { message: string; code: string } };
-
-export function map<T, R extends AuthorValue, M extends "fail" | "collect">(
+export function map<T, R extends AuthorValue, M extends (typeof MAP_ERROR_MODES)[number]>(
   over: Ref<T[]>,
   body: (item: Ref<T>, index: Ref<number>) => R,
   options: { concurrency?: number; onError: M },
 ): Ref<(M extends "collect" ? Collected<Result<R>> : Result<R>)[]> {
   const builder = currentBuilder();
-  const base = builder.allocate("map", null);
+  const base = builder.allocate("map", { fallback: "map" });
   const item = builder.binding(base.id, "item");
   const index = builder.binding(base.id, "index");
 
@@ -98,7 +95,7 @@ export function map<T, R extends AuthorValue, M extends "fail" | "collect">(
   };
 
   builder.record(node);
-  const arm = builder.arm(base.id, () => body(builder.ref(item), builder.ref(index)));
+  const arm = builder.arm(base.id, () => body(builder.scalarRef(item), builder.scalarRef(index)));
   node.body = arm.entry;
 
   for (const tail of arm.tails) {
@@ -107,18 +104,18 @@ export function map<T, R extends AuthorValue, M extends "fail" | "collect">(
 
   builder.continueFrom(base.id, [base.id], "next");
 
-  return builder.ref(base.id);
+  return builder.scalarRef(base.id);
 }
 
 export function parallel<A extends Record<string, Arm>>(
   arms: A,
 ): Ref<{ [K in keyof A]: Result<ReturnType<A[K]>> }, { [K in keyof A]: Result<ReturnType<A[K]>> }> {
   const builder = currentBuilder();
-  const base = builder.allocate("parallel", null);
+  const base = builder.allocate("parallel", { fallback: "parallel" });
   const node = { ...base, kind: "parallel" as const, branches: {} };
   builder.record(node);
   const tails = [];
-  const entries = [];
+  const entries: [string, NodeId][] = [];
 
   for (const [label, callback] of Object.entries(arms)) {
     validateLabel(label);
@@ -130,12 +127,12 @@ export function parallel<A extends Record<string, Arm>>(
   node.branches = Object.fromEntries(entries);
   builder.continueFrom(base.id, tails);
 
-  return builder.ref(base.id);
+  return builder.scalarRef(base.id);
 }
 
 export function finally_<R extends AuthorValue>(body: () => R, cleanup: Arm): Ref<Result<R>> {
   const builder = currentBuilder();
-  const base = builder.allocate("finally", null);
+  const base = builder.allocate("finally", { fallback: "finally" });
   const node = { ...base, kind: "finally" as const, body: base.id, cleanup: base.id };
   builder.record(node);
   const main = builder.arm(base.id, body);
@@ -145,7 +142,7 @@ export function finally_<R extends AuthorValue>(body: () => R, cleanup: Arm): Re
   builder.edge(base.id, main.entry, "next");
   builder.continueFrom(base.id, [...main.tails, ...final.tails]);
 
-  return builder.ref(base.id);
+  return builder.scalarRef(base.id);
 }
 
 export function rescue<R extends AuthorValue, H extends AuthorValue>(
@@ -153,14 +150,14 @@ export function rescue<R extends AuthorValue, H extends AuthorValue>(
   handler: (error: Ref<InferRecord<typeof ERROR_FIELDS>, InferRecord<typeof ERROR_FIELDS>>) => H,
 ): Ref<Result<R> | Result<H>> {
   const builder = currentBuilder();
-  const base = builder.allocate("rescue", null);
+  const base = builder.allocate("rescue", { fallback: "rescue" });
   const error = builder.binding(base.id, "error");
   const node = { ...base, kind: "rescue" as const, body: base.id, handler: base.id, error };
   builder.record(node);
   const main = builder.arm(base.id, body);
 
   const caught = builder.arm(base.id, () =>
-    handler(builder.ref(error, { kind: "record", fields: ERROR_FIELDS })),
+    handler(builder.schemaRef(error, { kind: "record", fields: ERROR_FIELDS })),
   );
 
   node.body = main.entry;
@@ -168,11 +165,11 @@ export function rescue<R extends AuthorValue, H extends AuthorValue>(
   builder.edge(base.id, main.entry, "next");
   builder.continueFrom(base.id, [...main.tails, ...caught.tails]);
 
-  return builder.ref(base.id);
+  return builder.scalarRef(base.id);
 }
 
 export function fail(message: string | Ref<string>): Ref<never> {
   const builder = currentBuilder();
 
-  return builder.ref(builder.add({ kind: "fail", message: serialize(message, builder) }).id);
+  return builder.scalarRef(builder.add({ kind: "fail", message: serialize(message, builder) }).id);
 }

@@ -3,6 +3,7 @@ import { graphSchema, graphView, refIdSchema } from "../src/contract/index.js";
 import {
   type DiagnosticCode,
   graphTypeResolver,
+  type Json,
   renderArgv,
   validateGraph,
 } from "../src/core/index.js";
@@ -513,13 +514,13 @@ test("dynamic flags preserve all descriptor rendering rules for the executor", (
     path: ["sub"],
     style: "equals",
     flagsAfterPositionals: true,
-    positionalSeparator: true,
     flags: {
       enabled: { cli: "--enabled", kind: "boolean" },
       count: { cli: "-n", kind: "number", style: "attached" },
       tag: { cli: "--tag", kind: "string", repeatable: true },
-      named: { cli: "--arg", kind: "string", pairs: true },
+      named: { cli: "--arg", kind: "string", style: "pairs" },
     },
+    operands: { kind: "positional", parts: undefined, separator: true },
   });
 
   const graph = compile(() => {
@@ -556,7 +557,7 @@ test("dynamic flags preserve all descriptor rendering rules for the executor", (
         enabled: { cli: "--enabled", kind: "boolean" },
         count: { cli: "-n", kind: "number", style: "attached" },
         tag: { cli: "--tag", kind: "string", repeatable: true },
-        named: { cli: "--arg", kind: "string", pairs: true },
+        named: { cli: "--arg", kind: "string", style: "pairs" },
       },
     },
   });
@@ -599,12 +600,12 @@ test("stored descriptor data renders false booleans, attached values and ordered
     path: ["sub"],
     style: "equals",
     flagsAfterPositionals: true,
-    positionalSeparator: true,
     flags: {
       enabled: { cli: "--enabled", kind: "boolean" },
       count: { cli: "-n", kind: "number", style: "attached" },
       tag: { cli: "--tag", kind: "string", repeatable: true },
     },
+    operands: { kind: "positional", parts: undefined, separator: true },
   });
 
   const graph = compile(() =>
@@ -636,7 +637,13 @@ test("collect maps infer success and failure outcomes while fail maps preserve v
       const collected = map(input.get("names"), (item) => item, { onError: "collect" });
       expectTypeOf(collected).toEqualTypeOf<
         Ref<
-          ({ ok: true; value: string } | { ok: false; error: { message: string; code: string } })[]
+          (
+            | { ok: true; value: string }
+            | {
+                ok: false;
+                error: { message: string; code: string; data: Json };
+              }
+          )[]
         >
       >();
       const plain = map(input.get("names"), (item) => item, { onError: "fail" });

@@ -36,14 +36,17 @@ export const textDescriptors = {
       B: { cli: "-B", kind: "number" },
       C: { cli: "-C", kind: "number" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
-    positionalSeparator: true,
     key: "text.grep",
     parse: "./parsers/text-grep.ts",
     out: parseGrepOut,
     prepare: ({ args, flags }) => ({
       flags: args - Number(!flags.has("e") && !flags.has("f")) > 1 ? { H: true } : {},
     }),
+    operands: {
+      kind: "positional",
+      parts: [{ name: "paths", optional: true, variadic: true }],
+      separator: true,
+    },
   },
   grepCount: {
     program: "grep",
@@ -71,11 +74,14 @@ export const textDescriptors = {
       B: { cli: "-B", kind: "number" },
       C: { cli: "-C", kind: "number" },
     },
-    positionals: [{ name: "pattern" }, { name: "path", optional: true }],
-    positionalSeparator: true,
     key: "text.grepCount",
     parse: "./parsers/text-grep-count.ts",
     out: parseGrepCountOut,
+    operands: {
+      kind: "positional",
+      parts: [{ name: "pattern" }, { name: "path", optional: true }],
+      separator: true,
+    },
   },
   sed: {
     program: "sed",
@@ -86,9 +92,13 @@ export const textDescriptors = {
       file: { cli: "-f", kind: "string" },
       inPlace: { cli: "-i", kind: "string" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
     variants: { linux: { flags: { inPlace: { cli: "-i", kind: "string", style: "attached" } } } },
     key: "text.sed",
+    operands: {
+      kind: "positional",
+      parts: [{ name: "paths", optional: true, variadic: true }],
+      separator: false,
+    },
   },
   awk: {
     program: "awk",
@@ -97,8 +107,12 @@ export const textDescriptors = {
       assign: { cli: "-v", kind: "string", repeatable: true },
       file: { cli: "-f", kind: "string" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
     key: "text.awk",
+    operands: {
+      kind: "positional",
+      parts: [{ name: "paths", optional: true, variadic: true }],
+      separator: false,
+    },
   },
   cut: {
     program: "cut",
@@ -108,8 +122,12 @@ export const textDescriptors = {
       characters: { cli: "-c", kind: "string" },
       bytes: { cli: "-b", kind: "string" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
     key: "text.cut",
+    operands: {
+      kind: "positional",
+      parts: [{ name: "paths", optional: true, variadic: true }],
+      separator: false,
+    },
   },
   sort: {
     program: "sort",
@@ -120,8 +138,12 @@ export const textDescriptors = {
       key: { cli: "-k", kind: "string" },
       separator: { cli: "-t", kind: "string" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
     key: "text.sort",
+    operands: {
+      kind: "positional",
+      parts: [{ name: "paths", optional: true, variadic: true }],
+      separator: false,
+    },
   },
   uniq: {
     program: "uniq",
@@ -131,8 +153,12 @@ export const textDescriptors = {
       unique: { cli: "-u", kind: "boolean" },
       ignoreCase: { cli: "-i", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
     key: "text.uniq",
+    operands: {
+      kind: "positional",
+      parts: [{ name: "paths", optional: true, variadic: true }],
+      separator: false,
+    },
   },
   uniqCount: {
     preset: { flags: { count: true } },
@@ -143,16 +169,24 @@ export const textDescriptors = {
       unique: { cli: "-u", kind: "boolean" },
       ignoreCase: { cli: "-i", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
     key: "text.uniqCount",
     parse: "./parsers/text-uniq-count.ts",
     out: parseUniqCountOut,
+    operands: {
+      kind: "positional",
+      parts: [{ name: "paths", optional: true, variadic: true }],
+      separator: false,
+    },
   },
   head: {
     program: "head",
     flags: { lines: { cli: "-n", kind: "number" }, bytes: { cli: "-c", kind: "number" } },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
     key: "text.head",
+    operands: {
+      kind: "positional",
+      parts: [{ name: "paths", optional: true, variadic: true }],
+      separator: false,
+    },
   },
   tail: {
     program: "tail",
@@ -161,8 +195,12 @@ export const textDescriptors = {
       bytes: { cli: "-c", kind: "number" },
       follow: { cli: "-f", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
     key: "text.tail",
+    operands: {
+      kind: "positional",
+      parts: [{ name: "paths", optional: true, variadic: true }],
+      separator: false,
+    },
   },
   wc: {
     exclude: ["lines", "words", "bytes", "characters"],
@@ -174,10 +212,14 @@ export const textDescriptors = {
       bytes: { cli: "-c", kind: "boolean" },
       characters: { cli: "-m", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
     key: "text.wc",
     parse: "./parsers/text-wc.ts",
     out: parseWcOut,
+    operands: {
+      kind: "positional",
+      parts: [{ name: "paths", optional: true, variadic: true }],
+      separator: false,
+    },
   },
   tr: {
     program: "tr",
@@ -186,8 +228,12 @@ export const textDescriptors = {
       squeeze: { cli: "-s", kind: "boolean" },
       complement: { cli: "-c", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
     key: "text.tr",
+    operands: {
+      kind: "positional",
+      parts: [{ name: "paths", optional: true, variadic: true }],
+      separator: false,
+    },
   },
   diff: {
     program: "diff",
@@ -197,8 +243,12 @@ export const textDescriptors = {
       brief: { cli: "-q", kind: "boolean" },
       ignoreSpace: { cli: "-w", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
     key: "text.diff",
+    operands: {
+      kind: "positional",
+      parts: [{ name: "paths", optional: true, variadic: true }],
+      separator: false,
+    },
   },
   jq: {
     exclude: ["rawOutput", "rawOutput0"],
@@ -210,15 +260,19 @@ export const textDescriptors = {
       compactOutput: { cli: "-c", kind: "boolean" },
       slurp: { cli: "-s", kind: "boolean" },
       rawInput: { cli: "-R", kind: "boolean" },
-      arg: { cli: "--arg", kind: "string", pairs: true },
-      argjson: { cli: "--argjson", kind: "string", pairs: true },
+      arg: { cli: "--arg", kind: "string", style: "pairs" },
+      argjson: { cli: "--argjson", kind: "string", style: "pairs" },
       nullInput: { cli: "-n", kind: "boolean" },
       exitStatus: { cli: "-e", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
     key: "text.jq",
     parse: "./parsers/text-jq.ts",
     out: parseJqOut,
+    operands: {
+      kind: "positional",
+      parts: [{ name: "paths", optional: true, variadic: true }],
+      separator: false,
+    },
   },
   yq: {
     program: "yq",
@@ -227,13 +281,16 @@ export const textDescriptors = {
       compactOutput: { cli: "-c", kind: "boolean" },
       exitStatus: { cli: "-e", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
     key: "text.yq",
+    operands: {
+      kind: "positional",
+      parts: [{ name: "paths", optional: true, variadic: true }],
+      separator: false,
+    },
   },
   base64: {
     program: "base64",
     flags: { decode: { cli: "-d", kind: "boolean" }, input: { cli: "-i", kind: "string" } },
-    positionals: [],
     variants: {
       linux: {
         flags: { input: { cli: "", kind: "string", style: "positional", position: "after" } },
@@ -243,17 +300,22 @@ export const textDescriptors = {
       },
     },
     key: "text.base64",
+    operands: { kind: "positional", parts: [], separator: false },
   },
   sha256sum: {
     exclude: ["check"],
     preset: { flags: {} },
     program: "sha256sum",
     flags: { check: { cli: "-c", kind: "boolean" }, binary: { cli: "-b", kind: "boolean" } },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
     variants: { darwin: { program: "shasum", path: ["-a", "256"] } },
     key: "text.sha256sum",
     parse: "./parsers/text-sha256sum.ts",
     out: parseSha256Out,
+    operands: {
+      kind: "positional",
+      parts: [{ name: "paths", optional: true, variadic: true }],
+      separator: false,
+    },
   },
 } as const satisfies Record<string, CommandDescriptor>;
 

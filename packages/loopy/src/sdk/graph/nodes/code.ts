@@ -1,7 +1,6 @@
 import type { Duration, GraphRetry, OutSchema, RateLimit } from "../../../core/index.js";
 import { currentBuilder } from "../builder.js";
 import { type AuthorValue, serializeValues } from "../ref.js";
-import type { Infer, SchemaFields } from "../types.js";
 
 export function code<const S extends OutSchema>(
   label: string,
@@ -29,5 +28,5 @@ export function code<const S extends OutSchema>(
     label,
   );
 
-  return builder.ref<Infer<S>, SchemaFields<S>>(node.id, options.out);
+  return builder.schemaRef(node.id, options.out);
 }
