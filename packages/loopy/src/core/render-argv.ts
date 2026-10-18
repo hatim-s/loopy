@@ -70,7 +70,6 @@ function scalar<T>(flag: CommandFlag, value: T, isReference: <R>(value: R) => bo
   }
 }
 
-// BOUNDARY: Literal flags enter through the SDK; resolved reference values enter before dispatch.
 export function validateCommandFlag<T>(
   flag: CommandFlag,
   value: T,
@@ -186,6 +185,7 @@ function renderFlag(
   }
 }
 
+// BOUNDARY: Resolved refs can change flag types after the author has built the graph.
 function validateResolvedFlag(flag: CommandFlag, value: RenderValue, original: Value) {
   if (isRef(original)) {
     validateCommandFlag(flag, value);

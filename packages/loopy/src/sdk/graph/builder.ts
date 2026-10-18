@@ -83,7 +83,6 @@ export class GraphBuilder {
   }
 
   expand<T>(label: string, callback: () => T): T {
-    validateLabel(label);
     const scope = this.scope;
     const labels = scope.labels;
     scope.labels = new Set();
@@ -97,7 +96,7 @@ export class GraphBuilder {
     }
   }
 
-  // PR 3 checks label literals in the AST; construction accepts the already typed string.
+  // Scope-local labels let repeated subgraph invocations reuse the author's node names.
   allocate(kind: NodeKind, naming: { label: string } | { fallback: string }) {
     const label = "label" in naming ? naming.label : null;
     const fallback = "fallback" in naming ? naming.fallback : kind;
@@ -130,7 +129,7 @@ export class GraphBuilder {
   }
 
   record(node: Node) {
-    nodeNames(node).forEach(validateLabel);
+    [...this.prefixes, ...nodeNames(node)].forEach(validateLabel);
     this.nodes.push(node);
     this.scope.first ??= node.id;
 
@@ -159,6 +158,7 @@ export class GraphBuilder {
     return new Reference<T>({ owner: this, id: graphId<RefId>(refId), schema: null, path: [] });
   }
 
+  // Callback signatures carry the join type without executing a body twice.
   controlRef<A extends Record<string, (...args: never[]) => NodeResult>>(
     refId: string,
     arms: A,
