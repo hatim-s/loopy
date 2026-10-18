@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { checkImports } from "../src/compiler/module-imports.js";
+import { checkImports } from "../src/compiler/code-module.js";
 import type { CompilerDiagnostic } from "../src/compiler/types.js";
 
 function diagnosticsFor(source: string) {

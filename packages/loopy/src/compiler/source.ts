@@ -1,5 +1,14 @@
 import { basename, dirname, resolve } from "node:path";
 
+export function applyEdits(
+  source: string,
+  edits: readonly { start: number; end: number; text: string }[],
+) {
+  return [...edits]
+    .sort((a, b) => b.start - a.start)
+    .reduce((text, edit) => text.slice(0, edit.start) + edit.text + text.slice(edit.end), source);
+}
+
 export const typescriptPaths: Bun.BunPlugin = {
   name: "typescript-source-paths",
   setup(build) {
@@ -77,9 +86,7 @@ export function inlineImportMeta(path: string, lang: Lang, source: string) {
     },
   }).visit(program);
 
-  return edits
-    .sort((a, b) => b.start - a.start)
-    .reduce((text, edit) => text.slice(0, edit.start) + edit.text + text.slice(edit.end), source);
+  return applyEdits(source, edits);
 }
 
 // A saved bundle runs from <home>/bundles, so each module's import.meta must keep

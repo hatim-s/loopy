@@ -1,9 +1,9 @@
 import { realpath } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type Expression, type Node, parseSync, Visitor } from "oxc-parser";
+import { type Expression, type Node, Visitor } from "oxc-parser";
 import { isString } from "../core/index.js";
-import { diagnostic } from "./diagnostic.js";
+import { diagnostic, parseModule, unwrap } from "./ast.js";
 import type { CompilerDiagnostic } from "./types.js";
 
 export async function modulePath(specifier: string, file: string) {
@@ -46,7 +46,9 @@ const runtimeCode = {
   bunMembers: new Set(["plugin", "Transpiler"]),
 };
 
-function finalName(node: Node): string | undefined {
+function finalName(original: Node): string | undefined {
+  const node = unwrap(original);
+
   switch (node.type) {
     case "Identifier":
       return node.name;
@@ -58,18 +60,6 @@ function finalName(node: Node): string | undefined {
       return node.property.type === "Literal" && isString(node.property.value)
         ? node.property.value
         : undefined;
-    case "SequenceExpression": {
-      const last = node.expressions.at(-1);
-
-      return last && finalName(last);
-    }
-
-    case "ChainExpression":
-    case "ParenthesizedExpression":
-    case "TSAsExpression":
-    case "TSSatisfiesExpression":
-    case "TSNonNullExpression":
-      return finalName(node.expression);
     case "Literal":
       return isString(node.value) ? node.value : undefined;
     default:
@@ -77,16 +67,8 @@ function finalName(node: Node): string | undefined {
   }
 }
 
-function importMetaMember(node: Node): boolean {
-  if (node.type === "SequenceExpression") {
-    const last = node.expressions.at(-1);
-
-    return last ? importMetaMember(last) : false;
-  }
-
-  if (node.type === "ChainExpression" || node.type === "ParenthesizedExpression") {
-    return importMetaMember(node.expression);
-  }
+function importMetaMember(original: Node): boolean {
+  const node = unwrap(original);
 
   return (
     node.type === "MemberExpression" &&
@@ -97,7 +79,7 @@ function importMetaMember(node: Node): boolean {
 }
 
 export function checkImports(file: string, source: string, diagnostics: CompilerDiagnostic[]) {
-  const parsed = parseSync(file, source, { sourceType: "module" });
+  const program = parseModule(file, source, diagnostics);
   const dependencies: string[] = [];
 
   const reject = (node: Node) => {
@@ -111,12 +93,6 @@ export function checkImports(file: string, source: string, diagnostics: Compiler
       ),
     );
   };
-
-  for (const error of parsed.errors) {
-    diagnostics.push(
-      diagnostic(file, source, error.labels[0]?.start ?? 0, "syntax_error", error.message),
-    );
-  }
 
   const dependency = (node: Node, value: string) => {
     if (runtimeCode.modules.has(value)) {
@@ -143,7 +119,7 @@ export function checkImports(file: string, source: string, diagnostics: Compiler
         requires.add(node.id.name);
       }
     },
-  }).visit(parsed.program);
+  }).visit(program);
 
   const call = (node: Extract<Node, { type: "CallExpression" | "NewExpression" }>) => {
     const name = finalName(node.callee) ?? "";
@@ -198,24 +174,101 @@ export function checkImports(file: string, source: string, diagnostics: Compiler
     },
     CallExpression: call,
     NewExpression: call,
-  }).visit(parsed.program);
+  }).visit(program);
 
-  return dependencies;
+  return { program, dependencies };
 }
 
-export async function checkModuleImports(
-  file: string,
-  diagnostics: CompilerDiagnostic[],
-  seen = new Set<string>(),
-): Promise<void> {
-  if (seen.has(file) || file.endsWith(".json")) {
-    return;
+export async function checkModuleImports(file: string, diagnostics: CompilerDiagnostic[]) {
+  const seen = new Set<string>();
+
+  async function visit(path: string) {
+    if (seen.has(path) || path.endsWith(".json")) {
+      return;
+    }
+
+    seen.add(path);
+    const source = await Bun.file(path).text();
+    const { program, dependencies } = checkImports(path, source, diagnostics);
+
+    for (const specifier of dependencies) {
+      await visit(await modulePath(specifier, path));
+    }
+
+    return { source, program };
   }
 
-  seen.add(file);
-  const source = await Bun.file(file).text();
+  return visit(file);
+}
 
-  for (const specifier of checkImports(file, source, diagnostics)) {
-    await checkModuleImports(await modulePath(specifier, file), diagnostics, seen);
+export async function checkCodeModule(path: string) {
+  const diagnostics: CompilerDiagnostic[] = [];
+  const entry = await checkModuleImports(path, diagnostics);
+
+  if (!entry || diagnostics.some((value) => value.code === "syntax_error")) {
+    return { ok: false as const, diagnostics };
   }
+
+  const { source, program } = entry;
+
+  const exported = program.body.find((node) => node.type === "ExportDefaultDeclaration");
+
+  if (exported?.type !== "ExportDefaultDeclaration") {
+    diagnostics.push(
+      diagnostic(
+        path,
+        source,
+        0,
+        "module_default",
+        "Code modules must default-export one function.",
+      ),
+    );
+
+    return { ok: false as const, diagnostics };
+  }
+
+  let declaration = exported.declaration;
+
+  if (declaration.type === "Identifier") {
+    const identifier = declaration.name;
+
+    const named = program.body
+      .flatMap((node) => (node.type === "VariableDeclaration" ? node.declarations : []))
+      .find((node) => node.id.type === "Identifier" && node.id.name === identifier);
+
+    const fn = program.body.find(
+      (node) => node.type === "FunctionDeclaration" && node.id?.name === identifier,
+    );
+
+    if (fn?.type === "FunctionDeclaration") {
+      declaration = fn;
+    } else if (
+      named?.init?.type === "ArrowFunctionExpression" ||
+      named?.init?.type === "FunctionExpression"
+    ) {
+      declaration = named.init;
+    }
+  }
+
+  if (
+    !["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"].includes(
+      declaration.type,
+    )
+  ) {
+    diagnostics.push(
+      diagnostic(
+        path,
+        source,
+        0,
+        "module_default",
+        "Code modules must default-export one function.",
+      ),
+    );
+
+    return { ok: false as const, diagnostics };
+  }
+
+  return diagnostics.length > 0
+    ? { ok: false as const, diagnostics }
+    : { ok: true as const, diagnostics };
 }

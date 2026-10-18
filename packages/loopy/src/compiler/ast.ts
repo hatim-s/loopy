@@ -1,5 +1,5 @@
 import { dirname, resolve } from "node:path";
-import type { Expression, Node, Statement } from "oxc-parser";
+import { type Expression, type Node, parseSync, type Statement } from "oxc-parser";
 import {
   type CompilerDiagnosticCode,
   isBoolean,
@@ -8,8 +8,31 @@ import {
   isString,
 } from "../core/index.js";
 import { builtinCommandKeys, commandKey, sdkCalls } from "../sdk/graph-host.js";
-import { diagnostic } from "./diagnostic.js";
 import type { CompilerDiagnostic, ParserSource } from "./types.js";
+
+export function diagnostic(
+  file: string,
+  source: string,
+  start: number,
+  code: CompilerDiagnosticCode,
+  message: string,
+): CompilerDiagnostic {
+  const lines = source.slice(0, start).split("\n");
+
+  return { code, message, file, line: lines.length, column: (lines.at(-1)?.length ?? 0) + 1 };
+}
+
+export function parseModule(file: string, source: string, diagnostics: CompilerDiagnostic[]) {
+  const parsed = parseSync(file, source, { sourceType: "module", preserveParens: false });
+
+  for (const error of parsed.errors) {
+    diagnostics.push(
+      diagnostic(file, source, error.labels[0]?.start ?? 0, "syntax_error", error.message),
+    );
+  }
+
+  return parsed.program;
+}
 
 type Binding = "sdk" | "subgraph" | "command" | "value" | "ref" | "function" | "graph";
 
@@ -143,7 +166,7 @@ function callback(context: Context, node: Expression, scope: Scope) {
   }
 }
 
-function moduleProperty(context: Context, property: Property) {
+function moduleProperty(context: Context, property: Property, owner: "code" | "defineCommand") {
   const path = literal(context, property.value, "module_path");
 
   if (path === null) {
@@ -153,6 +176,10 @@ function moduleProperty(context: Context, property: Property) {
   if (!path.startsWith("./") && !path.startsWith("../")) {
     refuse(context, property, "module_path", "Code modules must use a relative file path.");
 
+    return;
+  }
+
+  if (owner === "defineCommand") {
     return;
   }
 
@@ -186,24 +213,17 @@ function propertyValue(context: Context, property: Property, scope: Scope, owner
     literal(context, property.value);
   }
 
-  if (key === "module" && owner === "code") {
-    moduleProperty(context, property);
+  if ((key === "module" && owner === "code") || (key === "parse" && owner === "defineCommand")) {
+    moduleProperty(context, property, owner);
 
     return;
   }
 
-  if (key === "parse" && owner === "defineCommand") {
-    parserProperty(context, property);
+  const isCallbackSlot =
+    (owner === "loopy" && key === "run") || ["branch", "switch_", "parallel"].includes(owner);
 
-    return;
-  }
-
-  if (
-    property.value.type === "ArrowFunctionExpression" ||
-    (owner === "loopy" && key === "run") ||
-    ["branch", "switch_", "parallel"].includes(owner)
-  ) {
-    if ((owner === "loopy" && key === "run") || ["branch", "switch_", "parallel"].includes(owner)) {
+  if (property.value.type === "ArrowFunctionExpression" || isCallbackSlot) {
+    if (isCallbackSlot) {
       callback(context, property.value, scope);
     } else {
       refuse(
@@ -247,12 +267,11 @@ function callRule(
 ) {
   const call = callable(node.callee, scope);
 
-  const get =
+  if (
     node.callee.type === "MemberExpression" &&
     !node.callee.computed &&
-    name(node.callee.property) === "get";
-
-  if (get && node.callee.type === "MemberExpression") {
+    name(node.callee.property) === "get"
+  ) {
     expressionRule(context, node.callee.object, scope);
     literal(context, node.arguments[0]);
 
@@ -282,7 +301,7 @@ function callRule(
   }
 
   const before = context.diagnostics.length;
-  callArguments(context, node, scope, call);
+  callArguments(context, node, scope, call, root);
 
   if (call === "defineCommand" && context.diagnostics.length === before) {
     const argument = node.arguments[0];
@@ -355,12 +374,11 @@ function callArguments(
   node: Extract<Expression, { type: "CallExpression" }>,
   scope: Scope,
   call: string,
+  root: string,
 ) {
-  const root = call.split(".")[0] ?? call;
-
   for (const [index, original] of node.arguments.entries()) {
     const argument = original.type === "SpreadElement" ? original : unwrap(original);
-    const options = optionsArgument(call, index, scope);
+    const options = optionsArgument(call, root, index, scope);
 
     if (options && argument.type !== "ObjectExpression") {
       refuse(
@@ -392,7 +410,9 @@ function callArguments(
   }
 }
 
-export function expressionRule(context: Context, node: Expression, scope: Scope): void {
+export function expressionRule(context: Context, original: Expression, scope: Scope): void {
+  const node = unwrap(original);
+
   switch (node.type) {
     case "Literal":
       if (
@@ -435,12 +455,6 @@ export function expressionRule(context: Context, node: Expression, scope: Scope)
           expressionRule(context, item, scope);
         }
       }
-
-      return;
-    case "TSAsExpression":
-    case "TSSatisfiesExpression":
-    case "TSNonNullExpression":
-      expressionRule(context, node.expression, scope);
 
       return;
     case "UnaryExpression":
@@ -511,14 +525,8 @@ function statementRule(context: Context, statement: Statement, scope: Scope) {
   }
 }
 
-export function declarationKind(expression: Expression | null, scope: Scope): Binding {
-  if (
-    expression?.type === "TSAsExpression" ||
-    expression?.type === "TSSatisfiesExpression" ||
-    expression?.type === "TSNonNullExpression"
-  ) {
-    return declarationKind(expression.expression, scope);
-  }
+export function declarationKind(original: Expression | null, scope: Scope): Binding {
+  const expression = original && unwrap(original);
 
   if (expression?.type === "Identifier") {
     return scope.get(expression.name) ?? "value";
@@ -530,30 +538,33 @@ export function declarationKind(expression: Expression | null, scope: Scope): Bi
 
   const call = callable(expression.callee, scope);
 
-  return call === "subgraph"
-    ? "subgraph"
-    : call === "defineCommand"
-      ? "command"
-      : call === "loopy"
-        ? "graph"
-        : "ref";
+  const kinds = { subgraph: "subgraph", defineCommand: "command", loopy: "graph" } as const;
+
+  return call === "subgraph" || call === "defineCommand" || call === "loopy" ? kinds[call] : "ref";
 }
 
-export function unwrap(node: Expression): Expression {
+export function unwrap(node: Expression): Expression;
+export function unwrap(node: Node): Node;
+export function unwrap(node: Node): Node {
   switch (node.type) {
     case "TSAsExpression":
     case "TSSatisfiesExpression":
     case "TSNonNullExpression":
     case "ParenthesizedExpression":
+    case "ChainExpression":
       return unwrap(node.expression);
+    case "SequenceExpression": {
+      const last = node.expressions.at(-1);
+
+      return last ? unwrap(last) : node;
+    }
+
     default:
       return node;
   }
 }
 
-function optionsArgument(call: string, index: number, scope: Scope) {
-  const root = call.split(".")[0] ?? call;
-
+function optionsArgument(call: string, root: string, index: number, scope: Scope) {
   if (["loopy", "code", "wait", "branch", "switch_"].includes(root)) {
     return index === 1;
   }
@@ -569,10 +580,93 @@ function optionsArgument(call: string, index: number, scope: Scope) {
   return index === 1 && (root === "sh" || call.includes(".") || scope.get(root) === "command");
 }
 
-function parserProperty(context: Context, property: Property) {
-  const path = literal(context, property.value, "module_path");
+export function declarations(statement: Statement) {
+  return statement.type === "ExportNamedDeclaration" ? statement.declaration : statement;
+}
 
-  if (path !== null && !path.startsWith("./") && !path.startsWith("../")) {
-    refuse(context, property, "module_path", "Parser modules must use a relative file path.");
+function inspectConstants(
+  context: Context,
+  declarations: Extract<Statement, { type: "VariableDeclaration" }>["declarations"],
+) {
+  for (const declaration of declarations) {
+    if (
+      declaration.id.type !== "Identifier" ||
+      !declaration.init ||
+      context.scope.has(declaration.id.name)
+    ) {
+      refuse(context, declaration, "invalid_binding", "Use unique const declarations.");
+      continue;
+    }
+
+    expressionRule(context, declaration.init, context.scope);
+    const kind = declarationKind(declaration.init, context.scope);
+    context.scope.set(declaration.id.name, kind);
   }
+}
+
+function defaultExport(
+  context: Context,
+  statement: Extract<Statement, { type: "ExportDefaultDeclaration" }>,
+) {
+  const expression = statement.declaration;
+
+  if (
+    expression.type === "FunctionDeclaration" ||
+    expression.type === "ClassDeclaration" ||
+    expression.type === "TSInterfaceDeclaration"
+  ) {
+    return null;
+  }
+
+  expressionRule(context, expression, context.scope);
+
+  return declarationKind(expression, context.scope);
+}
+
+export function inspectStatements(context: Context, statements: Statement[]) {
+  let defaultKind: Binding | null = null;
+
+  for (const statement of statements) {
+    const node = declarations(statement);
+
+    if (
+      statement.type === "ExportAllDeclaration" ||
+      (statement.type === "ExportNamedDeclaration" && statement.source)
+    ) {
+      refuse(
+        context,
+        statement,
+        "module_import",
+        "Import and export author bindings explicitly without re-exports.",
+      );
+      continue;
+    }
+
+    if (
+      !node ||
+      statement.type === "ImportDeclaration" ||
+      ["TSTypeAliasDeclaration", "TSInterfaceDeclaration", "TSDeclareFunction"].includes(node.type)
+    ) {
+      continue;
+    }
+
+    if (node.type === "FunctionDeclaration") {
+      continue;
+    }
+
+    if (node.type === "VariableDeclaration" && node.kind === "const") {
+      inspectConstants(context, node.declarations);
+    } else if (statement.type === "ExportDefaultDeclaration") {
+      defaultKind = defaultExport(context, statement);
+    } else {
+      refuse(
+        context,
+        statement,
+        "module_effect",
+        "Builder modules allow imports, immutable data, descriptors and subgraphs only.",
+      );
+    }
+  }
+
+  return defaultKind;
 }

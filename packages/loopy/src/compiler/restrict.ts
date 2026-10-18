@@ -1,14 +1,18 @@
-import { dirname, resolve } from "node:path";
-import { parseSync, type Statement } from "oxc-parser";
-import { type Context, declarationKind, expressionRule, name, refuse, type Scope } from "./ast.js";
-import { diagnostic } from "./diagnostic.js";
-import { checkCodeModule } from "./module.js";
-import { modulePath } from "./module-imports.js";
+import type { Statement } from "oxc-parser";
+import {
+  type Context,
+  declarations,
+  diagnostic,
+  inspectStatements,
+  name,
+  parseModule,
+  refuse,
+  type Scope,
+} from "./ast.js";
+import { checkCodeModule, modulePath } from "./code-module.js";
+import { sdkEntry } from "./evaluate.js";
+import { applyEdits } from "./source.js";
 import type { AuthorModule, CompilerDiagnostic, ParserSource, Restricted } from "./types.js";
-
-function declarations(statement: Statement) {
-  return statement.type === "ExportNamedDeclaration" ? statement.declaration : statement;
-}
 
 type Inspection = {
   modules: Map<string, AuthorModule>;
@@ -21,8 +25,7 @@ type Inspection = {
 function importBindings(
   context: Context,
   statement: Extract<Statement, { type: "ImportDeclaration" }>,
-  sdk: boolean,
-  imported: Scope,
+  imported: Scope | "sdk",
 ) {
   for (const item of statement.specifiers) {
     if (item.type === "ImportSpecifier" && item.importKind === "type") {
@@ -36,7 +39,7 @@ function importBindings(
 
     const original = name(item.imported) ?? "";
 
-    const binding = sdk ? "sdk" : (imported.get(original) ?? "function");
+    const binding = imported === "sdk" ? "sdk" : (imported.get(original) ?? "function");
 
     if (binding === "sdk" && item.local.name !== original) {
       refuse(context, item, "sdk_alias", "Keep SDK names unchanged across author modules.");
@@ -44,6 +47,16 @@ function importBindings(
 
     context.scope.set(item.local.name, binding);
   }
+}
+
+async function isSdkSpecifier(specifier: string, file: string) {
+  if (specifier === "loopy" || specifier === "loopy/graph") {
+    return true;
+  }
+
+  const path = await modulePath(specifier, file);
+
+  return path === sdkEntry || path === sdkEntry.replace("/graph/index.", "/index.");
 }
 
 async function inspectImports(context: Context, statements: Statement[], state: Inspection) {
@@ -57,13 +70,7 @@ async function inspectImports(context: Context, statements: Statement[], state: 
 
     const specifier = statement.source.value;
 
-    const sdk =
-      specifier === "loopy" ||
-      specifier === "loopy/graph" ||
-      resolve(dirname(file), specifier) === resolve(import.meta.dir, "../sdk/index.ts") ||
-      resolve(dirname(file), specifier) === resolve(import.meta.dir, "../sdk/index.js") ||
-      resolve(dirname(file), specifier) === resolve(import.meta.dir, "../sdk/graph/index.ts") ||
-      resolve(dirname(file), specifier) === resolve(import.meta.dir, "../sdk/graph/index.js");
+    const sdk = await isSdkSpecifier(specifier, file);
 
     let imported: Scope = new Map();
 
@@ -90,108 +97,14 @@ async function inspectImports(context: Context, statements: Statement[], state: 
       }
     }
 
-    importBindings(context, statement, sdk, imported);
-  }
-}
-
-function inspectConstants(
-  context: Context,
-  declarations: Extract<Statement, { type: "VariableDeclaration" }>["declarations"],
-) {
-  for (const declaration of declarations) {
-    if (
-      declaration.id.type !== "Identifier" ||
-      !declaration.init ||
-      context.scope.has(declaration.id.name)
-    ) {
-      refuse(context, declaration, "invalid_binding", "Use unique const declarations.");
-      continue;
-    }
-
-    expressionRule(context, declaration.init, context.scope);
-    const kind = declarationKind(declaration.init, context.scope);
-    context.scope.set(declaration.id.name, kind);
-  }
-}
-
-function defaultExport(
-  context: Context,
-  statement: Extract<Statement, { type: "ExportDefaultDeclaration" }>,
-  requireLoopy: boolean,
-) {
-  const expression = statement.declaration;
-
-  if (
-    expression.type === "FunctionDeclaration" ||
-    expression.type === "ClassDeclaration" ||
-    expression.type === "TSInterfaceDeclaration"
-  ) {
-    refuse(context, statement, "default_loopy", "Default-export a loopy() builder result.");
-
-    return;
-  }
-
-  if (requireLoopy && declarationKind(expression, context.scope) !== "graph") {
-    refuse(context, statement, "default_loopy", "Default-export a loopy() builder result.");
-  }
-
-  expressionRule(context, expression, context.scope);
-}
-
-function inspectStatements(context: Context, statements: Statement[], requireLoopy: boolean) {
-  for (const statement of statements) {
-    const node = declarations(statement);
-
-    if (
-      statement.type === "ExportAllDeclaration" ||
-      (statement.type === "ExportNamedDeclaration" && statement.source)
-    ) {
-      refuse(
-        context,
-        statement,
-        "module_import",
-        "Import and export author bindings explicitly without re-exports.",
-      );
-      continue;
-    }
-
-    if (
-      !node ||
-      statement.type === "ImportDeclaration" ||
-      ["TSTypeAliasDeclaration", "TSInterfaceDeclaration", "TSDeclareFunction"].includes(node.type)
-    ) {
-      continue;
-    }
-
-    if (node.type === "FunctionDeclaration") {
-      continue;
-    }
-
-    if (node.type === "VariableDeclaration" && node.kind === "const") {
-      inspectConstants(context, node.declarations);
-    } else if (statement.type === "ExportDefaultDeclaration") {
-      defaultExport(context, statement, requireLoopy);
-    } else {
-      refuse(
-        context,
-        statement,
-        "module_effect",
-        "Builder modules allow imports, immutable data, descriptors and subgraphs only.",
-      );
-    }
+    importBindings(context, statement, sdk ? "sdk" : imported);
   }
 }
 
 async function inspectModule(file: string, state: Inspection): Promise<Scope> {
   const { modules, parsers, diagnostics, scopes } = state;
   const source = await Bun.file(file).text();
-  const parsed = parseSync(file, source, { sourceType: "module", preserveParens: false });
-
-  for (const error of parsed.errors) {
-    diagnostics.push(
-      diagnostic(file, source, error.labels[0]?.start ?? 0, "syntax_error", error.message),
-    );
-  }
+  const program = parseModule(file, source, diagnostics);
 
   const scope: Scope = new Map();
   modules.set(file, { file, source, evaluated: source });
@@ -205,9 +118,9 @@ async function inspectModule(file: string, state: Inspection): Promise<Scope> {
     parsers,
   };
 
-  await inspectImports(context, parsed.program.body, state);
+  await inspectImports(context, program.body, state);
 
-  for (const statement of parsed.program.body) {
+  for (const statement of program.body) {
     const node = declarations(statement);
 
     if (node?.type === "FunctionDeclaration" && node.id) {
@@ -215,14 +128,21 @@ async function inspectModule(file: string, state: Inspection): Promise<Scope> {
     }
   }
 
-  inspectStatements(context, parsed.program.body, file === state.entry);
+  const defaultKind = inspectStatements(context, program.body);
 
-  if (
-    file === state.entry &&
-    !parsed.program.body.some((statement) => statement.type === "ExportDefaultDeclaration")
-  ) {
+  if (file === state.entry && defaultKind !== "graph") {
+    const exported = program.body.find(
+      (statement) => statement.type === "ExportDefaultDeclaration",
+    );
+
     diagnostics.push(
-      diagnostic(file, source, 0, "default_loopy", "Default-export a loopy() builder result."),
+      diagnostic(
+        file,
+        source,
+        exported?.start ?? 0,
+        "default_loopy",
+        "Default-export a loopy() builder result.",
+      ),
     );
   }
 
@@ -234,9 +154,7 @@ async function inspectModule(file: string, state: Inspection): Promise<Scope> {
     diagnostics.push(...checked.diagnostics);
   }
 
-  const evaluated = context.edits
-    .sort((a, b) => b.start - a.start)
-    .reduce((text, edit) => text.slice(0, edit.start) + edit.text + text.slice(edit.end), source);
+  const evaluated = applyEdits(source, context.edits);
 
   modules.set(file, { file, source, evaluated });
   scopes.set(file, scope);
