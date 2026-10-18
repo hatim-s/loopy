@@ -49,3 +49,25 @@ test("normalized graph metadata and schema do not retain caller-owned arrays or 
   expect(graph.meta.schedule?.cron).toBe("0 * * * *");
   expect(graph.input).toEqual(input);
 });
+
+for (const cron of ["* * * *", "60 * * * *", "*/0 * * * *", "0 0 * wat *"]) {
+  test(`graph definition rejects invalid cron ${cron}`, () => {
+    expect(() => loopy("test", { input: {}, schedule: { cron }, run: () => null })).toThrow(
+      "Invalid",
+    );
+  });
+}
+
+test("graph definitions validate timezones and reject unknown properties", () => {
+  expect(() =>
+    loopy("test", { input: {}, schedule: { cron: "@daily", tz: "Mars/Olympus" }, run: () => null }),
+  ).toThrow("Invalid time zone 'Mars/Olympus'");
+  // @ts-expect-error JavaScript callers can pass unknown properties.
+  expect(() => loopy("test", { input: {}, typo: true, run: () => null })).toThrow(
+    "Unknown definition property 'typo'",
+  );
+  expect(
+    loopy("test", { input: {}, schedule: { cron: "@daily", tz: "Asia/Kolkata" }, run: () => null })
+      .graph.meta.schedule,
+  ).toEqual({ cron: "@daily", tz: "Asia/Kolkata" });
+});

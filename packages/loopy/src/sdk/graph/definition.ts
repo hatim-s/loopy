@@ -9,6 +9,7 @@ import {
   validateSecretName,
   validateSlug,
 } from "../../core/index.js";
+import { parseCron } from "../../host/index.js";
 
 // BOUNDARY: JavaScript author modules can pass malformed field schemas to the public builder.
 export function parseDefinitionInput(value: unknown) {
@@ -24,6 +25,12 @@ export function parseDefinitionInput(value: unknown) {
 export function parseDefinitionMeta(name: string, value: unknown) {
   validateSlug(name);
   const definition = requireRecord(value, "Loopy definition");
+
+  for (const key of Object.keys(definition)) {
+    if (!["description", "schedule", "secrets", "mode", "scope", "input", "run"].includes(key)) {
+      throw new Error(`Unknown definition property '${key}'. Remove it from the definition.`);
+    }
+  }
 
   const schedule =
     definition.schedule === undefined ? null : requireRecord(definition.schedule, "Schedule");
@@ -57,8 +64,18 @@ function parseSchedule(schedule: Record<string, unknown>): NonNullable<GraphMeta
     cron: requireString(schedule.cron, "Schedule cron"),
   };
 
+  parseCron(parsed.cron);
+
   if (schedule.tz !== undefined) {
     parsed.tz = requireString(schedule.tz, "Schedule timezone");
+
+    try {
+      new Intl.DateTimeFormat("en", { timeZone: parsed.tz });
+    } catch {
+      throw new Error(
+        `Invalid time zone '${parsed.tz}'. Provide an IANA time zone such as 'Asia/Kolkata'.`,
+      );
+    }
   }
 
   return parsed;
