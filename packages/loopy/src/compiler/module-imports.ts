@@ -24,7 +24,7 @@ export async function modulePath(specifier: string, file: string) {
   return path;
 }
 
-function imports(file: string, source: string, diagnostics: CompilerDiagnostic[]) {
+export function checkImports(file: string, source: string, diagnostics: CompilerDiagnostic[]) {
   const parsed = parseSync(file, source, { sourceType: "module" });
   const dependencies: string[] = [];
 
@@ -58,6 +58,35 @@ function imports(file: string, source: string, diagnostics: CompilerDiagnostic[]
     );
   };
 
+  // Bun rewrites require() to a binding initialized from import.meta.require.
+  const requires = new Set(["require"]);
+  new Visitor({
+    VariableDeclarator(node) {
+      if (
+        node.id.type === "Identifier" &&
+        node.init?.type === "MemberExpression" &&
+        node.init.object.type === "MetaProperty" &&
+        node.init.object.meta.name === "import" &&
+        node.init.property.type === "Identifier" &&
+        node.init.property.name === "require"
+      ) {
+        requires.add(node.id.name);
+      }
+    },
+  }).visit(parsed.program);
+
+  const generatedCode = (node: Node) => {
+    diagnostics.push(
+      diagnostic(
+        file,
+        source,
+        node.start,
+        "dynamic_import",
+        "Use bundled modules instead of eval() or Function().",
+      ),
+    );
+  };
+
   new Visitor({
     ImportDeclaration(node) {
       if (node.importKind !== "type") {
@@ -78,9 +107,18 @@ function imports(file: string, source: string, diagnostics: CompilerDiagnostic[]
       dynamic(node, node.source);
     },
     CallExpression(node) {
-      if (node.callee.type === "Identifier" && node.callee.name === "require") {
+      if (node.callee.type === "Identifier" && requires.has(node.callee.name)) {
         const argument = node.arguments[0];
         dynamic(node, argument?.type === "SpreadElement" ? undefined : argument);
+      }
+
+      if (node.callee.type === "Identifier" && ["eval", "Function"].includes(node.callee.name)) {
+        generatedCode(node);
+      }
+    },
+    NewExpression(node) {
+      if (node.callee.type === "Identifier" && node.callee.name === "Function") {
+        generatedCode(node);
       }
     },
   }).visit(parsed.program);
@@ -100,7 +138,7 @@ export async function checkModuleImports(
   seen.add(file);
   const source = await Bun.file(file).text();
 
-  for (const specifier of imports(file, source, diagnostics)) {
+  for (const specifier of checkImports(file, source, diagnostics)) {
     await checkModuleImports(await modulePath(specifier, file), diagnostics, seen);
   }
 }

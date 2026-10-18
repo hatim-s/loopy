@@ -501,3 +501,98 @@ for (const wrapper of [
     });
   });
 }
+
+for (const expression of ["import(path)", "require(path)", "new Function(path)()", "eval(path)"]) {
+  test(`emitted bundle rejects ${expression} in a tsconfig alias dependency`, async () => {
+    const { root, file } = await project(
+      'import {loopy,code} from "__SDK__";export default loopy("alias",{input:{},run:()=>code("x",{in:{path:"./escaped.ts"},out:{kind:"value",type:"number"},module:"./code.ts"})});',
+    );
+
+    await writeFile(
+      join(root, "tsconfig.json"),
+      JSON.stringify({ compilerOptions: { paths: { "@local/*": ["./lib/*"] } } }),
+    );
+    await writeFile(
+      join(root, "code.ts"),
+      'import {value} from "@local/helper";export default ({path})=>value(path);',
+    );
+    await Bun.write(join(root, "lib/helper.ts"), `export const value=(path)=>${expression};`);
+
+    const result = await compile(file);
+    expect(result).toMatchObject({
+      ok: false,
+      diagnostics: [
+        expect.objectContaining({
+          code: "dynamic_import",
+          file: join(root, "code.ts"),
+          line: expect.any(Number),
+          column: expect.any(Number),
+        }),
+      ],
+    });
+  });
+}
+
+test("tsconfig alias helpers are bundled and their changes alter the hash and revision", async () => {
+  const { root, file } = await project(
+    'import {loopy,code} from "__SDK__";export default loopy("alias",{input:{},run:()=>code("x",{in:{},out:{kind:"value",type:"number"},module:"./code.ts"})});',
+  );
+
+  await writeFile(
+    join(root, "tsconfig.json"),
+    JSON.stringify({ compilerOptions: { paths: { "@local/*": ["./lib/*"] } } }),
+  );
+  await writeFile(
+    join(root, "code.ts"),
+    'import {value} from "@local/helper";export default ()=>value;',
+  );
+  const helper = join(root, "lib/helper.ts");
+  await Bun.write(helper, "export const value=1;");
+  const first = await compile(file);
+  await writeFile(helper, "export const value=2;");
+  const second = await compile(file);
+
+  if (!first.ok || !second.ok) {
+    throw new Error(JSON.stringify({ first, second }));
+  }
+
+  expect(first.bundles[0]?.bundleHash).not.toBe(second.bundles[0]?.bundleHash);
+  expect(first.revision).not.toBe(second.revision);
+  const saved = join(root, "pinned.js");
+  await writeFile(saved, first.bundles[0]?.bytes ?? new Uint8Array());
+  await rm(helper);
+  const { default: run }: { default: () => number } = await import(saved);
+  expect(run()).toBe(1);
+});
+
+test("node_modules dependencies with literal dynamic imports bundle their helpers", async () => {
+  const { root, file } = await project(
+    'import {loopy,code} from "__SDK__";export default loopy("dependency",{input:{},run:()=>code("x",{in:{},out:{kind:"value",type:"number"},module:"./code.ts"})});',
+  );
+
+  await writeFile(
+    join(root, "code.ts"),
+    'import {value} from "literal-dependency";export default ()=>value();',
+  );
+  const dependency = join(root, "node_modules/literal-dependency");
+  await Bun.write(
+    join(dependency, "package.json"),
+    JSON.stringify({ name: "literal-dependency", type: "module", exports: "./index.js" }),
+  );
+  await writeFile(
+    join(dependency, "index.js"),
+    'export const value=async ()=>(await import("./helper.js")).value;',
+  );
+  await writeFile(join(dependency, "helper.js"), "export const value=42;");
+  const result = await compile(file);
+
+  if (!result.ok) {
+    throw new Error(JSON.stringify(result.diagnostics));
+  }
+
+  const saved = join(root, "pinned.js");
+  await writeFile(saved, result.bundles[0]?.bytes ?? new Uint8Array());
+  await rm(join(root, "node_modules"), { recursive: true });
+  const { default: run }: { default: () => Promise<number> } = await import(saved);
+  expect(await run()).toBe(42);
+});

@@ -3,9 +3,10 @@ import { resolve } from "node:path";
 import type { Graph, Node } from "../core/index.js";
 import { sourcePaths } from "../local/index.js";
 import { commandParser } from "../sdk/graph-host.js";
+import { checkImports } from "./module-imports.js";
 import { runnerSource } from "./runner.js";
 import { typescriptPaths } from "./source.js";
-import type { Bundle, ParserSource } from "./types.js";
+import type { Bundle, CompilerDiagnostic, ParserSource } from "./types.js";
 
 async function buildModule(file: string, kind: "code" | "parser") {
   return Bun.build({
@@ -38,7 +39,7 @@ async function buildNode(
   parsers: Map<string, ParserSource>,
 ) {
   if (node.kind === "code") {
-    return buildModule(node.module.path, "code");
+    return { file: node.module.path, result: await buildModule(node.module.path, "code") };
   }
 
   const parser = parsers.get(node.key)?.file ?? commandParser(node.key);
@@ -47,13 +48,19 @@ async function buildNode(
     throw new Error(`Declare parser '${node.key}' in a module-level defineCommand descriptor.`);
   }
 
-  return buildModule(
-    parsers.has(node.key) ? parser : resolve(import.meta.dir, "../sdk/graph", parser),
-    "parser",
-  );
+  const file = parsers.has(node.key) ? parser : resolve(import.meta.dir, "../sdk/graph", parser);
+
+  return { file, result: await buildModule(file, "parser") };
 }
 
-export async function bundle(graph: Graph, parsers: Map<string, ParserSource>): Promise<Bundle[]> {
+type BundleResult =
+  | { ok: true; bundles: Bundle[] }
+  | { ok: false; diagnostics: CompilerDiagnostic[] };
+
+export async function bundle(
+  graph: Graph,
+  parsers: Map<string, ParserSource>,
+): Promise<BundleResult> {
   const bundles: Bundle[] = [];
 
   for (const node of graph.nodes) {
@@ -61,12 +68,30 @@ export async function bundle(graph: Graph, parsers: Map<string, ParserSource>): 
       continue;
     }
 
-    const result = await buildNode(node, parsers);
+    const { file, result } = await buildNode(node, parsers);
 
     const output = result.outputs[0];
 
     if (!result.success || !output) {
       throw new Error(result.logs.join("\n"));
+    }
+
+    const diagnostics: CompilerDiagnostic[] = [];
+
+    for (const emitted of result.outputs) {
+      if (emitted.kind === "entry-point" || emitted.kind === "chunk") {
+        checkImports(file, await emitted.text(), diagnostics);
+      }
+    }
+
+    if (diagnostics.length > 0) {
+      return {
+        ok: false,
+        diagnostics: diagnostics.map((value) => ({
+          ...value,
+          message: `Emitted bundle: ${value.message}`,
+        })),
+      };
     }
 
     const bytes = new Uint8Array(await output.arrayBuffer());
@@ -80,5 +105,5 @@ export async function bundle(graph: Graph, parsers: Map<string, ParserSource>): 
     }
   }
 
-  return bundles;
+  return { ok: true, bundles };
 }

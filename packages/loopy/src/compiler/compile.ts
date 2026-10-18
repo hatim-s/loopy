@@ -40,12 +40,16 @@ export async function compile(path: string): Promise<CompileResult> {
     }
 
     stage = "bundle_failed";
-    const bundles = await bundle(graph, restricted.parsers);
+    const bundled = await bundle(graph, restricted.parsers);
+
+    if (!bundled.ok) {
+      return bundled;
+    }
 
     return {
       ok: true,
       graph,
-      bundles,
+      bundles: bundled.bundles,
       revision: await revision(graph),
       warnings: graph.warnings,
     };
