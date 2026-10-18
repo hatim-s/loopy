@@ -8,7 +8,6 @@ import {
   type Executor,
   errorMessage,
   type Json,
-  limitLogs,
 } from "../core/index.js";
 import {
   executeLocalCommand,
@@ -61,13 +60,7 @@ export class ExecutionWorker implements Executor {
           message: this.redact(errorMessage(cause)),
         },
         exitCode: null,
-        logs:
-          cause instanceof CommandExecutionError
-            ? limitLogs([
-                { message: "stdout", data: this.redact(cause.output.stdout, true) },
-                { message: "stderr", data: this.redact(cause.output.stderr, true) },
-              ])
-            : [],
+        logs: [],
       };
     }
 
@@ -80,35 +73,43 @@ export class ExecutionWorker implements Executor {
     const bundle = await realpath(this.options.bundlePath(hash));
     const workspace = await realpath(this.options.workspace);
 
-    const raw = await withBundleSandbox(
-      {
-        bundle,
-        workspace,
-        network: this.options.mode === "full",
-        home: await realpath(this.options.home),
-      },
-      ({ program, args }) =>
-        spawnCaptured(
-          {
-            program,
-            args,
-            cwd: workspace,
-            env: {
-              PATH: process.env.PATH,
-              LANG: "C.UTF-8",
-              HOME: workspace,
-              TMPDIR: workspace,
-              ...this.env,
+    try {
+      const raw = await withBundleSandbox(
+        {
+          bundle,
+          workspace,
+          network: this.options.mode === "full",
+          home: await realpath(this.options.home),
+        },
+        ({ program, args }) =>
+          spawnCaptured(
+            {
+              program,
+              args,
+              cwd: workspace,
+              env: {
+                PATH: process.env.PATH,
+                LANG: "C.UTF-8",
+                HOME: workspace,
+                TMPDIR: workspace,
+                ...this.env,
+              },
+              stdin: JSON.stringify(input),
             },
-            stdin: JSON.stringify(input),
-          },
-          { timeoutMs, maxOutputBytes: 2 * 1024 * 1024 },
-          signal,
-          performance.now(),
-        ),
-    );
+            { timeoutMs, maxOutputBytes: 2 * 1024 * 1024 },
+            signal,
+            performance.now(),
+          ),
+      );
 
-    return bundleResult(raw, this.redact);
+      return bundleResult(raw, this.redact);
+    } catch (cause) {
+      if (!(cause instanceof CommandExecutionError)) {
+        throw cause;
+      }
+
+      return bundleResult(cause.output, this.redact, { code: cause.code, message: cause.message });
+    }
   }
   private async perform(spec: ExecutionSpec, signal: AbortSignal): Promise<ExecutionResult> {
     if (spec.kind === "code") {
@@ -121,15 +122,39 @@ export class ExecutionWorker implements Executor {
       throw new Error("Command argv is empty.");
     }
 
-    const raw = await executeLocalCommand(
-      { program, args, cwd: spec.cwd ?? undefined, env: spec.env, stdin: spec.stdin ?? undefined },
-      {
-        ...this.options,
-        protectedHome: await realpath(this.options.home),
-        sensitiveEnv: this.env,
-        signal,
-      },
-    );
+    let raw;
+
+    try {
+      raw = await executeLocalCommand(
+        {
+          program,
+          args,
+          cwd: spec.cwd ?? undefined,
+          env: spec.env,
+          stdin: spec.stdin ?? undefined,
+        },
+        {
+          ...this.options,
+          protectedHome: await realpath(this.options.home),
+          sensitiveEnv: this.env,
+          signal,
+        },
+      );
+    } catch (cause) {
+      if (!(cause instanceof CommandExecutionError)) {
+        throw cause;
+      }
+
+      return {
+        kind: "failed",
+        error: { code: cause.code, message: this.redact(cause.message) },
+        exitCode: null,
+        logs: [
+          { message: "stdout", data: this.redact(cause.output.stdout, true) },
+          { message: "stderr", data: this.redact(cause.output.stderr, true) },
+        ],
+      };
+    }
 
     const result = {
       stdout: raw.stdout,

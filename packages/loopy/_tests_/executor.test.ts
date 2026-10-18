@@ -2,9 +2,11 @@ import { expect, test } from "bun:test";
 import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { compile } from "../src/compiler/index.js";
+import { graphSchema } from "../src/contract/index.js";
 import { LocalExecutor } from "../src/executor/index.js";
+import { bundleResult } from "../src/executor/protocol.js";
 import { receiptPath } from "../src/executor/receipts.js";
-import { SYSTEM_CLOCK } from "../src/host/index.js";
+import { activate, SYSTEM_CLOCK } from "../src/host/index.js";
 import {
   LoopyService,
   localDaemon,
@@ -12,7 +14,11 @@ import {
   Registry,
   SecretStore,
 } from "../src/local/index.js";
+import { secretRedactor } from "../src/local/secret-redactor.js";
+import { MemoryStore } from "../src/store/index.js";
+import { newRun } from "./fixture.js";
 import { fixture } from "./fixtures/executor.js";
+import { approveDemoGraph } from "./fixtures/graphs.js";
 
 test("code protocol captures stderr logs and leading stdout, and retains its trusted completion receipt", async () => {
   const f = await fixture();
@@ -234,4 +240,94 @@ test("only declared secrets reach bundles and receipts contain redacted results 
   expect(await readFile(await receiptPath(join(f.root, "home"), f.key, 1), "utf8")).not.toContain(
     "super-private",
   );
+});
+
+for (const failure of ["timeout", "output_limit", "nonzero"] as const) {
+  test(`bundle ${failure} decodes escaped secrets before storing logs, node failures and receipts`, async () => {
+    const f = await fixture();
+    const secret = 'alpha"beta';
+    const escaped = JSON.stringify(secret).slice(1, -1);
+    new SecretStore(f.home).set("TOKEN", secret);
+
+    const executor = new LocalExecutor({
+      home: f.home,
+      workspace: f.workspace,
+      mode: "sandbox",
+      secrets: ["TOKEN"],
+      bundlePath: () => f.bundle,
+    });
+
+    const ending =
+      failure === "timeout"
+        ? "await Bun.sleep(10000);"
+        : failure === "output_limit"
+          ? 'process.stdout.write("x".repeat(3 * 1024 * 1024));'
+          : "process.exit(2);";
+
+    await writeFile(
+      f.bundle,
+      `const secret = process.env.TOKEN; const escaped = JSON.stringify(secret).slice(1,-1); process.stderr.write(JSON.stringify({message: escaped, data: {nested: [escaped]}}) + "\\n"); process.stdout.write(JSON.stringify({escaped}) + "\\n"); process.stderr.write('{"message":"partial","data":"' + JSON.stringify(escaped).slice(1,-1)); ${ending}`,
+    );
+    const graph = structuredClone(approveDemoGraph);
+    const node = graph.nodes[0];
+
+    if (node?.kind !== "code") {
+      throw new Error("Expected code fixture.");
+    }
+
+    node.module.bundleHash = "a".repeat(64);
+    node.timeout = 500;
+    node.retry = { attempts: 1, backoff: "exponential", retryOnExit: false };
+    const store = new MemoryStore();
+    await store.createRun({ ...newRun(), input: { subject: "test" } });
+
+    const outcome = await activate({
+      store,
+      executor,
+      graph: graphSchema.parse(graph),
+      runId: "run",
+    });
+
+    expect(outcome.status).toBe("failed");
+    const nodes = await store.getNodeRuns("run");
+    expect(nodes[0]).toMatchObject({
+      status: "failed",
+      error: { code: failure === "output_limit" ? "output_limit" : "execution" },
+    });
+    const logs = await store.getLogs("run");
+    const key = nodes[0]?.key;
+
+    if (!key) {
+      throw new Error("Missing stored execution key.");
+    }
+
+    const receipt = await readFile(await receiptPath(f.home, key, 1), "utf8");
+
+    for (const value of [nodes, logs, outcome, JSON.parse(receipt)]) {
+      const serialized = JSON.stringify(value);
+      expect(serialized).not.toContain("alpha");
+      expect(serialized).not.toContain(escaped);
+      expect(serialized).not.toContain(JSON.stringify(escaped).slice(1, -1));
+    }
+
+    expect(logs).toContainEqual(
+      expect.objectContaining({ message: "[redacted]", data: { nested: ["[redacted]"] } }),
+    );
+  });
+}
+
+test("truncated bundle records decode secret escapes at every capture boundary", () => {
+  const secret = 'alpha"beta';
+  const escaped = JSON.stringify(secret).slice(1, -1);
+  const record = JSON.stringify({ message: escaped, data: { nested: [escaped] } });
+
+  for (let end = record.indexOf("alpha") + 5; end <= record.length; end++) {
+    const result = bundleResult(
+      { stdout: "", stderr: record.slice(0, end), exitCode: 1, durationMs: 0 },
+      secretRedactor([secret]),
+      { code: "output_limit", message: "Capture limit" },
+    );
+
+    expect(JSON.stringify(result)).not.toContain("alpha");
+  }
 });
