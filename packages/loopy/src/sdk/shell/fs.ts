@@ -1,3 +1,4 @@
+import { RAW_COMMAND_OUTPUT } from "../../core/index.js";
 import type { CommandDescriptor } from "../define-command.js";
 import { defineCommands } from "../graph/nodes/command.js";
 import {
@@ -42,6 +43,7 @@ export const fsDescriptors = {
         F: { cli: "-F", kind: "boolean" },
       },
       key: "fs.ls",
+      out: RAW_COMMAND_OUTPUT,
       operands: {
         kind: "positional",
         parts: [{ name: "paths", optional: true, variadic: true }],
@@ -62,6 +64,7 @@ export const fsDescriptors = {
       s: { cli: "-s", kind: "boolean" },
     },
     key: "fs.cat",
+    out: RAW_COMMAND_OUTPUT,
     operands: {
       kind: "positional",
       parts: [{ name: "paths", optional: true, variadic: true }],
@@ -81,6 +84,7 @@ export const fsDescriptors = {
       verbose: { cli: "-v", kind: "boolean" },
     },
     key: "fs.cp",
+    out: RAW_COMMAND_OUTPUT,
     operands: { kind: "positional", parts: [{ name: "sources", variadic: true }], separator: true },
   },
   mv: {
@@ -91,6 +95,7 @@ export const fsDescriptors = {
       verbose: { cli: "-v", kind: "boolean" },
     },
     key: "fs.mv",
+    out: RAW_COMMAND_OUTPUT,
     operands: {
       kind: "positional",
       parts: [{ name: "paths", optional: true, variadic: true }],
@@ -106,6 +111,7 @@ export const fsDescriptors = {
       verbose: { cli: "-v", kind: "boolean" },
     },
     key: "fs.rm",
+    out: RAW_COMMAND_OUTPUT,
     operands: {
       kind: "positional",
       parts: [{ name: "paths", optional: true, variadic: true }],
@@ -120,6 +126,7 @@ export const fsDescriptors = {
       verbose: { cli: "-v", kind: "boolean" },
     },
     key: "fs.mkdir",
+    out: RAW_COMMAND_OUTPUT,
     operands: {
       kind: "positional",
       parts: [{ name: "paths", optional: true, variadic: true }],
@@ -136,6 +143,7 @@ export const fsDescriptors = {
       time: { cli: "-t", kind: "string" },
     },
     key: "fs.touch",
+    out: RAW_COMMAND_OUTPUT,
     operands: {
       kind: "positional",
       parts: [{ name: "paths", optional: true, variadic: true }],
@@ -229,6 +237,7 @@ export const fsDescriptors = {
     program: "chmod",
     flags: { recursive: { cli: "-R", kind: "boolean" }, verbose: { cli: "-v", kind: "boolean" } },
     key: "fs.chmod",
+    out: RAW_COMMAND_OUTPUT,
     operands: {
       kind: "positional",
       parts: [{ name: "mode" }, { name: "paths", variadic: true }],
@@ -244,6 +253,7 @@ export const fsDescriptors = {
       verbose: { cli: "-v", kind: "boolean" },
     },
     key: "fs.ln",
+    out: RAW_COMMAND_OUTPUT,
     operands: {
       kind: "positional",
       parts: [{ name: "paths", optional: true, variadic: true }],
@@ -262,6 +272,7 @@ export const fsDescriptors = {
       program: "realpath",
       flags: { quiet: { cli: "-q", kind: "boolean" } },
       key: "fs.realpath",
+      out: RAW_COMMAND_OUTPUT,
       operands: {
         kind: "positional",
         parts: [{ name: "paths", optional: true, variadic: true }],

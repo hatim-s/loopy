@@ -48,14 +48,14 @@ import {
   uuid,
   wait,
 } from "../src/sdk/graph/index.js";
-import type { AuthorValue } from "../src/sdk/graph/ref.js";
+import type { NodeResult } from "../src/sdk/graph/ref.js";
 import assetSync from "./fixtures/graph-examples/asset-sync.js";
 import hello from "./fixtures/graph-examples/hello.js";
 import review from "./fixtures/graph-examples/review.js";
 import wwwSync from "./fixtures/graph-examples/www-sync.js";
 import { approveDemoGraph } from "./fixtures/graphs.js";
 
-function compile(run: () => AuthorValue) {
+function compile(run: () => NodeResult) {
   const result = loopy("test", { input: {}, run });
   expect(result.diagnostics).toEqual([]);
   expect(validateGraph(result.graph)).toEqual([]);
@@ -952,4 +952,40 @@ test("rescue resolves a parallel with one failing arm to its numeric handler", (
   expect(
     graph.nodes.filter((node) => node.kind === "join" && node.result.kind === "none"),
   ).toHaveLength(2);
+});
+
+test("output shorthand and omitted schemas lower to canonical node schemas", () => {
+  const parsed = defineCommand(
+    { key: "custom.count", program: "count", parse: "./parse.ts" },
+    "number",
+  );
+
+  const silent = defineCommand({ key: "custom.silent", program: "true" });
+
+  const graph = compile(() => {
+    code("greet", { in: {}, out: { greeting: "string" }, module: "./greet.ts" });
+    wait("count", { payload: "number" });
+    code("effect", { in: {}, module: "./effect.ts" });
+    wait("signal");
+    parsed();
+
+    return silent();
+  });
+
+  expect(
+    graph.nodes.flatMap((node) =>
+      node.kind === "code" || node.kind === "command"
+        ? [node.out]
+        : node.kind === "wait"
+          ? [node.payload]
+          : [],
+    ),
+  ).toEqual([
+    { kind: "record", fields: { greeting: "string" } },
+    { kind: "value", type: "number" },
+    null,
+    null,
+    { kind: "value", type: "number" },
+    null,
+  ]);
 });

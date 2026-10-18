@@ -1,3 +1,4 @@
+import { RAW_COMMAND_OUTPUT } from "../../core/index.js";
 import type { CommandDescriptor } from "../define-command.js";
 import { defineCommands } from "../graph/nodes/command.js";
 import {
@@ -94,6 +95,7 @@ export const textDescriptors = {
     },
     variants: { linux: { flags: { inPlace: { cli: "-i", kind: "string", style: "attached" } } } },
     key: "text.sed",
+    out: RAW_COMMAND_OUTPUT,
     operands: {
       kind: "positional",
       parts: [{ name: "paths", optional: true, variadic: true }],
@@ -108,6 +110,7 @@ export const textDescriptors = {
       file: { cli: "-f", kind: "string" },
     },
     key: "text.awk",
+    out: RAW_COMMAND_OUTPUT,
     operands: {
       kind: "positional",
       parts: [{ name: "paths", optional: true, variadic: true }],
@@ -123,6 +126,7 @@ export const textDescriptors = {
       bytes: { cli: "-b", kind: "string" },
     },
     key: "text.cut",
+    out: RAW_COMMAND_OUTPUT,
     operands: {
       kind: "positional",
       parts: [{ name: "paths", optional: true, variadic: true }],
@@ -139,6 +143,7 @@ export const textDescriptors = {
       separator: { cli: "-t", kind: "string" },
     },
     key: "text.sort",
+    out: RAW_COMMAND_OUTPUT,
     operands: {
       kind: "positional",
       parts: [{ name: "paths", optional: true, variadic: true }],
@@ -154,6 +159,7 @@ export const textDescriptors = {
       ignoreCase: { cli: "-i", kind: "boolean" },
     },
     key: "text.uniq",
+    out: RAW_COMMAND_OUTPUT,
     operands: {
       kind: "positional",
       parts: [{ name: "paths", optional: true, variadic: true }],
@@ -182,6 +188,7 @@ export const textDescriptors = {
     program: "head",
     flags: { lines: { cli: "-n", kind: "number" }, bytes: { cli: "-c", kind: "number" } },
     key: "text.head",
+    out: RAW_COMMAND_OUTPUT,
     operands: {
       kind: "positional",
       parts: [{ name: "paths", optional: true, variadic: true }],
@@ -196,6 +203,7 @@ export const textDescriptors = {
       follow: { cli: "-f", kind: "boolean" },
     },
     key: "text.tail",
+    out: RAW_COMMAND_OUTPUT,
     operands: {
       kind: "positional",
       parts: [{ name: "paths", optional: true, variadic: true }],
@@ -229,6 +237,7 @@ export const textDescriptors = {
       complement: { cli: "-c", kind: "boolean" },
     },
     key: "text.tr",
+    out: RAW_COMMAND_OUTPUT,
     operands: {
       kind: "positional",
       parts: [{ name: "paths", optional: true, variadic: true }],
@@ -244,6 +253,7 @@ export const textDescriptors = {
       ignoreSpace: { cli: "-w", kind: "boolean" },
     },
     key: "text.diff",
+    out: RAW_COMMAND_OUTPUT,
     operands: {
       kind: "positional",
       parts: [{ name: "paths", optional: true, variadic: true }],
@@ -282,6 +292,7 @@ export const textDescriptors = {
       exitStatus: { cli: "-e", kind: "boolean" },
     },
     key: "text.yq",
+    out: RAW_COMMAND_OUTPUT,
     operands: {
       kind: "positional",
       parts: [{ name: "paths", optional: true, variadic: true }],
@@ -300,6 +311,7 @@ export const textDescriptors = {
       },
     },
     key: "text.base64",
+    out: RAW_COMMAND_OUTPUT,
     operands: { kind: "positional", parts: [], separator: false },
   },
   sha256sum: {

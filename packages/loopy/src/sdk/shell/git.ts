@@ -1,3 +1,4 @@
+import { RAW_COMMAND_OUTPUT } from "../../core/index.js";
 import type { CommandDescriptor } from "../define-command.js";
 import { defineCommands } from "../graph/nodes/command.js";
 import {
@@ -158,6 +159,7 @@ export const gitDescriptors = {
     },
     style: "equals",
     key: "git.show",
+    out: RAW_COMMAND_OUTPUT,
     operands: { kind: "revisionPaths" },
   },
   add: {
@@ -170,6 +172,7 @@ export const gitDescriptors = {
       update: { cli: "--update", kind: "boolean" },
     },
     key: "git.add",
+    out: RAW_COMMAND_OUTPUT,
     operands: {
       kind: "positional",
       parts: [{ name: "paths", optional: true, variadic: true }],
@@ -190,6 +193,7 @@ export const gitDescriptors = {
       file: { cli: "-F", kind: "string" },
     },
     key: "git.commit",
+    out: RAW_COMMAND_OUTPUT,
     operands: {
       kind: "positional",
       parts: [{ name: "paths", optional: true, variadic: true }],
@@ -210,6 +214,7 @@ export const gitDescriptors = {
       delete: { cli: "--delete", kind: "boolean" },
     },
     key: "git.push",
+    out: RAW_COMMAND_OUTPUT,
     operands: {
       kind: "positional",
       parts: [{ name: "paths", optional: true, variadic: true }],
@@ -225,6 +230,7 @@ export const gitDescriptors = {
       noRebase: { cli: "--no-rebase", kind: "boolean" },
     },
     key: "git.pull",
+    out: RAW_COMMAND_OUTPUT,
     operands: {
       kind: "positional",
       parts: [{ name: "paths", optional: true, variadic: true }],
@@ -242,6 +248,7 @@ export const gitDescriptors = {
     },
     style: "equals",
     key: "git.fetch",
+    out: RAW_COMMAND_OUTPUT,
     operands: {
       kind: "positional",
       parts: [{ name: "paths", optional: true, variadic: true }],
@@ -258,6 +265,7 @@ export const gitDescriptors = {
       detach: { cli: "--detach", kind: "boolean" },
     },
     key: "git.checkout",
+    out: RAW_COMMAND_OUTPUT,
     operands: {
       kind: "positional",
       parts: [{ name: "paths", optional: true, variadic: true }],
@@ -273,6 +281,7 @@ export const gitDescriptors = {
       detach: { cli: "--detach", kind: "boolean" },
     },
     key: "git.switch",
+    out: RAW_COMMAND_OUTPUT,
     operands: {
       kind: "positional",
       parts: [{ name: "paths", optional: true, variadic: true }],
@@ -351,6 +360,7 @@ export const gitDescriptors = {
       b: { cli: "-b", kind: "string" },
     },
     key: "git.worktree.add",
+    out: RAW_COMMAND_OUTPUT,
     operands: {
       kind: "positional",
       parts: [{ name: "paths", optional: true, variadic: true }],
@@ -374,6 +384,7 @@ export const gitDescriptors = {
     path: ["worktree", "remove"],
     flags: { force: { cli: "--force", kind: "boolean" } },
     key: "git.worktree.remove",
+    out: RAW_COMMAND_OUTPUT,
     operands: {
       kind: "positional",
       parts: [{ name: "paths", optional: true, variadic: true }],
@@ -389,6 +400,7 @@ export const gitDescriptors = {
       message: { cli: "-m", kind: "string" },
     },
     key: "git.stash.push",
+    out: RAW_COMMAND_OUTPUT,
     operands: {
       kind: "positional",
       parts: [{ name: "paths", optional: true, variadic: true }],
@@ -400,6 +412,7 @@ export const gitDescriptors = {
     path: ["stash", "pop"],
     flags: { index: { cli: "--index", kind: "boolean" } },
     key: "git.stash.pop",
+    out: RAW_COMMAND_OUTPUT,
     operands: {
       kind: "positional",
       parts: [{ name: "paths", optional: true, variadic: true }],

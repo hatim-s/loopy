@@ -1,7 +1,7 @@
 import { currentBuilder } from "../builder.js";
-import type { AuthorValue } from "../ref.js";
+import type { AuthorValue, NodeResult } from "../ref.js";
 
-export function subgraph<A extends AuthorValue[], R extends AuthorValue>(
+export function subgraph<A extends AuthorValue[], R extends NodeResult>(
   label: string,
   callback: (...args: A) => R,
 ) {

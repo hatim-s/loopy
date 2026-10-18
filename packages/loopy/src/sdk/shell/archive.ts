@@ -1,3 +1,4 @@
+import { RAW_COMMAND_OUTPUT } from "../../core/index.js";
 import type { CommandDescriptor } from "../define-command.js";
 import { defineCommands } from "../graph/nodes/command.js";
 
@@ -15,6 +16,7 @@ export const archiveDescriptors = {
       directory: { cli: "-C", kind: "string" },
     },
     key: "archive.tar",
+    out: RAW_COMMAND_OUTPUT,
     operands: {
       kind: "positional",
       parts: [{ name: "paths", optional: true, variadic: true }],
@@ -31,6 +33,7 @@ export const archiveDescriptors = {
       recursive: { cli: "-r", kind: "boolean" },
     },
     key: "archive.gzip",
+    out: RAW_COMMAND_OUTPUT,
     operands: {
       kind: "positional",
       parts: [{ name: "paths", optional: true, variadic: true }],
@@ -46,6 +49,7 @@ export const archiveDescriptors = {
       exclude: { cli: "-x", kind: "string", position: "after" },
     },
     key: "archive.zip",
+    out: RAW_COMMAND_OUTPUT,
     operands: {
       kind: "positional",
       parts: [{ name: "paths", optional: true, variadic: true }],
@@ -62,6 +66,7 @@ export const archiveDescriptors = {
       directory: { cli: "-d", kind: "string" },
     },
     key: "archive.unzip",
+    out: RAW_COMMAND_OUTPUT,
     operands: {
       kind: "positional",
       parts: [{ name: "paths", optional: true, variadic: true }],

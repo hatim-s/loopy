@@ -67,13 +67,15 @@ const literalSchema: z.ZodType<Json> = z.lazy(() =>
 
 export const valueSchema = z.union([refSchema, literalSchema]);
 
-export const outputSchema = z.discriminatedUnion("kind", [
-  z.strictObject({
-    kind: z.literal("record"),
-    fields: graphRecord(z.enum(FIELD_TYPES)).readonly(),
-  }),
-  z.strictObject({ kind: z.literal("value"), type: z.enum(FIELD_TYPES) }),
-]);
+export const outputSchema = z
+  .discriminatedUnion("kind", [
+    z.strictObject({
+      kind: z.literal("record"),
+      fields: graphRecord(z.enum(FIELD_TYPES)).readonly(),
+    }),
+    z.strictObject({ kind: z.literal("value"), type: z.enum(FIELD_TYPES) }),
+  ])
+  .nullable();
 
 const operandSchema = z.union([refSchema.extend({ size: z.literal(true) }), valueSchema]);
 

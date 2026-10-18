@@ -1,5 +1,10 @@
 import type { RateLimit } from "../../../core/index.js";
-import { type GraphRetry, type OutSchema, parseArgv } from "../../../core/index.js";
+import {
+  type GraphRetry,
+  type OutSchema,
+  parseArgv,
+  RAW_COMMAND_OUTPUT,
+} from "../../../core/index.js";
 import {
   type CommandDescriptor,
   type CommandOperands,
@@ -11,6 +16,7 @@ import { commandArgv } from "../command-argv.js";
 import type { CommandInput, CommandRawInput } from "../command-input.js";
 import type { SchemaRef } from "../ref.js";
 import { type Ref, type RefValue, serialize, serializeValues } from "../ref.js";
+import { type Normalized, normalizeOut, type Output } from "../schema.js";
 
 type Options = {
   label?: string;
@@ -69,11 +75,6 @@ function record({
   return node.id;
 }
 
-export const commandOutput = {
-  kind: "record",
-  fields: { stdout: "string", stderr: "string", exitCode: "number" },
-} as const;
-
 type CallArguments<I> = I extends { args: readonly unknown[] }
   ? [input: I, options?: Options]
   : [input?: I, options?: Options];
@@ -85,36 +86,35 @@ export type CommandCall<D extends CommandDescriptor, S extends OutSchema> = {
     ...args: CallArguments<
       CommandRawInput<D extends { readonly raw: infer R extends CommandDescriptor } ? R : D>
     >
-  ) => SchemaRef<typeof commandOutput>;
+  ) => SchemaRef<typeof RAW_COMMAND_OUTPUT>;
 };
 
 export function defineCommand<const D extends CommandDescriptor>(
   descriptor: D,
-): CommandCall<D, D extends { readonly out: infer S extends OutSchema } ? S : typeof commandOutput>;
-export function defineCommand<const S extends OutSchema, const D extends CommandDescriptor>(
+): CommandCall<D, D extends { readonly out: infer S extends Output } ? Normalized<S> : null>;
+export function defineCommand<const S extends Output, const D extends CommandDescriptor>(
   descriptor: D & { parse: string },
   out: S,
-): CommandCall<D, S>;
-export function defineCommand<const S extends OutSchema, const D extends CommandDescriptor>(
-  descriptor: D,
-  schema?: S,
-) {
+): CommandCall<D, Normalized<S>>;
+export function defineCommand(
+  descriptor: CommandDescriptor,
+  schema?: Output,
+): {
+  (...args: never[]): RefValue;
+  raw: (...args: never[]) => RefValue;
+  descriptor: CommandDescriptor;
+} {
   validateCommandDescriptor(descriptor);
-  const out = schema ?? descriptor.out ?? commandOutput;
+  const out = normalizeOut(schema === undefined ? descriptor.out : schema);
 
-  function call(input: Input = {}, options: Options = {}) {
+  function call(input: Input = {}, options: Options = {}): RefValue {
     return currentBuilder().schemaRef(
       record({ label: options.label ?? null, descriptor, input, options, mode: "parsed", out }),
       out,
     );
   }
 
-  function raw(
-    ...args: CallArguments<
-      CommandRawInput<D extends { readonly raw: infer R extends CommandDescriptor } ? R : D>
-    >
-  ): SchemaRef<typeof commandOutput>;
-  function raw(input: Input = {}, options: Options = {}): SchemaRef<typeof commandOutput> {
+  function raw(input: Input = {}, options: Options = {}): SchemaRef<typeof RAW_COMMAND_OUTPUT> {
     return currentBuilder().schemaRef(
       record({
         label: options.label ?? null,
@@ -122,9 +122,9 @@ export function defineCommand<const S extends OutSchema, const D extends Command
         input,
         options,
         mode: "raw",
-        out: commandOutput,
+        out: RAW_COMMAND_OUTPUT,
       }),
-      commandOutput,
+      RAW_COMMAND_OUTPUT,
     );
   }
 
@@ -139,7 +139,7 @@ function shell({
 }: {
   label: string | null;
   key: string;
-  argv: readonly (string | RefValue)[];
+  argv: readonly (string | Ref<string>)[];
   options: Options;
 }) {
   const builder = currentBuilder();
@@ -148,7 +148,7 @@ function shell({
     {
       kind: "command",
       key,
-      out: commandOutput,
+      out: RAW_COMMAND_OUTPUT,
       argv: argv.map((arg) => serialize(arg, builder)),
       flags: {},
       flagSpec: null,
@@ -165,10 +165,10 @@ function shell({
     label,
   );
 
-  return builder.schemaRef(node.id, commandOutput);
+  return builder.schemaRef(node.id, RAW_COMMAND_OUTPUT);
 }
 
-function exec(argv: readonly (string | RefValue)[], options: Options = {}) {
+function exec(argv: readonly (string | Ref<string>)[], options: Options = {}) {
   return shell({ label: options.label ?? null, key: "sh.exec", argv, options });
 }
 
@@ -188,7 +188,7 @@ export function defineCommands<const D extends Record<string, CommandDescriptor>
   return Object.fromEntries(entries) as {
     [K in keyof D]: CommandCall<
       D[K],
-      D[K] extends { readonly out: infer S extends OutSchema } ? S : typeof commandOutput
+      D[K] extends { readonly out: infer S extends Output } ? Normalized<S> : null
     >;
   };
 }

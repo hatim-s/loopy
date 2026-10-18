@@ -144,10 +144,13 @@ function completion(
     })),
   );
 
+  const output =
+    event.result.kind === "succeeded" && !(node.kind === "command" && node.out === null)
+      ? event.result.output
+      : null;
+
   const error =
-    event.result.kind === "failed"
-      ? event.result.error
-      : validateOutput(event.result.output, node.out);
+    event.result.kind === "failed" ? event.result.error : validateOutput(output, node.out);
 
   if (error) {
     if (previous.attempt < previous.maxAttempts && shouldRetry(error, node.retry)) {
@@ -177,7 +180,7 @@ function completion(
     write(changes, {
       ...previous,
       status: "succeeded",
-      output: event.result.output,
+      output,
       endedAt: event.at,
       receipt: "finished",
     });

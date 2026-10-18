@@ -18,9 +18,11 @@ export function validateOutput(output: Json, schema: OutSchema): ExecutionError 
   }
 
   const valid =
-    schema.kind === "value"
-      ? isFieldValue(schema.type, output)
-      : matchesRecord(schema.fields, output, { extraKeys: "allow" });
+    schema === null
+      ? output === null
+      : schema.kind === "value"
+        ? isFieldValue(schema.type, output)
+        : matchesRecord(schema.fields, output, { extraKeys: "allow" });
 
   return valid
     ? null

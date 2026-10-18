@@ -33,6 +33,10 @@ function recordPathType(schema: RecordSpec, path: string[]): ValueType | null {
 }
 
 function schemaType(schema: OutSchema, path: string[]): ValueType | null {
+  if (schema === null) {
+    return path.length === 0 ? "null" : null;
+  }
+
   if (schema.kind === "record") {
     return recordPathType(schema.fields, path);
   }

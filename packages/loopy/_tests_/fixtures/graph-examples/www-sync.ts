@@ -15,37 +15,37 @@ export default loopy("www-uacode-sync", {
         sourceRef: input.get("sourceRef"),
         targetBranches: input.get("targetBranches"),
       },
-      out: { kind: "record", fields: { options: "json" } },
+      out: { options: "json" },
       module: "./www-sync/validate.ts",
     });
 
     const source = code("snapshot", {
       in: { options },
-      out: { kind: "record", fields: { sha: "string", files: "json" } },
+      out: { sha: "string", files: "json" },
       module: "./www-sync/snapshot.ts",
     });
 
     const plan = code("plan", {
       in: { options, source, id: uuid() },
-      out: { kind: "record", fields: { changes: "json", target: "json" } },
+      out: { changes: "json", target: "json" },
       module: "./www-sync/plan.ts",
     });
 
     const verified = code("verify", {
       in: { options, plan },
-      out: { kind: "record", fields: { observed: "json" } },
+      out: { observed: "json" },
       module: "./www-sync/verify.ts",
     });
 
     const results = code("publish", {
       in: { options, plan, verified },
-      out: { kind: "record", fields: { results: "json" } },
+      out: { results: "json" },
       module: "./www-sync/publish.ts",
     });
 
     code("cleanup", {
       in: { plan },
-      out: { kind: "record", fields: {} },
+      out: {},
       module: "./www-sync/cleanup.ts",
     });
     log("Prompt and skill synchronization completed.", { dryRun: input.get("dryRun") });

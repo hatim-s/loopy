@@ -1,3 +1,5 @@
+import type { InferRecord } from "./field-value.js";
+import type { RAW_COMMAND_OUTPUT } from "./graph.js";
 import type { NodeRun } from "./node-run.js";
 
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
@@ -6,11 +8,7 @@ export const EXECUTION_MODES = ["sandbox", "full"] as const;
 
 export type ExecutionMode = (typeof EXECUTION_MODES)[number];
 
-export type RawCommandOutput = {
-  stdout: string;
-  stderr: string;
-  exitCode: number;
-};
+export type RawCommandOutput = InferRecord<typeof RAW_COMMAND_OUTPUT.fields>;
 
 export type CommandResult = RawCommandOutput & { durationMs: number };
 

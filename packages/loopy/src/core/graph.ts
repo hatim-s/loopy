@@ -43,7 +43,15 @@ export const ERROR_FIELDS = {
   data: "json",
 } as const satisfies RecordSpec;
 
-export type OutSchema = { kind: "record"; fields: RecordSpec } | { kind: "value"; type: FieldType };
+export type OutSchema =
+  | { kind: "record"; fields: RecordSpec }
+  | { kind: "value"; type: FieldType }
+  | null;
+
+export const RAW_COMMAND_OUTPUT = {
+  kind: "record",
+  fields: { stdout: "string", stderr: "string", exitCode: "number" },
+} as const;
 
 export type Ref = { ref: RefId; path: string[] };
 

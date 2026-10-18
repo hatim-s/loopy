@@ -16,7 +16,7 @@ export default loopy("review", {
 
         const prompt = code("prompt", {
           in: { diff: diff.get("stdout"), instructions: input.get("instructions") },
-          out: { kind: "record", fields: { prompt: "string" } },
+          out: { prompt: "string" },
           module: "./review/prompt.ts",
         });
 

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { graphSchema } from "../src/contract/index.js";
 import { type ExecutionKey, type ExecutionResult, type Json } from "../src/core/index.js";
 import { type EngineEvent, initialState, step } from "../src/engine/index.js";
-import { loopy, sh } from "../src/sdk/graph/index.js";
+import { defineCommand, loopy, sh } from "../src/sdk/graph/index.js";
 import { approveDemoGraph } from "./fixtures/graphs.js";
 
 const at = "2026-10-18T00:00:00.000Z";
@@ -321,4 +321,26 @@ test("resolved command flags fail validation before dispatch", () => {
     status: "failed",
     error: { code: "validation" },
   });
+});
+
+test("a command without an output declaration completes with null", () => {
+  const command = defineCommand({ key: "silent", program: "true" });
+  const graph = loopy("silent", { input: {}, run: () => command() }).graph;
+  const started = step(graph, initialState("run", {}), { kind: "resume", at });
+
+  if (started.next.kind !== "dispatch") {
+    throw new Error("Expected command dispatch.");
+  }
+
+  const finished = step(
+    graph,
+    started.state,
+    completed(started.next.executionKey, 1, { stdout: "text", stderr: "", exitCode: 0 }),
+  );
+
+  expect(finished.state.phase).toEqual({
+    kind: "finished",
+    outcome: { status: "succeeded", output: null },
+  });
+  expect(finished.state.nodeRuns[0]).toMatchObject({ status: "succeeded", output: null });
 });

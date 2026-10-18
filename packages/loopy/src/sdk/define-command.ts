@@ -1,5 +1,6 @@
-import type { CommandFlag, OutSchema } from "../core/index.js";
-import type { AuthorValue } from "./graph/ref.js";
+import type { CommandFlag } from "../core/index.js";
+import type { AuthorData, RefValue } from "./graph/ref.js";
+import type { Output } from "./graph/schema.js";
 import { refuse } from "./graph/validate.js";
 
 export type PositionalDefinition = {
@@ -35,7 +36,7 @@ export type CommandDefinition = {
     flags?: Readonly<Record<string, string | number | boolean | undefined>>;
   };
   readonly parse?: string;
-  readonly out?: OutSchema;
+  readonly out?: Output;
 };
 
 export type CommandDescriptor = CommandDefinition & {
@@ -195,5 +196,5 @@ export type CommandOperands<V> = {
   args?: readonly V[];
   revisions?: readonly V[];
   paths?: readonly V[];
-  flags?: Readonly<Record<string, AuthorValue>>;
+  flags?: Readonly<Record<string, AuthorData<RefValue>>>;
 };

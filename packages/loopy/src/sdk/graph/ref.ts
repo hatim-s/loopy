@@ -37,7 +37,11 @@ export class RefValue {
 }
 
 export class Reference<T, Fields = never> extends RefValue {
-  declare readonly [OUTPUT]: T;
+  declare readonly [OUTPUT]: {
+    value: T;
+    fields: Fields;
+    returns: [T] extends [never] ? false : true;
+  };
 
   get<K extends keyof Fields & string>(key: K): Ref<Fields[K]> {
     return new Reference({ ...this[REF], path: [...this[REF].path, key] });
@@ -47,16 +51,18 @@ export class Reference<T, Fields = never> extends RefValue {
 export type Ref<T, Fields = never> = Omit<Reference<T, Fields>, "get"> &
   ([Fields] extends [never] ? object : Pick<Reference<T, Fields>, "get">);
 
-export type AuthorValue =
+export type AuthorData<R> =
   | string
   | number
   | boolean
   | null
   | undefined
   | void
-  | RefValue
-  | readonly AuthorValue[]
-  | { readonly [key: string]: AuthorValue };
+  | R
+  | readonly AuthorData<R>[]
+  | { readonly [key: string]: AuthorData<R> };
+
+export type AuthorValue = AuthorData<RefValue & { readonly [OUTPUT]: { returns: true } }>;
 
 export function serializeRef(ref: RefValue, context: RefContext): GraphRef {
   context.check(ref);
@@ -64,7 +70,7 @@ export function serializeRef(ref: RefValue, context: RefContext): GraphRef {
   return { ref: ref[REF].id, path: [...ref[REF].path] };
 }
 
-export function serialize(value: AuthorValue, context: RefContext): Value {
+export function serialize(value: AuthorData<RefValue>, context: RefContext): Value {
   if (value === undefined) {
     return null;
   }
@@ -82,7 +88,7 @@ export function serialize(value: AuthorValue, context: RefContext): Value {
   }
 
   if (Array.isArray(value)) {
-    return value.map((item: AuthorValue) => serialize(item, context));
+    return value.map((item: AuthorData<RefValue>) => serialize(item, context));
   }
 
   if ("ref" in value) {
@@ -97,7 +103,7 @@ export function serialize(value: AuthorValue, context: RefContext): Value {
 }
 
 export function serializeValues(
-  values: Readonly<Record<string, AuthorValue>>,
+  values: Readonly<Record<string, AuthorData<RefValue>>>,
   context: RefContext,
 ) {
   return Object.fromEntries(
@@ -116,3 +122,9 @@ export function serializeSize(ref: RefValue, context: RefContext) {
 }
 
 export type SchemaRef<S extends OutSchema> = Ref<Infer<S>, SchemaFields<S>>;
+
+export type RefResult<T> = T extends { readonly [OUTPUT]: { value: infer R } } ? R : never;
+
+export type RefFields<T> = T extends { readonly [OUTPUT]: { fields: infer F } } ? F : never;
+
+export type NodeResult = AuthorValue | Ref<never>;

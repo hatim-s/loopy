@@ -15,13 +15,15 @@ import {
   validateGraph,
 } from "../../core/index.js";
 import {
-  type AuthorValue,
+  type NodeResult,
   REF,
+  type Ref,
   Reference,
   type RefValue,
   type SchemaRef,
   serialize,
 } from "./ref.js";
+import type { ControlRef, Result } from "./types.js";
 import { refuse, validateLabel } from "./validate.js";
 
 type Tail = { id: NodeId; kind: "next" | "join" };
@@ -160,6 +162,27 @@ export class GraphBuilder {
     return new Reference<T>({ owner: this, id: graphId<RefId>(refId), schema: null, path: [] });
   }
 
+  controlRef<A extends Record<string, (...args: never[]) => NodeResult>>(
+    refId: string,
+    arms: A,
+  ): ControlRef<ReturnType<A[keyof A]>> {
+    void arms;
+
+    return new Reference({ owner: this, id: graphId<RefId>(refId), schema: null, path: [] });
+  }
+
+  parallelRef<A extends Record<string, () => NodeResult>>(
+    refId: string,
+    arms: A,
+  ): Ref<
+    { [K in keyof A]: Result<ReturnType<A[K]>> },
+    { [K in keyof A]: Result<ReturnType<A[K]>> }
+  > {
+    void arms;
+
+    return new Reference({ owner: this, id: graphId<RefId>(refId), schema: null, path: [] });
+  }
+
   check(ref: RefValue) {
     const metadata = ref[REF];
 
@@ -176,7 +199,7 @@ export class GraphBuilder {
     this.edges.push({ from, to, kind });
   }
 
-  arm(owner: NodeId, callback: () => AuthorValue) {
+  arm(owner: NodeId, callback: () => NodeResult) {
     const child = frame(owner);
     this.frames.unshift(child);
 
@@ -237,7 +260,7 @@ export class GraphBuilder {
     };
   }
 
-  finish(result: AuthorValue) {
+  finish(result: NodeResult) {
     const terminal = this.scope.first !== null && this.scope.tails.length === 0;
 
     const output = terminal

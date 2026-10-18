@@ -54,7 +54,7 @@ test("RecordSpec round-trips every field type through contracts and input bounda
     fields: JSON.parse(JSON.stringify(allFields)),
   });
 
-  if (output.kind !== "record") {
+  if (output?.kind !== "record") {
     throw new Error("Expected a record output.");
   }
 
