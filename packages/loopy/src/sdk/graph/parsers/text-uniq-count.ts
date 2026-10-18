@@ -1,3 +1,1 @@
-import { parseUniqCount as run } from "../../shell/parse/text.js";
-
-export default (...args: Parameters<typeof run>) => run(...args);
+export { parseUniqCount as default } from "../../shell/parse/text.js";

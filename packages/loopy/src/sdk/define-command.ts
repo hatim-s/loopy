@@ -1,5 +1,4 @@
-import type { CommandFlag, CommandResult, Json } from "../core/index.js";
-import { type RenderInput } from "../core/index.js";
+import type { CommandFlag, OutSchema } from "../core/index.js";
 
 export type FlagDefinition = CommandFlag;
 
@@ -28,15 +27,17 @@ export type CommandDefinition = {
   };
   readonly exclude?: readonly string[];
   readonly okExitCodes?: readonly number[];
-  /** Adjust operands and derived flags only after parsed flag validation. */
-  readonly prepare?: (input: RenderInput) => RenderInput;
-  readonly parse?: (result: CommandResult, input: RenderInput) => Json;
+  readonly defaultArgs?: readonly string[];
+  readonly prepare?: (counts: { args: number; flags: Set<string> }) => {
+    flags?: Readonly<Record<string, string | number | boolean | undefined>>;
+  };
+  readonly parse?: string;
+  readonly out?: OutSchema;
 };
 
 export type CommandDescriptor = CommandDefinition & {
-  readonly namespace?: string;
-  readonly name?: string;
-  readonly key?: string;
+  readonly key: string;
+  readonly raw?: CommandDescriptor;
   readonly variants?: {
     readonly darwin?: Partial<CommandDefinition>;
     readonly linux?: Partial<CommandDefinition>;
@@ -70,7 +71,7 @@ type FlagInput<F extends FlagDefinition> = F extends { readonly pairs: true }
     ? FlagValue<F> | true
     : FlagValue<F>;
 
-type Flags<D extends Omit<CommandDescriptor, "parse">> = D extends {
+type Flags<D extends CommandDescriptor> = D extends {
   readonly flags: infer F extends Readonly<Record<string, FlagDefinition>>;
 }
   ? keyof F extends never
@@ -82,13 +83,13 @@ type Flags<D extends Omit<CommandDescriptor, "parse">> = D extends {
       }
   : Record<string, never>;
 
-type Args<D extends Omit<CommandDescriptor, "parse">> = D extends {
+type Args<D extends CommandDescriptor> = D extends {
   readonly positionals: infer P extends readonly PositionalDefinition[];
 }
   ? Positionals<P>
   : readonly string[];
 
-type Operands<D extends Omit<CommandDescriptor, "parse">> = D extends {
+type Operands<D extends CommandDescriptor> = D extends {
   readonly revisionPaths: true;
 }
   ? {
@@ -108,17 +109,17 @@ type ExcludedKeys<D> = D extends { readonly exclude: readonly (infer K extends s
 
 type ProtectedKeys<D> = PresetKeys<D> | ExcludedKeys<D>;
 
-type ParsedDescriptor<D extends Omit<CommandDescriptor, "parse">> = D extends {
+type ParsedDescriptor<D extends CommandDescriptor> = D extends {
   readonly parsedPositionals: infer P extends readonly PositionalDefinition[];
 }
   ? Omit<D, "positionals"> & { readonly positionals: P }
   : D;
 
-export type Input<D extends Omit<CommandDescriptor, "parse">> = Operands<ParsedDescriptor<D>> & {
+export type Input<D extends CommandDescriptor> = Operands<ParsedDescriptor<D>> & {
   flags?: Omit<Flags<D>, ProtectedKeys<D>> & { readonly [K in ProtectedKeys<D>]?: never };
 };
 
-export type RawInput<D extends Omit<CommandDescriptor, "parse">> = Operands<D> & {
+export type RawInput<D extends CommandDescriptor> = Operands<D> & {
   flags?: Flags<D>;
 };
 
@@ -159,7 +160,7 @@ function optionIdentity(flag: FlagDefinition | undefined): string {
   return JSON.stringify([...(flag?.prefix ?? []), flag?.cli]);
 }
 
-export function validateCommandDescriptor(descriptor: Omit<CommandDescriptor, "parse">): void {
+export function validateCommandDescriptor(descriptor: CommandDescriptor): void {
   for (const definition of [
     descriptor,
     platformVariant(descriptor, "darwin"),
@@ -180,4 +181,8 @@ export function validateCommandDescriptor(descriptor: Omit<CommandDescriptor, "p
       seen.set(identity, name);
     }
   }
+}
+
+export function commandKey(descriptor: Pick<CommandDescriptor, "key">) {
+  return descriptor.key;
 }

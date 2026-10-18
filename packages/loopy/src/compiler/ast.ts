@@ -8,7 +8,7 @@ import {
   isReservedGraphName,
   isString,
 } from "../core/index.js";
-import { builtinCommandKeys, commandKey, sdkCalls } from "../sdk/graph-host.js";
+import { builtinCommandKeys, sdkCalls } from "../sdk/commands.js";
 import type { CompilerDiagnostic } from "./types.js";
 
 export function diagnostic(
@@ -332,17 +332,13 @@ function recordParser(
     return;
   }
 
-  if (!fields.has("key") && !(fields.has("namespace") && fields.has("name"))) {
+  const id = fields.get("key");
+
+  if (id === undefined) {
     refuse(context, node, "command_key");
 
     return;
   }
-
-  const id = commandKey({
-    key: fields.get("key"),
-    namespace: fields.get("namespace"),
-    name: fields.get("name"),
-  });
 
   if (context.parsers.has(id) || builtinCommandKeys.includes(id)) {
     refuse(context, node, "command_key");

@@ -1,9 +1,8 @@
-import { descriptorCommand } from "../descriptor.js";
+import type { CommandDescriptor } from "../define-command.js";
+import { defineCommands } from "../graph/nodes/command.js";
 
-export const archive = {
-  tar: descriptorCommand({
-    namespace: "archive",
-    name: "tar",
+export const archiveDescriptors = {
+  tar: {
     program: "tar",
     flags: {
       create: { cli: "-c", kind: "boolean" },
@@ -16,10 +15,9 @@ export const archive = {
       directory: { cli: "-C", kind: "string" },
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
-  }),
-  gzip: descriptorCommand({
-    namespace: "archive",
-    name: "gzip",
+    key: "archive.tar",
+  },
+  gzip: {
     program: "gzip",
     flags: {
       decompress: { cli: "-d", kind: "boolean" },
@@ -29,10 +27,9 @@ export const archive = {
       recursive: { cli: "-r", kind: "boolean" },
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
-  }),
-  zip: descriptorCommand({
-    namespace: "archive",
-    name: "zip",
+    key: "archive.gzip",
+  },
+  zip: {
     program: "zip",
     flags: {
       recursive: { cli: "-r", kind: "boolean" },
@@ -41,10 +38,9 @@ export const archive = {
       exclude: { cli: "-x", kind: "string", position: "after" },
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
-  }),
-  unzip: descriptorCommand({
-    namespace: "archive",
-    name: "unzip",
+    key: "archive.zip",
+  },
+  unzip: {
     program: "unzip",
     flags: {
       list: { cli: "-l", kind: "boolean" },
@@ -54,5 +50,8 @@ export const archive = {
       directory: { cli: "-d", kind: "string" },
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
-  }),
-};
+    key: "archive.unzip",
+  },
+} as const satisfies Record<string, CommandDescriptor>;
+
+export const archive = defineCommands(archiveDescriptors);

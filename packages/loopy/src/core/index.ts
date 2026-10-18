@@ -42,6 +42,7 @@ export type {
   LogLevel,
   LogPosition,
   LogRecord,
+  RawCommandOutput,
   RunOutcome,
   RunRecord,
   RunSnapshot,

@@ -147,7 +147,7 @@ test("layers import downward, and only through the target layer's index", () => 
         if (
           isBarrel(specifier) &&
           !(
-            (name === "sdk/graph-host.ts" || name === "sdk/index.ts") &&
+            (name === "sdk/commands.ts" || name === "sdk/index.ts") &&
             specifier === "./graph/index.js"
           )
         ) {
@@ -160,10 +160,10 @@ test("layers import downward, and only through the target layer's index", () => 
       if (!ALLOWED_IMPORTS[layer].includes(target)) {
         violations.push(`${name} (${layer}) may not import ${target} (${specifier}).`);
       } else if (
-        target === "sdk" ? !/\/(?:host|graph-host)\.js$/.test(specifier) : !isBarrel(specifier)
+        target === "sdk" ? !/\/(?:host|commands)\.js$/.test(specifier) : !isBarrel(specifier)
       ) {
         violations.push(
-          `${name} must import ${target} through ${target === "sdk" ? "sdk/host.js" : `${target}/index.js`} (${specifier}).`,
+          `${name} must import ${target} through ${target === "sdk" ? "sdk/commands.js" : `${target}/index.js`} (${specifier}).`,
         );
       }
     }

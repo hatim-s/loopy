@@ -1,11 +1,12 @@
-import type { CommandResult } from "../../../core/index.js";
+import type { RawCommandOutput } from "../../../core/index.js";
+import type { Infer } from "../../graph/types.js";
 import { jsonValue, lines, nulFields, unexpected } from "./shared.js";
 
-export type Find = string[];
+type Find = string[];
 
-export type Ls = string[];
+type Ls = string[];
 
-export type Stat = {
+type Stat = {
   path: string;
   size: number;
   mtime: string;
@@ -13,9 +14,9 @@ export type Stat = {
   mode: string;
 };
 
-export type Du = { path: string; kilobytes: number };
+type Du = { path: string; kilobytes: number };
 
-export type Df = {
+type Df = {
   filesystem: string;
   kilobytes: number;
   used: number;
@@ -24,26 +25,26 @@ export type Df = {
   mountedOn: string;
 };
 
-export type Realpath = string;
+type Realpath = string;
 
-export type Which = string | null;
+type Which = string | null;
 
-export type Mktemp = string;
+type Mktemp = string;
 
-export type TreeNode = { type: "directory" | "file"; name: string; contents?: TreeNode[] };
+type TreeNode = { type: "directory" | "file"; name: string; contents?: TreeNode[] };
 
-export type Tree = TreeNode[];
+type Tree = TreeNode[];
 
 // Neither BSD -f nor GNU -c interprets git's %x00. SOH separates metadata fields.
 export const STAT_DARWIN_FORMAT = "%N\x01%z\x01%m\x01%HT\x01%Lp";
 
 export const STAT_LINUX_FORMAT = "%n\x01%s\x01%Y\x01%F\x01%a";
 
-export function parseFind({ stdout }: CommandResult): Find {
+export function parseFind({ stdout }: RawCommandOutput): Find {
   return nulFields(stdout, "find").map((path) => path || unexpected("find", stdout));
 }
 
-export function parseLs(result: CommandResult): Ls {
+export function parseLs(result: RawCommandOutput): Ls {
   return nulFields(result.stdout, "ls").map(
     (path) => (path || unexpected("ls", result.stdout)).replace(/\/$/, "").split("/").at(-1) ?? "",
   );
@@ -63,7 +64,7 @@ function statType(value: string): Stat["type"] {
   }
 }
 
-export function parseStat({ stdout }: CommandResult): Stat[] {
+export function parseStat({ stdout }: RawCommandOutput): Stat[] {
   const entries: Stat[] = [];
   let cursor = 0;
   const records = /([\s\S]*?)\x01(\d+)\x01(-?\d+)\x01([^\x01\n]+)\x01([0-7]{1,4})\n/g;
@@ -98,7 +99,7 @@ export function parseStat({ stdout }: CommandResult): Stat[] {
   return entries;
 }
 
-export function parseDu({ stdout }: CommandResult): Du[] {
+export function parseDu({ stdout }: RawCommandOutput): Du[] {
   return lines(stdout).map((line) => {
     const match = /^(\d+)\t(.+)$/.exec(line);
 
@@ -110,7 +111,7 @@ export function parseDu({ stdout }: CommandResult): Du[] {
   });
 }
 
-export function parseDf({ stdout }: CommandResult): Df[] {
+export function parseDf({ stdout }: RawCommandOutput): Df[] {
   const [header = "", ...rows] = lines(stdout);
 
   if (
@@ -147,15 +148,15 @@ function trimmed(stdout: string, command: string): string {
   return stdout.trim() || unexpected(command, stdout);
 }
 
-export function parseRealpath({ stdout }: CommandResult): Realpath {
+export function parseRealpath({ stdout }: RawCommandOutput): Realpath {
   return trimmed(stdout, "realpath");
 }
 
-export function parseWhich({ stdout, exitCode }: CommandResult): Which {
+export function parseWhich({ stdout, exitCode }: RawCommandOutput): Which {
   return exitCode === 1 ? null : trimmed(stdout, "which");
 }
 
-export function parseMktemp({ stdout }: CommandResult): Mktemp {
+export function parseMktemp({ stdout }: RawCommandOutput): Mktemp {
   return trimmed(stdout, "mktemp");
 }
 
@@ -186,7 +187,7 @@ function treeNode(value: ReturnType<typeof jsonValue>, line: string): TreeNode {
   };
 }
 
-export function parseTree({ stdout }: CommandResult): Tree {
+export function parseTree({ stdout }: RawCommandOutput): Tree {
   const value = jsonValue(stdout, "tree");
 
   if (!Array.isArray(value)) {
@@ -195,3 +196,39 @@ export function parseTree({ stdout }: CommandResult): Tree {
 
   return value.map((node) => treeNode(node, stdout));
 }
+
+export const parseStatOut = { kind: "value", type: "json[]" } as const;
+
+parseStat satisfies (raw: RawCommandOutput) => Infer<typeof parseStatOut>;
+
+export const parseFindOut = { kind: "value", type: "string[]" } as const;
+
+parseFind satisfies (raw: RawCommandOutput) => Infer<typeof parseFindOut>;
+
+export const parseWhichOut = { kind: "value", type: "json" } as const;
+
+parseWhich satisfies (raw: RawCommandOutput) => Infer<typeof parseWhichOut>;
+
+export const parseMktempOut = { kind: "value", type: "string" } as const;
+
+parseMktemp satisfies (raw: RawCommandOutput) => Infer<typeof parseMktempOut>;
+
+export const parseLsOut = { kind: "value", type: "string[]" } as const;
+
+parseLs satisfies (raw: RawCommandOutput) => Infer<typeof parseLsOut>;
+
+export const parseDuOut = { kind: "value", type: "json[]" } as const;
+
+parseDu satisfies (raw: RawCommandOutput) => Infer<typeof parseDuOut>;
+
+export const parseRealpathOut = { kind: "value", type: "string" } as const;
+
+parseRealpath satisfies (raw: RawCommandOutput) => Infer<typeof parseRealpathOut>;
+
+export const parseDfOut = { kind: "value", type: "json[]" } as const;
+
+parseDf satisfies (raw: RawCommandOutput) => Infer<typeof parseDfOut>;
+
+export const parseTreeOut = { kind: "value", type: "json[]" } as const;
+
+parseTree satisfies (raw: RawCommandOutput) => Infer<typeof parseTreeOut>;

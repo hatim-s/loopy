@@ -1,7 +1,8 @@
-import type { CommandResult } from "../../../core/index.js";
+import type { RawCommandOutput } from "../../../core/index.js";
+import type { Infer } from "../../graph/types.js";
 import { jsonValue, unexpected } from "./shared.js";
 
-export type Curl = {
+type Curl = {
   status: number;
   headers: Record<string, string>;
   body: string;
@@ -71,7 +72,7 @@ function responseBody(stdout: string, status: number, redirects: number) {
 }
 
 // BOUNDARY: curl metadata is untrusted JSON; require the fields used in the typed result.
-export function parseCurl({ stdout }: CommandResult): Curl {
+export function parseCurl({ stdout }: RawCommandOutput): Curl {
   const marker = stdout.lastIndexOf(CURL_MARKER);
 
   if (marker === -1) {
@@ -107,3 +108,17 @@ export function parseCurl({ stdout }: CommandResult): Curl {
     url: info.url_effective,
   };
 }
+
+export const parseCurlOut = {
+  kind: "record",
+  fields: {
+    status: "number",
+    headers: "json",
+    body: "string",
+    timeTotal: "number",
+    sizeDownload: "number",
+    url: "string",
+  },
+} as const;
+
+parseCurl satisfies (raw: RawCommandOutput) => Infer<typeof parseCurlOut>;

@@ -337,7 +337,7 @@ test("code bundle import.meta names each source module instead of the saved bund
 
 test("bundles execute the stdin/stdout protocol and preserve prepared parser input", async () => {
   const { root, file } = await project(
-    'import {loopy,defineCommand,code} from "__SDK__"; const command=defineCommand({namespace:"custom",name:"parse",program:"echo",flags:{suffix:{cli:"-s",kind:"string"}},parse:"./parse.ts"},{kind:"value",type:"string"}); export default loopy("executable", {input:{},run:()=>{command({args:["hello"],flags:{suffix:"!"}});return code("context",{in:{value:42},out:{kind:"record",fields:{value:"number",workspace:"string"}},module:"./context.ts"});}});',
+    'import {loopy,defineCommand,code} from "__SDK__"; const command=defineCommand({key:"custom.parse",program:"echo",flags:{suffix:{cli:"-s",kind:"string"}},parse:"./parse.ts"},{kind:"value",type:"string"}); export default loopy("executable", {input:{},run:()=>{command({args:["hello"],flags:{suffix:"!"}});return code("context",{in:{value:42},out:{kind:"record",fields:{value:"number",workspace:"string"}},module:"./context.ts"});}});',
   );
 
   await writeFile(

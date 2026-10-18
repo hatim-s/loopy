@@ -1,34 +1,24 @@
-import type { RenderInput } from "../../core/index.js";
-import { descriptorCommand } from "../descriptor.js";
-import { CURL_WRITE_OUT, parseCurl } from "./parse/net.js";
+import type { CommandDescriptor } from "../define-command.js";
+import { defineCommands } from "../graph/nodes/command.js";
+import { refuse } from "../graph/validate.js";
+import { parseCurlOut } from "./parse/net.js";
 
-function curlInput(input: RenderInput): RenderInput {
-  const urls = (input.args?.length ?? 0) + (input.flags?.url === undefined ? 0 : 1);
-
-  if (urls !== 1) {
-    throw new Error("Parsed curl requires one URL. Use .raw() for multiple transfers.");
-  }
-
-  return input;
-}
-
-export const net = {
-  curl: descriptorCommand({
-    parse: parseCurl,
-    prepare: curlInput,
-    preset: { flags: { silent: true, showError: true, dumpHeader: "-", writeOut: CURL_WRITE_OUT } },
+export const netDescriptors = {
+  curl: {
+    preset: {
+      flags: {
+        silent: true,
+        showError: true,
+        dumpHeader: "-",
+        writeOut: "\n__LOOPY_CURL__%{json}",
+      },
+    },
     exclude: ["output", "include", "head"],
-    namespace: "net",
-    name: "curl",
     program: "curl",
     flags: {
       url: { cli: "--url", kind: "string" },
       request: { cli: "-X", kind: "string" },
-      header: {
-        cli: "-H",
-        kind: "string",
-        repeatable: true,
-      },
+      header: { cli: "-H", kind: "string", repeatable: true },
       data: { cli: "--data", kind: "string" },
       dataRaw: { cli: "--data-raw", kind: "string" },
       dumpHeader: { cli: "-D", kind: "string" },
@@ -43,5 +33,17 @@ export const net = {
       writeOut: { cli: "-w", kind: "string" },
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
-  }),
-};
+    key: "net.curl",
+    parse: "./parsers/net-curl.ts",
+    out: parseCurlOut,
+    prepare: ({ args, flags }) => {
+      if (args + Number(flags.has("url")) !== 1) {
+        refuse("arity", "Parsed curl requires one URL. Use .raw() for multiple transfers.");
+      }
+
+      return {};
+    },
+  },
+} as const satisfies Record<string, CommandDescriptor>;
+
+export const net = defineCommands(netDescriptors);

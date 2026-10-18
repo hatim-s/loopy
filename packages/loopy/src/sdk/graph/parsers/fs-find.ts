@@ -1,3 +1,1 @@
-import { parseFind as run } from "../../shell/parse/fs.js";
-
-export default (...args: Parameters<typeof run>) => run(...args);
+export { parseFind as default } from "../../shell/parse/fs.js";

@@ -1,5 +1,9 @@
+import { archive as archiveImpl } from "../shell/archive.js";
+import { fs as fsImpl } from "../shell/fs.js";
+import { git as gitImpl } from "../shell/git.js";
+import { net as netImpl } from "../shell/net.js";
+import { text as textImpl } from "../shell/text.js";
 import { loopy as loopyImpl } from "./loopy.js";
-import { archive as archiveImpl } from "./nodes/archive.js";
 import { code as codeImpl } from "./nodes/code.js";
 import { defineCommand as defineCommandImpl, sh as shImpl } from "./nodes/command.js";
 import {
@@ -11,11 +15,7 @@ import {
   rescue as rescueImpl,
   switch_ as switch_Impl,
 } from "./nodes/control.js";
-import { fs as fsImpl } from "./nodes/fs.js";
-import { git as gitImpl } from "./nodes/git.js";
-import { net as netImpl } from "./nodes/net.js";
 import { subgraph as subgraphImpl } from "./nodes/subgraph.js";
-import { text as textImpl } from "./nodes/text.js";
 import {
   format as formatImpl,
   log as logImpl,

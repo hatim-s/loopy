@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
-import type { CommandResult } from "../src/sdk/index.js";
+import type { RawCommandOutput } from "../src/sdk/index.js";
 
-export function result(stdout: string, exitCode = 0): CommandResult {
-  return { stdout, stderr: "", exitCode, durationMs: 0 };
+export function result(stdout: string, exitCode = 0): RawCommandOutput {
+  return { stdout, stderr: "", exitCode };
 }
 
 export function fixture(namespace: string, name: string, platform = "darwin") {

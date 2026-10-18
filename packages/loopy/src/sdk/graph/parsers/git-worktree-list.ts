@@ -1,3 +1,1 @@
-import { parseWorktreeList as run } from "../../shell/parse/git.js";
-
-export default (...args: Parameters<typeof run>) => run(...args);
+export { parseWorktreeList as default } from "../../shell/parse/git.js";

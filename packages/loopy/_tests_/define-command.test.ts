@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { defineCommand, loopy, sh } from "../src/sdk/graph/index.js";
-import { base64Descriptor } from "../src/sdk/shell/text/format.js";
+import { textDescriptors } from "../src/sdk/shell/text.js";
 import { capture } from "./fixtures/command-capture.js";
 
 const probe = defineCommand({
@@ -73,7 +73,7 @@ test("platform variants merge and preserve unchanged flags in the recorded descr
   expect(f.executor.calls[0]?.args).toEqual(
     process.platform === "linux" ? ["--format=%s", "-L"] : ["-f", "%s", "-L"],
   );
-  const base64 = defineCommand(base64Descriptor);
+  const base64 = defineCommand(textDescriptors.base64);
   expect(
     capture(() => base64({ flags: { input: "input", decode: true } })).executor.calls[0]?.args,
   ).toEqual(process.platform === "darwin" ? ["-D", "-i", "input"] : ["-d", "input"]);

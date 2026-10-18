@@ -1,3 +1,1 @@
-import { parseRealpath as run } from "../../shell/parse/fs.js";
-
-export default (...args: Parameters<typeof run>) => run(...args);
+export { parseRealpath as default } from "../../shell/parse/fs.js";

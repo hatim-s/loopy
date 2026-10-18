@@ -1,3 +1,1 @@
-import { parseDu as run } from "../../shell/parse/fs.js";
-
-export default (...args: Parameters<typeof run>) => run(...args);
+export { parseDu as default } from "../../shell/parse/fs.js";

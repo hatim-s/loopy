@@ -6,12 +6,13 @@ export const EXECUTION_MODES = ["sandbox", "full"] as const;
 
 export type ExecutionMode = (typeof EXECUTION_MODES)[number];
 
-export type CommandResult = {
+export type RawCommandOutput = {
   stdout: string;
   stderr: string;
   exitCode: number;
-  durationMs: number;
 };
+
+export type CommandResult = RawCommandOutput & { durationMs: number };
 
 export const RUN_STATUSES = [
   "queued",

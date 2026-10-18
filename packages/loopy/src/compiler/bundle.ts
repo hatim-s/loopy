@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { bundleRefs, type Graph, type Node, sha256Hex } from "../core/index.js";
-import { commandParser } from "../sdk/graph-host.js";
+import { commandParser } from "../sdk/commands.js";
 import { diagnostic } from "./ast.js";
 import { checkImports } from "./code-module.js";
 import { runnerSource } from "./runner.js";

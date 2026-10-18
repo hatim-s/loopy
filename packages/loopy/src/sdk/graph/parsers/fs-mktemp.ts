@@ -1,3 +1,1 @@
-import { parseMktemp as run } from "../../shell/parse/fs.js";
-
-export default (...args: Parameters<typeof run>) => run(...args);
+export { parseMktemp as default } from "../../shell/parse/fs.js";

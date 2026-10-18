@@ -1,3 +1,1 @@
-import { parseCurl as run } from "../../shell/parse/net.js";
-
-export default (...args: Parameters<typeof run>) => run(...args);
+export { parseCurl as default } from "../../shell/parse/net.js";

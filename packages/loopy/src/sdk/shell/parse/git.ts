@@ -1,15 +1,16 @@
-import type { CommandResult } from "../../../core/index.js";
-import { lines, nulFields as splitNulFields } from "./shared.js";
+import type { RawCommandOutput } from "../../../core/index.js";
+import type { Infer } from "../../graph/types.js";
+import { lines, nulFields, unexpected } from "./shared.js";
 
-export type Change = {
+type Change = {
   path: string;
-  status: "added" | "modified" | "deleted" | "renamed" | "copied" | "typechange";
+  status: (typeof CHANGE_STATUSES)[keyof typeof CHANGE_STATUSES];
   from?: string;
 };
 
-export type Conflict = { path: string; status: string };
+type Conflict = { path: string; status: (typeof CONFLICT_STATUSES)[number] };
 
-export type Status = {
+type Status = {
   branch: string | null;
   upstream: string | null;
   ahead: number;
@@ -21,7 +22,7 @@ export type Status = {
   stashes: number;
 };
 
-export type LogEntry = {
+type LogEntry = {
   sha: string;
   short: string;
   author: { name: string; email: string };
@@ -30,16 +31,20 @@ export type LogEntry = {
   body: string;
 };
 
-export type DiffEntry = {
+type DiffEntry = {
   path: string;
   added: number | null;
   deleted: number | null;
   from?: string;
 };
 
-export type DiffName = { path: string; status: string; from?: string };
+type DiffName = {
+  path: string;
+  status: keyof typeof CHANGE_STATUSES | "U" | "X" | "B" | `${"R" | "C" | "M"}${number}`;
+  from?: string;
+};
 
-export type Branch = {
+type Branch = {
   name: string;
   current: boolean;
   upstream: string | null;
@@ -48,7 +53,7 @@ export type Branch = {
   behind: number;
 };
 
-export type Worktree = {
+type Worktree = {
   path: string;
   sha: string | null;
   branch: string | null;
@@ -59,11 +64,13 @@ export type Worktree = {
   prunable?: string;
 };
 
-export type Stash = { ref: string; sha: string; message: string };
+type Stash = { ref: string; sha: string; message: string };
 
-export type Tag = { name: string; sha: string; date: string | null };
+type Tag = { name: string; sha: string; date: string | null };
 
-export type Remote = { name: string; fetch: string | null; push: string | null };
+type Remote = { name: string; fetch: string | null; push: string | null };
+
+const CONFLICT_STATUSES = ["DD", "AU", "UD", "UA", "DU", "AA", "UU"] as const;
 
 const SHA = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/;
 
@@ -76,17 +83,9 @@ const CHANGE_STATUSES = {
   T: "typechange",
 } as const;
 
-function unexpected(cmd: string, line: string): never {
-  throw new Error(`Unexpected git ${cmd} output line: ${line}. Report this with the git version.`);
-}
-
-function nulFields(stdout: string, cmd: string): string[] {
-  return splitNulFields(stdout, cmd, unexpected);
-}
-
 function required(value: string | undefined, cmd: string, line: string): string {
   if (!value) {
-    unexpected(cmd, line);
+    unexpected(`git ${cmd}`, line);
   }
 
   return value;
@@ -100,7 +99,7 @@ function tracking(value: string, cmd: string, line: string) {
   const match = /^\[(?:ahead (\d+))?(?:, )?(?:behind (\d+))?\]$/.exec(value);
 
   if (!match || (!match[1] && !match[2])) {
-    unexpected(cmd, line);
+    unexpected(`git ${cmd}`, line);
   }
 
   return { ahead: Number(match[1] ?? 0), behind: Number(match[2] ?? 0) };
@@ -112,7 +111,7 @@ function addChange(target: Change[], code: string, path: string, from?: string) 
   }
 
   if (!Object.hasOwn(CHANGE_STATUSES, code)) {
-    unexpected("status", `${code} ${path}`);
+    unexpected("git status", `${code} ${path}`);
   }
 
   // SAFETY: The own-key check above narrows the porcelain status to the declared map.
@@ -137,7 +136,7 @@ function statusBranchHeader(result: Status, line: string) {
     const oid = line.slice(13);
 
     if (oid !== "(initial)" && !SHA.test(oid)) {
-      unexpected("status", line);
+      unexpected("git status", line);
     }
 
     return;
@@ -159,7 +158,7 @@ function statusBranchHeader(result: Status, line: string) {
   const ab = /^# branch.ab \+(\d+) -(\d+)$/.exec(line);
 
   if (!ab) {
-    unexpected("status", line);
+    unexpected("git status", line);
   }
 
   result.ahead = Number(ab[1]);
@@ -170,7 +169,7 @@ function statusRecord(result: Status, line: string, from?: string) {
   const match = /^(1|2|u) ([.AMDRCTU]{2}) (N\.\.\.|S[.C][.M][.U]) ([\s\S]*)$/.exec(line);
 
   if (!match) {
-    unexpected("status", line);
+    unexpected("git status", line);
   }
 
   const count = match[1] === "u" ? 7 : match[1] === "2" ? 6 : 5;
@@ -184,26 +183,32 @@ function statusRecord(result: Status, line: string, from?: string) {
     metadata.slice(0, modes).some((mode) => !/^[0-7]{6}$/.test(mode)) ||
     metadata.slice(modes, modes + (match[1] === "u" ? 3 : 2)).some((sha) => !SHA.test(sha))
   ) {
-    unexpected("status", line);
+    unexpected("git status", line);
   }
 
   const xy = required(match[2], "status", line);
 
   if (match[1] === "u") {
-    result.conflicts.push({ path, status: xy });
+    const status = CONFLICT_STATUSES.find((code) => code === xy);
+
+    if (status === undefined) {
+      unexpected("git status", line);
+    }
+
+    result.conflicts.push({ path, status });
 
     return;
   }
 
   if (match[1] === "2" && (!from || !/^[RC]\d+$/.test(metadata[5] ?? ""))) {
-    unexpected("status", line);
+    unexpected("git status", line);
   }
 
   addChange(result.staged, xy.charAt(0), path, from);
   addChange(result.unstaged, xy.charAt(1), path, from);
 }
 
-export function parseStatus({ stdout }: CommandResult): Status {
+export function parseStatus({ stdout }: RawCommandOutput): Status {
   const result: Status = {
     branch: null,
     upstream: null,
@@ -216,7 +221,7 @@ export function parseStatus({ stdout }: CommandResult): Status {
     stashes: 0,
   };
 
-  const fields = nulFields(stdout, "status");
+  const fields = nulFields(stdout, "git status");
 
   for (let index = 0; index < fields.length; index++) {
     const line = required(fields[index], "status", stdout);
@@ -240,11 +245,11 @@ export function parseStatus({ stdout }: CommandResult): Status {
 // lines and even ASCII record-separator bytes in bodies intact; -z terminates each record.
 export const LOG_FORMAT = "%H%x00%h%x00%an%x00%ae%x00%aI%x00%s%x00%b";
 
-export function parseLog({ stdout }: CommandResult): LogEntry[] {
-  const fields = nulFields(stdout, "log");
+export function parseLog({ stdout }: RawCommandOutput): LogEntry[] {
+  const fields = nulFields(stdout, "git log");
 
   if (fields.length % 7 !== 0) {
-    unexpected("log", stdout);
+    unexpected("git log", stdout);
   }
 
   const result: LogEntry[] = [];
@@ -258,7 +263,7 @@ export function parseLog({ stdout }: CommandResult): LogEntry[] {
       !/^[a-f0-9]+$/.test(short) ||
       !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d$/.test(date)
     ) {
-      unexpected("log", fields.slice(index, index + 7).join("\0"));
+      unexpected("git log", fields.slice(index, index + 7).join("\0"));
     }
 
     result.push({ sha, short, author: { name, email }, date, subject, body });
@@ -278,8 +283,8 @@ function diffPaths(fields: string[], index: number, path: string, cmd: string) {
   return { entry: { path: to, from }, consumed: 2 };
 }
 
-export function parseDiff({ stdout }: CommandResult): DiffEntry[] {
-  const fields = nulFields(stdout, "diff");
+export function parseDiff({ stdout }: RawCommandOutput): DiffEntry[] {
+  const fields = nulFields(stdout, "git diff");
   const result: DiffEntry[] = [];
 
   for (let index = 0; index < fields.length; index++) {
@@ -287,7 +292,7 @@ export function parseDiff({ stdout }: CommandResult): DiffEntry[] {
     const match = /^(\d+|-)\t(\d+|-)\t([\s\S]*)$/.exec(line);
 
     if (!match || (match[1] === "-") !== (match[2] === "-")) {
-      unexpected("diff", line);
+      unexpected("git diff", line);
     }
 
     const { entry, consumed } = diffPaths(fields, index, match[3] ?? "", "diff");
@@ -302,15 +307,19 @@ export function parseDiff({ stdout }: CommandResult): DiffEntry[] {
   return result;
 }
 
-export function parseDiffNames({ stdout }: CommandResult): DiffName[] {
-  const fields = nulFields(stdout, "diffNames");
+function isDiffStatus(status: string): status is DiffName["status"] {
+  return /^(?:[ACDMRTUXB]|[RC]\d+|M\d+)$/.test(status);
+}
+
+export function parseDiffNames({ stdout }: RawCommandOutput): DiffName[] {
+  const fields = nulFields(stdout, "git diffNames");
   const result: DiffName[] = [];
 
   for (let index = 0; index < fields.length; index += 2) {
     const status = required(fields[index], "diffNames", stdout);
 
-    if (!/^(?:[ACDMRTUXB]|[RC]\d+|M\d+)$/.test(status)) {
-      unexpected("diffNames", status);
+    if (!isDiffStatus(status)) {
+      unexpected("git diffNames", status);
     }
 
     const path = required(fields[index + 1], "diffNames", status);
@@ -326,7 +335,7 @@ export function parseDiffNames({ stdout }: CommandResult): DiffName[] {
   return result;
 }
 
-export function parseBranch({ stdout }: CommandResult): Branch[] {
+export function parseBranch({ stdout }: RawCommandOutput): Branch[] {
   return lines(stdout).map((line) => {
     const [name, head, upstream, sha, track, extra] = line.split("\0");
 
@@ -339,7 +348,7 @@ export function parseBranch({ stdout }: CommandResult): Branch[] {
       track === undefined ||
       extra !== undefined
     ) {
-      unexpected("branch", line);
+      unexpected("git branch", line);
     }
 
     return {
@@ -370,7 +379,7 @@ function worktreeValue(value: string, line: string): string {
   }
 
   if (!value.endsWith('"')) {
-    unexpected("worktree.list", line);
+    unexpected("git worktree.list", line);
   }
 
   const body = value.slice(1, -1);
@@ -379,7 +388,7 @@ function worktreeValue(value: string, line: string): string {
 
   for (const match of body.matchAll(/\\([0-7]{3}|[abfnrtv"\\])|([^"\\]+)/g)) {
     if (match.index !== cursor) {
-      unexpected("worktree.list", line);
+      unexpected("git worktree.list", line);
     }
 
     const escape = match[1];
@@ -388,7 +397,7 @@ function worktreeValue(value: string, line: string): string {
       bytes.push(
         escape.length === 3
           ? Number.parseInt(escape, 8)
-          : (C_ESCAPES.get(escape) ?? unexpected("worktree.list", line)),
+          : (C_ESCAPES.get(escape) ?? unexpected("git worktree.list", line)),
       );
     } else {
       bytes.push(...new TextEncoder().encode(match[2]));
@@ -398,7 +407,7 @@ function worktreeValue(value: string, line: string): string {
   }
 
   if (cursor !== body.length) {
-    unexpected("worktree.list", line);
+    unexpected("git worktree.list", line);
   }
 
   return new TextDecoder().decode(new Uint8Array(bytes));
@@ -433,7 +442,7 @@ function worktreeState(entry: Worktree, line: string) {
     return;
   }
 
-  unexpected("worktree.list", line);
+  unexpected("git worktree.list", line);
 }
 
 function worktreeField(entry: Worktree, line: string) {
@@ -452,7 +461,7 @@ function worktreeField(entry: Worktree, line: string) {
   worktreeState(entry, line);
 }
 
-export function parseWorktreeList({ stdout }: CommandResult): Worktree[] {
+export function parseWorktreeList({ stdout }: RawCommandOutput): Worktree[] {
   if (!stdout) {
     return [];
   }
@@ -464,7 +473,7 @@ export function parseWorktreeList({ stdout }: CommandResult): Worktree[] {
       const [first = "", ...rest] = block.split("\n");
 
       if (!first.startsWith("worktree ") || !first.slice(9)) {
-        unexpected("worktree.list", first);
+        unexpected("git worktree.list", first);
       }
 
       const entry: Worktree = {
@@ -481,14 +490,14 @@ export function parseWorktreeList({ stdout }: CommandResult): Worktree[] {
       }
 
       if (!entry.bare && (!entry.sha || (!entry.branch && !entry.detached))) {
-        unexpected("worktree.list", block);
+        unexpected("git worktree.list", block);
       }
 
       return entry;
     });
 }
 
-export function parseStashList({ stdout }: CommandResult): Stash[] {
+export function parseStashList({ stdout }: RawCommandOutput): Stash[] {
   return lines(stdout).map((line) => {
     const [ref, sha, message, extra] = line.split("\0");
 
@@ -500,14 +509,14 @@ export function parseStashList({ stdout }: CommandResult): Stash[] {
       message === undefined ||
       extra !== undefined
     ) {
-      unexpected("stash.list", line);
+      unexpected("git stash.list", line);
     }
 
     return { ref, sha, message };
   });
 }
 
-export function parseTag({ stdout }: CommandResult): Tag[] {
+export function parseTag({ stdout }: RawCommandOutput): Tag[] {
   return lines(stdout).map((line) => {
     const [name, sha, date, extra] = line.split("\0");
 
@@ -519,21 +528,21 @@ export function parseTag({ stdout }: CommandResult): Tag[] {
       extra !== undefined ||
       (date !== "" && !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d$/.test(date))
     ) {
-      unexpected("tag", line);
+      unexpected("git tag", line);
     }
 
     return { name, sha, date: date || null };
   });
 }
 
-export function parseRemote({ stdout }: CommandResult): Remote[] {
+export function parseRemote({ stdout }: RawCommandOutput): Remote[] {
   const remotes = new Map<string, Remote>();
 
   for (const line of lines(stdout)) {
     const match = /^(\S+)\t(.+) \((fetch|push)\)$/.exec(line);
 
     if (!match) {
-      unexpected("remote", line);
+      unexpected("git remote", line);
     }
 
     const name = required(match[1], "remote", line);
@@ -551,20 +560,77 @@ export function parseRemote({ stdout }: CommandResult): Remote[] {
   return [...remotes.values()];
 }
 
-export type RevParse = string;
+type RevParse = string;
 
-export function parseRevParse({ stdout }: CommandResult): RevParse {
+export function parseRevParse({ stdout }: RawCommandOutput): RevParse {
   const value = stdout.trim();
 
   if (!value || /[\n\r\0]/.test(value)) {
-    unexpected("rev-parse", stdout);
+    unexpected("git rev-parse", stdout);
   }
 
   return value;
 }
 
-export type LsFiles = string[];
+type LsFiles = string[];
 
-export function parseLsFiles({ stdout }: CommandResult): LsFiles {
-  return nulFields(stdout, "ls-files").map((path) => required(path, "ls-files", stdout));
+export function parseLsFiles({ stdout }: RawCommandOutput): LsFiles {
+  return nulFields(stdout, "git ls-files").map((path) => required(path, "ls-files", stdout));
 }
+
+export const parseTagOut = { kind: "value", type: "json[]" } as const;
+
+parseTag satisfies (raw: RawCommandOutput) => Infer<typeof parseTagOut>;
+
+export const parseLsFilesOut = { kind: "value", type: "string[]" } as const;
+
+parseLsFiles satisfies (raw: RawCommandOutput) => Infer<typeof parseLsFilesOut>;
+
+export const parseStatusOut = {
+  kind: "record",
+  fields: {
+    branch: "json",
+    upstream: "json",
+    ahead: "number",
+    behind: "number",
+    staged: "json[]",
+    unstaged: "json[]",
+    untracked: "string[]",
+    conflicts: "json[]",
+    stashes: "number",
+  },
+} as const;
+
+parseStatus satisfies (raw: RawCommandOutput) => Infer<typeof parseStatusOut>;
+
+export const parseRevParseOut = { kind: "value", type: "string" } as const;
+
+parseRevParse satisfies (raw: RawCommandOutput) => Infer<typeof parseRevParseOut>;
+
+export const parseWorktreeListOut = { kind: "value", type: "json[]" } as const;
+
+parseWorktreeList satisfies (raw: RawCommandOutput) => Infer<typeof parseWorktreeListOut>;
+
+export const parseLogOut = { kind: "value", type: "json[]" } as const;
+
+parseLog satisfies (raw: RawCommandOutput) => Infer<typeof parseLogOut>;
+
+export const parseDiffNamesOut = { kind: "value", type: "json[]" } as const;
+
+parseDiffNames satisfies (raw: RawCommandOutput) => Infer<typeof parseDiffNamesOut>;
+
+export const parseRemoteOut = { kind: "value", type: "json[]" } as const;
+
+parseRemote satisfies (raw: RawCommandOutput) => Infer<typeof parseRemoteOut>;
+
+export const parseDiffOut = { kind: "value", type: "json[]" } as const;
+
+parseDiff satisfies (raw: RawCommandOutput) => Infer<typeof parseDiffOut>;
+
+export const parseStashListOut = { kind: "value", type: "json[]" } as const;
+
+parseStashList satisfies (raw: RawCommandOutput) => Infer<typeof parseStashListOut>;
+
+export const parseBranchOut = { kind: "value", type: "json[]" } as const;
+
+parseBranch satisfies (raw: RawCommandOutput) => Infer<typeof parseBranchOut>;

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
-import { type CommandResult } from "../src/sdk/index.js";
+import { type RawCommandOutput } from "../src/sdk/index.js";
 import {
   parseBranch,
   parseDiff,
@@ -15,8 +15,8 @@ import {
   parseWorktreeList,
 } from "../src/sdk/shell/parse/git.js";
 
-function result(stdout: string): CommandResult {
-  return { stdout, stderr: "", exitCode: 0, durationMs: 1 };
+function result(stdout: string): RawCommandOutput {
+  return { stdout, stderr: "", exitCode: 0 };
 }
 
 function fixture(name: string, platform: string) {

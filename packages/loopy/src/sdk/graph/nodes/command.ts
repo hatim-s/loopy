@@ -1,6 +1,10 @@
 import type { RateLimit } from "../../../core/index.js";
 import { type GraphRetry, type OutSchema, parseArgv } from "../../../core/index.js";
-import { type CommandDescriptor, validateCommandDescriptor } from "../../define-command.js";
+import {
+  type CommandDescriptor,
+  commandKey,
+  validateCommandDescriptor,
+} from "../../define-command.js";
 import { currentBuilder } from "../builder.js";
 import { commandArgv } from "../command-argv.js";
 import type { CommandInput, CommandRawInput } from "../command-input.js";
@@ -33,14 +37,14 @@ function record({
   out,
 }: {
   label: string | null;
-  descriptor: GraphCommandDescriptor;
+  descriptor: CommandDescriptor;
   input: Input;
   options: Options;
   mode: "parsed" | "raw";
   out: OutSchema;
 }) {
   const builder = currentBuilder();
-  const key = descriptor.key ?? `${descriptor.namespace}.${descriptor.name}`;
+  const key = commandKey(descriptor);
   const rendered = commandArgv(descriptor, input, mode);
 
   const node = builder.add(
@@ -79,29 +83,29 @@ type CallArguments<I> = I extends { args: readonly unknown[] }
   ? [input: I, options?: Options]
   : [input?: I, options?: Options];
 
-export type GraphCommandDescriptor = Omit<CommandDescriptor, "parse"> & { parse?: string };
-
-type CommandCall<D extends GraphCommandDescriptor, S extends OutSchema> = {
+export type CommandCall<D extends CommandDescriptor, S extends OutSchema> = {
   (...args: CallArguments<CommandInput<D>>): Ref<Infer<S>, SchemaFields<S>>;
   readonly descriptor: D;
   raw: (
-    ...args: CallArguments<CommandRawInput<D>>
+    ...args: CallArguments<
+      CommandRawInput<D extends { readonly raw: infer R extends CommandDescriptor } ? R : D>
+    >
   ) => Ref<Infer<typeof commandOutput>, SchemaFields<typeof commandOutput>>;
 };
 
-export function defineCommand<const D extends GraphCommandDescriptor>(
-  descriptor: D & { parse?: never },
-): CommandCall<D, typeof commandOutput>;
-export function defineCommand<const S extends OutSchema, const D extends GraphCommandDescriptor>(
+export function defineCommand<const D extends CommandDescriptor>(
+  descriptor: D,
+): CommandCall<D, D extends { readonly out: infer S extends OutSchema } ? S : typeof commandOutput>;
+export function defineCommand<const S extends OutSchema, const D extends CommandDescriptor>(
   descriptor: D & { parse: string },
   out: S,
 ): CommandCall<D, S>;
-export function defineCommand<const S extends OutSchema, const D extends GraphCommandDescriptor>(
+export function defineCommand<const S extends OutSchema, const D extends CommandDescriptor>(
   descriptor: D,
   schema?: S,
 ) {
   validateCommandDescriptor(descriptor);
-  const out = schema ?? commandOutput;
+  const out = schema ?? descriptor.out ?? commandOutput;
   function call(...args: CallArguments<CommandInput<D>>): Ref<Infer<S>, SchemaFields<S>>;
   function call(input: Input = {}, options: Options = {}): Ref<Infer<S>, SchemaFields<S>> {
     return currentBuilder().ref(
@@ -111,7 +115,9 @@ export function defineCommand<const S extends OutSchema, const D extends GraphCo
   }
 
   function raw(
-    ...args: CallArguments<CommandRawInput<D>>
+    ...args: CallArguments<
+      CommandRawInput<D extends { readonly raw: infer R extends CommandDescriptor } ? R : D>
+    >
   ): Ref<Infer<typeof commandOutput>, SchemaFields<typeof commandOutput>>;
   function raw(
     input: Input = {},
@@ -182,3 +188,18 @@ function run(line: string, options: Options = {}) {
 }
 
 export const sh = Object.assign(exec, { exec, run });
+
+export function defineCommands<const D extends Record<string, CommandDescriptor>>(table: D) {
+  const entries: [string, object][] = Object.entries(table).map(([key, descriptor]) => [
+    key,
+    defineCommand(descriptor),
+  ]);
+
+  // SAFETY: Each table key keeps the call signature of its own descriptor and output schema.
+  return Object.fromEntries(entries) as {
+    [K in keyof D]: CommandCall<
+      D[K],
+      D[K] extends { readonly out: infer S extends OutSchema } ? S : typeof commandOutput
+    >;
+  };
+}

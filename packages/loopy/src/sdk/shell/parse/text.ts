@@ -1,21 +1,22 @@
-import type { CommandResult, Json, RenderInput } from "../../../core/index.js";
+import type { Json, RawCommandOutput, RenderInput } from "../../../core/index.js";
+import type { Infer } from "../../graph/types.js";
 import { jsonValue, lines, unexpected } from "./shared.js";
 
-export type Wc = { lines: number; words: number; bytes: number; file?: string };
+type Wc = { lines: number; words: number; bytes: number; file?: string };
 
-export type UniqCount = { count: number; line: string };
+type UniqCount = { count: number; line: string };
 
-export type GrepMatch = { file: string | null; line: number; text: string };
+type GrepMatch = { file: string | null; line: number; text: string };
 
-export type Grep = { matches: GrepMatch[]; binaryMatches: string[] };
+type Grep = { matches: GrepMatch[]; binaryMatches: string[] };
 
-export type GrepCount = number;
+type GrepCount = number;
 
-export type Sha256 = { hash: string; file: string };
+type Sha256 = { hash: string; file: string };
 
-export type Jq = Json;
+type Jq = Json;
 
-export function parseWc({ stdout }: CommandResult, input: RenderInput = {}): Wc[] {
+export function parseWc({ stdout }: RawCommandOutput, input: RenderInput = {}): Wc[] {
   const rows = lines(stdout);
 
   if ((input.args?.length ?? 0) > 1) {
@@ -35,7 +36,7 @@ export function parseWc({ stdout }: CommandResult, input: RenderInput = {}): Wc[
   });
 }
 
-export function parseUniqCount({ stdout }: CommandResult): UniqCount[] {
+export function parseUniqCount({ stdout }: RawCommandOutput): UniqCount[] {
   return lines(stdout).map((line) => {
     const match = /^\s*(\d+) ([\s\S]*)$/.exec(line);
 
@@ -73,7 +74,7 @@ function parseGrepMatch(line: string): GrepMatch {
   return { file: match[1] ?? null, line: grepLine(match[2] ?? "", line), text: match[3] ?? "" };
 }
 
-export function parseGrep({ stdout, exitCode }: CommandResult): Grep {
+export function parseGrep({ stdout, exitCode }: RawCommandOutput): Grep {
   const result: Grep = { matches: [], binaryMatches: [] };
 
   if (exitCode === 1) {
@@ -94,7 +95,7 @@ export function parseGrep({ stdout, exitCode }: CommandResult): Grep {
   return result;
 }
 
-export function parseGrepCount({ stdout }: CommandResult): GrepCount {
+export function parseGrepCount({ stdout }: RawCommandOutput): GrepCount {
   const value = stdout.trim();
 
   if (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value))) {
@@ -131,7 +132,7 @@ function checksumPath(path: string, escaped: boolean, line: string): string {
   return decoded;
 }
 
-export function parseSha256({ stdout }: CommandResult): Sha256[] {
+export function parseSha256({ stdout }: RawCommandOutput): Sha256[] {
   return lines(stdout).map((line) => {
     const match = /^(\\?)([a-fA-F0-9]{64}) [ *](.+)$/.exec(line);
 
@@ -143,8 +144,35 @@ export function parseSha256({ stdout }: CommandResult): Sha256[] {
   });
 }
 
-export function parseJq({ stdout }: CommandResult): Jq {
+export function parseJq({ stdout }: RawCommandOutput): Jq {
   const values = lines(stdout).map((line) => jsonValue(line, "jq"));
 
   return values.length === 1 ? (values[0] ?? null) : values;
 }
+
+export const parseGrepCountOut = { kind: "value", type: "number" } as const;
+
+parseGrepCount satisfies (raw: RawCommandOutput) => Infer<typeof parseGrepCountOut>;
+
+export const parseWcOut = { kind: "value", type: "json[]" } as const;
+
+parseWc satisfies (raw: RawCommandOutput) => Infer<typeof parseWcOut>;
+
+export const parseUniqCountOut = { kind: "value", type: "json[]" } as const;
+
+parseUniqCount satisfies (raw: RawCommandOutput) => Infer<typeof parseUniqCountOut>;
+
+export const parseSha256Out = { kind: "value", type: "json[]" } as const;
+
+parseSha256 satisfies (raw: RawCommandOutput) => Infer<typeof parseSha256Out>;
+
+export const parseJqOut = { kind: "value", type: "json" } as const;
+
+parseJq satisfies (raw: RawCommandOutput) => Infer<typeof parseJqOut>;
+
+export const parseGrepOut = {
+  kind: "record",
+  fields: { matches: "json[]", binaryMatches: "string[]" },
+} as const;
+
+parseGrep satisfies (raw: RawCommandOutput) => Infer<typeof parseGrepOut>;

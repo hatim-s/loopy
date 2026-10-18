@@ -1,3 +1,1 @@
-import { parseDf as run } from "../../shell/parse/fs.js";
-
-export default (...args: Parameters<typeof run>) => run(...args);
+export { parseDf as default } from "../../shell/parse/fs.js";

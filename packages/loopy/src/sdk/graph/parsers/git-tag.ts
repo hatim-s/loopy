@@ -1,3 +1,1 @@
-import { parseTag as run } from "../../shell/parse/git.js";
-
-export default (...args: Parameters<typeof run>) => run(...args);
+export { parseTag as default } from "../../shell/parse/git.js";
