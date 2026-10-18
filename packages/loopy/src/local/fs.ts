@@ -1,11 +1,5 @@
-import { existsSync, mkdirSync, realpathSync, rmSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdirSync, rmSync } from "node:fs";
 import { errnoCode } from "../core/index.js";
-
-/** Canonical path for ownership checks: symlinks resolve, missing files stay absolute. */
-export function canonicalPath(path: string): string {
-  return existsSync(path) ? realpathSync(path) : resolve(path);
-}
 
 /**
  * Serialises writers with a lock directory, since mkdir is atomic on every

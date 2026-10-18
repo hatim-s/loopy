@@ -1,5 +1,6 @@
 import { parseArgs } from "node:util";
 import { z } from "zod";
+import { DaemonError } from "./errors.js";
 
 const OPTIONS = {
   format: { type: "string" },
@@ -87,22 +88,10 @@ const commandSchemas = {
 
 const schemas = new Map(Object.entries(commandSchemas));
 
-const GLOBAL_OPTIONS = ["home", "cwd", "help"] as const;
+const GLOBAL_OPTIONS = Object.keys(globals.shape);
 
-const COMMAND_OPTIONS = new Map<string, readonly (keyof typeof OPTIONS)[]>(
-  Object.entries({
-    run: ["input-json", "input-file"],
-    resume: [],
-    schedule: ["cron", "tz", "input-json"],
-    logs: ["follow"],
-    "daemon run": ["concurrency", "port", "lease-ms"],
-    "daemon install": ["concurrency", "port"],
-    save: ["replace"],
-    graph: ["format"],
-    types: ["out", "name"],
-    ui: ["port"],
-    "secrets set": ["stdin"],
-  } satisfies Record<string, readonly (keyof typeof OPTIONS)[]>),
+const COMMAND_OPTIONS = new Map(
+  Object.entries(commandSchemas).map(([name, schema]) => [name, Object.keys(schema.shape)]),
 );
 
 const OPTION_TYPES = new Map(Object.entries(OPTIONS).map(([name, option]) => [name, option.type]));
@@ -163,23 +152,24 @@ function findCommands(args: string[]): string[] {
 
 function recordInput(inputs: Map<string, string>, arg: string, next: string | undefined): boolean {
   if (!arg.startsWith("--")) {
-    throw new Error(`Expected a loopy input flag, received '${arg}'.`);
+    throw new DaemonError("bad_request", `Expected a loopy input flag, received '${arg}'.`);
   }
 
   const flag = describeFlag(arg);
 
   if (!flag.name) {
-    throw new Error(`Expected a loopy input flag, received '${arg}'.`);
+    throw new DaemonError("bad_request", `Expected a loopy input flag, received '${arg}'.`);
   }
 
   if (inputs.has(flag.name)) {
-    throw new Error(`Loopy input --${flag.name} was provided more than once.`);
+    throw new DaemonError("bad_request", `Loopy input --${flag.name} was provided more than once.`);
   }
 
   const consumesNext = flag.inline === undefined;
 
   if (consumesNext && (next === undefined || next.startsWith("--"))) {
-    throw new Error(
+    throw new DaemonError(
+      "bad_request",
       `Loopy input --${flag.name} requires a value. Use --${flag.name}=value for a value starting with --.`,
     );
   }
@@ -201,7 +191,7 @@ function recordOption(
   }
 
   if (next === undefined || next.startsWith("--")) {
-    throw new Error(`Option --${flag.name} requires a value.`);
+    throw new DaemonError("bad_request", `Option --${flag.name} requires a value.`);
   }
 
   cli.push(next);
@@ -227,7 +217,10 @@ function recordArgument(
     (isInput && command !== "run") ||
     (arg.startsWith("-") && !arg.startsWith("--") && arg !== "-h")
   ) {
-    throw new Error(`Unknown option '${arg}' for loopy ${command}. Run loopy --help for usage.`);
+    throw new DaemonError(
+      "bad_request",
+      `Unknown option '${arg}' for loopy ${command}. Run loopy --help for usage.`,
+    );
   }
 
   return isInput
@@ -291,7 +284,10 @@ export function parseCliArgs(args: string[]) {
     Number(parsed.values["input-file"] !== undefined);
 
   if (sources > 1) {
-    throw new Error("Choose one input source: named flags, --input-json, or --input-file.");
+    throw new DaemonError(
+      "bad_request",
+      "Choose one input source: named flags, --input-json, or --input-file.",
+    );
   }
 
   return {
@@ -312,10 +308,21 @@ function valuesFor(
   const schema = schemas.get(scope);
 
   if (!schema) {
-    throw new Error(`Unknown command '${scope}'. Run loopy --help.`);
+    throw new DaemonError("bad_request", `Unknown command '${scope}'. Run loopy --help.`);
   }
 
   const action = scope === "schedule" ? { action: parsed.positionals[2] } : {};
 
-  return schema.parse({ ...parsed.values, ...action });
+  const parsedOptions = schema.safeParse({ ...parsed.values, ...action });
+
+  if (!parsedOptions.success) {
+    throw new DaemonError(
+      "bad_request",
+      parsedOptions.error.issues
+        .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+        .join("\n"),
+    );
+  }
+
+  return parsedOptions.data;
 }

@@ -1,5 +1,6 @@
 import type { CommandFlag } from "../../core/index.js";
 import type { PositionalDefinition } from "../../sdk/define-command.js";
+import { ServiceError } from "../service-error.js";
 import { isTypeScriptIdentifier } from "./names.js";
 import type { GeneratedCommandDescriptor } from "./parse-help.js";
 
@@ -15,7 +16,7 @@ function descriptorObject(value: CommandFlag | PositionalDefinition): string {
 
 export function renderCommandSource(name: string, descriptor: GeneratedCommandDescriptor): string {
   if (!isTypeScriptIdentifier(name)) {
-    throw new Error(`'${name}' is not a valid TypeScript identifier.`);
+    throw new ServiceError("bad_request", `'${name}' is not a valid TypeScript identifier.`);
   }
 
   const { helpHash, observedVersion, ...command } = descriptor;

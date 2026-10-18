@@ -3,6 +3,7 @@ import { compile, formatDiagnostics } from "../../compiler/index.js";
 import { type GraphView, graphView, routes } from "../../contract/index.js";
 import { call } from "../client.js";
 import { type CliContext, requireTarget } from "../context.js";
+import { DaemonError } from "../errors.js";
 import { printJson, printLine } from "../output.js";
 
 function text(graph: GraphView) {
@@ -36,7 +37,7 @@ export async function runGraph(context: CliContext): Promise<void> {
     const result = await compile(resolve(context.cwd, target), { home: context.home });
 
     if (!result.ok) {
-      throw new Error(formatDiagnostics(result.diagnostics));
+      throw new DaemonError("bad_request", formatDiagnostics(result.diagnostics));
     }
 
     graph = graphView(result.graph);

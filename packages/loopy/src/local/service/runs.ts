@@ -10,7 +10,7 @@ import {
   serverEvent,
 } from "../../contract/index.js";
 import { type RunRecord, type RuntimeEvent, StoreError } from "../../core/index.js";
-import { canonicalPath } from "../fs.js";
+import { canonicalPath } from "../../executor/index.js";
 import { ServiceError } from "../service-error.js";
 import { ServiceContext } from "./context.js";
 

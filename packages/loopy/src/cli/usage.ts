@@ -1,5 +1,3 @@
-import { DEFAULT_PORT } from "../local/index.js";
-
 export function usage(): string {
   return `loopy: compiled workflow graphs for CLI tools
 
@@ -25,7 +23,7 @@ export function usage(): string {
   loopy secrets set <name> [--stdin]          Store a secret privately
   loopy secrets list                          List secret names
   loopy secrets remove <name>                 Delete a stored secret
-  loopy ui [--port ${DEFAULT_PORT}]                      Print the dashboard URL, starting the daemon if needed
+  loopy ui [--port PORT]                      Print the dashboard URL, starting the daemon if needed
 
 Global options:
   --home <directory>    Registry, bundles and runs.sqlite. Default: ~/.loopy

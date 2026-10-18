@@ -4,7 +4,6 @@ import { resolve } from "node:path";
 import { errorMessage } from "../core/index.js";
 import { defaultHome } from "../local/index.js";
 import { parseCliArgs } from "./args.js";
-import { DaemonError } from "./client.js";
 import { runCancel } from "./commands/cancel.js";
 import { runDaemon } from "./commands/daemon.js";
 import { runGraph } from "./commands/graph.js";
@@ -20,6 +19,7 @@ import { runSecrets } from "./commands/secrets.js";
 import { runTypes } from "./commands/types.js";
 import { runUi } from "./commands/ui.js";
 import type { CliContext } from "./context.js";
+import { DaemonError } from "./errors.js";
 import { printLine, report } from "./output.js";
 import { usage } from "./usage.js";
 
@@ -57,7 +57,7 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
   const handler = isCommandName(command) ? COMMANDS[command] : undefined;
 
   if (!handler) {
-    throw new Error(`Unknown command '${command}'. Run loopy --help.`);
+    throw new DaemonError("bad_request", `Unknown command '${command}'. Run loopy --help.`);
   }
 
   await handler({
@@ -71,7 +71,10 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
 
 if (import.meta.main) {
   main().catch((cause: unknown) => {
-    report(cause instanceof DaemonError ? `[${cause.code}] ${cause.message}` : errorMessage(cause));
+    const error =
+      cause instanceof DaemonError ? cause : new DaemonError("internal", errorMessage(cause));
+
+    report(`[${error.code}] ${error.message}`);
     process.exitCode = 1;
   });
 }

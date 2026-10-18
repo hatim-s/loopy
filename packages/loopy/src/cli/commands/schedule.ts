@@ -1,6 +1,7 @@
 import { routes } from "../../contract/index.js";
 import { call } from "../client.js";
 import { type CliContext, requireHead } from "../context.js";
+import { DaemonError } from "../errors.js";
 import { jsonInput } from "../input.js";
 import { printJson } from "../output.js";
 
@@ -8,7 +9,7 @@ export async function runSchedule(context: CliContext): Promise<void> {
   const { head: slug, rest } = requireHead(context, "Slug");
 
   if (rest.length > 1) {
-    throw new Error(`Unexpected arguments: ${rest.slice(1).join(" ")}.`);
+    throw new DaemonError("bad_request", `Unexpected arguments: ${rest.slice(1).join(" ")}.`);
   }
 
   const { action, cron, tz } = context.values;

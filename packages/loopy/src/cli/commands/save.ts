@@ -3,6 +3,7 @@ import { compile, formatDiagnostics } from "../../compiler/index.js";
 import { routes } from "../../contract/index.js";
 import { call } from "../client.js";
 import { type CliContext, requireTarget } from "../context.js";
+import { DaemonError } from "../errors.js";
 import { printJson } from "../output.js";
 
 export async function runSave(context: CliContext): Promise<void> {
@@ -10,7 +11,7 @@ export async function runSave(context: CliContext): Promise<void> {
   const result = await compile(source, { home: context.home });
 
   if (!result.ok) {
-    throw new Error(formatDiagnostics(result.diagnostics));
+    throw new DaemonError("bad_request", formatDiagnostics(result.diagnostics));
   }
 
   const path = relative(context.cwd, source);

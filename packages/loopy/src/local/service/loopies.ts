@@ -20,7 +20,7 @@ export class LoopiesService extends ServiceContext {
   }
   async putLoopy(slug: string, body: PutLoopyBody) {
     if (slug !== body.graph.name) {
-      throw new ServiceError("bad_request", "The URL name must match the graph name.");
+      throw new ServiceError("bad_request");
     }
 
     await this.options.registry(body.source.workspace).save(body);

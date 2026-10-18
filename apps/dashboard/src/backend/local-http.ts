@@ -285,12 +285,12 @@ export function localHttpBackend({ origin, token, workspace }: LocalHttpOptions)
 
   return {
     cursor: (signal) => send(routes.cursor, { params: {}, query: {}, body: undefined }, signal),
-    loopies: () => send(routes.loopies, { params: {}, query: {}, body: undefined }),
+    loopies: () => send(routes.loopies, { params: {}, query: { workspace }, body: undefined }),
     runs: (query) => send(routes.runs, { params: {}, query, body: undefined }),
     run: (id, signal) => send(routes.run, { params: { id }, query: {}, body: undefined }, signal),
     logs: (id, after) => send(routes.logs, { params: { id }, query: { after }, body: undefined }),
     startRun: (slug, input) =>
-      send(routes.startRun, { params: { slug }, query: {}, body: { input } }),
+      send(routes.startRun, { params: { slug }, query: {}, body: { input, workspace } }),
     resumeRun: (id) => send(routes.resumeRun, { params: { id }, query: {}, body: undefined }),
     cancelRun: (id) => send(routes.cancelRun, { params: { id }, query: {}, body: undefined }),
     resolveHook: (token, payload) =>

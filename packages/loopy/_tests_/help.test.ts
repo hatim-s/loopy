@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import ts from "typescript";
 import { compile } from "../src/compiler/index.js";
 import { renderArgv } from "../src/core/index.js";
 import { initialState, step } from "../src/engine/index.js";
+import { generateCommand } from "../src/local/typegen/generate.js";
 import { parseCliHelp } from "../src/local/typegen/parse-help";
 import { renderCommandSource } from "../src/local/typegen/render";
 import { defineCommand, loopy } from "../src/sdk/index.js";
@@ -78,6 +79,41 @@ describe("CLI help generation", () => {
       }),
     );
   });
+  test("help generation denies daemon files and excludes the daemon environment", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "loopy-help-boundary-"));
+    const home = join(directory, "home");
+    const secret = join(home, "synthetic-secret");
+    const probe = join(directory, "probe.ts");
+    const previous = process.env.LOOPY_TYPEGEN_TASK_PRIVATE;
+    process.env.LOOPY_TYPEGEN_TASK_PRIVATE = "synthetic-value";
+
+    try {
+      await mkdir(home);
+      await writeFile(secret, "synthetic-file");
+      await writeFile(
+        probe,
+        `let readable = false; try {await Bun.file(${JSON.stringify(secret)}).text(); readable = true;} catch {} const leaked = readable || process.env.LOOPY_TYPEGEN_TASK_PRIVATE !== undefined; console.log("Usage: tool [OPTIONS]\\nOptions:\\n  --" + (leaked ? "leaked" : "safe") + "  Probe the boundary");`,
+      );
+
+      const generated = await generateCommand(process.execPath, [probe], {
+        name: "probe",
+        workspace: directory,
+        home,
+      });
+
+      expect(generated.source).toContain("--safe");
+      expect(generated.source).not.toContain("--leaked");
+    } finally {
+      if (previous === undefined) {
+        delete process.env.LOOPY_TYPEGEN_TASK_PRIVATE;
+      } else {
+        process.env.LOOPY_TYPEGEN_TASK_PRIVATE = previous;
+      }
+
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   test("a loopy importing generated source compiles through the restricted compiler", async () => {
     const directory = await mkdtemp(join(tmpdir(), "loopy-generated-"));
 

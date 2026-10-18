@@ -6,7 +6,7 @@ export const hashSchema = z.string().regex(/^[a-f0-9]{64}$/);
 
 export const sourceMetadataSchema = z.strictObject({
   path: z.string(),
-  workspace: z.string(),
+  workspace: z.string().min(1),
 });
 
 export const putLoopyBodySchema = z.strictObject({

@@ -30,7 +30,7 @@ const STATUS: Record<ErrorCode, number> = {
   invalid_timezone: 400,
 };
 
-export function json(data: ApiResponse, status = 200): Response {
+function json(data: ApiResponse, status = 200): Response {
   return Response.json(data, {
     status,
     headers: { "Cache-Control": "no-store", ...NOSNIFF },
@@ -118,7 +118,12 @@ export function apiRoutes({ service, store, cwd, daemon }: Dependencies) {
     endpoint(routes.resolveNamedHook, async ({ params, body }) =>
       service.resolveNamedHook(params.id, params.name, body.payload),
     ),
-    endpoint(routes.putLoopy, async ({ params: { slug }, body }) => service.putLoopy(slug, body)),
+    endpoint(routes.putLoopy, async ({ params: { slug }, body }) =>
+      service.putLoopy(slug, {
+        ...body,
+        source: { ...body.source, workspace: workspace(body.source.workspace) },
+      }),
+    ),
     endpoint(routes.graph, async ({ params: { slug }, query }) =>
       service.graph(slug, workspace(query.workspace)),
     ),

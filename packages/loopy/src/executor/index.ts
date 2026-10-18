@@ -2,7 +2,7 @@ export { writeFileAtomically } from "./fs.js";
 
 export { LocalExecutor } from "./local.js";
 
-export { homePaths } from "./paths.js";
+export { canonicalPath, homePaths } from "./paths.js";
 
 export { executeLocalCommand, processAlive, withCommandSandbox } from "./process.js";
 

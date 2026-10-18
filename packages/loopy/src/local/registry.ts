@@ -15,8 +15,8 @@ import {
   sha256Hex,
   validateGraph,
 } from "../core/index.js";
-import { writeFileAtomically } from "../executor/index.js";
-import { canonicalPath, withLockDirectory } from "./fs.js";
+import { canonicalPath, writeFileAtomically } from "../executor/index.js";
+import { withLockDirectory } from "./fs.js";
 import { homePaths } from "./home.js";
 import { ServiceError } from "./service-error.js";
 

@@ -1,4 +1,5 @@
 import type { ParsedCliArgs } from "./args.js";
+import { DaemonError } from "./errors.js";
 
 export type CliContext = {
   home: string;
@@ -11,7 +12,7 @@ export type CliContext = {
 
 export function requireArgument(value: string | undefined, label: string): string {
   if (!value) {
-    throw new Error(`${label} is required. Run loopy --help for usage.`);
+    throw new DaemonError("bad_request", `${label} is required. Run loopy --help for usage.`);
   }
 
   return value;
@@ -19,7 +20,7 @@ export function requireArgument(value: string | undefined, label: string): strin
 
 export function expectNoArguments(context: CliContext): void {
   if (context.positionals.length) {
-    throw new Error(`Unexpected arguments: ${context.positionals.join(" ")}.`);
+    throw new DaemonError("bad_request", `Unexpected arguments: ${context.positionals.join(" ")}.`);
   }
 }
 
@@ -27,7 +28,7 @@ export function optionalTarget(context: CliContext): string | undefined {
   const [target, ...extra] = context.positionals;
 
   if (extra.length) {
-    throw new Error(`Unexpected arguments: ${extra.join(" ")}.`);
+    throw new DaemonError("bad_request", `Unexpected arguments: ${extra.join(" ")}.`);
   }
 
   return target;

@@ -2,7 +2,7 @@ import { realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname } from "node:path";
 import type { ExecutionMode } from "../../core/index.js";
-import { packageDirectory, within } from "../paths.js";
+import { canonicalPath, packageDirectory, within } from "../paths.js";
 
 export type PathRule = {
   path: string;
@@ -109,7 +109,7 @@ export async function commandSpec(options: {
       ...(helper ? [literal(helper)] : []),
     ],
     write: mode === "full" ? [subpath("/")] : [subpath(workspace), subpath(scratch)],
-    denied: [protectedHome],
+    denied: [canonicalPath(protectedHome)],
     network: mode === "full",
   };
 }

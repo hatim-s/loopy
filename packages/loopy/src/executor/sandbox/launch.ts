@@ -1,9 +1,9 @@
 import { constants } from "node:fs";
 import { copyFile, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { type CommandResult, type ExecutionMode, errnoCode } from "../../core/index.js";
-import { ENV_EXEC, envArgs, executable } from "../paths.js";
+import { join } from "node:path";
+import { type CommandResult, type ExecutionMode } from "../../core/index.js";
+import { canonicalPath, ENV_EXEC, envArgs, executable } from "../paths.js";
 import { darwinProfile } from "./darwin.js";
 import { linuxArgs } from "./linux.js";
 import { bundleSpec, commandSpec, compilerSpec, type SandboxSpec } from "./spec.js";
@@ -82,13 +82,7 @@ export async function withBundleSandbox(
     await copyFile(options.bundle, bundle, constants.COPYFILE_EXCL);
     const bun = await realpath(process.execPath);
 
-    const home = await realpath(options.home).catch((cause) => {
-      if (errnoCode(cause) === "ENOENT") {
-        return resolve(options.home);
-      }
-
-      throw cause;
-    });
+    const home = canonicalPath(options.home);
 
     const paths = { bundle, bun, workspace: options.workspace, home };
 

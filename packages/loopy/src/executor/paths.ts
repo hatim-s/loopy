@@ -1,6 +1,7 @@
-import { constants } from "node:fs";
+import { constants, realpathSync } from "node:fs";
 import { access, realpath, stat } from "node:fs/promises";
 import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { errnoCode } from "../core/index.js";
 
 export const ENV_EXEC = "/usr/bin/env";
 
@@ -79,4 +80,16 @@ export function homePaths(home: string) {
     daemonLog: join(home, "logs", "daemon.log"),
     runsDb: join(home, "runs.sqlite"),
   };
+}
+
+export function canonicalPath(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch (error) {
+    if (errnoCode(error) === "ENOENT") {
+      return resolve(path);
+    }
+
+    throw error;
+  }
 }

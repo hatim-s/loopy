@@ -1,8 +1,9 @@
 import { resolve } from "node:path";
 import type { z } from "zod";
-import { DEFAULT_ERROR_MESSAGES, type ErrorCode, errorBodySchema } from "../contract/index.js";
+import { errorBodySchema } from "../contract/index.js";
 import { readDaemonFile } from "../local/index.js";
 import type { CliContext } from "./context.js";
+import { DaemonError } from "./errors.js";
 
 type ClientContext = Pick<CliContext, "home" | "cwd">;
 
@@ -49,17 +50,10 @@ export async function ensureDaemon(context: ClientContext & { port?: number }) {
 
   child.kill();
   await child.exited;
-  throw new Error("The daemon did not start. Run loopy daemon run to inspect the error.");
-}
-
-export class DaemonError extends Error {
-  constructor(
-    readonly code: ErrorCode,
-    message = DEFAULT_ERROR_MESSAGES[code],
-  ) {
-    super(message);
-    this.name = "DaemonError";
-  }
+  throw new DaemonError(
+    "internal",
+    "The daemon did not start. Run loopy daemon run to inspect the error.",
+  );
 }
 
 type Route = {
@@ -114,14 +108,31 @@ export async function call<R extends Route>(
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
   });
 
-  const value: unknown = await response.json();
+  let value: unknown;
+
+  try {
+    value = await response.json();
+  } catch {
+    throw new DaemonError("internal");
+  }
 
   if (!response.ok) {
-    const { error } = errorBodySchema.parse(value);
+    const parsed = errorBodySchema.safeParse(value);
+
+    if (!parsed.success) {
+      throw new DaemonError("internal");
+    }
+
+    const { error } = parsed.data;
     throw new DaemonError(error.code, error.message);
   }
 
   const schema: R["response"] = route.response;
+  const parsed = schema.safeParse(value);
 
-  return schema.parse(value);
+  if (!parsed.success) {
+    throw new DaemonError("internal");
+  }
+
+  return parsed.data;
 }

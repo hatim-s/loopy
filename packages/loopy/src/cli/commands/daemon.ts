@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { installDaemon, localDaemon, readDaemonFile, uninstallDaemon } from "../../local/index.js";
 import { openRunStore } from "../../store/index.js";
 import { type CliContext, requireTarget } from "../context.js";
+import { DaemonError } from "../errors.js";
 import { printJson, printLine, report } from "../output.js";
 import { onTermination } from "../signals.js";
 
@@ -37,7 +38,8 @@ async function installService(context: CliContext): Promise<void> {
   const entry = process.argv[1];
 
   if (!entry) {
-    throw new Error(
+    throw new DaemonError(
+      "bad_request",
       "Cannot resolve the CLI entry. Run loopy daemon install from the installed CLI.",
     );
   }
@@ -90,7 +92,7 @@ async function runForeground(context: CliContext, onStarted: (url: string) => vo
 
 function serviceUid(): number {
   if (!process.getuid) {
-    throw new Error("Daemon services require macOS or Linux.");
+    throw new DaemonError("bad_request", "Daemon services require macOS or Linux.");
   }
 
   return process.getuid();

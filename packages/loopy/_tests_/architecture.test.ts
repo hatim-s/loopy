@@ -27,14 +27,16 @@ const ALLOWED_IMPORTS: Record<Layer, readonly Layer[]> = {
   core: [],
   engine: ["core"],
   host: ["core", "engine"],
-  // SQLite uses the shared host-side PID liveness helper.
+  // SQLite uses executor leaf helpers for PID liveness and home paths.
   store: ["core", "contract", "executor"],
   executor: ["core", "contract"],
   contract: ["core"],
-  local: ["core", "engine", "host", "store", "executor", "sdk", "contract"],
+  // Local composes runtime owners; typegen reads SDK descriptor types.
+  local: ["core", "host", "store", "executor", "sdk", "contract"],
   sdk: ["core"],
-  cli: ["core", "engine", "host", "store", "executor", "local", "sdk", "contract", "compiler"],
-  // Compilation uses the executor leaf for its sandboxed evaluation process.
+  // CLI composes local services and directly compiles author files.
+  cli: ["core", "store", "local", "contract", "compiler"],
+  // Compilation uses executor sandboxing and reads SDK descriptor/parser tables.
   compiler: ["core", "contract", "executor", "sdk"],
 };
 

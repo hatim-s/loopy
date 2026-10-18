@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import {
   assertJson,
+  errorMessage,
   isFieldValue,
   type Json,
   type RecordSpec,
@@ -9,22 +10,24 @@ import {
   setOwnProperty,
 } from "../core/index.js";
 import type { CliContext } from "./context.js";
+import { DaemonError } from "./errors.js";
 
 export async function jsonInput(context: CliContext): Promise<Json> {
-  const text = context.values["input-json"];
   const file = context.values["input-file"];
 
-  if (file !== undefined) {
-    const value: unknown = JSON.parse(await Bun.file(resolve(context.cwd, file)).text());
-    assertJson(value, "Input file");
+  const text =
+    file === undefined
+      ? (context.values["input-json"] ?? "{}")
+      : await Bun.file(resolve(context.cwd, file)).text();
+
+  try {
+    const value: unknown = JSON.parse(text);
+    assertJson(value, "JSON input");
 
     return value;
+  } catch (error) {
+    throw new DaemonError("bad_request", errorMessage(error));
   }
-
-  const value: unknown = text === undefined ? {} : JSON.parse(text);
-  assertJson(value, "JSON input");
-
-  return value;
 }
 
 function coerce(value: string, kind: RecordSpec[string], key: string) {
@@ -36,10 +39,13 @@ function coerce(value: string, kind: RecordSpec[string], key: string) {
         return parsed;
       }
     } catch {
-      throw new Error(`Input --${key} must be valid JSON.`);
+      throw new DaemonError("bad_request", `Input --${key} must be valid JSON.`);
     }
 
-    throw new Error(`Input --${key} must be a ${kind}. Provide a valid value.`);
+    throw new DaemonError(
+      "bad_request",
+      `Input --${key} must be a ${kind}. Provide a valid value.`,
+    );
   }
 
   if (kind === "string") {
@@ -54,7 +60,7 @@ function coerce(value: string, kind: RecordSpec[string], key: string) {
     return value === "true";
   }
 
-  throw new Error(`Input --${key} must be a ${kind}. Provide a valid value.`);
+  throw new DaemonError("bad_request", `Input --${key} must be a ${kind}. Provide a valid value.`);
 }
 
 type NamedInput = Record<string, Json>;

@@ -1,12 +1,13 @@
 import { routes } from "../../contract/index.js";
 import { call } from "../client.js";
 import { type CliContext, optionalTarget, requireHead } from "../context.js";
+import { DaemonError } from "../errors.js";
 import { printJson } from "../output.js";
 import { readHiddenSecret, readPipedSecret } from "../secret-entry.js";
 
 async function storeSecret(context: CliContext, name: string | undefined) {
   if (!name) {
-    throw new Error("Pass a secret name, e.g. loopy secrets set NPM_TOKEN.");
+    throw new DaemonError("bad_request", "Pass a secret name, e.g. loopy secrets set NPM_TOKEN.");
   }
 
   const value = await (context.values.stdin ? readPipedSecret() : readHiddenSecret());
@@ -20,13 +21,13 @@ export async function runSecrets(context: CliContext): Promise<void> {
   const name = optionalTarget({ ...context, positionals: rest });
 
   if (context.values.stdin && action !== "set") {
-    throw new Error("--stdin is only supported by loopy secrets set.");
+    throw new DaemonError("bad_request", "--stdin is only supported by loopy secrets set.");
   }
 
   switch (action) {
     case "list":
       if (name) {
-        throw new Error("loopy secrets list takes no name.");
+        throw new DaemonError("bad_request", "loopy secrets list takes no name.");
       }
 
       printJson(await call(context, routes.secrets, { params: {}, query: {}, body: undefined }));
@@ -38,7 +39,10 @@ export async function runSecrets(context: CliContext): Promise<void> {
       return;
     case "remove":
       if (!name) {
-        throw new Error("Pass a secret name, e.g. loopy secrets set NPM_TOKEN.");
+        throw new DaemonError(
+          "bad_request",
+          "Pass a secret name, e.g. loopy secrets set NPM_TOKEN.",
+        );
       }
 
       printJson(
@@ -47,6 +51,6 @@ export async function runSecrets(context: CliContext): Promise<void> {
 
       return;
     default:
-      throw new Error("Use loopy secrets set <name>, list, or remove <name>.");
+      throw new DaemonError("bad_request", "Use loopy secrets set <name>, list, or remove <name>.");
   }
 }

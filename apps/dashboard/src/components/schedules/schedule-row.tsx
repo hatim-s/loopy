@@ -156,7 +156,9 @@ function EditRow({ schedule }: { schedule: ScheduleView }) {
           slug={schedule.slug}
           workspace={schedule.workspace}
           draft={schedule}
-          onDone={() => void navigate({ to: "/schedules", search: {} })}
+          onDone={() =>
+            void navigate({ to: "/schedules", search: { workspace: schedule.workspace } })
+          }
         />
       </td>
     </tr>

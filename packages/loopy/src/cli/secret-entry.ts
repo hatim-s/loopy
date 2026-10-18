@@ -1,14 +1,17 @@
 import { createInterface } from "node:readline";
 import { Writable } from "node:stream";
-
 import { SECRET_VALUE_MAX_BYTES } from "../contract/index.js";
+import { DaemonError } from "./errors.js";
 
 // A trailing CRLF is stripped after reading, so it does not count against the limit.
 const LINE_ENDING_BYTES = 2;
 
 export async function readPipedSecret(): Promise<string> {
   if (process.stdin.isTTY) {
-    throw new Error("--stdin requires piped input. Omit it to enter a secret privately.");
+    throw new DaemonError(
+      "bad_request",
+      "--stdin requires piped input. Omit it to enter a secret privately.",
+    );
   }
 
   const chunks: Buffer[] = [];
@@ -19,7 +22,7 @@ export async function readPipedSecret(): Promise<string> {
     bytes += buffer.length;
 
     if (bytes > SECRET_VALUE_MAX_BYTES + LINE_ENDING_BYTES) {
-      throw new Error("Secret input exceeds 64 KiB.");
+      throw new DaemonError("bad_request", "Secret input exceeds 64 KiB.");
     }
 
     chunks.push(buffer);
@@ -32,7 +35,8 @@ export async function readPipedSecret(): Promise<string> {
 
 export async function readHiddenSecret(): Promise<string> {
   if (!process.stdin.isTTY || !process.stderr.isTTY) {
-    throw new Error(
+    throw new DaemonError(
+      "bad_request",
       "Secret entry requires a terminal. Pipe the value with --stdin for automation.",
     );
   }
@@ -56,7 +60,9 @@ export async function readHiddenSecret(): Promise<string> {
   try {
     return await new Promise<string>((resolve, reject) => {
       terminal.once("line", resolve);
-      terminal.once("close", () => reject(new Error("Secret entry cancelled.")));
+      terminal.once("close", () =>
+        reject(new DaemonError("bad_request", "Secret entry cancelled.")),
+      );
       terminal.once("SIGINT", () => terminal.close());
     });
   } finally {

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { basename } from "node:path";
 import type { CommandFlag } from "../../core/index.js";
 import type { CommandDescriptor, PositionalDefinition } from "../../sdk/define-command.js";
+import { ServiceError } from "../service-error.js";
 import { identifier } from "./names.js";
 
 export type GeneratedCommandDescriptor = CommandDescriptor & {
@@ -346,7 +347,7 @@ export function parseCliHelp(binary: string, path: readonly string[], help: stri
   const warnings: string[] = [];
 
   if (!help.trim()) {
-    throw new Error("CLI help output is empty.");
+    throw new ServiceError("bad_request", `CLI help output for '${binary}' is empty.`);
   }
 
   const positionals = parsePositionals(lines);

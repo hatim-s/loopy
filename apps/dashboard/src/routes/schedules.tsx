@@ -66,7 +66,7 @@ function ScheduleTable({ schedules, open }: { schedules: ScheduleView[]; open?: 
   );
 }
 
-function SchedulePicker({ loopies }: { loopies: LoopyView[] }) {
+function SchedulePicker({ loopies, workspace }: { loopies: LoopyView[]; workspace?: string }) {
   const navigate = Route.useNavigate();
 
   if (loopies.length === 0) {
@@ -77,7 +77,7 @@ function SchedulePicker({ loopies }: { loopies: LoopyView[] }) {
     <select
       value=""
       aria-label="Schedule a loopy"
-      onChange={(event) => void navigate({ search: { slug: event.target.value } })}
+      onChange={(event) => void navigate({ search: { slug: event.target.value, workspace } })}
       className="h-7 rounded-md border border-line bg-panel px-2 text-[13px]"
     >
       <option value="" disabled>
@@ -114,7 +114,7 @@ function NewSchedule({ loopy, workspace }: { loopy: LoopyView; workspace?: strin
           input: {},
           enabled: true,
         }}
-        onDone={() => void navigate({ search: {} })}
+        onDone={() => void navigate({ search: { workspace } })}
       />
     </section>
   );
@@ -135,7 +135,7 @@ function SchedulesPage() {
         <h1 id="schedules-heading" className="text-base font-semibold">
           Schedules
         </h1>
-        <SchedulePicker loopies={unscheduled} />
+        <SchedulePicker loopies={unscheduled} workspace={workspace} />
       </header>
       {schedules.error && <ErrorBanner error={schedules.error} />}
       {creating && <NewSchedule loopy={creating} workspace={workspace} />}
