@@ -44,7 +44,7 @@ export async function runGraph(context: CliContext): Promise<void> {
         result.diagnostics
           .map(
             (value) =>
-              `${value.file}:${value.line}:${value.column} [${value.code}] ${value.message}`,
+              `${value.source.module}:${value.source.line}:${value.source.column} [${value.code}] ${value.message}`,
           )
           .join("\n"),
       );

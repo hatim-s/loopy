@@ -1,13 +1,7 @@
-import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
-import {
-  type CompilerDiagnosticCode,
-  errorMessage,
-  revision,
-  validateGraph,
-} from "../core/index.js";
+import { errorMessage, revision, validateGraph } from "../core/index.js";
 import { bundle } from "./bundle.js";
-import { EvaluationError, evaluate } from "./evaluate.js";
+import { evaluate } from "./evaluate.js";
 import { restrict } from "./restrict.js";
 import type { CompileResult } from "./types.js";
 
@@ -16,75 +10,61 @@ export async function compile(
   options: { home?: string } = {},
 ): Promise<CompileResult> {
   const file = resolve(path);
-  let stage: CompilerDiagnosticCode = "source_error";
+  const source = { module: file, line: 1, column: 1 };
+  const restricted = await restrict(file);
+
+  if (!restricted.ok) {
+    return restricted;
+  }
+
+  let evaluated: Awaited<ReturnType<typeof evaluate>>;
 
   try {
-    const restricted = await restrict(await realpath(file));
+    evaluated = await evaluate(file, restricted.modules, options.home);
+  } catch (error) {
+    return {
+      ok: false,
+      diagnostics: [{ code: "evaluation_failed", message: errorMessage(error), source }],
+    };
+  }
 
-    if (!restricted.ok) {
-      return restricted;
-    }
+  if (!evaluated.ok) {
+    return evaluated;
+  }
 
-    stage = "evaluation_failed";
-    const graph = await evaluate(await realpath(file), restricted.modules, options.home);
-    const diagnostics = validateGraph(graph);
+  const { graph } = evaluated;
+  const diagnostics = validateGraph(graph);
 
-    if (diagnostics.length > 0) {
-      return {
-        ok: false,
-        diagnostics: diagnostics.map((value) => ({
-          code: value.code,
-          message: value.message,
-          file: value.source?.module ?? file,
-          line: value.source?.line ?? 1,
-          column: value.source?.column ?? 1,
-        })),
-      };
-    }
+  if (diagnostics.length > 0) {
+    return {
+      ok: false,
+      diagnostics: diagnostics.map((value) => ({
+        code: value.code,
+        message: value.message,
+        source: value.source ?? source,
+      })),
+    };
+  }
 
-    stage = "bundle_failed";
+  try {
     const bundled = await bundle(graph, restricted.parsers);
 
     if (!bundled.ok) {
       return bundled;
     }
 
-    return {
-      ok: true,
-      graph,
-      bundles: bundled.bundles,
-      revision: await revision(graph),
-    };
+    return { ok: true, graph, bundles: bundled.bundles, revision: await revision(graph) };
   } catch (error) {
-    if (error instanceof EvaluationError) {
-      const value = error.diagnostic;
-
-      return {
-        ok: false,
-        diagnostics: [
-          {
-            code: value.code,
-            message: value.message,
-            file: value.source?.module ?? file,
-            line: value.source?.line ?? 1,
-            column: value.source?.column ?? 1,
-          },
-        ],
-      };
-    }
-
     return {
       ok: false,
       diagnostics: [
         {
-          code: stage,
+          code: "bundle_failed",
           message:
             error instanceof AggregateError
               ? error.errors.map(errorMessage).join("\n")
               : errorMessage(error),
-          file,
-          line: 1,
-          column: 1,
+          source,
         },
       ],
     };

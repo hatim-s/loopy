@@ -82,11 +82,15 @@ for (const [name, code] of Object.entries(rejected)) {
     expect(result.diagnostics).toContainEqual({
       code,
       message: expect.any(String),
-      file: code === "module_default" ? join(root, "not-function.ts") : file,
-      line: expect.any(Number),
-      column: expect.any(Number),
+      source: {
+        module: code === "module_default" ? join(root, "not-function.ts") : file,
+        line: expect.any(Number),
+        column: expect.any(Number),
+      },
     });
-    expect(result.diagnostics.every((value) => value.line > 0 && value.column > 0)).toBe(true);
+    expect(
+      result.diagnostics.every((value) => value.source.line > 0 && value.source.column > 0),
+    ).toBe(true);
   });
 }
 
@@ -108,7 +112,10 @@ test("restrictions traverse imported author modules before any author evaluation
   }
 
   expect(result.diagnostics).toContainEqual(
-    expect.objectContaining({ code: "module_effect", file: join(root, "effect.ts") }),
+    expect.objectContaining({
+      code: "module_effect",
+      source: expect.objectContaining({ module: join(root, "effect.ts") }),
+    }),
   );
   expect(await Bun.file(marker).exists()).toBe(false);
 });
@@ -157,7 +164,10 @@ for (const effect of ["network", "write"]) {
     await writeFile(file, source);
 
     try {
-      await expect(evaluate(file, [{ file, source, evaluated: source }])).rejects.toThrow();
+      expect(await evaluate(file, [{ file, source, evaluated: source }])).toMatchObject({
+        ok: false,
+        diagnostics: [{ code: "evaluation_failed" }],
+      });
     } finally {
       await server.stop(true);
     }
@@ -174,18 +184,27 @@ test("compiler sandbox denies reads of daemon secrets inside the workspace", asy
   await Bun.write(secrets, '{"TOKEN":"private"}');
   const source = `await Bun.file(${JSON.stringify(secrets)}).text(); export default {graph:${graph}};`;
   await writeFile(file, source);
-  await expect(evaluate(file, [{ file, source, evaluated: source }], home)).rejects.toThrow(
-    /permitted|denied|EACCES|EPERM/i,
-  );
+  expect(await evaluate(file, [{ file, source, evaluated: source }], home)).toMatchObject({
+    ok: false,
+    diagnostics: [
+      {
+        code: "evaluation_failed",
+        message: expect.stringMatching(/permitted|denied|EACCES|EPERM/i),
+      },
+    ],
+  });
 });
 
 test("evaluation has a hard ten second timeout", async () => {
   const { file } = await project("while(true){} export default {};");
   const source = await Bun.file(file).text();
   const started = performance.now();
-  await expect(evaluate(file, [{ file, source, evaluated: source }])).rejects.toThrow(
-    "timed out after 10000 ms",
-  );
+  expect(await evaluate(file, [{ file, source, evaluated: source }])).toMatchObject({
+    ok: false,
+    diagnostics: [
+      { code: "evaluation_failed", message: expect.stringContaining("timed out after 10000 ms") },
+    ],
+  });
   expect(performance.now() - started).toBeLessThan(12_000);
 }, 15_000);
 
@@ -417,14 +436,16 @@ for (const name of [
       diagnostics: [
         expect.objectContaining({
           code: "dynamic_code",
-          file: join(
-            root,
-            name.endsWith("transitive-helper") || name === "absolute-helper"
-              ? "helper.ts"
-              : "code.ts",
-          ),
-          line: 1,
-          column: expect.any(Number),
+          source: {
+            module: join(
+              root,
+              name.endsWith("transitive-helper") || name === "absolute-helper"
+                ? "helper.ts"
+                : "code.ts",
+            ),
+            line: 1,
+            column: expect.any(Number),
+          },
         }),
       ],
     });
@@ -476,7 +497,12 @@ test("parser modules reject dynamic imports in their local dependencies", async 
   const result = await compile(file);
   expect(result).toMatchObject({
     ok: false,
-    diagnostics: [expect.objectContaining({ code: "dynamic_code", file: join(root, "helper.ts") })],
+    diagnostics: [
+      expect.objectContaining({
+        code: "dynamic_code",
+        source: expect.objectContaining({ module: join(root, "helper.ts") }),
+      }),
+    ],
   });
 });
 
@@ -543,9 +569,11 @@ for (const expression of [
       diagnostics: [
         expect.objectContaining({
           code: "dynamic_code",
-          file: join(root, "code.ts"),
-          line: expect.any(Number),
-          column: expect.any(Number),
+          source: {
+            module: join(root, "code.ts"),
+            line: expect.any(Number),
+            column: expect.any(Number),
+          },
         }),
       ],
     });

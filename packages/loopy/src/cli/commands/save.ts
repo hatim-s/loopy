@@ -13,7 +13,8 @@ export async function runSave(context: CliContext): Promise<void> {
     throw new Error(
       result.diagnostics
         .map(
-          (value) => `${value.file}:${value.line}:${value.column} [${value.code}] ${value.message}`,
+          (value) =>
+            `${value.source.module}:${value.source.line}:${value.source.column} [${value.code}] ${value.message}`,
         )
         .join("\n"),
     );

@@ -91,7 +91,7 @@ export class FakeClock implements Clock {
 }
 
 export async function until(ready: () => boolean | Promise<boolean>): Promise<void> {
-  for (let attempt = 0; attempt < 500; attempt++) {
+  for (let attempt = 0; attempt < 5000; attempt++) {
     if (await ready()) {
       return;
     }

@@ -1,6 +1,7 @@
 import { dirname, resolve } from "node:path";
 import { type Expression, type Node, parseSync, type Statement } from "oxc-parser";
 import {
+  COMPILER_MESSAGES,
   type CompilerDiagnosticCode,
   isBoolean,
   isNumber,
@@ -11,24 +12,24 @@ import { builtinCommandKeys, commandKey, sdkCalls } from "../sdk/graph-host.js";
 import type { CompilerDiagnostic, ParserSource } from "./types.js";
 
 export function diagnostic(
-  file: string,
-  source: string,
+  { file, source }: Pick<Context, "file" | "source">,
   start: number,
   code: CompilerDiagnosticCode,
-  message: string,
 ): CompilerDiagnostic {
   const lines = source.slice(0, start).split("\n");
 
-  return { code, message, file, line: lines.length, column: (lines.at(-1)?.length ?? 0) + 1 };
+  return {
+    code,
+    message: COMPILER_MESSAGES[code],
+    source: { module: file, line: lines.length, column: (lines.at(-1)?.length ?? 0) + 1 },
+  };
 }
 
 export function parseModule(file: string, source: string, diagnostics: CompilerDiagnostic[]) {
   const parsed = parseSync(file, source, { sourceType: "module", preserveParens: false });
 
   for (const error of parsed.errors) {
-    diagnostics.push(
-      diagnostic(file, source, error.labels[0]?.start ?? 0, "syntax_error", error.message),
-    );
+    diagnostics.push(diagnostic({ file, source }, error.labels[0]?.start ?? 0, "syntax_error"));
   }
 
   return parsed.program;
@@ -52,13 +53,8 @@ export type Context = {
   parsers: Map<string, ParserSource>;
 };
 
-export function refuse(
-  context: Context,
-  node: Node,
-  code: CompilerDiagnosticCode,
-  message: string,
-) {
-  context.diagnostics.push(diagnostic(context.file, context.source, node.start, code, message));
+export function refuse(context: Context, node: Node, code: CompilerDiagnosticCode) {
+  context.diagnostics.push(diagnostic(context, node.start, code));
 }
 
 export function name(node: Node): string | null {
@@ -103,18 +99,9 @@ export function callable(expression: Expression, scope: Scope): string | null {
   return null;
 }
 
-export function literal(
-  context: Context,
-  node: Node | undefined,
-  code: CompilerDiagnosticCode = "literal_required",
-) {
+export function literal(context: Context, parent: Node, node: Node | undefined) {
   if (!node || node.type !== "Literal" || !isString(node.value)) {
-    refuse(
-      context,
-      node ?? { type: "Identifier", name: "missing", start: 0, end: 0 },
-      code,
-      "Use a string literal here.",
-    );
+    refuse(context, node ?? parent, "literal_required");
 
     return null;
   }
@@ -124,12 +111,7 @@ export function literal(
 
 function callback(context: Context, node: Expression, scope: Scope) {
   if (node.type !== "ArrowFunctionExpression" || node.async) {
-    refuse(
-      context,
-      node,
-      "synchronous_run",
-      "Use a synchronous arrow function for graph construction.",
-    );
+    refuse(context, node, "synchronous_run");
 
     return;
   }
@@ -149,11 +131,11 @@ function callback(context: Context, node: Expression, scope: Scope) {
         ) {
           local.set(property.value.name, "ref");
         } else {
-          refuse(context, property, "invalid_binding", "Use simple reference bindings.");
+          refuse(context, property, "invalid_binding");
         }
       }
     } else {
-      refuse(context, parameter, "invalid_binding", "Use simple reference bindings.");
+      refuse(context, parameter, "invalid_binding");
     }
   }
 
@@ -167,17 +149,19 @@ function callback(context: Context, node: Expression, scope: Scope) {
 }
 
 function moduleProperty(context: Context, property: Property, owner: "code" | "defineCommand") {
-  const path = literal(context, property.value, "module_path");
+  const value = unwrap(property.value);
 
-  if (path === null) {
+  if (
+    value.type !== "Literal" ||
+    !isString(value.value) ||
+    (!value.value.startsWith("./") && !value.value.startsWith("../"))
+  ) {
+    refuse(context, property, "module_path");
+
     return;
   }
 
-  if (!path.startsWith("./") && !path.startsWith("../")) {
-    refuse(context, property, "module_path", "Code modules must use a relative file path.");
-
-    return;
-  }
+  const path = value.value;
 
   if (owner === "defineCommand") {
     return;
@@ -194,13 +178,13 @@ function propertyValue(context: Context, property: Property, scope: Scope, owner
   const key = name(property.key);
 
   if (key !== null && isReservedGraphName(key)) {
-    refuse(context, property, "reserved_name", "This property name is reserved by the graph.");
+    refuse(context, property, "reserved_name");
 
     return;
   }
 
   if (key === null) {
-    refuse(context, property, "literal_key", "Object keys must be strings.");
+    refuse(context, property, "literal_key");
 
     return;
   }
@@ -210,7 +194,9 @@ function propertyValue(context: Context, property: Property, scope: Scope, owner
     (owner === "loopy" && key === "name") ||
     (owner === "defineCommand" && ["key", "namespace", "name"].includes(key))
   ) {
-    literal(context, property.value);
+    literal(context, property, property.value);
+
+    return;
   }
 
   if ((key === "module" && owner === "code") || (key === "parse" && owner === "defineCommand")) {
@@ -226,12 +212,7 @@ function propertyValue(context: Context, property: Property, scope: Scope, owner
     if (isCallbackSlot) {
       callback(context, property.value, scope);
     } else {
-      refuse(
-        context,
-        property,
-        "invalid_callback",
-        "Callbacks belong to control nodes or command parsers.",
-      );
+      refuse(context, property, "invalid_callback");
     }
 
     return;
@@ -252,7 +233,7 @@ function propertyRule(
 ) {
   for (const property of expression.properties) {
     if (property.type !== "Property" || property.computed || property.method) {
-      refuse(context, property, "literal_key", "Object keys must be literal property names.");
+      refuse(context, property, "literal_key");
       continue;
     }
 
@@ -273,17 +254,17 @@ function callRule(
     name(node.callee.property) === "get"
   ) {
     expressionRule(context, node.callee.object, scope);
-    literal(context, node.arguments[0]);
+    literal(context, node, node.arguments[0]);
 
     if (node.arguments.length !== 1) {
-      refuse(context, node, "literal_required", "ref.get takes one literal key.");
+      refuse(context, node, "literal_required");
     }
 
     return;
   }
 
   if (call === null || node.optional) {
-    refuse(context, node, "forbidden_call", "Call an SDK export or a declared subgraph only.");
+    refuse(context, node, "forbidden_call");
 
     return;
   }
@@ -291,13 +272,13 @@ function callRule(
   const root = call.split(".")[0] ?? call;
 
   if (scope.get(root) === "sdk" && !sdkCalls.includes(call)) {
-    refuse(context, node, "unknown_sdk_call", "Call an exported SDK function or namespace member.");
+    refuse(context, node, "unknown_sdk_call");
 
     return;
   }
 
   if (["loopy", "code", "wait", "subgraph"].includes(root)) {
-    literal(context, node.arguments[0]);
+    literal(context, node, node.arguments[0]);
   }
 
   const before = context.diagnostics.length;
@@ -339,12 +320,7 @@ function recordParser(
   }
 
   if (!fields.has("key") && !(fields.has("namespace") && fields.has("name"))) {
-    refuse(
-      context,
-      node,
-      "command_key",
-      "Custom parsers require a literal command key or namespace and name.",
-    );
+    refuse(context, node, "command_key");
 
     return;
   }
@@ -356,12 +332,7 @@ function recordParser(
   });
 
   if (context.parsers.has(id) || builtinCommandKeys.includes(id)) {
-    refuse(
-      context,
-      node,
-      "command_key",
-      "Custom parser keys must be unique and cannot replace built-in commands.",
-    );
+    refuse(context, node, "command_key");
 
     return;
   }
@@ -384,19 +355,13 @@ function callArguments(
       refuse(
         context,
         argument,
-        "options_not_literal",
-        "Use an inline object literal for SDK options.",
+        root === "defineCommand" && index === 0 ? "descriptor_not_literal" : "options_not_literal",
       );
       continue;
     }
 
     if (argument.type === "SpreadElement") {
-      refuse(
-        context,
-        argument,
-        "forbidden_expression",
-        "Spread arguments are unavailable in graph builders.",
-      );
+      refuse(context, argument, "forbidden_expression");
     } else if (
       argument.type === "ArrowFunctionExpression" &&
       ["map", "finally_", "rescue", "subgraph"].includes(root)
@@ -421,7 +386,7 @@ export function expressionRule(context: Context, original: Expression, scope: Sc
         !isNumber(node.value) &&
         !isBoolean(node.value)
       ) {
-        refuse(context, node, "forbidden_expression", "Use JSON literals in graph construction.");
+        refuse(context, node, "forbidden_expression");
       }
 
       return;
@@ -430,12 +395,7 @@ export function expressionRule(context: Context, original: Expression, scope: Sc
         !["value", "ref", "graph"].includes(scope.get(node.name) ?? "") &&
         node.name !== "undefined"
       ) {
-        refuse(
-          context,
-          node,
-          "invalid_reference",
-          "Use a literal or an immutable graph reference.",
-        );
+        refuse(context, node, "invalid_reference");
       }
 
       return;
@@ -450,7 +410,7 @@ export function expressionRule(context: Context, original: Expression, scope: Sc
     case "ArrayExpression":
       for (const item of node.elements) {
         if (item === null || item.type === "SpreadElement") {
-          refuse(context, node, "forbidden_expression", "Use explicit array items.");
+          refuse(context, node, "forbidden_expression");
         } else {
           expressionRule(context, item, scope);
         }
@@ -468,7 +428,7 @@ export function expressionRule(context: Context, original: Expression, scope: Sc
 
       break;
     case "AwaitExpression":
-      refuse(context, node, "await_forbidden", "Graph construction cannot await.");
+      refuse(context, node, "await_forbidden");
 
       return;
     case "TemplateLiteral":
@@ -476,17 +436,12 @@ export function expressionRule(context: Context, original: Expression, scope: Sc
         return;
       }
 
-      refuse(context, node, "template_reference", "Use format() to interpolate graph references.");
+      refuse(context, node, "template_reference");
 
       return;
   }
 
-  refuse(
-    context,
-    node,
-    "forbidden_expression",
-    "Graph construction accepts only SDK calls, references and literals.",
-  );
+  refuse(context, node, "forbidden_expression");
 }
 
 function statementRule(context: Context, statement: Statement, scope: Scope) {
@@ -497,12 +452,7 @@ function statementRule(context: Context, statement: Statement, scope: Scope) {
         !declaration.init ||
         scope.has(declaration.id.name)
       ) {
-        refuse(
-          context,
-          declaration,
-          "invalid_binding",
-          "Use unique const bindings for graph values.",
-        );
+        refuse(context, declaration, "invalid_binding");
         continue;
       }
 
@@ -516,12 +466,7 @@ function statementRule(context: Context, statement: Statement, scope: Scope) {
   } else if (statement.type === "ExpressionStatement") {
     expressionRule(context, statement.expression, scope);
   } else {
-    refuse(
-      context,
-      statement,
-      "forbidden_statement",
-      "Graph construction allows const declarations, SDK calls and return only.",
-    );
+    refuse(context, statement, "forbidden_statement");
   }
 }
 
@@ -594,7 +539,7 @@ function inspectConstants(
       !declaration.init ||
       context.scope.has(declaration.id.name)
     ) {
-      refuse(context, declaration, "invalid_binding", "Use unique const declarations.");
+      refuse(context, declaration, "invalid_binding");
       continue;
     }
 
@@ -633,12 +578,7 @@ export function inspectStatements(context: Context, statements: Statement[]) {
       statement.type === "ExportAllDeclaration" ||
       (statement.type === "ExportNamedDeclaration" && statement.source)
     ) {
-      refuse(
-        context,
-        statement,
-        "module_import",
-        "Import and export author bindings explicitly without re-exports.",
-      );
+      refuse(context, statement, "module_import");
       continue;
     }
 
@@ -659,12 +599,7 @@ export function inspectStatements(context: Context, statements: Statement[]) {
     } else if (statement.type === "ExportDefaultDeclaration") {
       defaultKind = defaultExport(context, statement);
     } else {
-      refuse(
-        context,
-        statement,
-        "module_effect",
-        "Builder modules allow imports, immutable data, descriptors and subgraphs only.",
-      );
+      refuse(context, statement, "module_effect");
     }
   }
 

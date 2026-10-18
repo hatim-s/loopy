@@ -2,10 +2,10 @@ import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { diagnosticSchema, graphSchema } from "../contract/index.js";
-import type { Diagnostic } from "../core/index.js";
+import { type Diagnostic, errorMessage, type Graph } from "../core/index.js";
 import { spawnCaptured, withBundleSandbox } from "../executor/index.js";
 import { typescriptPaths } from "./source.js";
-import type { AuthorModule } from "./types.js";
+import type { AuthorModule, CompilerDiagnostic } from "./types.js";
 
 const javascript = resolve(import.meta.dir, "../sdk/graph/index.js");
 
@@ -13,17 +13,13 @@ export const sdkEntry = await realpath(
   (await Bun.file(javascript).exists()) ? javascript : javascript.replace(/\.js$/, ".ts"),
 );
 
-export class EvaluationError extends Error {
-  constructor(readonly diagnostic: Diagnostic) {
-    super(diagnostic.message);
-  }
-}
-
-function reportedDiagnostic(stderr: string) {
+function reportedDiagnostic(stderr: string): Diagnostic | undefined {
   try {
-    return diagnosticSchema.safeParse(JSON.parse(stderr));
+    const parsed = diagnosticSchema.safeParse(JSON.parse(stderr));
+
+    return parsed.success ? parsed.data : undefined;
   } catch {
-    return null;
+    return undefined;
   }
 }
 
@@ -31,7 +27,7 @@ export async function evaluate(
   file: string,
   modules: AuthorModule[],
   home = resolve(process.env.LOOPY_HOME ?? join(homedir(), ".loopy")),
-) {
+): Promise<{ ok: true; graph: Graph } | { ok: false; diagnostics: CompilerDiagnostic[] }> {
   const scratch = await realpath(await mkdtemp(join(tmpdir(), "loopy-compiler-")));
 
   try {
@@ -101,15 +97,35 @@ export async function evaluate(
     if (captured.exitCode !== 0) {
       const reported = reportedDiagnostic(captured.stderr);
 
-      if (reported?.success) {
-        throw new EvaluationError(reported.data);
+      if (reported) {
+        return {
+          ok: false,
+          diagnostics: [
+            {
+              code: reported.code,
+              message: reported.message,
+              source: reported.source ?? { module: file, line: 1, column: 1 },
+            },
+          ],
+        };
       }
 
       throw new Error(captured.stderr || "Compiler process failed.");
     }
 
     // BOUNDARY: The isolated process returns untrusted author-produced graph JSON.
-    return graphSchema.parse(JSON.parse(captured.stdout));
+    return { ok: true, graph: graphSchema.parse(JSON.parse(captured.stdout)) };
+  } catch (error) {
+    return {
+      ok: false,
+      diagnostics: [
+        {
+          code: "evaluation_failed",
+          message: errorMessage(error),
+          source: { module: file, line: 1, column: 1 },
+        },
+      ],
+    };
   } finally {
     await rm(scratch, { recursive: true, force: true });
   }

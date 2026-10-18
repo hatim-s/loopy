@@ -83,15 +83,7 @@ export function checkImports(file: string, source: string, diagnostics: Compiler
   const dependencies: string[] = [];
 
   const reject = (node: Node) => {
-    diagnostics.push(
-      diagnostic(
-        file,
-        source,
-        node.start,
-        "dynamic_code",
-        "Use bundled modules instead of runtime loading or code generation.",
-      ),
-    );
+    diagnostics.push(diagnostic({ file, source }, node.start, "dynamic_code"));
   };
 
   const dependency = (node: Node, value: string) => {
@@ -214,15 +206,7 @@ export async function checkCodeModule(path: string) {
   const exported = program.body.find((node) => node.type === "ExportDefaultDeclaration");
 
   if (exported?.type !== "ExportDefaultDeclaration") {
-    diagnostics.push(
-      diagnostic(
-        path,
-        source,
-        0,
-        "module_default",
-        "Code modules must default-export one function.",
-      ),
-    );
+    diagnostics.push(diagnostic({ file: path, source }, 0, "module_default"));
 
     return { ok: false as const, diagnostics };
   }
@@ -255,15 +239,7 @@ export async function checkCodeModule(path: string) {
       declaration.type,
     )
   ) {
-    diagnostics.push(
-      diagnostic(
-        path,
-        source,
-        0,
-        "module_default",
-        "Code modules must default-export one function.",
-      ),
-    );
+    diagnostics.push(diagnostic({ file: path, source }, 0, "module_default"));
 
     return { ok: false as const, diagnostics };
   }

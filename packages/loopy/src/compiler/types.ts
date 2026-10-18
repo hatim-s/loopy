@@ -1,11 +1,9 @@
-import type { CompilerDiagnosticCode, Graph, NodeId } from "../core/index.js";
+import type { CompilerDiagnosticCode, Diagnostic, Graph, NodeId } from "../core/index.js";
 
 export type CompilerDiagnostic = {
   code: CompilerDiagnosticCode;
   message: string;
-  file: string;
-  line: number;
-  column: number;
+  source: NonNullable<Diagnostic["source"]>;
 };
 
 export type Bundle = { nodeId: NodeId; bundleHash: string; bytes: Uint8Array };

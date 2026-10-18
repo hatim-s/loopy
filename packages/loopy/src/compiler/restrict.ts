@@ -1,4 +1,6 @@
+import { realpath } from "node:fs/promises";
 import type { Statement } from "oxc-parser";
+import { errorMessage } from "../core/index.js";
 import {
   type Context,
   declarations,
@@ -33,7 +35,7 @@ function importBindings(
     }
 
     if (item.type !== "ImportSpecifier") {
-      refuse(context, item, "module_import", "Use named SDK and author imports.");
+      refuse(context, item, "module_import");
       continue;
     }
 
@@ -42,7 +44,7 @@ function importBindings(
     const binding = imported === "sdk" ? "sdk" : (imported.get(original) ?? "function");
 
     if (binding === "sdk" && item.local.name !== original) {
-      refuse(context, item, "sdk_alias", "Keep SDK names unchanged across author modules.");
+      refuse(context, item, "sdk_alias");
     }
 
     context.scope.set(item.local.name, binding);
@@ -76,12 +78,7 @@ async function inspectImports(context: Context, statements: Statement[], state: 
 
     if (!sdk) {
       if (!specifier.startsWith(".")) {
-        refuse(
-          context,
-          statement,
-          "module_import",
-          "Builder imports must be loopy, loopy/graph or relative author modules.",
-        );
+        refuse(context, statement, "module_import");
         continue;
       }
 
@@ -90,7 +87,7 @@ async function inspectImports(context: Context, statements: Statement[], state: 
       if (scopes.has(dependency)) {
         imported = scopes.get(dependency) ?? new Map();
       } else if (modules.has(dependency)) {
-        refuse(context, statement, "cyclic_import", "Builder imports cannot be cyclic.");
+        refuse(context, statement, "cyclic_import");
         continue;
       } else {
         imported = await inspectModule(dependency, state);
@@ -135,15 +132,7 @@ async function inspectModule(file: string, state: Inspection): Promise<Scope> {
       (statement) => statement.type === "ExportDefaultDeclaration",
     );
 
-    diagnostics.push(
-      diagnostic(
-        file,
-        source,
-        exported?.start ?? 0,
-        "default_loopy",
-        "Default-export a loopy() builder result.",
-      ),
-    );
+    diagnostics.push(diagnostic({ file, source }, exported?.start ?? 0, "default_loopy"));
   }
 
   for (const edit of context.edits) {
@@ -165,17 +154,31 @@ async function inspectModule(file: string, state: Inspection): Promise<Scope> {
 export async function restrict(
   file: string,
 ): Promise<Restricted | { ok: false; diagnostics: CompilerDiagnostic[] }> {
-  const modules = new Map<string, AuthorModule>();
-  const parsers = new Map<string, ParserSource>();
-  const diagnostics: CompilerDiagnostic[] = [];
-  await inspectModule(file, { modules, parsers, diagnostics, scopes: new Map(), entry: file });
+  try {
+    const modules = new Map<string, AuthorModule>();
+    const parsers = new Map<string, ParserSource>();
+    const diagnostics: CompilerDiagnostic[] = [];
+    const entry = await realpath(file);
+    await inspectModule(entry, { modules, parsers, diagnostics, scopes: new Map(), entry });
 
-  for (const parser of parsers.values()) {
-    const checked = await checkCodeModule(parser.file);
-    diagnostics.push(...checked.diagnostics);
+    for (const parser of parsers.values()) {
+      const checked = await checkCodeModule(parser.file);
+      diagnostics.push(...checked.diagnostics);
+    }
+
+    return diagnostics.length > 0
+      ? { ok: false, diagnostics }
+      : { ok: true, modules: [...modules.values()], parsers };
+  } catch (error) {
+    return {
+      ok: false,
+      diagnostics: [
+        {
+          code: "source_error",
+          message: errorMessage(error),
+          source: { module: file, line: 1, column: 1 },
+        },
+      ],
+    };
   }
-
-  return diagnostics.length > 0
-    ? { ok: false, diagnostics }
-    : { ok: true, modules: [...modules.values()], parsers };
 }

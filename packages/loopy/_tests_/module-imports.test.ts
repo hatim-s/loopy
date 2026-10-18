@@ -30,9 +30,7 @@ for (const name of [
     test(`runtime code denylist rejects ${expression}`, () => {
       expect(diagnosticsFor(expression)).toContainEqual({
         code: "dynamic_code",
-        file: "bundle.ts",
-        line: 1,
-        column: expect.any(Number),
+        source: { module: "bundle.ts", line: 1, column: expect.any(Number) },
         message: "Use bundled modules instead of runtime loading or code generation.",
       });
     });
