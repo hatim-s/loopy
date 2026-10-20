@@ -45,7 +45,9 @@ test("schema outputs exactly match core records and the wire owner projection", 
       });
 
   expectTypeOf<contract.ServerEvent>().toEqualTypeOf<Flatten<WireEvent>>();
-  expectTypeOf<SavedLoopy>().toMatchTypeOf<Parameters<typeof contract.loopyView>[0]>();
+  expectTypeOf<SavedLoopy & { workspace: string }>().toMatchTypeOf<
+    Parameters<typeof contract.loopyView>[0]
+  >();
 });
 
 const waiting: core.StepRecord = {
@@ -172,7 +174,7 @@ test("loopy views count matching runs and choose the newest without leaking regi
     nextFireAt: now,
   };
 
-  const result = contract.loopyView(saved, schedule, [
+  const result = contract.loopyView({ ...saved, workspace: "/workspace" }, schedule, [
     newer,
     view(newRun()),
     view({ ...newRun(), slug: "other" }),
@@ -197,7 +199,8 @@ test("loopy views count matching runs and choose the newest without leaking regi
   expect(result).not.toHaveProperty("secrets");
   expect(result).not.toHaveProperty("bundleHash");
   expect(contract.loopyViewSchema.parse(result)).toEqual(result);
-  expect(contract.loopyView(saved, null, [])).toMatchObject({
+  expect(contract.loopyView({ ...saved, workspace: "/workspace" }, null, [])).toMatchObject({
+    workspace: "/workspace",
     lastRun: null,
     schedule: null,
     counts: { queued: 0, succeeded: 0 },
@@ -246,7 +249,7 @@ test("serialized loopy and snapshot views exclude private registry and owner key
     savedAt: now,
   };
 
-  const loopy = contract.loopyView(saved, null, [run]);
+  const loopy = contract.loopyView({ ...saved, workspace: "/workspace" }, null, [run]);
 
   const snapshot: contract.RunSnapshotView = {
     nodeRuns: [],
@@ -328,6 +331,7 @@ test("schedule wire fields normalize core nullability and preserve every field",
 test("loopy declared schedule is visible until a persisted schedule overrides it", () => {
   const saved = {
     slug: "test",
+    workspace: "/workspace",
     scope: "project",
     mode: "sandbox",
     input: {},

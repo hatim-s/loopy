@@ -27,6 +27,8 @@ function pendingToggle(client: QueryClient) {
     loopies: [],
     schedules: [],
     runs: [],
+    graphs: [],
+    pins: {},
     batches: [],
     intervalMs: 0,
   });

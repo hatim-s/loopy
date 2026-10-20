@@ -128,7 +128,7 @@ function SchedulesPage() {
   const creating = schedules.data && unscheduled.find((loopy) => loopy.slug === slug);
 
   return (
-    <section aria-labelledby="schedules-heading" className="mx-auto max-w-5xl space-y-5 px-6 py-6">
+    <section aria-labelledby="schedules-heading" className="page max-w-5xl space-y-5">
       <header className="flex flex-wrap items-baseline justify-between gap-3">
         <h1 id="schedules-heading" className="text-base font-semibold">
           Schedules

@@ -25,11 +25,12 @@ export function ConnectionStatus() {
   const { text, tone, title } = LABEL[state];
 
   return (
-    <p role="status" title={title} className={`flex items-center gap-1.5 text-xs ${tone}`}>
-      <span
-        aria-hidden="true"
-        className={`size-1.5 rounded-full bg-current ${state === "live" ? "motion-safe:animate-pulse" : ""}`}
-      />
+    <p
+      role="status"
+      title={title}
+      className={`flex h-7 items-center gap-1.5 px-1 text-xs whitespace-nowrap ${tone}`}
+    >
+      <span aria-hidden="true" className="size-2 rounded-full bg-current" />
       <span className="max-sm:sr-only">{text}</span>
     </p>
   );

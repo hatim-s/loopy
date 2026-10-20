@@ -7,7 +7,7 @@ import { printJson } from "../output.js";
 export async function runRun(context: CliContext): Promise<void> {
   const slug = requireTarget(context, "Slug");
 
-  const graph = await request(
+  const { graph } = await request(
     context,
     `/loopies/${encodeURIComponent(slug)}/graph?workspace=${encodeURIComponent(context.cwd)}`,
     routes.graph.response,

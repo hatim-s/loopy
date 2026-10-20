@@ -1,4 +1,4 @@
-import { errorBodySchema, routes, serverEventSchema } from "loopy/contract";
+import { errorBodySchema, routes, type ServerEvent, serverEventSchema } from "loopy/contract";
 import type { z } from "zod";
 import {
   BackendError,
@@ -165,13 +165,16 @@ function pause(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-type LocalHttpOptions = {
+export type LocalHttpOptions = {
   /** Absolute origin of the Loopy server; the browser passes its own. */
   origin: string;
   token: string | null;
 };
 
-export function localHttpBackend({ origin, token }: LocalHttpOptions): LoopyBackend {
+export function httpTransport(
+  { origin, token }: LocalHttpOptions,
+  eventBatchSchema: z.ZodType<ServerEvent[]> = batchSchema,
+) {
   const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
   async function request(url: string, init: RequestInit): Promise<Response> {
@@ -236,7 +239,7 @@ export function localHttpBackend({ origin, token }: LocalHttpOptions): LoopyBack
 
     for await (const data of frames(response.body)) {
       cursor.received = true;
-      const batch = contractBody(batchSchema, data, routes.events.path);
+      const batch = contractBody(eventBatchSchema, data, routes.events.path);
       cursor.after = batch.reduce((max, event) => Math.max(max, event.sequence), cursor.after);
       onBatch(batch);
     }
@@ -282,14 +285,24 @@ export function localHttpBackend({ origin, token }: LocalHttpOptions): LoopyBack
     return "aborted";
   }
 
+  return { send, events };
+}
+
+export function localHttpBackend(options: LocalHttpOptions): LoopyBackend {
+  const { send, events } = httpTransport(options);
+
   return {
+    graphSupport: "available",
     cursor: (signal) => send(routes.cursor, { params: {}, query: {}, body: undefined }, signal),
     loopies: () => send(routes.loopies, { params: {}, query: {}, body: undefined }),
+    loopyGraph: (slug, workspace) =>
+      send(routes.graph, { params: { slug }, query: { workspace }, body: undefined }),
     runs: (query) => send(routes.runs, { params: {}, query, body: undefined }),
     run: (id, signal) => send(routes.run, { params: { id }, query: {}, body: undefined }, signal),
+    runGraph: (id) => send(routes.runGraph, { params: { id }, query: {}, body: undefined }),
     logs: (id, after) => send(routes.logs, { params: { id }, query: { after }, body: undefined }),
-    startRun: (slug, input) =>
-      send(routes.startRun, { params: { slug }, query: {}, body: { input } }),
+    startRun: (slug, input, workspace) =>
+      send(routes.startRun, { params: { slug }, query: {}, body: { input, workspace } }),
     resumeRun: (id) => send(routes.resumeRun, { params: { id }, query: {}, body: undefined }),
     cancelRun: (id) => send(routes.cancelRun, { params: { id }, query: {}, body: undefined }),
     resolveHook: (token, payload) =>

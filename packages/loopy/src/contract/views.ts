@@ -65,6 +65,8 @@ export type ScheduleView = z.infer<typeof scheduleViewSchema>;
 
 export const loopyViewSchema = z.strictObject({
   slug: z.string(),
+  /** The project root whose registry resolved this entry. Graph and start requests send it back. */
+  workspace: z.string(),
   description: z.string().nullable(),
   scope: z.enum(LOOPY_SCOPES),
   mode: z.enum(EXECUTION_MODES),

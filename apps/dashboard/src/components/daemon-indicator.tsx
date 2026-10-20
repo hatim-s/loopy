@@ -8,32 +8,66 @@ export function isUnreachable(error: Error | null): boolean {
   return error instanceof BackendError && error.code === "unreachable";
 }
 
-/** The header's link to the daemon page, with its slot use at a glance. Narrow screens get the short form. */
+/** One cell per worker slot, filled while a run holds it. Wide pools fall back to the numbers. */
+function SlotMeter({ running, concurrency }: { running: number; concurrency: number }) {
+  if (concurrency > 8) {
+    return null;
+  }
+
+  return (
+    <span aria-hidden="true" className="flex gap-0.5 max-sm:hidden">
+      {[...Array(concurrency).keys()].map((slot) => (
+        <span
+          key={slot}
+          className={`h-3 w-1.5 rounded-[2px] ${slot < running ? "bg-active" : "bg-line-strong"}`}
+        />
+      ))}
+    </span>
+  );
+}
+
+function placeholderLabel(error: Error | null): string {
+  if (error === null) {
+    return "Daemon";
+  }
+
+  return isUnreachable(error) ? "Daemon offline" : "Daemon error";
+}
+
+/** The header's link to the daemon page, with its slot use at a glance. */
 export function DaemonIndicator() {
   const daemon = useQuery(daemonQuery(useBackend()));
 
-  const unreachable = isUnreachable(daemon.error);
-  const tone = unreachable ? "text-danger" : "text-muted";
-  let text = "Daemon";
-  let short = "Daemon";
-
-  if (unreachable) {
-    text = "Daemon not reachable";
-    short = "No daemon";
-  } else if (daemon.data) {
-    text = `Daemon, ${daemon.data.running} of ${daemon.data.concurrency} running`;
-    short = `Daemon ${daemon.data.running}/${daemon.data.concurrency}`;
+  // The query does not retry, so an error stays until the next poll succeeds. Say so instead of
+  // looking like a first load.
+  if (daemon.error || !daemon.data) {
+    return (
+      <Link
+        to="/daemon"
+        title={daemon.error?.message}
+        className={`tab text-xs whitespace-nowrap ${daemon.error ? "text-danger" : ""}`}
+        activeProps={{ className: "bg-raised text-ink" }}
+      >
+        <span aria-hidden="true" className="size-2 rounded-full border border-current" />
+        {placeholderLabel(daemon.error)}
+      </Link>
+    );
   }
+
+  const { running, concurrency } = daemon.data;
 
   return (
     <Link
       to="/daemon"
-      className={`flex items-center gap-1.5 text-xs whitespace-nowrap hover:text-ink ${tone}`}
-      activeProps={{ className: "text-ink" }}
+      aria-label={`Daemon, ${running} of ${concurrency} worker slots in use`}
+      className="tab text-xs whitespace-nowrap"
+      activeProps={{ className: "bg-raised text-ink" }}
     >
-      <span aria-hidden="true" className="size-1.5 rounded-full border border-current" />
-      <span className="sm:hidden">{short}</span>
-      <span className="max-sm:hidden">{text}</span>
+      <SlotMeter running={running} concurrency={concurrency} />
+      <span className="font-mono tabular-nums">
+        {running}/{concurrency}
+      </span>
+      <span className="max-sm:hidden">slots</span>
     </Link>
   );
 }

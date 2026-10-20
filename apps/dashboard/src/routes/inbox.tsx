@@ -15,7 +15,7 @@ function Inbox() {
   const total = inbox.data ? waitingCount(inbox.data) : 0;
 
   return (
-    <section aria-labelledby="inbox-heading" className="mx-auto max-w-4xl space-y-5 px-6 py-6">
+    <section aria-labelledby="inbox-heading" className="page max-w-4xl space-y-5">
       <header className="space-y-0.5">
         <h1 id="inbox-heading" className="text-base font-semibold">
           Inbox

@@ -63,6 +63,17 @@ test("each call uses the method and path from the route table, with the token", 
   expect(last()?.path).toBe("/api/hooks/tok");
   expect(JSON.parse(last()?.body ?? "")).toEqual({ payload: { approved: true } });
 
+  // A slug alone can name another project's loopy, so both calls carry the view's workspace.
+  await backend.startRun("triage", { name: "Hatim" }, "/work/a");
+  expect(last()?.path).toBe("/api/loopies/triage/runs");
+  expect(JSON.parse(last()?.body ?? "")).toEqual({
+    input: { name: "Hatim" },
+    workspace: "/work/a",
+  });
+
+  await expect(backend.loopyGraph("triage", "/work/a")).rejects.toBeInstanceOf(BackendError);
+  expect(last()?.path).toBe("/api/loopies/triage/graph?workspace=%2Fwork%2Fa");
+
   reply = () => Response.json([run]);
   await backend.runs({ slug: "triage", limit: 20 });
   expect(last()?.method).toBe("GET");

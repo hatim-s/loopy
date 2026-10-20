@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { encodeRunCursor, routes } from "../src/contract/index.js";
+import { encodeRunCursor, graphView, routes } from "../src/contract/index.js";
 import type { Graph, RunRecord } from "../src/core/index.js";
 import { revision } from "../src/core/index.js";
 import { Daemon, SYSTEM_CLOCK } from "../src/host/index.js";
@@ -399,6 +399,37 @@ test("service cursor follows the last event without requiring a run snapshot", a
   expect(current).toEqual({ cursor: initial.cursor + 1, epoch: initial.epoch });
 });
 
+test("run graphs stay pinned to the revision each run started on", async () => {
+  const { service, root } = await fixture();
+  const unsaved = await service.startRun("service", { name: "Hatim" }, root);
+
+  // The fixture registry entry was never compiled to disk, so its run has no graph to show.
+  await expect(service.runGraph(unsaved.id)).rejects.toMatchObject({ code: "not_found" });
+
+  const source = join(root, "service.ts");
+  const first = await compiledBody("service", source);
+  first.graph.input = { name: "string" };
+  first.revision = await revision(first.graph);
+  await service.putLoopy("service", first);
+  const pinned = await service.startRun("service", { name: "Hatim" }, root);
+
+  const second = await compiledBody("service", source);
+  second.graph.input = { name: "string", "note?": "string" };
+  second.revision = await revision(second.graph);
+  await service.putLoopy("service", second);
+
+  expect(second.revision).not.toBe(first.revision);
+  expect(routes.runGraph.response.parse(await service.runGraph(pinned.id))).toEqual({
+    revision: first.revision,
+    graph: graphView(first.graph),
+  });
+  expect(routes.graph.response.parse(service.graph("service", root))).toEqual({
+    revision: second.revision,
+    graph: graphView(second.graph),
+  });
+  await expect(service.runGraph("missing")).rejects.toMatchObject({ code: "not_found" });
+});
+
 test("service maps completion between requireRun and claim to not_claimable", async () => {
   const { service, store, root } = await fixture();
   const run = await service.startRun("service", { name: "Hatim" }, root);
@@ -457,4 +488,61 @@ test("listLoopies reads each workspace registry once per call", async () => {
       ]),
     );
   }
+});
+
+test("loopy views name their workspace so graph and start reach that project's save", async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "loopy-workspaces-")));
+  const home = join(root, "home");
+  const store = openRunStore(home);
+
+  cleanups.push(() => {
+    store.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  const service = new LoopyService({
+    store,
+    clock: SYSTEM_CLOCK,
+    registry: (workspace) => new Registry(home, workspace),
+  });
+
+  const save = async (workspace: string, field: string) => {
+    mkdirSync(join(workspace, ".loopy", "loopies"), { recursive: true });
+    const source = join(workspace, "shared.ts");
+    await Bun.write(source, "");
+    const body = await compiledBody("shared", source);
+    body.graph.input = { [field]: "string" };
+    body.revision = await revision(body.graph);
+    await service.putLoopy("shared", body);
+
+    return body.revision;
+  };
+
+  const a = join(root, "a");
+  const b = join(root, "b");
+  const elsewhere = join(root, "elsewhere");
+  mkdirSync(elsewhere);
+  const revisionA = await save(a, "alpha");
+  const revisionB = await save(b, "beta");
+
+  const workspaces = async (caller: string) =>
+    (await service.listLoopies(caller)).map((view) => view.workspace);
+
+  expect(await workspaces(a)).toEqual([a]);
+  const started = await service.startRun("shared", { alpha: "x" }, a);
+  expect(started.workspace).toBe(a);
+  expect((await store.getRun(started.id))?.revision).toBe(revisionA);
+
+  // A daemon in another directory lists A's loopy through its run, so only A's path resolves it.
+  expect(await workspaces(elsewhere)).toEqual([a]);
+  expect(() => service.graph("shared", elsewhere)).toThrow("No saved loopy 'shared'");
+  expect(service.graph("shared", a).revision).toBe(revisionA);
+
+  expect(await workspaces(b)).toEqual([b]);
+  expect(service.graph("shared", b).revision).toBe(revisionB);
+  await expect(service.startRun("shared", { alpha: "x" }, b)).rejects.toMatchObject({
+    code: "bad_request",
+  });
+  const other = await service.startRun("shared", { beta: "y" }, b);
+  expect((await store.getRun(other.id))?.revision).toBe(revisionB);
 });

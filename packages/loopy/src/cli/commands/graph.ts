@@ -52,11 +52,11 @@ export async function runGraph(context: CliContext): Promise<void> {
 
     graph = graphView(result.graph);
   } else {
-    graph = await request(
+    ({ graph } = await request(
       context,
       `/loopies/${encodeURIComponent(target)}/graph?workspace=${encodeURIComponent(context.cwd)}`,
       routes.graph.response,
-    );
+    ));
   }
 
   if (format === "text") {

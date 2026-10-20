@@ -81,7 +81,7 @@ function DaemonStatus() {
 
 function DaemonPage() {
   return (
-    <section aria-labelledby="daemon-heading" className="mx-auto max-w-4xl space-y-4 px-6 py-6">
+    <section aria-labelledby="daemon-heading" className="page max-w-4xl space-y-4">
       <h1 id="daemon-heading" className="text-base font-semibold">
         Daemon
       </h1>

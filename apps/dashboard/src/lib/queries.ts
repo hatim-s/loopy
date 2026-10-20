@@ -43,6 +43,23 @@ export function runQuery(backend: LoopyBackend, id: string) {
   });
 }
 
+/** Saves do not travel on the event stream, so the latest definition refetches by time. */
+export function loopyGraphQuery(backend: LoopyBackend, slug: string, workspace: string) {
+  return queryOptions({
+    queryKey: keys.loopyGraph(slug, workspace),
+    queryFn: () => backend.loopyGraph(slug, workspace),
+  });
+}
+
+/** A run's revision is fixed when the run is created, so its graph never changes. */
+export function runGraphQuery(backend: LoopyBackend, id: string) {
+  return queryOptions({
+    queryKey: keys.runGraph(id),
+    queryFn: () => backend.runGraph(id),
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+}
+
 /** Polled, since the daemon's counters do not travel on the event stream. */
 export function daemonQuery(backend: LoopyBackend) {
   return queryOptions({

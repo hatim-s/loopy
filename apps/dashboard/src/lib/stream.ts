@@ -1,10 +1,12 @@
 import type { InfiniteData, Query, QueryClient } from "@tanstack/react-query";
-import type {
-  RunSnapshotView,
-  RunView,
-  ScheduleView,
-  ServerEvent,
-  StepRecord,
+import {
+  executionKeyString,
+  type NodeRunView,
+  type RunSnapshotView,
+  type RunView,
+  type ScheduleView,
+  type ServerEvent,
+  type StepRecord,
 } from "loopy/contract";
 import type { LoopyBackend, RunsQuery, StreamState } from "../backend/backend.ts";
 import { keys } from "./keys.ts";
@@ -45,6 +47,15 @@ function waitingAfter(run: RunView, event: HookEvent, steps: StepRecord[]): RunV
   return { hook: hook.name, token: hook.token, seq: hook.seq, since: hook.createdAt, expiresAt };
 }
 
+/** One record per execution key: a later attempt replaces the earlier one in place. */
+function withNodeRun(runs: NodeRunView[], record: NodeRunView): NodeRunView[] {
+  const key = executionKeyString(record.key);
+
+  return runs.some((run) => executionKeyString(run.key) === key)
+    ? runs.map((run) => (executionKeyString(run.key) === key ? record : run))
+    : [...runs, record];
+}
+
 function newer(current: RunView, next: RunView): boolean {
   return next.updatedAt >= current.updatedAt;
 }
@@ -80,6 +91,8 @@ export function applyToSnapshot(snapshot: RunSnapshotView, event: ServerEvent): 
 
   if (event.entity === "run") {
     next.run = newer(snapshot.run, event.record) ? event.record : snapshot.run;
+  } else if (event.entity === "node") {
+    next.nodeRuns = withNodeRun(snapshot.nodeRuns, event.record);
   } else if (event.entity === "step") {
     next.steps = upsertBy(
       snapshot.steps,
@@ -197,6 +210,7 @@ function updateMembership(
   write?: { history: StreamHistory; event: RunEvent },
 ): Set<string> {
   const missing = new Set<string>();
+  const seen = histories.get(client)?.runs.get(run.id)?.run;
 
   for (const query of client.getQueryCache().findAll({ queryKey: keys.runLists })) {
     const key = query.queryKey;
@@ -217,7 +231,19 @@ function updateMembership(
       client.setQueryData<RunList>(key, (current) =>
         mapRunList(current, (runs) => replaceMember(runs, run, filters)),
       );
-    } else if (matchesRun(filters, run)) {
+    }
+
+    // A fetch in flight read the server before this write. If the run could have matched the
+    // list then, its answer would bring back the older row, so the refetch restarts. A created
+    // run did not exist yet. Any other run the session has never seen might have matched, which
+    // bounds those extra restarts to one per run.
+    const before = previous ?? seen;
+
+    const stale =
+      query.state.fetchStatus === "fetching" &&
+      (before === undefined ? write?.event.kind !== "created" : matchesRun(filters, before));
+
+    if (stale || (previous === undefined && matchesRun(filters, run))) {
       missing.add(query.queryHash);
     }
   }
@@ -319,6 +345,33 @@ function applyEvent(context: BatchContext, event: ServerEvent): void {
   }
 }
 
+/**
+ * Refetches lists by query hash. TanStack's refetch cancels a fetch in flight only when the
+ * query already holds data (`Query.fetch` with `cancelRefetch`). A first load would instead
+ * keep its fetch, which read the server before the event. The silent cancel followed by a
+ * fetch is the same restart TanStack applies to a list with data, so a loader awaiting the
+ * first load receives the new answer.
+ */
+function refetchLists(client: QueryClient, hashes: Set<string>): void {
+  if (hashes.size === 0) {
+    return;
+  }
+
+  for (const hash of hashes) {
+    const query = client.getQueryCache().get(hash);
+
+    if (query?.state.data === undefined && query?.state.fetchStatus === "fetching") {
+      void query.cancel({ silent: true });
+      void query.fetch().catch(() => {});
+    }
+  }
+
+  void client.invalidateQueries({
+    queryKey: keys.runLists,
+    predicate: (query) => hashes.has(query.queryHash),
+  });
+}
+
 /** Writes a transaction before refetching each affected list once. */
 export function applyBatch(client: QueryClient, batch: ServerEvent[]): void {
   const history = histories.get(client) ?? {
@@ -334,12 +387,7 @@ export function applyBatch(client: QueryClient, batch: ServerEvent[]): void {
     applyEvent({ client, history, changes }, event);
   }
 
-  if (changes.lists.size > 0) {
-    void client.invalidateQueries({
-      queryKey: keys.runLists,
-      predicate: (query) => changes.lists.has(query.queryHash),
-    });
-  }
+  refetchLists(client, changes.lists);
 
   if (changes.loopies) {
     void client.invalidateQueries({ queryKey: keys.loopies });
@@ -427,11 +475,7 @@ export function applyRunView(client: QueryClient, run: RunView): void {
     (snapshot) => snapshot && (newer(snapshot.run, run) ? { ...snapshot, run } : snapshot),
   );
 
-  const missing = updateMembership(client, run);
-  void client.invalidateQueries({
-    queryKey: keys.runLists,
-    predicate: (query) => missing.has(query.queryHash),
-  });
+  refetchLists(client, updateMembership(client, run));
   void client.invalidateQueries({ queryKey: keys.loopies });
 }
 

@@ -1,6 +1,14 @@
 import { expect, spyOn, test } from "bun:test";
-import { type InfiniteData, QueryClient } from "@tanstack/react-query";
-import type { RunSnapshotView, RunView, Schedule, ScheduleView, ServerEvent } from "loopy/contract";
+import { type InfiniteData, QueryClient, QueryObserver } from "@tanstack/react-query";
+import {
+  type NodeRunView,
+  nodeRunViewSchema,
+  type RunSnapshotView,
+  type RunView,
+  type Schedule,
+  type ScheduleView,
+  type ServerEvent,
+} from "loopy/contract";
 import type { EventSubscription, StreamEnd } from "../src/backend/backend.ts";
 import { type EventDraft, fakeBackend } from "../src/backend/fake.ts";
 import { INBOX_QUERY, inboxGroups } from "../src/lib/inbox.ts";
@@ -156,6 +164,44 @@ test("a list keeps a run that is newer than the event", () => {
   expect(client.getQueryData<RunView[]>(keys.runs({}))).toEqual([running]);
 });
 
+function nodeEvent(sequence: number, index: number, attempt: number, status: string) {
+  const record: NodeRunView = nodeRunViewSchema.parse({
+    key: { runId: run.id, nodeId: "1:classify", scope: [{ nodeId: "0:map", index }] },
+    attempt,
+    maxAttempts: 3,
+    startedAt: AT,
+    receipt: "started",
+    status,
+    ...(status === "retrying"
+      ? { error: { code: "exit", message: "boom" }, endedAt: AT, nextRetryAt: AT }
+      : status === "succeeded"
+        ? { output: { ok: true }, endedAt: AT }
+        : {}),
+  });
+
+  return event(sequence, { entity: "node", kind: record.status, runId: run.id, record });
+}
+
+test("node events keep one record per execution key at its latest attempt", () => {
+  const next = [
+    nodeEvent(11, 0, 1, "running"),
+    nodeEvent(12, 1, 1, "running"),
+    nodeEvent(13, 0, 1, "retrying"),
+    nodeEvent(14, 0, 2, "running"),
+    nodeEvent(15, 0, 2, "succeeded"),
+    // A replay of an applied event is already part of the snapshot and must not regress it.
+    nodeEvent(13, 0, 1, "retrying"),
+  ].reduce(applyToSnapshot, snapshot());
+
+  expect(
+    next.nodeRuns.map((record) => [record.key.scope[0]?.index, record.attempt, record.status]),
+  ).toEqual([
+    [0, 2, "succeeded"],
+    [1, 1, "running"],
+  ]);
+  expect(next.cursor).toBe(15);
+});
+
 test("logs and steps land in seq order whatever order the events arrive in", () => {
   const next = [logEvent(13, 3), logEvent(12, 1), stepEvent(14, 2, "running"), logEvent(11, 2)]
     .sort((a, b) => a.sequence - b.sequence)
@@ -234,6 +280,8 @@ test("a reset from the backend invalidates every query and resubscribes from a f
     loopies: [],
     schedules: [],
     runs: [fresh],
+    graphs: [],
+    pins: {},
     batches: [],
     intervalMs: 0,
   });
@@ -343,6 +391,8 @@ test("abort during reset cursor fetch cancels the request and settles followSess
     loopies: [],
     schedules: [],
     runs: [snapshot()],
+    graphs: [],
+    pins: {},
     batches: [],
     intervalMs: 10,
   });
@@ -470,6 +520,130 @@ test("queued to running removes old membership and refetches the destination pag
   expect(client.getQueryData<RunView[]>(array)).toEqual([]);
   expect(client.getQueryState(active)?.isInvalidated).toBe(true);
   expect(client.getQueryState(queued)?.isInvalidated).toBe(false);
+});
+
+/** Status lists whose fetches read the server when they start and answer only when released. */
+function heldLists(client: QueryClient) {
+  let server: RunView[] = [];
+  const held: (() => void)[] = [];
+  const fetches = new Map<RunView["status"], number>();
+
+  return {
+    queryFn(status: RunView["status"]) {
+      return () => {
+        fetches.set(status, (fetches.get(status) ?? 0) + 1);
+        const answer = server.filter((row) => row.status === status);
+
+        return new Promise<RunView[]>((resolve) => held.push(() => resolve(answer)));
+      };
+    },
+    /** Without rows the list has no data yet, so subscribing starts its first load. */
+    observe(status: RunView["status"], rows?: RunView[]) {
+      if (rows !== undefined) {
+        client.setQueryData(keys.runs({ status }), rows);
+      }
+
+      const observer = new QueryObserver(client, {
+        queryKey: keys.runs({ status }),
+        staleTime: Infinity,
+        queryFn: this.queryFn(status),
+      });
+
+      observer.subscribe(() => {});
+
+      return observer;
+    },
+    serve(rows: RunView[]) {
+      server = rows;
+    },
+    fetches: (status: RunView["status"]) => fetches.get(status) ?? 0,
+    async release() {
+      for (const answer of held.splice(0)) {
+        answer();
+      }
+
+      await Bun.sleep(0);
+    },
+  };
+}
+
+test("a status change restarts a list fetch that started before it, even when the list lacks the run", async () => {
+  const client = new QueryClient();
+  const lists = heldLists(client);
+  lists.observe("queued", []);
+  lists.observe("running", []);
+  void lists.observe("failed", []).refetch();
+  lists.serve([run]);
+  applyBatch(client, [event(11, { entity: "run", kind: "created", runId: run.id, record: run })]);
+  lists.serve([running]);
+  applyBatch(client, [runEvent(12, running)]);
+  const beat = { ...running, updatedAt: "2026-10-17T10:00:02.000Z" };
+  applyBatch(client, [
+    event(13, { entity: "run", kind: "heartbeat", runId: run.id, record: beat }),
+  ]);
+  await lists.release();
+
+  expect(client.getQueryData<RunView[]>(keys.runs({ status: "queued" }))).toEqual([]);
+  expect(client.getQueryData<RunView[]>(keys.runs({ status: "running" }))).toEqual([running]);
+  expect(lists.fetches("queued")).toBe(2);
+  expect(lists.fetches("running")).toBe(1);
+  expect(lists.fetches("failed")).toBe(1);
+});
+
+test("a run leaving a list restarts that list's fetch already in flight", async () => {
+  const client = new QueryClient();
+  const lists = heldLists(client);
+  lists.serve([run]);
+  void lists.observe("queued", [run]).refetch();
+  lists.serve([running]);
+  applyBatch(client, [runEvent(11, running)]);
+  await lists.release();
+
+  expect(client.getQueryData<RunView[]>(keys.runs({ status: "queued" }))).toEqual([]);
+  expect(lists.fetches("queued")).toBe(2);
+});
+
+test("a status change restarts a list's first load that read the server before it", async () => {
+  const client = new QueryClient();
+  const lists = heldLists(client);
+  applyBatch(client, [event(11, { entity: "run", kind: "created", runId: run.id, record: run })]);
+  lists.serve([run]);
+  const queued = lists.observe("queued");
+  lists.observe("failed");
+  lists.observe("running", []);
+  lists.serve([running]);
+  applyBatch(client, [runEvent(12, running)]);
+  await lists.release();
+  await lists.release();
+
+  expect(client.getQueryData<RunView[]>(keys.runs({ status: "queued" }))).toEqual([]);
+  expect(client.getQueryData<RunView[]>(keys.runs({ status: "running" }))).toEqual([running]);
+  expect(client.getQueryData<RunView[]>(keys.runs({ status: "failed" }))).toEqual([]);
+  expect(queued.getCurrentResult()).toMatchObject({ status: "success", fetchStatus: "idle" });
+  expect(lists.fetches("queued")).toBe(2);
+  expect(lists.fetches("running")).toBe(1);
+  expect(lists.fetches("failed")).toBe(1);
+});
+
+test("a restarted first load without an observer still answers its loader", async () => {
+  const client = new QueryClient();
+  const lists = heldLists(client);
+  applyBatch(client, [event(11, { entity: "run", kind: "created", runId: run.id, record: run })]);
+  lists.serve([run]);
+
+  const loaded = client.fetchQuery({
+    queryKey: keys.runs({ status: "queued" }),
+    queryFn: lists.queryFn("queued"),
+  });
+
+  lists.serve([running]);
+  applyBatch(client, [runEvent(12, running)]);
+  await lists.release();
+  await lists.release();
+
+  expect(await loaded).toEqual([]);
+  expect(client.getQueryState(keys.runs({ status: "queued" }))?.fetchStatus).toBe("idle");
+  expect(lists.fetches("queued")).toBe(2);
 });
 
 test("status transitions and schedule events invalidate summaries once while heartbeat and replay do not", () => {

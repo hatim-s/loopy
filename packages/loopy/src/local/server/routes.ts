@@ -122,6 +122,7 @@ export function apiRoutes({ service, store, cwd, daemon }: Dependencies) {
     endpoint(routes.graph, async ({ params: { slug }, query }) =>
       service.graph(slug, query.workspace ?? cwd),
     ),
+    endpoint(routes.runGraph, async ({ params: { id } }) => service.runGraph(id)),
     endpoint(routes.schedules, async ({ query }) => service.listSchedules(query.workspace)),
     endpoint(routes.putSchedule, async ({ params: { slug }, body, query }) =>
       service.putSchedule(slug, body, query.workspace),

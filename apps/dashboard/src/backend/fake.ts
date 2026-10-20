@@ -1,6 +1,7 @@
 import {
   type DaemonView,
   encodeRunCursor,
+  type GraphRevisionView,
   type HookRecord,
   isTerminalRun,
   type LoopyView,
@@ -25,6 +26,10 @@ export type FakeScript = {
   /** Runs as they stand before the first batch plays. */
   runs: RunSnapshotView[];
   schedules: ScheduleView[];
+  /** Every saved revision. The last one named after a loopy is its latest definition. */
+  graphs: GraphRevisionView[];
+  /** The revision each scripted run pinned, keyed by run id. */
+  pins: Record<string, string>;
   /** Played in order. A batch that creates a hook holds playback until it is resolved. */
   batches: EventDraft[][];
   intervalMs: number;
@@ -85,6 +90,16 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
 
   function release(drafts: EventDraft[]): void {
     held = publish(drafts).some((event) => event.entity === "hook" && event.kind === "created");
+  }
+
+  function revision(id: string | undefined, missing: string): GraphRevisionView {
+    const found = script.graphs.find((view) => view.revision === id);
+
+    if (!found) {
+      throw new BackendError("not_found", missing);
+    }
+
+    return found;
   }
 
   function schedule(slug: string): ScheduleView {
@@ -181,11 +196,22 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
 
   return {
     cursor: async () => ({ cursor: sequence, epoch: script.epoch }),
+    graphSupport: "available",
     loopies: async () =>
-      script.loopies.map((loopy) => ({
-        ...loopy,
-        lastRun: loopy.lastRun && (snapshots.get(loopy.lastRun.id)?.run ?? loopy.lastRun),
-      })),
+      script.loopies.map((loopy) => {
+        const counts = { ...loopy.counts };
+
+        // Counts follow the played runs, the way the server derives them from its store.
+        for (const { run } of snapshots.values()) {
+          counts[run.status] += run.slug === loopy.slug ? 1 : 0;
+        }
+
+        return {
+          ...loopy,
+          counts,
+          lastRun: loopy.lastRun && (snapshots.get(loopy.lastRun.id)?.run ?? loopy.lastRun),
+        };
+      }),
     runs: async (query) => {
       const { slug, status, waiting, limit, before } = routes.runs.query.parse(query);
 
@@ -201,7 +227,16 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
         .sort((a, b) => (encodeRunCursor(a) < encodeRunCursor(b) ? 1 : -1))
         .slice(0, limit);
     },
+    loopyGraph: async (slug, workspace) =>
+      revision(
+        script.loopies.some((loopy) => loopy.slug === slug && loopy.workspace === workspace)
+          ? script.graphs.filter((view) => view.graph.name === slug).at(-1)?.revision
+          : undefined,
+        `No saved graph for '${slug}' in ${workspace}.`,
+      ),
     run: async (id) => snapshot(id),
+    runGraph: async (id) =>
+      revision(script.pins[snapshot(id).run.id], `The graph run '${id}' pinned is missing.`),
     logs: async (id, after) => snapshot(id).logs.filter((log) => log.seq > after),
     startRun: async () => {
       throw new BackendError("bad_request", "The fake backend only plays its script.");

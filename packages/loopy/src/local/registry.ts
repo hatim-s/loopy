@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { PutLoopyBody } from "../contract/index.js";
+import { type Graph, graphSchema, type PutLoopyBody } from "../contract/index.js";
 import { canonicalJson, isRecord, validateSlug } from "../core/index.js";
 import { canonicalPath, withLockDirectory, writeFileAtomically } from "./fs.js";
 import { parseSavedLoopy, type SavedLoopy } from "./saved-loopy.js";
@@ -155,6 +156,11 @@ export class Registry {
 
   graphPath(revision: string): string {
     return this.artifactPath("graphs", revision, "json");
+  }
+
+  /** Reads the graph one revision pinned, which later saves never overwrite. */
+  async revisionGraph(revision: string): Promise<Graph> {
+    return graphSchema.parse(JSON.parse(await readFile(this.graphPath(revision), "utf8")));
   }
 }
 

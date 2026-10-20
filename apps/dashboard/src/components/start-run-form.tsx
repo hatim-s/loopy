@@ -61,7 +61,7 @@ function RecordFields({ spec, onSubmit }: { spec: RecordSpec; onSubmit: (input: 
     <form
       id="start-run"
       noValidate
-      className="grid gap-x-4 gap-y-2 sm:grid-cols-2"
+      className="grid gap-y-2.5"
       onSubmit={(event) => {
         event.preventDefault();
         const coerced = coerceInput(fields, values);
@@ -135,7 +135,9 @@ function JsonEditor({ onSubmit }: { onSubmit: (input: Json) => void }) {
 export function StartRunForm({ loopy }: { loopy: LoopyView }) {
   const navigate = useNavigate();
 
-  const start = useRunMutation((backend, input: Json) => backend.startRun(loopy.slug, input));
+  const start = useRunMutation((backend, input: Json) =>
+    backend.startRun(loopy.slug, input, loopy.workspace),
+  );
 
   const submit = (input: Json) =>
     start.mutate(input, {
@@ -145,8 +147,8 @@ export function StartRunForm({ loopy }: { loopy: LoopyView }) {
   const empty = loopy.input !== "schema" && Object.keys(loopy.input).length === 0;
 
   return (
-    <section aria-labelledby="start-heading" className="space-y-3">
-      <h2 id="start-heading" className="font-medium">
+    <section aria-labelledby="start-heading" className="space-y-2.5">
+      <h2 id="start-heading" className="section-title">
         Start run
       </h2>
       {empty && <p className="text-xs text-muted">This loopy takes no input.</p>}

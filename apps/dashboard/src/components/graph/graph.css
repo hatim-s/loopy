@@ -1,0 +1,484 @@
+/*
+ * Graph styles, read as a signal box mimic panel. Tracks are quiet until a run takes them, then
+ * they draw in ink. The node a run occupies glows with the lamp colour. XYFlow reads its own
+ * --xy-* variables, so they point at the dashboard tokens and both themes follow.
+ */
+.loopy-graph .react-flow {
+  --xy-background-color: var(--page);
+  --xy-background-pattern-color: var(--grid);
+  --xy-minimap-background-color: var(--panel);
+  --xy-minimap-mask-background-color: color-mix(in srgb, var(--page) 70%, transparent);
+  --xy-minimap-mask-stroke-color: var(--line-strong);
+  --xy-minimap-mask-stroke-width: 1;
+}
+
+/* Nodes are read-only, so handles exist for XYFlow's bookkeeping and stay invisible. */
+.loopy-graph .react-flow__handle {
+  opacity: 0;
+  pointer-events: none;
+  min-width: 0;
+  min-height: 0;
+  width: 1px;
+  height: 1px;
+  border: 0;
+}
+
+.loopy-graph .react-flow__panel.loopy-view {
+  margin: var(--gap);
+}
+
+.loopy-graph .loopy-minimap {
+  margin: var(--gap);
+  margin-bottom: calc(var(--gap) + 2.75rem);
+  overflow: hidden;
+}
+
+.loopy-graph .react-flow__minimap-svg {
+  display: block;
+}
+
+/* Node state sets one tone that the lamp, border, badge and read-out all take from. */
+.loopy-node {
+  --tone: var(--track);
+  --fill: var(--panel);
+  position: relative;
+  display: flex;
+  min-width: 0;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.loopy-node[data-state="definition"] {
+  --tone: var(--line-strong);
+}
+
+.loopy-node[data-state="succeeded"] {
+  --tone: var(--success);
+}
+
+.loopy-node[data-state="failed"] {
+  --tone: var(--danger);
+  --fill: color-mix(in srgb, var(--danger) 9%, var(--panel));
+}
+
+.loopy-node[data-state="running"],
+.loopy-node[data-state="queued"] {
+  --tone: var(--active);
+}
+
+.loopy-node[data-state="waiting"],
+.loopy-node[data-state="sleeping"],
+.loopy-node[data-state="retrying"],
+.loopy-node[data-state="rate_limited"] {
+  --tone: var(--attention);
+  --fill: color-mix(in srgb, var(--attention) 7%, var(--panel));
+}
+
+.loopy-node[data-state="cancelled"],
+.loopy-node[data-state="skipped"] {
+  --tone: var(--neutral);
+}
+
+/* No record yet: the run has not reached this node, so it recedes without disappearing. */
+.loopy-node[data-state="idle"] {
+  opacity: 0.6;
+}
+
+/* The run ended without it, or chose another arm. Hatching says "not this time". */
+.loopy-node[data-reason="not_run"],
+.loopy-node[data-state="skipped"] {
+  opacity: 0.55;
+  --fill: repeating-linear-gradient(
+    -45deg,
+    var(--sunken) 0 5px,
+    color-mix(in srgb, var(--line) 60%, var(--sunken)) 5px 6px
+  );
+}
+
+.node-title {
+  overflow: hidden;
+  font-weight: 560;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-detail {
+  display: block;
+  overflow: hidden;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-line {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.node-glyph {
+  color: var(--muted);
+}
+
+.node-mark {
+  margin-left: auto;
+  flex-shrink: 0;
+  color: var(--tone);
+  font-size: 11px;
+  font-weight: 560;
+  white-space: nowrap;
+}
+
+/* Work: a solid card with a lamp strip down its leading edge. */
+.node-work {
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 10px 0 15px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--fill);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
+}
+
+.node-lamp {
+  position: absolute;
+  inset: 5px auto 5px 5px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--tone);
+}
+
+/* Control: a signpost plate, pointing down the line. The plate is SVG so selection follows it. */
+.node-control {
+  align-items: center;
+  gap: 8px;
+  padding: 0 22px 0 6px;
+}
+
+.node-plate {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.node-plate path {
+  fill: var(--fill);
+  stroke: var(--tone);
+  stroke-width: 1.5;
+}
+
+.node-control[data-state="definition"] .node-plate path {
+  fill: var(--sunken);
+  stroke: var(--track);
+}
+
+/* The hatched fill is a gradient, which SVG cannot paint, so skipped plates go flat. */
+.node-control[data-reason="not_run"] .node-plate path,
+.node-control[data-state="skipped"] .node-plate path {
+  fill: var(--sunken);
+  stroke-dasharray: 4 3;
+}
+
+.node-control > :not(.node-plate) {
+  position: relative;
+}
+
+.node-badge {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--tone) 16%, transparent);
+  color: var(--ink);
+}
+
+/* Wait and sleep: a rounded capsule, since the run holds here for a person or a clock. */
+.node-wait {
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px 0 10px;
+  border: 1.5px dashed var(--tone);
+  border-radius: 999px;
+  background: var(--fill);
+}
+
+.node-wait .node-badge {
+  border-radius: 999px;
+}
+
+.node-wait[data-state="waiting"],
+.node-wait[data-state="sleeping"] {
+  border-style: solid;
+}
+
+/* Value nodes are cheap and inline, so they stay light: one line, no lamp. */
+.node-value,
+.node-fail {
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--fill);
+}
+
+.node-value[data-state="definition"] {
+  background: color-mix(in srgb, var(--panel) 55%, transparent);
+}
+
+.node-value[data-state="succeeded"],
+.node-value[data-state="running"],
+.node-value[data-state="failed"] {
+  border-color: color-mix(in srgb, var(--tone) 55%, var(--line));
+}
+
+/* A fail node is where the line ends on purpose: a buffer stop in the danger colour. */
+.node-fail {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+  border-right: 4px solid var(--danger);
+}
+
+.node-fail .node-glyph {
+  color: var(--danger);
+}
+
+/* Junctions are where arms rejoin the line. Selecting one still opens its record. */
+.node-junction {
+  border-radius: 999px;
+  background: var(--track);
+  box-shadow: 0 0 0 3px var(--page);
+}
+
+.node-junction[data-state="definition"] {
+  background: var(--track);
+}
+
+.node-junction[data-state="succeeded"],
+.node-junction[data-state="running"],
+.node-junction[data-state="failed"],
+.node-junction[data-state="skipped"] {
+  background: var(--tone);
+}
+
+.node-end {
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  background: var(--panel);
+  box-shadow:
+    inset 0 0 0 4px var(--panel),
+    inset 0 0 0 12px var(--tone);
+}
+
+.node-end[data-state="definition"],
+.node-end[data-state="idle"] {
+  border-color: var(--track);
+  box-shadow:
+    inset 0 0 0 4px var(--panel),
+    inset 0 0 0 12px var(--track);
+}
+
+.loopy-node:hover {
+  filter: brightness(1.02);
+}
+
+.node-work:hover,
+.node-value:hover {
+  border-color: var(--muted);
+}
+
+/* Selection draws a lamp halo outside an ink ring, so it reads on any state colour. */
+.loopy-node[aria-pressed="true"]:not(.node-control) {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 7px color-mix(in srgb, var(--lamp) 38%, transparent);
+}
+
+.node-control[aria-pressed="true"] .node-plate path {
+  stroke: var(--ink);
+  stroke-width: 2.5;
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--lamp) 80%, transparent));
+}
+
+.loopy-node:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+
+/* An occupied node: the lamp breathes so motion always means the run is here now. */
+@keyframes loopy-occupied {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--lamp) 55%, transparent);
+  }
+
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--lamp) 0%, transparent);
+  }
+}
+
+@keyframes loopy-plate {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 0 color-mix(in srgb, var(--lamp) 0%, transparent));
+  }
+
+  50% {
+    filter: drop-shadow(0 0 5px color-mix(in srgb, var(--lamp) 85%, transparent));
+  }
+}
+
+.loopy-node[data-state="running"]:not(.node-control) {
+  border-color: var(--lamp);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .loopy-node[data-state="running"]:not(.node-control, [aria-pressed="true"]),
+  .loopy-node[data-state="retrying"]:not(.node-control, [aria-pressed="true"]) {
+    animation: loopy-occupied 1.6s ease-in-out infinite;
+  }
+
+  .node-control[data-state="running"] .node-plate path {
+    animation: loopy-plate 1.6s ease-in-out infinite;
+  }
+}
+
+.node-control[data-state="running"] .node-plate path {
+  stroke: var(--lamp);
+}
+
+/* Frames sit behind the tracks. Nested scopes stack their tint, so depth reads at a glance. */
+.loopy-frame {
+  position: relative;
+  border: 1px solid color-mix(in srgb, var(--line-strong) 70%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--panel) 34%, transparent);
+  pointer-events: none;
+}
+
+/* A map body runs once per item, so its frame draws as a stack of sheets. */
+.loopy-frame[data-owner="map"] {
+  box-shadow:
+    4px 4px 0 -1px var(--page),
+    4px 4px 0 0 color-mix(in srgb, var(--line-strong) 70%, transparent),
+    8px 8px 0 -1px var(--page),
+    8px 8px 0 0 color-mix(in srgb, var(--line-strong) 45%, transparent);
+}
+
+.loopy-frame[data-owner="rescue"],
+.loopy-frame[data-owner="finally"] {
+  border-style: dashed;
+}
+
+.frame-subgraph {
+  border-style: dashed;
+  border-color: var(--track);
+  background: transparent;
+}
+
+.frame-caption {
+  position: absolute;
+  top: -9px;
+  left: 12px;
+  display: inline-flex;
+  height: 18px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--page);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+/* Tracks. */
+.loopy-track .track-line {
+  stroke: var(--track);
+  stroke-width: 1.6;
+}
+
+.loopy-track .track-arrow {
+  stroke: var(--track);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.track-cleanup .track-line,
+.track-rescue .track-line {
+  stroke-dasharray: 5 4;
+}
+
+/* The map body's way back to the map: a return loop, not the main line. */
+.track-join .track-line {
+  stroke-width: 1.3;
+}
+
+.loopy-track[data-taken] .track-line,
+.loopy-track[data-taken] .track-arrow {
+  stroke: var(--ink);
+  stroke-width: 2.4;
+}
+
+.track-flow {
+  stroke: var(--lamp);
+  stroke-width: 2.4;
+  stroke-dasharray: 3 9;
+  stroke-linecap: round;
+}
+
+@keyframes loopy-flow {
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .track-flow {
+    animation: loopy-flow 0.9s linear infinite;
+  }
+}
+
+.track-label {
+  position: absolute;
+  display: inline-flex;
+  height: 18px;
+  align-items: center;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.track-label-yes {
+  border-color: color-mix(in srgb, var(--success) 45%, var(--line));
+  color: var(--success);
+}
+
+.track-label-no,
+.track-label-rescue {
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--line));
+  color: var(--danger);
+}
+
+.track-label-each {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}

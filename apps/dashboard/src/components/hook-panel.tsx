@@ -39,7 +39,7 @@ function WaitingHook({
       <h2 className="font-medium">
         Waiting on <span className="font-mono">{waiting.hook}</span>
       </h2>
-      <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-xs">
         <Fact label="Opened">
           {hook ? <time dateTime={hook.createdAt}>{timestamp(hook.createdAt)}</time> : "unknown"}
         </Fact>
@@ -48,11 +48,6 @@ function WaitingHook({
         </Fact>
         <Fact label="Step">
           <span className="font-mono text-xs">{step?.key ?? `#${waiting.seq}`}</span>
-        </Fact>
-        <Fact label="Token">
-          <span className="font-mono text-xs" title={waiting.token}>
-            {waiting.token}
-          </span>
         </Fact>
       </dl>
       <PayloadEditor resolve={resolve} />
@@ -82,7 +77,7 @@ function SettledHook({ hook }: { hook: HookRecord }) {
         )}
       </h2>
       {hook.payload === undefined ? (
-        <p className="text-xs text-muted">No payload. The hook step failed with a timeout.</p>
+        <p className="text-xs text-muted">No payload recorded.</p>
       ) : (
         <JsonPreview label="Payload" value={hook.payload} />
       )}
@@ -90,17 +85,22 @@ function SettledHook({ hook }: { hook: HookRecord }) {
   );
 }
 
-/** The pending hook with its resolve form, or the outcome of the latest settled hook. */
+/** Retained hook outcomes remain visible beside the pending hook's resolve form. */
 export function HookPanel({ snapshot, now }: { snapshot: RunSnapshotView; now: number }) {
   const { waitingOn } = snapshot.run;
 
-  if (waitingOn) {
-    return <WaitingHook key={waitingOn.token} waiting={waitingOn} snapshot={snapshot} now={now} />;
-  }
+  const settled = snapshot.hooks.filter(
+    (hook) => hook.resolvedAt !== undefined || hook.expiredAt !== undefined,
+  );
 
-  const settled = snapshot.hooks
-    .filter((hook) => hook.resolvedAt !== undefined || hook.expiredAt !== undefined)
-    .at(-1);
-
-  return settled ? <SettledHook hook={settled} /> : null;
+  return (
+    <>
+      {waitingOn && (
+        <WaitingHook key={waitingOn.token} waiting={waitingOn} snapshot={snapshot} now={now} />
+      )}
+      {settled.map((hook) => (
+        <SettledHook key={hook.token} hook={hook} />
+      ))}
+    </>
+  );
 }

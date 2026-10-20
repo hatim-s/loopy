@@ -1,31 +1,65 @@
 @import "tailwindcss";
 
+/*
+ * Shared tokens, taken from the marketing site in apps/site/src/styles/site.css so the dashboard
+ * and the landing page read as one product. The board is a cool grey, panels float over it, and
+ * tracks light up along the route a run took. `active` is the blue for work in flight and
+ * `attention` the amber for work held on a person or a clock. `lamp` is the blue fill for glows,
+ * selection and primary buttons, `lamp-strong` is its hover, and `on-lamp` is the text on both.
+ * The site's status hues are too light for small text on white, so the light theme darkens them.
+ * Every text colour clears 4.5:1 against page, panel, sunken and raised in both themes.
+ */
 :root {
-  --page: #f6f8fb;
+  --page: #f7f8fa;
   --panel: #ffffff;
-  --raised: #eef1f5;
-  --ink: #161b22;
-  --muted: #5b6573;
-  --line: #dde2e8;
-  --active: #3d5bd9;
-  --success: #1d8556;
-  --danger: #c4413a;
-  --attention: #9a6400;
+  --sunken: #f1f3f6;
+  --raised: #eceff3;
+  --ink: #15191f;
+  --muted: #5b6673;
+  --faint: #636d79;
+  --line: #e3e7ec;
+  --line-strong: #c9d0d9;
+  --track: #838d99;
+  --grid: #d3d9e1;
+  --active: #3653dc;
+  --lamp: #4360e6;
+  --lamp-strong: #2f4bd1;
+  --on-lamp: #ffffff;
+  --success: #16774a;
+  --danger: #c43a2f;
+  --attention: #8a5d00;
+  --neutral: #5f6975;
+  --shadow: 0 1px 0 rgb(21 25 31 / 0.04), 0 12px 32px -16px rgb(21 25 31 / 0.3);
+
+  --row-h: 2.125rem;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 12px;
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     --page: #0d1014;
-    --panel: #11151a;
-    --raised: #161b21;
+    --panel: #161b21;
+    --sunken: #11151a;
+    --raised: #1c2229;
     --ink: #e6eaf0;
     --muted: #98a2ae;
+    --faint: #8a94a0;
     --line: #222931;
+    --line-strong: #323b46;
+    --track: #5a6573;
+    --grid: #262d36;
     --active: #8fa8ff;
+    --lamp: #8fa8ff;
+    --lamp-strong: #b7c6ff;
+    --on-lamp: #0b1330;
     --success: #5cd39b;
     --danger: #f2877e;
     --attention: #f0c46c;
+    --neutral: #8e98a4;
+    --shadow: 0 1px 0 rgb(0 0 0 / 0.2), 0 16px 40px -18px rgb(0 0 0 / 0.75);
     color-scheme: dark;
   }
 }
@@ -35,14 +69,24 @@
   --font-mono: "Geist Mono Variable", ui-monospace, "SFMono-Regular", Menlo, monospace;
   --color-page: var(--page);
   --color-panel: var(--panel);
+  --color-sunken: var(--sunken);
   --color-raised: var(--raised);
   --color-ink: var(--ink);
   --color-muted: var(--muted);
+  --color-faint: var(--faint);
   --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
   --color-active: var(--active);
+  --color-lamp: var(--lamp);
+  --color-lamp-strong: var(--lamp-strong);
+  --color-on-lamp: var(--on-lamp);
   --color-success: var(--success);
   --color-danger: var(--danger);
   --color-attention: var(--attention);
+  --color-neutral: var(--neutral);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
 }
 
 @layer base {
@@ -53,15 +97,92 @@
   }
 
   body {
-    @apply bg-page font-sans text-[13px] leading-[1.55] text-ink antialiased;
+    @apply bg-page font-sans text-[13px] leading-[1.5] text-ink antialiased;
     font-synthesis: none;
+    font-feature-settings: "cv11", "ss01";
   }
 
   :focus-visible {
-    @apply outline-2 outline-offset-2 outline-active;
+    @apply outline-2 outline-offset-2 outline-lamp;
   }
 
   ::selection {
-    @apply bg-active/25;
+    @apply bg-lamp/25;
+  }
+
+  input,
+  select,
+  textarea {
+    @apply text-[13px];
+  }
+}
+
+@layer components {
+  /* A bordered surface that holds a table or list. Sections sit on the page, not in cards. */
+  .panel {
+    @apply overflow-hidden rounded-md border border-line bg-panel;
+  }
+
+  /* A document page: centred, and clear of the floating bar. */
+  .page {
+    @apply mx-auto px-6 pt-[calc(var(--bar-h)+var(--gap)*3)] pb-10;
+  }
+
+  /* A surface that floats over the canvas or the page: the bar, side panels, the inspector. */
+  .float {
+    @apply rounded-lg border border-line bg-panel;
+    box-shadow: var(--shadow);
+  }
+
+  .data-table {
+    @apply w-full table-fixed border-collapse text-left;
+  }
+
+  .data-table thead th {
+    @apply h-7 border-b border-line bg-sunken px-3 text-xs font-normal whitespace-nowrap text-muted;
+  }
+
+  .data-table tbody td {
+    @apply h-(--row-h) border-b border-line px-3 align-middle;
+  }
+
+  .data-table tbody tr:last-child td {
+    @apply border-b-0;
+  }
+
+  .data-table tbody tr {
+    @apply hover:bg-sunken;
+  }
+
+  /* The row's main link stretches over the whole row, so the row is one click target. */
+  .row-link {
+    @apply after:absolute after:inset-0 focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 focus-visible:after:outline-lamp;
+  }
+
+  .section-head {
+    @apply flex min-h-7 flex-wrap items-center justify-between gap-x-4 gap-y-2;
+  }
+
+  .section-title {
+    @apply text-[13px] font-semibold;
+  }
+
+  .tab {
+    @apply flex h-7 items-center gap-1.5 rounded-md px-2 text-muted hover:bg-raised hover:text-ink;
+  }
+
+  .chip {
+    @apply inline-flex h-6 items-center gap-1.5 rounded-sm border border-transparent px-2 text-xs text-muted hover:bg-raised hover:text-ink;
+  }
+
+  .chip[aria-current="page"],
+  .chip[aria-pressed="true"],
+  .chip[aria-selected="true"] {
+    @apply border-lamp/45 bg-lamp/10 text-ink;
+  }
+
+  /* A square icon button for panel chrome: collapse, close, zoom. */
+  .icon-button {
+    @apply inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-raised hover:text-ink disabled:opacity-40;
   }
 }

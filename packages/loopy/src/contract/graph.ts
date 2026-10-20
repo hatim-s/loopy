@@ -348,7 +348,15 @@ export const graphViewSchema = graphSchema.extend({
 
 export const nodeRunViewSchema = nodeRunSchema;
 
+// A run pins one revision, so viewers name the revision beside the graph they draw.
+export const graphRevisionViewSchema = z.strictObject({
+  revision: z.string(),
+  graph: graphViewSchema,
+});
+
 export type GraphView = z.infer<typeof graphViewSchema>;
+
+export type GraphRevisionView = z.infer<typeof graphRevisionViewSchema>;
 
 export type NodeRunView = z.infer<typeof nodeRunViewSchema>;
 

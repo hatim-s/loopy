@@ -1,9 +1,11 @@
+import { existsSync } from "node:fs";
 import type { z } from "zod";
 import {
   type CursorView,
   DEFAULT_ERROR_MESSAGES,
   type ErrorCode,
   encodeRunCursor,
+  type GraphRevisionView,
   graphView,
   isTerminalRun,
   type Json,
@@ -251,12 +253,29 @@ export class LoopyService {
     }
   }
 
-  graph(slug: string, workspace: string) {
+  graph(slug: string, workspace: string): GraphRevisionView {
     try {
-      return graphView(this.options.registry(workspace).get(slug).graph);
+      const saved = this.options.registry(workspace).get(slug);
+
+      return { revision: saved.revision, graph: graphView(saved.graph) };
     } catch (error) {
       throw new ServiceError("not_found", errorMessage(error));
     }
+  }
+
+  /** The graph a run executes is the revision it pinned, not the loopy's latest save. */
+  async runGraph(id: string): Promise<GraphRevisionView> {
+    const run = await this.requireRun(id);
+    const registry = this.options.registry(run.workspace);
+
+    if (!existsSync(registry.graphPath(run.revision))) {
+      throw new ServiceError(
+        "not_found",
+        `Graph revision ${run.revision} for run '${id}' is missing from the Loopy home.`,
+      );
+    }
+
+    return { revision: run.revision, graph: graphView(await registry.revisionGraph(run.revision)) };
   }
 
   async requireRun(id: string): Promise<RunRecord> {
@@ -465,7 +484,7 @@ export class LoopyService {
   ): LoopyView[] {
     return entries.map((saved) =>
       loopyView(
-        saved,
+        { ...saved, workspace: registry.project },
         schedules.find((item) => item.slug === saved.slug && item.workspace === registry.project) ??
           null,
         runs.filter((run) => saved.scope === "global" || run.workspace === registry.project),

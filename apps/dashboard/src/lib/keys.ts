@@ -10,6 +10,8 @@ export const keys = {
   runs: (query: RunsQuery) => ["runs", query] as const,
   runPages: (filters: RunFilters) => ["runs", "pages", filters] as const,
   run: (id: string) => ["run", id] as const,
+  loopyGraph: (slug: string, workspace: string) => ["graph", "loopy", workspace, slug] as const,
+  runGraph: (id: string) => ["graph", "run", id] as const,
   daemon: ["daemon"],
   schedules: ["schedules"],
 } as const;

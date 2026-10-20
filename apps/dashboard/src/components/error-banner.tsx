@@ -11,7 +11,7 @@ export function ErrorBanner({ error }: { error: Error }) {
 /** A loader or render threw; the router hands over whatever was thrown. */
 export function RouteError({ error }: ErrorComponentProps) {
   return (
-    <div className="px-6 py-6">
+    <div className="page">
       <ErrorBanner error={error instanceof Error ? error : new Error(String(error))} />
     </div>
   );

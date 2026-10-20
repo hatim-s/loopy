@@ -107,6 +107,8 @@ function pagedCache() {
     loopies: [],
     schedules: [],
     runs: runs.map(snapshot),
+    graphs: [],
+    pins: {},
     batches: [],
     intervalMs: 0,
   });

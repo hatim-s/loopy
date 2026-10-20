@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { putLoopyBodySchema } from "./compiled-loopy.js";
-import { graphViewSchema } from "./graph.js";
+import { graphRevisionViewSchema, graphViewSchema } from "./graph.js";
 import { jsonSchema } from "./json.js";
 import { logRecordSchema, runStatusSchema } from "./records.js";
 import {
@@ -188,7 +188,15 @@ export const routes = {
     params: scheduleParamsSchema,
     query: z.strictObject({ workspace: z.string().optional() }),
     body: z.undefined(),
-    response: graphViewSchema,
+    response: graphRevisionViewSchema,
+  },
+  runGraph: {
+    method: "GET",
+    path: "/runs/:id/graph",
+    params: runParamsSchema,
+    query: emptySchema,
+    body: z.undefined(),
+    response: graphRevisionViewSchema,
   },
   schedules: {
     method: "GET",

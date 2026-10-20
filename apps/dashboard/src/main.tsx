@@ -5,6 +5,8 @@ import { createRouter, RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BackendError, type LoopyBackend } from "./backend/backend.ts";
+import { backendConfigSchema } from "./backend/config.ts";
+import { legacyHttpBackend } from "./backend/legacy-http.ts";
 import { localHttpBackend } from "./backend/local-http.ts";
 import { routeTree } from "./routeTree.gen.ts";
 import "./style.css";
@@ -26,7 +28,12 @@ function captureToken(): string | null {
 }
 
 async function createBackend(): Promise<LoopyBackend> {
-  if (import.meta.env.VITE_BACKEND === "fake") {
+  const config = backendConfigSchema.parse({
+    mode: import.meta.env.VITE_BACKEND ?? "http",
+    workspace: import.meta.env.VITE_LEGACY_WORKSPACE,
+  });
+
+  if (config.mode === "fake") {
     const [{ fakeBackend }, { demoScript }] = await Promise.all([
       import("./backend/fake.ts"),
       import("./backend/demo.ts"),
@@ -35,7 +42,11 @@ async function createBackend(): Promise<LoopyBackend> {
     return fakeBackend(demoScript());
   }
 
-  return localHttpBackend({ origin: window.location.origin, token: captureToken() });
+  const connection = { origin: window.location.origin, token: captureToken() };
+
+  return config.mode === "legacy"
+    ? legacyHttpBackend({ ...connection, workspace: config.workspace })
+    : localHttpBackend(connection);
 }
 
 const queryClient = new QueryClient({

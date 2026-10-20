@@ -1,4 +1,10 @@
-export { isFieldValue, isTerminalRun } from "../core/index.js";
+export {
+  executionKeyString,
+  isFieldValue,
+  isRecord,
+  isRef,
+  isTerminalRun,
+} from "../core/index.js";
 
 export {
   DEFAULT_ERROR_MESSAGES,
