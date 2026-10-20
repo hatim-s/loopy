@@ -78,29 +78,6 @@ function logEvent(sequence: number, seq: number) {
   });
 }
 
-function stepEvent(sequence: number, seq: number, status: "running" | "waiting") {
-  const base = {
-    runId: "run-1",
-    seq,
-    key: `step-${seq}`,
-    kind: "hook",
-    input: null,
-    attempt: 1,
-    maxAttempts: 1,
-    startedAt: AT,
-  } as const;
-
-  return event(sequence, {
-    entity: "step",
-    kind: status,
-    runId: "run-1",
-    record:
-      status === "waiting"
-        ? { ...base, status, wakeAt: "2026-10-17T11:00:00.000Z" }
-        : { ...base, status },
-  });
-}
-
 const hook = { token: "tok", runId: "run-1", seq: 1, name: "approve", createdAt: AT };
 
 function hookEvent(sequence: number, kind: "created" | "resolved") {
@@ -144,15 +121,19 @@ test("a run event updates its run inside every page of a paged list", () => {
   });
 });
 
-test("hook creation without steps invalidates a paged list that holds its run", () => {
+test("hook creation updates a paged list from native hook data", () => {
   const client = new QueryClient();
   const holding = keys.runPages({});
   const other = keys.runPages({ slug: "other" });
   client.setQueryData(holding, { pages: [page([]), page([run])], pageParams: [undefined, "c1"] });
   client.setQueryData(other, { pages: [page([{ ...run, id: "other" }])], pageParams: [undefined] });
   applyBatch(client, [hookEvent(11, "created")]);
-  expect(client.getQueryState(holding)?.isInvalidated).toBe(true);
-  expect(client.getQueryState(other)?.isInvalidated).toBe(false);
+  expect(
+    client.getQueryData<InfiniteData<RunPage>>(holding)?.pages[1]?.runs[0]?.waitingOn?.token,
+  ).toBe("tok");
+  expect(
+    client.getQueryData<InfiniteData<RunPage>>(other)?.pages[0]?.runs[0]?.waitingOn,
+  ).toBeNull();
 });
 
 test("a list keeps a run that is newer than the event", () => {
@@ -202,14 +183,13 @@ test("node events keep one record per execution key at its latest attempt", () =
   expect(next.cursor).toBe(15);
 });
 
-test("logs and steps land in seq order whatever order the events arrive in", () => {
-  const next = [logEvent(13, 3), logEvent(12, 1), stepEvent(14, 2, "running"), logEvent(11, 2)]
+test("logs land in seq order whatever order the events arrive in", () => {
+  const next = [logEvent(13, 3), logEvent(12, 1), logEvent(11, 2)]
     .sort((a, b) => a.sequence - b.sequence)
     .reduce(applyToSnapshot, snapshot());
 
   expect(next.logs.map((log) => log.seq)).toEqual([1, 2, 3]);
-  expect(next.steps.map((step) => step.seq)).toEqual([2]);
-  expect(next.cursor).toBe(14);
+  expect(next.cursor).toBe(13);
 });
 
 test("events at or below the cursor are already in the snapshot and change nothing", () => {
@@ -221,26 +201,27 @@ test("events at or below the cursor are already in the snapshot and change nothi
   expect(replayed.logs.map((log) => log.seq)).toEqual([1, 2]);
 });
 
-test("a step update replaces the step with the same seq", () => {
-  const next = [stepEvent(11, 1, "running"), stepEvent(12, 1, "waiting")].reduce(
-    applyToSnapshot,
-    snapshot(),
-  );
-
-  expect(next.steps.map((step) => step.status)).toEqual(["waiting"]);
-});
-
 test("events for another run leave the snapshot alone", () => {
   const start = snapshot();
 
   expect(applyToSnapshot(start, runEvent(11, { ...running, id: "run-2" }))).toBe(start);
 });
 
-test("a created hook sets waitingOn with the step expiry and resolving it clears it", () => {
-  const waiting = [stepEvent(11, 1, "waiting"), hookEvent(12, "created")].reduce(
-    applyToSnapshot,
-    snapshot(),
-  );
+test("native wait hooks preserve run expiry and resolving them clears waitingOn", () => {
+  const nativeWaiting: RunView = {
+    ...run,
+    status: "suspended",
+    wakeAt: "2026-10-17T11:00:00.000Z",
+    waitingOn: {
+      hook: "approve",
+      token: "tok",
+      seq: 1,
+      since: AT,
+      expiresAt: "2026-10-17T11:00:00.000Z",
+    },
+  };
+
+  const waiting = applyToSnapshot(snapshot({ run: nativeWaiting }), hookEvent(11, "created"));
 
   expect(waiting.run.waitingOn).toEqual({
     hook: "approve",
@@ -260,10 +241,7 @@ test("a created hook sets waitingOn with the step expiry and resolving it clears
 test("hook events update waitingOn on list entries too", () => {
   const client = new QueryClient();
   client.setQueryData(keys.runs({}), [run]);
-  client.setQueryData(
-    keys.run(run.id),
-    applyToSnapshot(snapshot({ cursor: 9 }), stepEvent(10, 1, "waiting")),
-  );
+  client.setQueryData(keys.run(run.id), snapshot({ cursor: 9 }));
 
   applyBatch(client, [hookEvent(11, "created")]);
 
@@ -341,8 +319,20 @@ test("old hook replay cannot resurrect waitingOn after a newer run event", () =>
 
 test("hook updates preserve snapshot expiry in lists and reject older timestamps", () => {
   const client = new QueryClient();
-  client.setQueryData(keys.run(run.id), applyToSnapshot(snapshot(), stepEvent(11, 1, "waiting")));
-  client.setQueryData(keys.runs({}), [run]);
+
+  const waitingRun: RunView = {
+    ...run,
+    waitingOn: {
+      hook: "approve",
+      token: "tok",
+      seq: 1,
+      since: AT,
+      expiresAt: "2026-10-17T11:00:00.000Z",
+    },
+  };
+
+  client.setQueryData(keys.run(run.id), snapshot({ run: waitingRun }));
+  client.setQueryData(keys.runs({}), [waitingRun]);
   applyBatch(client, [hookEvent(12, "created")]);
   expect(client.getQueryData<RunView[]>(keys.runs({}))?.[0]?.waitingOn?.expiresAt).toBe(
     "2026-10-17T11:00:00.000Z",
@@ -352,14 +342,14 @@ test("hook updates preserve snapshot expiry in lists and reject older timestamps
   expect(client.getQueryData<RunSnapshotView>(keys.run(run.id))?.run.waitingOn).toBeNull();
 });
 
-test("hook creation without steps invalidates only lists containing its run", () => {
+test("hook creation updates only lists containing its run", () => {
   const client = new QueryClient();
   const other = keys.runs({ slug: "other" });
   client.setQueryData(keys.runs({}), [run]);
   client.setQueryData(other, [{ ...run, id: "other" }]);
   applyBatch(client, [hookEvent(11, "created")]);
-  expect(client.getQueryState(keys.runs({}))?.isInvalidated).toBe(true);
-  expect(client.getQueryState(other)?.isInvalidated).toBe(false);
+  expect(client.getQueryData<RunView[]>(keys.runs({}))?.[0]?.waitingOn?.token).toBe("tok");
+  expect(client.getQueryData<RunView[]>(other)?.[0]?.waitingOn).toBeNull();
 });
 
 test("run creation and completion invalidate the lists and loopy summaries", () => {

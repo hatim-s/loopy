@@ -6,7 +6,6 @@ import {
   type RunView,
   type ScheduleView,
   type ServerEvent,
-  type StepRecord,
 } from "loopy/contract";
 import type { LoopyBackend, RunsQuery, StreamState } from "../backend/backend.ts";
 import { keys } from "./keys.ts";
@@ -33,16 +32,15 @@ function upsertBy<T>(items: T[], item: T, same: (a: T) => boolean, order: (a: T)
   return [...items.filter((existing) => !same(existing)), item].sort((a, b) => order(a) - order(b));
 }
 
-/** A created hook becomes what the run waits on; a resolved or expired one stops being it. */
-function waitingAfter(run: RunView, event: HookEvent, steps: StepRecord[]): RunView["waitingOn"] {
+/** A hook event carries wait identity; the run view carries its native expiry. */
+function waitingAfter(run: RunView, event: HookEvent): RunView["waitingOn"] {
   const hook = event.record;
 
   if (hook.resolvedAt !== undefined || hook.expiredAt !== undefined) {
     return run.waitingOn?.token === hook.token ? null : run.waitingOn;
   }
 
-  const step = steps.find((item) => item.seq === hook.seq);
-  const expiresAt = step?.status === "waiting" ? (step.wakeAt ?? null) : null;
+  const expiresAt = run.waitingOn?.token === hook.token ? run.waitingOn.expiresAt : null;
 
   return { hook: hook.name, token: hook.token, seq: hook.seq, since: hook.createdAt, expiresAt };
 }
@@ -71,10 +69,7 @@ function withSnapshotHook(snapshot: RunSnapshotView, event: HookEvent): RunSnaps
       (hook) => hook.token === event.record.token,
       (hook) => hook.seq,
     ),
-    run:
-      event.at >= run.updatedAt
-        ? { ...run, waitingOn: waitingAfter(run, event, snapshot.steps) }
-        : run,
+    run: event.at >= run.updatedAt ? { ...run, waitingOn: waitingAfter(run, event) } : run,
   };
 }
 
@@ -93,13 +88,6 @@ export function applyToSnapshot(snapshot: RunSnapshotView, event: ServerEvent): 
     next.run = newer(snapshot.run, event.record) ? event.record : snapshot.run;
   } else if (event.entity === "node") {
     next.nodeRuns = withNodeRun(snapshot.nodeRuns, event.record);
-  } else if (event.entity === "step") {
-    next.steps = upsertBy(
-      snapshot.steps,
-      event.record,
-      (step) => step.seq === event.record.seq,
-      (step) => step.seq,
-    );
   } else if (event.entity === "log") {
     next.logs = upsertBy(
       snapshot.logs,
@@ -114,28 +102,10 @@ export function applyToSnapshot(snapshot: RunSnapshotView, event: ServerEvent): 
   return next;
 }
 
-function hookNeedsSteps(event: HookEvent): boolean {
-  return event.record.resolvedAt === undefined && event.record.expiredAt === undefined;
-}
-
-function canApplyHook(event: HookEvent, snapshot: RunSnapshotView | undefined): boolean {
-  return (
-    !hookNeedsSteps(event) ||
-    (snapshot?.steps.some(
-      (step) => step.seq === event.record.seq && step.status === "waiting" && step.kind === "hook",
-    ) ??
-      false)
-  );
-}
-
-function applyHookToList(
-  runs: RunView[],
-  event: HookEvent,
-  snapshot: RunSnapshotView | undefined,
-): RunView[] {
+function applyHookToList(runs: RunView[], event: HookEvent): RunView[] {
   return runs.map((run) =>
-    run.id === event.record.runId && event.at >= run.updatedAt && canApplyHook(event, snapshot)
-      ? { ...run, waitingOn: waitingAfter(run, event, snapshot?.steps ?? []) }
+    run.id === event.record.runId && event.at >= run.updatedAt
+      ? { ...run, waitingOn: waitingAfter(run, event) }
       : run,
   );
 }
@@ -251,20 +221,10 @@ function updateMembership(
   return missing;
 }
 
-function applyHookLists(
-  { client, changes }: BatchContext,
-  event: HookEvent,
-  snapshot: RunSnapshotView | undefined,
-): void {
+function applyHookLists({ client }: BatchContext, event: HookEvent): void {
   for (const query of client.getQueryCache().findAll({ queryKey: keys.runLists })) {
-    const list = client.getQueryData<RunList>(query.queryKey);
-
-    if (!canApplyHook(event, snapshot) && listRun(list, event.record.runId) !== undefined) {
-      changes.lists.add(query.queryHash);
-    }
-
     client.setQueryData<RunList>(query.queryKey, (current) =>
-      mapRunList(current, (runs) => applyHookToList(runs, event, snapshot)),
+      mapRunList(current, (runs) => applyHookToList(runs, event)),
     );
   }
 }
@@ -315,9 +275,6 @@ function acceptEvent(history: StreamHistory, event: ServerEvent): boolean {
 function applyEvent(context: BatchContext, event: ServerEvent): void {
   const { client, history, changes } = context;
 
-  const snapshot =
-    event.runId === null ? undefined : client.getQueryData<RunSnapshotView>(keys.run(event.runId));
-
   if (event.entity === "run") {
     applyRunEvent(context, event);
     acceptEvent(history, event);
@@ -334,7 +291,7 @@ function applyEvent(context: BatchContext, event: ServerEvent): void {
   }
 
   if (event.entity === "hook") {
-    applyHookLists(context, event, snapshot);
+    applyHookLists(context, event);
   }
 
   if (event.runId !== null) {

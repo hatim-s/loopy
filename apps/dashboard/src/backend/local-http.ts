@@ -292,7 +292,6 @@ export function localHttpBackend(options: LocalHttpOptions): LoopyBackend {
   const { send, events } = httpTransport(options);
 
   return {
-    graphSupport: "available",
     cursor: (signal) => send(routes.cursor, { params: {}, query: {}, body: undefined }, signal),
     loopies: () => send(routes.loopies, { params: {}, query: {}, body: undefined }),
     loopyGraph: (slug, workspace) =>

@@ -196,7 +196,6 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
 
   return {
     cursor: async () => ({ cursor: sequence, epoch: script.epoch }),
-    graphSupport: "available",
     loopies: async () =>
       script.loopies.map((loopy) => {
         const counts = { ...loopy.counts };

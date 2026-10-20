@@ -36,7 +36,6 @@ export type StreamEnd = "aborted" | "reset";
 
 /** The one seam between the UI and wherever runs live. Components never call fetch. */
 export type LoopyBackend = {
-  readonly graphSupport: "available" | "legacy_unavailable";
   cursor(signal: AbortSignal): Promise<CursorView>;
   loopies(): Promise<LoopyView[]>;
   /** The latest revision saved in `workspace`, which the next run there will pin. */
@@ -59,7 +58,6 @@ export type LoopyBackend = {
 };
 
 const CLIENT_ERROR_MESSAGES = {
-  legacy_unavailable: "Static graph unavailable for this legacy TypeScript workflow.",
   unreachable: "The Loopy server did not answer. Check that the daemon is running.",
   malformed_response: "The server sent a response this dashboard does not understand.",
 } as const;

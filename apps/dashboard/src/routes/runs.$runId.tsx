@@ -9,7 +9,6 @@ import { HookPanel } from "../components/hook-panel.tsx";
 import { LogLines } from "../components/log-lines.tsx";
 import { RunFacts, RunTitle } from "../components/run-header.tsx";
 import { RunIo } from "../components/run-io.tsx";
-import { RunTrace } from "../components/run-trace.tsx";
 import { useClock } from "../lib/clock.ts";
 import { loopyGraphQuery, runGraphQuery, runQuery } from "../lib/queries.ts";
 import { useBackend } from "../router-context.ts";
@@ -17,9 +16,7 @@ import { useBackend } from "../router-context.ts";
 export const Route = createFileRoute("/runs/$runId")({
   loader: ({ context, params }) => {
     // The graph loads beside the snapshot; a missing revision must not hide the run.
-    if (context.backend.graphSupport === "available") {
-      void context.queryClient.prefetchQuery(runGraphQuery(context.backend, params.runId));
-    }
+    void context.queryClient.prefetchQuery(runGraphQuery(context.backend, params.runId));
 
     return context.queryClient.ensureQueryData(runQuery(context.backend, params.runId));
   },
@@ -137,13 +134,7 @@ function RunPage() {
       header={<RunTitle run={data.run} />}
       body={<RunBody key={data.run.id} snapshot={data} now={now} />}
     >
-      {(frame) =>
-        backend.graphSupport === "legacy_unavailable" ? (
-          <RunTrace steps={data.steps} now={now} frame={frame} />
-        ) : (
-          <RunGraph snapshot={data} now={now} frame={frame} />
-        )
-      }
+      {(frame) => <RunGraph snapshot={data} now={now} frame={frame} />}
     </CanvasPage>
   );
 }

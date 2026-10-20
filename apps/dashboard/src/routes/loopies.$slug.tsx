@@ -28,7 +28,7 @@ export const Route = createFileRoute("/loopies/$slug")({
     // The slug alone can name another project's loopy, so the graph waits for the workspace.
     const loopy = loopies.find((item) => item.slug === params.slug);
 
-    if (loopy && context.backend.graphSupport === "available") {
+    if (loopy) {
       void context.queryClient.prefetchQuery(
         loopyGraphQuery(context.backend, loopy.slug, loopy.workspace),
       );
@@ -103,7 +103,6 @@ function DefinitionGraph({
 
 function LoopyDetails({ loopy, now }: { loopy: LoopyView; now: number }) {
   const { schedule } = loopy;
-  const legacy = useBackend().graphSupport === "legacy_unavailable";
 
   return (
     <section aria-label="Details" className="space-y-1 px-3 py-3 text-xs text-muted">
@@ -121,7 +120,6 @@ function LoopyDetails({ loopy, now }: { loopy: LoopyView; now: number }) {
         </Link>
       </p>
       <p className="truncate font-mono" title={loopy.workspace}>
-        {legacy && <span className="block font-sans">Configured run directory</span>}
         {loopy.workspace}
       </p>
     </section>
@@ -133,7 +131,6 @@ function LoopyPage() {
   const { status } = Route.useSearch();
   const loopy = useLoopy(slug);
   const now = useClock();
-  const backend = useBackend();
 
   if (!loopy) {
     return <p className="page text-muted">No saved loopy has this slug.</p>;
@@ -173,25 +170,7 @@ function LoopyPage() {
         </>
       }
     >
-      {(frame) =>
-        backend.graphSupport === "legacy_unavailable" ? (
-          <div
-            className="h-full"
-            style={{
-              paddingLeft: frame.padding.left,
-              paddingTop: frame.padding.top,
-              paddingRight: frame.padding.right,
-              paddingBottom: frame.padding.bottom,
-            }}
-          >
-            <CanvasMessage>
-              Static graph unavailable for this legacy TypeScript workflow.
-            </CanvasMessage>
-          </div>
-        ) : (
-          <DefinitionGraph loopy={loopy} now={now} frame={frame} />
-        )
-      }
+      {(frame) => <DefinitionGraph loopy={loopy} now={now} frame={frame} />}
     </CanvasPage>
   );
 }
