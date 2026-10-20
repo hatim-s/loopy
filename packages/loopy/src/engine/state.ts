@@ -17,6 +17,7 @@ export type EngineState = {
 
 export type EngineEvent = { at: string } & (
   | { kind: "run_started" }
+  | { kind: "value_sampled"; executionKey: ExecutionKey; value: Json }
   | {
       kind: "execution_completed";
       executionKey: ExecutionKey;

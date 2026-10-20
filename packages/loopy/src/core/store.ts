@@ -1,6 +1,8 @@
 import type { StoreEffect } from "./effects.js";
-import type { NodeRun } from "./graph.js";
+import type { ExecutionKey, NodeRun, OutSchema } from "./graph.js";
 import type {
+  HookRecord,
+  Json,
   LogRecord,
   RunOutcome,
   RunRecord,
@@ -20,7 +22,16 @@ export class OwnershipError extends Error {
 
 export type WakeError = "not_found" | "owned_elsewhere" | "not_claimable";
 
+export type WaitRecord = HookRecord & { executionKey: ExecutionKey; schema: OutSchema };
+
+export type WaitResolution =
+  | { kind: "resolved"; runId: string }
+  | { kind: "rejected"; code: "unknown_hook" | "bad_request"; message: string };
+
 export interface Store {
+  getWaits(runId: string): Promise<WaitRecord[]>;
+  getWait(token: string): Promise<WaitRecord | undefined>;
+  resolveWait(options: { token: string; payload: Json; at: string }): Promise<WaitResolution>;
   wakeRun(runId: string, at: string): Promise<WakeError | undefined>;
   oldestEventSequence(): number | undefined;
   events(after: number, limit: number): Promise<RuntimeEvent[]>;

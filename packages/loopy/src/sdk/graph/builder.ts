@@ -4,6 +4,7 @@ import {
   type GraphMeta,
   type GraphRetry,
   graphTypeResolver,
+  type InputValidation,
   type Node,
   type NodeId,
   type NodeKind,
@@ -70,6 +71,7 @@ export function currentBuilder(): GraphBuilder {
 }
 
 export class GraphBuilder {
+  inputValidation?: InputValidation;
   readonly nodes: Node[] = [];
   readonly edges: Edge[] = [];
   readonly frames: Frame[] = [frame(null)];
@@ -254,6 +256,7 @@ export class GraphBuilder {
       version: 1,
       name: this.name,
       input: this.input,
+      inputValidation: this.inputValidation,
       nodes: this.nodes,
       edges: this.edges,
       entry,

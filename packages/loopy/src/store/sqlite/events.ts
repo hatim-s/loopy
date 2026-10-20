@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import type { RuntimeEvent, RuntimeEventChange } from "../../core/index.js";
 import { EVENT_RETENTION, EventListeners, type EventTransaction } from "../event-outbox.js";
 import { rowToEvent, SQL } from "./store-rows.js";
-import { type EventRow, SCHEMA, SCHEMA_VERSION } from "./store-schema.js";
+import { type EventRow, SCHEMA, SCHEMA_VERSION, WAIT_SCHEMA } from "./store-schema.js";
 
 export class SqliteEvents {
   protected readonly db: Database;
@@ -18,34 +18,46 @@ export class SqliteEvents {
   ) {
     this.db = new Database(file, { create: true });
     this.db.exec("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000");
-    this.db
-      .transaction(() => {
-        const version = this.db
-          .query<{ user_version: number }, []>("PRAGMA user_version")
-          .get()?.user_version;
 
-        if (version === SCHEMA_VERSION) {
-          return;
-        }
+    try {
+      this.db
+        .transaction(() => {
+          const version = this.db
+            .query<{ user_version: number }, []>("PRAGMA user_version")
+            .get()?.user_version;
 
-        const tables = this.db
-          .query<{ name: string }, []>(
-            "SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'",
-          )
-          .all();
+          if (version === SCHEMA_VERSION) {
+            return;
+          }
 
-        // Defer foreign keys until every old table has been dropped.
-        this.db.exec("PRAGMA defer_foreign_keys=ON");
+          const tables = this.db
+            .query<{ name: string }, []>(
+              "SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+            )
+            .all();
 
-        for (const table of tables) {
-          this.db.exec(`DROP TABLE "${table.name.replaceAll('"', '""')}"`);
-        }
+          if (version === 13) {
+            this.db.exec(WAIT_SCHEMA);
+            this.db.exec(`PRAGMA user_version=${SCHEMA_VERSION}`);
 
-        this.db.exec(SCHEMA);
-        this.db.query(SQL.createEpoch).run(crypto.randomUUID());
-        this.db.exec(`PRAGMA user_version=${SCHEMA_VERSION}`);
-      })
-      .immediate();
+            return;
+          }
+
+          if (tables.length > 0 || version !== 0) {
+            throw new Error(
+              `Database schema ${version} cannot be opened by this runtime. Preserve this home and migrate its saved definitions into a separate home.`,
+            );
+          }
+
+          this.db.exec(SCHEMA);
+          this.db.query(SQL.createEpoch).run(crypto.randomUUID());
+          this.db.exec(`PRAGMA user_version=${SCHEMA_VERSION}`);
+        })
+        .immediate();
+    } catch (error) {
+      this.db.close();
+      throw error;
+    }
   }
 
   dataVersion(): number {

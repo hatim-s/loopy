@@ -16,7 +16,7 @@ export async function runHook(context: CliContext): Promise<void> {
     routes.resolveNamedHook.response,
     { method: "POST", body: { payload } },
   );
-  printLine(`Resolved hook '${name}' for run ${runId}. Run loopy resume ${runId} to continue.`);
+  printLine(`Resolved hook '${name}' for run ${runId}. The run is ready to continue.`);
 }
 
 function parsePayload(text = "null"): Json {

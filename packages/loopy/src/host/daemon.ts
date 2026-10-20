@@ -53,6 +53,7 @@ export class Daemon {
   private waiting?: AbortController;
   private ticking?: Promise<TickResult>;
   private running?: Promise<void>;
+  private readonly unsubscribe: () => void;
 
   constructor(private readonly options: DaemonOptions) {
     this.clock = options.clock ?? SYSTEM_CLOCK;
@@ -73,6 +74,11 @@ export class Daemon {
       (run) => this.activateRun(run),
       () => this.wake(),
     );
+    this.unsubscribe = options.store.subscribe((events) => {
+      if (events.some((event) => event.entity === "run" && event.kind === "woken")) {
+        this.wake();
+      }
+    });
   }
 
   tick(): Promise<TickResult> {
@@ -102,6 +108,7 @@ export class Daemon {
 
   async stop(): Promise<void> {
     this.stopped = true;
+    this.unsubscribe();
     this.wake();
     await this.ticking;
     await this.running;

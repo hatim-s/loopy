@@ -167,6 +167,8 @@ const command = base.extend({
     cwd: valueSchema.nullable(),
     env: graphRecord(valueSchema),
     stdin: valueSchema.nullable(),
+    timeout: durationSchema.optional(),
+    maxOutputBytes: z.number().int().positive().optional(),
   }),
   rateLimit: rateLimitSchema.nullable(),
   retry: retrySchema,
@@ -276,6 +278,13 @@ export const graphSchema = z.strictObject({
   version: z.literal(1),
   name: z.string(),
   input: z.union([graphRecord(z.enum(FIELD_TYPES)).readonly(), z.literal("schema")]),
+  inputValidation: z
+    .strictObject({
+      minItems: graphRecord(z.number().int().nonnegative()).readonly(),
+      unknownKeys: z.enum(["strip", "reject", "passthrough"]),
+      root: z.literal("json").optional(),
+    })
+    .optional(),
   nodes: z.array(nodeSchema),
   edges: z.array(edgeSchema),
   entry: nodeIdSchema,

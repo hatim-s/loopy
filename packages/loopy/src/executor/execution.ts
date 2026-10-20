@@ -1,6 +1,7 @@
 import { realpath } from "node:fs/promises";
 import {
   CommandExecutionError,
+  durationMs,
   type ExecutionKey,
   type ExecutionMode,
   type ExecutionResult,
@@ -133,6 +134,11 @@ export class ExecutionWorker implements Executor {
           cwd: spec.cwd ?? undefined,
           env: spec.env,
           stdin: spec.stdin ?? undefined,
+          maxOutputBytes: spec.node.options.maxOutputBytes,
+          timeoutMs:
+            spec.node.options.timeout === undefined
+              ? undefined
+              : durationMs(spec.node.options.timeout),
         },
         {
           ...this.options,

@@ -4,6 +4,14 @@ export function utc(value: string): string {
   return new Date(value).toISOString();
 }
 
+export function earliestWakeAt(...values: (string | null | undefined)[]): string | null {
+  return (
+    values
+      .flatMap((value) => (value === null || value === undefined ? [] : [utc(value)]))
+      .sort()[0] ?? null
+  );
+}
+
 export function normalizeNode(node: NodeRun): NodeRun {
   const record = { ...node, startedAt: utc(node.startedAt) };
 

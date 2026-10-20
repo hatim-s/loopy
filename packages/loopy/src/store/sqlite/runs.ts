@@ -15,11 +15,11 @@ import {
 } from "../../core/index.js";
 import { type EventTransaction } from "../event-outbox.js";
 import { normalizeRun, utc } from "../timestamps.js";
-import { SqliteOwnership } from "./ownership.js";
 import { rowToRun, SQL } from "./store-rows.js";
 import { type RunRow } from "./store-schema.js";
+import { SqliteWaitRecords } from "./wait-records.js";
 
-export class SqliteRuns extends SqliteOwnership {
+export class SqliteRuns extends SqliteWaitRecords {
   async acquireRateLimit(
     key: string,
     count: number,
@@ -161,6 +161,7 @@ export class SqliteRuns extends SqliteOwnership {
   async finishRun(runId: string, token: string, outcome: RunOutcome): Promise<void> {
     this.commit((txn) => {
       this.requireRunning(this.owned(runId, token));
+      this.expireWaits(txn, runId, this.timestamp());
       this.db
         .query(SQL.finish)
         .run(

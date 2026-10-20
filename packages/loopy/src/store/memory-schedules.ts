@@ -1,8 +1,8 @@
 import type { Schedule } from "../core/index.js";
 import { type Store } from "../core/index.js";
-import { MemoryNodes } from "./memory-nodes.js";
+import { MemoryWaits } from "./memory-waits.js";
 
-export class MemorySchedules extends MemoryNodes {
+export class MemorySchedules extends MemoryWaits {
   async putSchedule(schedule: Omit<Schedule, "version">): Promise<Schedule> {
     return this.commit((txn) => {
       const record = structuredClone({

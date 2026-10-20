@@ -1,4 +1,9 @@
-import type { GraphMeta, RecordSpec } from "../../core/index.js";
+import {
+  type GraphMeta,
+  type InputValidation,
+  parseInputValidation,
+  type RecordSpec,
+} from "../../core/index.js";
 import { GraphBuilder } from "./builder.js";
 import { parseDefinitionInput, parseDefinitionMeta } from "./definition.js";
 import { inputRef } from "./input.js";
@@ -8,6 +13,7 @@ export function loopy<const S extends RecordSpec>(
   name: string,
   definition: { [K in keyof GraphMeta]?: NonNullable<GraphMeta[K]> } & {
     input: S;
+    inputValidation?: InputValidation;
     run(context: { input: ReturnType<typeof inputRef<S>> }): AuthorValue;
   },
 ) {
@@ -16,6 +22,8 @@ export function loopy<const S extends RecordSpec>(
     parseDefinitionInput(definition.input),
     parseDefinitionMeta(name, definition),
   );
+
+  builder.inputValidation = parseInputValidation(definition.inputValidation, definition.input);
 
   return builder.run(() =>
     builder.finish(definition.run({ input: inputRef(builder, definition.input) })),

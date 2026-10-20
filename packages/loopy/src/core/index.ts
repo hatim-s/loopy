@@ -28,6 +28,8 @@ export { isRef, projectValue } from "./graph-ref.js";
 
 export { graphTypeResolver } from "./graph-type.js";
 
+export { parseInputValidation, validateGraphInput } from "./input.js";
+
 export { assertJson } from "./json.js";
 
 export { limitLogs } from "./logs.js";

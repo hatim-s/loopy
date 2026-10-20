@@ -1,126 +1,10 @@
-import { errorMessage, type Graph, type Node, type NodeRun } from "../core/index.js";
-import { failNode } from "./failure.js";
-import { immediate } from "./immediate.js";
+import { errorMessage, type Graph, isNumber, isString } from "../core/index.js";
 import { finish, type Transition, write } from "./node-run.js";
 import { validateOutput } from "./output.js";
 import { resolve, sameExecution } from "./resolve.js";
 import { retryDelayMs, shouldRetry } from "./retry.js";
-import { executionSpec } from "./spec.js";
 import type { EngineEvent, EngineState } from "./state.js";
-
-function dispatch(
-  transition: Transition,
-  node: Extract<Node, { kind: "code" | "command" }>,
-  previous: NodeRun | undefined,
-  at: string,
-) {
-  const spec = executionSpec(node, transition.state);
-
-  const nodeRun: NodeRun =
-    previous?.status === "running" || previous?.status === "rate_limited"
-      ? {
-          key: previous.key,
-          attempt: previous.attempt,
-          maxAttempts: previous.maxAttempts,
-          startedAt: previous.startedAt,
-          receipt: previous.receipt,
-          status: "running",
-        }
-      : {
-          key: { runId: transition.state.runId, nodeId: node.id, scope: [] },
-          status: "running",
-          attempt: (previous?.attempt ?? 0) + 1,
-          maxAttempts: node.retry.attempts,
-          startedAt: at,
-          receipt: "none",
-        };
-
-  write(transition, nodeRun);
-  transition.effects.push({
-    kind: "dispatch",
-    executionKey: nodeRun.key,
-    attempt: nodeRun.attempt,
-    spec,
-  });
-}
-
-function invokeNode(transition: Transition, node: Node, previous: NodeRun | undefined, at: string) {
-  if (node.kind === "code" || node.kind === "command") {
-    dispatch(transition, node, previous, at);
-
-    return true;
-  }
-
-  if (node.kind !== "log" && node.kind !== "join") {
-    throw new Error(`Node kind '${node.kind}' is not_yet supported by the sequence engine.`);
-  }
-
-  const output =
-    node.kind === "join" && node.result.kind === "value"
-      ? resolve(node.result.value, transition.state)
-      : null;
-
-  immediate(transition, node, output, at);
-
-  return transition.state.phase.kind === "finished";
-}
-
-function executeNode(
-  transition: Transition,
-  node: Node,
-  previous: NodeRun | undefined,
-  at: string,
-) {
-  try {
-    return invokeNode(transition, node, previous, at);
-  } catch (cause) {
-    failNode(transition, node, { code: "validation", message: errorMessage(cause) }, at);
-
-    return true;
-  }
-}
-
-function advance(graph: Graph, transition: Transition, at: string) {
-  let id: Node["id"] | undefined = graph.entry;
-
-  while (id !== undefined && transition.state.phase.kind === "active") {
-    const node = graph.nodes.find((node) => node.id === id);
-
-    if (!node) {
-      throw new Error(`Graph node '${id}' is missing.`);
-    }
-
-    const previous = transition.state.nodeRuns.find(
-      (run) => run.key.nodeId === id && run.key.scope.length === 0,
-    );
-
-    if (previous?.status === "failed") {
-      finish(transition, { status: "failed", error: previous.error.message }, at);
-
-      return;
-    }
-
-    if (
-      (previous?.status === "retrying" || previous?.status === "rate_limited") &&
-      previous.nextRetryAt > at
-    ) {
-      transition.effects.push({ kind: "schedule_retry", at: previous.nextRetryAt });
-
-      return;
-    }
-
-    if (previous?.status !== "succeeded") {
-      if (executeNode(transition, node, previous, at)) {
-        return;
-      }
-    }
-
-    id = graph.edges.find((edge) => edge.from === node.id && edge.kind === "next")?.to;
-  }
-
-  const output = graph.outputs === null ? null : resolve(graph.outputs, transition.state);
-  finish(transition, { status: "succeeded", output }, at);
-}
+import { sequence } from "./traversal.js";
 
 function completion(
   graph: Graph,
@@ -166,7 +50,6 @@ function completion(
         nextRetryAt: at,
         receipt: "finished",
       });
-      transition.effects.push({ kind: "schedule_retry", at });
     } else {
       write(transition, {
         ...previous,
@@ -175,13 +58,8 @@ function completion(
         endedAt: event.at,
         receipt: "finished",
       });
-      finish(transition, { status: "failed", error: error.message }, event.at);
     }
-
-    return false;
-  }
-
-  if (event.kind === "execution_completed") {
+  } else if (event.kind === "execution_completed") {
     write(transition, {
       ...previous,
       status: "succeeded",
@@ -194,6 +72,75 @@ function completion(
   return true;
 }
 
+function sampled(
+  graph: Graph,
+  transition: Transition,
+  event: Extract<EngineEvent, { kind: "value_sampled" }>,
+) {
+  const previous = transition.state.nodeRuns.find((run) =>
+    sameExecution(run.key, event.executionKey),
+  );
+
+  const node = graph.nodes.find((node) => node.id === previous?.key.nodeId);
+
+  if (previous?.status !== "running" || (node?.kind !== "uuid" && node?.kind !== "random")) {
+    return false;
+  }
+
+  if (
+    (node.kind === "uuid" &&
+      (!isString(event.value) ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+          event.value,
+        ))) ||
+    (node.kind === "random" &&
+      (!isNumber(event.value) ||
+        !Number.isFinite(event.value) ||
+        event.value < 0 ||
+        event.value >= 1))
+  ) {
+    write(transition, {
+      ...previous,
+      status: "failed",
+      endedAt: event.at,
+      error: { code: "validation", message: `Invalid ${node.kind} sample.` },
+    });
+  } else {
+    write(transition, { ...previous, status: "succeeded", output: event.value, endedAt: event.at });
+  }
+
+  return true;
+}
+
+function suspend(transition: Transition, at: string) {
+  if (transition.effects.some((effect) => effect.kind === "dispatch" || effect.kind === "sample")) {
+    return;
+  }
+
+  const pending = transition.state.nodeRuns.filter(
+    (run) => run.status === "waiting" || run.status === "sleeping",
+  );
+
+  const executing = transition.state.nodeRuns.some((run) => run.status === "running");
+
+  if (pending.length === 0 || executing) {
+    return;
+  }
+
+  const deadlines = pending.flatMap((run) =>
+    (run.status === "waiting" || run.status === "sleeping") && run.wakeAt !== null
+      ? [run.wakeAt]
+      : [],
+  );
+
+  const retry = transition.effects
+    .filter((effect) => effect.kind === "schedule_retry")
+    .map((effect) => effect.at);
+
+  const wakeAt = [...deadlines, ...retry].sort()[0] ?? null;
+  transition.effects.push({ kind: "suspend_run", wakeAt, at });
+}
+
 export function step(graph: Graph, state: EngineState, event: EngineEvent): Transition {
   if (state.phase.kind === "finished") {
     return { state, effects: [] };
@@ -202,12 +149,6 @@ export function step(graph: Graph, state: EngineState, event: EngineEvent): Tran
   const transition: Transition = { state: structuredClone(state), effects: [] };
 
   try {
-    if (event.kind === "cancel_requested") {
-      throw new Error(
-        "Cancellation is not_yet supported. PR 4c adds process cancellation and cleanup.",
-      );
-    }
-
     if (event.kind === "rate_limited") {
       const previous = transition.state.nodeRuns.find((run) =>
         sameExecution(run.key, event.executionKey),
@@ -228,7 +169,42 @@ export function step(graph: Graph, state: EngineState, event: EngineEvent): Tran
       return transition;
     }
 
-    advance(graph, transition, event.at);
+    if (event.kind === "value_sampled" && !sampled(graph, transition, event)) {
+      return transition;
+    }
+
+    const result = sequence(
+      {
+        graph,
+        transition,
+        at: event.at,
+        rehydrate: event.kind === "run_started",
+        cancelling: event.kind === "cancel_requested",
+      },
+      graph.entry,
+    );
+
+    switch (result.kind) {
+      case "succeeded":
+        finish(
+          transition,
+          {
+            status: "succeeded",
+            output: graph.outputs === null ? null : resolve(graph.outputs, transition.state),
+          },
+          event.at,
+        );
+        break;
+      case "failed":
+        finish(transition, { status: "failed", error: result.error.message }, event.at);
+        break;
+      case "cancelled":
+        finish(transition, { status: "cancelled" }, event.at);
+        break;
+      case "pending":
+        suspend(transition, event.at);
+        break;
+    }
   } catch (cause) {
     finish(transition, { status: "failed", error: errorMessage(cause) }, event.at);
   }

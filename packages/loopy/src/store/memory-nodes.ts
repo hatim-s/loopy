@@ -1,9 +1,10 @@
-import type { LogRecord, RunSnapshot } from "../core/index.js";
+import type { HookRecord, LogRecord, RunSnapshot } from "../core/index.js";
 import { executionKeyString, type NodeRun, type StoreEffect } from "../core/index.js";
 import { type EventTransaction } from "./event-outbox.js";
 import { MemoryRuns } from "./memory-runs.js";
 import { checkLogWrite, checkNodeWrite, logRecord } from "./node-write.js";
-import { normalizeNode, utc } from "./timestamps.js";
+import { earliestWakeAt, normalizeNode, utc } from "./timestamps.js";
+import { publicHook } from "./wait.js";
 
 export class MemoryNodes extends MemoryRuns {
   async getNodeRuns(runId: string): Promise<NodeRun[]> {
@@ -20,10 +21,19 @@ export class MemoryNodes extends MemoryRuns {
     effects: StoreEffect[];
   }): Promise<void> {
     this.commit((txn) => {
-      this.requireRunning(this.owned(runId, token));
+      const run = this.owned(runId, token);
+      this.requireRunning(run);
+      // A stale batch may clear the signal wake before it reaches its suspend effect.
+      const wakeAtBeforeApply = run.wakeAt;
 
       for (const effect of effects) {
-        this.applyEffect(txn, runId, effect);
+        this.applyEffect(
+          txn,
+          runId,
+          effect.kind === "suspend_run"
+            ? { ...effect, wakeAt: earliestWakeAt(wakeAtBeforeApply, effect.wakeAt) }
+            : effect,
+        );
       }
     });
   }
@@ -97,6 +107,12 @@ export class MemoryNodes extends MemoryRuns {
     );
   }
 
+  protected readHooks(runId: string): HookRecord[] {
+    return [...this.waits.values()].flatMap((wait) =>
+      wait.runId === runId ? [publicHook(wait)] : [],
+    );
+  }
+
   async snapshotRun(id: string): Promise<RunSnapshot | undefined> {
     const run = this.runs.get(id);
 
@@ -108,7 +124,7 @@ export class MemoryNodes extends MemoryRuns {
       run,
       nodeRuns: [...(this.nodes.get(id)?.values() ?? [])],
       steps: [],
-      hooks: [],
+      hooks: this.readHooks(id),
       logs: [...(this.logs.get(id)?.values() ?? [])].sort((left, right) => left.seq - right.seq),
       cursor: this.sequence,
       epoch: this.storeEpoch,

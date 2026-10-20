@@ -159,7 +159,13 @@ export type Node = Expand<
           argv: Value[];
           flags: Record<string, Value>;
           flagSpec?: CommandFlagSpec;
-          options: { cwd: Value | null; env: Record<string, Value>; stdin: Value | null };
+          options: {
+            cwd: Value | null;
+            env: Record<string, Value>;
+            stdin: Value | null;
+            timeout?: Duration;
+            maxOutputBytes?: number;
+          };
           rateLimit: RateLimit | null;
           retry: GraphRetry;
           okExitCodes: number[];
@@ -256,11 +262,18 @@ export type GraphMeta = {
   scope: (typeof LOOPY_SCOPES)[number];
 };
 
+export type InputValidation = {
+  minItems: Readonly<Record<string, number>>;
+  unknownKeys: "strip" | "reject" | "passthrough";
+  root?: "json";
+};
+
 export type Graph = {
   meta: GraphMeta;
   version: 1;
   name: string;
   input: RecordSpec | "schema";
+  inputValidation?: InputValidation;
   nodes: Node[];
   edges: Edge[];
   entry: NodeId;

@@ -8,6 +8,7 @@ import {
 import { type EventTransaction } from "./event-outbox.js";
 import { MemoryEvents } from "./memory-events.js";
 import { normalizeRun, utc } from "./timestamps.js";
+import { publicHook } from "./wait.js";
 
 export class MemoryRuns extends MemoryEvents {
   async acquireRateLimit(
@@ -144,6 +145,7 @@ export class MemoryRuns extends MemoryEvents {
     return this.commit((txn) => {
       const run = this.owned(runId, token);
       this.requireRunning(run);
+      this.expireWaits(txn, runId, this.timestamp());
       run.status = outcome.status;
       delete run.output;
       delete run.error;
@@ -214,9 +216,18 @@ export class MemoryRuns extends MemoryEvents {
     return wakes[0] === undefined ? undefined : new Date(wakes[0]).toISOString();
   }
 
+  protected expireWaits(txn: EventTransaction, runId: string, at: string): void {
+    for (const wait of this.waits.values()) {
+      if (wait.runId === runId && !wait.resolvedAt && !wait.expiredAt) {
+        wait.expiredAt = utc(at);
+        this.emit(txn, { entity: "hook", kind: "expired", runId, record: publicHook(wait) });
+      }
+    }
+  }
+
   protected stale(run: RunRecord, now: number): boolean {
     return (
-      run.status === "running" &&
+      (run.status === "running" || run.status === "suspended") &&
       run.owner !== undefined &&
       now - Date.parse(run.owner.heartbeatAt) > this.leaseMs
     );

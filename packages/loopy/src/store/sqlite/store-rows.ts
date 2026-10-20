@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  hookRecordSchema,
   jsonSchema,
   logRecordSchema,
   nodeRunSchema,
@@ -7,6 +8,7 @@ import {
   scheduleSchema,
 } from "../../contract/index.js";
 import {
+  HOOK_EVENT_KINDS,
   NODE_RUN_STATUSES,
   RUN_EVENT_KINDS,
   type RunRecord,
@@ -60,7 +62,7 @@ export const SQL = {
   logs: "SELECT * FROM logs WHERE run_id=? AND seq>? ORDER BY seq",
   dueRuns: `SELECT * FROM runs WHERE (owner_token IS NULL AND
     (status IN ('queued','running') OR (status='suspended' AND wake_at<=?))) OR
-    (owner_token IS NOT NULL AND status='running') ORDER BY created_at,rowid`,
+    (owner_token IS NOT NULL AND status IN ('running','suspended')) ORDER BY created_at,rowid`,
 };
 
 export function rowToRun(row: RunRow): RunRecord {
@@ -159,6 +161,7 @@ const runSchema = z
   .strict();
 
 const eventSchema = z.union([
+  z.object({ entity: z.literal("hook"), kind: z.enum(HOOK_EVENT_KINDS), record: hookRecordSchema }),
   z.object({ entity: z.literal("run"), kind: z.enum(RUN_EVENT_KINDS), record: runSchema }),
   z.object({ entity: z.literal("node"), kind: z.enum(NODE_RUN_STATUSES), record: nodeRunSchema }),
   z.object({ entity: z.literal("log"), kind: z.literal("written"), record: logRecordSchema }),

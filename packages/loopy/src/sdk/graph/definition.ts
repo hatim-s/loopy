@@ -27,7 +27,18 @@ export function parseDefinitionMeta(name: string, value: unknown) {
   const definition = requireRecord(value, "Loopy definition");
 
   for (const key of Object.keys(definition)) {
-    if (!["description", "schedule", "secrets", "mode", "scope", "input", "run"].includes(key)) {
+    if (
+      ![
+        "description",
+        "schedule",
+        "secrets",
+        "mode",
+        "scope",
+        "input",
+        "inputValidation",
+        "run",
+      ].includes(key)
+    ) {
       throw new Error(`Unknown definition property '${key}'. Remove it from the definition.`);
     }
   }

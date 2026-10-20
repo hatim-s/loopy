@@ -1,8 +1,18 @@
 import type { RunRecord } from "../../core/index.js";
 
-export const SCHEMA_VERSION = 13;
+export const SCHEMA_VERSION = 14;
 
-export const SCHEMA = `
+export const WAIT_SCHEMA = `
+  CREATE TABLE waits (
+    token TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+    execution_key TEXT NOT NULL, record TEXT NOT NULL,
+    UNIQUE(run_id, execution_key)
+  );
+  CREATE INDEX waits_run ON waits(run_id);
+`;
+
+export const SCHEMA = `${WAIT_SCHEMA}
   CREATE TABLE events (
     sequence INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, txn TEXT NOT NULL,
     entity TEXT NOT NULL, kind TEXT NOT NULL, run_id TEXT, record TEXT NOT NULL

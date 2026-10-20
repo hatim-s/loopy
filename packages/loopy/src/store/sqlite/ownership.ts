@@ -6,7 +6,11 @@ import { type RunRow } from "./store-schema.js";
 
 export class SqliteOwnership extends SqliteEvents {
   protected stale(row: RunRow, now: number): boolean {
-    if (row.status !== "running" || row.owner_token === null || row.heartbeat_at === null) {
+    if (
+      (row.status !== "running" && row.status !== "suspended") ||
+      row.owner_token === null ||
+      row.heartbeat_at === null
+    ) {
       return false;
     }
 

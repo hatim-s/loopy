@@ -1,11 +1,11 @@
 import type { Schedule } from "../../core/index.js";
 import { type Store } from "../../core/index.js";
 import { type EventTransaction } from "../event-outbox.js";
-import { SqliteNodes } from "./nodes.js";
 import { rowToSchedule, SQL } from "./store-rows.js";
 import { type ScheduleRow } from "./store-schema.js";
+import { SqliteWaits } from "./waits.js";
 
-export class SqliteSchedules extends SqliteNodes {
+export class SqliteSchedules extends SqliteWaits {
   async putSchedule(schedule: Omit<Schedule, "version">): Promise<Schedule> {
     return this.commit((txn) => {
       const row = this.db

@@ -1,4 +1,4 @@
-import type { RateLimit } from "../../../core/index.js";
+import type { Duration, RateLimit } from "../../../core/index.js";
 import { type GraphRetry, type OutSchema, parseArgv } from "../../../core/index.js";
 import { type CommandDescriptor, validateCommandDescriptor } from "../../define-command.js";
 import { currentBuilder } from "../builder.js";
@@ -13,6 +13,8 @@ type Options = {
   cwd?: string | Ref<string>;
   env?: Record<string, string | Ref<string>>;
   stdin?: string | Ref<string>;
+  timeout?: Duration;
+  maxOutputBytes?: number;
   retry?: Partial<GraphRetry>;
   rateLimit?: RateLimit;
 };
@@ -55,6 +57,8 @@ function record({
         cwd: serialize(options.cwd, builder),
         env: serializeValues(options.env ?? {}, builder),
         stdin: serialize(options.stdin, builder),
+        timeout: options.timeout,
+        maxOutputBytes: options.maxOutputBytes,
       },
       rateLimit: options.rateLimit ?? null,
       retry: builder.retry(options.retry),
@@ -157,6 +161,8 @@ function shell({
         cwd: serialize(options.cwd, builder),
         env: serializeValues(options.env ?? {}, builder),
         stdin: serialize(options.stdin, builder),
+        timeout: options.timeout,
+        maxOutputBytes: options.maxOutputBytes,
       },
       rateLimit: options.rateLimit ?? null,
       retry: builder.retry(options.retry),

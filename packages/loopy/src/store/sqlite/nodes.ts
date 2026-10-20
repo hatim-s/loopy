@@ -3,7 +3,7 @@ import type { LogRecord, RunSnapshot } from "../../core/index.js";
 import { executionKeyString, type NodeRun, type StoreEffect } from "../../core/index.js";
 import { type EventTransaction } from "../event-outbox.js";
 import { checkLogWrite, checkNodeWrite, logRecord } from "../node-write.js";
-import { normalizeNode, utc } from "../timestamps.js";
+import { earliestWakeAt, normalizeNode, utc } from "../timestamps.js";
 import { SqliteRuns } from "./runs.js";
 import { rowToLog, rowToRun, SQL } from "./store-rows.js";
 import { type LogRow } from "./store-schema.js";
@@ -32,10 +32,19 @@ export class SqliteNodes extends SqliteRuns {
     effects: StoreEffect[];
   }): Promise<void> {
     this.commit((txn) => {
-      this.requireRunning(this.owned(runId, token));
+      const run = this.owned(runId, token);
+      this.requireRunning(run);
+      // A stale batch may clear the signal wake before it reaches its suspend effect.
+      const wakeAtBeforeApply = run.wake_at;
 
       for (const effect of effects) {
-        this.applyEffect(txn, runId, effect);
+        this.applyEffect(
+          txn,
+          runId,
+          effect.kind === "suspend_run"
+            ? { ...effect, wakeAt: earliestWakeAt(wakeAtBeforeApply, effect.wakeAt) }
+            : effect,
+        );
       }
     });
   }
@@ -145,7 +154,7 @@ export class SqliteNodes extends SqliteRuns {
           nodeRuns: this.readNodes(id),
           steps: [],
           logs: this.db.query<LogRow, [string, number]>(SQL.logs).all(id, 0).map(rowToLog),
-          hooks: [],
+          hooks: this.readHooks(id),
           ...this.readEventCursor(),
         };
       })

@@ -5,7 +5,7 @@ import type {
   RuntimeEventChange,
   Schedule,
 } from "../core/index.js";
-import { type NodeRun, type RateLimitWindow } from "../core/index.js";
+import { type NodeRun, type RateLimitWindow, type WaitRecord } from "../core/index.js";
 import { EVENT_RETENTION, EventListeners, type EventTransaction } from "./event-outbox.js";
 
 export class MemoryEvents {
@@ -16,6 +16,8 @@ export class MemoryEvents {
   protected runs = new Map<string, RunRecord>();
 
   protected nodes = new Map<string, Map<string, NodeRun>>();
+
+  protected waits = new Map<string, WaitRecord>();
 
   protected logs = new Map<string, Map<number, LogRecord>>();
 
@@ -71,6 +73,7 @@ export class MemoryEvents {
     const backup = structuredClone({
       runs: this.runs,
       nodes: this.nodes,
+      waits: this.waits,
       logs: this.logs,
       schedules: this.schedules,
       limits: this.limits,
@@ -84,6 +87,7 @@ export class MemoryEvents {
     } catch (cause) {
       this.runs = backup.runs;
       this.nodes = backup.nodes;
+      this.waits = backup.waits;
       this.logs = backup.logs;
       this.schedules = backup.schedules;
       this.limits = backup.limits;

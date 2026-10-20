@@ -1,6 +1,7 @@
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  durationMs,
   type ExecutionKey,
   type ExecutionMode,
   type ExecutionResult,
@@ -98,10 +99,20 @@ export class LocalExecutor implements Executor {
         program: process.execPath,
         args: ["--no-env-file", worker],
         cwd: dirname(worker),
-        env: { PATH: process.env.PATH },
+        env: this.options.mode === "full" ? process.env : { PATH: process.env.PATH },
         stdin: JSON.stringify({ options: { ...this.options, bundles }, key, attempt, spec }),
       },
-      { timeoutMs: 24 * 60 * 60_000, maxOutputBytes: 64 * 1024 },
+      {
+        timeoutMs:
+          spec.kind === "code"
+            ? spec.timeoutMs + 30_000
+            : (spec.node.options.timeout === undefined
+                ? 300_000
+                : durationMs(spec.node.options.timeout)) +
+              (spec.parse === null ? 0 : 300_000) +
+              30_000,
+        maxOutputBytes: 64 * 1024,
+      },
       signal,
       performance.now(),
     );

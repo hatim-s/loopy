@@ -71,25 +71,24 @@ function launchEnvironment(command: ProcessCommand, mode: ExecutionMode): NodeJS
 }
 
 /**
- * Wraps the command in the platform sandbox. With private values the launcher
- * runs a Bun helper that reads them from stdin; `env -i` inside applies the rest.
+ * Full environments can contain ambient credentials, so they travel through
+ * stdin with declared secrets instead of appearing in the sandbox launch argv.
  */
 async function sandboxLaunch(command: ProcessCommand, context: SandboxContext): Promise<Launch> {
   const { program, workspace, cwd, scratch, env, sensitiveEnv } = context;
-  const privateEnvironment = sensitiveEnv !== undefined && Object.keys(sensitiveEnv).length > 0;
-  const helper = privateEnvironment ? await realpath(process.execPath) : undefined;
 
-  if (privateEnvironment) {
-    for (const key of Object.keys(sensitiveEnv)) {
-      delete env[key];
-    }
-  }
+  const privateEnvironment =
+    context.mode === "full" || (sensitiveEnv !== undefined && Object.keys(sensitiveEnv).length > 0);
+
+  const helper = privateEnvironment ? await realpath(process.execPath) : undefined;
+  const childEnv = { ...env, ...sensitiveEnv };
+  const launcherEnv = privateEnvironment ? { PATH: env.PATH, LANG: env.LANG } : env;
 
   const [launcher, prefix] = await sandboxLauncher({
     program,
     workspace,
     cwd,
-    env,
+    env: launcherEnv,
     scratch,
     helper,
     protectedHome: context.protectedHome,
@@ -113,7 +112,7 @@ async function sandboxLaunch(command: ProcessCommand, context: SandboxContext): 
     stdin: JSON.stringify({
       program,
       args: command.args,
-      env: sensitiveEnv,
+      env: childEnv,
       stdin: command.stdin,
     }),
   };
@@ -139,7 +138,7 @@ export async function prepareLaunch(
   const env = launchEnvironment(command, options.mode);
   const effectiveEnv = { ...env, ...options.sensitiveEnv };
   // Validate without putting sensitive values into launcher arguments.
-  envArgs(options.sensitiveEnv ?? {});
+  envArgs(effectiveEnv);
   const program = await resolveProgram(command.program, cwd, effectiveEnv.PATH ?? "");
 
   if (options.mode === "full" && !options.protectedHome) {
@@ -161,7 +160,12 @@ async function prepareSandbox(
   const scratch = await realpath(await mkdtemp(join(tmpdir(), "loopy-run-")));
 
   try {
-    const env = { ...launchEnvironment(command, options.mode), HOME: scratch, TMPDIR: scratch };
+    const env = launchEnvironment(command, options.mode);
+
+    if (options.mode === "sandbox") {
+      env.HOME = scratch;
+      env.TMPDIR = scratch;
+    }
 
     const launch = await sandboxLaunch(command, {
       ...paths,

@@ -14,6 +14,7 @@ import { isRef } from "./graph-ref.js";
 import { structureRules } from "./graph-structure.js";
 import { graphTypeResolver } from "./graph-type.js";
 import { type ValidationContext as Context, diagnostic } from "./graph-validation.js";
+import { parseInputValidation } from "./input.js";
 
 function visible(context: Context, producer: Node, consumer: Node): boolean {
   const chain = [consumer, ...ancestors(consumer, context.nodes)];
@@ -171,6 +172,20 @@ function reservedNames({ graph }: Context): Diagnostic[] {
 }
 
 export function validateGraph(graph: Graph): Diagnostic[] {
+  try {
+    if (graph.inputValidation !== undefined) {
+      if (graph.input === "schema") {
+        throw new Error("Input validation requires record fields.");
+      }
+
+      parseInputValidation(graph.inputValidation, graph.input);
+    }
+  } catch (cause) {
+    return [
+      diagnostic("predicate_type", null, cause instanceof Error ? cause.message : String(cause)),
+    ];
+  }
+
   const context: Context = {
     graph,
     nodes: new Map(graph.nodes.map((node) => [node.id, node])),

@@ -15,15 +15,12 @@ import {
   type PutScheduleBody,
   type RunView,
   type routes,
-  runView,
   type ScheduleView,
   serverEvent,
 } from "../contract/index.js";
 import {
   assertJson,
   errorMessage,
-  isFieldValue,
-  isRecord,
   nextFire,
   OwnershipError,
   parseCron,
@@ -31,6 +28,8 @@ import {
   type RuntimeEvent,
   type Schedule,
   type Store,
+  type StoreEffect,
+  validateGraphInput,
 } from "../core/index.js";
 import { type Clock } from "../host/index.js";
 import { canonicalPath } from "./fs.js";
@@ -38,6 +37,7 @@ import type { Registry } from "./registry.js";
 import { saveCompiled } from "./save-compiled.js";
 import type { SavedLoopy } from "./saved-loopy.js";
 import { SecretStore } from "./secrets.js";
+import { graphRunView } from "./service-views.js";
 import { generateCommand } from "./typegen/generate.js";
 
 export class ServiceError extends Error {
@@ -215,28 +215,13 @@ export class LoopyService {
   }
 
   private validateInput(saved: SavedLoopy, input: Json): Json {
-    const spec = saved.graph.input;
+    const result = validateGraphInput(saved.graph, input);
 
-    if (spec === "schema" || !isRecord(input)) {
-      throw new ServiceError("bad_request", "Graph input requires a record schema and an object.");
+    if (!result.ok) {
+      throw new ServiceError("bad_request", result.error);
     }
 
-    const keys = Object.keys(spec).map((key) => key.replace(/\?$/, ""));
-
-    if (
-      Object.keys(input).some((key) => !keys.includes(key)) ||
-      Object.entries(spec).some(([field, kind]) => {
-        const key = field.replace(/\?$/, "");
-
-        return (
-          !(field.endsWith("?") && input[key] === undefined) && !isFieldValue(kind, input[key])
-        );
-      })
-    ) {
-      throw new ServiceError("bad_request", "Input does not match the saved graph schema.");
-    }
-
-    return input;
+    return result.value;
   }
 
   async putLoopy(slug: string, body: PutLoopyBody) {
@@ -295,9 +280,12 @@ export class LoopyService {
   private async viewResolver(ids: string[], registries = new Map<string, SavedLoopy[]>()) {
     const records = await Promise.all(
       ids.map(async (id) => {
-        const [steps, hooks] = await Promise.all([Promise.resolve([]), Promise.resolve([])]);
+        const [hooks, nodeRuns] = await Promise.all([
+          this.options.store.getWaits(id),
+          this.options.store.getNodeRuns(id),
+        ]);
 
-        return [id, { steps, hooks }] as const;
+        return [id, { nodeRuns, hooks }] as const;
       }),
     );
 
@@ -311,7 +299,7 @@ export class LoopyService {
         throw new ServiceError("not_found");
       }
 
-      return runView({
+      return graphRunView({
         ...snapshot,
         run,
         loopy: this.loopySummary(run, registries),
@@ -379,12 +367,71 @@ export class LoopyService {
     return this.view(await this.requireRun(id));
   }
 
+  private async cancellableNodes(id: string) {
+    const nodes = await this.options.store.getNodeRuns(id);
+
+    if (nodes.some((node) => node.status === "running")) {
+      throw new ServiceError(
+        "not_claimable",
+        "This run has an unfinished execution. Resume it before cancelling.",
+      );
+    }
+
+    if (nodes.length > 0) {
+      const { graph } = await this.runGraph(id);
+
+      if (graph.nodes.some((node) => node.kind === "finally")) {
+        throw new ServiceError(
+          "not_claimable",
+          "This run requires finally cleanup. Cancellation with cleanup is not available; resume the run instead.",
+        );
+      }
+    }
+
+    return nodes;
+  }
+
   async cancelRun(id: string): Promise<RunView> {
+    const run = await this.requireRun(id);
+
+    if (isTerminalRun(run.status)) {
+      throw new ServiceError("not_claimable");
+    }
+
+    await this.cancellableNodes(id);
     const token = crypto.randomUUID();
     await this.claim(id, token);
 
     try {
-      await this.options.store.finishRun(id, token, { status: "cancelled" });
+      const nodes = await this.cancellableNodes(id);
+
+      const at = this.now();
+
+      const effects: StoreEffect[] = nodes.flatMap((node) =>
+        node.status === "waiting" ||
+        node.status === "sleeping" ||
+        node.status === "retrying" ||
+        node.status === "rate_limited" ||
+        node.status === "queued"
+          ? [
+              {
+                kind: "write_node_run" as const,
+                nodeRun: {
+                  key: node.key,
+                  attempt: node.attempt,
+                  maxAttempts: node.maxAttempts,
+                  startedAt: node.startedAt,
+                  receipt: node.receipt,
+                  status: "cancelled" as const,
+                  endedAt: at,
+                },
+              },
+            ]
+          : [],
+      );
+
+      effects.push({ kind: "finish_run", outcome: { status: "cancelled" }, at });
+      await this.options.store.apply({ runId: id, token, effects });
     } finally {
       await this.options.store.release(id, token);
     }
@@ -392,12 +439,38 @@ export class LoopyService {
     return this.view(await this.requireRun(id));
   }
 
-  resolveNamedHook: (id: string, name: string, payload: Json) => Promise<RunView> = async () => {
-    throw new ServiceError("not_yet", "Wait signals arrive in PR 4c.");
-  };
-  resolveHook: (token: string, payload: Json) => Promise<RunView> = async () => {
-    throw new ServiceError("not_yet", "Wait signals arrive in PR 4c.");
-  };
+  async resolveNamedHook(id: string, name: string, payload: Json): Promise<RunView> {
+    await this.requireRun(id);
+
+    const waits = (await this.options.store.getWaits(id)).filter(
+      (wait) => wait.name === name && !wait.resolvedAt && !wait.expiredAt,
+    );
+
+    if (waits.length > 1) {
+      throw new ServiceError(
+        "bad_request",
+        "More than one pending wait has this name. Resolve a specific hook token.",
+      );
+    }
+
+    const wait = waits[0];
+
+    if (!wait) {
+      throw new ServiceError("unknown_hook");
+    }
+
+    return this.resolveHook(wait.token, payload);
+  }
+
+  async resolveHook(token: string, payload: Json): Promise<RunView> {
+    const result = await this.options.store.resolveWait({ token, payload, at: this.now() });
+
+    if (result.kind === "rejected") {
+      throw new ServiceError(result.code, result.message);
+    }
+
+    return this.view(await this.requireRun(result.runId));
+  }
 
   async runSnapshot(id: string) {
     const snapshot = await this.options.store.snapshotRun(id);
@@ -408,8 +481,9 @@ export class LoopyService {
 
     return {
       ...snapshot,
-      run: runView({
+      run: graphRunView({
         ...snapshot,
+        hooks: await this.options.store.getWaits(id),
         loopy: this.loopySummary(snapshot.run),
         now: this.now(),
         leaseMs: this.options.store.leaseMs,
@@ -484,7 +558,11 @@ export class LoopyService {
   ): LoopyView[] {
     return entries.map((saved) =>
       loopyView(
-        { ...saved, workspace: registry.project },
+        {
+          ...saved,
+          workspace: registry.project,
+          input: saved.graph.inputValidation?.root === "json" ? "schema" : saved.input,
+        },
         schedules.find((item) => item.slug === saved.slug && item.workspace === registry.project) ??
           null,
         runs.filter((run) => saved.scope === "global" || run.workspace === registry.project),
