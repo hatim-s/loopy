@@ -1,6 +1,7 @@
 import { expect, spyOn, test } from "bun:test";
 import { type InfiniteData, QueryClient, QueryObserver } from "@tanstack/react-query";
 import {
+  executionKeyString,
   type NodeRunView,
   nodeRunViewSchema,
   type RunSnapshotView,
@@ -147,7 +148,7 @@ test("a list keeps a run that is newer than the event", () => {
 
 function nodeEvent(sequence: number, index: number, attempt: number, status: string) {
   const record: NodeRunView = nodeRunViewSchema.parse({
-    key: { runId: run.id, nodeId: "1:classify", scope: [{ nodeId: "0:map", index }] },
+    key: { runId: run.id, nodeId: `1:classify-${index}`, scope: [] },
     attempt,
     maxAttempts: 3,
     startedAt: AT,
@@ -175,10 +176,10 @@ test("node events keep one record per execution key at its latest attempt", () =
   ].reduce(applyToSnapshot, snapshot());
 
   expect(
-    next.nodeRuns.map((record) => [record.key.scope[0]?.index, record.attempt, record.status]),
+    next.nodeRuns.map((record) => [String(record.key.nodeId), record.attempt, record.status]),
   ).toEqual([
-    [0, 2, "succeeded"],
-    [1, 1, "running"],
+    ["1:classify-0", 2, "succeeded"],
+    ["1:classify-1", 1, "running"],
   ]);
   expect(next.cursor).toBe(15);
 });
@@ -639,6 +640,8 @@ test("a restarted first load without an observer still answers its loader", asyn
 test("status transitions and schedule events invalidate summaries once while heartbeat and replay do not", () => {
   const client = new QueryClient();
   client.setQueryData(keys.loopies, []);
+  client.setQueryData(keys.workspaceLoopies("/other"), []);
+  client.setQueryData(keys.scheduleOverview, { workspaces: [], active: 0, next: [] });
   client.setQueryData(keys.runs({}), [run]);
   const invalidations = spyOn(client, "invalidateQueries");
 
@@ -650,10 +653,14 @@ test("status transitions and schedule events invalidate summaries once while hea
   });
 
   applyBatch(client, [runEvent(11, running), runEvent(12, waiting), schedule]);
-  expect(invalidations).toHaveBeenCalledTimes(1);
+  expect(invalidations).toHaveBeenCalledTimes(2);
   expect(client.getQueryState(keys.loopies)?.isInvalidated).toBe(true);
+  expect(client.getQueryState(keys.workspaceLoopies("/other"))?.isInvalidated).toBe(true);
+  expect(client.getQueryState(keys.scheduleOverview)?.isInvalidated).toBe(true);
   invalidations.mockClear();
   client.setQueryData(keys.loopies, []);
+  client.setQueryData(keys.workspaceLoopies("/other"), []);
+  client.setQueryData(keys.scheduleOverview, { workspaces: [], active: 0, next: [] });
   applyBatch(client, [
     schedule,
     runEvent(11, running),
@@ -661,8 +668,10 @@ test("status transitions and schedule events invalidate summaries once while hea
   ]);
   expect(invalidations).not.toHaveBeenCalled();
   expect(client.getQueryState(keys.loopies)?.isInvalidated).toBe(false);
+  expect(client.getQueryState(keys.workspaceLoopies("/other"))?.isInvalidated).toBe(false);
+  expect(client.getQueryState(keys.scheduleOverview)?.isInvalidated).toBe(false);
   applyBatch(client, [{ ...schedule, sequence: 15 }]);
-  expect(invalidations).toHaveBeenCalledTimes(1);
+  expect(invalidations).toHaveBeenCalledTimes(2);
   invalidations.mockRestore();
 });
 
@@ -698,22 +707,24 @@ function scheduleSaved(sequence: number, saved: Schedule) {
 test("a saved schedule replaces its row, and an older version leaves the row alone", () => {
   const client = new QueryClient();
   const other = { ...scheduled, slug: "digest" };
-  client.setQueryData(keys.schedules, [scheduled, other]);
+  client.setQueryData(keys.schedules("/work"), [scheduled, other]);
 
   applyBatch(client, [scheduleSaved(11, { ...record, enabled: false, version: 3 })]);
-  expect(client.getQueryData<ScheduleView[]>(keys.schedules)).toEqual([
+  expect(client.getQueryData<ScheduleView[]>(keys.schedules("/work"))).toEqual([
     { ...scheduled, enabled: false, version: 3 },
     other,
   ]);
 
   applyBatch(client, [scheduleSaved(12, { ...record, cron: "@daily", version: 1 })]);
-  expect(client.getQueryData<ScheduleView[]>(keys.schedules)?.[0]?.cron).toBe("*/5 * * * *");
-  expect(client.getQueryState(keys.schedules)?.isInvalidated).toBe(false);
+  expect(client.getQueryData<ScheduleView[]>(keys.schedules("/work"))?.[0]?.cron).toBe(
+    "*/5 * * * *",
+  );
+  expect(client.getQueryState(keys.schedules("/work"))?.isInvalidated).toBe(false);
 });
 
 test("a fired schedule keeps its version and carries the fire key into the row", () => {
   const client = new QueryClient();
-  client.setQueryData(keys.schedules, [scheduled]);
+  client.setQueryData(keys.schedules("/work"), [scheduled]);
   const next = "2026-10-17T10:10:00.000Z";
 
   applyBatch(client, [
@@ -725,25 +736,25 @@ test("a fired schedule keeps its version and carries the fire key into the row",
     }),
   ]);
 
-  expect(client.getQueryData<ScheduleView[]>(keys.schedules)).toEqual([
+  expect(client.getQueryData<ScheduleView[]>(keys.schedules("/work"))).toEqual([
     { ...scheduled, nextFireAt: next, lastFireKey: "triage@2026-10-17T10:05Z" },
   ]);
 });
 
-test("a schedule the list has not seen refetches it instead of joining a list for another workspace", () => {
+test("a save in another workspace leaves the selected workspace list alone", () => {
   const client = new QueryClient();
-  client.setQueryData(keys.schedules, []);
+  client.setQueryData(keys.schedules("/work"), []);
 
   applyBatch(client, [scheduleSaved(11, { ...record, workspace: "/elsewhere" })]);
 
-  expect(client.getQueryData<ScheduleView[]>(keys.schedules)).toEqual([]);
-  expect(client.getQueryState(keys.schedules)?.isInvalidated).toBe(true);
+  expect(client.getQueryData<ScheduleView[]>(keys.schedules("/work"))).toEqual([]);
+  expect(client.getQueryState(keys.schedules("/work"))?.isInvalidated).toBe(false);
 });
 
 test("a deleted schedule leaves the list without a refetch, and only for its workspace", () => {
   const client = new QueryClient();
   const elsewhere = { ...scheduled, workspace: "/elsewhere" };
-  client.setQueryData(keys.schedules, [scheduled, elsewhere]);
+  client.setQueryData(keys.schedules("/work"), [scheduled, elsewhere]);
 
   applyBatch(client, [
     event(11, {
@@ -754,13 +765,13 @@ test("a deleted schedule leaves the list without a refetch, and only for its wor
     }),
   ]);
 
-  expect(client.getQueryData<ScheduleView[]>(keys.schedules)).toEqual([elsewhere]);
-  expect(client.getQueryState(keys.schedules)?.isInvalidated).toBe(false);
+  expect(client.getQueryData<ScheduleView[]>(keys.schedules("/work"))).toEqual([elsewhere]);
+  expect(client.getQueryState(keys.schedules("/work"))?.isInvalidated).toBe(false);
 });
 
 test("a delayed HTTP response cannot undo a fire at the same version", () => {
   const client = new QueryClient();
-  client.setQueryData(keys.schedules, [scheduled]);
+  client.setQueryData(keys.schedules("/work"), [scheduled]);
   const fired = { ...record, nextFireAt: "2026-10-17T10:10:00.000Z", lastFireKey: "fire-1" };
   applyBatch(client, [
     event(11, { entity: "schedule", kind: "fired", runId: null, record: fired }),
@@ -768,9 +779,9 @@ test("a delayed HTTP response cannot undo a fire at the same version", () => {
 
   applyScheduleView(client, scheduled);
 
-  expect(client.getQueryData<ScheduleView[]>(keys.schedules)).toEqual([fired]);
+  expect(client.getQueryData<ScheduleView[]>(keys.schedules("/work"))).toEqual([fired]);
   applyScheduleView(client, { ...fired, nextFireAt: "2026-10-17T10:15:00.000Z" });
-  expect(client.getQueryData<ScheduleView[]>(keys.schedules)?.[0]?.nextFireAt).toBe(
+  expect(client.getQueryData<ScheduleView[]>(keys.schedules("/work"))?.[0]?.nextFireAt).toBe(
     "2026-10-17T10:15:00.000Z",
   );
 });
@@ -778,16 +789,16 @@ test("a delayed HTTP response cannot undo a fire at the same version", () => {
 test("an equal-version schedule with the same fire time leaves the cached row unchanged", () => {
   const client = new QueryClient();
   const current = { ...scheduled, lastFireKey: "fire-1" };
-  client.setQueryData(keys.schedules, [current]);
+  client.setQueryData(keys.schedules("/work"), [current]);
 
   applyScheduleView(client, { ...current, lastFireKey: "fire-2" });
 
-  expect(client.getQueryData<ScheduleView[]>(keys.schedules)?.[0]).toBe(current);
+  expect(client.getQueryData<ScheduleView[]>(keys.schedules("/work"))?.[0]).toBe(current);
 });
 
 test("an unseen save cannot skip a later delete in the same batch", () => {
   const client = new QueryClient();
-  client.setQueryData(keys.schedules, [scheduled]);
+  client.setQueryData(keys.schedules("/work"), [scheduled]);
   applyBatch(client, [
     scheduleSaved(11, { ...record, slug: "unseen" }),
     event(12, {
@@ -798,6 +809,147 @@ test("an unseen save cannot skip a later delete in the same batch", () => {
     }),
   ]);
 
-  expect(client.getQueryData<ScheduleView[]>(keys.schedules)).toEqual([]);
-  expect(client.getQueryState(keys.schedules)?.isInvalidated).toBe(true);
+  expect(client.getQueryData<ScheduleView[]>(keys.schedules("/work"))).toEqual([]);
+  expect(client.getQueryState(keys.schedules("/work"))?.isInvalidated).toBe(true);
+});
+
+test("stream snapshots retain bounded root nodes, logs and hooks across long sessions", () => {
+  let current = snapshot();
+  let sequence = 11;
+
+  for (let index = 0; index < 1000; index++) {
+    const root = nodeEvent(sequence++, index, 1, "running");
+    current = applyToSnapshot(current, root);
+    current = applyToSnapshot(current, logEvent(sequence++, index + 1));
+    current = applyToSnapshot(
+      current,
+      event(sequence++, {
+        entity: "hook",
+        kind: "created",
+        runId: run.id,
+        record: { ...hook, token: `token-${index}`, seq: index + 1 },
+      }),
+    );
+  }
+
+  expect(current.nodeRuns).toHaveLength(200);
+  expect(current.nodeRunsNext).toBeTruthy();
+  expect(current.logs).toHaveLength(200);
+  expect(current.hooks).toHaveLength(200);
+  expect(current.logs[0]?.seq).toBe(801);
+  expect(current.hooksTruncated).toBe(true);
+  expect(current.cursor).toBe(sequence - 1);
+});
+
+test("stream overflow keeps the execution keyset boundary and preview metadata bounded", () => {
+  let current = snapshot();
+  const keysWritten: string[] = [];
+
+  for (let index = 0; index < 201; index++) {
+    const record = nodeRunViewSchema.parse({
+      key: { runId: run.id, nodeId: `${index}:work`, scope: [] },
+      attempt: 1,
+      maxAttempts: 1,
+      startedAt: AT,
+      endedAt: AT,
+      receipt: "finished",
+      status: "succeeded",
+      output: null,
+    });
+
+    keysWritten.push(executionKeyString(record.key));
+    current = applyToSnapshot(
+      current,
+      event(11 + index, {
+        entity: "node",
+        kind: "succeeded",
+        runId: run.id,
+        record,
+        truncatedOutputBytes: 20_002,
+      }),
+    );
+  }
+
+  const firstPage = keysWritten.sort().slice(0, 200);
+
+  expect(current.nodeRuns.map((node) => executionKeyString(node.key))).toEqual(firstPage);
+  expect(current.nodeRunsNext).toBe(firstPage.at(-1));
+  expect(Object.keys(current.truncatedOutputs ?? {}).sort()).toEqual(firstPage);
+});
+
+test("scoped node bursts invalidate aggregates and refetch active queries once", async () => {
+  const client = new QueryClient();
+  const activeKey = keys.scopes(run.id, "[]");
+  const inactiveKey = keys.scopes(run.id, '[{"nodeId":"0:map","index":0}]');
+  client.setQueryData(activeKey, []);
+  client.setQueryData(inactiveKey, []);
+  client.setQueryData(keys.run(run.id), snapshot());
+  let fetches = 0;
+
+  const observer = new QueryObserver(client, {
+    queryKey: activeKey,
+    staleTime: Infinity,
+    queryFn: async () => {
+      fetches++;
+
+      return [];
+    },
+  });
+
+  const unsubscribe = observer.subscribe(() => undefined);
+
+  try {
+    const root = nodeEvent(11, 0, 1, "running");
+
+    if (root.entity !== "node") {
+      throw new Error("Expected a node fixture.");
+    }
+
+    const scoped: ServerEvent = {
+      ...root,
+      record: nodeRunViewSchema.parse({
+        ...root.record,
+        key: { ...root.record.key, scope: [{ nodeId: "0:map", index: 0 }] },
+      }),
+    };
+
+    applyBatch(client, [scoped]);
+    applyBatch(client, [{ ...scoped, sequence: 12 }]);
+    expect(fetches).toBe(0);
+    expect(client.getQueryState(activeKey)?.isInvalidated).toBe(true);
+    expect(client.getQueryState(inactiveKey)?.isInvalidated).toBe(true);
+    expect(client.getQueryData<RunSnapshotView>(keys.run(run.id))?.nodeRuns).toEqual([]);
+    expect(client.getQueryData<RunSnapshotView>(keys.run(run.id))?.cursor).toBe(12);
+    await Bun.sleep(300);
+    expect(fetches).toBe(1);
+    expect(client.getQueryState(inactiveKey)?.isInvalidated).toBe(true);
+  } finally {
+    unsubscribe();
+    client.clear();
+  }
+});
+
+test("large streamed outputs stay previews while detail queries remain lazy", () => {
+  const root = nodeEvent(11, 0, 1, "succeeded");
+
+  if (root.entity !== "node" || root.record.status !== "succeeded") {
+    throw new Error("Expected a completed node fixture.");
+  }
+
+  const value = "x".repeat(20_000);
+
+  const next = applyToSnapshot(snapshot(), {
+    ...root,
+    record: {
+      ...root.record,
+      output: value,
+      inputView: { state: "available", value: { private: "input" } },
+    },
+  });
+
+  const node = next.nodeRuns[0];
+  expect(node?.status === "succeeded" ? node.output : undefined).toBeNull();
+  expect(node?.inputView).toBeUndefined();
+  expect(Object.values(next.truncatedOutputs ?? {})).toEqual([20_002]);
+  expect(next.cursor).toBe(11);
 });

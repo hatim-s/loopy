@@ -9,7 +9,7 @@ import {
 } from "../core/index.js";
 import { sdkCalls } from "../sdk/graph-host.js";
 import { diagnostic } from "./diagnostic.js";
-import type { CompilerDiagnostic, ParserSource } from "./types.js";
+import type { CompilerDiagnostic, ParserSource, SourceCall } from "./types.js";
 
 type Binding = "sdk" | "subgraph" | "command" | "value" | "ref" | "function" | "graph";
 
@@ -27,6 +27,7 @@ export type Context = {
   diagnostics: CompilerDiagnostic[];
   edits: { start: number; end: number; text: string }[];
   parsers: Map<string, ParserSource>;
+  sourceCalls: SourceCall[];
 };
 
 export function refuse(
@@ -270,6 +271,17 @@ function callRule(
   }
 
   const root = call.split(".")[0] ?? call;
+
+  const label = node.arguments[0];
+
+  if (
+    (call === "code" || call === "wait") &&
+    scope.get(root) === "sdk" &&
+    label?.type === "Literal" &&
+    isString(label.value)
+  ) {
+    context.sourceCalls.push({ kind: call, label: label.value, start: node.start, end: node.end });
+  }
 
   if (scope.get(root) === "sdk" && !sdkCalls.includes(call)) {
     refuse(context, node, "unknown_sdk_call", "Call an exported SDK function or namespace member.");

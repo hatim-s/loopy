@@ -7,10 +7,12 @@ import {
   type StreamEnd,
 } from "./backend.ts";
 
+import { httpBaseUrl } from "./config.ts";
+
 type Route = {
   method: string;
   path: string;
-  params: z.ZodType<Record<string, string>>;
+  params: z.ZodType<Record<string, string | number>>;
   query: z.ZodObject;
   body: z.ZodType;
   response: z.ZodType;
@@ -29,7 +31,7 @@ const RETRY_MS = { first: 500, max: 10_000 } as const;
 
 function routeUrl(
   path: string,
-  params: Record<string, string>,
+  params: Record<string, string | number>,
   query: z.input<Route["query"]>,
 ): string {
   const filled = path
@@ -45,7 +47,7 @@ function routeUrl(
         throw new Error(`Route ${path} needs the ${segment} parameter.`);
       }
 
-      return encodeURIComponent(value);
+      return encodeURIComponent(String(value));
     })
     .join("/");
 
@@ -166,20 +168,27 @@ function pause(ms: number, signal: AbortSignal): Promise<void> {
 }
 
 export type LocalHttpOptions = {
-  /** Absolute origin of the Loopy server; the browser passes its own. */
-  origin: string;
+  /** Trusted absolute base URL, optionally including a reverse-proxy path prefix. */
+  baseUrl: string;
   token: string | null;
 };
 
 export function httpTransport(
-  { origin, token }: LocalHttpOptions,
+  { baseUrl, token }: LocalHttpOptions,
   eventBatchSchema: z.ZodType<ServerEvent[]> = batchSchema,
 ) {
+  const base = httpBaseUrl(baseUrl);
   const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
   async function request(url: string, init: RequestInit): Promise<Response> {
     try {
-      return await fetch(`${origin}${url}`, { ...init, headers: { ...headers, ...init.headers } });
+      return await fetch(`${base}${url}`, {
+        ...init,
+        headers: { ...headers, ...init.headers },
+        credentials: "omit",
+        redirect: "error",
+        referrerPolicy: "no-referrer",
+      });
     } catch (cause) {
       if (init.signal?.aborted) {
         throw cause;
@@ -293,7 +302,8 @@ export function localHttpBackend(options: LocalHttpOptions): LoopyBackend {
 
   return {
     cursor: (signal) => send(routes.cursor, { params: {}, query: {}, body: undefined }, signal),
-    loopies: () => send(routes.loopies, { params: {}, query: {}, body: undefined }),
+    loopies: (workspace) =>
+      send(routes.loopies, { params: {}, query: { workspace }, body: undefined }),
     loopyGraph: (slug, workspace) =>
       send(routes.graph, { params: { slug }, query: { workspace }, body: undefined }),
     runs: (query) => send(routes.runs, { params: {}, query, body: undefined }),
@@ -307,12 +317,43 @@ export function localHttpBackend(options: LocalHttpOptions): LoopyBackend {
     resolveHook: (token, payload) =>
       send(routes.resolveHook, { params: { token }, query: {}, body: { payload } }),
     daemon: () => send(routes.daemon, { params: {}, query: {}, body: undefined }),
-    schedules: () => send(routes.schedules, { params: {}, query: {}, body: undefined }),
-    putSchedule: (slug, body) => send(routes.putSchedule, { params: { slug }, query: {}, body }),
-    setScheduleEnabled: (slug, enabled) =>
-      send(routes.setScheduleEnabled, { params: { slug }, query: {}, body: { enabled } }),
-    deleteSchedule: (slug) =>
-      send(routes.deleteSchedule, { params: { slug }, query: {}, body: undefined }),
+    scheduleOverview: (signal) =>
+      send(routes.scheduleOverview, { params: {}, query: {}, body: undefined }, signal),
+    schedules: (workspace) =>
+      send(routes.schedules, { params: {}, query: { workspace }, body: undefined }),
+    putSchedule: (slug, workspace, body) =>
+      send(routes.putSchedule, { params: { slug }, query: { workspace }, body }),
+    setScheduleEnabled: (slug, workspace, enabled) =>
+      send(routes.setScheduleEnabled, {
+        params: { slug },
+        query: { workspace },
+        body: { enabled },
+      }),
+    deleteSchedule: (slug, workspace) =>
+      send(routes.deleteSchedule, { params: { slug }, query: { workspace }, body: undefined }),
     events,
+    runPayload: (id, signal) =>
+      send(routes.runPayload, { params: { id }, query: {}, body: undefined }, signal),
+    scopes: (id, query, signal) =>
+      send(routes.scopes, { params: { id }, query, body: undefined }, signal),
+    overview: (query, signal) =>
+      send(routes.overview, { params: {}, query, body: undefined }, signal),
+    source: (slug, workspace, signal) =>
+      send(routes.source, { params: { slug }, query: { workspace }, body: undefined }, signal),
+    runSource: (id, signal) =>
+      send(routes.runSource, { params: { id }, query: {}, body: undefined }, signal),
+    executions: (id, query, signal) =>
+      send(routes.executions, { params: { id }, query, body: undefined }, signal),
+    execution: (id, query, signal) =>
+      send(routes.execution, { params: { id }, query, body: undefined }, signal),
+    scopeItems: (id, query, signal) =>
+      send(routes.scopeItems, { params: { id }, query, body: undefined }, signal),
+    globalLogs: (query, signal) =>
+      send(routes.globalLogs, { params: {}, query, body: undefined }, signal),
+    log: (id, signal) => send(routes.log, { params: { id }, query: {}, body: undefined }, signal),
+    eventHistory: (query, signal) =>
+      send(routes.eventHistory, { params: {}, query, body: undefined }, signal),
+    event: (sequence, signal) =>
+      send(routes.event, { params: { sequence }, query: {}, body: undefined }, signal),
   };
 }

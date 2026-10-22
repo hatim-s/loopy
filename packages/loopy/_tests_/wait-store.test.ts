@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { nodeIdSchema } from "../src/contract/index.js";
 import { type NodeRun, type Store } from "../src/core/index.js";
 import { MemoryStore, SqliteRunStore } from "../src/store/index.js";
+import { SCHEMA, WAIT_SCHEMA } from "../src/store/sqlite/store-schema.js";
 import { newRun } from "./fixture.js";
 
 const homes: string[] = [];
@@ -233,13 +234,17 @@ test("sqlite reopen retains accepted payload and wake without a second resolutio
 });
 
 test("schema 13 upgrade preserves records and legacy schema rejection never resets data", async () => {
-  const { store, file } = sqlite();
-  await store.createRun(newRun());
-  const epoch = await store.epoch();
-  stores.splice(stores.indexOf(store), 1);
-  store.close();
+  const home = mkdtempSync(join(tmpdir(), "loopy-schema13-"));
+  homes.push(home);
+  const file = join(home, "runs.sqlite");
+  const epoch = crypto.randomUUID();
   const db = new Database(file);
-  db.exec("DROP TABLE waits; PRAGMA user_version=13");
+  db.exec(SCHEMA.replace(WAIT_SCHEMA, ""));
+  db.query("INSERT INTO meta VALUES ('epoch',?)").run(epoch);
+  db.query(
+    "INSERT INTO runs(id,slug,revision,workspace,input_json,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)",
+  ).run("run", "test", "bundle", "/workspace", "{}", "queued", at, at);
+  db.exec("PRAGMA user_version=13");
   db.close();
   const upgraded = new SqliteRunStore(file);
   stores.push(upgraded);

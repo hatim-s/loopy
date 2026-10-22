@@ -9,6 +9,7 @@ import {
   SCHEDULE_EVENT_KINDS,
   STEP_STATUSES,
 } from "../core/index.js";
+import { scopeCountsSchema } from "./dashboard.js";
 import { nodeRunViewSchema } from "./graph.js";
 import { jsonSchema } from "./json.js";
 import {
@@ -25,6 +26,12 @@ const runBaseSchema = z.strictObject({
   workspace: z.string(),
   loopy: z.strictObject({ slug: z.string(), description: z.string().nullable() }),
   input: jsonSchema,
+  truncatedFields: z
+    .strictObject({
+      input: z.number().int().nonnegative().optional(),
+      output: z.number().int().nonnegative().optional(),
+    })
+    .optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
   owner: z
@@ -81,6 +88,7 @@ export const loopyViewSchema = z.strictObject({
     .nullable(),
   lastRun: runViewSchema.nullable(),
   counts: z.record(runStatusSchema, z.number().int().nonnegative()),
+  latestRuns: z.array(runViewSchema).max(10).optional(),
 });
 
 export type LoopyView = z.infer<typeof loopyViewSchema>;
@@ -88,6 +96,10 @@ export type LoopyView = z.infer<typeof loopyViewSchema>;
 export const runSnapshotViewSchema = z.strictObject({
   run: runViewSchema,
   nodeRuns: z.array(nodeRunViewSchema),
+  scopes: z.array(scopeCountsSchema).optional(),
+  nodeRunsNext: z.string().nullable().optional(),
+  truncatedOutputs: z.record(z.string(), z.number()).optional(),
+  hooksTruncated: z.boolean().optional(),
   steps: z.array(stepRecordSchema),
   logs: z.array(logRecordSchema),
   hooks: z.array(hookRecordSchema),
@@ -108,6 +120,7 @@ export const daemonViewSchema = z.strictObject({
 export type DaemonView = z.infer<typeof daemonViewSchema>;
 
 const eventBaseSchema = z.strictObject({
+  truncatedOutputBytes: z.number().int().nonnegative().optional(),
   sequence: z.number().int().nonnegative(),
   at: z.string(),
   txn: z.string(),

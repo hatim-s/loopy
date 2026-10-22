@@ -14,7 +14,7 @@ export { Registry } from "./registry.js";
 
 export { SecretStore, validateSecretValue } from "./secrets.js";
 
-export { DEFAULT_PORT } from "./server/start-server.js";
+export { createRequestHandler, DEFAULT_PORT, type ServerOptions } from "./server/start-server.js";
 
 export { LoopyService, ServiceError } from "./service.js";
 

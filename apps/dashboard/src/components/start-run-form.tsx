@@ -14,8 +14,7 @@ import { useRunMutation } from "../lib/mutations.ts";
 import { Button } from "./button.tsx";
 import { ErrorBanner } from "./error-banner.tsx";
 
-const CONTROL =
-  "block h-7 w-full rounded-md border border-line bg-panel px-2 text-[13px] aria-invalid:border-danger";
+const CONTROL = "field block w-full";
 
 function FieldControl({
   field,
@@ -124,7 +123,7 @@ function JsonEditor({ onSubmit }: { onSubmit: (input: Json) => void }) {
           rows={5}
           spellCheck={false}
           aria-invalid={!parsed.valid}
-          className="block w-full resize-y rounded-md border border-line bg-panel p-2.5 font-mono text-xs aria-invalid:border-danger"
+          className="field"
         />
       </label>
       {!parsed.valid && <p className="text-xs text-danger">The input is not valid JSON.</p>}
@@ -147,10 +146,7 @@ export function StartRunForm({ loopy }: { loopy: LoopyView }) {
   const empty = loopy.input !== "schema" && Object.keys(loopy.input).length === 0;
 
   return (
-    <section aria-labelledby="start-heading" className="space-y-2.5">
-      <h2 id="start-heading" className="section-title">
-        Start run
-      </h2>
+    <section aria-label="Start run" className="space-y-2.5">
       {empty && <p className="text-xs text-muted">This loopy takes no input.</p>}
       {loopy.input === "schema" ? (
         <JsonEditor onSubmit={submit} />

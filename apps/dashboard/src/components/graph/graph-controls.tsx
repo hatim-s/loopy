@@ -1,8 +1,7 @@
 import { MiniMap, useReactFlow, useStore } from "@xyflow/react";
 import type { ReactNode } from "react";
 import type { NodeRunStatus } from "../../lib/graph.ts";
-import type { GraphLayout } from "../../lib/graph-layout.ts";
-import type { CanvasFrame } from "../canvas-page.tsx";
+import type { FitPadding, GraphLayout } from "../../lib/graph-layout.ts";
 import type { FrameNode } from "./graph-frame.tsx";
 import type { FlowNode } from "./graph-node.tsx";
 
@@ -85,7 +84,7 @@ function ControlIcon({ d }: { d: string }) {
 
 /** Zoom, fit and the minimap switch, in one strip with whatever the page puts beside them. */
 export function ViewControls(props: {
-  padding: CanvasFrame["padding"];
+  padding: FitPadding;
   minimap: boolean;
   onMinimap: (shown: boolean) => void;
   children: ReactNode;

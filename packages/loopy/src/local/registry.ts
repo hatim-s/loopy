@@ -1,10 +1,18 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { type Graph, graphSchema, type PutLoopyBody } from "../contract/index.js";
+import {
+  type Graph,
+  graphSchema,
+  MAX_SOURCE_BYTES,
+  type PutLoopyBody,
+  type SourceArtifact,
+  sourceArtifactSchema,
+} from "../contract/index.js";
 import { canonicalJson, isRecord, validateSlug } from "../core/index.js";
-import { canonicalPath, withLockDirectory, writeFileAtomically } from "./fs.js";
+import { canonicalPath, errnoCode, withLockDirectory, writeFileAtomically } from "./fs.js";
 import { parseSavedLoopy, type SavedLoopy } from "./saved-loopy.js";
+import { redactSourceArtifact } from "./source-view.js";
 
 function readEntry(file: string) {
   const value: unknown = JSON.parse(readFileSync(file, "utf8"));
@@ -130,6 +138,10 @@ export class Registry {
         savedAt: new Date().toISOString(),
       };
 
+      if (body.sourceArtifact) {
+        this.pinSource(graph.name, body.sourceArtifact);
+      }
+
       writeFileAtomically(file, `${JSON.stringify(entry, null, 2)}\n`, 0o600);
 
       for (const other of files.filter((candidate) => candidate !== file)) {
@@ -156,6 +168,50 @@ export class Registry {
 
   graphPath(revision: string): string {
     return this.artifactPath("graphs", revision, "json");
+  }
+
+  private sourcePath(slug: string, revision: string): string {
+    validateSlug(slug);
+    const file = this.artifactPath("sources", revision, "json");
+
+    return join(dirname(file), slug, `${revision}.json`);
+  }
+
+  pinSource(slug: string, artifact: SourceArtifact): void {
+    const file = this.sourcePath(slug, artifact.revision);
+    mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
+    withLockDirectory(`${file}.lock`, "source capture", () => {
+      if (!existsSync(file)) {
+        writeFileAtomically(file, canonicalJson(artifact), 0o600);
+      }
+    });
+  }
+
+  async revisionSource(slug: string, revision: string): Promise<SourceArtifact> {
+    const file = this.sourcePath(slug, revision);
+    let contents: string;
+
+    try {
+      if ((await stat(file)).size > MAX_SOURCE_BYTES * 2) {
+        throw new Error("Source artifact exceeds the 512 KiB payload limit.");
+      }
+
+      contents = await readFile(file, "utf8");
+    } catch (error) {
+      if (errnoCode(error) !== "ENOENT") {
+        throw error;
+      }
+
+      return { version: 1, status: "unavailable", revision, reason: "not_captured" };
+    }
+
+    const artifact = sourceArtifactSchema.parse(JSON.parse(contents));
+
+    if (artifact.revision !== revision) {
+      throw new Error("Source artifact does not match the requested revision.");
+    }
+
+    return redactSourceArtifact(this.home, artifact);
   }
 
   /** Reads the graph one revision pinned, which later saves never overwrite. */

@@ -321,6 +321,7 @@ export type NodeRun = Expand<
     maxAttempts: number;
     startedAt: string;
     receipt: (typeof RECEIPT_KINDS)[number];
+    inputView?: { state: "available"; value: Json } | { state: "truncated"; bytes: number };
   } & (
     | { status: (typeof NODE_RUN_STATUSES)[0] }
     | { status: (typeof NODE_RUN_STATUSES)[7] }

@@ -28,6 +28,8 @@ export {
   savedLoopySchema,
 } from "./compiled-loopy.js";
 
+export * from "./dashboard.js";
+
 export { graphView, loopyView, runView, serverEvent } from "./derive.js";
 
 export * from "./graph.js";
@@ -50,6 +52,14 @@ export {
   scheduleSchema,
   stepRecordSchema,
 } from "./records.js";
+
+export {
+  MAX_SOURCE_BYTES,
+  MAX_SOURCE_FILES,
+  MAX_SOURCE_RANGES,
+  type SourceArtifact,
+  sourceArtifactSchema,
+} from "./source-artifact.js";
 
 export {
   type CursorView,

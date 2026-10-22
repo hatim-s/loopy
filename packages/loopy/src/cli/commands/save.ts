@@ -32,6 +32,7 @@ export async function runSave(context: CliContext): Promise<void> {
         body: {
           graph: result.graph,
           revision: result.revision,
+          sourceArtifact: result.sourceArtifact,
           bundles: result.bundles.map((value) => ({
             ...value,
             bytes: Buffer.from(value.bytes).toString("base64"),

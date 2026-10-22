@@ -22,7 +22,7 @@ export const SQL = {
   createEpoch: "INSERT INTO meta VALUES ('epoch',?)",
   epoch: "SELECT value FROM meta WHERE key='epoch'",
   appendEvent:
-    "INSERT INTO events(at,txn,entity,kind,run_id,record) VALUES (?,?,?,?,?,?) RETURNING *",
+    "INSERT INTO events(at,txn,entity,kind,run_id,record,node_id,slug,workspace) VALUES (?,?,?,?,?,?,?,?,?) RETURNING *",
   events: "SELECT * FROM events WHERE sequence>? ORDER BY sequence LIMIT ?",
   transactionEvents: "SELECT * FROM events WHERE txn=? AND sequence>? ORDER BY sequence",
   cursor: "SELECT COALESCE((SELECT seq FROM sqlite_sequence WHERE name='events'),0) AS cursor",
@@ -31,8 +31,9 @@ export const SQL = {
   rateLimit: "SELECT window_start AS windowStart,count FROM rate_limits WHERE key=?",
   putRateLimit:
     "INSERT INTO rate_limits VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET window_start=excluded.window_start,count=excluded.count",
-  putNode: `INSERT INTO node_runs VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(run_id,execution_key) DO UPDATE SET attempt=excluded.attempt,status=excluded.status,started_at=excluded.started_at,finished_at=excluded.finished_at,output=excluded.output,error=excluded.error,receipt=excluded.receipt,record=excluded.record`,
-  appendLog: "INSERT INTO logs VALUES (?,?,?,?,?,?)",
+  putNode: `INSERT INTO node_runs(run_id,execution_key,attempt,status,started_at,finished_at,output,error,receipt,record,node_id,scope) VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(run_id,execution_key) DO UPDATE SET attempt=excluded.attempt,status=excluded.status,started_at=excluded.started_at,finished_at=excluded.finished_at,output=excluded.output,error=excluded.error,receipt=excluded.receipt,record=excluded.record,node_id=excluded.node_id,scope=excluded.scope`,
+  appendLog:
+    "INSERT INTO logs(run_id,execution_key,attempt,log_index,seq,record,node_id,at,level,message,data_bytes) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
   schedules: "SELECT * FROM schedules ORDER BY rowid",
   schedule: "SELECT * FROM schedules WHERE workspace=? AND slug=?",
   putSchedule: `INSERT INTO schedules VALUES (?,?,?,?,?,?,?,?,1) ON CONFLICT(workspace,slug) DO UPDATE SET
@@ -48,7 +49,7 @@ export const SQL = {
   nextWakeAt:
     "SELECT MIN(wake_at) AS wake_at FROM runs WHERE status='suspended' AND owner_token IS NULL",
   run: "SELECT * FROM runs WHERE id=?",
-  createRun: `INSERT INTO runs VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+  createRun: `INSERT INTO runs(id,slug,revision,workspace,input_json,status,output_json,error,wake_at,next_retry_at,created_at,updated_at,owner_token,owner_pid,owner_host,heartbeat_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
   listRuns:
     "SELECT * FROM runs WHERE (?1 IS NULL OR slug=?1) AND (?2 IS NULL OR status=?2) ORDER BY rowid",
   claim: `UPDATE runs SET owner_token=?,owner_pid=?,owner_host=?,heartbeat_at=?,updated_at=?,status='running',wake_at=NULL,next_retry_at=NULL WHERE id=? AND owner_token IS NULL AND status IN ('queued','suspended','running')`,

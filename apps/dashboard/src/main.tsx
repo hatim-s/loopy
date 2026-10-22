@@ -7,27 +7,23 @@ import { createRoot } from "react-dom/client";
 import { BackendError, type LoopyBackend } from "./backend/backend.ts";
 import { backendConfigSchema } from "./backend/config.ts";
 import { localHttpBackend } from "./backend/local-http.ts";
+import { browserConnection } from "./lib/connection.ts";
 import { routeTree } from "./routeTree.gen.ts";
 import "./style.css";
 
-const TOKEN_KEY = "loopy-token";
-
-/** `loopy ui` opens the page with #token=…; keep it for the tab and drop it from the URL. */
-function captureToken(): string | null {
-  const token = new URLSearchParams(window.location.hash.slice(1)).get("token");
-
-  if (token) {
-    sessionStorage.setItem(TOKEN_KEY, token);
-    const url = new URL(window.location.href);
-    url.hash = "";
-    history.replaceState(null, "", url);
-  }
-
-  return sessionStorage.getItem(TOKEN_KEY);
-}
-
 async function createBackend(): Promise<LoopyBackend> {
-  const config = backendConfigSchema.parse({ mode: import.meta.env.VITE_BACKEND ?? "http" });
+  const connection = browserConnection({
+    baseUrl: import.meta.env.VITE_API_BASE_URL ?? window.location.origin,
+    pageUrl: window.location.href,
+    storage: () => sessionStorage,
+    replaceUrl: (url) => history.replaceState(null, "", url),
+  });
+
+  const mode = import.meta.env.VITE_BACKEND ?? "http";
+
+  const config = backendConfigSchema.parse(
+    mode === "http" ? { mode, baseUrl: import.meta.env.VITE_API_BASE_URL } : { mode },
+  );
 
   if (config.mode === "fake") {
     const [{ fakeBackend }, { demoScript }] = await Promise.all([
@@ -37,8 +33,6 @@ async function createBackend(): Promise<LoopyBackend> {
 
     return fakeBackend(demoScript());
   }
-
-  const connection = { origin: window.location.origin, token: captureToken() };
 
   return localHttpBackend(connection);
 }

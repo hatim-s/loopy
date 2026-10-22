@@ -13,6 +13,15 @@ export function span(ms: number): string {
     : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 }
 
+/** A run or execution length: 892ms, 4.3s, then the same units as `span`. */
+export function elapsed(ms: number): string {
+  if (ms < 1000) {
+    return `${Math.max(0, Math.round(ms))}ms`;
+  }
+
+  return ms < 10_000 ? `${(ms / 1000).toFixed(1)}s` : span(ms);
+}
+
 export function duration(start: string, end: number): string {
   return span(end - Date.parse(start));
 }
@@ -24,6 +33,14 @@ export function timestamp(value: string): string {
 /** Wall-clock time only, for log lines where the date is already on the page. */
 export function clockTime(value: string): string {
   return new Date(value).toLocaleTimeString(undefined, { hour12: false });
+}
+
+// Daemon run ids are UUIDs, so eight characters identify one on a page. Other ids show whole.
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-/i;
+
+/** A run id short enough for a table cell. */
+export function shortId(id: string): string {
+  return UUID.test(id) ? id.slice(0, 8) : id;
 }
 
 /** How long ago a moment was, against a clock the caller owns: "42s ago", "3h 10m ago". */

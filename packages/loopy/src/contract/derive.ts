@@ -83,6 +83,15 @@ function outcome(run: RunRecord) {
   }
 }
 
+function previewPayload(value: RunRecord["input"]): {
+  value: RunRecord["input"];
+  bytes: number | null;
+} {
+  const bytes = new TextEncoder().encode(JSON.stringify(value)).byteLength;
+
+  return bytes > 16_384 ? { value: null, bytes } : { value, bytes: null };
+}
+
 export function runView(options: RunViewOptions): RunView {
   const { run, now, leaseMs } = options;
 
@@ -94,19 +103,43 @@ export function runView(options: RunViewOptions): RunView {
       }
     : null;
 
-  return {
+  const input = previewPayload(run.input);
+  const result = outcome(run);
+  const output = result.status === "succeeded" ? previewPayload(result.output) : null;
+
+  const truncatedFields: NonNullable<RunRecord["truncatedFields"]> = { ...run.truncatedFields };
+
+  if (input.bytes !== null) {
+    truncatedFields.input = input.bytes;
+  }
+
+  if (output?.bytes) {
+    truncatedFields.output = output.bytes;
+  }
+
+  if (result.status === "succeeded" && output) {
+    result.output = output.value;
+  }
+
+  const view: RunView = {
     id: run.id,
     slug: run.slug,
     workspace: run.workspace,
     loopy: { slug: options.loopy.slug, description: options.loopy.description },
-    input: run.input,
+    input: input.value,
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,
     owner,
     ownerStale: owner !== null && Date.parse(now) - Date.parse(owner.heartbeatAt) > leaseMs,
     waitingOn: waitingOn(options),
-    ...outcome(run),
+    ...result,
   };
+
+  if (Object.keys(truncatedFields).length > 0) {
+    view.truncatedFields = truncatedFields;
+  }
+
+  return view;
 }
 
 type SavedLoopyInput = Pick<LoopyView, "slug" | "workspace" | "scope" | "mode"> & {

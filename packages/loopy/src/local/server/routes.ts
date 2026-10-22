@@ -109,6 +109,7 @@ async function parseRequest<P, Q, B>(
 
 export function apiRoutes({ service, store, cwd, daemon }: Dependencies) {
   return [
+    endpoint(routes.scheduleOverview, async () => service.scheduleOverview()),
     endpoint(routes.secrets, async () => service.listSecrets()),
     endpoint(routes.putSecret, async ({ params, body }) =>
       service.putSecret(params.name, body.value),
@@ -123,6 +124,20 @@ export function apiRoutes({ service, store, cwd, daemon }: Dependencies) {
       service.graph(slug, query.workspace ?? cwd),
     ),
     endpoint(routes.runGraph, async ({ params: { id } }) => service.runGraph(id)),
+    endpoint(routes.source, async ({ params: { slug }, query }) =>
+      service.loopySource(slug, query.workspace ?? cwd),
+    ),
+    endpoint(routes.runSource, async ({ params: { id } }) => service.runSource(id)),
+    endpoint(routes.overview, async ({ query }) => service.overview(query)),
+    endpoint(routes.executions, async ({ params: { id }, query }) => service.executions(id, query)),
+    endpoint(routes.execution, async ({ params: { id }, query }) => service.execution(id, query)),
+    endpoint(routes.scopes, async ({ params: { id }, query }) => service.scopes(id, query)),
+    endpoint(routes.runPayload, async ({ params: { id } }) => service.runPayload(id)),
+    endpoint(routes.scopeItems, async ({ params: { id }, query }) => service.scopeItems(id, query)),
+    endpoint(routes.globalLogs, async ({ query }) => service.globalLogs(query)),
+    endpoint(routes.log, async ({ params: { id } }) => service.log(id)),
+    endpoint(routes.eventHistory, async ({ query }) => service.eventHistory(query)),
+    endpoint(routes.event, async ({ params: { sequence } }) => service.event(sequence)),
     endpoint(routes.schedules, async ({ query }) => service.listSchedules(query.workspace)),
     endpoint(routes.putSchedule, async ({ params: { slug }, body, query }) =>
       service.putSchedule(slug, body, query.workspace),
@@ -139,7 +154,7 @@ export function apiRoutes({ service, store, cwd, daemon }: Dependencies) {
     endpoint(routes.logs, async ({ params: { id }, query }) => {
       await service.requireRun(id);
 
-      return store.getLogs(id, query.after);
+      return store.getLogs(id, query.after, query.limit);
     }),
     endpoint(routes.startRun, async ({ params: { slug }, body }) =>
       service.startRun(slug, body.input, body.workspace ?? cwd),
@@ -153,7 +168,7 @@ export function apiRoutes({ service, store, cwd, daemon }: Dependencies) {
       pid: process.pid,
       startedAt: daemon.startedAt,
       concurrency: daemon.concurrency,
-      running: (await store.listRuns({ status: "running" })).length,
+      running: await store.runningCount(),
       nextWakeAt: (await store.nextWakeAt()) ?? null,
     })),
     endpoint(routes.events, async ({ query, request }) =>

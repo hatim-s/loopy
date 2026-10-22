@@ -13,7 +13,14 @@ export function earliestWakeAt(...values: (string | null | undefined)[]): string
 }
 
 export function normalizeNode(node: NodeRun): NodeRun {
-  const record = { ...node, startedAt: utc(node.startedAt) };
+  const record = {
+    ...node,
+    key: {
+      ...node.key,
+      scope: node.key.scope.map((scope) => ({ nodeId: scope.nodeId, index: scope.index })),
+    },
+    startedAt: utc(node.startedAt),
+  };
 
   if ("endedAt" in record) {
     record.endedAt = utc(record.endedAt);

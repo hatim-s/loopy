@@ -4,7 +4,6 @@ import {
   type CursorView,
   DEFAULT_ERROR_MESSAGES,
   type ErrorCode,
-  encodeRunCursor,
   type GraphRevisionView,
   graphView,
   isTerminalRun,
@@ -15,7 +14,10 @@ import {
   type PutScheduleBody,
   type RunView,
   type routes,
+  runView,
+  type ScheduleOverviewView,
   type ScheduleView,
+  type SourceArtifact,
   serverEvent,
 } from "../contract/index.js";
 import {
@@ -24,6 +26,7 @@ import {
   nextFire,
   OwnershipError,
   parseCron,
+  type RunFilter,
   type RunRecord,
   type RuntimeEvent,
   type Schedule,
@@ -37,7 +40,8 @@ import type { Registry } from "./registry.js";
 import { saveCompiled } from "./save-compiled.js";
 import type { SavedLoopy } from "./saved-loopy.js";
 import { SecretStore } from "./secrets.js";
-import { graphRunView } from "./service-views.js";
+
+import { nodeDetailEvent, nodeEventPreview } from "./service-views.js";
 import { generateCommand } from "./typegen/generate.js";
 
 export class ServiceError extends Error {
@@ -72,6 +76,10 @@ export class LoopyService {
     }
 
     return { registry, saved, workspace: registry.project };
+  }
+
+  async scheduleOverview(): Promise<ScheduleOverviewView> {
+    return this.options.store.scheduleOverview();
   }
 
   async listSchedules(callerWorkspace = ""): Promise<ScheduleView[]> {
@@ -278,34 +286,33 @@ export class LoopyService {
   }
 
   private async viewResolver(ids: string[], registries = new Map<string, SavedLoopy[]>()) {
-    const records = await Promise.all(
-      ids.map(async (id) => {
-        const [hooks, nodeRuns] = await Promise.all([
-          this.options.store.getWaits(id),
-          this.options.store.getNodeRuns(id),
-        ]);
-
-        return [id, { nodeRuns, hooks }] as const;
-      }),
-    );
-
-    const snapshots = new Map(records);
     const now = this.now();
+    const hooks = await this.options.store.pendingHooks(ids, now);
 
-    return (run: RunRecord) => {
-      const snapshot = snapshots.get(run.id);
-
-      if (!snapshot) {
-        throw new ServiceError("not_found");
-      }
-
-      return graphRunView({
-        ...snapshot,
+    return (run: RunRecord): RunView => {
+      const view = runView({
         run,
         loopy: this.loopySummary(run, registries),
+        steps: [],
+        hooks: [],
         now,
         leaseMs: this.options.store.leaseMs,
       });
+
+      const hook = hooks.get(run.id);
+
+      return hook
+        ? {
+            ...view,
+            waitingOn: {
+              hook: hook.name,
+              token: hook.token,
+              seq: hook.seq,
+              expiresAt: hook.expiresAt,
+              since: hook.createdAt,
+            },
+          }
+        : view;
     };
   }
 
@@ -473,101 +480,176 @@ export class LoopyService {
   }
 
   async runSnapshot(id: string) {
-    const snapshot = await this.options.store.snapshotRun(id);
+    const snapshot = await this.options.store.dashboardSnapshot(id);
 
     if (!snapshot) {
       throw new ServiceError("not_found", `No run '${id}'. Use loopy runs to list run ids.`);
     }
 
-    return {
-      ...snapshot,
-      run: graphRunView({
-        ...snapshot,
-        hooks: await this.options.store.getWaits(id),
-        loopy: this.loopySummary(snapshot.run),
-        now: this.now(),
-        leaseMs: this.options.store.leaseMs,
-      }),
-    };
+    return { ...snapshot, run: await this.view(snapshot.run) };
   }
 
   async listRuns(query: z.output<typeof routes.runs.query>): Promise<RunView[]> {
-    const runs = (await this.options.store.listRuns(query))
-      .filter((run) => query.before === undefined || encodeRunCursor(run) < query.before)
-      .sort(
-        (a, b) =>
-          Number(encodeRunCursor(a) < encodeRunCursor(b)) -
-          Number(encodeRunCursor(a) > encodeRunCursor(b)),
-      );
+    const runs = await this.options.store.queryRuns({ ...query, now: this.now() });
+    const resolve = await this.viewResolver(runs.map((run) => run.id));
 
-    const selected = query.waiting === undefined ? runs.slice(0, query.limit) : runs;
-    const resolve = await this.viewResolver(selected.map((run) => run.id));
-
-    return selected
-      .map(resolve)
-      .filter((run) => query.waiting === undefined || (run.waitingOn !== null) === query.waiting)
-      .slice(0, query.limit);
+    return runs.map(resolve);
   }
 
   async listLoopies(callerWorkspace = ""): Promise<LoopyView[]> {
-    const [records, schedules] = await Promise.all([
-      this.options.store.listRuns(),
+    const [workspaces, schedules] = await Promise.all([
+      this.options.store.runWorkspaces(),
       this.options.store.listSchedules(),
     ]);
 
+    const views = new Map<string, LoopyView>();
     const registries = new Map<string, SavedLoopy[]>();
 
-    const resolve = await this.viewResolver(
-      records.map((run) => run.id),
-      registries,
-    );
-
-    const runs = records.map(resolve);
-
-    const workspaces = new Set([
+    for (const workspace of new Set([
       callerWorkspace,
-      ...runs.map((run) => run.workspace),
+      ...workspaces,
       ...schedules.map((schedule) => schedule.workspace),
-    ]);
-
-    const views = new Map<string, LoopyView>();
-
-    for (const workspace of workspaces) {
+    ])) {
       const registry = this.options.registry(workspace);
 
-      for (const view of this.registryViews(
-        registry,
-        this.registryEntries(registry, registries),
-        schedules,
-        runs,
-      )) {
-        if (!views.has(view.slug)) {
-          views.set(view.slug, view);
+      for (const saved of this.registryEntries(registry, registries)) {
+        if (views.has(saved.slug)) {
+          continue;
         }
+
+        const filter: RunFilter = { slug: saved.slug };
+
+        if (saved.scope !== "global") {
+          filter.workspace = registry.project;
+        }
+
+        const [counts, recent] = await Promise.all([
+          this.options.store.runCounts(filter),
+          this.options.store.queryRuns({ ...filter, limit: 10, now: this.now() }),
+        ]);
+
+        const resolve = await this.viewResolver(
+          recent.map((run) => run.id),
+          registries,
+        );
+
+        const latestRuns = recent.map(resolve);
+
+        const view = loopyView(
+          {
+            ...saved,
+            workspace: registry.project,
+            input: saved.graph.inputValidation?.root === "json" ? "schema" : saved.input,
+          },
+          schedules.find(
+            (schedule) => schedule.slug === saved.slug && schedule.workspace === registry.project,
+          ) ?? null,
+          [],
+        );
+
+        views.set(saved.slug, { ...view, counts, lastRun: latestRuns[0] ?? null, latestRuns });
       }
     }
 
     return [...views.values()];
   }
 
-  private registryViews(
-    registry: Registry,
-    entries: SavedLoopy[],
-    schedules: Schedule[],
-    runs: RunView[],
-  ): LoopyView[] {
-    return entries.map((saved) =>
-      loopyView(
-        {
-          ...saved,
-          workspace: registry.project,
-          input: saved.graph.inputValidation?.root === "json" ? "schema" : saved.input,
-        },
-        schedules.find((item) => item.slug === saved.slug && item.workspace === registry.project) ??
-          null,
-        runs.filter((run) => saved.scope === "global" || run.workspace === registry.project),
-      ),
+  private async readRunReference(id: string) {
+    const run = await this.options.store.runReference(id);
+
+    if (!run) {
+      throw new ServiceError("not_found");
+    }
+
+    return run;
+  }
+
+  async overview(query: z.output<typeof routes.overview.query>) {
+    return this.options.store.overview(query);
+  }
+  async executions(id: string, query: z.output<typeof routes.executions.query>) {
+    await this.readRunReference(id);
+
+    return this.options.store.nodePage(id, query);
+  }
+  async scopes(id: string, query: z.output<typeof routes.scopes.query>) {
+    await this.readRunReference(id);
+
+    return this.options.store.scopeCounts(id, query.parentScope);
+  }
+  async scopeItems(id: string, query: z.output<typeof routes.scopeItems.query>) {
+    await this.readRunReference(id);
+
+    return this.options.store.scopeItems(id, query);
+  }
+  async execution(id: string, query: z.output<typeof routes.execution.query>) {
+    await this.readRunReference(id);
+    const detail = await this.options.store.execution(id, query.key, query.attemptsAfter);
+
+    if (!detail) {
+      throw new ServiceError("not_found");
+    }
+
+    return detail;
+  }
+  async globalLogs(query: z.output<typeof routes.globalLogs.query>) {
+    return this.options.store.logPage(query);
+  }
+  async log(id: number) {
+    const log = await this.options.store.logDetail(id);
+
+    if (!log) {
+      throw new ServiceError("not_found");
+    }
+
+    return log;
+  }
+  async eventHistory(query: z.output<typeof routes.eventHistory.query>) {
+    return this.options.store.eventPage(query);
+  }
+  async event(sequence: number) {
+    const event = await this.options.store.eventDetail(sequence);
+
+    if (!event) {
+      throw new ServiceError("not_found");
+    }
+
+    if (event.entity === "node") {
+      return nodeDetailEvent(event);
+    }
+
+    return serverEvent(
+      event,
+      await this.viewResolver(event.entity === "run" ? [event.record.id] : []),
     );
+  }
+  async runSource(id: string): Promise<SourceArtifact> {
+    const run = await this.readRunReference(id);
+
+    return this.options.registry(run.workspace).revisionSource(run.slug, run.revision);
+  }
+  async loopySource(slug: string, workspace: string): Promise<SourceArtifact> {
+    const registry = this.options.registry(workspace);
+    let saved: SavedLoopy;
+
+    try {
+      saved = registry.get(slug);
+    } catch {
+      throw new ServiceError("not_found");
+    }
+
+    return registry.revisionSource(slug, saved.revision);
+  }
+  async runPayload(id: string) {
+    const run = await this.requireRun(id);
+
+    const payload: z.output<typeof routes.runPayload.response> = { input: run.input };
+
+    if (run.output !== undefined) {
+      payload.output = run.output;
+    }
+
+    return payload;
   }
 
   listSecrets() {
@@ -609,7 +691,13 @@ export class LoopyService {
 
     const view = await this.viewResolver(ids);
 
-    return transaction.map((event) => serverEvent(event, view));
+    return transaction.map((event) => {
+      if (event.entity === "node") {
+        return nodeEventPreview(event);
+      }
+
+      return serverEvent(event, view);
+    });
   }
 
   async cursor(): Promise<CursorView> {

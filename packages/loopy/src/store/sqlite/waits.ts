@@ -19,7 +19,7 @@ export class SqliteWaits extends SqliteNodes {
       }
 
       const key = executionKeyString(effect.executionKey);
-      const node = this.readNodes(runId).find((node) => executionKeyString(node.key) === key);
+      const node = this.readNode(runId, key);
       const wait = registerWait(effect, node, this.readWaits(runId));
 
       if (wait) {
@@ -71,11 +71,7 @@ export class SqliteWaits extends SqliteNodes {
     return this.commit((txn) => {
       const wait = this.readWait(token);
 
-      const node =
-        wait &&
-        this.readNodes(wait.runId).find(
-          (node) => executionKeyString(node.key) === executionKeyString(wait.executionKey),
-        );
+      const node = wait && this.readNode(wait.runId, executionKeyString(wait.executionKey));
 
       const row = wait && this.row(wait.runId);
 

@@ -11,6 +11,7 @@ import type {
   RuntimeEvent,
   Schedule,
 } from "./model.js";
+import type { DashboardReader } from "./queries.js";
 import type { RateLimitResult } from "./rate-limit.js";
 
 export class OwnershipError extends Error {
@@ -28,7 +29,7 @@ export type WaitResolution =
   | { kind: "resolved"; runId: string }
   | { kind: "rejected"; code: "unknown_hook" | "bad_request"; message: string };
 
-export interface Store {
+export interface Store extends DashboardReader {
   getWaits(runId: string): Promise<WaitRecord[]>;
   getWait(token: string): Promise<WaitRecord | undefined>;
   resolveWait(options: { token: string; payload: Json; at: string }): Promise<WaitResolution>;
@@ -57,7 +58,7 @@ export interface Store {
   release(runId: string, token: string): Promise<void>;
   getNodeRuns(runId: string): Promise<NodeRun[]>;
   apply(batch: { runId: string; token: string; effects: StoreEffect[] }): Promise<void>;
-  getLogs(runId: string, after?: number): Promise<LogRecord[]>;
+  getLogs(runId: string, after?: number, limit?: number): Promise<LogRecord[]>;
   dueRuns(now: string): Promise<RunRecord[]>;
   nextWakeAt(): Promise<string | undefined>;
   putSchedule(schedule: Omit<Schedule, "version">): Promise<Schedule>;

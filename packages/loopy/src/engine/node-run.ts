@@ -7,6 +7,15 @@ export type Transition = { state: EngineState; effects: Effect[] };
 
 export function write(transition: Transition, nodeRun: NodeRun) {
   const index = transition.state.nodeRuns.findIndex((run) => sameExecution(run.key, nodeRun.key));
+  const previous = transition.state.nodeRuns[index];
+
+  if (
+    nodeRun.inputView === undefined &&
+    previous?.attempt === nodeRun.attempt &&
+    previous.inputView !== undefined
+  ) {
+    nodeRun.inputView = previous.inputView;
+  }
 
   if (index < 0) {
     transition.state.nodeRuns.push(nodeRun);

@@ -3,6 +3,9 @@ import type { GraphModel, GraphNodeModel, NodeRole } from "./graph.ts";
 
 type Size = { width: number; height: number };
 
+/** Room kept clear around the graph when it is framed, as CSS pixel lengths. */
+export type FitPadding = Record<"top" | "right" | "bottom" | "left", `${number}px`>;
+
 /** Node boxes have fixed sizes per role so layout runs before React measures anything. */
 export const NODE_SIZE = {
   work: { width: 224, height: 60 },

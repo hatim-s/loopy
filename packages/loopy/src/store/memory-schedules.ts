@@ -1,4 +1,4 @@
-import type { Schedule } from "../core/index.js";
+import type { Schedule, ScheduleOverview } from "../core/index.js";
 import { type Store } from "../core/index.js";
 import { MemoryWaits } from "./memory-waits.js";
 
@@ -60,6 +60,34 @@ export class MemorySchedules extends MemoryWaits {
 
       return true;
     });
+  }
+
+  async scheduleOverview(): Promise<ScheduleOverview> {
+    const schedules = [...this.schedules.values()];
+    const active = schedules.filter((schedule) => schedule.enabled);
+
+    return {
+      workspaces: [...new Set(schedules.map((schedule) => schedule.workspace))].sort(),
+      active: active.length,
+      next: active
+        .sort((a, b) => {
+          for (const field of ["nextFireAt", "workspace", "slug"] as const) {
+            if (a[field] !== b[field]) {
+              return a[field] < b[field] ? -1 : 1;
+            }
+          }
+
+          return 0;
+        })
+        .slice(0, 10)
+        .map(({ workspace, slug, cron, tz, nextFireAt }) => ({
+          workspace,
+          slug,
+          cron,
+          tz,
+          nextFireAt,
+        })),
+    };
   }
 
   async listSchedules(): Promise<Schedule[]> {

@@ -2,7 +2,7 @@ import type { HookRecord, LogRecord, RunSnapshot } from "../core/index.js";
 import { executionKeyString, type NodeRun, type StoreEffect } from "../core/index.js";
 import { type EventTransaction } from "./event-outbox.js";
 import { MemoryRuns } from "./memory-runs.js";
-import { checkLogWrite, checkNodeWrite, logRecord } from "./node-write.js";
+import { checkLogBytes, checkNodeWrite, logRecord } from "./node-write.js";
 import { earliestWakeAt, normalizeNode, utc } from "./timestamps.js";
 import { publicHook } from "./wait.js";
 
@@ -55,6 +55,10 @@ export class MemoryNodes extends MemoryRuns {
         const nodes = this.nodes.get(runId) ?? new Map<string, NodeRun>();
         nodes.set(executionKeyString(node.key), structuredClone(node));
         this.nodes.set(runId, nodes);
+        const key = executionKeyString(node.key);
+        const attempts = this.attempts.get(key) ?? new Map<number, NodeRun>();
+        attempts.set(node.attempt, structuredClone(node));
+        this.attempts.set(key, attempts);
         this.emit(txn, { entity: "node", kind: node.status, runId, record: node });
         break;
       }
@@ -89,21 +93,29 @@ export class MemoryNodes extends MemoryRuns {
         }
 
         const logs = this.logs.get(runId) ?? new Map<number, LogRecord>();
-        const record = logRecord([...logs.values()], effect);
-        checkLogWrite([...logs.values()], record);
+        const usageKey = JSON.stringify([executionKeyString(effect.executionKey), effect.attempt]);
+        const usage = this.logUsage.get(usageKey) ?? { bytes: 0, index: -1 };
+        const record = logRecord({ seq: logs.size + 1, index: usage.index + 1 }, effect);
+        this.logUsage.set(usageKey, {
+          bytes: checkLogBytes(usage.bytes, record),
+          index: record.position.index,
+        });
         logs.set(record.seq, structuredClone(record));
         this.logs.set(runId, logs);
+        this.logIds.set(++this.logSequence, structuredClone(record));
+        this.logNodeIds.set(this.logSequence, effect.executionKey.nodeId);
         this.emit(txn, { entity: "log", kind: "written", runId, record });
         break;
       }
     }
   }
 
-  async getLogs(runId: string, after = 0): Promise<LogRecord[]> {
+  async getLogs(runId: string, after = 0, limit = 200): Promise<LogRecord[]> {
     return structuredClone(
       [...(this.logs.get(runId)?.values() ?? [])]
         .filter((log) => log.seq > after)
-        .sort((a, b) => a.seq - b.seq),
+        .sort((a, b) => a.seq - b.seq)
+        .slice(0, Math.min(limit, 200)),
     );
   }
 

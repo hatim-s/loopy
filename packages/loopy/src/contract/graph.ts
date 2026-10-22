@@ -304,6 +304,12 @@ const runBase = z.strictObject({
   maxAttempts: z.number().int().positive(),
   startedAt: z.string(),
   receipt: z.enum(RECEIPT_KINDS),
+  inputView: z
+    .discriminatedUnion("state", [
+      z.strictObject({ state: z.literal("available"), value: jsonSchema }),
+      z.strictObject({ state: z.literal("truncated"), bytes: z.number().int().nonnegative() }),
+    ])
+    .optional(),
 });
 
 export const executionErrorSchema = z.strictObject({

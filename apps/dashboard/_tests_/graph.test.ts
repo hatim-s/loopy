@@ -72,6 +72,7 @@ test("a definition draws every compiled node and labels control edges", () => {
 test("nodes without a record never read as executed", () => {
   const stopped = graphModel(REVIEW.graph, {
     status: "failed",
+    coverage: [{ scope: [], complete: true }],
     nodeRuns: [record("0:changes", "succeeded"), record("1:branch", "failed")],
   });
 
@@ -86,7 +87,12 @@ test("nodes without a record never read as executed", () => {
     "0:changes->1:branch:next",
   ]);
 
-  const active = graphModel(TRIAGE_V2.graph, { status: "running", nodeRuns: [] });
+  const active = graphModel(TRIAGE_V2.graph, {
+    status: "running",
+    coverage: [{ scope: [], complete: true }],
+    nodeRuns: [],
+  });
+
   expect(new Set(Object.values(states(active)))).toEqual(new Set(["not_started"]));
 });
 
@@ -96,6 +102,7 @@ test("only a next edge from a succeeded node into a node that ran in its scope r
 
   const review = graphModel(REVIEW.graph, {
     status: "succeeded",
+    coverage: [{ scope: [], complete: true }],
     nodeRuns: [
       record("0:changes", "succeeded"),
       record("1:branch", "succeeded"),
@@ -114,6 +121,7 @@ test("only a next edge from a succeeded node into a node that ran in its scope r
   const scoped = (index: number) =>
     graphModel(TRIAGE_V2.graph, {
       status: "running",
+      coverage: [{ scope: [], complete: true }],
       nodeRuns: [record("1:classify", "succeeded", 0), record("2:log", "running", index)],
     });
 
@@ -124,6 +132,7 @@ test("only a next edge from a succeeded node into a node that ran in its scope r
 test("scoped executions roll up to the most urgent status with counts", () => {
   const model = graphModel(TRIAGE_V2.graph, {
     status: "running",
+    coverage: [{ scope: [], complete: true }],
     nodeRuns: [
       record("1:classify", "succeeded", 0),
       record("1:classify", "failed", 1),
@@ -148,7 +157,11 @@ test("records from another revision surface as orphans instead of attaching to n
     throw new Error("The demo script lost its pinned run.");
   }
 
-  const run = { status: pinned.run.status, nodeRuns: pinned.nodeRuns };
+  const run = {
+    status: pinned.run.status,
+    coverage: [{ scope: [], complete: true }],
+    nodeRuns: pinned.nodeRuns,
+  };
 
   // The demo pins this run to the first revision; drawing it on the latest one must not fit.
   expect(graphModel(TRIAGE_V1.graph, run).orphans).toEqual([]);
@@ -317,6 +330,7 @@ test("the first view frames the run where it is: inner work in flight, else fail
   const parse = (nodeRuns: ReturnType<typeof scoped>[]) =>
     graphModel(RELEASE.graph, {
       status: "running",
+      coverage: [{ scope: [], complete: true }],
       nodeRuns: nodeRuns.map((entry) => nodeRunViewSchema.parse(entry)),
     });
 

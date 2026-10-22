@@ -1,6 +1,9 @@
 import type { RunRecord } from "../../core/index.js";
 
-export const SCHEMA_VERSION = 14;
+export const SCHEMA_VERSION = 15;
+
+export const SCHEDULE_OVERVIEW_INDEX = `CREATE INDEX IF NOT EXISTS schedules_enabled_next
+  ON schedules(enabled,next_fire_at,workspace,slug)`;
 
 export const WAIT_SCHEMA = `
   CREATE TABLE waits (

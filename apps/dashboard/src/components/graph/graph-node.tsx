@@ -16,6 +16,7 @@ export type FlowNode = Node<{ model: GraphNodeModel }, "loopy">;
 const IDLE_TEXT = {
   not_started: "not started",
   not_run: "not run",
+  not_loaded: "not loaded",
 } satisfies Record<Extract<NodeState, { kind: "idle" }>["reason"], string>;
 
 function stateName(state: NodeState): string {

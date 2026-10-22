@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useSyncExternalStore } from "react";
 import type { StreamState } from "../backend/backend.ts";
+import { httpBaseUrl } from "../backend/config.ts";
 import { useBackend } from "../router-context.ts";
 import { followSession } from "./stream.ts";
 
@@ -47,4 +48,42 @@ export function useSessionStream(): void {
       publish("idle");
     };
   }, [client, backend]);
+}
+
+/** The fragment is a bootstrap secret, so remove it before touching storage. */
+export function browserConnection(options: {
+  baseUrl: string;
+  pageUrl: string;
+  storage: () => Pick<Storage, "getItem" | "setItem" | "removeItem">;
+  replaceUrl: (url: string) => void;
+}) {
+  const page = new URL(options.pageUrl);
+  const fragment = new URLSearchParams(page.hash.slice(1));
+  const token = fragment.get("token");
+
+  if (fragment.has("token")) {
+    fragment.delete("token");
+    page.hash = fragment.toString();
+    options.replaceUrl(page.href);
+  }
+
+  const baseUrl = httpBaseUrl(options.baseUrl);
+  const key = `loopy-token:${baseUrl}`;
+  let stored: string | null = null;
+
+  try {
+    const storage = options.storage();
+
+    storage.removeItem("loopy-token");
+
+    if (token) {
+      storage.setItem(key, token);
+    }
+
+    stored = storage.getItem(key);
+  } catch {
+    // A blocked storage API must not leave the bootstrap token in the URL.
+  }
+
+  return { baseUrl, token: token || stored };
 }

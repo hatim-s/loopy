@@ -11,8 +11,7 @@ export type ScheduleDraft = Pick<ScheduleView, "cron" | "tz" | "input" | "enable
 
 type Field = "cron" | "tz" | "input";
 
-const CONTROL =
-  "block h-7 w-full rounded-md border border-line bg-panel px-2 font-mono text-xs aria-invalid:border-danger";
+const CONTROL = "field field-mono block w-full";
 
 function rejectedField(error: Error | null): Field | undefined {
   if (!(error instanceof BackendError)) {
@@ -42,14 +41,16 @@ function FieldError({ error }: { error: Error | null }) {
 /** Edits every field at once; PUT replaces the schedule and the daemon recomputes the next fire. */
 export function ScheduleForm({
   slug,
+  workspace,
   draft,
   onDone,
 }: {
   slug: string;
+  workspace: string;
   draft: ScheduleDraft;
   onDone: () => void;
 }) {
-  const save = useSaveSchedule(slug);
+  const save = useSaveSchedule(slug, workspace);
   const [cron, setCron] = useState(draft.cron);
   const [tz, setTz] = useState(draft.tz);
   const [inputText, setInputText] = useState(() => JSON.stringify(draft.input, null, 2));
@@ -100,7 +101,7 @@ export function ScheduleForm({
             rows={3}
             spellCheck={false}
             aria-invalid={!input.valid || field === "input"}
-            className="block w-full resize-y rounded-md border border-line bg-panel p-2 font-mono text-xs aria-invalid:border-danger"
+            className="field"
           />
         </Labelled>
         {!input.valid && <span className="text-xs text-danger">The input is not valid JSON.</span>}
@@ -112,7 +113,7 @@ export function ScheduleForm({
             type="checkbox"
             checked={enabled}
             onChange={(event) => setEnabled(event.target.checked)}
-            className="accent-active"
+            className="accent-[var(--lamp)]"
           />
           Enabled
         </label>

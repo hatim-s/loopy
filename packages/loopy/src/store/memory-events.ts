@@ -19,6 +19,16 @@ export class MemoryEvents {
 
   protected waits = new Map<string, WaitRecord>();
 
+  protected attempts = new Map<string, Map<number, NodeRun>>();
+
+  protected logNodeIds = new Map<number, string>();
+
+  protected logIds = new Map<number, LogRecord>();
+
+  protected logSequence = 0;
+
+  protected logUsage = new Map<string, { bytes: number; index: number }>();
+
   protected logs = new Map<string, Map<number, LogRecord>>();
 
   constructor(
@@ -75,6 +85,11 @@ export class MemoryEvents {
       nodes: this.nodes,
       waits: this.waits,
       logs: this.logs,
+      attempts: this.attempts,
+      logUsage: this.logUsage,
+      logIds: this.logIds,
+      logNodeIds: this.logNodeIds,
+      logSequence: this.logSequence,
       schedules: this.schedules,
       limits: this.limits,
       sequence: this.sequence,
@@ -89,6 +104,11 @@ export class MemoryEvents {
       this.nodes = backup.nodes;
       this.waits = backup.waits;
       this.logs = backup.logs;
+      this.attempts = backup.attempts;
+      this.logUsage = backup.logUsage;
+      this.logIds = backup.logIds;
+      this.logNodeIds = backup.logNodeIds;
+      this.logSequence = backup.logSequence;
       this.schedules = backup.schedules;
       this.limits = backup.limits;
       this.sequence = backup.sequence;

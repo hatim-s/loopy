@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { graphMetaSchema, graphSchema, nodeIdSchema } from "./graph.js";
+import { sourceArtifactSchema } from "./source-artifact.js";
 
 export const hashSchema = z.string().regex(/^[a-f0-9]{64}$/);
 
@@ -22,6 +23,7 @@ export const putLoopyBodySchema = z.strictObject({
     }),
   ),
   source: sourceMetadataSchema,
+  sourceArtifact: sourceArtifactSchema.optional(),
   replace: z.boolean(),
 });
 

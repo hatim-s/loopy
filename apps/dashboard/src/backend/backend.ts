@@ -11,9 +11,26 @@ import {
   type RunSnapshotView,
   type RunsQuery,
   type RunView,
+  type routes,
   type ScheduleView,
   type ServerEvent,
 } from "loopy/contract";
+
+import type { z } from "zod";
+
+type ApiQuery<K extends keyof typeof routes> = z.input<(typeof routes)[K]["query"]>;
+
+type ApiResult<K extends keyof typeof routes> = z.output<(typeof routes)[K]["response"]>;
+
+export type OverviewQuery = ApiQuery<"overview">;
+
+export type ExecutionQuery = ApiQuery<"executions">;
+
+export type ScopeItemsQuery = ApiQuery<"scopeItems">;
+
+export type GlobalLogsQuery = ApiQuery<"globalLogs">;
+
+export type EventHistoryQuery = ApiQuery<"eventHistory">;
 
 export type { RunsQuery } from "loopy/contract";
 
@@ -37,7 +54,7 @@ export type StreamEnd = "aborted" | "reset";
 /** The one seam between the UI and wherever runs live. Components never call fetch. */
 export type LoopyBackend = {
   cursor(signal: AbortSignal): Promise<CursorView>;
-  loopies(): Promise<LoopyView[]>;
+  loopies(workspace?: string): Promise<LoopyView[]>;
   /** The latest revision saved in `workspace`, which the next run there will pin. */
   loopyGraph(slug: string, workspace: string): Promise<GraphRevisionView>;
   runs(query: RunsQuery): Promise<RunView[]>;
@@ -50,10 +67,35 @@ export type LoopyBackend = {
   cancelRun(id: string): Promise<RunView>;
   resolveHook(token: string, payload: Json): Promise<RunView>;
   daemon(): Promise<DaemonView>;
-  schedules(): Promise<ScheduleView[]>;
-  putSchedule(slug: string, body: PutScheduleBody): Promise<ScheduleView>;
-  setScheduleEnabled(slug: string, enabled: boolean): Promise<ScheduleView>;
-  deleteSchedule(slug: string): Promise<{ deleted: true }>;
+  scheduleOverview(signal?: AbortSignal): Promise<ApiResult<"scheduleOverview">>;
+  schedules(workspace: string): Promise<ScheduleView[]>;
+  putSchedule(slug: string, workspace: string, body: PutScheduleBody): Promise<ScheduleView>;
+  setScheduleEnabled(slug: string, workspace: string, enabled: boolean): Promise<ScheduleView>;
+  deleteSchedule(slug: string, workspace: string): Promise<{ deleted: true }>;
+  overview(query: OverviewQuery, signal?: AbortSignal): Promise<ApiResult<"overview">>;
+  source(slug: string, workspace: string, signal?: AbortSignal): Promise<ApiResult<"source">>;
+  runSource(id: string, signal?: AbortSignal): Promise<ApiResult<"runSource">>;
+  runPayload(id: string, signal?: AbortSignal): Promise<ApiResult<"runPayload">>;
+  scopes(id: string, query: ApiQuery<"scopes">, signal?: AbortSignal): Promise<ApiResult<"scopes">>;
+  executions(
+    id: string,
+    query: ExecutionQuery,
+    signal?: AbortSignal,
+  ): Promise<ApiResult<"executions">>;
+  execution(
+    id: string,
+    query: ApiQuery<"execution">,
+    signal?: AbortSignal,
+  ): Promise<ApiResult<"execution">>;
+  scopeItems(
+    id: string,
+    query: ScopeItemsQuery,
+    signal?: AbortSignal,
+  ): Promise<ApiResult<"scopeItems">>;
+  globalLogs(query: GlobalLogsQuery, signal?: AbortSignal): Promise<ApiResult<"globalLogs">>;
+  log(id: number, signal?: AbortSignal): Promise<ApiResult<"log">>;
+  eventHistory(query: EventHistoryQuery, signal?: AbortSignal): Promise<ApiResult<"eventHistory">>;
+  event(sequence: number, signal?: AbortSignal): Promise<ApiResult<"event">>;
   events(subscription: EventSubscription): Promise<StreamEnd>;
 };
 

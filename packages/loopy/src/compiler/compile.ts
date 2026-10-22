@@ -7,6 +7,7 @@ import {
   validateGraph,
 } from "../core/index.js";
 import { bundle } from "./bundle.js";
+import { captureSource } from "./capture-source.js";
 import { EvaluationError, evaluate } from "./evaluate.js";
 import { restrict } from "./restrict.js";
 import type { CompileResult } from "./types.js";
@@ -46,12 +47,15 @@ export async function compile(path: string): Promise<CompileResult> {
       return bundled;
     }
 
+    const compiledRevision = await revision(graph);
+
     return {
       ok: true,
       graph,
       bundles: bundled.bundles,
-      revision: await revision(graph),
+      revision: compiledRevision,
       warnings: graph.warnings,
+      sourceArtifact: captureSource(graph, compiledRevision, restricted.modules),
     };
   } catch (error) {
     if (error instanceof EvaluationError) {

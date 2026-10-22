@@ -43,7 +43,7 @@ function pendingToggle(client: QueryClient) {
         return reply.promise;
       },
     },
-    { slug: schedule.slug, enabled: false },
+    { slug: schedule.slug, workspace: schedule.workspace, enabled: false },
   );
 
   return { reply, started: started.promise, request };
@@ -66,32 +66,32 @@ function saved(client: QueryClient, view: ScheduleView) {
 
 test("a failed toggle preserves version 4 delivered while its POST is pending", async () => {
   const client = new QueryClient();
-  client.setQueryData(keys.schedules, [schedule]);
+  client.setQueryData(keys.schedules("/work"), [schedule]);
   const pending = pendingToggle(client);
   await pending.started;
   const newer = { ...schedule, version: 4, enabled: false };
   saved(client, newer);
   pending.reply.reject(new Error("POST failed."));
   await expect(pending.request).rejects.toThrow("POST failed.");
-  expect(client.getQueryData<ScheduleView[]>(keys.schedules)).toEqual([newer]);
+  expect(client.getQueryData<ScheduleView[]>(keys.schedules("/work"))).toEqual([newer]);
 });
 
 test("a failed toggle restores only its row and preserves another row's stream update", async () => {
   const client = new QueryClient();
   const other = { ...schedule, slug: "digest" };
-  client.setQueryData(keys.schedules, [schedule, other]);
+  client.setQueryData(keys.schedules("/work"), [schedule, other]);
   const pending = pendingToggle(client);
   await pending.started;
   const newer = { ...other, version: 4 };
   saved(client, newer);
   pending.reply.reject(new Error("POST failed."));
   await expect(pending.request).rejects.toThrow("POST failed.");
-  expect(client.getQueryData<ScheduleView[]>(keys.schedules)).toEqual([schedule, newer]);
+  expect(client.getQueryData<ScheduleView[]>(keys.schedules("/work"))).toEqual([schedule, newer]);
 });
 
 test("a failed toggle preserves a same-version fire delivered during its POST", async () => {
   const client = new QueryClient();
-  client.setQueryData(keys.schedules, [schedule]);
+  client.setQueryData(keys.schedules("/work"), [schedule]);
   const pending = pendingToggle(client);
   await pending.started;
 
@@ -115,5 +115,5 @@ test("a failed toggle preserves a same-version fire delivered during its POST", 
   ]);
   pending.reply.reject(new Error("POST failed."));
   await expect(pending.request).rejects.toThrow("POST failed.");
-  expect(client.getQueryData<ScheduleView[]>(keys.schedules)).toEqual([fired]);
+  expect(client.getQueryData<ScheduleView[]>(keys.schedules("/work"))).toEqual([fired]);
 });

@@ -10,8 +10,7 @@ import {
 } from "@xyflow/react";
 import { memo, type ReactNode, useCallback, useId, useMemo, useState } from "react";
 import type { GraphModel } from "../../lib/graph.ts";
-import { type GraphLayout, nodeSize } from "../../lib/graph-layout.ts";
-import type { CanvasFrame } from "../canvas-page.tsx";
+import { type FitPadding, type GraphLayout, nodeSize } from "../../lib/graph-layout.ts";
 import { GraphMinimap, ViewControls } from "./graph-controls.tsx";
 import { type FlowEdge, TrackEdge } from "./graph-edge.tsx";
 import { type FrameNode, GraphFrame } from "./graph-frame.tsx";
@@ -31,18 +30,19 @@ const READABLE_ZOOM = 0.7;
 const FOCUS_ZOOM = 0.9;
 
 /**
- * The first view. The canvas fills the window, so the window less the panel padding is the room
- * there is. A graph that fits it at a readable zoom is fitted whole; a larger one opens on its
- * focus nodes at reading zoom, and the fit button still shows all of it.
+ * The first view. The pane less its padding is the room there is. A graph that fits it at a
+ * readable zoom is fitted whole; a larger one opens on its focus nodes at reading zoom, and the
+ * fit button still shows all of it.
  */
 function firstView(
   layout: GraphLayout,
   focus: string[],
-  padding: CanvasFrame["padding"],
+  padding: FitPadding,
+  pane: { width: number; height: number },
 ): FitViewOptions {
   const room = {
-    width: window.innerWidth - Number.parseFloat(padding.left) - Number.parseFloat(padding.right),
-    height: window.innerHeight - Number.parseFloat(padding.top) - Number.parseFloat(padding.bottom),
+    width: pane.width - Number.parseFloat(padding.left) - Number.parseFloat(padding.right),
+    height: pane.height - Number.parseFloat(padding.top) - Number.parseFloat(padding.bottom),
   };
 
   const zoom = Math.min(room.width / layout.size.width, room.height / layout.size.height);
@@ -111,8 +111,10 @@ type GraphCanvasProps = {
   focus: string[];
   selected: string | null;
   onSelect: (id: string | null) => void;
-  /** Room the floating panels take on each side, kept clear when the graph is framed. */
-  padding: CanvasFrame["padding"];
+  /** Room kept clear on each side when the graph is framed. */
+  padding: FitPadding;
+  /** The pane's size when the canvas mounts, which decides the first view. */
+  pane: { width: number; height: number };
   /** The minimap gives way while the inspector holds the right edge. */
   minimapAllowed: boolean;
   /** Read-outs drawn into the control strip, before the zoom buttons. */
@@ -124,10 +126,12 @@ type GraphCanvasProps = {
  * revision: `fitView` frames the graph only on mount, so live updates keep the user's pan.
  */
 export const GraphCanvas = memo(function GraphCanvas(props: GraphCanvasProps) {
-  const { model, layout, focus, selected, onSelect, padding, minimapAllowed, readout } = props;
+  const { model, layout, focus, selected, onSelect, padding, pane, minimapAllowed, readout } =
+    props;
+
   const help = useId();
   // Decided once on mount, so live updates and panel toggles never move the user's view.
-  const [initial] = useState(() => firstView(layout, focus, padding));
+  const [initial] = useState(() => firstView(layout, focus, padding, pane));
   const [minimap, setMinimap] = useState(model.nodes.length >= MINIMAP_FROM);
 
   const nodes = useMemo(

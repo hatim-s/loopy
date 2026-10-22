@@ -1,5 +1,6 @@
 import { dirname, resolve } from "node:path";
 import { type Expression, parseSync, type Statement } from "oxc-parser";
+import { MAX_SOURCE_BYTES, MAX_SOURCE_FILES } from "../contract/index.js";
 import { builtinCommandKeys } from "../sdk/graph-host.js";
 import {
   type Context,
@@ -84,6 +85,7 @@ type Inspection = {
   diagnostics: CompilerDiagnostic[];
   scopes: Map<string, Scope>;
   entry: string;
+  sourceBytes: number;
 };
 
 function importBindings(
@@ -262,7 +264,19 @@ function inspectStatements(context: Context, statements: Statement[], requireLoo
 
 async function inspectModule(file: string, state: Inspection): Promise<Scope> {
   const { modules, parsers, diagnostics, scopes } = state;
-  const source = await Bun.file(file).text();
+  const input = Bun.file(file);
+
+  if (modules.size >= MAX_SOURCE_FILES) {
+    throw new Error("Builder source must fit within 32 files.");
+  }
+
+  const source = await input.slice(0, MAX_SOURCE_BYTES - state.sourceBytes + 1).text();
+  state.sourceBytes += Buffer.byteLength(source);
+
+  if (state.sourceBytes > MAX_SOURCE_BYTES) {
+    throw new Error("Builder source must fit within 256 KiB.");
+  }
+
   const parsed = parseSync(file, source, { sourceType: "module", preserveParens: false });
 
   for (const error of parsed.errors) {
@@ -281,6 +295,7 @@ async function inspectModule(file: string, state: Inspection): Promise<Scope> {
     diagnostics,
     edits: [],
     parsers,
+    sourceCalls: [],
   };
 
   await inspectImports(context, parsed.program.body, state);
@@ -316,7 +331,7 @@ async function inspectModule(file: string, state: Inspection): Promise<Scope> {
     .sort((a, b) => b.start - a.start)
     .reduce((text, edit) => text.slice(0, edit.start) + edit.text + text.slice(edit.end), source);
 
-  modules.set(file, { file, source, evaluated });
+  modules.set(file, { file, source, evaluated, sourceCalls: context.sourceCalls });
   scopes.set(file, scope);
 
   return scope;
@@ -328,7 +343,14 @@ export async function restrict(
   const modules = new Map<string, AuthorModule>();
   const parsers = new Map<string, ParserSource>();
   const diagnostics: CompilerDiagnostic[] = [];
-  await inspectModule(file, { modules, parsers, diagnostics, scopes: new Map(), entry: file });
+  await inspectModule(file, {
+    modules,
+    parsers,
+    diagnostics,
+    scopes: new Map(),
+    entry: file,
+    sourceBytes: 0,
+  });
 
   for (const parser of parsers.values()) {
     const checked = await checkCodeModule(parser.file);

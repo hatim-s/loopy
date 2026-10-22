@@ -164,7 +164,7 @@ export default loopy("sequence", {input: {}, run: () => {sh.exec(["printf", "raw
     ]);
     expect(snapshot.nodeRuns.map((node) => node.attempt)).toEqual([1, 1, 1, 1]);
     expect(snapshot.nodeRuns.every((node) => node.key.scope.length === 0)).toBe(true);
-    expect(snapshot.logs).toContainEqual(
+    expect(await store.getLogs(run.id, 0, 200)).toContainEqual(
       expect.objectContaining({ message: "code", data: { word: "hello", operand: "hello" } }),
     );
   } finally {

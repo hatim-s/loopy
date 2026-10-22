@@ -73,7 +73,11 @@ test("API returns run records, step traces and cursor logs", async () => {
     { status: "succeeded" },
     { status: "succeeded" },
   ]);
-  expect(detail.logs).toMatchObject([{ message: "first" }, { message: "second" }]);
+  expect(detail.logs).toEqual([]);
+  expect(await (await request(`/runs/${run.id}/logs`)).json()).toMatchObject([
+    { message: "first" },
+    { message: "second" },
+  ]);
   expect(await (await request(`/runs/${run.id}/logs?after=1`)).json()).toMatchObject([
     { message: "second" },
   ]);
@@ -153,10 +157,12 @@ test("API returns the contract snapshot, rejects unknown query keys and keeps cu
   const path = `${url.origin}/api/runs/${run.id}`;
   const full = object(await (await fetch(path, { headers })).text());
   expect(full.nodeRuns).toHaveLength(2);
-  expect(full.logs).toHaveLength(1);
+  expect(full.logs).toEqual([]);
   // The old viewer's logs=false switch is gone; strict query parsing rejects it.
   expect((await fetch(`${path}?logs=false`, { headers })).status).toBe(400);
-  expect(await (await fetch(`${path}/logs?after=0`, { headers })).json()).toEqual(full.logs);
+  expect(await (await fetch(`${path}/logs?after=0`, { headers })).json()).toMatchObject([
+    { message: "hello" },
+  ]);
   expect(await (await fetch(`${path}/logs?after=1`, { headers })).json()).toEqual([]);
   expect((await fetch(`${url.origin}/api/runs/missing`, { headers })).status).toBe(404);
 });
@@ -636,7 +642,15 @@ test("run paging includes every run sharing a timestamp", async () => {
 });
 
 async function httpEvents(name: string) {
-  const { f, store } = await serviceFixture(name);
+  const { f, store, service } = await serviceFixture(name);
+
+  const run = {
+    ...replayRun(f.cwd),
+    status: "running" as const,
+    owner: { token: "owner", host: "fixture", pid: 1, heartbeatAt: new Date().toISOString() },
+  };
+
+  await store.createRun(run);
   const daemon = localDaemon({ concurrency: 4, ...f, store, port: 0 });
   const url = new URL(daemon.start());
   const headers = { Authorization: `Bearer ${readDaemonFile(f.home)!.token}` };
@@ -647,8 +661,46 @@ async function httpEvents(name: string) {
     url,
     headers,
     endpoint,
-    write: (id: number, bytes: number) =>
-      store.createRun({ ...replayRun(f.cwd), id: String(id), input: "x".repeat(bytes) }),
+    async write(id: number, rows: number) {
+      const after = (await store.eventCursor()).cursor;
+      // Each output survives the 16 KiB preview cap. Rows share one durable transaction.
+      const output = "x".repeat(16_000);
+      await store.apply({
+        runId: run.id,
+        token: "owner",
+        effects: [...Array(rows).keys()].map((index) => ({
+          kind: "write_node_run" as const,
+          nodeRun: {
+            key: {
+              runId: run.id,
+              nodeId: nodeIdSchema.parse(`txn-${id}-node-${index}`),
+              scope: [],
+            },
+            status: "succeeded" as const,
+            attempt: 1,
+            maxAttempts: 1,
+            startedAt: run.createdAt,
+            endedAt: run.createdAt,
+            receipt: "finished" as const,
+            output,
+          },
+        })),
+      });
+      const events = await store.events(after, rows);
+      const data = serverEventSchema.array().parse(await service.events(events));
+      expect(data).toHaveLength(rows);
+      expect(
+        data.every(
+          (event) =>
+            event.entity === "node" &&
+            event.record.status === "succeeded" &&
+            event.record.output === output,
+        ),
+      ).toBe(true);
+      const cursor = events.at(-1)!.sequence;
+
+      return Buffer.byteLength(`id: ${cursor}\nevent: txn\ndata: ${JSON.stringify(data)}\n\n`);
+    },
     connect: (id: number) =>
       fetch(endpoint, { headers: { ...headers, "Last-Event-ID": String(id) } }),
     async close() {
@@ -670,32 +722,31 @@ test("SSE HTTP replay drains 45 large transactions from Last-Event-ID 1 in order
   const http = await httpEvents("large-replay");
 
   try {
-    for (let id = 1; id <= 46; id++) {
-      await http.write(id, 40_000);
+    for (let id = 2; id <= 46; id++) {
+      expect(await http.write(id, 4)).toBeGreaterThan(64_000);
     }
 
     const response = await http.connect(1);
     expect(response.status).toBe(200);
     const capture = captureFrames(response.body!);
     await waitForFrames(capture, 45);
-    expect(await capture.finish()).toEqual(expectedFrames(await http.store.events(1, 100)));
+    expect(await capture.finish()).toEqual(expectedFrames(await http.store.events(1, 1000)));
   } finally {
     await http.close();
   }
 }, 15_000);
 
-test("SSE HTTP replays an oversized transaction and live-delivers another whole frame", async () => {
+test("SSE HTTP replays a transaction over 1 MiB and live-delivers another whole frame", async () => {
   const http = await httpEvents("oversized-replay");
 
   try {
-    await http.write(1, 0);
-    await http.write(2, 1_100_000);
+    expect(await http.write(2, 80)).toBeGreaterThan(1024 * 1024);
     const response = await http.connect(1);
     const capture = captureFrames(response.body!);
     await waitForFrames(capture, 1);
-    await http.write(3, 1_100_000);
+    expect(await http.write(3, 80)).toBeGreaterThan(1024 * 1024);
     await waitForFrames(capture, 2);
-    expect(await capture.finish()).toEqual(expectedFrames(await http.store.events(1, 100)));
+    expect(await capture.finish()).toEqual(expectedFrames(await http.store.events(1, 1000)));
   } finally {
     await http.close();
   }
@@ -725,7 +776,10 @@ async function unreadHttp(http: Awaited<ReturnType<typeof httpEvents>>) {
   return { response, ended };
 }
 
-async function closedCursor(slow: Awaited<ReturnType<typeof unreadHttp>>) {
+async function closedCursor(
+  slow: Awaited<ReturnType<typeof unreadHttp>>,
+  expected: ReturnType<typeof expectedFrames>,
+) {
   await Bun.sleep(2300);
   slow.response.resume();
 
@@ -738,17 +792,23 @@ async function closedCursor(slow: Awaited<ReturnType<typeof unreadHttp>>) {
 
   expect(slow.response.statusCode).toBe(200);
 
-  const ids = received
+  const frames = received
     .split("\n\n")
     .slice(0, -1)
-    .flatMap((frame) => parseFrame(frame.split("\n"))?.id ?? []);
+    .flatMap((frame) => parseFrame(frame.split("\n")) ?? []);
 
-  return ids.at(-1) ?? 1;
+  expect(frames.length).toBeGreaterThan(0);
+  expect(frames).toEqual(expected.slice(0, frames.length));
+
+  return frames.at(-1)!.id;
 }
+
+const PRESSURE_TRANSACTIONS = 128;
+
+const PRESSURE_ROWS = 40;
 
 async function stalledHttpReader(name: string) {
   const http = await httpEvents(name);
-  await http.write(1, 0);
   const slow = await unreadHttp(http);
 
   try {
@@ -756,14 +816,26 @@ async function stalledHttpReader(name: string) {
     const capture = captureFrames(response.body!);
     await Bun.sleep(50);
 
-    for (let id = 2; id <= 401; id++) {
-      await http.write(id, 40_000);
+    let bytes = 0;
+
+    // Exceed macOS loopback buffer autotuning while keeping every output below the preview cap.
+    for (let id = 2; id < PRESSURE_TRANSACTIONS + 2; id++) {
+      bytes += await http.write(id, PRESSURE_ROWS);
     }
 
-    await waitForFrames(capture, 400);
-    expect(await capture.finish()).toEqual(expectedFrames(await http.store.events(1, 1000)));
-    const lastId = await closedCursor(slow);
-    expect(lastId).toBeLessThan(401);
+    expect(bytes).toBeGreaterThan(64 * 1024 * 1024);
+
+    const expected = expectedFrames(
+      await http.store.events(1, PRESSURE_TRANSACTIONS * PRESSURE_ROWS),
+    );
+
+    expect(expected).toHaveLength(PRESSURE_TRANSACTIONS);
+    expect(expected.every((frame) => frame.sequences.length === PRESSURE_ROWS)).toBe(true);
+    await waitForFrames(capture, expected.length);
+    expect(await capture.finish()).toEqual(expected);
+    const lastId = await closedCursor(slow, expected);
+    expect(lastId).toBeLessThan(expected.at(-1)!.id);
+    expect([1, ...expected.map((frame) => frame.id)]).toContain(lastId);
 
     return { http, lastId };
   } catch (error) {
@@ -785,8 +857,14 @@ test("SSE HTTP reconnect from a closed client's last id has no gap", async () =>
   try {
     const response = await http.connect(lastId);
     const capture = captureFrames(response.body!);
-    await waitForFrames(capture, 401 - lastId);
-    expect(await capture.finish()).toEqual(expectedFrames(await http.store.events(lastId, 1000)));
+
+    const expected = expectedFrames(
+      await http.store.events(lastId, PRESSURE_TRANSACTIONS * PRESSURE_ROWS),
+    );
+
+    expect(expected.length).toBeGreaterThan(0);
+    await waitForFrames(capture, expected.length);
+    expect(await capture.finish()).toEqual(expected);
   } finally {
     await http.close();
   }

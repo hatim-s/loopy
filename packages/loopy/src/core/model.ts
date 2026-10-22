@@ -53,6 +53,7 @@ export type RunRecord = {
   createdAt: string;
   updatedAt: string;
   owner?: RunOwner;
+  truncatedFields?: { input?: number; output?: number };
 };
 
 export type StepBase = {

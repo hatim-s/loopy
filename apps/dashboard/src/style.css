@@ -1,24 +1,23 @@
 @import "tailwindcss";
 
 /*
- * Shared tokens, taken from the marketing site in apps/site/src/styles/site.css so the dashboard
- * and the landing page read as one product. The board is a cool grey, panels float over it, and
- * tracks light up along the route a run took. `active` is the blue for work in flight and
- * `attention` the amber for work held on a person or a clock. `lamp` is the blue fill for glows,
- * selection and primary buttons, `lamp-strong` is its hover, and `on-lamp` is the text on both.
- * The site's status hues are too light for small text on white, so the light theme darkens them.
- * Every text colour clears 4.5:1 against page, panel, sunken and raised in both themes.
+ * Tokens from the approved round 4 dashboard (option 9). Dark is the primary theme and light
+ * follows the system. Blue marks links, selection and work in flight; amber marks work held on
+ * a person or a clock. Chart green is quieter than text green so failures carry the eye.
+ * The graph stylesheet reads the same names, so both themes reach the canvas too.
  */
 :root {
   --page: #f7f8fa;
   --panel: #ffffff;
-  --sunken: #f1f3f6;
+  --sunken: #f3f5f8;
   --raised: #eceff3;
-  --ink: #15191f;
+  --hover: #f5f7f9;
+  --selected: rgb(67 96 230 / 0.07);
+  --ink: #14181e;
   --muted: #5b6673;
-  --faint: #636d79;
-  --line: #e3e7ec;
-  --line-strong: #c9d0d9;
+  --faint: #6a7480;
+  --line: #e6e9ee;
+  --line-strong: #cfd6df;
   --track: #838d99;
   --grid: #d3d9e1;
   --active: #3653dc;
@@ -29,26 +28,36 @@
   --danger: #c43a2f;
   --attention: #8a5d00;
   --neutral: #5f6975;
-  --shadow: 0 1px 0 rgb(21 25 31 / 0.04), 0 12px 32px -16px rgb(21 25 31 / 0.3);
-
-  --row-h: 2.125rem;
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 12px;
+  --success-soft: rgb(22 119 74 / 0.09);
+  --danger-soft: rgb(196 58 47 / 0.08);
+  --attention-soft: rgb(176 120 0 / 0.1);
+  --active-soft: rgb(67 96 230 / 0.1);
+  --neutral-soft: rgb(95 105 117 / 0.09);
+  --chart-ok: #7bbf9c;
+  --chart-bad: #d4483c;
+  --chart-cancel: #aab3be;
+  --chart-live: #4360e6;
+  --shadow: 0 12px 32px -16px rgb(21 25 31 / 0.3);
+  --shadow-pop: 0 16px 40px -12px rgb(21 25 31 / 0.22), 0 0 0 1px rgb(21 25 31 / 0.04);
+  --side-w: 232px;
+  --head-h: 52px;
+  --gap: 12px;
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --page: #0d1014;
-    --panel: #161b21;
-    --sunken: #11151a;
-    --raised: #1c2229;
-    --ink: #e6eaf0;
+    --page: #0e1116;
+    --panel: #13171d;
+    --sunken: #0f1318;
+    --raised: #1b2129;
+    --hover: #171c23;
+    --selected: rgb(143 168 255 / 0.08);
+    --ink: #e8ecf1;
     --muted: #98a2ae;
-    --faint: #8a94a0;
-    --line: #222931;
-    --line-strong: #323b46;
+    --faint: #7d8793;
+    --line: #222a33;
+    --line-strong: #303a46;
     --track: #5a6573;
     --grid: #262d36;
     --active: #8fa8ff;
@@ -59,7 +68,17 @@
     --danger: #f2877e;
     --attention: #f0c46c;
     --neutral: #8e98a4;
-    --shadow: 0 1px 0 rgb(0 0 0 / 0.2), 0 16px 40px -18px rgb(0 0 0 / 0.75);
+    --success-soft: rgb(92 211 155 / 0.12);
+    --danger-soft: rgb(242 135 126 / 0.13);
+    --attention-soft: rgb(240 196 108 / 0.13);
+    --active-soft: rgb(143 168 255 / 0.13);
+    --neutral-soft: rgb(142 152 164 / 0.14);
+    --chart-ok: #3f8f6b;
+    --chart-bad: #f2877e;
+    --chart-cancel: #5d6672;
+    --chart-live: #8fa8ff;
+    --shadow: 0 16px 40px -18px rgb(0 0 0 / 0.75);
+    --shadow-pop: 0 18px 50px -12px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 255 255 / 0.02);
     color-scheme: dark;
   }
 }
@@ -71,6 +90,8 @@
   --color-panel: var(--panel);
   --color-sunken: var(--sunken);
   --color-raised: var(--raised);
+  --color-hover: var(--hover);
+  --color-selected: var(--selected);
   --color-ink: var(--ink);
   --color-muted: var(--muted);
   --color-faint: var(--faint);
@@ -84,9 +105,13 @@
   --color-danger: var(--danger);
   --color-attention: var(--attention);
   --color-neutral: var(--neutral);
-  --radius-sm: var(--radius-sm);
-  --radius-md: var(--radius-md);
-  --radius-lg: var(--radius-lg);
+  --color-success-soft: var(--success-soft);
+  --color-danger-soft: var(--danger-soft);
+  --color-attention-soft: var(--attention-soft);
+  --color-active-soft: var(--active-soft);
+  --color-neutral-soft: var(--neutral-soft);
+  --radius-control: 6px;
+  --radius-panel: 8px;
 }
 
 @layer base {
@@ -97,92 +122,300 @@
   }
 
   body {
-    @apply bg-page font-sans text-[13px] leading-[1.5] text-ink antialiased;
+    @apply bg-page font-sans text-[13px] leading-5 text-ink antialiased;
     font-synthesis: none;
-    font-feature-settings: "cv11", "ss01";
+    font-feature-settings: "cv11" 1;
   }
 
   :focus-visible {
-    @apply outline-2 outline-offset-2 outline-lamp;
+    @apply rounded-[3px] outline-2 outline-offset-2 outline-lamp;
   }
 
   ::selection {
     @apply bg-lamp/25;
   }
 
+  a {
+    @apply text-active hover:text-lamp-strong;
+  }
+
+  code,
+  pre,
+  kbd {
+    @apply font-mono text-xs;
+  }
+
+  h1 {
+    @apply text-[22px] leading-7 font-semibold tracking-[-0.015em];
+  }
+
+  h2 {
+    @apply text-sm font-semibold;
+  }
+
   input,
   select,
-  textarea {
-    @apply text-[13px];
+  textarea,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      transition-duration: 0.001ms !important;
+    }
   }
 }
 
 @layer components {
-  /* A bordered surface that holds a table or list. Sections sit on the page, not in cards. */
+  /* ---------- Page ---------- */
+  .content {
+    @apply mx-auto w-full max-w-[1400px] px-8 pt-6 pb-12 max-md:px-4;
+  }
+
+  .page-head {
+    @apply mb-5 flex flex-wrap items-start justify-between gap-x-6 gap-y-3;
+  }
+
+  .lede {
+    @apply mt-1 max-w-[80ch] text-muted;
+  }
+
+  .facts {
+    @apply mt-2.5 flex flex-wrap gap-x-5 gap-y-1 text-xs;
+  }
+
+  .facts > span > span:first-child {
+    @apply mr-1.5 text-muted;
+  }
+
   .panel {
-    @apply overflow-hidden rounded-md border border-line bg-panel;
+    @apply rounded-panel border border-line bg-panel;
   }
 
-  /* A document page: centred, and clear of the floating bar. */
-  .page {
-    @apply mx-auto px-6 pt-[calc(var(--bar-h)+var(--gap)*3)] pb-10;
+  .panel-head {
+    @apply flex min-h-12 flex-wrap items-center gap-2 border-b border-line px-4 py-2.5;
   }
 
-  /* A surface that floats over the canvas or the page: the bar, side panels, the inspector. */
-  .float {
-    @apply rounded-lg border border-line bg-panel;
-    box-shadow: var(--shadow);
+  .muted-note {
+    @apply px-4 py-6 text-muted;
   }
 
-  .data-table {
-    @apply w-full table-fixed border-collapse text-left;
+  /* ---------- Controls ---------- */
+  .btn {
+    @apply inline-flex h-8 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-control border border-line-strong bg-panel px-3 font-medium whitespace-nowrap text-ink transition-colors duration-100 hover:bg-raised hover:text-ink disabled:cursor-not-allowed disabled:opacity-45;
   }
 
-  .data-table thead th {
-    @apply h-7 border-b border-line bg-sunken px-3 text-xs font-normal whitespace-nowrap text-muted;
+  .btn-primary {
+    @apply border-ink bg-ink text-panel hover:bg-ink/85 hover:text-panel;
   }
 
-  .data-table tbody td {
-    @apply h-(--row-h) border-b border-line px-3 align-middle;
+  .btn-danger {
+    @apply text-danger hover:text-danger;
   }
 
-  .data-table tbody tr:last-child td {
+  .btn-sm {
+    @apply h-[26px] px-2.5 text-xs;
+  }
+
+  .icon-btn {
+    @apply inline-grid size-[30px] shrink-0 cursor-pointer place-items-center rounded-control text-muted hover:bg-raised hover:text-ink disabled:cursor-not-allowed disabled:opacity-35 aria-expanded:bg-raised aria-expanded:text-ink aria-pressed:bg-raised aria-pressed:text-ink;
+  }
+
+  .text-btn {
+    @apply inline-flex h-[30px] cursor-pointer items-center gap-1.5 rounded-control px-2 text-muted hover:bg-raised hover:text-ink aria-expanded:text-ink;
+  }
+
+  .link-btn {
+    @apply cursor-pointer text-active hover:text-lamp-strong;
+  }
+
+  .field {
+    @apply h-8 rounded-control border border-line-strong bg-panel px-2.5 text-ink placeholder:text-faint focus:border-muted focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-lamp aria-invalid:border-danger;
+  }
+
+  select.field {
+    @apply max-w-56 pr-1.5;
+  }
+
+  .field-mono {
+    @apply font-mono text-xs;
+  }
+
+  textarea.field {
+    @apply h-auto w-full resize-y py-2 font-mono text-xs leading-[18px];
+  }
+
+  /* One choice from a few. Buttons carry aria-pressed. */
+  .seg {
+    @apply inline-flex max-w-full shrink-0 items-center gap-0.5 overflow-x-auto rounded-control border border-line-strong bg-panel p-0.5;
+  }
+
+  .seg > button,
+  .seg > a {
+    @apply inline-flex h-[26px] cursor-pointer items-center gap-1.5 rounded px-2.5 text-xs font-medium whitespace-nowrap text-muted hover:text-ink aria-pressed:bg-raised aria-pressed:text-ink aria-pressed:shadow-[inset_0_0_0_1px_var(--line-strong)];
+  }
+
+  .seg .count {
+    @apply font-normal text-faint tabular-nums;
+  }
+
+  /* Tabs: a row of buttons with a rule under the chosen one. */
+  .tabs {
+    @apply flex items-end gap-5 border-b border-line;
+  }
+
+  .tabs > [role="tab"],
+  .tabs > a {
+    @apply -mb-px inline-flex h-9 cursor-pointer items-center gap-1.5 border-b-2 border-transparent font-medium text-muted hover:text-ink aria-selected:border-ink aria-selected:text-ink;
+  }
+
+  .switch {
+    @apply relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full border border-line-strong bg-raised transition-colors aria-checked:border-ink aria-checked:bg-ink disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .switch > span {
+    @apply ml-[2px] size-2.5 rounded-full bg-muted transition-transform;
+  }
+
+  .switch[aria-checked="true"] > span {
+    @apply translate-x-3 bg-panel;
+  }
+
+  /* ---------- Status pills ---------- */
+  .pill {
+    @apply inline-flex h-[22px] shrink-0 items-center gap-[5px] rounded-full bg-neutral-soft pr-2 pl-1.5 text-xs leading-none font-medium whitespace-nowrap text-neutral;
+  }
+
+  .pill-sm {
+    @apply h-5 pr-[7px] pl-[5px] text-[11px];
+  }
+
+  .pill-plain {
+    @apply px-2;
+  }
+
+  .pill-outline {
+    @apply bg-transparent px-2 text-muted shadow-[inset_0_0_0_1px_var(--line-strong)];
+  }
+
+  .tone-ok {
+    @apply bg-success-soft text-success;
+  }
+
+  .tone-bad {
+    @apply bg-danger-soft text-danger;
+  }
+
+  .tone-warn {
+    @apply bg-attention-soft text-attention;
+  }
+
+  .tone-blue {
+    @apply bg-active-soft text-active;
+  }
+
+  .tone-neutral {
+    @apply bg-neutral-soft text-neutral;
+  }
+
+  /* ---------- Tables: one shell for every list ---------- */
+  .table-card {
+    @apply relative rounded-panel border border-line bg-panel;
+  }
+
+  .table-bar {
+    @apply flex flex-wrap items-center gap-2.5 border-b border-line px-3.5 py-3;
+  }
+
+  .table-scroll {
+    @apply overflow-x-auto;
+  }
+
+  .data {
+    @apply w-full border-collapse text-left;
+  }
+
+  .data th {
+    @apply h-9 border-b border-line px-3.5 text-xs font-medium whitespace-nowrap text-muted;
+  }
+
+  .data th.num,
+  .data td.num {
+    @apply text-right tabular-nums;
+  }
+
+  .data td {
+    @apply h-11 border-b border-line px-3.5 align-middle;
+  }
+
+  .data.dense td {
+    @apply h-9;
+  }
+
+  .data tbody tr:last-child td {
     @apply border-b-0;
   }
 
-  .data-table tbody tr {
-    @apply hover:bg-sunken;
+  .data tbody tr {
+    @apply relative hover:bg-hover;
+  }
+
+  .data tbody tr[aria-selected="true"] {
+    @apply bg-selected;
+  }
+
+  .data tbody tr[aria-selected="true"] td:first-child {
+    @apply shadow-[inset_2px_0_0_var(--lamp)];
+  }
+
+  .data.busy tbody {
+    @apply opacity-55 transition-opacity;
+  }
+
+  .table-foot {
+    @apply flex min-h-12 flex-wrap items-center gap-3 border-t border-line px-3.5 py-2 text-xs text-muted;
   }
 
   /* The row's main link stretches over the whole row, so the row is one click target. */
   .row-link {
-    @apply after:absolute after:inset-0 focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 focus-visible:after:outline-lamp;
+    @apply text-ink after:absolute after:inset-0 hover:text-ink focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 focus-visible:after:outline-lamp;
   }
 
-  .section-head {
-    @apply flex min-h-7 flex-wrap items-center justify-between gap-x-4 gap-y-2;
+  /* Controls inside a linked row sit above the stretched link. */
+  .above-link {
+    @apply relative z-[1];
+  }
+
+  .cell-main {
+    @apply block truncate font-medium;
+  }
+
+  .cell-sub {
+    @apply block truncate text-xs text-muted;
+  }
+
+  /* ---------- Popovers ---------- */
+  .popover {
+    @apply absolute z-50 rounded-[10px] border border-line-strong bg-panel;
+    box-shadow: var(--shadow-pop);
+  }
+
+  .float {
+    @apply rounded-panel border border-line bg-panel;
+    box-shadow: var(--shadow);
+  }
+
+  /* Graph chrome reuses the icon button shape under its older name. */
+  .icon-button {
+    @apply inline-grid size-7 shrink-0 cursor-pointer place-items-center rounded-control text-muted hover:bg-raised hover:text-ink disabled:opacity-40 aria-pressed:bg-raised aria-pressed:text-ink;
   }
 
   .section-title {
     @apply text-[13px] font-semibold;
-  }
-
-  .tab {
-    @apply flex h-7 items-center gap-1.5 rounded-md px-2 text-muted hover:bg-raised hover:text-ink;
-  }
-
-  .chip {
-    @apply inline-flex h-6 items-center gap-1.5 rounded-sm border border-transparent px-2 text-xs text-muted hover:bg-raised hover:text-ink;
-  }
-
-  .chip[aria-current="page"],
-  .chip[aria-pressed="true"],
-  .chip[aria-selected="true"] {
-    @apply border-lamp/45 bg-lamp/10 text-ink;
-  }
-
-  /* A square icon button for panel chrome: collapse, close, zoom. */
-  .icon-button {
-    @apply inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-raised hover:text-ink disabled:opacity-40;
   }
 }

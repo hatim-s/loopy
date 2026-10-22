@@ -19,53 +19,33 @@ export function checkNodeWrite(runId: string, node: NodeRun) {
   }
 }
 
-export function checkLogWrite(previous: LogRecord[], log: LogRecord) {
-  const position = log.position;
+export function logBytes(log: Pick<LogRecord, "message" | "data">): number {
+  return outputBytes({ message: log.message, data: log.data ?? null });
+}
 
-  if (position.kind !== "node") {
-    throw new Error("Attempt logs require a node execution key.");
-  }
-
-  const bytes = [...previous, log]
-    .filter(
-      (item) =>
-        item.position.kind === "node" &&
-        item.position.executionKey === position.executionKey &&
-        item.position.attempt === position.attempt,
-    )
-    .reduce(
-      (total, item) => total + outputBytes({ message: item.message, data: item.data ?? null }),
-      0,
-    );
+export function checkLogBytes(previousBytes: number, log: LogRecord): number {
+  const bytes = previousBytes + logBytes(log);
 
   if (bytes > MAX_LOG_BYTES) {
     throw new Error("Attempt logs exceed the 64 KiB limit.");
   }
+
+  return bytes;
 }
 
 export function logRecord(
-  previous: LogRecord[],
+  position: { seq: number; index: number },
   effect: Extract<StoreEffect, { kind: "write_log" }>,
 ) {
-  const executionKey = executionKeyString(effect.executionKey);
-
-  const indices = previous.flatMap((log) =>
-    log.position.kind === "node" &&
-    log.position.executionKey === executionKey &&
-    log.position.attempt === effect.attempt
-      ? [log.position.index]
-      : [],
-  );
-
   return {
     ...effect.log,
     runId: effect.executionKey.runId,
-    seq: Math.max(0, ...previous.map((log) => log.seq)) + 1,
+    seq: position.seq,
     position: {
       kind: "node" as const,
-      executionKey,
+      executionKey: executionKeyString(effect.executionKey),
       attempt: effect.attempt,
-      index: Math.max(-1, ...indices) + 1,
+      index: position.index,
     },
     level: "info" as const,
     at: utc(effect.at),

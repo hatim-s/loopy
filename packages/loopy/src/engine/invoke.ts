@@ -6,6 +6,7 @@ import {
   type Node,
   type NodeRun,
 } from "../core/index.js";
+import { captureInput } from "./input.js";
 import { write } from "./node-run.js";
 import { type ResolutionContext, resolve } from "./resolve.js";
 import { executionSpec } from "./spec.js";
@@ -25,25 +26,33 @@ function dispatch(
   const { transition, at } = traversal;
   const spec = executionSpec(node, transition.state, context);
   const key = { runId: transition.state.runId, nodeId: node.id, scope: context.scope };
+  const sameAttempt = previous?.status === "running" || previous?.status === "rate_limited";
 
-  const run: NodeRun =
-    previous?.status === "running" || previous?.status === "rate_limited"
-      ? {
-          key,
-          status: "running",
-          attempt: previous.attempt,
-          maxAttempts: previous.maxAttempts,
-          startedAt: previous.startedAt,
-          receipt: previous.receipt,
-        }
-      : {
-          key,
-          startedAt: at,
-          receipt: "none",
-          status: "running",
-          attempt: (previous?.attempt ?? 0) + 1,
-          maxAttempts: node.retry.attempts,
-        };
+  const run: NodeRun = sameAttempt
+    ? {
+        key,
+        status: "running",
+        attempt: previous.attempt,
+        maxAttempts: previous.maxAttempts,
+        startedAt: previous.startedAt,
+        receipt: previous.receipt,
+      }
+    : {
+        key,
+        startedAt: at,
+        receipt: "none",
+        status: "running",
+        attempt: (previous?.attempt ?? 0) + 1,
+        maxAttempts: node.retry.attempts,
+      };
+
+  if (!sameAttempt) {
+    const inputView = captureInput(spec);
+
+    if (inputView !== undefined) {
+      run.inputView = inputView;
+    }
+  }
 
   write(transition, run);
   transition.effects.push({ kind: "dispatch", executionKey: key, attempt: run.attempt, spec });

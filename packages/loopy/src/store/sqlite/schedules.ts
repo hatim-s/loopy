@@ -1,4 +1,4 @@
-import type { Schedule } from "../../core/index.js";
+import type { Schedule, ScheduleOverview } from "../../core/index.js";
 import { type Store } from "../../core/index.js";
 import { type EventTransaction } from "../event-outbox.js";
 import { rowToSchedule, SQL } from "./store-rows.js";
@@ -71,6 +71,28 @@ export class SqliteSchedules extends SqliteWaits {
 
       return true;
     });
+  }
+
+  async scheduleOverview(): Promise<ScheduleOverview> {
+    return this.db
+      .transaction(() => ({
+        workspaces: this.db
+          .query<{ workspace: string }, []>(
+            "SELECT DISTINCT workspace FROM schedules ORDER BY workspace",
+          )
+          .all()
+          .map((row) => row.workspace),
+        active: this.db
+          .query<{ count: number }, []>("SELECT COUNT(*) AS count FROM schedules WHERE enabled=1")
+          .get()!.count,
+        next: this.db
+          .query<ScheduleOverview["next"][number], []>(
+            `SELECT workspace,slug,cron,tz,next_fire_at AS nextFireAt FROM schedules
+           WHERE enabled=1 ORDER BY next_fire_at,workspace,slug LIMIT 10`,
+          )
+          .all(),
+      }))
+      .deferred();
   }
 
   async listSchedules(): Promise<Schedule[]> {

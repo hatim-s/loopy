@@ -25,9 +25,9 @@ test("an undeclared schedule can be created from the PUT body on an empty page",
     ],
   });
 
-  expect(await backend.schedules()).toEqual([]);
+  expect(await backend.schedules("/work")).toEqual([]);
   const body = { cron: "@daily", tz: "Asia/Kolkata", input: { name: "Hatim" }, enabled: false };
-  const created = await backend.putSchedule("triage", body);
+  const created = await backend.putSchedule("triage", "/work", body);
   expect(created).toMatchObject({ ...body, slug: "triage", version: 1 });
-  expect(await backend.schedules()).toEqual([created]);
+  expect(await backend.schedules("/work")).toEqual([created]);
 });

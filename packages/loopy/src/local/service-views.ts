@@ -1,49 +1,29 @@
-import { type RunView, runView } from "../contract/index.js";
-import { executionKeyString, type NodeRun, type WaitRecord } from "../core/index.js";
+import type { ServerEvent } from "../contract/index.js";
+import type { RuntimeEvent } from "../core/index.js";
 
-type Options = Omit<Parameters<typeof runView>[0], "steps" | "hooks"> & {
-  nodeRuns: NodeRun[];
-  hooks: WaitRecord[];
-};
+type NodeEvent = Extract<RuntimeEvent, { entity: "node" }>;
 
-export function graphRunView(options: Options): RunView {
-  const view = runView({ ...options, steps: [], hooks: [] });
+type NodeEventView = Extract<ServerEvent, { entity: "node" }>;
 
-  if (view.status !== "running" && view.status !== "suspended") {
+export function nodeDetailEvent(event: NodeEvent): NodeEventView {
+  const record = { ...event.record };
+  delete record.inputView;
+
+  return { ...event, record };
+}
+
+export function nodeEventPreview(event: NodeEvent): NodeEventView {
+  const view = nodeDetailEvent(event);
+
+  if (view.record.status !== "succeeded") {
     return view;
   }
 
-  const hook = options.hooks.find((hook) => {
-    if (hook.resolvedAt || hook.expiredAt) {
-      return false;
-    }
+  const bytes = new TextEncoder().encode(JSON.stringify(view.record.output)).byteLength;
 
-    const node = options.nodeRuns.find(
-      (node) => executionKeyString(node.key) === executionKeyString(hook.executionKey),
-    );
-
-    return (
-      node?.status === "waiting" &&
-      (node.wakeAt === null || Date.parse(node.wakeAt) > Date.parse(options.now))
-    );
-  });
-
-  if (!hook) {
+  if (bytes <= 16_384) {
     return view;
   }
 
-  const node = options.nodeRuns.find(
-    (node) => executionKeyString(node.key) === executionKeyString(hook.executionKey),
-  );
-
-  return {
-    ...view,
-    waitingOn: {
-      hook: hook.name,
-      token: hook.token,
-      seq: hook.seq,
-      expiresAt: node?.status === "waiting" ? node.wakeAt : null,
-      since: hook.createdAt,
-    },
-  };
+  return { ...view, truncatedOutputBytes: bytes, record: { ...view.record, output: null } };
 }

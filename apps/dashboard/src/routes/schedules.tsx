@@ -1,16 +1,27 @@
-import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { type LoopyView, routes, type ScheduleView } from "loopy/contract";
+import { routes } from "loopy/contract";
+import { useState } from "react";
 import { z } from "zod";
 import { ErrorBanner } from "../components/error-banner.tsx";
 import { ScheduleForm } from "../components/schedules/schedule-form.tsx";
 import { ScheduleRow } from "../components/schedules/schedule-row.tsx";
+import { Load, Note } from "../components/ui/load.tsx";
+import { Segmented } from "../components/ui/segmented.tsx";
 import { useClock } from "../lib/clock.ts";
-import { loopiesQuery, schedulesQuery } from "../lib/queries.ts";
-import { useBackend } from "../router-context.ts";
+import {
+  useLoopyRows,
+  useScheduleOverview,
+  useSchedules,
+  useWorkspaceLoopyRows,
+} from "../lib/ui-data.ts";
+import type { LoopyRow } from "../lib/view-models.ts";
 
-/** The loopy whose schedule form is open. */
+/**
+ * The workspace whose schedules show, and the loopy whose form is open. A schedule belongs to
+ * one workspace, so its identity is workspace plus slug.
+ */
 const searchSchema = z.object({
+  workspace: z.string().optional().catch(undefined),
   slug: routes.putSchedule.params.shape.slug.optional().catch(undefined),
 });
 
@@ -19,131 +30,254 @@ export const Route = createFileRoute("/schedules")({
   component: SchedulesPage,
 });
 
-const HEAD = "py-1.5 pr-4 font-normal";
+const SHOW = ["all", "active", "paused"] as const;
 
-function ScheduleTable({ schedules, open }: { schedules: ScheduleView[]; open?: string }) {
-  const now = useClock();
+type Show = (typeof SHOW)[number];
 
-  return (
-    <table className="w-full table-fixed border-y border-line text-left max-md:block">
-      <thead className="text-xs text-muted max-md:sr-only">
-        <tr className="border-b border-line">
-          <th scope="col" className={`${HEAD} pl-2`}>
-            Loopy
-          </th>
-          <th scope="col" className={`${HEAD} hidden w-32 md:table-cell`}>
-            Time zone
-          </th>
-          <th scope="col" className={`${HEAD} w-20`}>
-            Next fire
-          </th>
-          <th scope="col" className={`${HEAD} hidden w-48 xl:table-cell`}>
-            Last fire
-          </th>
-          <th scope="col" className={`${HEAD} hidden w-36 lg:table-cell`}>
-            Input
-          </th>
-          <th scope="col" className={`${HEAD} w-16`}>
-            Enabled
-          </th>
-          <th scope="col" className="w-32 py-1.5 pr-2 text-right font-normal">
-            <span className="sr-only">Actions</span>
-          </th>
-        </tr>
-      </thead>
-      <tbody className="divide-y divide-line max-md:block">
-        {schedules.map((schedule) => (
-          <ScheduleRow
-            key={`${schedule.workspace}:${schedule.slug}`}
-            schedule={schedule}
-            now={now}
-            editing={schedule.slug === open}
-          />
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
-function SchedulePicker({ loopies }: { loopies: LoopyView[] }) {
-  const navigate = Route.useNavigate();
-
-  if (loopies.length === 0) {
-    return null;
-  }
-
-  return (
-    <select
-      value=""
-      aria-label="Schedule a loopy"
-      onChange={(event) => void navigate({ search: { slug: event.target.value } })}
-      className="h-7 rounded-md border border-line bg-panel px-2 text-[13px]"
-    >
-      <option value="" disabled>
-        Schedule a loopy
-      </option>
-      {loopies.map((loopy) => (
-        <option key={loopy.slug} value={loopy.slug}>
-          {loopy.slug}
-        </option>
-      ))}
-    </select>
-  );
-}
+const SHOW_LABEL = { all: "All", active: "Active", paused: "Paused" } satisfies Record<
+  Show,
+  string
+>;
 
 /** A new schedule starts from what the definition declares, else every hour in UTC. */
-function NewSchedule({ loopy }: { loopy: LoopyView }) {
+function NewSchedule({ loopy }: { loopy: LoopyRow }) {
   const navigate = Route.useNavigate();
 
   return (
-    <section
-      aria-labelledby="new-schedule-heading"
-      className="space-y-3 border-l-2 border-active py-1 pl-4"
-    >
-      <h2 id="new-schedule-heading" className="font-medium">
-        New schedule for <span className="font-mono">{loopy.slug}</span>
+    <section aria-label={`New schedule for ${loopy.slug}`} className="panel p-4">
+      <h2 className="mb-3">
+        New schedule for <code className="text-sm">{loopy.slug}</code>
       </h2>
       <ScheduleForm
-        key={loopy.slug}
+        key={`${loopy.workspace}:${loopy.slug}`}
         slug={loopy.slug}
+        workspace={loopy.workspace}
         draft={{
           cron: loopy.schedule?.cron ?? "@hourly",
           tz: loopy.schedule?.tz ?? "UTC",
           input: {},
           enabled: true,
         }}
-        onDone={() => void navigate({ search: {} })}
+        onDone={() => void navigate({ search: { workspace: loopy.workspace } })}
       />
     </section>
   );
 }
 
 function SchedulesPage() {
-  const backend = useBackend();
-  const { slug } = Route.useSearch();
-  const schedules = useQuery(schedulesQuery(backend));
-  const loopies = useQuery(loopiesQuery(backend));
-  const scheduled = new Set(schedules.data?.map((schedule) => schedule.slug));
-  const unscheduled = loopies.data?.filter((loopy) => !scheduled.has(loopy.slug)) ?? [];
-  const creating = schedules.data && unscheduled.find((loopy) => loopy.slug === slug);
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const loopies = useLoopyRows();
+  const overview = useScheduleOverview();
+
+  const loopyWorkspaces =
+    loopies.state === "ready" ? [...new Set(loopies.data.map((loopy) => loopy.workspace))] : [];
+
+  // Loopy rows keep one workspace per slug, so only the overview names every workspace that has
+  // a schedule, including one whose slug another workspace also saved.
+  const scheduleWorkspaces = overview.state === "ready" ? overview.data.workspaces : [];
+
+  // Without a workspace in the URL, wait for both reads, then open the first loopy workspace that
+  // has schedules, else any workspace with schedules, else the first with a saved loopy. A failed
+  // overview falls back to loopy rows.
+  const settled = loopies.state !== "loading" && overview.state !== "loading";
+
+  const fallback =
+    loopyWorkspaces.find((path) => scheduleWorkspaces.includes(path)) ??
+    scheduleWorkspaces[0] ??
+    loopyWorkspaces[0] ??
+    null;
+
+  const workspace = search.workspace ?? (settled ? fallback : null);
+
+  // A workspace named only by the URL appears in neither read. Every workspace shown during this
+  // visit stays a choice until the page unmounts.
+  const [seen, setSeen] = useState<string[]>(() => (workspace === null ? [] : [workspace]));
+
+  if (workspace !== null && !seen.includes(workspace)) {
+    setSeen([...seen, workspace]);
+  }
+
+  const choices = [...new Set([...loopyWorkspaces, ...scheduleWorkspaces, ...seen])];
+  const schedules = useSchedules(workspace);
+
+  // Global rows keep one workspace per slug, so a slug saved in A and B shows only A's row. The
+  // workspace read lists this workspace's loopies first; other workspaces' slugs can follow.
+  const scoped = useWorkspaceLoopyRows(workspace);
+  const now = useClock();
+  const [show, setShow] = useState<Show>("all");
+  const slug = search.slug;
+
+  // Until both reads answer, a scheduled slug could look unscheduled, so nothing is offered.
+  const unscheduled =
+    scoped.state === "ready" && schedules.state === "ready"
+      ? scoped.data.filter(
+          (loopy) =>
+            loopy.workspace === workspace &&
+            !schedules.data.some((schedule) => schedule.slug === loopy.slug),
+        )
+      : [];
+
+  // A null workspace skips both reads, which stay loading; that case has its own note below.
+  const pending =
+    workspace !== null && (scoped.state === "loading" || schedules.state === "loading");
+
+  const creating = unscheduled.find((loopy) => loopy.slug === slug);
 
   return (
-    <section aria-labelledby="schedules-heading" className="page max-w-5xl space-y-5">
-      <header className="flex flex-wrap items-baseline justify-between gap-3">
-        <h1 id="schedules-heading" className="text-base font-semibold">
-          Schedules
-        </h1>
-        <SchedulePicker loopies={unscheduled} />
-      </header>
-      {schedules.error && <ErrorBanner error={schedules.error} />}
+    <div className="content space-y-4">
+      <div className="page-head mb-1">
+        <div>
+          <h1>Schedules</h1>
+          <p className="lede">
+            Cron schedules, when each fires next, and the input each fire sends.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {workspace !== null && choices.length > 1 && (
+            <select
+              className="field max-w-80"
+              value={workspace}
+              aria-label="Workspace"
+              title={workspace}
+              onChange={(event) => {
+                setSeen([...new Set([...seen, workspace, event.target.value])]);
+                void navigate({ search: { workspace: event.target.value } });
+              }}
+            >
+              {choices.map((path) => (
+                <option key={path} value={path}>
+                  {path}
+                </option>
+              ))}
+            </select>
+          )}
+          {pending && (
+            <select className="field" value="" aria-label="Schedule a loopy" disabled>
+              <option value="">Loading loopies</option>
+            </select>
+          )}
+          {unscheduled.length > 0 && (
+            <select
+              className="field"
+              value=""
+              aria-label="Schedule a loopy"
+              onChange={(event) =>
+                void navigate({
+                  search: { workspace: workspace ?? undefined, slug: event.target.value },
+                })
+              }
+            >
+              <option value="" disabled>
+                Schedule a loopy
+              </option>
+              {unscheduled.map((loopy) => (
+                <option key={`${loopy.workspace}:${loopy.slug}`} value={loopy.slug}>
+                  {loopy.slug}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      </div>
+      {scoped.state === "error" && <ErrorBanner error={scoped.error} />}
       {creating && <NewSchedule loopy={creating} />}
-      {schedules.isPending && <p className="text-muted">Loading schedules.</p>}
-      {schedules.data?.length === 0 && !creating && (
-        <p className="border-y border-line py-6 text-muted">No loopy runs on a schedule yet.</p>
-      )}
-      {schedules.data && schedules.data.length > 0 && (
-        <ScheduleTable schedules={schedules.data} open={slug} />
-      )}
-    </section>
+      <section className="table-card" aria-label="Schedules">
+        {workspace === null ? (
+          // Until both reads answer there is no workspace to list; after that, none means none saved.
+          settled ? (
+            <Load value={loopies} pending={<Note>Loading schedules.</Note>}>
+              {() => (
+                <Note>
+                  No loopy is saved yet. Save one with <code>loopy save path/to/file.loopy.ts</code>
+                  , then schedule it here.
+                </Note>
+              )}
+            </Load>
+          ) : (
+            <Note>Loading schedules.</Note>
+          )
+        ) : (
+          <Load value={schedules} pending={<Note>Loading schedules.</Note>}>
+            {(data) => {
+              const active = data.filter((schedule) => schedule.enabled).length;
+
+              const rows = data
+                .filter((schedule) => show === "all" || schedule.enabled === (show === "active"))
+                .sort(
+                  (a, b) =>
+                    Number(b.enabled) - Number(a.enabled) ||
+                    a.nextFireAt.localeCompare(b.nextFireAt),
+                );
+
+              return (
+                <>
+                  <div className="table-bar">
+                    <Segmented
+                      label="Show"
+                      value={show}
+                      options={SHOW.map((value) => ({
+                        value,
+                        label: SHOW_LABEL[value],
+                        count:
+                          value === "all"
+                            ? data.length
+                            : value === "active"
+                              ? active
+                              : data.length - active,
+                      }))}
+                      onChange={setShow}
+                    />
+                  </div>
+                  {rows.length === 0 ? (
+                    <Note>
+                      {data.length > 0
+                        ? "No schedule matches."
+                        : unscheduled.length > 0
+                          ? "No loopy runs on a schedule yet. Pick one above to add a schedule."
+                          : scoped.state === "ready"
+                            ? "No loopy runs on a schedule yet, and this workspace has no saved loopy to schedule."
+                            : "No loopy runs on a schedule yet."}
+                    </Note>
+                  ) : (
+                    <div className="table-scroll">
+                      <table className="data">
+                        <thead>
+                          <tr>
+                            <th scope="col">Loopy</th>
+                            <th scope="col">Schedule</th>
+                            <th scope="col" className="w-36">
+                              Next fire
+                            </th>
+                            <th scope="col">Last fire</th>
+                            <th scope="col">Input</th>
+                            <th scope="col" className="w-36">
+                              State
+                            </th>
+                            <th scope="col" className="w-40">
+                              <span className="sr-only">Actions</span>
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map((schedule) => (
+                            <ScheduleRow
+                              key={`${schedule.workspace}:${schedule.slug}`}
+                              schedule={schedule}
+                              now={now}
+                              editing={schedule.slug === slug}
+                            />
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </>
+              );
+            }}
+          </Load>
+        )}
+      </section>
+    </div>
   );
 }

@@ -228,12 +228,12 @@ test("HTTP cancel refuses an active owner and inspect diagnoses a missing run", 
   expect(missing.stderr).toContain("No run 'missing-run'");
 });
 
-test("HTTP logs follow prints each log as a separate JSON line", async () => {
+test("HTTP logs drains every page for normal output and terminal follow", async () => {
   const f = graphFixture();
   await f.store.createRun({ ...newRun(), id: "logged", slug: "compiled", workspace: f.cwd });
   await f.store.claim("logged", "log-owner");
 
-  for (const index of [0, 1]) {
+  for (const index of [...Array(250).keys()]) {
     await f.store.apply({
       runId: "logged",
       token: "log-owner",
@@ -253,12 +253,22 @@ test("HTTP logs follow prints each log as a separate JSON line", async () => {
   await f.store.release("logged", "log-owner");
   const result = await cli(f, "logs", "logged", "--follow");
   expect(result).toMatchObject({ code: 0, stderr: "" });
-  expect(
-    result.stdout
-      .trim()
-      .split("\n")
-      .map((line) => JSON.parse(line)),
-  ).toMatchObject([{ message: "line 0" }, { message: "line 1" }]);
+
+  const followed = result.stdout
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line));
+
+  expect(followed[0]).toMatchObject({ message: "line 0" });
+  expect(followed.at(-1)).toMatchObject({ message: "line 249" });
+  expect(followed.map((line) => line.seq)).toEqual(
+    [...Array(250).keys()].map((index) => index + 1),
+  );
+  const normal = await cli(f, "logs", "logged");
+  expect(normal).toMatchObject({ code: 0, stderr: "" });
+  expect([...normal.stdout.matchAll(/"seq":\s*(\d+)/g)].map((match) => Number(match[1]))).toEqual(
+    followed.map((line) => line.seq),
+  );
 });
 
 test("HTTP run reports named JSON input errors before creating a run", async () => {

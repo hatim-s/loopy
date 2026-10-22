@@ -44,7 +44,9 @@ test("schema outputs exactly match core records and the wire owner projection", 
         record: contract.RunView;
       });
 
-  expectTypeOf<contract.ServerEvent>().toEqualTypeOf<Flatten<WireEvent>>();
+  expectTypeOf<contract.ServerEvent>().toEqualTypeOf<
+    Flatten<WireEvent & { truncatedOutputBytes?: number }>
+  >();
   expectTypeOf<SavedLoopy & { workspace: string }>().toMatchTypeOf<
     Parameters<typeof contract.loopyView>[0]
   >();
@@ -217,7 +219,7 @@ test("route patterns are unique and every parameter has a schema", () => {
     expect(Object.keys(route.params.shape).sort()).toEqual(names.sort());
 
     expect(
-      route.params.safeParse(Object.fromEntries(names.map((parameter) => [parameter, "value"])))
+      route.params.safeParse(Object.fromEntries(names.map((parameter) => [parameter, "1"])))
         .success,
     ).toBe(true);
 

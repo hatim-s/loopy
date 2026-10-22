@@ -9,7 +9,7 @@ type Resolve = ReturnType<typeof useResolveHook>;
 /** Server codes stay visible: unknown_hook means someone or something resolved it first. */
 export function ResolveError({ error }: { error: Error }) {
   return (
-    <p role="alert" className="border-l-2 border-danger bg-danger/8 px-3 py-2 text-danger">
+    <p role="alert" className="mt-2 rounded-control bg-danger-soft px-3 py-2 text-xs text-danger">
       {error instanceof BackendError && <code className="mr-2 font-mono">{error.code}</code>}
       {error.message}
     </p>
@@ -41,7 +41,7 @@ export function PayloadEditor({ resolve }: { resolve: Resolve }) {
           rows={4}
           spellCheck={false}
           aria-invalid={!payload.valid}
-          className="block w-full resize-y rounded-md border border-line bg-panel p-2.5 font-mono text-xs aria-invalid:border-danger"
+          className="field"
         />
       </label>
       <div className="flex items-center gap-3">

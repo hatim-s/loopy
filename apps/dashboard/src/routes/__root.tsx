@@ -1,75 +1,52 @@
-import { createRootRouteWithContext, Link, Outlet } from "@tanstack/react-router";
-import { BrandMark } from "../components/brand-mark.tsx";
-import { SHELL_STYLE } from "../components/canvas-page.tsx";
-import { ConnectionStatus } from "../components/connection-status.tsx";
-import { DaemonIndicator } from "../components/daemon-indicator.tsx";
+import { createRootRouteWithContext, Outlet } from "@tanstack/react-router";
+import { useState } from "react";
 import { RouteError } from "../components/error-banner.tsx";
-import { InboxLink } from "../components/inbox/inbox-link.tsx";
-import { LoopySwitcher } from "../components/loopy-switcher.tsx";
+import { Crumbs } from "../components/shell/crumbs.tsx";
+import { DaemonPill } from "../components/shell/daemon-pill.tsx";
+import { Sidebar } from "../components/shell/sidebar.tsx";
+import { Icon } from "../components/ui/icon.tsx";
 import { useSessionStream } from "../lib/connection.ts";
 import type { RouterContext } from "../router-context.ts";
 
 export const Route = createRootRouteWithContext<RouterContext>()({
   component: Shell,
   errorComponent: RouteError,
-  notFoundComponent: () => <p className="page text-muted">Nothing lives at this address.</p>,
+  notFoundComponent: () => <p className="content text-muted">Nothing lives at this address.</p>,
 });
 
-/**
- * Every page shares one floating bar. Graph pages fill the viewport underneath it; document
- * pages scroll beneath it on the same board.
- */
 function Shell() {
   useSessionStream();
+  const [drawer, setDrawer] = useState(false);
 
   return (
-    <div className="relative h-full" style={SHELL_STYLE}>
+    <div className="flex min-h-full">
       <a
         href="#main"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-panel focus:px-3 focus:py-1.5"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-control focus:bg-panel focus:px-3 focus:py-1.5"
       >
         Skip to content
       </a>
-      <header className="pointer-events-none absolute inset-x-(--gap) top-(--gap) z-30 flex h-(--bar-h) items-start justify-between gap-2">
-        <nav
-          aria-label="Primary"
-          className="float pointer-events-auto flex h-full min-w-0 items-center gap-0.5 overflow-x-auto px-1"
-        >
-          <Link
-            to="/"
-            className="flex h-7 shrink-0 items-center gap-2 rounded-md pr-2.5 pl-1.5 font-semibold tracking-tight hover:bg-raised"
-            aria-label="loopy overview"
+      <Sidebar open={drawer} onClose={() => setDrawer(false)} />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-20 flex h-(--head-h) shrink-0 items-center gap-4 border-b border-line bg-page/90 px-8 backdrop-blur-sm max-md:px-4">
+          <button
+            type="button"
+            className="icon-btn md:hidden"
+            aria-label="Open navigation"
+            aria-expanded={drawer}
+            onClick={() => setDrawer(true)}
           >
-            <BrandMark className="size-5" />
-            <span className="max-sm:sr-only">loopy</span>
-          </Link>
-          <span aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-line" />
-          <Link
-            to="/"
-            className="tab shrink-0"
-            activeOptions={{ exact: true, includeSearch: false }}
-            activeProps={{ className: "bg-raised text-ink" }}
-          >
-            Overview
-          </Link>
-          <LoopySwitcher />
-          <InboxLink />
-          <Link
-            to="/schedules"
-            className="tab shrink-0"
-            activeProps={{ className: "bg-raised text-ink" }}
-          >
-            Schedules
-          </Link>
-        </nav>
-        <div className="float pointer-events-auto flex h-full shrink-0 items-center gap-0.5 px-1">
-          <ConnectionStatus />
-          <DaemonIndicator />
-        </div>
-      </header>
-      <main id="main" tabIndex={-1} className="h-full overflow-y-auto focus:outline-none">
-        <Outlet />
-      </main>
+            <Icon name="menu" />
+          </button>
+          <Crumbs />
+          <div className="ml-auto">
+            <DaemonPill />
+          </div>
+        </header>
+        <main id="main" tabIndex={-1} className="flex min-h-0 flex-1 flex-col focus:outline-none">
+          <Outlet />
+        </main>
+      </div>
     </div>
   );
 }

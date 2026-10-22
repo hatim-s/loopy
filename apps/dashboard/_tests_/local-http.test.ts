@@ -41,7 +41,7 @@ const server = Bun.serve({
 
 afterAll(() => server.stop(true));
 
-const backend = localHttpBackend({ origin: server.url.origin, token: "secret" });
+const backend = localHttpBackend({ baseUrl: server.url.origin, token: "secret" });
 
 function last(): Seen | undefined {
   return seen.at(-1);

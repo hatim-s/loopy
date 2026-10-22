@@ -7,6 +7,7 @@ import {
   type RunStatus,
 } from "loopy/contract";
 import { kindDetail } from "./graph-text.ts";
+import type { ScopeTuple } from "./view-models.ts";
 
 type GraphNode = GraphView["nodes"][number];
 
@@ -15,12 +16,12 @@ type GraphEdge = GraphView["edges"][number];
 export type NodeRunStatus = NodeRunView["status"];
 
 /**
- * What the graph knows about one node. `definition` has no run to compare against; `idle`
- * means the run holds no record for the node, so nothing claims it executed.
+ * What the graph knows about one node. `definition` has no run to compare against. An idle
+ * node is known absent only when its scope was loaded completely; otherwise it is not loaded.
  */
 export type NodeState =
   | { kind: "definition" }
-  | { kind: "idle"; reason: "not_started" | "not_run" }
+  | { kind: "idle"; reason: "not_started" | "not_run" | "not_loaded" }
   | { kind: "ran"; status: NodeRunStatus; counts: Partial<Record<NodeRunStatus, number>> };
 
 /**
@@ -70,7 +71,10 @@ export type GraphEdgeModel = {
   taken: boolean;
 };
 
+export type ExecutionCoverage = { scope: ScopeTuple; complete: boolean };
+
 export type GraphModel = {
+  historyIncomplete: boolean;
   nodes: GraphNodeModel[];
   edges: GraphEdgeModel[];
   /** Records whose node is absent from the graph, which means the graph is not the pinned one. */
@@ -91,7 +95,7 @@ const URGENCY = {
   skipped: 9,
 } satisfies Record<NodeRunStatus, number>;
 
-function nodeState(executions: NodeRunView[], run: RunStatus | null): NodeState {
+function nodeState(executions: NodeRunView[], run: RunStatus | null, complete: boolean): NodeState {
   if (run === null) {
     return { kind: "definition" };
   }
@@ -99,6 +103,10 @@ function nodeState(executions: NodeRunView[], run: RunStatus | null): NodeState 
   const [first, ...rest] = executions;
 
   if (first === undefined) {
+    if (!complete) {
+      return { kind: "idle", reason: "not_loaded" };
+    }
+
     return { kind: "idle", reason: isTerminalRun(run) ? "not_run" : "not_started" };
   }
 
@@ -163,11 +171,24 @@ function edgeLabel(edge: GraphEdge): string | null {
  */
 export function graphModel(
   graph: GraphView,
-  run: { status: RunStatus; nodeRuns: NodeRunView[] } | null,
+  run: {
+    status: RunStatus;
+    nodeRuns: NodeRunView[];
+    coverage: ExecutionCoverage[];
+    selectedExecutions?: NodeRunView[];
+  } | null,
 ): GraphModel {
+  const records = new Map(
+    (run?.nodeRuns ?? []).map((execution) => [executionKeyString(execution.key), execution]),
+  );
+
+  for (const execution of run?.selectedExecutions ?? []) {
+    records.set(executionKeyString(execution.key), execution);
+  }
+
   const byNode = new Map<string, NodeRunView[]>();
 
-  for (const execution of run?.nodeRuns ?? []) {
+  for (const execution of records.values()) {
     byNode.set(execution.key.nodeId, [...(byNode.get(execution.key.nodeId) ?? []), execution]);
   }
 
@@ -177,8 +198,28 @@ export function graphModel(
     leaves.delete(edge.from);
   }
 
+  const definitions = new Map(graph.nodes.map((node) => [node.id, node]));
+
   const nodes = graph.nodes.map((node): GraphNodeModel => {
     const executions = byNode.get(node.id) ?? [];
+    const maps: string[] = [];
+    let parent = node.scope === null ? undefined : definitions.get(node.scope);
+
+    while (parent) {
+      if (parent.kind === "map") {
+        maps.unshift(parent.id);
+      }
+
+      parent = parent.scope === null ? undefined : definitions.get(parent.scope);
+    }
+
+    const complete =
+      run?.coverage.some(
+        (page) =>
+          page.complete &&
+          page.scope.length === maps.length &&
+          page.scope.every((part, index) => part.nodeId === maps[index]),
+      ) ?? false;
 
     return {
       id: node.id,
@@ -190,13 +231,14 @@ export function graphModel(
       title: node.label ?? node.kind,
       detail: kindDetail(node),
       executions,
-      state: nodeState(executions, run?.status ?? null),
+      state: nodeState(executions, run?.status ?? null, complete),
     };
   });
 
   const known = new Set<string>(graph.nodes.map((node) => node.id));
 
   return {
+    historyIncomplete: run?.coverage.some((page) => !page.complete) ?? false,
     nodes,
     edges: graph.edges.map((edge) => ({
       id: `${edge.from}->${edge.to}:${edge.kind === "case" ? `case:${edge.label}` : edge.kind}`,
@@ -206,7 +248,7 @@ export function graphModel(
       label: edgeLabel(edge),
       taken: tookNext(edge, byNode),
     })),
-    orphans: (run?.nodeRuns ?? []).filter((execution) => !known.has(execution.key.nodeId)),
+    orphans: [...records.values()].filter((execution) => !known.has(execution.key.nodeId)),
   };
 }
 

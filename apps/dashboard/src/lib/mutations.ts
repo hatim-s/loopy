@@ -22,12 +22,12 @@ export function useResolveHook(token: string) {
   return useRunMutation((backend, payload: Json) => backend.resolveHook(token, payload));
 }
 
-export function useSaveSchedule(slug: string) {
+export function useSaveSchedule(slug: string, workspace: string) {
   const backend = useBackend();
   const client = useQueryClient();
 
   return useMutation({
-    mutationFn: (body: PutScheduleBody) => backend.putSchedule(slug, body),
+    mutationFn: (body: PutScheduleBody) => backend.putSchedule(slug, workspace, body),
     onSuccess: (schedule) => applyScheduleView(client, schedule),
   });
 }
@@ -36,51 +36,51 @@ export function useSaveSchedule(slug: string) {
 export async function toggleSchedule(
   client: QueryClient,
   backend: LoopyBackend,
-  change: { slug: string; enabled: boolean },
+  change: { slug: string; workspace: string; enabled: boolean },
 ) {
-  const { slug, enabled } = change;
-  await client.cancelQueries({ queryKey: keys.schedules });
+  const { slug, workspace, enabled } = change;
+  await client.cancelQueries({ queryKey: keys.schedules(workspace) });
 
   const previous = client
-    .getQueryData<ScheduleView[]>(keys.schedules)
-    ?.find((item) => item.slug === slug);
+    .getQueryData<ScheduleView[]>(keys.schedules(workspace))
+    ?.find((item) => item.slug === slug && item.workspace === workspace);
 
   const optimistic = previous && { ...previous, enabled };
-  client.setQueryData<ScheduleView[]>(keys.schedules, (current) =>
+  client.setQueryData<ScheduleView[]>(keys.schedules(workspace), (current) =>
     current?.map((item) => (item === previous && optimistic ? optimistic : item)),
   );
 
   // React Query may structurally share an unchanged row, so keep the cached identity.
   const written = client
-    .getQueryData<ScheduleView[]>(keys.schedules)
-    ?.find((item) => item.slug === slug);
+    .getQueryData<ScheduleView[]>(keys.schedules(workspace))
+    ?.find((item) => item.slug === slug && item.workspace === workspace);
 
   try {
-    return await backend.setScheduleEnabled(slug, enabled);
+    return await backend.setScheduleEnabled(slug, workspace, enabled);
   } catch (error) {
-    client.setQueryData<ScheduleView[]>(keys.schedules, (current) =>
+    client.setQueryData<ScheduleView[]>(keys.schedules(workspace), (current) =>
       current?.map((item) => (item === written && previous ? previous : item)),
     );
     throw error;
   }
 }
 
-export function useToggleSchedule(slug: string) {
+export function useToggleSchedule(slug: string, workspace: string) {
   const backend = useBackend();
   const client = useQueryClient();
 
   return useMutation({
-    mutationFn: (enabled: boolean) => toggleSchedule(client, backend, { slug, enabled }),
+    mutationFn: (enabled: boolean) => toggleSchedule(client, backend, { slug, workspace, enabled }),
     onSuccess: (schedule) => applyScheduleView(client, schedule),
   });
 }
 
-export function useRemoveSchedule(slug: string) {
+export function useRemoveSchedule(slug: string, workspace: string) {
   const backend = useBackend();
   const client = useQueryClient();
 
   return useMutation({
-    mutationFn: () => backend.deleteSchedule(slug),
-    onSuccess: () => removeScheduleView(client, slug),
+    mutationFn: () => backend.deleteSchedule(slug, workspace),
+    onSuccess: () => removeScheduleView(client, { slug, workspace }),
   });
 }

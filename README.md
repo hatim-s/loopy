@@ -21,7 +21,11 @@ To install the CLI globally, run `bun run install:global`. The installer builds 
 
 ## Dashboard
 
-Home lists saved loopies and recent runs. Each loopy page has an input form, schedule details, status filters and paged runs. A run page shows its inputs, output, live step trace, logs, hook resolution and run controls. Inbox groups waiting hooks by loopy, oldest first. The schedules page is being added separately for listing and toggling schedules. The daemon page shows its process, start time, concurrency, active runs and next wake. One event stream updates the session query cache; reconnects resume from the cursor, and stale cursors or a changed store epoch trigger a refetch.
+The dashboard has Overview, Loopies, Runs, Logs and Schedules views. Overview counts and chart buckets come from the selected time window. Loopies show their latest ten runs and schedule. Definition pages place code and graph side by side, with either pane collapsible. Run pages start with revision-pinned code and disclose selected executions, map iterations, inputs, outputs, errors and attempts on demand. Older definitions without captured source show a labeled compiled outline.
+
+Logs are diagnostic output. The secondary Runtime events tab shows durable state transitions, transaction identity and retained event history. Both views page summaries and load payloads when opened. Approval controls and schedule edits use the same authenticated API as the CLI. The daemon pill shows current process and worker counts. One event stream updates bounded session caches; reconnects resume from the cursor, and stale cursors or a changed store epoch trigger a refetch.
+
+The browser defaults to its page origin. A separately hosted dashboard can set `VITE_API_BASE_URL` at build time to a trusted HTTP or HTTPS API base URL, including a path prefix. Query parameters cannot change that destination. Tokens remain scoped to that API in tab session storage. HTTP requests omit cookies and reject redirects. Server hosts can use `createRequestHandler` from `loopy/local`, supply a trusted `publicOrigin`, and explicitly allow additional browser origins with `allowedOrigins`. Every API request still requires a bearer token. The local daemon stays on loopback. A cloud deployment must supply its own hosting, durable storage, TLS and appropriate CSP; this repository does not provision them.
 
 ## Write a loopy
 
@@ -100,9 +104,9 @@ loopy schedule review --off
 
 An inline run activates until it finishes or suspends without a wake time. For a timed sleep or retry, it waits and activates again. Ctrl-C and SIGTERM leave unfinished work resumable. `--detach` creates a queued run without executing it; the foreground daemon claims queued and due runs. `resume` continues queued, suspended or abandoned runs. A finished run stays finished; start a new run to try a failed workflow again. Cancellation requires a claimable run. Stop its runner before cancelling an actively owned run.
 
-`runs [slug]` prints the stored runs as a JSON array. Dashboard run lists page newest first and load older runs on request. The HTTP API accepts `slug`, `status`, `limit` and `before` filters.
+`runs [slug]` prints the stored runs as a JSON array. Dashboard run lists use SQL keyset pages ordered by creation time and ID. The HTTP API accepts `slug`, `workspace`, `status`, `waiting`, `from`, `to`, `limit` and `before` filters. Large input and output values become explicit previews; `/api/runs/<id>/payload` loads them on demand.
 
-`inspect` returns a snapshot with the run, ordered steps, logs, hooks, event cursor and store epoch. Run statuses are `queued`, `running`, `suspended`, `succeeded`, `failed` and `cancelled`. Each step records its sequence, key, kind, attempt, status and result or error. Logs carry their workflow position or step attempt. `logs --follow` emits one JSON object per line.
+`inspect` returns a slim snapshot with the run, root executions, bounded hook history, map counts, event cursor and store epoch. Logs and map executions have separate paging endpoints. Run statuses are `queued`, `running`, `suspended`, `succeeded`, `failed` and `cancelled`. Each execution records its key, attempt, status and result or error. Attempts retained before the dashboard migration contain only the latest known attempt. `logs --follow` emits one JSON object per line.
 
 A definition can include `schedule: { cron: "0 9 * * 1-5", tz: "Asia/Kolkata" }`. `loopy schedule <slug>` uses those defaults; flags override them. Pass schedule input with `--input-json`. `--disable` pauses a saved schedule; `--enable` resumes it. `--off` deletes it. These actions cannot be combined with each other or with cron, timezone or input flags. Schedules retain their workspace, even when the daemon starts elsewhere. Missed fires are not backfilled. Scheduling stores the next fire time; keep `loopy daemon run` running to execute it. Cron uses five fields and defaults to UTC. Command options are scoped: `--follow` belongs to logs, `--concurrency` to daemon run and install, and `--cron`, `--tz`, `--enable`, `--disable` and `--off` to schedule.
 
@@ -187,12 +191,15 @@ Run records retain input, command argv, explicit environment and stdin, step res
   daemon.json
   logs/daemon.log
   loopies/<slug>.json
+  graphs/<revision>.json
+  sources/<slug>/<revision>.json
   bundles/<sha256>.js
+  receipts/<run>/<execution>/<attempt>.json
   runs.sqlite
 <project>/.loopy/loopies/<slug>.json
 ```
 
-Set `LOOPY_HOME` or pass `--home` to move the home. Project lookup checks the nearest ancestor containing `.loopy/loopies`; project entries override global entries. A slug belongs to its canonical source file. Use `loopy save <file.ts> --replace` to transfer ownership. A schema-version mismatch deletes all runs, steps, logs and schedules; there is no data migration.
+Set `LOOPY_HOME` or pass `--home` to move the home. Project lookup checks the nearest ancestor containing `.loopy/loopies`; project entries override global entries. A slug belongs to its canonical source file. Use `loopy save <file.ts> --replace` to transfer ownership. Schema 15 upgrades schema 13 and 14 in a transaction and preserves existing records and the store epoch. Unsupported populated schemas fail without resetting the database.
 
 ## Examples
 

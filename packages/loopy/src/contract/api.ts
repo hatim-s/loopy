@@ -1,8 +1,28 @@
 import { z } from "zod";
 import { putLoopyBodySchema } from "./compiled-loopy.js";
+import {
+  eventHistoryPageSchema,
+  eventHistoryQuerySchema,
+  executionDetailQuerySchema,
+  executionDetailSchema,
+  executionPageSchema,
+  executionQuerySchema,
+  globalLogsPageSchema,
+  globalLogsQuerySchema,
+  logDetailSchema,
+  overviewQuerySchema,
+  overviewSchema,
+  runFilterFields,
+  scheduleOverviewSchema,
+  scopeCountsSchema,
+  scopeItemsPageSchema,
+  scopeItemsQuerySchema,
+  scopesQuerySchema,
+} from "./dashboard.js";
 import { graphRevisionViewSchema, graphViewSchema } from "./graph.js";
 import { jsonSchema } from "./json.js";
-import { logRecordSchema, runStatusSchema } from "./records.js";
+import { logRecordSchema } from "./records.js";
+import { sourceArtifactSchema } from "./source-artifact.js";
 import {
   cursorViewSchema,
   daemonViewSchema,
@@ -62,8 +82,7 @@ const workspaceQuerySchema = z.strictObject({ workspace: z.string().optional() }
 const runParamsSchema = z.strictObject({ id: z.string() });
 
 export const runsQuerySchema = z.strictObject({
-  slug: z.string().optional(),
-  status: runStatusSchema.optional(),
+  ...runFilterFields,
   waiting: z
     .union([z.boolean(), z.enum(["true", "false"]).transform((value) => value === "true")])
     .optional(),
@@ -88,6 +107,7 @@ export function decodeRunCursor(cursor: NonNullable<RunsQuery["before"]>) {
 }
 
 export const logsQuerySchema = z.strictObject({
+  limit: z.coerce.number().int().positive().max(200).default(200),
   after: z.coerce.number().int().nonnegative().optional(),
 });
 
@@ -126,6 +146,102 @@ type Route = {
 };
 
 export const routes = {
+  runPayload: {
+    method: "GET",
+    path: "/runs/:id/payload",
+    params: runParamsSchema,
+    query: emptySchema,
+    body: z.undefined(),
+    response: z.strictObject({ input: jsonSchema, output: jsonSchema.optional() }),
+  },
+  scopes: {
+    method: "GET",
+    path: "/runs/:id/scopes",
+    params: runParamsSchema,
+    query: scopesQuerySchema,
+    body: z.undefined(),
+    response: z.array(scopeCountsSchema),
+  },
+  overview: {
+    method: "GET",
+    path: "/overview",
+    params: emptySchema,
+    query: overviewQuerySchema,
+    body: z.undefined(),
+    response: overviewSchema,
+  },
+  executions: {
+    method: "GET",
+    path: "/runs/:id/executions",
+    params: runParamsSchema,
+    query: executionQuerySchema,
+    body: z.undefined(),
+    response: executionPageSchema,
+  },
+  execution: {
+    method: "GET",
+    path: "/runs/:id/execution",
+    params: runParamsSchema,
+    query: executionDetailQuerySchema,
+    body: z.undefined(),
+    response: executionDetailSchema,
+  },
+  scopeItems: {
+    method: "GET",
+    path: "/runs/:id/scope-items",
+    params: runParamsSchema,
+    query: scopeItemsQuerySchema,
+    body: z.undefined(),
+    response: scopeItemsPageSchema,
+  },
+  globalLogs: {
+    method: "GET",
+    path: "/logs",
+    params: emptySchema,
+    query: globalLogsQuerySchema,
+    body: z.undefined(),
+    response: globalLogsPageSchema,
+  },
+  log: {
+    method: "GET",
+    path: "/logs/:id",
+    params: z.strictObject({ id: z.coerce.number().int().positive() }),
+    query: emptySchema,
+    body: z.undefined(),
+    response: logDetailSchema,
+  },
+  eventHistory: {
+    method: "GET",
+    path: "/event-history",
+    params: emptySchema,
+    query: eventHistoryQuerySchema,
+    body: z.undefined(),
+    response: eventHistoryPageSchema,
+  },
+  event: {
+    method: "GET",
+    path: "/event-history/:sequence",
+    params: z.strictObject({ sequence: z.coerce.number().int().positive() }),
+    query: emptySchema,
+    body: z.undefined(),
+    response: serverEventSchema,
+  },
+  source: {
+    method: "GET",
+    path: "/loopies/:slug/source",
+    params: scheduleParamsSchema,
+    query: workspaceQuerySchema,
+    body: z.undefined(),
+    response: sourceArtifactSchema,
+  },
+  runSource: {
+    method: "GET",
+    path: "/runs/:id/source",
+    params: runParamsSchema,
+    query: emptySchema,
+    body: z.undefined(),
+    response: sourceArtifactSchema,
+  },
   secrets: {
     method: "GET",
     path: "/secrets",
@@ -197,6 +313,14 @@ export const routes = {
     query: emptySchema,
     body: z.undefined(),
     response: graphRevisionViewSchema,
+  },
+  scheduleOverview: {
+    method: "GET",
+    path: "/schedules/overview",
+    params: emptySchema,
+    query: emptySchema,
+    body: z.undefined(),
+    response: scheduleOverviewSchema,
   },
   schedules: {
     method: "GET",

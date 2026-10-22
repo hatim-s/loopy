@@ -5,13 +5,12 @@ import { request } from "../client.js";
 import { type CliContext, requireTarget } from "../context.js";
 import { printJson, printLine } from "../output.js";
 
-export async function runLogs(context: CliContext): Promise<void> {
-  const id = requireTarget(context, "Run ID");
-  let after = 0;
+const LOG_PAGE_SIZE = 200;
+
+async function drainLogs(context: CliContext, id: string, cursor: number): Promise<number> {
+  let after = cursor;
 
   while (true) {
-    const snapshot = await request(context, `/runs/${encodeURIComponent(id)}`, routes.run.response);
-
     const logs = await request(
       context,
       `/runs/${encodeURIComponent(id)}/logs?after=${after}`,
@@ -27,6 +26,21 @@ export async function runLogs(context: CliContext): Promise<void> {
 
       after = log.seq;
     }
+
+    if (logs.length < LOG_PAGE_SIZE) {
+      return after;
+    }
+  }
+}
+
+export async function runLogs(context: CliContext): Promise<void> {
+  const id = requireTarget(context, "Run ID");
+  let after = 0;
+
+  while (true) {
+    const snapshot = await request(context, `/runs/${encodeURIComponent(id)}`, routes.run.response);
+
+    after = await drainLogs(context, id, after);
 
     if (!context.values.follow || isTerminalRun(snapshot.run.status)) {
       return;
