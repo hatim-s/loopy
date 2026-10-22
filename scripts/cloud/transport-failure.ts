@@ -43,27 +43,6 @@ equal(process.cwd(), root, "wrong_worktree_directory");
 
 equal(root, "/Users/hatim.shakir/projects/loopy/cloud-integration", "wrong_worktree");
 
-const requestedHead = "8eb76408294968abb4bb9e41cbffc1104e1f814b";
-
-const ancestor = await command(["git", "merge-base", "--is-ancestor", requestedHead, head]);
-
-equal(ancestor.exitCode, 0, "requested_head_not_ancestor");
-
-const advancedFiles = (await command(["git", "diff", "--name-only", requestedHead, head])).stdout
-  .trim()
-  .split("\n")
-  .filter(Boolean);
-
-assert(
-  advancedFiles.every(
-    (path) =>
-      path.startsWith(".notes/cloud/") ||
-      path === "apps/cloud/README.md" ||
-      (path.startsWith("scripts/cloud/transport-failure") && path.endsWith(".ts")),
-  ),
-  "runtime_changed_since_requested_head",
-);
-
 equal(branch, "cloud-integration", "wrong_branch");
 
 const before = await sourceHashes();
@@ -109,8 +88,6 @@ await Bun.write(
         worktree: root,
         branch,
         head,
-        requestedHead,
-        documentationAndHarnessAdvancedFiles: advancedFiles,
         bun: Bun.version,
         dockerContext: context,
         image,

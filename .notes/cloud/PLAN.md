@@ -34,4 +34,9 @@ It documents synchronous SQL transactions, automatic input/output gates, cursor 
 
 ## Current continuation
 
-Authenticated personal Chrome QA passed on 2026-10-22. Additional Docker transport-failure verification passed in isolated resources under `.loopy/cloud-transport`; cleanup was verified and the existing fixture stack remains available. New Sol tasks use Standard speed, `serviceTier: default`, as requested by Hatim. Retain earlier task settings as historical records. The phase 2 packet still needs its staging implementation prerequisites resolved before a deployment approval request.
+Authenticated personal Chrome QA passed on 2026-10-22. Additional Docker transport-failure verification passed in isolated resources under `.loopy/cloud-transport`; cleanup was verified and the existing fixture stack remains available. New Sol tasks use Standard speed, `serviceTier: default`, as requested by Hatim. Retain earlier task settings as historical records. The full staging packet still needs its implementation prerequisites resolved before a deployment approval request. The immediate approval proposal is narrowed to a bounded Modal provider probe, prepared and tested locally first, to resolve sandbox/process recovery and workspace assumptions. It is not a full staging rollout.
+
+
+## Local work complete, awaiting target selection and approval
+
+Phase 1 is accepted. The bounded Modal probe is locally implemented, independently reviewed with no blockers after three fixes, and included in the passing 1,165-test full check. Its seven-script source hash is recorded in MODAL-PROBE.md. Full staging remains a separate draft. No cloud approval exists. Next obtain the user-selected workspace and existing environment names, generate the exact offline target manifest, then request explicit approval for that manifest's probe, inventory and cleanup. Do not execute live commands or fabricate approval records while waiting. The existing local fixture stack and all personal state remain untouched.

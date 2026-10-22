@@ -89,3 +89,25 @@ The first full check to reach tests passed build, lint and both TypeScript confi
 ## Final check after transport proof
 
 `bun run check` exited 0 after the new harness and runbook change. Build, Biome/ESLint and both TypeScript configurations passed. Tests: 1,147 passed, 3 skipped, 0 failed, 5,197 assertions across 78 files, 67.13 seconds. Log: `evidence/check-transport-final.log`. The real-Docker transport journey passed separately because it is an explicit local resource test. No tests were deleted or moved.
+
+## Local preparation for a bounded provider probe
+
+The approval-readiness review found no new phase 1 acceptance blocker. Full staging still lacks the provider adapter and deployable operations. The immediate proposal is narrowed to a fixed Modal probe because the public SDK does not expose process reattachment and the workspace/recovery assumptions need provider evidence. A Standard-speed Sol task owns only new probe scripts and dedicated boundary tests. Parent pinned `modal@0.11.1`, inspected its source as text and queried public base-image metadata. No Modal client was instantiated, credentials loaded, cloud resources created or cloud workload executed. Target workspace/environment names are pending; they do not constitute approval.
+
+## Probe preparation full check
+
+`bun run check` passed build, lint, both TypeScript configurations and 1,162 tests, with 3 skips, zero failures and 5,298 assertions across 79 files in 69.45 seconds. Log: `evidence/check-modal-probe.log`. The 15 added probe tests use fake provider identities and local Bun children. They do not import the Modal runtime or prove provider behavior. Independent review is pending.
+
+The transport fixture's historical commit whitelist was removed so unrelated committed preparation does not prevent rerunning it. Worktree/branch identity, actual HEAD, runtime source hashes and unchanged image verification remain. Both real Docker cases passed again at 17:58:31 through 17:58:52 UTC, with zero owned containers, volumes, background processes or active runner calls remaining. Scoped Biome and ESLint passed after this fixture-only edit. No tests were deleted or moved.
+
+The fresh probe review requested three fixes before live approval: atomic exclusive journal publication, app admission across V1/V2 sandboxes, and separately approved cleanup after source changes while preserving original resource identity. Report: `modal-probe-review-1.md`. The implementation follow-up is local only; a fresh review will follow. Phase 1 acceptance remains unchanged.
+
+## Check after probe review fixes
+
+The implementation follow-up fixed all three findings and passed 18 focused tests with 145 assertions. Each targeted mutation caused its new test to fail. The seven-script implementation hash is `8b2d50cd4168e79bf74bdc04840f2ee19c15548b59019fa032a1a88ae8ed342a`. A fresh independent round 2 review is running at Standard speed.
+
+Parent `bun run check` exited 0 after those fixes: build, Biome/ESLint, both TypeScript configurations, 1,165 passed, 3 skipped, zero failed, 5,342 assertions across 79 files in 69.10 seconds. Log: `evidence/check-modal-probe-final.log`. No existing tests were deleted or moved. The new probe comprises 1,920 TypeScript lines including 710 test lines; the separate transport fixture simplification removes 23 lines. No Modal SDK runtime import, provider call or credential read was needed. Target selection and actual cloud approval remain pending.
+
+## Probe review accepted
+
+Fresh independent round 2 found no blockers and traced each fix to its round 1 failure mechanism. It independently passed 18 tests with 145 assertions and verified implementation/test hashes. The T3 task completed with `result_available`, no pending child work and Standard speed. Report: `modal-probe-review-2.md`. No code changed after the final full check; only reports and this handoff were updated. User-selected Modal target names and explicit execution approval remain outstanding. Main remains clean at `dee31da64781c04313b2555a5e697da724e06ef8`.

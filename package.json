@@ -30,6 +30,7 @@
     "eslint-plugin-unicorn": "77.0.0",
     "loopy": "workspace:*",
     "miniflare": "4.20260730.0",
+    "modal": "0.11.1",
     "typescript": "5.9.2",
     "typescript-eslint": "8.66.0",
     "wrangler": "4.152.0",

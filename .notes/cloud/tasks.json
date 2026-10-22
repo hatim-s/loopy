@@ -158,5 +158,45 @@
       "reasoningEffort": "high",
       "serviceTier": "default"
     }
+  },
+  {
+    "requestId": "loopy-cloud-modal-probe-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Adelegate-task%3Aloopy-cloud-modal-probe-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-cloud-modal-probe-review-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Adelegate-task%3Aloopy-cloud-modal-probe-review-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-cloud-modal-probe-fix-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Athread-send%3Aloopy-cloud-modal-probe-fix-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-cloud-modal-probe-review-02",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Adelegate-task%3Aloopy-cloud-modal-probe-review-02",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
   }
 ]

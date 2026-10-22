@@ -38,3 +38,7 @@ Preparation included two failed preflight checks before any Docker fixture ran: 
 ## Parent verification
 
 The parent reran the corrected harness at 17:27:30 through 17:27:51 UTC on 2026-10-22. Both scenarios passed; the second timeout completed 134 ms after its original deadline. The JSON now records this rerun and the corrected harness hash. An independent read-only Docker check confirmed zero containers with either owner label and all four receipt-derived volumes absent. No runtime implementation changed.
+
+## Reproducible later runs
+
+The historical commit whitelist was removed when the separate Modal preparation was added. Each run now records the actual HEAD, verifies the exact integration worktree and branch, and compares all sampled runtime and harness source hashes plus the image ID before and after execution. Earlier evidence remains tied to its recorded snapshot. A later run verifies its own source snapshot rather than claiming the original source is unchanged.

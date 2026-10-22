@@ -2,21 +2,12 @@
   "status": "passed",
   "scope": "local-real-docker-cli-transport-faults",
   "command": "env -i PATH=\"$PATH\" HOME=\"$HOME\" LANG=C.UTF-8 bun --no-env-file scripts/cloud/transport-failure.ts",
-  "startedAt": "2026-10-22T17:27:30.789Z",
-  "finishedAt": "2026-10-22T17:27:51.793Z",
+  "startedAt": "2026-10-22T17:58:31.910Z",
+  "finishedAt": "2026-10-22T17:58:52.902Z",
   "identity": {
     "worktree": "/Users/hatim.shakir/projects/loopy/cloud-integration",
     "branch": "cloud-integration",
-    "head": "214bbe3910ff65dc3eec6af31c187908e33246bc",
-    "requestedHead": "8eb76408294968abb4bb9e41cbffc1104e1f814b",
-    "documentationAndHarnessAdvancedFiles": [
-      ".notes/cloud/EVIDENCE.md",
-      ".notes/cloud/PHASE-2.md",
-      ".notes/cloud/PLAN.md",
-      ".notes/cloud/evidence/dashboard-approval.jpg",
-      ".notes/cloud/evidence/dashboard-execution.jpg",
-      ".notes/cloud/tasks.json"
-    ],
+    "head": "b02de1b97300573891b020c5539690bf94a4e7ae",
     "bun": "1.4.0",
     "dockerContext": "colima-loopy-cloud-phase1",
     "image": "loopy-sandbox:bun-1.4.0",
@@ -56,7 +47,7 @@
     "packages/loopy/src/local/spawn.ts": "4ae966490d7eddffe8659dc7d520cf9e167bf2016196363db7e972bfebe544fd",
     "packages/loopy/src/executor/protocol.ts": "cd96c7ea10e49f284252f930c57b5962f04e836cb2fd93e8b0d9cf5bd974c695",
     "packages/loopy/src/contract/sandbox.ts": "e0f4762b960f637bc6559b2061709a3762b9c0ca603dc1c320733baa97dd0a42",
-    "scripts/cloud/transport-failure.ts": "c1b1df30422454d614147b743fa5c6dcb03fd4becc6746af23d5382aaed25a25",
+    "scripts/cloud/transport-failure.ts": "4214db576b0dd8e6fd75e3cc140afdb272db3fbe5cff6921ad87f4e2044eb8fc",
     "scripts/cloud/transport-failure-resources.ts": "40aeb43f68a1027a713aedb502d732ecf38ad2d15a0653e64ce2c67292d527bf",
     "scripts/cloud/transport-failure-faults.ts": "ab8853e1ac0d69327368d6c2c26a11ca495b46790a8948ddab32e5e88ed22419",
     "scripts/cloud/transport-failure-scenario.ts": "fd49090802be0c0873c082e727b44b6ddeabb5efc4df2570ef4533728c6dbea9"
@@ -67,17 +58,17 @@
       "status": "passed",
       "proof": {
         "mode": "kill_wait_client",
-        "stateRoot": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/cloud-transport/run-DPUz6R/runtime-root/.loopy/cloud/sandbox",
-        "owner": "f850f2d1c0906fcb4124e54892c48172f56291f8d3cb3585a5fb3ec1453ff3d5",
-        "receiptId": "36fedb9099f81724509858e1987b0b7e4afa12a453d00e103617ba3a631a2964",
-        "container": "loopy-attempt-36fedb9099f81724509858e1987b0b7e4afa12a453d00e103617ba3a631a2964",
-        "dockerContainerId": "58637ddba0230692c9b98b98429dc129c0b2bbd7a44255a20013b79dbd1a6a10",
-        "workerStartedAt": "2026-10-22T17:27:31.097223645Z",
+        "stateRoot": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/cloud-transport/run-mwHHHw/runtime-root/.loopy/cloud/sandbox",
+        "owner": "042571d0e79549ef8ff2bfee3236e63572c8587e727748c57a474596db5aae9d",
+        "receiptId": "afe8d367871937e565e6f8c5b39f7d3de3bdec21c9954f5969c04e88d4b4d29c",
+        "container": "loopy-attempt-afe8d367871937e565e6f8c5b39f7d3de3bdec21c9954f5969c04e88d4b4d29c",
+        "dockerContainerId": "cd4197559f4c6a0cee967d1d3d75a3d024a0011ff0fa748d35c465bb81bab9ea",
+        "workerStartedAt": "2026-10-22T17:58:32.198761494Z",
         "imageWorkerSha256": "55f2fcb8fbc0d1c9fc4918a77b83e8ff2d629197ca6a45af50beba3bed8c3361",
-        "deadline": 1792690070920,
+        "deadline": 1792691932000,
         "reopenedAt": null,
-        "completedAt": 1792690057296,
-        "completionRelativeToDeadlineMs": -13624,
+        "completedAt": 1792691918369,
+        "completionRelativeToDeadlineMs": -13631,
         "result": {
           "kind": "succeeded",
           "output": {
@@ -100,88 +91,88 @@
           {
             "operation": "wait",
             "exitCode": 137,
-            "pid": 98417,
+            "pid": 31765,
             "signal": "SIGKILL",
-            "at": "2026-10-22T17:27:31.585Z",
+            "at": "2026-10-22T17:58:32.589Z",
             "workerRunning": true
           },
           {
             "operation": "container inspect",
             "exitCode": 1,
-            "stderr": "failed to connect to the docker API at unix:///var/empty/loopy-transport-f850f2d1c0906fcb.sock; check if the path is correct and if the daemon is running: dial unix /var/empty/loopy-transport-f850f2d1c0906fcb.sock: connect: no such file or directory",
-            "at": "2026-10-22T17:27:31.791Z",
+            "stderr": "failed to connect to the docker API at unix:///var/empty/loopy-transport-042571d0e79549ef.sock; check if the path is correct and if the daemon is running: dial unix /var/empty/loopy-transport-042571d0e79549ef.sock: connect: no such file or directory",
+            "at": "2026-10-22T17:58:32.786Z",
             "workerRunning": true
           },
           {
             "operation": "container ls",
             "exitCode": 1,
-            "stderr": "failed to connect to the docker API at unix:///var/empty/loopy-transport-f850f2d1c0906fcb.sock; check if the path is correct and if the daemon is running: dial unix /var/empty/loopy-transport-f850f2d1c0906fcb.sock: connect: no such file or directory",
-            "at": "2026-10-22T17:27:31.855Z",
+            "stderr": "failed to connect to the docker API at unix:///var/empty/loopy-transport-042571d0e79549ef.sock; check if the path is correct and if the daemon is running: dial unix /var/empty/loopy-transport-042571d0e79549ef.sock: connect: no such file or directory",
+            "at": "2026-10-22T17:58:32.854Z",
             "workerRunning": true
           }
         ],
         "dockerCalls": [
           {
             "operation": "create",
-            "at": 1792690050921
+            "at": 1792691912001
           },
           {
             "operation": "cp",
-            "at": 1792690050976
+            "at": 1792691912051
           },
           {
             "operation": "rm",
-            "at": 1792690051016
+            "at": 1792691912086
           },
           {
             "operation": "create",
-            "at": 1792690051061
+            "at": 1792691912118
           },
           {
             "operation": "start",
-            "at": 1792690051110
+            "at": 1792691912169
           },
           {
             "operation": "container inspect",
-            "at": 1792690051174
+            "at": 1792691912232
           },
           {
             "operation": "wait",
-            "at": 1792690051208
+            "at": 1792691912262
           },
           {
             "operation": "container inspect",
-            "at": 1792690051686
+            "at": 1792691912690
           },
           {
             "operation": "container ls",
-            "at": 1792690051791
+            "at": 1792691912786
           },
           {
             "operation": "container inspect",
-            "at": 1792690052056
+            "at": 1792691913056
           },
           {
             "operation": "wait",
-            "at": 1792690052095
+            "at": 1792691913085
           },
           {
             "operation": "container inspect",
-            "at": 1792690057228
+            "at": 1792691918294
           },
           {
             "operation": "logs",
-            "at": 1792690057261
+            "at": 1792691918335
           }
         ]
       },
       "cleanup": {
         "containersRemoved": [
-          "loopy-attempt-36fedb9099f81724509858e1987b0b7e4afa12a453d00e103617ba3a631a2964"
+          "loopy-attempt-afe8d367871937e565e6f8c5b39f7d3de3bdec21c9954f5969c04e88d4b4d29c"
         ],
         "volumesCheckedAbsent": [
-          "loopy-input-36fedb9099f81724509858e1987b0b7e4afa12a453d00e103617ba3a631a2964",
-          "loopy-workspace-63d670a8eb0cd5f233373cde7b068c41188c025012fe60512c8375175afc97fa"
+          "loopy-input-afe8d367871937e565e6f8c5b39f7d3de3bdec21c9954f5969c04e88d4b4d29c",
+          "loopy-workspace-bda329a32bfea4e2e5c7c1b490d95880878e4c5510a05f320acd605f75622069"
         ],
         "ownedContainersRemaining": 0,
         "ownedVolumesRemaining": 0,
@@ -193,17 +184,17 @@
       "status": "passed",
       "proof": {
         "mode": "unavailable_inspect_socket",
-        "stateRoot": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/cloud-transport/run-auKdnO/runtime-root/.loopy/cloud/sandbox",
-        "owner": "a1455db3579388db51fe239bae2470367cdcdb48b72dbcdd3a08161c15f08bc0",
-        "receiptId": "24c18ad50e1d99e273fb23aadd982fad71b235a843a4c13fc5a8877e30ad4b96",
-        "container": "loopy-attempt-24c18ad50e1d99e273fb23aadd982fad71b235a843a4c13fc5a8877e30ad4b96",
-        "dockerContainerId": "67f6f21f75d51205a13d10249e09ec22505a4b60a7421822328562a5f93cfafb",
-        "workerStartedAt": "2026-10-22T17:27:38.758650313Z",
+        "stateRoot": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/cloud-transport/run-l4leXE/runtime-root/.loopy/cloud/sandbox",
+        "owner": "6dabd4a73ec74e3877975353908553271165da0901c7b52033a357b538912f71",
+        "receiptId": "3cb8135a2db7565423d3859f68c4e8da1ee13c71cb48f2578a6a2923d6b95c10",
+        "container": "loopy-attempt-3cb8135a2db7565423d3859f68c4e8da1ee13c71cb48f2578a6a2923d6b95c10",
+        "dockerContainerId": "2c3f27483b422ac132cd918401e81b45642bbfd0462985576cb39c162c0c3c2d",
+        "workerStartedAt": "2026-10-22T17:58:39.844673966Z",
         "imageWorkerSha256": "55f2fcb8fbc0d1c9fc4918a77b83e8ff2d629197ca6a45af50beba3bed8c3361",
-        "deadline": 1792690070573,
-        "reopenedAt": 1792690060389,
-        "completedAt": 1792690070707,
-        "completionRelativeToDeadlineMs": 134,
+        "deadline": 1792691931626,
+        "reopenedAt": 1792691921433,
+        "completedAt": 1792691931770,
+        "completionRelativeToDeadlineMs": 144,
         "result": {
           "kind": "failed",
           "error": {
@@ -228,91 +219,91 @@
           {
             "operation": "container inspect",
             "exitCode": 1,
-            "stderr": "failed to connect to the docker API at unix:///var/empty/loopy-transport-a1455db3579388db.sock; check if the path is correct and if the daemon is running: dial unix /var/empty/loopy-transport-a1455db3579388db.sock: connect: no such file or directory",
-            "at": "2026-10-22T17:27:38.907Z",
+            "stderr": "failed to connect to the docker API at unix:///var/empty/loopy-transport-6dabd4a73ec74e38.sock; check if the path is correct and if the daemon is running: dial unix /var/empty/loopy-transport-6dabd4a73ec74e38.sock: connect: no such file or directory",
+            "at": "2026-10-22T17:58:39.945Z",
             "workerRunning": true
           },
           {
             "operation": "container ls",
             "exitCode": 1,
-            "stderr": "failed to connect to the docker API at unix:///var/empty/loopy-transport-a1455db3579388db.sock; check if the path is correct and if the daemon is running: dial unix /var/empty/loopy-transport-a1455db3579388db.sock: connect: no such file or directory",
-            "at": "2026-10-22T17:27:38.972Z",
+            "stderr": "failed to connect to the docker API at unix:///var/empty/loopy-transport-6dabd4a73ec74e38.sock; check if the path is correct and if the daemon is running: dial unix /var/empty/loopy-transport-6dabd4a73ec74e38.sock: connect: no such file or directory",
+            "at": "2026-10-22T17:58:40.010Z",
             "workerRunning": true
           },
           {
             "operation": "container inspect",
             "exitCode": 1,
-            "stderr": "failed to connect to the docker API at unix:///var/empty/loopy-transport-a1455db3579388db.sock; check if the path is correct and if the daemon is running: dial unix /var/empty/loopy-transport-a1455db3579388db.sock: connect: no such file or directory",
-            "at": "2026-10-22T17:27:39.150Z",
+            "stderr": "failed to connect to the docker API at unix:///var/empty/loopy-transport-6dabd4a73ec74e38.sock; check if the path is correct and if the daemon is running: dial unix /var/empty/loopy-transport-6dabd4a73ec74e38.sock: connect: no such file or directory",
+            "at": "2026-10-22T17:58:40.176Z",
             "workerRunning": true
           }
         ],
         "dockerCalls": [
           {
             "operation": "create",
-            "at": 1792690058574
+            "at": 1792691919627
           },
           {
             "operation": "cp",
-            "at": 1792690058634
+            "at": 1792691919682
           },
           {
             "operation": "rm",
-            "at": 1792690058673
+            "at": 1792691919721
           },
           {
             "operation": "create",
-            "at": 1792690058716
+            "at": 1792691919759
           },
           {
             "operation": "start",
-            "at": 1792690058769
+            "at": 1792691919811
           },
           {
             "operation": "container inspect",
-            "at": 1792690058837
+            "at": 1792691919879
           },
           {
             "operation": "container ls",
-            "at": 1792690058907
+            "at": 1792691919945
           },
           {
             "operation": "container inspect",
-            "at": 1792690059073
+            "at": 1792691920111
           },
           {
             "operation": "container ls",
-            "at": 1792690059150
+            "at": 1792691920176
           },
           {
             "operation": "container inspect",
-            "at": 1792690060390
+            "at": 1792691921435
           },
           {
             "operation": "wait",
-            "at": 1792690060425
+            "at": 1792691921475
           },
           {
             "operation": "container inspect",
-            "at": 1792690070576
+            "at": 1792691931628
           },
           {
             "operation": "kill",
-            "at": 1792690070625
+            "at": 1792691931688
           },
           {
             "operation": "container inspect",
-            "at": 1792690070676
+            "at": 1792691931739
           }
         ]
       },
       "cleanup": {
         "containersRemoved": [
-          "loopy-attempt-24c18ad50e1d99e273fb23aadd982fad71b235a843a4c13fc5a8877e30ad4b96"
+          "loopy-attempt-3cb8135a2db7565423d3859f68c4e8da1ee13c71cb48f2578a6a2923d6b95c10"
         ],
         "volumesCheckedAbsent": [
-          "loopy-input-24c18ad50e1d99e273fb23aadd982fad71b235a843a4c13fc5a8877e30ad4b96",
-          "loopy-workspace-bee41a044153042548cbb07fe4c46a86904e7c4641ae8fd9a57062f08d507992"
+          "loopy-input-3cb8135a2db7565423d3859f68c4e8da1ee13c71cb48f2578a6a2923d6b95c10",
+          "loopy-workspace-eb8d231a86a21b1e7ec19b7f2db83d80d64c605a33bdef612655f64009bc45f2"
         ],
         "ownedContainersRemaining": 0,
         "ownedVolumesRemaining": 0,

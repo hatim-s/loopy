@@ -1,8 +1,8 @@
-# Phase 2 approval packet, draft
+# Full phase 2 rollout plan, draft
 
 No cloud action is authorized. Phase 1's final repository check and authenticated dashboard acceptance have passed. This draft does not yet request deployment approval because the staging adapter and configuration prerequisites below remain unimplemented. The branch stays separate from main even after cloud approval.
 
-## Proposed first cloud scope
+## Full staging scope after provider verification
 
 Start with fresh synthetic state in a staging environment. Do not upload `~/.loopy`, import personal receipts, copy local credentials or migrate running workflows. The local daemon remains usable on its current ports and configuration.
 
@@ -22,7 +22,7 @@ D1, KV, Queues and a separate cron service are not needed for the current atomic
 
 The official Modal TypeScript SDK supports Bun, Node 22+ and Deno. Its documentation does not promise Workers compatibility, so this plan uses a Bun bridge rather than assuming it bundles into workerd. The SDK remains beta. [Modal SDK reference](https://modal.com/docs/sdk/js/latest), [JavaScript SDK scope](https://modal.com/docs/guide/sdk-javascript-go).
 
-## Code required before the first deployment
+## Code required before the full staging deployment
 
 These files and commands are planned, not present or executed. Cloud approval should authorize the staging rollout only after the following code has a reviewed local diff and passing contract tests.
 
@@ -35,7 +35,7 @@ These files and commands are planned, not present or executed. Cloud approval sh
 
 The initial live verification must establish sandbox identity recovery, provider deadlines, volume visibility and resource cleanup before any personal workflow is admitted. These are the main remaining provider risks.
 
-## Approval-time inputs and command sequence
+## Full staging inputs and command sequence
 
 The approval must identify the Cloudflare account, Modal workspace/environment, staging hostname, initial allowed user/workspace, spending ceiling and retention period. Credentials are entered through a private secret mechanism, never chat. Account-scoped tokens should be limited to this Worker, its DOs/containers and its R2 bucket where the providers support that scope.
 
@@ -89,3 +89,7 @@ Rollback stops new admission and disables schedules, records active provider IDs
 ## Gate
 
 Pending before this packet is ready for deployment approval: a concrete reviewed staging-adapter/configuration diff. Additional isolated Docker transport-failure verification has passed. Final phase 1 check and authenticated dashboard acceptance have passed. No approval has been requested or inferred. No cloud resource, remote migration, deployment or paid workload has run from this branch.
+
+## First proposed cloud action is narrower
+
+The readiness review found no new phase 1 acceptance blocker, but full staging is not deployable. The first cloud approval request will instead cover a bounded Modal provider probe after its local script and tests are reviewed. See `MODAL-PROBE.md`. It will not deploy this Worker, create Cloudflare resources, migrate personal state or admit workflows. The full staging implementation and approval described above remain later work.
