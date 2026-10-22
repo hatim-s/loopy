@@ -10,6 +10,7 @@ import {
   startServer,
 } from "../../../packages/loopy/src/local/server/start-server.ts";
 import { localHttpBackend } from "../src/backend/local-http.ts";
+import { checkAccess } from "../src/lib/connection.ts";
 
 const cleanups: (() => void | Promise<void>)[] = [];
 
@@ -218,4 +219,26 @@ test("public host handler uses its configured origin without trusting forwarded 
       originSecurity({ publicOrigin: "https://api.example", allowedOrigins: [origin] }),
     ).toThrow();
   }
+});
+
+test("access gate opens only for the current token and sends nothing without one", async () => {
+  const f = launch();
+
+  const access = (token: string | null, baseUrl = f.baseUrl) =>
+    checkAccess(localHttpBackend({ baseUrl, token }), token);
+
+  expect(await access(f.token)).toBe("open");
+  expect(await access("token-from-a-previous-daemon")).toBe("rejected");
+  const fetches = spyOn(globalThis, "fetch");
+
+  try {
+    expect(await access(null)).toBe("missing");
+    expect(fetches).not.toHaveBeenCalled();
+  } finally {
+    fetches.mockRestore();
+  }
+
+  const closed = Bun.serve({ port: 0, fetch: () => new Response() });
+  await closed.stop(true);
+  expect(await access(f.token, closed.url.origin)).toBe("unreachable");
 });
