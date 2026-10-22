@@ -1,0 +1,26 @@
+{
+  "status": "passed",
+  "scope": "local-wrangler-docker",
+  "batch": "playground-2026-10-22T19-54-57-063Z",
+  "group": "a",
+  "phase": "preflight",
+  "startedAt": "2026-10-22T19:58:53.716Z",
+  "endedAt": "2026-10-22T19:58:55.234Z",
+  "planned": 1,
+  "completed": 1,
+  "results": [
+    {
+      "runId": "45d39a62-fc19-4837-888d-6c876f199a40",
+      "slug": "playground-a-format-report",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z-preflight/playground-a-format-report/45d39a62-fc19-4837-888d-6c876f199a40.json",
+        "sha256": "b8b7717d5bbfa5e6e544fba5855ce8201561386b6a4ce72acd3ba1d3083d246e",
+        "bytes": 314
+      }
+    }
+  ]
+}

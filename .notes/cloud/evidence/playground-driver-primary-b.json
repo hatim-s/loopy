@@ -1,0 +1,2798 @@
+{
+  "status": "passed",
+  "scope": "local-wrangler-docker",
+  "batch": "playground-2026-10-22T19-54-57-063Z",
+  "group": "b",
+  "phase": "primary",
+  "startedAt": "2026-10-22T20:14:11.471Z",
+  "endedAt": "2026-10-22T20:20:50.558Z",
+  "planned": 200,
+  "completed": 200,
+  "results": [
+    {
+      "runId": "7177cae6-87c7-4dc8-9bd3-4e445493c851",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/7177cae6-87c7-4dc8-9bd3-4e445493c851.json",
+        "sha256": "5b06b1a42596183e2f490f3d3e324f6a3f15b2ed48be7b261c6b30ca39f1670c",
+        "bytes": 169
+      }
+    },
+    {
+      "runId": "d535e078-29ad-4ef1-87e0-ea0251bc7570",
+      "slug": "playground-b-parallel-build",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-parallel-build/d535e078-29ad-4ef1-87e0-ea0251bc7570.json",
+        "sha256": "87b3ec92fcffd7fed502ecb5bf0d30c3737e1bec100c24483f5d617484851ad4",
+        "bytes": 170
+      }
+    },
+    {
+      "runId": "a4d1f2b7-b25f-46b9-a4f7-253e7e63b2a1",
+      "slug": "playground-b-retry-marker",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-retry-marker/a4d1f2b7-b25f-46b9-a4f7-253e7e63b2a1.json",
+        "sha256": "4157cb81e6a78675fa90caac35852d0de28b6fafcf9e527aba79e63bb2089dda",
+        "bytes": 168
+      }
+    },
+    {
+      "runId": "8ce6587b-9ee7-4bdd-9638-cae1e7b824da",
+      "slug": "playground-b-log-audit",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-log-audit/8ce6587b-9ee7-4bdd-9638-cae1e7b824da.json",
+        "sha256": "2e428b3fb6c6ffc015b47aaa08b64f374250a0a706e66f39862ffe2573ad95ed",
+        "bytes": 157
+      }
+    },
+    {
+      "runId": "2c577997-056f-4420-8a86-b88761492c2e",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/2c577997-056f-4420-8a86-b88761492c2e.json",
+        "sha256": "c3636bac27f343aa5f8332629ea4e374aa4c62605466bb9fa33ee0f42fa02d8f",
+        "bytes": 170
+      }
+    },
+    {
+      "runId": "41f81f29-6070-435c-9a9f-c41a546e4b1e",
+      "slug": "playground-b-parallel-build",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-parallel-build/41f81f29-6070-435c-9a9f-c41a546e4b1e.json",
+        "sha256": "ba23c05ff6010ee370e139aed6b48695303199463cb92dc2bdb5952f70080524",
+        "bytes": 170
+      }
+    },
+    {
+      "runId": "4228f8d7-e830-4c86-991b-6ba12b2589cb",
+      "slug": "playground-b-log-audit",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-log-audit/4228f8d7-e830-4c86-991b-6ba12b2589cb.json",
+        "sha256": "34284db53c969616e57e068b3e7446b434630a8f58431804638da09a18313f5f",
+        "bytes": 157
+      }
+    },
+    {
+      "runId": "dfbef039-9700-47f1-b2ad-6c916ea84f1f",
+      "slug": "playground-b-retry-marker",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-retry-marker/dfbef039-9700-47f1-b2ad-6c916ea84f1f.json",
+        "sha256": "3fd584eb17f467ebdeb5f1709400e71723fba21077a7c6e6ad51feb08097f7ec",
+        "bytes": 168
+      }
+    },
+    {
+      "runId": "7470d1b2-cea3-42ab-98f5-729d67e4e2ef",
+      "slug": "playground-b-release-approval",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-22T20:14:12.831Z",
+        "dueAt": 1792700062831,
+        "resolvedAt": "2026-10-22T20:14:23.647Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-release-approval/7470d1b2-cea3-42ab-98f5-729d67e4e2ef.json",
+        "sha256": "a327f445b55c07725ac7c7fbdb964d3aa61752ec5f91b4c9e24a612d4af0a93b",
+        "bytes": 166
+      }
+    },
+    {
+      "runId": "cbb8ac99-a9e0-4aa9-ab01-e38f0bd39099",
+      "slug": "playground-b-parallel-build",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-parallel-build/cbb8ac99-a9e0-4aa9-ab01-e38f0bd39099.json",
+        "sha256": "83df403178f6a32d55724690017e62604bcf013ebf87d9d893ef3a5a417d2454",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "7062b47a-4313-40b4-b31f-3bc9565548c2",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/7062b47a-4313-40b4-b31f-3bc9565548c2.json",
+        "sha256": "3e41ed1804c5a1f7dfdbfaac38cc8e6b36d01c1c11a33004e47d17a99be3f43a",
+        "bytes": 170
+      }
+    },
+    {
+      "runId": "17ae398d-f454-45d6-93c7-334f043a2546",
+      "slug": "playground-b-retry-marker",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-retry-marker/17ae398d-f454-45d6-93c7-334f043a2546.json",
+        "sha256": "e76b150a2ad2d0ccbce2ff20e849fe0843f6cbd31e181f9d8bf6716cf3a4fbed",
+        "bytes": 168
+      }
+    },
+    {
+      "runId": "4a2a7e6a-35cb-4443-b16c-cae971a2d1c5",
+      "slug": "playground-b-log-audit",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-log-audit/4a2a7e6a-35cb-4443-b16c-cae971a2d1c5.json",
+        "sha256": "0262dd29fa48214421a0adc622cc588322673158ee1ba2894ec00c256fc5050f",
+        "bytes": 157
+      }
+    },
+    {
+      "runId": "f2037d3c-94fa-41cd-b20f-5e2b0fe244ac",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/f2037d3c-94fa-41cd-b20f-5e2b0fe244ac.json",
+        "sha256": "8aca1d2531b0a2ac62a917070da3c45b82fd5d8e3d445f3acf5256556a0dd10a",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "ca2bf9bf-6e66-401c-9b2f-5792f61becd4",
+      "slug": "playground-b-parallel-build",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-parallel-build/ca2bf9bf-6e66-401c-9b2f-5792f61becd4.json",
+        "sha256": "d2c280e407ab36e8d5e27d32ee9e845208fdca1eed4dea6cd96338982fe5e2a8",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "558872b0-d11d-4373-b830-61b08cebc7c1",
+      "slug": "playground-b-retry-marker",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-retry-marker/558872b0-d11d-4373-b830-61b08cebc7c1.json",
+        "sha256": "d7f1680ac7d17af8e1913760831acd44f442bf63c7bc552f128191b2f9332fae",
+        "bytes": 169
+      }
+    },
+    {
+      "runId": "5f4b9adc-38c7-48a4-b79e-6b2b5b9228f4",
+      "slug": "playground-b-log-audit",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-log-audit/5f4b9adc-38c7-48a4-b79e-6b2b5b9228f4.json",
+        "sha256": "48a41e074c9507c00f913dab1001783c62742a54bb9f5932a19d31fcb897e7c7",
+        "bytes": 157
+      }
+    },
+    {
+      "runId": "d5d9b119-d7e5-4a73-bbc9-64f55c65fa24",
+      "slug": "playground-b-release-approval",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-22T20:14:21.553Z",
+        "dueAt": 1792700078553,
+        "resolvedAt": "2026-10-22T20:14:39.598Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-release-approval/d5d9b119-d7e5-4a73-bbc9-64f55c65fa24.json",
+        "sha256": "a1d57f37571ae0b7336685bb522105e993d6918ad25c1489a38af85276fcb535",
+        "bytes": 166
+      }
+    },
+    {
+      "runId": "94a211ba-a929-45e6-930b-a82558601215",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/94a211ba-a929-45e6-930b-a82558601215.json",
+        "sha256": "e151bd95672a1a946b2fa76a19feb7c7059b5665ac532fad56195c5ec3d059d8",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "938ac489-7c39-4d8f-a546-ca7c30620499",
+      "slug": "playground-b-parallel-build",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-parallel-build/938ac489-7c39-4d8f-a546-ca7c30620499.json",
+        "sha256": "7993fa7ff7d5471eef150aa2f6cadfd3840a7ccac8745fb2224ce8d198326146",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "3bb7b206-0c5d-4882-bf05-4e804f02726a",
+      "slug": "playground-b-retry-marker",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-retry-marker/3bb7b206-0c5d-4882-bf05-4e804f02726a.json",
+        "sha256": "76b42124cbddb85db26cce6d95186a0f0470532e41eb6ca3b4324a245bfc8051",
+        "bytes": 169
+      }
+    },
+    {
+      "runId": "214fda40-95f2-457b-b9f2-d99543bed9c5",
+      "slug": "playground-b-log-audit",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-log-audit/214fda40-95f2-457b-b9f2-d99543bed9c5.json",
+        "sha256": "2b33b134654988b5dce4972db8621a68cfe9e27d5c79813ed72cabf524b2f5d5",
+        "bytes": 158
+      }
+    },
+    {
+      "runId": "a686639c-3a77-467e-8d8a-7b6516200510",
+      "slug": "playground-b-test-matrix",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "8f751bd4-3a3c-4acf-b89c-a9601aecd38c",
+      "slug": "playground-b-parallel-build",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "faafcfe5-0e79-442a-b4e0-5951bac6d6b4",
+      "slug": "playground-b-release-approval",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-22T20:14:28.199Z",
+        "dueAt": 1792700092199,
+        "resolvedAt": "2026-10-22T20:14:52.895Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-release-approval/faafcfe5-0e79-442a-b4e0-5951bac6d6b4.json",
+        "sha256": "629981242088c8a7bdf0bcdce849bafde62d0b1cf1a3d2f00318966198bf7770",
+        "bytes": 166
+      }
+    },
+    {
+      "runId": "18896492-4d49-48fc-a7f6-db084dd2f672",
+      "slug": "playground-b-retry-marker",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "516f4a43-4647-4b57-807c-d5a70abc6597",
+      "slug": "playground-b-log-audit",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "70b8aeee-5888-42e3-912f-7c31260a3bc1",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/70b8aeee-5888-42e3-912f-7c31260a3bc1.json",
+        "sha256": "d6af7d6baf2637db559bb79a599f91a40ccd294539b79e59969aa1b139c36d98",
+        "bytes": 170
+      }
+    },
+    {
+      "runId": "92251bbe-c7be-4412-9a5c-13519f3aec8d",
+      "slug": "playground-b-parallel-build",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-parallel-build/92251bbe-c7be-4412-9a5c-13519f3aec8d.json",
+        "sha256": "b98f410892aba5220d36e898cd0d644050894ff9393d2251e8805ad60ad2b886",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "2231b313-be72-41bd-8ed1-6986190c4ba9",
+      "slug": "playground-b-retry-marker",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-retry-marker/2231b313-be72-41bd-8ed1-6986190c4ba9.json",
+        "sha256": "029fbb67dee46ac0896a102816e0c55598624275b7ff41ee725f6ca7546246df",
+        "bytes": 169
+      }
+    },
+    {
+      "runId": "38ce8fe9-76dc-4635-bc78-ec6dc4a55c7c",
+      "slug": "playground-b-release-approval",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-22T20:14:35.135Z",
+        "dueAt": 1792700106135,
+        "resolvedAt": "2026-10-22T20:15:06.945Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-release-approval/38ce8fe9-76dc-4635-bc78-ec6dc4a55c7c.json",
+        "sha256": "57a060707d00030a45e131b74ae4c927198f8b059053769b630fb6ebb9168169",
+        "bytes": 166
+      }
+    },
+    {
+      "runId": "e85b1236-e098-44b2-b7d1-df36880a9b2f",
+      "slug": "playground-b-log-audit",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-log-audit/e85b1236-e098-44b2-b7d1-df36880a9b2f.json",
+        "sha256": "3807baa4028f2851a217c6235519ba895d1744c109f9bf215fed06f164fe934e",
+        "bytes": 158
+      }
+    },
+    {
+      "runId": "480754fe-ccfe-4462-8fff-5e567675c43e",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/480754fe-ccfe-4462-8fff-5e567675c43e.json",
+        "sha256": "563ff41197796b97140fbc70ddbdaf03da3a7af581cf723b7309b98049c878ac",
+        "bytes": 169
+      }
+    },
+    {
+      "runId": "a4786fc5-5570-4027-bb5d-680129d6e2d1",
+      "slug": "playground-b-parallel-build",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-parallel-build/a4786fc5-5570-4027-bb5d-680129d6e2d1.json",
+        "sha256": "141a3932d2ceb2fe36b47a91eb24c84476e099fe26fffac540513cb6e2d4df1f",
+        "bytes": 170
+      }
+    },
+    {
+      "runId": "700da460-7cff-43fc-8f7f-db60f7fb01fc",
+      "slug": "playground-b-retry-marker",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-retry-marker/700da460-7cff-43fc-8f7f-db60f7fb01fc.json",
+        "sha256": "89c51db654a11badd25e7040d763753649c692b1a049ddcfc3a1e2c9ac071a8d",
+        "bytes": 168
+      }
+    },
+    {
+      "runId": "a3b08f07-70dd-4f0e-b4e6-babefade474e",
+      "slug": "playground-b-release-approval",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-22T20:15:07.496Z",
+        "dueAt": 1792700123496,
+        "resolvedAt": "2026-10-22T20:15:24.029Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-release-approval/a3b08f07-70dd-4f0e-b4e6-babefade474e.json",
+        "sha256": "ba6264d9897c411026aed956e916d6a87aa13ef0ca254a3ae391ae526a3845ed",
+        "bytes": 167
+      }
+    },
+    {
+      "runId": "d0a02d0e-008f-4c8c-8dc2-a8f1713e3ff9",
+      "slug": "playground-b-release-approval",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-22T20:14:46.081Z",
+        "dueAt": 1792700124081,
+        "resolvedAt": "2026-10-22T20:15:24.546Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-release-approval/d0a02d0e-008f-4c8c-8dc2-a8f1713e3ff9.json",
+        "sha256": "131b80956351300c8f51981a1392de5654a4d36bfd9ee73f806fdd2cc6ab3fe5",
+        "bytes": 167
+      }
+    },
+    {
+      "runId": "d46843c2-7524-4d4a-9707-0e408d990c09",
+      "slug": "playground-b-log-audit",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-log-audit/d46843c2-7524-4d4a-9707-0e408d990c09.json",
+        "sha256": "56b806230a2726e4d6d572531884843a639d0658ed53cc11eecc4b5eb17297cd",
+        "bytes": 157
+      }
+    },
+    {
+      "runId": "eebe368a-a883-4469-89d4-b538df0f4810",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/eebe368a-a883-4469-89d4-b538df0f4810.json",
+        "sha256": "21546b1e2bf2fad2eb4412b7ae315b517c253f7f7ab8719424256f05a04f2a85",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "3f82a6d6-1768-4f50-bae7-12282df08611",
+      "slug": "playground-b-parallel-build",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-parallel-build/3f82a6d6-1768-4f50-bae7-12282df08611.json",
+        "sha256": "5e51ec7cbf23255550b07ef3e3f921d09f0efb1a59fc23fd06f4bbc774d9117c",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "9ef279ac-75cf-4de0-8ba7-eb820393750e",
+      "slug": "playground-b-retry-marker",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-retry-marker/9ef279ac-75cf-4de0-8ba7-eb820393750e.json",
+        "sha256": "9039df473dcb2281c60f0fc52cc21d25a86240969638ebfd857633164472a7e4",
+        "bytes": 168
+      }
+    },
+    {
+      "runId": "e8d6ab6f-b428-4c67-9488-3bf9b523239f",
+      "slug": "playground-b-log-audit",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-log-audit/e8d6ab6f-b428-4c67-9488-3bf9b523239f.json",
+        "sha256": "df307ad9fd8cd6be6336b1324dc0924d82b5ea9674674c72c9366d1975b81595",
+        "bytes": 157
+      }
+    },
+    {
+      "runId": "e267695e-e674-49e0-8c7f-a405600bb612",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/e267695e-e674-49e0-8c7f-a405600bb612.json",
+        "sha256": "ff0db1e55cdad92856a3df0b46e34d917457fe27ef44b5ea4f7d5ea216c8b8c8",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "8f840dc7-f320-4697-baa6-441c99fa6ab5",
+      "slug": "playground-b-parallel-build",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-parallel-build/8f840dc7-f320-4697-baa6-441c99fa6ab5.json",
+        "sha256": "f81753502fcc485de17b871a2a1b72b0bd566c9e27fac8eb3f9668d008e7e536",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "3afe3a47-a9c9-4789-b7b6-e22e72471ed8",
+      "slug": "playground-b-release-approval",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-22T20:14:55.806Z",
+        "dueAt": 1792700140806,
+        "resolvedAt": "2026-10-22T20:15:41.400Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-release-approval/3afe3a47-a9c9-4789-b7b6-e22e72471ed8.json",
+        "sha256": "f7fd1f4141ee8a537611662c40d1bb057a2a18db783078350153b5d6968783b1",
+        "bytes": 166
+      }
+    },
+    {
+      "runId": "4d820917-82dc-486d-a9df-fd6876a86ee6",
+      "slug": "playground-b-release-approval",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-22T20:15:20.496Z",
+        "dueAt": 1792700143496,
+        "resolvedAt": "2026-10-22T20:15:43.906Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-release-approval/4d820917-82dc-486d-a9df-fd6876a86ee6.json",
+        "sha256": "596af9d4d5228a5c5131e7277023155c622cff4e8a9f7b66662626780156c61c",
+        "bytes": 166
+      }
+    },
+    {
+      "runId": "97fd8968-eff8-4ba5-8003-ca15f02e6c2d",
+      "slug": "playground-b-retry-marker",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-retry-marker/97fd8968-eff8-4ba5-8003-ca15f02e6c2d.json",
+        "sha256": "4a30cf011e6c41a13e6c4753315a8ab9bcac8b4afe65b1f3a1c2bc5bf42e779a",
+        "bytes": 169
+      }
+    },
+    {
+      "runId": "605cdca1-dc82-4961-b991-2aebb7738f48",
+      "slug": "playground-b-log-audit",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-log-audit/605cdca1-dc82-4961-b991-2aebb7738f48.json",
+        "sha256": "7b501cb548147bc5eb43dc65e0e999d66f1d7bcc96935e14b249cc31ffcd2e43",
+        "bytes": 157
+      }
+    },
+    {
+      "runId": "2d2eb2fb-54e5-4eee-894e-083043861ef3",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/2d2eb2fb-54e5-4eee-894e-083043861ef3.json",
+        "sha256": "7e4994582e0087a6dc37d2942fb2a89ce798dc8495154791acbe613607874382",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "68ef4147-cc33-46fb-a0ee-9e2aeea64820",
+      "slug": "playground-b-parallel-build",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-parallel-build/68ef4147-cc33-46fb-a0ee-9e2aeea64820.json",
+        "sha256": "f1f6bed3af8a03555a5e8feb95d4e0e0d5aaf369a861484eccec8a23f8d9c4a1",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "614a2df7-6268-4f27-921c-55a23f0ae223",
+      "slug": "playground-b-retry-marker",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-retry-marker/614a2df7-6268-4f27-921c-55a23f0ae223.json",
+        "sha256": "589ee7c05bdfdaf3e9fac161d46bea6ee4d4cda93f3c73c8ca356173a825d00b",
+        "bytes": 169
+      }
+    },
+    {
+      "runId": "7592371d-9c52-4c50-a9a7-efd966c68001",
+      "slug": "playground-b-log-audit",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-log-audit/7592371d-9c52-4c50-a9a7-efd966c68001.json",
+        "sha256": "47def7f49357a5cfcf0d74202504f55da420a62ccd9380bca69d4a544c8bba69",
+        "bytes": 158
+      }
+    },
+    {
+      "runId": "8558f269-e569-4de3-8ca1-439e40c25eb1",
+      "slug": "playground-b-test-matrix",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "dba013cc-8116-4c19-8745-50ea6b8cc25c",
+      "slug": "playground-b-parallel-build",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "9e3779b7-81b2-48ac-9ccc-bb93c1a339ce",
+      "slug": "playground-b-release-approval",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-22T20:15:31.918Z",
+        "dueAt": 1792700161918,
+        "resolvedAt": "2026-10-22T20:16:02.274Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-release-approval/9e3779b7-81b2-48ac-9ccc-bb93c1a339ce.json",
+        "sha256": "205207dad63cf195e62b568a7db7d82138718ac1f10d2ceea0d6e884254cdca9",
+        "bytes": 166
+      }
+    },
+    {
+      "runId": "8f5c0d09-645c-41fd-ae83-20486cf3f102",
+      "slug": "playground-b-retry-marker",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "d59d0b6d-b954-409e-8486-7f7b6ab08731",
+      "slug": "playground-b-log-audit",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "5c1aec13-a94b-473b-b604-3d0f03b3e0c7",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/5c1aec13-a94b-473b-b604-3d0f03b3e0c7.json",
+        "sha256": "c1e11944504ed64eba006729f5c24422d5a95a361e5cf5178e6af8b46d8a0af1",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "90f704e9-6c93-487c-a08d-92c9f3452910",
+      "slug": "playground-b-parallel-build",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-parallel-build/90f704e9-6c93-487c-a08d-92c9f3452910.json",
+        "sha256": "6d16603c048e883d84d03af74093f16c5811bc3d53807bc93d8cddcb100c571e",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "48b5d3a8-2c02-4803-baef-1a8e2a749c67",
+      "slug": "playground-b-retry-marker",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-retry-marker/48b5d3a8-2c02-4803-baef-1a8e2a749c67.json",
+        "sha256": "943e7174bbe45a95a5e81824ceb677057d11cf372c8293e0588023908facccc9",
+        "bytes": 170
+      }
+    },
+    {
+      "runId": "490ce5c6-848a-4c9b-bc7f-c79d7c2bd064",
+      "slug": "playground-b-release-approval",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-22T20:16:04.924Z",
+        "dueAt": 1792700179924,
+        "resolvedAt": "2026-10-22T20:16:19.971Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-release-approval/490ce5c6-848a-4c9b-bc7f-c79d7c2bd064.json",
+        "sha256": "b72c8757b7fc0ecbf811f06ffaf760f6967a37f583f8f73ba7db5a31a511b14a",
+        "bytes": 167
+      }
+    },
+    {
+      "runId": "6f6ec41f-9811-49ec-8808-536afe51f762",
+      "slug": "playground-b-release-approval",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-22T20:15:44.078Z",
+        "dueAt": 1792700181078,
+        "resolvedAt": "2026-10-22T20:16:21.559Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-release-approval/6f6ec41f-9811-49ec-8808-536afe51f762.json",
+        "sha256": "7f6977186fc6ca36d6f8ef2c9aa123aef9a604caaa2562222b042e9f384ebeb5",
+        "bytes": 166
+      }
+    },
+    {
+      "runId": "495ecb23-ad0a-4655-acd0-280afa4613ea",
+      "slug": "playground-b-log-audit",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-log-audit/495ecb23-ad0a-4655-acd0-280afa4613ea.json",
+        "sha256": "64aa5c593abc9248fc858a409e80db5494fd152e503065899017196f65a351e9",
+        "bytes": 159
+      }
+    },
+    {
+      "runId": "e6c3fffb-7ad0-4c37-90be-b87dbf60d4ac",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/e6c3fffb-7ad0-4c37-90be-b87dbf60d4ac.json",
+        "sha256": "f1beba764fca50fe7edb59bc0afd729870d2efcd962174dd3b5f88a8388053c2",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "f5b3dc80-42b9-47df-a801-6c765aed1366",
+      "slug": "playground-b-parallel-build",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-parallel-build/f5b3dc80-42b9-47df-a801-6c765aed1366.json",
+        "sha256": "f54eed6bf7b8d84459a2bcb93904f06ce75c5c4bb1f423b115ad6efd5acad15e",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "f61f176d-0d98-4c42-a1ae-bd501166115a",
+      "slug": "playground-b-retry-marker",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-retry-marker/f61f176d-0d98-4c42-a1ae-bd501166115a.json",
+        "sha256": "96fa4eda1e617c46690d2d57dba5e62aef3ecd1ef45149836e28c81c92100420",
+        "bytes": 170
+      }
+    },
+    {
+      "runId": "8439ce45-dc9e-4556-ae90-4550b11fb1d8",
+      "slug": "playground-b-log-audit",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-log-audit/8439ce45-dc9e-4556-ae90-4550b11fb1d8.json",
+        "sha256": "88b42fe6021f705e6a30defebf6e9cff72ff5dc6c93e3f842707324e1607c3ce",
+        "bytes": 159
+      }
+    },
+    {
+      "runId": "49b23b54-3e85-4f6f-9aec-a58bc0d3b800",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/49b23b54-3e85-4f6f-9aec-a58bc0d3b800.json",
+        "sha256": "b3bd33a45329708860edfc709a186506340dde062a1a4b179574bccf0280a9bc",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "e5debec0-0c93-434e-8dd2-e7a3aba77731",
+      "slug": "playground-b-release-approval",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-22T20:15:53.765Z",
+        "dueAt": 1792700197765,
+        "resolvedAt": "2026-10-22T20:16:38.000Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-release-approval/e5debec0-0c93-434e-8dd2-e7a3aba77731.json",
+        "sha256": "fe1e5d1636029b9583c71fb7ad213725c9a6f5224d68e00006e9612f5e6e95da",
+        "bytes": 167
+      }
+    },
+    {
+      "runId": "9e50c24e-63ee-4582-ba18-3c8f465658e9",
+      "slug": "playground-b-parallel-build",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-parallel-build/9e50c24e-63ee-4582-ba18-3c8f465658e9.json",
+        "sha256": "e6e35b254218a3d6d6bd30137fe3e26eaca2d42bdaba79c82edcfcfc701299de",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "5fc04577-9d24-4222-bd57-7b8fe1b77a0e",
+      "slug": "playground-b-retry-marker",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-retry-marker/5fc04577-9d24-4222-bd57-7b8fe1b77a0e.json",
+        "sha256": "e6aabf78cf8fe19caefc32a456eb1225ba3189a7d48911f292920c213671761c",
+        "bytes": 169
+      }
+    },
+    {
+      "runId": "b64913c1-d99b-4d79-af0e-102c7613c323",
+      "slug": "playground-b-release-approval",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-22T20:16:19.436Z",
+        "dueAt": 1792700201436,
+        "resolvedAt": "2026-10-22T20:16:42.417Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-release-approval/b64913c1-d99b-4d79-af0e-102c7613c323.json",
+        "sha256": "76eec8ce7826bd2ab08692fe6b107835d192a2d64250f4c64808362fb20eeab5",
+        "bytes": 168
+      }
+    },
+    {
+      "runId": "3a018c2f-e3c8-40a8-af9a-ac6deb052a74",
+      "slug": "playground-b-log-audit",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-log-audit/3a018c2f-e3c8-40a8-af9a-ac6deb052a74.json",
+        "sha256": "9a9a3f4ae0da2e547a5d559f905ff093080b24e70f5169ca526bb09c48978c46",
+        "bytes": 158
+      }
+    },
+    {
+      "runId": "fe767cd4-8a02-48fa-a345-8b806289e98c",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/fe767cd4-8a02-48fa-a345-8b806289e98c.json",
+        "sha256": "6da2a417be5ae6bc3248a9d40ba2b53b326e3f88e338f305a57f5ae949775028",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "959ba099-0515-49e4-9355-12a4b7e6e261",
+      "slug": "playground-b-parallel-build",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-parallel-build/959ba099-0515-49e4-9355-12a4b7e6e261.json",
+        "sha256": "412843603ee9f1ae108530b20b12ab3dd570a1a299fe3463c90e07eeeb646baf",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "870ee20b-ef63-4756-b3af-ee0bfbfe6331",
+      "slug": "playground-b-retry-marker",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-retry-marker/870ee20b-ef63-4756-b3af-ee0bfbfe6331.json",
+        "sha256": "0c63e245461f2b03fe042a2db79601c8254ddd957fc62c0eb4a7cb6942e6fdb8",
+        "bytes": 169
+      }
+    },
+    {
+      "runId": "7c7562c1-eeb4-4a75-b33f-b46cd2e6e8f5",
+      "slug": "playground-b-log-audit",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-log-audit/7c7562c1-eeb4-4a75-b33f-b46cd2e6e8f5.json",
+        "sha256": "198c640372b3139609b73e44d29cdb671444245f13afb9635e07eaf83df575d7",
+        "bytes": 158
+      }
+    },
+    {
+      "runId": "87ce5d26-d1ec-466f-aa94-2abbce3b3cf0",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/87ce5d26-d1ec-466f-aa94-2abbce3b3cf0.json",
+        "sha256": "90a0414d8a61bfd55c3270e615f3683a90685a796ace5e839a8fdfb52afe42ce",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "a5662112-b170-4dda-a459-9ff56a70372b",
+      "slug": "playground-b-release-approval",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-22T20:16:29.590Z",
+        "dueAt": 1792700218590,
+        "resolvedAt": "2026-10-22T20:16:59.252Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-release-approval/a5662112-b170-4dda-a459-9ff56a70372b.json",
+        "sha256": "4a5d94fa7c71933a7502c41ab0ac350bcab23c415c98d1f42d59dc49b8541827",
+        "bytes": 168
+      }
+    },
+    {
+      "runId": "501037dc-3a61-45ef-a4d3-7b3286b7662c",
+      "slug": "playground-b-parallel-build",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-parallel-build/501037dc-3a61-45ef-a4d3-7b3286b7662c.json",
+        "sha256": "b5c2b4aa92fa91ae297529785b263212aff1118026f627f43f2ccfe132c42728",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "b269398a-ca01-4193-84e6-f6078671ddbc",
+      "slug": "playground-b-retry-marker",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-retry-marker/b269398a-ca01-4193-84e6-f6078671ddbc.json",
+        "sha256": "8edcbab6ec65aee151cd75af07e847ec2c6d3a0b83ed43e138050f699d6cb089",
+        "bytes": 169
+      }
+    },
+    {
+      "runId": "70098734-b292-4dcd-9d13-21422b2a4dde",
+      "slug": "playground-b-log-audit",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-log-audit/70098734-b292-4dcd-9d13-21422b2a4dde.json",
+        "sha256": "8dd5a8bf1a1eadc58796d662d3958e168e5c07065b9feafb63018cd49c5e13dd",
+        "bytes": 158
+      }
+    },
+    {
+      "runId": "a070945d-09b5-4484-9133-3ff10f988f3e",
+      "slug": "playground-b-test-matrix",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "e5556faa-94ab-4dde-b1ed-907a85a337d6",
+      "slug": "playground-b-parallel-build",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "5638ca65-b648-4da3-9dbe-ac0267d3d1be",
+      "slug": "playground-b-retry-marker",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "8b21a29c-2bb2-401b-8e80-4841329406fd",
+      "slug": "playground-b-release-approval",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-22T20:16:41.679Z",
+        "dueAt": 1792700237679,
+        "resolvedAt": "2026-10-22T20:17:18.278Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-release-approval/8b21a29c-2bb2-401b-8e80-4841329406fd.json",
+        "sha256": "0616c4d5f87de347752f240e464e16a350709b781b9151e1c3ba28ad0270328b",
+        "bytes": 167
+      }
+    },
+    {
+      "runId": "02d047ef-2004-42cb-909b-bb58808f5aa1",
+      "slug": "playground-b-log-audit",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "d462f560-efe2-4db3-a433-d05955a00395",
+      "slug": "playground-b-release-approval",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-22T20:17:07.354Z",
+        "dueAt": 1792700241354,
+        "resolvedAt": "2026-10-22T20:17:22.100Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-release-approval/d462f560-efe2-4db3-a433-d05955a00395.json",
+        "sha256": "b3caeb40dcd3ebf541680cd228da816dcef6d790444a80c271669be6bb5c9861",
+        "bytes": 167
+      }
+    },
+    {
+      "runId": "28e711ee-256e-49a9-992a-7ae1b63a9466",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/28e711ee-256e-49a9-992a-7ae1b63a9466.json",
+        "sha256": "d45418aa9b17278544bd77cf8927be88246e2f89cd617919ba4e2e60ed404496",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "feccfbbc-8088-49f6-bad2-1a0f066c3741",
+      "slug": "playground-b-parallel-build",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-parallel-build/feccfbbc-8088-49f6-bad2-1a0f066c3741.json",
+        "sha256": "e7e7c1e8f50d807fd604288f6cb7a14791970d94affa6453d1ac99cce2842296",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "6564ecb6-a3ad-4715-a67f-86b88379a649",
+      "slug": "playground-b-retry-marker",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-retry-marker/6564ecb6-a3ad-4715-a67f-86b88379a649.json",
+        "sha256": "e9f2f6ff3afe1b4d0681e9b9a56c5387a2f7ebb56ff4479b5d222253bba2dee9",
+        "bytes": 170
+      }
+    },
+    {
+      "runId": "2e529914-c00b-4d8a-b9df-75b1d35e4d71",
+      "slug": "playground-b-log-audit",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-log-audit/2e529914-c00b-4d8a-b9df-75b1d35e4d71.json",
+        "sha256": "721d63bd2e8631aeee726642a30035d28feed7bb36129b844316cd2051cfbada",
+        "bytes": 159
+      }
+    },
+    {
+      "runId": "fd7c10ca-35f5-4649-bd7f-b50eaf7b160c",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/fd7c10ca-35f5-4649-bd7f-b50eaf7b160c.json",
+        "sha256": "a97cf3c25b9ff898b7a425192aefbdb998ef968c4cb384b90c576f993e86cf7e",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "843c6357-1fb6-4892-a668-3cf2eeada667",
+      "slug": "playground-b-release-approval",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-22T20:16:50.606Z",
+        "dueAt": 1792700253606,
+        "resolvedAt": "2026-10-22T20:17:34.325Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-release-approval/843c6357-1fb6-4892-a668-3cf2eeada667.json",
+        "sha256": "64339816e4d6d150edd195a3fa574127e878ab8e64c51f966c33820c6e4b6f14",
+        "bytes": 167
+      }
+    },
+    {
+      "runId": "a4d110f5-0cb8-488a-aade-6f2b79aecce9",
+      "slug": "playground-b-parallel-build",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-parallel-build/a4d110f5-0cb8-488a-aade-6f2b79aecce9.json",
+        "sha256": "9193ceba47bc957465f7e73f4f87759a0060e0d81222798b2e89f7642cbbda57",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "9e556c16-15ad-4a5a-89e8-04cc9c051baf",
+      "slug": "playground-b-retry-marker",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-retry-marker/9e556c16-15ad-4a5a-89e8-04cc9c051baf.json",
+        "sha256": "3513ee27cd2f0a871aeae135239b431adb475143de728d6d1b5b049c2f25586f",
+        "bytes": 170
+      }
+    },
+    {
+      "runId": "a5f7a4e1-5aca-4263-a9e7-7923d7196764",
+      "slug": "playground-b-release-approval",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-22T20:17:17.609Z",
+        "dueAt": 1792700258609,
+        "resolvedAt": "2026-10-22T20:17:40.485Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-release-approval/a5f7a4e1-5aca-4263-a9e7-7923d7196764.json",
+        "sha256": "2bf22fe0dde083f3923f994e9675348cd105240b1d37beb07177bcca2d549828",
+        "bytes": 167
+      }
+    },
+    {
+      "runId": "5cd9cdef-c2a1-4c44-ace2-fd38d5bfb86a",
+      "slug": "playground-b-log-audit",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-log-audit/5cd9cdef-c2a1-4c44-ace2-fd38d5bfb86a.json",
+        "sha256": "4a7700ff4c7ff5270bc08d1de1827e0f23cb3ac0b6b4f4972d5a4da4c1774b50",
+        "bytes": 159
+      }
+    },
+    {
+      "runId": "2f440a7b-1563-4d44-a714-635eea53887d",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/2f440a7b-1563-4d44-a714-635eea53887d.json",
+        "sha256": "f9c8109b0d5a21f61f92109057ee1cfaa21e725820037cc8ef7224c2dab2d0a7",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "349e099d-b5d2-4c46-8cb4-54f58d0120db",
+      "slug": "playground-b-parallel-build",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-parallel-build/349e099d-b5d2-4c46-8cb4-54f58d0120db.json",
+        "sha256": "c970a2515046993678f436e5e0d721baa05490cf83667a98658b2caccfdb5b5b",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "8fc7a5aa-cdfd-4245-9dc4-80443cd852ad",
+      "slug": "playground-b-retry-marker",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-retry-marker/8fc7a5aa-cdfd-4245-9dc4-80443cd852ad.json",
+        "sha256": "06289e530edb753133f084d6412dc36fc2cdb29fe4b9eb05d5131ffd9107e7e4",
+        "bytes": 170
+      }
+    },
+    {
+      "runId": "b11ea260-07b3-417d-9dff-d1c31f8dcb4e",
+      "slug": "playground-b-log-audit",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-log-audit/b11ea260-07b3-417d-9dff-d1c31f8dcb4e.json",
+        "sha256": "922f7cf90ba94a1f98e44634d3d7124cda02fc173f7287626bbd7d7a5b1b58d7",
+        "bytes": 158
+      }
+    },
+    {
+      "runId": "5ba008a8-3cc8-4299-ba8c-6cd61e477b46",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/5ba008a8-3cc8-4299-ba8c-6cd61e477b46.json",
+        "sha256": "fc160b15c914d104b96b82560ae0fd06d87ff412dae84e7a22383590d09901b9",
+        "bytes": 170
+      }
+    },
+    {
+      "runId": "464708ab-50d3-42c5-a036-615695f5f851",
+      "slug": "playground-b-release-approval",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-22T20:17:30.709Z",
+        "dueAt": 1792700278709,
+        "resolvedAt": "2026-10-22T20:17:59.695Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-release-approval/464708ab-50d3-42c5-a036-615695f5f851.json",
+        "sha256": "e556c90a316a2b498a4e0c70264affa3b07ee1b634815ed7b7cb6724f48053c4",
+        "bytes": 168
+      }
+    },
+    {
+      "runId": "224b3631-2c6a-498d-b4b4-be0c0187484f",
+      "slug": "playground-b-parallel-build",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-parallel-build/224b3631-2c6a-498d-b4b4-be0c0187484f.json",
+        "sha256": "fe139f09cfb438625f27aff4183054fab4b281c7a628673b7d1a00a139b6436c",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "e08956b6-237f-4e57-9db1-9c8deac79d07",
+      "slug": "playground-b-retry-marker",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-retry-marker/e08956b6-237f-4e57-9db1-9c8deac79d07.json",
+        "sha256": "392d3c5831f247ef7a16643c829919d3951684953c343344288fbb6fef982482",
+        "bytes": 169
+      }
+    },
+    {
+      "runId": "c8c987b6-40eb-4108-b73e-f94334812f6f",
+      "slug": "playground-b-log-audit",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-log-audit/c8c987b6-40eb-4108-b73e-f94334812f6f.json",
+        "sha256": "e071e0cccd6be05760586d51954c446fa8c9805191ff1eae539f043f44f16529",
+        "bytes": 158
+      }
+    },
+    {
+      "runId": "26d462b9-42cc-45ba-b254-4790020dd023",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/26d462b9-42cc-45ba-b254-4790020dd023.json",
+        "sha256": "d3f87440b52b9521146fc6ba9d5317b2176447c0ec5377f35ac0615a3955ae60",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "6637868a-4a0d-4ae9-bebe-17ce02abf784",
+      "slug": "playground-b-parallel-build",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-parallel-build/6637868a-4a0d-4ae9-bebe-17ce02abf784.json",
+        "sha256": "e280b5e595c73c8ef06ed8a742b941777754cdb38464dd573cf4a622e7b018af",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "8ead3628-cacd-4fd6-a88e-2cbb8d4e34e4",
+      "slug": "playground-b-retry-marker",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-retry-marker/8ead3628-cacd-4fd6-a88e-2cbb8d4e34e4.json",
+        "sha256": "94fbad296aec410d1076cc0d97302087fca6190824785013a2adc69072143cfc",
+        "bytes": 169
+      }
+    },
+    {
+      "runId": "44b389e6-e233-407d-9310-e5e6743c4365",
+      "slug": "playground-b-release-approval",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-22T20:17:41.188Z",
+        "dueAt": 1792700296188,
+        "resolvedAt": "2026-10-22T20:18:16.930Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-release-approval/44b389e6-e233-407d-9310-e5e6743c4365.json",
+        "sha256": "4c2730c11fd73d6aac6bc341b3e2c20f4ac4939d8fd2545a0807afc44e3950e6",
+        "bytes": 168
+      }
+    },
+    {
+      "runId": "9a4bf375-d90c-4f7d-8897-434675a92f9b",
+      "slug": "playground-b-release-approval",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-22T20:18:03.694Z",
+        "dueAt": 1792700296694,
+        "resolvedAt": "2026-10-22T20:18:17.047Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-release-approval/9a4bf375-d90c-4f7d-8897-434675a92f9b.json",
+        "sha256": "fe3d9b2ba88c4406a642ddd030f2cf22d11d6b1001bf7aa026370b95cda6a36b",
+        "bytes": 167
+      }
+    },
+    {
+      "runId": "30b18c54-8f71-4cdc-866b-165228a34d57",
+      "slug": "playground-b-log-audit",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-log-audit/30b18c54-8f71-4cdc-866b-165228a34d57.json",
+        "sha256": "481892fca5f6c095a221560daaa27756b206995c577e03eca9f769d48b036c32",
+        "bytes": 158
+      }
+    },
+    {
+      "runId": "89c6f7a1-be07-4217-b44e-060a690aa07f",
+      "slug": "playground-b-test-matrix",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "ec8546a5-31eb-43a9-8bdd-d0bbfdc7e9ea",
+      "slug": "playground-b-parallel-build",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "c012cabf-efe1-4abf-b7d0-99edf40710c2",
+      "slug": "playground-b-retry-marker",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "4b8db29e-ad7d-473e-8231-75072994d41f",
+      "slug": "playground-b-log-audit",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "8c838c14-902d-42fd-ac42-df1377cddad8",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/8c838c14-902d-42fd-ac42-df1377cddad8.json",
+        "sha256": "83a1548bb5bf63976ec299d53d9586780d998288a68fe5020bc2dc51b6f1d1de",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "6b4ee9ef-fceb-4fc0-a1eb-d6f59ca3c875",
+      "slug": "playground-b-parallel-build",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-parallel-build/6b4ee9ef-fceb-4fc0-a1eb-d6f59ca3c875.json",
+        "sha256": "dfe3ff58ecbfbea510ab6ba528391cda493c2f458c96db85db767424a1b93fa5",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "7f7337c6-5fea-477a-a59a-fb6b6bfeb2a9",
+      "slug": "playground-b-release-approval",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-22T20:17:53.208Z",
+        "dueAt": 1792700315208,
+        "resolvedAt": "2026-10-22T20:18:35.871Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-release-approval/7f7337c6-5fea-477a-a59a-fb6b6bfeb2a9.json",
+        "sha256": "ff19a6f69edbf9467d15a61a4a5efbf04d12ea8368f1770d20a3a06f8f852c07",
+        "bytes": 167
+      }
+    },
+    {
+      "runId": "476960fc-db8b-4154-80ca-1374a0b9a3b0",
+      "slug": "playground-b-retry-marker",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-retry-marker/476960fc-db8b-4154-80ca-1374a0b9a3b0.json",
+        "sha256": "61c4c387428a2c9376ff93166cee7aa037d899df321d64e6b95bd54e42c83f31",
+        "bytes": 170
+      }
+    },
+    {
+      "runId": "7867a44a-1644-4147-8065-2196f79ece9f",
+      "slug": "playground-b-log-audit",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-log-audit/7867a44a-1644-4147-8065-2196f79ece9f.json",
+        "sha256": "80312882c88a96825ca13f0526e9ffa2fe0595accab4302cf6f38884fc29fa12",
+        "bytes": 159
+      }
+    },
+    {
+      "runId": "4f8f58d0-ea6b-4999-92c2-848368b1a36b",
+      "slug": "playground-b-release-approval",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-22T20:18:19.956Z",
+        "dueAt": 1792700319956,
+        "resolvedAt": "2026-10-22T20:18:40.842Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-release-approval/4f8f58d0-ea6b-4999-92c2-848368b1a36b.json",
+        "sha256": "caca58233698df85ae3eb0dafb27911efb890fdce85a4995436cab3534f83df8",
+        "bytes": 167
+      }
+    },
+    {
+      "runId": "2839a7ab-1567-4de3-982f-848fa2010030",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/2839a7ab-1567-4de3-982f-848fa2010030.json",
+        "sha256": "14f203a3b081f3a3ccbb4eb61ac064b5d7ab0564493708bd09d9a8789107cd33",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "9bd0a56b-ff4c-4ec7-b69d-4b34beae9e75",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/9bd0a56b-ff4c-4ec7-b69d-4b34beae9e75.json",
+        "sha256": "15e89ad7b7d650059913b0a5a2e240abf3398c1ba3cf224088e083d7ea919acb",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "ba589ffb-d13f-4a6a-a667-6c60408937bb",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/ba589ffb-d13f-4a6a-a667-6c60408937bb.json",
+        "sha256": "583225191afe7f356f4025775872ea3f33106fe69d2f75714a61e3122a885716",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "d86454a3-c41e-4153-874f-89c79177d91a",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/d86454a3-c41e-4153-874f-89c79177d91a.json",
+        "sha256": "23355760a9cbb0ab1e45ce285b01630fbb306307439d6c1bbfc1eba3631b112f",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "dfb13d2e-d23c-4add-87ae-bec68bae6ee2",
+      "slug": "playground-b-test-matrix",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "f174dce5-be2b-477f-a96d-53e423bbd62e",
+      "slug": "playground-b-release-approval",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-22T20:18:25.488Z",
+        "dueAt": 1792700332488,
+        "resolvedAt": "2026-10-22T20:18:52.776Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-release-approval/f174dce5-be2b-477f-a96d-53e423bbd62e.json",
+        "sha256": "53f70a567e4a396b0a02d62348941d7dc22c578ad87dd477034c0daaeeb75864",
+        "bytes": 167
+      }
+    },
+    {
+      "runId": "c585f866-d9fb-4c87-9598-60d22325633b",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/c585f866-d9fb-4c87-9598-60d22325633b.json",
+        "sha256": "e30e695074df5259973afa37cbe717498360b32f8a1fc4c74d93f0fe43da4d74",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "526d4447-068c-4ae6-bc60-9d9484f56a0d",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/526d4447-068c-4ae6-bc60-9d9484f56a0d.json",
+        "sha256": "02d83641d077902a88a89ae2eab64417f25b7a7e7768920cd74d2f290ad61fd7",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "78520177-ff77-45be-8549-5211907b17a6",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/78520177-ff77-45be-8549-5211907b17a6.json",
+        "sha256": "664e97880eeb0300102b3334633dcc3bdb4a76b10820812ba7d528192684afa1",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "4a2033d9-4bd4-4af3-ace2-88e6be549431",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/4a2033d9-4bd4-4af3-ace2-88e6be549431.json",
+        "sha256": "c11230db51665414331ff1fbc33206c600f6ba9ad58a921231ecbde01c861bd0",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "53ea573e-9113-4cad-bdf4-d558ae52025d",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/53ea573e-9113-4cad-bdf4-d558ae52025d.json",
+        "sha256": "bfd11e40c757c46dd9ce939530dd6007325fd9b0ba98f1bbd58cc67638297a1d",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "66302b9e-55a0-43bf-9adc-47d780b7db86",
+      "slug": "playground-b-test-matrix",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "eba7d689-70dd-42c5-bee9-0f7a9356c106",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/eba7d689-70dd-42c5-bee9-0f7a9356c106.json",
+        "sha256": "28a61720037a626b2d5bed61714143a456708b4e3e5322542e4b070bf7b83ad0",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "932ccb8f-b712-451d-9f75-c8e0ec4049d0",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/932ccb8f-b712-451d-9f75-c8e0ec4049d0.json",
+        "sha256": "12d749cfd66805ca98f0a5af64f04a71d8515194b08cb53a3bfcfabd75a62ed8",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "4f685ccc-4e32-4b50-a8eb-88921500ca22",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/4f685ccc-4e32-4b50-a8eb-88921500ca22.json",
+        "sha256": "1e01d6ffb9420700e0dd1ad281fa255d229be1ca68d546b96c9f47e9e19bbde8",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "97074b08-5545-45ca-884d-90fb799dfeea",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/97074b08-5545-45ca-884d-90fb799dfeea.json",
+        "sha256": "a348f3b023081312803fbb638c06535ce64cba2b50c007cf538e3b14c57308ed",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "c251e490-e073-4911-b45f-50cdf1aa49c7",
+      "slug": "playground-b-test-matrix",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "d0afc9c7-33c3-435a-a618-7e5337ebbaab",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/d0afc9c7-33c3-435a-a618-7e5337ebbaab.json",
+        "sha256": "4a686391db0d95ab4bcb5baa2fcd93e95b629afe429c6d17fa48808c4bf1a866",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "c4d79367-8afd-4afc-b3bb-ce452e0731a5",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/c4d79367-8afd-4afc-b3bb-ce452e0731a5.json",
+        "sha256": "deea41e4f0a0de0033be89d19beb79b58ad59e3a907dfdf15544b21f597ad329",
+        "bytes": 170
+      }
+    },
+    {
+      "runId": "6a512166-07d2-4872-8290-5ac57fb56577",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/6a512166-07d2-4872-8290-5ac57fb56577.json",
+        "sha256": "f3d4242330af1e8e84231d81a31122fbccfd637b6793218a5eef538afbe314e4",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "532a4ab1-32a6-4b53-8b78-fd3b0c3168c7",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/532a4ab1-32a6-4b53-8b78-fd3b0c3168c7.json",
+        "sha256": "70382db1f14fb485dd3df7ab85ce0ddb0fe6cd3b169fe2baf96b90555b7bd505",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "66ed2738-4bd4-4e4e-9e38-47c186fb3504",
+      "slug": "playground-b-release-approval",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-22T20:18:40.503Z",
+        "dueAt": 1792700354503,
+        "resolvedAt": "2026-10-22T20:19:15.647Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-release-approval/66ed2738-4bd4-4e4e-9e38-47c186fb3504.json",
+        "sha256": "0c047d25458d503518786a06b4c881c62e1a7222f491f2f9d5436b52a740bf90",
+        "bytes": 168
+      }
+    },
+    {
+      "runId": "c15fcabd-e698-4c0a-b7e5-92360f92dae7",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/c15fcabd-e698-4c0a-b7e5-92360f92dae7.json",
+        "sha256": "565f48f1e4db901e656bda9dc20af248984ff96d5f65c47a45859eed3da966b3",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "ad7e3eb1-5a8d-41c4-a27e-90a54af5f8db",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/ad7e3eb1-5a8d-41c4-a27e-90a54af5f8db.json",
+        "sha256": "de0b8dbb6a6ee0ff66bf69577d1205bcaeafc02183812a5970c243283afbddc7",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "59761dc1-e648-404c-978e-75c35a0d0475",
+      "slug": "playground-b-test-matrix",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "2912f0ac-c29f-428d-94fb-521cfa5a52dc",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/2912f0ac-c29f-428d-94fb-521cfa5a52dc.json",
+        "sha256": "ea3ba274571b0c3a8d6c4e742bf3bfb716efdbf4a454a1cd6d930db08b234717",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "141e3da7-fa63-4efd-8144-577340325730",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/141e3da7-fa63-4efd-8144-577340325730.json",
+        "sha256": "2dc1cb27cbfd7e074965611e3035eeb8167cbbbb7faecb158f484a336b247e5d",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "d7465cdd-e67e-440d-8eef-bb7aac1646ca",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/d7465cdd-e67e-440d-8eef-bb7aac1646ca.json",
+        "sha256": "c73a8bae24cdf36de8ecc1e9da9926eac5141392941cfa86d0c409aee1005ebf",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "ff5bd301-a2d3-4aef-815b-c6c4838e2c2a",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/ff5bd301-a2d3-4aef-815b-c6c4838e2c2a.json",
+        "sha256": "da830ff385dc4d76763d873a8e1d06a7cfd57f1fd1cb23d34094586c7335bea8",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "d82d171e-f7b3-4da6-9859-4cc86e071143",
+      "slug": "playground-b-test-matrix",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "a9edea7e-9b89-4a01-abd9-f7eef82e0aee",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/a9edea7e-9b89-4a01-abd9-f7eef82e0aee.json",
+        "sha256": "74fb94fbb6fcf58cc2030299eda56796dfe658526ad061870e7b43f894bb288a",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "c23b91fd-9928-4aa8-bb50-8242228b92c3",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/c23b91fd-9928-4aa8-bb50-8242228b92c3.json",
+        "sha256": "27ac110142e70791c2c9d612b0207b7d7b457ee59c9a49e1fc5a4f63699e0132",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "1d74cf49-4d57-4940-869a-1337d58b7c4d",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/1d74cf49-4d57-4940-869a-1337d58b7c4d.json",
+        "sha256": "0218db9abfa187096f81c1a15cd5efe27f0863cfa65cbe3c065625e62d5f5386",
+        "bytes": 170
+      }
+    },
+    {
+      "runId": "df68a301-d275-46f1-93bb-d1f9f6225572",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/df68a301-d275-46f1-93bb-d1f9f6225572.json",
+        "sha256": "2b2b68e00ee208eba49795ab3e1a9ca3d57861758aeae6b040f14547e4c2e41a",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "f4ddd896-5be0-41a9-bf8c-9bc05b252f89",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/f4ddd896-5be0-41a9-bf8c-9bc05b252f89.json",
+        "sha256": "227ff5e8bb93aded7d4b292f7a43fa935f5195ab115b2ff3b7b816163d7e8e65",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "55e62dec-61b8-4d0c-9851-789c6471e68d",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/55e62dec-61b8-4d0c-9851-789c6471e68d.json",
+        "sha256": "4071c2b616b211cfbc270ef892db7c15e9f55c3978993612d6cb4a48962a5b74",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "f6d15102-1735-4f64-be08-c06f38a8ec66",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/f6d15102-1735-4f64-be08-c06f38a8ec66.json",
+        "sha256": "1ff2697bcafc5c56ba1f00589236b64bbac7b73c5a6a19b883cb629055f67194",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "e8d74e65-705d-4cd6-8617-80b328da0f42",
+      "slug": "playground-b-test-matrix",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "050b6404-1714-494d-be75-dd880c6684b8",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/050b6404-1714-494d-be75-dd880c6684b8.json",
+        "sha256": "dcc01d18fce1236ee6f03d4f510093eeef985dd9035cc7024a292e6b7d11614b",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "baf38f77-ca0c-423f-af81-214fccc336f3",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/baf38f77-ca0c-423f-af81-214fccc336f3.json",
+        "sha256": "9aecf3fbc74c0602ea7f3ecbfcb4689ac4ae08db2758dc834490384472421ed8",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "6b74b689-d612-4c5b-9f7e-c4cb4b3b3f2f",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/6b74b689-d612-4c5b-9f7e-c4cb4b3b3f2f.json",
+        "sha256": "efcd643dd5e77b6ccb61847281ea54551971efd41521bb69f855c23eeefed83f",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "1d15dcf5-87b9-4f0c-8034-28f5944b21e4",
+      "slug": "playground-b-test-matrix",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "a1acbc0e-d407-4762-b16c-8c366c72dd50",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/a1acbc0e-d407-4762-b16c-8c366c72dd50.json",
+        "sha256": "04e776f87a6d1dcde22fb365b7b3c5580d4f884384eb98bb7537a9fc53d86420",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "0247f395-a6a0-4f69-ae40-f88edf5dd1ff",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/0247f395-a6a0-4f69-ae40-f88edf5dd1ff.json",
+        "sha256": "83c6c32cec0f721c29616007a564c3324170c650e3604137b3b40894b047593d",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "4282d99d-6193-481a-9a42-01a0d56f2936",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/4282d99d-6193-481a-9a42-01a0d56f2936.json",
+        "sha256": "6b516aefbceafa041adaf6a1e672d154d10423bd961f2a8225113e37f5e83845",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "4c34f6f3-e3ef-4fff-8827-4dcae7bf1cc0",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/4c34f6f3-e3ef-4fff-8827-4dcae7bf1cc0.json",
+        "sha256": "2b85d767a231791786742077ac0f681944e32672409c1e03e88f52767b4c1353",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "3d64ff0e-3dd8-491b-86bc-3c06e553155b",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/3d64ff0e-3dd8-491b-86bc-3c06e553155b.json",
+        "sha256": "5a76f599767a41ddc75fc8817bfbd09cca6c2936ce5d5c979937f94e98f0a10d",
+        "bytes": 170
+      }
+    },
+    {
+      "runId": "6ccaf04d-ca4f-42cc-9c90-1406f0ca39d2",
+      "slug": "playground-b-test-matrix",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "ade97efb-cd06-4c7e-a785-a05bc032e499",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/ade97efb-cd06-4c7e-a785-a05bc032e499.json",
+        "sha256": "36823c2bdf6d3a15dc476c60cbb2fb16609d8d014e54c4d1bb5bf57deeb55086",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "14127793-fbc4-4713-98ad-d5413cc0416e",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/14127793-fbc4-4713-98ad-d5413cc0416e.json",
+        "sha256": "8aa01dce909471b05edb9873c0b09c4da25d9f56cd635df834da47b09b0519a1",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "b91254ff-c6f7-4165-b3e1-2bfeec12eb27",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/b91254ff-c6f7-4165-b3e1-2bfeec12eb27.json",
+        "sha256": "2034f575a95a41220bf183fdd2d630fec26c1bb3de0f3a0dc2cb5981acd6146a",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "9fba5751-ed7e-483c-975a-ec54fbb56f66",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/9fba5751-ed7e-483c-975a-ec54fbb56f66.json",
+        "sha256": "dea1c1f727130b1aacf2f55b369872dc146102066268a5db4f1d895826e4a1b2",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "c73fa4a8-9147-412a-b29e-e514833b1371",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/c73fa4a8-9147-412a-b29e-e514833b1371.json",
+        "sha256": "8babd92a352431bf5141bccdfef46a23ec11879019a510be4893e49a90701201",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "b567cb49-195c-4479-ab3f-34da70bc259f",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/b567cb49-195c-4479-ab3f-34da70bc259f.json",
+        "sha256": "38bc7d26914364943993316766c7dbebf82c6665b503a63d672b3e4e56b7f88b",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "70df03c4-a217-46b5-814e-40d5a5bc402c",
+      "slug": "playground-b-test-matrix",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "ea737e5f-70a1-44cf-b322-291f2c70cfaa",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/ea737e5f-70a1-44cf-b322-291f2c70cfaa.json",
+        "sha256": "34c03ab176d74fbf4e837bce522370c20b174aa8a6dcefc2cc63a006a44129e0",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "f476d6db-ed62-4c1f-aa17-7189c51ca1b3",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/f476d6db-ed62-4c1f-aa17-7189c51ca1b3.json",
+        "sha256": "d2185e397fcae6ae85147524dfaedb09042fbe4ed3174b864bb0dd00f1af2ae8",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "db7c3d45-8621-47e3-a3cc-4f0385c05862",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/db7c3d45-8621-47e3-a3cc-4f0385c05862.json",
+        "sha256": "5b85340d0081c77f22d09906a0485f84e6fd006c944e560a5a05cb421c9293b6",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "e5a976ef-3e2d-4aac-8dcd-317ba226e7d9",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/e5a976ef-3e2d-4aac-8dcd-317ba226e7d9.json",
+        "sha256": "40e578d6213849bdf57111974570a569e18fa69d22eec3f51cc910b3e4fe18d1",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "8b96b989-c7fa-4a8c-ac16-5e44281b432c",
+      "slug": "playground-b-test-matrix",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "9551b244-53ee-42d2-8ad2-bfbfe9a1812d",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/9551b244-53ee-42d2-8ad2-bfbfe9a1812d.json",
+        "sha256": "1d09c4dfc4c600bc0f17667651537e46020f80a9255f3c8a218c012cf2d6a035",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "09ef1497-3b71-4b51-b226-b358cbd818e9",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/09ef1497-3b71-4b51-b226-b358cbd818e9.json",
+        "sha256": "d62806a4db8c724947e5b3e1b78f1945dc5a1f2ca93f72c6a8cab24175535569",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "a9cca12e-e937-4279-ae6a-9a737f96d117",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/a9cca12e-e937-4279-ae6a-9a737f96d117.json",
+        "sha256": "54f48e01074464606754053d4ef438c03686eccac4e96842ec39fa3297187b01",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "0ce4cd7d-5ed2-4fd2-be66-7e93432f681e",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/0ce4cd7d-5ed2-4fd2-be66-7e93432f681e.json",
+        "sha256": "cd80298da065b1dfc39512ddad890fcabd653d5a67a19de7d08777c979e240c2",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "1ce33994-1c04-43d5-8b9d-964f1d84a1a2",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/1ce33994-1c04-43d5-8b9d-964f1d84a1a2.json",
+        "sha256": "f42f31a58d70801a90d7aec083001cdc3d8fa0e060e0e6d4c6d44d4877c4001f",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "4391b98c-ab6c-4597-b4d7-5dbb86042f79",
+      "slug": "playground-b-test-matrix",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "f871ec85-f311-4b14-bf54-24a0534c2dfc",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/f871ec85-f311-4b14-bf54-24a0534c2dfc.json",
+        "sha256": "65ffb5222e6c305d18689545e203accaa834be9d1f9a7e1d4bb8526024b5c4fb",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "368aa3ba-bdf5-4f41-b5e0-55a561751314",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/368aa3ba-bdf5-4f41-b5e0-55a561751314.json",
+        "sha256": "a617e63b075bf959e5001b7e524972260795ac363ce91c483ce82e700f70218f",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "80040ca1-9bb8-4260-a8c5-9a426b011759",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/80040ca1-9bb8-4260-a8c5-9a426b011759.json",
+        "sha256": "92a690e27887440baa2ee20d97c45a1e9326c2518ea28052a4c5cbc8baaddb27",
+        "bytes": 170
+      }
+    },
+    {
+      "runId": "216ee6e6-583c-4cc7-bb16-7325895071e1",
+      "slug": "playground-b-test-matrix",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "3c494612-9548-4550-9597-99b44553a3b2",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/3c494612-9548-4550-9597-99b44553a3b2.json",
+        "sha256": "830af4d500920a5011d6b55554a389566379a62420c8416ad44d6dec88224ecd",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "5d0cea98-08dd-4b86-939e-2522ab951a88",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/5d0cea98-08dd-4b86-939e-2522ab951a88.json",
+        "sha256": "527d1b167e8a8bd7ed26b70b23775847d593274efe61efdd0d2ead0a66def61c",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "005b4687-c437-4d79-9f6e-758b7ccf5ffc",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/005b4687-c437-4d79-9f6e-758b7ccf5ffc.json",
+        "sha256": "3f1d00b7dca420ac02a4d3c7534a1da1cac1facd0d28c7d452da364b06f5b2e2",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "55985620-30eb-406b-adc8-987f9d083b71",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/55985620-30eb-406b-adc8-987f9d083b71.json",
+        "sha256": "78209add49ca97bb57c04f5d3fbe6f2faaab699c32298ac7aba9647d575155f6",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "d9815f37-3e9c-4aa0-af05-19cc175905c0",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/d9815f37-3e9c-4aa0-af05-19cc175905c0.json",
+        "sha256": "aeef22b9252a75ca0dc63ea695e77bff1ea636f4d99b4232f907ff274bc9ec16",
+        "bytes": 171
+      }
+    },
+    {
+      "runId": "b7e1c990-6403-4edf-b7a6-0e40d24b8ca7",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/b7e1c990-6403-4edf-b7a6-0e40d24b8ca7.json",
+        "sha256": "b05167d8f93d7e4afdd6a0b36bbb763b91e75390e3ac35ef67731e88d8107b4f",
+        "bytes": 172
+      }
+    },
+    {
+      "runId": "90c12eee-eb21-4c6d-bc5c-bc32a06a04be",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-b-test-matrix/90c12eee-eb21-4c6d-bc5c-bc32a06a04be.json",
+        "sha256": "63eec19594e0b85f288db3f95f208313ae8af6d6a3ad4554203db05ffd88d0ae",
+        "bytes": 171
+      }
+    }
+  ]
+}

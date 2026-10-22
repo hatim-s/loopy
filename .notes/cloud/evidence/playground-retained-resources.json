@@ -1,0 +1,16 @@
+{
+  "capturedAt": "2026-10-22T20:51:32.908610+00:00",
+  "dockerContext": "colima-loopy-cloud-phase1",
+  "stateRoot": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/runtime-root/.loopy/cloud/sandbox",
+  "ownerHash": "c860f0f14a2bdada6c0ac6c98f50d3bbb10bc94bb81700cdd6e5e206a5312274",
+  "containers": 1560,
+  "containerStates": {
+    "exited": 1560
+  },
+  "receiptNamedVolumes": 2088,
+  "existingReceiptNamedVolumes": 2088,
+  "missingReceiptNamedVolumes": 0,
+  "limits": [
+    "No resources removed. Docker volume bytes not measured. Only exact owner-labelled containers and receipt-named volumes counted."
+  ]
+}

@@ -1,0 +1,221 @@
+{
+  "status": "passed",
+  "scope": "bounded-local-authenticated-pagination-read-verification",
+  "startedAt": "2026-10-22T20:41:53.517Z",
+  "endedAt": "2026-10-22T20:41:53.609Z",
+  "command": "bun --no-env-file scripts/playground/index.ts start",
+  "verificationCommand": "bun --no-env-file .loopy/playground/pagination-verify.mjs",
+  "beforeStartAt": "2026-10-22T20:40:17.990675+00:00",
+  "source": {
+    "path": "/Users/hatim.shakir/projects/loopy/cloud-integration/packages/loopy/src/store/sqlite/query-runs.ts",
+    "sha256": "8383ce0afc84e83047397e0606a6fa1ad1ea9950bb1443540c6750d2ee101728"
+  },
+  "manifest": {
+    "owner": 56542,
+    "startedAt": "2026-10-22T20:40:18.269Z",
+    "children": [
+      {
+        "name": "sandbox",
+        "pid": 56549
+      },
+      {
+        "name": "worker",
+        "pid": 56550
+      },
+      {
+        "name": "dashboard",
+        "pid": 56551
+      }
+    ],
+    "path": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/processes.json"
+  },
+  "samePersistentConfig": true,
+  "api": "http://127.0.0.1:15070",
+  "workspace": "playground",
+  "health": {
+    "api": 200,
+    "sandbox": 200,
+    "dashboard": 200
+  },
+  "limitChecks": [
+    {
+      "limit": 99,
+      "status": 200,
+      "rows": 99,
+      "rejected": false,
+      "bytes": 76906,
+      "durationMs": 20.293875
+    },
+    {
+      "limit": 100,
+      "status": 200,
+      "rows": 100,
+      "rejected": false,
+      "bytes": 77470,
+      "durationMs": 12.143540999999999
+    },
+    {
+      "limit": 200,
+      "status": 200,
+      "rows": 200,
+      "rejected": false,
+      "bytes": 137888,
+      "durationMs": 14.645125000000007
+    },
+    {
+      "limit": 201,
+      "status": 400,
+      "rows": null,
+      "rejected": true,
+      "bytes": 99,
+      "durationMs": 2.2235840000000024
+    }
+  ],
+  "traversal": {
+    "pageSize": 200,
+    "pages": [
+      {
+        "pageIndex": 0,
+        "status": 200,
+        "rows": 200,
+        "bytes": 137888,
+        "durationMs": 15.081625000000003
+      },
+      {
+        "pageIndex": 1,
+        "status": 200,
+        "rows": 200,
+        "bytes": 128008,
+        "durationMs": 12.895332999999994
+      },
+      {
+        "pageIndex": 2,
+        "status": 200,
+        "rows": 128,
+        "bytes": 82694,
+        "durationMs": 11.997167000000005
+      }
+    ],
+    "rows": 528,
+    "unique": 528,
+    "statuses": {
+      "succeeded": 464,
+      "failed": 64
+    },
+    "missingIds": [],
+    "extraIds": [],
+    "statusMismatches": [],
+    "exactInventoryMatch": true,
+    "idStatusSha256": "2ee2cf576af94fc48fdf584735e5a53dfe11fccbe455ee0908a3707d6b2e4be6"
+  },
+  "inventoryPath": ".notes/cloud/evidence/playground-performance-postload-inventory.json",
+  "workflowRunsAdded": 0,
+  "stackState": "running-for-browser-qa",
+  "protectedListenersBefore": {
+    "4173": ["41194"],
+    "4310": ["81432"],
+    "14870": ["87267"],
+    "14871": ["87033"],
+    "14872": ["87061"],
+    "14873": ["87267"]
+  },
+  "limits": [
+    "Small bounded read verification, not a load benchmark.",
+    "No workflow admission, artifact mutation, source edits or Docker cleanup.",
+    "One earlier verification command completed its read assertions but failed during evidence hashing because it passed ArrayBuffer directly to Node crypto; the corrected command repeated only bounded GET reads."
+  ],
+  "ownedProcessTree": [
+    {
+      "pid": 56542,
+      "ppid": 1,
+      "pgid": 56542,
+      "stat": "Ss",
+      "command": "/Users/hatim.shakir/.bun/bin/bun --no-env-file /Users/hatim.shakir/projects/loopy/cloud-integration/scripts/playground/index.ts serve"
+    },
+    {
+      "pid": 56549,
+      "ppid": 56542,
+      "pgid": 56542,
+      "stat": "S",
+      "command": "/Users/hatim.shakir/.bun/bin/bun --no-env-file /Users/hatim.shakir/projects/loopy/cloud-integration/scripts/playground/provider.ts"
+    },
+    {
+      "pid": 56550,
+      "ppid": 56542,
+      "pgid": 56542,
+      "stat": "S",
+      "command": "node /Users/hatim.shakir/projects/loopy/cloud-integration/node_modules/.bin/wrangler dev --local --config /Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/wrangler.json --persist-to /Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/wrangler --env-file /Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/worker.dev.vars"
+    },
+    {
+      "pid": 56551,
+      "ppid": 56542,
+      "pgid": 56542,
+      "stat": "S",
+      "command": "/Users/hatim.shakir/.bun/bin/bun run --cwd apps/dashboard dev --host 127.0.0.1 --port 15072 --strictPort"
+    },
+    {
+      "pid": 56553,
+      "ppid": 56551,
+      "pgid": 56542,
+      "stat": "S",
+      "command": "node /Users/hatim.shakir/projects/loopy/cloud-integration/apps/dashboard/node_modules/.bin/vite --host 127.0.0.1 --port 15072 --strictPort"
+    },
+    {
+      "pid": 56556,
+      "ppid": 56550,
+      "pgid": 56542,
+      "stat": "S",
+      "command": "/Users/hatim.shakir/.local/share/fnm/node-versions/v24.14.1/installation/bin/node --no-warnings /Users/hatim.shakir/projects/loopy/cloud-integration/node_modules/.bun/wrangler@4.152.0+b35ac5897ad54762/node_modules/wrangler/wrangler-dist/cli.js dev --local --config /Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/wrangler.json --persist-to /Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/wrangler --env-file /Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/worker.dev.vars"
+    },
+    {
+      "pid": 56559,
+      "ppid": 56553,
+      "pgid": 56542,
+      "stat": "S",
+      "command": "/Users/hatim.shakir/.bun/install/cache/links/@esbuild+darwin-arm64@0.25.12-5c988bcaf394fe84/node_modules/@esbuild/darwin-arm64/bin/esbuild --service=0.25.12 --ping"
+    },
+    {
+      "pid": 56562,
+      "ppid": 56556,
+      "pgid": 56542,
+      "stat": "S",
+      "command": "/Users/hatim.shakir/.bun/install/cache/links/@esbuild+darwin-arm64@0.28.2-7aa809be835b58ea/node_modules/@esbuild/darwin-arm64/bin/esbuild --service=0.28.2 --ping"
+    },
+    {
+      "pid": 56563,
+      "ppid": 56556,
+      "pgid": 56542,
+      "stat": "S",
+      "command": "/Users/hatim.shakir/.bun/install/cache/links/@cloudflare+workerd-darwin-arm64@1.20261019.1-3890b444c6bb86b8/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd serve --binary --experimental --socket-addr=entry=127.0.0.1:15070 --external-addr=loopback=127.0.0.1:51825 --control-fd=3 -"
+    },
+    {
+      "pid": 56564,
+      "ppid": 56556,
+      "pgid": 56542,
+      "stat": "S",
+      "command": "/Users/hatim.shakir/.bun/install/cache/links/@cloudflare+workerd-darwin-arm64@1.20261019.1-3890b444c6bb86b8/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd serve --binary --experimental --socket-addr=entry=127.0.0.1:0 --external-addr=loopback=127.0.0.1:51827 --control-fd=3 - --inspector-addr=127.0.0.1:0 --debug-port=127.0.0.1:0"
+    }
+  ],
+  "protectedListenersAfter": {
+    "4310": ["81432"],
+    "4173": ["41194"],
+    "14870": ["87267"],
+    "14871": ["87033"],
+    "14872": ["87061"],
+    "14873": ["87267"]
+  },
+  "protectedListenerIdentitiesUnchanged": true,
+  "rawSnapshotUnchangedAfterRestart": true,
+  "rawSnapshotDirectory": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/diagnostics/quiesced-postload-20261022T203547958718Z/raw/do",
+  "standaloneSnapshotUnchangedAfterRestart": true,
+  "finalVerifiedAt": "2026-10-22T20:42:20.108361+00:00",
+  "commands": [
+    "shasum -a 256 packages/loopy/src/store/sqlite/query-runs.ts",
+    "bun --no-env-file scripts/playground/index.ts start",
+    "bun --no-env-file scripts/playground/index.ts status",
+    "bun --no-env-file .loopy/playground/pagination-verify.mjs",
+    "lsof -nP -tiTCP:<4310,4173,14870..14873> -sTCP:LISTEN",
+    "ps -axo pid=,ppid=,pgid=,stat=,command=; select owned process group",
+    "Python SHA-256/size/mtime verification of all raw snapshot files and standalone DB hash"
+  ]
+}

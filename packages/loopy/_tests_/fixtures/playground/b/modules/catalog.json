@@ -1,0 +1,42 @@
+[
+  {
+    "slug": "playground-b-test-matrix",
+    "file": "test-matrix.ts",
+    "description": "Map synthetic test shards and collect assertion scores",
+    "approval": false,
+    "artifactPath": "loopies-playground/results/result.json",
+    "burst": true
+  },
+  {
+    "slug": "playground-b-parallel-build",
+    "file": "parallel-build.ts",
+    "description": "Build client and server summaries in parallel",
+    "approval": false,
+    "artifactPath": "loopies-playground/results/result.json",
+    "burst": false
+  },
+  {
+    "slug": "playground-b-retry-marker",
+    "file": "retry-marker.ts",
+    "description": "Fail attempt one, then update repository values on attempt two",
+    "approval": false,
+    "artifactPath": "loopies-playground/results/result.json",
+    "burst": false
+  },
+  {
+    "slug": "playground-b-release-approval",
+    "file": "release-approval.ts",
+    "description": "Hold release approval before publishing a repository report",
+    "approval": true,
+    "artifactPath": "loopies-playground/results/result.json",
+    "burst": false
+  },
+  {
+    "slug": "playground-b-log-audit",
+    "file": "log-audit.ts",
+    "description": "Emit bounded audit evidence and write a sorted CI report",
+    "approval": false,
+    "artifactPath": "loopies-playground/results/result.json",
+    "burst": false
+  }
+]

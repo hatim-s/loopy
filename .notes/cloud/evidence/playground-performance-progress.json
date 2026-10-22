@@ -1,0 +1,49 @@
+{
+  "scope": "local-load-progress",
+  "at": "2026-10-22T20:15:18.488Z",
+  "from": "2026-10-22T20:14:11.628Z",
+  "api": {
+    "samples": 119,
+    "failures": 0,
+    "latencyMs": {
+      "count": 119,
+      "p50": 31.5173749999376,
+      "p95": 688.4271660000086,
+      "p99": 1120.3672909999732,
+      "max": 1511.1183329999913
+    },
+    "measurement": "client-observed-end-to-end-including-filesystem-api-slot-queue-40ms-polling-and-buffered-http-body",
+    "headersMsMeaning": "not-TTFB-shared-client-returns-after-body-buffering",
+    "attribution": "Cannot distinguish client slot contention from HTTP/server latency in current samples."
+  },
+  "runtime": {
+    "completedBackendStarts": 275,
+    "invalidRecords": 0,
+    "queueWaitMs": {
+      "count": 275,
+      "p50": 0,
+      "p95": 177,
+      "p99": 376,
+      "max": 459
+    },
+    "backendDurationMs": {
+      "count": 275,
+      "p50": 355,
+      "p95": 508,
+      "p99": 852,
+      "max": 1021
+    },
+    "outcomes": {
+      "succeeded": 265,
+      "execution": 10
+    }
+  },
+  "pressure": {
+    "status": "passed",
+    "at": "2026-10-22T20:15:12.367Z",
+    "running": 0,
+    "vmContainerMemoryPercent": 0,
+    "vmContainerMemoryBytes": 0,
+    "vmTotalMemoryBytes": 3039522816
+  }
+}

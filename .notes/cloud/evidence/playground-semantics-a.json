@@ -1,0 +1,3526 @@
+{
+  "status": "passed",
+  "scope": "group-a-local-primary-artifact-semantics",
+  "checkedAt": "2026-10-22T20:22:06.703Z",
+  "batch": "playground-2026-10-22T19-54-57-063Z",
+  "frozenSeedCommit": "9e649e9a8abcb2ec20e4379190b893c6876931b0",
+  "acceptedGuardSha256": "1213d36290bf1cf94a7587cc54d6320bda41cba2d6a6ccc29943af8b278c42a9",
+  "command": "bun --no-env-file scripts/playground/index.ts cohort --group a",
+  "process": {
+    "pid": 19569,
+    "startedAt": "2026-10-22T20:14:11.928Z",
+    "exitCode": 0,
+    "invocations": 1
+  },
+  "startedAt": "2026-10-22T20:14:11.935Z",
+  "endedAt": "2026-10-22T20:20:44.757Z",
+  "durationMs": 392822,
+  "admitted": 200,
+  "terminal": 200,
+  "succeeded": 172,
+  "controlledFailures": 28,
+  "unexpected": 0,
+  "artifactsSemanticsPassed": 172,
+  "retries": "Not applicable. Group A executable nodes are configured for one attempt.",
+  "perWorkflow": {
+    "playground-a-format-report": {
+      "admitted": 100,
+      "succeeded": 84,
+      "controlledFailures": 16,
+      "artifactSemanticsPassed": 84
+    },
+    "playground-a-dependency-audit": {
+      "admitted": 25,
+      "succeeded": 21,
+      "controlledFailures": 4,
+      "artifactSemanticsPassed": 21
+    },
+    "playground-a-lint-report": {
+      "admitted": 25,
+      "succeeded": 21,
+      "controlledFailures": 4,
+      "artifactSemanticsPassed": 21
+    },
+    "playground-a-generated-docs": {
+      "admitted": 25,
+      "succeeded": 21,
+      "controlledFailures": 4,
+      "artifactSemanticsPassed": 21
+    },
+    "playground-a-changelog-approval": {
+      "admitted": 25,
+      "succeeded": 25,
+      "controlledFailures": 0,
+      "artifactSemanticsPassed": 25
+    }
+  },
+  "approvals": {
+    "count": 25,
+    "minHoldMs": 11439,
+    "maxHoldMs": 46330,
+    "maxDueOvershootMs": 1976,
+    "holdsAbove45000Ms": [
+      {
+        "runId": "0f67d1c1-7ff6-4c64-b7ba-71f50765aab8",
+        "ordinal": 5,
+        "observedAt": "2026-10-22T20:14:57.444Z",
+        "resolvedAt": "2026-10-22T20:15:43.774Z",
+        "scheduledMs": 45000,
+        "actualHoldMs": 46330,
+        "dueOvershootMs": 1330
+      }
+    ],
+    "waits": [
+      {
+        "runId": "f026f9d7-bb2e-4e8f-aad1-75c61f0a2aab",
+        "ordinal": 0,
+        "observedAt": "2026-10-22T20:14:16.194Z",
+        "resolvedAt": "2026-10-22T20:14:27.633Z",
+        "scheduledMs": 10000,
+        "actualHoldMs": 11439,
+        "dueOvershootMs": 1439
+      },
+      {
+        "runId": "8afa7db1-efbc-4dfc-b7e5-2030534319bd",
+        "ordinal": 1,
+        "observedAt": "2026-10-22T20:14:24.692Z",
+        "resolvedAt": "2026-10-22T20:14:42.567Z",
+        "scheduledMs": 17000,
+        "actualHoldMs": 17875,
+        "dueOvershootMs": 875
+      },
+      {
+        "runId": "84d12396-fe83-4cb9-a465-170ccede3313",
+        "ordinal": 2,
+        "observedAt": "2026-10-22T20:14:30.811Z",
+        "resolvedAt": "2026-10-22T20:14:54.905Z",
+        "scheduledMs": 24000,
+        "actualHoldMs": 24094,
+        "dueOvershootMs": 94
+      },
+      {
+        "runId": "11e051b4-5fa8-4694-b006-972dbd54a6f4",
+        "ordinal": 3,
+        "observedAt": "2026-10-22T20:14:40.545Z",
+        "resolvedAt": "2026-10-22T20:15:12.580Z",
+        "scheduledMs": 31000,
+        "actualHoldMs": 32035,
+        "dueOvershootMs": 1035
+      },
+      {
+        "runId": "57c8d670-44b1-4b38-8984-b1ff99c868ac",
+        "ordinal": 4,
+        "observedAt": "2026-10-22T20:14:47.989Z",
+        "resolvedAt": "2026-10-22T20:15:26.991Z",
+        "scheduledMs": 38000,
+        "actualHoldMs": 39002,
+        "dueOvershootMs": 1002
+      },
+      {
+        "runId": "0f67d1c1-7ff6-4c64-b7ba-71f50765aab8",
+        "ordinal": 5,
+        "observedAt": "2026-10-22T20:14:57.444Z",
+        "resolvedAt": "2026-10-22T20:15:43.774Z",
+        "scheduledMs": 45000,
+        "actualHoldMs": 46330,
+        "dueOvershootMs": 1330
+      },
+      {
+        "runId": "5dc0f0a3-758a-42e6-bb9e-6b68024f34d2",
+        "ordinal": 6,
+        "observedAt": "2026-10-22T20:15:08.395Z",
+        "resolvedAt": "2026-10-22T20:15:25.062Z",
+        "scheduledMs": 16000,
+        "actualHoldMs": 16667,
+        "dueOvershootMs": 667
+      },
+      {
+        "runId": "483ac685-5978-45b8-8183-5d1708f8860f",
+        "ordinal": 7,
+        "observedAt": "2026-10-22T20:15:26.576Z",
+        "resolvedAt": "2026-10-22T20:15:50.193Z",
+        "scheduledMs": 23000,
+        "actualHoldMs": 23617,
+        "dueOvershootMs": 617
+      },
+      {
+        "runId": "e6bb349d-64f1-4d7d-b6f9-a88806423b75",
+        "ordinal": 8,
+        "observedAt": "2026-10-22T20:15:36.872Z",
+        "resolvedAt": "2026-10-22T20:16:07.057Z",
+        "scheduledMs": 30000,
+        "actualHoldMs": 30185,
+        "dueOvershootMs": 185
+      },
+      {
+        "runId": "faae7c4f-fee2-4827-a3a7-c9d55bfb3244",
+        "ordinal": 9,
+        "observedAt": "2026-10-22T20:15:46.656Z",
+        "resolvedAt": "2026-10-22T20:16:24.580Z",
+        "scheduledMs": 37000,
+        "actualHoldMs": 37924,
+        "dueOvershootMs": 924
+      },
+      {
+        "runId": "bc503dcc-9498-407c-8cc6-65bf3661efde",
+        "ordinal": 10,
+        "observedAt": "2026-10-22T20:15:57.594Z",
+        "resolvedAt": "2026-10-22T20:16:41.715Z",
+        "scheduledMs": 44000,
+        "actualHoldMs": 44121,
+        "dueOvershootMs": 121
+      },
+      {
+        "runId": "6c217293-12ff-4277-befc-01c10cab391d",
+        "ordinal": 11,
+        "observedAt": "2026-10-22T20:16:06.048Z",
+        "resolvedAt": "2026-10-22T20:16:21.660Z",
+        "scheduledMs": 15000,
+        "actualHoldMs": 15612,
+        "dueOvershootMs": 612
+      },
+      {
+        "runId": "d60ca50b-c940-410b-95fb-bbcee61d5ac7",
+        "ordinal": 12,
+        "observedAt": "2026-10-22T20:16:22.491Z",
+        "resolvedAt": "2026-10-22T20:16:45.534Z",
+        "scheduledMs": 22000,
+        "actualHoldMs": 23043,
+        "dueOvershootMs": 1043
+      },
+      {
+        "runId": "ca1951d4-f2f8-4832-aba0-e3eef26bf3a9",
+        "ordinal": 13,
+        "observedAt": "2026-10-22T20:16:34.217Z",
+        "resolvedAt": "2026-10-22T20:17:03.732Z",
+        "scheduledMs": 29000,
+        "actualHoldMs": 29515,
+        "dueOvershootMs": 515
+      },
+      {
+        "runId": "a0970aed-d9e9-4b92-8b2e-0869059d6888",
+        "ordinal": 14,
+        "observedAt": "2026-10-22T20:16:47.516Z",
+        "resolvedAt": "2026-10-22T20:17:24.030Z",
+        "scheduledMs": 36000,
+        "actualHoldMs": 36514,
+        "dueOvershootMs": 514
+      },
+      {
+        "runId": "fb7b0083-481a-49b1-8f15-af8d617157d5",
+        "ordinal": 15,
+        "observedAt": "2026-10-22T20:16:56.108Z",
+        "resolvedAt": "2026-10-22T20:17:40.485Z",
+        "scheduledMs": 43000,
+        "actualHoldMs": 44377,
+        "dueOvershootMs": 1377
+      },
+      {
+        "runId": "da7a1600-375e-4175-a671-d5c65dd4bbb7",
+        "ordinal": 16,
+        "observedAt": "2026-10-22T20:17:09.715Z",
+        "resolvedAt": "2026-10-22T20:17:24.087Z",
+        "scheduledMs": 14000,
+        "actualHoldMs": 14372,
+        "dueOvershootMs": 372
+      },
+      {
+        "runId": "e3094e8c-4437-456e-9d1a-1bbf114f1373",
+        "ordinal": 17,
+        "observedAt": "2026-10-22T20:17:17.810Z",
+        "resolvedAt": "2026-10-22T20:17:39.324Z",
+        "scheduledMs": 21000,
+        "actualHoldMs": 21514,
+        "dueOvershootMs": 514
+      },
+      {
+        "runId": "71cf1256-243d-45a2-83c9-4249fe0de7b7",
+        "ordinal": 18,
+        "observedAt": "2026-10-22T20:17:33.999Z",
+        "resolvedAt": "2026-10-22T20:18:02.777Z",
+        "scheduledMs": 28000,
+        "actualHoldMs": 28778,
+        "dueOvershootMs": 778
+      },
+      {
+        "runId": "e966b5bf-e10f-48ec-9025-67954bed9521",
+        "ordinal": 19,
+        "observedAt": "2026-10-22T20:17:46.392Z",
+        "resolvedAt": "2026-10-22T20:18:22.510Z",
+        "scheduledMs": 35000,
+        "actualHoldMs": 36118,
+        "dueOvershootMs": 1118
+      },
+      {
+        "runId": "af3ae09a-6b1d-4c73-9991-5301ad33b671",
+        "ordinal": 20,
+        "observedAt": "2026-10-22T20:17:54.879Z",
+        "resolvedAt": "2026-10-22T20:18:38.772Z",
+        "scheduledMs": 42000,
+        "actualHoldMs": 43893,
+        "dueOvershootMs": 1893
+      },
+      {
+        "runId": "4fb3011c-eedb-4308-9a5c-c2f4cc90da14",
+        "ordinal": 21,
+        "observedAt": "2026-10-22T20:18:07.290Z",
+        "resolvedAt": "2026-10-22T20:18:21.570Z",
+        "scheduledMs": 13000,
+        "actualHoldMs": 14280,
+        "dueOvershootMs": 1280
+      },
+      {
+        "runId": "afccb5a7-6f74-4c8c-a6fc-698db23d337c",
+        "ordinal": 22,
+        "observedAt": "2026-10-22T20:18:25.960Z",
+        "resolvedAt": "2026-10-22T20:18:47.336Z",
+        "scheduledMs": 20000,
+        "actualHoldMs": 21376,
+        "dueOvershootMs": 1376
+      },
+      {
+        "runId": "b8e131db-a139-496c-bf6c-3fca8d5ed42d",
+        "ordinal": 23,
+        "observedAt": "2026-10-22T20:18:31.137Z",
+        "resolvedAt": "2026-10-22T20:19:00.113Z",
+        "scheduledMs": 27000,
+        "actualHoldMs": 28976,
+        "dueOvershootMs": 1976
+      },
+      {
+        "runId": "4da3d953-ef47-4a8e-b3d5-a76246dd9cc7",
+        "ordinal": 24,
+        "observedAt": "2026-10-22T20:18:42.405Z",
+        "resolvedAt": "2026-10-22T20:19:18.317Z",
+        "scheduledMs": 34000,
+        "actualHoldMs": 35912,
+        "dueOvershootMs": 1912
+      }
+    ]
+  },
+  "driverSummary": ".notes/cloud/evidence/playground-driver-primary-a.json",
+  "admissionJournal": ".loopy/playground/journal/primary/a",
+  "eventJournal": ".loopy/playground/journal/a.jsonl",
+  "resultRoot": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z",
+  "results": [
+    {
+      "runId": "f026f9d7-bb2e-4e8f-aad1-75c61f0a2aab",
+      "slug": "playground-a-changelog-approval",
+      "ordinal": 0,
+      "items": [1, 2],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "changelog contains ordered input items, approval attestation and completed delayed hook"
+      ],
+      "wait": {
+        "runId": "f026f9d7-bb2e-4e8f-aad1-75c61f0a2aab",
+        "ordinal": 0,
+        "observedAt": "2026-10-22T20:14:16.194Z",
+        "resolvedAt": "2026-10-22T20:14:27.633Z",
+        "scheduledMs": 10000,
+        "actualHoldMs": 11439,
+        "dueOvershootMs": 1439
+      },
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-changelog-approval/f026f9d7-bb2e-4e8f-aad1-75c61f0a2aab.json",
+        "bytes": 346,
+        "sha256": "37a4cb7bb9c611003796c3f67a245f23b776e34c10ce5ed04c087988100ace20",
+        "generatedPath": "CHANGELOG.md"
+      }
+    },
+    {
+      "runId": "8afa7db1-efbc-4dfc-b7e5-2030534319bd",
+      "slug": "playground-a-changelog-approval",
+      "ordinal": 1,
+      "items": [2, 3],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "changelog contains ordered input items, approval attestation and completed delayed hook"
+      ],
+      "wait": {
+        "runId": "8afa7db1-efbc-4dfc-b7e5-2030534319bd",
+        "ordinal": 1,
+        "observedAt": "2026-10-22T20:14:24.692Z",
+        "resolvedAt": "2026-10-22T20:14:42.567Z",
+        "scheduledMs": 17000,
+        "actualHoldMs": 17875,
+        "dueOvershootMs": 875
+      },
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-changelog-approval/8afa7db1-efbc-4dfc-b7e5-2030534319bd.json",
+        "bytes": 346,
+        "sha256": "3056ea36a1edc6c5db64521942b12b816bebc5fc520de5370519d0e06f977d56",
+        "generatedPath": "CHANGELOG.md"
+      }
+    },
+    {
+      "runId": "84d12396-fe83-4cb9-a465-170ccede3313",
+      "slug": "playground-a-changelog-approval",
+      "ordinal": 2,
+      "items": [3, 4],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "changelog contains ordered input items, approval attestation and completed delayed hook"
+      ],
+      "wait": {
+        "runId": "84d12396-fe83-4cb9-a465-170ccede3313",
+        "ordinal": 2,
+        "observedAt": "2026-10-22T20:14:30.811Z",
+        "resolvedAt": "2026-10-22T20:14:54.905Z",
+        "scheduledMs": 24000,
+        "actualHoldMs": 24094,
+        "dueOvershootMs": 94
+      },
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-changelog-approval/84d12396-fe83-4cb9-a465-170ccede3313.json",
+        "bytes": 346,
+        "sha256": "0261cc1386facc6459bbb89497477c19c980b8c456bc437bec5566de0a5b58df",
+        "generatedPath": "CHANGELOG.md"
+      }
+    },
+    {
+      "runId": "11e051b4-5fa8-4694-b006-972dbd54a6f4",
+      "slug": "playground-a-changelog-approval",
+      "ordinal": 3,
+      "items": [4, 5],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "changelog contains ordered input items, approval attestation and completed delayed hook"
+      ],
+      "wait": {
+        "runId": "11e051b4-5fa8-4694-b006-972dbd54a6f4",
+        "ordinal": 3,
+        "observedAt": "2026-10-22T20:14:40.545Z",
+        "resolvedAt": "2026-10-22T20:15:12.580Z",
+        "scheduledMs": 31000,
+        "actualHoldMs": 32035,
+        "dueOvershootMs": 1035
+      },
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-changelog-approval/11e051b4-5fa8-4694-b006-972dbd54a6f4.json",
+        "bytes": 346,
+        "sha256": "e152fdcbead90b6a3c92ffbcbab1ebd79dcfb837226b1fdd8a5a76d3aa7da9ff",
+        "generatedPath": "CHANGELOG.md"
+      }
+    },
+    {
+      "runId": "57c8d670-44b1-4b38-8984-b1ff99c868ac",
+      "slug": "playground-a-changelog-approval",
+      "ordinal": 4,
+      "items": [5, 6],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "changelog contains ordered input items, approval attestation and completed delayed hook"
+      ],
+      "wait": {
+        "runId": "57c8d670-44b1-4b38-8984-b1ff99c868ac",
+        "ordinal": 4,
+        "observedAt": "2026-10-22T20:14:47.989Z",
+        "resolvedAt": "2026-10-22T20:15:26.991Z",
+        "scheduledMs": 38000,
+        "actualHoldMs": 39002,
+        "dueOvershootMs": 1002
+      },
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-changelog-approval/57c8d670-44b1-4b38-8984-b1ff99c868ac.json",
+        "bytes": 346,
+        "sha256": "f79b5c951ef5a09e345843d1199bb8562fab1561f76e932a39e8b91e6ee947a5",
+        "generatedPath": "CHANGELOG.md"
+      }
+    },
+    {
+      "runId": "0f67d1c1-7ff6-4c64-b7ba-71f50765aab8",
+      "slug": "playground-a-changelog-approval",
+      "ordinal": 5,
+      "items": [1, 7],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "changelog contains ordered input items, approval attestation and completed delayed hook"
+      ],
+      "wait": {
+        "runId": "0f67d1c1-7ff6-4c64-b7ba-71f50765aab8",
+        "ordinal": 5,
+        "observedAt": "2026-10-22T20:14:57.444Z",
+        "resolvedAt": "2026-10-22T20:15:43.774Z",
+        "scheduledMs": 45000,
+        "actualHoldMs": 46330,
+        "dueOvershootMs": 1330
+      },
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-changelog-approval/0f67d1c1-7ff6-4c64-b7ba-71f50765aab8.json",
+        "bytes": 346,
+        "sha256": "efd09fecf17fdda688d913e568319d862112c9285ede5544cb30206083c5b87b",
+        "generatedPath": "CHANGELOG.md"
+      }
+    },
+    {
+      "runId": "5dc0f0a3-758a-42e6-bb9e-6b68024f34d2",
+      "slug": "playground-a-changelog-approval",
+      "ordinal": 6,
+      "items": [2, 8],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "changelog contains ordered input items, approval attestation and completed delayed hook"
+      ],
+      "wait": {
+        "runId": "5dc0f0a3-758a-42e6-bb9e-6b68024f34d2",
+        "ordinal": 6,
+        "observedAt": "2026-10-22T20:15:08.395Z",
+        "resolvedAt": "2026-10-22T20:15:25.062Z",
+        "scheduledMs": 16000,
+        "actualHoldMs": 16667,
+        "dueOvershootMs": 667
+      },
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-changelog-approval/5dc0f0a3-758a-42e6-bb9e-6b68024f34d2.json",
+        "bytes": 346,
+        "sha256": "d2d95dd4e84974e910ffed40feca6c29944b57a7059eb0bbbac5d4494e185751",
+        "generatedPath": "CHANGELOG.md"
+      }
+    },
+    {
+      "runId": "483ac685-5978-45b8-8183-5d1708f8860f",
+      "slug": "playground-a-changelog-approval",
+      "ordinal": 7,
+      "items": [3, 2],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "changelog contains ordered input items, approval attestation and completed delayed hook"
+      ],
+      "wait": {
+        "runId": "483ac685-5978-45b8-8183-5d1708f8860f",
+        "ordinal": 7,
+        "observedAt": "2026-10-22T20:15:26.576Z",
+        "resolvedAt": "2026-10-22T20:15:50.193Z",
+        "scheduledMs": 23000,
+        "actualHoldMs": 23617,
+        "dueOvershootMs": 617
+      },
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-changelog-approval/483ac685-5978-45b8-8183-5d1708f8860f.json",
+        "bytes": 346,
+        "sha256": "cfc47ccc4adc065b25b75aaedb4f0bd151573be18663ad59c0ac603f4436d952",
+        "generatedPath": "CHANGELOG.md"
+      }
+    },
+    {
+      "runId": "e6bb349d-64f1-4d7d-b6f9-a88806423b75",
+      "slug": "playground-a-changelog-approval",
+      "ordinal": 8,
+      "items": [4, 3],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "changelog contains ordered input items, approval attestation and completed delayed hook"
+      ],
+      "wait": {
+        "runId": "e6bb349d-64f1-4d7d-b6f9-a88806423b75",
+        "ordinal": 8,
+        "observedAt": "2026-10-22T20:15:36.872Z",
+        "resolvedAt": "2026-10-22T20:16:07.057Z",
+        "scheduledMs": 30000,
+        "actualHoldMs": 30185,
+        "dueOvershootMs": 185
+      },
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-changelog-approval/e6bb349d-64f1-4d7d-b6f9-a88806423b75.json",
+        "bytes": 346,
+        "sha256": "56bb225d7842d6c352095677faef8214dbacf1446b452318cf0d8b53e20b5998",
+        "generatedPath": "CHANGELOG.md"
+      }
+    },
+    {
+      "runId": "faae7c4f-fee2-4827-a3a7-c9d55bfb3244",
+      "slug": "playground-a-changelog-approval",
+      "ordinal": 9,
+      "items": [5, 4],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "changelog contains ordered input items, approval attestation and completed delayed hook"
+      ],
+      "wait": {
+        "runId": "faae7c4f-fee2-4827-a3a7-c9d55bfb3244",
+        "ordinal": 9,
+        "observedAt": "2026-10-22T20:15:46.656Z",
+        "resolvedAt": "2026-10-22T20:16:24.580Z",
+        "scheduledMs": 37000,
+        "actualHoldMs": 37924,
+        "dueOvershootMs": 924
+      },
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-changelog-approval/faae7c4f-fee2-4827-a3a7-c9d55bfb3244.json",
+        "bytes": 346,
+        "sha256": "ed356ac4db73b921125ddc821c406da0112488c60369a17e7ecdd10663520aa7",
+        "generatedPath": "CHANGELOG.md"
+      }
+    },
+    {
+      "runId": "bc503dcc-9498-407c-8cc6-65bf3661efde",
+      "slug": "playground-a-changelog-approval",
+      "ordinal": 10,
+      "items": [1, 5],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "changelog contains ordered input items, approval attestation and completed delayed hook"
+      ],
+      "wait": {
+        "runId": "bc503dcc-9498-407c-8cc6-65bf3661efde",
+        "ordinal": 10,
+        "observedAt": "2026-10-22T20:15:57.594Z",
+        "resolvedAt": "2026-10-22T20:16:41.715Z",
+        "scheduledMs": 44000,
+        "actualHoldMs": 44121,
+        "dueOvershootMs": 121
+      },
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-changelog-approval/bc503dcc-9498-407c-8cc6-65bf3661efde.json",
+        "bytes": 347,
+        "sha256": "3d7e7e32c7a9fbaa1d33464761662cfc1eff4abaaddc2da716382e6ebc42272a",
+        "generatedPath": "CHANGELOG.md"
+      }
+    },
+    {
+      "runId": "6c217293-12ff-4277-befc-01c10cab391d",
+      "slug": "playground-a-changelog-approval",
+      "ordinal": 11,
+      "items": [2, 6],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "changelog contains ordered input items, approval attestation and completed delayed hook"
+      ],
+      "wait": {
+        "runId": "6c217293-12ff-4277-befc-01c10cab391d",
+        "ordinal": 11,
+        "observedAt": "2026-10-22T20:16:06.048Z",
+        "resolvedAt": "2026-10-22T20:16:21.660Z",
+        "scheduledMs": 15000,
+        "actualHoldMs": 15612,
+        "dueOvershootMs": 612
+      },
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-changelog-approval/6c217293-12ff-4277-befc-01c10cab391d.json",
+        "bytes": 347,
+        "sha256": "03f14542d4b6315d78cfb2346631679b462463bb6556eedbdeef8f66cc1e87d5",
+        "generatedPath": "CHANGELOG.md"
+      }
+    },
+    {
+      "runId": "d60ca50b-c940-410b-95fb-bbcee61d5ac7",
+      "slug": "playground-a-changelog-approval",
+      "ordinal": 12,
+      "items": [3, 7],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "changelog contains ordered input items, approval attestation and completed delayed hook"
+      ],
+      "wait": {
+        "runId": "d60ca50b-c940-410b-95fb-bbcee61d5ac7",
+        "ordinal": 12,
+        "observedAt": "2026-10-22T20:16:22.491Z",
+        "resolvedAt": "2026-10-22T20:16:45.534Z",
+        "scheduledMs": 22000,
+        "actualHoldMs": 23043,
+        "dueOvershootMs": 1043
+      },
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-changelog-approval/d60ca50b-c940-410b-95fb-bbcee61d5ac7.json",
+        "bytes": 347,
+        "sha256": "9420abc9cac7c7f53ba9056141eee5af9da9d20aa30a69b0fb179ea329cc51ab",
+        "generatedPath": "CHANGELOG.md"
+      }
+    },
+    {
+      "runId": "ca1951d4-f2f8-4832-aba0-e3eef26bf3a9",
+      "slug": "playground-a-changelog-approval",
+      "ordinal": 13,
+      "items": [4, 8],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "changelog contains ordered input items, approval attestation and completed delayed hook"
+      ],
+      "wait": {
+        "runId": "ca1951d4-f2f8-4832-aba0-e3eef26bf3a9",
+        "ordinal": 13,
+        "observedAt": "2026-10-22T20:16:34.217Z",
+        "resolvedAt": "2026-10-22T20:17:03.732Z",
+        "scheduledMs": 29000,
+        "actualHoldMs": 29515,
+        "dueOvershootMs": 515
+      },
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-changelog-approval/ca1951d4-f2f8-4832-aba0-e3eef26bf3a9.json",
+        "bytes": 347,
+        "sha256": "ca7a964dd2d7b785cba389fc32edb4e4b5c24e6267d4b128763e9cf4916b4631",
+        "generatedPath": "CHANGELOG.md"
+      }
+    },
+    {
+      "runId": "a0970aed-d9e9-4b92-8b2e-0869059d6888",
+      "slug": "playground-a-changelog-approval",
+      "ordinal": 14,
+      "items": [5, 2],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "changelog contains ordered input items, approval attestation and completed delayed hook"
+      ],
+      "wait": {
+        "runId": "a0970aed-d9e9-4b92-8b2e-0869059d6888",
+        "ordinal": 14,
+        "observedAt": "2026-10-22T20:16:47.516Z",
+        "resolvedAt": "2026-10-22T20:17:24.030Z",
+        "scheduledMs": 36000,
+        "actualHoldMs": 36514,
+        "dueOvershootMs": 514
+      },
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-changelog-approval/a0970aed-d9e9-4b92-8b2e-0869059d6888.json",
+        "bytes": 347,
+        "sha256": "404a551056d7f23ee8e22864c2dfa66c974ca4b270881e30b06f866f6c3e33c7",
+        "generatedPath": "CHANGELOG.md"
+      }
+    },
+    {
+      "runId": "fb7b0083-481a-49b1-8f15-af8d617157d5",
+      "slug": "playground-a-changelog-approval",
+      "ordinal": 15,
+      "items": [1, 3],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "changelog contains ordered input items, approval attestation and completed delayed hook"
+      ],
+      "wait": {
+        "runId": "fb7b0083-481a-49b1-8f15-af8d617157d5",
+        "ordinal": 15,
+        "observedAt": "2026-10-22T20:16:56.108Z",
+        "resolvedAt": "2026-10-22T20:17:40.485Z",
+        "scheduledMs": 43000,
+        "actualHoldMs": 44377,
+        "dueOvershootMs": 1377
+      },
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-changelog-approval/fb7b0083-481a-49b1-8f15-af8d617157d5.json",
+        "bytes": 347,
+        "sha256": "3febc09aa121b6fafe0138312038c0c1cb7885e70b4ef9d067e673d5c94059d2",
+        "generatedPath": "CHANGELOG.md"
+      }
+    },
+    {
+      "runId": "da7a1600-375e-4175-a671-d5c65dd4bbb7",
+      "slug": "playground-a-changelog-approval",
+      "ordinal": 16,
+      "items": [2, 4],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "changelog contains ordered input items, approval attestation and completed delayed hook"
+      ],
+      "wait": {
+        "runId": "da7a1600-375e-4175-a671-d5c65dd4bbb7",
+        "ordinal": 16,
+        "observedAt": "2026-10-22T20:17:09.715Z",
+        "resolvedAt": "2026-10-22T20:17:24.087Z",
+        "scheduledMs": 14000,
+        "actualHoldMs": 14372,
+        "dueOvershootMs": 372
+      },
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-changelog-approval/da7a1600-375e-4175-a671-d5c65dd4bbb7.json",
+        "bytes": 347,
+        "sha256": "aeb56abee47b8c847dc08a5d3b61f36faf9a742d75786e50a7f3e266d9ea46e2",
+        "generatedPath": "CHANGELOG.md"
+      }
+    },
+    {
+      "runId": "e3094e8c-4437-456e-9d1a-1bbf114f1373",
+      "slug": "playground-a-changelog-approval",
+      "ordinal": 17,
+      "items": [3, 5],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "changelog contains ordered input items, approval attestation and completed delayed hook"
+      ],
+      "wait": {
+        "runId": "e3094e8c-4437-456e-9d1a-1bbf114f1373",
+        "ordinal": 17,
+        "observedAt": "2026-10-22T20:17:17.810Z",
+        "resolvedAt": "2026-10-22T20:17:39.324Z",
+        "scheduledMs": 21000,
+        "actualHoldMs": 21514,
+        "dueOvershootMs": 514
+      },
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-changelog-approval/e3094e8c-4437-456e-9d1a-1bbf114f1373.json",
+        "bytes": 347,
+        "sha256": "369fd8d686d57fcd862289d69b8588601bce859ea41db00834ef1df30709d827",
+        "generatedPath": "CHANGELOG.md"
+      }
+    },
+    {
+      "runId": "71cf1256-243d-45a2-83c9-4249fe0de7b7",
+      "slug": "playground-a-changelog-approval",
+      "ordinal": 18,
+      "items": [4, 6],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "changelog contains ordered input items, approval attestation and completed delayed hook"
+      ],
+      "wait": {
+        "runId": "71cf1256-243d-45a2-83c9-4249fe0de7b7",
+        "ordinal": 18,
+        "observedAt": "2026-10-22T20:17:33.999Z",
+        "resolvedAt": "2026-10-22T20:18:02.777Z",
+        "scheduledMs": 28000,
+        "actualHoldMs": 28778,
+        "dueOvershootMs": 778
+      },
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-changelog-approval/71cf1256-243d-45a2-83c9-4249fe0de7b7.json",
+        "bytes": 347,
+        "sha256": "487fb08b54c6deb3729c5f9795f9061e28e4594e1691259666a43b56f3e562e3",
+        "generatedPath": "CHANGELOG.md"
+      }
+    },
+    {
+      "runId": "e966b5bf-e10f-48ec-9025-67954bed9521",
+      "slug": "playground-a-changelog-approval",
+      "ordinal": 19,
+      "items": [5, 7],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "changelog contains ordered input items, approval attestation and completed delayed hook"
+      ],
+      "wait": {
+        "runId": "e966b5bf-e10f-48ec-9025-67954bed9521",
+        "ordinal": 19,
+        "observedAt": "2026-10-22T20:17:46.392Z",
+        "resolvedAt": "2026-10-22T20:18:22.510Z",
+        "scheduledMs": 35000,
+        "actualHoldMs": 36118,
+        "dueOvershootMs": 1118
+      },
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-changelog-approval/e966b5bf-e10f-48ec-9025-67954bed9521.json",
+        "bytes": 347,
+        "sha256": "5a730b57af32c7d02d4c945297f2f6137cc47a5597a6fd2cf19f3736fd976d38",
+        "generatedPath": "CHANGELOG.md"
+      }
+    },
+    {
+      "runId": "af3ae09a-6b1d-4c73-9991-5301ad33b671",
+      "slug": "playground-a-changelog-approval",
+      "ordinal": 20,
+      "items": [1, 8],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "changelog contains ordered input items, approval attestation and completed delayed hook"
+      ],
+      "wait": {
+        "runId": "af3ae09a-6b1d-4c73-9991-5301ad33b671",
+        "ordinal": 20,
+        "observedAt": "2026-10-22T20:17:54.879Z",
+        "resolvedAt": "2026-10-22T20:18:38.772Z",
+        "scheduledMs": 42000,
+        "actualHoldMs": 43893,
+        "dueOvershootMs": 1893
+      },
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-changelog-approval/af3ae09a-6b1d-4c73-9991-5301ad33b671.json",
+        "bytes": 347,
+        "sha256": "dd8cd3ada007c6a315736de0e0e514aa70612634b2c63eced3c7658bccab2906",
+        "generatedPath": "CHANGELOG.md"
+      }
+    },
+    {
+      "runId": "4fb3011c-eedb-4308-9a5c-c2f4cc90da14",
+      "slug": "playground-a-changelog-approval",
+      "ordinal": 21,
+      "items": [2, 2],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "changelog contains ordered input items, approval attestation and completed delayed hook"
+      ],
+      "wait": {
+        "runId": "4fb3011c-eedb-4308-9a5c-c2f4cc90da14",
+        "ordinal": 21,
+        "observedAt": "2026-10-22T20:18:07.290Z",
+        "resolvedAt": "2026-10-22T20:18:21.570Z",
+        "scheduledMs": 13000,
+        "actualHoldMs": 14280,
+        "dueOvershootMs": 1280
+      },
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-changelog-approval/4fb3011c-eedb-4308-9a5c-c2f4cc90da14.json",
+        "bytes": 347,
+        "sha256": "fc8d09d6c08d19aaa2b7294131ece822560c5fea1a4374c54eff8acb18fe1b10",
+        "generatedPath": "CHANGELOG.md"
+      }
+    },
+    {
+      "runId": "afccb5a7-6f74-4c8c-a6fc-698db23d337c",
+      "slug": "playground-a-changelog-approval",
+      "ordinal": 22,
+      "items": [3, 3],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "changelog contains ordered input items, approval attestation and completed delayed hook"
+      ],
+      "wait": {
+        "runId": "afccb5a7-6f74-4c8c-a6fc-698db23d337c",
+        "ordinal": 22,
+        "observedAt": "2026-10-22T20:18:25.960Z",
+        "resolvedAt": "2026-10-22T20:18:47.336Z",
+        "scheduledMs": 20000,
+        "actualHoldMs": 21376,
+        "dueOvershootMs": 1376
+      },
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-changelog-approval/afccb5a7-6f74-4c8c-a6fc-698db23d337c.json",
+        "bytes": 347,
+        "sha256": "54b908593bdc3b1c23eae0bd6d76a36809c7c7e79d4d775850ca77e457aaf786",
+        "generatedPath": "CHANGELOG.md"
+      }
+    },
+    {
+      "runId": "b8e131db-a139-496c-bf6c-3fca8d5ed42d",
+      "slug": "playground-a-changelog-approval",
+      "ordinal": 23,
+      "items": [4, 4],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "changelog contains ordered input items, approval attestation and completed delayed hook"
+      ],
+      "wait": {
+        "runId": "b8e131db-a139-496c-bf6c-3fca8d5ed42d",
+        "ordinal": 23,
+        "observedAt": "2026-10-22T20:18:31.137Z",
+        "resolvedAt": "2026-10-22T20:19:00.113Z",
+        "scheduledMs": 27000,
+        "actualHoldMs": 28976,
+        "dueOvershootMs": 1976
+      },
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-changelog-approval/b8e131db-a139-496c-bf6c-3fca8d5ed42d.json",
+        "bytes": 347,
+        "sha256": "b7bfd91b439cfbfb9b78205ce9b75af6d2e3c56a37624a45c064fa3e465f0784",
+        "generatedPath": "CHANGELOG.md"
+      }
+    },
+    {
+      "runId": "4da3d953-ef47-4a8e-b3d5-a76246dd9cc7",
+      "slug": "playground-a-changelog-approval",
+      "ordinal": 24,
+      "items": [5, 5],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "changelog contains ordered input items, approval attestation and completed delayed hook"
+      ],
+      "wait": {
+        "runId": "4da3d953-ef47-4a8e-b3d5-a76246dd9cc7",
+        "ordinal": 24,
+        "observedAt": "2026-10-22T20:18:42.405Z",
+        "resolvedAt": "2026-10-22T20:19:18.317Z",
+        "scheduledMs": 34000,
+        "actualHoldMs": 35912,
+        "dueOvershootMs": 1912
+      },
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-changelog-approval/4da3d953-ef47-4a8e-b3d5-a76246dd9cc7.json",
+        "bytes": 347,
+        "sha256": "6a4066c7559c5aa1315170359ab98b5051f0ff72ca52c174459d38b263e08a19",
+        "generatedPath": "CHANGELOG.md"
+      }
+    },
+    {
+      "runId": "8363da60-5da7-4a3d-958c-c1c8ffec8087",
+      "slug": "playground-a-dependency-audit",
+      "ordinal": 0,
+      "items": [1, 2],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "parallel inventory and review counts agree with the two seeded dependency rows"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-dependency-audit/8363da60-5da7-4a3d-958c-c1c8ffec8087.json",
+        "bytes": 414,
+        "sha256": "fa0e424354789962f480a6e8474d5ffb165adeb06edaae321b27d3ac3809ef99",
+        "generatedPath": "reports/dependencies.md"
+      }
+    },
+    {
+      "runId": "0960c96c-2626-4066-bc91-41ab5259d44f",
+      "slug": "playground-a-dependency-audit",
+      "ordinal": 1,
+      "items": [2, 3],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "parallel inventory and review counts agree with the two seeded dependency rows"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-dependency-audit/0960c96c-2626-4066-bc91-41ab5259d44f.json",
+        "bytes": 414,
+        "sha256": "d6184a1a25b4ca6a6df9801268441d5d16b5695f19d316442050ce4813be311b",
+        "generatedPath": "reports/dependencies.md"
+      }
+    },
+    {
+      "runId": "498405d4-48ec-4556-8aaa-c030127657d3",
+      "slug": "playground-a-dependency-audit",
+      "ordinal": 2,
+      "items": [3, 4],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "parallel inventory and review counts agree with the two seeded dependency rows"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-dependency-audit/498405d4-48ec-4556-8aaa-c030127657d3.json",
+        "bytes": 414,
+        "sha256": "60c7dd174ca603f5ebc53493139d1f285fb1d5ceae5cf1247b167f00810a643f",
+        "generatedPath": "reports/dependencies.md"
+      }
+    },
+    {
+      "runId": "bb8e27ba-2a0b-4b43-8841-03993f925fc5",
+      "slug": "playground-a-dependency-audit",
+      "ordinal": 3,
+      "items": [4, 5],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "parallel inventory and review counts agree with the two seeded dependency rows"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-dependency-audit/bb8e27ba-2a0b-4b43-8841-03993f925fc5.json",
+        "bytes": 414,
+        "sha256": "5c874aaf08a9bf7fd1e18404c01a005893ba40a90609aa4fbb548f9fe2060ff6",
+        "generatedPath": "reports/dependencies.md"
+      }
+    },
+    {
+      "runId": "70df5b00-e5c9-439e-8263-85209f489c66",
+      "slug": "playground-a-dependency-audit",
+      "ordinal": 4,
+      "items": [5, 6],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "parallel inventory and review counts agree with the two seeded dependency rows"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-dependency-audit/70df5b00-e5c9-439e-8263-85209f489c66.json",
+        "bytes": 414,
+        "sha256": "1f10520797eb910f2e4280309754f6d46e200bdfd1719187716faf6f0e7400d0",
+        "generatedPath": "reports/dependencies.md"
+      }
+    },
+    {
+      "runId": "32ca9923-874b-41be-a12a-99bdbf6ce818",
+      "slug": "playground-a-dependency-audit",
+      "ordinal": 5,
+      "items": [1, 7],
+      "status": "failed",
+      "classification": "controlled-failure",
+      "semanticChecks": ["exact controlled failure marker and ordinal policy"],
+      "failureCause": "Controlled dependency policy failure requested by fixture input."
+    },
+    {
+      "runId": "30521c8d-9bb9-409e-bd75-494905982307",
+      "slug": "playground-a-dependency-audit",
+      "ordinal": 6,
+      "items": [2, 8],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "parallel inventory and review counts agree with the two seeded dependency rows"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-dependency-audit/30521c8d-9bb9-409e-bd75-494905982307.json",
+        "bytes": 414,
+        "sha256": "d846347fd736cf0e6ea7d8c854f7d02c5d5994b6916d77fd54ba97c0e4a6fdb9",
+        "generatedPath": "reports/dependencies.md"
+      }
+    },
+    {
+      "runId": "d85ab5cc-2118-40c1-a083-2a2c153c3ab6",
+      "slug": "playground-a-dependency-audit",
+      "ordinal": 7,
+      "items": [3, 2],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "parallel inventory and review counts agree with the two seeded dependency rows"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-dependency-audit/d85ab5cc-2118-40c1-a083-2a2c153c3ab6.json",
+        "bytes": 414,
+        "sha256": "1ce8fac3ba775051dd2ef478541344bb9d21497ca811050be9f9d4f1701d87f8",
+        "generatedPath": "reports/dependencies.md"
+      }
+    },
+    {
+      "runId": "81f7f845-f87d-487c-a478-45323dd70e13",
+      "slug": "playground-a-dependency-audit",
+      "ordinal": 8,
+      "items": [4, 3],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "parallel inventory and review counts agree with the two seeded dependency rows"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-dependency-audit/81f7f845-f87d-487c-a478-45323dd70e13.json",
+        "bytes": 414,
+        "sha256": "2ff749e0dfa3bb542c5ef403176e74ce5f28580e7d83f6fc3ab94e6f64bc3458",
+        "generatedPath": "reports/dependencies.md"
+      }
+    },
+    {
+      "runId": "e31b4944-0f45-4c5b-8a6f-8ed00263db51",
+      "slug": "playground-a-dependency-audit",
+      "ordinal": 9,
+      "items": [5, 4],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "parallel inventory and review counts agree with the two seeded dependency rows"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-dependency-audit/e31b4944-0f45-4c5b-8a6f-8ed00263db51.json",
+        "bytes": 414,
+        "sha256": "a45a583cceeae9a244665faeb395fdc62919bda721bf8e7844098e7a242ae9a8",
+        "generatedPath": "reports/dependencies.md"
+      }
+    },
+    {
+      "runId": "9cb709f5-04f0-4b7e-8a5d-905a5001a90a",
+      "slug": "playground-a-dependency-audit",
+      "ordinal": 10,
+      "items": [1, 5],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "parallel inventory and review counts agree with the two seeded dependency rows"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-dependency-audit/9cb709f5-04f0-4b7e-8a5d-905a5001a90a.json",
+        "bytes": 415,
+        "sha256": "61fcd927ae6882453826a2f7583067fb828478b61b8ed25da1b62c33db70bcf3",
+        "generatedPath": "reports/dependencies.md"
+      }
+    },
+    {
+      "runId": "5e9ce245-2e07-4fc6-bb14-442e6951875f",
+      "slug": "playground-a-dependency-audit",
+      "ordinal": 11,
+      "items": [2, 6],
+      "status": "failed",
+      "classification": "controlled-failure",
+      "semanticChecks": ["exact controlled failure marker and ordinal policy"],
+      "failureCause": "Controlled dependency policy failure requested by fixture input."
+    },
+    {
+      "runId": "ca3d13fe-7ab6-4264-a377-c953a923815b",
+      "slug": "playground-a-dependency-audit",
+      "ordinal": 12,
+      "items": [3, 7],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "parallel inventory and review counts agree with the two seeded dependency rows"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-dependency-audit/ca3d13fe-7ab6-4264-a377-c953a923815b.json",
+        "bytes": 415,
+        "sha256": "f02c19eae0ece2da9eda734737ddbc3a3791d733d87ddbaea888aa08169e80c7",
+        "generatedPath": "reports/dependencies.md"
+      }
+    },
+    {
+      "runId": "49183c97-30a0-4c80-9712-c158a77b4235",
+      "slug": "playground-a-dependency-audit",
+      "ordinal": 13,
+      "items": [4, 8],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "parallel inventory and review counts agree with the two seeded dependency rows"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-dependency-audit/49183c97-30a0-4c80-9712-c158a77b4235.json",
+        "bytes": 415,
+        "sha256": "d804beca93e564baafb1b3f7427d3668cff671dfc975dc9160413c293257ed60",
+        "generatedPath": "reports/dependencies.md"
+      }
+    },
+    {
+      "runId": "973005fa-6185-487c-bca0-6404436a4d6c",
+      "slug": "playground-a-dependency-audit",
+      "ordinal": 14,
+      "items": [5, 2],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "parallel inventory and review counts agree with the two seeded dependency rows"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-dependency-audit/973005fa-6185-487c-bca0-6404436a4d6c.json",
+        "bytes": 415,
+        "sha256": "6bee37b8b272dc88951426c0e711f9998951b9f0abe94d40e4fe7c221b7d002f",
+        "generatedPath": "reports/dependencies.md"
+      }
+    },
+    {
+      "runId": "c256cf77-6599-4829-9651-143ac6c29374",
+      "slug": "playground-a-dependency-audit",
+      "ordinal": 15,
+      "items": [1, 3],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "parallel inventory and review counts agree with the two seeded dependency rows"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-dependency-audit/c256cf77-6599-4829-9651-143ac6c29374.json",
+        "bytes": 415,
+        "sha256": "a5109b1b6a276a83b27a85fd8a9b818da789443a4eb305a42b32fff17a34e9a1",
+        "generatedPath": "reports/dependencies.md"
+      }
+    },
+    {
+      "runId": "0fe6df12-5adf-4247-a069-833280c47afc",
+      "slug": "playground-a-dependency-audit",
+      "ordinal": 16,
+      "items": [2, 4],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "parallel inventory and review counts agree with the two seeded dependency rows"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-dependency-audit/0fe6df12-5adf-4247-a069-833280c47afc.json",
+        "bytes": 415,
+        "sha256": "58df5dce573908c502d8d8ca8d2508d4a3681ba5ef5833d91ac03b6f0abc4911",
+        "generatedPath": "reports/dependencies.md"
+      }
+    },
+    {
+      "runId": "23c0c439-2e88-4c2c-bc23-7816a8847fcd",
+      "slug": "playground-a-dependency-audit",
+      "ordinal": 17,
+      "items": [3, 5],
+      "status": "failed",
+      "classification": "controlled-failure",
+      "semanticChecks": ["exact controlled failure marker and ordinal policy"],
+      "failureCause": "Controlled dependency policy failure requested by fixture input."
+    },
+    {
+      "runId": "95ed373e-2adf-406b-a39d-8c8975995826",
+      "slug": "playground-a-dependency-audit",
+      "ordinal": 18,
+      "items": [4, 6],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "parallel inventory and review counts agree with the two seeded dependency rows"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-dependency-audit/95ed373e-2adf-406b-a39d-8c8975995826.json",
+        "bytes": 415,
+        "sha256": "f15b8bac8db7adc93f8aa1524f5a6a7823a83db8ac341aaf40efa60b6e920cb4",
+        "generatedPath": "reports/dependencies.md"
+      }
+    },
+    {
+      "runId": "d269b2e4-ae45-4254-bb9a-e459d9275b21",
+      "slug": "playground-a-dependency-audit",
+      "ordinal": 19,
+      "items": [5, 7],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "parallel inventory and review counts agree with the two seeded dependency rows"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-dependency-audit/d269b2e4-ae45-4254-bb9a-e459d9275b21.json",
+        "bytes": 415,
+        "sha256": "d4164b1a32293d98e5307dbb3876882f95668a4e253b86a2ad3425e039a257d2",
+        "generatedPath": "reports/dependencies.md"
+      }
+    },
+    {
+      "runId": "c55500ff-0cc4-4ff1-9335-fbb94dfca165",
+      "slug": "playground-a-dependency-audit",
+      "ordinal": 20,
+      "items": [1, 8],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "parallel inventory and review counts agree with the two seeded dependency rows"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-dependency-audit/c55500ff-0cc4-4ff1-9335-fbb94dfca165.json",
+        "bytes": 415,
+        "sha256": "0731835dfa2db8239f336184078bd2740175dbb94d7cb06366dc4efc6d1d21b7",
+        "generatedPath": "reports/dependencies.md"
+      }
+    },
+    {
+      "runId": "48c8ddb0-d3cd-4e24-a3e5-d8d410ebc81d",
+      "slug": "playground-a-dependency-audit",
+      "ordinal": 21,
+      "items": [2, 2],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "parallel inventory and review counts agree with the two seeded dependency rows"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-dependency-audit/48c8ddb0-d3cd-4e24-a3e5-d8d410ebc81d.json",
+        "bytes": 415,
+        "sha256": "23dba37b7fde52237d7c519309f7725d1d546178b34749c4b37134a39051ca67",
+        "generatedPath": "reports/dependencies.md"
+      }
+    },
+    {
+      "runId": "c369ee58-0271-4274-9c6c-1b1518dec5cd",
+      "slug": "playground-a-dependency-audit",
+      "ordinal": 22,
+      "items": [3, 3],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "parallel inventory and review counts agree with the two seeded dependency rows"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-dependency-audit/c369ee58-0271-4274-9c6c-1b1518dec5cd.json",
+        "bytes": 415,
+        "sha256": "81dab8c0631d10a27b6de58f82ae49d484c0eebf5c0816c561962b6127d9e05b",
+        "generatedPath": "reports/dependencies.md"
+      }
+    },
+    {
+      "runId": "4c5549f5-0800-43f9-b11c-f505a36174f7",
+      "slug": "playground-a-dependency-audit",
+      "ordinal": 23,
+      "items": [4, 4],
+      "status": "failed",
+      "classification": "controlled-failure",
+      "semanticChecks": ["exact controlled failure marker and ordinal policy"],
+      "failureCause": "Controlled dependency policy failure requested by fixture input."
+    },
+    {
+      "runId": "81721c53-91d6-47e4-8ce9-f2f7f83173bb",
+      "slug": "playground-a-dependency-audit",
+      "ordinal": 24,
+      "items": [5, 5],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "parallel inventory and review counts agree with the two seeded dependency rows"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-dependency-audit/81721c53-91d6-47e4-8ce9-f2f7f83173bb.json",
+        "bytes": 415,
+        "sha256": "1e5fa934329180d804deb912acd56fb3e4d6c9fe9242eb2588b8698f41b3c0cd",
+        "generatedPath": "reports/dependencies.md"
+      }
+    },
+    {
+      "runId": "354f6f43-24da-4fc2-82b9-ae9df4bdcdf1",
+      "slug": "playground-a-format-report",
+      "ordinal": 0,
+      "items": [1, 2],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/354f6f43-24da-4fc2-82b9-ae9df4bdcdf1.json",
+        "bytes": 304,
+        "sha256": "308204573bed99ae372bd686dcb8e4f904124f60342fc1af943d11912766a6a2",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "dfba3f6f-0c4f-4609-ac24-a8b32c708d39",
+      "slug": "playground-a-format-report",
+      "ordinal": 1,
+      "items": [2, 3],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/dfba3f6f-0c4f-4609-ac24-a8b32c708d39.json",
+        "bytes": 304,
+        "sha256": "8145f58a5b906338338756d35314e9faf803c54422dda327b7dba3907d788674",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "f67e0417-9eff-43eb-a9ec-5baeb3d0c225",
+      "slug": "playground-a-format-report",
+      "ordinal": 2,
+      "items": [3, 4],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/f67e0417-9eff-43eb-a9ec-5baeb3d0c225.json",
+        "bytes": 304,
+        "sha256": "0cbcdc01fc8245a3c207114a7388a7883ff07757733d9ac0f29ec27f0cc09187",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "2fb9119e-2d4b-4629-a2bc-f7a242dc1a99",
+      "slug": "playground-a-format-report",
+      "ordinal": 3,
+      "items": [4, 5],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/2fb9119e-2d4b-4629-a2bc-f7a242dc1a99.json",
+        "bytes": 304,
+        "sha256": "6fe52dbb2fc7aaabe330fe8f2ebabb1c356ef8a1e0efedee93c816fc40c7dd55",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "53502572-f034-4667-bf28-93055b09fdb3",
+      "slug": "playground-a-format-report",
+      "ordinal": 4,
+      "items": [5, 6],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/53502572-f034-4667-bf28-93055b09fdb3.json",
+        "bytes": 304,
+        "sha256": "4535bf42e13b1408ad0accc48e000167e740d4eae7fbaae5f29b4273b4a61689",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "3f9175f7-cfb9-4c60-b784-9702458206a3",
+      "slug": "playground-a-format-report",
+      "ordinal": 5,
+      "items": [1, 7],
+      "status": "failed",
+      "classification": "controlled-failure",
+      "semanticChecks": ["exact controlled failure marker and ordinal policy"],
+      "failureCause": "Controlled format check failure requested by fixture input."
+    },
+    {
+      "runId": "84dd78e8-a3a3-40d4-a381-44d8960bd636",
+      "slug": "playground-a-format-report",
+      "ordinal": 6,
+      "items": [2, 8],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/84dd78e8-a3a3-40d4-a381-44d8960bd636.json",
+        "bytes": 304,
+        "sha256": "48dc78831d8090f15572ff30d7abdcb7bcc0da62fb184a471a6eefe0533361a6",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "81b12095-401a-49db-aad4-9eaa14077947",
+      "slug": "playground-a-format-report",
+      "ordinal": 7,
+      "items": [3, 2],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/81b12095-401a-49db-aad4-9eaa14077947.json",
+        "bytes": 304,
+        "sha256": "e52d96a86def6b62c8296b2afdc586fd69c9de89b532a0135b85282f620747a5",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "5f5e909e-7eaa-4bd5-a4e2-72973a258252",
+      "slug": "playground-a-format-report",
+      "ordinal": 8,
+      "items": [4, 3],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/5f5e909e-7eaa-4bd5-a4e2-72973a258252.json",
+        "bytes": 304,
+        "sha256": "da439645d1d6a5052bbb18d9625b144d34bb8c3011e325e48f2fcf2db6d3515a",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "b6fd2320-af02-4b23-a9ef-edfb6d03a2c5",
+      "slug": "playground-a-format-report",
+      "ordinal": 9,
+      "items": [5, 4],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/b6fd2320-af02-4b23-a9ef-edfb6d03a2c5.json",
+        "bytes": 304,
+        "sha256": "b2a875790eb4383356faacefc8545ad1083455a292d45808299d9920d74b2115",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "731a9f53-78c2-45cc-a1dd-2feaea455206",
+      "slug": "playground-a-format-report",
+      "ordinal": 10,
+      "items": [1, 5],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/731a9f53-78c2-45cc-a1dd-2feaea455206.json",
+        "bytes": 305,
+        "sha256": "f90b2cb1fc35175c985ad183c6e8d7299fe958ba9efa1b3d120ea34be6e39911",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "44b9af07-8f19-435d-aaf0-a222f35ef1b2",
+      "slug": "playground-a-format-report",
+      "ordinal": 11,
+      "items": [2, 6],
+      "status": "failed",
+      "classification": "controlled-failure",
+      "semanticChecks": ["exact controlled failure marker and ordinal policy"],
+      "failureCause": "Controlled format check failure requested by fixture input."
+    },
+    {
+      "runId": "7a92711f-3f0c-4538-8824-364a2aadd9ab",
+      "slug": "playground-a-format-report",
+      "ordinal": 12,
+      "items": [3, 7],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/7a92711f-3f0c-4538-8824-364a2aadd9ab.json",
+        "bytes": 305,
+        "sha256": "9899c18de7fd8947540c74f7499ab30e403c6a958b8d194401b77f0da5b92fb7",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "970bc9f5-b312-4117-9744-f151c661aa37",
+      "slug": "playground-a-format-report",
+      "ordinal": 13,
+      "items": [4, 8],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/970bc9f5-b312-4117-9744-f151c661aa37.json",
+        "bytes": 305,
+        "sha256": "dba1c0b80f6a50cef3e6fcb8d09f7d6ec0ef7d46ace4642169ce4cc8eb1a6f7f",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "56ea049b-4ce8-4d41-bbe3-784c39cc4f48",
+      "slug": "playground-a-format-report",
+      "ordinal": 14,
+      "items": [5, 2],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/56ea049b-4ce8-4d41-bbe3-784c39cc4f48.json",
+        "bytes": 305,
+        "sha256": "451dbbc623860e37d10aa9106d8f24766332d20ff9a6ad876260dbbcc0674a5a",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "552abee7-5b2a-4ba6-bef9-55b63d0e1aaf",
+      "slug": "playground-a-format-report",
+      "ordinal": 15,
+      "items": [1, 3],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/552abee7-5b2a-4ba6-bef9-55b63d0e1aaf.json",
+        "bytes": 305,
+        "sha256": "e9ad9fd8295cf649f23dc1b4c3f7a50f2c7c2786a812ca3e5a71e435ee70b617",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "9abc2c89-d85b-4daa-8f8d-5bfe0d17e009",
+      "slug": "playground-a-format-report",
+      "ordinal": 16,
+      "items": [2, 4],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/9abc2c89-d85b-4daa-8f8d-5bfe0d17e009.json",
+        "bytes": 305,
+        "sha256": "085ea017e88c6290edc19773cd38dfd3de8adfefffa72bfc0dbaab736c0dcaa3",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "d5ffcdcd-8575-4a8a-b6ab-42dfe44155d4",
+      "slug": "playground-a-format-report",
+      "ordinal": 17,
+      "items": [3, 5],
+      "status": "failed",
+      "classification": "controlled-failure",
+      "semanticChecks": ["exact controlled failure marker and ordinal policy"],
+      "failureCause": "Controlled format check failure requested by fixture input."
+    },
+    {
+      "runId": "9a6997eb-4e7b-4de6-b291-95f5551e992d",
+      "slug": "playground-a-format-report",
+      "ordinal": 18,
+      "items": [4, 6],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/9a6997eb-4e7b-4de6-b291-95f5551e992d.json",
+        "bytes": 305,
+        "sha256": "b799ff5caedb7644f21c5a3290a3f6d8b981489d99fba245f609e1a2a5c56d5f",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "289bb38d-36e2-473d-9349-79a5f4507f43",
+      "slug": "playground-a-format-report",
+      "ordinal": 19,
+      "items": [5, 7],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/289bb38d-36e2-473d-9349-79a5f4507f43.json",
+        "bytes": 305,
+        "sha256": "ba471f401e684f72b09bff2a5d1a36781ea4dcd9dcca74d3765f3ef3e554f9b9",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "6dc259af-eb21-419f-972b-ffd430125807",
+      "slug": "playground-a-format-report",
+      "ordinal": 20,
+      "items": [1, 8],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/6dc259af-eb21-419f-972b-ffd430125807.json",
+        "bytes": 305,
+        "sha256": "b13975a43bf66da76217ea8ee786d39940247d3197bccd5c110a9c838f9d8973",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "fcf6999b-1fad-46c0-b6de-25581f3ea314",
+      "slug": "playground-a-format-report",
+      "ordinal": 21,
+      "items": [2, 2],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/fcf6999b-1fad-46c0-b6de-25581f3ea314.json",
+        "bytes": 305,
+        "sha256": "f4310c389c741456c7efb746bae59537454e7a8ce773ab8ca9c624e48a2bf745",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "2faa3c95-7171-49b8-8c41-ab1bdd2b77c1",
+      "slug": "playground-a-format-report",
+      "ordinal": 22,
+      "items": [3, 3],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/2faa3c95-7171-49b8-8c41-ab1bdd2b77c1.json",
+        "bytes": 305,
+        "sha256": "c6b3d43bda8f7c20ddf7f902e113d39605c8c3a7f7f265a66e937b6b1ee2c046",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "02fa19c9-be7f-40ba-8aa1-bc6a1268b450",
+      "slug": "playground-a-format-report",
+      "ordinal": 23,
+      "items": [4, 4],
+      "status": "failed",
+      "classification": "controlled-failure",
+      "semanticChecks": ["exact controlled failure marker and ordinal policy"],
+      "failureCause": "Controlled format check failure requested by fixture input."
+    },
+    {
+      "runId": "5735f0ad-5702-48f1-8e6d-8e928e1e206f",
+      "slug": "playground-a-format-report",
+      "ordinal": 24,
+      "items": [5, 5],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/5735f0ad-5702-48f1-8e6d-8e928e1e206f.json",
+        "bytes": 305,
+        "sha256": "8bf8a8768651775c0499532648dcfa2878bda1d138e43c1cac5cccb7022e94a6",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "6c7bbe35-7a72-4884-8991-2f662d59cbb9",
+      "slug": "playground-a-format-report",
+      "ordinal": 25,
+      "items": [1, 6],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/6c7bbe35-7a72-4884-8991-2f662d59cbb9.json",
+        "bytes": 305,
+        "sha256": "842949f24ad40a447efe0b36db0eef79d6850f4560ca405138cf0f9f1f99f45c",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "ff12c765-c9c5-4206-ac28-c25696e80881",
+      "slug": "playground-a-format-report",
+      "ordinal": 26,
+      "items": [2, 7],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/ff12c765-c9c5-4206-ac28-c25696e80881.json",
+        "bytes": 305,
+        "sha256": "36e4ebdc7cd4941d3875ced29cf8f7d60c2806c123a9c3ec3541eeb84f3d9d8f",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "1af362fe-c219-4738-81e8-26b1c5a328a2",
+      "slug": "playground-a-format-report",
+      "ordinal": 27,
+      "items": [3, 8],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/1af362fe-c219-4738-81e8-26b1c5a328a2.json",
+        "bytes": 305,
+        "sha256": "9f048455905d45abb3385a8b63f4cc0991e754c8d44012d77e75fc4e6f1fdf7e",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "7a6584ab-f41a-4c38-af4d-7d1600b16198",
+      "slug": "playground-a-format-report",
+      "ordinal": 28,
+      "items": [4, 2],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/7a6584ab-f41a-4c38-af4d-7d1600b16198.json",
+        "bytes": 305,
+        "sha256": "d08b5184d834dfd3acdccdde8dc6828655c0b77415309521185b6112284fed31",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "5587c784-efb0-4c31-a02c-494165f69b5c",
+      "slug": "playground-a-format-report",
+      "ordinal": 29,
+      "items": [5, 3],
+      "status": "failed",
+      "classification": "controlled-failure",
+      "semanticChecks": ["exact controlled failure marker and ordinal policy"],
+      "failureCause": "Controlled format check failure requested by fixture input."
+    },
+    {
+      "runId": "aafae750-559a-4654-ba7b-7fb720d6b420",
+      "slug": "playground-a-format-report",
+      "ordinal": 30,
+      "items": [1, 4],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/aafae750-559a-4654-ba7b-7fb720d6b420.json",
+        "bytes": 305,
+        "sha256": "f866d9c2ebc61c3a85cbe165343464fc885d94622ecdaba31a3fe9909aec02c7",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "8b986040-16ec-46ff-b58b-ea738b4dbb22",
+      "slug": "playground-a-format-report",
+      "ordinal": 31,
+      "items": [2, 5],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/8b986040-16ec-46ff-b58b-ea738b4dbb22.json",
+        "bytes": 305,
+        "sha256": "0f6cbab096661d99f738e88613747484c040985f61f7eafc54ba2b8602feaf3c",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "89bde812-594a-4fce-9144-b1feddd516c6",
+      "slug": "playground-a-format-report",
+      "ordinal": 32,
+      "items": [3, 6],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/89bde812-594a-4fce-9144-b1feddd516c6.json",
+        "bytes": 305,
+        "sha256": "0606800f9da59019d5f354a338c0455a07a81ef5870d88e3687d24ca40255865",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "9dacb7ea-e042-4fb4-b9be-5e311b624ece",
+      "slug": "playground-a-format-report",
+      "ordinal": 33,
+      "items": [4, 7],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/9dacb7ea-e042-4fb4-b9be-5e311b624ece.json",
+        "bytes": 305,
+        "sha256": "698d2330ca1c08954beedbe2a571f3765d312c4bb98e04f640fc51e319db50b5",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "1198b22c-16e7-4522-95ea-c54fe34c9393",
+      "slug": "playground-a-format-report",
+      "ordinal": 34,
+      "items": [5, 8],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/1198b22c-16e7-4522-95ea-c54fe34c9393.json",
+        "bytes": 305,
+        "sha256": "6f2f42b1d615f61985a5bee029d6164d38cfaeffc147455a4efe6083d6326e02",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "2353885b-7a23-4903-af9e-8170c5de888c",
+      "slug": "playground-a-format-report",
+      "ordinal": 35,
+      "items": [1, 2],
+      "status": "failed",
+      "classification": "controlled-failure",
+      "semanticChecks": ["exact controlled failure marker and ordinal policy"],
+      "failureCause": "Controlled format check failure requested by fixture input."
+    },
+    {
+      "runId": "c8ee2396-6549-44bc-98ff-befa4e22880d",
+      "slug": "playground-a-format-report",
+      "ordinal": 36,
+      "items": [2, 3],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/c8ee2396-6549-44bc-98ff-befa4e22880d.json",
+        "bytes": 305,
+        "sha256": "70c51ec5e5689cbdd85db11712bb8a586ddca8dcab77080e1588a7f3a87d9c6a",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "e8880477-1de1-419c-966b-52c830dc9f95",
+      "slug": "playground-a-format-report",
+      "ordinal": 37,
+      "items": [3, 4],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/e8880477-1de1-419c-966b-52c830dc9f95.json",
+        "bytes": 305,
+        "sha256": "5f40bfcd271365cdabc073d1faa1f23a75ee562f8386047e02c94624817b95f2",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "9ea22867-52df-4ef1-bc5c-4804302a8c92",
+      "slug": "playground-a-format-report",
+      "ordinal": 38,
+      "items": [4, 5],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/9ea22867-52df-4ef1-bc5c-4804302a8c92.json",
+        "bytes": 305,
+        "sha256": "06475a94c0bd9dc59d24a05000896bfd510387b9cbe622d16bb1aed523d58b5d",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "7ef34d39-14aa-4acc-9c42-250a2286624e",
+      "slug": "playground-a-format-report",
+      "ordinal": 39,
+      "items": [5, 6],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/7ef34d39-14aa-4acc-9c42-250a2286624e.json",
+        "bytes": 305,
+        "sha256": "a9d6c5da5d67d9e9c8f491b283051ca735bb25137441c3f5ef57163fe7b92f80",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "461f42a0-4d68-44b3-962a-f37a2b695c42",
+      "slug": "playground-a-format-report",
+      "ordinal": 40,
+      "items": [1, 7],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/461f42a0-4d68-44b3-962a-f37a2b695c42.json",
+        "bytes": 305,
+        "sha256": "7afb84cb505d7dc1a9b1f7d8f630789e5e8622aa05dca1f7511719271e019bd9",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "830f31a6-eebc-4377-b45f-ea7dab60c858",
+      "slug": "playground-a-format-report",
+      "ordinal": 41,
+      "items": [2, 8],
+      "status": "failed",
+      "classification": "controlled-failure",
+      "semanticChecks": ["exact controlled failure marker and ordinal policy"],
+      "failureCause": "Controlled format check failure requested by fixture input."
+    },
+    {
+      "runId": "f4f8d6e1-ec60-4cc1-ad2f-f22f0e687b33",
+      "slug": "playground-a-format-report",
+      "ordinal": 42,
+      "items": [3, 2],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/f4f8d6e1-ec60-4cc1-ad2f-f22f0e687b33.json",
+        "bytes": 305,
+        "sha256": "81e2e2f1a39d1017a02a488b561a5e7e48d3a6e7ab3e57962d3a3db8a967734d",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "ac290b54-7563-4378-9a5e-35f56d5b7438",
+      "slug": "playground-a-format-report",
+      "ordinal": 43,
+      "items": [4, 3],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/ac290b54-7563-4378-9a5e-35f56d5b7438.json",
+        "bytes": 305,
+        "sha256": "83e4a8278467c905e27e930c92ce5e9f109c40cd3da512ebd6da0cb98f578d19",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "2f7ded2e-52cf-40bb-8e6d-a0b17b8388ef",
+      "slug": "playground-a-format-report",
+      "ordinal": 44,
+      "items": [5, 4],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/2f7ded2e-52cf-40bb-8e6d-a0b17b8388ef.json",
+        "bytes": 305,
+        "sha256": "ff56fb92c73629be17f9a7db80e82ec51c0994b78fea616ad1199d3b12440cf0",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "b52d9b63-045b-4b5b-9b08-78f7d4f1b31b",
+      "slug": "playground-a-format-report",
+      "ordinal": 45,
+      "items": [1, 5],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/b52d9b63-045b-4b5b-9b08-78f7d4f1b31b.json",
+        "bytes": 305,
+        "sha256": "5e016b88b6d52cd3ba3c60ebc7dacebc1ab239630ca303dd4f9436d238375e98",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "566b31af-f0e6-4915-bf61-b9b9a0bf538d",
+      "slug": "playground-a-format-report",
+      "ordinal": 46,
+      "items": [2, 6],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/566b31af-f0e6-4915-bf61-b9b9a0bf538d.json",
+        "bytes": 305,
+        "sha256": "6a1dbbdd7faa554db11733ac33d7c7a6fcf54c60f30fb3c2eda77066c94334cb",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "a728a378-4607-45e2-8aed-a4b8abe512de",
+      "slug": "playground-a-format-report",
+      "ordinal": 47,
+      "items": [3, 7],
+      "status": "failed",
+      "classification": "controlled-failure",
+      "semanticChecks": ["exact controlled failure marker and ordinal policy"],
+      "failureCause": "Controlled format check failure requested by fixture input."
+    },
+    {
+      "runId": "8546f7b7-1f43-4623-9af9-96f5a723c9dd",
+      "slug": "playground-a-format-report",
+      "ordinal": 48,
+      "items": [4, 8],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/8546f7b7-1f43-4623-9af9-96f5a723c9dd.json",
+        "bytes": 305,
+        "sha256": "8ac497ea044292ab7a65a0a23fb97d04400c153b062ea6be4af89059c44776e5",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "dbe8e6c2-848e-4da8-abd2-21100a8c8d6b",
+      "slug": "playground-a-format-report",
+      "ordinal": 49,
+      "items": [5, 2],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/dbe8e6c2-848e-4da8-abd2-21100a8c8d6b.json",
+        "bytes": 305,
+        "sha256": "86193e28456eea62686762c95c444a622ffa8f0c45598e2c880fb0d755bf0f8c",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "645a0246-1d79-4e5f-a21a-ba9ba34fa6fb",
+      "slug": "playground-a-format-report",
+      "ordinal": 50,
+      "items": [1, 3],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/645a0246-1d79-4e5f-a21a-ba9ba34fa6fb.json",
+        "bytes": 305,
+        "sha256": "ab163d9bd5195e4d7cce52397b11dce8be14d51e1af4e0a8820d5fd7ecfc21f6",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "e6579f4d-3198-4a05-9920-10f99321f92e",
+      "slug": "playground-a-format-report",
+      "ordinal": 51,
+      "items": [2, 4],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/e6579f4d-3198-4a05-9920-10f99321f92e.json",
+        "bytes": 305,
+        "sha256": "9c3d723bb3da2b5f7a6c7cc3cce40505a6b21dd6c66ddfbf52545f10b72d6075",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "6e93705c-73c6-435d-867d-0efda559fcd0",
+      "slug": "playground-a-format-report",
+      "ordinal": 52,
+      "items": [3, 5],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/6e93705c-73c6-435d-867d-0efda559fcd0.json",
+        "bytes": 305,
+        "sha256": "b393d38103744b2d78ab423e1b4b6a5fa553684d326c6fcacee5b1ab0f1a4e2d",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "c1511bfc-f482-44a8-acbe-a5589d88714d",
+      "slug": "playground-a-format-report",
+      "ordinal": 53,
+      "items": [4, 6],
+      "status": "failed",
+      "classification": "controlled-failure",
+      "semanticChecks": ["exact controlled failure marker and ordinal policy"],
+      "failureCause": "Controlled format check failure requested by fixture input."
+    },
+    {
+      "runId": "d21793fb-e1e2-409b-9604-b3d6e47cf42c",
+      "slug": "playground-a-format-report",
+      "ordinal": 54,
+      "items": [5, 7],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/d21793fb-e1e2-409b-9604-b3d6e47cf42c.json",
+        "bytes": 305,
+        "sha256": "59beca5e1d83c0d32bcccaf4a175b2a50a41e2dffb084470ffcfa8ea92a89e33",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "1ed1bb8c-3ad9-41e2-a71b-e578d18adb62",
+      "slug": "playground-a-format-report",
+      "ordinal": 55,
+      "items": [1, 8],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/1ed1bb8c-3ad9-41e2-a71b-e578d18adb62.json",
+        "bytes": 305,
+        "sha256": "8eb62d003b6b0e05137fb475373e74d504633b974c1fc22c23a9adc94b9b8591",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "ac131ea9-1c0c-401a-8f19-e0201e6d0086",
+      "slug": "playground-a-format-report",
+      "ordinal": 56,
+      "items": [2, 2],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/ac131ea9-1c0c-401a-8f19-e0201e6d0086.json",
+        "bytes": 305,
+        "sha256": "477dec7fff10e4fcdff3f6026e4bcf9032e6a5e1b22059707094e3919a298d51",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "e1c9aec6-e9c5-494d-9360-14bab49957f6",
+      "slug": "playground-a-format-report",
+      "ordinal": 57,
+      "items": [3, 3],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/e1c9aec6-e9c5-494d-9360-14bab49957f6.json",
+        "bytes": 305,
+        "sha256": "72cede2ac0605dd5f25bdf8c448a5ee9c808b06beb6acb41003b56725f2d39c3",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "3aec7a45-3c2f-4325-9413-ef5f57638133",
+      "slug": "playground-a-format-report",
+      "ordinal": 58,
+      "items": [4, 4],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/3aec7a45-3c2f-4325-9413-ef5f57638133.json",
+        "bytes": 305,
+        "sha256": "2822abd08e73831d1c4f85d995934120be4946f62e838d527fd253b7c3c3413a",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "0f17d39d-bddf-4c91-9a8c-d63c0d1d224c",
+      "slug": "playground-a-format-report",
+      "ordinal": 59,
+      "items": [5, 5],
+      "status": "failed",
+      "classification": "controlled-failure",
+      "semanticChecks": ["exact controlled failure marker and ordinal policy"],
+      "failureCause": "Controlled format check failure requested by fixture input."
+    },
+    {
+      "runId": "dd043e14-a1e3-406a-8cf8-af7f0c21d1a2",
+      "slug": "playground-a-format-report",
+      "ordinal": 60,
+      "items": [1, 6],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/dd043e14-a1e3-406a-8cf8-af7f0c21d1a2.json",
+        "bytes": 305,
+        "sha256": "5b18fda7ea71203e2ca884dc8b09b02fe6443f08b6dbfbf4b63d9dbfffc2a59e",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "88467b77-75da-4806-af55-6b049c6e98a4",
+      "slug": "playground-a-format-report",
+      "ordinal": 61,
+      "items": [2, 7],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/88467b77-75da-4806-af55-6b049c6e98a4.json",
+        "bytes": 305,
+        "sha256": "b4bbfc2e4eb49310815a874cb4d9f1c40460ef851dde53e5d2c56585f64b248f",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "fcf5f1fa-6126-47d3-aa26-72b674219ada",
+      "slug": "playground-a-format-report",
+      "ordinal": 62,
+      "items": [3, 8],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/fcf5f1fa-6126-47d3-aa26-72b674219ada.json",
+        "bytes": 305,
+        "sha256": "00f1c8f68a82283d601ad358a43c104b4686c7012563d9c4239e3cff91ca5dc9",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "64be8f9a-12ac-4318-abd0-0dd91627d464",
+      "slug": "playground-a-format-report",
+      "ordinal": 63,
+      "items": [4, 2],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/64be8f9a-12ac-4318-abd0-0dd91627d464.json",
+        "bytes": 305,
+        "sha256": "701594af57a48a1c90530d1e2a69ec48ac31179e8058d78c6c96d18967d9dbbb",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "436454c9-c15d-4ec7-b910-840bb92a3632",
+      "slug": "playground-a-format-report",
+      "ordinal": 64,
+      "items": [5, 3],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/436454c9-c15d-4ec7-b910-840bb92a3632.json",
+        "bytes": 305,
+        "sha256": "ee46a7059f0f6ebac5a7f5a3a02f63488311be376b7b956b44325fc8f7bb87c0",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "f8eaff74-9efd-45b4-8faf-8a892d07b135",
+      "slug": "playground-a-format-report",
+      "ordinal": 65,
+      "items": [1, 4],
+      "status": "failed",
+      "classification": "controlled-failure",
+      "semanticChecks": ["exact controlled failure marker and ordinal policy"],
+      "failureCause": "Controlled format check failure requested by fixture input."
+    },
+    {
+      "runId": "a72ad153-b0de-4dcd-837d-a86eb107467b",
+      "slug": "playground-a-format-report",
+      "ordinal": 66,
+      "items": [2, 5],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/a72ad153-b0de-4dcd-837d-a86eb107467b.json",
+        "bytes": 305,
+        "sha256": "13d3a7c47e69acd87e42cf3506f8c01bd50e9f36bf7be7c8a60db8c811240600",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "dee6f050-aca1-4a31-bd63-a78664611eca",
+      "slug": "playground-a-format-report",
+      "ordinal": 67,
+      "items": [3, 6],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/dee6f050-aca1-4a31-bd63-a78664611eca.json",
+        "bytes": 305,
+        "sha256": "1c947a00066444a5a535cff63123dfb640ab9e9994feb355e620c89f12137997",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "7c5e3ce5-2e62-4e40-a928-e98a8184a490",
+      "slug": "playground-a-format-report",
+      "ordinal": 68,
+      "items": [4, 7],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/7c5e3ce5-2e62-4e40-a928-e98a8184a490.json",
+        "bytes": 305,
+        "sha256": "6178062e85c4e01ef5c0c600377b09f3d0f0c46f431df5e3389cc026c588ee0c",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "fbcbc2ee-665e-4103-999b-b2b51feecd83",
+      "slug": "playground-a-format-report",
+      "ordinal": 69,
+      "items": [5, 8],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/fbcbc2ee-665e-4103-999b-b2b51feecd83.json",
+        "bytes": 305,
+        "sha256": "8e8beef67c3bd415764ed24473c53a6ddecc822b4dc8746804bd98f2743f39f5",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "4a754c00-aa31-43ef-95fd-07ba7e9f6051",
+      "slug": "playground-a-format-report",
+      "ordinal": 70,
+      "items": [1, 2],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/4a754c00-aa31-43ef-95fd-07ba7e9f6051.json",
+        "bytes": 305,
+        "sha256": "ddfe534e8c4c1d2d5e6705c8756bd49dc2e9c1e955a39ddf436e50306f2d4924",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "b0ace3bd-6c5f-4ee4-a7ed-03f3755caa6e",
+      "slug": "playground-a-format-report",
+      "ordinal": 71,
+      "items": [2, 3],
+      "status": "failed",
+      "classification": "controlled-failure",
+      "semanticChecks": ["exact controlled failure marker and ordinal policy"],
+      "failureCause": "Controlled format check failure requested by fixture input."
+    },
+    {
+      "runId": "69e56706-9f5a-46fc-961b-fd8459762c65",
+      "slug": "playground-a-format-report",
+      "ordinal": 72,
+      "items": [3, 4],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/69e56706-9f5a-46fc-961b-fd8459762c65.json",
+        "bytes": 305,
+        "sha256": "ec1dc165c60afe77056aea0f58defb8f3cab491ea9a44c6c0a05060246f200f3",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "729685bf-6980-4a71-8b0d-72e765b4fea1",
+      "slug": "playground-a-format-report",
+      "ordinal": 73,
+      "items": [4, 5],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/729685bf-6980-4a71-8b0d-72e765b4fea1.json",
+        "bytes": 305,
+        "sha256": "669dc7131cc655eb1d5faa8c29e21169f2e5e398c8e20fb745b18bce3425f52a",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "d7ad4807-ece7-4ed3-9b38-ac54d7181d8c",
+      "slug": "playground-a-format-report",
+      "ordinal": 74,
+      "items": [5, 6],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/d7ad4807-ece7-4ed3-9b38-ac54d7181d8c.json",
+        "bytes": 305,
+        "sha256": "d51dc48984666c4d418482f277b8fb7bfb0a13a738157a30c065cbb38f3e49e6",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "d2f4e120-dc12-432c-a991-6cdc7e0b23fc",
+      "slug": "playground-a-format-report",
+      "ordinal": 75,
+      "items": [1, 7],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/d2f4e120-dc12-432c-a991-6cdc7e0b23fc.json",
+        "bytes": 305,
+        "sha256": "9b76d6675230ead7b46c93a43eb1c265e165150d25a924b49d5f34cfe98947c8",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "a67a59ae-6a65-401a-8ba3-82f80f218db8",
+      "slug": "playground-a-format-report",
+      "ordinal": 76,
+      "items": [2, 8],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/a67a59ae-6a65-401a-8ba3-82f80f218db8.json",
+        "bytes": 305,
+        "sha256": "3de0e6f9261d6a420fa1d082041a1080954a3d639632e84a313a9bf770a9f506",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "e79dab34-1254-4516-94a0-54cbce53dbd3",
+      "slug": "playground-a-format-report",
+      "ordinal": 77,
+      "items": [3, 2],
+      "status": "failed",
+      "classification": "controlled-failure",
+      "semanticChecks": ["exact controlled failure marker and ordinal policy"],
+      "failureCause": "Controlled format check failure requested by fixture input."
+    },
+    {
+      "runId": "85517ccb-ca54-48c5-b725-bf025668a8e8",
+      "slug": "playground-a-format-report",
+      "ordinal": 78,
+      "items": [4, 3],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/85517ccb-ca54-48c5-b725-bf025668a8e8.json",
+        "bytes": 305,
+        "sha256": "c0df99b39ccf544611cea9866a85798bae917d941148178bf81b26ec47e3a7dc",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "b601e917-2105-47b1-95f9-a456ac7320ca",
+      "slug": "playground-a-format-report",
+      "ordinal": 79,
+      "items": [5, 4],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/b601e917-2105-47b1-95f9-a456ac7320ca.json",
+        "bytes": 305,
+        "sha256": "6d037cd62e473caf8431c390e571f3b379cda317d3ac848330cf3a44b8ce19fc",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "5766db75-491d-47d3-afbf-59bd1376c8a3",
+      "slug": "playground-a-format-report",
+      "ordinal": 80,
+      "items": [1, 5],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/5766db75-491d-47d3-afbf-59bd1376c8a3.json",
+        "bytes": 305,
+        "sha256": "feb6ea2d444093585410abc96029bcac9508646f6c3619ec8360b099951306e7",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "e0a7b8ae-593c-4a3c-8431-7ba029acc978",
+      "slug": "playground-a-format-report",
+      "ordinal": 81,
+      "items": [2, 6],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/e0a7b8ae-593c-4a3c-8431-7ba029acc978.json",
+        "bytes": 305,
+        "sha256": "28fcdb45d954b1f2d482b8511dd587c2ff8d1b5520f534a770f600f16e6e09ba",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "46651211-73ca-48ec-9f43-4eb4e0d2db72",
+      "slug": "playground-a-format-report",
+      "ordinal": 82,
+      "items": [3, 7],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/46651211-73ca-48ec-9f43-4eb4e0d2db72.json",
+        "bytes": 305,
+        "sha256": "80e276a779909dbb3fe4d7e595840d92b8b6a1f21ce0efe26c3cbc6f367a7e00",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "c2b48d4f-22a4-4d3b-ba17-a468a8f85e8f",
+      "slug": "playground-a-format-report",
+      "ordinal": 83,
+      "items": [4, 8],
+      "status": "failed",
+      "classification": "controlled-failure",
+      "semanticChecks": ["exact controlled failure marker and ordinal policy"],
+      "failureCause": "Controlled format check failure requested by fixture input."
+    },
+    {
+      "runId": "334e5f4b-a872-4fa8-abc1-7b9b97ce8b8d",
+      "slug": "playground-a-format-report",
+      "ordinal": 84,
+      "items": [5, 2],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/334e5f4b-a872-4fa8-abc1-7b9b97ce8b8d.json",
+        "bytes": 305,
+        "sha256": "00bc790a5b4bb55df73d4c3e64856bbec477ba22dd64573367fd84b9a404891a",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "0215e9c6-c886-4faa-9b4a-a52d4ada3b3c",
+      "slug": "playground-a-format-report",
+      "ordinal": 85,
+      "items": [1, 3],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/0215e9c6-c886-4faa-9b4a-a52d4ada3b3c.json",
+        "bytes": 305,
+        "sha256": "f78612288bdebb416900f59c436492a9b1f83efeb31719bac2c4d1c4048cf32e",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "da9a591a-24cd-488b-8c66-7360fd6d077f",
+      "slug": "playground-a-format-report",
+      "ordinal": 86,
+      "items": [2, 4],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/da9a591a-24cd-488b-8c66-7360fd6d077f.json",
+        "bytes": 305,
+        "sha256": "0b0c2bebc6a9d9206c0ba7abe56cbcac5c4abdfeb0876596e802815212e9b4e4",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "3704958d-75fc-4f60-91ef-3275a56e8028",
+      "slug": "playground-a-format-report",
+      "ordinal": 87,
+      "items": [3, 5],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/3704958d-75fc-4f60-91ef-3275a56e8028.json",
+        "bytes": 305,
+        "sha256": "d4961e8110e9910029f91b9b0113d8663424853127b2b15e0d8a626a85cddbfb",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "c37eb3ae-f332-4f53-8e75-277741c532d2",
+      "slug": "playground-a-format-report",
+      "ordinal": 88,
+      "items": [4, 6],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/c37eb3ae-f332-4f53-8e75-277741c532d2.json",
+        "bytes": 305,
+        "sha256": "18978283fe4b4cfd5be23a9b7c4103f685208c75a3286324e351585c37644217",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "007919a5-2074-4f03-87f5-abf684da6baa",
+      "slug": "playground-a-format-report",
+      "ordinal": 89,
+      "items": [5, 7],
+      "status": "failed",
+      "classification": "controlled-failure",
+      "semanticChecks": ["exact controlled failure marker and ordinal policy"],
+      "failureCause": "Controlled format check failure requested by fixture input."
+    },
+    {
+      "runId": "d8b0e227-3ae8-41dd-af88-433f465131d8",
+      "slug": "playground-a-format-report",
+      "ordinal": 90,
+      "items": [1, 8],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/d8b0e227-3ae8-41dd-af88-433f465131d8.json",
+        "bytes": 305,
+        "sha256": "5a02e10a25fc828989e7b64c1eb0ed7b17475aba1fc9dafd5866b397b8c65c02",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "6ef07bd8-9914-4fec-8b0c-416c9a683432",
+      "slug": "playground-a-format-report",
+      "ordinal": 91,
+      "items": [2, 2],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/6ef07bd8-9914-4fec-8b0c-416c9a683432.json",
+        "bytes": 305,
+        "sha256": "c81b4aaf1dd4a4fa78c9186d73e049690a488a6a4e7b8b06cd43f1d0bce1d501",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "53201857-12a9-4b1d-9f42-950ed71adb95",
+      "slug": "playground-a-format-report",
+      "ordinal": 92,
+      "items": [3, 3],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/53201857-12a9-4b1d-9f42-950ed71adb95.json",
+        "bytes": 305,
+        "sha256": "8220a72ee8ce4ab94c0af6bb042f5577eb5ae69d12b485927475185ff23979c4",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "91145e4a-a650-4eb8-b3cd-c67d9257055e",
+      "slug": "playground-a-format-report",
+      "ordinal": 93,
+      "items": [4, 4],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/91145e4a-a650-4eb8-b3cd-c67d9257055e.json",
+        "bytes": 305,
+        "sha256": "b1e57cb2af98c6b8ca6e26bdaf9646532d37c38c1f9c1cbf925b79b098938834",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "b1077b36-504f-46a6-b88f-a094dd80d52b",
+      "slug": "playground-a-format-report",
+      "ordinal": 94,
+      "items": [5, 5],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/b1077b36-504f-46a6-b88f-a094dd80d52b.json",
+        "bytes": 305,
+        "sha256": "3f8c0a005b6ca128f43d88798a3758047e9b2b0d061eb48bfd442389895f7b5a",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "b401580c-a9d6-4e08-8706-c6348c911890",
+      "slug": "playground-a-format-report",
+      "ordinal": 95,
+      "items": [1, 6],
+      "status": "failed",
+      "classification": "controlled-failure",
+      "semanticChecks": ["exact controlled failure marker and ordinal policy"],
+      "failureCause": "Controlled format check failure requested by fixture input."
+    },
+    {
+      "runId": "d99e92e9-736b-452f-8d99-001053d8661b",
+      "slug": "playground-a-format-report",
+      "ordinal": 96,
+      "items": [2, 7],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/d99e92e9-736b-452f-8d99-001053d8661b.json",
+        "bytes": 305,
+        "sha256": "7d778972049a1471ffbb01435f72ba4c12b3c0480aadfc06078cbc0b71cb2c6e",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "4db69cd3-45bb-4ead-a22d-e82dded8600a",
+      "slug": "playground-a-format-report",
+      "ordinal": 97,
+      "items": [3, 8],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/4db69cd3-45bb-4ead-a22d-e82dded8600a.json",
+        "bytes": 305,
+        "sha256": "e44b4675ebb94d1569cb707655cf551899f2dfedc982d180bb402f94c4f804f6",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "34e43917-6301-4c2d-b007-b975e9b5a420",
+      "slug": "playground-a-format-report",
+      "ordinal": 98,
+      "items": [4, 2],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/34e43917-6301-4c2d-b007-b975e9b5a420.json",
+        "bytes": 305,
+        "sha256": "8e3d10b33a76a6975a4b4a7a85d25591425a60932807f48d6699b6fa3878efaa",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "2d91d5db-b199-42bb-b419-791368aa0ab7",
+      "slug": "playground-a-format-report",
+      "ordinal": 99,
+      "items": [5, 3],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["format report lists the three seeded source files and three changes"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-format-report/2d91d5db-b199-42bb-b419-791368aa0ab7.json",
+        "bytes": 305,
+        "sha256": "c6eb9b59ce63f9b49ae1de09841b78a71a9464e72a8846bb5536ae16c98e58dc",
+        "generatedPath": "reports/format.md"
+      }
+    },
+    {
+      "runId": "9dbc471b-79c4-42d8-aa54-4a1fb1120099",
+      "slug": "playground-a-generated-docs",
+      "ordinal": 0,
+      "items": [1, 2],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "mapped doc sections preserve input order, source paths and actual seeded TypeScript declarations"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-generated-docs/9dbc471b-79c4-42d8-aa54-4a1fb1120099.json",
+        "bytes": 475,
+        "sha256": "5d7a0dcfd0ef7399e4cdb6ec76838257b5f2d7250bcf1eec8b96793a1fabc8ec",
+        "generatedPath": "docs/api.md"
+      }
+    },
+    {
+      "runId": "9f829b7f-716b-4a92-b7b3-17ed85fe78f1",
+      "slug": "playground-a-generated-docs",
+      "ordinal": 1,
+      "items": [2, 3],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "mapped doc sections preserve input order, source paths and actual seeded TypeScript declarations"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-generated-docs/9f829b7f-716b-4a92-b7b3-17ed85fe78f1.json",
+        "bytes": 475,
+        "sha256": "d170d1824db421bbb8458bcad2b91156effe695d265d16d1c24db312256bd217",
+        "generatedPath": "docs/api.md"
+      }
+    },
+    {
+      "runId": "53ad0e64-51ba-4e41-b8b1-dafd218291d7",
+      "slug": "playground-a-generated-docs",
+      "ordinal": 2,
+      "items": [3, 4],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "mapped doc sections preserve input order, source paths and actual seeded TypeScript declarations"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-generated-docs/53ad0e64-51ba-4e41-b8b1-dafd218291d7.json",
+        "bytes": 475,
+        "sha256": "c96253aa4f8da74bb13ee6b0f8b4928df3e5f55442c71eca2f07afcf5ae79bf3",
+        "generatedPath": "docs/api.md"
+      }
+    },
+    {
+      "runId": "16767223-b918-400a-8ccc-3f6dcc5149e0",
+      "slug": "playground-a-generated-docs",
+      "ordinal": 3,
+      "items": [4, 5],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "mapped doc sections preserve input order, source paths and actual seeded TypeScript declarations"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-generated-docs/16767223-b918-400a-8ccc-3f6dcc5149e0.json",
+        "bytes": 475,
+        "sha256": "806bfe94880dd5c41fac3c1a05eb01da5c6a1c6ff6478e62e17ab59585187395",
+        "generatedPath": "docs/api.md"
+      }
+    },
+    {
+      "runId": "e886ea15-c624-4195-a71d-8c9dbd92edae",
+      "slug": "playground-a-generated-docs",
+      "ordinal": 4,
+      "items": [5, 6],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "mapped doc sections preserve input order, source paths and actual seeded TypeScript declarations"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-generated-docs/e886ea15-c624-4195-a71d-8c9dbd92edae.json",
+        "bytes": 475,
+        "sha256": "637be988e94da37702a1716905149212c0eb22a9671b385d443e16752efe2105",
+        "generatedPath": "docs/api.md"
+      }
+    },
+    {
+      "runId": "a3b8324c-da90-4cbc-a133-e822a650e148",
+      "slug": "playground-a-generated-docs",
+      "ordinal": 5,
+      "items": [1, 7],
+      "status": "failed",
+      "classification": "controlled-failure",
+      "semanticChecks": ["exact controlled failure marker and ordinal policy"],
+      "failureCause": "Controlled generated documentation failure requested by fixture input."
+    },
+    {
+      "runId": "aa4922ee-71d7-4cab-a977-562bd13bd7bb",
+      "slug": "playground-a-generated-docs",
+      "ordinal": 6,
+      "items": [2, 8],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "mapped doc sections preserve input order, source paths and actual seeded TypeScript declarations"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-generated-docs/aa4922ee-71d7-4cab-a977-562bd13bd7bb.json",
+        "bytes": 475,
+        "sha256": "6aa0ad45d55931573f8275bb36a7b375b99233c52c06d1919015f0604e6e20eb",
+        "generatedPath": "docs/api.md"
+      }
+    },
+    {
+      "runId": "db232956-9be3-4070-9ccc-af444c263abc",
+      "slug": "playground-a-generated-docs",
+      "ordinal": 7,
+      "items": [3, 2],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "mapped doc sections preserve input order, source paths and actual seeded TypeScript declarations"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-generated-docs/db232956-9be3-4070-9ccc-af444c263abc.json",
+        "bytes": 475,
+        "sha256": "4e7f593b5b27f4a33e706e4ae1caea440fa2233def1b3c18c1997e273414b796",
+        "generatedPath": "docs/api.md"
+      }
+    },
+    {
+      "runId": "e6d4c874-8376-4a94-96d9-520f1e645bb8",
+      "slug": "playground-a-generated-docs",
+      "ordinal": 8,
+      "items": [4, 3],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "mapped doc sections preserve input order, source paths and actual seeded TypeScript declarations"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-generated-docs/e6d4c874-8376-4a94-96d9-520f1e645bb8.json",
+        "bytes": 475,
+        "sha256": "3943e6b46c713e43d118fc515d1250ccc8884697d018a7db1cc341a0f86bb2e8",
+        "generatedPath": "docs/api.md"
+      }
+    },
+    {
+      "runId": "a54e9d27-b723-4aa4-a84e-169d2bc8f87a",
+      "slug": "playground-a-generated-docs",
+      "ordinal": 9,
+      "items": [5, 4],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "mapped doc sections preserve input order, source paths and actual seeded TypeScript declarations"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-generated-docs/a54e9d27-b723-4aa4-a84e-169d2bc8f87a.json",
+        "bytes": 475,
+        "sha256": "9a9f6140c55625bfb67a64e7ff937c5b8cd13ab85815b6b72868ee7ebf3f1124",
+        "generatedPath": "docs/api.md"
+      }
+    },
+    {
+      "runId": "ad969000-c800-4996-a819-e653930cb91c",
+      "slug": "playground-a-generated-docs",
+      "ordinal": 10,
+      "items": [1, 5],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "mapped doc sections preserve input order, source paths and actual seeded TypeScript declarations"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-generated-docs/ad969000-c800-4996-a819-e653930cb91c.json",
+        "bytes": 476,
+        "sha256": "80f5b4681bb1674bf0008e6a66b44ff51931b0d61df0faf63e5fdd91cec0e7b1",
+        "generatedPath": "docs/api.md"
+      }
+    },
+    {
+      "runId": "3ec9c087-5e8f-4a9f-b84b-b337b1af4a33",
+      "slug": "playground-a-generated-docs",
+      "ordinal": 11,
+      "items": [2, 6],
+      "status": "failed",
+      "classification": "controlled-failure",
+      "semanticChecks": ["exact controlled failure marker and ordinal policy"],
+      "failureCause": "Controlled generated documentation failure requested by fixture input."
+    },
+    {
+      "runId": "892f613c-ca63-4f2e-bc3d-1215ccecaeeb",
+      "slug": "playground-a-generated-docs",
+      "ordinal": 12,
+      "items": [3, 7],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "mapped doc sections preserve input order, source paths and actual seeded TypeScript declarations"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-generated-docs/892f613c-ca63-4f2e-bc3d-1215ccecaeeb.json",
+        "bytes": 476,
+        "sha256": "a5d5d087a4726e6ec1767e0ae9db7889446f3aab444f44f3aee62a828f0bc7e3",
+        "generatedPath": "docs/api.md"
+      }
+    },
+    {
+      "runId": "396bbb2c-0cb9-4cf2-9037-8424a75e768e",
+      "slug": "playground-a-generated-docs",
+      "ordinal": 13,
+      "items": [4, 8],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "mapped doc sections preserve input order, source paths and actual seeded TypeScript declarations"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-generated-docs/396bbb2c-0cb9-4cf2-9037-8424a75e768e.json",
+        "bytes": 476,
+        "sha256": "49046590d307fae6ff30c3d530156d09ec4937580bc06a1090a1fc051e075dc1",
+        "generatedPath": "docs/api.md"
+      }
+    },
+    {
+      "runId": "9ff2de9d-abc3-4875-9e82-dbbcacc0beb9",
+      "slug": "playground-a-generated-docs",
+      "ordinal": 14,
+      "items": [5, 2],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "mapped doc sections preserve input order, source paths and actual seeded TypeScript declarations"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-generated-docs/9ff2de9d-abc3-4875-9e82-dbbcacc0beb9.json",
+        "bytes": 476,
+        "sha256": "b4a8e108050b33908f37425ea03550e2ef5432dbf3ee7c285500147446d65dfd",
+        "generatedPath": "docs/api.md"
+      }
+    },
+    {
+      "runId": "dda618fa-f7a7-4a2d-9cf6-0246d46cd125",
+      "slug": "playground-a-generated-docs",
+      "ordinal": 15,
+      "items": [1, 3],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "mapped doc sections preserve input order, source paths and actual seeded TypeScript declarations"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-generated-docs/dda618fa-f7a7-4a2d-9cf6-0246d46cd125.json",
+        "bytes": 476,
+        "sha256": "7eb63d84d82a026e03674ac4990eee4f93b49353a240f5f9933e963bf3432f78",
+        "generatedPath": "docs/api.md"
+      }
+    },
+    {
+      "runId": "d86aafd0-e4ae-4b7b-a42a-7e1ae134b627",
+      "slug": "playground-a-generated-docs",
+      "ordinal": 16,
+      "items": [2, 4],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "mapped doc sections preserve input order, source paths and actual seeded TypeScript declarations"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-generated-docs/d86aafd0-e4ae-4b7b-a42a-7e1ae134b627.json",
+        "bytes": 476,
+        "sha256": "71ab8aa6da347b970805b4ecc44eeb8718a3f23410e2e248c0143ac73b1769ed",
+        "generatedPath": "docs/api.md"
+      }
+    },
+    {
+      "runId": "2e58eaf1-065c-40e0-a631-9cb0a8c59cb4",
+      "slug": "playground-a-generated-docs",
+      "ordinal": 17,
+      "items": [3, 5],
+      "status": "failed",
+      "classification": "controlled-failure",
+      "semanticChecks": ["exact controlled failure marker and ordinal policy"],
+      "failureCause": "Controlled generated documentation failure requested by fixture input."
+    },
+    {
+      "runId": "1fb1a58b-94f4-485b-8b3b-09acf7f3b91a",
+      "slug": "playground-a-generated-docs",
+      "ordinal": 18,
+      "items": [4, 6],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "mapped doc sections preserve input order, source paths and actual seeded TypeScript declarations"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-generated-docs/1fb1a58b-94f4-485b-8b3b-09acf7f3b91a.json",
+        "bytes": 476,
+        "sha256": "d316cd13760509e0583ce571fe476fd3d9988f14d88210dfb324e081649d2b2e",
+        "generatedPath": "docs/api.md"
+      }
+    },
+    {
+      "runId": "a0c2ca68-6e20-41de-9fd1-361d20db95ee",
+      "slug": "playground-a-generated-docs",
+      "ordinal": 19,
+      "items": [5, 7],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "mapped doc sections preserve input order, source paths and actual seeded TypeScript declarations"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-generated-docs/a0c2ca68-6e20-41de-9fd1-361d20db95ee.json",
+        "bytes": 476,
+        "sha256": "e09f371ce109f957af3e20f08a0c399e2f834fbc677b2e613d5b7eae21e5807f",
+        "generatedPath": "docs/api.md"
+      }
+    },
+    {
+      "runId": "956aebc5-5984-4e61-b795-46505c296b02",
+      "slug": "playground-a-generated-docs",
+      "ordinal": 20,
+      "items": [1, 8],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "mapped doc sections preserve input order, source paths and actual seeded TypeScript declarations"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-generated-docs/956aebc5-5984-4e61-b795-46505c296b02.json",
+        "bytes": 476,
+        "sha256": "1e4921d3b4ef196e630ff2605b67fc3080f200f1c4bb76df273bb18f80895d1d",
+        "generatedPath": "docs/api.md"
+      }
+    },
+    {
+      "runId": "f14dd5c2-f132-4d79-bea0-b724c37855f5",
+      "slug": "playground-a-generated-docs",
+      "ordinal": 21,
+      "items": [2, 2],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "mapped doc sections preserve input order, source paths and actual seeded TypeScript declarations"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-generated-docs/f14dd5c2-f132-4d79-bea0-b724c37855f5.json",
+        "bytes": 476,
+        "sha256": "f6a2a048ca53f99e7ea32863dd4c41e103948b0a3abeae702e990a1a662dc403",
+        "generatedPath": "docs/api.md"
+      }
+    },
+    {
+      "runId": "fb263b18-742e-448a-be77-c9d269de5ef9",
+      "slug": "playground-a-generated-docs",
+      "ordinal": 22,
+      "items": [3, 3],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "mapped doc sections preserve input order, source paths and actual seeded TypeScript declarations"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-generated-docs/fb263b18-742e-448a-be77-c9d269de5ef9.json",
+        "bytes": 476,
+        "sha256": "f3c70750a71356ae76a176143819ee941ce74774cb1bf9704aa47a2b1bdab6f4",
+        "generatedPath": "docs/api.md"
+      }
+    },
+    {
+      "runId": "e567939e-8b75-4e69-ab40-b98bfd3012fa",
+      "slug": "playground-a-generated-docs",
+      "ordinal": 23,
+      "items": [4, 4],
+      "status": "failed",
+      "classification": "controlled-failure",
+      "semanticChecks": ["exact controlled failure marker and ordinal policy"],
+      "failureCause": "Controlled generated documentation failure requested by fixture input."
+    },
+    {
+      "runId": "e19f0449-5d8f-4b10-85ce-855f9e77fc29",
+      "slug": "playground-a-generated-docs",
+      "ordinal": 24,
+      "items": [5, 5],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": [
+        "mapped doc sections preserve input order, source paths and actual seeded TypeScript declarations"
+      ],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-generated-docs/e19f0449-5d8f-4b10-85ce-855f9e77fc29.json",
+        "bytes": 476,
+        "sha256": "7ae906fee99f1cbabd10ceb3c0e1304c10552372bc5f224c982b05db4b3981f0",
+        "generatedPath": "docs/api.md"
+      }
+    },
+    {
+      "runId": "92e3f234-59a5-47da-b890-567b33bddef2",
+      "slug": "playground-a-lint-report",
+      "ordinal": 0,
+      "items": [1, 2],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["mapped check count and aggregate findings equal input item count"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-lint-report/92e3f234-59a5-47da-b890-567b33bddef2.json",
+        "bytes": 320,
+        "sha256": "f326bfbab092892a721438227fecfb7306dc19a64176bb0838d4ee66947831f5",
+        "generatedPath": "reports/lint.md"
+      }
+    },
+    {
+      "runId": "5f57620c-abb2-4eb5-87ea-b50c90db33ca",
+      "slug": "playground-a-lint-report",
+      "ordinal": 1,
+      "items": [2, 3],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["mapped check count and aggregate findings equal input item count"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-lint-report/5f57620c-abb2-4eb5-87ea-b50c90db33ca.json",
+        "bytes": 320,
+        "sha256": "43d5fe9d3ea596c695ef71c2ff9a035e22c70e1461e55a707cba1d6551556806",
+        "generatedPath": "reports/lint.md"
+      }
+    },
+    {
+      "runId": "13e43bbc-490a-4b25-a620-a8f9bee36421",
+      "slug": "playground-a-lint-report",
+      "ordinal": 2,
+      "items": [3, 4],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["mapped check count and aggregate findings equal input item count"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-lint-report/13e43bbc-490a-4b25-a620-a8f9bee36421.json",
+        "bytes": 320,
+        "sha256": "c9bae5f468081c5ca628bffb6a1047c809dd573fcb8e3954fa4ddf41662d2e9c",
+        "generatedPath": "reports/lint.md"
+      }
+    },
+    {
+      "runId": "f0bd6ac4-982b-49b6-9d89-d001ec126902",
+      "slug": "playground-a-lint-report",
+      "ordinal": 3,
+      "items": [4, 5],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["mapped check count and aggregate findings equal input item count"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-lint-report/f0bd6ac4-982b-49b6-9d89-d001ec126902.json",
+        "bytes": 320,
+        "sha256": "4a30fef18fc6704f8b61a1f3585c4179ca5042f625f649a9e52f0ccad14d7cc3",
+        "generatedPath": "reports/lint.md"
+      }
+    },
+    {
+      "runId": "4f624e09-415d-4d44-b532-6b864a589724",
+      "slug": "playground-a-lint-report",
+      "ordinal": 4,
+      "items": [5, 6],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["mapped check count and aggregate findings equal input item count"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-lint-report/4f624e09-415d-4d44-b532-6b864a589724.json",
+        "bytes": 320,
+        "sha256": "8b418a6886669caccf85a081e3b01da398250786ab65417ffb798f91be796ac4",
+        "generatedPath": "reports/lint.md"
+      }
+    },
+    {
+      "runId": "0e0a2b1c-5fcc-4660-906f-48cc10a8b173",
+      "slug": "playground-a-lint-report",
+      "ordinal": 5,
+      "items": [1, 7],
+      "status": "failed",
+      "classification": "controlled-failure",
+      "semanticChecks": ["exact controlled failure marker and ordinal policy"],
+      "failureCause": "Controlled lint gate failure requested by fixture input."
+    },
+    {
+      "runId": "7f7fa247-a26d-43c5-b322-15addd609e76",
+      "slug": "playground-a-lint-report",
+      "ordinal": 6,
+      "items": [2, 8],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["mapped check count and aggregate findings equal input item count"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-lint-report/7f7fa247-a26d-43c5-b322-15addd609e76.json",
+        "bytes": 320,
+        "sha256": "36d4326806c423b4b45c9df253ce85a2add15e3038fbf0342789e23306aeef86",
+        "generatedPath": "reports/lint.md"
+      }
+    },
+    {
+      "runId": "01eda0a1-d526-44ac-a745-afa2860c66bc",
+      "slug": "playground-a-lint-report",
+      "ordinal": 7,
+      "items": [3, 2],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["mapped check count and aggregate findings equal input item count"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-lint-report/01eda0a1-d526-44ac-a745-afa2860c66bc.json",
+        "bytes": 320,
+        "sha256": "7bebd1b306f1831366cf3d0980d2d2a949d6a61ad1e784d2bb9b3ca08a4df25a",
+        "generatedPath": "reports/lint.md"
+      }
+    },
+    {
+      "runId": "f0a45a09-af25-4847-8399-736d17c3f624",
+      "slug": "playground-a-lint-report",
+      "ordinal": 8,
+      "items": [4, 3],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["mapped check count and aggregate findings equal input item count"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-lint-report/f0a45a09-af25-4847-8399-736d17c3f624.json",
+        "bytes": 320,
+        "sha256": "7fe168d522132612f2cf30999d1a5203130aa384a362ac0662e15abbdf1d23bc",
+        "generatedPath": "reports/lint.md"
+      }
+    },
+    {
+      "runId": "9f71af23-f5d4-47d9-921e-21c25e24cecf",
+      "slug": "playground-a-lint-report",
+      "ordinal": 9,
+      "items": [5, 4],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["mapped check count and aggregate findings equal input item count"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-lint-report/9f71af23-f5d4-47d9-921e-21c25e24cecf.json",
+        "bytes": 320,
+        "sha256": "4efa5102fea537fc62321b42ccb035bf3bab98c37565e3d0cf84571ba054bd50",
+        "generatedPath": "reports/lint.md"
+      }
+    },
+    {
+      "runId": "751cb33e-f8f5-4ada-9124-d809424d37f6",
+      "slug": "playground-a-lint-report",
+      "ordinal": 10,
+      "items": [1, 5],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["mapped check count and aggregate findings equal input item count"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-lint-report/751cb33e-f8f5-4ada-9124-d809424d37f6.json",
+        "bytes": 321,
+        "sha256": "a9f1b0ef030f9f6517b15731937fe6ec732ea47510bda7d3c8d4e73c66fa6fe3",
+        "generatedPath": "reports/lint.md"
+      }
+    },
+    {
+      "runId": "b5c0c174-5747-4543-9e7e-30f7d5109bae",
+      "slug": "playground-a-lint-report",
+      "ordinal": 11,
+      "items": [2, 6],
+      "status": "failed",
+      "classification": "controlled-failure",
+      "semanticChecks": ["exact controlled failure marker and ordinal policy"],
+      "failureCause": "Controlled lint gate failure requested by fixture input."
+    },
+    {
+      "runId": "994025b0-6ca6-4dcf-aec8-2806c73d61a4",
+      "slug": "playground-a-lint-report",
+      "ordinal": 12,
+      "items": [3, 7],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["mapped check count and aggregate findings equal input item count"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-lint-report/994025b0-6ca6-4dcf-aec8-2806c73d61a4.json",
+        "bytes": 321,
+        "sha256": "01c8b3a00c4f8ab8d6486db383022eda3bd2e6dca3182120b5e868e83978d136",
+        "generatedPath": "reports/lint.md"
+      }
+    },
+    {
+      "runId": "e4f61be5-27b8-4ac8-8e23-ec925c210005",
+      "slug": "playground-a-lint-report",
+      "ordinal": 13,
+      "items": [4, 8],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["mapped check count and aggregate findings equal input item count"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-lint-report/e4f61be5-27b8-4ac8-8e23-ec925c210005.json",
+        "bytes": 321,
+        "sha256": "383cd6c620de3bde1bbb9b33993aa7bcc02336bf31faa7ba3f5b1f4d7a5397ec",
+        "generatedPath": "reports/lint.md"
+      }
+    },
+    {
+      "runId": "7e19605c-55e9-4c2c-b03b-d2051842a9fc",
+      "slug": "playground-a-lint-report",
+      "ordinal": 14,
+      "items": [5, 2],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["mapped check count and aggregate findings equal input item count"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-lint-report/7e19605c-55e9-4c2c-b03b-d2051842a9fc.json",
+        "bytes": 321,
+        "sha256": "7ba71e33c51800854067fd1d992bf04484f8e15332927e9acac9dae19dbe3a13",
+        "generatedPath": "reports/lint.md"
+      }
+    },
+    {
+      "runId": "2b7187eb-937e-4ca2-9507-3bdb26ea3168",
+      "slug": "playground-a-lint-report",
+      "ordinal": 15,
+      "items": [1, 3],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["mapped check count and aggregate findings equal input item count"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-lint-report/2b7187eb-937e-4ca2-9507-3bdb26ea3168.json",
+        "bytes": 321,
+        "sha256": "8a6be9d6bc9a331eab223e4edd68fa4f57866c1514046ec6eec5d6f39b25c3b7",
+        "generatedPath": "reports/lint.md"
+      }
+    },
+    {
+      "runId": "89a7fb54-f5d0-4698-9649-07955c1343e4",
+      "slug": "playground-a-lint-report",
+      "ordinal": 16,
+      "items": [2, 4],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["mapped check count and aggregate findings equal input item count"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-lint-report/89a7fb54-f5d0-4698-9649-07955c1343e4.json",
+        "bytes": 321,
+        "sha256": "9e44e19317efe72c6676241d8edad18d9f1fac795b5147155b029a2328b77aa4",
+        "generatedPath": "reports/lint.md"
+      }
+    },
+    {
+      "runId": "4c44f7a7-62e2-411f-afcb-87b0b61e9bea",
+      "slug": "playground-a-lint-report",
+      "ordinal": 17,
+      "items": [3, 5],
+      "status": "failed",
+      "classification": "controlled-failure",
+      "semanticChecks": ["exact controlled failure marker and ordinal policy"],
+      "failureCause": "Controlled lint gate failure requested by fixture input."
+    },
+    {
+      "runId": "9e385646-f6fc-4345-a5a2-dc2f649efc6e",
+      "slug": "playground-a-lint-report",
+      "ordinal": 18,
+      "items": [4, 6],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["mapped check count and aggregate findings equal input item count"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-lint-report/9e385646-f6fc-4345-a5a2-dc2f649efc6e.json",
+        "bytes": 321,
+        "sha256": "941bb65465086735a4d4a2c12693f541af86989b73ced6965b0c6a94fbffc9d4",
+        "generatedPath": "reports/lint.md"
+      }
+    },
+    {
+      "runId": "927ebfda-a849-4dc4-9712-331ccebfe4b4",
+      "slug": "playground-a-lint-report",
+      "ordinal": 19,
+      "items": [5, 7],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["mapped check count and aggregate findings equal input item count"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-lint-report/927ebfda-a849-4dc4-9712-331ccebfe4b4.json",
+        "bytes": 321,
+        "sha256": "11ac610cb5a773e2eeae5726e0db04a59e4931f253989321cc09046f0270d556",
+        "generatedPath": "reports/lint.md"
+      }
+    },
+    {
+      "runId": "63cf4f3a-4555-49ea-b6e7-3b6772c58334",
+      "slug": "playground-a-lint-report",
+      "ordinal": 20,
+      "items": [1, 8],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["mapped check count and aggregate findings equal input item count"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-lint-report/63cf4f3a-4555-49ea-b6e7-3b6772c58334.json",
+        "bytes": 321,
+        "sha256": "eec321f3803ac9bdae9e3f44cc5d54603600e9567aebac49992ad35d6f44bae8",
+        "generatedPath": "reports/lint.md"
+      }
+    },
+    {
+      "runId": "614bbf12-2e61-4b42-8b4d-48cfbd01386f",
+      "slug": "playground-a-lint-report",
+      "ordinal": 21,
+      "items": [2, 2],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["mapped check count and aggregate findings equal input item count"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-lint-report/614bbf12-2e61-4b42-8b4d-48cfbd01386f.json",
+        "bytes": 321,
+        "sha256": "df3f512fa4d9b73f47d79c301c08b7e8be2999757d6595b252007713340e2920",
+        "generatedPath": "reports/lint.md"
+      }
+    },
+    {
+      "runId": "259b860c-e78d-4360-9179-fa8ea5a44b4a",
+      "slug": "playground-a-lint-report",
+      "ordinal": 22,
+      "items": [3, 3],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["mapped check count and aggregate findings equal input item count"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-lint-report/259b860c-e78d-4360-9179-fa8ea5a44b4a.json",
+        "bytes": 321,
+        "sha256": "14bd31f2b6f3dda9245bb1a3ea6fd0bbc62e84e79d28ca75ea200f002f8d11a4",
+        "generatedPath": "reports/lint.md"
+      }
+    },
+    {
+      "runId": "c2f6769d-d5cd-4f7d-97c7-89260c680b34",
+      "slug": "playground-a-lint-report",
+      "ordinal": 23,
+      "items": [4, 4],
+      "status": "failed",
+      "classification": "controlled-failure",
+      "semanticChecks": ["exact controlled failure marker and ordinal policy"],
+      "failureCause": "Controlled lint gate failure requested by fixture input."
+    },
+    {
+      "runId": "9785ca46-a377-49a3-8a6b-d3dd996fea55",
+      "slug": "playground-a-lint-report",
+      "ordinal": 24,
+      "items": [5, 5],
+      "status": "succeeded",
+      "classification": "success",
+      "semanticChecks": ["mapped check count and aggregate findings equal input item count"],
+      "artifact": {
+        "path": ".loopy/playground/loopies-playground/results/playground-2026-10-22T19-54-57-063Z/playground-a-lint-report/9785ca46-a377-49a3-8a6b-d3dd996fea55.json",
+        "bytes": 321,
+        "sha256": "30332b8779ecba46e31c6e820970f763d3bf12775fe3c8614c4f6c308e6ba6a1",
+        "generatedPath": "reports/lint.md"
+      }
+    }
+  ]
+}

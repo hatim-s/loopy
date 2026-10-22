@@ -1,0 +1,256 @@
+{
+  "status": "validated-snapshot-complete",
+  "scope": "closed-local-playground-do-storage",
+  "at": "2026-10-22T20:35:48.003767+00:00",
+  "stopCommand": "bun --no-env-file scripts/playground/index.ts stop",
+  "stopBefore": {
+    "beforeStopAt": 1792701298.803519,
+    "manifest": {
+      "owner": 60790,
+      "root": "/Users/hatim.shakir/projects/loopy/cloud-integration",
+      "argv": [
+        "/Users/hatim.shakir/.bun/bin/bun",
+        "/Users/hatim.shakir/projects/loopy/cloud-integration/scripts/playground/index.ts",
+        "serve"
+      ],
+      "api": "http://127.0.0.1:15070",
+      "dashboard": "http://127.0.0.1:15072",
+      "state": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground",
+      "sandboxState": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/runtime-root/.loopy/cloud/sandbox",
+      "dockerContext": "colima-loopy-cloud-phase1",
+      "createdAt": "2026-10-22T20:06:31.247Z",
+      "stopCommand": "bun --no-env-file scripts/playground/index.ts stop",
+      "children": [
+        {
+          "name": "sandbox",
+          "pid": 60792
+        },
+        {
+          "name": "worker",
+          "pid": 60793
+        },
+        {
+          "name": "dashboard",
+          "pid": 60794
+        }
+      ]
+    },
+    "ownedProcesses": [
+      {
+        "pid": 60790,
+        "ppid": 1,
+        "pgid": 60790,
+        "stat": "Ss",
+        "command": "/Users/hatim.shakir/.bun/bin/bun --no-env-file /Users/hatim.shakir/projects/loopy/cloud-integration/scripts/playground/index.ts serve"
+      },
+      {
+        "pid": 60792,
+        "ppid": 60790,
+        "pgid": 60790,
+        "stat": "S",
+        "command": "/Users/hatim.shakir/.bun/bin/bun --no-env-file /Users/hatim.shakir/projects/loopy/cloud-integration/scripts/playground/provider.ts"
+      },
+      {
+        "pid": 60793,
+        "ppid": 60790,
+        "pgid": 60790,
+        "stat": "S",
+        "command": "node /Users/hatim.shakir/projects/loopy/cloud-integration/node_modules/.bin/wrangler dev --local --config /Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/wrangler.json --persist-to /Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/wrangler --env-file /Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/worker.dev.vars"
+      },
+      {
+        "pid": 60794,
+        "ppid": 60790,
+        "pgid": 60790,
+        "stat": "S",
+        "command": "/Users/hatim.shakir/.bun/bin/bun run --cwd apps/dashboard dev --host 127.0.0.1 --port 15072 --strictPort"
+      },
+      {
+        "pid": 60795,
+        "ppid": 60794,
+        "pgid": 60790,
+        "stat": "S",
+        "command": "node /Users/hatim.shakir/projects/loopy/cloud-integration/apps/dashboard/node_modules/.bin/vite --host 127.0.0.1 --port 15072 --strictPort"
+      },
+      {
+        "pid": 60796,
+        "ppid": 60793,
+        "pgid": 60790,
+        "stat": "S",
+        "command": "/Users/hatim.shakir/.local/share/fnm/node-versions/v24.14.1/installation/bin/node --no-warnings /Users/hatim.shakir/projects/loopy/cloud-integration/node_modules/.bun/wrangler@4.152.0+b35ac5897ad54762/node_modules/wrangler/wrangler-dist/cli.js dev --local --config /Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/wrangler.json --persist-to /Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/wrangler --env-file /Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/worker.dev.vars"
+      },
+      {
+        "pid": 60797,
+        "ppid": 60795,
+        "pgid": 60790,
+        "stat": "S",
+        "command": "/Users/hatim.shakir/.bun/install/cache/links/@esbuild+darwin-arm64@0.25.12-5c988bcaf394fe84/node_modules/@esbuild/darwin-arm64/bin/esbuild --service=0.25.12 --ping"
+      },
+      {
+        "pid": 60798,
+        "ppid": 60796,
+        "pgid": 60790,
+        "stat": "S",
+        "command": "/Users/hatim.shakir/.bun/install/cache/links/@esbuild+darwin-arm64@0.28.2-7aa809be835b58ea/node_modules/@esbuild/darwin-arm64/bin/esbuild --service=0.28.2 --ping"
+      },
+      {
+        "pid": 60799,
+        "ppid": 60796,
+        "pgid": 60790,
+        "stat": "S",
+        "command": "/Users/hatim.shakir/.bun/install/cache/links/@cloudflare+workerd-darwin-arm64@1.20261019.1-3890b444c6bb86b8/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd serve --binary --experimental --socket-addr=entry=127.0.0.1:15070 --external-addr=loopback=127.0.0.1:55261 --control-fd=3 -"
+      },
+      {
+        "pid": 60800,
+        "ppid": 60796,
+        "pgid": 60790,
+        "stat": "S",
+        "command": "/Users/hatim.shakir/.bun/install/cache/links/@cloudflare+workerd-darwin-arm64@1.20261019.1-3890b444c6bb86b8/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd serve --binary --experimental --socket-addr=entry=127.0.0.1:0 --external-addr=loopback=127.0.0.1:55263 --control-fd=3 - --inspector-addr=127.0.0.1:0 --debug-port=127.0.0.1:0"
+      }
+    ],
+    "protectedListenersBefore": {
+      "4310": ["81432"],
+      "4173": ["41194"],
+      "14870": ["87267"],
+      "14871": ["87033"],
+      "14872": ["87061"],
+      "14873": ["87267"]
+    }
+  },
+  "ownedProcessesRemaining": [],
+  "portsAfter": {
+    "15070": "released",
+    "15071": "released",
+    "15072": "released",
+    "15073": "released"
+  },
+  "sourceOpenFiles": [],
+  "protectedListenersAfter": {
+    "4310": ["81432"],
+    "4173": ["41194"],
+    "14870": ["87267"],
+    "14871": ["87033"],
+    "14872": ["87061"],
+    "14873": ["87267"]
+  },
+  "protectedListenerIdentitiesUnchanged": true,
+  "sourceDirectory": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/wrangler/v3/do",
+  "snapshotDirectory": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/diagnostics/quiesced-postload-20261022T203547958718Z",
+  "rawDirectory": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/diagnostics/quiesced-postload-20261022T203547958718Z/raw/do",
+  "fullTreePreserved": true,
+  "sourceStableAcrossCopy": true,
+  "rawFileHashes": [
+    {
+      "path": "loopy-playground-local-Workspace/f452e348e1d8a7a561c1f3ac2602e79059b161b59c8513bf1985ed061f7675da.sqlite",
+      "bytes": 22966272,
+      "mtimeNs": 1792700712148703311,
+      "sha256": "3491718dfc36df40ba6102656e0636c28689fefcd42462acca25bd7a1cb01c37"
+    },
+    {
+      "path": "loopy-playground-local-Workspace/f452e348e1d8a7a561c1f3ac2602e79059b161b59c8513bf1985ed061f7675da.sqlite-shm",
+      "bytes": 32768,
+      "mtimeNs": 1792699592152518557,
+      "sha256": "7ada8d753f2eee38f194a09191259dcf209750cf6663419605863e3b97a04b09"
+    },
+    {
+      "path": "loopy-playground-local-Workspace/f452e348e1d8a7a561c1f3ac2602e79059b161b59c8513bf1985ed061f7675da.sqlite-wal",
+      "bytes": 4309552,
+      "mtimeNs": 1792700746965652100,
+      "sha256": "e043970fb63ef7dd0873856a3ebeb2d80554fbf6c48ee1e81c75aaa176a43fd5"
+    },
+    {
+      "path": "loopy-playground-local-Workspace/metadata.sqlite",
+      "bytes": 8192,
+      "mtimeNs": 1792700522318005055,
+      "sha256": "8b7b38f3a3d7fcfc040c4876b624c4ef6005d38f727e2f7747aaa3ce991c0c02"
+    },
+    {
+      "path": "loopy-playground-local-Workspace/metadata.sqlite-shm",
+      "bytes": 32768,
+      "mtimeNs": 1792699592006649951,
+      "sha256": "4bc46692065a559150bb973906bad41656a1ecda8418d4fd0c106aea1afd279a"
+    },
+    {
+      "path": "loopy-playground-local-Workspace/metadata.sqlite-wal",
+      "bytes": 4120032,
+      "mtimeNs": 1792700746965925393,
+      "sha256": "9f7e1428fb9151186262696ba47ca4d999dad77040d78118982cfaeba41102d1"
+    }
+  ],
+  "rawFiles": 6,
+  "rawBytes": 31469584,
+  "sqliteSourceOpened": false,
+  "sqliteRawCopyOpened": false,
+  "stackState": "stopped-until-root-authorizes-restart",
+  "commands": [
+    "ps -axo pid=,ppid=,pgid=,stat=,command=",
+    "lsof -nP -iTCP:<15070..15073> -sTCP:LISTEN",
+    "lsof +D <source-do-directory>",
+    "Python shutil.copytree(sourceDO, rawDO, copy_function=copy2, symlinks=True)",
+    "SHA-256 source-before/source-after/raw comparison",
+    "Python sqlite3.connect(working_source_uri + ?mode=ro, uri=True)",
+    "readonly working-source backup(validated.sqlite)",
+    "PRAGMA journal_mode=DELETE only on validated.sqlite destination",
+    "PRAGMA integrity_check and full id/status inventory compare on validated.sqlite opened mode=ro",
+    "Preserve DELETE-conversion SHM beside backup destination",
+    "Copy closed DELETE main file to standalone/diagnostic.sqlite and independently reopen mode=ro; verify integrity and full 528-ID inventory without sidecars",
+    "Final source/raw SHA-256 + size + mtime comparison"
+  ],
+  "validation": {
+    "at": "2026-10-22T20:36:47.074273+00:00",
+    "workingFullTree": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/diagnostics/quiesced-postload-20261022T203547958718Z/working/do",
+    "workingReadonlySource": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/diagnostics/quiesced-postload-20261022T203547958718Z/working/do/loopy-playground-local-Workspace/f452e348e1d8a7a561c1f3ac2602e79059b161b59c8513bf1985ed061f7675da.sqlite",
+    "standalonePath": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/diagnostics/quiesced-postload-20261022T203547958718Z/standalone/diagnostic.sqlite",
+    "mechanism": "readonly-working-copy-sqlite-backup-then-destination-only-journal-mode-delete",
+    "originalAndRawNeverOpenedBySQLite": true,
+    "sqliteVersion": "3.43.2",
+    "workingSourceJournalMode": "wal",
+    "destinationJournalMode": "delete",
+    "integrity": [["ok"]],
+    "counts": {
+      "failed": 64,
+      "succeeded": 464
+    },
+    "rows": 528,
+    "unique": 528,
+    "missingIds": [],
+    "extraIds": [],
+    "statusMismatches": [],
+    "tableCounts": {
+      "runs": 528,
+      "node_runs": 4721,
+      "node_attempts": 4746,
+      "node_scopes": 604,
+      "logs": 2727,
+      "events": 16913,
+      "waits": 126,
+      "cloud_turns": 528
+    },
+    "status": "passed",
+    "durationMs": 68.56099999999999,
+    "backupDestinationPath": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/diagnostics/quiesced-postload-20261022T203547958718Z/validated.sqlite",
+    "backupDestinationSidecarsRetained": [
+      "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/diagnostics/quiesced-postload-20261022T203547958718Z/validated.sqlite-shm"
+    ],
+    "backupDestinationSidecarNote": "SQLite DELETE conversion left an SHM file; it is retained. A separate main-file-only copy was independently reopened read-only and exactly matched integrity and inventory, proving standalone reads.",
+    "standaloneSha256": "0d0ce744814caf442edf3c3fde3e74b129019f7602db4bb393a431cd341697fa",
+    "standaloneBytes": 23035904,
+    "standaloneJournalMode": "delete",
+    "standaloneSidecars": []
+  },
+  "sourceAndRawUnchangedAfterValidation": true,
+  "finalVerifiedAt": "2026-10-22T20:38:10.032879+00:00",
+  "limits": [
+    "Closed local DO storage only; no remote/cloud/provider claim.",
+    "Full raw DO tree and WAL/SHM sidecars retained untouched; diagnostics use standalone/diagnostic.sqlite.",
+    "SQLite source reads used disposable working tree only, never original/raw files.",
+    "No migrations, Store constructors, original/raw PRAGMAs or workflow executions.",
+    "Stack remains stopped pending root authorization. Protected listeners and Docker VM untouched."
+  ],
+  "finalStoppedAt": "2026-10-22T20:38:25.354383+00:00",
+  "portsAfterFinalValidation": {
+    "15070": "released",
+    "15071": "released",
+    "15072": "released",
+    "15073": "released"
+  }
+}

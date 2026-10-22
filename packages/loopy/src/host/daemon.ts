@@ -75,7 +75,15 @@ export class Daemon {
       () => this.wake(),
     );
     this.unsubscribe = options.store.subscribe((events) => {
-      if (events.some((event) => event.entity === "run" && event.kind === "woken")) {
+      if (
+        this.running &&
+        events.some((event) =>
+          event.entity === "run"
+            ? event.kind === "woken" ||
+              (event.kind === "created" && event.record.status === "queued")
+            : event.entity === "schedule" && event.kind === "saved",
+        )
+      ) {
         this.wake();
       }
     });

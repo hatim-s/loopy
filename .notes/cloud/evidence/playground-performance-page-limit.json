@@ -1,0 +1,33 @@
+{
+  "scope": "bounded-postload-readonly-pagination-boundary",
+  "known200": {
+    "status": 500,
+    "errorCode": "internal",
+    "bytes": 76,
+    "reproductions": 2
+  },
+  "probes": [
+    {
+      "at": "2026-10-22T20:31:21.836Z",
+      "path": "/runs?limit=99",
+      "status": 200,
+      "bytes": 76906,
+      "errorCode": null,
+      "items": 99,
+      "clientEndToEndMs": 24.177625
+    },
+    {
+      "at": "2026-10-22T20:31:22.835Z",
+      "path": "/runs?limit=100",
+      "status": 500,
+      "bytes": 76,
+      "errorCode": "internal",
+      "items": null,
+      "clientEndToEndMs": 22.504791999999952
+    }
+  ],
+  "limits": [
+    "No error payload strings or credentials saved.",
+    "Candidate mechanism is pendingHooks binds now plus one parameter perselectedrun; runtimequeryerrornotyetvisible."
+  ]
+}

@@ -1,0 +1,84 @@
+{
+  "measuredAt": "2026-10-22T20:50:15.173Z",
+  "bun": "1.4.0",
+  "branch": "cloud-integration",
+  "cwd": "/Users/hatim.shakir/projects/loopy/cloud-integration",
+  "isolatedHome": "/private/var/folders/5g/3k9cdnrj5mb1l77gw9pfb2br0000gn/T/loopy-cli-sdk-9gsD9C/home",
+  "isolatedWorkspace": "/private/var/folders/5g/3k9cdnrj5mb1l77gw9pfb2br0000gn/T/loopy-cli-sdk-9gsD9C",
+  "pid": 80646,
+  "port": 54608,
+  "spawnedAt": "2026-10-22T20:50:13.825Z",
+  "readyAt": "2026-10-22T20:50:13.957Z",
+  "daemonStartedAt": "2026-10-22T20:50:13.936Z",
+  "before": {
+    "files": 266,
+    "sha256": "7d99f651375bd122b9492e3492ebd561d979a2c9b554d3e94a719ea54fed590c",
+    "daemonSha256": "6a10e9da5e231a2e71921a7fb932c48c9eb0b88437c15fd3720f55d3679edd5b"
+  },
+  "after": {
+    "files": 266,
+    "sha256": "7d99f651375bd122b9492e3492ebd561d979a2c9b554d3e94a719ea54fed590c",
+    "daemonSha256": "6a10e9da5e231a2e71921a7fb932c48c9eb0b88437c15fd3720f55d3679edd5b"
+  },
+  "measurements": [
+    {
+      "index": 0,
+      "runId": "64259ef2-f1dc-494a-b3b3-a605b22c2084",
+      "admittedAt": "2026-10-22T20:50:14.161Z",
+      "createdAt": "2026-10-22T20:50:14.171Z",
+      "admissionMs": 15.963959000000045,
+      "firstNodeAt": "2026-10-22T20:50:14.178Z",
+      "createdToNodeMs": 7,
+      "admissionToNodeMs": 17,
+      "daemonStartupToNodeMs": 242,
+      "spawnToNodeMs": 353,
+      "status": "succeeded",
+      "output": {
+        "stdout": "daemon-wake-smoke",
+        "stderr": "",
+        "exitCode": 0
+      }
+    },
+    {
+      "index": 1,
+      "runId": "485b6b02-84fd-41d5-9374-79b9a0782702",
+      "admittedAt": "2026-10-22T20:50:14.577Z",
+      "createdAt": "2026-10-22T20:50:14.579Z",
+      "admissionMs": 2.357833000000028,
+      "firstNodeAt": "2026-10-22T20:50:14.580Z",
+      "createdToNodeMs": 1,
+      "admissionToNodeMs": 3,
+      "daemonStartupToNodeMs": 644,
+      "spawnToNodeMs": 755,
+      "status": "succeeded",
+      "output": {
+        "stdout": "daemon-wake-smoke",
+        "stderr": "",
+        "exitCode": 0
+      }
+    },
+    {
+      "index": 2,
+      "runId": "4337bfbe-e3a2-4ae7-88c5-0ecdfc87f2d5",
+      "admittedAt": "2026-10-22T20:50:14.977Z",
+      "createdAt": "2026-10-22T20:50:14.978Z",
+      "admissionMs": 2.1310410000000957,
+      "firstNodeAt": "2026-10-22T20:50:14.980Z",
+      "createdToNodeMs": 2,
+      "admissionToNodeMs": 3,
+      "daemonStartupToNodeMs": 1044,
+      "spawnToNodeMs": 1155,
+      "status": "succeeded",
+      "output": {
+        "stdout": "daemon-wake-smoke",
+        "stderr": "",
+        "exitCode": 0
+      }
+    }
+  ],
+  "exitCode": 0,
+  "discoveryRemoved": true,
+  "isolatedStateRemoved": true,
+  "cleanupVerifiedAt": "2026-10-22T20:51:45.943Z",
+  "processAlive": false
+}

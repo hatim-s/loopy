@@ -198,5 +198,259 @@
       "reasoningEffort": "high",
       "serviceTier": "default"
     }
+  },
+  {
+    "requestId": "loopy-playground-driver-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Adelegate-task%3Aloopy-playground-driver-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-playground-fixtures-a-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Adelegate-task%3Aloopy-playground-fixtures-a-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-playground-fixtures-b-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Adelegate-task%3Aloopy-playground-fixtures-b-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-playground-fixtures-c-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Adelegate-task%3Aloopy-playground-fixtures-c-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-playground-performance-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Adelegate-task%3Aloopy-playground-performance-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-playground-daemon-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Adelegate-task%3Aloopy-playground-daemon-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "playground-b-catalog-align-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Athread-send%3Aplayground-b-catalog-align-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-playground-review-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Adelegate-task%3Aloopy-playground-review-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-playground-guard-review-02",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Adelegate-task%3Aloopy-playground-guard-review-02",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "playground-cohort-a-run-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Athread-send%3Aplayground-cohort-a-run-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "playground-cohort-b-run-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Athread-send%3Aplayground-cohort-b-run-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "playground-cohort-c-run-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Athread-send%3Aplayground-cohort-c-run-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "playground-metrics-load-run-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Athread-send%3Aplayground-metrics-load-run-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "playground-postload-metrics-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Athread-send%3Aplayground-postload-metrics-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-cloud-pagination-fix-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Adelegate-task%3Aloopy-cloud-pagination-fix-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "playground-quiesced-snapshot-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Athread-send%3Aplayground-quiesced-snapshot-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "playground-offline-sql-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    },
+    "delivery": "steered",
+    "childThreadId": "thread:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Adelegate-task%3Aloopy-playground-performance-01",
+    "note": "Steered an active performance turn; no new taskId returned."
+  },
+  {
+    "requestId": "playground-restart-pagination-fix-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Athread-send%3Aplayground-restart-pagination-fix-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-cloud-pagination-review-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Adelegate-task%3Aloopy-cloud-pagination-review-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-daemon-admission-wake-fix-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Adelegate-task%3Aloopy-daemon-admission-wake-fix-01",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-playground-evidence-review-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Adelegate-task%3Aloopy-playground-evidence-review-01",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "playground-performance-sql-luna-01",
+    "taskId": "node:delegated-task:command%3Amcp%3A0031baa7-ce84-40c3-a6fb-b250b153f819%3Adelegate-task%3Aplayground-performance-sql-luna-01",
+    "providerInstanceId": "codex",
+    "model": "gpt-6-luna",
+    "options": {
+      "reasoningEffort": "medium",
+      "serviceTier": "default"
+    },
+    "parent": "loopy-playground-performance-01",
+    "scope": "Read-only SQL source research; no edits or database calls."
+  },
+  {
+    "requestId": "loopy-daemon-admission-wake-review-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Adelegate-task%3Aloopy-daemon-admission-wake-review-01",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "playground-metrics-stream-type-fix",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Athread-send%3Aplayground-metrics-stream-type-fix",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "daemon-wake-smoke-location",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Athread-send%3Adaemon-wake-smoke-location",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
   }
 ]

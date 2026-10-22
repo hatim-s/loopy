@@ -1,0 +1,392 @@
+{
+  "verifiedRuns": 45,
+  "verifiedFiles": 272,
+  "wallMs": 356451,
+  "admissionMs": {
+    "count": 45,
+    "min": 1.0660420000058366,
+    "p50": 1.4158750000024156,
+    "p95": 6.310291000001598,
+    "max": 10.959790999999996
+  },
+  "observedCompletionMs": {
+    "count": 45,
+    "min": 5278,
+    "p50": 5676,
+    "p95": 17281,
+    "max": 17493
+  },
+  "serverLifecycleMs": {
+    "count": 45,
+    "min": 5264,
+    "p50": 5529,
+    "p95": 17244,
+    "max": 17457
+  },
+  "firstRecordedNodeDelayMs": {
+    "count": 45,
+    "min": 4791,
+    "p50": 4876,
+    "p95": 4989,
+    "max": 4997
+  },
+  "holdsMs": {
+    "count": 9,
+    "min": 10003,
+    "p50": 11008,
+    "p95": 12005,
+    "max": 12005
+  },
+  "finishedEffectReceipts": 178,
+  "latestExecutions": 457,
+  "executionAttempts": 466,
+  "scopedExecutions": 72,
+  "logs": 400,
+  "fullExecutionCounts": [
+    {
+      "runId": "03f1d5b7-cf0a-483e-940f-06c45f840592",
+      "slug": "playground-c-security-review",
+      "nodes": 6,
+      "attempts": 6,
+      "logs": 6
+    },
+    {
+      "runId": "0634c23e-7264-4509-a396-3a3ab6e66269",
+      "slug": "playground-b-retry-marker",
+      "nodes": 4,
+      "attempts": 5,
+      "logs": 7
+    },
+    {
+      "runId": "0c155231-bb57-4502-9e6d-c61a74a12b6d",
+      "slug": "playground-c-security-review",
+      "nodes": 6,
+      "attempts": 6,
+      "logs": 6
+    },
+    {
+      "runId": "0f52b5e5-8a7b-4990-9bfc-0e54056f193b",
+      "slug": "playground-b-retry-marker",
+      "nodes": 4,
+      "attempts": 5,
+      "logs": 7
+    },
+    {
+      "runId": "14b76d09-2fb6-4eb3-8295-c3bb0c9e77fe",
+      "slug": "playground-c-repository-validation",
+      "nodes": 11,
+      "attempts": 11,
+      "logs": 11
+    },
+    {
+      "runId": "15476ede-5e49-4278-bf6f-3f68288a858c",
+      "slug": "playground-b-retry-marker",
+      "nodes": 4,
+      "attempts": 5,
+      "logs": 7
+    },
+    {
+      "runId": "180d0d6e-3041-4fe8-ae70-111c52facc0e",
+      "slug": "playground-b-retry-marker",
+      "nodes": 4,
+      "attempts": 5,
+      "logs": 7
+    },
+    {
+      "runId": "2523be7d-1e3e-40f2-a1d2-9dd0fa4ca46b",
+      "slug": "playground-b-parallel-build",
+      "nodes": 13,
+      "attempts": 13,
+      "logs": 8
+    },
+    {
+      "runId": "3174762f-43ca-42d5-88f2-d1585bbf8ea2",
+      "slug": "playground-a-lint-report",
+      "nodes": 17,
+      "attempts": 17,
+      "logs": 13
+    },
+    {
+      "runId": "3bfae122-3f25-4bb8-8c4c-46ad8a9fe40d",
+      "slug": "playground-b-parallel-build",
+      "nodes": 13,
+      "attempts": 13,
+      "logs": 8
+    },
+    {
+      "runId": "40e26782-59b6-4015-a48d-643e66874f9f",
+      "slug": "playground-c-repository-validation",
+      "nodes": 12,
+      "attempts": 12,
+      "logs": 11
+    },
+    {
+      "runId": "4b5a1649-5798-45d0-8dbc-e1c7627c22ca",
+      "slug": "playground-c-security-review",
+      "nodes": 5,
+      "attempts": 5,
+      "logs": 5
+    },
+    {
+      "runId": "4d509b23-81aa-4e0a-bc52-28f2a2c83bb5",
+      "slug": "playground-c-repository-validation",
+      "nodes": 12,
+      "attempts": 12,
+      "logs": 11
+    },
+    {
+      "runId": "4ebe2122-97ed-472a-84e0-ce1f78af6f9a",
+      "slug": "playground-a-lint-report",
+      "nodes": 17,
+      "attempts": 17,
+      "logs": 13
+    },
+    {
+      "runId": "55ab953e-15c0-441f-8ccb-d3d5037abfa6",
+      "slug": "playground-a-lint-report",
+      "nodes": 17,
+      "attempts": 17,
+      "logs": 13
+    },
+    {
+      "runId": "5a018d53-7f97-4131-920d-c0df34375545",
+      "slug": "playground-c-security-review",
+      "nodes": 5,
+      "attempts": 5,
+      "logs": 6
+    },
+    {
+      "runId": "5b57298a-8c57-4c00-a669-b7fbf722c757",
+      "slug": "playground-b-retry-marker",
+      "nodes": 4,
+      "attempts": 5,
+      "logs": 7
+    },
+    {
+      "runId": "6389b581-80ec-478e-8e44-3123c29f10b3",
+      "slug": "playground-c-repository-validation",
+      "nodes": 12,
+      "attempts": 12,
+      "logs": 11
+    },
+    {
+      "runId": "66f123ae-caba-48a4-a907-43a7587011b6",
+      "slug": "playground-b-retry-marker",
+      "nodes": 4,
+      "attempts": 5,
+      "logs": 7
+    },
+    {
+      "runId": "681cdd01-0fe4-4162-83b0-98bf3dd0461f",
+      "slug": "playground-c-repository-validation",
+      "nodes": 12,
+      "attempts": 12,
+      "logs": 11
+    },
+    {
+      "runId": "68bcec2d-2286-4e3b-8ae9-1c83c8b95a8d",
+      "slug": "playground-b-parallel-build",
+      "nodes": 9,
+      "attempts": 9,
+      "logs": 6
+    },
+    {
+      "runId": "6910c9bc-44b1-4a52-95ea-d6b1d9c67879",
+      "slug": "playground-c-repository-validation",
+      "nodes": 12,
+      "attempts": 12,
+      "logs": 11
+    },
+    {
+      "runId": "70f6b6f7-e51a-47b6-a3cf-b5785f174859",
+      "slug": "playground-a-lint-report",
+      "nodes": 17,
+      "attempts": 17,
+      "logs": 13
+    },
+    {
+      "runId": "770c4376-b54a-45a7-8200-6df5c5f051f6",
+      "slug": "playground-b-parallel-build",
+      "nodes": 13,
+      "attempts": 13,
+      "logs": 8
+    },
+    {
+      "runId": "7716823a-901c-406f-8beb-7aa8659f5259",
+      "slug": "playground-c-security-review",
+      "nodes": 6,
+      "attempts": 6,
+      "logs": 6
+    },
+    {
+      "runId": "7c40a14d-151e-46e7-8d7c-cb35f433e122",
+      "slug": "playground-a-lint-report",
+      "nodes": 17,
+      "attempts": 17,
+      "logs": 13
+    },
+    {
+      "runId": "7ed75927-916f-47b4-9def-c83753d592dc",
+      "slug": "playground-a-lint-report",
+      "nodes": 14,
+      "attempts": 14,
+      "logs": 11
+    },
+    {
+      "runId": "85771bea-8c30-43ef-b87b-9b05a907658d",
+      "slug": "playground-a-lint-report",
+      "nodes": 17,
+      "attempts": 17,
+      "logs": 13
+    },
+    {
+      "runId": "85c432ce-9783-497a-8d38-5bd2d03ef4cb",
+      "slug": "playground-b-parallel-build",
+      "nodes": 13,
+      "attempts": 13,
+      "logs": 8
+    },
+    {
+      "runId": "8f45bf4b-569a-4b12-9ff5-1e366d072950",
+      "slug": "playground-b-parallel-build",
+      "nodes": 13,
+      "attempts": 13,
+      "logs": 8
+    },
+    {
+      "runId": "95338b3d-5269-46bd-addc-a719ae0eadcf",
+      "slug": "playground-b-retry-marker",
+      "nodes": 4,
+      "attempts": 5,
+      "logs": 7
+    },
+    {
+      "runId": "97b3e576-431c-40fb-b707-7ce97c8593f7",
+      "slug": "playground-c-security-review",
+      "nodes": 6,
+      "attempts": 6,
+      "logs": 6
+    },
+    {
+      "runId": "a81efd8d-7d45-4dcf-88fe-6e340387f71f",
+      "slug": "playground-b-retry-marker",
+      "nodes": 3,
+      "attempts": 4,
+      "logs": 7
+    },
+    {
+      "runId": "ac37e3c9-09b1-42a5-94ff-d5b359e030ec",
+      "slug": "playground-b-retry-marker",
+      "nodes": 4,
+      "attempts": 5,
+      "logs": 7
+    },
+    {
+      "runId": "bb786fdd-a861-4fa9-97e2-8eef32261a1a",
+      "slug": "playground-c-repository-validation",
+      "nodes": 12,
+      "attempts": 12,
+      "logs": 11
+    },
+    {
+      "runId": "caaa2bbb-0d9f-415c-9ba4-82a4baf141c6",
+      "slug": "playground-b-parallel-build",
+      "nodes": 13,
+      "attempts": 13,
+      "logs": 8
+    },
+    {
+      "runId": "d5e16914-8a20-4ce0-9efb-ce58c62e3783",
+      "slug": "playground-a-lint-report",
+      "nodes": 17,
+      "attempts": 17,
+      "logs": 13
+    },
+    {
+      "runId": "d8413955-ccff-441c-85fb-bda1b45c246f",
+      "slug": "playground-c-repository-validation",
+      "nodes": 12,
+      "attempts": 12,
+      "logs": 11
+    },
+    {
+      "runId": "dbfc6883-fcb8-4770-a187-aab69891f9c2",
+      "slug": "playground-c-security-review",
+      "nodes": 6,
+      "attempts": 6,
+      "logs": 6
+    },
+    {
+      "runId": "dc810633-7e23-4a8f-92a1-1ce92dc963e5",
+      "slug": "playground-b-parallel-build",
+      "nodes": 13,
+      "attempts": 13,
+      "logs": 8
+    },
+    {
+      "runId": "e5f63bca-8808-45f7-a456-759533aef3fb",
+      "slug": "playground-a-lint-report",
+      "nodes": 17,
+      "attempts": 17,
+      "logs": 13
+    },
+    {
+      "runId": "e7e2ab5f-0e76-4cbb-987b-0fdacec00e74",
+      "slug": "playground-c-security-review",
+      "nodes": 6,
+      "attempts": 6,
+      "logs": 6
+    },
+    {
+      "runId": "f0cd36df-58e5-47be-915c-dd2f9ffdb752",
+      "slug": "playground-b-parallel-build",
+      "nodes": 13,
+      "attempts": 13,
+      "logs": 8
+    },
+    {
+      "runId": "f209c619-db6b-44c8-82f3-8d76579ccfe6",
+      "slug": "playground-c-security-review",
+      "nodes": 6,
+      "attempts": 6,
+      "logs": 6
+    },
+    {
+      "runId": "fa94021c-799e-4cbc-9c01-8e7d7c66ce43",
+      "slug": "playground-c-repository-validation",
+      "nodes": 12,
+      "attempts": 12,
+      "logs": 11
+    }
+  ],
+  "perWorkflow": [
+    {
+      "slug": "playground-a-lint-report",
+      "runs": 9,
+      "succeeded": 8
+    },
+    {
+      "slug": "playground-b-parallel-build",
+      "runs": 9,
+      "succeeded": 8
+    },
+    {
+      "slug": "playground-b-retry-marker",
+      "runs": 9,
+      "succeeded": 8
+    },
+    {
+      "slug": "playground-c-repository-validation",
+      "runs": 9,
+      "succeeded": 8
+    },
+    {
+      "slug": "playground-c-security-review",
+      "runs": 9,
+      "succeeded": 7
+    }
+  ],
+  "seedReceiptReusedThroughFinalCompletion": true,
+  "allPinnedRevisionsMatchPreflight": true,
+  "timingBoundary": "Observed completion includes 200ms polling and output-capture overhead. First recorded node delay is not a worker-dispatch measurement. Serial behavior/recovery exercise, not maximum throughput or hardware-matched cloud comparison."
+}

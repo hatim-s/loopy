@@ -1,0 +1,42 @@
+[
+  {
+    "slug": "playground-c-data-migration",
+    "file": "data-migration.ts",
+    "description": "Seed CSV records, hold migration approval, then write migrated data and a receipt.",
+    "approval": true,
+    "artifactPath": "loopies-playground/results/result.json",
+    "burst": false
+  },
+  {
+    "slug": "playground-c-security-review",
+    "file": "security-review.ts",
+    "description": "Seed repository policy and source, hold security approval, then publish a review.",
+    "approval": true,
+    "artifactPath": "loopies-playground/results/result.json",
+    "burst": false
+  },
+  {
+    "slug": "playground-c-sleep-resume",
+    "file": "sleep-resume.ts",
+    "description": "Seed records, suspend for two seconds, then publish a resumed report.",
+    "approval": false,
+    "artifactPath": "loopies-playground/results/result.json",
+    "burst": false
+  },
+  {
+    "slug": "playground-c-repository-validation",
+    "file": "repository-validation.ts",
+    "description": "Seed a repository, validate three files in parallel, then publish the integrity report.",
+    "approval": false,
+    "artifactPath": "loopies-playground/results/result.json",
+    "burst": false
+  },
+  {
+    "slug": "playground-c-artifact-manifest",
+    "file": "artifact-manifest.ts",
+    "description": "Hash four repository files, hold approval, verify and publish the artifact manifest.",
+    "approval": true,
+    "artifactPath": "loopies-playground/results/result.json",
+    "burst": false
+  }
+]

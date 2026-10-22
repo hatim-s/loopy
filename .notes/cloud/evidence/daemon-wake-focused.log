@@ -1,0 +1,86 @@
+bun test v1.4.0 (34cbb9a40)
+
+packages/loopy/_tests_/local-daemon.test.ts:
+(pass) daemon publishes a private discovery file and removes it on clean shutdown [172.80ms]
+(pass) ui starts the foreground daemon when discovery is absent and removes it on SIGTERM [115.66ms]
+
+packages/loopy/_tests_/wait-daemon.test.ts:
+(pass) daemon leaves an indefinite sleep when a durable approval signal wakes its run [3.52ms]
+
+packages/loopy/_tests_/daemon-concurrency.test.ts:
+(pass) six graph runs respect concurrency two across overlapping ticks [2.17ms]
+(pass) shutdown drains the active graph execution and leaves queued work untouched [0.41ms]
+(pass) a held activation does not stop the running loop from processing new work and overdue schedules [12.15ms]
+
+packages/loopy/_tests_/daemon.test.ts:
+(pass) a due schedule fires once per key and the next minute fires a new run [1.13ms]
+(pass) disabled schedules do not fire [0.08ms]
+(pass) startup skips stale schedules forward without firing and preserves the fire key [0.48ms]
+(pass) startup permits a schedule exactly one minute late [0.32ms]
+(pass) a queued run activates and completes [0.16ms]
+(pass) a throwing loader reports its run and other runs still activate [0.37ms]
+(pass) a throwing activation releases ownership and does not block other runs [2.20ms]
+(pass) the loop sleeps 1000ms for run 1000ms and schedule 2000ms [0.21ms]
+(pass) the loop sleeps 1000ms for run 2000ms and schedule 1000ms [0.09ms]
+(pass) the loop sleeps 5000ms for run 10000ms and schedule 20000ms [0.06ms]
+(pass) memory committed queued creation interrupts idle sleep without an explicit wake [1.42ms]
+(pass) sqlite committed queued creation interrupts idle sleep without an explicit wake [10.86ms]
+(pass) schedule save interrupts idle sleep and fires once without a busy loop [2.75ms]
+(pass) schedule enable interrupts idle sleep and fires once without a busy loop [2.62ms]
+(pass) unrelated run events leave the idle wait intact [1.50ms]
+(pass) a failed wake lookup reports once and retries after an abortable capped wait [2.71ms]
+(pass) failed activations back off from one second to the five second cap [5.15ms]
+(pass) claim contention does not report an activation error [0.17ms]
+(pass) the loop prunes old events at startup and each hour [3.97ms]
+(pass) memory startup catch-up preserves a concurrent PUT of a later overdue schedule [0.68ms]
+(pass) memory startup catch-up preserves a concurrent disable of a later overdue schedule [0.44ms]
+(pass) sqlite startup catch-up preserves a concurrent PUT of a later overdue schedule [8.13ms]
+(pass) sqlite startup catch-up preserves a concurrent disable of a later overdue schedule [6.27ms]
+
+packages/loopy/_tests_/server.test.ts:
+(pass) API returns run records, step traces and cursor logs [137.94ms]
+(pass) the daemon server requires its token and origin, serves pinned assets and serves authenticated API reads [98.77ms]
+(pass) API distinguishes invalid cursors from registry failures [96.64ms]
+(pass) API returns the contract snapshot, rejects unknown query keys and keeps cursor log reads [97.00ms]
+(pass) contract routes start, snapshot, resume and cancel without exposing owner tokens [96.42ms]
+(pass) SPA routes fall back to pinned index but missing files stay 404 [88.76ms]
+(pass) SSE delivers exact transactions across replay, cross-process writes and Last-Event-ID reconnect [684.69ms]
+(pass) SSE disconnect removes the subscriber and stops polling [315.73ms]
+(pass) response validation rejects a view with extra fields [118.77ms]
+(pass) service error codes serialize with their HTTP status [92.27ms]
+(pass) SSE keeps a node transaction whole across the replay batch limit [367.23ms]
+(pass) daemon run stdout never contains its bearer token [139.82ms]
+(pass) run paging includes every run sharing a timestamp [85.55ms]
+(pass) SSE HTTP replay drains 45 large transactions from Last-Event-ID 1 in order [404.52ms]
+(pass) SSE HTTP replays a transaction over 1 MiB and live-delivers another whole frame [442.84ms]
+144 |     while (!this.closed && (controller.desiredSize ?? 0) <= 0) {
+145 |       await new Promise<void>((resolve) => {
+146 |         this.drained = resolve;
+147 |         this.stalled = setTimeout(() => {
+148 |           this.close();
+149 |           controller.error(new Error("SSE client fell behind. Reconnect from the last event ID."));
+                                     ^
+error: SSE client fell behind. Reconnect from the last event ID.
+      at <anonymous> (/Users/hatim.shakir/projects/loopy/cloud-integration/packages/loopy/src/service/events.ts:149:32)
+(pass) SSE HTTP closes a client that never reads while a concurrent reader gets every transaction [4139.80ms]
+144 |     while (!this.closed && (controller.desiredSize ?? 0) <= 0) {
+145 |       await new Promise<void>((resolve) => {
+146 |         this.drained = resolve;
+147 |         this.stalled = setTimeout(() => {
+148 |           this.close();
+149 |           controller.error(new Error("SSE client fell behind. Reconnect from the last event ID."));
+                                     ^
+error: SSE client fell behind. Reconnect from the last event ID.
+      at <anonymous> (/Users/hatim.shakir/projects/loopy/cloud-integration/packages/loopy/src/service/events.ts:149:32)
+(pass) SSE HTTP reconnect from a closed client's last id has no gap [4584.75ms]
+(pass) local server leaves event pruning to the runtime daemon [128.61ms]
+(pass) schedule routes round trip validated views and report status codes [110.66ms]
+(pass) schedule PUT publishes a saved SSE frame [95.17ms]
+(pass) cursor endpoint bootstraps an empty dashboard and follows new events [9.91ms]
+(pass) compiled save route verifies artifacts, stores private bundles and returns only GraphView [183.30ms]
+(pass) saving another revision retains the earlier graph and executable artifacts [233.81ms]
+
+ 52 pass
+ 0 fail
+ 964 expect() calls
+Ran 52 tests across 5 files. [13.18s]

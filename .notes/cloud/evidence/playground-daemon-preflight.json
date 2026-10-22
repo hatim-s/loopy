@@ -1,0 +1,91 @@
+{
+  "frozenAt": "2026-10-22T19:59:46.793Z",
+  "source": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-daemon/loopies-playground",
+  "upstreamMarker": "a213d51dab78b89a140ebcc1c792daa18558d9fb428330bdc21b650400de9c89",
+  "sourceHash": "4623ccc20a2f9bfb824dc0f0c8ce848401ae960d336e8c21f1dabb08d5642bfa",
+  "selections": [
+    {
+      "slug": "playground-a-lint-report",
+      "file": "lint-report.ts",
+      "description": "Map local TypeScript source checks and write an advisory lint report.",
+      "approval": false,
+      "artifactPath": "loopies-playground/results/result.json",
+      "burst": false,
+      "group": "a",
+      "workspace": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-daemon/workspaces/playground-a-lint-report"
+    },
+    {
+      "slug": "playground-b-parallel-build",
+      "file": "parallel-build.ts",
+      "description": "Build client and server summaries in parallel",
+      "approval": false,
+      "artifactPath": "loopies-playground/results/result.json",
+      "burst": false,
+      "group": "b",
+      "workspace": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-daemon/workspaces/playground-b-parallel-build"
+    },
+    {
+      "slug": "playground-b-retry-marker",
+      "file": "retry-marker.ts",
+      "description": "Fail attempt one, then update repository values on attempt two",
+      "approval": false,
+      "artifactPath": "loopies-playground/results/result.json",
+      "burst": false,
+      "group": "b",
+      "workspace": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-daemon/workspaces/playground-b-retry-marker"
+    },
+    {
+      "slug": "playground-c-repository-validation",
+      "file": "repository-validation.ts",
+      "description": "Seed a repository, validate three files in parallel, then publish the integrity report.",
+      "approval": false,
+      "artifactPath": "loopies-playground/results/result.json",
+      "burst": false,
+      "group": "c",
+      "workspace": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-daemon/workspaces/playground-c-repository-validation"
+    },
+    {
+      "slug": "playground-c-security-review",
+      "file": "security-review.ts",
+      "description": "Seed repository policy and source, hold security approval, then publish a review.",
+      "approval": true,
+      "artifactPath": "loopies-playground/results/result.json",
+      "burst": false,
+      "group": "c",
+      "workspace": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-daemon/workspaces/playground-c-security-review"
+    }
+  ],
+  "revisions": [
+    {
+      "slug": "playground-a-lint-report",
+      "revision": "ef1a7a6db6739304c847c82b6a75bd0927a74611660fec1ac7cfd721260b8258",
+      "nodeCount": 12
+    },
+    {
+      "slug": "playground-b-parallel-build",
+      "revision": "fccd3908d88ac2c7c7e8ff44c47bf853566ee9ac7d2fe6a77d37ebdf41f4137a",
+      "nodeCount": 14
+    },
+    {
+      "slug": "playground-b-retry-marker",
+      "revision": "e93374a45edd278853b9a9d90bfe65e2fa39bd5b6f14a08685f19574609eb4a8",
+      "nodeCount": 4
+    },
+    {
+      "slug": "playground-c-repository-validation",
+      "revision": "f322107ee24086a6b93297d462155979e80d54b337951e798f9e5423db6443ed",
+      "nodeCount": 12
+    },
+    {
+      "slug": "playground-c-security-review",
+      "revision": "7971c25e8159622f01d7593b9f8df97b326b8c9be5984c97ac9485854cfbca84",
+      "nodeCount": 6
+    }
+  ],
+  "plannedRuns": 45,
+  "performedRuns": 0,
+  "mode": "actual Bun daemon with sandbox-exec on host OS",
+  "port": 15170,
+  "concurrency": 4,
+  "leaseMs": 2000
+}

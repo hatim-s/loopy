@@ -1,0 +1,18 @@
+{
+  "scope": "local-primary-load-boundary",
+  "batch": "playground-2026-10-22T19-54-57-063Z",
+  "dispatchAt": "2026-10-22T20:14:07.000Z",
+  "firstPrimaryIntentAt": "2026-10-22T20:14:11.628Z",
+  "firstPrimaryAdmittedAt": "2026-10-22T20:14:11.649Z",
+  "firstPrimaryRunId": "7177cae6-87c7-4dc8-9bd3-4e445493c851",
+  "samplerPid": 47144,
+  "restart": {
+    "firstTransportFailureAt": "2026-10-22T20:05:46.085Z",
+    "lastTransportFailureAt": "2026-10-22T20:06:31.645Z",
+    "transportFailures": 92
+  },
+  "limits": [
+    "Dispatch timestamp is an orchestration boundary, not measured admission.",
+    "Prelaunch and restart samples remain in the raw continuous evidence and are excluded from primary-load latency summaries."
+  ]
+}

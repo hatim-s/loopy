@@ -1,0 +1,42 @@
+[
+  {
+    "slug": "playground-a-format-report",
+    "file": "format-report.ts",
+    "description": "Normalize synthetic repository whitespace and export a format report.",
+    "approval": false,
+    "artifactPath": "loopies-playground/results/result.json",
+    "burst": true
+  },
+  {
+    "slug": "playground-a-lint-report",
+    "file": "lint-report.ts",
+    "description": "Map local TypeScript source checks and write an advisory lint report.",
+    "approval": false,
+    "artifactPath": "loopies-playground/results/result.json",
+    "burst": false
+  },
+  {
+    "slug": "playground-a-dependency-audit",
+    "file": "dependency-audit.ts",
+    "description": "Run parallel synthetic dependency policy scans and write an audit report.",
+    "approval": false,
+    "artifactPath": "loopies-playground/results/result.json",
+    "burst": false
+  },
+  {
+    "slug": "playground-a-changelog-approval",
+    "file": "changelog-approval.ts",
+    "description": "Draft a repository changelog, wait for approval, then publish it.",
+    "approval": true,
+    "artifactPath": "loopies-playground/results/result.json",
+    "burst": false
+  },
+  {
+    "slug": "playground-a-generated-docs",
+    "file": "generated-docs.ts",
+    "description": "Generate API documentation by reading synthetic repository source files.",
+    "approval": false,
+    "artifactPath": "loopies-playground/results/result.json",
+    "burst": false
+  }
+]

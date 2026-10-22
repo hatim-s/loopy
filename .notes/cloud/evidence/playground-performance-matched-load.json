@@ -1,0 +1,865 @@
+{
+  "phase": "matched-load",
+  "scope": "local-read-only-matched-http-probe",
+  "startedAt": "2026-10-22T20:17:48.652Z",
+  "updatedAt": "2026-10-22T20:18:26.714Z",
+  "api": "http://127.0.0.1:15070",
+  "workspace": "playground",
+  "batch": "playground-2026-10-22T19-54-57-063Z",
+  "plannedRequests": 36,
+  "maximumRequestsPerSecond": 1,
+  "maximumInFlight": 1,
+  "pairs": [
+    {
+      "route": "runs",
+      "iteration": 0,
+      "order": ["direct", "shared"],
+      "startedAt": "2026-10-22T20:17:48.652Z",
+      "endedAt": "2026-10-22T20:17:50.660Z"
+    },
+    {
+      "route": "runs",
+      "iteration": 1,
+      "order": ["shared", "direct"],
+      "startedAt": "2026-10-22T20:17:50.661Z",
+      "endedAt": "2026-10-22T20:17:53.208Z"
+    },
+    {
+      "route": "runs",
+      "iteration": 2,
+      "order": ["direct", "shared"],
+      "startedAt": "2026-10-22T20:17:53.209Z",
+      "endedAt": "2026-10-22T20:17:56.151Z"
+    },
+    {
+      "route": "runs",
+      "iteration": 3,
+      "order": ["shared", "direct"],
+      "startedAt": "2026-10-22T20:17:56.152Z",
+      "endedAt": "2026-10-22T20:17:57.232Z"
+    },
+    {
+      "route": "runs",
+      "iteration": 4,
+      "order": ["direct", "shared"],
+      "startedAt": "2026-10-22T20:17:57.233Z",
+      "endedAt": "2026-10-22T20:17:59.170Z"
+    },
+    {
+      "route": "runs",
+      "iteration": 5,
+      "order": ["shared", "direct"],
+      "startedAt": "2026-10-22T20:17:59.170Z",
+      "endedAt": "2026-10-22T20:18:01.272Z"
+    },
+    {
+      "route": "loopies",
+      "iteration": 0,
+      "order": ["direct", "shared"],
+      "startedAt": "2026-10-22T20:18:01.273Z",
+      "endedAt": "2026-10-22T20:18:03.549Z"
+    },
+    {
+      "route": "loopies",
+      "iteration": 1,
+      "order": ["shared", "direct"],
+      "startedAt": "2026-10-22T20:18:03.550Z",
+      "endedAt": "2026-10-22T20:18:05.623Z"
+    },
+    {
+      "route": "loopies",
+      "iteration": 2,
+      "order": ["direct", "shared"],
+      "startedAt": "2026-10-22T20:18:05.625Z",
+      "endedAt": "2026-10-22T20:18:07.291Z"
+    },
+    {
+      "route": "loopies",
+      "iteration": 3,
+      "order": ["shared", "direct"],
+      "startedAt": "2026-10-22T20:18:07.291Z",
+      "endedAt": "2026-10-22T20:18:09.194Z"
+    },
+    {
+      "route": "loopies",
+      "iteration": 4,
+      "order": ["direct", "shared"],
+      "startedAt": "2026-10-22T20:18:09.195Z",
+      "endedAt": "2026-10-22T20:18:11.182Z"
+    },
+    {
+      "route": "loopies",
+      "iteration": 5,
+      "order": ["shared", "direct"],
+      "startedAt": "2026-10-22T20:18:11.183Z",
+      "endedAt": "2026-10-22T20:18:13.279Z"
+    },
+    {
+      "route": "events",
+      "iteration": 0,
+      "order": ["direct", "shared"],
+      "startedAt": "2026-10-22T20:18:13.280Z",
+      "endedAt": "2026-10-22T20:18:15.174Z"
+    },
+    {
+      "route": "events",
+      "iteration": 1,
+      "order": ["shared", "direct"],
+      "startedAt": "2026-10-22T20:18:15.174Z",
+      "endedAt": "2026-10-22T20:18:17.728Z"
+    },
+    {
+      "route": "events",
+      "iteration": 2,
+      "order": ["direct", "shared"],
+      "startedAt": "2026-10-22T20:18:17.729Z",
+      "endedAt": "2026-10-22T20:18:19.841Z"
+    },
+    {
+      "route": "events",
+      "iteration": 3,
+      "order": ["shared", "direct"],
+      "startedAt": "2026-10-22T20:18:19.842Z",
+      "endedAt": "2026-10-22T20:18:21.381Z"
+    },
+    {
+      "route": "events",
+      "iteration": 4,
+      "order": ["direct", "shared"],
+      "startedAt": "2026-10-22T20:18:21.381Z",
+      "endedAt": "2026-10-22T20:18:25.702Z"
+    },
+    {
+      "route": "events",
+      "iteration": 5,
+      "order": ["shared", "direct"],
+      "startedAt": "2026-10-22T20:18:25.702Z",
+      "endedAt": "2026-10-22T20:18:26.713Z"
+    }
+  ],
+  "samples": [
+    {
+      "endpoint": "runs.direct",
+      "at": "2026-10-22T20:17:49.613Z",
+      "status": 200,
+      "bytes": 32236,
+      "headersMs": 111.9770420000001,
+      "totalMs": 156.43358299999989,
+      "parseMs": 3.6554579999999532,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "queued": 0,
+        "running": 4,
+        "terminal": 39
+      }
+    },
+    {
+      "endpoint": "runs.shared",
+      "at": "2026-10-22T20:17:50.612Z",
+      "status": 200,
+      "bytes": 32293,
+      "headersMs": 47.04724999999985,
+      "totalMs": 47.11287500000003,
+      "parseMs": 0.7081669999997757,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "queued": 0,
+        "running": 3,
+        "terminal": 39
+      }
+    },
+    {
+      "endpoint": "runs.shared",
+      "at": "2026-10-22T20:17:51.613Z",
+      "status": 200,
+      "bytes": 32350,
+      "headersMs": 280.0340000000001,
+      "totalMs": 280.06849999999986,
+      "parseMs": 0.6739589999997406,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "queued": 0,
+        "running": 1,
+        "terminal": 40
+      }
+    },
+    {
+      "endpoint": "runs.direct",
+      "at": "2026-10-22T20:17:52.614Z",
+      "status": 200,
+      "bytes": 32366,
+      "headersMs": 593.603541,
+      "totalMs": 594.036791,
+      "parseMs": 0.5210839999999735,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "queued": 0,
+        "running": 2,
+        "terminal": 39
+      }
+    },
+    {
+      "endpoint": "runs.direct",
+      "at": "2026-10-22T20:17:53.614Z",
+      "status": 200,
+      "bytes": 31951,
+      "headersMs": 12.343249999999898,
+      "totalMs": 12.75,
+      "parseMs": 0.4774999999999636,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "queued": 0,
+        "running": 4,
+        "terminal": 38
+      }
+    },
+    {
+      "endpoint": "runs.shared",
+      "at": "2026-10-22T20:17:54.614Z",
+      "status": 200,
+      "bytes": 32439,
+      "headersMs": 1536.625333,
+      "totalMs": 1536.6664170000004,
+      "parseMs": 0.7091669999999795,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "queued": 0,
+        "running": 3,
+        "terminal": 38
+      }
+    },
+    {
+      "endpoint": "runs.shared",
+      "at": "2026-10-22T20:17:56.152Z",
+      "status": 200,
+      "bytes": 32439,
+      "headersMs": 16.243250000000444,
+      "totalMs": 16.27337500000067,
+      "parseMs": 0.44708300000002055,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "queued": 0,
+        "running": 3,
+        "terminal": 38
+      }
+    },
+    {
+      "endpoint": "runs.direct",
+      "at": "2026-10-22T20:17:57.152Z",
+      "status": 200,
+      "bytes": 32511,
+      "headersMs": 79.51570800000081,
+      "totalMs": 79.85379099999955,
+      "parseMs": 0.5457080000014685,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "queued": 0,
+        "running": 2,
+        "terminal": 38
+      }
+    },
+    {
+      "endpoint": "runs.direct",
+      "at": "2026-10-22T20:17:58.153Z",
+      "status": 200,
+      "bytes": 32496,
+      "headersMs": 29.473042000001442,
+      "totalMs": 29.988875000000917,
+      "parseMs": 0.46229200000016135,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "queued": 0,
+        "running": 1,
+        "terminal": 39
+      }
+    },
+    {
+      "endpoint": "runs.shared",
+      "at": "2026-10-22T20:17:59.154Z",
+      "status": 200,
+      "bytes": 32530,
+      "headersMs": 15.792874999999185,
+      "totalMs": 15.825417000000016,
+      "parseMs": 0.46225000000049477,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "queued": 0,
+        "running": 1,
+        "terminal": 39
+      }
+    },
+    {
+      "endpoint": "runs.shared",
+      "at": "2026-10-22T20:18:00.155Z",
+      "status": 200,
+      "bytes": 32500,
+      "headersMs": 17.471958000000086,
+      "totalMs": 17.503999999998996,
+      "parseMs": 0.440958999999566,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "queued": 0,
+        "running": 3,
+        "terminal": 38
+      }
+    },
+    {
+      "endpoint": "runs.direct",
+      "at": "2026-10-22T20:18:01.156Z",
+      "status": 200,
+      "bytes": 32439,
+      "headersMs": 115.42233300000044,
+      "totalMs": 115.70487499999945,
+      "parseMs": 0.4686249999995198,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "queued": 0,
+        "running": 0,
+        "terminal": 41
+      }
+    },
+    {
+      "endpoint": "loopies.direct",
+      "at": "2026-10-22T20:18:02.157Z",
+      "status": 200,
+      "bytes": 117078,
+      "headersMs": 319.337125,
+      "totalMs": 327.6391670000012,
+      "parseMs": 2.008958000000348,
+      "failure": null,
+      "observation": {
+        "items": 15,
+        "retainedRuns": 265,
+        "running": 2,
+        "queued": 1
+      }
+    },
+    {
+      "endpoint": "loopies.shared",
+      "at": "2026-10-22T20:18:03.157Z",
+      "status": 200,
+      "bytes": 117635,
+      "headersMs": 390.8783339999991,
+      "totalMs": 390.94587499999943,
+      "parseMs": 1.0767909999995027,
+      "failure": null,
+      "observation": {
+        "items": 15,
+        "retainedRuns": 266,
+        "running": 2,
+        "queued": 0
+      }
+    },
+    {
+      "endpoint": "loopies.shared",
+      "at": "2026-10-22T20:18:04.159Z",
+      "status": 200,
+      "bytes": 117779,
+      "headersMs": 199.91158300000097,
+      "totalMs": 199.97329200000058,
+      "parseMs": 1.188333000000057,
+      "failure": null,
+      "observation": {
+        "items": 15,
+        "retainedRuns": 267,
+        "running": 1,
+        "queued": 0
+      }
+    },
+    {
+      "endpoint": "loopies.direct",
+      "at": "2026-10-22T20:18:05.158Z",
+      "status": 200,
+      "bytes": 117366,
+      "headersMs": 463.1108750000021,
+      "totalMs": 463.8030830000025,
+      "parseMs": 1.101875000000291,
+      "failure": null,
+      "observation": {
+        "items": 15,
+        "retainedRuns": 269,
+        "running": 2,
+        "queued": 0
+      }
+    },
+    {
+      "endpoint": "loopies.direct",
+      "at": "2026-10-22T20:18:06.159Z",
+      "status": 200,
+      "bytes": 117263,
+      "headersMs": 19.879417000000103,
+      "totalMs": 29.291250000002037,
+      "parseMs": 1.0345000000015716,
+      "failure": null,
+      "observation": {
+        "items": 15,
+        "retainedRuns": 270,
+        "running": 2,
+        "queued": 0
+      }
+    },
+    {
+      "endpoint": "loopies.shared",
+      "at": "2026-10-22T20:18:07.159Z",
+      "status": 200,
+      "bytes": 118067,
+      "headersMs": 130.6650410000002,
+      "totalMs": 130.7200410000005,
+      "parseMs": 1.0772910000014235,
+      "failure": null,
+      "observation": {
+        "items": 15,
+        "retainedRuns": 270,
+        "running": 0,
+        "queued": 0
+      }
+    },
+    {
+      "endpoint": "loopies.shared",
+      "at": "2026-10-22T20:18:08.160Z",
+      "status": 200,
+      "bytes": 118458,
+      "headersMs": 994.710833000001,
+      "totalMs": 994.7599169999994,
+      "parseMs": 0.9838339999987511,
+      "failure": null,
+      "observation": {
+        "items": 15,
+        "retainedRuns": 273,
+        "running": 3,
+        "queued": 0
+      }
+    },
+    {
+      "endpoint": "loopies.direct",
+      "at": "2026-10-22T20:18:09.161Z",
+      "status": 200,
+      "bytes": 118458,
+      "headersMs": 20.466416999999637,
+      "totalMs": 32.753874999998516,
+      "parseMs": 0.9857080000001588,
+      "failure": null,
+      "observation": {
+        "items": 15,
+        "retainedRuns": 273,
+        "running": 3,
+        "queued": 0
+      }
+    },
+    {
+      "endpoint": "loopies.direct",
+      "at": "2026-10-22T20:18:10.162Z",
+      "status": 200,
+      "bytes": 118428,
+      "headersMs": 620.0625839999993,
+      "totalMs": 621.0392089999987,
+      "parseMs": 1.098374999997759,
+      "failure": null,
+      "observation": {
+        "items": 15,
+        "retainedRuns": 273,
+        "running": 2,
+        "queued": 0
+      }
+    },
+    {
+      "endpoint": "loopies.shared",
+      "at": "2026-10-22T20:18:11.163Z",
+      "status": 200,
+      "bytes": 118457,
+      "headersMs": 18.70770800000173,
+      "totalMs": 18.76825000000099,
+      "parseMs": 0.7999169999966398,
+      "failure": null,
+      "observation": {
+        "items": 15,
+        "retainedRuns": 274,
+        "running": 3,
+        "queued": 0
+      }
+    },
+    {
+      "endpoint": "loopies.shared",
+      "at": "2026-10-22T20:18:12.164Z",
+      "status": 200,
+      "bytes": 118847,
+      "headersMs": 972.2967500000013,
+      "totalMs": 972.3467920000003,
+      "parseMs": 0.9448750000010477,
+      "failure": null,
+      "observation": {
+        "items": 15,
+        "retainedRuns": 275,
+        "running": 0,
+        "queued": 1
+      }
+    },
+    {
+      "endpoint": "loopies.direct",
+      "at": "2026-10-22T20:18:13.164Z",
+      "status": 200,
+      "bytes": 119618,
+      "headersMs": 113.90754200000083,
+      "totalMs": 114.6362500000032,
+      "parseMs": 0.830707999997685,
+      "failure": null,
+      "observation": {
+        "items": 15,
+        "retainedRuns": 276,
+        "running": 2,
+        "queued": 0
+      }
+    },
+    {
+      "endpoint": "events.direct",
+      "at": "2026-10-22T20:18:14.164Z",
+      "status": 200,
+      "bytes": 11825,
+      "headersMs": 113.77100000000064,
+      "totalMs": 114.13154100000247,
+      "parseMs": 0.8859580000025744,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "scanned": 50,
+        "newest": 9084,
+        "hasMore": true
+      }
+    },
+    {
+      "endpoint": "events.shared",
+      "at": "2026-10-22T20:18:15.165Z",
+      "status": 200,
+      "bytes": 11814,
+      "headersMs": 8.870209000000614,
+      "totalMs": 8.90912500000195,
+      "parseMs": 0.20899999999892316,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "scanned": 50,
+        "newest": 9120,
+        "hasMore": true
+      }
+    },
+    {
+      "endpoint": "events.shared",
+      "at": "2026-10-22T20:18:16.166Z",
+      "status": 200,
+      "bytes": 11773,
+      "headersMs": 7.955167000000074,
+      "totalMs": 7.989957999998296,
+      "parseMs": 0.11895799999911105,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "scanned": 50,
+        "newest": 9127,
+        "hasMore": true
+      }
+    },
+    {
+      "endpoint": "events.direct",
+      "at": "2026-10-22T20:18:17.167Z",
+      "status": 200,
+      "bytes": 11778,
+      "headersMs": 549.0529160000006,
+      "totalMs": 561.4802500000005,
+      "parseMs": 0.13579199999730918,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "scanned": 50,
+        "newest": 9187,
+        "hasMore": true
+      }
+    },
+    {
+      "endpoint": "events.direct",
+      "at": "2026-10-22T20:18:18.167Z",
+      "status": 200,
+      "bytes": 11738,
+      "headersMs": 412.6466250000012,
+      "totalMs": 412.8489579999987,
+      "parseMs": 0.184333000001061,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "scanned": 50,
+        "newest": 9209,
+        "hasMore": true
+      }
+    },
+    {
+      "endpoint": "events.shared",
+      "at": "2026-10-22T20:18:19.167Z",
+      "status": 200,
+      "bytes": 11612,
+      "headersMs": 674.0009170000012,
+      "totalMs": 674.0355420000014,
+      "parseMs": 0.12991699999838602,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "scanned": 50,
+        "newest": 9225,
+        "hasMore": true
+      }
+    },
+    {
+      "endpoint": "events.shared",
+      "at": "2026-10-22T20:18:20.168Z",
+      "status": 200,
+      "bytes": 11599,
+      "headersMs": 8.479624999999942,
+      "totalMs": 8.510833000000275,
+      "parseMs": 0.1108749999984866,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "scanned": 50,
+        "newest": 9229,
+        "hasMore": true
+      }
+    },
+    {
+      "endpoint": "events.direct",
+      "at": "2026-10-22T20:18:21.169Z",
+      "status": 200,
+      "bytes": 11714,
+      "headersMs": 202.14900000000125,
+      "totalMs": 211.2599160000027,
+      "parseMs": 0.14254200000141282,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "scanned": 50,
+        "newest": 9297,
+        "hasMore": true
+      }
+    },
+    {
+      "endpoint": "events.direct",
+      "at": "2026-10-22T20:18:22.171Z",
+      "status": 200,
+      "bytes": 11946,
+      "headersMs": 6.653959000002942,
+      "totalMs": 6.8779170000052545,
+      "parseMs": 0.15225000000646105,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "scanned": 50,
+        "newest": 9360,
+        "hasMore": true
+      }
+    },
+    {
+      "endpoint": "events.shared",
+      "at": "2026-10-22T20:18:23.172Z",
+      "status": 200,
+      "bytes": 11842,
+      "headersMs": 2529.9821250000023,
+      "totalMs": 2530.0214579999956,
+      "parseMs": 0.1317909999997937,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "scanned": 50,
+        "newest": 9474,
+        "hasMore": true
+      }
+    },
+    {
+      "endpoint": "events.shared",
+      "at": "2026-10-22T20:18:25.702Z",
+      "status": 200,
+      "bytes": 11811,
+      "headersMs": 97.4427499999947,
+      "totalMs": 97.47916699999769,
+      "parseMs": 0.1282920000012382,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "scanned": 50,
+        "newest": 9478,
+        "hasMore": true
+      }
+    },
+    {
+      "endpoint": "events.direct",
+      "at": "2026-10-22T20:18:26.703Z",
+      "status": 200,
+      "bytes": 11660,
+      "headersMs": 8.778459000001021,
+      "totalMs": 9.30137499999546,
+      "parseMs": 0.1693749999976717,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "scanned": 50,
+        "newest": 9520,
+        "hasMore": true
+      }
+    }
+  ],
+  "summaries": [
+    {
+      "endpoint": "runs.direct",
+      "samples": 6,
+      "statuses": {
+        "200": 6
+      },
+      "failures": 0,
+      "latencyMs": {
+        "count": 6,
+        "p50": 79.85379099999955,
+        "p95": 594.036791,
+        "p99": 594.036791,
+        "max": 594.036791
+      },
+      "bytes": {
+        "count": 6,
+        "p50": 32366,
+        "p95": 32511,
+        "p99": 32511,
+        "max": 32511
+      }
+    },
+    {
+      "endpoint": "runs.shared",
+      "samples": 6,
+      "statuses": {
+        "200": 6
+      },
+      "failures": 0,
+      "latencyMs": {
+        "count": 6,
+        "p50": 17.503999999998996,
+        "p95": 1536.6664170000004,
+        "p99": 1536.6664170000004,
+        "max": 1536.6664170000004
+      },
+      "bytes": {
+        "count": 6,
+        "p50": 32439,
+        "p95": 32530,
+        "p99": 32530,
+        "max": 32530
+      }
+    },
+    {
+      "endpoint": "loopies.direct",
+      "samples": 6,
+      "statuses": {
+        "200": 6
+      },
+      "failures": 0,
+      "latencyMs": {
+        "count": 6,
+        "p50": 114.6362500000032,
+        "p95": 621.0392089999987,
+        "p99": 621.0392089999987,
+        "max": 621.0392089999987
+      },
+      "bytes": {
+        "count": 6,
+        "p50": 117366,
+        "p95": 119618,
+        "p99": 119618,
+        "max": 119618
+      }
+    },
+    {
+      "endpoint": "loopies.shared",
+      "samples": 6,
+      "statuses": {
+        "200": 6
+      },
+      "failures": 0,
+      "latencyMs": {
+        "count": 6,
+        "p50": 199.97329200000058,
+        "p95": 994.7599169999994,
+        "p99": 994.7599169999994,
+        "max": 994.7599169999994
+      },
+      "bytes": {
+        "count": 6,
+        "p50": 118067,
+        "p95": 118847,
+        "p99": 118847,
+        "max": 118847
+      }
+    },
+    {
+      "endpoint": "events.direct",
+      "samples": 6,
+      "statuses": {
+        "200": 6
+      },
+      "failures": 0,
+      "latencyMs": {
+        "count": 6,
+        "p50": 114.13154100000247,
+        "p95": 561.4802500000005,
+        "p99": 561.4802500000005,
+        "max": 561.4802500000005
+      },
+      "bytes": {
+        "count": 6,
+        "p50": 11738,
+        "p95": 11946,
+        "p99": 11946,
+        "max": 11946
+      }
+    },
+    {
+      "endpoint": "events.shared",
+      "samples": 6,
+      "statuses": {
+        "200": 6
+      },
+      "failures": 0,
+      "latencyMs": {
+        "count": 6,
+        "p50": 8.90912500000195,
+        "p95": 2530.0214579999956,
+        "p99": 2530.0214579999956,
+        "max": 2530.0214579999956
+      },
+      "bytes": {
+        "count": 6,
+        "p50": 11773,
+        "p95": 11842,
+        "p99": 11842,
+        "max": 11842
+      }
+    }
+  ],
+  "measurement": {
+    "direct": "headersMs timestamps direct fetch response before body consumption; totalMs includes HTTP transport and full body read.",
+    "shared": "headersMs and totalMs include filesystem API-slot acquisition,40ms polling,HTTP work and full-body buffering inside current PlaygroundClient; headersMs is not TTFB."
+  },
+  "limits": [
+    "Direct reads bypass the four shared API slots and add at most one extra HTTP request concurrently with that shared pool.",
+    "Pairs alternate ordering and use the same three exact paths, API origin, workspace credential and schemas.",
+    "Data changes during active load; counts, event cursor and per-request timestamps expose those differences.",
+    "Six samples per route and mode do not establish tail latency or statistical significance.",
+    "Direct HTTP end-to-end timing still includes local transport and server scheduling; it is not pure SQL or server execution time.",
+    "Each request has a15second abort signal and the measured body reader stops above8MiB. The unchanged shared client buffers before that reader, so its internal allocation is outside the probe's cap.",
+    "Only statuses,bytes,timings and numeric observations are saved; no credentials,hook tokens or response payloads."
+  ]
+}

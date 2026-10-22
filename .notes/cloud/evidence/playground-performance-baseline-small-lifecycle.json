@@ -1,0 +1,130 @@
+{
+  "phase": "baseline-small",
+  "scope": "local-driver-journals-only",
+  "at": "2026-10-22T20:02:41.227Z",
+  "invalidFiles": 0,
+  "invalidEvents": 0,
+  "primary": {
+    "admitted": 0,
+    "terminal": 0,
+    "unexpected": 0,
+    "actual": {
+      "succeeded": 0,
+      "failed": 0,
+      "cancelled": 0
+    },
+    "admissionMs": {
+      "count": 0,
+      "p50": null,
+      "p95": null,
+      "p99": null,
+      "max": null
+    },
+    "terminalFromIntentMs": {
+      "count": 0,
+      "p50": null,
+      "p95": null,
+      "p99": null,
+      "max": null
+    },
+    "terminalFromAdmissionMs": {
+      "count": 0,
+      "p50": null,
+      "p95": null,
+      "p99": null,
+      "max": null
+    },
+    "observedApprovalHoldMs": {
+      "count": 0,
+      "p50": null,
+      "p95": null,
+      "p99": null,
+      "max": null
+    }
+  },
+  "preflight": {
+    "admitted": 3,
+    "terminal": 3,
+    "unexpected": 0,
+    "actual": {
+      "succeeded": 3,
+      "failed": 0,
+      "cancelled": 0
+    },
+    "admissionMs": {
+      "count": 3,
+      "p50": 27,
+      "p95": 33,
+      "p99": 33,
+      "max": 33
+    },
+    "terminalFromIntentMs": {
+      "count": 3,
+      "p50": 1547,
+      "p95": 12033,
+      "p99": 12033,
+      "max": 12033
+    },
+    "terminalFromAdmissionMs": {
+      "count": 3,
+      "p50": 1521,
+      "p95": 12006,
+      "p99": 12006,
+      "max": 12006
+    },
+    "observedApprovalHoldMs": {
+      "count": 1,
+      "p50": 10337,
+      "p95": 10337,
+      "p99": 10337,
+      "max": 10337
+    }
+  },
+  "records": [
+    {
+      "runId": "ca974500-3bcd-4103-a72c-dfb8aa8faeb5",
+      "slug": "playground-b-test-matrix",
+      "group": "b",
+      "phase": "preflight",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "unexpected": false,
+      "admissionMs": 26,
+      "terminalFromIntentMs": 1547,
+      "terminalFromAdmissionMs": 1521,
+      "observedApprovalHoldMs": null
+    },
+    {
+      "runId": "a2b218f7-219c-4c48-8439-e431970699d1",
+      "slug": "playground-c-data-migration",
+      "group": "c",
+      "phase": "preflight",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "unexpected": false,
+      "admissionMs": 27,
+      "terminalFromIntentMs": 12033,
+      "terminalFromAdmissionMs": 12006,
+      "observedApprovalHoldMs": 10337
+    },
+    {
+      "runId": "45d39a62-fc19-4837-888d-6c876f199a40",
+      "slug": "playground-a-format-report",
+      "group": "a",
+      "phase": "preflight",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "unexpected": false,
+      "admissionMs": 33,
+      "terminalFromIntentMs": 1048,
+      "terminalFromAdmissionMs": 1015,
+      "observedApprovalHoldMs": null
+    }
+  ],
+  "limits": [
+    "Admission includes durable journal writes, client API-slot wait and HTTP body/schema handling.",
+    "Terminal time comes from server run.updatedAt; wall time includes queue, scheduler polling, execution and approval holds.",
+    "Observed approval hold starts at runner observation, not durable wait creation.",
+    "No SQL queue-to-claim timing is available until a safe copied snapshot is supplied."
+  ]
+}

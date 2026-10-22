@@ -1,0 +1,177 @@
+import { mkdir, open } from "node:fs/promises";
+import { createServer } from "node:net";
+import { resolve } from "node:path";
+import type { z } from "zod";
+import type { routes } from "../../packages/loopy/src/contract/index.ts";
+
+type Mutation =
+  | z.output<typeof routes.startRun.body>
+  | z.output<typeof routes.resolveNamedHook.body>;
+
+import { errorBodySchema } from "../../packages/loopy/src/contract/index.ts";
+import { readDaemonFile } from "../../packages/loopy/src/local/index.ts";
+import { cli, environment, home, port, source, state } from "./config.ts";
+import { runtimeSource } from "./source.ts";
+
+export async function requireFreePort() {
+  const probe = createServer();
+  await new Promise<void>((accept, reject) => {
+    probe.once("error", reject);
+    probe.listen(port, "127.0.0.1", accept);
+  });
+  await new Promise<void>((accept, reject) =>
+    probe.close((error) => (error ? reject(error) : accept())),
+  );
+}
+
+export class OwnedDaemon {
+  private child?: ReturnType<typeof Bun.spawn>;
+  private log?: Awaited<ReturnType<typeof open>>;
+  readonly starts: {
+    pid: number;
+    startedAt: string;
+    beforeSpawn: Awaited<ReturnType<typeof runtimeSource>>;
+    afterReady: Awaited<ReturnType<typeof runtimeSource>>;
+  }[] = [];
+
+  async start() {
+    if (this.child) {
+      throw new Error("This runner already owns a daemon process.");
+    }
+
+    await requireFreePort();
+
+    if (readDaemonFile(home)) {
+      throw new Error("The isolated home already has a live daemon. Refusing to adopt it.");
+    }
+
+    await mkdir(home, { recursive: true });
+    this.log = await open(resolve(state, "daemon.log"), "a", 0o600);
+    const beforeSpawn = await runtimeSource();
+    this.child = Bun.spawn(this.command(), {
+      cwd: source,
+      env: environment(),
+      stdin: "ignore",
+      stdout: this.log.fd,
+      stderr: this.log.fd,
+    });
+    const deadline = Date.now() + 10_000;
+
+    while (Date.now() < deadline) {
+      if (this.child.exitCode !== null) {
+        throw new Error(
+          `Owned daemon exited with ${this.child.exitCode}. Inspect its isolated log.`,
+        );
+      }
+
+      const record = readDaemonFile(home);
+
+      if (record?.pid === this.child.pid && record.port === port) {
+        this.starts.push({
+          pid: record.pid,
+          startedAt: record.startedAt,
+          beforeSpawn,
+          afterReady: await runtimeSource(),
+        });
+
+        return;
+      }
+
+      await Bun.sleep(50);
+    }
+
+    throw new Error("Owned daemon did not become ready within ten seconds.");
+  }
+
+  private command() {
+    return [
+      process.execPath,
+      "--no-env-file",
+      cli,
+      "--home",
+      home,
+      "--cwd",
+      source,
+      "--lease-ms",
+      "2000",
+      "daemon",
+      "run",
+      "--port",
+      String(port),
+      "--concurrency",
+      "4",
+    ];
+  }
+
+  async singletonProbe() {
+    const child = Bun.spawn(this.command(), {
+      cwd: source,
+      env: environment(),
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    const result = await Promise.race([
+      Promise.all([child.exited, new Response(child.stderr).text()]),
+      Bun.sleep(5000).then(() => null),
+    ]);
+
+    if (!result) {
+      child.kill("SIGTERM");
+      await child.exited;
+      throw new Error("Competing daemon failed to reject within five seconds.");
+    }
+
+    const [exitCode, stderr] = result;
+
+    return { exitCode, rejected: exitCode !== 0, reason: stderr.trim() };
+  }
+
+  async request<T>(path: string, schema: z.ZodType<T>, body?: Mutation) {
+    const record = readDaemonFile(home);
+
+    if (!this.child || record?.pid !== this.child.pid || record.port !== port) {
+      throw new Error("Daemon discovery does not match the process this runner owns.");
+    }
+
+    const response = await fetch(`http://127.0.0.1:${port}/api${path}`, {
+      method: body === undefined ? "GET" : "POST",
+      headers: { Authorization: `Bearer ${record.token}`, "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    const value: unknown = await response.json();
+
+    if (!response.ok) {
+      throw new Error(`${response.status}: ${errorBodySchema.parse(value).error.code}`);
+    }
+
+    return schema.parse(value);
+  }
+
+  async stop(signal: "SIGTERM" | "SIGKILL" = "SIGTERM") {
+    const child = this.child;
+
+    if (!child) {
+      return;
+    }
+
+    child.kill(signal);
+
+    const ended = await Promise.race([
+      child.exited.then(() => true),
+      Bun.sleep(10_000).then(() => false),
+    ]);
+
+    if (!ended) {
+      child.kill("SIGKILL");
+      await child.exited;
+    }
+
+    this.child = undefined;
+    await this.log?.close();
+    this.log = undefined;
+  }
+}

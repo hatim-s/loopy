@@ -1,0 +1,148 @@
+{
+  "status": "ready-for-parent-gate",
+  "at": "2026-10-22T20:11:55.828Z",
+  "scope": "local-wrangler-docker-only",
+  "api": "http://127.0.0.1:15070",
+  "dashboard": "http://127.0.0.1:15072",
+  "batch": "playground-2026-10-22T19-54-57-063Z",
+  "workspace": "playground",
+  "stack": {
+    "previousOwner": 42723,
+    "owner": 60790,
+    "startedAt": "2026-10-22T20:06:31.247Z",
+    "readyRecordedAt": "2026-10-22T20:11:55.828Z",
+    "children": [
+      {
+        "name": "sandbox",
+        "pid": 60792
+      },
+      {
+        "name": "worker",
+        "pid": 60793
+      },
+      {
+        "name": "dashboard",
+        "pid": 60794
+      }
+    ],
+    "manifest": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground/processes.json",
+    "stopCommand": "bun --no-env-file scripts/playground/index.ts stop",
+    "restartBoundary": "Final script-only backend timing instrumentation loaded after small-data baseline; same three persisted preflight runs retained."
+  },
+  "source": {
+    "commit": "9e649e9a8abcb2ec20e4379190b893c6876931b0",
+    "sourceHash": "a213d51dab78b89a140ebcc1c792daa18558d9fb428330bdc21b650400de9c89",
+    "workflows": 15
+  },
+  "preflightRunIds": [
+    "a2b218f7-219c-4c48-8439-e431970699d1",
+    "ca974500-3bcd-4103-a72c-dfb8aa8faeb5",
+    "45d39a62-fc19-4837-888d-6c876f199a40"
+  ],
+  "primaryRunsSubmitted": 0,
+  "primaryGate": "closed",
+  "files": [
+    {
+      "path": "scripts/playground/config.ts",
+      "sha256": "2b7880588cb8a8e74faf50e39892dd32a7a023f03943bc2f89918be40b0b6d23",
+      "lines": 69
+    },
+    {
+      "path": "scripts/playground/client.ts",
+      "sha256": "7806673911064109207e2a721494a4367cb522f62f1303ee8cd931046f924aa0",
+      "lines": 91
+    },
+    {
+      "path": "scripts/playground/provider.ts",
+      "sha256": "86fabfe6f52a2f45d384736ab15fc3f1538a47de335e6adb2de3beb74fae2da2",
+      "lines": 37
+    },
+    {
+      "path": "scripts/playground/runtime-limit.ts",
+      "sha256": "d98d94bc915ba77fc8b16cf83f23417f0d010022b49782ce12afff7d51497d5f",
+      "lines": 125
+    },
+    {
+      "path": "scripts/playground/stack.ts",
+      "sha256": "2abf39040239a6da49d181538efbb3337c27def57fd47c23fc9ce929f7f92ea7",
+      "lines": 250
+    },
+    {
+      "path": "scripts/playground/index.ts",
+      "sha256": "3b8e0837b6963b58c1edce4dc47820c2a378a742843d2aaa110e8f84277fe6f0",
+      "lines": 47
+    },
+    {
+      "path": "scripts/playground/artifacts.ts",
+      "sha256": "6ff4d71ff37f5942579a56ce3dded1399f62253907897799f938c51870161c42",
+      "lines": 107
+    },
+    {
+      "path": "scripts/playground/repository.ts",
+      "sha256": "65f2923fa8b1f26b3bce33afdbe8711e6050784757b06e3deeba825c726f7026",
+      "lines": 282
+    },
+    {
+      "path": "scripts/playground/journal.ts",
+      "sha256": "d5b0dfccb453a5dc48c51cb8117937447969e9a647f8282f05830346403aa992",
+      "lines": 72
+    },
+    {
+      "path": "scripts/playground/cohort.ts",
+      "sha256": "f7d5038d8c5f10a7a7bad2ff53e806cbb36198c6afd8d8598b1fa96555a364fd",
+      "lines": 158
+    },
+    {
+      "path": "scripts/playground/prepare.ts",
+      "sha256": "718a6506158c3ef569f8dc2411d2706a1fbc6c617b8756ddddad48b5a75bfe32",
+      "lines": 108
+    },
+    {
+      "path": "scripts/playground/run.ts",
+      "sha256": "7a11e6c61f9185ac8bf8ca864a3b6548bcedf9dd471a7ce23538c513387ef5ec",
+      "lines": 160
+    },
+    {
+      "path": "scripts/playground/guard.ts",
+      "sha256": "1213d36290bf1cf94a7587cc54d6320bda41cba2d6a6ccc29943af8b278c42a9",
+      "lines": 202
+    },
+    {
+      "path": "scripts/playground/outcomes.ts",
+      "sha256": "e6de226126461b46d11b9708961f737e9c1ed2e07cc757cb6b0d29ec54e93aee",
+      "lines": 118
+    },
+    {
+      "path": "scripts/playground/approval.ts",
+      "sha256": "5d907733c9c2c8c83d8fb1718482fc7237e6a4aa2ad524eefcd46549bf82f5ee",
+      "lines": 78
+    }
+  ],
+  "linesAdded": 1904,
+  "linesDeleted": 0,
+  "checksReceipt": ".notes/cloud/evidence/playground-driver-checks.json",
+  "focusedChecks": {
+    "backendOperationConcurrency": 4,
+    "queuedAbort": true,
+    "expiredWhileQueuedEffectsStarted": 0,
+    "completedReplayRunCountBefore": 3,
+    "completedReplayRunCountAfter": 3,
+    "artifactIdempotent": true,
+    "approvalRecoveryPosts": 0,
+    "syntheticControlledFailureCases": 3,
+    "syntheticUncertainRejected": 3,
+    "syntheticTimeoutRejected": 3,
+    "memoryGuardFour64MiBContainersVmPercent": 8.333333333333332,
+    "differingContainerLimitsDoNotChangeUsage": true,
+    "concurrentPressureFailureBothRejected": true,
+    "deadPressureOwnerRejectedAndLockRetained": true,
+    "concurrentPressureSuccessRequiresFreshSample": true
+  },
+  "gaps": [
+    "Backend operation limit is not a hard active-container guarantee after Docker transport failure; ABORT and ownership checks stop new admission.",
+    "backendDurationMs includes Docker setup and result inspection, not only worker execution.",
+    "Fixture leads own report semantics beyond exported identity/hash.",
+    "Primary525-run cohorts remain delegated to their group leads behind parent gate.",
+    "Bun daemon comparison is separately coordinated after cloud measurement."
+  ]
+}

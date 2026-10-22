@@ -1,0 +1,31 @@
+{
+  "method": "sqlite3_backup from read-only source after owned daemon exit",
+  "source": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-daemon/home/runs.sqlite",
+  "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-daemon/preflight-standalone.sqlite",
+  "sidecarsBefore": [
+    {
+      "suffix": "-wal",
+      "bytes": 0
+    },
+    {
+      "suffix": "-shm",
+      "bytes": 32768
+    }
+  ],
+  "sidecarsAfter": [
+    {
+      "suffix": "-wal",
+      "bytes": 0
+    },
+    {
+      "suffix": "-shm",
+      "bytes": 32768
+    }
+  ],
+  "sourceRows": [],
+  "copiedRows": [],
+  "integrity": "ok",
+  "matchesSource": true,
+  "matchesApi": null,
+  "matches45ApiRuns": false
+}

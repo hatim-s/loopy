@@ -1,0 +1,61 @@
+{
+  "observedAt": "2026-10-22T19:48:18.001Z",
+  "source": "existing local API 14870",
+  "workspaces": [
+    {
+      "principal": "fixtures",
+      "total": 16,
+      "statuses": {
+        "succeeded": 16
+      },
+      "slugs": {
+        "cloud-journey-execution": 10,
+        "cloud-journey-approval": 6
+      },
+      "ids": [
+        "5972833b-2ce1-4e32-a5a5-4051f4c9482e",
+        "61fd50be-f53e-4aca-a265-1358f48d7fb1",
+        "9a4ddebe-d235-43ca-a8bb-c8a41459fe42",
+        "33ba19ea-56d1-4103-99ff-377d5e4c90a3",
+        "e02aa1e0-61d3-4831-9b68-72934dda205d",
+        "a8922c68-55b3-40bb-8916-3910cd7a74f2",
+        "bdced5e6-4e74-4a0a-ba3b-266778a5d64d",
+        "ced5c4a1-108f-4fb4-90ef-d47e1f9cc1f8",
+        "d8ac7180-a1fb-4396-ae21-5c9e8527fb67",
+        "1e1c5d5a-3f10-4cf5-9bda-9bb19af81596",
+        "73986f78-d323-42ec-a5de-8d845428e4dc",
+        "6f512903-58c7-40b1-99b2-a85d0c7e1c4e",
+        "1020281e-424e-4c60-9855-ce8cc4eaaad9",
+        "27e9c49b-66b9-4b7d-aa6d-6a7a1a401fe4",
+        "eae72350-4f18-4216-814c-6eeedac8b4b1",
+        "84f7b40e-4bb7-4b00-82e2-77debdfc81dd"
+      ]
+    },
+    {
+      "principal": "other",
+      "total": 0,
+      "statuses": {},
+      "slugs": {},
+      "ids": []
+    }
+  ],
+  "isolatedFailureStack": {
+    "total": 6,
+    "statuses": {
+      "succeeded": 2,
+      "failed": 2,
+      "suspended": 2
+    },
+    "ids": [
+      "5f5d5cbc-134b-484a-b25b-2691a2af52da",
+      "9f7fa825-d897-4785-8109-09e991d0ced0",
+      "92c8043f-1f55-4c4f-b91e-cecbe926e310",
+      "c7e72964-53b4-4f6b-a9bd-3f1b667fc622",
+      "b12525e3-b1b1-4404-a521-a21c5715cb01",
+      "3ff8e956-9276-428a-aa0b-9ce7157d3356"
+    ],
+    "verification": "Read-only SQLite status count against retained isolated failure DO database"
+  },
+  "retainedWorkflowTotal": 22,
+  "limits": "Counts retained actual end-to-end workflow runs in the two prior persistent local stacks. Does not count direct sandbox attempts or ephemeral automated-test runs; not an all-time execution total."
+}

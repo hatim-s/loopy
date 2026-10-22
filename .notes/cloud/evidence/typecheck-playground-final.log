@@ -1,0 +1,2 @@
+$ tsc --noEmit && tsc -p packages/loopy/tsconfig.portable.json
+scripts/playground/metrics-request.ts(36,35): error TS2504: Type 'ReadableStream<Uint8Array<ArrayBuffer>>' must have a '[Symbol.asyncIterator]()' method that returns an async iterator.

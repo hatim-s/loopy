@@ -1,0 +1,42 @@
+{
+  "scope": "local-playground-diagnostics-only",
+  "status": "blocked-live-snapshot-deferred-to-quiesced-window",
+  "source": ".loopy/playground/wrangler/v3/do/loopy-playground-local-Workspace/f452e348e1d8a7a561c1f3ac2602e79059b161b59c8513bf1985ed061f7675da.sqlite",
+  "attempts": [
+    {
+      "mechanism": "python-sqlite3-online-backup-from-mode-ro",
+      "sqliteVersion": "3.43.2",
+      "outcome": "failed",
+      "failure": "sqlite3.OperationalError: unable to open database file",
+      "failedAt": "reader.backup(writer)",
+      "sourceChanged": false,
+      "sourceQueries": {
+        "PRAGMA database_list": "succeeded",
+        "SELECT count(*) FROM runs": "unable to open database file",
+        "PRAGMA journal_mode": "unable to open database file",
+        "PRAGMA integrity_check": "unable to open database file"
+      },
+      "boundedReadonlyDiagnostics": [
+        "mode=ro&vfs=unix-excl: unable to open database file",
+        "mode=ro&vfs=unix-none: unable to open database file",
+        "mode=ro&nolock=1: unable to open database file",
+        "connection-only locking_mode=exclusive then SELECT: disk I/O error"
+      ]
+    },
+    {
+      "mechanism": "bun-readonly-explicit-deferred-transaction-serialization",
+      "sqliteVersion": "3.43.2",
+      "outcome": "failed-before-serialization",
+      "failure": "SQLiteError SQLITE_CANTOPEN errno 14: unable to open database file",
+      "failedAt": "first SELECT name FROM sqlite_schema WHERE type='table' inside explicit read transaction",
+      "sourceChanged": false,
+      "snapshotBytesWritten": false,
+      "priorAutocommitReadonlyProbe": "Bun SELECT count(*) FROM runs succeeded with count 0 before this transaction attempt"
+    }
+  ],
+  "limits": [
+    "No successful snapshot, measured SQL plans or SQL timing claim comes from these failures.",
+    "No immutable URI, writable live connection, FFI workaround or raw active WAL copy was used.",
+    "No more live DB experiments are authorized. Parent coordinates a quiesced owned-state copy after workload and post-load API capture."
+  ]
+}

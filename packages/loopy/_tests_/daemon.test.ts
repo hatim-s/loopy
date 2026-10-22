@@ -225,18 +225,100 @@ for (const [runDelay, scheduleDelay, expected] of [
   });
 }
 
-test("wake interrupts an idle wait and activates new queued work", async () => {
+for (const kind of ["memory", "sqlite"] as const) {
+  test(`${kind} committed queued creation interrupts idle sleep without an explicit wake`, async () => {
+    const stores = catchUpStores(kind);
+    const sleeping = sleeper();
+    const observed: RunRecord[] = [];
+
+    const f = fixture({
+      store: stores.store,
+      sleep: sleeping.sleep,
+      graphFor: async (run) => {
+        const committed = await stores.writer.getRun(run.id);
+        expect(committed).toEqual(run);
+        observed.push(run);
+
+        return loopy("test", { input: {}, run: () => "done" }).graph;
+      },
+    });
+
+    const running = f.daemon.run();
+
+    try {
+      await sleeping.entered();
+      expect(sleeping.calls[0]?.milliseconds).toBe(5000);
+      await f.store.createRun(newRun());
+      expect(sleeping.calls[0]?.signal.aborted).toBe(true);
+      await until(async () => (await f.store.getRun("run"))?.status === "succeeded");
+      expect(observed).toEqual([newRun()]);
+      expect(f.errors).toEqual([]);
+    } finally {
+      await f.daemon.stop();
+      await running;
+      stores.close();
+    }
+  });
+}
+
+for (const mutation of ["save", "enable"] as const) {
+  test(`schedule ${mutation} interrupts idle sleep and fires once without a busy loop`, async () => {
+    const sleeping = sleeper();
+    const f = fixture({ sleep: sleeping.sleep });
+
+    if (mutation === "enable") {
+      await f.store.putSchedule(schedule({ enabled: false }));
+    }
+
+    const running = f.daemon.run();
+
+    try {
+      await sleeping.entered();
+      const idle = sleeping.calls.at(-1);
+
+      if (mutation === "save") {
+        await f.store.putSchedule(schedule());
+      } else {
+        await f.store.setScheduleEnabled({ workspace: "/workspace", slug: "test", enabled: true });
+      }
+
+      expect(idle?.signal.aborted).toBe(true);
+      await until(async () => (await f.store.listRuns({ status: "succeeded" })).length === 1);
+      await until(() => sleeping.calls.at(-1)?.signal.aborted === false);
+      expect(sleeping.calls.at(-1)?.milliseconds).toBe(5000);
+      const waits = sleeping.calls.length;
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      expect(sleeping.calls).toHaveLength(waits);
+      expect(await f.store.listRuns()).toHaveLength(1);
+      expect(f.errors).toEqual([]);
+    } finally {
+      await f.daemon.stop();
+      await running;
+    }
+  });
+}
+
+test("unrelated run events leave the idle wait intact", async () => {
   const sleeping = sleeper();
   const f = fixture({ sleep: sleeping.sleep });
+  await f.store.createRun({ ...newRun(), status: "suspended" });
+  await f.store.claim("run", "owner");
   const running = f.daemon.run();
-  await sleeping.entered();
-  await f.store.createRun(newRun());
-  f.daemon.wake();
-  await Promise.resolve();
-  await sleeping.entered();
-  await until(async () => (await f.store.getRun("run"))?.status === "succeeded");
-  await f.daemon.stop();
-  await running;
+
+  try {
+    await sleeping.entered();
+    await f.store.heartbeat("run", "owner");
+    await f.store.finishRun("run", "owner", { status: "succeeded", output: null });
+    await f.store.release("run", "owner");
+    await f.store.createRun({ ...newRun(), id: "historical", status: "succeeded" });
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(sleeping.calls).toHaveLength(1);
+    expect(sleeping.calls[0]?.signal.aborted).toBe(false);
+    expect(f.errors).toEqual([]);
+  } finally {
+    await f.daemon.stop();
+    await running;
+  }
 });
 
 async function until(ready: () => boolean | Promise<boolean>): Promise<void> {

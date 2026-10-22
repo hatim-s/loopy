@@ -1,0 +1,119 @@
+{
+  "verifiedAt": "2026-10-22T20:48:22.193Z",
+  "codeLinesAdded": 1459,
+  "codeLinesDeleted": 0,
+  "files": [
+    {
+      "path": "/Users/hatim.shakir/projects/loopy/cloud-integration/scripts/daemon-playground/analyze.ts",
+      "sha256": "1deb3568dda2db26778152e24a2c900dbaa1a625a5c78404633275f65a13601c",
+      "lines": 141
+    },
+    {
+      "path": "/Users/hatim.shakir/projects/loopy/cloud-integration/scripts/daemon-playground/daemon.ts",
+      "sha256": "65e378aaab31c11b913a94db9f1ed3b3b1cd64e11f35244a0ec83f90699f4d29",
+      "lines": 177
+    },
+    {
+      "path": "/Users/hatim.shakir/projects/loopy/cloud-integration/scripts/daemon-playground/prepare.ts",
+      "sha256": "10dbe87242e0782efdcf95782562c78984364e8a5cc861c7864164f47a7c54e9",
+      "lines": 178
+    },
+    {
+      "path": "/Users/hatim.shakir/projects/loopy/cloud-integration/scripts/daemon-playground/backup.py",
+      "sha256": "f298a32cec9cc4e8af40e00288921b079ad3d9ba11b55350003c4abc041ed2fc",
+      "lines": 63
+    },
+    {
+      "path": "/Users/hatim.shakir/projects/loopy/cloud-integration/scripts/daemon-playground/source.ts",
+      "sha256": "43a13856c852ead26dc4c8fd5073c971d5dfb6b9e6c800f6785aafc13ce77c16",
+      "lines": 28
+    },
+    {
+      "path": "/Users/hatim.shakir/projects/loopy/cloud-integration/scripts/daemon-playground/report-schema.ts",
+      "sha256": "9a4526d40346d61eb64d80107a13251c99b05ccb28eded760ebe1171e17d80b2",
+      "lines": 44
+    },
+    {
+      "path": "/Users/hatim.shakir/projects/loopy/cloud-integration/scripts/daemon-playground/waits.ts",
+      "sha256": "36eb61ea264e0f9215ebfd8e0c3862191fc54633d859ed3efb6bd99550a13dbc",
+      "lines": 124
+    },
+    {
+      "path": "/Users/hatim.shakir/projects/loopy/cloud-integration/scripts/daemon-playground/outcomes.ts",
+      "sha256": "af6111a17d3492b382909a2f0e1e0ac72b1b51ca748bc74572d868c131c046d3",
+      "lines": 67
+    },
+    {
+      "path": "/Users/hatim.shakir/projects/loopy/cloud-integration/scripts/daemon-playground/capture.ts",
+      "sha256": "afc9721a54274bf73b0a7f28f926097da4e1dac793af351af48764c90a3b8dd1",
+      "lines": 129
+    },
+    {
+      "path": "/Users/hatim.shakir/projects/loopy/cloud-integration/scripts/daemon-playground/closed-executions.ts",
+      "sha256": "7e7d27df43c284c7de0b37e534c9665cde41702859a26b21efc413b30f0a524f",
+      "lines": 51
+    },
+    {
+      "path": "/Users/hatim.shakir/projects/loopy/cloud-integration/scripts/daemon-playground/semantics.ts",
+      "sha256": "a98d5d0e3eec585c578ca4c0fb93ae6a62c505b757f5b8505281c1cf577c633c",
+      "lines": 180
+    },
+    {
+      "path": "/Users/hatim.shakir/projects/loopy/cloud-integration/scripts/daemon-playground/config.ts",
+      "sha256": "c8bc745b70626ff78bcca4803210440560be7d0d9896ec3a51bb4ec4f4e4b5ba",
+      "lines": 41
+    },
+    {
+      "path": "/Users/hatim.shakir/projects/loopy/cloud-integration/scripts/daemon-playground/backup.ts",
+      "sha256": "9e09b8d42f603816cf100585834e7b47b08429e188a4b440feb9deb7c4ffbcf0",
+      "lines": 54
+    },
+    {
+      "path": "/Users/hatim.shakir/projects/loopy/cloud-integration/scripts/daemon-playground/run.ts",
+      "sha256": "0be0fdb487ce2bcf21b1c94dd54098d5c607fb63f3caf78f72215f6a51217aeb",
+      "lines": 182
+    }
+  ],
+  "commands": [
+    {
+      "command": "bunx biome check scripts/daemon-playground",
+      "exitCode": 0,
+      "stdout": "Checked 13 files in 3ms. No fixes applied."
+    },
+    {
+      "command": "bunx eslint scripts/daemon-playground",
+      "exitCode": 0,
+      "stdout": ""
+    },
+    {
+      "command": "bunx tsc -p .loopy/playground-daemon/tsconfig.json --noEmit",
+      "exitCode": 0,
+      "stdout": ""
+    },
+    {
+      "command": "bun --no-env-file scripts/daemon-playground/analyze.ts",
+      "exitCode": 0,
+      "stdoutFile": ".loopy/playground-daemon/semantic-analysis.log",
+      "summary": "45 semantic run checks and 272 retained file hash checks passed"
+    }
+  ],
+  "ownedPids": [
+    {
+      "pid": 32651,
+      "alive": false
+    },
+    {
+      "pid": 33241,
+      "alive": false
+    }
+  ],
+  "backup": {
+    "sha256": "5f83e877a93e335e4f5ac5d1586c5dea9db6523bf9de9614dd8c377774297771",
+    "bytes": 2506752
+  },
+  "fullCheck": "parent-owned; not run",
+  "testsDeleted": [],
+  "testsMoved": [],
+  "productionEdits": [],
+  "commits": []
+}

@@ -1,0 +1,3324 @@
+{
+  "scope": "local-playground-read-only-api",
+  "phase": "baseline-small",
+  "startedAt": "2026-10-22T20:00:49.110Z",
+  "updatedAt": "2026-10-22T20:02:19.859Z",
+  "elapsedMs": 90748.16274999999,
+  "targetRequestsPerSecond": 2,
+  "samples": [
+    {
+      "endpoint": "runs.latest",
+      "at": "2026-10-22T20:00:49.110Z",
+      "status": 200,
+      "bytes": 2121,
+      "headersMs": 19.88266600000003,
+      "totalMs": 19.96445799999998,
+      "parseMs": 1.4210410000000024,
+      "failure": null,
+      "observation": {
+        "items": 3
+      }
+    },
+    {
+      "endpoint": "loopies.counts",
+      "at": "2026-10-22T20:00:49.612Z",
+      "status": 200,
+      "bytes": 10346,
+      "headersMs": 14.360916999999972,
+      "totalMs": 14.399999999999977,
+      "parseMs": 1.1532920000000786,
+      "failure": null,
+      "observation": {
+        "items": 15,
+        "runs": 3
+      }
+    },
+    {
+      "endpoint": "runs.waiting",
+      "at": "2026-10-22T20:00:50.114Z",
+      "status": 200,
+      "bytes": 2,
+      "headersMs": 3.521208999999999,
+      "totalMs": 3.5510000000001583,
+      "parseMs": 0.045125000000098225,
+      "failure": null,
+      "observation": {
+        "items": 0
+      }
+    },
+    {
+      "endpoint": "runs.failed",
+      "at": "2026-10-22T20:00:50.615Z",
+      "status": 200,
+      "bytes": 2,
+      "headersMs": 3.5752910000001066,
+      "totalMs": 3.6070830000001024,
+      "parseMs": 0.029541999999992186,
+      "failure": null,
+      "observation": {
+        "items": 0
+      }
+    },
+    {
+      "endpoint": "overview.counts",
+      "at": "2026-10-22T20:00:51.115Z",
+      "status": 200,
+      "bytes": 3212,
+      "headersMs": 5.032292000000325,
+      "totalMs": 5.073125000000346,
+      "parseMs": 0.7590420000001359,
+      "failure": null,
+      "observation": {
+        "queued": 0,
+        "running": 0,
+        "suspended": 0,
+        "succeeded": 3,
+        "failed": 0,
+        "cancelled": 0,
+        "buckets": 25
+      }
+    },
+    {
+      "endpoint": "logs.latest",
+      "at": "2026-10-22T20:00:51.616Z",
+      "status": 200,
+      "bytes": 4422,
+      "headersMs": 5.242749999999887,
+      "totalMs": 5.276290999999674,
+      "parseMs": 0.8395409999998265,
+      "failure": null,
+      "observation": {
+        "items": 14,
+        "scanned": 14,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "events.latest",
+      "at": "2026-10-22T20:00:52.117Z",
+      "status": 200,
+      "bytes": 11619,
+      "headersMs": 4.748791999999867,
+      "totalMs": 4.784957999999733,
+      "parseMs": 0.6242910000000848,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "scanned": 50,
+        "hasMore": true
+      }
+    },
+    {
+      "endpoint": "daemon",
+      "at": "2026-10-22T20:00:52.618Z",
+      "status": 200,
+      "bytes": 97,
+      "headersMs": 6.091583999999784,
+      "totalMs": 6.17712500000016,
+      "parseMs": 0.7334159999995791,
+      "failure": null,
+      "observation": {
+        "running": 0,
+        "concurrency": 4
+      }
+    },
+    {
+      "endpoint": "runs.page2",
+      "at": "2026-10-22T20:00:53.118Z",
+      "status": 200,
+      "bytes": 2,
+      "headersMs": 3.7398749999993015,
+      "totalMs": 3.7823749999997744,
+      "parseMs": 0.02775000000019645,
+      "failure": null,
+      "observation": {
+        "items": 0,
+        "cursorSupplied": true
+      }
+    },
+    {
+      "endpoint": "runs.slug",
+      "at": "2026-10-22T20:00:53.619Z",
+      "status": 200,
+      "bytes": 970,
+      "headersMs": 18.99316700000054,
+      "totalMs": 19.05004199999985,
+      "parseMs": 0.13487500000064756,
+      "failure": null,
+      "observation": {
+        "items": 1,
+        "filterSupplied": true
+      }
+    },
+    {
+      "endpoint": "logs.text",
+      "at": "2026-10-22T20:00:54.120Z",
+      "status": 200,
+      "bytes": 901,
+      "headersMs": 3.821584000000257,
+      "totalMs": 3.8527500000000146,
+      "parseMs": 0.09891700000025594,
+      "failure": null,
+      "observation": {
+        "items": 2,
+        "scanned": 14,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "events.run-filter",
+      "at": "2026-10-22T20:00:54.620Z",
+      "status": 200,
+      "bytes": 5312,
+      "headersMs": 11.891749999999774,
+      "totalMs": 11.972125000000233,
+      "parseMs": 0.4329999999999927,
+      "failure": null,
+      "observation": {
+        "items": 23,
+        "scanned": 90,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "logs.page2",
+      "at": "2026-10-22T20:00:55.122Z",
+      "status": 200,
+      "bytes": 4422,
+      "headersMs": 7.401708999999755,
+      "totalMs": 7.463334000000032,
+      "parseMs": 0.25183300000026065,
+      "failure": null,
+      "observation": {
+        "items": 14,
+        "scanned": 14,
+        "hasMore": false,
+        "cursorSupplied": false
+      }
+    },
+    {
+      "endpoint": "events.page2",
+      "at": "2026-10-22T20:00:55.623Z",
+      "status": 200,
+      "bytes": 9224,
+      "headersMs": 8.169625000000451,
+      "totalMs": 8.241083000000799,
+      "parseMs": 0.41841699999986304,
+      "failure": null,
+      "observation": {
+        "items": 40,
+        "scanned": 40,
+        "hasMore": false,
+        "cursorSupplied": true
+      }
+    },
+    {
+      "endpoint": "run.snapshot",
+      "at": "2026-10-22T20:00:56.125Z",
+      "status": 200,
+      "bytes": 2795,
+      "headersMs": 20.75816600000053,
+      "totalMs": 20.832875000000058,
+      "parseMs": 1.8113750000002256,
+      "failure": null,
+      "observation": {
+        "nodes": 7,
+        "hooks": 0,
+        "status": "succeeded"
+      }
+    },
+    {
+      "endpoint": "run.payload",
+      "at": "2026-10-22T20:00:56.625Z",
+      "status": 200,
+      "bytes": 568,
+      "headersMs": 6.836083000000144,
+      "totalMs": 6.896958000000268,
+      "parseMs": 0.5791670000007798,
+      "failure": null,
+      "observation": {}
+    },
+    {
+      "endpoint": "execution.page",
+      "at": "2026-10-22T20:00:57.127Z",
+      "status": 200,
+      "bytes": 2526,
+      "headersMs": 5.167749999998705,
+      "totalMs": 5.208999999998923,
+      "parseMs": 0.55816699999923,
+      "failure": null,
+      "observation": {
+        "items": 6,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "execution.detail",
+      "at": "2026-10-22T20:00:57.629Z",
+      "status": 200,
+      "bytes": 1128,
+      "headersMs": 12.171791000000667,
+      "totalMs": 12.241083000000799,
+      "parseMs": 1.0160410000007687,
+      "failure": null,
+      "observation": {
+        "attempts": 1,
+        "status": "succeeded"
+      }
+    },
+    {
+      "endpoint": "runs.latest",
+      "at": "2026-10-22T20:00:58.145Z",
+      "status": 200,
+      "bytes": 2121,
+      "headersMs": 11.269166000000041,
+      "totalMs": 11.30529099999876,
+      "parseMs": 0.13316699999995762,
+      "failure": null,
+      "observation": {
+        "items": 3
+      }
+    },
+    {
+      "endpoint": "loopies.counts",
+      "at": "2026-10-22T20:00:58.646Z",
+      "status": 200,
+      "bytes": 10346,
+      "headersMs": 21.997083000000202,
+      "totalMs": 22.067542000000685,
+      "parseMs": 0.5776249999998981,
+      "failure": null,
+      "observation": {
+        "items": 15,
+        "runs": 3
+      }
+    },
+    {
+      "endpoint": "runs.waiting",
+      "at": "2026-10-22T20:00:59.147Z",
+      "status": 200,
+      "bytes": 2,
+      "headersMs": 7.305458000000726,
+      "totalMs": 7.378708000000188,
+      "parseMs": 0.05854200000067067,
+      "failure": null,
+      "observation": {
+        "items": 0
+      }
+    },
+    {
+      "endpoint": "runs.failed",
+      "at": "2026-10-22T20:00:59.649Z",
+      "status": 200,
+      "bytes": 2,
+      "headersMs": 7.79791699999987,
+      "totalMs": 7.91070899999977,
+      "parseMs": 0.07308299999931478,
+      "failure": null,
+      "observation": {
+        "items": 0
+      }
+    },
+    {
+      "endpoint": "overview.counts",
+      "at": "2026-10-22T20:01:00.149Z",
+      "status": 200,
+      "bytes": 3212,
+      "headersMs": 4.841290999998819,
+      "totalMs": 4.928124999998545,
+      "parseMs": 0.3084579999995185,
+      "failure": null,
+      "observation": {
+        "queued": 0,
+        "running": 0,
+        "suspended": 0,
+        "succeeded": 3,
+        "failed": 0,
+        "cancelled": 0,
+        "buckets": 25
+      }
+    },
+    {
+      "endpoint": "logs.latest",
+      "at": "2026-10-22T20:01:00.650Z",
+      "status": 200,
+      "bytes": 4422,
+      "headersMs": 10.288625000001048,
+      "totalMs": 10.37079199999971,
+      "parseMs": 0.40916699999979755,
+      "failure": null,
+      "observation": {
+        "items": 14,
+        "scanned": 14,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "events.latest",
+      "at": "2026-10-22T20:01:01.151Z",
+      "status": 200,
+      "bytes": 11619,
+      "headersMs": 3.4241669999992155,
+      "totalMs": 3.457416999999623,
+      "parseMs": 0.1891670000004524,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "scanned": 50,
+        "hasMore": true
+      }
+    },
+    {
+      "endpoint": "daemon",
+      "at": "2026-10-22T20:01:01.652Z",
+      "status": 200,
+      "bytes": 97,
+      "headersMs": 3.054041999999754,
+      "totalMs": 3.0794999999998254,
+      "parseMs": 0.06425000000126602,
+      "failure": null,
+      "observation": {
+        "running": 0,
+        "concurrency": 4
+      }
+    },
+    {
+      "endpoint": "runs.page2",
+      "at": "2026-10-22T20:01:02.152Z",
+      "status": 200,
+      "bytes": 2,
+      "headersMs": 4.757958000000144,
+      "totalMs": 4.817957999999635,
+      "parseMs": 0.0687500000003638,
+      "failure": null,
+      "observation": {
+        "items": 0,
+        "cursorSupplied": true
+      }
+    },
+    {
+      "endpoint": "runs.slug",
+      "at": "2026-10-22T20:01:02.653Z",
+      "status": 200,
+      "bytes": 970,
+      "headersMs": 21.595041000000492,
+      "totalMs": 21.650416000000405,
+      "parseMs": 0.19849999999860302,
+      "failure": null,
+      "observation": {
+        "items": 1,
+        "filterSupplied": true
+      }
+    },
+    {
+      "endpoint": "logs.text",
+      "at": "2026-10-22T20:01:03.154Z",
+      "status": 200,
+      "bytes": 901,
+      "headersMs": 7.610708000000159,
+      "totalMs": 7.674999999999272,
+      "parseMs": 0.24975000000085856,
+      "failure": null,
+      "observation": {
+        "items": 2,
+        "scanned": 14,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "events.run-filter",
+      "at": "2026-10-22T20:01:03.655Z",
+      "status": 200,
+      "bytes": 5312,
+      "headersMs": 6.11449999999968,
+      "totalMs": 6.170250000001033,
+      "parseMs": 0.1950829999987036,
+      "failure": null,
+      "observation": {
+        "items": 23,
+        "scanned": 90,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "logs.page2",
+      "at": "2026-10-22T20:01:04.156Z",
+      "status": 200,
+      "bytes": 4422,
+      "headersMs": 6.648542000000816,
+      "totalMs": 6.7068749999998545,
+      "parseMs": 0.17566699999952107,
+      "failure": null,
+      "observation": {
+        "items": 14,
+        "scanned": 14,
+        "hasMore": false,
+        "cursorSupplied": false
+      }
+    },
+    {
+      "endpoint": "events.page2",
+      "at": "2026-10-22T20:01:04.657Z",
+      "status": 200,
+      "bytes": 9224,
+      "headersMs": 7.13537499999984,
+      "totalMs": 7.223292000000583,
+      "parseMs": 0.30145900000024994,
+      "failure": null,
+      "observation": {
+        "items": 40,
+        "scanned": 40,
+        "hasMore": false,
+        "cursorSupplied": true
+      }
+    },
+    {
+      "endpoint": "run.snapshot",
+      "at": "2026-10-22T20:01:05.158Z",
+      "status": 200,
+      "bytes": 2795,
+      "headersMs": 18.749250000000757,
+      "totalMs": 18.80412499999875,
+      "parseMs": 0.36533399999825633,
+      "failure": null,
+      "observation": {
+        "nodes": 7,
+        "hooks": 0,
+        "status": "succeeded"
+      }
+    },
+    {
+      "endpoint": "run.payload",
+      "at": "2026-10-22T20:01:05.658Z",
+      "status": 200,
+      "bytes": 568,
+      "headersMs": 3.236124999999447,
+      "totalMs": 3.270667000000685,
+      "parseMs": 0.084208000000217,
+      "failure": null,
+      "observation": {}
+    },
+    {
+      "endpoint": "execution.page",
+      "at": "2026-10-22T20:01:06.159Z",
+      "status": 200,
+      "bytes": 2526,
+      "headersMs": 5.9181250000001455,
+      "totalMs": 5.9654580000024,
+      "parseMs": 0.21133299999928568,
+      "failure": null,
+      "observation": {
+        "items": 6,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "execution.detail",
+      "at": "2026-10-22T20:01:06.660Z",
+      "status": 200,
+      "bytes": 1128,
+      "headersMs": 8.591959000001225,
+      "totalMs": 8.638291999999637,
+      "parseMs": 0.2186249999977008,
+      "failure": null,
+      "observation": {
+        "attempts": 1,
+        "status": "succeeded"
+      }
+    },
+    {
+      "endpoint": "runs.latest",
+      "at": "2026-10-22T20:01:07.186Z",
+      "status": 200,
+      "bytes": 2121,
+      "headersMs": 10.947082999999111,
+      "totalMs": 10.98070799999914,
+      "parseMs": 0.1169579999987036,
+      "failure": null,
+      "observation": {
+        "items": 3
+      }
+    },
+    {
+      "endpoint": "loopies.counts",
+      "at": "2026-10-22T20:01:07.687Z",
+      "status": 200,
+      "bytes": 10346,
+      "headersMs": 15.657332999999198,
+      "totalMs": 15.699208000001818,
+      "parseMs": 0.3890830000018468,
+      "failure": null,
+      "observation": {
+        "items": 15,
+        "runs": 3
+      }
+    },
+    {
+      "endpoint": "runs.waiting",
+      "at": "2026-10-22T20:01:08.187Z",
+      "status": 200,
+      "bytes": 2,
+      "headersMs": 2.8064999999987776,
+      "totalMs": 2.834082999997918,
+      "parseMs": 0.023250000002008164,
+      "failure": null,
+      "observation": {
+        "items": 0
+      }
+    },
+    {
+      "endpoint": "runs.failed",
+      "at": "2026-10-22T20:01:08.689Z",
+      "status": 200,
+      "bytes": 2,
+      "headersMs": 6.648000000001048,
+      "totalMs": 6.703249999998661,
+      "parseMs": 0.030333999999129446,
+      "failure": null,
+      "observation": {
+        "items": 0
+      }
+    },
+    {
+      "endpoint": "overview.counts",
+      "at": "2026-10-22T20:01:09.189Z",
+      "status": 200,
+      "bytes": 3212,
+      "headersMs": 8.599667000002228,
+      "totalMs": 8.678584000001138,
+      "parseMs": 0.36124999999810825,
+      "failure": null,
+      "observation": {
+        "queued": 0,
+        "running": 0,
+        "suspended": 0,
+        "succeeded": 3,
+        "failed": 0,
+        "cancelled": 0,
+        "buckets": 25
+      }
+    },
+    {
+      "endpoint": "logs.latest",
+      "at": "2026-10-22T20:01:09.690Z",
+      "status": 200,
+      "bytes": 4422,
+      "headersMs": 3.344583000001876,
+      "totalMs": 3.3747910000020056,
+      "parseMs": 0.08383299999695737,
+      "failure": null,
+      "observation": {
+        "items": 14,
+        "scanned": 14,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "events.latest",
+      "at": "2026-10-22T20:01:10.191Z",
+      "status": 200,
+      "bytes": 11619,
+      "headersMs": 3.5116669999988517,
+      "totalMs": 3.5481670000008307,
+      "parseMs": 0.1444580000024871,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "scanned": 50,
+        "hasMore": true
+      }
+    },
+    {
+      "endpoint": "daemon",
+      "at": "2026-10-22T20:01:10.692Z",
+      "status": 200,
+      "bytes": 97,
+      "headersMs": 3.066292000003159,
+      "totalMs": 3.1022919999995793,
+      "parseMs": 0.03800000000046566,
+      "failure": null,
+      "observation": {
+        "running": 0,
+        "concurrency": 4
+      }
+    },
+    {
+      "endpoint": "runs.page2",
+      "at": "2026-10-22T20:01:11.191Z",
+      "status": 200,
+      "bytes": 2,
+      "headersMs": 3.30304199999955,
+      "totalMs": 3.3364999999976135,
+      "parseMs": 0.02537500000107684,
+      "failure": null,
+      "observation": {
+        "items": 0,
+        "cursorSupplied": true
+      }
+    },
+    {
+      "endpoint": "runs.slug",
+      "at": "2026-10-22T20:01:11.691Z",
+      "status": 200,
+      "bytes": 970,
+      "headersMs": 12.215415999999095,
+      "totalMs": 12.24895800000013,
+      "parseMs": 0.0900419999998121,
+      "failure": null,
+      "observation": {
+        "items": 1,
+        "filterSupplied": true
+      }
+    },
+    {
+      "endpoint": "logs.text",
+      "at": "2026-10-22T20:01:12.192Z",
+      "status": 200,
+      "bytes": 901,
+      "headersMs": 5.1751660000009,
+      "totalMs": 5.226500000000669,
+      "parseMs": 0.09608400000070105,
+      "failure": null,
+      "observation": {
+        "items": 2,
+        "scanned": 14,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "events.run-filter",
+      "at": "2026-10-22T20:01:12.693Z",
+      "status": 200,
+      "bytes": 5312,
+      "headersMs": 5.670208999999886,
+      "totalMs": 5.734833999998955,
+      "parseMs": 0.20437500000116415,
+      "failure": null,
+      "observation": {
+        "items": 23,
+        "scanned": 90,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "logs.page2",
+      "at": "2026-10-22T20:01:13.194Z",
+      "status": 200,
+      "bytes": 4422,
+      "headersMs": 10.783666999999696,
+      "totalMs": 10.867291999998997,
+      "parseMs": 0.25604200000088895,
+      "failure": null,
+      "observation": {
+        "items": 14,
+        "scanned": 14,
+        "hasMore": false,
+        "cursorSupplied": false
+      }
+    },
+    {
+      "endpoint": "events.page2",
+      "at": "2026-10-22T20:01:13.695Z",
+      "status": 200,
+      "bytes": 9224,
+      "headersMs": 5.206541999999899,
+      "totalMs": 5.254834000003029,
+      "parseMs": 0.12150000000110595,
+      "failure": null,
+      "observation": {
+        "items": 40,
+        "scanned": 40,
+        "hasMore": false,
+        "cursorSupplied": true
+      }
+    },
+    {
+      "endpoint": "run.snapshot",
+      "at": "2026-10-22T20:01:14.195Z",
+      "status": 200,
+      "bytes": 2795,
+      "headersMs": 18.0902079999978,
+      "totalMs": 18.14799999999741,
+      "parseMs": 0.2538749999985157,
+      "failure": null,
+      "observation": {
+        "nodes": 7,
+        "hooks": 0,
+        "status": "succeeded"
+      }
+    },
+    {
+      "endpoint": "run.payload",
+      "at": "2026-10-22T20:01:14.697Z",
+      "status": 200,
+      "bytes": 568,
+      "headersMs": 6.535792000002402,
+      "totalMs": 6.608083000002807,
+      "parseMs": 0.20483299999978044,
+      "failure": null,
+      "observation": {}
+    },
+    {
+      "endpoint": "execution.page",
+      "at": "2026-10-22T20:01:15.197Z",
+      "status": 200,
+      "bytes": 2526,
+      "headersMs": 7.8834160000005795,
+      "totalMs": 7.959666000002471,
+      "parseMs": 0.4330420000005688,
+      "failure": null,
+      "observation": {
+        "items": 6,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "execution.detail",
+      "at": "2026-10-22T20:01:15.701Z",
+      "status": 200,
+      "bytes": 1128,
+      "headersMs": 6.4941669999971054,
+      "totalMs": 6.537499999998545,
+      "parseMs": 0.15008300000044983,
+      "failure": null,
+      "observation": {
+        "attempts": 1,
+        "status": "succeeded"
+      }
+    },
+    {
+      "endpoint": "runs.latest",
+      "at": "2026-10-22T20:01:16.201Z",
+      "status": 200,
+      "bytes": 2121,
+      "headersMs": 13.96295900000041,
+      "totalMs": 13.996542000000773,
+      "parseMs": 0.1416669999998703,
+      "failure": null,
+      "observation": {
+        "items": 3
+      }
+    },
+    {
+      "endpoint": "loopies.counts",
+      "at": "2026-10-22T20:01:16.703Z",
+      "status": 200,
+      "bytes": 10346,
+      "headersMs": 20.89404099999956,
+      "totalMs": 20.951333000000886,
+      "parseMs": 0.5750829999997222,
+      "failure": null,
+      "observation": {
+        "items": 15,
+        "runs": 3
+      }
+    },
+    {
+      "endpoint": "runs.waiting",
+      "at": "2026-10-22T20:01:17.204Z",
+      "status": 200,
+      "bytes": 2,
+      "headersMs": 11.243624999999156,
+      "totalMs": 11.322667000000365,
+      "parseMs": 0.0610000000015134,
+      "failure": null,
+      "observation": {
+        "items": 0
+      }
+    },
+    {
+      "endpoint": "runs.failed",
+      "at": "2026-10-22T20:01:17.706Z",
+      "status": 200,
+      "bytes": 2,
+      "headersMs": 6.057415999999648,
+      "totalMs": 6.11370800000077,
+      "parseMs": 0.03141699999832781,
+      "failure": null,
+      "observation": {
+        "items": 0
+      }
+    },
+    {
+      "endpoint": "overview.counts",
+      "at": "2026-10-22T20:01:18.206Z",
+      "status": 200,
+      "bytes": 3212,
+      "headersMs": 3.0804580000003625,
+      "totalMs": 3.110708000000159,
+      "parseMs": 0.13079199999992852,
+      "failure": null,
+      "observation": {
+        "queued": 0,
+        "running": 0,
+        "suspended": 0,
+        "succeeded": 3,
+        "failed": 0,
+        "cancelled": 0,
+        "buckets": 25
+      }
+    },
+    {
+      "endpoint": "logs.latest",
+      "at": "2026-10-22T20:01:18.706Z",
+      "status": 200,
+      "bytes": 4422,
+      "headersMs": 3.673584000000119,
+      "totalMs": 3.7106669999993755,
+      "parseMs": 0.09533299999748124,
+      "failure": null,
+      "observation": {
+        "items": 14,
+        "scanned": 14,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "events.latest",
+      "at": "2026-10-22T20:01:19.207Z",
+      "status": 200,
+      "bytes": 11619,
+      "headersMs": 5.915999999997439,
+      "totalMs": 5.968582999998034,
+      "parseMs": 0.1977919999990263,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "scanned": 50,
+        "hasMore": true
+      }
+    },
+    {
+      "endpoint": "daemon",
+      "at": "2026-10-22T20:01:19.709Z",
+      "status": 200,
+      "bytes": 97,
+      "headersMs": 6.958957999999257,
+      "totalMs": 7.035208000001148,
+      "parseMs": 0.07049999999799184,
+      "failure": null,
+      "observation": {
+        "running": 0,
+        "concurrency": 4
+      }
+    },
+    {
+      "endpoint": "runs.page2",
+      "at": "2026-10-22T20:01:20.209Z",
+      "status": 200,
+      "bytes": 2,
+      "headersMs": 11.290208999998868,
+      "totalMs": 11.369249999999738,
+      "parseMs": 0.061083000000508036,
+      "failure": null,
+      "observation": {
+        "items": 0,
+        "cursorSupplied": true
+      }
+    },
+    {
+      "endpoint": "runs.slug",
+      "at": "2026-10-22T20:01:20.710Z",
+      "status": 200,
+      "bytes": 970,
+      "headersMs": 11.08520900000076,
+      "totalMs": 11.12091700000019,
+      "parseMs": 0.09366700000100536,
+      "failure": null,
+      "observation": {
+        "items": 1,
+        "filterSupplied": true
+      }
+    },
+    {
+      "endpoint": "logs.text",
+      "at": "2026-10-22T20:01:21.210Z",
+      "status": 200,
+      "bytes": 901,
+      "headersMs": 6.579999999998108,
+      "totalMs": 6.653500000000349,
+      "parseMs": 0.09441700000024866,
+      "failure": null,
+      "observation": {
+        "items": 2,
+        "scanned": 14,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "events.run-filter",
+      "at": "2026-10-22T20:01:21.712Z",
+      "status": 200,
+      "bytes": 5312,
+      "headersMs": 6.753875000002154,
+      "totalMs": 6.8151250000009895,
+      "parseMs": 0.1372920000067097,
+      "failure": null,
+      "observation": {
+        "items": 23,
+        "scanned": 90,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "logs.page2",
+      "at": "2026-10-22T20:01:22.213Z",
+      "status": 200,
+      "bytes": 4422,
+      "headersMs": 3.14366699999664,
+      "totalMs": 3.1746249999996508,
+      "parseMs": 0.09129199999733828,
+      "failure": null,
+      "observation": {
+        "items": 14,
+        "scanned": 14,
+        "hasMore": false,
+        "cursorSupplied": false
+      }
+    },
+    {
+      "endpoint": "events.page2",
+      "at": "2026-10-22T20:01:22.713Z",
+      "status": 200,
+      "bytes": 9224,
+      "headersMs": 4.584875000000466,
+      "totalMs": 4.638208000003942,
+      "parseMs": 0.13925000000017462,
+      "failure": null,
+      "observation": {
+        "items": 40,
+        "scanned": 40,
+        "hasMore": false,
+        "cursorSupplied": true
+      }
+    },
+    {
+      "endpoint": "run.snapshot",
+      "at": "2026-10-22T20:01:23.214Z",
+      "status": 200,
+      "bytes": 2795,
+      "headersMs": 26.99208300000464,
+      "totalMs": 27.0716670000038,
+      "parseMs": 0.4593749999985448,
+      "failure": null,
+      "observation": {
+        "nodes": 7,
+        "hooks": 0,
+        "status": "succeeded"
+      }
+    },
+    {
+      "endpoint": "run.payload",
+      "at": "2026-10-22T20:01:23.714Z",
+      "status": 200,
+      "bytes": 568,
+      "headersMs": 4.709666999995534,
+      "totalMs": 4.748374999995576,
+      "parseMs": 0.11612500000046566,
+      "failure": null,
+      "observation": {}
+    },
+    {
+      "endpoint": "execution.page",
+      "at": "2026-10-22T20:01:24.216Z",
+      "status": 200,
+      "bytes": 2526,
+      "headersMs": 13.157459000001836,
+      "totalMs": 13.23924999999872,
+      "parseMs": 0.3292089999958989,
+      "failure": null,
+      "observation": {
+        "items": 6,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "execution.detail",
+      "at": "2026-10-22T20:01:24.716Z",
+      "status": 200,
+      "bytes": 1128,
+      "headersMs": 7.163915999997698,
+      "totalMs": 7.246583000000101,
+      "parseMs": 0.25804100000095787,
+      "failure": null,
+      "observation": {
+        "attempts": 1,
+        "status": "succeeded"
+      }
+    },
+    {
+      "endpoint": "runs.latest",
+      "at": "2026-10-22T20:01:25.257Z",
+      "status": 200,
+      "bytes": 2121,
+      "headersMs": 11.641666999996232,
+      "totalMs": 11.670583999999508,
+      "parseMs": 0.10583300000143936,
+      "failure": null,
+      "observation": {
+        "items": 3
+      }
+    },
+    {
+      "endpoint": "loopies.counts",
+      "at": "2026-10-22T20:01:25.757Z",
+      "status": 200,
+      "bytes": 10346,
+      "headersMs": 14.164000000004307,
+      "totalMs": 14.206208000003244,
+      "parseMs": 0.2900000000008731,
+      "failure": null,
+      "observation": {
+        "items": 15,
+        "runs": 3
+      }
+    },
+    {
+      "endpoint": "runs.waiting",
+      "at": "2026-10-22T20:01:26.258Z",
+      "status": 200,
+      "bytes": 2,
+      "headersMs": 4.267667000000074,
+      "totalMs": 4.324208999998518,
+      "parseMs": 0.039291000000957865,
+      "failure": null,
+      "observation": {
+        "items": 0
+      }
+    },
+    {
+      "endpoint": "runs.failed",
+      "at": "2026-10-22T20:01:26.758Z",
+      "status": 200,
+      "bytes": 2,
+      "headersMs": 6.017291999996814,
+      "totalMs": 6.066375000002154,
+      "parseMs": 0.02841700000135461,
+      "failure": null,
+      "observation": {
+        "items": 0
+      }
+    },
+    {
+      "endpoint": "overview.counts",
+      "at": "2026-10-22T20:01:27.258Z",
+      "status": 200,
+      "bytes": 3212,
+      "headersMs": 8.066332999995211,
+      "totalMs": 8.144207999997889,
+      "parseMs": 0.296875,
+      "failure": null,
+      "observation": {
+        "queued": 0,
+        "running": 0,
+        "suspended": 0,
+        "succeeded": 3,
+        "failed": 0,
+        "cancelled": 0,
+        "buckets": 25
+      }
+    },
+    {
+      "endpoint": "logs.latest",
+      "at": "2026-10-22T20:01:27.758Z",
+      "status": 200,
+      "bytes": 4422,
+      "headersMs": 4.582915999999386,
+      "totalMs": 4.620999999999185,
+      "parseMs": 0.08675000000221189,
+      "failure": null,
+      "observation": {
+        "items": 14,
+        "scanned": 14,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "events.latest",
+      "at": "2026-10-22T20:01:28.259Z",
+      "status": 200,
+      "bytes": 11619,
+      "headersMs": 3.0981249999967986,
+      "totalMs": 3.1295830000017304,
+      "parseMs": 0.1096250000045984,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "scanned": 50,
+        "hasMore": true
+      }
+    },
+    {
+      "endpoint": "daemon",
+      "at": "2026-10-22T20:01:28.759Z",
+      "status": 200,
+      "bytes": 97,
+      "headersMs": 6.004165999998804,
+      "totalMs": 6.087541000000783,
+      "parseMs": 0.06829199999629054,
+      "failure": null,
+      "observation": {
+        "running": 0,
+        "concurrency": 4
+      }
+    },
+    {
+      "endpoint": "runs.page2",
+      "at": "2026-10-22T20:01:29.259Z",
+      "status": 200,
+      "bytes": 2,
+      "headersMs": 5.5460000000020955,
+      "totalMs": 5.605499999997846,
+      "parseMs": 0.039792000003217254,
+      "failure": null,
+      "observation": {
+        "items": 0,
+        "cursorSupplied": true
+      }
+    },
+    {
+      "endpoint": "runs.slug",
+      "at": "2026-10-22T20:01:29.760Z",
+      "status": 200,
+      "bytes": 970,
+      "headersMs": 16.947666000000027,
+      "totalMs": 16.99791600000026,
+      "parseMs": 0.14220799999748124,
+      "failure": null,
+      "observation": {
+        "items": 1,
+        "filterSupplied": true
+      }
+    },
+    {
+      "endpoint": "logs.text",
+      "at": "2026-10-22T20:01:30.260Z",
+      "status": 200,
+      "bytes": 901,
+      "headersMs": 12.4209170000031,
+      "totalMs": 12.507749999997031,
+      "parseMs": 0.17504100000223843,
+      "failure": null,
+      "observation": {
+        "items": 2,
+        "scanned": 14,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "events.run-filter",
+      "at": "2026-10-22T20:01:30.760Z",
+      "status": 200,
+      "bytes": 5312,
+      "headersMs": 9.02362500000163,
+      "totalMs": 9.094542000006186,
+      "parseMs": 0.16008399999554968,
+      "failure": null,
+      "observation": {
+        "items": 23,
+        "scanned": 90,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "logs.page2",
+      "at": "2026-10-22T20:01:31.260Z",
+      "status": 200,
+      "bytes": 4422,
+      "headersMs": 7.668041999997513,
+      "totalMs": 7.748375000002852,
+      "parseMs": 0.2836659999957192,
+      "failure": null,
+      "observation": {
+        "items": 14,
+        "scanned": 14,
+        "hasMore": false,
+        "cursorSupplied": false
+      }
+    },
+    {
+      "endpoint": "events.page2",
+      "at": "2026-10-22T20:01:31.760Z",
+      "status": 200,
+      "bytes": 9224,
+      "headersMs": 9.015040999998746,
+      "totalMs": 9.075333000000683,
+      "parseMs": 0.16404200000397395,
+      "failure": null,
+      "observation": {
+        "items": 40,
+        "scanned": 40,
+        "hasMore": false,
+        "cursorSupplied": true
+      }
+    },
+    {
+      "endpoint": "run.snapshot",
+      "at": "2026-10-22T20:01:32.261Z",
+      "status": 200,
+      "bytes": 2795,
+      "headersMs": 26.692957999999635,
+      "totalMs": 26.77604099999735,
+      "parseMs": 0.3700840000019525,
+      "failure": null,
+      "observation": {
+        "nodes": 7,
+        "hooks": 0,
+        "status": "succeeded"
+      }
+    },
+    {
+      "endpoint": "run.payload",
+      "at": "2026-10-22T20:01:32.761Z",
+      "status": 200,
+      "bytes": 568,
+      "headersMs": 6.442583000003651,
+      "totalMs": 6.500250000004598,
+      "parseMs": 0.11874999999417923,
+      "failure": null,
+      "observation": {}
+    },
+    {
+      "endpoint": "execution.page",
+      "at": "2026-10-22T20:01:33.262Z",
+      "status": 200,
+      "bytes": 2526,
+      "headersMs": 7.567291999999725,
+      "totalMs": 7.653708999998344,
+      "parseMs": 0.40904199999931734,
+      "failure": null,
+      "observation": {
+        "items": 6,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "execution.detail",
+      "at": "2026-10-22T20:01:33.762Z",
+      "status": 200,
+      "bytes": 1128,
+      "headersMs": 7.759250000002794,
+      "totalMs": 7.838500000005297,
+      "parseMs": 0.29858299999614246,
+      "failure": null,
+      "observation": {
+        "attempts": 1,
+        "status": "succeeded"
+      }
+    },
+    {
+      "endpoint": "runs.latest",
+      "at": "2026-10-22T20:01:34.278Z",
+      "status": 200,
+      "bytes": 2121,
+      "headersMs": 11.581083000004583,
+      "totalMs": 11.612165999998979,
+      "parseMs": 0.09612499999639113,
+      "failure": null,
+      "observation": {
+        "items": 3
+      }
+    },
+    {
+      "endpoint": "loopies.counts",
+      "at": "2026-10-22T20:01:34.778Z",
+      "status": 200,
+      "bytes": 10346,
+      "headersMs": 22.7221669999999,
+      "totalMs": 22.783250000000407,
+      "parseMs": 0.4060830000016722,
+      "failure": null,
+      "observation": {
+        "items": 15,
+        "runs": 3
+      }
+    },
+    {
+      "endpoint": "runs.waiting",
+      "at": "2026-10-22T20:01:35.279Z",
+      "status": 200,
+      "bytes": 2,
+      "headersMs": 5.642415999995137,
+      "totalMs": 5.694582999996783,
+      "parseMs": 0.03054100000008475,
+      "failure": null,
+      "observation": {
+        "items": 0
+      }
+    },
+    {
+      "endpoint": "runs.failed",
+      "at": "2026-10-22T20:01:35.779Z",
+      "status": 200,
+      "bytes": 2,
+      "headersMs": 6.9415829999998095,
+      "totalMs": 7.0150419999990845,
+      "parseMs": 0.05045899999822723,
+      "failure": null,
+      "observation": {
+        "items": 0
+      }
+    },
+    {
+      "endpoint": "overview.counts",
+      "at": "2026-10-22T20:01:36.280Z",
+      "status": 200,
+      "bytes": 3212,
+      "headersMs": 6.608958999997412,
+      "totalMs": 6.677292000000307,
+      "parseMs": 0.2760829999970156,
+      "failure": null,
+      "observation": {
+        "queued": 0,
+        "running": 0,
+        "suspended": 0,
+        "succeeded": 3,
+        "failed": 0,
+        "cancelled": 0,
+        "buckets": 25
+      }
+    },
+    {
+      "endpoint": "logs.latest",
+      "at": "2026-10-22T20:01:36.780Z",
+      "status": 200,
+      "bytes": 4422,
+      "headersMs": 6.34824999999546,
+      "totalMs": 6.398667000001296,
+      "parseMs": 0.13037499999336433,
+      "failure": null,
+      "observation": {
+        "items": 14,
+        "scanned": 14,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "events.latest",
+      "at": "2026-10-22T20:01:37.279Z",
+      "status": 200,
+      "bytes": 11619,
+      "headersMs": 6.868541999996523,
+      "totalMs": 6.937541999999667,
+      "parseMs": 0.24224999999569263,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "scanned": 50,
+        "hasMore": true
+      }
+    },
+    {
+      "endpoint": "daemon",
+      "at": "2026-10-22T20:01:37.780Z",
+      "status": 200,
+      "bytes": 97,
+      "headersMs": 8.407999999995809,
+      "totalMs": 8.46600000000035,
+      "parseMs": 0.04504099999758182,
+      "failure": null,
+      "observation": {
+        "running": 0,
+        "concurrency": 4
+      }
+    },
+    {
+      "endpoint": "runs.page2",
+      "at": "2026-10-22T20:01:38.280Z",
+      "status": 200,
+      "bytes": 2,
+      "headersMs": 9.375374999995984,
+      "totalMs": 9.427499999997963,
+      "parseMs": 0.03312500000174623,
+      "failure": null,
+      "observation": {
+        "items": 0,
+        "cursorSupplied": true
+      }
+    },
+    {
+      "endpoint": "runs.slug",
+      "at": "2026-10-22T20:01:38.780Z",
+      "status": 200,
+      "bytes": 970,
+      "headersMs": 15.652584000003117,
+      "totalMs": 15.68829199999891,
+      "parseMs": 0.10133399999904213,
+      "failure": null,
+      "observation": {
+        "items": 1,
+        "filterSupplied": true
+      }
+    },
+    {
+      "endpoint": "logs.text",
+      "at": "2026-10-22T20:01:39.281Z",
+      "status": 200,
+      "bytes": 901,
+      "headersMs": 5.441707999998471,
+      "totalMs": 5.4898749999993015,
+      "parseMs": 0.12812500000291038,
+      "failure": null,
+      "observation": {
+        "items": 2,
+        "scanned": 14,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "events.run-filter",
+      "at": "2026-10-22T20:01:39.782Z",
+      "status": 200,
+      "bytes": 5312,
+      "headersMs": 3.8339580000028946,
+      "totalMs": 3.869124999997439,
+      "parseMs": 0.10150000000430737,
+      "failure": null,
+      "observation": {
+        "items": 23,
+        "scanned": 90,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "logs.page2",
+      "at": "2026-10-22T20:01:40.282Z",
+      "status": 200,
+      "bytes": 4422,
+      "headersMs": 3.816584000000148,
+      "totalMs": 3.852041999998619,
+      "parseMs": 0.1335830000025453,
+      "failure": null,
+      "observation": {
+        "items": 14,
+        "scanned": 14,
+        "hasMore": false,
+        "cursorSupplied": false
+      }
+    },
+    {
+      "endpoint": "events.page2",
+      "at": "2026-10-22T20:01:40.782Z",
+      "status": 200,
+      "bytes": 9224,
+      "headersMs": 4.337166999997862,
+      "totalMs": 4.376333000000159,
+      "parseMs": 0.1269590000010794,
+      "failure": null,
+      "observation": {
+        "items": 40,
+        "scanned": 40,
+        "hasMore": false,
+        "cursorSupplied": true
+      }
+    },
+    {
+      "endpoint": "run.snapshot",
+      "at": "2026-10-22T20:01:41.283Z",
+      "status": 200,
+      "bytes": 2795,
+      "headersMs": 16.75391700000182,
+      "totalMs": 16.802416999998968,
+      "parseMs": 0.20262499999807915,
+      "failure": null,
+      "observation": {
+        "nodes": 7,
+        "hooks": 0,
+        "status": "succeeded"
+      }
+    },
+    {
+      "endpoint": "run.payload",
+      "at": "2026-10-22T20:01:41.783Z",
+      "status": 200,
+      "bytes": 568,
+      "headersMs": 3.8690829999977723,
+      "totalMs": 3.9079579999961425,
+      "parseMs": 0.1056250000037835,
+      "failure": null,
+      "observation": {}
+    },
+    {
+      "endpoint": "execution.page",
+      "at": "2026-10-22T20:01:42.282Z",
+      "status": 200,
+      "bytes": 2526,
+      "headersMs": 7.711624999996275,
+      "totalMs": 7.76170799999818,
+      "parseMs": 0.21841700000368292,
+      "failure": null,
+      "observation": {
+        "items": 6,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "execution.detail",
+      "at": "2026-10-22T20:01:42.782Z",
+      "status": 200,
+      "bytes": 1128,
+      "headersMs": 4.54979099999764,
+      "totalMs": 4.588749999995343,
+      "parseMs": 0.16241699999955017,
+      "failure": null,
+      "observation": {
+        "attempts": 1,
+        "status": "succeeded"
+      }
+    },
+    {
+      "endpoint": "runs.latest",
+      "at": "2026-10-22T20:01:43.311Z",
+      "status": 200,
+      "bytes": 2121,
+      "headersMs": 11.737750000000233,
+      "totalMs": 11.771583000001556,
+      "parseMs": 0.11529200000222772,
+      "failure": null,
+      "observation": {
+        "items": 3
+      }
+    },
+    {
+      "endpoint": "loopies.counts",
+      "at": "2026-10-22T20:01:43.811Z",
+      "status": 200,
+      "bytes": 10346,
+      "headersMs": 19.996708000006038,
+      "totalMs": 20.039417000007234,
+      "parseMs": 0.312792000004265,
+      "failure": null,
+      "observation": {
+        "items": 15,
+        "runs": 3
+      }
+    },
+    {
+      "endpoint": "runs.waiting",
+      "at": "2026-10-22T20:01:44.312Z",
+      "status": 200,
+      "bytes": 2,
+      "headersMs": 13.713082999995095,
+      "totalMs": 13.800666999995883,
+      "parseMs": 0.06341699999757111,
+      "failure": null,
+      "observation": {
+        "items": 0
+      }
+    },
+    {
+      "endpoint": "runs.failed",
+      "at": "2026-10-22T20:01:44.813Z",
+      "status": 200,
+      "bytes": 2,
+      "headersMs": 10.332166000000143,
+      "totalMs": 10.41562499999418,
+      "parseMs": 0.05212500000197906,
+      "failure": null,
+      "observation": {
+        "items": 0
+      }
+    },
+    {
+      "endpoint": "overview.counts",
+      "at": "2026-10-22T20:01:45.313Z",
+      "status": 200,
+      "bytes": 3212,
+      "headersMs": 4.434207999998762,
+      "totalMs": 4.477624999999534,
+      "parseMs": 0.2242499999993015,
+      "failure": null,
+      "observation": {
+        "queued": 0,
+        "running": 0,
+        "suspended": 0,
+        "succeeded": 3,
+        "failed": 0,
+        "cancelled": 0,
+        "buckets": 25
+      }
+    },
+    {
+      "endpoint": "logs.latest",
+      "at": "2026-10-22T20:01:45.814Z",
+      "status": 200,
+      "bytes": 4422,
+      "headersMs": 4.908999999999651,
+      "totalMs": 4.960833999997703,
+      "parseMs": 0.12216600000101607,
+      "failure": null,
+      "observation": {
+        "items": 14,
+        "scanned": 14,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "events.latest",
+      "at": "2026-10-22T20:01:46.314Z",
+      "status": 200,
+      "bytes": 11619,
+      "headersMs": 7.604125000005297,
+      "totalMs": 7.681625000004715,
+      "parseMs": 0.35012499999720603,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "scanned": 50,
+        "hasMore": true
+      }
+    },
+    {
+      "endpoint": "daemon",
+      "at": "2026-10-22T20:01:46.815Z",
+      "status": 200,
+      "bytes": 97,
+      "headersMs": 6.947875000005297,
+      "totalMs": 7.034959000004164,
+      "parseMs": 0.0775839999987511,
+      "failure": null,
+      "observation": {
+        "running": 0,
+        "concurrency": 4
+      }
+    },
+    {
+      "endpoint": "runs.page2",
+      "at": "2026-10-22T20:01:47.315Z",
+      "status": 200,
+      "bytes": 2,
+      "headersMs": 7.694583000004059,
+      "totalMs": 7.774167000003217,
+      "parseMs": 0.060125000003608875,
+      "failure": null,
+      "observation": {
+        "items": 0,
+        "cursorSupplied": true
+      }
+    },
+    {
+      "endpoint": "runs.slug",
+      "at": "2026-10-22T20:01:47.816Z",
+      "status": 200,
+      "bytes": 970,
+      "headersMs": 25.314084000005096,
+      "totalMs": 25.362417000003916,
+      "parseMs": 0.09937499999796273,
+      "failure": null,
+      "observation": {
+        "items": 1,
+        "filterSupplied": true
+      }
+    },
+    {
+      "endpoint": "logs.text",
+      "at": "2026-10-22T20:01:48.316Z",
+      "status": 200,
+      "bytes": 901,
+      "headersMs": 6.900625000002037,
+      "totalMs": 6.974709000001894,
+      "parseMs": 0.1222090000010212,
+      "failure": null,
+      "observation": {
+        "items": 2,
+        "scanned": 14,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "events.run-filter",
+      "at": "2026-10-22T20:01:48.817Z",
+      "status": 200,
+      "bytes": 5312,
+      "headersMs": 7.2792499999995925,
+      "totalMs": 7.397540999998455,
+      "parseMs": 0.17291699999623233,
+      "failure": null,
+      "observation": {
+        "items": 23,
+        "scanned": 90,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "logs.page2",
+      "at": "2026-10-22T20:01:49.317Z",
+      "status": 200,
+      "bytes": 4422,
+      "headersMs": 8.04754099999991,
+      "totalMs": 8.1282910000009,
+      "parseMs": 0.20512500000040745,
+      "failure": null,
+      "observation": {
+        "items": 14,
+        "scanned": 14,
+        "hasMore": false,
+        "cursorSupplied": false
+      }
+    },
+    {
+      "endpoint": "events.page2",
+      "at": "2026-10-22T20:01:49.818Z",
+      "status": 200,
+      "bytes": 9224,
+      "headersMs": 6.334332999998878,
+      "totalMs": 6.399250000002212,
+      "parseMs": 0.18341700000019046,
+      "failure": null,
+      "observation": {
+        "items": 40,
+        "scanned": 40,
+        "hasMore": false,
+        "cursorSupplied": true
+      }
+    },
+    {
+      "endpoint": "run.snapshot",
+      "at": "2026-10-22T20:01:50.318Z",
+      "status": 200,
+      "bytes": 2795,
+      "headersMs": 31.883083000000624,
+      "totalMs": 31.942250000000058,
+      "parseMs": 0.3186660000064876,
+      "failure": null,
+      "observation": {
+        "nodes": 7,
+        "hooks": 0,
+        "status": "succeeded"
+      }
+    },
+    {
+      "endpoint": "run.payload",
+      "at": "2026-10-22T20:01:50.819Z",
+      "status": 200,
+      "bytes": 568,
+      "headersMs": 8.316292000003159,
+      "totalMs": 8.387834000001021,
+      "parseMs": 0.1244589999987511,
+      "failure": null,
+      "observation": {}
+    },
+    {
+      "endpoint": "execution.page",
+      "at": "2026-10-22T20:01:51.319Z",
+      "status": 200,
+      "bytes": 2526,
+      "headersMs": 10.963917000000947,
+      "totalMs": 11.051166999997804,
+      "parseMs": 0.3632500000021537,
+      "failure": null,
+      "observation": {
+        "items": 6,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "execution.detail",
+      "at": "2026-10-22T20:01:51.818Z",
+      "status": 200,
+      "bytes": 1128,
+      "headersMs": 12.28929199999402,
+      "totalMs": 12.369124999997439,
+      "parseMs": 0.3645830000023125,
+      "failure": null,
+      "observation": {
+        "attempts": 1,
+        "status": "succeeded"
+      }
+    },
+    {
+      "endpoint": "runs.latest",
+      "at": "2026-10-22T20:01:52.371Z",
+      "status": 200,
+      "bytes": 2121,
+      "headersMs": 10.193874999997206,
+      "totalMs": 10.22899999999936,
+      "parseMs": 0.09891600000264589,
+      "failure": null,
+      "observation": {
+        "items": 3
+      }
+    },
+    {
+      "endpoint": "loopies.counts",
+      "at": "2026-10-22T20:01:52.871Z",
+      "status": 200,
+      "bytes": 10346,
+      "headersMs": 21.286583000000974,
+      "totalMs": 21.338000000003376,
+      "parseMs": 0.3546669999996084,
+      "failure": null,
+      "observation": {
+        "items": 15,
+        "runs": 3
+      }
+    },
+    {
+      "endpoint": "runs.waiting",
+      "at": "2026-10-22T20:01:53.372Z",
+      "status": 200,
+      "bytes": 2,
+      "headersMs": 7.772333000000799,
+      "totalMs": 7.850957999995444,
+      "parseMs": 0.1318329999994603,
+      "failure": null,
+      "observation": {
+        "items": 0
+      }
+    },
+    {
+      "endpoint": "runs.failed",
+      "at": "2026-10-22T20:01:53.872Z",
+      "status": 200,
+      "bytes": 2,
+      "headersMs": 6.148750000000291,
+      "totalMs": 6.2181669999990845,
+      "parseMs": 0.055417000003217254,
+      "failure": null,
+      "observation": {
+        "items": 0
+      }
+    },
+    {
+      "endpoint": "overview.counts",
+      "at": "2026-10-22T20:01:54.373Z",
+      "status": 200,
+      "bytes": 3212,
+      "headersMs": 3.61241699999664,
+      "totalMs": 3.645749999996042,
+      "parseMs": 0.1491249999962747,
+      "failure": null,
+      "observation": {
+        "queued": 0,
+        "running": 0,
+        "suspended": 0,
+        "succeeded": 3,
+        "failed": 0,
+        "cancelled": 0,
+        "buckets": 25
+      }
+    },
+    {
+      "endpoint": "logs.latest",
+      "at": "2026-10-22T20:01:54.874Z",
+      "status": 200,
+      "bytes": 4422,
+      "headersMs": 7.553749999991851,
+      "totalMs": 7.641250000000582,
+      "parseMs": 0.19366699999955017,
+      "failure": null,
+      "observation": {
+        "items": 14,
+        "scanned": 14,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "events.latest",
+      "at": "2026-10-22T20:01:55.374Z",
+      "status": 200,
+      "bytes": 11619,
+      "headersMs": 6.303333000003477,
+      "totalMs": 6.374083000002429,
+      "parseMs": 0.23966700000164565,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "scanned": 50,
+        "hasMore": true
+      }
+    },
+    {
+      "endpoint": "daemon",
+      "at": "2026-10-22T20:01:55.875Z",
+      "status": 200,
+      "bytes": 97,
+      "headersMs": 6.024416000000201,
+      "totalMs": 6.100540999992518,
+      "parseMs": 0.06783300000824966,
+      "failure": null,
+      "observation": {
+        "running": 0,
+        "concurrency": 4
+      }
+    },
+    {
+      "endpoint": "runs.page2",
+      "at": "2026-10-22T20:01:56.375Z",
+      "status": 200,
+      "bytes": 2,
+      "headersMs": 3.2260839999944437,
+      "totalMs": 3.2594589999935124,
+      "parseMs": 0.023124999992433004,
+      "failure": null,
+      "observation": {
+        "items": 0,
+        "cursorSupplied": true
+      }
+    },
+    {
+      "endpoint": "runs.slug",
+      "at": "2026-10-22T20:01:56.876Z",
+      "status": 200,
+      "bytes": 970,
+      "headersMs": 16.553708000006736,
+      "totalMs": 16.591250000012224,
+      "parseMs": 0.09133299998939037,
+      "failure": null,
+      "observation": {
+        "items": 1,
+        "filterSupplied": true
+      }
+    },
+    {
+      "endpoint": "logs.text",
+      "at": "2026-10-22T20:01:57.376Z",
+      "status": 200,
+      "bytes": 901,
+      "headersMs": 6.290166999999201,
+      "totalMs": 6.322374999988824,
+      "parseMs": 0.060207999995327555,
+      "failure": null,
+      "observation": {
+        "items": 2,
+        "scanned": 14,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "events.run-filter",
+      "at": "2026-10-22T20:01:57.876Z",
+      "status": 200,
+      "bytes": 5312,
+      "headersMs": 5.705499999996391,
+      "totalMs": 5.7409999999945285,
+      "parseMs": 0.09249999999883585,
+      "failure": null,
+      "observation": {
+        "items": 23,
+        "scanned": 90,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "logs.page2",
+      "at": "2026-10-22T20:01:58.376Z",
+      "status": 200,
+      "bytes": 4422,
+      "headersMs": 3.8395409999939147,
+      "totalMs": 3.8704580000048736,
+      "parseMs": 0.08137500000884756,
+      "failure": null,
+      "observation": {
+        "items": 14,
+        "scanned": 14,
+        "hasMore": false,
+        "cursorSupplied": false
+      }
+    },
+    {
+      "endpoint": "events.page2",
+      "at": "2026-10-22T20:01:58.877Z",
+      "status": 200,
+      "bytes": 9224,
+      "headersMs": 5.207166000007419,
+      "totalMs": 5.247916000007535,
+      "parseMs": 0.13370799999393057,
+      "failure": null,
+      "observation": {
+        "items": 40,
+        "scanned": 40,
+        "hasMore": false,
+        "cursorSupplied": true
+      }
+    },
+    {
+      "endpoint": "run.snapshot",
+      "at": "2026-10-22T20:01:59.376Z",
+      "status": 200,
+      "bytes": 2795,
+      "headersMs": 22.479082999998354,
+      "totalMs": 22.55504199999268,
+      "parseMs": 0.4057079999911366,
+      "failure": null,
+      "observation": {
+        "nodes": 7,
+        "hooks": 0,
+        "status": "succeeded"
+      }
+    },
+    {
+      "endpoint": "run.payload",
+      "at": "2026-10-22T20:01:59.877Z",
+      "status": 200,
+      "bytes": 568,
+      "headersMs": 7.234792000002926,
+      "totalMs": 7.335333000009996,
+      "parseMs": 0.1905419999966398,
+      "failure": null,
+      "observation": {}
+    },
+    {
+      "endpoint": "execution.page",
+      "at": "2026-10-22T20:02:00.378Z",
+      "status": 200,
+      "bytes": 2526,
+      "headersMs": 3.50304199999664,
+      "totalMs": 3.530916999996407,
+      "parseMs": 0.09412500000325963,
+      "failure": null,
+      "observation": {
+        "items": 6,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "execution.detail",
+      "at": "2026-10-22T20:02:00.879Z",
+      "status": 200,
+      "bytes": 1128,
+      "headersMs": 7.418917000002693,
+      "totalMs": 7.502875000005588,
+      "parseMs": 0.26650000001245644,
+      "failure": null,
+      "observation": {
+        "attempts": 1,
+        "status": "succeeded"
+      }
+    },
+    {
+      "endpoint": "runs.latest",
+      "at": "2026-10-22T20:02:01.401Z",
+      "status": 200,
+      "bytes": 2121,
+      "headersMs": 10.702292000001762,
+      "totalMs": 10.736833999995724,
+      "parseMs": 0.09654199999931734,
+      "failure": null,
+      "observation": {
+        "items": 3
+      }
+    },
+    {
+      "endpoint": "loopies.counts",
+      "at": "2026-10-22T20:02:01.902Z",
+      "status": 200,
+      "bytes": 10346,
+      "headersMs": 18.266834000009112,
+      "totalMs": 18.32612500000687,
+      "parseMs": 0.3617919999960577,
+      "failure": null,
+      "observation": {
+        "items": 15,
+        "runs": 3
+      }
+    },
+    {
+      "endpoint": "runs.waiting",
+      "at": "2026-10-22T20:02:02.402Z",
+      "status": 200,
+      "bytes": 2,
+      "headersMs": 4.581166000003577,
+      "totalMs": 4.6244580000056885,
+      "parseMs": 0.028875000003608875,
+      "failure": null,
+      "observation": {
+        "items": 0
+      }
+    },
+    {
+      "endpoint": "runs.failed",
+      "at": "2026-10-22T20:02:02.903Z",
+      "status": 200,
+      "bytes": 2,
+      "headersMs": 8.161208999998053,
+      "totalMs": 8.254624999986845,
+      "parseMs": 0.056667000011657365,
+      "failure": null,
+      "observation": {
+        "items": 0
+      }
+    },
+    {
+      "endpoint": "overview.counts",
+      "at": "2026-10-22T20:02:03.403Z",
+      "status": 200,
+      "bytes": 3212,
+      "headersMs": 7.370209000000614,
+      "totalMs": 7.45579199999338,
+      "parseMs": 0.37220800000068266,
+      "failure": null,
+      "observation": {
+        "queued": 0,
+        "running": 0,
+        "suspended": 0,
+        "succeeded": 3,
+        "failed": 0,
+        "cancelled": 0,
+        "buckets": 25
+      }
+    },
+    {
+      "endpoint": "logs.latest",
+      "at": "2026-10-22T20:02:03.904Z",
+      "status": 200,
+      "bytes": 4422,
+      "headersMs": 6.358458000002429,
+      "totalMs": 6.42433299998811,
+      "parseMs": 0.16049999999813735,
+      "failure": null,
+      "observation": {
+        "items": 14,
+        "scanned": 14,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "events.latest",
+      "at": "2026-10-22T20:02:04.405Z",
+      "status": 200,
+      "bytes": 11619,
+      "headersMs": 8.451541999995243,
+      "totalMs": 8.538457999995444,
+      "parseMs": 0.29829099999915343,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "scanned": 50,
+        "hasMore": true
+      }
+    },
+    {
+      "endpoint": "daemon",
+      "at": "2026-10-22T20:02:04.906Z",
+      "status": 200,
+      "bytes": 97,
+      "headersMs": 3.5399170000018785,
+      "totalMs": 3.581124999996973,
+      "parseMs": 0.045291999995242804,
+      "failure": null,
+      "observation": {
+        "running": 0,
+        "concurrency": 4
+      }
+    },
+    {
+      "endpoint": "runs.page2",
+      "at": "2026-10-22T20:02:05.407Z",
+      "status": 200,
+      "bytes": 2,
+      "headersMs": 7.583832999996957,
+      "totalMs": 7.667042000000947,
+      "parseMs": 0.050791000001481734,
+      "failure": null,
+      "observation": {
+        "items": 0,
+        "cursorSupplied": true
+      }
+    },
+    {
+      "endpoint": "runs.slug",
+      "at": "2026-10-22T20:02:05.907Z",
+      "status": 200,
+      "bytes": 970,
+      "headersMs": 24.13925000000745,
+      "totalMs": 24.233749999999418,
+      "parseMs": 0.17958399999770336,
+      "failure": null,
+      "observation": {
+        "items": 1,
+        "filterSupplied": true
+      }
+    },
+    {
+      "endpoint": "logs.text",
+      "at": "2026-10-22T20:02:06.408Z",
+      "status": 200,
+      "bytes": 901,
+      "headersMs": 10.61129100000835,
+      "totalMs": 10.69879100000253,
+      "parseMs": 0.18208299999241717,
+      "failure": null,
+      "observation": {
+        "items": 2,
+        "scanned": 14,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "events.run-filter",
+      "at": "2026-10-22T20:02:06.909Z",
+      "status": 200,
+      "bytes": 5312,
+      "headersMs": 6.66387499999837,
+      "totalMs": 6.735125000006519,
+      "parseMs": 0.165833000006387,
+      "failure": null,
+      "observation": {
+        "items": 23,
+        "scanned": 90,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "logs.page2",
+      "at": "2026-10-22T20:02:07.410Z",
+      "status": 200,
+      "bytes": 4422,
+      "headersMs": 4.911500000001979,
+      "totalMs": 4.948875000001863,
+      "parseMs": 0.0897079999995185,
+      "failure": null,
+      "observation": {
+        "items": 14,
+        "scanned": 14,
+        "hasMore": false,
+        "cursorSupplied": false
+      }
+    },
+    {
+      "endpoint": "events.page2",
+      "at": "2026-10-22T20:02:07.910Z",
+      "status": 200,
+      "bytes": 9224,
+      "headersMs": 3.4068329999863636,
+      "totalMs": 3.442624999996042,
+      "parseMs": 0.11383299999579322,
+      "failure": null,
+      "observation": {
+        "items": 40,
+        "scanned": 40,
+        "hasMore": false,
+        "cursorSupplied": true
+      }
+    },
+    {
+      "endpoint": "run.snapshot",
+      "at": "2026-10-22T20:02:08.411Z",
+      "status": 200,
+      "bytes": 2795,
+      "headersMs": 18.30929200000537,
+      "totalMs": 18.345457999996142,
+      "parseMs": 0.18541600000753533,
+      "failure": null,
+      "observation": {
+        "nodes": 7,
+        "hooks": 0,
+        "status": "succeeded"
+      }
+    },
+    {
+      "endpoint": "run.payload",
+      "at": "2026-10-22T20:02:08.910Z",
+      "status": 200,
+      "bytes": 568,
+      "headersMs": 6.36600000000908,
+      "totalMs": 6.450167000002693,
+      "parseMs": 0.16504199999326374,
+      "failure": null,
+      "observation": {}
+    },
+    {
+      "endpoint": "execution.page",
+      "at": "2026-10-22T20:02:09.411Z",
+      "status": 200,
+      "bytes": 2526,
+      "headersMs": 6.674041999998735,
+      "totalMs": 6.744334000002709,
+      "parseMs": 0.25979199999710545,
+      "failure": null,
+      "observation": {
+        "items": 6,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "execution.detail",
+      "at": "2026-10-22T20:02:09.911Z",
+      "status": 200,
+      "bytes": 1128,
+      "headersMs": 6.933458999992581,
+      "totalMs": 7.020041999989189,
+      "parseMs": 0.36070800000743475,
+      "failure": null,
+      "observation": {
+        "attempts": 1,
+        "status": "succeeded"
+      }
+    },
+    {
+      "endpoint": "runs.latest",
+      "at": "2026-10-22T20:02:10.439Z",
+      "status": 200,
+      "bytes": 2121,
+      "headersMs": 10.851875000007567,
+      "totalMs": 10.883874999999534,
+      "parseMs": 0.08758400000806432,
+      "failure": null,
+      "observation": {
+        "items": 3
+      }
+    },
+    {
+      "endpoint": "loopies.counts",
+      "at": "2026-10-22T20:02:10.940Z",
+      "status": 200,
+      "bytes": 10346,
+      "headersMs": 21.628249999994296,
+      "totalMs": 21.69858299999032,
+      "parseMs": 0.3572500000009313,
+      "failure": null,
+      "observation": {
+        "items": 15,
+        "runs": 3
+      }
+    },
+    {
+      "endpoint": "runs.waiting",
+      "at": "2026-10-22T20:02:11.440Z",
+      "status": 200,
+      "bytes": 2,
+      "headersMs": 14.953249999991385,
+      "totalMs": 15.03583300000173,
+      "parseMs": 0.04220799999893643,
+      "failure": null,
+      "observation": {
+        "items": 0
+      }
+    },
+    {
+      "endpoint": "runs.failed",
+      "at": "2026-10-22T20:02:11.940Z",
+      "status": 200,
+      "bytes": 2,
+      "headersMs": 4.920834000004106,
+      "totalMs": 4.981667000000016,
+      "parseMs": 0.04433299999800511,
+      "failure": null,
+      "observation": {
+        "items": 0
+      }
+    },
+    {
+      "endpoint": "overview.counts",
+      "at": "2026-10-22T20:02:12.440Z",
+      "status": 200,
+      "bytes": 3212,
+      "headersMs": 3.9292089999944437,
+      "totalMs": 3.9613340000069,
+      "parseMs": 0.15295899999910034,
+      "failure": null,
+      "observation": {
+        "queued": 0,
+        "running": 0,
+        "suspended": 0,
+        "succeeded": 3,
+        "failed": 0,
+        "cancelled": 0,
+        "buckets": 25
+      }
+    },
+    {
+      "endpoint": "logs.latest",
+      "at": "2026-10-22T20:02:12.940Z",
+      "status": 200,
+      "bytes": 4422,
+      "headersMs": 16.359167000002344,
+      "totalMs": 16.457416999997804,
+      "parseMs": 0.2081670000043232,
+      "failure": null,
+      "observation": {
+        "items": 14,
+        "scanned": 14,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "events.latest",
+      "at": "2026-10-22T20:02:13.440Z",
+      "status": 200,
+      "bytes": 11619,
+      "headersMs": 6.891583000004175,
+      "totalMs": 6.985958000004757,
+      "parseMs": 0.21904199999698903,
+      "failure": null,
+      "observation": {
+        "items": 50,
+        "scanned": 50,
+        "hasMore": true
+      }
+    },
+    {
+      "endpoint": "daemon",
+      "at": "2026-10-22T20:02:13.941Z",
+      "status": 200,
+      "bytes": 97,
+      "headersMs": 4.653875000003609,
+      "totalMs": 4.709124999993946,
+      "parseMs": 0.05316699999093544,
+      "failure": null,
+      "observation": {
+        "running": 0,
+        "concurrency": 4
+      }
+    },
+    {
+      "endpoint": "runs.page2",
+      "at": "2026-10-22T20:02:14.441Z",
+      "status": 200,
+      "bytes": 2,
+      "headersMs": 6.800167000008514,
+      "totalMs": 6.873124999998254,
+      "parseMs": 0.04575000000477303,
+      "failure": null,
+      "observation": {
+        "items": 0,
+        "cursorSupplied": true
+      }
+    },
+    {
+      "endpoint": "runs.slug",
+      "at": "2026-10-22T20:02:14.942Z",
+      "status": 200,
+      "bytes": 970,
+      "headersMs": 11.494333000009647,
+      "totalMs": 11.528749999997672,
+      "parseMs": 0.07554099999833852,
+      "failure": null,
+      "observation": {
+        "items": 1,
+        "filterSupplied": true
+      }
+    },
+    {
+      "endpoint": "logs.text",
+      "at": "2026-10-22T20:02:15.443Z",
+      "status": 200,
+      "bytes": 901,
+      "headersMs": 6.954666999998153,
+      "totalMs": 7.015750000005937,
+      "parseMs": 0.09258399999816902,
+      "failure": null,
+      "observation": {
+        "items": 2,
+        "scanned": 14,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "events.run-filter",
+      "at": "2026-10-22T20:02:15.943Z",
+      "status": 200,
+      "bytes": 5312,
+      "headersMs": 3.3776660000003176,
+      "totalMs": 3.410707999995793,
+      "parseMs": 0.07037499999569263,
+      "failure": null,
+      "observation": {
+        "items": 23,
+        "scanned": 90,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "logs.page2",
+      "at": "2026-10-22T20:02:16.444Z",
+      "status": 200,
+      "bytes": 4422,
+      "headersMs": 4.533000000010361,
+      "totalMs": 4.569000000003143,
+      "parseMs": 0.08704199999920093,
+      "failure": null,
+      "observation": {
+        "items": 14,
+        "scanned": 14,
+        "hasMore": false,
+        "cursorSupplied": false
+      }
+    },
+    {
+      "endpoint": "events.page2",
+      "at": "2026-10-22T20:02:16.945Z",
+      "status": 200,
+      "bytes": 9224,
+      "headersMs": 13.643874999994296,
+      "totalMs": 13.748624999992899,
+      "parseMs": 0.25174999999580905,
+      "failure": null,
+      "observation": {
+        "items": 40,
+        "scanned": 40,
+        "hasMore": false,
+        "cursorSupplied": true
+      }
+    },
+    {
+      "endpoint": "run.snapshot",
+      "at": "2026-10-22T20:02:17.445Z",
+      "status": 200,
+      "bytes": 2795,
+      "headersMs": 11.55412499999511,
+      "totalMs": 11.588124999994761,
+      "parseMs": 0.16300000000046566,
+      "failure": null,
+      "observation": {
+        "nodes": 7,
+        "hooks": 0,
+        "status": "succeeded"
+      }
+    },
+    {
+      "endpoint": "run.payload",
+      "at": "2026-10-22T20:02:17.946Z",
+      "status": 200,
+      "bytes": 568,
+      "headersMs": 3.1624579999916023,
+      "totalMs": 3.19962499999383,
+      "parseMs": 0.0635000000038417,
+      "failure": null,
+      "observation": {}
+    },
+    {
+      "endpoint": "execution.page",
+      "at": "2026-10-22T20:02:18.446Z",
+      "status": 200,
+      "bytes": 2526,
+      "headersMs": 7.387291999999434,
+      "totalMs": 7.4621250000054715,
+      "parseMs": 0.22462500000256114,
+      "failure": null,
+      "observation": {
+        "items": 6,
+        "hasMore": false
+      }
+    },
+    {
+      "endpoint": "execution.detail",
+      "at": "2026-10-22T20:02:18.947Z",
+      "status": 200,
+      "bytes": 1128,
+      "headersMs": 4.934124999999767,
+      "totalMs": 4.9884999999922,
+      "parseMs": 0.16795899999851827,
+      "failure": null,
+      "observation": {
+        "attempts": 1,
+        "status": "succeeded"
+      }
+    }
+  ],
+  "summaries": [
+    {
+      "endpoint": "runs.latest",
+      "samples": 10,
+      "statuses": {
+        "200": 10
+      },
+      "failures": 0,
+      "latencyMs": {
+        "count": 10,
+        "p50": 11.30529099999876,
+        "p95": 19.96445799999998,
+        "p99": 19.96445799999998,
+        "max": 19.96445799999998
+      },
+      "bytes": {
+        "count": 10,
+        "p50": 2121,
+        "p95": 2121,
+        "p99": 2121,
+        "max": 2121
+      }
+    },
+    {
+      "endpoint": "loopies.counts",
+      "samples": 10,
+      "statuses": {
+        "200": 10
+      },
+      "failures": 0,
+      "latencyMs": {
+        "count": 10,
+        "p50": 20.039417000007234,
+        "p95": 22.783250000000407,
+        "p99": 22.783250000000407,
+        "max": 22.783250000000407
+      },
+      "bytes": {
+        "count": 10,
+        "p50": 10346,
+        "p95": 10346,
+        "p99": 10346,
+        "max": 10346
+      }
+    },
+    {
+      "endpoint": "runs.waiting",
+      "samples": 10,
+      "statuses": {
+        "200": 10
+      },
+      "failures": 0,
+      "latencyMs": {
+        "count": 10,
+        "p50": 5.694582999996783,
+        "p95": 15.03583300000173,
+        "p99": 15.03583300000173,
+        "max": 15.03583300000173
+      },
+      "bytes": {
+        "count": 10,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "endpoint": "runs.failed",
+      "samples": 10,
+      "statuses": {
+        "200": 10
+      },
+      "failures": 0,
+      "latencyMs": {
+        "count": 10,
+        "p50": 6.2181669999990845,
+        "p95": 10.41562499999418,
+        "p99": 10.41562499999418,
+        "max": 10.41562499999418
+      },
+      "bytes": {
+        "count": 10,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "endpoint": "overview.counts",
+      "samples": 10,
+      "statuses": {
+        "200": 10
+      },
+      "failures": 0,
+      "latencyMs": {
+        "count": 10,
+        "p50": 4.928124999998545,
+        "p95": 8.678584000001138,
+        "p99": 8.678584000001138,
+        "max": 8.678584000001138
+      },
+      "bytes": {
+        "count": 10,
+        "p50": 3212,
+        "p95": 3212,
+        "p99": 3212,
+        "max": 3212
+      }
+    },
+    {
+      "endpoint": "logs.latest",
+      "samples": 10,
+      "statuses": {
+        "200": 10
+      },
+      "failures": 0,
+      "latencyMs": {
+        "count": 10,
+        "p50": 5.276290999999674,
+        "p95": 16.457416999997804,
+        "p99": 16.457416999997804,
+        "max": 16.457416999997804
+      },
+      "bytes": {
+        "count": 10,
+        "p50": 4422,
+        "p95": 4422,
+        "p99": 4422,
+        "max": 4422
+      }
+    },
+    {
+      "endpoint": "events.latest",
+      "samples": 10,
+      "statuses": {
+        "200": 10
+      },
+      "failures": 0,
+      "latencyMs": {
+        "count": 10,
+        "p50": 5.968582999998034,
+        "p95": 8.538457999995444,
+        "p99": 8.538457999995444,
+        "max": 8.538457999995444
+      },
+      "bytes": {
+        "count": 10,
+        "p50": 11619,
+        "p95": 11619,
+        "p99": 11619,
+        "max": 11619
+      }
+    },
+    {
+      "endpoint": "daemon",
+      "samples": 10,
+      "statuses": {
+        "200": 10
+      },
+      "failures": 0,
+      "latencyMs": {
+        "count": 10,
+        "p50": 6.087541000000783,
+        "p95": 8.46600000000035,
+        "p99": 8.46600000000035,
+        "max": 8.46600000000035
+      },
+      "bytes": {
+        "count": 10,
+        "p50": 97,
+        "p95": 97,
+        "p99": 97,
+        "max": 97
+      }
+    },
+    {
+      "endpoint": "runs.page2",
+      "samples": 10,
+      "statuses": {
+        "200": 10
+      },
+      "failures": 0,
+      "latencyMs": {
+        "count": 10,
+        "p50": 5.605499999997846,
+        "p95": 11.369249999999738,
+        "p99": 11.369249999999738,
+        "max": 11.369249999999738
+      },
+      "bytes": {
+        "count": 10,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "endpoint": "runs.slug",
+      "samples": 10,
+      "statuses": {
+        "200": 10
+      },
+      "failures": 0,
+      "latencyMs": {
+        "count": 10,
+        "p50": 16.591250000012224,
+        "p95": 25.362417000003916,
+        "p99": 25.362417000003916,
+        "max": 25.362417000003916
+      },
+      "bytes": {
+        "count": 10,
+        "p50": 970,
+        "p95": 970,
+        "p99": 970,
+        "max": 970
+      }
+    },
+    {
+      "endpoint": "logs.text",
+      "samples": 10,
+      "statuses": {
+        "200": 10
+      },
+      "failures": 0,
+      "latencyMs": {
+        "count": 10,
+        "p50": 6.653500000000349,
+        "p95": 12.507749999997031,
+        "p99": 12.507749999997031,
+        "max": 12.507749999997031
+      },
+      "bytes": {
+        "count": 10,
+        "p50": 901,
+        "p95": 901,
+        "p99": 901,
+        "max": 901
+      }
+    },
+    {
+      "endpoint": "events.run-filter",
+      "samples": 10,
+      "statuses": {
+        "200": 10
+      },
+      "failures": 0,
+      "latencyMs": {
+        "count": 10,
+        "p50": 6.170250000001033,
+        "p95": 11.972125000000233,
+        "p99": 11.972125000000233,
+        "max": 11.972125000000233
+      },
+      "bytes": {
+        "count": 10,
+        "p50": 5312,
+        "p95": 5312,
+        "p99": 5312,
+        "max": 5312
+      }
+    },
+    {
+      "endpoint": "logs.page2",
+      "samples": 10,
+      "statuses": {
+        "200": 10
+      },
+      "failures": 0,
+      "latencyMs": {
+        "count": 10,
+        "p50": 4.948875000001863,
+        "p95": 10.867291999998997,
+        "p99": 10.867291999998997,
+        "max": 10.867291999998997
+      },
+      "bytes": {
+        "count": 10,
+        "p50": 4422,
+        "p95": 4422,
+        "p99": 4422,
+        "max": 4422
+      }
+    },
+    {
+      "endpoint": "events.page2",
+      "samples": 10,
+      "statuses": {
+        "200": 10
+      },
+      "failures": 0,
+      "latencyMs": {
+        "count": 10,
+        "p50": 5.254834000003029,
+        "p95": 13.748624999992899,
+        "p99": 13.748624999992899,
+        "max": 13.748624999992899
+      },
+      "bytes": {
+        "count": 10,
+        "p50": 9224,
+        "p95": 9224,
+        "p99": 9224,
+        "max": 9224
+      }
+    },
+    {
+      "endpoint": "run.snapshot",
+      "samples": 10,
+      "statuses": {
+        "200": 10
+      },
+      "failures": 0,
+      "latencyMs": {
+        "count": 10,
+        "p50": 18.80412499999875,
+        "p95": 31.942250000000058,
+        "p99": 31.942250000000058,
+        "max": 31.942250000000058
+      },
+      "bytes": {
+        "count": 10,
+        "p50": 2795,
+        "p95": 2795,
+        "p99": 2795,
+        "max": 2795
+      }
+    },
+    {
+      "endpoint": "run.payload",
+      "samples": 10,
+      "statuses": {
+        "200": 10
+      },
+      "failures": 0,
+      "latencyMs": {
+        "count": 10,
+        "p50": 6.450167000002693,
+        "p95": 8.387834000001021,
+        "p99": 8.387834000001021,
+        "max": 8.387834000001021
+      },
+      "bytes": {
+        "count": 10,
+        "p50": 568,
+        "p95": 568,
+        "p99": 568,
+        "max": 568
+      }
+    },
+    {
+      "endpoint": "execution.page",
+      "samples": 10,
+      "statuses": {
+        "200": 10
+      },
+      "failures": 0,
+      "latencyMs": {
+        "count": 10,
+        "p50": 7.4621250000054715,
+        "p95": 13.23924999999872,
+        "p99": 13.23924999999872,
+        "max": 13.23924999999872
+      },
+      "bytes": {
+        "count": 10,
+        "p50": 2526,
+        "p95": 2526,
+        "p99": 2526,
+        "max": 2526
+      }
+    },
+    {
+      "endpoint": "execution.detail",
+      "samples": 10,
+      "statuses": {
+        "200": 10
+      },
+      "failures": 0,
+      "latencyMs": {
+        "count": 10,
+        "p50": 7.246583000000101,
+        "p95": 12.369124999997439,
+        "p99": 12.369124999997439,
+        "max": 12.369124999997439
+      },
+      "bytes": {
+        "count": 10,
+        "p50": 1128,
+        "p95": 1128,
+        "p99": 1128,
+        "max": 1128
+      }
+    }
+  ],
+  "resources": [
+    {
+      "at": "2026-10-22T20:00:49.110Z",
+      "host": {
+        "cpus": 16,
+        "freeBytes": 12779012096,
+        "totalBytes": 137438953472,
+        "load": [6.44189453125, 8.0693359375, 7.587890625]
+      },
+      "sampler": {
+        "memory": {
+          "rss": 65224704,
+          "heapTotal": 7016448,
+          "heapUsed": 6645402,
+          "external": 2794874,
+          "arrayBuffers": 459424
+        },
+        "cpu": {
+          "user": 67832,
+          "system": 94734
+        }
+      },
+      "processes": "42723     1   0.0  67632 416705664 02:04 /Users/hatim.shakir/.bun/bin/bun\n42730 42723   0.0  82992 416835744 02:03 /Users/hatim.shakir/.bun/bin/bun\n42731 42723   0.0  49072 412265536 02:03 node\n42732 42723   0.0   4624 411692960 02:03 /Users/hatim.shakir/.bun/bin/bun\n42733 42732   0.0 348336 422375520 02:03 node\n42734 42731   0.0 305120 430585392 02:03 /Users/hatim.shakir/.local/share/fnm/node-versions/v24.14.1/installation/bin/node\n42736 42733   0.0  26864 411875696 02:03 /Users/hatim.shakir/.bun/install/cache/links/@esbuild+darwin-arm64@0.25.12-5c988bcaf394fe84/node_modules/@esbuild/darwin-arm64/bin/esbuild\n42738 42734   3.3  77520 412067136 02:03 /Users/hatim.shakir/.bun/install/cache/links/@esbuild+darwin-arm64@0.28.2-7aa809be835b58ea/node_modules/@esbuild/darwin-arm64/bin/esbuild\n42739 42734   0.0  73104 437229872 02:03 /Users/hatim.shakir/.bun/install/cache/links/@cloudflare+workerd-darwin-arm64@1.20261019.1-3890b444c6bb86b8/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd\n42740 42734   0.0 173840 446674752 02:03 /Users/hatim.shakir/.bun/install/cache/links/@cloudflare+workerd-darwin-arm64@1.20261019.1-3890b444c6bb86b8/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd",
+      "disk": "Filesystem   1024-blocks      Used Available Capacity  iused      ifree %iused  Mounted on\n/dev/disk3s5   971350180 446578136 487492632    48% 28546403 4874926320    1%   /System/Volumes/Data",
+      "limits": "ps CPU is lifetime averaged; RSS is KiB; child discovery is bounded to three generations. Docker guest/container CPU is not measured."
+    },
+    {
+      "at": "2026-10-22T20:00:58.144Z",
+      "host": {
+        "cpus": 16,
+        "freeBytes": 12694257664,
+        "totalBytes": 137438953472,
+        "load": [6.287109375, 7.98388671875, 7.5625]
+      },
+      "sampler": {
+        "memory": {
+          "rss": 71073792,
+          "heapTotal": 7259136,
+          "heapUsed": 7110319,
+          "external": 3328391,
+          "arrayBuffers": 622532
+        },
+        "cpu": {
+          "user": 119700,
+          "system": 132200
+        }
+      },
+      "processes": "42723     1   0.0  67632 416705664 02:13 /Users/hatim.shakir/.bun/bin/bun\n42730 42723   0.0  82992 416835744 02:12 /Users/hatim.shakir/.bun/bin/bun\n42731 42723   0.0  49072 412265536 02:12 node\n42732 42723   0.0   4624 411692960 02:12 /Users/hatim.shakir/.bun/bin/bun\n42733 42732   0.0 348336 422375520 02:12 node\n42734 42731   0.1 305632 430586416 02:12 /Users/hatim.shakir/.local/share/fnm/node-versions/v24.14.1/installation/bin/node\n42736 42733   0.0  26864 411875696 02:12 /Users/hatim.shakir/.bun/install/cache/links/@esbuild+darwin-arm64@0.25.12-5c988bcaf394fe84/node_modules/@esbuild/darwin-arm64/bin/esbuild\n42738 42734   8.8  77520 412067136 02:12 /Users/hatim.shakir/.bun/install/cache/links/@esbuild+darwin-arm64@0.28.2-7aa809be835b58ea/node_modules/@esbuild/darwin-arm64/bin/esbuild\n42739 42734   0.1  75088 437493040 02:12 /Users/hatim.shakir/.bun/install/cache/links/@cloudflare+workerd-darwin-arm64@1.20261019.1-3890b444c6bb86b8/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd\n42740 42734   0.4 178928 446676224 02:12 /Users/hatim.shakir/.bun/install/cache/links/@cloudflare+workerd-darwin-arm64@1.20261019.1-3890b444c6bb86b8/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd",
+      "disk": "Filesystem   1024-blocks      Used Available Capacity  iused      ifree %iused  Mounted on\n/dev/disk3s5   971350180 446583496 487487272    48% 28546510 4874872720    1%   /System/Volumes/Data",
+      "limits": "ps CPU is lifetime averaged; RSS is KiB; child discovery is bounded to three generations. Docker guest/container CPU is not measured."
+    },
+    {
+      "at": "2026-10-22T20:01:07.184Z",
+      "host": {
+        "cpus": 16,
+        "freeBytes": 12621234176,
+        "totalBytes": 137438953472,
+        "load": [6.34375, 7.96728515625, 7.55908203125]
+      },
+      "sampler": {
+        "memory": {
+          "rss": 74121216,
+          "heapTotal": 7202816,
+          "heapUsed": 6390482,
+          "external": 2792754,
+          "arrayBuffers": 556704
+        },
+        "cpu": {
+          "user": 173329,
+          "system": 169738
+        }
+      },
+      "processes": "42723     1   0.0  67536 416702304 02:22 /Users/hatim.shakir/.bun/bin/bun\n42730 42723   0.0  83088 416839104 02:21 /Users/hatim.shakir/.bun/bin/bun\n42731 42723   0.0  49072 412265536 02:21 node\n42732 42723   0.0   4624 411692960 02:21 /Users/hatim.shakir/.bun/bin/bun\n42733 42732   0.0 348336 422375520 02:21 node\n42734 42731   0.3 305984 430586416 02:21 /Users/hatim.shakir/.local/share/fnm/node-versions/v24.14.1/installation/bin/node\n42736 42733   0.0  26864 411875696 02:21 /Users/hatim.shakir/.bun/install/cache/links/@esbuild+darwin-arm64@0.25.12-5c988bcaf394fe84/node_modules/@esbuild/darwin-arm64/bin/esbuild\n42738 42734   5.5  77520 412067136 02:21 /Users/hatim.shakir/.bun/install/cache/links/@esbuild+darwin-arm64@0.28.2-7aa809be835b58ea/node_modules/@esbuild/darwin-arm64/bin/esbuild\n42739 42734   0.3  77328 437624240 02:21 /Users/hatim.shakir/.bun/install/cache/links/@cloudflare+workerd-darwin-arm64@1.20261019.1-3890b444c6bb86b8/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd\n42740 42734   0.3 182000 446807552 02:21 /Users/hatim.shakir/.bun/install/cache/links/@cloudflare+workerd-darwin-arm64@1.20261019.1-3890b444c6bb86b8/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd",
+      "disk": "Filesystem   1024-blocks      Used Available Capacity  iused      ifree %iused  Mounted on\n/dev/disk3s5   971350180 446584516 487486252    48% 28546511 4874862520    1%   /System/Volumes/Data",
+      "limits": "ps CPU is lifetime averaged; RSS is KiB; child discovery is bounded to three generations. Docker guest/container CPU is not measured."
+    },
+    {
+      "at": "2026-10-22T20:01:16.175Z",
+      "host": {
+        "cpus": 16,
+        "freeBytes": 12138512384,
+        "totalBytes": 137438953472,
+        "load": [5.9892578125, 7.83642578125, 7.51708984375]
+      },
+      "sampler": {
+        "memory": {
+          "rss": 75907072,
+          "heapTotal": 7212032,
+          "heapUsed": 8503896,
+          "external": 4852584,
+          "arrayBuffers": 1138922
+        },
+        "cpu": {
+          "user": 206687,
+          "system": 201349
+        }
+      },
+      "processes": "42723     1   0.0  67536 416702304 02:31 /Users/hatim.shakir/.bun/bin/bun\n42730 42723   0.0  82992 416835744 02:30 /Users/hatim.shakir/.bun/bin/bun\n42731 42723   0.0  49072 412265536 02:30 node\n42732 42723   0.0   4624 411692960 02:30 /Users/hatim.shakir/.bun/bin/bun\n42733 42732   0.0 348336 422375520 02:30 node\n42734 42731   0.0 305984 430586416 02:30 /Users/hatim.shakir/.local/share/fnm/node-versions/v24.14.1/installation/bin/node\n42736 42733   0.0  26864 411875696 02:30 /Users/hatim.shakir/.bun/install/cache/links/@esbuild+darwin-arm64@0.25.12-5c988bcaf394fe84/node_modules/@esbuild/darwin-arm64/bin/esbuild\n42738 42734   3.4  77520 412067136 02:30 /Users/hatim.shakir/.bun/install/cache/links/@esbuild+darwin-arm64@0.28.2-7aa809be835b58ea/node_modules/@esbuild/darwin-arm64/bin/esbuild\n42739 42734   0.3  78832 437624240 02:30 /Users/hatim.shakir/.bun/install/cache/links/@cloudflare+workerd-darwin-arm64@1.20261019.1-3890b444c6bb86b8/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd\n42740 42734   0.3 185408 446808192 02:30 /Users/hatim.shakir/.bun/install/cache/links/@cloudflare+workerd-darwin-arm64@1.20261019.1-3890b444c6bb86b8/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd",
+      "disk": "Filesystem   1024-blocks      Used Available Capacity  iused      ifree %iused  Mounted on\n/dev/disk3s5   971350180 446607756 487463012    48% 28546867 4874630120    1%   /System/Volumes/Data",
+      "limits": "ps CPU is lifetime averaged; RSS is KiB; child discovery is bounded to three generations. Docker guest/container CPU is not measured."
+    },
+    {
+      "at": "2026-10-22T20:01:25.256Z",
+      "host": {
+        "cpus": 16,
+        "freeBytes": 12535496704,
+        "totalBytes": 137438953472,
+        "load": [5.91650390625, 7.75927734375, 7.49267578125]
+      },
+      "sampler": {
+        "memory": {
+          "rss": 80199680,
+          "heapTotal": 7230464,
+          "heapUsed": 10238080,
+          "external": 6571184,
+          "arrayBuffers": 1721140
+        },
+        "cpu": {
+          "user": 248060,
+          "system": 240451
+        }
+      },
+      "processes": "42723     1   0.0  67632 416705664 02:40 /Users/hatim.shakir/.bun/bin/bun\n42730 42723   0.0  82992 416835744 02:39 /Users/hatim.shakir/.bun/bin/bun\n42731 42723   0.0  49072 412265536 02:39 node\n42732 42723   0.0   4624 411692960 02:39 /Users/hatim.shakir/.bun/bin/bun\n42733 42732   0.0 348336 422375520 02:39 node\n42734 42731   0.0 305984 430586416 02:39 /Users/hatim.shakir/.local/share/fnm/node-versions/v24.14.1/installation/bin/node\n42736 42733   0.0  26864 411875696 02:39 /Users/hatim.shakir/.bun/install/cache/links/@esbuild+darwin-arm64@0.25.12-5c988bcaf394fe84/node_modules/@esbuild/darwin-arm64/bin/esbuild\n42738 42734   3.4  77520 412067136 02:39 /Users/hatim.shakir/.bun/install/cache/links/@esbuild+darwin-arm64@0.28.2-7aa809be835b58ea/node_modules/@esbuild/darwin-arm64/bin/esbuild\n42739 42734   0.1  79776 437624368 02:39 /Users/hatim.shakir/.bun/install/cache/links/@cloudflare+workerd-darwin-arm64@1.20261019.1-3890b444c6bb86b8/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd\n42740 42734   0.3 190464 446939776 02:39 /Users/hatim.shakir/.bun/install/cache/links/@cloudflare+workerd-darwin-arm64@1.20261019.1-3890b444c6bb86b8/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd",
+      "disk": "Filesystem   1024-blocks      Used Available Capacity  iused      ifree %iused  Mounted on\n/dev/disk3s5   971350180 446605096 487465672    48% 28546886 4874656720    1%   /System/Volumes/Data",
+      "limits": "ps CPU is lifetime averaged; RSS is KiB; child discovery is bounded to three generations. Docker guest/container CPU is not measured."
+    },
+    {
+      "at": "2026-10-22T20:01:34.277Z",
+      "host": {
+        "cpus": 16,
+        "freeBytes": 12586450944,
+        "totalBytes": 137438953472,
+        "load": [5.6083984375, 7.634765625, 7.45166015625]
+      },
+      "sampler": {
+        "memory": {
+          "rss": 82198528,
+          "heapTotal": 7214080,
+          "heapUsed": 11992314,
+          "external": 8307898,
+          "arrayBuffers": 2303358
+        },
+        "cpu": {
+          "user": 285022,
+          "system": 278833
+        }
+      },
+      "processes": "42723     1   0.0  67536 416702304 02:49 /Users/hatim.shakir/.bun/bin/bun\n42730 42723   0.0  83088 416839104 02:48 /Users/hatim.shakir/.bun/bin/bun\n42731 42723   0.0  49072 412265536 02:48 node\n42732 42723   0.0   4624 411692960 02:48 /Users/hatim.shakir/.bun/bin/bun\n42733 42732   0.0 183888 422204000 02:48 node\n42734 42731   0.0 305984 430586416 02:48 /Users/hatim.shakir/.local/share/fnm/node-versions/v24.14.1/installation/bin/node\n42736 42733   0.0  26864 411875696 02:48 /Users/hatim.shakir/.bun/install/cache/links/@esbuild+darwin-arm64@0.25.12-5c988bcaf394fe84/node_modules/@esbuild/darwin-arm64/bin/esbuild\n42738 42734   3.2  77520 412067136 02:48 /Users/hatim.shakir/.bun/install/cache/links/@esbuild+darwin-arm64@0.28.2-7aa809be835b58ea/node_modules/@esbuild/darwin-arm64/bin/esbuild\n42739 42734   0.1  81696 437624496 02:48 /Users/hatim.shakir/.bun/install/cache/links/@cloudflare+workerd-darwin-arm64@1.20261019.1-3890b444c6bb86b8/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd\n42740 42734   0.3 197152 446940416 02:48 /Users/hatim.shakir/.bun/install/cache/links/@cloudflare+workerd-darwin-arm64@1.20261019.1-3890b444c6bb86b8/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd",
+      "disk": "Filesystem   1024-blocks      Used Available Capacity  iused      ifree %iused  Mounted on\n/dev/disk3s5   971350180 446605300 487465468    48% 28546899 4874654680    1%   /System/Volumes/Data",
+      "limits": "ps CPU is lifetime averaged; RSS is KiB; child discovery is bounded to three generations. Docker guest/container CPU is not measured."
+    },
+    {
+      "at": "2026-10-22T20:01:43.310Z",
+      "host": {
+        "cpus": 16,
+        "freeBytes": 11985043456,
+        "totalBytes": 137438953472,
+        "load": [5.5146484375, 7.54736328125, 7.42236328125]
+      },
+      "sampler": {
+        "memory": {
+          "rss": 84672512,
+          "heapTotal": 7217152,
+          "heapUsed": 13737858,
+          "external": 10033538,
+          "arrayBuffers": 2885576
+        },
+        "cpu": {
+          "user": 318633,
+          "system": 315350
+        }
+      },
+      "processes": "42723     1   0.0  67536 416702304 02:58 /Users/hatim.shakir/.bun/bin/bun\n42730 42723   0.0  82992 416835744 02:57 /Users/hatim.shakir/.bun/bin/bun\n42731 42723   0.0  49072 412265536 02:57 node\n42732 42723   0.0   4624 411692960 02:57 /Users/hatim.shakir/.bun/bin/bun\n42733 42732   0.0 183904 422204000 02:57 node\n42734 42731   0.0 306064 430586416 02:57 /Users/hatim.shakir/.local/share/fnm/node-versions/v24.14.1/installation/bin/node\n42736 42733   0.0  26864 411875696 02:57 /Users/hatim.shakir/.bun/install/cache/links/@esbuild+darwin-arm64@0.25.12-5c988bcaf394fe84/node_modules/@esbuild/darwin-arm64/bin/esbuild\n42738 42734   3.1  77568 412067136 02:57 /Users/hatim.shakir/.bun/install/cache/links/@esbuild+darwin-arm64@0.28.2-7aa809be835b58ea/node_modules/@esbuild/darwin-arm64/bin/esbuild\n42739 42734   0.1  82224 437755696 02:57 /Users/hatim.shakir/.bun/install/cache/links/@cloudflare+workerd-darwin-arm64@1.20261019.1-3890b444c6bb86b8/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd\n42740 42734   0.1 200048 446940928 02:57 /Users/hatim.shakir/.bun/install/cache/links/@cloudflare+workerd-darwin-arm64@1.20261019.1-3890b444c6bb86b8/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd",
+      "disk": "Filesystem   1024-blocks      Used Available Capacity  iused      ifree %iused  Mounted on\n/dev/disk3s5   971350180 446600344 487470424    48% 28546911 4874704240    1%   /System/Volumes/Data",
+      "limits": "ps CPU is lifetime averaged; RSS is KiB; child discovery is bounded to three generations. Docker guest/container CPU is not measured."
+    },
+    {
+      "at": "2026-10-22T20:01:52.370Z",
+      "host": {
+        "cpus": 16,
+        "freeBytes": 12122079232,
+        "totalBytes": 137438953472,
+        "load": [5.71337890625, 7.5546875, 7.42529296875]
+      },
+      "sampler": {
+        "memory": {
+          "rss": 86425600,
+          "heapTotal": 7249920,
+          "heapUsed": 15500173,
+          "external": 11778973,
+          "arrayBuffers": 3467794
+        },
+        "cpu": {
+          "user": 360972,
+          "system": 359773
+        }
+      },
+      "processes": "42723     1   0.0  67632 416705664 03:07 /Users/hatim.shakir/.bun/bin/bun\n42730 42723   0.0  82992 416835744 03:06 /Users/hatim.shakir/.bun/bin/bun\n42731 42723   0.0  49072 412265536 03:06 node\n42732 42723   0.0   4624 411692960 03:06 /Users/hatim.shakir/.bun/bin/bun\n42733 42732   0.0 184224 422205024 03:06 node\n42734 42731   0.0 306112 430586416 03:06 /Users/hatim.shakir/.local/share/fnm/node-versions/v24.14.1/installation/bin/node\n42736 42733   0.0  26864 411875696 03:06 /Users/hatim.shakir/.bun/install/cache/links/@esbuild+darwin-arm64@0.25.12-5c988bcaf394fe84/node_modules/@esbuild/darwin-arm64/bin/esbuild\n42738 42734   2.9  77568 412067136 03:06 /Users/hatim.shakir/.bun/install/cache/links/@esbuild+darwin-arm64@0.28.2-7aa809be835b58ea/node_modules/@esbuild/darwin-arm64/bin/esbuild\n42739 42734   0.1  82624 437755696 03:06 /Users/hatim.shakir/.bun/install/cache/links/@cloudflare+workerd-darwin-arm64@1.20261019.1-3890b444c6bb86b8/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd\n42740 42734   0.2 204000 446941312 03:06 /Users/hatim.shakir/.bun/install/cache/links/@cloudflare+workerd-darwin-arm64@1.20261019.1-3890b444c6bb86b8/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd",
+      "disk": "Filesystem   1024-blocks      Used Available Capacity  iused      ifree %iused  Mounted on\n/dev/disk3s5   971350180 446601872 487468896    48% 28546915 4874688960    1%   /System/Volumes/Data",
+      "limits": "ps CPU is lifetime averaged; RSS is KiB; child discovery is bounded to three generations. Docker guest/container CPU is not measured."
+    },
+    {
+      "at": "2026-10-22T20:02:01.400Z",
+      "host": {
+        "cpus": 16,
+        "freeBytes": 12259704832,
+        "totalBytes": 137438953472,
+        "load": [5.6162109375, 7.470703125, 7.396484375]
+      },
+      "sampler": {
+        "memory": {
+          "rss": 88014848,
+          "heapTotal": 7252992,
+          "heapUsed": 17247804,
+          "external": 13512220,
+          "arrayBuffers": 4050012
+        },
+        "cpu": {
+          "user": 397607,
+          "system": 394316
+        }
+      },
+      "processes": "42723     1   0.0  67536 416702304 03:16 /Users/hatim.shakir/.bun/bin/bun\n42730 42723   0.0  83088 416839104 03:15 /Users/hatim.shakir/.bun/bin/bun\n42731 42723   0.0  49072 412265536 03:15 node\n42732 42723   0.0   4624 411692960 03:15 /Users/hatim.shakir/.bun/bin/bun\n42733 42732   0.0 184624 422205024 03:15 node\n42734 42731   0.0 306128 430586416 03:15 /Users/hatim.shakir/.local/share/fnm/node-versions/v24.14.1/installation/bin/node\n42736 42733   0.0  26864 411875696 03:15 /Users/hatim.shakir/.bun/install/cache/links/@esbuild+darwin-arm64@0.25.12-5c988bcaf394fe84/node_modules/@esbuild/darwin-arm64/bin/esbuild\n42738 42734   2.6  77568 412067136 03:15 /Users/hatim.shakir/.bun/install/cache/links/@esbuild+darwin-arm64@0.28.2-7aa809be835b58ea/node_modules/@esbuild/darwin-arm64/bin/esbuild\n42739 42734   0.1  82992 437755952 03:15 /Users/hatim.shakir/.bun/install/cache/links/@cloudflare+workerd-darwin-arm64@1.20261019.1-3890b444c6bb86b8/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd\n42740 42734   0.3 206896 446941952 03:15 /Users/hatim.shakir/.bun/install/cache/links/@cloudflare+workerd-darwin-arm64@1.20261019.1-3890b444c6bb86b8/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd",
+      "disk": "Filesystem   1024-blocks      Used Available Capacity  iused      ifree %iused  Mounted on\n/dev/disk3s5   971350180 446605412 487465356    48% 28546978 4874653560    1%   /System/Volumes/Data",
+      "limits": "ps CPU is lifetime averaged; RSS is KiB; child discovery is bounded to three generations. Docker guest/container CPU is not measured."
+    },
+    {
+      "at": "2026-10-22T20:02:10.438Z",
+      "host": {
+        "cpus": 16,
+        "freeBytes": 11868094464,
+        "totalBytes": 137438953472,
+        "load": [5.28076171875, 7.3388671875, 7.3505859375]
+      },
+      "sampler": {
+        "memory": {
+          "rss": 89587712,
+          "heapTotal": 7252992,
+          "heapUsed": 18993325,
+          "external": 15241821,
+          "arrayBuffers": 4632230
+        },
+        "cpu": {
+          "user": 436243,
+          "system": 432939
+        }
+      },
+      "processes": "42723     1   0.0  67536 416702304 03:25 /Users/hatim.shakir/.bun/bin/bun\n42730 42723   0.0  82992 416835744 03:24 /Users/hatim.shakir/.bun/bin/bun\n42731 42723   0.0  49072 412265536 03:24 node\n42732 42723   0.0   4624 411692960 03:24 /Users/hatim.shakir/.bun/bin/bun\n42733 42732   0.0 184736 422205024 03:24 node\n42734 42731   0.0 306144 430586416 03:24 /Users/hatim.shakir/.local/share/fnm/node-versions/v24.14.1/installation/bin/node\n42736 42733   0.0  26864 411875696 03:24 /Users/hatim.shakir/.bun/install/cache/links/@esbuild+darwin-arm64@0.25.12-5c988bcaf394fe84/node_modules/@esbuild/darwin-arm64/bin/esbuild\n42738 42734   2.8  77568 412067136 03:24 /Users/hatim.shakir/.bun/install/cache/links/@esbuild+darwin-arm64@0.28.2-7aa809be835b58ea/node_modules/@esbuild/darwin-arm64/bin/esbuild\n42739 42734   0.1  83392 437755952 03:24 /Users/hatim.shakir/.bun/install/cache/links/@cloudflare+workerd-darwin-arm64@1.20261019.1-3890b444c6bb86b8/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd\n42740 42734   0.3 211120 446942336 03:24 /Users/hatim.shakir/.bun/install/cache/links/@cloudflare+workerd-darwin-arm64@1.20261019.1-3890b444c6bb86b8/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd",
+      "disk": "Filesystem   1024-blocks      Used Available Capacity  iused      ifree %iused  Mounted on\n/dev/disk3s5   971350180 446606040 487464728    48% 28547023 4874647280    1%   /System/Volumes/Data",
+      "limits": "ps CPU is lifetime averaged; RSS is KiB; child discovery is bounded to three generations. Docker guest/container CPU is not measured."
+    },
+    {
+      "at": "2026-10-22T20:02:19.454Z",
+      "host": {
+        "cpus": 16,
+        "freeBytes": 11641552896,
+        "totalBytes": 137438953472,
+        "load": [5.55078125, 7.32763671875, 7.345703125]
+      },
+      "sampler": {
+        "memory": {
+          "rss": 91291648,
+          "heapTotal": 7256064,
+          "heapUsed": 20712788,
+          "external": 16949028,
+          "arrayBuffers": 5214448
+        },
+        "cpu": {
+          "user": 467998,
+          "system": 469878
+        }
+      },
+      "processes": "42723     1   0.0  67632 416705664 03:34 /Users/hatim.shakir/.bun/bin/bun\n42730 42723   0.0  82992 416835744 03:33 /Users/hatim.shakir/.bun/bin/bun\n42731 42723   0.0  49072 412265536 03:33 node\n42732 42723   0.0   4624 411692960 03:33 /Users/hatim.shakir/.bun/bin/bun\n42733 42732   0.0 184736 422205024 03:33 node\n42734 42731   0.0 304896 430584624 03:33 /Users/hatim.shakir/.local/share/fnm/node-versions/v24.14.1/installation/bin/node\n42736 42733   0.0  26864 411875696 03:33 /Users/hatim.shakir/.bun/install/cache/links/@esbuild+darwin-arm64@0.25.12-5c988bcaf394fe84/node_modules/@esbuild/darwin-arm64/bin/esbuild\n42738 42734   3.3  77584 412067136 03:33 /Users/hatim.shakir/.bun/install/cache/links/@esbuild+darwin-arm64@0.28.2-7aa809be835b58ea/node_modules/@esbuild/darwin-arm64/bin/esbuild\n42739 42734   0.1  84688 437756080 03:33 /Users/hatim.shakir/.bun/install/cache/links/@cloudflare+workerd-darwin-arm64@1.20261019.1-3890b444c6bb86b8/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd\n42740 42734   0.1 213696 446942976 03:33 /Users/hatim.shakir/.bun/install/cache/links/@cloudflare+workerd-darwin-arm64@1.20261019.1-3890b444c6bb86b8/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd",
+      "disk": "Filesystem   1024-blocks      Used Available Capacity  iused      ifree %iused  Mounted on\n/dev/disk3s5   971350180 446611160 487459608    48% 28547031 4874596080    1%   /System/Volumes/Data",
+      "limits": "ps CPU is lifetime averaged; RSS is KiB; child discovery is bounded to three generations. Docker guest/container CPU is not measured."
+    },
+    {
+      "at": "2026-10-22T20:02:19.859Z",
+      "host": {
+        "cpus": 16,
+        "freeBytes": 11635539968,
+        "totalBytes": 137438953472,
+        "load": [5.55078125, 7.32763671875, 7.345703125]
+      },
+      "sampler": {
+        "memory": {
+          "rss": 93290496,
+          "heapTotal": 7303168,
+          "heapUsed": 23388791,
+          "external": 19275143,
+          "arrayBuffers": 5673872
+        },
+        "cpu": {
+          "user": 475152,
+          "system": 475255
+        }
+      },
+      "processes": "42723     1   0.0  67632 416705664 03:34 /Users/hatim.shakir/.bun/bin/bun\n42730 42723   0.0  82992 416835744 03:33 /Users/hatim.shakir/.bun/bin/bun\n42731 42723   0.0  49072 412265536 03:33 node\n42732 42723   0.0   4624 411692960 03:33 /Users/hatim.shakir/.bun/bin/bun\n42733 42732   0.0 184736 422205024 03:33 node\n42734 42731   0.0 304896 430584624 03:33 /Users/hatim.shakir/.local/share/fnm/node-versions/v24.14.1/installation/bin/node\n42736 42733   0.0  26864 411875696 03:33 /Users/hatim.shakir/.bun/install/cache/links/@esbuild+darwin-arm64@0.25.12-5c988bcaf394fe84/node_modules/@esbuild/darwin-arm64/bin/esbuild\n42738 42734   3.8  77584 412067136 03:33 /Users/hatim.shakir/.bun/install/cache/links/@esbuild+darwin-arm64@0.28.2-7aa809be835b58ea/node_modules/@esbuild/darwin-arm64/bin/esbuild\n42739 42734   0.0  84688 437756080 03:33 /Users/hatim.shakir/.bun/install/cache/links/@cloudflare+workerd-darwin-arm64@1.20261019.1-3890b444c6bb86b8/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd\n42740 42734   0.0 213696 446942976 03:33 /Users/hatim.shakir/.bun/install/cache/links/@cloudflare+workerd-darwin-arm64@1.20261019.1-3890b444c6bb86b8/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd",
+      "disk": "Filesystem   1024-blocks      Used Available Capacity  iused      ifree %iused  Mounted on\n/dev/disk3s5   971350180 446611168 487459600    48% 28547031 4874596000    1%   /System/Volumes/Data",
+      "limits": "ps CPU is lifetime averaged; RSS is KiB; child discovery is bounded to three generations. Docker guest/container CPU is not measured."
+    }
+  ],
+  "limits": [
+    "Sequential requests; no catch-up burst.",
+    "Latency ends after body read, schema parse timed separately.",
+    "No response payloads, hook tokens or credentials saved.",
+    "Host resources include unrelated work; sampler CPU is not server CPU."
+  ],
+  "api": "http://127.0.0.1:15070",
+  "dashboard": "http://127.0.0.1:15072",
+  "batch": "playground-2026-10-22T19-54-57-063Z",
+  "workspace": "playground",
+  "workloadControls": {
+    "apiSlots": 4,
+    "runtimeAttempts": 4
+  }
+}

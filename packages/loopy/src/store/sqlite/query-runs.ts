@@ -143,11 +143,12 @@ export class SqliteQueryRuns extends SqliteSchedules {
       return hooks;
     }
 
+    // One array binding keeps a 200-run page below workerd's SQL variable limit.
     const rows = this.db
       .query<{ id: string; record: string | null }, SqlValue[]>(
-        `SELECT r.id,(${PENDING_HOOK.replace("SELECT w.record", "SELECT json_set(w.record,'$.expiresAt',json_extract(n.record,'$.wakeAt'))")}) AS record FROM runs r WHERE r.id IN (${ids.map(() => "?").join(",")})`,
+        `SELECT r.id,(${PENDING_HOOK.replace("SELECT w.record", "SELECT json_set(w.record,'$.expiresAt',json_extract(n.record,'$.wakeAt'))")}) AS record FROM runs r WHERE r.id IN (SELECT value FROM json_each(?))`,
       )
-      .all(now, ...ids);
+      .all(now, JSON.stringify(ids));
 
     for (const row of rows) {
       if (row.record === null) {

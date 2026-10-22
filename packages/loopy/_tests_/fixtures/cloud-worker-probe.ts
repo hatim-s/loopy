@@ -5,6 +5,7 @@ import { nodeIdSchema } from "../../src/contract/index.js";
 import type { RunRecord, StoreEffect } from "../../src/core/index.js";
 import { EVENT_RETENTION } from "../../src/store/event-outbox.js";
 import { SqlRunStore } from "../../src/store/portable.js";
+import { paginationResponse } from "./cloud-pagination-probe.js";
 
 const at = "2026-10-22T00:00:00.000Z";
 
@@ -51,6 +52,10 @@ export class CloudWorkerProbe {
 
   async fetch(request: Request): Promise<Response> {
     try {
+      if (new URL(request.url).pathname.startsWith("/pagination/")) {
+        return await paginationResponse(request, this.ctx, this.env.ARTIFACTS);
+      }
+
       return Response.json(await this.command(new URL(request.url).pathname));
     } catch (error) {
       return Response.json(

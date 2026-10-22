@@ -1,0 +1,1 @@
+$ tsc --noEmit && tsc -p packages/loopy/tsconfig.portable.json

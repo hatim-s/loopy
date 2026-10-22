@@ -2,9 +2,11 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Miniflare } from "miniflare";
-import { jsonSchema, routes } from "../src/contract/index.js";
+import { z } from "zod";
+import { encodeRunCursor, jsonSchema, routes } from "../src/contract/index.js";
 import { revision } from "../src/core/index.js";
 import { log, loopy, wait } from "../src/sdk/graph/index.js";
+import { waitRecordSchema } from "../src/store/wait-schema.js";
 import { compiledBody } from "./compiled-fixture.js";
 
 let runtime: Miniflare;
@@ -187,6 +189,115 @@ test("workerd pruning removes the whole transaction across an age boundary and p
     next: [{ sequence: 5, kind: "heartbeat" }],
     oldest: 5,
   });
+});
+
+test("workerd run pages retain all pending hooks through the 200-row contract limit", async () => {
+  const namespace = await runtime.getDurableObjectNamespace("PROBES", "probe");
+  const object = namespace.get(namespace.idFromName("pagination"));
+  const seeded = await object.fetch("http://probe/pagination/seed");
+
+  const seed = z
+    .object({
+      total: z.number(),
+      hooks: z.array(waitRecordSchema.extend({ expiresAt: z.string().nullable() })),
+    })
+    .parse(await seeded.json());
+
+  const seededHooks = new Map(seed.hooks.map((hook) => [hook.runId, hook]));
+  expect({ status: seeded.status, seed }).toMatchObject({ status: 200 });
+  expect(seed).toMatchObject({
+    total: 205,
+    hooks: expect.arrayContaining([
+      expect.objectContaining({ runId: "page-200", resolvedAt: "2026-10-22T00:00:00.000Z" }),
+      expect.objectContaining({ runId: "page-201", expiredAt: "2026-10-22T00:00:00.000Z" }),
+      expect.objectContaining({ runId: "page-202", expiresAt: "2026-10-22T00:00:00.000Z" }),
+    ]),
+  });
+
+  async function page(query: string) {
+    const response = await object.fetch(`http://probe/pagination/runs?${query}`);
+    const body: unknown = await response.json();
+    expect({ status: response.status, body }).toMatchObject({ status: 200 });
+
+    return routes.runs.response.parse(body);
+  }
+
+  const boundaries = [];
+
+  for (const limit of [99, 100, 200]) {
+    const response = await object.fetch(`http://probe/pagination/runs?limit=${limit}`);
+    const body: unknown = await response.json();
+    boundaries.push({
+      limit,
+      status: response.status,
+      result: response.ok ? routes.runs.response.parse(body).length : body,
+    });
+  }
+
+  expect(boundaries).toEqual([
+    { limit: 99, status: 200, result: 99 },
+    { limit: 100, status: 200, result: 100 },
+    { limit: 200, status: 200, result: 200 },
+  ]);
+
+  const expectedIds = Array.from(
+    Array(205).keys(),
+    (index) => `page-${String(index).padStart(3, "0")}`,
+  ).reverse();
+
+  for (const limit of [99, 100, 200]) {
+    const first = await page(`limit=${limit}`);
+    expect(first.map(({ id }) => id)).toEqual(expectedIds.slice(0, limit));
+
+    const last = first.at(-1);
+
+    if (!last) {
+      throw new Error("Synthetic first page was empty.");
+    }
+
+    const rest = await page(`limit=200&before=${encodeURIComponent(encodeRunCursor(last))}`);
+    const all = [...first, ...rest];
+    expect(all.map(({ id }) => id)).toEqual(expectedIds);
+    expect(new Set(all.map(({ id }) => id)).size).toBe(205);
+
+    for (const row of all) {
+      const index = Number(row.id.slice(5));
+
+      if (index >= 200) {
+        expect(row.waitingOn).toBeNull();
+        continue;
+      }
+
+      expect(row.waitingOn).toMatchObject({
+        hook: `approve-${row.id}`,
+        seq: 1,
+        expiresAt: index % 2 === 0 ? "2026-10-22T01:00:00.000Z" : null,
+        since: "2026-10-22T00:00:00.000Z",
+      });
+      expect(seededHooks.get(row.id)).toMatchObject({
+        runId: row.id,
+        name: row.waitingOn?.hook,
+        token: row.waitingOn?.token,
+        expiresAt: row.waitingOn?.expiresAt,
+        createdAt: row.waitingOn?.since,
+      });
+    }
+  }
+
+  const waiting = await page("limit=200&waiting=true");
+  expect(waiting.map(({ id }) => id)).toEqual(expectedIds.slice(5));
+  expect(new Set(waiting.map(({ waitingOn }) => waitingOn?.token)).size).toBe(200);
+  expect((await page("limit=200&waiting=false")).map(({ id }) => id)).toEqual(
+    expectedIds.slice(0, 5),
+  );
+  const oldest = waiting.at(-1);
+
+  if (!oldest) {
+    throw new Error("Synthetic waiting page was empty.");
+  }
+
+  expect(await page(`limit=200&before=${encodeURIComponent(encodeRunCursor(oldest))}`)).toEqual([]);
+  expect((await object.fetch("http://probe/pagination/runs?limit=201")).status).toBe(400);
 });
 
 test("R2 conditional create preserves the original bytes and enforces bounded tenant reads", async () => {
