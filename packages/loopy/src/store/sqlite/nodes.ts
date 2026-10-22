@@ -208,23 +208,21 @@ export class SqliteNodes extends SqliteRuns {
   }
 
   async snapshotRun(id: string): Promise<RunSnapshot | undefined> {
-    return this.db
-      .transaction(() => {
-        const row = this.row(id);
+    return this.db.transaction(() => {
+      const row = this.row(id);
 
-        if (!row) {
-          return undefined;
-        }
+      if (!row) {
+        return undefined;
+      }
 
-        return {
-          run: rowToRun(row),
-          nodeRuns: this.readNodes(id),
-          steps: [],
-          logs: this.db.query<LogRow, [string, number]>(SQL.logs).all(id, 0).map(rowToLog),
-          hooks: this.readHooks(id),
-          ...this.readEventCursor(),
-        };
-      })
-      .deferred();
+      return {
+        run: rowToRun(row),
+        nodeRuns: this.readNodes(id),
+        steps: [],
+        logs: this.db.query<LogRow, [string, number]>(SQL.logs).all(id, 0).map(rowToLog),
+        hooks: this.readHooks(id),
+        ...this.readEventCursor(),
+      };
+    }, "deferred");
   }
 }

@@ -1,0 +1,245 @@
+import type { DurableObjectStorage, SqlStorageCursor } from "@cloudflare/workers-types";
+import { errorMessage } from "../../../packages/loopy/src/core/index.js";
+import {
+  activateDurable,
+  type DurableExecutionProvider,
+} from "../../../packages/loopy/src/host/index.js";
+import type { SqlRunStore, SqlValue } from "../../../packages/loopy/src/store/portable.js";
+import type { R2ArtifactRegistry } from "./artifacts.js";
+import { WorkspaceSchedules } from "./scheduler-schedules.js";
+
+export type SchedulerStorage = Pick<
+  DurableObjectStorage,
+  "getAlarm" | "setAlarm" | "deleteAlarm"
+> & {
+  sql: {
+    exec<Row extends Record<string, SqlValue>>(
+      query: string,
+      ...bindings: SqlValue[]
+    ): Pick<SqlStorageCursor<Row>, "toArray" | "one">;
+  };
+};
+
+type Candidate = {
+  id: string;
+  cursor: string | null;
+  owner_token: string | null;
+  heartbeat_at: string | null;
+};
+
+export class WorkspaceScheduler {
+  private readonly schedules: WorkspaceSchedules;
+
+  constructor(
+    private readonly options: {
+      storage: SchedulerStorage;
+      store: SqlRunStore;
+      registry: Pick<R2ArtifactRegistry, "get" | "revisionGraph">;
+      provider: DurableExecutionProvider;
+      token: string;
+      concurrency: number;
+      workspace: string;
+    },
+  ) {
+    options.storage.sql.exec(`CREATE TABLE IF NOT EXISTS cloud_turns (
+      run_id TEXT PRIMARY KEY REFERENCES runs(id), next_at TEXT NOT NULL, cursor TEXT, error TEXT
+    )`);
+    this.schedules = new WorkspaceSchedules(options);
+  }
+
+  async wake(at = Date.now()): Promise<void> {
+    const current = await this.options.storage.getAlarm();
+
+    if (current === null || at < current) {
+      await this.options.storage.setAlarm(at);
+    }
+  }
+
+  private foreignLease(candidate: Candidate): string | null {
+    const { token, store } = this.options;
+
+    if (candidate.owner_token !== token && candidate.heartbeat_at !== null) {
+      const expires = Date.parse(candidate.heartbeat_at) + store.leaseMs + 1;
+
+      if (Date.now() < expires) {
+        return new Date(expires).toISOString();
+      }
+    }
+
+    return null;
+  }
+
+  private async releaseSuspended(now: string): Promise<void> {
+    const { storage, store } = this.options;
+
+    const rows = storage.sql
+      .exec<Candidate>(
+        `SELECT r.id,t.cursor,r.owner_token,r.heartbeat_at FROM runs r
+      LEFT JOIN cloud_turns t ON r.id=t.run_id
+      WHERE r.status='suspended' AND r.owner_token IS NOT NULL
+      AND (t.next_at IS NULL OR t.next_at<=?)
+      ORDER BY COALESCE(t.next_at,r.created_at),r.id LIMIT 32`,
+        now,
+      )
+      .toArray();
+
+    for (const row of rows) {
+      let nextAt = this.foreignLease(row);
+      let error: string | null = null;
+
+      try {
+        if (nextAt === null && row.owner_token !== null) {
+          // Suspension already committed. Releasing it preserves waits without taking a slot.
+          await store.release(row.id, row.owner_token);
+        }
+      } catch (cause) {
+        nextAt = new Date(Date.now() + 1000).toISOString();
+        error = errorMessage(cause).slice(0, 1000);
+      }
+
+      this.saveTurn(row, nextAt ?? now, null, error);
+    }
+  }
+
+  private saveTurn(
+    candidate: Candidate,
+    nextAt: string,
+    cursor: string | null,
+    error: string | null,
+  ) {
+    this.options.storage.sql.exec(
+      `INSERT INTO cloud_turns(run_id,next_at,cursor,error) VALUES (?,?,?,?)
+      ON CONFLICT(run_id) DO UPDATE SET next_at=excluded.next_at,cursor=excluded.cursor,error=excluded.error`,
+      candidate.id,
+      nextAt,
+      cursor,
+      error,
+    );
+  }
+
+  private candidates(now: string): Candidate[] {
+    const { storage, concurrency } = this.options;
+
+    const running = storage.sql
+      .exec<Candidate>(
+        `SELECT r.id,t.cursor,r.owner_token,r.heartbeat_at
+      FROM runs r LEFT JOIN cloud_turns t ON r.id=t.run_id WHERE r.status='running'
+      AND (t.next_at IS NULL OR t.next_at<=?) ORDER BY r.created_at,r.id LIMIT ?`,
+        now,
+        concurrency,
+      )
+      .toArray();
+
+    const count = storage.sql
+      .exec<{ count: number }>("SELECT COUNT(*) AS count FROM runs WHERE status='running'")
+      .one().count;
+
+    const free = Math.max(0, concurrency - count);
+
+    const ready = storage.sql
+      .exec<Candidate>(
+        `SELECT r.id,t.cursor,r.owner_token,r.heartbeat_at
+      FROM runs r LEFT JOIN cloud_turns t ON r.id=t.run_id
+      WHERE r.owner_token IS NULL AND (r.status='queued' OR (r.status='suspended' AND r.wake_at<=?))
+      AND (t.error IS NULL OR t.next_at<=?)
+      ORDER BY r.created_at,r.id LIMIT ?`,
+        now,
+        now,
+        free,
+      )
+      .toArray();
+
+    return [...running, ...ready];
+  }
+
+  private next(now: number): number | null {
+    const { storage, concurrency } = this.options;
+
+    const deadlines = storage.sql
+      .exec<{ at: string | null }>(
+        `SELECT MIN(MAX(s.next_fire_at,COALESCE(t.next_at,s.next_fire_at))) AS at
+      FROM schedules s LEFT JOIN cloud_schedule_turns t
+      ON s.workspace=t.workspace AND s.slug=t.slug AND s.version=t.version WHERE s.enabled=1
+      UNION ALL SELECT MIN(COALESCE(t.next_at,r.heartbeat_at,r.created_at)) FROM runs r LEFT JOIN cloud_turns t ON r.id=t.run_id WHERE r.status='running'
+      UNION ALL SELECT MIN(COALESCE(t.next_at,r.created_at)) FROM runs r LEFT JOIN cloud_turns t ON r.id=t.run_id
+      WHERE r.status='suspended' AND r.owner_token IS NOT NULL
+      UNION ALL SELECT MIN(MAX(CASE WHEN r.status='queued' THEN r.created_at ELSE r.wake_at END,
+      CASE WHEN t.error IS NULL THEN r.created_at ELSE t.next_at END))
+      FROM runs r LEFT JOIN cloud_turns t ON r.id=t.run_id
+      WHERE r.owner_token IS NULL AND (r.status='queued' OR r.status='suspended')
+      AND (SELECT COUNT(*) FROM runs WHERE status='running')<?`,
+        concurrency,
+      )
+      .toArray();
+
+    const dates = deadlines.flatMap(({ at }) => (at === null ? [] : [Date.parse(at)]));
+
+    return dates.length === 0 ? null : Math.max(now + 50, Math.min(...dates));
+  }
+
+  async tick(): Promise<void> {
+    const { storage, store, registry, provider, token } = this.options;
+    const now = new Date().toISOString();
+    // A crash anywhere after this write leaves a recovery wakeup.
+    await storage.setAlarm(Date.now() + 5000);
+
+    try {
+      await this.schedules.tick(now);
+      await this.releaseSuspended(now);
+
+      for (const candidate of this.candidates(now)) {
+        let nextAt = new Date(Date.now() + 1000).toISOString();
+        let cursor = candidate.cursor;
+        let error: string | null = null;
+
+        try {
+          const lease = this.foreignLease(candidate);
+
+          if (lease === null) {
+            const run = await store.getRun(candidate.id);
+
+            if (!run) {
+              continue;
+            }
+
+            const result = await activateDurable({
+              store,
+              graph: await registry.revisionGraph(run.revision),
+              runId: run.id,
+              provider,
+              token,
+              at: new Date().toISOString(),
+              cursor,
+              maxWork: 16,
+              pollMs: 500,
+            });
+
+            cursor = result.cursor;
+            nextAt = result.nextWakeAt ?? now;
+          } else {
+            nextAt = lease;
+          }
+        } catch (cause) {
+          error = errorMessage(cause).slice(0, 1000);
+        }
+
+        this.saveTurn(candidate, nextAt, cursor, error);
+      }
+
+      await store.pruneEvents(now);
+      const next = this.next(Date.now());
+
+      if (next === null) {
+        await storage.deleteAlarm();
+      } else {
+        await storage.setAlarm(next);
+      }
+    } catch (cause) {
+      storage.sql.exec(
+        "INSERT OR REPLACE INTO meta(key,value) VALUES ('cloud_scheduler_error',?)",
+        errorMessage(cause).slice(0, 1000),
+      );
+      await storage.setAlarm(Date.now() + 5000);
+    }
+  }
+}

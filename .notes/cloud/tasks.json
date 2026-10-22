@@ -1,0 +1,142 @@
+[
+  {
+    "requestId": "loopy-cloud-store-assessment-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Adelegate-task%3Aloopy-cloud-store-assessment-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "priority"
+    }
+  },
+  {
+    "requestId": "loopy-cloud-portable-store-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Adelegate-task%3Aloopy-cloud-portable-store-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "priority"
+    }
+  },
+  {
+    "requestId": "loopy-cloud-service-extraction-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Adelegate-task%3Aloopy-cloud-service-extraction-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "priority"
+    }
+  },
+  {
+    "requestId": "loopy-cloud-docker-executor-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Adelegate-task%3Aloopy-cloud-docker-executor-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "priority"
+    }
+  },
+  {
+    "requestId": "loopy-cloud-alarm-driver-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Adelegate-task%3Aloopy-cloud-alarm-driver-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "priority"
+    }
+  },
+  {
+    "requestId": "loopy-cloud-artifacts-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Adelegate-task%3Aloopy-cloud-artifacts-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "priority"
+    }
+  },
+  {
+    "requestId": "loopy-cloud-journey-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Adelegate-task%3Aloopy-cloud-journey-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "priority"
+    }
+  },
+  {
+    "requestId": "loopy-cloud-review-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Adelegate-task%3Aloopy-cloud-review-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "priority"
+    }
+  },
+  {
+    "requestId": "loopy-cloud-workerd-tests-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Adelegate-task%3Aloopy-cloud-workerd-tests-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "priority"
+    }
+  },
+  {
+    "requestId": "loopy-cloud-capacity-fix-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Adelegate-task%3Aloopy-cloud-capacity-fix-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "priority"
+    }
+  },
+  {
+    "requestId": "loopy-cloud-scheduler-fix-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Adelegate-task%3Aloopy-cloud-scheduler-fix-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "priority"
+    }
+  },
+  {
+    "requestId": "loopy-cloud-failure-journey-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Adelegate-task%3Aloopy-cloud-failure-journey-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "priority"
+    }
+  },
+  {
+    "requestId": "cloud-docker-artifact-followup-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Athread-send%3Acloud-docker-artifact-followup-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "priority"
+    }
+  },
+  {
+    "requestId": "loopy-cloud-review-02",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Adelegate-task%3Aloopy-cloud-review-02",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "priority"
+    }
+  }
+]

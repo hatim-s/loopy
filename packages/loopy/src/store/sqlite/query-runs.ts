@@ -1,4 +1,3 @@
-import type { SQLQueryBindings } from "bun:sqlite";
 import {
   emptyRunCounts,
   type HookRecord,
@@ -10,6 +9,7 @@ import {
 } from "../../core/index.js";
 import { overviewBuckets, PREVIEW_BYTES } from "../query-utils.js";
 import { waitRecordSchema } from "../wait-schema.js";
+import type { SqlValue } from "./driver.js";
 import { SqliteSchedules } from "./schedules.js";
 import { rowToRun } from "./store-rows.js";
 import type { RunRow } from "./store-schema.js";
@@ -21,7 +21,7 @@ export const PENDING_HOOK = `SELECT w.record FROM waits w JOIN node_runs n ON n.
 
 export function runWhere(filter: RunFilter, alias = "r") {
   const clauses: string[] = [];
-  const values: SQLQueryBindings[] = [];
+  const values: SqlValue[] = [];
 
   for (const [field, value] of [
     ["slug", filter.slug],
@@ -99,7 +99,7 @@ export class SqliteQueryRuns extends SqliteSchedules {
     }
 
     return this.db
-      .query<PreviewRunRow, SQLQueryBindings[]>(
+      .query<PreviewRunRow, SqlValue[]>(
         `SELECT ${RUN_PREVIEW_COLUMNS} FROM runs r ${clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""} ORDER BY r.created_at DESC,r.id DESC LIMIT ?`,
       )
       .all(...values, Math.min(query.limit, 200))
@@ -111,7 +111,7 @@ export class SqliteQueryRuns extends SqliteSchedules {
     const counts = emptyRunCounts();
 
     for (const row of this.db
-      .query<{ status: keyof StatusCounts; count: number }, SQLQueryBindings[]>(
+      .query<{ status: keyof StatusCounts; count: number }, SqlValue[]>(
         `SELECT status,count(*) AS count FROM runs r ${clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""} GROUP BY status`,
       )
       .all(...values)) {
@@ -144,7 +144,7 @@ export class SqliteQueryRuns extends SqliteSchedules {
     }
 
     const rows = this.db
-      .query<{ id: string; record: string | null }, SQLQueryBindings[]>(
+      .query<{ id: string; record: string | null }, SqlValue[]>(
         `SELECT r.id,(${PENDING_HOOK.replace("SELECT w.record", "SELECT json_set(w.record,'$.expiresAt',json_extract(n.record,'$.wakeAt'))")}) AS record FROM runs r WHERE r.id IN (${ids.map(() => "?").join(",")})`,
       )
       .all(now, ...ids);
@@ -169,7 +169,7 @@ export class SqliteQueryRuns extends SqliteSchedules {
     const { clauses, values } = runWhere(query);
 
     const rows = this.db
-      .query<{ bucket: number; status: keyof StatusCounts; count: number }, SQLQueryBindings[]>(
+      .query<{ bucket: number; status: keyof StatusCounts; count: number }, SqlValue[]>(
         `SELECT CAST((unixepoch(created_at,'subsec')-?)/? AS INTEGER) AS bucket,status,count(*) AS count FROM runs r WHERE ${clauses.join(" AND ")} GROUP BY bucket,status`,
       )
       .all(Date.parse(query.from) / 1000, query.bucketSeconds, ...values);

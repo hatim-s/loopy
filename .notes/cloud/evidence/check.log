@@ -1,0 +1,1395 @@
+$ bun run build && bun run lint && bun run typecheck && bun run test
+$ bun scripts/build.ts
+$ vite build
+vite v7.1.2 building for production...
+transforming...
+../../../../../.bun/install/cache/links/zod@4.6.7-34ecec2bd54c0415/node_modules/zod/v4/core/regexes.js (74:0): A comment
+
+"/** Anchors a pattern source. The interpolation lives here rather than at the call site because
+ * esbuild will not drop a `@__PURE__` call whose own argument interpolates a variable, but it
+ * will drop `anchor(dateSource)`. Keeping it inline pinned `date` into every bundle. */"
+
+in "../../../../../.bun/install/cache/links/zod@4.6.7-34ecec2bd54c0415/node_modules/zod/v4/core/regexes.js" contains an annotation that Rollup cannot interpret due to the position of the comment. The comment will be removed to avoid issues.
+../../../../../.bun/install/cache/links/zod@4.6.7-34ecec2bd54c0415/node_modules/zod/v4/core/util.js (400:0): A comment
+
+"// Wrapped in a `@__PURE__` IIFE: esbuild never tree-shakes a top-level initializer that contains a member access on `Number`, so the bare object literal survived into every bundle."
+
+in "../../../../../.bun/install/cache/links/zod@4.6.7-34ecec2bd54c0415/node_modules/zod/v4/core/util.js" contains an annotation that Rollup cannot interpret due to the position of the comment. The comment will be removed to avoid issues.
+✓ 546 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                                   0.52 kB │ gzip:   0.30 kB
+dist/assets/geist-mono-symbols2-wght-normal-CO5SzqOn.woff2        5.81 kB
+dist/assets/geist-mono-cyrillic-ext-wght-normal-X_5orZeX.woff2    6.18 kB
+dist/assets/geist-cyrillic-ext-wght-normal-DjL33-gN.woff2         7.42 kB
+dist/assets/geist-mono-vietnamese-wght-normal-DadHysG0.woff2      7.70 kB
+dist/assets/geist-vietnamese-wght-normal-6IgcOCM7.woff2           8.00 kB
+dist/assets/geist-mono-cyrillic-wght-normal-DiZS0aHC.woff2       12.94 kB
+dist/assets/geist-mono-latin-ext-wght-normal-Bwz-egvJ.woff2      14.70 kB
+dist/assets/geist-cyrillic-wght-normal-BEAKL7Jp.woff2            15.08 kB
+dist/assets/geist-latin-ext-wght-normal-DC-KSUi6.woff2           16.51 kB
+dist/assets/geist-mono-latin-wght-normal-XN7g48iV.woff2          23.13 kB
+dist/assets/geist-latin-wght-normal-BgDaEnEv.woff2               29.40 kB
+dist/assets/run-marks-DOl9GLYo.css                               19.30 kB │ gzip:   3.82 kB
+dist/assets/index-ChlTiSIn.css                                   53.80 kB │ gzip:  10.13 kB
+dist/assets/resolve-form-nFYLHdiz.js                              1.14 kB │ gzip:   0.63 kB
+dist/assets/pager-gVyafb6g.js                                     1.18 kB │ gzip:   0.58 kB
+dist/assets/runs.index-Et-4YiNH.js                                2.13 kB │ gzip:   0.97 kB
+dist/assets/schedule-text-CLtuZUld.js                             2.38 kB │ gzip:   1.14 kB
+dist/assets/run-table-DvDRH77A.js                                 3.35 kB │ gzip:   1.42 kB
+dist/assets/log-table-BJYh8_MA.js                                 3.43 kB │ gzip:   1.32 kB
+dist/assets/segmented-FUk7yLCA.js                                 3.53 kB │ gzip:   1.32 kB
+dist/assets/input-form-IcBQe2XV.js                                5.30 kB │ gzip:   2.09 kB
+dist/assets/loopies.index-XQ-29CT9.js                             5.39 kB │ gzip:   2.21 kB
+dist/assets/loopies._slug-4_6NfkFu.js                             8.82 kB │ gzip:   3.24 kB
+dist/assets/schedules-B6xd7BKM.js                                 9.30 kB │ gzip:   3.18 kB
+dist/assets/observability-C5en-qxm.js                            10.10 kB │ gzip:   3.34 kB
+dist/assets/fake-DjnOorfU.js                                     11.28 kB │ gzip:   3.99 kB
+dist/assets/index-DaOe8Vw9.js                                    13.05 kB │ gzip:   4.39 kB
+dist/assets/runs._runId-CHxjrEfO.js                              16.74 kB │ gzip:   5.82 kB
+dist/assets/demo-DnoW8M5M.js                                     28.70 kB │ gzip:   6.25 kB
+dist/assets/stream-CzwOrwfc.js                                  126.73 kB │ gzip:  36.96 kB
+dist/assets/run-marks-DavU3g23.js                               272.47 kB │ gzip:  91.15 kB
+dist/assets/index-Bl-9zpKe.js                                   335.98 kB │ gzip: 109.57 kB
+✓ built in 2.32s
+Built loopy with the dashboard.
+$ biome check . && eslint .
+Checked 563 files in 109ms. No fixes applied.
+$ tsc --noEmit && tsc -p packages/loopy/tsconfig.portable.json
+$ bun test --timeout 60000 apps/dashboard/_tests_ packages/loopy/_tests_
+bun test v1.4.0 (34cbb9a40)
+
+apps/dashboard/_tests_/inbox.test.ts:
+(pass) the inbox keeps waiting runs, grouped by loopy, oldest wait first [1.17ms]
+(pass) suspended runs that only sleep leave the inbox empty [0.03ms]
+(pass) hook creation time keeps inbox order stable across later run updates [0.16ms]
+
+apps/dashboard/_tests_/local-http.test.ts:
+(pass) each call uses the method and path from the route table, with the token [84.81ms]
+(pass) a response that fails the route schema is rejected [3.24ms]
+(pass) an error body becomes a BackendError with the server's code and message [2.06ms]
+(pass) GET 401 preserves the contract error unauthorized [0.63ms]
+(pass) GET 403 preserves the contract error forbidden [0.56ms]
+(pass) GET 500 preserves the contract error internal [0.28ms]
+(pass) the event stream ends with reset when the server no longer holds the cursor [1.32ms]
+(pass) frames split across chunks arrive as batches and a reconnect resumes after the last one [539.78ms]
+(pass) a malformed 410 is rejected instead of triggering reset [11.15ms]
+(pass) a valid non-cursor 410 preserves its error code [2.10ms]
+(pass) a malformed frame cancels the open response stream [3.40ms]
+(pass) byte-at-a-time CRLF frames deliver a batch [787.08ms]
+(pass) three empty EOFs back off for 500, 1000, then 2000 ms and release pause listeners [3515.59ms]
+(pass) snapshot HTTP requests stop when their signal is aborted [11.74ms]
+(pass) session cursor uses its route schema and waiting booleans survive URL encoding [3.24ms]
+
+apps/dashboard/_tests_/input-form.test.ts:
+(pass) a trailing ? marks the field optional and drops from the key [0.04ms]
+(pass) required booleans start false and everything else starts empty [0.06ms]
+(pass) form text becomes typed JSON and empty optional fields are left out [0.17ms]
+(pass) an empty required field and a non-number are issues, not coerced values [0.03ms]
+(pass) the JSON editor accepts any JSON value and rejects text that is not JSON [0.59ms]
+
+apps/dashboard/_tests_/cron.test.ts:
+(pass) common cron patterns read as plain sentences [6.33ms]
+(pass) rarer or malformed expressions have no reading [0.14ms]
+(pass) 99 25 * * * has no exact plain reading [0.02ms]
+(pass) */59 * * * * has no exact plain reading
+
+apps/dashboard/_tests_/connection-security.test.ts:
+(pass) remote adapter authenticates against an isolated real server with explicit browser policy [305.82ms]
+(pass) preflight needs an allowed origin, method and headers but never bypasses actual auth [74.50ms]
+(pass) public host handler uses its configured origin without trusting forwarded hosts [13.72ms]
+(pass) access gate opens only for the current token and sends nothing without one [24.23ms]
+
+apps/dashboard/_tests_/schedule-mutations.test.ts:
+(pass) a failed toggle preserves version 4 delivered while its POST is pending [5.37ms]
+(pass) a failed toggle restores only its row and preserves another row's stream update [0.36ms]
+(pass) a failed toggle preserves a same-version fire delivered during its POST [0.25ms]
+
+apps/dashboard/_tests_/list-cache.test.ts:
+(pass) detail heartbeat and queued-to-running delivery in either order reconcile lists once [2.74ms]
+(pass) removing the oldest row from a full page preserves its next cursor [5.88ms]
+(pass) garbage collecting a list discards its stream freshness history [1.76ms]
+(pass) run pagination evicts old pages without losing its next server cursor [6.72ms]
+(pass) the displayed run page keeps its next cursor after the oldest row leaves [0.31ms]
+(pass) map item pagination retains at most 200 rows and continues numeric cursors [13.94ms]
+(pass) a filtered log scan continues from its cursor even when no rows matched [0.53ms]
+(pass) a filtered event scan continues independently of the returned row count [0.36ms]
+
+apps/dashboard/_tests_/browser-connection.test.ts:
+(pass) redirects never forward a bearer token, including same-origin redirects [6.53ms]
+(pass) base URL prefix is preserved and URL credentials or selectors are rejected [5.98ms]
+(pass) bootstrap removes secrets before storage, scopes them by API, and ignores query origins [0.38ms]
+
+apps/dashboard/_tests_/graph.test.ts:
+(pass) a definition draws every compiled node and labels control edges [26.36ms]
+(pass) nodes without a record never read as executed [41.70ms]
+(pass) only a next edge from a succeeded node into a node that ran in its scope reads as taken [1.15ms]
+(pass) scoped executions roll up to the most urgent status with counts [0.15ms]
+(pass) records from another revision surface as orphans instead of attaching to nodes [1.29ms]
+(pass) execution logs match the shared execution key and group by the attempt that wrote them [0.16ms]
+(pass) roles tell work, control, values and joins apart, and the top-level output join is the end [0.10ms]
+(pass) control nodes read as text: predicates by label, shell commands by argv [0.25ms]
+(pass) only control edges carry labels; sequence and join edges stay quiet [0.19ms]
+(pass) frames nest scopes and subgraph calls: map, then the publish subgraph, then its rescue [0.47ms]
+(pass) two calls of one subgraph far apart get separate frames [2.13ms]
+(pass) layout runs left to right, keeps arms beside their control and the map's continuation after its body [331.32ms]
+(pass) the first view frames the run where it is: inner work in flight, else failures, else the entry [7.85ms]
+
+apps/dashboard/_tests_/stream.test.ts:
+(pass) a run event replaces the snapshot run and every list entry for that run [0.51ms]
+(pass) a run event updates its run inside every page of a paged list [0.21ms]
+(pass) hook creation updates a paged list from native hook data [0.27ms]
+(pass) a list keeps a run that is newer than the event [0.07ms]
+(pass) node events keep one record per execution key at its latest attempt [1.14ms]
+(pass) logs land in seq order whatever order the events arrive in [0.12ms]
+(pass) events at or below the cursor are already in the snapshot and change nothing [0.04ms]
+(pass) events for another run leave the snapshot alone [0.02ms]
+(pass) native wait hooks preserve run expiry and resolving them clears waitingOn [0.10ms]
+(pass) hook events update waitingOn on list entries too [0.12ms]
+(pass) a reset from the backend invalidates every query and resubscribes from a fresh global cursor [0.60ms]
+(pass) old hook replay cannot resurrect waitingOn after a newer run event [0.10ms]
+(pass) hook updates preserve snapshot expiry in lists and reject older timestamps [0.19ms]
+(pass) hook creation updates only lists containing its run [0.10ms]
+(pass) run creation and completion invalidate the lists and loopy summaries [0.87ms]
+(pass) abort during reset cursor fetch cancels the request and settles followSession [0.47ms]
+(pass) a resolved hook drops the run from the inbox in place, without a refetch [0.20ms]
+(pass) a run entering a status refetches the lists for that status that lack it [0.31ms]
+(pass) an unseen run invalidates matching array and infinite lists once per fresh batch [1.34ms]
+(pass) queued to running removes old membership and refetches the destination pages [0.20ms]
+(pass) a status change restarts a list fetch that started before it, even when the list lacks the run [2.90ms]
+(pass) a run leaving a list restarts that list's fetch already in flight [0.36ms]
+(pass) a status change restarts a list's first load that read the server before it [0.44ms]
+(pass) a restarted first load without an observer still answers its loader [0.31ms]
+(pass) status transitions and schedule events invalidate summaries once while heartbeat and replay do not [0.31ms]
+(pass) a newer detail cursor cannot hide a fresh list event or summary transition [0.11ms]
+(pass) a saved schedule replaces its row, and an older version leaves the row alone [0.14ms]
+(pass) a fired schedule keeps its version and carries the fire key into the row [0.07ms]
+(pass) a save in another workspace leaves the selected workspace list alone [0.07ms]
+(pass) a deleted schedule leaves the list without a refetch, and only for its workspace [0.09ms]
+(pass) a delayed HTTP response cannot undo a fire at the same version [0.15ms]
+(pass) an equal-version schedule with the same fire time leaves the cached row unchanged [0.05ms]
+(pass) an unseen save cannot skip a later delete in the same batch [0.07ms]
+(pass) stream snapshots retain bounded root nodes, logs and hooks across long sessions [1789.36ms]
+(pass) stream overflow keeps the execution keyset boundary and preview metadata bounded [229.65ms]
+(pass) scoped node bursts invalidate aggregates and refetch active queries once [305.90ms]
+(pass) large streamed outputs stay previews while detail queries remain lazy [3.94ms]
+
+apps/dashboard/_tests_/review-data.test.ts:
+(pass) schedule HTTP and cache mutations keep default A and project B independent for the same slug [2049.61ms]
+(pass) 201 root and 51 item executions remain unknown outside bounded pages and reconcile on selection [1672.74ms]
+(pass) fresh HTTP schedule overview discovers enabled B hidden by default A's same slug [2215.29ms]
+
+apps/dashboard/_tests_/fake.test.ts:
+(pass) an undeclared schedule can be created from the PUT body on an empty page [1.23ms]
+
+packages/loopy/_tests_/shell.test.ts:
+(pass) zip exclusions trail archive operands [3.38ms]
+(pass) find predicates precede actions regardless of caller property order [1.62ms]
+(pass) git inspection separates revisions from paths [2.01ms]
+(pass) jq named pairs retain separate keys and values [0.63ms]
+(pass) required positionals reject missing and short JavaScript inputs [0.37ms]
+(pass) typed shell graphs retain exact argv, command identities and execution options [3.41ms]
+
+packages/loopy/_tests_/executor.test.ts:
+(pass) code protocol captures stderr logs and leading stdout, and retains its trusted completion receipt [1030.74ms]
+(pass) code sandbox cannot read a sibling host file or write outside the workspace in either mode [1821.38ms]
+(pass) timeout terminates the process group including an inherited grandchild [1267.47ms]
+(pass) compiled command parser gets result and prepared input, then code runs through service and daemon [2244.98ms]
+(pass) a worker finishes its receipt after the caller process is killed [890.97ms]
+(pass) only declared secrets reach bundles and receipts contain redacted results and logs [261.86ms]
+(pass) bundle timeout masks escaped secrets before storing logs, node failures and receipts [635.05ms]
+(pass) bundle output_limit masks escaped secrets before storing logs, node failures and receipts [244.93ms]
+(pass) bundle nonzero masks escaped secrets before storing logs, node failures and receipts [176.64ms]
+(pass) bundle timeout masks a secret nested two JSON levels inside a log string [589.11ms]
+(pass) bundle success masks a secret nested two JSON levels inside a log string [190.12ms]
+(pass) bundle results redact once, so a secret inside the marker leaves it intact [223.46ms]
+(pass) truncated bundle records mask secret escapes at every capture boundary [2.06ms]
+(pass) bundle success masks secrets printed as plain text on stdout and stderr [170.98ms]
+(pass) bundle timeout masks secrets printed as plain text on stdout and stderr [586.91ms]
+(pass) bundle output_limit masks secrets printed as plain text on stdout and stderr [279.71ms]
+(pass) bundle nonzero masks secrets printed as plain text on stdout and stderr [143.92ms]
+(pass) complete log records keep keys and values that end in a secret prefix [0.23ms]
+
+packages/loopy/_tests_/graph-sdk-types.test.ts:
+(pass) typecheck fixtures are present and parsed array outputs remain measurable [0.62ms]
+
+packages/loopy/_tests_/cloud-worker.test.ts:
+(pass) workerd rolls back logs, usage and outbox rows when an apply batch fails [35.28ms]
+(pass) workerd reopens durable records and fences stale lease owners without emitting events [13.72ms]
+(pass) workerd schedule fire rolls back its pointer on conflict and deduplicates a repeated fire [5.13ms]
+(pass) workerd validates wait payloads and commits exactly one hook, node and wake transaction [6.94ms]
+(pass) workerd pruning removes the whole transaction across an age boundary and preserves cursor monotonicity [5.45ms]
+(pass) R2 conditional create preserves the original bytes and enforces bounded tenant reads [16.75ms]
+(pass) Worker derives workspace from credentials and rejects workspace/header/origin spoofing [6.93ms]
+(pass) Worker rejects invalid save/run inputs without publishing or creating runs [17.23ms]
+(pass) Worker alarm persists hooks and supports SQL dashboard queries without crossing tenants [42.27ms]
+(pass) Worker pins historical graph/source revisions and isolates tenant runs, hooks, sources and cursors [33.92ms]
+
+packages/loopy/_tests_/process.test.ts:
+(pass) process executor > passes arguments literally and preserves a failing exit code [80.13ms]
+(pass) process executor > resolves relative PATH entries from the command directory [397.69ms]
+(pass) process executor > bounds combined output [43.73ms]
+(pass) process executor > passes stdin and explicit environment values [29.56ms]
+(pass) process executor > stops a timed out process and its descendants [1357.64ms]
+(pass) process executor > stops background children after a successful parent exit [767.61ms]
+(pass) process executor > settles when a separate session inherits output pipes [318.23ms]
+(pass) process executor > kills descendants that ignore termination [805.63ms]
+(pass) process executor > honors cancellation [52.08ms]
+(pass) process executor > sandbox confines writes and rejects escaped directories [379.23ms]
+(pass) process executor > sandbox denies network access [147.07ms]
+(pass) process executor > sandbox denies reads from the user's home outside the workspace [166.87ms]
+(skip) process executor > Linux sandbox keeps a /tmp workspace writable
+(skip) process executor > Linux sandbox does not load command libraries in the launcher
+
+packages/loopy/_tests_/host-lifecycle.test.ts:
+(pass) node read failure releases ownership into a claimable suspension [0.66ms]
+(pass) release failure remains the cause of the primary read failure [0.22ms]
+(pass) dispatch persistence failure releases ownership and does not dispatch uncommitted work [0.42ms]
+(pass) finish persistence failure releases ownership and does not dispatch uncommitted work [0.39ms]
+(pass) release failure preserves a failed graph outcome as the primary message [0.33ms]
+(pass) all three attempts retain their own logs and indices [0.86ms]
+
+packages/loopy/_tests_/compiler.test.ts:
+(pass) restrict rejects options-identifier with a located stable diagnostic [1.40ms]
+(pass) restrict rejects options-wrapped with a located stable diagnostic [1.38ms]
+(pass) restrict rejects parser-inline with a located stable diagnostic [0.89ms]
+(pass) restrict rejects parameter-computed with a located stable diagnostic [0.92ms]
+(pass) restrict rejects parameter-default with a located stable diagnostic [0.85ms]
+(pass) restrict rejects parameter-rest with a located stable diagnostic [0.89ms]
+(pass) restrict rejects unknown-sdk-call with a located stable diagnostic [0.82ms]
+(pass) restrict rejects parser-effect with a located stable diagnostic [0.84ms]
+(pass) restrict rejects default-export with a located stable diagnostic [0.85ms]
+(pass) restrict rejects duplicate-label with a located stable diagnostic [74.83ms]
+(pass) restrict rejects enum with a located stable diagnostic [0.87ms]
+(pass) restrict rejects namespace with a located stable diagnostic [0.97ms]
+(pass) restrict rejects async with a located stable diagnostic [0.92ms]
+(pass) restrict rejects await with a located stable diagnostic [0.93ms]
+(pass) restrict rejects if with a located stable diagnostic [0.93ms]
+(pass) restrict rejects for with a located stable diagnostic [0.84ms]
+(pass) restrict rejects while with a located stable diagnostic [1.02ms]
+(pass) restrict rejects do with a located stable diagnostic [0.83ms]
+(pass) restrict rejects switch with a located stable diagnostic [0.73ms]
+(pass) restrict rejects exception with a located stable diagnostic [0.81ms]
+(pass) restrict rejects template with a located stable diagnostic [0.81ms]
+(pass) restrict rejects call with a located stable diagnostic [0.81ms]
+(pass) restrict rejects mutable with a located stable diagnostic [0.88ms]
+(pass) restrict rejects captured with a located stable diagnostic [0.90ms]
+(pass) restrict rejects label with a located stable diagnostic [0.94ms]
+(pass) restrict rejects name with a located stable diagnostic [0.78ms]
+(pass) restrict rejects key with a located stable diagnostic [0.87ms]
+(pass) restrict rejects module-literal with a located stable diagnostic [0.86ms]
+(pass) restrict rejects module-relative with a located stable diagnostic [0.79ms]
+(pass) restrict rejects module-default with a located stable diagnostic [0.86ms]
+(pass) restrict rejects inline-function with a located stable diagnostic [0.91ms]
+(pass) restrict rejects spread with a located stable diagnostic [0.91ms]
+(pass) restrict rejects mutation with a located stable diagnostic [0.87ms]
+(pass) restrict rejects constructor with a located stable diagnostic [0.81ms]
+(pass) restrict rejects get-key with a located stable diagnostic [0.79ms]
+(pass) restrictions traverse imported author modules before any author evaluation [1.19ms]
+(pass) subgraphs expand in each author module's directory [78.34ms]
+(pass) evaluation sandbox denies network even if AST validation is bypassed [88.34ms]
+(pass) evaluation sandbox denies write even if AST validation is bypassed [68.44ms]
+(pass) evaluation has a hard ten second timeout [10010.49ms]
+(pass) bundle hashes are stable, code changes alter revisions and whitespace does not [371.53ms]
+(pass) parser module bundles are hashed and preserve their module bindings [80.80ms]
+(pass) compile the hello graph example with its module and parser bundles [77.86ms]
+(pass) compile the review graph example with its module and parser bundles [78.01ms]
+(pass) compile the asset-sync graph example with its module and parser bundles [80.11ms]
+(pass) compile the www-sync graph example with its module and parser bundles [81.23ms]
+(pass) canonical JSON sorts nested keys and preserves array order [0.06ms]
+(pass) code bundle import.meta names each source module instead of the saved bundle [79.84ms]
+(pass) bundles execute the stdin/stdout protocol and preserve prepared parser input [153.17ms]
+(pass) code modules reject import-meta-helper with a located dynamic_code diagnostic [1.81ms]
+(pass) code modules reject require-helper with a located dynamic_code diagnostic [1.36ms]
+(pass) code modules reject transitive-helper with a located dynamic_code diagnostic [1.56ms]
+(pass) code modules reject absolute-helper with a located dynamic_code diagnostic [1.69ms]
+(pass) literal dynamic imports are bundled and alter the pinned revision [154.28ms]
+(pass) module stdout rejects a missing or malformed final JSON line [0.06ms]
+(pass) parser modules reject dynamic imports in their local dependencies [1.48ms]
+(pass) options retain module validation through ({options} as const) [0.99ms]
+(pass) options retain module validation through ({options} satisfies object) [0.99ms]
+(pass) options retain module validation through ({options})! [1.04ms]
+(pass) options retain module validation through ((({options}))) [0.91ms]
+(pass) emitted bundle rejects import(path) in a tsconfig alias dependency [75.85ms]
+(pass) emitted bundle rejects require(path) in a tsconfig alias dependency [75.78ms]
+(pass) emitted bundle rejects new Function(path)() in a tsconfig alias dependency [89.32ms]
+(pass) emitted bundle rejects eval(path) in a tsconfig alias dependency [77.00ms]
+(pass) emitted bundle rejects import.meta.require(path) in a tsconfig alias dependency [76.42ms]
+(pass) emitted bundle rejects (0, eval)(path) in a tsconfig alias dependency [76.19ms]
+(pass) emitted bundle rejects globalThis.Function(path)() in a tsconfig alias dependency [75.96ms]
+(pass) emitted bundle rejects globalThis.require?.(path) in a tsconfig alias dependency [75.72ms]
+(pass) emitted bundle rejects new globalThis.AsyncFunction(path)() in a tsconfig alias dependency [75.71ms]
+(pass) emitted bundle rejects globalThis.GeneratorFunction(path)() in a tsconfig alias dependency [76.59ms]
+(pass) emitted bundle rejects globalThis.createRequire(path) in a tsconfig alias dependency [77.00ms]
+(pass) emitted bundle rejects globalThis.importSync(path) in a tsconfig alias dependency [75.71ms]
+(pass) emitted bundle rejects globalThis.import(path) in a tsconfig alias dependency [75.36ms]
+(pass) emitted bundle rejects import.meta.resolve(path) in a tsconfig alias dependency [76.49ms]
+(pass) emitted bundle rejects Bun.plugin({setup() {}}) in a tsconfig alias dependency [76.31ms]
+(pass) emitted bundle rejects new Bun.Transpiler() in a tsconfig alias dependency [76.65ms]
+(pass) tsconfig alias helpers are bundled and their changes alter the hash and revision [150.94ms]
+(pass) node_modules dependencies with literal dynamic imports bundle their helpers [77.44ms]
+(pass) the public SDK entry compiles through the same graph builder [73.96ms]
+
+packages/loopy/_tests_/store.test.ts:
+(pass) sqlite > run, node and log inputs and every returned view isolate nested records [2.60ms]
+(pass) sqlite > due runs filter terminal, future, indefinite and owned states [1.23ms]
+(pass) sqlite > due runs sort chronologically across timestamp offsets [0.78ms]
+(pass) sqlite > run, node, log and retry timestamp writes normalize UTC and due comparisons accept offsets [1.51ms]
+(pass) sqlite > claim heartbeat suspend release and reclaim follow the state machine [1.02ms]
+(pass) sqlite > release of a running run suspends it at release time and permits reclaim [0.83ms]
+(pass) sqlite > terminal succeeded cannot be overwritten or suspended [0.74ms]
+(pass) sqlite > terminal failed cannot be overwritten or suspended [0.80ms]
+(pass) sqlite > terminal cancelled cannot be overwritten or suspended [0.89ms]
+(pass) sqlite > ownership fences stale writes and heartbeat reports lost ownership [1.08ms]
+(pass) sqlite > dueRuns includes queued and due suspensions but excludes owned and future runs [1.02ms]
+(pass) sqlite > schedules upsert by slug, isolate records, and delete idempotently [1.06ms]
+(pass) sqlite > competing schedule fires create exactly one run and advance the schedule atomically [0.96ms]
+(pass) sqlite > a failed schedule fire leaves both schedule and runs unchanged [0.80ms]
+(pass) sqlite > replacing a schedule rejects a stale fire without events or a run [0.80ms]
+(pass) sqlite > catch-up advances only nextFireAt and rejects stale, disabled and deleted schedules without events [1.30ms]
+(pass) sqlite > toggles preserve a concurrent PUT and fire while rejecting pre-toggle snapshots [1.03ms]
+(pass) sqlite > nextWakeAt returns the earliest suspended unowned wake and excludes all other states [0.87ms]
+(pass) sqlite > rate limits share a fixed window and reset at its boundary [0.61ms]
+(pass) sqlite > global cursor survives pruning and agrees with run snapshots [0.83ms]
+(pass) sqlite > wake rejects live ownership and terminal runs without publishing mutations [0.90ms]
+(pass) sqlite > atomic effects roll back node writes, finish and outbox on failure [1.47ms]
+
+packages/loopy/_tests_/service-input.test.ts:
+(pass) invalid graph input leaves no queued run [2.48ms]
+(pass) invalid graph input leaves no queued run [1.87ms]
+(pass) invalid graph input leaves no queued run [1.90ms]
+(pass) invalid graph input leaves no queued run [1.97ms]
+(pass) required and optional primitive inputs persist and resolve through the graph [2.53ms]
+(pass) required and optional primitive inputs persist and resolve through the graph [2.37ms]
+
+packages/loopy/_tests_/local-daemon.test.ts:
+(pass) daemon publishes a private discovery file and removes it on clean shutdown [201.84ms]
+(pass) ui starts the foreground daemon when discovery is absent and removes it on SIGTERM [112.11ms]
+
+packages/loopy/_tests_/wait-daemon.test.ts:
+(pass) daemon leaves an indefinite sleep when a durable approval signal wakes its run [1.58ms]
+
+packages/loopy/_tests_/schedule-overview.test.ts:
+(pass) memory schedule overview counts all workspaces and caps ordered summaries without input [1.20ms]
+(pass) sqlite schedule overview counts all workspaces and caps ordered summaries without input [13.16ms]
+(pass) schema 13 retains schedule payload, version, event and epoch while adding the overview index [15.59ms]
+(pass) schema 14 retains schedule payload, version, event and epoch while adding the overview index [13.26ms]
+(pass) schema 15 retains schedule payload, version, event and epoch while adding the overview index [11.44ms]
+
+packages/loopy/_tests_/events.test.ts:
+(pass) node and run outbox events publish one isolated transaction and parse over SSE [1.25ms]
+
+packages/loopy/_tests_/fs-parse.test.ts:
+(pass) find and ls preserve NUL-delimited paths and list basenames [0.28ms]
+(pass) stat normalizes file metadata (darwin) [0.18ms]
+(pass) df parses portable kilobytes (darwin) [0.18ms]
+(pass) stat normalizes file metadata (linux) [0.06ms]
+(pass) df parses portable kilobytes (linux) [0.06ms]
+(pass) du, realpath, which, mktemp and tree parse real captures [0.46ms]
+(pass) find rejects invalid output with the offending line [0.03ms]
+(pass) ls rejects invalid output with the offending line
+(pass) stat rejects invalid output with the offending line
+(pass) du rejects invalid output with the offending line
+(pass) df rejects invalid output with the offending line
+(pass) tree rejects invalid output with the offending line [0.01ms]
+(pass) stat preserves captured newlines and metadata separators inside filenames [0.08ms]
+(pass) stat accepts unpadded octal permissions and du preserves leading path whitespace [0.03ms]
+
+packages/loopy/_tests_/wait-race.test.ts:
+(pass) memory stale indefinite suspension preserves a signal across running-node writes [0.74ms]
+(pass) memory stale finite suspension preserves a signal across running-node writes [0.28ms]
+(pass) memory stale suspension keeps an earlier deadline instead of postponing it [0.22ms]
+(pass) memory signal between activation reload and suspension remains due and completes [0.50ms]
+(pass) sqlite stale indefinite suspension preserves a signal across running-node writes [7.79ms]
+(pass) sqlite stale finite suspension preserves a signal across running-node writes [5.94ms]
+(pass) sqlite stale suspension keeps an earlier deadline instead of postponing it [5.52ms]
+(pass) sqlite signal between activation reload and suspension remains due and completes [6.44ms]
+
+packages/loopy/_tests_/git-parse.test.ts:
+(pass) status parses changes, conflicts and tracking (darwin) [0.52ms]
+(pass) status retains literal newlines and tabs in paths (darwin) [0.17ms]
+(pass) log preserves multiline bodies and separator bytes (darwin) [0.24ms]
+(pass) diff and diffNames retain renames and binary counts (darwin) [0.25ms]
+(pass) branch and worktree records retain optional state (darwin) [0.46ms]
+(pass) worktree lock reasons and prunable records (darwin) [0.15ms]
+(pass) stash, tag, remote, revParse and lsFiles parse their captures (darwin) [0.48ms]
+(pass) status parses changes, conflicts and tracking (linux) [0.15ms]
+(pass) status retains literal newlines and tabs in paths (linux) [0.07ms]
+(pass) log preserves multiline bodies and separator bytes (linux) [0.15ms]
+(pass) diff and diffNames retain renames and binary counts (linux) [0.12ms]
+(pass) branch and worktree records retain optional state (linux) [0.18ms]
+(pass) worktree lock reasons and prunable records (linux) [0.07ms]
+(pass) stash, tag, remote, revParse and lsFiles parse their captures (linux) [0.28ms]
+(pass) status rejects malformed machine output [0.04ms]
+(pass) log rejects malformed machine output
+(pass) diff rejects malformed machine output
+(pass) diffNames rejects malformed machine output
+(pass) branch rejects malformed machine output
+(pass) worktree.list rejects malformed machine output
+(pass) stash.list rejects malformed machine output
+(pass) tag rejects malformed machine output
+(pass) remote rejects malformed machine output [0.02ms]
+(pass) ls-files rejects malformed machine output
+(pass) revParse rejects multiple values [0.02ms]
+(pass) status accepts the porcelain v2 stash header [0.10ms]
+
+packages/loopy/_tests_/service.test.ts:
+(pass) service validates input before queuing and hides registry private fields [8.22ms]
+(pass) service resumes queued, suspended and abandoned runs and rejects terminal or owned runs [10.88ms]
+(pass) service pages newest runs by createdAt with default and maximum page sizes [34.62ms]
+(pass) service schedules create, replace, toggle, delete and emit persisted events [14.03ms]
+(pass) service rejects invalid schedule semantics before writing [8.48ms]
+(pass) definition defaults apply and workspace schedule mutations stay isolated [8.76ms]
+(pass) disabled schedules stay dormant and re-enabling waits for the next slot [8.81ms]
+(pass) global schedules use the service workspace and preserve other workspaces [8.93ms]
+(pass) a PUT during bundle resolution rejects the pending schedule fire [8.31ms]
+(pass) a disable during bundle resolution rejects the pending schedule fire [8.17ms]
+(pass) service cursor follows the last event without requiring a run snapshot [7.10ms]
+(pass) run graphs stay pinned to the revision each run started on [12.32ms]
+(pass) service maps completion between requireRun and claim to not_claimable [6.98ms]
+(pass) listLoopies reads each workspace registry once per call [7.88ms]
+(pass) loopy views name their workspace so graph and start reach that project's save [14.89ms]
+
+packages/loopy/_tests_/store-durability.test.ts:
+(pass) node runs, logs, event revisions and rate windows survive reopening [9.54ms]
+(pass) outbox insertion failure rolls back nodes, logs and outcomes without publishing [5.96ms]
+(pass) event reads reject malformed run records [5.33ms]
+(pass) event reads reject malformed run records [8.40ms]
+(pass) event reads reject malformed run records [4.64ms]
+(pass) event reads reject malformed node attempts and invalid JSON [5.22ms]
+(pass) live local PID determines lease takeover [4.45ms]
+(pass) dead local PID determines lease takeover [2.18ms]
+
+packages/loopy/_tests_/cli-args.test.ts:
+(pass) named input preserves strings, equals signs, empty values, and own properties [0.22ms]
+(pass) reserved options stay separate and separator allows colliding input keys [0.06ms]
+(pass) ambiguous or incomplete inputs fail before execution [0.08ms]
+
+packages/loopy/_tests_/host.test.ts:
+(pass) host resumes the same persisted attempt from a none receipt [0.94ms]
+(pass) host resumes the same persisted attempt from a finished receipt [0.48ms]
+(pass) retry retains ownership and running status, persists its deadline and keeps logs per attempt [0.71ms]
+(pass) a shared window of two delays the third dispatch without consuming an attempt [0.87ms]
+
+packages/loopy/_tests_/cron.test.ts:
+(pass) parseCron > parses wildcards, lists, ranges and steps [0.06ms]
+(pass) parseCron > parses names and both Sunday numbers [0.18ms]
+(pass) parseCron > expands @hourly [0.04ms]
+(pass) parseCron > expands @daily [0.02ms]
+(pass) parseCron > expands @weekly [0.02ms]
+(pass) parseCron > expands @monthly
+(pass) parseCron > expands @yearly [0.01ms]
+(pass) parseCron > rejects 60 * * * * with field and token [0.04ms]
+(pass) parseCron > rejects * 24 * * * with field and token
+(pass) parseCron > rejects * * 0 * * with field and token
+(pass) parseCron > rejects * * * wat * with field and token
+(pass) parseCron > rejects * * * * 8 with field and token
+(pass) parseCron > rejects */0 * * * * with field and token
+(pass) parseCron > rejects 1-0 * * * * with field and token
+(pass) parseCron > rejects 1,,2 * * * * with field and token
+(pass) parseCron > rejects */1/2 * * * * with field and token
+(pass) parseCron > rejects 1-2-3 * * * * with field and token
+(pass) parseCron > rejects */1.5 * * * * with field and token
+(pass) parseCron > rejects * * * * mon-fry with field and token
+(pass) parseCron > rejects malformed expression  [0.01ms]
+(pass) parseCron > rejects malformed expression * * * *
+(pass) parseCron > rejects malformed expression * * * * * *
+(pass) parseCron > rejects malformed expression @unknown
+(pass) nextFire > is strictly after the input and crosses month boundaries [0.26ms]
+(pass) nextFire > uses the Kolkata half-hour offset [0.08ms]
+(pass) nextFire > finds valid minutes after a partial-hour spring gap in Pacific/Chatham [0.06ms]
+(pass) nextFire > finds valid minutes after a partial-hour spring gap in Australia/Lord_Howe [0.06ms]
+(pass) nextFire > skips the spring gap in America/New_York [0.08ms]
+(pass) nextFire > skips the spring gap in Europe/London [0.06ms]
+(pass) nextFire > skips the spring gap in Australia/Lord_Howe [0.07ms]
+(pass) nextFire > fires only the first overlapping minute in America/New_York [0.17ms]
+(pass) nextFire > fires only the first overlapping minute in Europe/London [0.16ms]
+(pass) nextFire > fires only the first minute of the Lord Howe half-hour overlap [0.19ms]
+(pass) nextFire > combines restricted days with OR and wildcard days with AND [0.30ms]
+(pass) nextFire > bounds an impossible calendar search [0.14ms]
+(pass) nextFire > rejects invalid dates and zones [0.06ms]
+
+packages/loopy/_tests_/define-command.test.ts:
+(pass) graph command descriptors retain enum, numeric, repeated and positional arguments [0.38ms]
+(pass) JavaScript flag values fail validation before author execution [0.24ms]
+(pass) platform variants merge and preserve unchanged flags in the recorded descriptor [0.18ms]
+(pass) descriptor construction rejects duplicate CLI identities in base and merged platform flags [0.06ms]
+(pass) parsed presets protect CLI identities even after descriptor mutation [0.05ms]
+(pass) prefixed options keep distinct identities while identical prefixes fail [0.10ms]
+(pass) sh.run rejects shell operators during graph construction [0.04ms]
+
+packages/loopy/_tests_/wait-host.test.ts:
+(pass) approval suspends without executing, named HTTP signal wakes once, and restart continues [13.03ms]
+(pass) opaque token HTTP route resolves and timeout rehydration preserves the original deadline [8.12ms]
+(pass) wait deadline fails on resume and sleep resumes once from its persisted deadline [12.23ms]
+(pass) a signal accepted while a parallel execution runs survives its completion [9.19ms]
+(pass) parallel dispatches run concurrently and sampling completes without an executor [7.02ms]
+(pass) cancelling a suspended approval expires its token and cancels its pending node [11.68ms]
+(pass) cancellation refuses suspended finally graphs without changing their wait [12.11ms]
+(pass) an indefinite signal advances its branch before a long sibling completes [12.72ms]
+
+packages/loopy/_tests_/net-parse.test.ts:
+(pass) curl capture separates headers, body marker text and metadata [0.41ms]
+(pass) curl rejects malformed responses with an actionable error [0.04ms]
+(pass) curl rejects malformed responses with an actionable error [0.01ms]
+(pass) curl rejects malformed responses with an actionable error
+(pass) curl skips proxy and repeated redirect statuses without consuming a body header [0.03ms]
+
+packages/loopy/_tests_/engine.test.ts:
+(pass) approve sequence prefix dispatches resolved code, records log and final join [0.50ms]
+(pass) retry backoff persists the deadline, does not dispatch early, increments the same key [0.17ms]
+(pass) invalid or oversized output fails without retries [0.08ms]
+(pass) invalid or oversized output fails without retries [0.27ms]
+(pass) resume from completed node runs skips code and reconstructs final output [0.10ms]
+(pass) resume redispatches a running execution with its persisted attempt [0.06ms]
+(pass) a missing input reference fails its consuming node before dispatch [0.10ms]
+(pass) rate denial fences stale decisions and reserves the same attempt until the deadline [0.12ms]
+(pass) stale completions emit no logs and completion and log nodes use write_log [0.09ms]
+(pass) command exit retry policy honors retryOnExit=false [0.18ms]
+(pass) command exit retry policy honors retryOnExit=true [0.05ms]
+(pass) graph retry delay caps at sixty seconds across repeated failures [0.23ms]
+
+packages/loopy/_tests_/module-imports.test.ts:
+(pass) runtime code denylist rejects require(path) [0.09ms]
+(pass) runtime code denylist rejects globalThis.require(path) [0.02ms]
+(pass) runtime code denylist rejects other["require"](path) [0.02ms]
+(pass) runtime code denylist rejects (0, globalThis.require)(path) [0.02ms]
+(pass) runtime code denylist rejects other.require?.(path) [0.01ms]
+(pass) runtime code denylist rejects new other.require(path) [0.01ms]
+(pass) runtime code denylist rejects eval(path)
+(pass) runtime code denylist rejects globalThis.eval(path)
+(pass) runtime code denylist rejects other["eval"](path) [0.01ms]
+(pass) runtime code denylist rejects (0, globalThis.eval)(path) [0.01ms]
+(pass) runtime code denylist rejects other.eval?.(path)
+(pass) runtime code denylist rejects new other.eval(path)
+(pass) runtime code denylist rejects Function(path) [0.02ms]
+(pass) runtime code denylist rejects globalThis.Function(path)
+(pass) runtime code denylist rejects other["Function"](path) [0.02ms]
+(pass) runtime code denylist rejects (0, globalThis.Function)(path) [0.01ms]
+(pass) runtime code denylist rejects other.Function?.(path) [0.01ms]
+(pass) runtime code denylist rejects new other.Function(path)
+(pass) runtime code denylist rejects AsyncFunction(path)
+(pass) runtime code denylist rejects globalThis.AsyncFunction(path)
+(pass) runtime code denylist rejects other["AsyncFunction"](path)
+(pass) runtime code denylist rejects (0, globalThis.AsyncFunction)(path)
+(pass) runtime code denylist rejects other.AsyncFunction?.(path)
+(pass) runtime code denylist rejects new other.AsyncFunction(path) [0.01ms]
+(pass) runtime code denylist rejects GeneratorFunction(path) [0.02ms]
+(pass) runtime code denylist rejects globalThis.GeneratorFunction(path)
+(pass) runtime code denylist rejects other["GeneratorFunction"](path)
+(pass) runtime code denylist rejects (0, globalThis.GeneratorFunction)(path) [0.01ms]
+(pass) runtime code denylist rejects other.GeneratorFunction?.(path)
+(pass) runtime code denylist rejects new other.GeneratorFunction(path)
+(pass) runtime code denylist rejects createRequire(path)
+(pass) runtime code denylist rejects globalThis.createRequire(path)
+(pass) runtime code denylist rejects other["createRequire"](path)
+(pass) runtime code denylist rejects (0, globalThis.createRequire)(path)
+(pass) runtime code denylist rejects other.createRequire?.(path)
+(pass) runtime code denylist rejects new other.createRequire(path)
+(pass) runtime code denylist rejects importSync(path)
+(pass) runtime code denylist rejects globalThis.importSync(path)
+(pass) runtime code denylist rejects other["importSync"](path)
+(pass) runtime code denylist rejects (0, globalThis.importSync)(path)
+(pass) runtime code denylist rejects other.importSync?.(path)
+(pass) runtime code denylist rejects new other.importSync(path)
+(pass) runtime code denylist rejects import(path)
+(pass) runtime code denylist rejects globalThis.import(path)
+(pass) runtime code denylist rejects other["import"](path)
+(pass) runtime code denylist rejects (0, globalThis.import)(path)
+(pass) runtime code denylist rejects other.import?.(path)
+(pass) runtime code denylist rejects new other.import(path) [0.01ms]
+(pass) runtime code denylist rejects import.meta.require(path) [0.02ms]
+(pass) runtime code denylist rejects import.meta.resolve(path) [0.01ms]
+(pass) runtime code denylist rejects import.meta["require"]?.("./literal.js") [0.01ms]
+(pass) runtime code denylist rejects (0, import.meta.resolve)("./literal.js") [0.01ms]
+(pass) runtime code denylist rejects (0, eval)(path)
+(pass) runtime code denylist rejects globalThis.Function(path)()
+(pass) runtime code denylist rejects eval("source")
+(pass) runtime code denylist rejects new Function("source")
+(pass) runtime code denylist rejects Bun.plugin
+(pass) runtime code denylist rejects Bun["plugin"]
+(pass) runtime code denylist rejects Bun?.Transpiler
+(pass) runtime code denylist rejects new Bun.Transpiler()
+(pass) runtime code denylist rejects import { plugin as register } from "bun"; [0.02ms]
+(pass) runtime code denylist rejects import { Transpiler } from "bun"; [0.01ms]
+(pass) runtime code denylist rejects import * as runtime from "bun"; runtime.plugin; [0.03ms]
+(pass) runtime code denylist rejects import runtime from "bun"; runtime.Transpiler; [0.02ms]
+(pass) runtime code denylist rejects const loader = import.meta.require; loader(path); [0.02ms]
+(pass) runtime code denylist rejects import * as runtime from "vm"; [0.01ms]
+(pass) runtime code denylist rejects export * from "vm"; [0.03ms]
+(pass) runtime code denylist rejects export { value } from "vm"; [0.02ms]
+(pass) runtime code denylist rejects import("vm"); [0.01ms]
+(pass) runtime code denylist rejects require("vm");
+(pass) runtime code denylist rejects import * as runtime from "node:vm"; [0.01ms]
+(pass) runtime code denylist rejects export * from "node:vm"; [0.01ms]
+(pass) runtime code denylist rejects export { value } from "node:vm"; [0.01ms]
+(pass) runtime code denylist rejects import("node:vm"); [0.02ms]
+(pass) runtime code denylist rejects require("node:vm");
+(pass) runtime code denylist rejects import * as runtime from "module";
+(pass) runtime code denylist rejects export * from "module";
+(pass) runtime code denylist rejects export { value } from "module";
+(pass) runtime code denylist rejects import("module");
+(pass) runtime code denylist rejects require("module");
+(pass) runtime code denylist rejects import * as runtime from "node:module";
+(pass) runtime code denylist rejects export * from "node:module";
+(pass) runtime code denylist rejects export { value } from "node:module";
+(pass) runtime code denylist rejects import("node:module");
+(pass) runtime code denylist rejects require("node:module");
+(pass) runtime code denylist rejects import * as runtime from "worker_threads";
+(pass) runtime code denylist rejects export * from "worker_threads";
+(pass) runtime code denylist rejects export { value } from "worker_threads";
+(pass) runtime code denylist rejects import("worker_threads");
+(pass) runtime code denylist rejects require("worker_threads"); [0.02ms]
+(pass) runtime code denylist rejects import * as runtime from "node:worker_threads";
+(pass) runtime code denylist rejects export * from "node:worker_threads";
+(pass) runtime code denylist rejects export { value } from "node:worker_threads";
+(pass) runtime code denylist rejects import("node:worker_threads");
+(pass) runtime code denylist rejects require("node:worker_threads"); [0.01ms]
+(pass) runtime code denylist allows import("./helper.js") [0.02ms]
+(pass) runtime code denylist allows require("./helper.js")
+(pass) runtime code denylist allows import { readFile } from "node:fs/promises";
+(pass) runtime code denylist allows import { spawn } from "node:child_process";
+(pass) runtime code denylist allows import { file } from "bun";
+(pass) runtime code denylist allows import type { Transpiler } from "bun";
+(pass) runtime code denylist allows other.plugin() [0.01ms]
+(pass) runtime code denylist allows other.Transpiler()
+(pass) runtime code denylist allows object[require](path)
+
+packages/loopy/_tests_/wait-store.test.ts:
+(pass) memory signal validates payload, resolves once, and commits node/hook/wake together [1.00ms]
+(pass) memory deadline wins at equality, timeout expires hook, and cancellation rejects signals [0.35ms]
+(pass) memory wait registration is idempotent and scoped, and failed batches roll back [0.38ms]
+(pass) sqlite signal validates payload, resolves once, and commits node/hook/wake together [6.44ms]
+(pass) sqlite deadline wins at equality, timeout expires hook, and cancellation rejects signals [5.60ms]
+(pass) sqlite wait registration is idempotent and scoped, and failed batches roll back [6.17ms]
+(pass) sqlite reopen retains accepted payload and wake without a second resolution [8.62ms]
+(pass) schema 13 upgrade preserves records and legacy schema rejection never resets data [14.62ms]
+
+packages/loopy/_tests_/definition.test.ts:
+(pass) graph definitions validate names, modes, scopes, schedules, secrets and input schemas for JavaScript callers [0.13ms]
+(pass) normalized graph metadata and schema do not retain caller-owned arrays or records [0.18ms]
+(pass) graph definition rejects invalid cron * * * * [0.02ms]
+(pass) graph definition rejects invalid cron 60 * * * *
+(pass) graph definition rejects invalid cron */0 * * * * [0.02ms]
+(pass) graph definition rejects invalid cron 0 0 * wat * [0.01ms]
+(pass) graph definitions validate timezones and reject unknown properties [0.44ms]
+
+packages/loopy/_tests_/input-validation.test.ts:
+(pass) nonempty array input rejects empty and malformed values before execution [0.47ms]
+(pass) schema unknown-key policy strips unrecognized inputs without mutating the caller [0.06ms]
+(pass) minimum constraints cannot target a missing or scalar field [0.08ms]
+(pass) open records retain unknown fields and defer missing optional references to execution [0.06ms]
+(pass) JSON-root input contracts preserve all JSON values without pre-queue field checks [0.05ms]
+
+packages/loopy/_tests_/input.test.ts:
+(pass) dashboard json field coercion parses values and reports invalid JSON [0.10ms]
+(pass) RecordSpec round-trips every field type through contracts and input boundaries [0.79ms]
+(pass) string[] rejects wrong elements or non-arrays at each input boundary [0.11ms]
+(pass) number[] rejects wrong elements or non-arrays at each input boundary [0.02ms]
+(pass) boolean[] rejects wrong elements or non-arrays at each input boundary [0.01ms]
+(pass) json[] rejects wrong elements or non-arrays at each input boundary [0.01ms]
+
+packages/loopy/_tests_/shell-validation.test.ts:
+(pass) added shell flags preserve their CLI spelling: 0 [0.31ms]
+(pass) added shell flags preserve their CLI spelling: 1 [0.10ms]
+(pass) added shell flags preserve their CLI spelling: 2 [0.06ms]
+(pass) added shell flags preserve their CLI spelling: 3 [0.06ms]
+(pass) added shell flags preserve their CLI spelling: 4 [0.05ms]
+(pass) added shell flags preserve their CLI spelling: 5 [0.05ms]
+(pass) added shell flags preserve their CLI spelling: 6 [0.06ms]
+(pass) added shell flags preserve their CLI spelling: 7 [0.07ms]
+(pass) added shell flags preserve their CLI spelling: 8 [0.07ms]
+(pass) jq rejects malformed named pairs before execution [0.14ms]
+(pass) parsed grepCount rejects -e before execution [0.05ms]
+(pass) parsed grepCount rejects -f before execution [0.01ms]
+(pass) raw grepCount keeps explicit patterns and pattern files [0.19ms]
+(pass) parsed realpath requires exactly one path before execution [0.11ms]
+(pass) raw realpath keeps variadic paths [0.07ms]
+
+packages/loopy/_tests_/executor-command.test.ts:
+(pass) full inherited environment stays out of sandbox launcher arguments [3.71ms]
+(pass) full commands preserve the caller environment and home while sandbox commands isolate them [381.57ms]
+(pass) graph command timeout survives serialization and terminates the actual subprocess [175.63ms]
+(pass) graph command capture limit survives serialization and bounds actual stdout [149.47ms]
+(pass) sandbox commands receive only declared secrets and redact stdout, stderr, errors and receipts [194.81ms]
+(pass) sandbox commands cannot read or replace daemon receipts [162.84ms]
+(pass) full commands receive only declared secrets and redact stdout, stderr, errors and receipts [194.38ms]
+(pass) full commands cannot read or replace daemon receipts [193.59ms]
+(pass) command exit errors omit empty stderr and retain its last 500 characters [173.13ms]
+(pass) command exit errors omit empty stderr and retain its last 500 characters [168.29ms]
+(pass) literal command arguments retain shell characters without evaluation [142.79ms]
+(pass) stderr secrets are redacted before the diagnostic tail is trimmed [202.27ms]
+(pass) declared successful exit codes are checked before parser execution, accepted=false [160.41ms]
+(pass) declared successful exit codes are checked before parser execution, accepted=true [242.45ms]
+(pass) parser execution failures propagate to the stored graph node and run [216.85ms]
+
+packages/loopy/_tests_/argv.test.ts:
+(pass) parseArgv > splits whitespace and preserves literal words without expansion [0.05ms]
+(pass) parseArgv > joins quotes, preserves empty words and single-quoted literals [0.04ms]
+(pass) parseArgv > escapes outside quotes and only quotes and backslashes inside double quotes [0.03ms]
+(pass) parseArgv > rejects unquoted | [0.02ms]
+(pass) parseArgv > rejects unquoted >
+(pass) parseArgv > rejects unquoted <
+(pass) parseArgv > rejects unquoted ;
+(pass) parseArgv > rejects unquoted &
+(pass) parseArgv > rejects unquoted $(
+(pass) parseArgv > rejects unquoted `
+(pass) parseArgv > rejects an unterminated ' quote [0.02ms]
+(pass) parseArgv > rejects an unterminated " quote
+(pass) parseArgv > rejects a trailing escape [0.01ms]
+
+packages/loopy/_tests_/dashboard-queries.test.ts:
+(pass) sqlite keyset ties, filtered counts and zero-filled fractional windows [26.86ms]
+(pass) sqlite input and attempts persist, bulk reads omit input and selected detail keeps it [11.47ms]
+(pass) memory keyset ties, filtered counts and zero-filled fractional windows [0.80ms]
+(pass) memory input and attempts persist, bulk reads omit input and selected detail keeps it [1.43ms]
+(pass) SQLite bounded scans continue through no-match pages and full log text search stays lazy [83.52ms]
+(pass) schema 14 upgrade preserves epoch, outbox, log identity, output and exact log cap [21.98ms]
+(pass) run lists and streamed run records preview large payloads with explicit byte counts [15.38ms]
+(pass) failed transactional batches roll back retained attempts and log usage with their outbox [8.10ms]
+(pass) a rejected schema migration preserves the old records, epoch and version [7.93ms]
+(pass) schema 13 log events retain node filtering after migration and agree with new log events [17.58ms]
+(pass) schema 14 log events retain node filtering after migration and agree with new log events [64.01ms]
+
+packages/loopy/_tests_/dashboard-scale.test.ts:
+(pass) dashboard queries bound payloads independently across 10k map rows and 10k workflow runs [2763.16ms]
+
+packages/loopy/_tests_/cloud-scheduler.test.ts:
+(pass) fresh foreign interrupted due sleep recovers without repeating effects [4.42ms]
+(pass) fresh foreign interrupted future sleep recovers without repeating effects [2.18ms]
+(pass) fresh foreign interrupted indefinite wait recovers without repeating effects [1.79ms]
+(pass) expired foreign interrupted due sleep recovers without repeating effects [1.75ms]
+(pass) expired foreign interrupted future sleep recovers without repeating effects [2.15ms]
+(pass) expired foreign interrupted indefinite wait recovers without repeating effects [1.71ms]
+(pass) same token interrupted due sleep recovers without repeating effects [2.04ms]
+(pass) same token interrupted future sleep recovers without repeating effects [2.12ms]
+(pass) same token interrupted indefinite wait recovers without repeating effects [1.78ms]
+(pass) a resolved hook supersedes the previous timeout alarm [2.04ms]
+(pass) a second release failure persists a retry without reactivating an indefinite wait [1.47ms]
+(pass) suspended recovery releases an expired owner while every execution slot is occupied [2.54ms]
+(pass) invalid revised input and transient registry failure do not stop healthy schedules or runs [5.35ms]
+(pass) schedule fire failure before commit is bounded and does not duplicate a fire [3.29ms]
+(pass) schedule fire failure after commit is bounded and does not duplicate a fire [2.72ms]
+(pass) a full failing schedule batch yields to later schedules on the next alarm [5.99ms]
+
+packages/loopy/_tests_/source-artifact.test.ts:
+(pass) source stays pinned after author edits, same-revision saves and later revisions [222.81ms]
+(pass) old registry metadata never gains today's source for an existing revision [2.77ms]
+(pass) source lookup rejects traversal and never opens source metadata paths [3.24ms]
+(pass) save validates source identity, exact ranges and byte caps [2.25ms]
+(pass) source containing a stored secret is withheld before persistence and on later retrieval [6.34ms]
+(pass) repeated subgraph labels have authentic source without invented node ranges [75.73ms]
+
+packages/loopy/_tests_/cloud-sandbox.test.ts:
+(pass) authenticated admission fsyncs once, joins duplicate starts, rejects changed content and replays completion [8.86ms]
+(pass) invalid bundles and malformed identities fail before backend effects [2.54ms]
+(pass) workspace and attempt identities isolate receipts while run volumes persist between nodes [4.44ms]
+(pass) restart reconciles the saved container and never starts another attempt [4.46ms]
+(pass) Docker create enforces isolation and recovery reads the original bounded result [4.63ms]
+(pass) Docker timeout kills only the owned worker and missing or killed workers stay uncertain [3.80ms]
+(pass) lost Docker start acknowledgement and wait transport failure retain started receipts through restart [521.21ms]
+(pass) artifact export requires its finished receipt and fences same-run admissions [8.60ms]
+(pass) state roots reject symlinks and public binding; live root ownership is exclusive [4.25ms]
+(pass) process capture bounds actual bytes and terminates timed-out workers [65.19ms]
+(pass) loopback server serves health and an authenticated asynchronous attempt [5.50ms]
+(pass) concurrent restarts reclaim a dead process lock under one startup owner [99.11ms]
+(skip) real Docker preserves files, bounds execution, reconciles results and never repeats killed workers
+
+packages/loopy/_tests_/dashboard-http.test.ts:
+(pass) the cache retains the server's streamed output preview size [33.92ms]
+(pass) HTTP dashboard reads pin source and page diagnostic payloads outside the slim snapshot [126.37ms]
+
+packages/loopy/_tests_/memory-store.test.ts:
+(pass) memory > run, node and log inputs and every returned view isolate nested records [0.45ms]
+(pass) memory > due runs filter terminal, future, indefinite and owned states [0.18ms]
+(pass) memory > due runs sort chronologically across timestamp offsets [0.04ms]
+(pass) memory > run, node, log and retry timestamp writes normalize UTC and due comparisons accept offsets [0.23ms]
+(pass) memory > claim heartbeat suspend release and reclaim follow the state machine [0.18ms]
+(pass) memory > release of a running run suspends it at release time and permits reclaim [0.07ms]
+(pass) memory > terminal succeeded cannot be overwritten or suspended [0.07ms]
+(pass) memory > terminal failed cannot be overwritten or suspended [0.06ms]
+(pass) memory > terminal cancelled cannot be overwritten or suspended [0.07ms]
+(pass) memory > ownership fences stale writes and heartbeat reports lost ownership [0.11ms]
+(pass) memory > dueRuns includes queued and due suspensions but excludes owned and future runs [0.09ms]
+(pass) memory > schedules upsert by slug, isolate records, and delete idempotently [0.11ms]
+(pass) memory > competing schedule fires create exactly one run and advance the schedule atomically [0.13ms]
+(pass) memory > a failed schedule fire leaves both schedule and runs unchanged [0.06ms]
+(pass) memory > replacing a schedule rejects a stale fire without events or a run [0.06ms]
+(pass) memory > catch-up advances only nextFireAt and rejects stale, disabled and deleted schedules without events [0.20ms]
+(pass) memory > toggles preserve a concurrent PUT and fire while rejecting pre-toggle snapshots [0.10ms]
+(pass) memory > nextWakeAt returns the earliest suspended unowned wake and excludes all other states [0.12ms]
+(pass) memory > rate limits share a fixed window and reset at its boundary [0.02ms]
+(pass) memory > global cursor survives pruning and agrees with run snapshots [0.07ms]
+(pass) memory > wake rejects live ownership and terminal runs without publishing mutations [0.11ms]
+(pass) memory > atomic effects roll back node writes, finish and outbox on failure [0.48ms]
+
+packages/loopy/_tests_/heartbeat.test.ts:
+(pass) activation renews ownership at a quarter of its lease while a step is running [501.44ms]
+
+packages/loopy/_tests_/graph.test.ts:
+(pass) graph schemas exactly match the portable model [0.02ms]
+(pass) approve-demo is the canonical JSON graph for the builder [0.56ms]
+(pass) graph validation reports duplicate_node [0.24ms]
+(pass) graph validation reports missing_endpoint [0.15ms]
+(pass) graph validation reports missing_entry [0.10ms]
+(pass) graph validation reports unresolved_ref [0.13ms]
+(pass) graph validation reports out_of_scope_ref [0.11ms]
+(pass) graph validation reports predicate_type [0.16ms]
+(pass) graph validation reports invalid_size [0.15ms]
+(pass) graph validation reports missing_arm [0.12ms]
+(pass) graph validation reports invalid_scope [0.10ms]
+(pass) graph validation reports cycle [0.10ms]
+(pass) execution identity escapes delimiters and distinguishes runs and iteration paths [0.03ms]
+(pass) strict value boundaries reject malformed refs instead of accepting them as literals [0.26ms]
+(pass) declared ref fields resolve and predicate size has a numeric comparison type [0.21ms]
+(pass) map bindings stay inside the body and only scope joins can iterate [0.14ms]
+(pass) parallel siblings cannot consume one another's results [0.10ms]
+(pass) rescue error binding is visible only to the handler [0.10ms]
+(pass) graph wire views reject paths and hashes, including command parser hashes [0.36ms]
+(pass) every node run status round-trips without optional state fields [0.18ms]
+(pass) scope bindings cannot shadow node outputs, input, or one another [0.10ms]
+(pass) lt rejects JSON and non-orderable declared types [0.44ms]
+(pass) lte rejects JSON and non-orderable declared types [0.39ms]
+(pass) gt rejects JSON and non-orderable declared types [0.37ms]
+(pass) gte rejects JSON and non-orderable declared types [0.40ms]
+(pass) size requires declared string or array and in requires matching array elements [0.43ms]
+(pass) eq accepts declared JSON [0.07ms]
+(pass) ne accepts declared JSON [0.07ms]
+(pass) exists accepts declared JSON [0.06ms]
+(pass) isNull accepts declared JSON [0.05ms]
+(pass) a map body cannot consume its enclosing map output [0.05ms]
+(pass) format accepts scalar literals and declared scalar refs only [0.23ms]
+(pass) graph warning views project node labels without source module paths [0.45ms]
+(pass) predicate wire schema parses the complete vocabulary and rejects unknown ops [0.28ms]
+(pass) disconnected nodes are diagnosed [0.12ms]
+(pass) a second root with an edge into the graph is diagnosed [0.09ms]
+(pass) outside edges cannot enter body node 5:apply [0.08ms]
+(pass) outside edges cannot enter body node 6:join [0.06ms]
+(pass) sibling arm edges cannot grant reference visibility [0.09ms]
+(pass) array refs use the declared map result type for size and membership [0.20ms]
+(pass) numeric branch results allow ordering and reject string equality [0.17ms]
+(pass) a branch with mismatched arm results rejects ordering [0.08ms]
+(pass) switch results resolve through each arm's terminal join [0.22ms]
+(pass) format accepts a scalar join result [0.05ms]
+(pass) format accepts map items from a declared string array [0.09ms]
+(pass) finally preserves its body result type [0.12ms]
+(pass) command refs use their declared output fields [0.24ms]
+(pass) yes control edges reject the wrong owner [0.11ms]
+(pass) yes control edges participate in cycle detection [0.09ms]
+(pass) no control edges reject the wrong owner [0.09ms]
+(pass) no control edges participate in cycle detection [0.08ms]
+(pass) case control edges reject the wrong owner [0.10ms]
+(pass) case control edges participate in cycle detection [0.08ms]
+(pass) each control edges reject the wrong owner [0.10ms]
+(pass) each control edges participate in cycle detection [0.08ms]
+(pass) cleanup control edges reject the wrong owner [0.08ms]
+(pass) cleanup control edges participate in cycle detection [0.23ms]
+(pass) rescue control edges reject the wrong owner [0.13ms]
+(pass) rescue control edges participate in cycle detection [0.08ms]
+(pass) control edges must match their owner's declared target [0.15ms]
+(pass) cyclic join field projections produce diagnostics without recursing forever [0.06ms]
+(pass) rescue results use the common body and handler type [0.16ms]
+(pass) literal array branch results preserve element types for [1] [0.17ms]
+(pass) literal array branch results preserve element types for ["a"] [0.11ms]
+(pass) literal array branch results preserve element types for [true] [0.08ms]
+(pass) literal array branch results preserve element types for [1,"a"] [0.09ms]
+(pass) literal array branch results preserve element types for [] [0.09ms]
+(pass) format resolves literal join paths through {"nested":{"count":1}} [0.09ms]
+(pass) format resolves literal join paths through {"nested":{"ref":"input","path":[]}} [0.04ms]
+(pass) format resolves literal join paths through {"nested":{"count":{"ref":"input","path":["count"]}}} [0.03ms]
+(pass) parallel result paths resolve each labelled arm through its join [0.23ms]
+(pass) rescue error binding resolves the shared record fields [0.18ms]
+(pass) value output string resolves without permitting scalar or array paths [0.30ms]
+(pass) value output number resolves without permitting scalar or array paths [0.20ms]
+(pass) value output boolean resolves without permitting scalar or array paths [0.19ms]
+(pass) value output json resolves without permitting scalar or array paths [0.18ms]
+(pass) value output string[] resolves without permitting scalar or array paths [0.18ms]
+(pass) value output number[] resolves without permitting scalar or array paths [0.18ms]
+(pass) value output boolean[] resolves without permitting scalar or array paths [0.18ms]
+(pass) value output json[] resolves without permitting scalar or array paths [0.17ms]
+(pass) control unions reject paths that enter a scalar or array arm [0.14ms]
+(pass) branch ignores a non-returning arm when resolving its result [0.11ms]
+(pass) rescue ignores a non-returning arm when resolving its result [0.07ms]
+(pass) a branch with no returning arms has an unresolved result reference [0.11ms]
+(pass) record paths require an own declaration for toString [0.14ms]
+(pass) parallel paths reject undeclared label toString [0.08ms]
+(pass) switch edges reject inherited target toString [0.11ms]
+(pass) parallel edges reject inherited target toString [0.06ms]
+(pass) record paths require an own declaration for constructor [0.10ms]
+(pass) parallel paths reject undeclared label constructor [0.04ms]
+(pass) switch edges reject inherited target constructor [0.06ms]
+(pass) parallel edges reject inherited target constructor [0.05ms]
+(pass) record paths require an own declaration for __proto__ [0.09ms]
+(pass) parallel paths reject undeclared label __proto__ [0.04ms]
+(pass) switch edges reject inherited target __proto__ [0.06ms]
+(pass) parallel edges reject inherited target __proto__ [0.06ms]
+(pass) core rejects reserved labels and fields named __proto__ [0.54ms]
+(pass) core rejects reserved labels and fields named constructor [0.34ms]
+(pass) core rejects reserved labels and fields named prototype [0.33ms]
+(pass) none joins resolve to never without a plumbing reference [0.20ms]
+(pass) wire parsing rejects reserved key __proto__ before it can be dropped [0.45ms]
+(pass) wire parsing rejects reserved key constructor before it can be dropped [0.18ms]
+(pass) wire parsing rejects reserved key prototype before it can be dropped [0.12ms]
+(pass) wire rejects reserved node label __proto__ [0.03ms]
+(pass) wire rejects reserved case-edge label __proto__
+(pass) wire rejects reserved parallel arm __proto__
+(pass) wire rejects reserved switch arm __proto__
+(pass) wire rejects reserved input field __proto__ [0.06ms]
+(pass) wire rejects reserved output field __proto__
+(pass) wire rejects reserved wait field __proto__ [0.01ms]
+(pass) wire rejects reserved node label __proto__?
+(pass) wire rejects reserved case-edge label __proto__?
+(pass) wire rejects reserved parallel arm __proto__?
+(pass) wire rejects reserved switch arm __proto__?
+(pass) wire rejects reserved input field __proto__? [0.06ms]
+(pass) wire rejects reserved output field __proto__?
+(pass) wire rejects reserved wait field __proto__?
+(pass) wire rejects reserved node label constructor
+(pass) wire rejects reserved case-edge label constructor
+(pass) wire rejects reserved parallel arm constructor
+(pass) wire rejects reserved switch arm constructor
+(pass) wire rejects reserved input field constructor [0.06ms]
+(pass) wire rejects reserved output field constructor
+(pass) wire rejects reserved wait field constructor
+(pass) wire rejects reserved node label constructor?
+(pass) wire rejects reserved case-edge label constructor?
+(pass) wire rejects reserved parallel arm constructor?
+(pass) wire rejects reserved switch arm constructor? [0.02ms]
+(pass) wire rejects reserved input field constructor? [0.06ms]
+(pass) wire rejects reserved output field constructor?
+(pass) wire rejects reserved wait field constructor?
+(pass) wire rejects reserved node label prototype
+(pass) wire rejects reserved case-edge label prototype
+(pass) wire rejects reserved parallel arm prototype
+(pass) wire rejects reserved switch arm prototype
+(pass) wire rejects reserved input field prototype [0.06ms]
+(pass) wire rejects reserved output field prototype
+(pass) wire rejects reserved wait field prototype
+(pass) wire rejects reserved node label prototype?
+(pass) wire rejects reserved case-edge label prototype?
+(pass) wire rejects reserved parallel arm prototype?
+(pass) wire rejects reserved switch arm prototype?
+(pass) wire rejects reserved input field prototype? [0.06ms]
+(pass) wire rejects reserved output field prototype?
+(pass) wire rejects reserved wait field prototype?
+(pass) parser input references use the same graph visibility checks as command arguments [0.22ms]
+
+packages/loopy/_tests_/event-retention.test.ts:
+(pass) memory subscribers survive throwing listeners and unsubscribe after committed batches [0.28ms]
+(pass) memory retention keeps the exact 24-hour boundary and monotonic sequences [0.15ms]
+(pass) memory retention bounds recent rows to the newest 100000 [806.26ms]
+(pass) sqlite subscribers survive throwing listeners and unsubscribe after committed batches [1.27ms]
+(pass) sqlite retention keeps the exact 24-hour boundary and monotonic sequences [0.81ms]
+(pass) sqlite retention bounds recent rows to the newest 100000 [2700.70ms]
+(pass) memory and SQLite emit equivalent graph node, log and run event ordering [2.42ms]
+
+packages/loopy/_tests_/engine-input.test.ts:
+(pass) code records resolved inputs before dispatch and keeps its own snapshot [0.49ms]
+(pass) map iterations capture their own resolved item and index [0.80ms]
+(pass) each retry captures the actual resolved input and retains failure metadata [0.21ms]
+(pass) input cap counts UTF-8 JSON bytes and stores no partial value above 16 KiB [0.15ms]
+(pass) redispatch and rate-limit admission preserve metadata and historical omission [0.12ms]
+(pass) cancel and pre-dispatch validation failures retain the previous attempt input [0.14ms]
+(pass) capture excludes command environment and runtime-declared secrets [0.18ms]
+(pass) code capture never reads process environment [0.06ms]
+
+packages/loopy/_tests_/secrets.test.ts:
+(pass) private CRUD preserves other secrets and lists names only [5.43ms]
+(pass) repairs permissive permissions before reading [1.55ms]
+(pass) refuses symlink directories, symlink files, and hard links [2.02ms]
+(pass) a competing writer cannot overwrite the store [1.85ms]
+(pass) malformed stores and invalid values never echo secret contents [1.70ms]
+(pass) CLI stdin entry and name-only listing do not disclose values [202.73ms]
+(pass) redaction handles overlapping values, regex punctuation and truncated secrets [0.21ms]
+
+packages/loopy/_tests_/graph-sdk.test.ts:
+(pass) approve-demo reproduces the canonical graph exactly [0.82ms]
+(pass) code records a node and connects its final join [0.17ms]
+(pass) command records a node and connects its final join [0.11ms]
+(pass) wait records a node and connects its final join [0.06ms]
+(pass) sleep records a node and connects its final join [0.05ms]
+(pass) format records a node and connects its final join [0.05ms]
+(pass) log records a node and connects its final join [0.07ms]
+(pass) now records a node and connects its final join [0.04ms]
+(pass) uuid records a node and connects its final join [0.03ms]
+(pass) random records a node and connects its final join [0.13ms]
+(pass) fail is terminal and never receives a scope join [0.04ms]
+(pass) branch carries each successful arm result in its own join [0.14ms]
+(pass) map binds item and index, collects errors, and joins back to its owner [0.22ms]
+(pass) parallel expands two independent branches [0.22ms]
+(pass) finally records body and cleanup paths with the body result [0.17ms]
+(pass) rescue binds its error only in the handler [0.18ms]
+(pass) switch records literal cases and default [0.17ms]
+(pass) subgraphs expand inline with nested prefixes and shared allocation [0.12ms]
+(pass) all shell namespaces use descriptors and record parsers without executing them [0.74ms]
+(pass) command argv, flags and options preserve symbolic values [0.15ms]
+(pass) refs cannot escape a branch or cross parallel siblings [0.18ms]
+(pass) refs cannot cross builders, including input refs [0.04ms]
+(pass) an enclosing earlier ref is visible within nested scopes [0.29ms]
+(pass) labels are unique per scope and builders restore activation after errors [0.23ms]
+(pass) declared predicate types reject mismatched operands at the call site [0.07ms]
+(pass) predicates serialize the closed vocabulary and size only in comparisons [0.34ms]
+(pass) schemas determine output refs, unknown keys fail, and branch results form a union [0.16ms]
+(pass) hello example compiles to a validated graph without executing modules [0.06ms]
+(pass) review example compiles to a validated graph without executing modules [0.27ms]
+(pass) asset-sync example compiles to a validated graph without executing modules [0.12ms]
+(pass) www-sync example compiles to a validated graph without executing modules [0.12ms]
+(pass) deferred predicates retain builder and lexical scope provenance [0.11ms]
+(pass) map and rescue bindings cannot escape their callbacks [0.09ms]
+(pass) subgraph invocations reuse labels without sharing their label namespace [0.09ms]
+(pass) dynamic flags preserve all descriptor rendering rules for the executor [0.23ms]
+(pass) size rejects declared non-string scalars and unknown fields are errors [0.03ms]
+(pass) raw shell identities and fs.ls's separate raw descriptor survive [0.15ms]
+(pass) stored descriptor data renders false booleans, attached values and ordered flags after resolution [0.16ms]
+(pass) collect maps infer success and failure outcomes while fail maps preserve values [0.17ms]
+(pass) known command fields resolve through main's validator without synthetic value nodes [0.66ms]
+(pass) reserved value keys and opaque JSON comparisons are rejected [0.05ms]
+(pass) branch joins its result before the next executable node [0.20ms]
+(pass) switch joins its result before the next executable node [0.23ms]
+(pass) parallel joins its result before the next executable node [0.15ms]
+(pass) map joins its result before the next executable node [0.23ms]
+(pass) rescue joins its result before the next executable node [0.14ms]
+(pass) finally joins its result before the next executable node [0.15ms]
+(pass) parallel projections and rescue error fields retain their core types [0.93ms]
+(pass) branch with no successful arm tails keeps its join without plumbing diagnostics [0.16ms]
+(pass) switch with no successful arm tails keeps its join without plumbing diagnostics [0.11ms]
+(pass) parallel with no successful arm tails keeps its join without plumbing diagnostics [0.06ms]
+(pass) failing parallel with no successful arm tails keeps its join without plumbing diagnostics [0.10ms]
+(pass) rescue with no successful arm tails keeps its join without plumbing diagnostics [0.07ms]
+(pass) finally with no successful arm tails keeps its join without plumbing diagnostics [0.07ms]
+(pass) a failing rescue body leaves a numeric handler result [0.17ms]
+(pass) a branch arm ending in fail after another node does not widen its result [0.20ms]
+(pass) rescue resolves a non-returning finally body to its numeric handler [0.21ms]
+(pass) author references to an all-failing branch remain unresolved [0.08ms]
+(pass) a rescue accepts a map body ending in fail [0.23ms]
+(pass) parallel rejects reserved name __proto__ [0.04ms]
+(pass) switch rejects reserved name __proto__ [0.05ms]
+(pass) code rejects reserved name __proto__ [0.02ms]
+(pass) command rejects reserved name __proto__ [0.01ms]
+(pass) wait rejects reserved name __proto__ [0.02ms]
+(pass) subgraph rejects reserved name __proto__
+(pass) input fields rejects reserved name __proto__
+(pass) code inputs rejects reserved name __proto__ [0.01ms]
+(pass) output fields rejects reserved name __proto__ [0.01ms]
+(pass) wait fields rejects reserved name __proto__ [0.01ms]
+(pass) record values rejects reserved name __proto__ [0.03ms]
+(pass) map records rejects reserved name __proto__ [0.03ms]
+(pass) parallel rejects reserved name constructor
+(pass) switch rejects reserved name constructor
+(pass) code rejects reserved name constructor
+(pass) command rejects reserved name constructor
+(pass) wait rejects reserved name constructor
+(pass) subgraph rejects reserved name constructor
+(pass) input fields rejects reserved name constructor
+(pass) code inputs rejects reserved name constructor
+(pass) output fields rejects reserved name constructor
+(pass) wait fields rejects reserved name constructor
+(pass) record values rejects reserved name constructor
+(pass) map records rejects reserved name constructor
+(pass) parallel rejects reserved name prototype
+(pass) switch rejects reserved name prototype
+(pass) code rejects reserved name prototype [0.01ms]
+(pass) command rejects reserved name prototype
+(pass) wait rejects reserved name prototype
+(pass) subgraph rejects reserved name prototype
+(pass) input fields rejects reserved name prototype
+(pass) code inputs rejects reserved name prototype
+(pass) output fields rejects reserved name prototype
+(pass) wait fields rejects reserved name prototype
+(pass) record values rejects reserved name prototype
+(pass) map records rejects reserved name prototype
+(pass) arm dictionaries contain only own callbacks [0.11ms]
+(pass) an author reference to a parallel with one failing arm is unresolved [0.08ms]
+(pass) rescue resolves a parallel with one failing arm to its numeric handler [0.16ms]
+
+packages/loopy/_tests_/daemon-concurrency.test.ts:
+(pass) six graph runs respect concurrency two across overlapping ticks [2.50ms]
+(pass) shutdown drains the active graph execution and leaves queued work untouched [0.57ms]
+(pass) a held activation does not stop the running loop from processing new work and overdue schedules [1.65ms]
+
+packages/loopy/_tests_/registry.test.ts:
+(pass) registry lookup uses the nearest project root and falls back to global entries [4.82ms]
+(pass) changing scope removes only the other entry owned by the same source [4.66ms]
+(pass) stale registry entries are ignored and replaced without preserving the old format [3.08ms]
+
+packages/loopy/_tests_/cloud-durable-host.test.ts:
+(pass) persists running before start, returns promptly and renews the same session lease [1.02ms]
+(pass) reconstruction waits for the stale lease then reconciles the same external attempt [0.55ms]
+(pass) lost start responses preserve running state and reconcile without repeating the effect [0.40ms]
+(pass) a disappeared started receipt fails uncertain without a retry [0.28ms]
+(pass) controlled retries retain ownership and fence old receipts and duplicate logs [0.52ms]
+(pass) an in-flight old completion cannot overwrite a newer persisted attempt [0.44ms]
+(pass) hook waits release ownership and resume from the same persisted store [0.39ms]
+(pass) sleep returns its deadline and releases ownership until the next alarm [0.25ms]
+(pass) a waiting sibling does not surrender a retry's lease or concurrency slot [0.57ms]
+(pass) small budgets preserve all dispatches and entropy samples across turns [1.60ms]
+(pass) failed admission consumes quota without creating a new attempt or releasing ownership [0.80ms]
+(pass) rate limited dispatch retains the attempt and bounds the next alarm by the lease [0.41ms]
+(pass) wide started graphs poll fairly without an immediate-alarm loop [1.09ms]
+(pass) interrupted suspension releases ownership when the same session resumes [0.40ms]
+(pass) a persistence failure prevents dispatch and retains ownership for reconciliation [0.14ms]
+
+packages/loopy/_tests_/daemon-install.test.ts:
+(pass) macOS plist retains absolute argv, environment, working directory and log paths [0.34ms]
+(pass) Linux unit escapes command expansion and supplies environment and persistent logs [0.11ms]
+(pass) darwin reinstall overwrites the same definition and restarts [0.05ms]
+(pass) darwin uninstall removes the definition after stopping [0.12ms]
+(pass) linux reinstall overwrites the same definition and restarts [0.02ms]
+(pass) linux uninstall removes the definition after stopping [0.01ms]
+(pass) older launchctl falls back to unload and load -w [0.05ms]
+(pass) launchctl status parses running [0.11ms]
+(pass) launchctl status parses stopped
+(pass) systemctl status parses active / running [0.07ms]
+(pass) systemctl status parses inactive / stopped
+(pass) systemctl status parses failed / stopped
+(pass) systemctl status parses inactive / not-installed
+(pass) supervisor failures are errors rather than an absent service [0.04ms]
+(pass) unsupported platforms reject every service action without side effects [0.06ms]
+(pass) install rejects relative paths and line injection before writing [0.03ms]
+(pass) install concurrency is parsed as a daemon option [0.06ms]
+(pass) failed install and uninstall report errors without deleting the definition [0.07ms]
+(pass) older launchctl uninstall uses unload when bootout is unavailable [0.04ms]
+(pass) unloaded macOS service with a plist is stopped [0.02ms]
+(pass) unloaded macOS service without a plist is not installed [0.02ms]
+(pass) zero-exit load rejects when the service remains unloaded [0.04ms]
+(pass) zero-exit unload keeps the plist when the service remains loaded [0.03ms]
+
+packages/loopy/_tests_/contract.test.ts:
+(pass) schema outputs exactly match core records and the wire owner projection [0.01ms]
+(pass) views strip fencing tokens and derive staleness at the lease boundary [0.17ms]
+(pass) waitingOn uses only the latest waiting hook step and an unresolved unexpired hook [0.08ms]
+(pass) loopy views count matching runs and choose the newest without leaking registry fields [0.14ms]
+(pass) route patterns are unique and every parameter has a schema [0.35ms]
+(pass) serialized loopy and snapshot views exclude private registry and owner keys [0.12ms]
+(pass) strict edges reject misspelled request keys and injected view tokens [0.11ms]
+(pass) run cursors preserve timestamp ties and reject timestamp-only paging [0.10ms]
+(pass) schedule wire fields normalize core nullability and preserve every field [0.04ms]
+(pass) loopy declared schedule is visible until a persisted schedule overrides it [0.02ms]
+(pass) cursor route rejects invalid cursors and extra response fields [0.05ms]
+(pass) schedule validation errors cross the contract with default messages [0.04ms]
+(pass) runs queries default to 50 and cap pages at 200 [0.03ms]
+
+packages/loopy/_tests_/daemon.test.ts:
+(pass) a due schedule fires once per key and the next minute fires a new run [1.13ms]
+(pass) disabled schedules do not fire [0.08ms]
+(pass) startup skips stale schedules forward without firing and preserves the fire key [0.43ms]
+(pass) startup permits a schedule exactly one minute late [0.29ms]
+(pass) a queued run activates and completes [0.17ms]
+(pass) a throwing loader reports its run and other runs still activate [0.38ms]
+(pass) a throwing activation releases ownership and does not block other runs [0.48ms]
+(pass) the loop sleeps 1000ms for run 1000ms and schedule 2000ms [0.20ms]
+(pass) the loop sleeps 1000ms for run 2000ms and schedule 1000ms [0.06ms]
+(pass) the loop sleeps 5000ms for run 10000ms and schedule 20000ms [0.05ms]
+(pass) wake interrupts an idle wait and activates new queued work [1.32ms]
+(pass) a failed wake lookup reports once and retries after an abortable capped wait [2.44ms]
+(pass) failed activations back off from one second to the five second cap [4.79ms]
+(pass) claim contention does not report an activation error [0.29ms]
+(pass) the loop prunes old events at startup and each hour [3.70ms]
+(pass) memory startup catch-up preserves a concurrent PUT of a later overdue schedule [0.82ms]
+(pass) memory startup catch-up preserves a concurrent disable of a later overdue schedule [0.37ms]
+(pass) sqlite startup catch-up preserves a concurrent PUT of a later overdue schedule [10.54ms]
+(pass) sqlite startup catch-up preserves a concurrent disable of a later overdue schedule [7.67ms]
+
+packages/loopy/_tests_/examples-helpers.test.ts:
+(pass) strips the maintainer-only note from the canonical Workflow Agent prompt [0.09ms]
+(pass) reuses the single open generated sync PR for its base across source SHA changes [0.09ms]
+(pass) updates registered skill copies once and preserves export metadata and JSON layout [2.44ms]
+(pass) bumps only the release feature affected by a later Workflow Agent change [1.14ms]
+(pass) fails before syncing a skill whose embedded and standalone export versions disagree [0.14ms]
+(pass) adds a missing skill registration to the manifest without rewriting other registration data [0.59ms]
+(pass) rejects malformed asset-specific frontmatter instead of replacing its name [0.09ms]
+(pass) generated metadata rejects unknown commits and truncated PR lists [0.10ms]
+(pass) JSON patch rejects values that cannot survive JSON serialization [0.03ms]
+(pass) asset request rejects malformed identities, paths and options [0.18ms]
+
+packages/loopy/_tests_/engine-control.test.ts:
+(pass) branch and switch run only selected arms and resolve joined nested values [0.77ms]
+(pass) nested maps persist ordered scopes and reconstruct item/index and ancestor refs [1.94ms]
+(pass) map bounds concurrency, fences scoped retries and collects failures in input order [0.50ms]
+(pass) parallel joins out of order completions without dispatching running siblings twice [0.22ms]
+(pass) finally persists cleanup once and rescue retains failed child diagnostics [0.34ms]
+(pass) sleep and wait persist deadlines, scoped identity, and resume without duplicate registration [0.27ms]
+(pass) entropy is supplied by host and persisted values survive rehydration [0.30ms]
+(pass) command argv expands string arrays while preserving spaces within each argument [0.08ms]
+
+packages/loopy/_tests_/architecture.test.ts:
+(pass) core, engine and contract exports bundle without host dependencies [7.20ms]
+(pass) layers import downward, and only through the target layer's index [108.70ms]
+(pass) the dashboard reaches the package only through the contract entry [44.67ms]
+
+packages/loopy/_tests_/help.test.ts:
+(pass) CLI help generation > extracts positional and flag types with a pinned help hash [0.74ms]
+(pass) CLI help generation > generated descriptors produce graph command dispatches [0.30ms]
+(pass) CLI help generation > emitted source typechecks against the SDK with typed flags and arity [713.30ms]
+(pass) CLI help generation > reports option lines it cannot parse [0.16ms]
+(pass) CLI help generation > reads a single line Usage synopsis when there is no Arguments section [0.07ms]
+(pass) CLI help generation > reads bracketed, lowercase, and variadic positional syntax [0.03ms]
+(pass) CLI help generation > models flags with optional values and rejects reserved export names [0.06ms]
+(pass) CLI help generation > reads inline choices [0.03ms]
+(pass) captured gh-pr-create help preserves operands and flag metadata [0.92ms]
+(pass) captured git-log help preserves operands and flag metadata [0.86ms]
+(pass) captured bun-build help preserves operands and flag metadata [0.64ms]
+(pass) captured jq help preserves operands and flag metadata [0.52ms]
+(pass) man-page overstrikes retain the advertised positional separator [0.09ms]
+(pass) only path-only usage receives an automatic positional separator [0.11ms]
+(pass) comma aliases retain value styles and repeatable placeholder metadata [0.09ms]
+(pass) captured gh flags accept repeated labels, assignees and reviewers [0.52ms]
+
+packages/loopy/_tests_/cloud-sql-driver.test.ts:
+(pass) portable SQL with lease-only ownership > run, node and log inputs and every returned view isolate nested records [2.35ms]
+(pass) portable SQL with lease-only ownership > due runs filter terminal, future, indefinite and owned states [1.41ms]
+(pass) portable SQL with lease-only ownership > due runs sort chronologically across timestamp offsets [13.87ms]
+(pass) portable SQL with lease-only ownership > run, node, log and retry timestamp writes normalize UTC and due comparisons accept offsets [1.80ms]
+(pass) portable SQL with lease-only ownership > claim heartbeat suspend release and reclaim follow the state machine [1.03ms]
+(pass) portable SQL with lease-only ownership > release of a running run suspends it at release time and permits reclaim [0.83ms]
+(pass) portable SQL with lease-only ownership > terminal succeeded cannot be overwritten or suspended [0.76ms]
+(pass) portable SQL with lease-only ownership > terminal failed cannot be overwritten or suspended [0.75ms]
+(pass) portable SQL with lease-only ownership > terminal cancelled cannot be overwritten or suspended [0.66ms]
+(pass) portable SQL with lease-only ownership > ownership fences stale writes and heartbeat reports lost ownership [0.77ms]
+(pass) portable SQL with lease-only ownership > dueRuns includes queued and due suspensions but excludes owned and future runs [0.84ms]
+(pass) portable SQL with lease-only ownership > schedules upsert by slug, isolate records, and delete idempotently [0.89ms]
+(pass) portable SQL with lease-only ownership > competing schedule fires create exactly one run and advance the schedule atomically [0.80ms]
+(pass) portable SQL with lease-only ownership > a failed schedule fire leaves both schedule and runs unchanged [0.75ms]
+(pass) portable SQL with lease-only ownership > replacing a schedule rejects a stale fire without events or a run [0.73ms]
+(pass) portable SQL with lease-only ownership > catch-up advances only nextFireAt and rejects stale, disabled and deleted schedules without events [1.18ms]
+(pass) portable SQL with lease-only ownership > toggles preserve a concurrent PUT and fire while rejecting pre-toggle snapshots [1.01ms]
+(pass) portable SQL with lease-only ownership > nextWakeAt returns the earliest suspended unowned wake and excludes all other states [1.07ms]
+(pass) portable SQL with lease-only ownership > rate limits share a fixed window and reset at its boundary [0.56ms]
+(pass) portable SQL with lease-only ownership > global cursor survives pruning and agrees with run snapshots [0.88ms]
+(pass) portable SQL with lease-only ownership > wake rejects live ownership and terminal runs without publishing mutations [0.78ms]
+(pass) portable SQL with lease-only ownership > atomic effects roll back node writes, finish and outbox on failure [1.17ms]
+(pass) portable entry bundles for browsers without Bun or Node dependencies [6.91ms]
+(pass) portable schema reopens with its epoch, records and cursor intact [0.98ms]
+(pass) immediate SQL transactions return results and roll back writes on SQLite failure [0.62ms]
+(pass) deferred SQL transactions return results and roll back writes on SQLite failure [0.49ms]
+(pass) failed fresh initialization rolls back DDL and preserves preexisting views [0.82ms]
+(pass) unsupported portable databases retain their records [0.11ms]
+(pass) fresh schema matches the migrated schema 13 tables and indexes [2.18ms]
+(pass) fresh schema matches the migrated schema 14 tables and indexes [1.92ms]
+(pass) portable age pruning removes a full transaction when time crosses the cutoff mid-batch [1.25ms]
+(pass) memory age pruning removes a full transaction when time crosses the cutoff mid-batch [0.24ms]
+(pass) row retention removes an entire transaction prefix and keeps replay boundaries [101.16ms]
+(pass) portable initialization ignores Cloudflare internal tables and retains nullable owner identity [1.17ms]
+(pass) memory row retention keeps the stricter cap when an older event also expires [990.04ms]
+
+packages/loopy/_tests_/cloud-artifacts.test.ts:
+(pass) real local R2 and DO SQL publish immutable revisions, pinned source and base64 bundles [43.65ms]
+(pass) missing source is pinned and workspaces cannot read another tenant's artifacts [9.76ms]
+(pass) artifact failures never publish metadata and a later retry finishes publication [6.36ms]
+(pass) final SQL transaction rejects source ownership races and explicit replace changes owners [12.75ms]
+(pass) capacity rejects overflow without truncating list results [13.17ms]
+(pass) aggregate capacity rejects new and replacement pointers while existing operations remain readable [1283.18ms]
+(pass) concurrent publications compete for aggregate capacity in the pointer transaction [618.64ms]
+(pass) cloud rejects unsupported modes, declared secrets, oversized writes and bounded R2 reads [21.73ms]
+(pass) shared validation rejects forged bundles, revisions and source mappings before storage [3.11ms]
+
+packages/loopy/_tests_/parsed-executions.test.ts:
+(pass) real parsed git, filesystem, text and redirecting curl executions persist their graph results [1405.19ms]
+
+packages/loopy/_tests_/summary.test.ts:
+(pass) asset summary rejects outside paths, traversal, unsafe characters and unknown checks [0.27ms]
+
+packages/loopy/_tests_/server.test.ts:
+(pass) API returns run records, step traces and cursor logs [118.62ms]
+(pass) the daemon server requires its token and origin, serves pinned assets and serves authenticated API reads [100.76ms]
+(pass) API distinguishes invalid cursors from registry failures [114.61ms]
+(pass) API returns the contract snapshot, rejects unknown query keys and keeps cursor log reads [119.33ms]
+(pass) contract routes start, snapshot, resume and cancel without exposing owner tokens [109.93ms]
+(pass) SPA routes fall back to pinned index but missing files stay 404 [101.55ms]
+(pass) SSE delivers exact transactions across replay, cross-process writes and Last-Event-ID reconnect [747.55ms]
+(pass) SSE disconnect removes the subscriber and stops polling [325.30ms]
+(pass) response validation rejects a view with extra fields [101.26ms]
+(pass) service error codes serialize with their HTTP status [84.60ms]
+(pass) SSE keeps a node transaction whole across the replay batch limit [357.45ms]
+(pass) daemon run stdout never contains its bearer token [136.54ms]
+(pass) run paging includes every run sharing a timestamp [96.77ms]
+(pass) SSE HTTP replay drains 45 large transactions from Last-Event-ID 1 in order [452.61ms]
+(pass) SSE HTTP replays a transaction over 1 MiB and live-delivers another whole frame [443.95ms]
+144 |     while (!this.closed && (controller.desiredSize ?? 0) <= 0) {
+145 |       await new Promise<void>((resolve) => {
+146 |         this.drained = resolve;
+147 |         this.stalled = setTimeout(() => {
+148 |           this.close();
+149 |           controller.error(new Error("SSE client fell behind. Reconnect from the last event ID."));
+                                     ^
+error: SSE client fell behind. Reconnect from the last event ID.
+      at <anonymous> (/Users/hatim.shakir/projects/loopy/cloud-integration/packages/loopy/src/service/events.ts:149:32)
+(pass) SSE HTTP closes a client that never reads while a concurrent reader gets every transaction [4556.59ms]
+144 |     while (!this.closed && (controller.desiredSize ?? 0) <= 0) {
+145 |       await new Promise<void>((resolve) => {
+146 |         this.drained = resolve;
+147 |         this.stalled = setTimeout(() => {
+148 |           this.close();
+149 |           controller.error(new Error("SSE client fell behind. Reconnect from the last event ID."));
+                                     ^
+error: SSE client fell behind. Reconnect from the last event ID.
+      at /Users/hatim.shakir/projects/loopy/cloud-integration/packages/loopy/src/service/events.ts:149:32
+(pass) SSE HTTP reconnect from a closed client's last id has no gap [5320.07ms]
+(pass) local server leaves event pruning to the runtime daemon [127.78ms]
+(pass) schedule routes round trip validated views and report status codes [115.01ms]
+(pass) schedule PUT publishes a saved SSE frame [101.59ms]
+(pass) cursor endpoint bootstraps an empty dashboard and follows new events [13.33ms]
+(pass) compiled save route verifies artifacts, stores private bundles and returns only GraphView [234.57ms]
+(pass) saving another revision retains the earlier graph and executable artifacts [325.16ms]
+
+packages/loopy/_tests_/engine-control-unwind.test.ts:
+(pass) map failure settles started item cleanup before outer cleanup and never starts later items [1.40ms]
+(pass) suspended map cancellation unwinds each started item and survives cleanup rehydration [0.66ms]
+(pass) cleanup failure takes precedence and rescue catches failures from immediate nodes [0.22ms]
+(pass) a retry and an indefinite wait suspend until the retry deadline [0.24ms]
+(pass) sleep deadline advances its parallel branch while an executable sibling remains running [0.26ms]
+
+packages/loopy/_tests_/cli.test.ts:
+(pass) save posts a compiled graph and graph prints the same redacted view by file and name [590.43ms]
+(pass) HTTP commands queue schema-validated graph runs and pin the saved revision [617.51ms]
+(pass) save rejects another source until --replace and locates absolute files beside their source [817.37ms]
+(pass) compiler diagnostics include locations and do not create registry entries [122.18ms]
+(pass) CLI rejects invalid graph formats and short leases [191.49ms]
+(pass) save starts the daemon on demand and leaves artifact writes to the service [384.35ms]
+(pass) list and schedules use the caller workspace when the daemon started elsewhere [414.59ms]
+(pass) types uses the daemon's command-help endpoint and writes the returned source [178.48ms]
+(pass) an absolute source in another project is registered beside that source [201.38ms]
+(pass) save preserves every author option from graph meta [202.55ms]
+(pass) HTTP schedule enable, disable and off persist their state [896.77ms]
+(pass) HTTP cancel refuses an active owner and inspect diagnoses a missing run [201.77ms]
+(pass) HTTP logs drains every page for normal output and terminal follow [261.80ms]
+(pass) HTTP run reports named JSON input errors before creating a run [457.30ms]
+
+packages/loopy/_tests_/cloud-service.test.ts:
+(pass) portable service validates input and pins graph/source revisions through async artifacts [1.80ms]
+(pass) portable schedules use registry workspace identity [1.45ms]
+(pass) portable routes use explicit daemon identity and return unsupported operation errors [0.90ms]
+(pass) portable SSE delivers whole SQL transactions and aborts without polling [1.38ms]
+(pass) portable SSE rejects partial transaction cursors, epoch changes and pruned history [1.18ms]
+
+packages/loopy/_tests_/text-parse.test.ts:
+(pass) wc drops only the aggregate row for multiple file operands [0.58ms]
+(pass) uniqCount preserves whitespace [0.31ms]
+(pass) grep separates text matches from binary filenames [0.49ms]
+(pass) sha256 parses hashes and filenames (darwin) [0.17ms]
+(pass) sha256 parses hashes and filenames (linux) [0.08ms]
+(pass) checksum escaping and jq JSON streams retain their values [0.17ms]
+(pass) wc rejects malformed output with the offending line [0.02ms]
+(pass) uniq rejects malformed output with the offending line
+(pass) grep rejects malformed output with the offending line [0.02ms]
+(pass) grep rejects malformed output with the offending line
+(pass) sha256sum rejects malformed output with the offending line
+(pass) jq rejects malformed output with the offending line
+
+packages/loopy/_tests_/executor-security.test.ts:
+(pass) decoded result and log strings redact "quote\"and\nnewline" without changing numeric values [145.10ms]
+(pass) decoded result and log strings redact "42" without changing numeric values [140.11ms]
+(pass) sandbox bundle cannot read, replace, remove or create daemon receipts and workspace forgeries are ignored [147.67ms]
+(pass) full bundle cannot read, replace, remove or create daemon receipts and workspace forgeries are ignored [136.62ms]
+(pass) a later author execution forging a workspace receipt cannot replace a finished daemon receipt [265.96ms]
+
+3 tests skipped:
+(skip) process executor > Linux sandbox keeps a /tmp workspace writable
+(skip) process executor > Linux sandbox does not load command libraries in the launcher
+(skip) real Docker preserves files, bounds execution, reconciles results and never repeats killed workers
+
+ 1147 pass
+ 3 skip
+ 0 fail
+ 5197 expect() calls
+Ran 1150 tests across 78 files. [82.44s]

@@ -16,6 +16,7 @@ const LAYERS = [
   "contract",
   "sdk",
   "local",
+  "service",
   "compiler",
   "cli",
 ] as const;
@@ -30,7 +31,8 @@ const ALLOWED_IMPORTS: Record<Layer, readonly Layer[]> = {
   store: ["core", "contract"],
   executor: ["core", "contract", "local"],
   contract: ["core"],
-  local: ["core", "engine", "host", "store", "executor", "sdk", "contract"],
+  service: ["core", "contract"],
+  local: ["core", "engine", "host", "store", "executor", "sdk", "contract", "service"],
   sdk: ["core"],
   cli: ["core", "engine", "host", "store", "executor", "local", "sdk", "contract", "compiler"],
   compiler: ["core", "contract", "local", "sdk"],
@@ -102,7 +104,9 @@ function isBarrel(specifier: string): boolean {
 
 test("core, engine and contract exports bundle without host dependencies", async () => {
   const result = await Bun.build({
-    entrypoints: ["core", "engine", "contract"].map((name) => resolve(SOURCE, `${name}/index.ts`)),
+    entrypoints: ["core", "engine", "contract", "service"].map((name) =>
+      resolve(SOURCE, `${name}/index.ts`),
+    ),
     target: "browser",
   });
 

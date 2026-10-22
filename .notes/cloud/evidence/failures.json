@@ -1,0 +1,136 @@
+{
+  "status": "passed",
+  "scope": "actual-local-wrangler-and-docker-only",
+  "command": "bun --no-env-file scripts/cloud/failures.ts",
+  "api": "http://127.0.0.1:14970",
+  "sandbox": "http://127.0.0.1:14971",
+  "stateRoot": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/cloud-failures",
+  "dockerContext": "colima-loopy-cloud-phase1",
+  "image": "loopy-sandbox:bun-1.4.0",
+  "startedAt": "2026-10-22T16:46:46.202Z",
+  "updatedAt": "2026-10-22T16:50:50.669Z",
+  "runIds": [
+    "5f5d5cbc-134b-484a-b25b-2691a2af52da",
+    "9f7fa825-d897-4785-8109-09e991d0ced0",
+    "92c8043f-1f55-4c4f-b91e-cecbe926e310",
+    "c7e72964-53b4-4f6b-a9bd-3f1b667fc622",
+    "b12525e3-b1b1-4404-a521-a21c5715cb01",
+    "3ff8e956-9276-428a-aa0b-9ce7157d3356"
+  ],
+  "results": [
+    {
+      "name": "isolated_stack_start_and_compile",
+      "status": "passed",
+      "durationMs": 1424,
+      "evidence": {
+        "compiledFixtures": 4,
+        "apiPort": 14970,
+        "sandboxPort": 14971,
+        "inspectorPort": 14973
+      }
+    },
+    {
+      "name": "process_loss_running_effect_duplicate_admission_late_receipt",
+      "status": "passed",
+      "durationMs": 18242,
+      "evidence": {
+        "runId": "9f7fa825-d897-4785-8109-09e991d0ced0",
+        "receiptId": "f554372ec2ad44afe248e3e30a491d6ab103e9192741fe93161685dd15c4257c",
+        "container": "loopy-attempt-f554372ec2ad44afe248e3e30a491d6ab103e9192741fe93161685dd15c4257c",
+        "attempt": 1,
+        "startedDuplicateRequests": 2,
+        "finishedDuplicateRequests": 2,
+        "effectLines": 2,
+        "processLossMs": 14000,
+        "workerPidBefore": 88679,
+        "workerPidAfter": 89910,
+        "providerPidBefore": 88678,
+        "providerPidAfter": 89909,
+        "recoveredFinishedReceipt": true
+      }
+    },
+    {
+      "name": "approval_wait_survives_process_restart",
+      "status": "passed",
+      "durationMs": 21,
+      "evidence": {
+        "runId": "5f5d5cbc-134b-484a-b25b-2691a2af52da",
+        "hookCountBeforeResolution": 1,
+        "status": "succeeded",
+        "approved": true
+      }
+    },
+    {
+      "name": "docker_worker_kill_uncertain_without_retry",
+      "status": "passed",
+      "durationMs": 3992,
+      "evidence": {
+        "runId": "92c8043f-1f55-4c4f-b91e-cecbe926e310",
+        "attempt": 1,
+        "errorCode": "uncertain",
+        "configuredAttempts": 3,
+        "effectLines": 1,
+        "failureObservedMs": 3197,
+        "runningAfterFailure": false
+      }
+    },
+    {
+      "name": "command_timeout_stops_side_effect",
+      "status": "passed",
+      "durationMs": 2693,
+      "evidence": {
+        "runId": "c7e72964-53b4-4f6b-a9bd-3f1b667fc622",
+        "configuredTimeoutMs": 1000,
+        "failureObservedMs": 2681,
+        "attempt": 1,
+        "errorCode": "execution",
+        "effectLines": 1,
+        "runningAfterFailure": false
+      }
+    },
+    {
+      "name": "scheduled_firing_overlap_and_restart_deduplication",
+      "status": "passed",
+      "durationMs": 205578,
+      "evidence": {
+        "runIds": ["3ff8e956-9276-428a-aa0b-9ce7157d3356", "b12525e3-b1b1-4404-a521-a21c5715cb01"],
+        "firstDeadline": "2026-10-22T16:48:00.000Z",
+        "lastFireKey": "cloud-failure-schedule@2026-10-22T16:49:00.000Z",
+        "scheduledRuns": 2,
+        "concurrentRunningDockerWorkers": 2,
+        "simultaneousApprovalWaits": 2,
+        "effectStartsPerRun": 1,
+        "duplicateRunsAfterRestart": 0,
+        "overlapPolicyObserved": "consecutive minute fires run concurrently, then both persist approval waits"
+      }
+    },
+    {
+      "name": "cleanup_owned_processes_containers_volumes",
+      "status": "passed",
+      "durationMs": 12472,
+      "evidence": {
+        "containersRemoved": 5,
+        "volumesRemoved": 10,
+        "ownedContainersRemaining": 0
+      }
+    }
+  ],
+  "gaps": [
+    "No remote deployment or provider tested.",
+    "No Docker CLI transport fault injected in the real Docker journey.",
+    "No completion push endpoint exists. Late completion is exercised by recovery of the durable finished provider receipt."
+  ],
+  "sourceHashes": {
+    "apps/cloud/src/scheduler.ts": "c5df4ce777fc44582d018b3269cc6eb1251fb0fca899173b3a9615f1d277d0bd",
+    "apps/sandbox/src/attempts.ts": "d5da615824d59074e123440f7155d551090195c0b04021d7d8d2ced2245f12ac",
+    "apps/sandbox/src/docker.ts": "879d257ccec1c61fb2acddf004ccf29aa97c34bb878e830fc4227278bcfd46be"
+  },
+  "cleanupVerification": {
+    "remainingOwnedContainers": 0,
+    "remainingOwnedVolumes": 0,
+    "remainingOwnedServiceProcesses": 0,
+    "freePorts": [14970, 14971, 14973],
+    "receiptNamedVolumesChecked": 10,
+    "manifestRemoved": true
+  }
+}

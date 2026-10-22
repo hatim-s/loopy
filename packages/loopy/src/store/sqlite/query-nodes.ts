@@ -1,4 +1,3 @@
-import type { SQLQueryBindings } from "bun:sqlite";
 import { executionKeySchema, nodeRunSchema } from "../../contract/index.js";
 import {
   type NodePageQuery,
@@ -11,6 +10,7 @@ import {
 import { PREVIEW_BYTES } from "../query-utils.js";
 import { publicHook } from "../wait.js";
 import { waitRecordSchema } from "../wait-schema.js";
+import type { SqlValue } from "./driver.js";
 import {
   type PreviewRunRow,
   previewRun,
@@ -21,7 +21,7 @@ import {
 export class SqliteQueryNodes extends SqliteQueryRuns {
   protected readNodePage(runId: string, query: NodePageQuery) {
     const clauses = ["run_id=?", "scope=?"];
-    const values: SQLQueryBindings[] = [runId, query.scope];
+    const values: SqlValue[] = [runId, query.scope];
 
     if (query.nodeId !== undefined) {
       clauses.push("node_id=?");
@@ -39,7 +39,7 @@ export class SqliteQueryNodes extends SqliteQueryRuns {
     }
 
     const rows = this.db
-      .query<{ record: string; bytes: number; execution_key: string }, SQLQueryBindings[]>(
+      .query<{ record: string; bytes: number; execution_key: string }, SqlValue[]>(
         `SELECT execution_key,CASE WHEN status='succeeded' AND length(CAST(output AS BLOB))>${PREVIEW_BYTES} THEN json_remove(json_set(record,'$.output',NULL),'$.inputView') ELSE json_remove(record,'$.inputView') END AS record,CASE WHEN status='succeeded' THEN length(CAST(output AS BLOB)) ELSE 0 END AS bytes FROM node_runs WHERE ${clauses.join(" AND ")} ORDER BY execution_key LIMIT ?`,
       )
       .all(...values, Math.min(query.limit, 200) + 1);
@@ -96,7 +96,7 @@ export class SqliteQueryNodes extends SqliteQueryRuns {
   }
 
   async scopeItems(runId: string, query: ScopeItemsQuery) {
-    const values: SQLQueryBindings[] = [runId, query.nodeId, query.parentScope, query.after ?? -1];
+    const values: SqlValue[] = [runId, query.nodeId, query.parentScope, query.after ?? -1];
     const status = query.status === undefined ? "" : " AND status=?";
 
     if (query.status !== undefined) {
@@ -106,7 +106,7 @@ export class SqliteQueryNodes extends SqliteQueryRuns {
     values.push(Math.min(query.limit, 200) + 1);
 
     const indices = this.db
-      .query<{ item_index: number }, SQLQueryBindings[]>(
+      .query<{ item_index: number }, SqlValue[]>(
         `SELECT DISTINCT item_index FROM node_scopes WHERE run_id=? AND map_node=? AND parent_scope=? AND item_index>?${status} ORDER BY item_index LIMIT ?`,
       )
       .all(...values);
@@ -118,7 +118,7 @@ export class SqliteQueryNodes extends SqliteQueryRuns {
     }
 
     const rows = this.db
-      .query<{ item_index: number; status: NodeRunStatus; count: number }, SQLQueryBindings[]>(
+      .query<{ item_index: number; status: NodeRunStatus; count: number }, SqlValue[]>(
         `SELECT item_index,status,count(*) AS count FROM node_scopes WHERE run_id=? AND map_node=? AND parent_scope=? AND item_index IN (${selected.map(() => "?").join(",")}) GROUP BY item_index,status ORDER BY item_index`,
       )
       .all(runId, query.nodeId, query.parentScope, ...selected.map((row) => row.item_index));
@@ -138,40 +138,38 @@ export class SqliteQueryNodes extends SqliteQueryRuns {
   }
 
   async dashboardSnapshot(id: string) {
-    return this.db
-      .transaction(() => {
-        const row = this.db
-          .query<PreviewRunRow, [string]>(`SELECT ${RUN_PREVIEW_COLUMNS} FROM runs r WHERE r.id=?`)
-          .get(id);
+    return this.db.transaction(() => {
+      const row = this.db
+        .query<PreviewRunRow, [string]>(`SELECT ${RUN_PREVIEW_COLUMNS} FROM runs r WHERE r.id=?`)
+        .get(id);
 
-        if (!row) {
-          return undefined;
-        }
+      if (!row) {
+        return undefined;
+      }
 
-        const nodes = this.readNodePage(id, { scope: "[]", limit: 200 });
+      const nodes = this.readNodePage(id, { scope: "[]", limit: 200 });
 
-        const hooks = this.db
-          .query<{ record: string }, [string]>(
-            "SELECT record FROM waits WHERE run_id=? ORDER BY rowid LIMIT 201",
-          )
-          .all(id);
+      const hooks = this.db
+        .query<{ record: string }, [string]>(
+          "SELECT record FROM waits WHERE run_id=? ORDER BY rowid LIMIT 201",
+        )
+        .all(id);
 
-        return {
-          run: previewRun(row),
-          nodeRuns: nodes.items,
-          nodeRunsNext: nodes.next,
-          truncatedOutputs: nodes.truncatedOutputs,
-          scopes: this.readScopeCounts(id),
-          steps: [],
-          logs: [],
-          hooks: hooks
-            .slice(0, 200)
-            .map((row) => publicHook(waitRecordSchema.parse(JSON.parse(row.record)))),
-          hooksTruncated: hooks.length > 200,
-          ...this.readEventCursor(),
-        };
-      })
-      .deferred();
+      return {
+        run: previewRun(row),
+        nodeRuns: nodes.items,
+        nodeRunsNext: nodes.next,
+        truncatedOutputs: nodes.truncatedOutputs,
+        scopes: this.readScopeCounts(id),
+        steps: [],
+        logs: [],
+        hooks: hooks
+          .slice(0, 200)
+          .map((row) => publicHook(waitRecordSchema.parse(JSON.parse(row.record)))),
+        hooksTruncated: hooks.length > 200,
+        ...this.readEventCursor(),
+      };
+    }, "deferred");
   }
 
   async execution(

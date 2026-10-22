@@ -9,7 +9,8 @@
       "!coverage",
       "!.loopy",
       "!tools/anti-slop",
-      "!**/routeTree.gen.ts"
+      "!**/routeTree.gen.ts",
+      "!**/.wrangler"
     ]
   },
   "formatter": {

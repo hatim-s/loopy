@@ -32,7 +32,7 @@ export const LOG_LEVELS = ["info", "warn", "error"] as const;
 
 export type LogLevel = (typeof LOG_LEVELS)[number];
 
-type RunOwner = { token: string; pid: number; host: string; heartbeatAt: string };
+type RunOwner = { token: string; pid: number | null; host: string; heartbeatAt: string };
 
 export type RunOutcome =
   | { status: "succeeded"; output: Json }

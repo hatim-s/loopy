@@ -1,4 +1,4 @@
-import type { Database } from "bun:sqlite";
+import type { SqlDriver } from "./driver.js";
 
 // The rebuild preserves legacy rowids as global log ids and all per-run sequences.
 export const QUERY_SCHEMA = `
@@ -65,7 +65,7 @@ export const QUERY_SCHEMA = `
     FROM logs GROUP BY execution_key,attempt;
 `;
 
-export function applyQuerySchema(db: Database): void {
+export function applyQuerySchema(db: SqlDriver): void {
   // Each statement must report its own failure before the transaction can change the version.
   for (const statement of QUERY_SCHEMA.split(";")) {
     if (statement.trim().length > 0) {

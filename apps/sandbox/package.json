@@ -1,0 +1,12 @@
+{
+  "name": "@loopy/sandbox",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun src/index.ts"
+  },
+  "dependencies": {
+    "loopy": "workspace:*",
+    "zod": "4.6.7"
+  }
+}

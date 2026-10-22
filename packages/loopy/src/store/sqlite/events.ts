@@ -1,85 +1,24 @@
-import { Database } from "bun:sqlite";
 import type { RuntimeEvent, RuntimeEventChange } from "../../core/index.js";
 import { EVENT_RETENTION, EventListeners, type EventTransaction } from "../event-outbox.js";
-import { applyQuerySchema } from "./query-schema.js";
+import type { SqlDriver } from "./driver.js";
+import type { SqlStoreOptions } from "./owner-policy.js";
+import { initializeSqlSchema } from "./schema.js";
 import { rowToEvent, SQL } from "./store-rows.js";
-import {
-  type EventRow,
-  SCHEDULE_OVERVIEW_INDEX,
-  SCHEMA,
-  SCHEMA_VERSION,
-  WAIT_SCHEMA,
-} from "./store-schema.js";
+import type { EventRow } from "./store-schema.js";
 
 export class SqliteEvents {
-  protected readonly db: Database;
+  protected readonly now: () => number;
 
   get leaseMs(): number {
     return this.options.leaseMs ?? 60_000;
   }
 
   constructor(
-    file: string,
-    protected readonly now: () => number = Date.now,
-    protected readonly options: { leaseMs?: number } = {},
+    protected readonly db: SqlDriver,
+    protected readonly options: SqlStoreOptions,
   ) {
-    this.db = new Database(file, { create: true });
-    this.db.exec("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000");
-
-    try {
-      this.db
-        .transaction(() => {
-          const version = this.db
-            .query<{ user_version: number }, []>("PRAGMA user_version")
-            .get()?.user_version;
-
-          if (version === SCHEMA_VERSION) {
-            this.db.exec(SCHEDULE_OVERVIEW_INDEX);
-
-            return;
-          }
-
-          const tables = this.db
-            .query<{ name: string }, []>(
-              "SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'",
-            )
-            .all();
-
-          if (version === 13 || version === 14) {
-            if (version === 13) {
-              this.db.exec(WAIT_SCHEMA);
-            }
-
-            applyQuerySchema(this.db);
-            this.db.exec(SCHEDULE_OVERVIEW_INDEX);
-            this.db.exec(`PRAGMA user_version=${SCHEMA_VERSION}`);
-
-            return;
-          }
-
-          if (tables.length > 0 || version !== 0) {
-            throw new Error(
-              `Database schema ${version} cannot be opened by this runtime. Preserve this home and migrate its saved definitions into a separate home.`,
-            );
-          }
-
-          this.db.exec(SCHEMA);
-          applyQuerySchema(this.db);
-          this.db.exec(SCHEDULE_OVERVIEW_INDEX);
-          this.db.query(SQL.createEpoch).run(crypto.randomUUID());
-          this.db.exec(`PRAGMA user_version=${SCHEMA_VERSION}`);
-        })
-        .immediate();
-    } catch (error) {
-      this.db.close();
-      throw error;
-    }
-  }
-
-  dataVersion(): number {
-    return (
-      this.db.query<{ data_version: number }, []>("PRAGMA data_version").get()?.data_version ?? 0
-    );
+    this.now = options.now ?? Date.now;
+    initializeSqlSchema(db);
   }
 
   oldestEventSequence(): number | undefined {
@@ -131,7 +70,7 @@ export class SqliteEvents {
   }
 
   async eventCursor(): Promise<{ cursor: number; epoch: string }> {
-    return this.db.transaction(() => this.readEventCursor()).deferred();
+    return this.db.transaction(() => this.readEventCursor(), "deferred");
   }
 
   async pruneEvents(now: string): Promise<number> {
@@ -142,7 +81,7 @@ export class SqliteEvents {
 
   protected commit<T>(change: (txn: EventTransaction) => T): T {
     const txn: EventTransaction = { id: crypto.randomUUID(), events: [] };
-    const result = this.db.transaction(() => change(txn)).immediate();
+    const result = this.db.transaction(() => change(txn), "immediate");
 
     this.listeners.publish(txn.events);
 
@@ -193,7 +132,7 @@ export class SqliteEvents {
   }
 
   close(): void {
-    this.db.close();
+    this.db.close?.();
   }
 
   protected timestamp(): string {

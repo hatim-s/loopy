@@ -28,6 +28,8 @@ export {
   savedLoopySchema,
 } from "./compiled-loopy.js";
 
+export { validateCompiled } from "./compiled-validation.js";
+
 export * from "./dashboard.js";
 
 export { graphView, loopyView, runView, serverEvent } from "./derive.js";
@@ -52,6 +54,8 @@ export {
   scheduleSchema,
   stepRecordSchema,
 } from "./records.js";
+
+export * from "./sandbox.js";
 
 export {
   MAX_SOURCE_BYTES,

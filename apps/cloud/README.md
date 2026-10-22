@@ -1,0 +1,83 @@
+# Local cloud integration
+
+Phase 1 runs a Cloudflare Worker, SQLite Durable Object per workspace, R2 artifact storage and Durable Object alarms through Wrangler local emulation. A Bun service starts isolated Docker workers through an asynchronous attempt API. The existing dashboard uses the same HTTP and SSE contracts as the local daemon.
+
+This branch is local only. The Worker rejects remote hosts and non-local stage configuration. No deployment script or CI deployment job is installed. Real Cloudflare resources, Modal workloads and personal data migration require Hatim's separate phase 2 approval. That approval does not authorize merging this branch.
+
+## Start
+
+Use the `cloud-integration` checkout. Bun 1.4.0 and Docker CLI 29.8.1 were used. The lockfile pins Wrangler 4.152.0, Miniflare 4.20260730.0 and Cloudflare types 5.20261022.1. The Worker compatibility date is 2026-07-30.
+
+```sh
+cd /Users/hatim.shakir/projects/loopy/cloud-integration
+bun install --frozen-lockfile
+colima start loopy-cloud-phase1 --activate=false --cpu 2 --memory 3 --disk 16 \
+  --mount none --ssh-agent=false --ssh-config=false --template=false
+bun run cloud:build-sandbox
+bun run cloud:start
+```
+
+Run the Colima command only for this named profile. It creates a dedicated VM without host mounts and leaves the default Docker context alone. The image uses `oven/bun:1.4.0`. No personal home, Docker socket or host secrets are mounted into execution containers.
+
+The start command checks all four ports before launching anything. An occupied port is an error, not permission to stop its owner.
+
+| Service | Address |
+| --- | --- |
+| Worker API | http://127.0.0.1:14870 |
+| Docker attempt service | http://127.0.0.1:14871 |
+| Dashboard | http://127.0.0.1:14872 |
+| Wrangler inspector | 127.0.0.1:14873 |
+
+In a second terminal, print the disposable dashboard URL and open it in personal Chrome:
+
+```sh
+bun --no-env-file scripts/cloud/open-url.ts
+```
+
+The URL contains a bearer credential in its fragment. Do not paste it into chat, reports or commits. Fixture credentials live in private ignored `.loopy/cloud/local.json`. The starter passes only a small environment allowlist to its children and runs Wrangler with `--local`. Existing ports 4310 and 4173 and personal `~/.loopy` are unused by this setup.
+
+## Exercise
+
+```sh
+bun --no-env-file scripts/cloud/journey.ts
+bun --no-env-file scripts/cloud/artifact-journey.ts
+bun --no-env-file scripts/cloud/failures.ts
+LOOPY_SANDBOX_DOCKER_CONTEXT=colima-loopy-cloud-phase1 \
+  bun test packages/loopy/_tests_/cloud-sandbox.test.ts
+bun run check
+```
+
+The ordinary journey creates fresh fixture runs on the main local stack. It compiles safe definitions, transfers verified bundles and source, exercises both branches, map/parallel work, a controlled retry, logs, approval, historical revision execution, auth isolation, bounded pages and SSE reconnection. JSON evidence goes to `.notes/cloud/evidence`.
+
+The failure journey starts its own local processes on 14970, 14971 and 14973. It uses `.loopy/cloud-failures/runtime-root` and a different Docker ownership hash. It kills only its recorded processes and labelled fixture workers, restarts persisted state, and checks uncertainty, timeouts and real overlapping cron firings. It removes its own Docker resources and stops its own processes after the run. It needs several minutes because cron ticks are real.
+
+## State and shutdown
+
+`.loopy/cloud/wrangler` holds emulated SQLite/R2 state. `.loopy/cloud/sandbox` holds durable receipts and process locks. The named Docker daemon holds input and run volumes. Tokens, generated environment files, process records and logs stay under ignored `.loopy/cloud`. The committed evidence contains fixture IDs and assertions, never credentials.
+
+Press Ctrl+C in the `cloud:start` terminal. The parent sends SIGTERM to its three children. The sandbox stops monitoring while preserving started receipts, which it reconciles on restart. Then, when no other phase 1 test is using the dedicated VM:
+
+```sh
+colima stop loopy-cloud-phase1
+```
+
+This stops compute and retains state for the next start. Stopped containers and named volumes are intentional inspection evidence. It is not a data reset. Do not run `docker system prune`, remove receipts, delete the whole Colima profile or erase Wrangler state as routine teardown. Removing a receipt can permit re-execution of an old attempt. Resource cleanup must derive an exact allowlist from this state's receipts and verify ownership labels, as the failure journey does.
+
+## Runtime boundaries
+
+- One workspace DO keeps schedule advancement/run creation, node effects, ownership fencing, waits and event outbox transactions together. Its SQL driver uses synchronous transactions; provider and R2 calls happen outside them.
+- Immutable graph/bundle/source writes precede mutable registry publication. Current definitions are capped at 1,000 and 32 MiB combined graph bytes, with 1 MiB per graph. Failed publication may leave unreferenced R2 objects. No garbage collector is provided yet.
+- Alarms recover persisted work. Interrupted suspension releases stranded ownership after the lease fence. A bad schedule is isolated from unrelated runs. Invalid saved input disables the schedule; transient failures retry with a persisted deadline.
+- Cron fires may overlap. Missed ticks coalesce to one run with the next deadline calculated from current time. There is no replay of every missed tick. Retry waits retain activation capacity; approval and sleep suspension release it.
+- Each attempt is persisted before dispatch. Duplicate provider requests join the same receipt. Unknown transport outcomes remain started while the original container is reconciled. A dead worker without a valid terminal result fails uncertain and is not automatically repeated. This does not promise exactly-once external side effects.
+- Rate-limit acquisition is conservative. A transport failure after acquisition can consume quota even if provider admission did not happen. Reconciliation does not refund an ambiguous acquisition.
+- `GET /api/cloud/artifacts` takes JSON execution `key`, positive `attempt` and relative `path`. It requires a terminal run in the authenticated workspace. Reads are capped at 1 MiB and reject traversal, symlinks and special files. The result is the current run workspace file, not an immutable per-attempt snapshot.
+- Receipts, source and logs contain only synthetic fixtures here. Declared workflow secrets, full mode, type generation and cross-workspace aggregation are not supported by the phase 1 API.
+
+## Limits of this evidence
+
+Local workerd exercises actual APIs but cannot prove Cloudflare regional failover, replicated durability, billing, PITR or production capacity. Docker tests cannot prove Modal sandbox identity, creation idempotency, network isolation or volume commit semantics. SSE keeps an object active and has a cloud duration cost. Whole transactions are retained or pruned together, so replay can require a fresh snapshot after retention.
+
+The engine still materializes activation state and traverses the graph within each bounded turn. Per-turn dispatch budgets are not a 10,000-node execution throughput proof. Metadata listings are capacity-bounded rather than paged. Production auth, workflow secret storage, artifact retention/GC and a real Modal adapter remain phase 2 work behind the approval gate.
+
+Current test outcomes and unresolved acceptance items are recorded in [the evidence log](../../.notes/cloud/EVIDENCE.md), with independent reports beside it.

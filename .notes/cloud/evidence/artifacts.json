@@ -1,0 +1,18 @@
+{
+  "status": "passed",
+  "at": "2026-10-22T16:46:46.884Z",
+  "runId": "61fd50be-f53e-4aca-a265-1358f48d7fb1",
+  "command": "bun --no-env-file scripts/cloud/artifact-journey.ts",
+  "assertions": [
+    "content",
+    "size",
+    "sha256",
+    "authentication",
+    "workspace isolation",
+    "traversal",
+    "missing file",
+    "missing attempt",
+    "run unchanged"
+  ],
+  "scope": "terminal run workspace file, not an immutable per-attempt snapshot"
+}

@@ -26,7 +26,16 @@ export const SQL = {
   events: "SELECT * FROM events WHERE sequence>? ORDER BY sequence LIMIT ?",
   transactionEvents: "SELECT * FROM events WHERE txn=? AND sequence>? ORDER BY sequence",
   cursor: "SELECT COALESCE((SELECT seq FROM sqlite_sequence WHERE name='events'),0) AS cursor",
-  pruneEvents: `DELETE FROM events WHERE at<? OR sequence IN (SELECT sequence FROM events ORDER BY sequence DESC LIMIT -1 OFFSET ${EVENT_RETENTION.maxRows})`,
+  // Advancing through the last affected transaction prevents replaying a retained tail.
+  pruneEvents: `WITH boundary AS (
+    SELECT MAX(sequence) AS sequence FROM events WHERE at<? OR sequence<=COALESCE(
+      (SELECT sequence FROM events ORDER BY sequence DESC LIMIT 1 OFFSET ${EVENT_RETENTION.maxRows}),0
+    )
+  ), transaction_end AS (
+    SELECT MAX(sequence) AS sequence FROM events WHERE txn IN (
+      SELECT txn FROM events WHERE sequence<=(SELECT sequence FROM boundary)
+    )
+  ) DELETE FROM events WHERE sequence<=(SELECT sequence FROM transaction_end)`,
   wakeRun: "UPDATE runs SET wake_at=?,updated_at=? WHERE id=?",
   rateLimit: "SELECT window_start AS windowStart,count FROM rate_limits WHERE key=?",
   putRateLimit:
@@ -94,12 +103,7 @@ export function rowToRun(row: RunRow): RunRecord {
     run.wakeAt = row.wake_at;
   }
 
-  if (
-    row.owner_token !== null &&
-    row.owner_pid !== null &&
-    row.owner_host !== null &&
-    row.heartbeat_at !== null
-  ) {
+  if (row.owner_token !== null && row.owner_host !== null && row.heartbeat_at !== null) {
     run.owner = {
       token: row.owner_token,
       pid: row.owner_pid,
@@ -153,7 +157,7 @@ const runSchema = z
     owner: z
       .strictObject({
         token: z.string(),
-        pid: z.number().int(),
+        pid: z.number().int().nullable(),
         host: z.string(),
         heartbeatAt: z.string(),
       })

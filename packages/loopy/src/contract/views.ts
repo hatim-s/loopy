@@ -36,7 +36,7 @@ const runBaseSchema = z.strictObject({
   updatedAt: z.string(),
   owner: z
     .strictObject({
-      pid: z.number().int().nonnegative(),
+      pid: z.number().int().nonnegative().nullable(),
       host: z.string(),
       heartbeatAt: z.string(),
     })
@@ -110,7 +110,7 @@ export const runSnapshotViewSchema = z.strictObject({
 export type RunSnapshotView = z.infer<typeof runSnapshotViewSchema>;
 
 export const daemonViewSchema = z.strictObject({
-  pid: z.number().int().nonnegative(),
+  pid: z.number().int().nonnegative().nullable(),
   startedAt: z.string(),
   concurrency: z.number().int().positive(),
   running: z.number().int().nonnegative(),

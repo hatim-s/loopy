@@ -1,0 +1,146 @@
+{
+  "status": "passed",
+  "scope": "local-stack-journey-only",
+  "command": "bun --no-env-file scripts/cloud/journey.ts",
+  "api": "http://127.0.0.1:14870",
+  "startedAt": "2026-10-22T16:35:17.060Z",
+  "updatedAt": "2026-10-22T16:35:31.687Z",
+  "runIds": [
+    "a8922c68-55b3-40bb-8916-3910cd7a74f2",
+    "e02aa1e0-61d3-4831-9b68-72934dda205d",
+    "33ba19ea-56d1-4103-99ff-377d5e4c90a3",
+    "9a4ddebe-d235-43ca-a8bb-c8a41459fe42"
+  ],
+  "results": [
+    {
+      "name": "authentication",
+      "status": "passed",
+      "durationMs": 6,
+      "evidence": {
+        "unauthenticatedDenied": true,
+        "invalidTokenDenied": true,
+        "crossOriginDenied": true
+      }
+    },
+    {
+      "name": "compile_upload_graph_bundles_source",
+      "status": "passed",
+      "durationMs": 228,
+      "evidence": {
+        "bundles": 2,
+        "nodes": 19,
+        "revision": "d5fed93f9c35ba4da06ce05298930aa4afa0f1779ac1b4ef2ad4adcd8ab96e6b",
+        "sourceCaptured": true
+      }
+    },
+    {
+      "name": "run_input_validation",
+      "status": "passed",
+      "durationMs": 23,
+      "evidence": {
+        "malformedInputsDenied": 2,
+        "noRunCreated": true
+      }
+    },
+    {
+      "name": "docker_execution_branch_yes_map_parallel_retry_logs",
+      "status": "passed",
+      "durationMs": 5274,
+      "evidence": {
+        "runId": "a8922c68-55b3-40bb-8916-3910cd7a74f2",
+        "status": "succeeded",
+        "mapItems": 3,
+        "retryAttempts": 2,
+        "logCount": 12,
+        "sandboxUid": 1000
+      }
+    },
+    {
+      "name": "docker_execution_branch_no_map_parallel_retry_logs",
+      "status": "passed",
+      "durationMs": 5863,
+      "evidence": {
+        "runId": "e02aa1e0-61d3-4831-9b68-72934dda205d",
+        "status": "succeeded",
+        "mapItems": 3,
+        "retryAttempts": 2,
+        "logCount": 12,
+        "sandboxUid": 1000
+      }
+    },
+    {
+      "name": "docker_network_none_and_retained_retry_workspace",
+      "status": "passed",
+      "durationMs": 141,
+      "evidence": {
+        "runId": "e02aa1e0-61d3-4831-9b68-72934dda205d",
+        "containersInspected": 4,
+        "network": "none",
+        "user": "1000:1000",
+        "rootReadOnly": true,
+        "inputReadOnly": true,
+        "hostBindMounts": 0,
+        "retryFirstExitCode": 7
+      }
+    },
+    {
+      "name": "approval_wait_and_invalid_payload",
+      "status": "passed",
+      "durationMs": 121,
+      "evidence": {
+        "runId": "33ba19ea-56d1-4103-99ff-377d5e4c90a3",
+        "waiting": true,
+        "invalidPayloadDenied": true,
+        "otherWorkspaceResolveDenied": true
+      }
+    },
+    {
+      "name": "revision_pinning_after_new_save_and_approval_resolve",
+      "status": "passed",
+      "durationMs": 2626,
+      "evidence": {
+        "originalRunId": "33ba19ea-56d1-4103-99ff-377d5e4c90a3",
+        "newRunId": "9a4ddebe-d235-43ca-a8bb-c8a41459fe42",
+        "pinnedRevision": "57ff7bbc0c01fc125299c2e304a8f8daf52514eae94174c190a8efd89aa24687",
+        "latestRevision": "28a468d359f39c6dbaec2dc594d39e8fa1c6b20d5a2abf3896b02f85401695ad",
+        "versionsExecuted": ["1", "2"]
+      }
+    },
+    {
+      "name": "cross_workspace_query_body_and_run_isolation",
+      "status": "passed",
+      "durationMs": 205,
+      "evidence": {
+        "queryDenials": 5,
+        "bodyDenials": 2,
+        "runResourceDenials": 6,
+        "filteredOtherFeedEmpty": true
+      }
+    },
+    {
+      "name": "bounded_run_node_log_feed_pages",
+      "status": "passed",
+      "durationMs": 78,
+      "evidence": {
+        "runPages": 2,
+        "nodePages": 8,
+        "rootNodes": 15,
+        "logPages": 2,
+        "feedPages": 2,
+        "oversizedLimitsDenied": 5
+      }
+    },
+    {
+      "name": "sse_reconnect_transaction_cursor_with_real_events",
+      "status": "passed",
+      "durationMs": 57,
+      "evidence": {
+        "firstCursor": 569,
+        "reconnectCursor": 570,
+        "firstEvents": 7,
+        "reconnectEvents": 1,
+        "acknowledgedEventsRepeated": false
+      }
+    }
+  ]
+}

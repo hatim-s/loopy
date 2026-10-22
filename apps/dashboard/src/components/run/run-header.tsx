@@ -223,7 +223,10 @@ export function RunHeader(props: {
               <span title="Resume recovers the run from this owner">
                 <span>Owner</span>
                 <code className="text-attention">
-                  pid {run.owner.pid} on {run.owner.host}, stopped heartbeating
+                  {run.owner.pid === null
+                    ? run.owner.host
+                    : `pid ${run.owner.pid} on ${run.owner.host}`}
+                  , stopped heartbeating
                 </code>
               </span>
             )}

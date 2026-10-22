@@ -8,3 +8,6 @@ test-results/
 # Loopy runtime state generated inside repositories using Loopy.
 .loopy/
 
+
+# Local Cloudflare build artifacts.
+.wrangler/

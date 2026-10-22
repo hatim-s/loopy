@@ -1,5 +1,4 @@
-import { hostname } from "node:os";
-import { errnoCode, OwnershipError } from "../../core/index.js";
+import { OwnershipError } from "../../core/index.js";
 import { SqliteEvents } from "./events.js";
 import { SQL } from "./store-rows.js";
 import { type RunRow } from "./store-schema.js";
@@ -14,16 +13,11 @@ export class SqliteOwnership extends SqliteEvents {
       return false;
     }
 
-    if (row.owner_host === hostname() && row.owner_pid !== null) {
-      try {
-        process.kill(row.owner_pid, 0);
-
-        return false;
-      } catch (error) {
-        if (errnoCode(error) !== "ESRCH") {
-          return false;
-        }
-      }
+    if (
+      row.owner_host !== null &&
+      this.options.owner.isAlive({ host: row.owner_host, pid: row.owner_pid })
+    ) {
+      return false;
     }
 
     return now - Date.parse(row.heartbeat_at) > this.leaseMs;

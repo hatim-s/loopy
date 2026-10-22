@@ -1,4 +1,3 @@
-import type { SQLQueryBindings } from "bun:sqlite";
 import type {
   EventPageQuery,
   EventSummary,
@@ -7,6 +6,7 @@ import type {
   RunStatus,
 } from "../../core/index.js";
 import { FEED_SCAN_LIMIT, scanPage } from "../query-utils.js";
+import type { SqlValue } from "./driver.js";
 import { SqliteQueryNodes } from "./query-nodes.js";
 import { rowToEvent, rowToLog } from "./store-rows.js";
 import type { EventRow } from "./store-schema.js";
@@ -58,7 +58,7 @@ export class SqliteQueryFeeds extends SqliteQueryNodes {
   async logPage(query: LogPageQuery) {
     const ascending = query.after !== undefined;
     const clauses = [`l.id${ascending ? ">" : "<"}?`];
-    const values: SQLQueryBindings[] = [query.after ?? query.before ?? Number.MAX_SAFE_INTEGER];
+    const values: SqlValue[] = [query.after ?? query.before ?? Number.MAX_SAFE_INTEGER];
 
     if (query.runId !== undefined) {
       clauses.push("l.run_id=?");
@@ -68,7 +68,7 @@ export class SqliteQueryFeeds extends SqliteQueryNodes {
     const rows = this.db
       .query<
         LogSummary & { workspace: string; status: RunStatus; textMatches: number },
-        SQLQueryBindings[]
+        SqlValue[]
       >(
         `SELECT l.id,l.run_id AS runId,r.slug,r.workspace,r.status,l.seq,l.at,l.node_id AS nodeId,l.execution_key AS executionKey,l.attempt,l.level,substr(l.message,1,1024) AS message,l.data_bytes AS dataBytes,instr(lower(l.message),lower(?))>0 AS textMatches FROM logs l JOIN runs r ON r.id=l.run_id WHERE ${clauses.join(" AND ")} ORDER BY l.id ${ascending ? "ASC" : "DESC"} LIMIT ${FEED_SCAN_LIMIT + 1}`,
       )
@@ -119,7 +119,7 @@ export class SqliteQueryFeeds extends SqliteQueryNodes {
   async eventPage(query: EventPageQuery) {
     const ascending = query.after !== undefined;
     const clauses = [`e.sequence${ascending ? ">" : "<"}?`];
-    const values: SQLQueryBindings[] = [query.after ?? query.before ?? Number.MAX_SAFE_INTEGER];
+    const values: SqlValue[] = [query.after ?? query.before ?? Number.MAX_SAFE_INTEGER];
 
     if (query.runId !== undefined) {
       clauses.push("e.run_id=?");
@@ -127,10 +127,7 @@ export class SqliteQueryFeeds extends SqliteQueryNodes {
     }
 
     const rows = this.db
-      .query<
-        EventSummary & { workspace: string | null; status: RunStatus | null },
-        SQLQueryBindings[]
-      >(
+      .query<EventSummary & { workspace: string | null; status: RunStatus | null }, SqlValue[]>(
         `SELECT e.sequence,e.at,e.txn,e.run_id AS runId,COALESCE(r.slug,e.slug) AS slug,COALESCE(r.workspace,e.workspace) AS workspace,r.status,e.node_id AS nodeId,e.entity,e.kind FROM events e LEFT JOIN runs r ON r.id=e.run_id WHERE ${clauses.join(" AND ")} ORDER BY e.sequence ${ascending ? "ASC" : "DESC"} LIMIT ${FEED_SCAN_LIMIT + 1}`,
       )
       .all(...values);

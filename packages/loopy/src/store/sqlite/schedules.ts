@@ -74,8 +74,8 @@ export class SqliteSchedules extends SqliteWaits {
   }
 
   async scheduleOverview(): Promise<ScheduleOverview> {
-    return this.db
-      .transaction(() => ({
+    return this.db.transaction(
+      () => ({
         workspaces: this.db
           .query<{ workspace: string }, []>(
             "SELECT DISTINCT workspace FROM schedules ORDER BY workspace",
@@ -91,8 +91,9 @@ export class SqliteSchedules extends SqliteWaits {
            WHERE enabled=1 ORDER BY next_fire_at,workspace,slug LIMIT 10`,
           )
           .all(),
-      }))
-      .deferred();
+      }),
+      "deferred",
+    );
   }
 
   async listSchedules(): Promise<Schedule[]> {

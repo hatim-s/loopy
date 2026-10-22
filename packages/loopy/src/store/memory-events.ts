@@ -67,12 +67,24 @@ export class MemoryEvents {
   async pruneEvents(now: string): Promise<number> {
     const cutoff = Date.parse(now) - EVENT_RETENTION.maxAgeMs;
 
-    const kept = this.eventLog
-      .slice(-EVENT_RETENTION.maxRows)
-      .filter((event) => Date.parse(event.at) >= cutoff);
+    let boundary = Math.max(-1, this.eventLog.length - EVENT_RETENTION.maxRows - 1);
 
-    const deleted = this.eventLog.length - kept.length;
-    this.eventLog = kept;
+    for (let index = 0; index < this.eventLog.length; index++) {
+      const event = this.eventLog[index];
+
+      if (event && Date.parse(event.at) < cutoff) {
+        boundary = Math.max(boundary, index);
+      }
+    }
+
+    const transaction = this.eventLog[boundary]?.txn;
+
+    while (transaction !== undefined && this.eventLog[boundary + 1]?.txn === transaction) {
+      boundary++;
+    }
+
+    const deleted = boundary + 1;
+    this.eventLog = this.eventLog.slice(deleted);
 
     return deleted;
   }

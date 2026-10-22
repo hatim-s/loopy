@@ -1,4 +1,3 @@
-import { hostname } from "node:os";
 import type {
   RunOutcome,
   RunRecord,
@@ -26,19 +25,14 @@ export class SqliteRuns extends SqliteWaitRecords {
     windowMs: number,
     now: string,
   ): Promise<RateLimitResult> {
-    return this.db
-      .transaction(() => {
-        const window =
-          this.db.query<RateLimitWindow, [string]>(SQL.rateLimit).get(key) ?? undefined;
+    return this.db.transaction(() => {
+      const window = this.db.query<RateLimitWindow, [string]>(SQL.rateLimit).get(key) ?? undefined;
 
-        const acquired = acquireWindow(window, count, windowMs, now);
-        this.db
-          .query(SQL.putRateLimit)
-          .run(key, acquired.window.windowStart, acquired.window.count);
+      const acquired = acquireWindow(window, count, windowMs, now);
+      this.db.query(SQL.putRateLimit).run(key, acquired.window.windowStart, acquired.window.count);
 
-        return acquired.result;
-      })
-      .immediate();
+      return acquired.result;
+    }, "immediate");
   }
 
   async createRun(run: RunRecord): Promise<void> {
@@ -77,7 +71,14 @@ export class SqliteRuns extends SqliteWaitRecords {
 
       const result = this.db
         .query(SQL.claim)
-        .run(token, process.pid, hostname(), timestamp, timestamp, runId);
+        .run(
+          token,
+          this.options.owner.identity.pid,
+          this.options.owner.identity.host,
+          timestamp,
+          timestamp,
+          runId,
+        );
 
       if (result.changes !== 1) {
         const row = this.requireRow(runId);
