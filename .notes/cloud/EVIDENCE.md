@@ -17,7 +17,7 @@ Full T3 task IDs are recorded in `tasks.json`.
 
 ## Acceptance status
 
-The runtime, real Docker journey, local workerd tests, failure journey and final repository check have passed. Independent review 2 has no blocking code findings. Phase 1 acceptance remains open for authenticated dashboard browser QA. Phase 2 is not authorized. Later sections record the chronological evidence and limits.
+The runtime, real Docker journey, local workerd tests, failure journey and final repository check have passed. Independent review 2 has no blocking code findings. Authenticated dashboard browser QA has now passed. Additional real Docker transport-failure verification is running; its result is not yet claimed. Phase 2 is not authorized. Later sections record the chronological evidence and limits.
 
 ## Local services and first platform checks
 
@@ -66,3 +66,13 @@ The first full check to reach tests passed build, lint and both TypeScript confi
 - The live fixture stack remains on 14870/14871/14872/14873. Its private state and disposable credentials remain in ignored .loopy/cloud. Failed intermediate formatting logs were retained in ignored .loopy/cloud/evidence-history.
 - Remaining phase 1 handoff: run `bun --no-env-file scripts/cloud/open-url.ts` from this worktree and open its printed URL in personal Chrome without pasting the credential into chat. Browser safety blocked reading the local credential file. The dashboard remains at its unauthenticated screen, so no authenticated visual/interaction acceptance is claimed.
 - Phase 2 approval is not requested while phase 1 acceptance is incomplete. PHASE-2.md is a draft resource/cost/cutover plan with provider implementation prerequisites, not a deployable or approved rollout.
+
+## Authenticated dashboard acceptance, 2026-10-22
+
+- User opened the local credential URL in personal Chrome. The newer user tab was connected; the earlier login-tab observation was stale. No credential was printed in chat or saved in evidence. Refresh preserved authentication and returned to Live.
+- Resolved the existing synthetic approval run `bdced5e6-4e74-4a0a-ba3b-266778a5d64d` through the dashboard with `{"approved":true}`. It changed live to Succeeded and returned version 1, preserving its older pinned revision `57ff7bbc` despite a newer saved definition.
+- Started `cloud-journey-execution` through its input form with name `browser-qa`, chooseYes true and items `[3,5]`. Run `5972833b-2ce1-4e32-a5a5-4051f4c9482e`, revision `d5fed93f`, succeeded in 4.1 seconds. Output doubled items to 6 and 10, selected the yes branch, returned the bundle greeting and descriptor output, and completed the retry fixture.
+- Inspected firstfail attempt 1's exit-code-7 retry and attempt 2's successful finished receipt. Opened map item 1, verified output `{"doubled":10,"index":1}` and finished receipt, then expanded its scoped log payload `{"item":5,"index":1}`.
+- Logs and events showed persisted records. Filtering by the browser-created run retained the filter across tabs. Event 909 contained the completed run and transaction identity. Run details and the read-only graph rendered; graph fit settled at 36 percent for the wide 19-node graph.
+- Screenshots: `evidence/dashboard-approval.jpg` and `evidence/dashboard-execution.jpg`. The user tab remains on the successful run. No new UI tests or production edits were needed. This is desktop Chrome acceptance of local fixture behavior, not remote-provider or responsive-device verification.
+- A new Sol test task uses high reasoning and Standard speed, advertised as `serviceTier: default`. It is checking real Docker CLI transport failures in isolated resources. No passing result is claimed yet.

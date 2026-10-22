@@ -1,6 +1,6 @@
 # Loopy cloud integration, phase 1
 
-Status: runtime implemented, verified and independently reviewed; authenticated dashboard QA pending. Owner: Astra top-level T3 thread. Updated 2026-10-22.
+Status: runtime implemented, verified and independently reviewed; authenticated dashboard QA passed; additional real Docker transport-failure verification running. Owner: Astra top-level T3 thread. Updated 2026-10-22.
 
 ## Authorization and workspace
 
@@ -31,3 +31,7 @@ Prepare exact resources, configuration and deployment commands; cost assumptions
 Cloudflare SQLite storage documentation was read in Hatim's personal Chrome on 2026-10-22: https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/
 
 It documents synchronous SQL transactions, automatic input/output gates, cursor consumption before awaits, and local PITR absence. Local tests cannot establish remote durability, failover timing or PITR.
+
+## Current continuation
+
+Authenticated personal Chrome QA passed on 2026-10-22. Additional Docker transport-failure verification runs in isolated resources under `.loopy/cloud-transport`; the existing fixture stack remains available. New Sol tasks use Standard speed, `serviceTier: default`, as requested by Hatim. Retain earlier task settings as historical records. The phase 2 packet still needs its staging implementation prerequisites resolved before a deployment approval request.

@@ -1,6 +1,6 @@
 # Phase 2 approval packet, draft
 
-No cloud action is authorized. This packet does not request approval until phase 1's final check and dashboard acceptance are complete. The branch stays separate from main even after cloud approval.
+No cloud action is authorized. Phase 1's final repository check and authenticated dashboard acceptance have passed. This draft does not yet request deployment approval because the staging adapter and configuration prerequisites below remain unimplemented. The branch stays separate from main even after cloud approval.
 
 ## Proposed first cloud scope
 
@@ -88,4 +88,4 @@ Rollback stops new admission and disables schedules, records active provider IDs
 
 ## Gate
 
-Pending before this packet is ready for approval: final phase 1 check, dashboard acceptance and a concrete reviewed staging-adapter/configuration diff. No approval has been requested or inferred. No cloud resource, remote migration, deployment or paid workload has run from this branch.
+Pending before this packet is ready for deployment approval: a concrete reviewed staging-adapter/configuration diff and completion of the additional isolated Docker transport-failure verification. Final phase 1 check and authenticated dashboard acceptance have passed. No approval has been requested or inferred. No cloud resource, remote migration, deployment or paid workload has run from this branch.
