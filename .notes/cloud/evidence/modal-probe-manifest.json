@@ -1,0 +1,43 @@
+{
+  "manifestHash": "373828259f067b6f88d01a9c61fea032a3d2137083a822de58b618a647474344",
+  "manifest": {
+    "version": 1,
+    "id": "eee517857013e3ff70f1a968",
+    "target": {
+      "workspace": "ac-BBeoTn9zN1g9g3tJyxwPN2",
+      "environment": "main"
+    },
+    "implementationHash": "8b2d50cd4168e79bf74bdc04840f2ee19c15548b59019fa032a1a88ae8ed342a",
+    "sdk": "modal@0.11.1",
+    "speed": "Standard",
+    "appName": "loopy-cloud-probe-eee517857013e3ff70f1a968",
+    "image": "oven/bun:1.4.0@sha256:5ff609364c049b54eb0ff560ec96319729a972078ef2c755d758f0c6ef89c2d6",
+    "resources": {
+      "cpu": 0.5,
+      "cpuLimit": 0.5,
+      "memoryMiB": 512,
+      "memoryLimitMiB": 512,
+      "blockNetwork": true
+    },
+    "sandboxes": [
+      {
+        "role": "recovery",
+        "name": "loopy-probe-eee517857013e3ff70f1a968-recovery",
+        "timeoutMs": 120000
+      },
+      {
+        "role": "lifetime",
+        "name": "loopy-probe-eee517857013e3ff70f1a968-lifetime",
+        "timeoutMs": 15000
+      }
+    ],
+    "bounds": {
+      "logicalSandboxCreates": 2,
+      "processTimeoutMs": 12000,
+      "outputBytes": 2048,
+      "wallTimeMs": 240000,
+      "sdkRetriesDisabled": false,
+      "strictAllocationCapVerified": false
+    }
+  }
+}

@@ -8,7 +8,7 @@ The public TypeScript SDK exposes sandbox identity lookup but no public process-
 
 The proposed cohort is two named sandboxes, requested sequentially in one explicitly selected Modal environment. The first has a requested lifetime of at most 120 seconds and tests sandbox reconnection, concurrent filesystem visibility and recovery of a saved result after dropping a client handle. The second has a requested lifetime of at most 15 seconds and tests provider-enforced timeout while the caller is absent. Resource requests are 0.5 physical CPU and 512 MiB memory, with matching limits where supported. Workload network access is blocked. No volumes, GPU, tunnels, workflow secrets, personal files or Cloudflare resources are involved.
 
-The target workspace and environment have been requested from Hatim as names only. That answer will identify the proposal, not authorize calls. The final command, target manifest hash, source hashes, secret-input mechanism, resource names and cleanup sequence will be filled in from the reviewed implementation before asking for approval. No current draft flag or file counts as user approval.
+Hatim selected workspace ID `ac-BBeoTn9zN1g9g3tJyxwPN2`. Hatim selected existing Modal environment `main`. This selection identifies the proposal and does not authorize calls. The workspace field records the supplied ID as the intended target; the SDK does not independently verify it against credentials. The final command, target manifest hash, source hashes, secret-input mechanism, resource names and cleanup sequence will be filled in from the reviewed implementation before asking for approval. No current draft flag or file counts as user approval.
 
 ## Local preparation and source findings
 
@@ -32,7 +32,7 @@ Run from `/Users/hatim.shakir/projects/loopy/cloud-integration`. The offline com
 
 ```sh
 bun --no-env-file scripts/cloud/modal-probe.ts plan \
-  --workspace USER_SELECTED_WORKSPACE --environment EXISTING_ENVIRONMENT
+  --workspace ac-BBeoTn9zN1g9g3tJyxwPN2 --environment main
 ```
 
 The live commands are implemented but remain unapproved. `PLAN_ID` must identify the reviewed target manifest. `APPROVAL_FILE` must record Hatim's actual explicit approval, with its reference, exact manifest hash and target, expiry and permitted actions. Never create a record to bypass the approval gate. `TOKEN_PAIR_FILE` is an owner-only JSON file containing the explicitly selected workspace token pair; its values must stay out of chat and logs. No credential is needed to review this packet.
@@ -62,8 +62,44 @@ The implementation bounds two logical create calls, each process to a requested 
 
 The corrected focused suite passed 18 tests with 145 assertions. It covers durable admission, ambiguous creation, identity-fenced cleanup, timeout observation, bounded output, sanitized workers and a real local Bun filesystem fixture. No test imports the Modal runtime or calls the provider. Before those fixes, the complete `bun run check` passed build, lint, both TypeScript configurations and 1,162 tests, with 3 skips and 5,298 assertions across 79 files. Log: `evidence/check-modal-probe.log`.
 
-The exact target manifest and final approval wording remain pending the workspace/environment names. Placeholder offline plans are not eligible to substitute for that target selection. See [implementation details](modal-probe-implementation.md) for the approval schema, SDK limitations and journal behavior.
+The exact target manifest and approval proposal are recorded below. Placeholder offline plans are not eligible to substitute for that target selection. See [implementation details](modal-probe-implementation.md) for the approval schema, SDK limitations and journal behavior.
 
 The corrected journal publishes synced private temporary files with no-overwrite links and a directory sync. App admission lists both V1 and V2 sandboxes through the exact app ID. Fresh cleanup-only approval can bind a `cleanupImplementationHash` while retaining the original resource manifest and tags; it cannot authorize execute or verification. The current seven-script hash is `8b2d50cd4168e79bf74bdc04840f2ee19c15548b59019fa032a1a88ae8ed342a`. All earlier placeholder plans are obsolete.
 
 After all three fixes, the full repository check passed again: 1,165 tests, 3 skips, zero failures and 5,342 assertions. Build, lint and both TypeScript configurations passed. Log: `evidence/check-modal-probe-final.log`. Fresh independent review passed with no blockers; see `modal-probe-review-2.md`.
+
+
+## Exact proposed probe, awaiting explicit approval
+
+Target: workspace ID `ac-BBeoTn9zN1g9g3tJyxwPN2`, existing Modal environment `main`. This is the Modal environment name, not permission to change the Git main branch. Hatim supplied both values. Neither target selection authorizes provider calls.
+
+Plan ID: `eee517857013e3ff70f1a968`.
+Manifest SHA-256: `373828259f067b6f88d01a9c61fea032a3d2137083a822de58b618a647474344`.
+Reviewed implementation commit: `093ccd4926b2f5e1faf9870d7133400e16725078`.
+Seven-script implementation SHA-256: `8b2d50cd4168e79bf74bdc04840f2ee19c15548b59019fa032a1a88ae8ed342a`.
+Public manifest copy: [evidence/modal-probe-manifest.json](evidence/modal-probe-manifest.json).
+
+The exact app is `loopy-cloud-probe-eee517857013e3ff70f1a968`. The two sandbox names are `loopy-probe-eee517857013e3ff70f1a968-recovery` and `loopy-probe-eee517857013e3ff70f1a968-lifetime`. Creation is sequential, and the first must be confirmed terminal before the second is requested. The app is new; any existing app under this name is refused. The pinned public Bun image and fixed commands are in the manifest and reviewed source. The environment is never created or modified.
+
+Proposed authorization: one execution of this exact plan, required provider discovery reads, app creation and image import/build as needed, its two logical sandbox creates, fixed synthetic commands, inventory and identity-scoped termination. Approval also needs to acknowledge retained SDK retries, unknown image-build cost/outcome and the absence of automatic workspace-to-credential verification. The local command has a 240-second watchdog; this is not a cloud spending or allocation guarantee. App/image records are retained after sandbox cleanup. No personal state, workflow credentials, Cloudflare deployment, production cutover or Git main merge is included.
+
+After fresh explicit approval and a supported private credential handoff, the commands will be:
+
+```sh
+bun --no-env-file scripts/cloud/modal-probe.ts execute \
+  --id eee517857013e3ff70f1a968 \
+  --approval "$PWD/.loopy/cloud-probe/eee517857013e3ff70f1a968/approval.json" \
+  --credentials "$PWD/.loopy/cloud-probe/eee517857013e3ff70f1a968/credentials.json"
+bun --no-env-file scripts/cloud/modal-probe.ts inventory \
+  --id eee517857013e3ff70f1a968 \
+  --approval "$PWD/.loopy/cloud-probe/eee517857013e3ff70f1a968/approval.json" \
+  --credentials "$PWD/.loopy/cloud-probe/eee517857013e3ff70f1a968/credentials.json"
+bun --no-env-file scripts/cloud/modal-probe.ts stop \
+  --id eee517857013e3ff70f1a968 \
+  --approval "$PWD/.loopy/cloud-probe/eee517857013e3ff70f1a968/approval.json" \
+  --credentials "$PWD/.loopy/cloud-probe/eee517857013e3ff70f1a968/credentials.json"
+```
+
+No approval or credential file was created during preparation. The approval record must cite the actual approving user message, expire within 24 hours, and grant execute/inventory/stop against the exact manifest. This proposed execution is one-shot; failure does not authorize another plan or resource cohort. If ambiguous remote work remains after scoped stop, retain the journal and report it before requesting further action. Fresh cleanup-only approval can bind newly reviewed code without changing the original resource identity.
+
+The offline planning command completed without SDK import or provider calls and reproduced the reviewed implementation hash. The final full check and independent review remain valid because only target documentation and a public manifest copy changed afterward.

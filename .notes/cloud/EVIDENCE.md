@@ -111,3 +111,7 @@ Parent `bun run check` exited 0 after those fixes: build, Biome/ESLint, both Typ
 ## Probe review accepted
 
 Fresh independent round 2 found no blockers and traced each fix to its round 1 failure mechanism. It independently passed 18 tests with 145 assertions and verified implementation/test hashes. The T3 task completed with `result_available`, no pending child work and Standard speed. Report: `modal-probe-review-2.md`. No code changed after the final full check; only reports and this handoff were updated. User-selected Modal target names and explicit execution approval remain outstanding. Main remains clean at `dee31da64781c04313b2555a5e697da724e06ef8`.
+
+## Exact target selected
+
+Hatim supplied workspace `ac-BBeoTn9zN1g9g3tJyxwPN2` and Modal environment `main`. The default offline CLI generated plan `eee517857013e3ff70f1a968`; manifest SHA-256 `373828259f067b6f88d01a9c61fea032a3d2137083a822de58b618a647474344`. Its implementation hash matches the accepted review. Public manifest: `evidence/modal-probe-manifest.json`. Only local planning and documentation occurred; no credentials, SDK client, provider calls or approval record. The exact probe is now awaiting explicit approval.
