@@ -148,5 +148,15 @@
       "reasoningEffort": "high",
       "serviceTier": "default"
     }
+  },
+  {
+    "requestId": "loopy-cloud-approval-readiness-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Aadc42349-d548-46b4-910b-15cb95acd1a7%3Adelegate-task%3Aloopy-cloud-approval-readiness-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
   }
 ]

@@ -1,0 +1,324 @@
+{
+  "status": "passed",
+  "scope": "local-real-docker-cli-transport-faults",
+  "command": "env -i PATH=\"$PATH\" HOME=\"$HOME\" LANG=C.UTF-8 bun --no-env-file scripts/cloud/transport-failure.ts",
+  "startedAt": "2026-10-22T17:27:30.789Z",
+  "finishedAt": "2026-10-22T17:27:51.793Z",
+  "identity": {
+    "worktree": "/Users/hatim.shakir/projects/loopy/cloud-integration",
+    "branch": "cloud-integration",
+    "head": "214bbe3910ff65dc3eec6af31c187908e33246bc",
+    "requestedHead": "8eb76408294968abb4bb9e41cbffc1104e1f814b",
+    "documentationAndHarnessAdvancedFiles": [
+      ".notes/cloud/EVIDENCE.md",
+      ".notes/cloud/PHASE-2.md",
+      ".notes/cloud/PLAN.md",
+      ".notes/cloud/evidence/dashboard-approval.jpg",
+      ".notes/cloud/evidence/dashboard-execution.jpg",
+      ".notes/cloud/tasks.json"
+    ],
+    "bun": "1.4.0",
+    "dockerContext": "colima-loopy-cloud-phase1",
+    "image": "loopy-sandbox:bun-1.4.0",
+    "imageId": "sha256:f99137d238871c84887617777c81e9920f4fcff3f9e3cb9c07d49e66c20b1cc8"
+  },
+  "boundaries": {
+    "portsOpened": [],
+    "stateBase": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/cloud-transport",
+    "sourceEdits": false,
+    "daemonStopped": false,
+    "credentialsUsed": false,
+    "contextChanged": false
+  },
+  "limitations": [
+    "Fault injection wraps the existing CommandRunner parameter inside this test process.",
+    "wait failure kills an actual docker wait client. inspect and fallback ls failures execute the actual Docker CLI against an absent Unix socket selected for those invocations only.",
+    "Successful Docker commands, ownership inspections, worker execution, receipts, artifacts and deadline termination use the real named context. No Docker state or result is mocked.",
+    "Attempts is closed and reopened in the same test process. This is service-object reconstruction, not an operating-system process crash.",
+    "The shared daemon remains available. This does not prove a daemon outage, network partition, remote provider behavior, Modal parity or browser acceptance.",
+    "The existing image is pinned by image ID and its bundled worker hash. It was not rebuilt from the inspected host source."
+  ],
+  "sourceHashes": {
+    "apps/sandbox/src/artifacts.ts": "35ce25495b615bd6cd9db0f3b04b618c42e84f38aed121a040d00945086f659f",
+    "apps/sandbox/src/admission.ts": "2cc3d7b014530ed95a6a8836a4f3322a6d143e781d61e5bbedf3f7ab39918f3e",
+    "apps/sandbox/src/process.ts": "1cd6d44b3cc366c657662cc9f0308d67f9113a7f99574842da27003ac6471ee8",
+    "apps/sandbox/src/attempts.ts": "d5da615824d59074e123440f7155d551090195c0b04021d7d8d2ced2245f12ac",
+    "apps/sandbox/src/result.ts": "79fdc73a86e222da62f0c431d27b713e4031a7c0d73e599f6dba8dead36f51cb",
+    "apps/sandbox/src/docker-client.ts": "3def9b7677784606ba0cf7e0615068da81c09ec99821df7c24ec08a37be864c8",
+    "apps/sandbox/src/docker.ts": "879d257ccec1c61fb2acddf004ccf29aa97c34bb878e830fc4227278bcfd46be",
+    "apps/sandbox/src/artifact-error.ts": "ba4456ca8a48317a32650b6dbe0dc2afe78d180ae02993a871509c9897793308",
+    "apps/sandbox/src/index.ts": "cb90850278a2a80ee86b405770562e2fbaf1129014d5993cdac22c63685252ff",
+    "apps/sandbox/src/config.ts": "3382e4af0117c3d1033ee25f021ee20e2dd783d81d5b9b283dc3f5063ec9ee44",
+    "apps/sandbox/src/receipts.ts": "31490443a0033c68fe448520792293ed38f4b008dcb1d96db289e18d33726c14",
+    "apps/sandbox/src/artifact-worker.ts": "5d58ac0e4e557b23a0a6b782d00a12bed78b1bd2bc5a9883528250702aa77243",
+    "apps/sandbox/src/server.ts": "7fcf6ee893fde32afcb09e2967dc3f3497303961ec44ea06b5549a064dad12fe",
+    "apps/sandbox/src/worker.ts": "5bbf2bf04e02d9d2962df04108aa73810cddf4b207d5c598b819290b31504f59",
+    "packages/loopy/src/local/spawn.ts": "4ae966490d7eddffe8659dc7d520cf9e167bf2016196363db7e972bfebe544fd",
+    "packages/loopy/src/executor/protocol.ts": "cd96c7ea10e49f284252f930c57b5962f04e836cb2fd93e8b0d9cf5bd974c695",
+    "packages/loopy/src/contract/sandbox.ts": "e0f4762b960f637bc6559b2061709a3762b9c0ca603dc1c320733baa97dd0a42",
+    "scripts/cloud/transport-failure.ts": "c1b1df30422454d614147b743fa5c6dcb03fd4becc6746af23d5382aaed25a25",
+    "scripts/cloud/transport-failure-resources.ts": "40aeb43f68a1027a713aedb502d732ecf38ad2d15a0653e64ce2c67292d527bf",
+    "scripts/cloud/transport-failure-faults.ts": "ab8853e1ac0d69327368d6c2c26a11ca495b46790a8948ddab32e5e88ed22419",
+    "scripts/cloud/transport-failure-scenario.ts": "fd49090802be0c0873c082e727b44b6ddeabb5efc4df2570ef4533728c6dbea9"
+  },
+  "sourceHashesUnchanged": true,
+  "results": [
+    {
+      "status": "passed",
+      "proof": {
+        "mode": "kill_wait_client",
+        "stateRoot": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/cloud-transport/run-DPUz6R/runtime-root/.loopy/cloud/sandbox",
+        "owner": "f850f2d1c0906fcb4124e54892c48172f56291f8d3cb3585a5fb3ec1453ff3d5",
+        "receiptId": "36fedb9099f81724509858e1987b0b7e4afa12a453d00e103617ba3a631a2964",
+        "container": "loopy-attempt-36fedb9099f81724509858e1987b0b7e4afa12a453d00e103617ba3a631a2964",
+        "dockerContainerId": "58637ddba0230692c9b98b98429dc129c0b2bbd7a44255a20013b79dbd1a6a10",
+        "workerStartedAt": "2026-10-22T17:27:31.097223645Z",
+        "imageWorkerSha256": "55f2fcb8fbc0d1c9fc4918a77b83e8ff2d629197ca6a45af50beba3bed8c3361",
+        "deadline": 1792690070920,
+        "reopenedAt": null,
+        "completedAt": 1792690057296,
+        "completionRelativeToDeadlineMs": -13624,
+        "result": {
+          "kind": "succeeded",
+          "output": {
+            "ok": true
+          },
+          "logs": []
+        },
+        "marker": "started\nfinished\n",
+        "starts": 1,
+        "admissions": 1,
+        "attempt": 1,
+        "sameContainerAndStartTime": true,
+        "originalDeadlinePreserved": true,
+        "duplicateAdmissions": {
+          "duringOutage": 2,
+          "afterRecovery": 1,
+          "afterCompletion": 1
+        },
+        "faults": [
+          {
+            "operation": "wait",
+            "exitCode": 137,
+            "pid": 98417,
+            "signal": "SIGKILL",
+            "at": "2026-10-22T17:27:31.585Z",
+            "workerRunning": true
+          },
+          {
+            "operation": "container inspect",
+            "exitCode": 1,
+            "stderr": "failed to connect to the docker API at unix:///var/empty/loopy-transport-f850f2d1c0906fcb.sock; check if the path is correct and if the daemon is running: dial unix /var/empty/loopy-transport-f850f2d1c0906fcb.sock: connect: no such file or directory",
+            "at": "2026-10-22T17:27:31.791Z",
+            "workerRunning": true
+          },
+          {
+            "operation": "container ls",
+            "exitCode": 1,
+            "stderr": "failed to connect to the docker API at unix:///var/empty/loopy-transport-f850f2d1c0906fcb.sock; check if the path is correct and if the daemon is running: dial unix /var/empty/loopy-transport-f850f2d1c0906fcb.sock: connect: no such file or directory",
+            "at": "2026-10-22T17:27:31.855Z",
+            "workerRunning": true
+          }
+        ],
+        "dockerCalls": [
+          {
+            "operation": "create",
+            "at": 1792690050921
+          },
+          {
+            "operation": "cp",
+            "at": 1792690050976
+          },
+          {
+            "operation": "rm",
+            "at": 1792690051016
+          },
+          {
+            "operation": "create",
+            "at": 1792690051061
+          },
+          {
+            "operation": "start",
+            "at": 1792690051110
+          },
+          {
+            "operation": "container inspect",
+            "at": 1792690051174
+          },
+          {
+            "operation": "wait",
+            "at": 1792690051208
+          },
+          {
+            "operation": "container inspect",
+            "at": 1792690051686
+          },
+          {
+            "operation": "container ls",
+            "at": 1792690051791
+          },
+          {
+            "operation": "container inspect",
+            "at": 1792690052056
+          },
+          {
+            "operation": "wait",
+            "at": 1792690052095
+          },
+          {
+            "operation": "container inspect",
+            "at": 1792690057228
+          },
+          {
+            "operation": "logs",
+            "at": 1792690057261
+          }
+        ]
+      },
+      "cleanup": {
+        "containersRemoved": [
+          "loopy-attempt-36fedb9099f81724509858e1987b0b7e4afa12a453d00e103617ba3a631a2964"
+        ],
+        "volumesCheckedAbsent": [
+          "loopy-input-36fedb9099f81724509858e1987b0b7e4afa12a453d00e103617ba3a631a2964",
+          "loopy-workspace-63d670a8eb0cd5f233373cde7b068c41188c025012fe60512c8375175afc97fa"
+        ],
+        "ownedContainersRemaining": 0,
+        "ownedVolumesRemaining": 0,
+        "ownedBackgroundProcessesRemaining": 0,
+        "activeRunnerCalls": 0
+      }
+    },
+    {
+      "status": "passed",
+      "proof": {
+        "mode": "unavailable_inspect_socket",
+        "stateRoot": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/cloud-transport/run-auKdnO/runtime-root/.loopy/cloud/sandbox",
+        "owner": "a1455db3579388db51fe239bae2470367cdcdb48b72dbcdd3a08161c15f08bc0",
+        "receiptId": "24c18ad50e1d99e273fb23aadd982fad71b235a843a4c13fc5a8877e30ad4b96",
+        "container": "loopy-attempt-24c18ad50e1d99e273fb23aadd982fad71b235a843a4c13fc5a8877e30ad4b96",
+        "dockerContainerId": "67f6f21f75d51205a13d10249e09ec22505a4b60a7421822328562a5f93cfafb",
+        "workerStartedAt": "2026-10-22T17:27:38.758650313Z",
+        "imageWorkerSha256": "55f2fcb8fbc0d1c9fc4918a77b83e8ff2d629197ca6a45af50beba3bed8c3361",
+        "deadline": 1792690070573,
+        "reopenedAt": 1792690060389,
+        "completedAt": 1792690070707,
+        "completionRelativeToDeadlineMs": 134,
+        "result": {
+          "kind": "failed",
+          "error": {
+            "code": "execution",
+            "message": "Attempt timed out. Its owned container was killed."
+          },
+          "exitCode": null,
+          "logs": []
+        },
+        "marker": "started\n",
+        "starts": 1,
+        "admissions": 1,
+        "attempt": 1,
+        "sameContainerAndStartTime": true,
+        "originalDeadlinePreserved": true,
+        "duplicateAdmissions": {
+          "duringOutage": 2,
+          "afterRecovery": 1,
+          "afterCompletion": 1
+        },
+        "faults": [
+          {
+            "operation": "container inspect",
+            "exitCode": 1,
+            "stderr": "failed to connect to the docker API at unix:///var/empty/loopy-transport-a1455db3579388db.sock; check if the path is correct and if the daemon is running: dial unix /var/empty/loopy-transport-a1455db3579388db.sock: connect: no such file or directory",
+            "at": "2026-10-22T17:27:38.907Z",
+            "workerRunning": true
+          },
+          {
+            "operation": "container ls",
+            "exitCode": 1,
+            "stderr": "failed to connect to the docker API at unix:///var/empty/loopy-transport-a1455db3579388db.sock; check if the path is correct and if the daemon is running: dial unix /var/empty/loopy-transport-a1455db3579388db.sock: connect: no such file or directory",
+            "at": "2026-10-22T17:27:38.972Z",
+            "workerRunning": true
+          },
+          {
+            "operation": "container inspect",
+            "exitCode": 1,
+            "stderr": "failed to connect to the docker API at unix:///var/empty/loopy-transport-a1455db3579388db.sock; check if the path is correct and if the daemon is running: dial unix /var/empty/loopy-transport-a1455db3579388db.sock: connect: no such file or directory",
+            "at": "2026-10-22T17:27:39.150Z",
+            "workerRunning": true
+          }
+        ],
+        "dockerCalls": [
+          {
+            "operation": "create",
+            "at": 1792690058574
+          },
+          {
+            "operation": "cp",
+            "at": 1792690058634
+          },
+          {
+            "operation": "rm",
+            "at": 1792690058673
+          },
+          {
+            "operation": "create",
+            "at": 1792690058716
+          },
+          {
+            "operation": "start",
+            "at": 1792690058769
+          },
+          {
+            "operation": "container inspect",
+            "at": 1792690058837
+          },
+          {
+            "operation": "container ls",
+            "at": 1792690058907
+          },
+          {
+            "operation": "container inspect",
+            "at": 1792690059073
+          },
+          {
+            "operation": "container ls",
+            "at": 1792690059150
+          },
+          {
+            "operation": "container inspect",
+            "at": 1792690060390
+          },
+          {
+            "operation": "wait",
+            "at": 1792690060425
+          },
+          {
+            "operation": "container inspect",
+            "at": 1792690070576
+          },
+          {
+            "operation": "kill",
+            "at": 1792690070625
+          },
+          {
+            "operation": "container inspect",
+            "at": 1792690070676
+          }
+        ]
+      },
+      "cleanup": {
+        "containersRemoved": [
+          "loopy-attempt-24c18ad50e1d99e273fb23aadd982fad71b235a843a4c13fc5a8877e30ad4b96"
+        ],
+        "volumesCheckedAbsent": [
+          "loopy-input-24c18ad50e1d99e273fb23aadd982fad71b235a843a4c13fc5a8877e30ad4b96",
+          "loopy-workspace-bee41a044153042548cbb07fe4c46a86904e7c4641ae8fd9a57062f08d507992"
+        ],
+        "ownedContainersRemaining": 0,
+        "ownedVolumesRemaining": 0,
+        "ownedBackgroundProcessesRemaining": 0,
+        "activeRunnerCalls": 0
+      }
+    }
+  ]
+}

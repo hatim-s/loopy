@@ -17,7 +17,7 @@ Full T3 task IDs are recorded in `tasks.json`.
 
 ## Acceptance status
 
-The runtime, real Docker journey, local workerd tests, failure journey and final repository check have passed. Independent review 2 has no blocking code findings. Authenticated dashboard browser QA has now passed. Additional real Docker transport-failure verification is running; its result is not yet claimed. Phase 2 is not authorized. Later sections record the chronological evidence and limits.
+The runtime, real Docker journey, local workerd tests, failure journey and final repository check have passed. Independent review 2 has no blocking code findings. Authenticated dashboard browser QA has now passed. Additional real Docker CLI transport-failure verification passed both scenarios, including a parent rerun. Phase 2 is not authorized. Later sections record the chronological evidence and limits.
 
 ## Local services and first platform checks
 
@@ -76,3 +76,16 @@ The first full check to reach tests passed build, lint and both TypeScript confi
 - Logs and events showed persisted records. Filtering by the browser-created run retained the filter across tabs. Event 909 contained the completed run and transaction identity. Run details and the read-only graph rendered; graph fit settled at 36 percent for the wide 19-node graph.
 - Screenshots: `evidence/dashboard-approval.jpg` and `evidence/dashboard-execution.jpg`. The user tab remains on the successful run. No new UI tests or production edits were needed. This is desktop Chrome acceptance of local fixture behavior, not remote-provider or responsive-device verification.
 - A new Sol test task uses high reasoning and Standard speed, advertised as `serviceTier: default`. It is checking real Docker CLI transport failures in isolated resources. No passing result is claimed yet.
+
+## Real Docker CLI transport faults
+
+- The Standard-speed Sol task completed with matching task/run identity, `result_available` and no pending child run. No causal runtime bug was found.
+- Killed a real `docker wait` client with SIGKILL. The owned worker continued; persisted receipt recovery returned success with exactly one start and one finish marker. Duplicate admissions did not create or restart a worker.
+- Selected real inspect/list invocations used an absent Unix socket while independent named-context calls observed the live worker. Reconstructed the service object, retained original admission/container/deadline, and confirmed timeout termination. The parent rerun completed the timeout 134 ms after the deadline.
+- Parent fixed only the harness's commit guard to permit its own committed scripts and the runbook. The corrected harness passed both scenarios. Independent parent cleanup inspection confirmed zero owned containers and all four receipt-derived volumes absent. No ports were opened or existing services changed.
+- Evidence: `evidence/transport-failure.json`; command and scoped checks: `transport-proof.md`. These are invocation-scoped CLI faults and service-object reconstruction. The Docker daemon remained healthy; this does not prove daemon failure or remote-provider parity. Earlier process-kill evidence remains separate.
+- A read-only Standard-speed Sol assessment is checking what local preparation is still needed to make the phase 2 deployment packet concrete. It cannot execute or authorize cloud actions.
+
+## Final check after transport proof
+
+`bun run check` exited 0 after the new harness and runbook change. Build, Biome/ESLint and both TypeScript configurations passed. Tests: 1,147 passed, 3 skipped, 0 failed, 5,197 assertions across 78 files, 67.13 seconds. Log: `evidence/check-transport-final.log`. The real-Docker transport journey passed separately because it is an explicit local resource test. No tests were deleted or moved.

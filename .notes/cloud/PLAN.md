@@ -1,6 +1,6 @@
 # Loopy cloud integration, phase 1
 
-Status: runtime implemented, verified and independently reviewed; authenticated dashboard QA passed; additional real Docker transport-failure verification running. Owner: Astra top-level T3 thread. Updated 2026-10-22.
+Status: runtime implemented, verified and independently reviewed; authenticated dashboard QA passed; additional real Docker transport-failure verification passed. Owner: Astra top-level T3 thread. Updated 2026-10-22.
 
 ## Authorization and workspace
 
@@ -34,4 +34,4 @@ It documents synchronous SQL transactions, automatic input/output gates, cursor 
 
 ## Current continuation
 
-Authenticated personal Chrome QA passed on 2026-10-22. Additional Docker transport-failure verification runs in isolated resources under `.loopy/cloud-transport`; the existing fixture stack remains available. New Sol tasks use Standard speed, `serviceTier: default`, as requested by Hatim. Retain earlier task settings as historical records. The phase 2 packet still needs its staging implementation prerequisites resolved before a deployment approval request.
+Authenticated personal Chrome QA passed on 2026-10-22. Additional Docker transport-failure verification passed in isolated resources under `.loopy/cloud-transport`; cleanup was verified and the existing fixture stack remains available. New Sol tasks use Standard speed, `serviceTier: default`, as requested by Hatim. Retain earlier task settings as historical records. The phase 2 packet still needs its staging implementation prerequisites resolved before a deployment approval request.

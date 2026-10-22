@@ -88,4 +88,4 @@ Rollback stops new admission and disables schedules, records active provider IDs
 
 ## Gate
 
-Pending before this packet is ready for deployment approval: a concrete reviewed staging-adapter/configuration diff and completion of the additional isolated Docker transport-failure verification. Final phase 1 check and authenticated dashboard acceptance have passed. No approval has been requested or inferred. No cloud resource, remote migration, deployment or paid workload has run from this branch.
+Pending before this packet is ready for deployment approval: a concrete reviewed staging-adapter/configuration diff. Additional isolated Docker transport-failure verification has passed. Final phase 1 check and authenticated dashboard acceptance have passed. No approval has been requested or inferred. No cloud resource, remote migration, deployment or paid workload has run from this branch.

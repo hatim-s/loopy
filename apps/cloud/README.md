@@ -42,6 +42,8 @@ The URL contains a bearer credential in its fragment. Do not paste it into chat,
 bun --no-env-file scripts/cloud/journey.ts
 bun --no-env-file scripts/cloud/artifact-journey.ts
 bun --no-env-file scripts/cloud/failures.ts
+env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 \
+  bun --no-env-file scripts/cloud/transport-failure.ts
 LOOPY_SANDBOX_DOCKER_CONTEXT=colima-loopy-cloud-phase1 \
   bun test packages/loopy/_tests_/cloud-sandbox.test.ts
 bun run check
@@ -50,6 +52,8 @@ bun run check
 The ordinary journey creates fresh fixture runs on the main local stack. It compiles safe definitions, transfers verified bundles and source, exercises both branches, map/parallel work, a controlled retry, logs, approval, historical revision execution, auth isolation, bounded pages and SSE reconnection. JSON evidence goes to `.notes/cloud/evidence`.
 
 The failure journey starts its own local processes on 14970, 14971 and 14973. It uses `.loopy/cloud-failures/runtime-root` and a different Docker ownership hash. It kills only its recorded processes and labelled fixture workers, restarts persisted state, and checks uncertainty, timeouts and real overlapping cron firings. It removes its own Docker resources and stops its own processes after the run. It needs several minutes because cron ticks are real.
+
+The transport journey opens no ports. It kills an actual Docker wait client and directs selected inspect/list calls to an absent socket while the owned worker keeps running. It checks original-container reconciliation, duplicate admission and the persisted timeout deadline, then removes only its receipt-derived resources. State remains under `.loopy/cloud-transport`. The shared Docker daemon and fixture stack stay available. This proves invocation-scoped CLI failures, not a Docker daemon outage.
 
 ## State and shutdown
 
