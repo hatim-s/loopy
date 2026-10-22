@@ -1,7 +1,7 @@
 bun test v1.4.0 (34cbb9a40)
 
 packages/loopy/_tests_/daemon.test.ts:
-247 | 
+247 |
 248 |     try {
 249 |       await sleeping.entered();
 250 |       expect(sleeping.calls[0]?.milliseconds).toBe(5000);
@@ -15,7 +15,7 @@ Received: false
 
       at <anonymous> (/Users/hatim.shakir/projects/loopy/cloud-integration/packages/loopy/_tests_/daemon.test.ts:252:49)
 (fail) memory committed queued creation interrupts idle sleep without an explicit wake [1.39ms]
-247 | 
+247 |
 248 |     try {
 249 |       await sleeping.entered();
 250 |       expect(sleeping.calls[0]?.milliseconds).toBe(5000);
@@ -33,7 +33,7 @@ Received: false
 281 |       } else {
 282 |         await f.store.setScheduleEnabled({ workspace: "/workspace", slug: "test", enabled: true });
 283 |       }
-284 | 
+284 |
 285 |       expect(idle?.signal.aborted).toBe(true);
                                          ^
 error: expect(received).toBe(expected)
@@ -47,7 +47,7 @@ Received: false
 281 |       } else {
 282 |         await f.store.setScheduleEnabled({ workspace: "/workspace", slug: "test", enabled: true });
 283 |       }
-284 | 
+284 |
 285 |       expect(idle?.signal.aborted).toBe(true);
                                          ^
 error: expect(received).toBe(expected)
