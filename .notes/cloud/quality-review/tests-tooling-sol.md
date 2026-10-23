@@ -202,4 +202,3 @@ Command evidence
 - `git show 6ffecdf:AGENTS.md`, `git show 6ffecdf:apps/sandbox/README.md`, and `git show 6ffecdf:scripts/playground/stack.ts` supplied before evidence. The documentation-path diff printed no changes.
 - A read-only Python script parsed only the source-freeze manifest's structural fields, counted paths and compared three representative `git show 9d30ca9:<path>` blobs with the stored SHA-256 values. All three matched. `git ls-tree -rl 9d30ca9 .notes/cloud/architecture .notes/cloud/evidence/architecture` supplied the aggregate file/byte counts.
 - No implementation changes, test deletions, test moves or behavior changes were made by this review.
-

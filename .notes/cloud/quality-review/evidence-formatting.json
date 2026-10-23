@@ -1,0 +1,24 @@
+{
+  "at": "2026-10-23T17:35:02.975880+00:00",
+  "reason": "Remove trailing whitespace from committed report prose and embedded diff/diagnostic display. Original bytes retained in ignored evidence; no source/tests or test results changed.",
+  "files": [
+    {
+      "path": ".notes/cloud/quality-review/fix-docs-round2.md",
+      "originalSha256": "57210bac60f0304a8960c3f3c035904513605db9c31d2a76fd366820f7c5c9b1",
+      "retainedOriginal": ".loopy/quality-tests/evidence-whitespace-originals/fix-docs-round2.md",
+      "normalizedSha256": "ee5e25bfb358595deaaee0ebbc70bcb1cf7ea5c220d4093a3177064a6422b081"
+    },
+    {
+      "path": ".notes/cloud/quality-review/fix-service-checks.txt",
+      "originalSha256": "5e212bf3a6bee2d5119aadeab4530a04d79b1a944783cbfc4f41e953d10548c4",
+      "retainedOriginal": ".loopy/quality-tests/evidence-whitespace-originals/fix-service-checks.txt",
+      "normalizedSha256": "79d9c1186caa086c41753246bc52d734a3e4902ecf329ed1b326407ec71ba942"
+    },
+    {
+      "path": ".notes/cloud/quality-review/tests-tooling-sol.md",
+      "originalSha256": "f00968a613d6c57ca16c4ca6698c251c2f11bb82fbf38a1514a77fbc94284aaf",
+      "retainedOriginal": ".loopy/quality-tests/evidence-whitespace-originals/tests-tooling-sol.md",
+      "normalizedSha256": "aa2d50b78906eaeea4b5f0268a812346b5eef4c4df46a5078c1d474f1d6df89d"
+    }
+  ]
+}
