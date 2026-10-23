@@ -1,0 +1,36 @@
+{
+  "at": "2026-10-23T16:35:51.930886+00:00",
+  "worktree": "/Users/hatim.shakir/projects/loopy/cloud-integration",
+  "branch": "cloud-integration",
+  "mainCheckout": "/Users/hatim.shakir/projects/loopy/main",
+  "mainBefore": "dee31da64781c04313b2555a5e697da724e06ef8",
+  "mainIntegrated": "7f6976ae585f8a1ae02bace26fa898eb5a341985",
+  "sourceCommit": "69de89c",
+  "method": "git merge --ff-only cloud-integration",
+  "commands": [
+    {
+      "command": "bun install --frozen-lockfile",
+      "exitCode": 0,
+      "log": ".loopy/architecture-tests/main-install.log",
+      "sha256": "929cafe1e1645f933809148d000adcb38323e2ed5dc259b167eff2cc8df60bb8"
+    },
+    {
+      "command": "bun --no-env-file scripts/build.ts",
+      "exitCode": 0,
+      "log": ".loopy/architecture-tests/main-build.log",
+      "sha256": "e29d6a301581ae3e6492b08fefda42dc3cd1c4564041a208386ac49f1263e2ae"
+    }
+  ],
+  "sourceFreeze": {
+    "files": 467,
+    "aggregate": "93e0bcd0fccac0dbf8deff30aa0eb9e4b18ec15cac090c2ec6d8cb00ae8edc52",
+    "integrationAndMainMatch": true
+  },
+  "fullCheck": "final-check.json",
+  "serviceVerification": "main-service-verification.json",
+  "watcherRecovery": "main-watcher-recovery.json",
+  "pushPerformed": false,
+  "cloudActionsPerformed": false,
+  "phase2Approved": false,
+  "worktreeRetainedReason": "Owns the running local architecture stack and retained test datasets."
+}

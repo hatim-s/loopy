@@ -1,0 +1,32 @@
+{
+  "at": "2026-10-23T16:35:11.360639+00:00",
+  "checks": [
+    {
+      "port": 4310,
+      "path": "/api/daemon",
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "port": 4173,
+      "path": "/",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "port": 15272,
+      "path": "/",
+      "status": 200,
+      "expected": 200
+    }
+  ],
+  "mainHead": "7f6976ae585f8a1ae02bace26fa898eb5a341985",
+  "mainClean": true,
+  "watcherPid": 90523,
+  "preservedWorkerPids": [
+    64206,
+    64207,
+    64208
+  ],
+  "scope": "Unauthenticated HTTP health only; no personal credentials or workflow data read."
+}

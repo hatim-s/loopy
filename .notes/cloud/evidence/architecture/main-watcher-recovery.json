@@ -1,0 +1,16 @@
+{
+  "at": "2026-10-23T16:30:52.811641+00:00",
+  "reason": "Watch reload failed during multi-file fast-forward and retained its PID, preventing daemon liveness recovery.",
+  "oldWatcherPid": 81432,
+  "newWatcherPid": 90523,
+  "action": "SIGKILL to failed watcher PID only, then same argv/cwd; no process-group signal.",
+  "preservedWorkerPids": [
+    64206,
+    64207,
+    64208
+  ],
+  "homePortConcurrencyUnchanged": true,
+  "personalDatabaseOrReceiptFilesManuallyChanged": false,
+  "verificationPending": false,
+  "verification": "main-service-verification.json"
+}
