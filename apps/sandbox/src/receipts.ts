@@ -3,23 +3,15 @@ import { constants } from "node:fs";
 import { open, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
-import {
-  sandboxAttemptIdentitySchema,
-  sandboxExecutionResultSchema,
-} from "../../../packages/loopy/src/contract/index.js";
-
-const common = sandboxAttemptIdentitySchema.extend({
-  id: z.string().regex(/^[a-f0-9]{64}$/),
-  requestHash: z.string().regex(/^[a-f0-9]{64}$/),
-  container: z.string().regex(/^loopy-attempt-[a-f0-9]{64}$/),
-  inputVolume: z.string().regex(/^loopy-input-[a-f0-9]{64}$/),
-  volume: z.string().regex(/^loopy-workspace-[a-f0-9]{64}$/),
-  deadline: z.number().int().positive(),
-});
+import { sandboxExecutionResultSchema } from "../../../packages/loopy/src/contract/index.js";
+import { dockerAttemptPlanSchema } from "../../../packages/loopy/src/contract/sandbox-journal.js";
 
 export const storedReceiptSchema = z.discriminatedUnion("kind", [
-  common.extend({ kind: z.literal("started") }),
-  common.extend({ kind: z.literal("finished"), result: sandboxExecutionResultSchema }),
+  dockerAttemptPlanSchema.extend({ kind: z.literal("started") }),
+  dockerAttemptPlanSchema.extend({
+    kind: z.literal("finished"),
+    result: sandboxExecutionResultSchema,
+  }),
 ]);
 
 export type StoredReceipt = z.infer<typeof storedReceiptSchema>;

@@ -1,0 +1,15 @@
+{
+  "startedAt": "2026-10-23T17:30:16.168407+00:00",
+  "directory": ".loopy/quality-tests/integrated-final-b5rixggn",
+  "command": "bun --no-env-file run check",
+  "environment": "fresh synthetic HOME with harmless .zshrc; LOOPY_HOME/XDG isolated; TMPDIR unset; Docker opt-in absent",
+  "log": ".loopy/quality-tests/integrated-final-b5rixggn/check.log",
+  "authorityRootsBefore": 43,
+  "pid": 48766,
+  "endedAt": "2026-10-23T17:31:55.265927+00:00",
+  "exitCode": 0,
+  "logSha256": "c3bea1351781d320e05adbb1a5c4af4d6a93aa608c0a425bc5ff558532ab6814",
+  "authorityRootsAfter": 43,
+  "authorityRootNamesUnchanged": true,
+  "sourceChanged": []
+}

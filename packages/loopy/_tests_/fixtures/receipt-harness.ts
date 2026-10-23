@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Miniflare } from "miniflare";
 import { attemptHash } from "../../../../apps/sandbox/src/admission.js";
@@ -13,9 +13,11 @@ export const namespace = "synthetic-receipt-authority";
 
 export async function receiptHarness(configuration: { stage?: string; token?: string } = {}) {
   const root = resolve(import.meta.dir, "../../../..");
-  const parent = resolve(root, ".loopy/architecture-tests");
+  const parent = resolve(root, ".loopy/quality-tests");
   await mkdir(parent, { recursive: true });
   const directory = await mkdtemp(`${parent}/receipts-`);
+  await writeFile(resolve(directory, "package.json"), JSON.stringify({ private: true }));
+  await mkdir(resolve(directory, ".loopy/loopies"), { recursive: true });
   const stateRoot = resolve(directory, "sandbox");
 
   const bundle = await Bun.build({

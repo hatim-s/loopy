@@ -1,12 +1,10 @@
 import { randomUUID } from "node:crypto";
-import type {
-  SandboxArtifactRequest,
-  SandboxExecutionResult,
-} from "../../../packages/loopy/src/contract/index.js";
-import type {
-  AttemptRecord,
-  AuthoritySession,
-  ExportRecord,
+import type { SandboxArtifactRequest } from "../../../packages/loopy/src/contract/index.js";
+import {
+  type AttemptRecord,
+  type AuthoritySession,
+  artifactHelperName,
+  type ExportRecord,
 } from "../../../packages/loopy/src/contract/sandbox-journal.js";
 import type { SandboxAttemptAuthority } from "../../../packages/loopy/src/contract/sandbox-journal-rpc.js";
 import { ArtifactError } from "./artifact-error.js";
@@ -42,7 +40,7 @@ export class AttemptExports {
     if (
       !record ||
       record.plan.volume !== guard.volume ||
-      guard.helper !== `loopy-artifact-${record.plan.id}`
+      guard.helper !== artifactHelperName(record.plan.id)
     ) {
       throw new ArtifactError(
         "conflict",
@@ -54,15 +52,28 @@ export class AttemptExports {
     await this.authority.endExport({ session: this.session, token: guard.token });
   }
 
-  async reconcile(volume?: string) {
-    const { exports } = await recoveryRecords(this.authority);
+  async reconcile(volume: string) {
+    const exports: ExportRecord[] = [];
+    let after: string | null = null;
+
+    do {
+      const page = await this.authority.exportGuards({ after, limit: 200, volume });
+      exports.push(...page.exports);
+      after = page.next;
+    } while (after !== null);
+
+    if (await this.reconcileGuards(exports)) {
+      throw new ArtifactError(
+        "conflict",
+        "Workspace export cleanup is unresolved. Retry after reconciliation.",
+      );
+    }
+  }
+
+  async reconcileGuards(exports: ExportRecord[]) {
     let blocked = false;
 
     for (const guard of exports) {
-      if (volume !== undefined && guard.volume !== volume) {
-        continue;
-      }
-
       if (this.live.has(guard.token)) {
         blocked = true;
         continue;
@@ -84,17 +95,11 @@ export class AttemptExports {
       }
     }
 
-    if (blocked && volume !== undefined) {
-      throw new ArtifactError(
-        "conflict",
-        "Workspace export cleanup is unresolved. Retry after reconciliation.",
-      );
-    }
+    return blocked;
   }
 
   async read(
     record: Extract<AttemptRecord, { kind: "finished" }>,
-    result: SandboxExecutionResult,
     request: SandboxArtifactRequest,
   ) {
     await this.reconcile(record.plan.volume);
@@ -113,7 +118,7 @@ export class AttemptExports {
       }
 
       try {
-        return await this.reader.read({ ...record.plan, kind: "finished", result }, request.path);
+        return await this.reader.read(record.plan, request.path);
       } finally {
         try {
           await this.release(reply.record);

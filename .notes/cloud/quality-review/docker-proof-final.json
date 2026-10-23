@@ -1,0 +1,12 @@
+{
+  "startedAt": "2026-10-23T17:32:16.720969+00:00",
+  "command": "bun --no-env-file packages/loopy/_tests_/fixtures/architecture-docker-proof.ts",
+  "log": ".loopy/quality-tests/docker-final-zwblrt7f/proof.log",
+  "image": "loopy-sandbox:architecture-bun-1.4.0",
+  "imageId": "sha256:ffc247b1e3a93dc0eafb8f387ed52d5b8fc7445e929a701f2117f6a0cc175722",
+  "scope": "one invocation, fresh DO/R2 state, four sequential Docker workers, no retained workload mutations",
+  "pid": 54968,
+  "exitCode": 0,
+  "endedAt": "2026-10-23T17:32:40.177970+00:00",
+  "logSha256": "55ac18dd7a9dfe1db92dc22de629c0fd8dc00ef360be21c4711076c82403c545"
+}

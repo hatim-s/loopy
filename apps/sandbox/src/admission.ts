@@ -4,6 +4,7 @@ import {
   type SandboxAttemptIdentity,
   type SandboxAttemptRequest,
 } from "../../../packages/loopy/src/contract/index.js";
+import { attemptIdInput } from "../../../packages/loopy/src/contract/sandbox-journal.js";
 import { canonicalJson } from "../../../packages/loopy/src/core/index.js";
 
 export class InvalidAttempt extends Error {}
@@ -17,6 +18,10 @@ export function attemptHash(
     | { root: string; workspace: string; runId: string },
 ) {
   return createHash("sha256").update(canonicalJson(value)).digest("hex");
+}
+
+export function attemptId(root: string, identity: SandboxAttemptIdentity) {
+  return attemptHash(attemptIdInput(root, identity));
 }
 
 export function validateBundles(request: SandboxAttemptRequest) {

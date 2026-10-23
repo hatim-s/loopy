@@ -1,4 +1,4 @@
-import type { Store } from "../../src/core/index.js";
+import { emptyRunCounts, type RunRecord, type Store } from "../../src/core/index.js";
 
 export const readmodelAt = "2026-10-23T00:00:00.000Z";
 
@@ -17,15 +17,42 @@ export async function countHistory(store: Store) {
 
   async function snapshot(stage: string) {
     const rows = await store.runCountsByDefinition();
+    const runs: RunRecord[] = [];
+    let before: string | undefined;
 
-    const filters = await Promise.all(
-      identities.map(async (identity) => ({
-        ...identity,
-        counts: await store.runCounts(identity),
-      })),
-    );
+    while (true) {
+      const page = await store.queryRuns({ now: readmodelAt, limit: 2, before });
+      runs.push(...page);
+      const last = page.at(-1);
 
-    return { stage, rows, filters, global: await store.runCounts({ slug: "shared" }) };
+      if (!last) {
+        break;
+      }
+
+      before = `${last.createdAt}|${last.id}`;
+    }
+
+    const filters = identities.map((identity) => {
+      const counts = emptyRunCounts();
+
+      for (const run of runs) {
+        if (run.workspace === identity.workspace && run.slug === identity.slug) {
+          counts[run.status]++;
+        }
+      }
+
+      return { ...identity, counts };
+    });
+
+    const global = emptyRunCounts();
+
+    for (const run of runs) {
+      if (run.slug === "shared") {
+        global[run.status]++;
+      }
+    }
+
+    return { stage, rows, filters, global };
   }
 
   snapshots.push(await snapshot("empty"));

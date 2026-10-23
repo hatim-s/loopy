@@ -253,6 +253,41 @@ async function serviceFixture(name: string) {
   return { f, store, service };
 }
 
+test("native definition routes return 404 for absence and 500 for corrupt saved data", async () => {
+  const f = fixture("corrupt-definition", "run: () => 1");
+  await save(f);
+  writeFileSync(join(f.cwd, ".loopy", "loopies", "corrupt-definition.json"), "{invalid");
+  const server = startDaemon({ ...f, port: 0 });
+  servers.push(server);
+  const origin = new URL(server.url).origin;
+  const headers = { Authorization: `Bearer ${readDaemonFile(f.home)!.token}` };
+
+  for (const slug of ["absent", "corrupt-definition"]) {
+    for (const [method, suffix, body] of [
+      ["POST", "runs", { input: {} }],
+      ["GET", "graph", undefined],
+      ["GET", "source", undefined],
+      ["PUT", "schedule", { cron: "* * * * *" }],
+      ["POST", "schedule/enabled", { enabled: true }],
+      ["DELETE", "schedule", undefined],
+    ] as const) {
+      const response = await fetch(`${origin}/api/loopies/${slug}/${suffix}`, {
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+
+      const error = errorBodySchema.parse(await response.json()).error;
+      expect(response.status).toBe(slug === "absent" ? 404 : 500);
+      expect(error.code).toBe(slug === "absent" ? "not_found" : "internal");
+
+      if (slug === "absent") {
+        expect(error.message).toBe("No saved loopy 'absent'. Use loopy save <file.ts> first.");
+      }
+    }
+  }
+});
+
 function parseFrame(lines: string[]) {
   const data = lines
     .flatMap((line) => (line.startsWith("data: ") ? [line.slice(6)] : []))

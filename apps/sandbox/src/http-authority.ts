@@ -136,6 +136,13 @@ export class HttpSandboxAuthority implements SandboxAttemptAuthority {
     await this.request({ operation: "endExport", input }, authorityOperations.endExport.output);
   }
 
+  async exportGuards(input: AuthorityInput<"exportGuards">) {
+    return this.request(
+      { operation: "exportGuards", input },
+      authorityOperations.exportGuards.output,
+    );
+  }
+
   async recoverable(input: AuthorityInput<"recoverable">) {
     return this.request(
       { operation: "recoverable", input },

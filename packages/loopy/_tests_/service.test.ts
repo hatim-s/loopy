@@ -424,7 +424,7 @@ test("run graphs stay pinned to the revision each run started on", async () => {
     revision: first.revision,
     graph: graphView(first.graph),
   });
-  expect(routes.graph.response.parse(service.graph("service", root))).toEqual({
+  expect(routes.graph.response.parse(await service.graph("service", root))).toEqual({
     revision: second.revision,
     graph: graphView(second.graph),
   });
@@ -537,11 +537,11 @@ test("loopy views name their workspace so graph and start reach that project's s
 
   // A daemon in another directory lists A's loopy through its run, so only A's path resolves it.
   expect(await workspaces(elsewhere)).toEqual([a]);
-  expect(() => service.graph("shared", elsewhere)).toThrow("No saved loopy 'shared'");
-  expect(service.graph("shared", a).revision).toBe(revisionA);
+  await expect(service.graph("shared", elsewhere)).rejects.toThrow("No saved loopy 'shared'");
+  expect((await service.graph("shared", a)).revision).toBe(revisionA);
 
   expect(await workspaces(b)).toEqual([b]);
-  expect(service.graph("shared", b).revision).toBe(revisionB);
+  expect((await service.graph("shared", b)).revision).toBe(revisionB);
   await expect(service.startRun("shared", { alpha: "x" }, b)).rejects.toMatchObject({
     code: "bad_request",
   });

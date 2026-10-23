@@ -82,10 +82,7 @@ async function seed(store: SqlRunStore) {
     hooks.push({ ...(await store.getWaits(id))[0], expiresAt: wakeAt });
   }
 
-  return {
-    total: Object.values(await store.runCounts()).reduce((sum, count) => sum + count, 0),
-    hooks,
-  };
+  return { total: 205, hooks };
 }
 
 export async function paginationResponse(

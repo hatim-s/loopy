@@ -57,6 +57,31 @@ export function receiptRecoveryProbe(db: ReceiptSql, input: AuthorityInput<"admi
   };
 
   const recovered = db.recoverable({ after: null, limit: 2 });
+
+  const volumePagePlan = db.storage.sql
+    .exec(
+      "EXPLAIN QUERY PLAN SELECT token FROM receipt_exports WHERE active=1 AND volume=? AND token>? ORDER BY token LIMIT ?",
+      input.plan.volume,
+      "",
+      201,
+    )
+    .toArray();
+
+  db.storage.sql
+    .exec(
+      `WITH RECURSIVE n(x) AS (SELECT 1001 UNION ALL SELECT x+1 FROM n WHERE x<1201)
+    INSERT INTO receipt_attempts SELECT printf('%064x',x),'started',volume,json_remove(json_set(record,'$.kind','started','$.plan.id',printf('%064x',x)),'$.result') FROM n,receipt_attempts WHERE id=?`,
+      input.plan.id,
+    )
+    .toArray();
+  const exactVolume = db.exportGuards({ after: null, limit: 1, volume: input.plan.volume });
+
+  const otherVolume = db.exportGuards({
+    after: null,
+    limit: 1,
+    volume: `loopy-workspace-${"0".repeat(64)}`,
+  });
+
   db.storage.sql
     .exec("UPDATE receipt_attempts SET record='{}' WHERE id=?", input.plan.id)
     .toArray();
@@ -68,5 +93,15 @@ export function receiptRecoveryProbe(db: ReceiptSql, input: AuthorityInput<"admi
     malformed = error instanceof Error ? error.message : "non-error rejection";
   }
 
-  return { attempts, exports, busy, counts, recovered, malformed };
+  return {
+    attempts,
+    exports,
+    busy,
+    counts,
+    recovered,
+    malformed,
+    volumePagePlan,
+    exactVolume,
+    otherVolume,
+  };
 }

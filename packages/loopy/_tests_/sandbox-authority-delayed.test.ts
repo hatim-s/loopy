@@ -1,9 +1,11 @@
-import { expect, test } from "bun:test";
+import { afterEach, expect, test } from "bun:test";
 import { FilesystemAuthority } from "../../../apps/sandbox/src/filesystem-authority.js";
 import type { SandboxExecutionResult } from "../src/contract/index.js";
 import type { AuthorityInput } from "../src/contract/sandbox-journal-rpc.js";
 import { artifactReader, successful, uncertain } from "./fixtures/sandbox-authority.js";
-import { fixture, open } from "./fixtures/sandbox-authority-lifecycle.js";
+import { cleanup, fixture, open } from "./fixtures/sandbox-authority-lifecycle.js";
+
+afterEach(cleanup);
 
 class DelayedCommit extends FilesystemAuthority {
   private pending: AuthorityInput<"admit"> | null = null;

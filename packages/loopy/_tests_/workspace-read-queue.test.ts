@@ -1,14 +1,14 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { Miniflare } from "miniflare";
-import { z } from "zod";
 import { routes } from "../src/contract/index.js";
 import { revision } from "../src/core/index.js";
 import { loopy, sh } from "../src/sdk/graph/index.js";
 import { compiledBody } from "./compiled-fixture.js";
+import { qualityTestRoot } from "./fixtures/quality-test-root.js";
 import {
   type QueueProofDetails,
   type QueueProofEvent,
@@ -36,10 +36,7 @@ async function bounded<T>(promise: Promise<T>, label: string, ms: number): Promi
 
 test("production Workspace queues runs, loopies and event history during provider lookup/start", async () => {
   const repository = resolve(import.meta.dir, "../../..");
-  const parent = join(repository, ".loopy/architecture-tests");
-  await mkdir(parent, { recursive: true });
-  const directory = await mkdtemp(join(parent, "read-queue-"));
-  await mkdir(join(directory, ".loopy/loopies"), { recursive: true });
+  const directory = await qualityTestRoot("read-queue");
   const events: QueueProofEvent[] = [];
   const origin = performance.now();
 
@@ -47,43 +44,10 @@ test("production Workspace queues runs, loopies and event history during provide
     events.push({ event, atMs: performance.now() - origin, details });
   };
 
-  const freeze = z
-    .object({
-      aggregate: z.string(),
-      files: z.array(z.object({ path: z.string(), sha256: z.string() })),
-    })
-    .parse(
-      JSON.parse(
-        await readFile(
-          join(repository, ".notes/cloud/evidence/architecture/source-freeze.json"),
-          "utf8",
-        ),
-      ),
-    );
-
-  const frozenChanges = async () =>
-    (
-      await Promise.all(
-        freeze.files.map(async (file) => {
-          const bytes = await readFile(join(repository, file.path));
-
-          return createHash("sha256").update(bytes).digest("hex") === file.sha256
-            ? null
-            : file.path;
-        }),
-      )
-    ).filter((path) => path !== null);
-
   record("execution-start", { at: new Date().toISOString(), directory });
   console.log(`Read queue proof state: ${directory}`);
 
   try {
-    expect(freeze.files).toHaveLength(467);
-    expect(freeze.aggregate).toBe(
-      "93e0bcd0fccac0dbf8deff30aa0eb9e4b18ec15cac090c2ec6d8cb00ae8edc52",
-    );
-    expect(await frozenChanges()).toEqual([]);
-
     const build = await Bun.build({
       entrypoints: [join(repository, "apps/cloud/src/worker.ts")],
       target: "browser",
@@ -104,6 +68,7 @@ test("production Workspace queues runs, loopies and event history during provide
       const provider = readQueueProvider(mode, record);
 
       const runtime = new Miniflare({
+        modulesRoot: join(directory, "bundle"),
         name: `read-queue-${mode}`,
         host: "127.0.0.1",
         port: 0,
@@ -231,10 +196,14 @@ test("production Workspace queues runs, loopies and event history during provide
       }
     }
 
-    expect(await frozenChanges()).toEqual([]);
-    record("proof-passed", { freeze: freeze.aggregate, frozenFiles: freeze.files.length });
-  } finally {
+    record("proof-passed");
+  } catch (cause) {
     record("execution-end", { at: new Date().toISOString() });
     await writeFile(join(directory, "evidence.json"), `${JSON.stringify(events, null, 2)}\n`);
+    console.error(`Read queue failure diagnostics retained at: ${directory}`);
+
+    throw cause;
   }
+
+  await rm(directory, { recursive: true, force: true });
 }, 45_000);

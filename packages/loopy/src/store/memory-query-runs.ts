@@ -1,10 +1,8 @@
 import {
-  emptyRunCounts,
   executionKeyString,
   type HookRecord,
   type OverviewQuery,
   type RunDefinitionCount,
-  type RunFilter,
   type RunPageQuery,
 } from "../core/index.js";
 import { MemorySchedules } from "./memory-schedules.js";
@@ -68,17 +66,6 @@ export class MemoryQueryRuns extends MemorySchedules {
         )
         .slice(0, Math.min(query.limit, 200)),
     );
-  }
-  async runCounts(filter: RunFilter = {}) {
-    const counts = emptyRunCounts();
-
-    for (const run of this.runs.values()) {
-      if (matchesRun(run, filter)) {
-        counts[run.status]++;
-      }
-    }
-
-    return counts;
   }
   async runCountsByDefinition(): Promise<RunDefinitionCount[]> {
     const counts = new Map<string, RunDefinitionCount>();

@@ -48,6 +48,13 @@ export class WorkspaceSchedules {
       try {
         const schedule = scheduleSchema.parse(JSON.parse(row.record));
         const saved = await registry.get(schedule.slug);
+
+        if (saved === null) {
+          throw new Error(
+            `No saved loopy '${schedule.slug}'. Save it again before retrying the schedule.`,
+          );
+        }
+
         const input = validateGraphInput(saved.graph, schedule.input);
 
         if (!input.ok) {

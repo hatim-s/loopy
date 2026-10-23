@@ -1,0 +1,200 @@
+[
+  {
+    "lane": "persistence",
+    "result": {
+      "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-quality-fix-persistence-01",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-quality-fix-persistence-01",
+      "childRunId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%253Adelegate-task%253Aloopy-quality-fix-persistence-01:ordinal:1",
+      "childNodeId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-quality-fix-persistence-01",
+      "status": "running",
+      "workState": "working",
+      "hasPendingChildRuns": false,
+      "latestTerminalRunId": null,
+      "latestTerminalStatus": null,
+      "latestTerminalSummary": null,
+      "latestTerminalResultContextTransferId": null,
+      "providerInstanceId": "codex",
+      "model": "gpt-6.1-sol",
+      "options": [
+        {
+          "id": "reasoningEffort",
+          "value": "high"
+        },
+        {
+          "id": "serviceTier",
+          "value": "default"
+        }
+      ],
+      "summary": null,
+      "resultContextTransferId": null,
+      "hasPendingQuestion": false,
+      "pendingApproval": null,
+      "waitTimedOut": false
+    }
+  },
+  {
+    "lane": "service",
+    "result": {
+      "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-quality-fix-service-01",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-quality-fix-service-01",
+      "childRunId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%253Adelegate-task%253Aloopy-quality-fix-service-01:ordinal:1",
+      "childNodeId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-quality-fix-service-01",
+      "status": "running",
+      "workState": "working",
+      "hasPendingChildRuns": false,
+      "latestTerminalRunId": null,
+      "latestTerminalStatus": null,
+      "latestTerminalSummary": null,
+      "latestTerminalResultContextTransferId": null,
+      "providerInstanceId": "codex",
+      "model": "gpt-6.1-sol",
+      "options": [
+        {
+          "id": "reasoningEffort",
+          "value": "high"
+        },
+        {
+          "id": "serviceTier",
+          "value": "default"
+        }
+      ],
+      "summary": null,
+      "resultContextTransferId": null,
+      "hasPendingQuestion": false,
+      "pendingApproval": null,
+      "waitTimedOut": false
+    }
+  },
+  {
+    "lane": "queries",
+    "result": {
+      "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-quality-fix-queries-01",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-quality-fix-queries-01",
+      "childRunId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%253Adelegate-task%253Aloopy-quality-fix-queries-01:ordinal:1",
+      "childNodeId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-quality-fix-queries-01",
+      "status": "running",
+      "workState": "working",
+      "hasPendingChildRuns": false,
+      "latestTerminalRunId": null,
+      "latestTerminalStatus": null,
+      "latestTerminalSummary": null,
+      "latestTerminalResultContextTransferId": null,
+      "providerInstanceId": "codex",
+      "model": "gpt-6.1-sol",
+      "options": [
+        {
+          "id": "reasoningEffort",
+          "value": "high"
+        },
+        {
+          "id": "serviceTier",
+          "value": "default"
+        }
+      ],
+      "summary": null,
+      "resultContextTransferId": null,
+      "hasPendingQuestion": false,
+      "pendingApproval": null,
+      "waitTimedOut": false
+    }
+  },
+  {
+    "lane": "projection",
+    "result": {
+      "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-quality-fix-projection-01",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-quality-fix-projection-01",
+      "childRunId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%253Adelegate-task%253Aloopy-quality-fix-projection-01:ordinal:1",
+      "childNodeId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-quality-fix-projection-01",
+      "status": "running",
+      "workState": "working",
+      "hasPendingChildRuns": false,
+      "latestTerminalRunId": null,
+      "latestTerminalStatus": null,
+      "latestTerminalSummary": null,
+      "latestTerminalResultContextTransferId": null,
+      "providerInstanceId": "codex",
+      "model": "gpt-6.1-sol",
+      "options": [
+        {
+          "id": "reasoningEffort",
+          "value": "high"
+        },
+        {
+          "id": "serviceTier",
+          "value": "default"
+        }
+      ],
+      "summary": null,
+      "resultContextTransferId": null,
+      "hasPendingQuestion": false,
+      "pendingApproval": null,
+      "waitTimedOut": false
+    }
+  },
+  {
+    "lane": "test-upkeep",
+    "result": {
+      "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-quality-fix-test-upkeep-01",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-quality-fix-test-upkeep-01",
+      "childRunId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%253Adelegate-task%253Aloopy-quality-fix-test-upkeep-01:ordinal:1",
+      "childNodeId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-quality-fix-test-upkeep-01",
+      "status": "running",
+      "workState": "working",
+      "hasPendingChildRuns": false,
+      "latestTerminalRunId": null,
+      "latestTerminalStatus": null,
+      "latestTerminalSummary": null,
+      "latestTerminalResultContextTransferId": null,
+      "providerInstanceId": "codex",
+      "model": "gpt-6.1-sol",
+      "options": [
+        {
+          "id": "reasoningEffort",
+          "value": "high"
+        },
+        {
+          "id": "serviceTier",
+          "value": "default"
+        }
+      ],
+      "summary": null,
+      "resultContextTransferId": null,
+      "hasPendingQuestion": false,
+      "pendingApproval": null,
+      "waitTimedOut": false
+    }
+  },
+  {
+    "lane": "docs",
+    "result": {
+      "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-quality-fix-docs-01",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-quality-fix-docs-01",
+      "childRunId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%253Adelegate-task%253Aloopy-quality-fix-docs-01:ordinal:1",
+      "childNodeId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-quality-fix-docs-01",
+      "status": "running",
+      "workState": "working",
+      "hasPendingChildRuns": false,
+      "latestTerminalRunId": null,
+      "latestTerminalStatus": null,
+      "latestTerminalSummary": null,
+      "latestTerminalResultContextTransferId": null,
+      "providerInstanceId": "codex",
+      "model": "gpt-6.1-sol",
+      "options": [
+        {
+          "id": "reasoningEffort",
+          "value": "high"
+        },
+        {
+          "id": "serviceTier",
+          "value": "default"
+        }
+      ],
+      "summary": null,
+      "resultContextTransferId": null,
+      "hasPendingQuestion": false,
+      "pendingApproval": null,
+      "waitTimedOut": false
+    }
+  }
+]

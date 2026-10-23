@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { afterEach, expect, test } from "bun:test";
 import { readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { FilesystemAuthority } from "../../../apps/sandbox/src/filesystem-authority.js";
@@ -6,7 +6,9 @@ import type { SandboxExecutionResult } from "../src/contract/index.js";
 import type { AuthorityInput } from "../src/contract/sandbox-journal-rpc.js";
 import { artifactReader, successful, uncertain } from "./fixtures/sandbox-authority.js";
 
-import { fixture, open } from "./fixtures/sandbox-authority-lifecycle.js";
+import { cleanup, fixture, open } from "./fixtures/sandbox-authority-lifecycle.js";
+
+afterEach(cleanup);
 
 class FaultAuthority extends FilesystemAuthority {
   drop = false;

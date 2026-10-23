@@ -1,5 +1,4 @@
 import {
-  emptyRunCounts,
   type HookRecord,
   type OverviewQuery,
   type RunDefinitionCount,
@@ -105,21 +104,6 @@ export class SqliteQueryRuns extends SqliteSchedules {
       )
       .all(...values, Math.min(query.limit, 200))
       .map(previewRun);
-  }
-
-  async runCounts(filter: RunFilter = {}): Promise<StatusCounts> {
-    const { clauses, values } = runWhere(filter);
-    const counts = emptyRunCounts();
-
-    for (const row of this.db
-      .query<{ status: keyof StatusCounts; count: number }, SqlValue[]>(
-        `SELECT status,count(*) AS count FROM runs r ${clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""} GROUP BY status`,
-      )
-      .all(...values)) {
-      counts[row.status] = row.count;
-    }
-
-    return counts;
   }
 
   async runningCount(): Promise<number> {

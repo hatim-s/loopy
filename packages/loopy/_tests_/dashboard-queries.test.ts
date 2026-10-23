@@ -75,15 +75,17 @@ for (const memory of [false, true]) {
 
     expect(second.map((run) => run.id)).toEqual(["a"]);
 
-    const summary = await store.overview({
+    const query = {
       from: "2026-10-15T23:59:59.500Z",
       to: "2026-10-16T00:02:59.500Z",
       bucketSeconds: 60,
-    });
+    };
+
+    const summary = await store.overview(query);
 
     expect(summary.counts.succeeded).toBe(3);
     expect(summary.buckets.map((bucket) => bucket.counts.succeeded)).toEqual([3, 0, 0]);
-    expect((await store.runCounts({ slug: "absent" })).succeeded).toBe(0);
+    expect((await store.overview({ ...query, slug: "absent" })).counts.succeeded).toBe(0);
   });
   test(`${memory ? "memory" : "sqlite"} input and attempts persist, bulk reads omit input and selected detail keeps it`, async () => {
     const { store, service } = fixture(memory);

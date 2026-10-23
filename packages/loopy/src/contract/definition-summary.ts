@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import { type SavedLoopy, savedLoopySchema } from "./compiled-loopy.js";
+import type { Graph } from "./graph.js";
 import { loopyViewSchema } from "./views.js";
 
 export const definitionSummarySchema = savedLoopySchema
@@ -17,6 +18,10 @@ export const definitionSummarySchema = savedLoopySchema
 
 export type DefinitionSummary = z.infer<typeof definitionSummarySchema>;
 
+export function definitionInput(graph: Pick<Graph, "input" | "inputValidation">) {
+  return graph.inputValidation?.root === "json" ? "schema" : graph.input;
+}
+
 export function definitionSummary(saved: SavedLoopy): DefinitionSummary {
   return {
     slug: saved.slug,
@@ -25,7 +30,7 @@ export function definitionSummary(saved: SavedLoopy): DefinitionSummary {
     savedAt: saved.savedAt,
     scope: saved.scope,
     description: saved.description,
-    input: saved.graph.inputValidation?.root === "json" ? "schema" : saved.input,
+    input: definitionInput({ input: saved.input, inputValidation: saved.graph.inputValidation }),
     schedule: saved.schedule,
     mode: saved.mode,
   };

@@ -162,6 +162,31 @@ export class ReceiptSql {
     );
   }
 
+  exportGuards(input: AuthorityInput<"exportGuards">): AuthorityOutput<"exportGuards"> {
+    return this.storage.transactionSync(() => {
+      const rows = this.storage.sql
+        .exec<{ token: string }>(
+          "SELECT token FROM receipt_exports WHERE active=1 AND volume=? AND token>? ORDER BY token LIMIT ?",
+          input.volume,
+          input.after ?? "",
+          input.limit + 1,
+        )
+        .toArray();
+
+      const exports = rows.slice(0, input.limit).map(({ token }) => {
+        const guard = this.export(token);
+
+        if (!guard?.active) {
+          throw new Error("Export guard query returned a missing or inactive guard.");
+        }
+
+        return guard.record;
+      });
+
+      return { exports, next: rows.length > input.limit ? (exports.at(-1)?.token ?? null) : null };
+    });
+  }
+
   recoverable(input: AuthorityInput<"recoverable">): AuthorityOutput<"recoverable"> {
     return this.storage.transactionSync(() => {
       if (input.after !== null && (!/^[ae]:/.test(input.after) || input.after.length > 258)) {

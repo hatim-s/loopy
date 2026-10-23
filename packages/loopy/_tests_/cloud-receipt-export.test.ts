@@ -129,3 +129,22 @@ test("recoverable pagination has one stable combined limit over attempts and exp
   );
   expect(new Set(ids).size).toBe(ids.length);
 });
+
+test("export-only HTTP recovery filters an exact volume and excludes released guards", async () => {
+  const { session, plan } = await finished("export-only");
+  await harness.authority.beginExport({ session, attemptId: plan.id, token: "export-only-guard" });
+  expect(
+    await harness.authority.exportGuards({ after: null, limit: 1, volume: plan.volume }),
+  ).toMatchObject({ exports: [{ token: "export-only-guard" }], next: null });
+  expect(
+    await harness.authority.exportGuards({
+      after: "export-only-guard",
+      limit: 1,
+      volume: plan.volume,
+    }),
+  ).toEqual({ exports: [], next: null });
+  await harness.authority.endExport({ session, token: "export-only-guard" });
+  expect(
+    await harness.authority.exportGuards({ after: null, limit: 1, volume: plan.volume }),
+  ).toEqual({ exports: [], next: null });
+});

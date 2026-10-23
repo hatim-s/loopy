@@ -64,6 +64,14 @@ export const authorityOperations = {
     input: z.strictObject({ ...session, token: z.string().min(1).max(256) }),
     output: z.null(),
   },
+  exportGuards: {
+    input: z.strictObject({
+      after: z.string().max(256).nullable(),
+      limit: z.number().int().min(1).max(200),
+      volume: dockerAttemptPlanSchema.shape.volume,
+    }),
+    output: z.strictObject({ exports: z.array(exportRecordSchema), next: z.string().nullable() }),
+  },
   recoverable: {
     input: z.strictObject({
       after: z.string().nullable(),
@@ -93,6 +101,7 @@ export interface SandboxAttemptAuthority {
   complete(input: AuthorityInput<"complete">): Promise<AuthorityOutput<"complete">>;
   beginExport(input: AuthorityInput<"beginExport">): Promise<AuthorityOutput<"beginExport">>;
   endExport(input: AuthorityInput<"endExport">): Promise<void>;
+  exportGuards(input: AuthorityInput<"exportGuards">): Promise<AuthorityOutput<"exportGuards">>;
   recoverable(input: AuthorityInput<"recoverable">): Promise<AuthorityOutput<"recoverable">>;
 }
 
@@ -127,6 +136,10 @@ export const authorityCommandSchema = z.discriminatedUnion("operation", [
     input: authorityOperations.beginExport.input,
   }),
   z.strictObject({ operation: z.literal("endExport"), input: authorityOperations.endExport.input }),
+  z.strictObject({
+    operation: z.literal("exportGuards"),
+    input: authorityOperations.exportGuards.input,
+  }),
   z.strictObject({
     operation: z.literal("recoverable"),
     input: authorityOperations.recoverable.input,

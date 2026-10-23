@@ -1,0 +1,11 @@
+{
+  "startedAt": "2026-10-23T17:22:11.872106+00:00",
+  "directory": ".loopy/quality-tests/integrated-r0ayfblz",
+  "command": "bun --no-env-file run check",
+  "environment": "fresh synthetic HOME with harmless .zshrc; LOOPY_HOME/XDG isolated; TMPDIR unset; Docker opt-in absent",
+  "log": ".loopy/quality-tests/integrated-r0ayfblz/check.log",
+  "pid": 16997,
+  "endedAt": "2026-10-23T17:23:54.709916+00:00",
+  "exitCode": 0,
+  "logSha256": "dc8771c7ff25a39111f309526df4d30c71230524cb960814c27d96691f997b7a"
+}

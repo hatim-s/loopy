@@ -4,19 +4,18 @@ import {
   type SandboxArtifact,
   sandboxArtifactReadSchema,
 } from "../../../packages/loopy/src/contract/index.js";
-import type { DockerAttemptPlan } from "../../../packages/loopy/src/contract/sandbox-journal.js";
+import {
+  artifactHelperName,
+  type DockerAttemptPlan,
+} from "../../../packages/loopy/src/contract/sandbox-journal.js";
 import { ArtifactError } from "./artifact-error.js";
 import type { SandboxConfig } from "./config.js";
 import { DockerClient } from "./docker-client.js";
 import { type CommandRunner, runCommand } from "./process.js";
-import type { StoredReceipt } from "./receipts.js";
 
 export interface ArtifactReader {
   cleanup(receipt: DockerAttemptPlan, helper: string): Promise<void>;
-  read(
-    receipt: Extract<StoredReceipt, { kind: "finished" }>,
-    path: string,
-  ): Promise<SandboxArtifact>;
+  read(receipt: DockerAttemptPlan, path: string): Promise<SandboxArtifact>;
 }
 
 const mountedContainersSchema = z.array(
@@ -84,14 +83,14 @@ export class DockerArtifacts implements ArtifactReader {
   }
 
   async cleanup(receipt: DockerAttemptPlan, helper: string) {
-    if (helper !== `loopy-artifact-${receipt.id}`) {
+    if (helper !== artifactHelperName(receipt.id)) {
       throw new Error("Artifact helper identity does not match its receipt.");
     }
 
     await this.removeHelper(new DockerClient(this.config, this.runner), receipt, helper);
   }
 
-  async read(receipt: Extract<StoredReceipt, { kind: "finished" }>, path: string) {
+  async read(receipt: DockerAttemptPlan, path: string) {
     const client = new DockerClient(this.config, this.runner);
     const volume = await client.call(["volume", "inspect", receipt.volume]);
 
@@ -146,7 +145,7 @@ export class DockerArtifacts implements ArtifactReader {
       }
     }
 
-    const container = `loopy-artifact-${receipt.id}`;
+    const container = artifactHelperName(receipt.id);
     await this.removeHelper(client, receipt, container);
 
     try {

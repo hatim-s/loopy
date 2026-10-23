@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { z } from "zod";
 import { ARTIFACT_LIMITS } from "../../../apps/cloud/src/artifacts-storage.js";
 import { definitionSummarySchema } from "../src/contract/index.js";
-import { canonicalJson } from "../src/core/index.js";
+import { canonicalJson, revision } from "../src/core/index.js";
 import { fillBytes, summarySizeBody, utf8 } from "./fixtures/summary-size-body.js";
 import { summarySizeRuntime } from "./fixtures/summary-size-runtime.js";
 
@@ -173,3 +173,26 @@ for (const [name, source] of [
     });
   });
 }
+
+test("JSON-root graph publication stores schema input within the row budget", async () => {
+  const body = await summarySizeBody("/json-input.ts", "🧪");
+
+  body.graph.input = { [`${fillBytes("🧪", 120_000)}?`]: "json" };
+  body.graph.inputValidation = { root: "json", minItems: {}, unknownKeys: "passthrough" };
+  body.graph.meta.description = "JSON input";
+  body.revision = await revision(body.graph);
+
+  const saved = await harness.probe("json-input", { operation: "save", body });
+  expect(saved).toMatchObject({
+    status: 200,
+    body: { value: { input: "schema" }, artifactWrites: 2 },
+  });
+
+  const stored = inspect.parse(
+    (await harness.probe("json-input", { operation: "inspect" })).body,
+  ).value;
+
+  expect(stored.projection?.projection_json).toBe(
+    '{"scope":"project","description":"JSON input","input":"schema","schedule":{"cron":"* * * * *","tz":"UTC"},"mode":"sandbox"}',
+  );
+});

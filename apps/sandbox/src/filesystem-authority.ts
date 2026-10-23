@@ -3,6 +3,7 @@ import { join } from "node:path";
 import {
   AuthorityError,
   type AuthoritySession,
+  artifactHelperName,
 } from "../../../packages/loopy/src/contract/sandbox-journal.js";
 import type {
   AuthorityInput,
@@ -183,7 +184,7 @@ export class FilesystemAuthority implements SandboxAttemptAuthority {
         session: input.session,
         attemptId: input.attemptId,
         volume: receipt.plan.volume,
-        helper: `loopy-artifact-${input.attemptId}`,
+        helper: artifactHelperName(input.attemptId),
       };
 
       await writeAtomic(join(this.root, "exports", `${input.attemptId}.json`), record);
@@ -212,6 +213,26 @@ export class FilesystemAuthority implements SandboxAttemptAuthority {
         await syncDirectory(join(this.root, "exports"));
       }
     });
+  }
+
+  async exportGuards(
+    input: AuthorityInput<"exportGuards">,
+  ): Promise<AuthorityOutput<"exportGuards">> {
+    const guards = (await this.journal.exportMetadata())
+      .filter(
+        (guard) =>
+          guard.volume === input.volume &&
+          (input.after === null ||
+            Buffer.compare(Buffer.from(guard.token), Buffer.from(input.after)) > 0),
+      )
+      .sort((a, b) => Buffer.compare(Buffer.from(a.token), Buffer.from(b.token)));
+
+    const page = guards.slice(0, input.limit);
+
+    return {
+      exports: page,
+      next: guards.length > input.limit ? (page.at(-1)?.token ?? null) : null,
+    };
   }
 
   async recoverable(input: AuthorityInput<"recoverable">): Promise<AuthorityOutput<"recoverable">> {

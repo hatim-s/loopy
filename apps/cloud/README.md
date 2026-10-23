@@ -1,6 +1,6 @@
 # Local cloud integration
 
-Phase 1 runs a Cloudflare Worker, SQLite Durable Object per workspace, R2 artifact storage and Durable Object alarms through Wrangler local emulation. A Bun service starts isolated Docker workers through an asynchronous attempt API. The existing dashboard uses the same HTTP and SSE contracts as the local daemon.
+Phase 1 runs a Cloudflare Worker, SQLite Durable Object per workspace, R2 artifact storage and Durable Object alarms through Wrangler local emulation. A Bun service starts isolated Docker workers through an asynchronous attempt API. Both hosts compose the portable `service/` layer for mutations, queries, schedules and wire views. The dashboard uses the same HTTP and SSE contracts as the local daemon.
 
 This branch is local only. The Worker rejects remote hosts and non-local stage configuration. No deployment script or CI deployment job is installed. Real Cloudflare resources, Modal workloads and personal data migration require Hatim's separate phase 2 approval. That approval does not authorize merging this branch.
 
@@ -9,7 +9,6 @@ This branch is local only. The Worker rejects remote hosts and non-local stage c
 Use the `cloud-integration` checkout. Bun 1.4.0 and Docker CLI 29.8.1 were used. The lockfile pins Wrangler 4.152.0, Miniflare 4.20260730.0 and Cloudflare types 5.20261022.1. The Worker compatibility date is 2026-07-30.
 
 ```sh
-cd /Users/hatim.shakir/projects/loopy/cloud-integration
 bun install --frozen-lockfile
 colima start loopy-cloud-phase1 --activate=false --cpu 2 --memory 3 --disk 16 \
   --mount none --ssh-agent=false --ssh-config=false --template=false
@@ -55,9 +54,40 @@ The failure journey starts its own local processes on 14970, 14971 and 14973. It
 
 The transport journey opens no ports. It kills an actual Docker wait client and directs selected inspect/list calls to an absent socket while the owned worker keeps running. It checks original-container reconciliation, duplicate admission and the persisted timeout deadline, then removes only its receipt-derived resources. State remains under `.loopy/cloud-transport`. The shared Docker daemon and fixture stack stay available. This proves invocation-scoped CLI failures, not a Docker daemon outage.
 
+See [AGENTS.md](../../AGENTS.md#tests-and-isolation) for test roots and fixture isolation.
+
+## Receipt authority and configuration
+
+The ordinary `cloud:start` stack and sandbox CLI use filesystem receipt authority. The `scripts/playground` default profile also uses filesystem authority; its `architecture` profile injects Durable Object authority over HTTP. These profiles have separate ports and state roots. The CLI has no DO-mode flag. A DO-backed harness supplies an explicit dependency factory to `startSandbox`; the factory runs only after state-root validation and process-lock acquisition. Authority selection must use a fresh root rather than reinterpret populated filesystem receipts or export guards.
+
+`apps/cloud/wrangler.jsonc` declares these local-emulation bindings:
+
+| Binding | Owner |
+| --- | --- |
+| `WORKSPACES` | `Workspace` DOs own workflow runs, schedules and outbox transactions. |
+| `ARTIFACTS` | R2 holds immutable graphs, bundles and source. |
+| `SANDBOX_RECEIPTS` | `SandboxReceipts` DO owns attempt records, session epochs and export guards for the configured namespace. |
+| `RECEIPT_RESULTS` | R2 holds immutable, content-addressed terminal result bytes. |
+
+Migration `v2-receipts` adds the SQLite-backed `SandboxReceipts` class. It is separate from the workflow workspace DO. The bridge uses `POST /internal/sandbox-receipts`, accepts loopback HTTP in local stage, rejects browser `Origin` requests and requires a private bearer credential plus `X-Loopy-Receipts-Namespace`.
+
+For DO mode, configure `RECEIPTS_TOKEN`, `RECEIPTS_NAMESPACE` and `RECEIPTS_ROOT`. The token must be 32 to 256 characters and differ from all `LOCAL_AUTH` user tokens. The namespace is 1 to 256 letters, digits, underscores or hyphens. The root is the bridge's canonical absolute sandbox state root, with no empty, `.` or `..` components. The bridge client sends the matching namespace header. The DO persists the namespace/root pair and rejects changes to it. Keep credentials in private ignored configuration; never copy generated vars, tokens or credential-bearing URLs into reports or commits.
+
+The authority serializes admission, completion and export exclusion. DO sessions persist a monotonically increasing epoch plus a nonce, fencing stale writers across bridge restart. Filesystem authority relies on the OS process lock and a process-local session; it does not claim a persistent epoch. Neither mode treats loss of an acknowledgement as permission to repeat a started attempt.
+
+Completion first stores immutable result bytes, then verifies their size, hash and schema before publishing a terminal pointer. DO verification reads R2 outside the SQL transaction and rechecks session/request/terminal authority inside the publication transaction. Result reads verify the reference again. Missing or corrupt bytes fail closed without reopening a terminal attempt. Export guards block same-volume admission until removal of the exact owned helper is confirmed, including after restart.
+
+```mermaid
+flowchart LR
+  A[Persist started attempt] --> B[Dispatch Docker work]
+  B --> C[Store immutable result bytes]
+  C --> D[Verify stored bytes]
+  D --> E[Publish terminal pointer under authority fences]
+```
+
 ## State and shutdown
 
-`.loopy/cloud/wrangler` holds emulated SQLite/R2 state. `.loopy/cloud/sandbox` holds durable receipts and process locks. The named Docker daemon holds input and run volumes. Tokens, generated environment files, process records and logs stay under ignored `.loopy/cloud`. The committed evidence contains fixture IDs and assertions, never credentials.
+`.loopy/cloud/wrangler` holds emulated SQLite/R2 state. In filesystem mode, `.loopy/cloud/sandbox` holds process locks, attempt records in `receipts/`, immutable result files in `results/`, and active/released export records in `exports/`. In DO mode, the selected profile's Wrangler state holds receipt SQL and result R2; the bridge root still owns its process lock and Docker identity. The named Docker daemon holds input and run volumes. Tokens, generated environment files, process records and logs stay under ignored state roots. The committed evidence contains fixture IDs and assertions, never credentials.
 
 Press Ctrl+C in the `cloud:start` terminal. The parent sends SIGTERM to its three children. The sandbox stops monitoring while preserving started receipts, which it reconciles on restart. Then, when no other phase 1 test is using the dedicated VM:
 
@@ -65,7 +95,11 @@ Press Ctrl+C in the `cloud:start` terminal. The parent sends SIGTERM to its thre
 colima stop loopy-cloud-phase1
 ```
 
-This stops compute and retains state for the next start. Stopped containers and named volumes are intentional inspection evidence. It is not a data reset. Do not run `docker system prune`, remove receipts, delete the whole Colima profile or erase Wrangler state as routine teardown. Removing a receipt can permit re-execution of an old attempt. Resource cleanup must derive an exact allowlist from this state's receipts and verify ownership labels, as the failure journey does.
+This stops compute and retains state for the next start. Stopped containers and named volumes are intentional inspection evidence. It is not a data reset. Do not run `docker system prune`, remove receipt/result/export/session records, delete the whole Colima profile or erase Wrangler state as routine teardown. Losing admission records can permit re-execution; losing result files breaks terminal reads; losing export guards can release a volume before helper cleanup. Resource cleanup must derive an exact allowlist from this authority's records, verify ownership labels and confirm each removal, as the failure journey does. Preserve the records when removing container resources. Stop only the identity-verified stack you own; an occupied port never authorizes stopping another service.
+
+## Retained data
+
+Cloud summary repair serves accepted pointers saved before summary projections existed. Remove that path only after every retained workspace's current pointers have generation-matched projections. Preserve publication generation fences and historical evidence throughout; deleting data is not migration. Filesystem receipt compatibility belongs to the [sandbox README](../sandbox/README.md#retained-data).
 
 ## Runtime boundaries
 

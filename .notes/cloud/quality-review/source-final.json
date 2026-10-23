@@ -1,0 +1,242 @@
+{
+  "base": "9d30ca923d168e299099758e0d95f3db3ba81cf0",
+  "files": [
+    {
+      "path": "apps/cloud/src/artifacts-projection.ts",
+      "sha256": "5c4aed5cc471d79d12402ee3c5ed20c1556a436c29413d6fbf2ede7c2012734e"
+    },
+    {
+      "path": "apps/cloud/src/artifacts.ts",
+      "sha256": "6d5f5ad069f24d49588ce2d4f740aa790530f1e63be55adfc4e3537039823d41"
+    },
+    {
+      "path": "apps/cloud/src/receipts-authority.ts",
+      "sha256": "675c4e735463f5004d26fd9d5a96d543deebd453b376e1f03db3c436a1c6024b"
+    },
+    {
+      "path": "apps/cloud/src/receipts-identity.ts",
+      "sha256": "1e7be270dd52c42aa98d76f432afa87446ef0e4f72c99f423fe942357dfbef4f"
+    },
+    {
+      "path": "apps/cloud/src/receipts-sql.ts",
+      "sha256": "427ed320ebbe4336550ee9c0f246b8163ce12a4017730bfe1cfd5aab3a2f993a"
+    },
+    {
+      "path": "apps/cloud/src/receipts.ts",
+      "sha256": "ecb034a3549567267bcec208021799a255b2b819fc1075e453aa513904b38621"
+    },
+    {
+      "path": "apps/cloud/src/scheduler-schedules.ts",
+      "sha256": "0839f1ce82baa1eb9c0a4a125a1e82ab18546830546fbf3a0eae9748d3f201c3"
+    },
+    {
+      "path": "apps/sandbox/src/admission.ts",
+      "sha256": "765e9a5603fbbd6eb150e412c1528e6e82fc27ddd2c6613f998c77eda4d52060"
+    },
+    {
+      "path": "apps/sandbox/src/artifacts.ts",
+      "sha256": "a97012f88b590da1c573755f76247742e8dd0b0a2136a15b77b80d17dba63489"
+    },
+    {
+      "path": "apps/sandbox/src/attempt-admissions.ts",
+      "sha256": "743f2d1d2d4b415fcd7b93715eed0099f654e8f20365ea0a0ec96c5fe6cb8a21"
+    },
+    {
+      "path": "apps/sandbox/src/attempt-exports.ts",
+      "sha256": "9652daaa6a663338f20649317240e8c4d5c1da3880c78b59b5363d864fc03081"
+    },
+    {
+      "path": "apps/sandbox/src/attempts.ts",
+      "sha256": "6604952d0892a35bc26dd69b204523e3289d4f978299ba4fb415cf370389f0bb"
+    },
+    {
+      "path": "apps/sandbox/src/filesystem-authority.ts",
+      "sha256": "57a290c0003c539cf4e0537c1bedd5de97a2607a10cdd8eae43f2ab16e451a37"
+    },
+    {
+      "path": "apps/sandbox/src/filesystem-journal.ts",
+      "sha256": "c9cfe1ee2123f6b9f584ffbff0bc2e0fd7abe1237ada5b06c2bf2f628be15e54"
+    },
+    {
+      "path": "apps/sandbox/src/http-authority.ts",
+      "sha256": "f69f136ea284537652a6e2590522d89c165af20b543ba3686a57ceb0ee35b4d4"
+    },
+    {
+      "path": "apps/sandbox/src/receipts.ts",
+      "sha256": "e1ded94765a6b463ba2e5ca929fd8af1f6d7f3b59865457d0a4b3cbfc64b8f84"
+    },
+    {
+      "path": "packages/loopy/_tests_/cloud-artifacts.test.ts",
+      "sha256": "1f3cc7d7cb2f796767d1674619267c814e2b102fd070b107a3e788e56f2819eb"
+    },
+    {
+      "path": "packages/loopy/_tests_/cloud-receipt-export.test.ts",
+      "sha256": "c70308e01f4a7f44cad13be17cc05133ad48d4f6720df699704e9e917392ce18"
+    },
+    {
+      "path": "packages/loopy/_tests_/cloud-receipt-recovery.test.ts",
+      "sha256": "d0beee067a4f583edeee57677371b21599e3cde6a834f96560a0c5ba8b5c8470"
+    },
+    {
+      "path": "packages/loopy/_tests_/cloud-sandbox.test.ts",
+      "sha256": "41640503c0cc4e92ea53b7157566a72d23202c3fd0faaba61ff4ef2b4cdb1119"
+    },
+    {
+      "path": "packages/loopy/_tests_/cloud-scheduler.test.ts",
+      "sha256": "64f91f65bbf14ec3b1fae5ed5fa562b2dec4649f71d14701f22a647ef95bc656"
+    },
+    {
+      "path": "packages/loopy/_tests_/cloud-service.test.ts",
+      "sha256": "5cdc5043942ed828ae9b24541d7d651bc4684f6de045e925057e316ca79e5bbf"
+    },
+    {
+      "path": "packages/loopy/_tests_/dashboard-queries.test.ts",
+      "sha256": "547042dfb9d5d78a5ed4f2aec957c4442df617333039680985f2ad72b8d91187"
+    },
+    {
+      "path": "packages/loopy/_tests_/definition-summaries-service.test.ts",
+      "sha256": "0f1466edf4c78dadd450e256486939c2f2e4b74334a28f8c9272957a89cabaa6"
+    },
+    {
+      "path": "packages/loopy/_tests_/definition-summaries-workerd.test.ts",
+      "sha256": "a2f727ebb96d8eb3b02f4337cbbc5db9739848e96df5378aa2f7f57e0b8e32d2"
+    },
+    {
+      "path": "packages/loopy/_tests_/definition-summary-size.test.ts",
+      "sha256": "7819ed37d02f7e87393ce659abc0b81a50ba24e78c57b08a108f9242ee5a8eb4"
+    },
+    {
+      "path": "packages/loopy/_tests_/fixtures/cloud-pagination-probe.ts",
+      "sha256": "29b61f623fba90a0aeb65cfc1ea0fe1fdda0ebab9f6e6d2def752e2c142bdb9f"
+    },
+    {
+      "path": "packages/loopy/_tests_/fixtures/quality-test-root.ts",
+      "sha256": "747b91f1ce80366094b73da7291c010a28e486c7b7f1e99b81b0150f8b7f0fbc"
+    },
+    {
+      "path": "packages/loopy/_tests_/fixtures/readmodel-copied-data.ts",
+      "sha256": "0c5c2150e9ad6d1a1e815568523bddea0ee187f34e1cb06a63571feea6bdc69c"
+    },
+    {
+      "path": "packages/loopy/_tests_/fixtures/readmodel-history.ts",
+      "sha256": "a68c74c7c52f48fbbb20b701d97bbb0b51088cf1fb363b5a7819099014e2a417"
+    },
+    {
+      "path": "packages/loopy/_tests_/fixtures/receipt-harness.ts",
+      "sha256": "948a810661d2000ff03968ead75f1f75e83a4647aa4cb8934ad133942ddfebb5"
+    },
+    {
+      "path": "packages/loopy/_tests_/fixtures/receipt-recovery-probe.ts",
+      "sha256": "cb495b0d06d5bd814e6943da7d50298c0b7796244c3179a4e66bc24bdc834628"
+    },
+    {
+      "path": "packages/loopy/_tests_/fixtures/sandbox-authority-lifecycle.ts",
+      "sha256": "9bd19f8c3e903522de756c0ab901cff98ff8afb1611d256ff20982bef507617a"
+    },
+    {
+      "path": "packages/loopy/_tests_/fixtures/sandbox-authority.ts",
+      "sha256": "f34b8c6a5fb304e17940d53855ffde8991903f31d87f88e8d7367e2fb840ae41"
+    },
+    {
+      "path": "packages/loopy/_tests_/fixtures/summary-service.ts",
+      "sha256": "9e10d1e88d04ae863168b85808b4c2c603f8bc3c2ed13b75a60c39a7402c22a4"
+    },
+    {
+      "path": "packages/loopy/_tests_/fixtures/summary-size-runtime.ts",
+      "sha256": "472270ac2fe226101b38e0b0e9428806f0678ffae58c25017186dc830abfe249"
+    },
+    {
+      "path": "packages/loopy/_tests_/fixtures/workerd-probe.ts",
+      "sha256": "7e2bdd8194ead9ebc95bc627cf359f6dda61ff34d53d468c58adb8a5686b3178"
+    },
+    {
+      "path": "packages/loopy/_tests_/readmodel-workerd.test.ts",
+      "sha256": "5db97843498059537092ed56873ea04384d937d29b55c48a21bb551231eb2877"
+    },
+    {
+      "path": "packages/loopy/_tests_/sandbox-authority-contract.test.ts",
+      "sha256": "3cbe8298ba213066489a26712358cb3ab50df63aee8b664e14346a76a1531e80"
+    },
+    {
+      "path": "packages/loopy/_tests_/sandbox-authority-delayed.test.ts",
+      "sha256": "da0e2a9d4303f6a1abd30a3aeebef5381d5912d46f0192acfee6eef4bb45f2c7"
+    },
+    {
+      "path": "packages/loopy/_tests_/sandbox-authority-lifecycle.test.ts",
+      "sha256": "7e182d512738b522ea1bdda550eac87ecceb674f846a790d73d06c3ed971519f"
+    },
+    {
+      "path": "packages/loopy/_tests_/sandbox-authority-publication.test.ts",
+      "sha256": "b7302b94b50a1b31e354d18f7162d8245923fad4c74c16766f7045c652f175ea"
+    },
+    {
+      "path": "packages/loopy/_tests_/server.test.ts",
+      "sha256": "9dadf9e220ba27aec34bab6174ab11a3927b0eb364f240cf9cb1c32790393353"
+    },
+    {
+      "path": "packages/loopy/_tests_/service.test.ts",
+      "sha256": "10f16bdefa13e79613d6d9835e943eef84917a9da4a767686c4e2199f37343b2"
+    },
+    {
+      "path": "packages/loopy/_tests_/workspace-read-queue.test.ts",
+      "sha256": "1e45325e7505457eb73abeb10f8d0cf1a8491154406e94a8a90a12b5bbf48c13"
+    },
+    {
+      "path": "packages/loopy/src/contract/definition-summary.ts",
+      "sha256": "50c9c55321ddf22ea1002d23ca590b94edc7bec664ca3aa18fe291156e03470a"
+    },
+    {
+      "path": "packages/loopy/src/contract/index.ts",
+      "sha256": "440f1ade58b5276135785997287649ae1721cbbf2591fb03e4f56fa0dcf011a1"
+    },
+    {
+      "path": "packages/loopy/src/contract/sandbox-journal-rpc.ts",
+      "sha256": "455e178d623d77b462bb03a98ecaaa8fd100aae68f235972d9081819ff62815e"
+    },
+    {
+      "path": "packages/loopy/src/contract/sandbox-journal.ts",
+      "sha256": "20617658c6bfbfebca2708a3ebf7f012e4f8fbc3021e46be3bf7f3abc0764cd4"
+    },
+    {
+      "path": "packages/loopy/src/core/queries.ts",
+      "sha256": "c1c165637619d8e3c2ce7650e549c64ad42b81af301568bea64f2ee4eba53102"
+    },
+    {
+      "path": "packages/loopy/src/local/service.ts",
+      "sha256": "e47a83328e8fde2c047b00bfad3500d6bd8cdf233983df62ff5f9dac61cd8d0a"
+    },
+    {
+      "path": "packages/loopy/src/service/definition.ts",
+      "sha256": "0866500fb1666e79cab23bcb88045f7ccd02a8ffb3b34398dc0cc9c66c77e2df"
+    },
+    {
+      "path": "packages/loopy/src/service/queries.ts",
+      "sha256": "3ee56f78c0211b7330bfe4c76a33e9d76c90b3cced369f6eb7414ccf4530f72f"
+    },
+    {
+      "path": "packages/loopy/src/service/registry.ts",
+      "sha256": "c8f6b3a5944d8a3bf6c703d3cd88c9b6b2891bf68032e70b424ffa95c40c670a"
+    },
+    {
+      "path": "packages/loopy/src/service/routes.ts",
+      "sha256": "c438d202be1f04a32c39b74dea8b709fdaf4d31cda1346276df45cf33fbd61e9"
+    },
+    {
+      "path": "packages/loopy/src/service/schedules.ts",
+      "sha256": "ac8ba5d631b089f4d3aaa47c72dbe9d4704216152d5c832d23d2c8c1533454a1"
+    },
+    {
+      "path": "packages/loopy/src/service/service.ts",
+      "sha256": "727652ab4757305ae2f73cb067079826fb06d6cf2c83d9b56e44e4ea79dacb31"
+    },
+    {
+      "path": "packages/loopy/src/store/memory-query-runs.ts",
+      "sha256": "7045924392a8f96b8bf88e4fe9ec3420ce22e1326d4e9f9215d2102d1bb139ab"
+    },
+    {
+      "path": "packages/loopy/src/store/sqlite/query-runs.ts",
+      "sha256": "36a04eb9baf99a27269514550953208d1ad25ca2eaa7d92351818135f6585ef2"
+    }
+  ],
+  "aggregate": "10cf3124e90650bf91e278bbf6c4b814f2225f5a2c4f90cc422491bc2036b082"
+}

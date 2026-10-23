@@ -10,7 +10,7 @@ import {
   type AttemptRecord,
   type AuthoritySession,
 } from "../../../packages/loopy/src/contract/sandbox-journal.js";
-import { attemptHash } from "./admission.js";
+import { attemptId } from "./admission.js";
 import { ArtifactError } from "./artifact-error.js";
 import { AttemptAdmissions } from "./attempt-admissions.js";
 import type { AttemptDependencies, AttemptDependenciesFactory } from "./attempt-dependencies.js";
@@ -72,10 +72,11 @@ export class Attempts {
       const { epoch } = await authority.status();
       const session = await authority.openSession({ expectedEpoch: epoch, nonce: randomUUID() });
       const attempts = new Attempts({ config, dependencies, session, unlock });
-      await attempts.exports.reconcile();
+      const recovered = await recoveryRecords(authority);
+      await attempts.exports.reconcileGuards(recovered.exports);
 
-      for (const record of (await recoveryRecords(authority)).attempts) {
-        attempts.admissions.recover(record);
+      for (const record of recovered.attempts) {
+        attempts.admissions.monitor(record);
       }
 
       return attempts;
@@ -84,15 +85,6 @@ export class Attempts {
       await unlock();
       throw cause;
     }
-  }
-
-  private id(identity: SandboxAttemptIdentity) {
-    return attemptHash({
-      root: this.config.stateRoot,
-      workspace: identity.workspace,
-      executionKey: identity.executionKey,
-      attempt: identity.attempt,
-    });
   }
 
   private async publicReceipt(record: AttemptRecord | null): Promise<SandboxReceipt> {
@@ -113,7 +105,7 @@ export class Attempts {
   }
 
   async lookup(identity: SandboxAttemptIdentity) {
-    const id = this.id(identity);
+    const id = attemptId(this.config.stateRoot, identity);
     await this.admissions.wait(id);
 
     // Only authoritative started records enter the monitor map.
@@ -140,8 +132,10 @@ export class Attempts {
     }
 
     const operation = (async () => {
-      await this.admissions.wait(this.id(request));
-      const record = await this.dependencies.authority.read(this.id(request));
+      const id = attemptId(this.config.stateRoot, request);
+      await this.admissions.wait(id);
+
+      const record = await this.dependencies.authority.read(id);
 
       if (!record) {
         throw new ArtifactError("not_found", "Artifact attempt receipt was not found.");
@@ -151,13 +145,7 @@ export class Attempts {
         throw new ArtifactError("conflict", "Artifact export requires a finished attempt.");
       }
 
-      const receipt = await this.publicReceipt(record);
-
-      if (receipt.kind !== "finished") {
-        throw new ArtifactError("conflict", "Artifact attempt is not terminal.");
-      }
-
-      return this.exports.read(record, receipt.result, request);
+      return this.exports.read(record, request);
     })();
 
     this.artifactOperations.add(operation);

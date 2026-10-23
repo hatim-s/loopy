@@ -1,4 +1,3 @@
-import { afterEach } from "bun:test";
 import { rm } from "node:fs/promises";
 import type { AttemptDependencies } from "../../../../apps/sandbox/src/attempt-dependencies.js";
 import { Attempts } from "../../../../apps/sandbox/src/attempts.js";
@@ -8,10 +7,10 @@ const roots: string[] = [];
 
 const services: Attempts[] = [];
 
-afterEach(async () => {
+export async function cleanup() {
   await Promise.all(services.splice(0).map((service) => service.close()));
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
-});
+}
 
 export async function fixture() {
   const value = await authorityFixture();

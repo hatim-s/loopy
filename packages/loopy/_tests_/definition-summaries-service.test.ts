@@ -156,6 +156,6 @@ test("native adapter distinguishes absence from corrupt existing files", async (
   await expect(service.putSchedule("native", { cron: "* * * * *" }, f.a)).rejects.toBeInstanceOf(
     SyntaxError,
   );
-  expect(() => service.graph("native", f.a)).toThrow(SyntaxError);
+  await expect(service.graph("native", f.a)).rejects.toBeInstanceOf(SyntaxError);
   expect(await f.store.listRuns()).toEqual([]);
 });

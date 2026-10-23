@@ -1,0 +1,11 @@
+{
+  "startedAt": "2026-10-23T17:14:41.656842+00:00",
+  "directory": ".loopy/quality-tests/integrated-duf_yuvg",
+  "command": "bun --no-env-file run check",
+  "environment": "fresh HOME/LOOPY_HOME/XDG; PATH inherited; TMPDIR unset; Docker opt-in absent",
+  "log": ".loopy/quality-tests/integrated-duf_yuvg/check.log",
+  "pid": 91229,
+  "endedAt": "2026-10-23T17:16:27.403943+00:00",
+  "exitCode": 1,
+  "logSha256": "f4052582e808b1f9d05452e6b8a328e854011fb2d8c901c91dc423d22f0238bd"
+}

@@ -61,15 +61,7 @@ function fixture() {
 
       return saved ? definitionSummary(saved) : null;
     },
-    get: async (slug) => {
-      const saved = entries.get(slug);
-
-      if (!saved) {
-        throw new ServiceError("not_found", `No saved loopy '${slug}'.`);
-      }
-
-      return saved;
-    },
+    get: async (slug) => entries.get(slug) ?? null,
     revisionGraph: async (hash) => {
       const graph = graphs.get(hash);
 
@@ -218,6 +210,32 @@ test("portable routes use explicit daemon identity and return unsupported operat
     expect(response.status).toBe(501);
     expect(await response.json()).toMatchObject({ error: { code: "not_yet" } });
   }
+
+  for (const [method, suffix, body] of [
+    ["POST", "runs", { input: {} }],
+    ["GET", "graph", undefined],
+    ["GET", "source", undefined],
+    ["PUT", "schedule", { cron: "* * * * *" }],
+    ["POST", "schedule/enabled", { enabled: true }],
+    ["DELETE", "schedule", undefined],
+  ] as const) {
+    const request = new Request(`https://loopy.example/api/loopies/absent/${suffix}`, {
+      method,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+
+    const response = await dispatch(table, request, new URL(request.url));
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "not_found",
+        message: "No saved loopy 'absent'. Use loopy save <file.ts> first.",
+      },
+    });
+  }
+
+  expect(await store.listRuns()).toEqual([]);
+  expect(await store.listSchedules()).toEqual([]);
 });
 
 async function seededTransaction() {

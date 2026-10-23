@@ -1,7 +1,15 @@
 import { afterEach, expect, test } from "bun:test";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdtemp, readdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { ArtifactReader } from "../../../apps/sandbox/src/artifacts.js";
 import { Attempts } from "../../../apps/sandbox/src/attempts.js";
@@ -19,6 +27,7 @@ import {
   sandboxAttemptRequestSchema,
 } from "../src/contract/index.js";
 import { attemptRecordSchema } from "../src/contract/sandbox-journal.js";
+import { canonicalJson } from "../src/core/index.js";
 import { commandSpec } from "./fixtures/executor.js";
 
 const roots: string[] = [];
@@ -35,7 +44,11 @@ afterEach(async () => {
 });
 
 async function fixture() {
-  const worktree = await realpath(await mkdtemp(join(tmpdir(), "loopy-cloud-sandbox-")));
+  const parent = resolve(import.meta.dir, "../../../.loopy/quality-tests");
+  await mkdir(parent, { recursive: true });
+  const worktree = await realpath(await mkdtemp(join(parent, "cloud-sandbox-")));
+  await writeFile(join(worktree, "package.json"), JSON.stringify({ private: true }));
+  await mkdir(join(worktree, ".loopy/loopies"), { recursive: true });
   roots.push(worktree);
 
   const config = sandboxConfigSchema.parse({
@@ -208,6 +221,10 @@ test("workspace and attempt identities isolate receipts while run volumes persis
   });
 
   const value = request();
+  value.executionKey.scope = [
+    { nodeId: nodeIdSchema.parse("2:each"), index: 3 },
+    { nodeId: nodeIdSchema.parse("3:each"), index: 7 },
+  ];
   await service.start(value);
   await service.start({ ...value, attempt: 2 });
   await service.start({ ...value, workspace: "workspace-two" });
@@ -215,11 +232,32 @@ test("workspace and attempt identities isolate receipts while run volumes persis
     ...value,
     executionKey: { ...value.executionKey, nodeId: nodeIdSchema.parse("1:code") },
   });
+  await service.start({
+    ...value,
+    executionKey: { ...value.executionKey, scope: [...value.executionKey.scope].reverse() },
+  });
   await service.drain();
-  expect(new Set(receipts.map((receipt) => receipt.id)).size).toBe(4);
+  expect(new Set(receipts.map((receipt) => receipt.id)).size).toBe(5);
   expect(receipts[0]?.volume).toBe(receipts[1]?.volume);
   expect(receipts[0]?.volume).toBe(receipts[3]?.volume);
   expect(receipts[0]?.volume).not.toBe(receipts[2]?.volume);
+  expect(receipts[0]?.volume).toBe(receipts[4]?.volume);
+
+  for (const receipt of receipts) {
+    const expected = createHash("sha256")
+      .update(
+        canonicalJson({
+          root: config.stateRoot,
+          workspace: receipt.workspace,
+          executionKey: receipt.executionKey,
+          attempt: receipt.attempt,
+        }),
+      )
+      .digest("hex");
+
+    expect(receipt.id).toBe(expected);
+    expect(await service.lookup(receipt)).toEqual({ kind: "finished", result: succeeded });
+  }
 });
 
 test("restart reconciles the saved container and never starts another attempt", async () => {

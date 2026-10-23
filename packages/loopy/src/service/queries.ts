@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import { type routes, type SourceArtifact, serverEvent } from "../contract/index.js";
+import { requireDefinition } from "./definition.js";
 import { ServiceError } from "./error.js";
 import type { ServiceOptions } from "./registry.js";
 import type { ServiceRunViews } from "./run-views.js";
@@ -87,7 +88,7 @@ export class ServiceQueries {
   }
   async loopySource(slug: string, workspace: string): Promise<SourceArtifact> {
     const registry = this.options.registry(workspace);
-    const saved = await registry.get(slug);
+    const saved = await requireDefinition(registry, slug);
 
     return registry.revisionSource(slug, saved.revision);
   }

@@ -150,7 +150,6 @@ export interface DashboardReader {
   ): Promise<Pick<RunRecord, "id" | "slug" | "workspace" | "revision"> | undefined>;
   runningCount(): Promise<number>;
   queryRuns(query: RunPageQuery): Promise<RunRecord[]>;
-  runCounts(filter?: RunFilter): Promise<StatusCounts>;
   runCountsByDefinition(): Promise<RunDefinitionCount[]>;
   runWorkspaces(): Promise<string[]>;
   pendingHooks(

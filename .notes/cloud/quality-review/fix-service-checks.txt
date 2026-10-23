@@ -1,0 +1,149 @@
+## focused-tests.log
+
+bun test v1.4.0 (34cbb9a40)
+
+packages/loopy/_tests_/service.test.ts:
+(pass) service validates input before queuing and hides registry private fields [24.70ms]
+(pass) service resumes queued, suspended and abandoned runs and rejects terminal or owned runs [12.01ms]
+(pass) service pages newest runs by createdAt with default and maximum page sizes [42.20ms]
+(pass) service schedules create, replace, toggle, delete and emit persisted events [21.27ms]
+(pass) service rejects invalid schedule semantics before writing [8.75ms]
+(pass) definition defaults apply and workspace schedule mutations stay isolated [8.55ms]
+(pass) disabled schedules stay dormant and re-enabling waits for the next slot [10.45ms]
+(pass) global schedules use the service workspace and preserve other workspaces [9.19ms]
+(pass) a PUT during bundle resolution rejects the pending schedule fire [8.61ms]
+(pass) a disable during bundle resolution rejects the pending schedule fire [7.50ms]
+(pass) service cursor follows the last event without requiring a run snapshot [7.42ms]
+(pass) run graphs stay pinned to the revision each run started on [13.26ms]
+(pass) service maps completion between requireRun and claim to not_claimable [7.21ms]
+(pass) listLoopies reads each workspace registry once per call [7.82ms]
+(pass) loopy views name their workspace so graph and start reach that project's save [12.84ms]
+
+packages/loopy/_tests_/cloud-service.test.ts:
+(pass) portable service validates input and pins graph/source revisions through async artifacts [1.73ms]
+(pass) portable schedules use registry workspace identity [1.39ms]
+(pass) portable routes use explicit daemon identity and return unsupported operation errors [2.28ms]
+(pass) portable SSE delivers whole SQL transactions and aborts without polling [2.55ms]
+(pass) portable SSE rejects partial transaction cursors, epoch changes and pruned history [1.22ms]
+
+packages/loopy/_tests_/cloud-scheduler.test.ts:
+(pass) fresh foreign interrupted due sleep recovers without repeating effects [4.33ms]
+(pass) fresh foreign interrupted future sleep recovers without repeating effects [2.20ms]
+(pass) fresh foreign interrupted indefinite wait recovers without repeating effects [2.24ms]
+(pass) expired foreign interrupted due sleep recovers without repeating effects [1.72ms]
+(pass) expired foreign interrupted future sleep recovers without repeating effects [1.68ms]
+(pass) expired foreign interrupted indefinite wait recovers without repeating effects [1.45ms]
+(pass) same token interrupted due sleep recovers without repeating effects [1.64ms]
+(pass) same token interrupted future sleep recovers without repeating effects [2.05ms]
+(pass) same token interrupted indefinite wait recovers without repeating effects [1.53ms]
+(pass) a resolved hook supersedes the previous timeout alarm [1.89ms]
+(pass) a second release failure persists a retry without reactivating an indefinite wait [1.31ms]
+(pass) suspended recovery releases an expired owner while every execution slot is occupied [2.65ms]
+(pass) invalid input, absent definitions and registry failures isolate schedules and recover [9.06ms]
+(pass) schedule fire failure before commit is bounded and does not duplicate a fire [3.32ms]
+(pass) schedule fire failure after commit is bounded and does not duplicate a fire [3.64ms]
+(pass) a full failing schedule batch yields to later schedules on the next alarm [6.57ms]
+
+packages/loopy/_tests_/definition-summaries-service.test.ts:
+(pass) definition projection hides graph, bundles and secrets and displays JSON input as schema [3.33ms]
+(pass) one grouped counts read maps globals across workspaces, projects to their workspace and keeps first slug selection [7.92ms]
+(pass) run metadata fetches each selected slug once per canonical workspace and caches missing definitions [3.19ms]
+(pass) start and schedule use direct get, distinguishing absent definitions from storage failures [1.52ms]
+(pass) native adapter distinguishes absence from corrupt existing files [3.26ms]
+
+packages/loopy/_tests_/registry.test.ts:
+(pass) registry lookup uses the nearest project root and falls back to global entries [3.98ms]
+(pass) changing scope removes only the other entry owned by the same source [4.58ms]
+(pass) stale registry entries are ignored and replaced without preserving the old format [2.41ms]
+
+packages/loopy/_tests_/registry-isolation.test.ts:
+(pass) marked temporary projects isolate saves and global fallback from an ancestor registry [4.38ms]
+
+packages/loopy/_tests_/secrets.test.ts:
+(pass) private CRUD preserves other secrets and lists names only [3.38ms]
+(pass) repairs permissive permissions before reading [1.15ms]
+(pass) refuses symlink directories, symlink files, and hard links [1.61ms]
+(pass) a competing writer cannot overwrite the store [1.47ms]
+(pass) malformed stores and invalid values never echo secret contents [1.10ms]
+(pass) CLI stdin entry and name-only listing do not disclose values [223.01ms]
+(pass) redaction handles overlapping values, regex punctuation and truncated secrets [0.29ms]
+
+ 52 pass
+ 0 fail
+ 377 expect() calls
+Ran 52 tests across 7 files. [594.00ms]
+
+## native-routes.log
+
+bun test v1.4.0 (34cbb9a40)
+
+packages/loopy/_tests_/server.test.ts:
+(pass) API distinguishes invalid cursors from registry failures [143.65ms]
+(pass) native definition routes return 404 for absence and 500 for corrupt saved data [102.84ms]
+(pass) service error codes serialize with their HTTP status [91.32ms]
+(pass) schedule routes round trip validated views and report status codes [93.33ms]
+(pass) compiled save route verifies artifacts, stores private bundles and returns only GraphView [161.94ms]
+
+ 5 pass
+ 19 filtered out
+ 0 fail
+ 94 expect() calls
+Ran 5 tests across 1 file. [660.00ms]
+
+## workerd-tests.log
+
+bun test v1.4.0 (34cbb9a40)
+
+packages/loopy/_tests_/cloud-artifacts.test.ts:
+(pass) real local R2 and DO SQL publish immutable revisions, pinned source and base64 bundles [73.09ms]
+(pass) missing source is pinned and workspaces cannot read another tenant's artifacts [14.26ms]
+(pass) artifact failures never publish metadata and a later retry finishes publication [11.07ms]
+(pass) final SQL transaction rejects source ownership races and explicit replace changes owners [15.03ms]
+(pass) capacity rejects overflow without truncating list results [12.20ms]
+(pass) aggregate capacity rejects new and replacement pointers while existing operations remain readable [1070.99ms]
+(pass) concurrent publications compete for aggregate capacity in the pointer transaction [882.91ms]
+(pass) cloud rejects unsupported modes, declared secrets, oversized writes and bounded R2 reads [24.75ms]
+(pass) shared validation rejects forged bundles, revisions and source mappings before storage [4.36ms]
+
+packages/loopy/_tests_/definition-summaries-workerd.test.ts:
+(pass) cloud SQL projections preserve legacy pointers and backfill outside transactions [60.49ms]
+(pass) same save repairs missing or corrupt summaries without changing generation or savedAt [33.29ms]
+(pass) a replacement save wins cold backfill against a valid old graph [18.66ms]
+(pass) a replacement save wins cold backfill against a missing old graph [16.56ms]
+(pass) a replacement save wins cold backfill against a corrupt old graph [17.09ms]
+(pass) SQL failure rolls back the pointer, summary and generation together [20.50ms]
+(pass) warm metadata endpoints read zero graphs while direct get, start and schedule reject corrupt artifacts [30.23ms]
+(pass) missing required graphs fail cold lists clearly without partial results [12.01ms]
+(pass) corrupt required graphs fail cold lists clearly without partial results [13.53ms]
+
+ 18 pass
+ 0 fail
+ 195 expect() calls
+Ran 18 tests across 2 files. [2.91s]
+
+## negative-control.log
+
+bun test v1.4.0 (34cbb9a40)
+
+packages/loopy/_tests_/cloud-service.test.ts:
+223 |       method,
+224 |       body: body === undefined ? undefined : JSON.stringify(body),
+225 |     });
+226 | 
+227 |     const response = await dispatch(table, request, new URL(request.url));
+228 |     expect(response.status).toBe(404);
+                                  ^
+error: expect(received).toBe(expected)
+
+Expected: 404
+Received: 500
+
+      at <anonymous> (/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/quality-tests/service-jpabmzi8/packages/loopy/_tests_/cloud-service.test.ts:228:29)
+(fail) portable routes use explicit daemon identity and return unsupported operation errors [6.75ms]
+
+ 0 pass
+ 4 filtered out
+ 1 fail
+ 10 expect() calls
+Ran 1 test across 1 file. [137.00ms]
+

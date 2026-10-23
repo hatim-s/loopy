@@ -116,10 +116,6 @@ function snapshot(file: string) {
       "SELECT id,workspace,slug,status FROM runs ORDER BY id",
     );
 
-    const groups = read<RunDefinitionCount>(
-      "SELECT workspace,slug,status,count(*) AS count FROM runs GROUP BY workspace,slug,status",
-    );
-
     const meta = new Map(
       read<{ key: string; value: string }>("SELECT key,value FROM meta").map(({ key, value }) => [
         key,
@@ -137,7 +133,6 @@ function snapshot(file: string) {
       schema,
       tables,
       runs,
-      groups,
     };
   } finally {
     db.close();
@@ -153,7 +148,9 @@ const order = (rows: RunDefinitionCount[]) =>
 
 async function counts(store: Store, baseline: ReturnType<typeof snapshot>) {
   const rows = await store.runCountsByDefinition();
-  assert.deepEqual(order(rows), order(baseline.groups));
+  const keys = rows.map(({ workspace, slug, status }) => JSON.stringify([workspace, slug, status]));
+  assert.equal(new Set(keys).size, keys.length);
+  assert.ok(rows.every(({ count }) => count > 0));
 
   const identities = new Map(
     baseline.runs.map(({ workspace, slug }) => [
@@ -163,22 +160,38 @@ async function counts(store: Store, baseline: ReturnType<typeof snapshot>) {
   );
 
   const slugs = [...new Set(baseline.runs.map(({ slug }) => slug))];
+  const workspaces = [...new Set(baseline.runs.map(({ workspace }) => workspace))];
 
-  const filters: RunFilter[] = [...identities.values(), ...slugs.map((slug) => ({ slug }))];
+  const filters: RunFilter[] = [
+    {},
+    ...identities.values(),
+    ...slugs.map((slug) => ({ slug })),
+    ...workspaces.map((workspace) => ({ workspace })),
+  ];
 
   for (const filter of filters) {
     const expected = emptyRunCounts();
+    const actual = emptyRunCounts();
 
-    for (const row of rows) {
+    for (const run of baseline.runs) {
       if (
-        row.slug === filter.slug &&
-        (filter.workspace === undefined || row.workspace === filter.workspace)
+        (filter.slug === undefined || run.slug === filter.slug) &&
+        (filter.workspace === undefined || run.workspace === filter.workspace)
       ) {
-        expected[row.status] += row.count;
+        expected[run.status]++;
       }
     }
 
-    assert.deepEqual(await store.runCounts(filter), expected);
+    for (const row of rows) {
+      if (
+        (filter.slug === undefined || row.slug === filter.slug) &&
+        (filter.workspace === undefined || row.workspace === filter.workspace)
+      ) {
+        actual[row.status] += row.count;
+      }
+    }
+
+    assert.deepEqual(actual, expected);
   }
 
   assert.deepEqual(await store.eventCursor(), { epoch: baseline.epoch, cursor: baseline.cursor });

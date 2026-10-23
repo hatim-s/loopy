@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import {
+  definitionInput,
   definitionSummarySchema,
   type PutLoopyBody,
 } from "../../../packages/loopy/src/contract/index.js";
@@ -20,7 +21,13 @@ const encoder = new TextEncoder();
 export function projectionJson(summary: DefinitionProjection): string {
   const { scope, description, input, schedule, mode } = summary;
 
-  return JSON.stringify({ scope, description, input, schedule, mode });
+  return JSON.stringify({
+    scope,
+    description,
+    input,
+    schedule,
+    mode,
+  } satisfies DefinitionProjection);
 }
 
 function rowBytes(fields: string[]): number {
@@ -59,7 +66,7 @@ export function checkDefinitionRows(body: PutLoopyBody): void {
     generation: "0".repeat(36),
     projection: projectionJson({
       ...body.graph.meta,
-      input: body.graph.inputValidation?.root === "json" ? "schema" : body.graph.input,
+      input: definitionInput(body.graph),
     }),
   });
 }

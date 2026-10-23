@@ -40,15 +40,8 @@ export function errorResponse(code: ErrorCode, message = DEFAULT_ERROR_MESSAGES[
   return json({ error: { code, message } }, STATUS[code]);
 }
 
-type AwaitableMethods<T> = {
-  [K in keyof T]: T[K] extends (...args: infer A) => infer R
-    ? (...args: A) => Awaited<R> | Promise<Awaited<R>>
-    : T[K];
-};
-
 export type RouteDependencies = {
-  service: Omit<LoopyService, "graph" | "listSecrets" | "putSecret" | "deleteSecret"> &
-    AwaitableMethods<Pick<LoopyService, "graph" | "listSecrets" | "putSecret" | "deleteSecret">>;
+  service: LoopyService;
   store: Pick<Store, "getLogs" | "runningCount" | "nextWakeAt"> & EventReader;
   cwd: string;
   daemon: Pick<DaemonView, "pid" | "startedAt" | "concurrency">;

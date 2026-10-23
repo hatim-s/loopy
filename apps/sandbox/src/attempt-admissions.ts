@@ -1,15 +1,16 @@
 import {
-  type SandboxAttemptIdentity,
   type SandboxAttemptRequest,
   type SandboxReceipt,
 } from "../../../packages/loopy/src/contract/index.js";
 import {
   type AttemptRecord,
   type AuthoritySession,
+  attemptResourceNames,
   type DockerAttemptPlan,
+  workspaceVolumeInput,
 } from "../../../packages/loopy/src/contract/sandbox-journal.js";
 import { durationMs } from "../../../packages/loopy/src/core/index.js";
-import { AttemptConflict, attemptHash, validateBundles } from "./admission.js";
+import { AttemptConflict, attemptHash, attemptId, validateBundles } from "./admission.js";
 import type { AttemptDependencies } from "./attempt-dependencies.js";
 import type { AttemptExports } from "./attempt-exports.js";
 import type { AttemptMonitors } from "./attempt-monitor.js";
@@ -18,6 +19,7 @@ import type { SandboxConfig } from "./config.js";
 
 export class AttemptAdmissions {
   private readonly admissions = new Map<string, Promise<SandboxReceipt>>();
+  // Never clear issued ids: a stale started read can arrive after terminal publication.
   private readonly issued = new Set<string>();
   private readonly retained = new Map<
     string,
@@ -54,14 +56,6 @@ export class AttemptAdmissions {
   async settle() {
     await Promise.allSettled(this.admissions.values());
   }
-  private id(identity: SandboxAttemptIdentity) {
-    return attemptHash({
-      root: this.config.stateRoot,
-      workspace: identity.workspace,
-      executionKey: identity.executionKey,
-      attempt: identity.attempt,
-    });
-  }
 
   async start(request: SandboxAttemptRequest): Promise<SandboxReceipt> {
     if (this.signal.aborted) {
@@ -69,7 +63,7 @@ export class AttemptAdmissions {
     }
 
     validateBundles(request);
-    const id = this.id(request);
+    const id = attemptId(this.config.stateRoot, request);
     const previous = this.admissions.get(id);
 
     if (previous) {
@@ -104,9 +98,10 @@ export class AttemptAdmissions {
       workspace: request.workspace,
       executionKey: request.executionKey,
       attempt: request.attempt,
-      container: `loopy-attempt-${id}`,
-      inputVolume: `loopy-input-${id}`,
-      volume: `loopy-workspace-${attemptHash({ root: this.config.stateRoot, workspace: request.workspace, runId: request.executionKey.runId })}`,
+      ...attemptResourceNames(
+        id,
+        attemptHash(workspaceVolumeInput(this.config.stateRoot, request)),
+      ),
       deadline: Date.now() + Math.min(timeout + 30_000, this.config.maxTimeoutMs),
     };
   }
@@ -115,7 +110,7 @@ export class AttemptAdmissions {
     const retained = this.retained.get(record.plan.id);
 
     if (record.kind === "started") {
-      this.recover(
+      this.monitor(
         record,
         retained?.requestHash === record.plan.requestHash ? retained.request : undefined,
       );
@@ -124,7 +119,7 @@ export class AttemptAdmissions {
     this.retained.delete(record.plan.id);
   }
 
-  recover(record: Extract<AttemptRecord, { kind: "started" }>, request?: SandboxAttemptRequest) {
+  monitor(record: Extract<AttemptRecord, { kind: "started" }>, request?: SandboxAttemptRequest) {
     if (this.signal.aborted) {
       return;
     }
@@ -151,6 +146,31 @@ export class AttemptAdmissions {
     }
   }
 
+  private async publishAdmission(plan: DockerAttemptPlan, request: SandboxAttemptRequest) {
+    const authority = this.dependencies.authority;
+    let reply;
+
+    try {
+      reply = await authority.admit({ session: this.session, plan });
+    } catch (cause) {
+      // A null resolving read may precede a delayed remote commit. Lookup keeps this obligation.
+      this.retained.set(plan.id, { request, requestHash: plan.requestHash });
+
+      return resolveAdmissionRead({
+        authority,
+        id: plan.id,
+        signal: this.signal,
+        cause: cause instanceof Error ? cause : new Error("Admission response failed.", { cause }),
+      });
+    }
+
+    if (reply.kind === "rejected") {
+      throw new AttemptConflict(`Attempt admission was rejected: ${reply.code}.`);
+    }
+
+    return reply.record;
+  }
+
   private async admit(id: string, request: SandboxAttemptRequest): Promise<SandboxReceipt> {
     const authority = this.dependencies.authority;
 
@@ -159,58 +179,17 @@ export class AttemptAdmissions {
       bundles: [...request.bundles].sort((a, b) => a.hash.localeCompare(b.hash)),
     });
 
-    const existing = await authority.read(id);
+    let record = await authority.read(id);
 
-    if (existing !== null) {
-      if (existing.plan.requestHash !== requestHash) {
-        throw new AttemptConflict("Attempt identity already has different request content.");
+    if (record === null) {
+      const plan = this.plan(id, requestHash, request);
+      await this.exports.reconcile(plan.volume);
+
+      if (this.signal.aborted) {
+        throw new AttemptConflict("Sandbox service is stopping.");
       }
 
-      if (existing.kind === "started") {
-        this.recover(existing, request);
-      }
-
-      return this.publicReceipt(existing);
-    }
-
-    const plan = this.plan(id, requestHash, request);
-    await this.exports.reconcile(plan.volume);
-
-    if (this.signal.aborted) {
-      throw new AttemptConflict("Sandbox service is stopping.");
-    }
-
-    let record: AttemptRecord;
-
-    try {
-      const reply = await authority.admit({ session: this.session, plan });
-
-      if (reply.kind === "rejected") {
-        throw new AttemptConflict(`Attempt admission was rejected: ${reply.code}.`);
-      }
-
-      record = reply.record;
-
-      if (reply.kind === "existing") {
-        if (record.kind === "started") {
-          this.recover(record, request);
-        }
-
-        return this.publicReceipt(record);
-      }
-    } catch (cause) {
-      if (cause instanceof AttemptConflict) {
-        throw cause;
-      }
-
-      // A null resolving read may precede a delayed remote commit. Lookup keeps this obligation.
-      this.retained.set(id, { request, requestHash });
-      record = await resolveAdmissionRead({
-        authority,
-        id,
-        signal: this.signal,
-        cause: cause instanceof Error ? cause : new Error("Admission response failed.", { cause }),
-      });
+      record = await this.publishAdmission(plan, request);
     }
 
     if (record.plan.requestHash !== requestHash) {
@@ -218,7 +197,7 @@ export class AttemptAdmissions {
     }
 
     if (record.kind === "started") {
-      this.recover(record, request);
+      this.monitor(record, request);
     }
 
     return this.publicReceipt(record);

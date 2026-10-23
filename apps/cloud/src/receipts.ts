@@ -125,6 +125,8 @@ export class SandboxReceipts {
         this.authority.endExport(command.input);
 
         return null;
+      case "exportGuards":
+        return this.db.exportGuards(command.input);
       case "recoverable":
         return this.db.recoverable(command.input);
       case "resultPut":

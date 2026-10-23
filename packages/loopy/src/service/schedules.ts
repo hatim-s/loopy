@@ -5,6 +5,7 @@ import type {
   ScheduleView,
 } from "../contract/index.js";
 import { assertJson, errorMessage, nextFire, parseCron, type Schedule } from "../core/index.js";
+import { requireDefinition } from "./definition.js";
 import { ServiceError } from "./error.js";
 import { validateDefinitionInput } from "./input.js";
 import type { ServiceOptions } from "./registry.js";
@@ -14,7 +15,7 @@ export class ServiceSchedules {
 
   private async scheduleTarget(slug: string, callerWorkspace = "") {
     const registry = this.options.registry(callerWorkspace);
-    const saved = await registry.get(slug);
+    const saved = await requireDefinition(registry, slug);
 
     return { registry, saved, workspace: await registry.workspace() };
   }

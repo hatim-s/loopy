@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { definitionSummary } from "../../src/contract/index.js";
 import { type RunRecord, revision } from "../../src/core/index.js";
 import { Registry } from "../../src/local/registry.js";
-import { type ArtifactRegistry, LoopyService, ServiceError } from "../../src/service/index.js";
+import { type ArtifactRegistry, LoopyService } from "../../src/service/index.js";
 import { MemoryStore } from "../../src/store/index.js";
 import { compiledBody } from "../compiled-fixture.js";
 
@@ -12,13 +12,10 @@ export class SummaryCountsStore extends MemoryStore {
   groupedReads = 0;
 
   override async runCountsByDefinition() {
+    // Lists must group counts once instead of querying once per definition.
     this.groupedReads++;
 
     return super.runCountsByDefinition();
-  }
-
-  override async runCounts(): Promise<never> {
-    throw new Error("Per-definition runCounts query must not run.");
   }
 }
 
@@ -66,7 +63,7 @@ export function summaryServiceFixture() {
         calls.graphs.push(slug);
 
         if (slug === "missing") {
-          throw new ServiceError("not_found");
+          return null;
         }
 
         if (slug === "corrupt") {

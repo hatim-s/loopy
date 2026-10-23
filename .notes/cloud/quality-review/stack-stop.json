@@ -1,0 +1,14 @@
+{
+  "at": "2026-10-23T16:57:19.336916+00:00",
+  "architectureListenersClosed": {
+    "15270": true,
+    "15271": true,
+    "15272": true,
+    "15273": true
+  },
+  "personalListeners": {
+    "4310": ["90523"],
+    "4173": ["41194"]
+  },
+  "stateAndVolumesRetained": true
+}

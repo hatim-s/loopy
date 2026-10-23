@@ -14,7 +14,7 @@ export interface ArtifactRegistry {
   workspace(): Promise<string>;
   listSummaries(): Promise<DefinitionSummary[]>;
   summary(slug: string): Promise<DefinitionSummary | null>;
-  get(slug: string): Promise<SavedLoopy>;
+  get(slug: string): Promise<SavedLoopy | null>;
   revisionGraph(revision: string): Promise<Graph>;
   revisionSource(slug: string, revision: string): Promise<SourceArtifact>;
   save(body: PutLoopyBody): Promise<void>;

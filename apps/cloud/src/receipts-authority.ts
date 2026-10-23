@@ -3,6 +3,7 @@ import {
   type AuthorityFailure,
   type AuthorityInput,
   type AuthorityOutput,
+  artifactHelperName,
   type ExportRecord,
 } from "../../../packages/loopy/src/contract/index.js";
 import type { ReceiptSql } from "./receipts-sql.js";
@@ -134,7 +135,7 @@ export class ReceiptAuthority {
           session: input.session,
           attemptId: input.attemptId,
           volume,
-          helper: `loopy-artifact-${input.attemptId}`,
+          helper: artifactHelperName(input.attemptId),
         };
 
         this.db.storage.sql

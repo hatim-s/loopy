@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, realpath } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { mkdir, mkdtemp, realpath, writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { attemptHash } from "../../../../apps/sandbox/src/admission.js";
 import type { ArtifactReader } from "../../../../apps/sandbox/src/artifacts.js";
 import { sandboxConfigSchema, validateStateRoot } from "../../../../apps/sandbox/src/config.js";
@@ -38,7 +37,11 @@ export const artifactReader: ArtifactReader = {
 };
 
 export async function authorityFixture() {
-  const root = await realpath(await mkdtemp(join(tmpdir(), "loopy-authority-")));
+  const parent = resolve(import.meta.dir, "../../../../.loopy/quality-tests");
+  await mkdir(parent, { recursive: true });
+  const root = await realpath(await mkdtemp(join(parent, "authority-")));
+  await writeFile(join(root, "package.json"), JSON.stringify({ private: true }));
+  await mkdir(join(root, ".loopy/loopies"), { recursive: true });
 
   const config = sandboxConfigSchema.parse({
     worktree: root,

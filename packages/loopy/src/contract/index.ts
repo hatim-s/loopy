@@ -34,6 +34,7 @@ export * from "./dashboard.js";
 
 export {
   type DefinitionSummary,
+  definitionInput,
   definitionSummary,
   definitionSummarySchema,
 } from "./definition-summary.js";

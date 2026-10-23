@@ -2,6 +2,7 @@ import { z } from "zod";
 import { hashSchema } from "./compiled-loopy.js";
 import {
   SANDBOX_MAX_CAPTURE_BYTES,
+  type SandboxAttemptIdentity,
   type SandboxExecutionResult,
   sandboxAttemptIdentitySchema,
   sandboxExecutionResultSchema,
@@ -92,3 +93,28 @@ export interface ImmutableResults {
 
 // Composition binds the workspace before any bytes or digest select storage paths.
 export type ResultsFor = (workspace: string) => ImmutableResults;
+
+export function attemptIdInput(root: string, identity: SandboxAttemptIdentity) {
+  return {
+    root,
+    workspace: identity.workspace,
+    executionKey: identity.executionKey,
+    attempt: identity.attempt,
+  };
+}
+
+export function workspaceVolumeInput(root: string, identity: SandboxAttemptIdentity) {
+  return { root, workspace: identity.workspace, runId: identity.executionKey.runId };
+}
+
+export function attemptResourceNames(id: string, volumeHash: string) {
+  return {
+    container: `loopy-attempt-${id}`,
+    inputVolume: `loopy-input-${id}`,
+    volume: `loopy-workspace-${volumeHash}`,
+  };
+}
+
+export function artifactHelperName(id: string) {
+  return `loopy-artifact-${id}`;
+}

@@ -1,60 +1,33 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { rm } from "node:fs/promises";
-import { join, resolve } from "node:path";
-import { Miniflare } from "miniflare";
+import { resolve } from "node:path";
+import type { Miniflare } from "miniflare";
 import { z } from "zod";
 import { routes, runStatusSchema, statusCountsSchema } from "../src/contract/index.js";
 import { checkCountHistory, checkScopePages } from "./fixtures/readmodel-assertions.js";
-import { readmodelDirectory } from "./fixtures/readmodel-directory.js";
+import { probeRuntime } from "./fixtures/workerd-probe.js";
 
 let runtime: Miniflare;
 
-let directory: string;
+let harness: Awaited<ReturnType<typeof probeRuntime>>;
 
 beforeAll(async () => {
-  directory = readmodelDirectory();
-
-  const bundle = await Bun.build({
-    entrypoints: [resolve(import.meta.dir, "fixtures/readmodel-workerd.ts")],
-    target: "browser",
-    format: "esm",
-    outdir: directory,
-    naming: "[name].js",
-  });
-
-  expect(bundle.success).toBe(true);
-  expect(bundle.logs).toEqual([]);
-  runtime = new Miniflare({
-    modulesRoot: directory,
-    durableObjectsPersist: join(directory, "durable"),
+  harness = await probeRuntime({
+    entry: resolve(import.meta.dir, "fixtures/readmodel-workerd.ts"),
     name: "readmodel",
-    host: "127.0.0.1",
-    port: 0,
-    modules: true,
-    scriptPath: join(directory, "readmodel-workerd.js"),
-    compatibilityDate: "2026-07-30",
-    durableObjects: { PROBES: { className: "ReadmodelProbe", useSQLite: true } },
+    className: "ReadmodelProbe",
   });
-  await runtime.ready;
+  runtime = harness.runtime;
 }, 60_000);
 
 afterAll(async () => {
-  try {
-    await runtime?.dispose();
-  } finally {
-    if (directory) {
-      await rm(directory, { recursive: true, force: true });
-    }
-  }
+  await harness?.cleanup();
 });
 
 async function probe(path: string, instance = "scopes") {
-  const namespace = await runtime.getDurableObjectNamespace("PROBES");
-  const response = await namespace.get(namespace.idFromName(instance)).fetch(`http://probe${path}`);
-  const body: unknown = await response.json();
-  expect({ status: response.status, body }).toMatchObject({ status: 200 });
+  const response = await harness.probe(instance, { path });
+  expect(response).toMatchObject({ status: 200 });
 
-  return body;
+  return response.body;
 }
 
 const row = z.object({

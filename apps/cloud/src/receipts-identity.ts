@@ -1,4 +1,9 @@
-import type { DockerAttemptPlan } from "../../../packages/loopy/src/contract/index.js";
+import {
+  attemptIdInput,
+  attemptResourceNames,
+  type DockerAttemptPlan,
+  workspaceVolumeInput,
+} from "../../../packages/loopy/src/contract/index.js";
 import { canonicalJson } from "../../../packages/loopy/src/core/index.js";
 
 export async function receiptHash(bytes: Uint8Array): Promise<string> {
@@ -8,31 +13,18 @@ export async function receiptHash(bytes: Uint8Array): Promise<string> {
 }
 
 export async function validReceiptPlan(root: string, plan: DockerAttemptPlan): Promise<boolean> {
-  const id = await receiptHash(
-    new TextEncoder().encode(
-      canonicalJson({
-        root,
-        workspace: plan.workspace,
-        executionKey: plan.executionKey,
-        attempt: plan.attempt,
-      }),
-    ),
-  );
+  const id = await receiptHash(new TextEncoder().encode(canonicalJson(attemptIdInput(root, plan))));
 
   const volume = await receiptHash(
-    new TextEncoder().encode(
-      canonicalJson({
-        root,
-        workspace: plan.workspace,
-        runId: plan.executionKey.runId,
-      }),
-    ),
+    new TextEncoder().encode(canonicalJson(workspaceVolumeInput(root, plan))),
   );
+
+  const names = attemptResourceNames(id, volume);
 
   return (
     plan.id === id &&
-    plan.container === `loopy-attempt-${id}` &&
-    plan.inputVolume === `loopy-input-${id}` &&
-    plan.volume === `loopy-workspace-${volume}`
+    plan.container === names.container &&
+    plan.inputVolume === names.inputVolume &&
+    plan.volume === names.volume
   );
 }

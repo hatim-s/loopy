@@ -1,67 +1,33 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { Miniflare } from "miniflare";
+import { resolve } from "node:path";
+import type { Miniflare } from "miniflare";
 import { z } from "zod";
 import { definitionSummarySchema, type PutLoopyBody } from "../src/contract/index.js";
 import { revision } from "../src/core/index.js";
 import { compiledBody } from "./compiled-fixture.js";
 import type { SummaryProbeRequest } from "./fixtures/summary-workerd.js";
+import { probeRuntime } from "./fixtures/workerd-probe.js";
 
 let runtime: Miniflare;
 
-let directory: string;
+let harness: Awaited<ReturnType<typeof probeRuntime>>;
 
 beforeAll(async () => {
-  directory = await mkdtemp(join(tmpdir(), "loopy-summary-workerd-"));
-
-  const built = await Bun.build({
-    entrypoints: [resolve(import.meta.dir, "fixtures/summary-workerd.ts")],
-    target: "browser",
-    format: "esm",
-    outdir: directory,
-    naming: "[name].js",
-  });
-
-  expect(built.success).toBe(true);
-  expect(built.logs).toEqual([]);
-  runtime = new Miniflare({
-    modulesRoot: directory,
+  harness = await probeRuntime({
+    entry: resolve(import.meta.dir, "fixtures/summary-workerd.ts"),
     name: "summary-tests",
-    host: "127.0.0.1",
-    port: 0,
-    modules: true,
-    scriptPath: join(directory, "summary-workerd.js"),
-    compatibilityDate: "2026-07-30",
-    durableObjects: { PROBES: { className: "SummaryProbe", useSQLite: true } },
-    durableObjectsPersist: join(directory, "durable"),
-    r2Buckets: ["BUCKET"],
-    r2Persist: join(directory, "r2"),
+    className: "SummaryProbe",
+    r2: "BUCKET",
   });
-  await runtime.ready;
+  runtime = harness.runtime;
 }, 60_000);
 
 afterAll(async () => {
-  try {
-    await runtime?.dispose();
-  } finally {
-    if (directory) {
-      await rm(directory, { recursive: true, force: true });
-    }
-  }
+  await harness?.cleanup();
 });
 
-async function probe(instance: string, input: SummaryProbeRequest) {
-  const namespace = await runtime.getDurableObjectNamespace("PROBES");
-
-  const response = await namespace
-    .get(namespace.idFromName(instance))
-    .fetch("http://probe/", { method: "POST", body: JSON.stringify(input) });
-
-  const body: unknown = await response.json();
-
-  return { status: response.status, body };
+function probe(instance: string, input: SummaryProbeRequest) {
+  return harness.probe(instance, { body: input });
 }
 
 const summaryResult = z.object({
@@ -249,7 +215,12 @@ test("warm metadata endpoints read zero graphs while direct get, start and sched
     body: { value: null, graphReads: 0 },
   });
 
-  for (const operation of ["get", "start", "schedule"] as const) {
+  expect(await probe("warm", { operation: "get", slug: "absent" })).toEqual({
+    status: 200,
+    body: { value: null, graphReads: 0 },
+  });
+
+  for (const operation of ["start", "schedule"] as const) {
     expect(await probe("warm", { operation, slug: "absent" })).toMatchObject({
       status: 400,
       body: { code: "not_found", graphReads: 0 },

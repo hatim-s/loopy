@@ -11,7 +11,7 @@ import {
   validateCompiled,
 } from "../../../packages/loopy/src/contract/index.js";
 import { canonicalJson, revision, validateSlug } from "../../../packages/loopy/src/core/index.js";
-import { type ArtifactRegistry, ServiceError } from "../../../packages/loopy/src/service/index.js";
+import type { ArtifactRegistry } from "../../../packages/loopy/src/service/index.js";
 import { ArtifactDefinitions, type Publication } from "./artifacts-definitions.js";
 import { ARTIFACT_LIMITS, ArtifactStorage, bytesToBase64, hashKey } from "./artifacts-storage.js";
 import { artifactEntry, checkArtifactLimits } from "./artifacts-validation.js";
@@ -110,14 +110,11 @@ export class R2ArtifactRegistry implements ArtifactRegistry {
     throw new Error("The definition kept changing during summary backfill. Retry the request.");
   }
 
-  async get(slug: string): Promise<SavedLoopy> {
+  async get(slug: string): Promise<SavedLoopy | null> {
     const row = this.definitions.pointer(slug);
 
     if (!row) {
-      throw new ServiceError(
-        "not_found",
-        `No saved loopy '${slug}'. Use loopy save <file.ts> first.`,
-      );
+      return null;
     }
 
     return artifactEntry(row, await this.revisionGraph(row.revision));

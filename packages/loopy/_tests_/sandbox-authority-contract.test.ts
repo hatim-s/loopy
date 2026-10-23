@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { readdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { FilesystemAuthority } from "../../../apps/sandbox/src/filesystem-authority.js";
 import { resultReference } from "../../../apps/sandbox/src/immutable-results.js";
@@ -191,4 +191,50 @@ test("wire operations reject missing admitting sessions and unscoped results", (
   expect(
     authorityCommandSchema.safeParse({ operation: "admit", input: { plan: {} } }).success,
   ).toBe(false);
+});
+
+test("export-only recovery filters exact volume metadata without reading receipts", async () => {
+  const { authority, resultsFor, config, plan } = await fixture();
+  const session = await authority.openSession({ expectedEpoch: 0, nonce: "export-pages" });
+  const expected = [];
+
+  for (const token of ["z", "A", "a"]) {
+    const target = plan(1, `export-${token}`);
+    await authority.admit({ session, plan: target });
+    await authority.complete({
+      session,
+      id: target.id,
+      requestHash: target.requestHash,
+      result: await resultsFor(target.workspace).put(successful),
+    });
+    const reply = await authority.beginExport({ session, attemptId: target.id, token });
+
+    if (reply.kind !== "granted") {
+      throw new Error("Expected export authority");
+    }
+
+    expected.push(reply.record);
+  }
+
+  // Export discovery reads metadata. Cleanup still must resolve and validate the attempt.
+  for (const guard of expected) {
+    await unlink(join(config.stateRoot, "receipts", `${guard.attemptId}.json`));
+  }
+
+  for (const target of expected) {
+    expect(await authority.exportGuards({ after: null, limit: 1, volume: target.volume })).toEqual({
+      exports: [target],
+      next: null,
+    });
+    expect(
+      await authority.exportGuards({ after: target.token, limit: 1, volume: target.volume }),
+    ).toEqual({
+      exports: [],
+      next: null,
+    });
+  }
+
+  await expect(authority.recoverable({ after: null, limit: 200 })).rejects.toThrow(
+    "does not match its admitted workspace",
+  );
 });

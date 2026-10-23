@@ -1,0 +1,43 @@
+{
+  "at": "2026-10-23T17:32:54.601453+00:00",
+  "proofRoot": ".loopy/architecture-tests/docker-durable-BxNTB0",
+  "reportSha256": "decca8428f261d6bdea6fbb6a99ee1f65a0c018599cfaffb40f15a132fe40167",
+  "namedContainersRemaining": [],
+  "namedVolumesRemaining": [],
+  "namesChecked": [
+    "loopy-artifact-168d8ca81162a172c5a0d66647a7d27d1aee1b9f86d2151d2e1f194497a56cc2",
+    "loopy-artifact-65b21c6f78444dff824e4f4ebffbb71c2fb152ccfc68e1d397f275831bf28274",
+    "loopy-artifact-8bd34df4b4593f22f67b7e504f9f878c25b238afd8983a621e8b4d667a2995cf",
+    "loopy-artifact-9f8464e2f53cf1b0bf343428554c016fc5251e01cbd0636bba97ad3a6ddb9116",
+    "loopy-artifact-ef4af4ab2434f404c4f7e0d3196ecd28e7fc84733b1648de8c80fe44445282ff",
+    "loopy-attempt-168d8ca81162a172c5a0d66647a7d27d1aee1b9f86d2151d2e1f194497a56cc2",
+    "loopy-attempt-168d8ca81162a172c5a0d66647a7d27d1aee1b9f86d2151d2e1f194497a56cc2-input",
+    "loopy-attempt-65b21c6f78444dff824e4f4ebffbb71c2fb152ccfc68e1d397f275831bf28274",
+    "loopy-attempt-65b21c6f78444dff824e4f4ebffbb71c2fb152ccfc68e1d397f275831bf28274-input",
+    "loopy-attempt-8bd34df4b4593f22f67b7e504f9f878c25b238afd8983a621e8b4d667a2995cf",
+    "loopy-attempt-8bd34df4b4593f22f67b7e504f9f878c25b238afd8983a621e8b4d667a2995cf-input",
+    "loopy-attempt-9f8464e2f53cf1b0bf343428554c016fc5251e01cbd0636bba97ad3a6ddb9116",
+    "loopy-attempt-9f8464e2f53cf1b0bf343428554c016fc5251e01cbd0636bba97ad3a6ddb9116-input",
+    "loopy-attempt-ef4af4ab2434f404c4f7e0d3196ecd28e7fc84733b1648de8c80fe44445282ff",
+    "loopy-attempt-ef4af4ab2434f404c4f7e0d3196ecd28e7fc84733b1648de8c80fe44445282ff-input"
+  ],
+  "volumesChecked": [
+    "loopy-input-168d8ca81162a172c5a0d66647a7d27d1aee1b9f86d2151d2e1f194497a56cc2",
+    "loopy-input-65b21c6f78444dff824e4f4ebffbb71c2fb152ccfc68e1d397f275831bf28274",
+    "loopy-input-8bd34df4b4593f22f67b7e504f9f878c25b238afd8983a621e8b4d667a2995cf",
+    "loopy-input-9f8464e2f53cf1b0bf343428554c016fc5251e01cbd0636bba97ad3a6ddb9116",
+    "loopy-input-ef4af4ab2434f404c4f7e0d3196ecd28e7fc84733b1648de8c80fe44445282ff",
+    "loopy-workspace-3217c1d4344a11ac6bcb637cc02f0a370a561ad6e9385f634b9d809e37350ddc",
+    "loopy-workspace-97e5b4b0dc4010e7d63890be274ad2aaf1fc33077bfb03262706919713f6eb3f",
+    "loopy-workspace-bc739dde01a406e220a629a85796345ce2bab304d8b3d76f27c4e297d1adb605",
+    "loopy-workspace-cd050597554e4fb3f292f13b9e2e32f1dd9c81a9b5d7412f3a791cf7c8d1931b"
+  ],
+  "lockAbsent": true,
+  "correction": "Input helper names corrected from initial guessed prefix to source-derived container + -input; exact absence rechecked. Lock absence rechecked at source-defined service.lock and service-start.lock paths. Owner-label enumeration rechecked with source-defined loopy.sandbox.owner.",
+  "lockPathsChecked": [
+    ".loopy/architecture-tests/docker-durable-BxNTB0/.loopy/cloud/sandbox/service.lock",
+    ".loopy/architecture-tests/docker-durable-BxNTB0/.loopy/cloud/sandbox/service-start.lock"
+  ],
+  "ownedContainers": 0,
+  "ownerLabel": "loopy.sandbox.owner"
+}

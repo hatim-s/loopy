@@ -8,6 +8,7 @@ import {
   type routes,
 } from "../contract/index.js";
 import { errorMessage, type RunRecord } from "../core/index.js";
+import { requireDefinition } from "./definition.js";
 import { ServiceError } from "./error.js";
 import { validateDefinitionInput } from "./input.js";
 import { ServiceMutations } from "./mutations.js";
@@ -35,7 +36,7 @@ export class LoopyService {
 
   async startRun(slug: string, input: Json, workspace: string): Promise<RunView> {
     const registry = this.options.registry(workspace);
-    const saved = await registry.get(slug);
+    const saved = await requireDefinition(registry, slug);
 
     const runId = crypto.randomUUID();
     const validated = validateDefinitionInput(saved, input);
@@ -72,7 +73,7 @@ export class LoopyService {
   }
 
   async graph(slug: string, workspace: string): Promise<GraphRevisionView> {
-    const saved = await this.options.registry(workspace).get(slug);
+    const saved = await requireDefinition(this.options.registry(workspace), slug);
 
     return { revision: saved.revision, graph: graphView(saved.graph) };
   }

@@ -4,30 +4,28 @@ import { join } from "node:path";
 import {
   type AttemptRecord,
   AuthorityError,
+  artifactHelperName,
   attemptRecordSchema,
+  attemptResourceNames,
   type DockerAttemptPlan,
   type ExportRecord,
   exportRecordSchema,
+  workspaceVolumeInput,
 } from "../../../packages/loopy/src/contract/sandbox-journal.js";
-import { attemptHash } from "./admission.js";
+import { attemptHash, attemptId } from "./admission.js";
 import { readBytes } from "./journal-files.js";
 import { storedReceiptSchema } from "./receipts.js";
 
 export class FilesystemJournal {
   constructor(private readonly root: string) {}
   validPlan(plan: DockerAttemptPlan) {
+    const names = attemptResourceNames(plan.id, attemptHash(workspaceVolumeInput(this.root, plan)));
+
     return (
-      plan.id ===
-        attemptHash({
-          root: this.root,
-          workspace: plan.workspace,
-          executionKey: plan.executionKey,
-          attempt: plan.attempt,
-        }) &&
-      plan.container === `loopy-attempt-${plan.id}` &&
-      plan.inputVolume === `loopy-input-${plan.id}` &&
-      plan.volume ===
-        `loopy-workspace-${attemptHash({ root: this.root, workspace: plan.workspace, runId: plan.executionKey.runId })}`
+      plan.id === attemptId(this.root, plan) &&
+      plan.container === names.container &&
+      plan.inputVolume === names.inputVolume &&
+      plan.volume === names.volume
     );
   }
 
@@ -118,7 +116,7 @@ export class FilesystemJournal {
     return record;
   }
 
-  async guards() {
+  async exportMetadata() {
     const result: ExportRecord[] = [];
 
     for (const name of await readdir(join(this.root, "exports"))) {
@@ -130,15 +128,9 @@ export class FilesystemJournal {
 
           if (
             `${record.attemptId}.json` !== name ||
-            record.helper !== `loopy-artifact-${record.attemptId}`
+            record.helper !== artifactHelperName(record.attemptId)
           ) {
             throw new Error("Sandbox export guard identity does not match its path.");
-          }
-
-          const attempt = await this.read(record.attemptId);
-
-          if (!attempt || attempt.plan.volume !== record.volume) {
-            throw new Error("Sandbox export guard does not match its admitted workspace.");
           }
 
           result.push(record);
@@ -147,5 +139,19 @@ export class FilesystemJournal {
     }
 
     return result;
+  }
+
+  async guards() {
+    const guards = await this.exportMetadata();
+
+    for (const record of guards) {
+      const attempt = await this.read(record.attemptId);
+
+      if (!attempt || attempt.plan.volume !== record.volume) {
+        throw new Error("Sandbox export guard does not match its admitted workspace.");
+      }
+    }
+
+    return guards;
   }
 }

@@ -43,5 +43,10 @@ test("real workerd recovery plans seek indexes through terminal and released his
     busy: [{ detail: "SEARCH receipt_exports USING INDEX receipt_export_volume (volume=?)" }],
     recovered: { attempts: [], exports: [{ token: "active" }], next: null },
     malformed: expect.stringContaining("Invalid"),
+    volumePagePlan: [
+      { detail: "SEARCH receipt_exports USING INDEX receipt_export_volume (volume=?)" },
+    ],
+    exactVolume: { exports: [{ token: "active" }], next: null },
+    otherVolume: { exports: [], next: null },
   });
 });

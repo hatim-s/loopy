@@ -356,7 +356,10 @@ test("aggregate capacity rejects new and replacement pointers while existing ope
     status: 200,
     body: { value: { count: 41, bounded: true } },
   });
-  expect(await call(workspace, "get", "definition-41")).toMatchObject({ status: 400 });
+  expect(await call(workspace, "get", "definition-41")).toEqual({
+    status: 200,
+    body: { value: null },
+  });
   expect(await call(workspace, "get", first.graph.name)).toMatchObject({
     status: 200,
     body: { value: { revision: first.revision } },

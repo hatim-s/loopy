@@ -128,13 +128,7 @@ class Registry implements Pick<R2ArtifactRegistry, "get" | "revisionGraph"> {
       throw new Error(`Registry unavailable. ${"x".repeat(2000)}`);
     }
 
-    const saved = this.current.get(slug);
-
-    if (!saved) {
-      throw new Error(`Missing fixture definition ${slug}.`);
-    }
-
-    return saved;
+    return this.current.get(slug) ?? null;
   }
 
   async revisionGraph(hash: string) {
@@ -409,7 +403,7 @@ test("suspended recovery releases an expired owner while every execution slot is
   expect(f.provider.runningCounts).toEqual([1, 1]);
 });
 
-test("invalid revised input and transient registry failure do not stop healthy schedules or runs", async () => {
+test("invalid input, absent definitions and registry failures isolate schedules and recover", async () => {
   const f = fixture();
   await f.run("running", graph("running"));
   await f.scheduler().tick();
@@ -422,6 +416,8 @@ test("invalid revised input and transient registry failure do not stop healthy s
   await f.registry.save(changed);
   await f.schedule(graph("transient"));
   f.registry.failures.add("transient");
+  await f.schedule(graph("missing"));
+  f.registry.current.delete("missing");
   await f.schedule(graph("healthy"));
   await f.scheduler().tick();
   expect((await f.store.getRun("running"))?.status).toBe("succeeded");
@@ -445,19 +441,35 @@ test("invalid revised input and transient registry failure do not stop healthy s
   expect(retry?.next_at).toBe(new Date(base + 5500).toISOString());
   expect(retry?.error).toStartWith("Registry unavailable.");
   expect(retry?.error.length).toBe(1000);
+  expect(await f.store.listRuns({ slug: "missing" })).toEqual([]);
+  expect((await f.store.listSchedules()).find((s) => s.slug === "missing")?.enabled).toBe(true);
+  expect(
+    f.db.query("SELECT next_at,error FROM cloud_schedule_turns WHERE slug='missing'").get(),
+  ).toEqual({
+    next_at: new Date(base + 5500).toISOString(),
+    error: "No saved loopy 'missing'. Save it again before retrying the schedule.",
+  });
   expect(f.db.query("SELECT value FROM meta WHERE key='cloud_scheduler_error'").get()).toBeNull();
   f.at(1000);
   f.provider.finishAll();
   await f.scheduler("original").tick();
   expect(f.registry.reads.get("transient")).toBe(1);
+  expect(f.registry.reads.get("missing")).toBe(1);
   expect(f.storage.alarm).toBe(base + 5500);
   f.registry.failures.clear();
+  const restored = graph("missing", () => work("restored"));
+  const restoredRevision = await f.registry.save(restored);
   f.at(5500);
   await f.scheduler().tick();
   expect(await f.store.listRuns({ slug: "transient" })).toHaveLength(1);
   expect(await f.store.listRuns({ slug: "healthy" })).toHaveLength(1);
   expect(f.db.query("SELECT * FROM cloud_schedule_turns").all()).toEqual([]);
   expect((await f.store.listRuns({ slug: "transient" }))[0]?.status).toBe("running");
+  expect(await f.store.listRuns({ slug: "missing" })).toMatchObject([
+    { status: "running", revision: restoredRevision },
+  ]);
+  await f.registry.save(graph("missing", () => work("later")));
+  expect((await f.store.listRuns({ slug: "missing" }))[0]?.revision).toBe(restoredRevision);
 });
 
 for (const failure of ["before", "after"] as const) {

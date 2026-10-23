@@ -1,0 +1,11 @@
+{
+  "startedAt": "2026-10-23T17:14:10.267783+00:00",
+  "directory": ".loopy/quality-tests/integrated-06l6k7uf",
+  "command": "bun --no-env-file run check",
+  "environment": "fresh HOME/LOOPY_HOME/XDG; PATH inherited; TMPDIR unset; Docker opt-in absent",
+  "log": ".loopy/quality-tests/integrated-06l6k7uf/check.log",
+  "pid": 89478,
+  "endedAt": "2026-10-23T17:14:16.068077+00:00",
+  "exitCode": 1,
+  "logSha256": "7809b294512a53f25c558c159c40cfc74ee984e0c48ddd9401c5517fb1f3df0a"
+}

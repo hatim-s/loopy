@@ -9,25 +9,36 @@ packages/loopy/src/
   core/       graph, execution identity, records, Store and Executor contracts, validation.
   contract/   browser-safe wire schemas, routes and view derivations.
   engine/     pure graph state machine, reference resolution and retry policy.
-  host/       daemon scheduling, activation pool, leases, heartbeat and clock.
+  host/       local and durable activation, shared admission policy, scheduling and leases.
   store/      memory store, SQLite schema and transactions, event outbox.
   executor/   local execution worker, receipts and executable bundle protocol.
   sdk/        compile-only graph builder, refs, command descriptors and parsers.
   compiler/   restricted author evaluation, executable bundles and graph revisions.
-  local/      home, registry, secrets, service, HTTP server and process sandbox launchers.
+  service/    portable mutations, queries, schedules, definition catalog and wire views.
+  local/      home, registry, secrets, service composition, HTTP server and OS launchers.
   cli/        thin HTTP commands, local compilation and daemon control.
 apps/dashboard/src/
   backend/    contract-backed HTTP and event stream adapter.
   routes/     dashboard pages.
   components/ shared display and action components.
   lib/        cache, event reducer and formatting.
+apps/cloud/src/
+              Worker routes, workspace DOs, SQL/R2 adapters and receipt authority.
+apps/sandbox/src/
+              attempt admission, monitoring, export guards, receipt adapters and Docker.
+scripts/cloud/
+              local phase 1 stack and fixture journeys.
+scripts/playground/
+              isolated workload profiles, stack ownership, metrics and receipt inspection.
+scripts/daemon-playground/
+              isolated local-daemon workload comparison.
 ```
 
-Tests live under `packages/loopy/_tests_` and `apps/dashboard/_tests_`. The real workflows in `examples/` use the removed step SDK. PR 7 owns their migration; they are outside semantic TypeScript checking until then. Graph example fixtures remain compiled and checked.
+The real workflows in `examples/` use the removed step SDK. PR 7 owns their migration; they are outside semantic TypeScript checking until then. Graph example fixtures remain compiled and checked.
 
 The public entries are `loopy` and `loopy/graph` for the builder, `loopy/engine` for the reducer, `loopy/local` and `loopy/contract`. The old runtime entry and executable step SDK are deleted. The dashboard imports only `loopy/contract`.
 
-Layers import downward through their target's index, except the SDK's trusted `host.ts` and `graph-host.ts` entries and the executor's narrow `local/execution-host.ts` OS bridge. Core, engine and contract bundle without host dependencies. Host imports core and engine. Store imports core and contract. Executor imports core, contract and its OS bridge. Local composes host, store and executor. Compiler imports core, contract, local and the trusted SDK entries. CLI imports the owners it calls. Same-layer imports name the file.
+Layers import downward through their target's index, except the SDK's trusted `host.ts` and `graph-host.ts` entries and the executor's narrow `local/execution-host.ts` OS bridge. Core, engine, contract and service bundle without host dependencies. Host imports core and engine. Store and service import core and contract. Executor imports core, contract and its OS bridge. Local composes service, host, store and executor. Compiler imports core, contract, local and the trusted SDK entries. CLI imports the owners it calls. Same-layer imports name the file.
 
 ## Ownership
 
@@ -35,16 +46,19 @@ Layers import downward through their target's index, except the SDK's trusted `h
 - `core/executor.ts`, `effects.ts` and `store.ts` own execution results, durable effects and the persistence contract. A failed node stores its error code and message for future rescue handling.
 - `engine/state.ts` owns reducer state and input events; `step.ts` owns transitions; `traversal.ts` and `control.ts` evaluate lexical sequences and scoped controls; `effects.ts` adds dispatch and entropy requests; `resolve.ts` resolves scoped data; `retry.ts` owns backoff; `output.ts` validates out schemas and the inline cap.
 - `host/activate.ts` reconstructs state from persisted node runs, reconciles receipts, calls the reducer, commits durable effects once, then dispatches work. Validation failures do not retry. Retries retain the running lease and persist `nextRetryAt`.
+- `host/durable.ts` owns bounded activation turns and provider reconciliation. Shared host policy partitions persistence and work, retains capacity during retry/rate waits, and applies rate admission after persistence. Provider calls stay outside store transactions.
 - `host/daemon.ts`, `pool.ts`, `cron.ts` and `heartbeat.ts` coordinate due work and leases without author callbacks.
-- `store/sqlite/` separates events, runs, nodes, waits, schedules and dashboard queries. `apply` fences the owner and commits node writes, attempts, scope summaries, log usage, wait registration, suspension, retry deadlines, run outcomes and outbox rows in one transaction. Schema 15 upgrades schema 13 and 14 without dropping records or changing the epoch and rejects unsupported populated schemas without resetting them. `store/memory-*` implements the same contract with rollback.
+- `store/sqlite/` separates events, runs, nodes, waits, schedules and dashboard queries. `apply` fences the owner and commits node writes, attempts, scope summaries, log usage, wait registration, suspension, retry deadlines, run outcomes and outbox rows in one transaction. Native SQLite schema 15 upgrades schema 13 and 14 without dropping records or changing the epoch and rejects unsupported populated schemas without resetting them. `store/memory-*` implements the same contract with rollback.
 - `executor/local.ts` starts a trusted worker. `execution.ts` owns executions, `receipts.ts` owns exclusive started and atomic finished receipt files, and `protocol.ts` decodes stdout results and stderr logs. Finished receipts prevent repeating lost completions. A dead worker with an unfinished receipt fails as uncertain.
 - `local/process.ts`, `spawn.ts` and `sandbox/` own OS processes, bounded capture, process groups and sandbox profiles. Bundles always have restricted filesystem access; mode controls network. Only declared secrets are injected into bundle environments.
 - `sdk/graph/` owns compile-only construction. `sdk/shell/` supplies descriptor data and parser implementations, with no executable step path.
 - `compiler/restrict.ts` and `ast.ts` enforce builder syntax. `module.ts` checks code exports, `evaluate.ts` imports one restricted snapshot, `bundle.ts` produces executable bundles, and `core/revision.ts` hashes the canonical graph and bundles.
 - `local/save-compiled.ts` validates and stores private bundles and historical graphs before publishing registry metadata. `local/registry.ts` owns paths and source identity.
-- `local/service.ts` owns mutations and wire views. Hook signals validate and resolve durable waits atomically. Snapshots expose node runs and hook history. Cancellation rejects unfinished executions and started graphs with finally cleanup until host cancellation can drive that cleanup.
+- `service/` owns mutations, queries, schedules, definition summaries and wire views over injected stores and registries. Hook signals validate and resolve durable waits atomically. Snapshots expose node runs and hook history. Cancellation rejects unfinished executions and started graphs with finally cleanup until host cancellation can drive that cleanup. `local/service.ts` composes filesystem registry, secrets and type generation with this portable service.
 - `contract/` owns the shared wire shapes. Logs retain a per-run sequence for HTTP cursors and use execution key, attempt and index for identity. Schedules use `version` for optimistic concurrency; `revision` names graph hashes.
 - `local/server/` owns authenticated HTTP, SSE replay and live transaction delivery. `local/daemon-file.ts` owns daemon discovery.
+- `apps/cloud/src/` composes portable service and durable host with workspace SQL and R2 artifacts. Receipt authority owns session epochs, attempt records and export exclusion in a separate DO; verified immutable results live in R2. See the app README for bindings and local-only configuration.
+- `apps/sandbox/src/` composes authority, result storage, backend and artifact reader dependencies after acquiring its process lock. Admission persists before Docker work. Monitoring reconciles started attempts without repeating them. Export guards remain until owned-helper removal is confirmed. The default factory selects filesystem authority; the architecture playground passes a custom factory for DO authority.
 
 ## Patterns to follow
 
@@ -56,6 +70,14 @@ Every CLI data command uses the daemon HTTP client. Save compiles locally and tr
 
 The reducer accepts time through events and performs no I/O, clock reads or randomness. Persist an execution before dispatch. Fence completions by execution key and attempt and writes by owner token. Never repeat an effect with a started receipt. Reconcile it first.
 
-Tests cover core transitions and durable boundaries. Use temporary homes and injected executors and clocks. Keep server, SSE, schedule and CLI tests passing when contracts change. Remove tests for deleted behavior with their implementation. Do not add compatibility paths or migrations for discarded databases.
+Do not add compatibility paths or migrations for discarded databases. Retained filesystem receipt compatibility and its exit condition belong to the [sandbox README](apps/sandbox/README.md#retained-data). Cloud summary repair and its exit condition belong to the [cloud README](apps/cloud/README.md#retained-data). See the cloud README for the phase 2 approval boundary.
+
+## Tests and isolation
+
+The test gate includes `packages/loopy/_tests_`, `apps/dashboard/_tests_` and `scripts/playground/_tests_`. Shared test fixtures stay under their owning test root. Tests cover core transitions and durable boundaries. Use temporary homes and injected executors and clocks. Keep server, SSE, schedule and CLI tests passing when contracts change. Remove tests for deleted behavior with their implementation.
+
+Tests that need repository-local state use `packages/loopy/_tests_/fixtures/quality-test-root.ts`. It creates a unique child of `.loopy/quality-tests` with its own `.loopy/loopies` project marker, preventing ancestor registry selection. Older suites still use temporary directories or `.loopy/architecture-tests`; the helper has not replaced every allocator.
+
+For verification runs, inject fixture Loopy homes and sanitize child environments to prevent personal-state access. Give fixture projects explicit registry markers. Do not set global `TMPDIR` for legacy sandbox tests. Use isolated state and port 0 for ephemeral Bun/Miniflare servers. Dispose owned processes before removing only that fixture's state. Keep historical evidence separate from disposable test output.
 
 PR 4b owns control and value nodes. PR 4c owns waits, sleep, cleanup, rescue and active cancellation. PR 5 owns the dashboard adaptation and the local-to-host rename. Preserve these boundaries and concurrent user work.

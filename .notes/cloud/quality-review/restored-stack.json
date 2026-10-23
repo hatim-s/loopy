@@ -1,0 +1,30 @@
+{
+  "at": "2026-10-23T17:33:20.468Z",
+  "health": {
+    "api": 200,
+    "dashboard": 200,
+    "sandbox": 200
+  },
+  "pages": [
+    {
+      "status": 200,
+      "count": 200
+    },
+    {
+      "status": 200,
+      "count": 200
+    },
+    {
+      "status": 200,
+      "count": 128
+    }
+  ],
+  "count": 528,
+  "statuses": {
+    "succeeded": 464,
+    "failed": 64
+  },
+  "exactHistoricalInventoryMatch": true,
+  "oldInventorySha256": "b696b825df4d99123ada33abc48a4c6092239bb9244877aba0d27e6608b63983",
+  "noWorkflowAdmissions": true
+}
