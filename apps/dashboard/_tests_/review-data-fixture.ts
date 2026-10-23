@@ -18,6 +18,10 @@ export async function reviewDataFixture() {
     mkdirSync(directory, { recursive: true });
   }
 
+  for (const workspace of [workspaceA, workspaceB]) {
+    mkdirSync(join(workspace, ".loopy", "loopies"), { recursive: true });
+  }
+
   const source = join(workspaceA, "review-data.loopy.ts");
   writeFileSync(
     source,

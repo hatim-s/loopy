@@ -1,4 +1,4 @@
-import { setTimeout as delay } from "node:timers/promises";
+import { randomUUID } from "node:crypto";
 import {
   type SandboxArtifact,
   type SandboxArtifactRequest,
@@ -6,64 +6,81 @@ import {
   type SandboxAttemptRequest,
   type SandboxReceipt,
 } from "../../../packages/loopy/src/contract/index.js";
-import { durationMs } from "../../../packages/loopy/src/core/index.js";
-import { attemptHash, validateBundles } from "./admission.js";
-import { ArtifactError } from "./artifact-error.js";
-import { type ArtifactReader, DockerArtifacts } from "./artifacts.js";
-import { type SandboxConfig, validateStateRoot } from "./config.js";
-import { type AttemptBackend, DockerBackend } from "./docker.js";
 import {
-  lockStateRoot,
-  ReceiptStore,
-  type StartedReceipt,
-  type StoredReceipt,
-} from "./receipts.js";
-import { boundedResult } from "./result.js";
+  type AttemptRecord,
+  type AuthoritySession,
+} from "../../../packages/loopy/src/contract/sandbox-journal.js";
+import { attemptHash } from "./admission.js";
+import { ArtifactError } from "./artifact-error.js";
+import { AttemptAdmissions } from "./attempt-admissions.js";
+import type { AttemptDependencies, AttemptDependenciesFactory } from "./attempt-dependencies.js";
+import { AttemptExports, recoveryRecords } from "./attempt-exports.js";
+import { AttemptMonitors } from "./attempt-monitor.js";
+import { type SandboxConfig, validateStateRoot } from "./config.js";
+import { lockStateRoot } from "./receipts.js";
 
-export class AttemptConflict extends Error {}
-
-function publicReceipt(receipt: StoredReceipt | null): SandboxReceipt {
-  if (receipt === null) {
-    return { kind: "none" };
-  }
-
-  return receipt.kind === "started"
-    ? { kind: "started" }
-    : { kind: "finished", result: receipt.result };
-}
+export { AttemptConflict } from "./admission.js";
 
 export class Attempts {
-  private readonly store: ReceiptStore;
-  private readonly active = new Map<string, Promise<void>>();
   private readonly artifactOperations = new Set<Promise<SandboxArtifact>>();
-  private readonly artifactReads = new Set<string>();
   private readonly stopping = new AbortController();
-  private readonly admissions = new Map<string, Promise<SandboxReceipt>>();
-  private constructor(
-    private readonly config: SandboxConfig,
-    private readonly backend: AttemptBackend,
-    private readonly unlock: () => Promise<void>,
-    private readonly artifactReader: ArtifactReader,
-  ) {
-    this.store = new ReceiptStore(config.stateRoot);
+  private readonly admissions: AttemptAdmissions;
+  private readonly monitors: AttemptMonitors;
+  private readonly exports: AttemptExports;
+  private closing: Promise<void> | null = null;
+
+  private readonly config: SandboxConfig;
+  private readonly dependencies: AttemptDependencies;
+  private readonly unlock: () => Promise<void>;
+  private constructor(options: {
+    config: SandboxConfig;
+    dependencies: AttemptDependencies;
+    session: AuthoritySession;
+    unlock: () => Promise<void>;
+  }) {
+    const { config, dependencies, session, unlock } = options;
+    this.config = config;
+    this.dependencies = dependencies;
+    this.unlock = unlock;
+    this.monitors = new AttemptMonitors({
+      authority: dependencies.authority,
+      resultsFor: dependencies.resultsFor,
+      backend: dependencies.backend,
+      session,
+      signal: this.stopping.signal,
+    });
+    this.exports = new AttemptExports(dependencies.authority, dependencies.artifactReader, session);
+    this.admissions = new AttemptAdmissions({
+      config,
+      dependencies,
+      session,
+      monitors: this.monitors,
+      exports: this.exports,
+      signal: this.stopping.signal,
+      publicReceipt: (record) => this.publicReceipt(record),
+    });
   }
 
-  static async open(
-    config: SandboxConfig,
-    backend: AttemptBackend = new DockerBackend(config),
-    artifactReader: ArtifactReader = new DockerArtifacts(config),
-  ) {
+  static async open(config: SandboxConfig, createDependencies: AttemptDependenciesFactory) {
     await validateStateRoot(config);
     const unlock = await lockStateRoot(config.stateRoot);
-    const attempts = new Attempts(config, backend, unlock, artifactReader);
+    let dependencies: AttemptDependencies | undefined;
 
     try {
-      for (const receipt of await attempts.store.pending()) {
-        attempts.launch(receipt, () => backend.recover(receipt, attempts.stopping.signal));
+      dependencies = await createDependencies();
+      const authority = dependencies.authority;
+      const { epoch } = await authority.status();
+      const session = await authority.openSession({ expectedEpoch: epoch, nonce: randomUUID() });
+      const attempts = new Attempts({ config, dependencies, session, unlock });
+      await attempts.exports.reconcile();
+
+      for (const record of (await recoveryRecords(authority)).attempts) {
+        attempts.admissions.recover(record);
       }
 
       return attempts;
     } catch (cause) {
+      await dependencies?.close?.();
       await unlock();
       throw cause;
     }
@@ -78,91 +95,43 @@ export class Attempts {
     });
   }
 
+  private async publicReceipt(record: AttemptRecord | null): Promise<SandboxReceipt> {
+    if (record === null) {
+      return { kind: "none" };
+    }
+
+    if (record.kind === "started") {
+      return { kind: "started" };
+    }
+
+    const result =
+      record.result.kind === "inline"
+        ? record.result.value
+        : await this.dependencies.resultsFor(record.plan.workspace).get(record.result.ref);
+
+    return { kind: "finished", result };
+  }
+
   async lookup(identity: SandboxAttemptIdentity) {
     const id = this.id(identity);
-    const admission = this.admissions.get(id);
+    await this.admissions.wait(id);
 
-    if (admission) {
-      await admission;
+    // Only authoritative started records enter the monitor map.
+    if (this.monitors.has(id)) {
+      return { kind: "started" } as const;
     }
 
-    return publicReceipt(await this.store.read(id));
+    const record = await this.dependencies.authority.read(id);
+
+    if (record) {
+      this.admissions.observe(record);
+    }
+
+    return this.publicReceipt(record);
   }
 
-  async start(request: SandboxAttemptRequest): Promise<SandboxReceipt> {
-    if (this.stopping.signal.aborted) {
-      throw new AttemptConflict("Sandbox service is stopping. Retry after restart.");
-    }
-
-    validateBundles(request);
-    const id = this.id(request);
-    // Serialise admission so two HTTP requests cannot both pass the missing-receipt check.
-    const previous = this.admissions.get(id);
-
-    if (previous) {
-      await previous;
-
-      return this.start(request);
-    }
-
-    const admission = this.admit(id, request);
-    this.admissions.set(id, admission);
-
-    try {
-      return await admission;
-    } finally {
-      this.admissions.delete(id);
-    }
-  }
-
-  private async admit(id: string, request: SandboxAttemptRequest): Promise<SandboxReceipt> {
-    const requestHash = attemptHash({
-      ...request,
-      bundles: [...request.bundles].sort((a, b) => a.hash.localeCompare(b.hash)),
-    });
-
-    const existing = await this.store.read(id);
-
-    if (existing !== null) {
-      if (existing.requestHash !== requestHash) {
-        throw new AttemptConflict("Attempt identity already has different request content.");
-      }
-
-      return publicReceipt(existing);
-    }
-
-    const spec = request.spec;
-
-    const timeout =
-      spec.kind === "code"
-        ? spec.timeoutMs
-        : (spec.node.options.timeout === undefined
-            ? 300_000
-            : durationMs(spec.node.options.timeout)) + (spec.parse ? 300_000 : 0);
-
-    const receipt: StartedReceipt = {
-      kind: "started",
-      id,
-      requestHash,
-      workspace: request.workspace,
-      executionKey: request.executionKey,
-      attempt: request.attempt,
-      container: `loopy-attempt-${id}`,
-      inputVolume: `loopy-input-${id}`,
-      volume: `loopy-workspace-${attemptHash({ root: this.config.stateRoot, workspace: request.workspace, runId: request.executionKey.runId })}`,
-      deadline: Date.now() + Math.min(timeout + 30_000, this.config.maxTimeoutMs),
-    };
-
-    if (this.artifactReads.has(receipt.volume)) {
-      throw new AttemptConflict(
-        "Workspace artifact export is in progress. Retry admission after export.",
-      );
-    }
-
-    await this.store.started(receipt);
-    this.launch(receipt, () => this.backend.start(receipt, request, this.stopping.signal));
-
-    return { kind: "started" };
+  start(request: SandboxAttemptRequest) {
+    return this.admissions.start(request);
   }
 
   async artifact(request: SandboxArtifactRequest) {
@@ -170,7 +139,27 @@ export class Attempts {
       throw new ArtifactError("conflict", "Sandbox service is stopping. Retry after restart.");
     }
 
-    const operation = this.readArtifact(request);
+    const operation = (async () => {
+      await this.admissions.wait(this.id(request));
+      const record = await this.dependencies.authority.read(this.id(request));
+
+      if (!record) {
+        throw new ArtifactError("not_found", "Artifact attempt receipt was not found.");
+      }
+
+      if (record.kind !== "finished") {
+        throw new ArtifactError("conflict", "Artifact export requires a finished attempt.");
+      }
+
+      const receipt = await this.publicReceipt(record);
+
+      if (receipt.kind !== "finished") {
+        throw new ArtifactError("conflict", "Artifact attempt is not terminal.");
+      }
+
+      return this.exports.read(record, receipt.result, request);
+    })();
+
     this.artifactOperations.add(operation);
 
     try {
@@ -180,89 +169,24 @@ export class Attempts {
     }
   }
 
-  private async readArtifact(request: SandboxArtifactRequest) {
-    const admission = this.admissions.get(this.id(request));
-
-    if (admission) {
-      await admission;
-    }
-
-    const receipt = await this.store.read(this.id(request));
-
-    if (receipt === null) {
-      throw new ArtifactError("not_found", "Artifact attempt receipt was not found.");
-    }
-
-    if (receipt.kind !== "finished" || this.artifactReads.has(receipt.volume)) {
-      throw new ArtifactError(
-        "conflict",
-        "Artifact export requires a finished attempt and an idle workspace.",
-      );
-    }
-
-    this.artifactReads.add(receipt.volume);
-
-    try {
-      // Fence new admission before checking already-admitted attempts sharing the volume.
-      await Promise.allSettled(this.admissions.values());
-
-      if ((await this.store.pending()).some((pending) => pending.volume === receipt.volume)) {
-        throw new ArtifactError(
-          "conflict",
-          "Workspace still has a started attempt. Export after the run is terminal.",
-        );
-      }
-
-      return await this.artifactReader.read(receipt, request.path);
-    } finally {
-      this.artifactReads.delete(receipt.volume);
-    }
-  }
-
-  private launch(receipt: StartedReceipt, perform: () => ReturnType<AttemptBackend["recover"]>) {
-    const operation = (async () => {
-      let reconcile = perform;
-      let backoffMs = 100;
-
-      while (!this.stopping.signal.aborted) {
-        try {
-          const result = boundedResult(await reconcile());
-          await this.store.finished(receipt, result);
-
-          return;
-        } catch {
-          // Unknown Docker state stays started. Recovery only inspects the pinned container.
-          reconcile = () => this.backend.recover(receipt, this.stopping.signal);
-
-          try {
-            await delay(backoffMs, undefined, { signal: this.stopping.signal });
-          } catch {
-            return;
-          }
-
-          backoffMs = Math.min(backoffMs * 2, 5000);
-        }
-      }
-    })();
-
-    this.active.set(receipt.id, operation);
-    // Retain monitoring until terminal state is confirmed or shutdown leaves recovery to the next process.
-    void operation.then(
-      () => this.active.delete(receipt.id),
-      () => undefined,
-    );
-  }
-
   async drain() {
-    await Promise.all(this.active.values());
+    await this.monitors.drain();
   }
 
-  async close() {
+  close() {
+    this.closing ??= this.shutdown();
+
+    return this.closing;
+  }
+
+  private async shutdown() {
     this.stopping.abort();
 
     try {
+      await this.admissions.settle();
       await this.drain();
       await Promise.allSettled(this.artifactOperations);
+      await this.dependencies.close?.();
     } finally {
       await this.unlock();
     }

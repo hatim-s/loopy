@@ -3,8 +3,9 @@ import { resolve } from "node:path";
 import { z } from "zod";
 import { compile } from "../../packages/loopy/src/compiler/index.js";
 import { putLoopyBodySchema, routes } from "../../packages/loopy/src/contract/index.js";
+import { requireCurrentBaseline } from "./baseline.js";
 import { PlaygroundClient } from "./client.js";
-import { atomic, root, state } from "./config.js";
+import { atomic, evidenceDirectory, profile, root, state } from "./config.js";
 import { catalog, prepareRepository, repository } from "./repository.js";
 
 export async function prepare() {
@@ -46,7 +47,7 @@ export async function prepare() {
     }
   }
 
-  await mkdir(resolve(root, ".notes/cloud/evidence"), { recursive: true });
+  await mkdir(evidenceDirectory, { recursive: true });
 
   const evidence = {
     batch: client.settings.batch,
@@ -57,7 +58,7 @@ export async function prepare() {
     revisions,
   };
 
-  await atomic(resolve(root, ".notes/cloud/evidence/playground-driver-source.json"), evidence);
+  await atomic(resolve(evidenceDirectory, "playground-driver-source.json"), evidence);
   await atomic(resolve(state, "source-ready.json"), evidence);
   console.log(
     JSON.stringify({
@@ -69,19 +70,41 @@ export async function prepare() {
   );
 }
 
-export async function arm(baseline: string) {
-  const client = await PlaygroundClient.open();
+interface ArmContext {
+  root: string;
+  state: string;
+  evidenceDirectory: string;
+  profile: typeof profile.name;
+  batch: string;
+}
+
+export async function arm(baseline: string, context?: ArmContext) {
+  const selected = context ?? {
+    root,
+    state,
+    evidenceDirectory,
+    profile: profile.name,
+    batch: (await PlaygroundClient.open()).settings.batch,
+  };
 
   const source = z
     .object({ batch: z.string(), revisions: z.array(z.unknown()).length(15) })
-    .parse(await Bun.file(resolve(state, "source-ready.json")).json());
+    .parse(await Bun.file(resolve(selected.state, "source-ready.json")).json());
 
   if (
-    source.batch !== client.settings.batch ||
-    !(await Bun.file(resolve(root, baseline)).exists())
+    source.batch !== selected.batch ||
+    !(await Bun.file(resolve(selected.root, baseline)).exists())
   ) {
     throw new Error(
       "Load requires the current 15-workflow source snapshot and a saved baseline receipt.",
+    );
+  }
+
+  if (selected.profile) {
+    await requireCurrentBaseline(
+      resolve(selected.root, baseline),
+      source.batch,
+      selected.evidenceDirectory,
     );
   }
 
@@ -90,7 +113,7 @@ export async function arm(baseline: string) {
       .object({ status: z.literal("passed"), batch: z.string(), completed: z.literal(1) })
       .parse(
         await Bun.file(
-          resolve(root, `.notes/cloud/evidence/playground-driver-preflight-${group}.json`),
+          resolve(selected.evidenceDirectory, `playground-driver-preflight-${group}.json`),
         ).json(),
       );
 
@@ -99,9 +122,9 @@ export async function arm(baseline: string) {
     }
   }
 
-  await atomic(resolve(state, "load-enabled.json"), {
+  await atomic(resolve(selected.state, "load-enabled.json"), {
     batch: source.batch,
-    baseline: resolve(root, baseline),
+    baseline: resolve(selected.root, baseline),
     enabledAt: new Date().toISOString(),
   });
   console.log("Load gate opened for the current batch. Group leads may invoke their own cohort.");

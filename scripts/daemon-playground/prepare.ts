@@ -7,6 +7,7 @@ import {
   cli,
   environment,
   home,
+  port,
   root,
   selected,
   source,
@@ -158,7 +159,7 @@ export async function prepare() {
       plannedRuns: 45,
       performedRuns: 0,
       mode: "actual Bun daemon with sandbox-exec on host OS",
-      port: 15170,
+      port,
       concurrency: 4,
       leaseMs: 2000,
     };

@@ -8,9 +8,9 @@ import {
   type RunRecord,
   requirePositiveInteger,
   type Store,
-  type StoreEffect,
 } from "../core/index.js";
 import { type EngineEvent, initialState, step } from "../engine/index.js";
+import { planActivation } from "./activation-plan.js";
 import { durableWakeAt } from "./durable-wake.js";
 import { type DurableWork, durableWorkId, reconcileDurableWork } from "./durable-work.js";
 
@@ -127,36 +127,23 @@ export async function activateDurable(
     const state = initialState(runId, input, await store.getNodeRuns(runId));
     const transition = step(graph, state, event);
 
-    const retrying = transition.state.nodeRuns.some(
-      (node) => node.status === "retrying" || node.status === "rate_limited",
-    );
+    const plan = planActivation(transition);
 
-    // Commit the whole transition even when its dispatches exceed this turn's budget.
-    // run_started recovers every unprocessed dispatch and sample on the next alarm.
-    await store.apply({
-      runId,
-      token,
-      effects: transition.effects.filter(
-        (effect): effect is StoreEffect =>
-          effect.kind !== "dispatch" &&
-          effect.kind !== "sample" &&
-          // A waiting sibling must not surrender a retry's concurrency slot.
-          !(effect.kind === "suspend_run" && retrying),
-      ),
-    });
+    // Persist the whole transition before any provider work, even beyond this turn's budget.
+    await store.apply({ runId, token, effects: plan.storeEffects });
 
-    for (const effect of transition.effects) {
-      if (effect.kind === "dispatch" || effect.kind === "sample") {
+    for (const effect of plan.work) {
+      if (effect.kind !== "schedule_retry") {
         queue.set(durableWorkId(effect), effect);
       }
     }
 
-    return transition;
+    return plan.disposition;
   }
 
-  let transition = await commit({ kind: "run_started", at });
+  let disposition = await commit({ kind: "run_started", at });
 
-  for (let count = 0; count < maxWork && transition.state.phase.kind !== "finished"; count++) {
+  for (let count = 0; count < maxWork && disposition.kind !== "finished"; count++) {
     const ids = [...queue.keys()].sort();
     const id = ids.find((id) => cursor === null || id > cursor) ?? ids[0];
     const work = id === undefined ? undefined : queue.get(id);
@@ -171,11 +158,10 @@ export async function activateDurable(
     const event = await reconcileDurableWork({
       ...options,
       work,
-      state: initialState(runId, input, await store.getNodeRuns(runId)),
     });
 
     if (event) {
-      transition = await commit(event);
+      disposition = await commit(event);
     }
   }
 

@@ -7,6 +7,7 @@ import type { ArtifactReader } from "../../../apps/sandbox/src/artifacts.js";
 import { Attempts } from "../../../apps/sandbox/src/attempts.js";
 import { sandboxConfigSchema, validateStateRoot } from "../../../apps/sandbox/src/config.js";
 import { type AttemptBackend, DockerBackend } from "../../../apps/sandbox/src/docker.js";
+import { filesystemDependencies } from "../../../apps/sandbox/src/filesystem.js";
 import { CaptureError, type CommandRunner, runCommand } from "../../../apps/sandbox/src/process.js";
 import { type StartedReceipt, storedReceiptSchema } from "../../../apps/sandbox/src/receipts.js";
 import { attemptHandler, startSandbox } from "../../../apps/sandbox/src/server.js";
@@ -17,6 +18,7 @@ import {
   sandboxArtifactSchema,
   sandboxAttemptRequestSchema,
 } from "../src/contract/index.js";
+import { attemptRecordSchema } from "../src/contract/sandbox-journal.js";
 import { commandSpec } from "./fixtures/executor.js";
 
 const roots: string[] = [];
@@ -70,7 +72,11 @@ async function open(
   backend: AttemptBackend,
   artifactReader?: ArtifactReader,
 ) {
-  const service = await Attempts.open(config, backend, artifactReader);
+  const service = await Attempts.open(
+    config,
+    filesystemDependencies(config, { backend, artifactReader }),
+  );
+
   services.push(service);
 
   return service;
@@ -105,13 +111,15 @@ test("authenticated admission fsyncs once, joins duplicate starts, rejects chang
       starts += 1;
       stored = receipt;
 
-      const durable = storedReceiptSchema.parse(
+      const durable = attemptRecordSchema.parse(
         JSON.parse(
           await readFile(join(config.stateRoot, "receipts", `${receipt.id}.json`), "utf8"),
         ),
       );
 
-      expect(durable).toEqual(receipt);
+      expect({ ...durable.plan, kind: "started" }).toEqual(receipt);
+      expect(durable.session.epoch).toBe(1);
+      expect(durable.session.nonce.length).toBeGreaterThan(0);
 
       return completed.promise;
     },
@@ -526,6 +534,7 @@ test("artifact export requires its finished receipt and fences same-run admissio
       recover: async () => succeeded,
     },
     {
+      cleanup: async () => {},
       read: async (receipt, path) => {
         exports += 1;
         expect(receipt.volume).toMatch(/^loopy-workspace-[a-f0-9]{64}$/);
@@ -590,7 +599,9 @@ test("state roots reject symlinks and public binding; live root ownership is exc
   await expect(validateStateRoot(other)).rejects.toThrow("without symlinks");
   const backend: AttemptBackend = { start: async () => succeeded, recover: async () => succeeded };
   await open(config, backend);
-  await expect(Attempts.open(config, backend)).rejects.toThrow("Another sandbox service owns");
+  await expect(Attempts.open(config, filesystemDependencies(config, { backend }))).rejects.toThrow(
+    "Another sandbox service owns",
+  );
 });
 
 test("process capture bounds actual bytes and terminates timed-out workers", async () => {
@@ -608,7 +619,7 @@ test("process capture bounds actual bytes and terminates timed-out workers", asy
 test("loopback server serves health and an authenticated asynchronous attempt", async () => {
   const config = await fixture();
   const backend: AttemptBackend = { start: async () => succeeded, recover: async () => succeeded };
-  const service = await startSandbox(config, backend);
+  const service = await startSandbox(config, filesystemDependencies(config, { backend }));
 
   try {
     const health = await fetch(new URL("/health", service.server.url));
@@ -648,8 +659,8 @@ test("concurrent restarts reclaim a dead process lock under one startup owner", 
   const backend: AttemptBackend = { start: async () => succeeded, recover: async () => succeeded };
 
   const results = await Promise.allSettled([
-    Attempts.open(config, backend),
-    Attempts.open(config, backend),
+    Attempts.open(config, filesystemDependencies(config, { backend })),
+    Attempts.open(config, filesystemDependencies(config, { backend })),
   ]);
 
   expect(results.filter((result) => result.status === "fulfilled").length).toBe(1);
@@ -662,12 +673,21 @@ test("concurrent restarts reclaim a dead process lock under one startup owner", 
   }
 });
 
+// BOUNDARY: Retained receipt JSON is parsed into the current or legacy record.
+function decodeDiskReceipt(value: unknown) {
+  const record = attemptRecordSchema.safeParse(value);
+
+  return record.success
+    ? { ...record.data.plan, kind: record.data.kind }
+    : storedReceiptSchema.parse(value);
+}
+
 async function diskReceipts(root: string) {
   return Promise.all(
     (await readdir(join(root, "receipts")))
       .filter((name) => name.endsWith(".json"))
       .map(async (name) =>
-        storedReceiptSchema.parse(JSON.parse(await readFile(join(root, "receipts", name), "utf8"))),
+        decodeDiskReceipt(JSON.parse(await readFile(join(root, "receipts", name), "utf8"))),
       ),
   );
 }

@@ -1,10 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { open, readdir, rename, unlink } from "node:fs/promises";
+import { open, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 import {
-  type SandboxExecutionResult,
   sandboxAttemptIdentitySchema,
   sandboxExecutionResultSchema,
 } from "../../../packages/loopy/src/contract/index.js";
@@ -34,89 +33,6 @@ async function syncDirectory(path: string) {
     await directory.sync();
   } finally {
     await directory.close();
-  }
-}
-
-export class ReceiptStore {
-  constructor(private readonly root: string) {}
-
-  async read(id: string): Promise<StoredReceipt | null> {
-    const path = join(this.root, "receipts", `${id}.json`);
-
-    try {
-      const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
-
-      try {
-        const stat = await file.stat();
-
-        if (!stat.isFile() || stat.size > 2 * 1024 * 1024) {
-          throw new Error("Sandbox receipt must be a bounded regular file.");
-        }
-
-        const receipt = storedReceiptSchema.parse(JSON.parse(await file.readFile("utf8")));
-
-        if (receipt.id !== id) {
-          throw new Error("Sandbox receipt identity does not match its path.");
-        }
-
-        return receipt;
-      } finally {
-        await file.close();
-      }
-    } catch (cause) {
-      if (cause instanceof Error && "code" in cause && cause.code === "ENOENT") {
-        return null;
-      }
-
-      throw cause;
-    }
-  }
-
-  async started(receipt: StartedReceipt) {
-    const directory = join(this.root, "receipts");
-    const file = await open(join(directory, `${receipt.id}.json`), "wx", 0o600);
-
-    try {
-      await file.writeFile(JSON.stringify(receipt));
-      await file.sync();
-    } finally {
-      await file.close();
-    }
-
-    await syncDirectory(directory);
-  }
-
-  async finished(receipt: StartedReceipt, result: SandboxExecutionResult) {
-    const directory = join(this.root, "receipts");
-    const temporary = join(directory, `${receipt.id}.${randomUUID()}.tmp`);
-    const file = await open(temporary, "wx", 0o600);
-
-    try {
-      await file.writeFile(JSON.stringify({ ...receipt, kind: "finished", result }));
-      await file.sync();
-    } finally {
-      await file.close();
-    }
-
-    await rename(temporary, join(directory, `${receipt.id}.json`));
-    await syncDirectory(directory);
-  }
-
-  async pending() {
-    const files = await readdir(join(this.root, "receipts"));
-    const receipts: StartedReceipt[] = [];
-
-    for (const file of files) {
-      if (/^[a-f0-9]{64}\.json$/.test(file)) {
-        const receipt = await this.read(file.slice(0, -5));
-
-        if (receipt?.kind === "started") {
-          receipts.push(receipt);
-        }
-      }
-    }
-
-    return receipts;
   }
 }
 

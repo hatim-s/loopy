@@ -11,7 +11,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { localDaemon, openRunStore } from "../src/local/index.js";
 import { secretRedactor } from "../src/local/secret-redactor.js";
 import { SecretStore } from "../src/local/secrets.js";
@@ -96,12 +96,13 @@ test("malformed stores and invalid values never echo secret contents", () => {
 });
 
 test("CLI stdin entry and name-only listing do not disclose values", async () => {
-  const { store } = setup();
+  const { directory, store } = setup();
+  mkdirSync(join(directory, ".loopy", "loopies"), { recursive: true });
   const runStore = openRunStore(store.directory);
 
   const daemon = localDaemon({
     home: store.directory,
-    cwd: process.cwd(),
+    cwd: directory,
     store: runStore,
     concurrency: 4,
     port: 0,
@@ -114,11 +115,11 @@ test("CLI stdin entry and name-only listing do not disclose values", async () =>
       runStore.close();
     },
   });
-  const command = [process.execPath, "packages/loopy/src/cli/index.ts"];
+  const command = [process.execPath, resolve(import.meta.dir, "../src/cli/index.ts")];
 
   const child = Bun.spawn(
     [...command, "secrets", "set", "orbit-cookie", "--stdin", "--home", store.directory],
-    { stdin: "pipe", stdout: "pipe", stderr: "pipe" },
+    { cwd: directory, stdin: "pipe", stdout: "pipe", stderr: "pipe" },
   );
 
   child.stdin.write("sensitive-marker\n");
@@ -129,6 +130,7 @@ test("CLI stdin entry and name-only listing do not disclose values", async () =>
   expect(store.get("orbit-cookie")).toBe("sensitive-marker");
 
   const listed = Bun.spawn([...command, "secrets", "list", "--home", store.directory], {
+    cwd: directory,
     stdout: "pipe",
     stderr: "pipe",
   });

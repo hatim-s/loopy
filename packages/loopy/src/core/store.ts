@@ -56,6 +56,7 @@ export interface Store extends DashboardReader {
   suspend(runId: string, token: string, wakeAt?: string): Promise<void>;
   finishRun(runId: string, token: string, outcome: RunOutcome): Promise<void>;
   release(runId: string, token: string): Promise<void>;
+  getNodeRun(key: ExecutionKey): Promise<NodeRun | undefined>;
   getNodeRuns(runId: string): Promise<NodeRun[]>;
   apply(batch: { runId: string; token: string; effects: StoreEffect[] }): Promise<void>;
   getLogs(runId: string, after?: number, limit?: number): Promise<LogRecord[]>;

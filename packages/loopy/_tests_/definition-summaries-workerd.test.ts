@@ -1,0 +1,295 @@
+import { afterAll, beforeAll, expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { Miniflare } from "miniflare";
+import { z } from "zod";
+import { definitionSummarySchema, type PutLoopyBody } from "../src/contract/index.js";
+import { revision } from "../src/core/index.js";
+import { compiledBody } from "./compiled-fixture.js";
+import type { SummaryProbeRequest } from "./fixtures/summary-workerd.js";
+
+let runtime: Miniflare;
+
+let directory: string;
+
+beforeAll(async () => {
+  directory = await mkdtemp(join(tmpdir(), "loopy-summary-workerd-"));
+
+  const built = await Bun.build({
+    entrypoints: [resolve(import.meta.dir, "fixtures/summary-workerd.ts")],
+    target: "browser",
+    format: "esm",
+    outdir: directory,
+    naming: "[name].js",
+  });
+
+  expect(built.success).toBe(true);
+  expect(built.logs).toEqual([]);
+  runtime = new Miniflare({
+    modulesRoot: directory,
+    name: "summary-tests",
+    host: "127.0.0.1",
+    port: 0,
+    modules: true,
+    scriptPath: join(directory, "summary-workerd.js"),
+    compatibilityDate: "2026-07-30",
+    durableObjects: { PROBES: { className: "SummaryProbe", useSQLite: true } },
+    durableObjectsPersist: join(directory, "durable"),
+    r2Buckets: ["BUCKET"],
+    r2Persist: join(directory, "r2"),
+  });
+  await runtime.ready;
+}, 60_000);
+
+afterAll(async () => {
+  try {
+    await runtime?.dispose();
+  } finally {
+    if (directory) {
+      await rm(directory, { recursive: true, force: true });
+    }
+  }
+});
+
+async function probe(instance: string, input: SummaryProbeRequest) {
+  const namespace = await runtime.getDurableObjectNamespace("PROBES");
+
+  const response = await namespace
+    .get(namespace.idFromName(instance))
+    .fetch("http://probe/", { method: "POST", body: JSON.stringify(input) });
+
+  const body: unknown = await response.json();
+
+  return { status: response.status, body };
+}
+
+const summaryResult = z.object({
+  value: definitionSummarySchema.nullable(),
+  graphReads: z.number(),
+});
+
+const pointer = z.object({
+  revision: z.string(),
+  source: z.string(),
+  saved_at: z.string(),
+  generation: z.string(),
+  projection_json: z.string().nullable(),
+});
+
+const pointerResult = z.object({ value: pointer, graphReads: z.number() });
+
+function fixture(description: string): Promise<PutLoopyBody> {
+  return compiledBody("summary", "/entry.ts", { workspace: "summaries", description });
+}
+
+async function change(body: PutLoopyBody, description: string) {
+  const changed = structuredClone(body);
+  changed.graph.meta.description = description;
+  changed.revision = await revision(changed.graph);
+
+  return changed;
+}
+
+test("cloud SQL projections preserve legacy pointers and backfill outside transactions", async () => {
+  const body = await fixture("legacy description");
+  const result = await probe("legacy", { operation: "legacy", body });
+  expect(result.status).toBe(200);
+  expect(result.body).toMatchObject({
+    value: {
+      columns: expect.not.arrayContaining([expect.objectContaining({ name: "projection_json" })]),
+      projectionColumns: expect.arrayContaining([
+        expect.objectContaining({ name: "projection_json", notnull: 1 }),
+      ]),
+      pointer: {
+        generation: "legacy-generation",
+        saved_at: "legacy-saved-at",
+        projection_json: null,
+      },
+    },
+    graphReads: 0,
+  });
+  const first = summaryResult.parse((await probe("legacy", { operation: "summary" })).body);
+  expect(first).toMatchObject({
+    value: {
+      revision: body.revision,
+      description: "legacy description",
+      savedAt: "legacy-saved-at",
+      input: {},
+    },
+    graphReads: 1,
+  });
+  expect(await probe("legacy", { operation: "summary" })).toEqual({
+    status: 200,
+    body: { value: first.value, graphReads: 0 },
+  });
+  await runtime.unsafeEvictDurableObject("summary-tests", "SummaryProbe", { name: "legacy" });
+  expect(await probe("legacy", { operation: "list" })).toEqual({
+    status: 200,
+    body: { value: [first.value], graphReads: 0 },
+  });
+  expect(
+    pointerResult.parse((await probe("legacy", { operation: "pointer" })).body).value,
+  ).toMatchObject({ saved_at: "legacy-saved-at", generation: "legacy-generation" });
+});
+
+test("same save repairs missing or corrupt summaries without changing generation or savedAt", async () => {
+  const body = await fixture("same-save");
+
+  const original = pointerResult.parse(
+    (await probe("same", { operation: "save", body })).body,
+  ).value;
+
+  for (const operation of ["forget", "corruptSummary"] as const) {
+    expect((await probe("same", { operation })).status).toBe(200);
+
+    const repaired = pointerResult.parse(
+      (await probe("same", { operation: "save", body })).body,
+    ).value;
+
+    expect(repaired).toEqual(original);
+    expect(
+      summaryResult.parse((await probe("same", { operation: "summary" })).body).graphReads,
+    ).toBe(0);
+  }
+});
+
+for (const oldGraph of ["valid", "missing", "corrupt"] as const) {
+  test(`a replacement save wins cold backfill against a ${oldGraph} old graph`, async () => {
+    const body = await fixture("before-race");
+    expect((await probe(`race-${oldGraph}`, { operation: "save", body })).status).toBe(200);
+    expect((await probe(`race-${oldGraph}`, { operation: "forget" })).status).toBe(200);
+    const bucket = await runtime.getR2Bucket("BUCKET");
+    const key = `workspaces/summaries/graphs/${body.revision}.json`;
+
+    if (oldGraph === "missing") {
+      await bucket.delete(key);
+    }
+
+    if (oldGraph === "corrupt") {
+      await bucket.put(key, "{invalid");
+    }
+
+    const changed = await change(body, "after-race");
+
+    const response = await probe(`race-${oldGraph}`, { operation: "race", body: changed });
+    expect(response).toMatchObject({ status: 200 });
+    const raced = summaryResult.parse(response.body);
+
+    expect(raced).toMatchObject({
+      value: { description: "after-race", revision: changed.revision },
+      graphReads: 1,
+    });
+
+    const saved = pointerResult.parse(
+      (await probe(`race-${oldGraph}`, { operation: "pointer" })).body,
+    ).value;
+
+    expect(JSON.parse(saved.projection_json ?? "null")).toEqual({
+      scope: raced.value?.scope,
+      description: raced.value?.description,
+      input: raced.value?.input,
+      schedule: raced.value?.schedule,
+      mode: raced.value?.mode,
+    });
+    expect(saved.revision).toBe(changed.revision);
+  });
+}
+
+test("SQL failure rolls back the pointer, summary and generation together", async () => {
+  const body = await fixture("before-rollback");
+  expect((await probe("rollback", { operation: "save", body })).status).toBe(200);
+  const changed = await change(body, "must-not-publish");
+
+  const result = z
+    .object({ value: z.object({ before: pointer, after: pointer, error: z.string() }) })
+    .parse((await probe("rollback", { operation: "rollback", body: changed })).body);
+
+  expect(result.value.error).toContain("CHECK constraint failed");
+  expect(result.value.after).toEqual(result.value.before);
+  expect(
+    summaryResult.parse((await probe("rollback", { operation: "summary" })).body).value
+      ?.description,
+  ).toBe("before-rollback");
+});
+
+test("warm metadata endpoints read zero graphs while direct get, start and schedule reject corrupt artifacts", async () => {
+  const body = await fixture("warm metadata");
+  expect((await probe("warm", { operation: "save", body })).status).toBe(200);
+  expect(await probe("warm", { operation: "start" })).toMatchObject({ status: 200 });
+  const bucket = await runtime.getR2Bucket("BUCKET");
+  await bucket.put(
+    `workspaces/summaries/graphs/${body.revision}.json`,
+    JSON.stringify({ ...body.graph, name: "corrupt" }),
+  );
+  expect(await probe("warm", { operation: "service" })).toMatchObject({
+    status: 200,
+    body: {
+      value: {
+        loopies: [{ description: "warm metadata", counts: { queued: 1 } }],
+        runs: [{ loopy: { description: "warm metadata" } }],
+      },
+      graphReads: 0,
+    },
+  });
+
+  for (const operation of ["get", "start", "schedule"] as const) {
+    expect(await probe("warm", { operation })).toMatchObject({
+      status: 400,
+      body: {
+        error: "Stored graph does not match its revision. Save the loopy again.",
+        code: null,
+        graphReads: 1,
+      },
+    });
+  }
+
+  expect(await probe("warm", { operation: "summary", slug: "absent" })).toEqual({
+    status: 200,
+    body: { value: null, graphReads: 0 },
+  });
+
+  for (const operation of ["get", "start", "schedule"] as const) {
+    expect(await probe("warm", { operation, slug: "absent" })).toMatchObject({
+      status: 400,
+      body: { code: "not_found", graphReads: 0 },
+    });
+  }
+
+  expect((await probe("warm", { operation: "forget" })).status).toBe(200);
+  expect(await probe("warm", { operation: "list" })).toMatchObject({
+    status: 400,
+    body: {
+      error: "Stored graph does not match its revision. Save the loopy again.",
+      graphReads: 1,
+    },
+  });
+});
+
+for (const failure of ["missing", "corrupt"] as const) {
+  test(`${failure} required graphs fail cold lists clearly without partial results`, async () => {
+    const body = await fixture(`required-${failure}`);
+    expect((await probe(failure, { operation: "save", body })).status).toBe(200);
+    const bucket = await runtime.getR2Bucket("BUCKET");
+    const key = `workspaces/summaries/graphs/${body.revision}.json`;
+
+    if (failure === "missing") {
+      await bucket.delete(key);
+    } else {
+      await bucket.put(key, "{invalid");
+    }
+
+    expect((await probe(failure, { operation: "forget" })).status).toBe(200);
+    expect(await probe(failure, { operation: "list" })).toEqual({
+      status: 400,
+      body: {
+        error:
+          failure === "missing"
+            ? "Published graph is missing. Save the loopy again."
+            : "Stored graph is invalid. Save the loopy again.",
+        code: null,
+        graphReads: 1,
+      },
+    });
+  });
+}

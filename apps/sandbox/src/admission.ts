@@ -8,6 +8,8 @@ import { canonicalJson } from "../../../packages/loopy/src/core/index.js";
 
 export class InvalidAttempt extends Error {}
 
+export class AttemptConflict extends Error {}
+
 export function attemptHash(
   value:
     | SandboxAttemptRequest

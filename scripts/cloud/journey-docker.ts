@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { z } from "zod";
-import { storedReceiptSchema } from "../../apps/sandbox/src/receipts.js";
 import { routes } from "../../packages/loopy/src/contract/index.js";
 import { canonicalJson, type ExecutionKey } from "../../packages/loopy/src/core/index.js";
+import { filesystemReceipt } from "./filesystem-receipt.js";
 import { assert, equal, type Journey } from "./journey-client.js";
 
 const stateRoot = resolve(import.meta.dir, "../../.loopy/cloud/sandbox");
@@ -13,17 +13,13 @@ async function receipt(key: ExecutionKey, attempt: number) {
     .update(canonicalJson({ root: stateRoot, workspace: "fixtures", executionKey: key, attempt }))
     .digest("hex");
 
-  const parsed = storedReceiptSchema.safeParse(
-    await Bun.file(resolve(stateRoot, "receipts", `${id}.json`)).json(),
-  );
-
-  assert(parsed.success, "docker_receipt_schema_failed");
+  const saved = await filesystemReceipt(stateRoot, id);
   assert(
-    parsed.data.workspace === "fixtures" && parsed.data.executionKey.runId === key.runId,
+    saved.workspace === "fixtures" && saved.executionKey.runId === key.runId,
     "docker_receipt_identity_mismatch",
   );
 
-  return parsed.data;
+  return saved;
 }
 
 const isolationSchema = z.object({

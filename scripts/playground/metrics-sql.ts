@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { z } from "zod";
-import { atomic, root } from "./config.js";
+import { atomic, config, evidenceDirectory, profile, root, state } from "./config.js";
 import { lifecycle } from "./metrics-lifecycle.js";
-import { diagnosticPath } from "./metrics-snapshot.js";
+import { approvedDiagnostic, diagnosticPath } from "./metrics-snapshot.js";
 import { DiagnosticDriver } from "./metrics-sql-driver.js";
 import { sqlCases } from "./metrics-sql-queries.js";
 import { distribution } from "./metrics-statistics.js";
@@ -15,7 +15,13 @@ const [phase, supplied] = z
 
 const path = await diagnosticPath(supplied);
 
-const expectedHash = "0d0ce744814caf442edf3c3fde3e74b129019f7602db4bb393a431cd341697fa";
+const expectedHash = profile.name
+  ? await approvedDiagnostic(
+      path,
+      resolve(state, "diagnostics/closed-copy.json"),
+      (await config()).batch,
+    )
+  : "0d0ce744814caf442edf3c3fde3e74b129019f7602db4bb393a431cd341697fa";
 
 const sha256 = async (file: string) =>
   createHash("sha256")
@@ -24,7 +30,10 @@ const sha256 = async (file: string) =>
 
 const beforeHash = await sha256(path);
 
-if (beforeHash !== expectedHash || !path.endsWith("/standalone/diagnostic.sqlite")) {
+if (
+  beforeHash !== expectedHash ||
+  (!profile.name && !path.endsWith("/standalone/diagnostic.sqlite"))
+) {
   throw new Error("Only the root-verified standalone snapshot is approved for final SQL evidence.");
 }
 
@@ -59,7 +68,7 @@ try {
     .object({ runs: z.array(z.object({ id: z.string(), status: z.string() })) })
     .parse(
       await Bun.file(
-        resolve(root, ".notes/cloud/evidence/playground-performance-postload-inventory.json"),
+        resolve(evidenceDirectory, "playground-performance-postload-inventory.json"),
       ).json(),
     );
 
@@ -158,7 +167,7 @@ try {
       "No SqlRunStore constructor,migrations,SQL writes or live/raw/working database access.",
       "Exact SQL shapes use source constants/projections;historical IN and current json_each run on the same immutable diagnostic copy.",
       "Native SQLite does not reproduce Workerd binding ceilings;successful native200-binding queries are not runtime parity proof.",
-      "Ten warm-cache repetitions on a shared host while daemon45 runs are local diagnostics,not a controlled hardware benchmark or production p99.",
+      "Ten warm-cache repetitions on a shared host are local diagnostics, not a controlled hardware benchmark or production p99.",
       "SQL duration excludes EXPLAIN and result hashing;operation duration includes first EXPLAIN. JSON row-to-view conversion and post-scan feed filtering are not measured.",
       "No new indexes,ANALYZE,checkpoint or persisted pragma changes were performed by this probe.",
     ],
@@ -176,7 +185,7 @@ try {
     sources.map(async (file) => ({ file, sha256: await sha256(resolve(root, file)) })),
   );
 
-  const output = resolve(root, ".notes/cloud/evidence", `playground-performance-${phase}-sql.json`);
+  const output = resolve(evidenceDirectory, `playground-performance-${phase}-sql.json`);
 
   if (await Bun.file(output).exists()) {
     throw new Error("SQL evidence exists. Choose a new phase.");

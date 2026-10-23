@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { z } from "zod";
 import { executionKeySchema } from "../../packages/loopy/src/contract/index.js";
-import { atomic, root, state } from "./config.js";
+import { atomic, evidenceDirectory, state } from "./config.js";
 import { distribution } from "./metrics-statistics.js";
 
 const queueSchema = z.object({
@@ -17,11 +17,7 @@ const queueSchema = z.object({
 
 const boundary = z
   .object({ firstIntent: z.string(), lastTerminal: z.string() })
-  .parse(
-    await Bun.file(
-      resolve(root, ".notes/cloud/evidence/playground-performance-segments.json"),
-    ).json(),
-  );
+  .parse(await Bun.file(resolve(evidenceDirectory, "playground-performance-segments.json")).json());
 
 const queue: z.infer<typeof queueSchema>[] = [];
 
@@ -59,9 +55,7 @@ const resourceSchema = z.object({
 const continuous = z
   .object({ resources: z.array(resourceSchema) })
   .parse(
-    await Bun.file(
-      resolve(root, ".notes/cloud/evidence/playground-performance-during-load.json"),
-    ).json(),
+    await Bun.file(resolve(evidenceDirectory, "playground-performance-during-load.json")).json(),
   );
 
 const resources = continuous.resources.filter(
@@ -149,7 +143,7 @@ const value = {
   ],
 };
 
-await atomic(resolve(root, ".notes/cloud/evidence/playground-performance-runtime.json"), value);
+await atomic(resolve(evidenceDirectory, "playground-performance-runtime.json"), value);
 
 process.stdout.write(
   `${JSON.stringify({ completedBackendStarts: value.completedBackendStarts, backendQueueWaitMs: value.backendQueueWaitMs, backendDurationMs: value.backendDurationMs, backendOutcomes: value.backendOutcomes, resourceSamples: value.resourceSamples, invalidQueueLines, invalidProcessRows })}\n`,

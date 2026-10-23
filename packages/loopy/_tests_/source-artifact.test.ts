@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { compile } from "../src/compiler/index.js";
@@ -20,6 +20,7 @@ const sdk = resolve(import.meta.dir, "../src/sdk/graph/index.ts");
 async function fixture() {
   const root = await realpath(await mkdtemp(join(tmpdir(), "loopy-source-")));
   roots.push(root);
+  await mkdir(join(root, ".loopy", "loopies"), { recursive: true });
 
   return { root, file: join(root, "entry.ts"), home: join(root, "home") };
 }

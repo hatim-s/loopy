@@ -83,10 +83,10 @@ beforeAll(async () => {
             } else if (operation === "forgetSizes") {
               this.state.storage.sql.exec("DELETE FROM artifact_graph_sizes WHERE workspace = ?", workspace);
             } else if (operation === "listSizes") {
-              const entries = await registry.list();
+              const entries = await registry.listSummaries();
               value = {
                 count: entries.length,
-                bounded: entries.reduce((total, entry) => total + new TextEncoder().encode(JSON.stringify(entry.graph)).byteLength, 0) <= ARTIFACT_LIMITS.listBytes
+                bounded: this.state.storage.sql.exec("SELECT sum(s.bytes) AS bytes FROM artifact_definitions d JOIN artifact_graph_sizes s ON s.workspace = d.workspace AND s.revision = d.revision WHERE d.workspace = ?", workspace).one().bytes <= ARTIFACT_LIMITS.listBytes
               };
             } else if (operation === "serviceChecks") {
               const store = this.store;
@@ -117,7 +117,7 @@ beforeAll(async () => {
               this.state.storage.transactionSync(() => {
                 for (let index = 0; index < args[0]; index++) {
                   this.state.storage.sql.exec(
-                    "INSERT INTO artifact_definitions VALUES (?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO artifact_definitions (workspace, slug, revision, source, saved_at, generation) VALUES (?, ?, ?, ?, ?, ?)",
                     workspace, "seed-" + index, "a".repeat(64), "/seed.ts", "now", "seed"
                   );
                 }
@@ -236,7 +236,7 @@ test("real local R2 and DO SQL publish immutable revisions, pinned source and ba
   expect(await call(workspace, "revisionGraph", first.revision)).toMatchObject({
     body: { value: first.graph },
   });
-  expect(await call(workspace, "list")).toMatchObject({
+  expect(await call(workspace, "listSummaries")).toMatchObject({
     body: { value: [{ revision: changed.revision }] },
   });
   expect(await call(workspace, "workspace")).toMatchObject({ body: { value: workspace } });
@@ -266,7 +266,7 @@ test("missing source is pinned and workspaces cannot read another tenant's artif
     status: 400,
     body: { error: "Source workspace does not match the authenticated workspace." },
   });
-  expect(await call("tenant-b", "list")).toMatchObject({ body: { value: [] } });
+  expect(await call("tenant-b", "listSummaries")).toMatchObject({ body: { value: [] } });
 });
 
 test("artifact failures never publish metadata and a later retry finishes publication", async () => {
@@ -275,7 +275,7 @@ test("artifact failures never publish metadata and a later retry finishes public
     status: 400,
     body: { error: "R2 write unavailable" },
   });
-  expect(await call("failure", "list")).toMatchObject({ body: { value: [] } });
+  expect(await call("failure", "listSummaries")).toMatchObject({ body: { value: [] } });
   expect(await call("failure", "save", body)).toMatchObject({ status: 200 });
   expect(await call("failure", "get", body.graph.name)).toMatchObject({
     body: { value: { revision: body.revision } },
@@ -331,7 +331,7 @@ test("capacity rejects overflow without truncating list results", async () => {
   expect(await call("overfull", "fillCapacity", ARTIFACT_LIMITS.definitions + 1)).toMatchObject({
     status: 200,
   });
-  expect(await call("overfull", "list")).toMatchObject({
+  expect(await call("overfull", "listSummaries")).toMatchObject({
     status: 400,
     body: { error: expect.stringContaining("1000 definition capacity") },
   });
@@ -527,5 +527,5 @@ test("shared validation rejects forged bundles, revisions and source mappings be
   expect(await call("validation", "save", { ...body, revision: "f".repeat(64) })).toMatchObject({
     status: 400,
   });
-  expect(await call("validation", "list")).toMatchObject({ body: { value: [] } });
+  expect(await call("validation", "listSummaries")).toMatchObject({ body: { value: [] } });
 });

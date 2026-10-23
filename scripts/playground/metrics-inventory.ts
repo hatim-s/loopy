@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { encodeRunCursor, type RunView, routes } from "../../packages/loopy/src/contract/index.js";
 import { PlaygroundClient } from "./client.js";
-import { atomic, root, state } from "./config.js";
+import { atomic, evidenceDirectory, state } from "./config.js";
 import { admissionSchema } from "./journal.js";
 
 const client = await PlaygroundClient.open();
@@ -88,10 +88,7 @@ const statusMismatches = primary.flatMap((admission) => {
     : [];
 });
 
-const output = resolve(
-  root,
-  ".notes/cloud/evidence/playground-performance-postload-inventory.json",
-);
+const output = resolve(evidenceDirectory, "playground-performance-postload-inventory.json");
 
 const value = {
   scope: "post-load-paginated-api-identity-inventory",
@@ -115,7 +112,7 @@ const value = {
   runs,
   limits: [
     "Shared-client end-to-end timing includes API-slot wait and body buffering.",
-    "Inventory is bounded to twenty50-run pages,one sequential request persecond; no workflow mutations. Page200failedHTTP500 and is preserved in separate pagination-boundary evidence.",
+    "Inventory is bounded to twenty 50-run pages, one sequential request per second; no workflow mutations.",
     "Only IDs,statuses,slug and timestamps are saved; payloads and wait tokens are discarded.",
   ],
 };

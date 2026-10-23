@@ -2,7 +2,7 @@ import { mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { z } from "zod";
 import { PlaygroundClient } from "./client.js";
-import { atomic, root, state } from "./config.js";
+import { atomic, evidenceDirectory, state } from "./config.js";
 import { guard } from "./guard.js";
 import type { Admission, Group } from "./journal.js";
 import { catalog } from "./repository.js";
@@ -21,11 +21,7 @@ export async function cohort(group: Group, phase: Admission["phase"] = "primary"
 
   await mkdir(resolve(state, "cohorts"), { recursive: true });
 
-  const summaryPath = resolve(
-    root,
-    ".notes/cloud/evidence",
-    `playground-driver-${phase}-${group}.json`,
-  );
+  const summaryPath = resolve(evidenceDirectory, `playground-driver-${phase}-${group}.json`);
 
   if (await Bun.file(summaryPath).exists()) {
     const saved = z
@@ -93,7 +89,7 @@ export async function cohort(group: Group, phase: Admission["phase"] = "primary"
   });
 
   const outcomes = await Promise.allSettled(workers);
-  await mkdir(resolve(root, ".notes/cloud/evidence"), { recursive: true });
+  await mkdir(evidenceDirectory, { recursive: true });
   await atomic(summaryPath, {
     status: failed ? "failed" : "passed",
     scope: "local-wrangler-docker",

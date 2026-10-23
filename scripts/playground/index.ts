@@ -7,7 +7,13 @@ import { serve, start, status, stop } from "./stack.js";
 const { positionals, values } = parseArgs({
   args: Bun.argv.slice(2),
   allowPositionals: true,
-  options: { group: { type: "string" }, baseline: { type: "string" } },
+  options: {
+    group: { type: "string" },
+    baseline: { type: "string" },
+    profile: { type: "string" },
+    "state-root": { type: "string" },
+    "launch-nonce": { type: "string" },
+  },
 });
 
 const command = positionals[0];
@@ -17,7 +23,11 @@ switch (command) {
     await start();
     break;
   case "serve":
-    await serve();
+    await serve({
+      profile: values.profile,
+      state: values["state-root"],
+      nonce: values["launch-nonce"],
+    });
     break;
   case "stop":
     await stop();

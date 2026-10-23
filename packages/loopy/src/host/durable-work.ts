@@ -1,11 +1,6 @@
-import {
-  type Executor,
-  executionKeyString,
-  type Graph,
-  type Receipt,
-  type Store,
-} from "../core/index.js";
-import type { Effect, EngineEvent, EngineState } from "../engine/index.js";
+import { executionKeyString, type Graph, type Store } from "../core/index.js";
+import type { Effect, EngineEvent } from "../engine/index.js";
+import { completionEvent } from "./completion-event.js";
 import type { DurableExecutionProvider } from "./durable.js";
 import { acquireDispatch } from "./rate-limit.js";
 
@@ -15,25 +10,6 @@ export function durableWorkId(work: DurableWork): string {
   return `${executionKeyString(work.executionKey)}/${work.kind === "dispatch" ? work.attempt : "sample"}`;
 }
 
-function completed(
-  work: Extract<DurableWork, { kind: "dispatch" }>,
-  receipt: Extract<Receipt, { kind: "finished" }>,
-  at: string,
-): EngineEvent {
-  const base = { executionKey: work.executionKey, attempt: work.attempt, at };
-  const { result } = receipt;
-
-  return result.kind === "succeeded"
-    ? { ...base, kind: "execution_completed", result }
-    : {
-        ...base,
-        kind: "execution_failed",
-        error: result.error,
-        exitCode: result.exitCode,
-        logs: result.logs,
-      };
-}
-
 export async function reconcileDurableWork(options: {
   store: Store;
   graph: Graph;
@@ -41,10 +17,9 @@ export async function reconcileDurableWork(options: {
   token: string;
   provider: DurableExecutionProvider;
   work: DurableWork;
-  state: EngineState;
   at: string;
 }): Promise<EngineEvent | undefined> {
-  const { store, graph, runId, token, provider, work, state, at } = options;
+  const { store, graph, runId, token, provider, work, at } = options;
 
   if (work.kind === "sample") {
     return {
@@ -55,9 +30,7 @@ export async function reconcileDurableWork(options: {
     };
   }
 
-  const previous = state.nodeRuns.find(
-    (node) => executionKeyString(node.key) === executionKeyString(work.executionKey),
-  );
+  const previous = await store.getNodeRun(work.executionKey);
 
   if (previous?.status !== "running" || previous.attempt !== work.attempt) {
     return;
@@ -81,33 +54,16 @@ export async function reconcileDurableWork(options: {
   }
 
   if (receipt.kind === "none") {
-    // acquireDispatch only needs lookup. Execution belongs to the asynchronous provider.
-    const executor: Executor = {
-      lookup: async () => receipt,
-      execute: async () => {
-        throw new Error("Durable dispatch cannot wait for execution. Use provider.start.");
-      },
-    };
-
-    const limited = await acquireDispatch({
+    const denial = await acquireDispatch({
       graph,
       store,
-      executor,
-      transition: { state, effects: [work] },
+      lookup: async () => receipt,
+      dispatch: work,
       at,
-      inFlight: new Set(),
     });
 
-    await store.apply({
-      runId,
-      token,
-      effects: limited.effects.filter(
-        (effect) => effect.kind !== "dispatch" && effect.kind !== "sample",
-      ),
-    });
-
-    if (!limited.effects.some((effect) => effect.kind === "dispatch")) {
-      return;
+    if (denial) {
+      return denial;
     }
 
     receipt = await provider.start(work.executionKey, work.attempt, work.spec);
@@ -120,12 +76,14 @@ export async function reconcileDurableWork(options: {
   }
 
   if (receipt.kind === "finished") {
-    return completed(work, receipt, at);
+    return completionEvent(work, receipt.result, at);
   }
 
-  await store.apply({
-    runId,
-    token,
-    effects: [{ kind: "write_node_run", nodeRun: { ...previous, receipt: "started" } }],
-  });
+  if (previous.receipt !== "started") {
+    await store.apply({
+      runId,
+      token,
+      effects: [{ kind: "write_node_run", nodeRun: { ...previous, receipt: "started" } }],
+    });
+  }
 }

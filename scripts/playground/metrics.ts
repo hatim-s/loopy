@@ -2,7 +2,7 @@ import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { z } from "zod";
 import { PlaygroundClient } from "./client.js";
-import { atomic, root } from "./config.js";
+import { atomic, evidenceDirectory } from "./config.js";
 import { sampleApi } from "./metrics-sampler.js";
 
 const args = z
@@ -17,7 +17,7 @@ const [phase, seconds, requestsPerSecond] = args;
 
 const client = await PlaygroundClient.open();
 
-const directory = resolve(root, ".notes/cloud/evidence");
+const directory = evidenceDirectory;
 
 await mkdir(directory, { recursive: true });
 

@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import {
+  definitionSummary,
   graphView,
   nodeIdSchema,
   routes,
@@ -54,12 +55,17 @@ function fixture() {
 
   const registry: ArtifactRegistry = {
     workspace: async () => "cloud-workspace",
-    list: async () => [...entries.values()],
+    listSummaries: async () => [...entries.values()].map(definitionSummary),
+    summary: async (slug) => {
+      const saved = entries.get(slug);
+
+      return saved ? definitionSummary(saved) : null;
+    },
     get: async (slug) => {
       const saved = entries.get(slug);
 
       if (!saved) {
-        throw new Error(`No saved loopy '${slug}'.`);
+        throw new ServiceError("not_found", `No saved loopy '${slug}'.`);
       }
 
       return saved;

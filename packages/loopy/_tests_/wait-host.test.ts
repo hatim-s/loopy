@@ -28,6 +28,7 @@ afterEach(() => {
 function fixture() {
   const home = mkdtempSync(join(tmpdir(), "loopy-wait-host-"));
   homes.push(home);
+  mkdirSync(join(home, ".loopy", "loopies"), { recursive: true });
   let now = Date.parse("2026-10-20T00:00:00.000Z");
 
   const clock: Clock = {

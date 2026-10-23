@@ -1,4 +1,4 @@
-import { mkdtempSync, realpathSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { compile } from "../src/compiler/index.js";
@@ -16,6 +16,7 @@ export const SDK = resolve(import.meta.dir, "../src/sdk/graph/index.ts");
 export function fixture(name: string, definition: string) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "loopy-cli-sdk-")));
   roots.push(root);
+  mkdirSync(join(root, ".loopy", "loopies"), { recursive: true });
   const home = join(root, "home");
   const file = join(root, `${name}.loopy.ts`);
   writeFileSync(

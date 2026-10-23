@@ -2,12 +2,14 @@ import { z } from "zod";
 import { executionKeySchema, jsonSchema, nodeSchema } from "../contract/index.js";
 import { EXECUTION_MODES } from "../core/index.js";
 import { ExecutionWorker } from "./execution.js";
+import { FilesystemReceipts, filesystemReceiptsDescriptorSchema } from "./receipts.js";
 
 const dictionary = z.record(z.string(), jsonSchema);
 
 const requestSchema = z.object({
   options: z.object({
     home: z.string(),
+    receipts: filesystemReceiptsDescriptorSchema,
     workspace: z.string(),
     mode: z.enum(EXECUTION_MODES),
     secrets: z.array(z.string()),
@@ -43,8 +45,13 @@ process.on("SIGTERM", () => controller.abort());
 
 process.on("SIGINT", () => controller.abort());
 
+if (request.options.receipts.home !== request.options.home) {
+  throw new Error("Execution receipts must use the protected daemon home.");
+}
+
 const executor = new ExecutionWorker({
   ...request.options,
+  receipts: new FilesystemReceipts(request.options.receipts.home),
   bundlePath: (hash) => {
     const path = request.options.bundles[hash];
 

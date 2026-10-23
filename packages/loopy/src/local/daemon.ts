@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import type { RunRecord } from "../core/index.js";
-import { LocalExecutor } from "../executor/index.js";
+import { FilesystemReceipts, LocalExecutor } from "../executor/index.js";
 import { Daemon, SYSTEM_CLOCK } from "../host/index.js";
 import type { SqliteRunStore } from "../store/index.js";
 import { readDaemonFile, removeDaemonFile, writeDaemonFile } from "./daemon-file.js";
@@ -21,6 +21,7 @@ type DaemonOptions = {
 
 function runtimeDaemon(options: DaemonOptions) {
   const { home, store, concurrency, onError } = options;
+  const receipts = new FilesystemReceipts(home);
 
   return new Daemon({
     store,
@@ -36,6 +37,7 @@ function runtimeDaemon(options: DaemonOptions) {
         graph,
         executor: new LocalExecutor({
           home,
+          receipts,
           workspace: run.workspace,
           mode: graph.meta.mode,
           secrets: graph.meta.secrets,

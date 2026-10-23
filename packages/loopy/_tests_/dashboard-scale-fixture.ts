@@ -8,6 +8,7 @@ import { LoopyService, openRunStore, Registry, SqliteRunStore } from "../src/loc
 
 export async function largeMapFixture() {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "loopy-dashboard-10k-map-")));
+  mkdirSync(join(root, ".loopy", "loopies"), { recursive: true });
   const home = join(root, "home");
   mkdirSync(home, { recursive: true });
   const source = join(root, "reindex-docs.loopy.ts");
@@ -158,6 +159,7 @@ export default loopy("reindex-docs", {
 
 export async function manyRunsFixture() {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "loopy-dashboard-10k-runs-")));
+  mkdirSync(join(root, ".loopy", "loopies"), { recursive: true });
   const home = join(root, "home");
   const store = openRunStore(home);
   const registry = new Registry(home, root);

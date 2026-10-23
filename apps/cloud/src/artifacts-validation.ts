@@ -4,9 +4,29 @@ import type {
   SavedLoopy,
 } from "../../../packages/loopy/src/contract/index.js";
 import { canonicalJson } from "../../../packages/loopy/src/core/index.js";
+import type { Publication } from "./artifacts-definitions.js";
+import { checkDefinitionRows } from "./artifacts-projection.js";
 import { ARTIFACT_LIMITS } from "./artifacts-storage.js";
 
 const encoder = new TextEncoder();
+
+export function artifactEntry(row: Publication, graph: Graph): SavedLoopy {
+  return {
+    version: 2,
+    slug: row.slug,
+    graph,
+    revision: row.revision,
+    source: row.source,
+    savedAt: row.saved_at,
+    scope: graph.meta.scope,
+    description: graph.meta.description,
+    input: graph.input,
+    schedule: graph.meta.schedule,
+    mode: graph.meta.mode,
+    secrets: graph.meta.secrets,
+    bundles: graphBundles(graph),
+  };
+}
 
 export function checkArtifactLimits(body: PutLoopyBody, workspaceId: string): void {
   if (body.source.workspace !== workspaceId) {
@@ -18,6 +38,8 @@ export function checkArtifactLimits(body: PutLoopyBody, workspaceId: string): vo
       "Cloud phase 1 supports sandbox mode without declared secrets. Set mode to sandbox and remove secrets before saving.",
     );
   }
+
+  checkDefinitionRows(body);
 
   const sizes = body.bundles.map(
     (bundle) =>

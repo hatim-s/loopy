@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { z } from "zod";
-import { atomic, root, state } from "./config.js";
+import { atomic, evidenceDirectory, state } from "./config.js";
 import { admissionSchema } from "./journal.js";
 import { distribution } from "./metrics-statistics.js";
 
@@ -126,10 +126,7 @@ export async function journalMetrics(phase: string) {
     ],
   };
 
-  await atomic(
-    resolve(root, ".notes/cloud/evidence", `playground-performance-${phase}-lifecycle.json`),
-    value,
-  );
+  await atomic(resolve(evidenceDirectory, `playground-performance-${phase}-lifecycle.json`), value);
 
   return { primary: value.primary, preflight: value.preflight, invalidFiles, invalidEvents };
 }

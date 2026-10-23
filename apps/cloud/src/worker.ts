@@ -2,6 +2,9 @@ import { errorResponse, json } from "../../../packages/loopy/src/service/index.j
 import type { Environment } from "./environment.js";
 import { principals } from "./environment.js";
 import { acceptsOrigin, boundedRequest } from "./http.js";
+import { RECEIPTS_PATH, routeReceipts } from "./receipts-route.js";
+
+export { SandboxReceipts } from "./receipts.js";
 
 export { Workspace } from "./workspace.js";
 
@@ -23,6 +26,10 @@ async function handle(request: Request, env: Environment) {
 
   if (url.pathname === "/health") {
     return json({ service: "loopy-cloud", stage: "local" });
+  }
+
+  if (url.pathname === RECEIPTS_PATH) {
+    return routeReceipts(request, env);
   }
 
   const principal = principals(env).find(

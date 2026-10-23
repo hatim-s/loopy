@@ -1,5 +1,10 @@
 import type { HookRecord, LogRecord, RunSnapshot } from "../core/index.js";
-import { executionKeyString, type NodeRun, type StoreEffect } from "../core/index.js";
+import {
+  type ExecutionKey,
+  executionKeyString,
+  type NodeRun,
+  type StoreEffect,
+} from "../core/index.js";
 import { type EventTransaction } from "./event-outbox.js";
 import { MemoryRuns } from "./memory-runs.js";
 import { checkLogBytes, checkNodeWrite, logRecord } from "./node-write.js";
@@ -7,6 +12,10 @@ import { earliestWakeAt, normalizeNode, utc } from "./timestamps.js";
 import { publicHook } from "./wait.js";
 
 export class MemoryNodes extends MemoryRuns {
+  async getNodeRun(key: ExecutionKey): Promise<NodeRun | undefined> {
+    return structuredClone(this.nodes.get(key.runId)?.get(executionKeyString(key)));
+  }
+
   async getNodeRuns(runId: string): Promise<NodeRun[]> {
     return structuredClone([...(this.nodes.get(runId)?.values() ?? [])]);
   }

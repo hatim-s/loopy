@@ -32,6 +32,12 @@ export { validateCompiled } from "./compiled-validation.js";
 
 export * from "./dashboard.js";
 
+export {
+  type DefinitionSummary,
+  definitionSummary,
+  definitionSummarySchema,
+} from "./definition-summary.js";
+
 export { graphView, loopyView, runView, serverEvent } from "./derive.js";
 
 export * from "./graph.js";
@@ -56,6 +62,10 @@ export {
 } from "./records.js";
 
 export * from "./sandbox.js";
+
+export * from "./sandbox-journal.js";
+
+export * from "./sandbox-journal-rpc.js";
 
 export {
   MAX_SOURCE_BYTES,

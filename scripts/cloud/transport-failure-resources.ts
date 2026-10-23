@@ -4,7 +4,8 @@ import { resolve } from "node:path";
 import { z } from "zod";
 import { sandboxConfigSchema } from "../../apps/sandbox/src/config.js";
 import { runCommand } from "../../apps/sandbox/src/process.js";
-import { type StoredReceipt, storedReceiptSchema } from "../../apps/sandbox/src/receipts.js";
+import type { StoredReceipt } from "../../apps/sandbox/src/receipts.js";
+import { filesystemReceipt } from "./filesystem-receipt.js";
 import { assert, equal } from "./journey-client.js";
 
 export const root = resolve(import.meta.dir, "../..");
@@ -57,11 +58,7 @@ export async function receipts(config: Config) {
   const directory = resolve(config.stateRoot, "receipts");
   const files = (await readdir(directory)).filter((name) => /^[a-f0-9]{64}\.json$/.test(name));
 
-  return Promise.all(
-    files.map(async (name) =>
-      storedReceiptSchema.parse(await Bun.file(resolve(directory, name)).json()),
-    ),
-  );
+  return Promise.all(files.map((name) => filesystemReceipt(config.stateRoot, name.slice(0, -5))));
 }
 
 export async function oneReceipt(config: Config) {

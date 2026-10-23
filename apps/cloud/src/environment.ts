@@ -9,6 +9,11 @@ export interface Environment {
   SANDBOX_URL: string;
   SANDBOX_TOKEN: string;
   CONCURRENCY: string;
+  SANDBOX_RECEIPTS: DurableObjectNamespace;
+  RECEIPT_RESULTS: R2Bucket;
+  RECEIPTS_TOKEN: string;
+  RECEIPTS_NAMESPACE: string;
+  RECEIPTS_ROOT: string;
 }
 
 const principalsSchema = z

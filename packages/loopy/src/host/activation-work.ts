@@ -1,25 +1,10 @@
 import { type ExecutionResult, errorMessage, executionKeyString } from "../core/index.js";
 import type { Effect, EngineEvent } from "../engine/index.js";
 import type { ActivationOptions } from "./activate.js";
+import type { ActivationWorkEffect } from "./activation-plan.js";
 import type { Clock } from "./clock.js";
-
-function completionEvent(
-  dispatch: Extract<Effect, { kind: "dispatch" }>,
-  result: ExecutionResult,
-  at: string,
-): EngineEvent {
-  const base = { executionKey: dispatch.executionKey, attempt: dispatch.attempt, at };
-
-  return result.kind === "failed"
-    ? {
-        ...base,
-        kind: "execution_failed",
-        error: result.error,
-        exitCode: result.exitCode,
-        logs: result.logs,
-      }
-    : { ...base, kind: "execution_completed", result };
-}
+import { completionEvent } from "./completion-event.js";
+import { acquireDispatch } from "./rate-limit.js";
 
 async function execute(
   options: ActivationOptions,
@@ -111,10 +96,6 @@ export class ActivationWork {
     });
   }
 
-  get inFlight(): ReadonlySet<string> {
-    return new Set(this.pending.keys());
-  }
-
   private timestamp() {
     return new Date(this.clock.now()).toISOString();
   }
@@ -137,16 +118,27 @@ export class ActivationWork {
     );
   }
 
-  dispatch(effects: Effect[]) {
+  dispatch(effects: ActivationWorkEffect[]) {
     for (const effect of effects) {
       if (effect.kind === "dispatch") {
-        this.start(`${executionKeyString(effect.executionKey)}/${effect.attempt}`, async () =>
-          completionEvent(
-            effect,
-            await execute(this.options, effect, this.signal),
-            this.timestamp(),
-          ),
-        );
+        this.start(`${executionKeyString(effect.executionKey)}/${effect.attempt}`, async () => {
+          const denial = await acquireDispatch({
+            graph: this.options.graph,
+            store: this.options.store,
+            lookup: this.options.executor.lookup.bind(this.options.executor),
+            dispatch: effect,
+            at: this.timestamp(),
+          });
+
+          return (
+            denial ??
+            completionEvent(
+              effect,
+              await execute(this.options, effect, this.signal),
+              this.timestamp(),
+            )
+          );
+        });
       }
 
       if (effect.kind === "sample") {

@@ -119,9 +119,14 @@ export class SqliteQueryNodes extends SqliteQueryRuns {
 
     const rows = this.db
       .query<{ item_index: number; status: NodeRunStatus; count: number }, SqlValue[]>(
-        `SELECT item_index,status,count(*) AS count FROM node_scopes WHERE run_id=? AND map_node=? AND parent_scope=? AND item_index IN (${selected.map(() => "?").join(",")}) GROUP BY item_index,status ORDER BY item_index`,
+        `SELECT item_index,status,count(*) AS count FROM node_scopes WHERE run_id=? AND map_node=? AND parent_scope=? AND item_index IN (SELECT value FROM json_each(?)) GROUP BY item_index,status ORDER BY item_index`,
       )
-      .all(runId, query.nodeId, query.parentScope, ...selected.map((row) => row.item_index));
+      .all(
+        runId,
+        query.nodeId,
+        query.parentScope,
+        JSON.stringify(selected.map((row) => row.item_index)),
+      );
 
     const items = new Map<number, ScopeItem>();
 

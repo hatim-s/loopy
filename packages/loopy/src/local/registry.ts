@@ -32,6 +32,13 @@ function sameSave(previous: SavedLoopy, body: PutLoopyBody) {
   );
 }
 
+export class RegistryMissingError extends Error {
+  constructor(slug: string) {
+    super(`No saved loopy '${slug}'. Use loopy save <file.ts> first.`);
+    this.name = "RegistryMissingError";
+  }
+}
+
 export class Registry {
   readonly project: string;
   readonly projectDirectory: string;
@@ -67,7 +74,7 @@ export class Registry {
       }
     }
 
-    throw new Error(`No saved loopy '${slug}'. Use loopy save <file.ts> first.`);
+    throw new RegistryMissingError(slug);
   }
 
   list(): SavedLoopy[] {

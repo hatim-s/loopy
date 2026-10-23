@@ -21,6 +21,7 @@ afterEach(() => {
 
 async function fixture(definition = "") {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "loopy-service-")));
+  mkdirSync(join(root, ".loopy", "loopies"), { recursive: true });
   const home = join(root, "home");
   const source = join(root, "service.ts");
   await Bun.write(
@@ -492,6 +493,7 @@ test("listLoopies reads each workspace registry once per call", async () => {
 
 test("loopy views name their workspace so graph and start reach that project's save", async () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "loopy-workspaces-")));
+  mkdirSync(join(root, ".loopy", "loopies"), { recursive: true });
   const home = join(root, "home");
   const store = openRunStore(home);
 
@@ -521,7 +523,7 @@ test("loopy views name their workspace so graph and start reach that project's s
   const a = join(root, "a");
   const b = join(root, "b");
   const elsewhere = join(root, "elsewhere");
-  mkdirSync(elsewhere);
+  mkdirSync(join(elsewhere, ".loopy", "loopies"), { recursive: true });
   const revisionA = await save(a, "alpha");
   const revisionB = await save(b, "beta");
 

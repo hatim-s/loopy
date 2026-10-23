@@ -1,11 +1,19 @@
 import type { z } from "zod";
-import type { Graph, PutLoopyBody, routes, SavedLoopy, SourceArtifact } from "../contract/index.js";
+import type {
+  DefinitionSummary,
+  Graph,
+  PutLoopyBody,
+  routes,
+  SavedLoopy,
+  SourceArtifact,
+} from "../contract/index.js";
 import type { Store } from "../core/index.js";
 
 /** Artifact writes finish before a definition becomes visible to new runs. */
 export interface ArtifactRegistry {
   workspace(): Promise<string>;
-  list(): Promise<SavedLoopy[]>;
+  listSummaries(): Promise<DefinitionSummary[]>;
+  summary(slug: string): Promise<DefinitionSummary | null>;
   get(slug: string): Promise<SavedLoopy>;
   revisionGraph(revision: string): Promise<Graph>;
   revisionSource(slug: string, revision: string): Promise<SourceArtifact>;

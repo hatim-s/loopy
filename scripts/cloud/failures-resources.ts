@@ -1,8 +1,8 @@
 import { readdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { z } from "zod";
-import { storedReceiptSchema } from "../../apps/sandbox/src/receipts.js";
 import { environment, owner, root, sandboxState } from "./failures-config.js";
+import { filesystemReceipt } from "./filesystem-receipt.js";
 import { assert } from "./journey-client.js";
 
 export async function command(argv: string[]) {
@@ -45,9 +45,7 @@ export async function receipts() {
   return Promise.all(
     files
       .filter((file) => /^[a-f0-9]{64}\.json$/.test(file))
-      .map(async (file) =>
-        storedReceiptSchema.parse(await Bun.file(resolve(directory, file)).json()),
-      ),
+      .map((file) => filesystemReceipt(sandboxState, file.slice(0, -5))),
   );
 }
 

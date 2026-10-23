@@ -7,10 +7,19 @@
   "preview_urls": false,
   "send_metrics": false,
   "durable_objects": {
-    "bindings": [{ "name": "WORKSPACES", "class_name": "Workspace" }]
+    "bindings": [
+      { "name": "WORKSPACES", "class_name": "Workspace" },
+      { "name": "SANDBOX_RECEIPTS", "class_name": "SandboxReceipts" }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Workspace"] }],
-  "r2_buckets": [{ "binding": "ARTIFACTS", "bucket_name": "loopy-phase1-artifacts-local" }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["Workspace"] },
+    { "tag": "v2-receipts", "new_sqlite_classes": ["SandboxReceipts"] }
+  ],
+  "r2_buckets": [
+    { "binding": "ARTIFACTS", "bucket_name": "loopy-phase1-artifacts-local" },
+    { "binding": "RECEIPT_RESULTS", "bucket_name": "loopy-phase1-receipt-results-local" }
+  ],
   "vars": {
     "LOOPY_STAGE": "local",
     "SANDBOX_URL": "http://127.0.0.1:14871",

@@ -1,5 +1,5 @@
 import { afterEach } from "bun:test";
-import { mkdtemp, realpath, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { nodeIdSchema } from "../../src/contract/index.js";
@@ -18,6 +18,7 @@ export async function fixture() {
   const root = await realpath(await mkdtemp(join(tmpdir(), "loopy-executor-")));
   roots.push(root);
   const workspace = join(root, "workspace");
+  await mkdir(join(workspace, ".loopy", "loopies"), { recursive: true });
   await Bun.write(join(workspace, "seed"), "workspace");
   const home = join(root, "home");
   await Bun.write(join(home, "bundles", "seed"), "bundle");

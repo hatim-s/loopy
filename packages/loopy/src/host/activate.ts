@@ -4,13 +4,12 @@ import {
   type Graph,
   type RunOutcome,
   type Store,
-  type StoreEffect,
 } from "../core/index.js";
 import { type EngineEvent, initialState, step } from "../engine/index.js";
+import { planActivation } from "./activation-plan.js";
 import { ActivationWork } from "./activation-work.js";
 import { type Clock, SYSTEM_CLOCK } from "./clock.js";
 import { withHeartbeat } from "./heartbeat.js";
-import { acquireDispatch } from "./rate-limit.js";
 
 export type ActivationOptions = {
   store: Store;
@@ -32,7 +31,7 @@ async function drive(options: ActivationOptions, token: string): Promise<Activat
     throw new Error("Run disappeared before execution.");
   }
 
-  let state = initialState(runId, run.input, await store.getNodeRuns(runId));
+  let state = initialState(runId, run.input);
   let event: EngineEvent = { kind: "run_started", at: new Date(clock.now()).toISOString() };
   const work = new ActivationWork(options, clock);
 
@@ -41,29 +40,22 @@ async function drive(options: ActivationOptions, token: string): Promise<Activat
       work.signal.throwIfAborted();
       state = { ...state, nodeRuns: await store.getNodeRuns(runId) };
 
-      const transition = await acquireDispatch({
-        ...options,
-        transition: step(graph, state, event),
-        at: event.at,
-        inFlight: work.inFlight,
-      });
+      const transition = step(graph, state, event);
 
-      const durable = transition.effects.filter(
-        (effect): effect is StoreEffect => effect.kind !== "dispatch" && effect.kind !== "sample",
-      );
+      const plan = planActivation(transition);
 
-      await store.apply({ runId, token, effects: durable });
+      await store.apply({ runId, token, effects: plan.storeEffects });
       state = transition.state;
 
-      if (state.phase.kind === "finished") {
-        return state.phase.outcome;
+      if (plan.disposition.kind === "finished") {
+        return plan.disposition.outcome;
       }
 
-      if (durable.some((effect) => effect.kind === "suspend_run")) {
+      if (plan.disposition.kind === "suspended") {
         return { status: "suspended" };
       }
 
-      work.dispatch(transition.effects);
+      work.dispatch(plan.work);
       event = await work.next();
     }
   } finally {

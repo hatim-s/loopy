@@ -8,9 +8,10 @@ import {
 } from "../../../packages/loopy/src/contract/index.js";
 import { InvalidAttempt } from "./admission.js";
 import { ArtifactError } from "./artifact-error.js";
+import type { AttemptDependenciesFactory } from "./attempt-dependencies.js";
 import { AttemptConflict, Attempts } from "./attempts.js";
 import { type SandboxConfig, sandboxConfigSchema } from "./config.js";
-import type { AttemptBackend } from "./docker.js";
+import { filesystemDependencies } from "./filesystem.js";
 
 class RequestTooLarge extends Error {}
 
@@ -164,9 +165,16 @@ export function attemptHandler(attempts: Attempts, token: string) {
   };
 }
 
-export async function startSandbox(input: SandboxConfig, backend?: AttemptBackend) {
+export async function startSandbox(
+  input: SandboxConfig,
+  createDependencies?: AttemptDependenciesFactory,
+) {
   const config = sandboxConfigSchema.parse(input);
-  const attempts = await Attempts.open(config, backend);
+
+  const attempts = await Attempts.open(
+    config,
+    createDependencies ?? filesystemDependencies(config),
+  );
 
   try {
     const server = Bun.serve({
@@ -180,8 +188,9 @@ export async function startSandbox(input: SandboxConfig, backend?: AttemptBacken
       server,
       attempts,
       close: async () => {
-        await server.stop(true);
+        const stopped = server.stop(true);
         await attempts.close();
+        await stopped;
       },
     };
   } catch (cause) {

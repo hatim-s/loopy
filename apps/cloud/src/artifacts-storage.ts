@@ -8,13 +8,15 @@ export const ARTIFACT_LIMITS = {
   totalBundleBytes: 16 * 1024 * 1024,
   sourceBytes: 512 * 1024,
   listBytes: 32 * 1024 * 1024,
+  // Reserve space for SQLite record headers below workerd's 2 MiB row limit.
+  metadataRowBytes: 2 * 1024 * 1024 - 1024,
 } as const;
 
 export class ArtifactStorage {
   private readonly prefix: string;
 
   constructor(
-    private readonly bucket: R2Bucket,
+    private readonly bucket: Pick<R2Bucket, "get" | "put">,
     workspace: string,
   ) {
     if (workspace.length === 0 || workspace.length > 512) {

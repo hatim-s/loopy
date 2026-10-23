@@ -1,0 +1,5 @@
+{
+  "extends": "../../tsconfig.json",
+  "include": ["./**/*.ts", "../daemon-playground/**/*.ts"],
+  "exclude": ["../../node_modules", "../../**/dist"]
+}

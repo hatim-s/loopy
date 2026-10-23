@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { nodeIdSchema, routes } from "../src/contract/index.js";
@@ -21,6 +21,7 @@ afterEach(() => {
 
 function fixture(memory = false) {
   const root = mkdtempSync(join(tmpdir(), "loopy-query-"));
+  mkdirSync(join(root, ".loopy", "loopies"), { recursive: true });
   const sqlite = memory ? null : new SqliteRunStore(join(root, "runs.sqlite"));
   const store: Store = sqlite ?? new MemoryStore();
   cleanups.push(() => {

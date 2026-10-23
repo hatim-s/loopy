@@ -14,6 +14,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { z } from "zod";
+import { profile } from "./config.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -21,7 +22,7 @@ const workspace = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 const sourceRoot = join(workspace, "packages/loopy/_tests_/fixtures/playground");
 
-export const repository = join(workspace, ".loopy/playground/loopies-playground");
+export const repository = profile.repository;
 
 const catalogEntrySchema = z
   .strictObject({

@@ -1,18 +1,19 @@
 import { resolve } from "node:path";
+import { profile } from "../playground/config.js";
 
 export const root = resolve(import.meta.dir, "../..");
 
-export const state = resolve(root, ".loopy/playground-daemon");
+export const state = profile.daemonState;
 
 export const home = resolve(state, "home");
 
 export const source = resolve(state, "loopies-playground");
 
-export const upstream = resolve(root, ".loopy/playground/loopies-playground");
+export const upstream = profile.repository;
 
-export const evidence = resolve(root, ".notes/cloud/evidence");
+export const evidence = profile.evidence;
 
-export const port = 15170;
+export const port = profile.daemonPort;
 
 export const cli = resolve(root, "packages/loopy/src/cli/index.ts");
 
@@ -26,6 +27,7 @@ export const selected = [
 
 export function environment() {
   return {
+    ...profile.environment,
     PATH: process.env.PATH,
     LANG: "C.UTF-8",
     HOME: resolve(state, "process-home"),

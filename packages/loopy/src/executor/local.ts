@@ -7,10 +7,9 @@ import {
   type ExecutionResult,
   type ExecutionSpec,
   type Executor,
-  executionKeyString,
 } from "../core/index.js";
 import { spawnCaptured } from "../local/execution-host.js";
-import { finishReceipt, lookupFile, receiptPath } from "./receipts.js";
+import { FilesystemReceipts } from "./receipts.js";
 
 type Options = {
   home: string;
@@ -18,20 +17,25 @@ type Options = {
   mode: ExecutionMode;
   secrets: readonly string[];
   bundlePath: (hash: string) => string;
+  receipts?: FilesystemReceipts;
 };
 
 export class LocalExecutor implements Executor {
-  constructor(private readonly options: Options) {}
-  async lookup(key: ExecutionKey, attempt: number) {
-    const path = await receiptPath(this.options.home, key, attempt);
-    const receipt = await lookupFile(path);
+  private readonly receipts: FilesystemReceipts;
 
-    if (
-      receipt.kind !== "none" &&
-      (executionKeyString(receipt.executionKey) !== executionKeyString(key) ||
-        receipt.attempt !== attempt)
-    ) {
-      throw new Error("Receipt identity does not match this execution attempt.");
+  constructor(private readonly options: Options) {
+    this.receipts = options.receipts ?? new FilesystemReceipts(options.home);
+
+    if (this.receipts.descriptor.home !== options.home) {
+      throw new Error("Execution receipts must use the protected daemon home.");
+    }
+  }
+  async lookup(key: ExecutionKey, attempt: number) {
+    const identity = { executionKey: key, attempt };
+    const receipt = await this.receipts.read(identity);
+
+    if (!receipt) {
+      return { kind: "none" as const };
     }
 
     if (receipt.kind !== "started") {
@@ -47,9 +51,9 @@ export class LocalExecutor implements Executor {
         throw cause;
       }
 
-      const latest = await lookupFile(path);
+      const latest = await this.receipts.read(identity);
 
-      if (latest.kind === "finished") {
+      if (latest?.kind === "finished") {
         return latest;
       }
 
@@ -64,9 +68,7 @@ export class LocalExecutor implements Executor {
         logs: [],
       };
 
-      await finishReceipt(path, { kind: "finished", executionKey: key, attempt, result });
-
-      return { kind: "finished" as const, result };
+      return this.receipts.finish({ kind: "finished", ...identity, result });
     }
   }
   async execute(
@@ -100,7 +102,19 @@ export class LocalExecutor implements Executor {
         args: ["--no-env-file", worker],
         cwd: dirname(worker),
         env: this.options.mode === "full" ? process.env : { PATH: process.env.PATH },
-        stdin: JSON.stringify({ options: { ...this.options, bundles }, key, attempt, spec }),
+        stdin: JSON.stringify({
+          options: {
+            home: this.options.home,
+            workspace: this.options.workspace,
+            mode: this.options.mode,
+            secrets: this.options.secrets,
+            receipts: this.receipts.descriptor,
+            bundles,
+          },
+          key,
+          attempt,
+          spec,
+        }),
       },
       {
         timeoutMs:

@@ -12,7 +12,8 @@ function fixture() {
   roots.push(root);
   const home = join(root, "home");
   const project = join(root, "project");
-  mkdirSync(project);
+  mkdirSync(join(root, ".loopy", "loopies"), { recursive: true });
+  mkdirSync(join(project, ".loopy", "loopies"), { recursive: true });
   const source = join(project, "saved.loopy.ts");
   writeFileSync(source, "");
 

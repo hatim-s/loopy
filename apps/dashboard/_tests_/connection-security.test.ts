@@ -1,5 +1,5 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SYSTEM_CLOCK } from "../../../packages/loopy/src/host/index.ts";
@@ -22,6 +22,7 @@ afterEach(async () => {
 
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), "loopy-connection-"));
+  mkdirSync(join(root, ".loopy", "loopies"), { recursive: true });
   const home = join(root, "home");
   const store = openRunStore(home);
 

@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 export function distribution(values: number[]) {
   const sorted = [...values].sort((left, right) => left - right);
 
@@ -15,17 +17,19 @@ export function distribution(values: number[]) {
   };
 }
 
-export type Sample = {
-  endpoint: string;
-  at: string;
-  status: number | null;
-  bytes: number;
-  headersMs: number | null;
-  totalMs: number;
-  parseMs: number | null;
-  failure: "transport" | "schema" | "http" | "body_limit" | null;
-  observation: Record<string, string | number | boolean | null>;
-};
+export const sampleSchema = z.object({
+  endpoint: z.string(),
+  at: z.string(),
+  status: z.number().nullable(),
+  bytes: z.number(),
+  headersMs: z.number().nullable(),
+  totalMs: z.number(),
+  parseMs: z.number().nullable(),
+  failure: z.enum(["transport", "schema", "http", "body_limit"]).nullable(),
+  observation: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
+});
+
+export type Sample = z.infer<typeof sampleSchema>;
 
 export function summarize(samples: Sample[]) {
   return [...new Set(samples.map((sample) => sample.endpoint))].map((endpoint) => {

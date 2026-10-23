@@ -1,26 +1,14 @@
 import { resolve } from "node:path";
 import { z } from "zod";
-import { atomic, root, state } from "./config.js";
+import { atomic, evidenceDirectory, state } from "./config.js";
 import { admissionSchema } from "./journal.js";
-import { distribution, type Sample, summarize } from "./metrics-statistics.js";
+import { distribution, sampleSchema, summarize } from "./metrics-statistics.js";
 
 const terminalSchema = z.object({
   kind: z.string(),
   phase: z.string().optional(),
   runId: z.string().optional(),
   terminalAt: z.string().optional(),
-});
-
-const sampleSchema: z.ZodType<Sample> = z.object({
-  endpoint: z.string(),
-  at: z.string(),
-  status: z.number().nullable(),
-  bytes: z.number(),
-  headersMs: z.number().nullable(),
-  totalMs: z.number(),
-  parseMs: z.number().nullable(),
-  failure: z.enum(["transport", "schema", "http", "body_limit"]).nullable(),
-  observation: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
 });
 
 const continuousSchema = z.object({
@@ -30,9 +18,7 @@ const continuousSchema = z.object({
 });
 
 const continuous = continuousSchema.parse(
-  await Bun.file(
-    resolve(root, ".notes/cloud/evidence/playground-performance-during-load.json"),
-  ).json(),
+  await Bun.file(resolve(evidenceDirectory, "playground-performance-during-load.json")).json(),
 );
 
 const admissions = [];
@@ -142,7 +128,7 @@ const segments = windows.map((window) => {
   };
 });
 
-await atomic(resolve(root, ".notes/cloud/evidence/playground-performance-segments.json"), {
+await atomic(resolve(evidenceDirectory, "playground-performance-segments.json"), {
   scope: "timestamp-derived-segments-of-preserved-continuous-capture",
   at: new Date().toISOString(),
   firstIntent,

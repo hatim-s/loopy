@@ -27,6 +27,13 @@ export type RunPageQuery = RunFilter & {
 
 export type StatusCounts = Record<RunStatus, number>;
 
+export type RunDefinitionCount = {
+  workspace: string;
+  slug: string;
+  status: RunStatus;
+  count: number;
+};
+
 export type ScopeCounts = {
   nodeId: string;
   parentScope: ExecutionKey["scope"];
@@ -144,6 +151,7 @@ export interface DashboardReader {
   runningCount(): Promise<number>;
   queryRuns(query: RunPageQuery): Promise<RunRecord[]>;
   runCounts(filter?: RunFilter): Promise<StatusCounts>;
+  runCountsByDefinition(): Promise<RunDefinitionCount[]>;
   runWorkspaces(): Promise<string[]>;
   pendingHooks(
     ids: string[],

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { Attempts } from "../../apps/sandbox/src/attempts.js";
 import { DockerBackend } from "../../apps/sandbox/src/docker.js";
+import { filesystemDependencies } from "../../apps/sandbox/src/filesystem.js";
 import { sandboxAttemptRequestSchema } from "../../packages/loopy/src/contract/index.js";
 import { assert, equal, JourneyFailure } from "./journey-client.js";
 import { type FaultMode, TransportFaults } from "./transport-failure-faults.js";
@@ -46,7 +47,12 @@ export async function scenario(config: Config, mode: FaultMode) {
   const faults = new TransportFaults(config, mode);
   const backend = () => new DockerBackend(config, faults.runner);
   const input = request(mode);
-  let service: Attempts | null = await Attempts.open(config, backend());
+
+  let service: Attempts | null = await Attempts.open(
+    config,
+    filesystemDependencies(config, { backend: backend() }),
+  );
+
   const initialService = service;
   let cleanupEvidence: Awaited<ReturnType<typeof cleanup>> | undefined;
   let result: Awaited<ReturnType<typeof prove>> | undefined;
@@ -96,7 +102,7 @@ export async function scenario(config: Config, mode: FaultMode) {
       faults.restore();
       reopenedAt = Date.now();
       assert(reopenedAt < original.deadline, "reopened_after_deadline");
-      service = await Attempts.open(config, backend());
+      service = await Attempts.open(config, filesystemDependencies(config, { backend: backend() }));
       assert(service !== initialService, "service_was_not_reconstructed");
     } else {
       faults.restore();

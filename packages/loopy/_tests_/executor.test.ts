@@ -179,7 +179,7 @@ test("a worker finishes its receipt after the caller process is killed", async (
   const caller = join(f.root, "caller.ts");
   await writeFile(
     caller,
-    `import {LocalExecutor} from ${JSON.stringify(resolve(import.meta.dir, "../src/executor/index.ts"))}; const executor = new LocalExecutor({home: ${JSON.stringify(join(f.root, "home"))}, workspace: ${JSON.stringify(f.workspace)}, mode: "sandbox", secrets: [], bundlePath: () => ${JSON.stringify(f.bundle)}}); await executor.execute(${JSON.stringify(f.key)}, 1, ${JSON.stringify(f.spec)}, new AbortController().signal);`,
+    `import {LocalExecutor} from ${JSON.stringify(resolve(import.meta.dir, "../src/executor/index.ts"))}; import {FilesystemReceipts} from ${JSON.stringify(resolve(import.meta.dir, "../src/executor/receipts.ts"))}; const executor = new LocalExecutor({receipts: new FilesystemReceipts(${JSON.stringify(f.home)}), home: ${JSON.stringify(join(f.root, "home"))}, workspace: ${JSON.stringify(f.workspace)}, mode: "sandbox", secrets: [], bundlePath: () => ${JSON.stringify(f.bundle)}}); await executor.execute(${JSON.stringify(f.key)}, 1, ${JSON.stringify(f.spec)}, new AbortController().signal);`,
   );
 
   const process = Bun.spawn([Bun.which("bun") ?? "bun", "--no-env-file", caller], {

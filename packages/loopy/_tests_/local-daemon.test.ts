@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { daemonUrl, localDaemon, openRunStore, readDaemonFile } from "../src/local/index.js";
@@ -9,6 +9,7 @@ const roots: string[] = [];
 function directory() {
   const root = mkdtempSync(join(tmpdir(), "loopy-local-daemon-"));
   roots.push(root);
+  mkdirSync(join(root, ".loopy", "loopies"), { recursive: true });
 
   return root;
 }

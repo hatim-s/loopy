@@ -20,7 +20,7 @@ import {
   withBundleSandbox,
 } from "../local/execution-host.js";
 import { bundleResult } from "./protocol.js";
-import { finishReceipt, lookupFile, receiptPath, startReceipt } from "./receipts.js";
+import type { FilesystemReceipts } from "./receipts.js";
 
 type Options = {
   home: string;
@@ -28,6 +28,7 @@ type Options = {
   mode: ExecutionMode;
   secrets: readonly string[];
   bundlePath: (hash: string) => string;
+  receipts: FilesystemReceipts;
 };
 
 export class ExecutionWorker implements Executor {
@@ -39,7 +40,11 @@ export class ExecutionWorker implements Executor {
     this.redact = secretRedactor(Object.values(this.env));
   }
   async lookup(key: ExecutionKey, attempt: number) {
-    return lookupFile(await receiptPath(this.options.home, key, attempt));
+    return (
+      (await this.options.receipts.read({ executionKey: key, attempt })) ?? {
+        kind: "none" as const,
+      }
+    );
   }
   async execute(
     key: ExecutionKey,
@@ -47,8 +52,16 @@ export class ExecutionWorker implements Executor {
     spec: ExecutionSpec,
     signal: AbortSignal,
   ): Promise<ExecutionResult> {
-    const path = await receiptPath(this.options.home, key, attempt);
-    await startReceipt(path, key, attempt);
+    const claim = await this.options.receipts.claim({ executionKey: key, attempt });
+
+    if (claim.kind === "existing") {
+      if (claim.receipt.kind === "finished") {
+        return claim.receipt.result;
+      }
+
+      throw new Error("Execution already started. Reconcile its receipt.");
+    }
+
     let result: ExecutionResult;
 
     try {
@@ -67,9 +80,15 @@ export class ExecutionWorker implements Executor {
 
     // Every path redacts its own values exactly once, so a secret inside the marker cannot nest.
     result = { ...result, logs: limitLogs(result.logs) };
-    await finishReceipt(path, { kind: "finished", result, executionKey: key, attempt });
 
-    return result;
+    const receipt = await this.options.receipts.finish({
+      kind: "finished",
+      result,
+      executionKey: key,
+      attempt,
+    });
+
+    return receipt.result;
   }
   private async bundle(hash: string, input: Json, timeoutMs: number, signal: AbortSignal) {
     const bundle = await realpath(this.options.bundlePath(hash));

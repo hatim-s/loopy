@@ -1,6 +1,11 @@
 import { nodeRunSchema } from "../../contract/index.js";
 import type { LogRecord, RunSnapshot } from "../../core/index.js";
-import { executionKeyString, type NodeRun, type StoreEffect } from "../../core/index.js";
+import {
+  type ExecutionKey,
+  executionKeyString,
+  type NodeRun,
+  type StoreEffect,
+} from "../../core/index.js";
 import { type EventTransaction } from "../event-outbox.js";
 import { checkLogBytes, checkNodeWrite, logRecord } from "../node-write.js";
 import { earliestWakeAt, normalizeNode, utc } from "../timestamps.js";
@@ -26,6 +31,10 @@ export class SqliteNodes extends SqliteRuns {
       .get(runId, key);
 
     return row ? nodeRunSchema.parse(JSON.parse(row.record)) : undefined;
+  }
+
+  async getNodeRun(key: ExecutionKey): Promise<NodeRun | undefined> {
+    return this.readNode(key.runId, executionKeyString(key));
   }
 
   async getNodeRuns(runId: string): Promise<NodeRun[]> {

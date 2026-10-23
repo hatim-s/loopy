@@ -1,112 +1,15 @@
 import {
   type DashboardSnapshot,
-  emptyRunCounts,
   executionKeyString,
-  type HookRecord,
   type NodePageQuery,
-  type OverviewQuery,
-  type RunFilter,
-  type RunPageQuery,
   type ScopeCounts,
   type ScopeItem,
   type ScopeItemsQuery,
 } from "../core/index.js";
-import { MemorySchedules } from "./memory-schedules.js";
-import { matchesRun, nodePage, overviewBuckets } from "./query-utils.js";
+import { MemoryQueryRuns } from "./memory-query-runs.js";
+import { nodePage } from "./query-utils.js";
 
-export class MemoryQueries extends MemorySchedules {
-  async runReference(id: string) {
-    const run = this.runs.get(id);
-
-    return run
-      ? { id: run.id, slug: run.slug, workspace: run.workspace, revision: run.revision }
-      : undefined;
-  }
-  async runningCount() {
-    return [...this.runs.values()].filter((run) => run.status === "running").length;
-  }
-  async runWorkspaces() {
-    return [...new Set([...this.runs.values()].map((run) => run.workspace))];
-  }
-  async pendingHooks(ids: string[], now: string) {
-    const hooks = new Map<string, HookRecord & { expiresAt: string | null }>();
-
-    for (const wait of this.waits.values()) {
-      if (!ids.includes(wait.runId) || hooks.has(wait.runId) || wait.resolvedAt || wait.expiredAt) {
-        continue;
-      }
-
-      const run = this.runs.get(wait.runId);
-
-      if (run?.status !== "running" && run?.status !== "suspended") {
-        continue;
-      }
-
-      const node = this.nodes.get(wait.runId)?.get(executionKeyString(wait.executionKey));
-
-      if (node?.status !== "waiting" || (node.wakeAt !== null && node.wakeAt <= now)) {
-        continue;
-      }
-
-      hooks.set(wait.runId, { ...structuredClone(wait), expiresAt: node.wakeAt });
-    }
-
-    return hooks;
-  }
-  async queryRuns(query: RunPageQuery) {
-    const hooks =
-      query.waiting === undefined
-        ? undefined
-        : await this.pendingHooks([...this.runs.keys()], query.now);
-
-    return structuredClone(
-      [...this.runs.values()]
-        .filter(
-          (run) =>
-            matchesRun(run, query) &&
-            (query.waiting === undefined || hooks?.has(run.id) === query.waiting) &&
-            (query.before === undefined || `${run.createdAt}|${run.id}` < query.before),
-        )
-        .sort((a, b) =>
-          a.createdAt === b.createdAt ? (a.id < b.id ? 1 : -1) : a.createdAt < b.createdAt ? 1 : -1,
-        )
-        .slice(0, Math.min(query.limit, 200)),
-    );
-  }
-  async runCounts(filter: RunFilter = {}) {
-    const counts = emptyRunCounts();
-
-    for (const run of this.runs.values()) {
-      if (matchesRun(run, filter)) {
-        counts[run.status]++;
-      }
-    }
-
-    return counts;
-  }
-  async overview(query: OverviewQuery) {
-    const result = overviewBuckets(query);
-
-    for (const run of this.runs.values()) {
-      if (!matchesRun(run, query)) {
-        continue;
-      }
-
-      const bucket =
-        result.buckets[
-          Math.floor(
-            (Date.parse(run.createdAt) - Date.parse(query.from)) / (query.bucketSeconds * 1000),
-          )
-        ];
-
-      if (bucket) {
-        bucket.counts[run.status]++;
-        result.counts[run.status]++;
-      }
-    }
-
-    return result;
-  }
+export class MemoryQueries extends MemoryQueryRuns {
   async nodePage(runId: string, query: NodePageQuery) {
     const nodes = [...(this.nodes.get(runId)?.values() ?? [])]
       .filter(

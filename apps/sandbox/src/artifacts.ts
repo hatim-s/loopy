@@ -4,6 +4,7 @@ import {
   type SandboxArtifact,
   sandboxArtifactReadSchema,
 } from "../../../packages/loopy/src/contract/index.js";
+import type { DockerAttemptPlan } from "../../../packages/loopy/src/contract/sandbox-journal.js";
 import { ArtifactError } from "./artifact-error.js";
 import type { SandboxConfig } from "./config.js";
 import { DockerClient } from "./docker-client.js";
@@ -11,6 +12,7 @@ import { type CommandRunner, runCommand } from "./process.js";
 import type { StoredReceipt } from "./receipts.js";
 
 export interface ArtifactReader {
+  cleanup(receipt: DockerAttemptPlan, helper: string): Promise<void>;
   read(
     receipt: Extract<StoredReceipt, { kind: "finished" }>,
     path: string,
@@ -29,11 +31,7 @@ export class DockerArtifacts implements ArtifactReader {
     private readonly runner: CommandRunner = runCommand,
   ) {}
 
-  private async removeHelper(
-    client: DockerClient,
-    receipt: Extract<StoredReceipt, { kind: "finished" }>,
-    container: string,
-  ) {
+  private async removeHelper(client: DockerClient, receipt: DockerAttemptPlan, container: string) {
     const listed = await client.required([
       "container",
       "ls",
@@ -69,6 +67,28 @@ export class DockerArtifacts implements ArtifactReader {
     }
 
     await client.required(["rm", "--force", container]);
+
+    const remaining = await client.required([
+      "container",
+      "ls",
+      "--all",
+      "--filter",
+      `name=^/${container}$`,
+      "--format",
+      "{{.Names}}",
+    ]);
+
+    if (remaining.stdout.trim() !== "") {
+      throw new Error("Artifact helper removal is not yet confirmed.");
+    }
+  }
+
+  async cleanup(receipt: DockerAttemptPlan, helper: string) {
+    if (helper !== `loopy-artifact-${receipt.id}`) {
+      throw new Error("Artifact helper identity does not match its receipt.");
+    }
+
+    await this.removeHelper(new DockerClient(this.config, this.runner), receipt, helper);
   }
 
   async read(receipt: Extract<StoredReceipt, { kind: "finished" }>, path: string) {

@@ -1,15 +1,27 @@
-import { type GraphRevisionView, graphView } from "../contract/index.js";
+import { definitionSummary, type GraphRevisionView, graphView } from "../contract/index.js";
 import type { Store } from "../core/index.js";
 import { errorMessage } from "../core/index.js";
 import type { Clock } from "../host/index.js";
 import { LoopyService as PortableService, ServiceError } from "../service/index.js";
 import { canonicalPath } from "./fs.js";
-import type { Registry } from "./registry.js";
+import { type Registry, RegistryMissingError } from "./registry.js";
 import { saveCompiled } from "./save-compiled.js";
 import { SecretStore } from "./secrets.js";
 import { generateCommand } from "./typegen/generate.js";
 
 export { ServiceError } from "../service/index.js";
+
+function currentDefinition(registry: Registry, slug: string) {
+  try {
+    return registry.get(slug);
+  } catch (error) {
+    if (error instanceof RegistryMissingError) {
+      return null;
+    }
+
+    throw error;
+  }
+}
 
 export class LoopyService {
   private readonly service: PortableService;
@@ -30,8 +42,24 @@ export class LoopyService {
 
         return {
           workspace: async () => registry.project,
-          list: async () => registry.list(),
-          get: async (slug) => registry.get(slug),
+          listSummaries: async () => registry.list().map(definitionSummary),
+          summary: async (slug) => {
+            const saved = currentDefinition(registry, slug);
+
+            return saved ? definitionSummary(saved) : null;
+          },
+          get: async (slug) => {
+            const saved = currentDefinition(registry, slug);
+
+            if (!saved) {
+              throw new ServiceError(
+                "not_found",
+                `No saved loopy '${slug}'. Use loopy save <file.ts> first.`,
+              );
+            }
+
+            return saved;
+          },
           revisionGraph: (revision) => registry.revisionGraph(revision),
           revisionSource: (slug, revision) => registry.revisionSource(slug, revision),
           save: async (body) => {
@@ -54,13 +82,16 @@ export class LoopyService {
   }
 
   graph(slug: string, workspace: string): GraphRevisionView {
-    try {
-      const saved = this.options.registry(workspace).get(slug);
+    const saved = currentDefinition(this.options.registry(workspace), slug);
 
-      return { revision: saved.revision, graph: graphView(saved.graph) };
-    } catch (error) {
-      throw new ServiceError("not_found", errorMessage(error));
+    if (!saved) {
+      throw new ServiceError(
+        "not_found",
+        `No saved loopy '${slug}'. Use loopy save <file.ts> first.`,
+      );
     }
+
+    return { revision: saved.revision, graph: graphView(saved.graph) };
   }
 
   listSecrets() {

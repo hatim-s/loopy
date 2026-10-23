@@ -47,9 +47,11 @@ export async function validateStateRoot(config: Pick<SandboxConfig, "worktree" |
 
   let directory = worktree;
 
-  for (const part of [".loopy", "cloud", "sandbox", "receipts", "staging"]) {
+  for (const part of [".loopy", "cloud", "sandbox", "receipts", "staging", "exports", "results"]) {
     // Each component is checked before descending, including pre-existing directories.
-    directory = part === "staging" ? join(expected, part) : join(directory, part);
+    directory = ["staging", "exports", "results"].includes(part)
+      ? join(expected, part)
+      : join(directory, part);
     await mkdir(directory, { mode: 0o700 }).catch((cause: unknown) => {
       if (!(cause instanceof Error && "code" in cause && cause.code === "EEXIST")) {
         throw cause;

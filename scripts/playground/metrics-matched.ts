@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import { z } from "zod";
 import { routes } from "../../packages/loopy/src/contract/index.js";
 import { PlaygroundClient } from "./client.js";
-import { atomic, root } from "./config.js";
+import { atomic, evidenceDirectory } from "./config.js";
 import { createMeasure } from "./metrics-request.js";
 import { type Sample, summarize } from "./metrics-statistics.js";
 
@@ -11,7 +11,7 @@ const phase = z
   .regex(/^[a-z][a-z0-9-]{0,63}$/)
   .parse(process.argv[2]);
 
-const output = resolve(root, ".notes/cloud/evidence", `playground-performance-${phase}.json`);
+const output = resolve(evidenceDirectory, `playground-performance-${phase}.json`);
 
 if (await Bun.file(output).exists()) {
   throw new Error("Matched evidence exists. Choose a new phase to preserve the earlier segment.");

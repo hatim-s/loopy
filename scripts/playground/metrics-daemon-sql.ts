@@ -3,10 +3,10 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { z } from "zod";
-import { atomic, root } from "./config.js";
+import { atomic, evidenceDirectory, profile } from "./config.js";
 import { sqlCases } from "./metrics-sql-queries.js";
 
-const path = resolve(root, ".loopy/playground-daemon/daemon-readonly.sqlite");
+const path = resolve(profile.daemonState, "daemon-readonly.sqlite");
 
 const sha256 = async () =>
   createHash("sha256")
@@ -21,7 +21,7 @@ const evidence = z
     startedAt: z.string(),
     endedAt: z.string(),
   })
-  .parse(await Bun.file(resolve(root, ".notes/cloud/evidence/playground-daemon.json")).json());
+  .parse(await Bun.file(resolve(evidenceDirectory, "playground-daemon.json")).json());
 
 const db = new Database(path, { readonly: true });
 
@@ -93,7 +93,7 @@ try {
     plans,
     limits: [
       "Only supplied daemon-readonly.sqlite was opened;no live home DB,API requests,restarts,migrations or writes.",
-      "No query timings collected:rootfullcheck runs concurrently and host Bun/SQLite differs cloudDO/Docker.",
+      "No query timings collected. Host Bun/SQLite differs from cloud DO/Docker.",
       "Plans identify mechanisms for this45-run data;they do not establish production scalability or runtime parity.",
       "The cloud-native timing artifact and daemon plans are not a controlled hardware comparison.",
     ],
@@ -108,10 +108,7 @@ if (beforeHash !== afterHash) {
   throw new Error("Readonly daemon backup hash changed.");
 }
 
-const output = resolve(
-  root,
-  ".notes/cloud/evidence/playground-performance-daemon-offline-sql.json",
-);
+const output = resolve(evidenceDirectory, "playground-performance-daemon-offline-sql.json");
 
 await atomic(output, { ...report, afterHash });
 

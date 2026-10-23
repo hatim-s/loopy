@@ -2,6 +2,7 @@ import {
   emptyRunCounts,
   type HookRecord,
   type OverviewQuery,
+  type RunDefinitionCount,
   type RunFilter,
   type RunPageQuery,
   type RunRecord,
@@ -127,6 +128,14 @@ export class SqliteQueryRuns extends SqliteSchedules {
         .query<{ count: number }, []>("SELECT count(*) AS count FROM runs WHERE status='running'")
         .get()?.count ?? 0
     );
+  }
+
+  async runCountsByDefinition(): Promise<RunDefinitionCount[]> {
+    return this.db
+      .query<RunDefinitionCount, []>(
+        "SELECT workspace,slug,status,count(*) AS count FROM runs GROUP BY workspace,slug,status",
+      )
+      .all();
   }
 
   async runWorkspaces(): Promise<string[]> {

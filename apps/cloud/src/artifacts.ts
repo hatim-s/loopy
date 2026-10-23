@@ -1,5 +1,7 @@
 import type { DurableObjectStorage, R2Bucket } from "@cloudflare/workers-types";
 import {
+  type DefinitionSummary,
+  definitionSummary,
   type Graph,
   graphSchema,
   type PutLoopyBody,
@@ -9,124 +11,126 @@ import {
   validateCompiled,
 } from "../../../packages/loopy/src/contract/index.js";
 import { canonicalJson, revision, validateSlug } from "../../../packages/loopy/src/core/index.js";
-import type { ArtifactRegistry } from "../../../packages/loopy/src/service/index.js";
-import { ArtifactCapacity } from "./artifacts-capacity.js";
+import { type ArtifactRegistry, ServiceError } from "../../../packages/loopy/src/service/index.js";
+import { ArtifactDefinitions, type Publication } from "./artifacts-definitions.js";
 import { ARTIFACT_LIMITS, ArtifactStorage, bytesToBase64, hashKey } from "./artifacts-storage.js";
-import { checkArtifactLimits, graphBundles } from "./artifacts-validation.js";
+import { artifactEntry, checkArtifactLimits } from "./artifacts-validation.js";
 
 export { ARTIFACT_LIMITS } from "./artifacts-storage.js";
-
-type Publication = {
-  slug: string;
-  revision: string;
-  source: string;
-  saved_at: string;
-  generation: string;
-};
 
 const decoder = new TextDecoder();
 
 export class R2ArtifactRegistry implements ArtifactRegistry {
   private readonly artifacts: ArtifactStorage;
-  private readonly capacity: ArtifactCapacity;
+  private readonly definitions: ArtifactDefinitions;
 
   constructor(
-    private readonly storage: Pick<DurableObjectStorage, "sql" | "transactionSync">,
-    bucket: R2Bucket,
+    storage: Pick<DurableObjectStorage, "sql" | "transactionSync">,
+    bucket: Pick<R2Bucket, "get" | "put">,
     private readonly workspaceId: string,
   ) {
     this.artifacts = new ArtifactStorage(bucket, workspaceId);
-    storage.sql.exec(`CREATE TABLE IF NOT EXISTS artifact_definitions (
-      workspace TEXT NOT NULL, slug TEXT NOT NULL, revision TEXT NOT NULL,
-      source TEXT NOT NULL, saved_at TEXT NOT NULL, generation TEXT NOT NULL,
-      PRIMARY KEY (workspace, slug)
-    )`);
-    this.capacity = new ArtifactCapacity(storage, this.artifacts, workspaceId);
+    this.definitions = new ArtifactDefinitions(storage, this.artifacts, workspaceId);
   }
 
   async workspace(): Promise<string> {
     return this.workspaceId;
   }
 
-  private pointer(slug: string): Publication | null {
-    validateSlug(slug);
+  async listSummaries(): Promise<DefinitionSummary[]> {
+    const summaries: DefinitionSummary[] = [];
+    const budget = { remaining: ARTIFACT_LIMITS.listBytes };
 
-    return (
-      this.storage.sql
-        .exec<Publication>(
-          "SELECT slug, revision, source, saved_at, generation FROM artifact_definitions WHERE workspace = ? AND slug = ?",
-          this.workspaceId,
-          slug,
-        )
-        .toArray()[0] ?? null
-    );
-  }
+    for (const row of this.definitions.pointers()) {
+      const summary = await this.resolveSummary(row, budget);
 
-  async list(): Promise<SavedLoopy[]> {
-    const rows = this.storage.sql
-      .exec<Publication>(
-        "SELECT slug, revision, source, saved_at, generation FROM artifact_definitions WHERE workspace = ? ORDER BY slug LIMIT ?",
-        this.workspaceId,
-        ARTIFACT_LIMITS.definitions + 1,
-      )
-      .toArray();
-
-    if (rows.length > ARTIFACT_LIMITS.definitions) {
-      throw new Error(
-        "Workspace exceeds the 1000 definition capacity. Remove definitions before listing.",
-      );
-    }
-
-    const entries: SavedLoopy[] = [];
-    let remaining = ARTIFACT_LIMITS.listBytes;
-
-    for (const row of rows) {
-      const bytes = await this.artifacts.read(
-        `graphs/${hashKey(row.revision)}.json`,
-        Math.min(remaining, ARTIFACT_LIMITS.graphBytes),
-      );
-
-      if (!bytes) {
-        throw new Error("Published graph is missing. Save the loopy again.");
+      if (summary === null) {
+        throw new Error("The definition disappeared during listing. Retry the request.");
       }
 
-      remaining -= bytes.byteLength;
-      entries.push(this.entry(row, await this.parseGraph(bytes, row.revision)));
+      summaries.push(summary);
     }
 
-    return entries;
+    return summaries;
+  }
+
+  async summary(slug: string): Promise<DefinitionSummary | null> {
+    return this.resolveSummary(this.definitions.pointer(slug), {
+      remaining: ARTIFACT_LIMITS.listBytes,
+    });
+  }
+
+  private async resolveSummary(
+    row: Publication | null,
+    budget: { remaining: number },
+  ): Promise<DefinitionSummary | null> {
+    let current = row;
+
+    for (let attempt = 0; attempt < 8; attempt++) {
+      if (current === null) {
+        return null;
+      }
+
+      const saved = this.definitions.summary(current);
+
+      if (saved !== null) {
+        return saved;
+      }
+
+      const publication = current;
+
+      try {
+        const bytes = await this.artifacts.read(
+          `graphs/${hashKey(publication.revision)}.json`,
+          Math.min(budget.remaining, ARTIFACT_LIMITS.graphBytes),
+        );
+
+        if (!bytes) {
+          throw new Error("Published graph is missing. Save the loopy again.");
+        }
+
+        budget.remaining -= bytes.byteLength;
+        const graph = await this.parseGraph(bytes, publication.revision);
+        current = this.definitions.repair(
+          publication,
+          definitionSummary(artifactEntry(publication, graph)),
+        );
+      } catch (error) {
+        const latest = this.definitions.pointer(publication.slug);
+
+        if (latest?.generation === publication.generation) {
+          throw error;
+        }
+
+        // A replacement can make the old graph irrelevant while its read is in flight.
+        current = latest;
+      }
+    }
+
+    throw new Error("The definition kept changing during summary backfill. Retry the request.");
   }
 
   async get(slug: string): Promise<SavedLoopy> {
-    const row = this.pointer(slug);
+    const row = this.definitions.pointer(slug);
 
     if (!row) {
-      throw new Error(`No saved loopy '${slug}'. Use loopy save <file.ts> first.`);
+      throw new ServiceError(
+        "not_found",
+        `No saved loopy '${slug}'. Use loopy save <file.ts> first.`,
+      );
     }
 
-    return this.entry(row, await this.revisionGraph(row.revision));
-  }
-
-  private entry(row: Publication, graph: Graph): SavedLoopy {
-    return {
-      version: 2,
-      slug: row.slug,
-      graph,
-      revision: row.revision,
-      source: row.source,
-      savedAt: row.saved_at,
-      scope: graph.meta.scope,
-      description: graph.meta.description,
-      input: graph.input,
-      schedule: graph.meta.schedule,
-      mode: graph.meta.mode,
-      secrets: graph.meta.secrets,
-      bundles: graphBundles(graph),
-    };
+    return artifactEntry(row, await this.revisionGraph(row.revision));
   }
 
   private async parseGraph(bytes: Uint8Array, hash: string): Promise<Graph> {
-    const graph = graphSchema.parse(JSON.parse(decoder.decode(bytes)));
+    let graph: Graph;
+
+    try {
+      graph = graphSchema.parse(JSON.parse(decoder.decode(bytes)));
+    } catch (cause) {
+      throw new Error("Stored graph is invalid. Save the loopy again.", { cause });
+    }
 
     if ((await revision(graph)) !== hash) {
       throw new Error("Stored graph does not match its revision. Save the loopy again.");
@@ -186,14 +190,12 @@ export class R2ArtifactRegistry implements ArtifactRegistry {
 
   async save(body: PutLoopyBody): Promise<void> {
     checkArtifactLimits(body, this.workspaceId);
-    const previous = this.pointer(body.graph.name);
-    this.checkOwner(previous, body);
-    this.checkCapacity(previous);
+    const previous = this.definitions.prepare(body);
 
     const { bundles, sourceArtifact } = await validateCompiled(body);
     const graph = new TextEncoder().encode(canonicalJson(body.graph));
-    await this.capacity.measureCurrent(body.graph.name);
-    this.capacity.check(body.graph.name, graph.byteLength);
+    await this.definitions.capacity.measureCurrent(body.graph.name);
+    this.definitions.capacity.check(body.graph.name, graph.byteLength);
 
     for (const bundle of bundles) {
       await this.artifacts.put(`bundles/${bundle.bundleHash}.js`, bundle.bytes);
@@ -205,62 +207,6 @@ export class R2ArtifactRegistry implements ArtifactRegistry {
     );
     await this.artifacts.put(`graphs/${body.revision}.json`, graph);
 
-    this.storage.transactionSync(() => {
-      const current = this.pointer(body.graph.name);
-      this.checkOwner(current, body);
-
-      if (current?.generation !== previous?.generation) {
-        throw new Error(
-          "The definition changed during save. Retry against its current source owner.",
-        );
-      }
-
-      this.checkCapacity(current);
-      this.capacity.record(body.revision, graph.byteLength);
-      this.capacity.check(body.graph.name, graph.byteLength);
-
-      if (current?.revision === body.revision && current.source === body.source.path) {
-        return;
-      }
-
-      this.storage.sql.exec(
-        `INSERT INTO artifact_definitions (workspace, slug, revision, source, saved_at, generation)
-         VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (workspace, slug) DO UPDATE SET
-         revision = excluded.revision, source = excluded.source, saved_at = excluded.saved_at, generation = excluded.generation`,
-        this.workspaceId,
-        body.graph.name,
-        body.revision,
-        body.source.path,
-        new Date().toISOString(),
-        crypto.randomUUID(),
-      );
-    });
-  }
-
-  private checkCapacity(current: Publication | null): void {
-    if (current) {
-      return;
-    }
-
-    const count = this.storage.sql
-      .exec<{ count: number }>(
-        "SELECT count(*) AS count FROM artifact_definitions WHERE workspace = ?",
-        this.workspaceId,
-      )
-      .one().count;
-
-    if (count >= ARTIFACT_LIMITS.definitions) {
-      throw new Error(
-        "Workspace has reached its 1000 definition capacity. Replace an existing definition or remove one first.",
-      );
-    }
-  }
-
-  private checkOwner(previous: Publication | null, body: PutLoopyBody): void {
-    if (previous && previous.source !== body.source.path && !body.replace) {
-      throw new Error(
-        `Slug '${body.graph.name}' belongs to another source. Rename it or use --replace.`,
-      );
-    }
+    this.definitions.publish(body, previous, graph.byteLength);
   }
 }
