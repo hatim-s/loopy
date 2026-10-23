@@ -1,0 +1,996 @@
+{
+  "at": "2026-10-23T15:33:52.745Z",
+  "phase": "baseline-small",
+  "command": "env LOOPY_PLAYGROUND_PROFILE=architecture bun --no-env-file scripts/playground/metrics.ts baseline-small 90 2",
+  "pid": 23428,
+  "sessionId": 77835,
+  "exitCode": 0,
+  "api": "http://127.0.0.1:15270",
+  "dashboard": "http://127.0.0.1:15272",
+  "batch": "playground-architecture-2026-10-23T15-18-37-705Z",
+  "startedAt": "2026-10-23T15:31:42.901Z",
+  "updatedAt": "2026-10-23T15:33:13.755Z",
+  "elapsedMs": 90849.726792,
+  "targetRequestsPerSecond": 2,
+  "samples": 178,
+  "endpoints": 18,
+  "failures": [],
+  "statuses": {
+    "200": 178
+  },
+  "captureSha256": "cbe5057b2004d291889a62a36f5b6335dafc6bd0e9d0a1f15d9a37d15265f593",
+  "sourceFreezeSha256": "34369d678d2d9baf06841c5309e066c2e0b6aacf0d934d03c922d98bf73d682c",
+  "sourceUnchangedSincePreparation": true,
+  "sourceHashes": [
+    {
+      "path": "scripts/playground/metrics-daemon-sql.ts",
+      "sha256": "090809c2390d5768571400d1d3ebee8ce537eb2225e7516f5a3692a32bfeed5b"
+    },
+    {
+      "path": "scripts/playground/metrics-inventory.ts",
+      "sha256": "06a78fa1fe82c28dcc9966d1cc2537a712c1b2e8f1421b751302b826f48df605"
+    },
+    {
+      "path": "scripts/playground/metrics-journal.ts",
+      "sha256": "ea124560b92916c934cfe49723db87dd0568712ebae673736fedac6ad81b293a"
+    },
+    {
+      "path": "scripts/playground/metrics-lifecycle.ts",
+      "sha256": "4f055fecf3d07fc0f0d8fcc3ec5a72f25ad58df3be5d993a47c3a8bacbf9f961"
+    },
+    {
+      "path": "scripts/playground/metrics-matched.ts",
+      "sha256": "b4f6af4bb9ff51fd8b3e58eab70884765d92804fc39450451c20a0b5589400af"
+    },
+    {
+      "path": "scripts/playground/metrics-request.ts",
+      "sha256": "221bbc2300d252bd945ff0e737a081f830a3f5d13b0b514d6dd747a3aa82c9e1"
+    },
+    {
+      "path": "scripts/playground/metrics-resources.ts",
+      "sha256": "d07d6fc96c42ed743fed02a5dcd4e9f8fbad1c843ce1f3836d76727f2f2faa36"
+    },
+    {
+      "path": "scripts/playground/metrics-runtime.ts",
+      "sha256": "6c8990af87fd57fb4070594c52a7007c57787e183828d3ef1175c3a62d762380"
+    },
+    {
+      "path": "scripts/playground/metrics-sampler.ts",
+      "sha256": "6b2a78581076a7d7b41e68d846ff50523bbca9800387f1ced83c363aeccffecc"
+    },
+    {
+      "path": "scripts/playground/metrics-segments.ts",
+      "sha256": "e4ee410930f59bc8d8d709f44c1c1940bab0d7bcf0928ab305f1490ddb939fef"
+    },
+    {
+      "path": "scripts/playground/metrics-snapshot.ts",
+      "sha256": "89b66d4c18f08198dab8c292ad658db302839e80c566d29becf3bc12ebd23a2b"
+    },
+    {
+      "path": "scripts/playground/metrics-sql-driver.ts",
+      "sha256": "433d4c98f37d4c2e31d3501037bf7c397c135825529bab9161c47558b4226cbe"
+    },
+    {
+      "path": "scripts/playground/metrics-sql-queries.ts",
+      "sha256": "412926675741224b11b9c3c460ee865b0ef6ee411f9902430505dbed7f5b49e3"
+    },
+    {
+      "path": "scripts/playground/metrics-sql.ts",
+      "sha256": "15ba3c8c59204c057eabebce4b61bbd13327c4d58e96f038f1250d8f454fb295"
+    },
+    {
+      "path": "scripts/playground/metrics-statistics.ts",
+      "sha256": "768ad51b7cf2ad4a4138521f8584f05f6c49481e10b760710dd155207029651e"
+    },
+    {
+      "path": "scripts/playground/metrics.ts",
+      "sha256": "a28e0ce43de7c5c74851897b485e8aeead5210c91f3f2770625b3c700919cc36"
+    }
+  ],
+  "rootReportedPreflights": [
+    "3b677343-45e8-49b2-80f2-b30e68127b04",
+    "8ebb0e76-4391-4818-8a54-e910aa9ef3ca",
+    "79078fb4-a871-4f74-9bcf-3e422f1ceb52"
+  ],
+  "observedLoopyCounts": [
+    {
+      "at": "2026-10-23T15:31:43.403Z",
+      "items": 15,
+      "runs": 3
+    },
+    {
+      "at": "2026-10-23T15:31:52.789Z",
+      "items": 15,
+      "runs": 3
+    },
+    {
+      "at": "2026-10-23T15:32:01.869Z",
+      "items": 15,
+      "runs": 3
+    },
+    {
+      "at": "2026-10-23T15:32:11.119Z",
+      "items": 15,
+      "runs": 3
+    },
+    {
+      "at": "2026-10-23T15:32:20.435Z",
+      "items": 15,
+      "runs": 3
+    },
+    {
+      "at": "2026-10-23T15:32:29.498Z",
+      "items": 15,
+      "runs": 3
+    },
+    {
+      "at": "2026-10-23T15:32:38.518Z",
+      "items": 15,
+      "runs": 3
+    },
+    {
+      "at": "2026-10-23T15:32:47.551Z",
+      "items": 15,
+      "runs": 3
+    },
+    {
+      "at": "2026-10-23T15:32:56.796Z",
+      "items": 15,
+      "runs": 3
+    },
+    {
+      "at": "2026-10-23T15:33:05.807Z",
+      "items": 15,
+      "runs": 3
+    }
+  ],
+  "oldPath": ".notes/cloud/evidence/playground-performance-baseline-small.json",
+  "comparison": [
+    {
+      "endpoint": "runs.latest",
+      "old": {
+        "endpoint": "runs.latest",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 11.30529099999876,
+          "p95": 19.96445799999998,
+          "p99": 19.96445799999998,
+          "max": 19.96445799999998
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 2121,
+          "p95": 2121,
+          "p99": 2121,
+          "max": 2121
+        }
+      },
+      "current": {
+        "endpoint": "runs.latest",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 3.7197920000035083,
+          "p95": 11.463666000003286,
+          "p99": 11.463666000003286,
+          "max": 11.463666000003286
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 2173,
+          "p95": 2173,
+          "p99": 2173,
+          "max": 2173
+        }
+      }
+    },
+    {
+      "endpoint": "loopies.counts",
+      "old": {
+        "endpoint": "loopies.counts",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 20.039417000007234,
+          "p95": 22.783250000000407,
+          "p99": 22.783250000000407,
+          "max": 22.783250000000407
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 10346,
+          "p95": 10346,
+          "p99": 10346,
+          "max": 10346
+        }
+      },
+      "current": {
+        "endpoint": "loopies.counts",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 5.3264170000038575,
+          "p95": 77.21537499999977,
+          "p99": 77.21537499999977,
+          "max": 77.21537499999977
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 10450,
+          "p95": 10450,
+          "p99": 10450,
+          "max": 10450
+        }
+      }
+    },
+    {
+      "endpoint": "runs.waiting",
+      "old": {
+        "endpoint": "runs.waiting",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 5.694582999996783,
+          "p95": 15.03583300000173,
+          "p99": 15.03583300000173,
+          "max": 15.03583300000173
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 2,
+          "p95": 2,
+          "p99": 2,
+          "max": 2
+        }
+      },
+      "current": {
+        "endpoint": "runs.waiting",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 4.213875000001281,
+          "p95": 18.509250000000065,
+          "p99": 18.509250000000065,
+          "max": 18.509250000000065
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 2,
+          "p95": 2,
+          "p99": 2,
+          "max": 2
+        }
+      }
+    },
+    {
+      "endpoint": "runs.failed",
+      "old": {
+        "endpoint": "runs.failed",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 6.2181669999990845,
+          "p95": 10.41562499999418,
+          "p99": 10.41562499999418,
+          "max": 10.41562499999418
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 2,
+          "p95": 2,
+          "p99": 2,
+          "max": 2
+        }
+      },
+      "current": {
+        "endpoint": "runs.failed",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 3.6513750000012806,
+          "p95": 21.06854200000089,
+          "p99": 21.06854200000089,
+          "max": 21.06854200000089
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 2,
+          "p95": 2,
+          "p99": 2,
+          "max": 2
+        }
+      }
+    },
+    {
+      "endpoint": "overview.counts",
+      "old": {
+        "endpoint": "overview.counts",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 4.928124999998545,
+          "p95": 8.678584000001138,
+          "p99": 8.678584000001138,
+          "max": 8.678584000001138
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 3212,
+          "p95": 3212,
+          "p99": 3212,
+          "max": 3212
+        }
+      },
+      "current": {
+        "endpoint": "overview.counts",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 6.452708000011626,
+          "p95": 12.759750000000167,
+          "p99": 12.759750000000167,
+          "max": 12.759750000000167
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 3212,
+          "p95": 3212,
+          "p99": 3212,
+          "max": 3212
+        }
+      }
+    },
+    {
+      "endpoint": "logs.latest",
+      "old": {
+        "endpoint": "logs.latest",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 5.276290999999674,
+          "p95": 16.457416999997804,
+          "p99": 16.457416999997804,
+          "max": 16.457416999997804
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 4422,
+          "p95": 4422,
+          "p99": 4422,
+          "max": 4422
+        }
+      },
+      "current": {
+        "endpoint": "logs.latest",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 8.055666000000201,
+          "p95": 17.8125,
+          "p99": 17.8125,
+          "max": 17.8125
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 4422,
+          "p95": 4422,
+          "p99": 4422,
+          "max": 4422
+        }
+      }
+    },
+    {
+      "endpoint": "events.latest",
+      "old": {
+        "endpoint": "events.latest",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 5.968582999998034,
+          "p95": 8.538457999995444,
+          "p99": 8.538457999995444,
+          "max": 8.538457999995444
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 11619,
+          "p95": 11619,
+          "p99": 11619,
+          "max": 11619
+        }
+      },
+      "current": {
+        "endpoint": "events.latest",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 4.001791999995476,
+          "p95": 36.78583300000173,
+          "p99": 36.78583300000173,
+          "max": 36.78583300000173
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 11600,
+          "p95": 11600,
+          "p99": 11600,
+          "max": 11600
+        }
+      }
+    },
+    {
+      "endpoint": "daemon",
+      "old": {
+        "endpoint": "daemon",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 6.087541000000783,
+          "p95": 8.46600000000035,
+          "p99": 8.46600000000035,
+          "max": 8.46600000000035
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 97,
+          "p95": 97,
+          "p99": 97,
+          "max": 97
+        }
+      },
+      "current": {
+        "endpoint": "daemon",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 3.4475000000020373,
+          "p95": 33.213041000002704,
+          "p99": 33.213041000002704,
+          "max": 33.213041000002704
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 97,
+          "p95": 97,
+          "p99": 97,
+          "max": 97
+        }
+      }
+    },
+    {
+      "endpoint": "runs.page2",
+      "old": {
+        "endpoint": "runs.page2",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 5.605499999997846,
+          "p95": 11.369249999999738,
+          "p99": 11.369249999999738,
+          "max": 11.369249999999738
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 2,
+          "p95": 2,
+          "p99": 2,
+          "max": 2
+        }
+      },
+      "current": {
+        "endpoint": "runs.page2",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 3.721584000000803,
+          "p95": 8.959416999990935,
+          "p99": 8.959416999990935,
+          "max": 8.959416999990935
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 2,
+          "p95": 2,
+          "p99": 2,
+          "max": 2
+        }
+      }
+    },
+    {
+      "endpoint": "runs.slug",
+      "old": {
+        "endpoint": "runs.slug",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 16.591250000012224,
+          "p95": 25.362417000003916,
+          "p99": 25.362417000003916,
+          "max": 25.362417000003916
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 970,
+          "p95": 970,
+          "p99": 970,
+          "max": 970
+        }
+      },
+      "current": {
+        "endpoint": "runs.slug",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 3.8688749999928405,
+          "p95": 8.909582999996928,
+          "p99": 8.909582999996928,
+          "max": 8.909582999996928
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 996,
+          "p95": 996,
+          "p99": 996,
+          "max": 996
+        }
+      }
+    },
+    {
+      "endpoint": "logs.text",
+      "old": {
+        "endpoint": "logs.text",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 6.653500000000349,
+          "p95": 12.507749999997031,
+          "p99": 12.507749999997031,
+          "max": 12.507749999997031
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 901,
+          "p95": 901,
+          "p99": 901,
+          "max": 901
+        }
+      },
+      "current": {
+        "endpoint": "logs.text",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 3.9629169999971054,
+          "p95": 40.28229199999987,
+          "p99": 40.28229199999987,
+          "max": 40.28229199999987
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 901,
+          "p95": 901,
+          "p99": 901,
+          "max": 901
+        }
+      }
+    },
+    {
+      "endpoint": "events.run-filter",
+      "old": {
+        "endpoint": "events.run-filter",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 6.170250000001033,
+          "p95": 11.972125000000233,
+          "p99": 11.972125000000233,
+          "max": 11.972125000000233
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 5312,
+          "p95": 5312,
+          "p99": 5312,
+          "max": 5312
+        }
+      },
+      "current": {
+        "endpoint": "events.run-filter",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 4.882832999996026,
+          "p95": 17.598166999996465,
+          "p99": 17.598166999996465,
+          "max": 17.598166999996465
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 6431,
+          "p95": 6431,
+          "p99": 6431,
+          "max": 6431
+        }
+      }
+    },
+    {
+      "endpoint": "logs.page2",
+      "old": {
+        "endpoint": "logs.page2",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 4.948875000001863,
+          "p95": 10.867291999998997,
+          "p99": 10.867291999998997,
+          "max": 10.867291999998997
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 4422,
+          "p95": 4422,
+          "p99": 4422,
+          "max": 4422
+        }
+      },
+      "current": {
+        "endpoint": "logs.page2",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 3.755457999999635,
+          "p95": 6.939332999987528,
+          "p99": 6.939332999987528,
+          "max": 6.939332999987528
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 4422,
+          "p95": 4422,
+          "p99": 4422,
+          "max": 4422
+        }
+      }
+    },
+    {
+      "endpoint": "events.page2",
+      "old": {
+        "endpoint": "events.page2",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 5.254834000003029,
+          "p95": 13.748624999992899,
+          "p99": 13.748624999992899,
+          "max": 13.748624999992899
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 9224,
+          "p95": 9224,
+          "p99": 9224,
+          "max": 9224
+        }
+      },
+      "current": {
+        "endpoint": "events.page2",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 3.9463329999998678,
+          "p95": 108.25570799999696,
+          "p99": 108.25570799999696,
+          "max": 108.25570799999696
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 11510,
+          "p95": 11510,
+          "p99": 11510,
+          "max": 11510
+        }
+      }
+    },
+    {
+      "endpoint": "run.snapshot",
+      "old": {
+        "endpoint": "run.snapshot",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 18.80412499999875,
+          "p95": 31.942250000000058,
+          "p99": 31.942250000000058,
+          "max": 31.942250000000058
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 2795,
+          "p95": 2795,
+          "p99": 2795,
+          "max": 2795
+        }
+      },
+      "current": {
+        "endpoint": "run.snapshot",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 7.92149999999674,
+          "p95": 37.793750000004366,
+          "p99": 37.793750000004366,
+          "max": 37.793750000004366
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 2809,
+          "p95": 2809,
+          "p99": 2809,
+          "max": 2809
+        }
+      }
+    },
+    {
+      "endpoint": "run.payload",
+      "old": {
+        "endpoint": "run.payload",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 6.450167000002693,
+          "p95": 8.387834000001021,
+          "p99": 8.387834000001021,
+          "max": 8.387834000001021
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 568,
+          "p95": 568,
+          "p99": 568,
+          "max": 568
+        }
+      },
+      "current": {
+        "endpoint": "run.payload",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 5.486790999988443,
+          "p95": 44.53308300000208,
+          "p99": 44.53308300000208,
+          "max": 44.53308300000208
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 594,
+          "p95": 594,
+          "p99": 594,
+          "max": 594
+        }
+      }
+    },
+    {
+      "endpoint": "execution.page",
+      "old": {
+        "endpoint": "execution.page",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 7.4621250000054715,
+          "p95": 13.23924999999872,
+          "p99": 13.23924999999872,
+          "max": 13.23924999999872
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 2526,
+          "p95": 2526,
+          "p99": 2526,
+          "max": 2526
+        }
+      },
+      "current": {
+        "endpoint": "execution.page",
+        "samples": 9,
+        "statuses": {
+          "200": 9
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 9,
+          "p50": 3.809958000001643,
+          "p95": 15.958582999999635,
+          "p99": 15.958582999999635,
+          "max": 15.958582999999635
+        },
+        "bytes": {
+          "count": 9,
+          "p50": 2552,
+          "p95": 2552,
+          "p99": 2552,
+          "max": 2552
+        }
+      }
+    },
+    {
+      "endpoint": "execution.detail",
+      "old": {
+        "endpoint": "execution.detail",
+        "samples": 10,
+        "statuses": {
+          "200": 10
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 10,
+          "p50": 7.246583000000101,
+          "p95": 12.369124999997439,
+          "p99": 12.369124999997439,
+          "max": 12.369124999997439
+        },
+        "bytes": {
+          "count": 10,
+          "p50": 1128,
+          "p95": 1128,
+          "p99": 1128,
+          "max": 1128
+        }
+      },
+      "current": {
+        "endpoint": "execution.detail",
+        "samples": 9,
+        "statuses": {
+          "200": 9
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 9,
+          "p50": 4.032291999996232,
+          "p95": 9.438083000000915,
+          "p99": 9.438083000000915,
+          "max": 9.438083000000915
+        },
+        "bytes": {
+          "count": 9,
+          "p50": 1154,
+          "p95": 1154,
+          "p99": 1154,
+          "max": 1154
+        }
+      }
+    }
+  ]
+}

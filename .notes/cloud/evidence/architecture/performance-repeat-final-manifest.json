@@ -1,0 +1,258 @@
+{
+  "at": "2026-10-23T16:12:46.712Z",
+  "status": "performance lane complete",
+  "sourceChanges": {
+    "added": 0,
+    "deleted": 0
+  },
+  "tests": {
+    "added": 0,
+    "moved": 0,
+    "deleted": 0,
+    "run": 0
+  },
+  "report": {
+    "path": ".notes/cloud/architecture/performance-repeat.md",
+    "sha256": "9ed8a2e37558f5d185b9937b45eab2cc427f4d752d744d09ba597feec7c0a69d",
+    "lines": 295
+  },
+  "metricSources": [
+    {
+      "path": "scripts/playground/metrics-daemon-sql.ts",
+      "sha256": "090809c2390d5768571400d1d3ebee8ce537eb2225e7516f5a3692a32bfeed5b"
+    },
+    {
+      "path": "scripts/playground/metrics-inventory.ts",
+      "sha256": "06a78fa1fe82c28dcc9966d1cc2537a712c1b2e8f1421b751302b826f48df605"
+    },
+    {
+      "path": "scripts/playground/metrics-journal.ts",
+      "sha256": "ea124560b92916c934cfe49723db87dd0568712ebae673736fedac6ad81b293a"
+    },
+    {
+      "path": "scripts/playground/metrics-lifecycle.ts",
+      "sha256": "4f055fecf3d07fc0f0d8fcc3ec5a72f25ad58df3be5d993a47c3a8bacbf9f961"
+    },
+    {
+      "path": "scripts/playground/metrics-matched.ts",
+      "sha256": "b4f6af4bb9ff51fd8b3e58eab70884765d92804fc39450451c20a0b5589400af"
+    },
+    {
+      "path": "scripts/playground/metrics-request.ts",
+      "sha256": "221bbc2300d252bd945ff0e737a081f830a3f5d13b0b514d6dd747a3aa82c9e1"
+    },
+    {
+      "path": "scripts/playground/metrics-resources.ts",
+      "sha256": "d07d6fc96c42ed743fed02a5dcd4e9f8fbad1c843ce1f3836d76727f2f2faa36"
+    },
+    {
+      "path": "scripts/playground/metrics-runtime.ts",
+      "sha256": "6c8990af87fd57fb4070594c52a7007c57787e183828d3ef1175c3a62d762380"
+    },
+    {
+      "path": "scripts/playground/metrics-sampler.ts",
+      "sha256": "6b2a78581076a7d7b41e68d846ff50523bbca9800387f1ced83c363aeccffecc"
+    },
+    {
+      "path": "scripts/playground/metrics-segments.ts",
+      "sha256": "e4ee410930f59bc8d8d709f44c1c1940bab0d7bcf0928ab305f1490ddb939fef"
+    },
+    {
+      "path": "scripts/playground/metrics-snapshot.ts",
+      "sha256": "89b66d4c18f08198dab8c292ad658db302839e80c566d29becf3bc12ebd23a2b"
+    },
+    {
+      "path": "scripts/playground/metrics-sql-driver.ts",
+      "sha256": "433d4c98f37d4c2e31d3501037bf7c397c135825529bab9161c47558b4226cbe"
+    },
+    {
+      "path": "scripts/playground/metrics-sql-queries.ts",
+      "sha256": "412926675741224b11b9c3c460ee865b0ef6ee411f9902430505dbed7f5b49e3"
+    },
+    {
+      "path": "scripts/playground/metrics-sql.ts",
+      "sha256": "15ba3c8c59204c057eabebce4b61bbd13327c4d58e96f038f1250d8f454fb295"
+    },
+    {
+      "path": "scripts/playground/metrics-statistics.ts",
+      "sha256": "768ad51b7cf2ad4a4138521f8584f05f6c49481e10b760710dd155207029651e"
+    },
+    {
+      "path": "scripts/playground/metrics.ts",
+      "sha256": "a28e0ce43de7c5c74851897b485e8aeead5210c91f3f2770625b3c700919cc36"
+    }
+  ],
+  "metricsUnchangedSincePreparation": true,
+  "runtimeFreeze": {
+    "aggregate": "93e0bcd0fccac0dbf8deff30aa0eb9e4b18ec15cac090c2ec6d8cb00ae8edc52",
+    "files": 467,
+    "mismatches": []
+  },
+  "cloudDiagnostic": {
+    "path": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/diagnostics/closed-snapshot-20261023T160158250238Z/standalone/loopy-playground-architecture-local-Workspace/c9fc980e43ecc368c89f7bc55f965f1da91aa94aa0bd54dd7515a5a571209ad3.sqlite",
+    "beforeHash": "05ac0b40f0c0bbcfd69f8e04a470324a6d6c5632256d099e89e9ae8388d213d4",
+    "afterHash": "05ac0b40f0c0bbcfd69f8e04a470324a6d6c5632256d099e89e9ae8388d213d4",
+    "inventory": {
+      "matched": true,
+      "ids": 528
+    },
+    "integrity": [
+      {
+        "integrity_check": "ok"
+      }
+    ],
+    "sourcesStable": true
+  },
+  "daemonDiagnostic": {
+    "path": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-daemon-architecture/daemon-readonly.sqlite",
+    "beforeHash": "ed037ac95b469b5a30616afb505fa1d2e6edfb8a4d4538250108d75a2c0b3bad",
+    "afterHash": "ed037ac95b469b5a30616afb505fa1d2e6edfb8a4d4538250108d75a2c0b3bad",
+    "inventory": {
+      "matched": true,
+      "ids": 45,
+      "statuses": [
+        {
+          "status": "failed",
+          "count": 6
+        },
+        {
+          "status": "succeeded",
+          "count": 39
+        }
+      ]
+    },
+    "integrity": [
+      {
+        "integrity_check": "ok"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": ".notes/cloud/evidence/architecture/performance-repeat-analysis-failures.json",
+      "sha256": "f048f079c23a8b618a7a8c9462a1a060ce8e20fd3f5167537bb787fb3d03a2fc"
+    },
+    {
+      "path": ".notes/cloud/evidence/architecture/performance-repeat-api-measurement-done.json",
+      "sha256": "3bec68d11107fd78239400be21ee0b3c94f30e923c73695de2e1c7c2770a0030"
+    },
+    {
+      "path": ".notes/cloud/evidence/architecture/performance-repeat-baseline-empty-validation.json",
+      "sha256": "071c077385b602aa58a546fc600cacbf376798a0fb41c95285abdbc794c8e487"
+    },
+    {
+      "path": ".notes/cloud/evidence/architecture/performance-repeat-baseline-small-validation.json",
+      "sha256": "c9b00c2b9bb04b3a577e36981a9e24779d3aee06f848c21b634c11a4e5dcc012"
+    },
+    {
+      "path": ".notes/cloud/evidence/architecture/performance-repeat-cloud-sql-validation.json",
+      "sha256": "924ffcae2a26dae95b20c3192795652b73cb8aee69c7b3b393d7d9d068a446c9"
+    },
+    {
+      "path": ".notes/cloud/evidence/architecture/performance-repeat-continuous-process.json",
+      "sha256": "578f9620c0fc7d50d21b316ce4b500a7a4a1dc074039c8a4506a9453d5d9d06c"
+    },
+    {
+      "path": ".notes/cloud/evidence/architecture/performance-repeat-daemon-copy-approval.json",
+      "sha256": "d65c552f64ddc688e9d109e25bcc4b2f2aa73f15b557fe23f9a19b00624ae598"
+    },
+    {
+      "path": ".notes/cloud/evidence/architecture/performance-repeat-daemon-sql-validation.json",
+      "sha256": "6e1065a6f8d67b6cc62dabec20a936af5fef56ebe649b123a2f567f6fa94b723"
+    },
+    {
+      "path": ".notes/cloud/evidence/architecture/performance-repeat-http-comparison.json",
+      "sha256": "4b574d31145d25f8443344cbb3671d84c3ae233908b2ba0b3ba075c24b336314"
+    },
+    {
+      "path": ".notes/cloud/evidence/architecture/performance-repeat-matched-load-validation.json",
+      "sha256": "cf5f571ae48ffc7732b876493e22d89a5c6f3c4fd68618cfe170172ba2ac829a"
+    },
+    {
+      "path": ".notes/cloud/evidence/architecture/performance-repeat-prelaunch-segment.json",
+      "sha256": "0cef76ad73094bb3ae9b39da835e2b740df3491e259a45eaaae7de80da482004"
+    },
+    {
+      "path": ".notes/cloud/evidence/architecture/performance-repeat-preparation.json",
+      "sha256": "cc5272778d45ed294c74f185565f2c1060178e729ce1cfd824ecbb123f797aaf"
+    },
+    {
+      "path": ".notes/cloud/evidence/architecture/performance-repeat-primary-start.json",
+      "sha256": "9593d364c26ad4b890279d9e9407219072db0af82251c304297e9569c2344a72"
+    },
+    {
+      "path": ".notes/cloud/evidence/architecture/performance-repeat-source-mechanisms.json",
+      "sha256": "1e270ebd4c3054e844447fd205a15d17488ad78392ea6ddf763b76e29bdec186"
+    },
+    {
+      "path": ".notes/cloud/evidence/architecture/playground-performance-baseline-empty.json",
+      "sha256": "3b1986d8e804f4e092c3fe5a16a6c9e3750a438a1baa13b8f84400c8b5157384"
+    },
+    {
+      "path": ".notes/cloud/evidence/architecture/playground-performance-baseline-small.json",
+      "sha256": "cbe5057b2004d291889a62a36f5b6335dafc6bd0e9d0a1f15d9a37d15265f593"
+    },
+    {
+      "path": ".notes/cloud/evidence/architecture/playground-performance-daemon-offline-sql.json",
+      "sha256": "f6718f9553c9c3194a5bcf61770a2ab24907031aef96d4aa8b13308cf5680773"
+    },
+    {
+      "path": ".notes/cloud/evidence/architecture/playground-performance-during-load.json",
+      "sha256": "9ff0de14cb5bb83a3879c26ffb5154dae7378bd8a8904b541ad894ddd8499207"
+    },
+    {
+      "path": ".notes/cloud/evidence/architecture/playground-performance-matched-load.json",
+      "sha256": "57ba7ed4ae71dfbd2abd9a316357e20858d629a53ef683b6e29ccf45666dbe76"
+    },
+    {
+      "path": ".notes/cloud/evidence/architecture/playground-performance-matched-postload.json",
+      "sha256": "ee084153fa934c73a6c702dd1d520bc72562fe324b3ced015ed0e503e3af7f6a"
+    },
+    {
+      "path": ".notes/cloud/evidence/architecture/playground-performance-postload-inventory.json",
+      "sha256": "b696b825df4d99123ada33abc48a4c6092239bb9244877aba0d27e6608b63983"
+    },
+    {
+      "path": ".notes/cloud/evidence/architecture/playground-performance-postload-offline-sql.json",
+      "sha256": "0c0a63236b8a35474e8f944777bc48318b4d77dad22918ec240934f4f9535801"
+    },
+    {
+      "path": ".notes/cloud/evidence/architecture/playground-performance-postload.json",
+      "sha256": "6d2265fa2c213bf1639eb76b86ca27c015a55ab880ad2ea57ab29d2fcff73147"
+    },
+    {
+      "path": ".notes/cloud/evidence/architecture/playground-performance-primary-final-lifecycle.json",
+      "sha256": "1bde26a5da8687b8e79bed7883cb6d9c66fdb4cd701cae6e36138d2bf61160dd"
+    },
+    {
+      "path": ".notes/cloud/evidence/architecture/playground-performance-runtime.json",
+      "sha256": "1b4fd59bcb7e4763e0912f3a1e82245f9d9ec85e2c020034b69f6953c9e4ad2d"
+    },
+    {
+      "path": ".notes/cloud/evidence/architecture/playground-performance-segments.json",
+      "sha256": "cf66ccf9f9b06f8df6cea9bfe7c9d98b3b9447915e4d36c627ffa4295834276d"
+    }
+  ],
+  "processes": {
+    "continuous46381": "SIGTERM graceful exit0",
+    "postload69992": "natural exit0",
+    "matchedLoadSession8095": "exit0",
+    "matchedPostloadSession66998": "exit0",
+    "inventorySession66336": "exit0",
+    "runningOwnedSamplers": 0
+  },
+  "corrections": [
+    {
+      "stage": "continuous startedAt notification",
+      "incorrectProvisionalMessage": "2026-10-23T15:34:48.024Z",
+      "correctSavedCaptureStartedAt": "2026-10-23T15:34:38.555Z",
+      "resolution": "Immediately corrected in root notification; all interval analysis uses saved capture/journal timestamps."
+    }
+  ],
+  "limits": [
+    "No production/source edits or existing metrics script changes.",
+    "API zero failures with actual sample counts retained. Independent review/root owns final check and integration.",
+    "Native copied SQL only, shared uncontrolled host, no liveDB/Workerd/hardware benchmark claim.",
+    "Source/unit summary warmzeroR2 and O(N) grouped input scan are separate from captures; grouped SQL not timed in preserved probe."
+  ]
+}

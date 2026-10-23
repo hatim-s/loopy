@@ -1,0 +1,31 @@
+{
+  "at": "2026-10-23T15:36:32.822Z",
+  "rootDispatchAt": "2026-10-23T15:35:21Z",
+  "firstIntentAt": "2026-10-23T15:35:22.353Z",
+  "firstIntentGroup": "b",
+  "firstIntentRunId": "8889fd05-1658-41c8-bca7-5819190c17f7",
+  "firstAdmittedAt": "2026-10-23T15:35:22.363Z",
+  "firstAdmittedGroup": "b",
+  "firstAdmittedRunId": "8889fd05-1658-41c8-bca7-5819190c17f7",
+  "journalRecords": 72,
+  "groups": [
+    {
+      "group": "a",
+      "journalRecords": 28,
+      "firstIntent": "2026-10-23T15:35:22.396Z",
+      "firstAdmission": "2026-10-23T15:35:22.418Z"
+    },
+    {
+      "group": "b",
+      "journalRecords": 28,
+      "firstIntent": "2026-10-23T15:35:22.353Z",
+      "firstAdmission": "2026-10-23T15:35:22.363Z"
+    },
+    {
+      "group": "c",
+      "journalRecords": 16,
+      "firstIntent": "2026-10-23T15:35:22.439Z",
+      "firstAdmission": "2026-10-23T15:35:22.451Z"
+    }
+  ]
+}

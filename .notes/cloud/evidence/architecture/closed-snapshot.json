@@ -1,0 +1,773 @@
+{
+  "status": "validated-snapshot-complete",
+  "batch": "playground-architecture-2026-10-23T15-18-37-705Z",
+  "at": "2026-10-23T16:01:58.318726+00:00",
+  "head": "6ffecdfd60e16aaa335467684d918b3cd8b44813",
+  "branch": "cloud-integration",
+  "directory": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/diagnostics/closed-snapshot-20261023T160158250238Z",
+  "source": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/wrangler/v3/do",
+  "raw": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/diagnostics/closed-snapshot-20261023T160158250238Z/raw/do",
+  "working": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/diagnostics/closed-snapshot-20261023T160158250238Z/working/do",
+  "sourceBefore": [
+    {
+      "path": "loopy-playground-architecture-local-SandboxReceipts",
+      "type": "directory",
+      "bytes": 192,
+      "mtimeNs": 1792771052345944411,
+      "mode": 493
+    },
+    {
+      "path": "loopy-playground-architecture-local-SandboxReceipts/327ae8e1d510b59f55607b6f29df0ffcd50c61848a5c5f6a2a9eaa14d2171e74.sqlite",
+      "type": "file",
+      "bytes": 2367488,
+      "mtimeNs": 1792771052345396117,
+      "mode": 420,
+      "sha256": "bff19bd7cb763ab76680fd3945e335ab433a60334137c70e00e117636b80d60e"
+    },
+    {
+      "path": "loopy-playground-architecture-local-SandboxReceipts/metadata.sqlite",
+      "type": "file",
+      "bytes": 4096,
+      "mtimeNs": 1792768720025557025,
+      "mode": 420,
+      "sha256": "97e8d54f8a7255106f66cf1b213c4a4d7b558d21310b1c2bfedc3d0d526dddda"
+    },
+    {
+      "path": "loopy-playground-architecture-local-SandboxReceipts/metadata.sqlite-shm",
+      "type": "file",
+      "bytes": 32768,
+      "mtimeNs": 1792768720025905236,
+      "mode": 420,
+      "sha256": "359933af979f74c7ffd1e163d7654ec851f0e9d3bfe36f2cfbc8f1c8a1970ef4"
+    },
+    {
+      "path": "loopy-playground-architecture-local-SandboxReceipts/metadata.sqlite-wal",
+      "type": "file",
+      "bytes": 8272,
+      "mtimeNs": 1792768720026057945,
+      "mode": 420,
+      "sha256": "c725c5870ade860805cf4baf7be0d3d67099ed3751d1da7a19e4283173e65210"
+    },
+    {
+      "path": "loopy-playground-architecture-local-Workspace",
+      "type": "directory",
+      "bytes": 192,
+      "mtimeNs": 1792771016268973995,
+      "mode": 493
+    },
+    {
+      "path": "loopy-playground-architecture-local-Workspace/c9fc980e43ecc368c89f7bc55f965f1da91aa94aa0bd54dd7515a5a571209ad3.sqlite",
+      "type": "file",
+      "bytes": 23818240,
+      "mtimeNs": 1792771016268652952,
+      "mode": 420,
+      "sha256": "3b8c6318ccc41357fd0e48720648aae59569b7a7eaca1f548c1b43a67ef5d6b2"
+    },
+    {
+      "path": "loopy-playground-architecture-local-Workspace/metadata.sqlite",
+      "type": "file",
+      "bytes": 8192,
+      "mtimeNs": 1792770542846176032,
+      "mode": 420,
+      "sha256": "219ad8177421f84e1793f330a072be552ffdd01bd0532a19128891d6ffb6a04b"
+    },
+    {
+      "path": "loopy-playground-architecture-local-Workspace/metadata.sqlite-shm",
+      "type": "file",
+      "bytes": 32768,
+      "mtimeNs": 1792768720024647810,
+      "mode": 420,
+      "sha256": "fe469f262b25a6d7fa72f7e83abdb8d1c88467b7361dd7413e1984aa821c350f"
+    },
+    {
+      "path": "loopy-playground-architecture-local-Workspace/metadata.sqlite-wal",
+      "type": "file",
+      "bytes": 4120032,
+      "mtimeNs": 1792770558637536054,
+      "mode": 420,
+      "sha256": "e3f7d092b057b1d37a6dd95e193203432d4488cf9ba68dc9ca76dcce774af99a"
+    }
+  ],
+  "sourceAfterCopy": [
+    {
+      "path": "loopy-playground-architecture-local-SandboxReceipts",
+      "type": "directory",
+      "bytes": 192,
+      "mtimeNs": 1792771052345944411,
+      "mode": 493
+    },
+    {
+      "path": "loopy-playground-architecture-local-SandboxReceipts/327ae8e1d510b59f55607b6f29df0ffcd50c61848a5c5f6a2a9eaa14d2171e74.sqlite",
+      "type": "file",
+      "bytes": 2367488,
+      "mtimeNs": 1792771052345396117,
+      "mode": 420,
+      "sha256": "bff19bd7cb763ab76680fd3945e335ab433a60334137c70e00e117636b80d60e"
+    },
+    {
+      "path": "loopy-playground-architecture-local-SandboxReceipts/metadata.sqlite",
+      "type": "file",
+      "bytes": 4096,
+      "mtimeNs": 1792768720025557025,
+      "mode": 420,
+      "sha256": "97e8d54f8a7255106f66cf1b213c4a4d7b558d21310b1c2bfedc3d0d526dddda"
+    },
+    {
+      "path": "loopy-playground-architecture-local-SandboxReceipts/metadata.sqlite-shm",
+      "type": "file",
+      "bytes": 32768,
+      "mtimeNs": 1792768720025905236,
+      "mode": 420,
+      "sha256": "359933af979f74c7ffd1e163d7654ec851f0e9d3bfe36f2cfbc8f1c8a1970ef4"
+    },
+    {
+      "path": "loopy-playground-architecture-local-SandboxReceipts/metadata.sqlite-wal",
+      "type": "file",
+      "bytes": 8272,
+      "mtimeNs": 1792768720026057945,
+      "mode": 420,
+      "sha256": "c725c5870ade860805cf4baf7be0d3d67099ed3751d1da7a19e4283173e65210"
+    },
+    {
+      "path": "loopy-playground-architecture-local-Workspace",
+      "type": "directory",
+      "bytes": 192,
+      "mtimeNs": 1792771016268973995,
+      "mode": 493
+    },
+    {
+      "path": "loopy-playground-architecture-local-Workspace/c9fc980e43ecc368c89f7bc55f965f1da91aa94aa0bd54dd7515a5a571209ad3.sqlite",
+      "type": "file",
+      "bytes": 23818240,
+      "mtimeNs": 1792771016268652952,
+      "mode": 420,
+      "sha256": "3b8c6318ccc41357fd0e48720648aae59569b7a7eaca1f548c1b43a67ef5d6b2"
+    },
+    {
+      "path": "loopy-playground-architecture-local-Workspace/metadata.sqlite",
+      "type": "file",
+      "bytes": 8192,
+      "mtimeNs": 1792770542846176032,
+      "mode": 420,
+      "sha256": "219ad8177421f84e1793f330a072be552ffdd01bd0532a19128891d6ffb6a04b"
+    },
+    {
+      "path": "loopy-playground-architecture-local-Workspace/metadata.sqlite-shm",
+      "type": "file",
+      "bytes": 32768,
+      "mtimeNs": 1792768720024647810,
+      "mode": 420,
+      "sha256": "fe469f262b25a6d7fa72f7e83abdb8d1c88467b7361dd7413e1984aa821c350f"
+    },
+    {
+      "path": "loopy-playground-architecture-local-Workspace/metadata.sqlite-wal",
+      "type": "file",
+      "bytes": 4120032,
+      "mtimeNs": 1792770558637536054,
+      "mode": 420,
+      "sha256": "e3f7d092b057b1d37a6dd95e193203432d4488cf9ba68dc9ca76dcce774af99a"
+    }
+  ],
+  "rawAfterCopy": [
+    {
+      "path": "loopy-playground-architecture-local-SandboxReceipts",
+      "type": "directory",
+      "bytes": 192,
+      "mtimeNs": 1792771052345944411,
+      "mode": 493
+    },
+    {
+      "path": "loopy-playground-architecture-local-SandboxReceipts/327ae8e1d510b59f55607b6f29df0ffcd50c61848a5c5f6a2a9eaa14d2171e74.sqlite",
+      "type": "file",
+      "bytes": 2367488,
+      "mtimeNs": 1792771052345396117,
+      "mode": 420,
+      "sha256": "bff19bd7cb763ab76680fd3945e335ab433a60334137c70e00e117636b80d60e"
+    },
+    {
+      "path": "loopy-playground-architecture-local-SandboxReceipts/metadata.sqlite",
+      "type": "file",
+      "bytes": 4096,
+      "mtimeNs": 1792768720025557025,
+      "mode": 420,
+      "sha256": "97e8d54f8a7255106f66cf1b213c4a4d7b558d21310b1c2bfedc3d0d526dddda"
+    },
+    {
+      "path": "loopy-playground-architecture-local-SandboxReceipts/metadata.sqlite-shm",
+      "type": "file",
+      "bytes": 32768,
+      "mtimeNs": 1792768720025905236,
+      "mode": 420,
+      "sha256": "359933af979f74c7ffd1e163d7654ec851f0e9d3bfe36f2cfbc8f1c8a1970ef4"
+    },
+    {
+      "path": "loopy-playground-architecture-local-SandboxReceipts/metadata.sqlite-wal",
+      "type": "file",
+      "bytes": 8272,
+      "mtimeNs": 1792768720026057945,
+      "mode": 420,
+      "sha256": "c725c5870ade860805cf4baf7be0d3d67099ed3751d1da7a19e4283173e65210"
+    },
+    {
+      "path": "loopy-playground-architecture-local-Workspace",
+      "type": "directory",
+      "bytes": 192,
+      "mtimeNs": 1792771016268973995,
+      "mode": 493
+    },
+    {
+      "path": "loopy-playground-architecture-local-Workspace/c9fc980e43ecc368c89f7bc55f965f1da91aa94aa0bd54dd7515a5a571209ad3.sqlite",
+      "type": "file",
+      "bytes": 23818240,
+      "mtimeNs": 1792771016268652952,
+      "mode": 420,
+      "sha256": "3b8c6318ccc41357fd0e48720648aae59569b7a7eaca1f548c1b43a67ef5d6b2"
+    },
+    {
+      "path": "loopy-playground-architecture-local-Workspace/metadata.sqlite",
+      "type": "file",
+      "bytes": 8192,
+      "mtimeNs": 1792770542846176032,
+      "mode": 420,
+      "sha256": "219ad8177421f84e1793f330a072be552ffdd01bd0532a19128891d6ffb6a04b"
+    },
+    {
+      "path": "loopy-playground-architecture-local-Workspace/metadata.sqlite-shm",
+      "type": "file",
+      "bytes": 32768,
+      "mtimeNs": 1792768720024647810,
+      "mode": 420,
+      "sha256": "fe469f262b25a6d7fa72f7e83abdb8d1c88467b7361dd7413e1984aa821c350f"
+    },
+    {
+      "path": "loopy-playground-architecture-local-Workspace/metadata.sqlite-wal",
+      "type": "file",
+      "bytes": 4120032,
+      "mtimeNs": 1792770558637536054,
+      "mode": 420,
+      "sha256": "e3f7d092b057b1d37a6dd95e193203432d4488cf9ba68dc9ca76dcce774af99a"
+    }
+  ],
+  "originalAndRawNeverOpenedBySQLite": true,
+  "immutableFlagUsed": false,
+  "sqliteVersion": "3.43.2",
+  "databases": [
+    {
+      "relativePath": "loopy-playground-architecture-local-SandboxReceipts/327ae8e1d510b59f55607b6f29df0ffcd50c61848a5c5f6a2a9eaa14d2171e74.sqlite",
+      "workingPath": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/diagnostics/closed-snapshot-20261023T160158250238Z/working/do/loopy-playground-architecture-local-SandboxReceipts/327ae8e1d510b59f55607b6f29df0ffcd50c61848a5c5f6a2a9eaa14d2171e74.sqlite",
+      "emptyWorkingWalCreated": true,
+      "backupPath": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/diagnostics/closed-snapshot-20261023T160158250238Z/validated/loopy-playground-architecture-local-SandboxReceipts/327ae8e1d510b59f55607b6f29df0ffcd50c61848a5c5f6a2a9eaa14d2171e74.sqlite",
+      "backupSidecars": [
+        "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/diagnostics/closed-snapshot-20261023T160158250238Z/validated/loopy-playground-architecture-local-SandboxReceipts/327ae8e1d510b59f55607b6f29df0ffcd50c61848a5c5f6a2a9eaa14d2171e74.sqlite-shm"
+      ],
+      "standalonePath": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/diagnostics/closed-snapshot-20261023T160158250238Z/standalone/loopy-playground-architecture-local-SandboxReceipts/327ae8e1d510b59f55607b6f29df0ffcd50c61848a5c5f6a2a9eaa14d2171e74.sqlite",
+      "standaloneSha256": "4e0c0316db77d23e5fcfd4f83298b82e88acee544cd3f44df28199a4d9a04a8e",
+      "standaloneBytes": 2367488,
+      "workingJournalMode": "wal",
+      "standaloneJournalMode": "delete",
+      "integrity": "ok",
+      "schema": [
+        {
+          "name": "__miniflare_do_name",
+          "sql": "CREATE TABLE __miniflare_do_name (id INTEGER PRIMARY KEY, name TEXT)"
+        },
+        {
+          "name": "receipt_attempts",
+          "sql": "CREATE TABLE receipt_attempts (id TEXT PRIMARY KEY, kind TEXT NOT NULL, volume TEXT NOT NULL, record TEXT NOT NULL)"
+        },
+        {
+          "name": "receipt_config",
+          "sql": "CREATE TABLE receipt_config (id INTEGER PRIMARY KEY CHECK(id=1), namespace TEXT NOT NULL, root TEXT NOT NULL)"
+        },
+        {
+          "name": "receipt_exports",
+          "sql": "CREATE TABLE receipt_exports (token TEXT PRIMARY KEY, volume TEXT NOT NULL, active INTEGER NOT NULL, record TEXT NOT NULL)"
+        },
+        {
+          "name": "receipt_sessions",
+          "sql": "CREATE TABLE receipt_sessions (epoch INTEGER PRIMARY KEY, nonce TEXT NOT NULL UNIQUE)"
+        }
+      ]
+    },
+    {
+      "relativePath": "loopy-playground-architecture-local-SandboxReceipts/metadata.sqlite",
+      "workingPath": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/diagnostics/closed-snapshot-20261023T160158250238Z/working/do/loopy-playground-architecture-local-SandboxReceipts/metadata.sqlite",
+      "emptyWorkingWalCreated": false,
+      "backupPath": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/diagnostics/closed-snapshot-20261023T160158250238Z/validated/loopy-playground-architecture-local-SandboxReceipts/metadata.sqlite",
+      "backupSidecars": [
+        "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/diagnostics/closed-snapshot-20261023T160158250238Z/validated/loopy-playground-architecture-local-SandboxReceipts/metadata.sqlite-shm"
+      ],
+      "standalonePath": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/diagnostics/closed-snapshot-20261023T160158250238Z/standalone/loopy-playground-architecture-local-SandboxReceipts/metadata.sqlite",
+      "standaloneSha256": "71a4a7d7f548911413c01a534dc165b3c1770cf7ff3c2409e0407cf973b78abb",
+      "standaloneBytes": 8192,
+      "workingJournalMode": "wal",
+      "standaloneJournalMode": "delete",
+      "integrity": "ok",
+      "schema": [
+        {
+          "name": "_cf_ALARM",
+          "sql": "CREATE TABLE _cf_ALARM (\n      actor_id TEXT PRIMARY KEY,\n      scheduled_time INTEGER,\n      actor_name TEXT\n    ) WITHOUT ROWID"
+        }
+      ]
+    },
+    {
+      "relativePath": "loopy-playground-architecture-local-Workspace/c9fc980e43ecc368c89f7bc55f965f1da91aa94aa0bd54dd7515a5a571209ad3.sqlite",
+      "workingPath": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/diagnostics/closed-snapshot-20261023T160158250238Z/working/do/loopy-playground-architecture-local-Workspace/c9fc980e43ecc368c89f7bc55f965f1da91aa94aa0bd54dd7515a5a571209ad3.sqlite",
+      "emptyWorkingWalCreated": true,
+      "backupPath": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/diagnostics/closed-snapshot-20261023T160158250238Z/validated/loopy-playground-architecture-local-Workspace/c9fc980e43ecc368c89f7bc55f965f1da91aa94aa0bd54dd7515a5a571209ad3.sqlite",
+      "backupSidecars": [
+        "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/diagnostics/closed-snapshot-20261023T160158250238Z/validated/loopy-playground-architecture-local-Workspace/c9fc980e43ecc368c89f7bc55f965f1da91aa94aa0bd54dd7515a5a571209ad3.sqlite-shm"
+      ],
+      "standalonePath": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/diagnostics/closed-snapshot-20261023T160158250238Z/standalone/loopy-playground-architecture-local-Workspace/c9fc980e43ecc368c89f7bc55f965f1da91aa94aa0bd54dd7515a5a571209ad3.sqlite",
+      "standaloneSha256": "05ac0b40f0c0bbcfd69f8e04a470324a6d6c5632256d099e89e9ae8388d213d4",
+      "standaloneBytes": 23818240,
+      "workingJournalMode": "wal",
+      "standaloneJournalMode": "delete",
+      "integrity": "ok",
+      "schema": [
+        {
+          "name": "__miniflare_do_name",
+          "sql": "CREATE TABLE __miniflare_do_name (id INTEGER PRIMARY KEY, name TEXT)"
+        },
+        {
+          "name": "_cf_METADATA",
+          "sql": "CREATE TABLE _cf_METADATA (\n        key INTEGER PRIMARY KEY,\n        value BLOB\n      )"
+        },
+        {
+          "name": "artifact_definition_summaries",
+          "sql": "CREATE TABLE artifact_definition_summaries (\n      workspace TEXT NOT NULL, slug TEXT NOT NULL, generation TEXT NOT NULL,\n      projection_json TEXT NOT NULL, PRIMARY KEY (workspace, slug)\n    )"
+        },
+        {
+          "name": "artifact_definitions",
+          "sql": "CREATE TABLE artifact_definitions (\n      workspace TEXT NOT NULL, slug TEXT NOT NULL, revision TEXT NOT NULL,\n      source TEXT NOT NULL, saved_at TEXT NOT NULL, generation TEXT NOT NULL,\n      PRIMARY KEY (workspace, slug)\n    )"
+        },
+        {
+          "name": "artifact_graph_sizes",
+          "sql": "CREATE TABLE artifact_graph_sizes (\n      workspace TEXT NOT NULL, revision TEXT NOT NULL, bytes INTEGER NOT NULL,\n      PRIMARY KEY (workspace, revision)\n    )"
+        },
+        {
+          "name": "cloud_schedule_turns",
+          "sql": "CREATE TABLE cloud_schedule_turns (\n      workspace TEXT NOT NULL, slug TEXT NOT NULL, version INTEGER NOT NULL,\n      next_at TEXT NOT NULL, error TEXT NOT NULL,\n      PRIMARY KEY (workspace,slug),\n      FOREIGN KEY (workspace,slug) REFERENCES schedules(workspace,slug) ON DELETE CASCADE\n    )"
+        },
+        {
+          "name": "cloud_turns",
+          "sql": "CREATE TABLE cloud_turns (\n      run_id TEXT PRIMARY KEY REFERENCES runs(id), next_at TEXT NOT NULL, cursor TEXT, error TEXT\n    )"
+        },
+        {
+          "name": "events",
+          "sql": "CREATE TABLE events (\n    sequence INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, txn TEXT NOT NULL,\n    entity TEXT NOT NULL, kind TEXT NOT NULL, run_id TEXT, record TEXT NOT NULL,\n    node_id TEXT, slug TEXT, workspace TEXT\n  )"
+        },
+        {
+          "name": "log_attempt_usage",
+          "sql": "CREATE TABLE log_attempt_usage (\n    execution_key TEXT NOT NULL, attempt INTEGER NOT NULL, bytes INTEGER NOT NULL,\n    PRIMARY KEY(execution_key,attempt)\n  )"
+        },
+        {
+          "name": "logs",
+          "sql": "CREATE TABLE logs (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,\n    execution_key TEXT NOT NULL, attempt INTEGER NOT NULL, log_index INTEGER NOT NULL,\n    seq INTEGER NOT NULL, record TEXT NOT NULL, node_id TEXT NOT NULL,\n    at TEXT NOT NULL, level TEXT NOT NULL, message TEXT NOT NULL, data_bytes INTEGER NOT NULL,\n    UNIQUE(execution_key,attempt,log_index), UNIQUE(run_id,seq)\n  )"
+        },
+        {
+          "name": "meta",
+          "sql": "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
+        },
+        {
+          "name": "node_attempts",
+          "sql": "CREATE TABLE node_attempts (\n    run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,\n    execution_key TEXT NOT NULL, attempt INTEGER NOT NULL, record TEXT NOT NULL,\n    PRIMARY KEY(run_id,execution_key,attempt)\n  )"
+        },
+        {
+          "name": "node_runs",
+          "sql": "CREATE TABLE node_runs (\n    run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,\n    execution_key TEXT NOT NULL, attempt INTEGER NOT NULL, status TEXT NOT NULL,\n    started_at TEXT NOT NULL, finished_at TEXT, output TEXT, error TEXT, receipt TEXT NOT NULL,\n    record TEXT NOT NULL, node_id TEXT NOT NULL DEFAULT '', scope TEXT NOT NULL DEFAULT '[]',\n    PRIMARY KEY(run_id,execution_key)\n  )"
+        },
+        {
+          "name": "node_scopes",
+          "sql": "CREATE TABLE node_scopes (\n    run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,\n    execution_key TEXT NOT NULL, map_node TEXT NOT NULL, parent_scope TEXT NOT NULL,\n    item_index INTEGER NOT NULL, status TEXT NOT NULL,\n    PRIMARY KEY(run_id,execution_key,map_node,parent_scope)\n  )"
+        },
+        {
+          "name": "rate_limits",
+          "sql": "CREATE TABLE rate_limits (key TEXT PRIMARY KEY, window_start TEXT NOT NULL, count INTEGER NOT NULL)"
+        },
+        {
+          "name": "runs",
+          "sql": "CREATE TABLE runs (\n    id TEXT PRIMARY KEY, slug TEXT NOT NULL, revision TEXT NOT NULL, workspace TEXT NOT NULL,\n    input_json TEXT NOT NULL, status TEXT NOT NULL, output_json TEXT, error TEXT,\n    wake_at TEXT, next_retry_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,\n    owner_token TEXT, owner_pid INTEGER, owner_host TEXT, heartbeat_at TEXT\n  )"
+        },
+        {
+          "name": "schedules",
+          "sql": "CREATE TABLE schedules (\n    workspace TEXT NOT NULL, slug TEXT NOT NULL, cron TEXT NOT NULL, tz TEXT NOT NULL,\n    input_json TEXT NOT NULL, enabled INTEGER NOT NULL,\n    last_fire_key TEXT, next_fire_at TEXT NOT NULL, version INTEGER NOT NULL,\n    PRIMARY KEY(workspace,slug)\n  )"
+        },
+        {
+          "name": "sqlite_sequence",
+          "sql": "CREATE TABLE sqlite_sequence(name,seq)"
+        },
+        {
+          "name": "waits",
+          "sql": "CREATE TABLE waits (\n    token TEXT PRIMARY KEY,\n    run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,\n    execution_key TEXT NOT NULL, record TEXT NOT NULL,\n    UNIQUE(run_id, execution_key)\n  )"
+        }
+      ]
+    },
+    {
+      "relativePath": "loopy-playground-architecture-local-Workspace/metadata.sqlite",
+      "workingPath": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/diagnostics/closed-snapshot-20261023T160158250238Z/working/do/loopy-playground-architecture-local-Workspace/metadata.sqlite",
+      "emptyWorkingWalCreated": false,
+      "backupPath": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/diagnostics/closed-snapshot-20261023T160158250238Z/validated/loopy-playground-architecture-local-Workspace/metadata.sqlite",
+      "backupSidecars": [
+        "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/diagnostics/closed-snapshot-20261023T160158250238Z/validated/loopy-playground-architecture-local-Workspace/metadata.sqlite-shm"
+      ],
+      "standalonePath": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/diagnostics/closed-snapshot-20261023T160158250238Z/standalone/loopy-playground-architecture-local-Workspace/metadata.sqlite",
+      "standaloneSha256": "991974f3e726d10abf40009a703487f987260208c4b06600e58cac782c7190e4",
+      "standaloneBytes": 8192,
+      "workingJournalMode": "wal",
+      "standaloneJournalMode": "delete",
+      "integrity": "ok",
+      "schema": [
+        {
+          "name": "_cf_ALARM",
+          "sql": "CREATE TABLE _cf_ALARM (\n      actor_id TEXT PRIMARY KEY,\n      scheduled_time INTEGER,\n      actor_name TEXT\n    ) WITHOUT ROWID"
+        }
+      ]
+    }
+  ],
+  "sourceFreeze": {
+    "files": 467,
+    "aggregate": "93e0bcd0fccac0dbf8deff30aa0eb9e4b18ec15cac090c2ec6d8cb00ae8edc52",
+    "manifestSha256": "34369d678d2d9baf06841c5309e066c2e0b6aacf0d934d03c922d98bf73d682c",
+    "allIndividualHashesMatched": true
+  },
+  "sourceAndRawUnchangedAfterBackups": true,
+  "scope": "closed-local-architecture-workspace-and-receipts-do-storage",
+  "finalVerifiedAt": "2026-10-23T16:08:48.510450+00:00",
+  "closure": {
+    "rootGate": "ROOTCLOSED after root verified stop command exit 0; metrics, collector, graph and browser traffic finished",
+    "rootVerifiedSupervisor": 35171,
+    "rootVerifiedPgid": 35171,
+    "preStopEvidence": "/Users/hatim.shakir/projects/loopy/cloud-integration/.notes/cloud/evidence/architecture/pre-stop-processes.json",
+    "ownedPids": [
+      35171,
+      35285,
+      35302,
+      35357,
+      35389,
+      35407,
+      35523,
+      35524,
+      35557,
+      35607
+    ],
+    "ownedProcessesRemaining": [],
+    "reusedPidsWithDifferentIdentities": [
+      {
+        "pid": 35389,
+        "ppid": 35366,
+        "pgid": 35366,
+        "stat": "S",
+        "originalIdentityAbsent": true,
+        "differentProcessGroup": true,
+        "signalSent": false
+      }
+    ],
+    "portsAfter": {
+      "4310": [
+        "81432"
+      ],
+      "4173": [
+        "41194"
+      ],
+      "14870": [],
+      "14871": [],
+      "14872": [],
+      "14873": [],
+      "15070": [],
+      "15071": [],
+      "15072": [],
+      "15073": [],
+      "15270": [],
+      "15271": [],
+      "15272": [],
+      "15273": []
+    },
+    "protectedListenerIdentitiesUnchanged": true,
+    "sourceOpenHandles": 0,
+    "signalsSentByThisLane": 0
+  },
+  "sourceFinal": [
+    {
+      "path": "loopy-playground-architecture-local-SandboxReceipts",
+      "type": "directory",
+      "bytes": 192,
+      "mtimeNs": 1792771052345944411,
+      "mode": 493
+    },
+    {
+      "path": "loopy-playground-architecture-local-SandboxReceipts/327ae8e1d510b59f55607b6f29df0ffcd50c61848a5c5f6a2a9eaa14d2171e74.sqlite",
+      "type": "file",
+      "bytes": 2367488,
+      "mtimeNs": 1792771052345396117,
+      "mode": 420,
+      "sha256": "bff19bd7cb763ab76680fd3945e335ab433a60334137c70e00e117636b80d60e"
+    },
+    {
+      "path": "loopy-playground-architecture-local-SandboxReceipts/metadata.sqlite",
+      "type": "file",
+      "bytes": 4096,
+      "mtimeNs": 1792768720025557025,
+      "mode": 420,
+      "sha256": "97e8d54f8a7255106f66cf1b213c4a4d7b558d21310b1c2bfedc3d0d526dddda"
+    },
+    {
+      "path": "loopy-playground-architecture-local-SandboxReceipts/metadata.sqlite-shm",
+      "type": "file",
+      "bytes": 32768,
+      "mtimeNs": 1792768720025905236,
+      "mode": 420,
+      "sha256": "359933af979f74c7ffd1e163d7654ec851f0e9d3bfe36f2cfbc8f1c8a1970ef4"
+    },
+    {
+      "path": "loopy-playground-architecture-local-SandboxReceipts/metadata.sqlite-wal",
+      "type": "file",
+      "bytes": 8272,
+      "mtimeNs": 1792768720026057945,
+      "mode": 420,
+      "sha256": "c725c5870ade860805cf4baf7be0d3d67099ed3751d1da7a19e4283173e65210"
+    },
+    {
+      "path": "loopy-playground-architecture-local-Workspace",
+      "type": "directory",
+      "bytes": 192,
+      "mtimeNs": 1792771016268973995,
+      "mode": 493
+    },
+    {
+      "path": "loopy-playground-architecture-local-Workspace/c9fc980e43ecc368c89f7bc55f965f1da91aa94aa0bd54dd7515a5a571209ad3.sqlite",
+      "type": "file",
+      "bytes": 23818240,
+      "mtimeNs": 1792771016268652952,
+      "mode": 420,
+      "sha256": "3b8c6318ccc41357fd0e48720648aae59569b7a7eaca1f548c1b43a67ef5d6b2"
+    },
+    {
+      "path": "loopy-playground-architecture-local-Workspace/metadata.sqlite",
+      "type": "file",
+      "bytes": 8192,
+      "mtimeNs": 1792770542846176032,
+      "mode": 420,
+      "sha256": "219ad8177421f84e1793f330a072be552ffdd01bd0532a19128891d6ffb6a04b"
+    },
+    {
+      "path": "loopy-playground-architecture-local-Workspace/metadata.sqlite-shm",
+      "type": "file",
+      "bytes": 32768,
+      "mtimeNs": 1792768720024647810,
+      "mode": 420,
+      "sha256": "fe469f262b25a6d7fa72f7e83abdb8d1c88467b7361dd7413e1984aa821c350f"
+    },
+    {
+      "path": "loopy-playground-architecture-local-Workspace/metadata.sqlite-wal",
+      "type": "file",
+      "bytes": 4120032,
+      "mtimeNs": 1792770558637536054,
+      "mode": 420,
+      "sha256": "e3f7d092b057b1d37a6dd95e193203432d4488cf9ba68dc9ca76dcce774af99a"
+    }
+  ],
+  "rawFinal": [
+    {
+      "path": "loopy-playground-architecture-local-SandboxReceipts",
+      "type": "directory",
+      "bytes": 192,
+      "mtimeNs": 1792771052345944411,
+      "mode": 493
+    },
+    {
+      "path": "loopy-playground-architecture-local-SandboxReceipts/327ae8e1d510b59f55607b6f29df0ffcd50c61848a5c5f6a2a9eaa14d2171e74.sqlite",
+      "type": "file",
+      "bytes": 2367488,
+      "mtimeNs": 1792771052345396117,
+      "mode": 420,
+      "sha256": "bff19bd7cb763ab76680fd3945e335ab433a60334137c70e00e117636b80d60e"
+    },
+    {
+      "path": "loopy-playground-architecture-local-SandboxReceipts/metadata.sqlite",
+      "type": "file",
+      "bytes": 4096,
+      "mtimeNs": 1792768720025557025,
+      "mode": 420,
+      "sha256": "97e8d54f8a7255106f66cf1b213c4a4d7b558d21310b1c2bfedc3d0d526dddda"
+    },
+    {
+      "path": "loopy-playground-architecture-local-SandboxReceipts/metadata.sqlite-shm",
+      "type": "file",
+      "bytes": 32768,
+      "mtimeNs": 1792768720025905236,
+      "mode": 420,
+      "sha256": "359933af979f74c7ffd1e163d7654ec851f0e9d3bfe36f2cfbc8f1c8a1970ef4"
+    },
+    {
+      "path": "loopy-playground-architecture-local-SandboxReceipts/metadata.sqlite-wal",
+      "type": "file",
+      "bytes": 8272,
+      "mtimeNs": 1792768720026057945,
+      "mode": 420,
+      "sha256": "c725c5870ade860805cf4baf7be0d3d67099ed3751d1da7a19e4283173e65210"
+    },
+    {
+      "path": "loopy-playground-architecture-local-Workspace",
+      "type": "directory",
+      "bytes": 192,
+      "mtimeNs": 1792771016268973995,
+      "mode": 493
+    },
+    {
+      "path": "loopy-playground-architecture-local-Workspace/c9fc980e43ecc368c89f7bc55f965f1da91aa94aa0bd54dd7515a5a571209ad3.sqlite",
+      "type": "file",
+      "bytes": 23818240,
+      "mtimeNs": 1792771016268652952,
+      "mode": 420,
+      "sha256": "3b8c6318ccc41357fd0e48720648aae59569b7a7eaca1f548c1b43a67ef5d6b2"
+    },
+    {
+      "path": "loopy-playground-architecture-local-Workspace/metadata.sqlite",
+      "type": "file",
+      "bytes": 8192,
+      "mtimeNs": 1792770542846176032,
+      "mode": 420,
+      "sha256": "219ad8177421f84e1793f330a072be552ffdd01bd0532a19128891d6ffb6a04b"
+    },
+    {
+      "path": "loopy-playground-architecture-local-Workspace/metadata.sqlite-shm",
+      "type": "file",
+      "bytes": 32768,
+      "mtimeNs": 1792768720024647810,
+      "mode": 420,
+      "sha256": "fe469f262b25a6d7fa72f7e83abdb8d1c88467b7361dd7413e1984aa821c350f"
+    },
+    {
+      "path": "loopy-playground-architecture-local-Workspace/metadata.sqlite-wal",
+      "type": "file",
+      "bytes": 4120032,
+      "mtimeNs": 1792770558637536054,
+      "mode": 420,
+      "sha256": "e3f7d092b057b1d37a6dd95e193203432d4488cf9ba68dc9ca76dcce774af99a"
+    }
+  ],
+  "sourceAndRawUnchangedAfterValidation": true,
+  "rawFiles": 8,
+  "rawBytes": 30391856,
+  "fullTreePreserved": true,
+  "sourceStableAcrossCopy": true,
+  "reconciliationEvidence": {
+    "path": "/Users/hatim.shakir/projects/loopy/cloud-integration/.notes/cloud/evidence/architecture/closed-snapshot-reconciliation.json",
+    "sha256": "516a3cf6b6e40eb3a4d3c016e89bffbea4067973d22c04b915702e05f32a3f05"
+  },
+  "workspace": {
+    "standalonePath": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/diagnostics/closed-snapshot-20261023T160158250238Z/standalone/loopy-playground-architecture-local-Workspace/c9fc980e43ecc368c89f7bc55f965f1da91aa94aa0bd54dd7515a5a571209ad3.sqlite",
+    "sha256": "05ac0b40f0c0bbcfd69f8e04a470324a6d6c5632256d099e89e9ae8388d213d4",
+    "bytes": 23818240,
+    "runs": 528,
+    "statuses": {
+      "succeeded": 464,
+      "failed": 64
+    },
+    "tableCounts": {
+      "__miniflare_do_name": 1,
+      "_cf_METADATA": 1,
+      "artifact_definition_summaries": 15,
+      "artifact_definitions": 15,
+      "artifact_graph_sizes": 15,
+      "cloud_schedule_turns": 0,
+      "cloud_turns": 528,
+      "events": 17525,
+      "log_attempt_usage": 2063,
+      "logs": 2727,
+      "meta": 3,
+      "node_attempts": 4746,
+      "node_runs": 4721,
+      "node_scopes": 604,
+      "rate_limits": 0,
+      "runs": 528,
+      "schedules": 0,
+      "sqlite_sequence": 2,
+      "waits": 126
+    },
+    "finishedBackendNodeAttempts": 1560,
+    "backendAttemptStatuses": {
+      "succeeded": 1519,
+      "retrying": 25,
+      "failed": 16
+    },
+    "missingIds": [],
+    "extraIds": [],
+    "statusMismatches": []
+  },
+  "receipts": {
+    "standalonePath": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/diagnostics/closed-snapshot-20261023T160158250238Z/standalone/loopy-playground-architecture-local-SandboxReceipts/327ae8e1d510b59f55607b6f29df0ffcd50c61848a5c5f6a2a9eaa14d2171e74.sqlite",
+    "sha256": "4e0c0316db77d23e5fcfd4f83298b82e88acee544cd3f44df28199a4d9a04a8e",
+    "bytes": 2367488,
+    "attempts": 1560,
+    "kinds": {
+      "finished": 1560
+    },
+    "started": 0,
+    "activeExports": 0,
+    "inactiveExports": 464,
+    "sessions": 1,
+    "tableCounts": {
+      "__miniflare_do_name": 1,
+      "receipt_attempts": 1560,
+      "receipt_config": 1,
+      "receipt_exports": 464,
+      "receipt_sessions": 1
+    },
+    "attemptPhases": {
+      "primary": 1552,
+      "preflight": 8
+    },
+    "missingIds": [],
+    "extraIds": [],
+    "mismatchedIds": []
+  },
+  "closedCopyManifest": {
+    "path": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/diagnostics/closed-copy.json",
+    "sha256": "7457383448724c8231cbeabdd4d0d9f7a7ec8939f75284dde7225ed07a5f9aba",
+    "value": {
+      "profile": "architecture",
+      "sourceClosed": true,
+      "path": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/diagnostics/closed-snapshot-20261023T160158250238Z/standalone/loopy-playground-architecture-local-Workspace/c9fc980e43ecc368c89f7bc55f965f1da91aa94aa0bd54dd7515a5a571209ad3.sqlite",
+      "sha256": "05ac0b40f0c0bbcfd69f8e04a470324a6d6c5632256d099e89e9ae8388d213d4",
+      "batch": "playground-architecture-2026-10-23T15-18-37-705Z"
+    }
+  },
+  "earlierAttempt": {
+    "directory": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/diagnostics/closed-snapshot-20261023T160046701547Z",
+    "retained": true,
+    "rawStillMatchesSource": true,
+    "errors": [
+      {
+        "stage": "initial hash helper before filesystem writes",
+        "error": "Python hashlib.file_digest is unavailable; replaced with chunked SHA-256."
+      },
+      {
+        "stage": "first working main-file read-only PRAGMA",
+        "error": "SQLite unable to open database file for checkpointed WAL-mode main files without WAL sidecars. Original/raw remained untouched. Disposable working probes with an empty WAL opened read-only."
+      },
+      {
+        "stage": "reconciliation assertion",
+        "error": "Initial assertion equated failed backend results with stored failed node status. Twenty-five historical attempt rows say retrying. Refined comparison verifies each finished successor, with 21 succeeded and four failed."
+      },
+      {
+        "stage": "strict successor assertion",
+        "error": "Initial retry assertion required all second attempts to succeed. Four controlled failures terminate after their second attempt. Final check accepts their verified terminal failed outcomes."
+      },
+      {
+        "stage": "final PID-only closure assertion",
+        "error": "PID 35389 was reused by a different process in another group. Full original identity and process-group checks establish the original workerd is gone. No foreign process was signalled."
+      }
+    ]
+  },
+  "mechanism": "full raw tree copy; disposable full working tree; mode=ro SQLite backup; destination-only journal_mode=DELETE; close; main-file-only standalone copy; mode=ro reopen integrity and exact identity reconciliation",
+  "workingOnlyAdjustment": "For each checkpointed main DO file with no WAL sidecar, created an empty WAL file in the disposable working tree before mode=ro SQLite open. No immutable flag and no writable connection to source, raw or working databases.",
+  "limits": [
+    "Receipt SQLite stores immutable result references. Result bytes were resolved and hashed by the root collector before shutdown; this offline comparison rechecks its exact references, not R2 bytes.",
+    "All SQL reads used ignored disposable working or standalone copies. Original and raw DO trees were never opened by SQLite.",
+    "Local stopped storage only; no remote cloud or provider acceptance claim.",
+    "Failed initial working probes are retained in the first ignored diagnostics directory. No failed snapshot is approved.",
+    "All 467 frozen source files and the source-freeze manifest hash still match. No source edits, stack restart, tests, builds, Docker operations, new runs, commits, remote actions or child agents."
+  ]
+}

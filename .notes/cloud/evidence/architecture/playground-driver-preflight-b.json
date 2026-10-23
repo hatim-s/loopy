@@ -1,0 +1,27 @@
+{
+  "status": "passed",
+  "scope": "local-wrangler-docker",
+  "batch": "playground-architecture-2026-10-23T15-18-37-705Z",
+  "group": "b",
+  "phase": "preflight",
+  "startedAt": "2026-10-23T15:28:22.748Z",
+  "endedAt": "2026-10-23T15:28:26.532Z",
+  "planned": 1,
+  "completed": 1,
+  "results": [
+    {
+      "runId": "8ebb0e76-4391-4818-8a54-e910aa9ef3ca",
+      "slug": "playground-b-test-matrix",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z-preflight/playground-b-test-matrix/8ebb0e76-4391-4818-8a54-e910aa9ef3ca.json",
+        "sha256": "784cab5ad5c4c00cc43bd9713986a83491aa11d7ec1e0e4d0fe9322c9dd6f7d1",
+        "bytes": 192
+      }
+    }
+  ]
+}

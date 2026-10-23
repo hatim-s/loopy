@@ -1,0 +1,1646 @@
+{
+  "at": "2026-10-23T16:12:06.224Z",
+  "exitCode": 0,
+  "command": "env LOOPY_PLAYGROUND_PROFILE=architecture bun --no-env-file scripts/playground/metrics-sql.ts postload-offline /Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/diagnostics/closed-snapshot-20261023T160158250238Z/standalone/loopy-playground-architecture-local-Workspace/c9fc980e43ecc368c89f7bc55f965f1da91aa94aa0bd54dd7515a5a571209ad3.sqlite",
+  "artifactSha256": "0c0a63236b8a35474e8f944777bc48318b4d77dad22918ec240934f4f9535801",
+  "approvalManifestSha256": "7457383448724c8231cbeabdd4d0d9f7a7ec8939f75284dde7225ed07a5f9aba",
+  "approval": {
+    "profile": "architecture",
+    "sourceClosed": true,
+    "path": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/diagnostics/closed-snapshot-20261023T160158250238Z/standalone/loopy-playground-architecture-local-Workspace/c9fc980e43ecc368c89f7bc55f965f1da91aa94aa0bd54dd7515a5a571209ad3.sqlite",
+    "sha256": "05ac0b40f0c0bbcfd69f8e04a470324a6d6c5632256d099e89e9ae8388d213d4",
+    "batch": "playground-architecture-2026-10-23T15-18-37-705Z"
+  },
+  "path": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/diagnostics/closed-snapshot-20261023T160158250238Z/standalone/loopy-playground-architecture-local-Workspace/c9fc980e43ecc368c89f7bc55f965f1da91aa94aa0bd54dd7515a5a571209ad3.sqlite",
+  "beforeHash": "05ac0b40f0c0bbcfd69f8e04a470324a6d6c5632256d099e89e9ae8388d213d4",
+  "afterHash": "05ac0b40f0c0bbcfd69f8e04a470324a6d6c5632256d099e89e9ae8388d213d4",
+  "integrity": [
+    {
+      "integrity_check": "ok"
+    }
+  ],
+  "inventory": {
+    "matched": true,
+    "ids": 528
+  },
+  "journal": {
+    "journal_mode": "delete"
+  },
+  "sidecarsBefore": [],
+  "sidecarsAfter": [],
+  "sourceUnchangedDuringProbe": true,
+  "sourceHashes": [
+    {
+      "file": "packages/loopy/src/store/sqlite/query-runs.ts",
+      "sha256": "45b5e48edefa14c4aef5d54802cfedca629755e272fec5d6dcd6ad68d30d535b"
+    },
+    {
+      "file": "packages/loopy/src/store/sqlite/query-feeds.ts",
+      "sha256": "e26a5f8e8d926206e8c2c760b8216b3329144ef3b43fc3d0fbbb2826fe1b5747"
+    },
+    {
+      "file": "packages/loopy/src/store/sqlite/query-nodes.ts",
+      "sha256": "2d90de7acb4501ea3d1b1045475661ff90eb929ecc9b86ba558082d801102201"
+    },
+    {
+      "file": "packages/loopy/src/store/sqlite/schema.ts",
+      "sha256": "a004f6c359a6f2d47d1ea2a58f0b1bb21a05077f990e20106cbc8670d7b9636b"
+    },
+    {
+      "file": "apps/cloud/src/scheduler.ts",
+      "sha256": "c5df4ce777fc44582d018b3269cc6eb1251fb0fca899173b3a9615f1d277d0bd"
+    },
+    {
+      "file": "apps/cloud/src/sql-driver.ts",
+      "sha256": "2d79412693620a7b1402ad4a4079f05336cf633553f2084112f4738e59749517"
+    },
+    {
+      "file": "scripts/playground/metrics-sql-queries.ts",
+      "sha256": "412926675741224b11b9c3c460ee865b0ef6ee411f9902430505dbed7f5b49e3"
+    }
+  ],
+  "sourceHashesAfter": [
+    {
+      "file": "packages/loopy/src/store/sqlite/query-runs.ts",
+      "sha256": "45b5e48edefa14c4aef5d54802cfedca629755e272fec5d6dcd6ad68d30d535b"
+    },
+    {
+      "file": "packages/loopy/src/store/sqlite/query-feeds.ts",
+      "sha256": "e26a5f8e8d926206e8c2c760b8216b3329144ef3b43fc3d0fbbb2826fe1b5747"
+    },
+    {
+      "file": "packages/loopy/src/store/sqlite/query-nodes.ts",
+      "sha256": "2d90de7acb4501ea3d1b1045475661ff90eb929ecc9b86ba558082d801102201"
+    },
+    {
+      "file": "packages/loopy/src/store/sqlite/schema.ts",
+      "sha256": "a004f6c359a6f2d47d1ea2a58f0b1bb21a05077f990e20106cbc8670d7b9636b"
+    },
+    {
+      "file": "apps/cloud/src/scheduler.ts",
+      "sha256": "c5df4ce777fc44582d018b3269cc6eb1251fb0fca899173b3a9615f1d277d0bd"
+    },
+    {
+      "file": "apps/cloud/src/sql-driver.ts",
+      "sha256": "2d79412693620a7b1402ad4a4079f05336cf633553f2084112f4738e59749517"
+    },
+    {
+      "file": "scripts/playground/metrics-sql-queries.ts",
+      "sha256": "412926675741224b11b9c3c460ee865b0ef6ee411f9902430505dbed7f5b49e3"
+    }
+  ],
+  "oldPath": ".notes/cloud/evidence/playground-performance-postload-offline-sql.json",
+  "operations": [
+    {
+      "operation": "runs.latest",
+      "sameSqlText": true,
+      "sql": [
+        "SELECT r.id,r.slug,r.revision,r.workspace,r.status,r.error,r.wake_at,r.next_retry_at,r.created_at,r.updated_at,r.owner_token,r.owner_pid,r.owner_host,r.heartbeat_at,\n CASE WHEN length(CAST(r.input_json AS BLOB))>16384 THEN 'null' ELSE r.input_json END AS input_json,\n CASE WHEN length(CAST(r.output_json AS BLOB))>16384 THEN 'null' ELSE r.output_json END AS output_json,\n length(CAST(r.input_json AS BLOB)) AS input_bytes,length(CAST(r.output_json AS BLOB)) AS output_bytes FROM runs r  ORDER BY r.created_at DESC,r.id DESC LIMIT ?"
+      ],
+      "oldSql": [
+        "SELECT r.id,r.slug,r.revision,r.workspace,r.status,r.error,r.wake_at,r.next_retry_at,r.created_at,r.updated_at,r.owner_token,r.owner_pid,r.owner_host,r.heartbeat_at,\n CASE WHEN length(CAST(r.input_json AS BLOB))>16384 THEN 'null' ELSE r.input_json END AS input_json,\n CASE WHEN length(CAST(r.output_json AS BLOB))>16384 THEN 'null' ELSE r.output_json END AS output_json,\n length(CAST(r.input_json AS BLOB)) AS input_bytes,length(CAST(r.output_json AS BLOB)) AS output_bytes FROM runs r  ORDER BY r.created_at DESC,r.id DESC LIMIT ?"
+      ],
+      "old": {
+        "operation": "runs.latest",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.034250000000000114,
+          "p95": 0.061458999999999264,
+          "p99": 0.061458999999999264,
+          "max": 0.061458999999999264
+        },
+        "rows": 500
+      },
+      "current": {
+        "operation": "runs.latest",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.02949999999999875,
+          "p95": 0.0714580000000069,
+          "p99": 0.0714580000000069,
+          "max": 0.0714580000000069
+        },
+        "rows": 500
+      },
+      "oldRowsPerCall": 50,
+      "currentRowsPerCall": 50,
+      "oldBindings": 1,
+      "currentBindings": 1,
+      "currentPlan": [
+        {
+          "id": 7,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SCAN r USING INDEX runs_created_id"
+        }
+      ]
+    },
+    {
+      "operation": "runs.slug-workspace",
+      "sameSqlText": true,
+      "sql": [
+        "SELECT r.id,r.slug,r.revision,r.workspace,r.status,r.error,r.wake_at,r.next_retry_at,r.created_at,r.updated_at,r.owner_token,r.owner_pid,r.owner_host,r.heartbeat_at,\n CASE WHEN length(CAST(r.input_json AS BLOB))>16384 THEN 'null' ELSE r.input_json END AS input_json,\n CASE WHEN length(CAST(r.output_json AS BLOB))>16384 THEN 'null' ELSE r.output_json END AS output_json,\n length(CAST(r.input_json AS BLOB)) AS input_bytes,length(CAST(r.output_json AS BLOB)) AS output_bytes FROM runs r WHERE r.slug=? AND r.workspace=? ORDER BY r.created_at DESC,r.id DESC LIMIT ?"
+      ],
+      "oldSql": [
+        "SELECT r.id,r.slug,r.revision,r.workspace,r.status,r.error,r.wake_at,r.next_retry_at,r.created_at,r.updated_at,r.owner_token,r.owner_pid,r.owner_host,r.heartbeat_at,\n CASE WHEN length(CAST(r.input_json AS BLOB))>16384 THEN 'null' ELSE r.input_json END AS input_json,\n CASE WHEN length(CAST(r.output_json AS BLOB))>16384 THEN 'null' ELSE r.output_json END AS output_json,\n length(CAST(r.input_json AS BLOB)) AS input_bytes,length(CAST(r.output_json AS BLOB)) AS output_bytes FROM runs r WHERE r.slug=? AND r.workspace=? ORDER BY r.created_at DESC,r.id DESC LIMIT ?"
+      ],
+      "old": {
+        "operation": "runs.slug-workspace",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.01762499999999534,
+          "p95": 0.03925000000000978,
+          "p99": 0.03925000000000978,
+          "max": 0.03925000000000978
+        },
+        "rows": 250
+      },
+      "current": {
+        "operation": "runs.slug-workspace",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.017749999999992383,
+          "p95": 0.03845900000000313,
+          "p99": 0.03845900000000313,
+          "max": 0.03845900000000313
+        },
+        "rows": 250
+      },
+      "oldRowsPerCall": 25,
+      "currentRowsPerCall": 25,
+      "oldBindings": 3,
+      "currentBindings": 3,
+      "currentPlan": [
+        {
+          "id": 7,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH r USING INDEX runs_slug_created_id (slug=?)"
+        }
+      ]
+    },
+    {
+      "operation": "runs.failed",
+      "sameSqlText": true,
+      "sql": [
+        "SELECT r.id,r.slug,r.revision,r.workspace,r.status,r.error,r.wake_at,r.next_retry_at,r.created_at,r.updated_at,r.owner_token,r.owner_pid,r.owner_host,r.heartbeat_at,\n CASE WHEN length(CAST(r.input_json AS BLOB))>16384 THEN 'null' ELSE r.input_json END AS input_json,\n CASE WHEN length(CAST(r.output_json AS BLOB))>16384 THEN 'null' ELSE r.output_json END AS output_json,\n length(CAST(r.input_json AS BLOB)) AS input_bytes,length(CAST(r.output_json AS BLOB)) AS output_bytes FROM runs r WHERE r.status=? ORDER BY r.created_at DESC,r.id DESC LIMIT ?"
+      ],
+      "oldSql": [
+        "SELECT r.id,r.slug,r.revision,r.workspace,r.status,r.error,r.wake_at,r.next_retry_at,r.created_at,r.updated_at,r.owner_token,r.owner_pid,r.owner_host,r.heartbeat_at,\n CASE WHEN length(CAST(r.input_json AS BLOB))>16384 THEN 'null' ELSE r.input_json END AS input_json,\n CASE WHEN length(CAST(r.output_json AS BLOB))>16384 THEN 'null' ELSE r.output_json END AS output_json,\n length(CAST(r.input_json AS BLOB)) AS input_bytes,length(CAST(r.output_json AS BLOB)) AS output_bytes FROM runs r WHERE r.status=? ORDER BY r.created_at DESC,r.id DESC LIMIT ?"
+      ],
+      "old": {
+        "operation": "runs.failed",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.03387500000000898,
+          "p95": 0.046416000000007784,
+          "p99": 0.046416000000007784,
+          "max": 0.046416000000007784
+        },
+        "rows": 500
+      },
+      "current": {
+        "operation": "runs.failed",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.031041999999999348,
+          "p95": 0.043290999999996416,
+          "p99": 0.043290999999996416,
+          "max": 0.043290999999996416
+        },
+        "rows": 500
+      },
+      "oldRowsPerCall": 50,
+      "currentRowsPerCall": 50,
+      "oldBindings": 2,
+      "currentBindings": 2,
+      "currentPlan": [
+        {
+          "id": 7,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH r USING INDEX runs_status_created_id (status=?)"
+        }
+      ]
+    },
+    {
+      "operation": "runs.page2",
+      "sameSqlText": true,
+      "sql": [
+        "SELECT r.id,r.slug,r.revision,r.workspace,r.status,r.error,r.wake_at,r.next_retry_at,r.created_at,r.updated_at,r.owner_token,r.owner_pid,r.owner_host,r.heartbeat_at,\n CASE WHEN length(CAST(r.input_json AS BLOB))>16384 THEN 'null' ELSE r.input_json END AS input_json,\n CASE WHEN length(CAST(r.output_json AS BLOB))>16384 THEN 'null' ELSE r.output_json END AS output_json,\n length(CAST(r.input_json AS BLOB)) AS input_bytes,length(CAST(r.output_json AS BLOB)) AS output_bytes FROM runs r WHERE (r.created_at,r.id)<(?,?) ORDER BY r.created_at DESC,r.id DESC LIMIT ?"
+      ],
+      "oldSql": [
+        "SELECT r.id,r.slug,r.revision,r.workspace,r.status,r.error,r.wake_at,r.next_retry_at,r.created_at,r.updated_at,r.owner_token,r.owner_pid,r.owner_host,r.heartbeat_at,\n CASE WHEN length(CAST(r.input_json AS BLOB))>16384 THEN 'null' ELSE r.input_json END AS input_json,\n CASE WHEN length(CAST(r.output_json AS BLOB))>16384 THEN 'null' ELSE r.output_json END AS output_json,\n length(CAST(r.input_json AS BLOB)) AS input_bytes,length(CAST(r.output_json AS BLOB)) AS output_bytes FROM runs r WHERE (r.created_at,r.id)<(?,?) ORDER BY r.created_at DESC,r.id DESC LIMIT ?"
+      ],
+      "old": {
+        "operation": "runs.page2",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.033292000000002986,
+          "p95": 0.041667000000003895,
+          "p99": 0.041667000000003895,
+          "max": 0.041667000000003895
+        },
+        "rows": 500
+      },
+      "current": {
+        "operation": "runs.page2",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.031542000000001735,
+          "p95": 0.03937499999999261,
+          "p99": 0.03937499999999261,
+          "max": 0.03937499999999261
+        },
+        "rows": 500
+      },
+      "oldRowsPerCall": 50,
+      "currentRowsPerCall": 50,
+      "oldBindings": 3,
+      "currentBindings": 3,
+      "currentPlan": [
+        {
+          "id": 7,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH r USING INDEX runs_created_id ((created_at,id)<(?,?))"
+        }
+      ]
+    },
+    {
+      "operation": "runs.waiting",
+      "sameSqlText": true,
+      "sql": [
+        "SELECT r.id,r.slug,r.revision,r.workspace,r.status,r.error,r.wake_at,r.next_retry_at,r.created_at,r.updated_at,r.owner_token,r.owner_pid,r.owner_host,r.heartbeat_at,\n CASE WHEN length(CAST(r.input_json AS BLOB))>16384 THEN 'null' ELSE r.input_json END AS input_json,\n CASE WHEN length(CAST(r.output_json AS BLOB))>16384 THEN 'null' ELSE r.output_json END AS output_json,\n length(CAST(r.input_json AS BLOB)) AS input_bytes,length(CAST(r.output_json AS BLOB)) AS output_bytes FROM runs r WHERE EXISTS(SELECT w.record FROM waits w JOIN node_runs n ON n.run_id=w.run_id AND n.execution_key=w.execution_key\n  WHERE w.run_id=r.id AND r.status IN ('running','suspended') AND n.status='waiting'\n  AND json_extract(w.record,'$.resolvedAt') IS NULL AND json_extract(w.record,'$.expiredAt') IS NULL\n  AND (json_extract(n.record,'$.wakeAt') IS NULL OR json_extract(n.record,'$.wakeAt')>?) LIMIT 1) ORDER BY r.created_at DESC,r.id DESC LIMIT ?"
+      ],
+      "oldSql": [
+        "SELECT r.id,r.slug,r.revision,r.workspace,r.status,r.error,r.wake_at,r.next_retry_at,r.created_at,r.updated_at,r.owner_token,r.owner_pid,r.owner_host,r.heartbeat_at,\n CASE WHEN length(CAST(r.input_json AS BLOB))>16384 THEN 'null' ELSE r.input_json END AS input_json,\n CASE WHEN length(CAST(r.output_json AS BLOB))>16384 THEN 'null' ELSE r.output_json END AS output_json,\n length(CAST(r.input_json AS BLOB)) AS input_bytes,length(CAST(r.output_json AS BLOB)) AS output_bytes FROM runs r WHERE EXISTS(SELECT w.record FROM waits w JOIN node_runs n ON n.run_id=w.run_id AND n.execution_key=w.execution_key\n  WHERE w.run_id=r.id AND r.status IN ('running','suspended') AND n.status='waiting'\n  AND json_extract(w.record,'$.resolvedAt') IS NULL AND json_extract(w.record,'$.expiredAt') IS NULL\n  AND (json_extract(n.record,'$.wakeAt') IS NULL OR json_extract(n.record,'$.wakeAt')>?) LIMIT 1) ORDER BY r.created_at DESC,r.id DESC LIMIT ?"
+      ],
+      "old": {
+        "operation": "runs.waiting",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.060583999999991534,
+          "p95": 0.10970800000001191,
+          "p99": 0.10970800000001191,
+          "max": 0.10970800000001191
+        },
+        "rows": 0
+      },
+      "current": {
+        "operation": "runs.waiting",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.06341600000000369,
+          "p95": 0.14699999999999136,
+          "p99": 0.14699999999999136,
+          "max": 0.14699999999999136
+        },
+        "rows": 0
+      },
+      "oldRowsPerCall": 0,
+      "currentRowsPerCall": 0,
+      "oldBindings": 2,
+      "currentBindings": 2,
+      "currentPlan": [
+        {
+          "id": 7,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SCAN r USING INDEX runs_created_id"
+        },
+        {
+          "id": 11,
+          "parent": 0,
+          "notused": 0,
+          "detail": "CORRELATED SCALAR SUBQUERY 1"
+        },
+        {
+          "id": 25,
+          "parent": 11,
+          "notused": 0,
+          "detail": "SEARCH w USING INDEX waits_run (run_id=?)"
+        },
+        {
+          "id": 37,
+          "parent": 11,
+          "notused": 0,
+          "detail": "SEARCH n USING INDEX sqlite_autoindex_node_runs_1 (run_id=? AND execution_key=?)"
+        }
+      ]
+    },
+    {
+      "operation": "counts.all",
+      "sameSqlText": true,
+      "sql": [
+        "SELECT status,count(*) AS count FROM runs r  GROUP BY status"
+      ],
+      "oldSql": [
+        "SELECT status,count(*) AS count FROM runs r  GROUP BY status"
+      ],
+      "old": {
+        "operation": "counts.all",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.012208000000001107,
+          "p95": 0.026416999999995028,
+          "p99": 0.026416999999995028,
+          "max": 0.026416999999995028
+        },
+        "rows": 20
+      },
+      "current": {
+        "operation": "counts.all",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.011917000000011058,
+          "p95": 0.028957999999988715,
+          "p99": 0.028957999999988715,
+          "max": 0.028957999999988715
+        },
+        "rows": 20
+      },
+      "oldRowsPerCall": 2,
+      "currentRowsPerCall": 2,
+      "oldBindings": 0,
+      "currentBindings": 0,
+      "currentPlan": [
+        {
+          "id": 6,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SCAN r USING COVERING INDEX runs_due"
+        }
+      ]
+    },
+    {
+      "operation": "counts.slug-workspace",
+      "sameSqlText": true,
+      "sql": [
+        "SELECT status,count(*) AS count FROM runs r WHERE r.slug=? AND r.workspace=? GROUP BY status"
+      ],
+      "oldSql": [
+        "SELECT status,count(*) AS count FROM runs r WHERE r.slug=? AND r.workspace=? GROUP BY status"
+      ],
+      "old": {
+        "operation": "counts.slug-workspace",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.005833000000009747,
+          "p95": 0.0108330000000052,
+          "p99": 0.0108330000000052,
+          "max": 0.0108330000000052
+        },
+        "rows": 10
+      },
+      "current": {
+        "operation": "counts.slug-workspace",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.00679200000000435,
+          "p95": 0.011208000000010543,
+          "p99": 0.011208000000010543,
+          "max": 0.011208000000010543
+        },
+        "rows": 10
+      },
+      "oldRowsPerCall": 1,
+      "currentRowsPerCall": 1,
+      "oldBindings": 2,
+      "currentBindings": 2,
+      "currentPlan": [
+        {
+          "id": 7,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH r USING INDEX runs_slug_created_id (slug=?)"
+        },
+        {
+          "id": 16,
+          "parent": 0,
+          "notused": 0,
+          "detail": "USE TEMP B-TREE FOR GROUP BY"
+        }
+      ]
+    },
+    {
+      "operation": "pending-hooks.historical-in-50",
+      "sameSqlText": true,
+      "sql": [
+        "SELECT r.id,(SELECT json_set(w.record,'$.expiresAt',json_extract(n.record,'$.wakeAt')) FROM waits w JOIN node_runs n ON n.run_id=w.run_id AND n.execution_key=w.execution_key\n  WHERE w.run_id=r.id AND r.status IN ('running','suspended') AND n.status='waiting'\n  AND json_extract(w.record,'$.resolvedAt') IS NULL AND json_extract(w.record,'$.expiredAt') IS NULL\n  AND (json_extract(n.record,'$.wakeAt') IS NULL OR json_extract(n.record,'$.wakeAt')>?) LIMIT 1) AS record FROM runs r WHERE r.id IN (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+      ],
+      "oldSql": [
+        "SELECT r.id,(SELECT json_set(w.record,'$.expiresAt',json_extract(n.record,'$.wakeAt')) FROM waits w JOIN node_runs n ON n.run_id=w.run_id AND n.execution_key=w.execution_key\n  WHERE w.run_id=r.id AND r.status IN ('running','suspended') AND n.status='waiting'\n  AND json_extract(w.record,'$.resolvedAt') IS NULL AND json_extract(w.record,'$.expiredAt') IS NULL\n  AND (json_extract(n.record,'$.wakeAt') IS NULL OR json_extract(n.record,'$.wakeAt')>?) LIMIT 1) AS record FROM runs r WHERE r.id IN (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+      ],
+      "old": {
+        "operation": "pending-hooks.historical-in-50",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.026833000000010543,
+          "p95": 0.05462500000000148,
+          "p99": 0.05462500000000148,
+          "max": 0.05462500000000148
+        },
+        "rows": 500
+      },
+      "current": {
+        "operation": "pending-hooks.historical-in-50",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.02758300000000702,
+          "p95": 0.05299999999999727,
+          "p99": 0.05299999999999727,
+          "max": 0.05299999999999727
+        },
+        "rows": 500
+      },
+      "oldRowsPerCall": 50,
+      "currentRowsPerCall": 50,
+      "oldBindings": 51,
+      "currentBindings": 51,
+      "currentPlan": [
+        {
+          "id": 3,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH r USING INDEX sqlite_autoindex_runs_1 (id=?)"
+        },
+        {
+          "id": 168,
+          "parent": 0,
+          "notused": 0,
+          "detail": "CORRELATED SCALAR SUBQUERY 1"
+        },
+        {
+          "id": 182,
+          "parent": 168,
+          "notused": 0,
+          "detail": "SEARCH w USING INDEX waits_run (run_id=?)"
+        },
+        {
+          "id": 194,
+          "parent": 168,
+          "notused": 0,
+          "detail": "SEARCH n USING INDEX sqlite_autoindex_node_runs_1 (run_id=? AND execution_key=?)"
+        }
+      ]
+    },
+    {
+      "operation": "pending-hooks.current-json-each-50",
+      "sameSqlText": true,
+      "sql": [
+        "SELECT r.id,(SELECT json_set(w.record,'$.expiresAt',json_extract(n.record,'$.wakeAt')) FROM waits w JOIN node_runs n ON n.run_id=w.run_id AND n.execution_key=w.execution_key\n  WHERE w.run_id=r.id AND r.status IN ('running','suspended') AND n.status='waiting'\n  AND json_extract(w.record,'$.resolvedAt') IS NULL AND json_extract(w.record,'$.expiredAt') IS NULL\n  AND (json_extract(n.record,'$.wakeAt') IS NULL OR json_extract(n.record,'$.wakeAt')>?) LIMIT 1) AS record FROM runs r WHERE r.id IN (SELECT value FROM json_each(?))"
+      ],
+      "oldSql": [
+        "SELECT r.id,(SELECT json_set(w.record,'$.expiresAt',json_extract(n.record,'$.wakeAt')) FROM waits w JOIN node_runs n ON n.run_id=w.run_id AND n.execution_key=w.execution_key\n  WHERE w.run_id=r.id AND r.status IN ('running','suspended') AND n.status='waiting'\n  AND json_extract(w.record,'$.resolvedAt') IS NULL AND json_extract(w.record,'$.expiredAt') IS NULL\n  AND (json_extract(n.record,'$.wakeAt') IS NULL OR json_extract(n.record,'$.wakeAt')>?) LIMIT 1) AS record FROM runs r WHERE r.id IN (SELECT value FROM json_each(?))"
+      ],
+      "old": {
+        "operation": "pending-hooks.current-json-each-50",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.028000000000005798,
+          "p95": 0.03175000000000239,
+          "p99": 0.03175000000000239,
+          "max": 0.03175000000000239
+        },
+        "rows": 500
+      },
+      "current": {
+        "operation": "pending-hooks.current-json-each-50",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.027875000000008754,
+          "p95": 0.038041000000006875,
+          "p99": 0.038041000000006875,
+          "max": 0.038041000000006875
+        },
+        "rows": 500
+      },
+      "oldRowsPerCall": 50,
+      "currentRowsPerCall": 50,
+      "oldBindings": 2,
+      "currentBindings": 2,
+      "currentPlan": [
+        {
+          "id": 3,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH r USING INDEX sqlite_autoindex_runs_1 (id=?)"
+        },
+        {
+          "id": 7,
+          "parent": 0,
+          "notused": 0,
+          "detail": "LIST SUBQUERY 2"
+        },
+        {
+          "id": 9,
+          "parent": 7,
+          "notused": 0,
+          "detail": "SCAN json_each VIRTUAL TABLE INDEX 1:"
+        },
+        {
+          "id": 28,
+          "parent": 0,
+          "notused": 0,
+          "detail": "CORRELATED SCALAR SUBQUERY 1"
+        },
+        {
+          "id": 42,
+          "parent": 28,
+          "notused": 0,
+          "detail": "SEARCH w USING INDEX waits_run (run_id=?)"
+        },
+        {
+          "id": 54,
+          "parent": 28,
+          "notused": 0,
+          "detail": "SEARCH n USING INDEX sqlite_autoindex_node_runs_1 (run_id=? AND execution_key=?)"
+        }
+      ]
+    },
+    {
+      "operation": "pending-hooks.historical-in-99",
+      "sameSqlText": true,
+      "sql": [
+        "SELECT r.id,(SELECT json_set(w.record,'$.expiresAt',json_extract(n.record,'$.wakeAt')) FROM waits w JOIN node_runs n ON n.run_id=w.run_id AND n.execution_key=w.execution_key\n  WHERE w.run_id=r.id AND r.status IN ('running','suspended') AND n.status='waiting'\n  AND json_extract(w.record,'$.resolvedAt') IS NULL AND json_extract(w.record,'$.expiredAt') IS NULL\n  AND (json_extract(n.record,'$.wakeAt') IS NULL OR json_extract(n.record,'$.wakeAt')>?) LIMIT 1) AS record FROM runs r WHERE r.id IN (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+      ],
+      "oldSql": [
+        "SELECT r.id,(SELECT json_set(w.record,'$.expiresAt',json_extract(n.record,'$.wakeAt')) FROM waits w JOIN node_runs n ON n.run_id=w.run_id AND n.execution_key=w.execution_key\n  WHERE w.run_id=r.id AND r.status IN ('running','suspended') AND n.status='waiting'\n  AND json_extract(w.record,'$.resolvedAt') IS NULL AND json_extract(w.record,'$.expiredAt') IS NULL\n  AND (json_extract(n.record,'$.wakeAt') IS NULL OR json_extract(n.record,'$.wakeAt')>?) LIMIT 1) AS record FROM runs r WHERE r.id IN (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+      ],
+      "old": {
+        "operation": "pending-hooks.historical-in-99",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.047624999999996476,
+          "p95": 0.053542000000007306,
+          "p99": 0.053542000000007306,
+          "max": 0.053542000000007306
+        },
+        "rows": 990
+      },
+      "current": {
+        "operation": "pending-hooks.historical-in-99",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.04925000000000068,
+          "p95": 0.05287500000000023,
+          "p99": 0.05287500000000023,
+          "max": 0.05287500000000023
+        },
+        "rows": 990
+      },
+      "oldRowsPerCall": 99,
+      "currentRowsPerCall": 99,
+      "oldBindings": 100,
+      "currentBindings": 100,
+      "currentPlan": [
+        {
+          "id": 3,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH r USING INDEX sqlite_autoindex_runs_1 (id=?)"
+        },
+        {
+          "id": 315,
+          "parent": 0,
+          "notused": 0,
+          "detail": "CORRELATED SCALAR SUBQUERY 1"
+        },
+        {
+          "id": 329,
+          "parent": 315,
+          "notused": 0,
+          "detail": "SEARCH w USING INDEX waits_run (run_id=?)"
+        },
+        {
+          "id": 341,
+          "parent": 315,
+          "notused": 0,
+          "detail": "SEARCH n USING INDEX sqlite_autoindex_node_runs_1 (run_id=? AND execution_key=?)"
+        }
+      ]
+    },
+    {
+      "operation": "pending-hooks.current-json-each-99",
+      "sameSqlText": true,
+      "sql": [
+        "SELECT r.id,(SELECT json_set(w.record,'$.expiresAt',json_extract(n.record,'$.wakeAt')) FROM waits w JOIN node_runs n ON n.run_id=w.run_id AND n.execution_key=w.execution_key\n  WHERE w.run_id=r.id AND r.status IN ('running','suspended') AND n.status='waiting'\n  AND json_extract(w.record,'$.resolvedAt') IS NULL AND json_extract(w.record,'$.expiredAt') IS NULL\n  AND (json_extract(n.record,'$.wakeAt') IS NULL OR json_extract(n.record,'$.wakeAt')>?) LIMIT 1) AS record FROM runs r WHERE r.id IN (SELECT value FROM json_each(?))"
+      ],
+      "oldSql": [
+        "SELECT r.id,(SELECT json_set(w.record,'$.expiresAt',json_extract(n.record,'$.wakeAt')) FROM waits w JOIN node_runs n ON n.run_id=w.run_id AND n.execution_key=w.execution_key\n  WHERE w.run_id=r.id AND r.status IN ('running','suspended') AND n.status='waiting'\n  AND json_extract(w.record,'$.resolvedAt') IS NULL AND json_extract(w.record,'$.expiredAt') IS NULL\n  AND (json_extract(n.record,'$.wakeAt') IS NULL OR json_extract(n.record,'$.wakeAt')>?) LIMIT 1) AS record FROM runs r WHERE r.id IN (SELECT value FROM json_each(?))"
+      ],
+      "old": {
+        "operation": "pending-hooks.current-json-each-99",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.049374999999997726,
+          "p95": 0.05233400000000188,
+          "p99": 0.05233400000000188,
+          "max": 0.05233400000000188
+        },
+        "rows": 990
+      },
+      "current": {
+        "operation": "pending-hooks.current-json-each-99",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.04966699999999946,
+          "p95": 0.05787500000000989,
+          "p99": 0.05787500000000989,
+          "max": 0.05787500000000989
+        },
+        "rows": 990
+      },
+      "oldRowsPerCall": 99,
+      "currentRowsPerCall": 99,
+      "oldBindings": 2,
+      "currentBindings": 2,
+      "currentPlan": [
+        {
+          "id": 3,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH r USING INDEX sqlite_autoindex_runs_1 (id=?)"
+        },
+        {
+          "id": 7,
+          "parent": 0,
+          "notused": 0,
+          "detail": "LIST SUBQUERY 2"
+        },
+        {
+          "id": 9,
+          "parent": 7,
+          "notused": 0,
+          "detail": "SCAN json_each VIRTUAL TABLE INDEX 1:"
+        },
+        {
+          "id": 28,
+          "parent": 0,
+          "notused": 0,
+          "detail": "CORRELATED SCALAR SUBQUERY 1"
+        },
+        {
+          "id": 42,
+          "parent": 28,
+          "notused": 0,
+          "detail": "SEARCH w USING INDEX waits_run (run_id=?)"
+        },
+        {
+          "id": 54,
+          "parent": 28,
+          "notused": 0,
+          "detail": "SEARCH n USING INDEX sqlite_autoindex_node_runs_1 (run_id=? AND execution_key=?)"
+        }
+      ]
+    },
+    {
+      "operation": "pending-hooks.historical-in-100",
+      "sameSqlText": true,
+      "sql": [
+        "SELECT r.id,(SELECT json_set(w.record,'$.expiresAt',json_extract(n.record,'$.wakeAt')) FROM waits w JOIN node_runs n ON n.run_id=w.run_id AND n.execution_key=w.execution_key\n  WHERE w.run_id=r.id AND r.status IN ('running','suspended') AND n.status='waiting'\n  AND json_extract(w.record,'$.resolvedAt') IS NULL AND json_extract(w.record,'$.expiredAt') IS NULL\n  AND (json_extract(n.record,'$.wakeAt') IS NULL OR json_extract(n.record,'$.wakeAt')>?) LIMIT 1) AS record FROM runs r WHERE r.id IN (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+      ],
+      "oldSql": [
+        "SELECT r.id,(SELECT json_set(w.record,'$.expiresAt',json_extract(n.record,'$.wakeAt')) FROM waits w JOIN node_runs n ON n.run_id=w.run_id AND n.execution_key=w.execution_key\n  WHERE w.run_id=r.id AND r.status IN ('running','suspended') AND n.status='waiting'\n  AND json_extract(w.record,'$.resolvedAt') IS NULL AND json_extract(w.record,'$.expiredAt') IS NULL\n  AND (json_extract(n.record,'$.wakeAt') IS NULL OR json_extract(n.record,'$.wakeAt')>?) LIMIT 1) AS record FROM runs r WHERE r.id IN (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+      ],
+      "old": {
+        "operation": "pending-hooks.historical-in-100",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.05554100000000517,
+          "p95": 0.05945799999999224,
+          "p99": 0.05945799999999224,
+          "max": 0.05945799999999224
+        },
+        "rows": 1000
+      },
+      "current": {
+        "operation": "pending-hooks.historical-in-100",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.05462500000000148,
+          "p95": 0.06320800000000304,
+          "p99": 0.06320800000000304,
+          "max": 0.06320800000000304
+        },
+        "rows": 1000
+      },
+      "oldRowsPerCall": 100,
+      "currentRowsPerCall": 100,
+      "oldBindings": 101,
+      "currentBindings": 101,
+      "currentPlan": [
+        {
+          "id": 3,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH r USING INDEX sqlite_autoindex_runs_1 (id=?)"
+        },
+        {
+          "id": 318,
+          "parent": 0,
+          "notused": 0,
+          "detail": "CORRELATED SCALAR SUBQUERY 1"
+        },
+        {
+          "id": 332,
+          "parent": 318,
+          "notused": 0,
+          "detail": "SEARCH w USING INDEX waits_run (run_id=?)"
+        },
+        {
+          "id": 344,
+          "parent": 318,
+          "notused": 0,
+          "detail": "SEARCH n USING INDEX sqlite_autoindex_node_runs_1 (run_id=? AND execution_key=?)"
+        }
+      ]
+    },
+    {
+      "operation": "pending-hooks.current-json-each-100",
+      "sameSqlText": true,
+      "sql": [
+        "SELECT r.id,(SELECT json_set(w.record,'$.expiresAt',json_extract(n.record,'$.wakeAt')) FROM waits w JOIN node_runs n ON n.run_id=w.run_id AND n.execution_key=w.execution_key\n  WHERE w.run_id=r.id AND r.status IN ('running','suspended') AND n.status='waiting'\n  AND json_extract(w.record,'$.resolvedAt') IS NULL AND json_extract(w.record,'$.expiredAt') IS NULL\n  AND (json_extract(n.record,'$.wakeAt') IS NULL OR json_extract(n.record,'$.wakeAt')>?) LIMIT 1) AS record FROM runs r WHERE r.id IN (SELECT value FROM json_each(?))"
+      ],
+      "oldSql": [
+        "SELECT r.id,(SELECT json_set(w.record,'$.expiresAt',json_extract(n.record,'$.wakeAt')) FROM waits w JOIN node_runs n ON n.run_id=w.run_id AND n.execution_key=w.execution_key\n  WHERE w.run_id=r.id AND r.status IN ('running','suspended') AND n.status='waiting'\n  AND json_extract(w.record,'$.resolvedAt') IS NULL AND json_extract(w.record,'$.expiredAt') IS NULL\n  AND (json_extract(n.record,'$.wakeAt') IS NULL OR json_extract(n.record,'$.wakeAt')>?) LIMIT 1) AS record FROM runs r WHERE r.id IN (SELECT value FROM json_each(?))"
+      ],
+      "old": {
+        "operation": "pending-hooks.current-json-each-100",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.052707999999995536,
+          "p95": 0.05666599999999278,
+          "p99": 0.05666599999999278,
+          "max": 0.05666599999999278
+        },
+        "rows": 1000
+      },
+      "current": {
+        "operation": "pending-hooks.current-json-each-100",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.052082999999996105,
+          "p95": 0.06391699999998934,
+          "p99": 0.06391699999998934,
+          "max": 0.06391699999998934
+        },
+        "rows": 1000
+      },
+      "oldRowsPerCall": 100,
+      "currentRowsPerCall": 100,
+      "oldBindings": 2,
+      "currentBindings": 2,
+      "currentPlan": [
+        {
+          "id": 3,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH r USING INDEX sqlite_autoindex_runs_1 (id=?)"
+        },
+        {
+          "id": 7,
+          "parent": 0,
+          "notused": 0,
+          "detail": "LIST SUBQUERY 2"
+        },
+        {
+          "id": 9,
+          "parent": 7,
+          "notused": 0,
+          "detail": "SCAN json_each VIRTUAL TABLE INDEX 1:"
+        },
+        {
+          "id": 28,
+          "parent": 0,
+          "notused": 0,
+          "detail": "CORRELATED SCALAR SUBQUERY 1"
+        },
+        {
+          "id": 42,
+          "parent": 28,
+          "notused": 0,
+          "detail": "SEARCH w USING INDEX waits_run (run_id=?)"
+        },
+        {
+          "id": 54,
+          "parent": 28,
+          "notused": 0,
+          "detail": "SEARCH n USING INDEX sqlite_autoindex_node_runs_1 (run_id=? AND execution_key=?)"
+        }
+      ]
+    },
+    {
+      "operation": "pending-hooks.historical-in-200",
+      "sameSqlText": true,
+      "sql": [
+        "SELECT r.id,(SELECT json_set(w.record,'$.expiresAt',json_extract(n.record,'$.wakeAt')) FROM waits w JOIN node_runs n ON n.run_id=w.run_id AND n.execution_key=w.execution_key\n  WHERE w.run_id=r.id AND r.status IN ('running','suspended') AND n.status='waiting'\n  AND json_extract(w.record,'$.resolvedAt') IS NULL AND json_extract(w.record,'$.expiredAt') IS NULL\n  AND (json_extract(n.record,'$.wakeAt') IS NULL OR json_extract(n.record,'$.wakeAt')>?) LIMIT 1) AS record FROM runs r WHERE r.id IN (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+      ],
+      "oldSql": [
+        "SELECT r.id,(SELECT json_set(w.record,'$.expiresAt',json_extract(n.record,'$.wakeAt')) FROM waits w JOIN node_runs n ON n.run_id=w.run_id AND n.execution_key=w.execution_key\n  WHERE w.run_id=r.id AND r.status IN ('running','suspended') AND n.status='waiting'\n  AND json_extract(w.record,'$.resolvedAt') IS NULL AND json_extract(w.record,'$.expiredAt') IS NULL\n  AND (json_extract(n.record,'$.wakeAt') IS NULL OR json_extract(n.record,'$.wakeAt')>?) LIMIT 1) AS record FROM runs r WHERE r.id IN (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+      ],
+      "old": {
+        "operation": "pending-hooks.historical-in-200",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.10787500000000705,
+          "p95": 0.11624999999999375,
+          "p99": 0.11624999999999375,
+          "max": 0.11624999999999375
+        },
+        "rows": 2000
+      },
+      "current": {
+        "operation": "pending-hooks.historical-in-200",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.11579200000001322,
+          "p95": 0.1291659999999979,
+          "p99": 0.1291659999999979,
+          "max": 0.1291659999999979
+        },
+        "rows": 2000
+      },
+      "oldRowsPerCall": 200,
+      "currentRowsPerCall": 200,
+      "oldBindings": 201,
+      "currentBindings": 201,
+      "currentPlan": [
+        {
+          "id": 3,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH r USING INDEX sqlite_autoindex_runs_1 (id=?)"
+        },
+        {
+          "id": 618,
+          "parent": 0,
+          "notused": 0,
+          "detail": "CORRELATED SCALAR SUBQUERY 1"
+        },
+        {
+          "id": 632,
+          "parent": 618,
+          "notused": 0,
+          "detail": "SEARCH w USING INDEX waits_run (run_id=?)"
+        },
+        {
+          "id": 644,
+          "parent": 618,
+          "notused": 0,
+          "detail": "SEARCH n USING INDEX sqlite_autoindex_node_runs_1 (run_id=? AND execution_key=?)"
+        }
+      ]
+    },
+    {
+      "operation": "pending-hooks.current-json-each-200",
+      "sameSqlText": true,
+      "sql": [
+        "SELECT r.id,(SELECT json_set(w.record,'$.expiresAt',json_extract(n.record,'$.wakeAt')) FROM waits w JOIN node_runs n ON n.run_id=w.run_id AND n.execution_key=w.execution_key\n  WHERE w.run_id=r.id AND r.status IN ('running','suspended') AND n.status='waiting'\n  AND json_extract(w.record,'$.resolvedAt') IS NULL AND json_extract(w.record,'$.expiredAt') IS NULL\n  AND (json_extract(n.record,'$.wakeAt') IS NULL OR json_extract(n.record,'$.wakeAt')>?) LIMIT 1) AS record FROM runs r WHERE r.id IN (SELECT value FROM json_each(?))"
+      ],
+      "oldSql": [
+        "SELECT r.id,(SELECT json_set(w.record,'$.expiresAt',json_extract(n.record,'$.wakeAt')) FROM waits w JOIN node_runs n ON n.run_id=w.run_id AND n.execution_key=w.execution_key\n  WHERE w.run_id=r.id AND r.status IN ('running','suspended') AND n.status='waiting'\n  AND json_extract(w.record,'$.resolvedAt') IS NULL AND json_extract(w.record,'$.expiredAt') IS NULL\n  AND (json_extract(n.record,'$.wakeAt') IS NULL OR json_extract(n.record,'$.wakeAt')>?) LIMIT 1) AS record FROM runs r WHERE r.id IN (SELECT value FROM json_each(?))"
+      ],
+      "old": {
+        "operation": "pending-hooks.current-json-each-200",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.10112499999999613,
+          "p95": 0.11270799999999781,
+          "p99": 0.11270799999999781,
+          "max": 0.11270799999999781
+        },
+        "rows": 2000
+      },
+      "current": {
+        "operation": "pending-hooks.current-json-each-200",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.1055419999999998,
+          "p95": 0.11325000000000784,
+          "p99": 0.11325000000000784,
+          "max": 0.11325000000000784
+        },
+        "rows": 2000
+      },
+      "oldRowsPerCall": 200,
+      "currentRowsPerCall": 200,
+      "oldBindings": 2,
+      "currentBindings": 2,
+      "currentPlan": [
+        {
+          "id": 3,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH r USING INDEX sqlite_autoindex_runs_1 (id=?)"
+        },
+        {
+          "id": 7,
+          "parent": 0,
+          "notused": 0,
+          "detail": "LIST SUBQUERY 2"
+        },
+        {
+          "id": 9,
+          "parent": 7,
+          "notused": 0,
+          "detail": "SCAN json_each VIRTUAL TABLE INDEX 1:"
+        },
+        {
+          "id": 28,
+          "parent": 0,
+          "notused": 0,
+          "detail": "CORRELATED SCALAR SUBQUERY 1"
+        },
+        {
+          "id": 42,
+          "parent": 28,
+          "notused": 0,
+          "detail": "SEARCH w USING INDEX waits_run (run_id=?)"
+        },
+        {
+          "id": 54,
+          "parent": 28,
+          "notused": 0,
+          "detail": "SEARCH n USING INDEX sqlite_autoindex_node_runs_1 (run_id=? AND execution_key=?)"
+        }
+      ]
+    },
+    {
+      "operation": "logs.candidates",
+      "sameSqlText": true,
+      "sql": [
+        "SELECT l.id,l.run_id AS runId,r.slug,r.workspace,r.status,l.seq,l.at,l.node_id AS nodeId,l.execution_key AS executionKey,l.attempt,l.level,substr(l.message,1,1024) AS message,l.data_bytes AS dataBytes,instr(lower(l.message),lower(?))>0 AS textMatches FROM logs l JOIN runs r ON r.id=l.run_id WHERE l.id<? ORDER BY l.id DESC LIMIT 2001"
+      ],
+      "oldSql": [
+        "SELECT l.id,l.run_id AS runId,r.slug,r.workspace,r.status,l.seq,l.at,l.node_id AS nodeId,l.execution_key AS executionKey,l.attempt,l.level,substr(l.message,1,1024) AS message,l.data_bytes AS dataBytes,instr(lower(l.message),lower(?))>0 AS textMatches FROM logs l JOIN runs r ON r.id=l.run_id WHERE l.id<? ORDER BY l.id DESC LIMIT 2001"
+      ],
+      "old": {
+        "operation": "logs.candidates",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 1.269207999999992,
+          "p95": 1.8669170000000008,
+          "p99": 1.8669170000000008,
+          "max": 1.8669170000000008
+        },
+        "rows": 20010
+      },
+      "current": {
+        "operation": "logs.candidates",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 1.3492919999999913,
+          "p95": 2.5730000000000075,
+          "p99": 2.5730000000000075,
+          "max": 2.5730000000000075
+        },
+        "rows": 20010
+      },
+      "oldRowsPerCall": 2001,
+      "currentRowsPerCall": 2001,
+      "oldBindings": 2,
+      "currentBindings": 2,
+      "currentPlan": [
+        {
+          "id": 6,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH l USING INTEGER PRIMARY KEY (rowid<?)"
+        },
+        {
+          "id": 8,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH r USING INDEX sqlite_autoindex_runs_1 (id=?)"
+        }
+      ]
+    },
+    {
+      "operation": "logs.text-candidates",
+      "sameSqlText": true,
+      "sql": [
+        "SELECT l.id,l.run_id AS runId,r.slug,r.workspace,r.status,l.seq,l.at,l.node_id AS nodeId,l.execution_key AS executionKey,l.attempt,l.level,substr(l.message,1,1024) AS message,l.data_bytes AS dataBytes,instr(lower(l.message),lower(?))>0 AS textMatches FROM logs l JOIN runs r ON r.id=l.run_id WHERE l.id<? ORDER BY l.id DESC LIMIT 2001"
+      ],
+      "oldSql": [
+        "SELECT l.id,l.run_id AS runId,r.slug,r.workspace,r.status,l.seq,l.at,l.node_id AS nodeId,l.execution_key AS executionKey,l.attempt,l.level,substr(l.message,1,1024) AS message,l.data_bytes AS dataBytes,instr(lower(l.message),lower(?))>0 AS textMatches FROM logs l JOIN runs r ON r.id=l.run_id WHERE l.id<? ORDER BY l.id DESC LIMIT 2001"
+      ],
+      "old": {
+        "operation": "logs.text-candidates",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 1.3953339999999912,
+          "p95": 1.4680830000000071,
+          "p99": 1.4680830000000071,
+          "max": 1.4680830000000071
+        },
+        "rows": 20010
+      },
+      "current": {
+        "operation": "logs.text-candidates",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 1.5446249999999964,
+          "p95": 1.9562500000000114,
+          "p99": 1.9562500000000114,
+          "max": 1.9562500000000114
+        },
+        "rows": 20010
+      },
+      "oldRowsPerCall": 2001,
+      "currentRowsPerCall": 2001,
+      "oldBindings": 2,
+      "currentBindings": 2,
+      "currentPlan": [
+        {
+          "id": 6,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH l USING INTEGER PRIMARY KEY (rowid<?)"
+        },
+        {
+          "id": 8,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH r USING INDEX sqlite_autoindex_runs_1 (id=?)"
+        }
+      ]
+    },
+    {
+      "operation": "logs.run-candidates",
+      "sameSqlText": true,
+      "sql": [
+        "SELECT l.id,l.run_id AS runId,r.slug,r.workspace,r.status,l.seq,l.at,l.node_id AS nodeId,l.execution_key AS executionKey,l.attempt,l.level,substr(l.message,1,1024) AS message,l.data_bytes AS dataBytes,instr(lower(l.message),lower(?))>0 AS textMatches FROM logs l JOIN runs r ON r.id=l.run_id WHERE l.id<? AND l.run_id=? ORDER BY l.id DESC LIMIT 2001"
+      ],
+      "oldSql": [
+        "SELECT l.id,l.run_id AS runId,r.slug,r.workspace,r.status,l.seq,l.at,l.node_id AS nodeId,l.execution_key AS executionKey,l.attempt,l.level,substr(l.message,1,1024) AS message,l.data_bytes AS dataBytes,instr(lower(l.message),lower(?))>0 AS textMatches FROM logs l JOIN runs r ON r.id=l.run_id WHERE l.id<? AND l.run_id=? ORDER BY l.id DESC LIMIT 2001"
+      ],
+      "old": {
+        "operation": "logs.run-candidates",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.00883300000000986,
+          "p95": 0.025290999999981523,
+          "p99": 0.025290999999981523,
+          "max": 0.025290999999981523
+        },
+        "rows": 50
+      },
+      "current": {
+        "operation": "logs.run-candidates",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.007374999999996135,
+          "p95": 0.025000000000005684,
+          "p99": 0.025000000000005684,
+          "max": 0.025000000000005684
+        },
+        "rows": 50
+      },
+      "oldRowsPerCall": 5,
+      "currentRowsPerCall": 5,
+      "oldBindings": 3,
+      "currentBindings": 3,
+      "currentPlan": [
+        {
+          "id": 7,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH r USING INDEX sqlite_autoindex_runs_1 (id=?)"
+        },
+        {
+          "id": 13,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH l USING INDEX logs_run_id (run_id=? AND id<?)"
+        }
+      ]
+    },
+    {
+      "operation": "events.candidates",
+      "sameSqlText": true,
+      "sql": [
+        "SELECT e.sequence,e.at,e.txn,e.run_id AS runId,COALESCE(r.slug,e.slug) AS slug,COALESCE(r.workspace,e.workspace) AS workspace,r.status,e.node_id AS nodeId,e.entity,e.kind FROM events e LEFT JOIN runs r ON r.id=e.run_id WHERE e.sequence<? ORDER BY e.sequence DESC LIMIT 2001"
+      ],
+      "oldSql": [
+        "SELECT e.sequence,e.at,e.txn,e.run_id AS runId,COALESCE(r.slug,e.slug) AS slug,COALESCE(r.workspace,e.workspace) AS workspace,r.status,e.node_id AS nodeId,e.entity,e.kind FROM events e LEFT JOIN runs r ON r.id=e.run_id WHERE e.sequence<? ORDER BY e.sequence DESC LIMIT 2001"
+      ],
+      "old": {
+        "operation": "events.candidates",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.8350829999999974,
+          "p95": 1.2762089999999944,
+          "p99": 1.2762089999999944,
+          "max": 1.2762089999999944
+        },
+        "rows": 20010
+      },
+      "current": {
+        "operation": "events.candidates",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.8938750000000084,
+          "p95": 1.911875000000009,
+          "p99": 1.911875000000009,
+          "max": 1.911875000000009
+        },
+        "rows": 20010
+      },
+      "oldRowsPerCall": 2001,
+      "currentRowsPerCall": 2001,
+      "oldBindings": 1,
+      "currentBindings": 1,
+      "currentPlan": [
+        {
+          "id": 6,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH e USING INTEGER PRIMARY KEY (rowid<?)"
+        },
+        {
+          "id": 8,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH r USING INDEX sqlite_autoindex_runs_1 (id=?) LEFT-JOIN"
+        }
+      ]
+    },
+    {
+      "operation": "events.run-candidates",
+      "sameSqlText": true,
+      "sql": [
+        "SELECT e.sequence,e.at,e.txn,e.run_id AS runId,COALESCE(r.slug,e.slug) AS slug,COALESCE(r.workspace,e.workspace) AS workspace,r.status,e.node_id AS nodeId,e.entity,e.kind FROM events e LEFT JOIN runs r ON r.id=e.run_id WHERE e.sequence<? AND e.run_id=? ORDER BY e.sequence DESC LIMIT 2001"
+      ],
+      "oldSql": [
+        "SELECT e.sequence,e.at,e.txn,e.run_id AS runId,COALESCE(r.slug,e.slug) AS slug,COALESCE(r.workspace,e.workspace) AS workspace,r.status,e.node_id AS nodeId,e.entity,e.kind FROM events e LEFT JOIN runs r ON r.id=e.run_id WHERE e.sequence<? AND e.run_id=? ORDER BY e.sequence DESC LIMIT 2001"
+      ],
+      "old": {
+        "operation": "events.run-candidates",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.0206670000000031,
+          "p95": 0.037709000000006654,
+          "p99": 0.037709000000006654,
+          "max": 0.037709000000006654
+        },
+        "rows": 350
+      },
+      "current": {
+        "operation": "events.run-candidates",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.02258399999999483,
+          "p95": 0.032291999999984,
+          "p99": 0.032291999999984,
+          "max": 0.032291999999984
+        },
+        "rows": 350
+      },
+      "oldRowsPerCall": 35,
+      "currentRowsPerCall": 35,
+      "oldBindings": 2,
+      "currentBindings": 2,
+      "currentPlan": [
+        {
+          "id": 7,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH e USING INDEX events_run_sequence (run_id=? AND sequence<?)"
+        },
+        {
+          "id": 17,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH r USING INDEX sqlite_autoindex_runs_1 (id=?) LEFT-JOIN"
+        }
+      ]
+    },
+    {
+      "operation": "executions.page",
+      "sameSqlText": true,
+      "sql": [
+        "SELECT execution_key,CASE WHEN status='succeeded' AND length(CAST(output AS BLOB))>16384 THEN json_remove(json_set(record,'$.output',NULL),'$.inputView') ELSE json_remove(record,'$.inputView') END AS record,CASE WHEN status='succeeded' THEN length(CAST(output AS BLOB)) ELSE 0 END AS bytes FROM node_runs WHERE run_id=? AND scope=? ORDER BY execution_key LIMIT ?"
+      ],
+      "oldSql": [
+        "SELECT execution_key,CASE WHEN status='succeeded' AND length(CAST(output AS BLOB))>16384 THEN json_remove(json_set(record,'$.output',NULL),'$.inputView') ELSE json_remove(record,'$.inputView') END AS record,CASE WHEN status='succeeded' THEN length(CAST(output AS BLOB)) ELSE 0 END AS bytes FROM node_runs WHERE run_id=? AND scope=? ORDER BY execution_key LIMIT ?"
+      ],
+      "old": {
+        "operation": "executions.page",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.012374999999991587,
+          "p95": 0.03300000000001546,
+          "p99": 0.03300000000001546,
+          "max": 0.03300000000001546
+        },
+        "rows": 70
+      },
+      "current": {
+        "operation": "executions.page",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.010917000000006283,
+          "p95": 0.03458299999999781,
+          "p99": 0.03458299999999781,
+          "max": 0.03458299999999781
+        },
+        "rows": 70
+      },
+      "oldRowsPerCall": 7,
+      "currentRowsPerCall": 7,
+      "oldBindings": 3,
+      "currentBindings": 3,
+      "currentPlan": [
+        {
+          "id": 7,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH node_runs USING INDEX node_runs_scope (run_id=? AND scope=?)"
+        }
+      ]
+    },
+    {
+      "operation": "execution.attempts",
+      "sameSqlText": true,
+      "sql": [
+        "SELECT attempt,length(CAST(record->'$.output' AS BLOB)) AS bytes,CASE WHEN json_type(record,'$.output') IS NOT NULL AND length(CAST(record->'$.output' AS BLOB))>16384 THEN json_set(record,'$.output',NULL) ELSE record END AS record FROM node_attempts WHERE run_id=? AND execution_key=? AND attempt>? ORDER BY attempt LIMIT 201"
+      ],
+      "oldSql": [
+        "SELECT attempt,length(CAST(record->'$.output' AS BLOB)) AS bytes,CASE WHEN json_type(record,'$.output') IS NOT NULL AND length(CAST(record->'$.output' AS BLOB))>16384 THEN json_set(record,'$.output',NULL) ELSE record END AS record FROM node_attempts WHERE run_id=? AND execution_key=? AND attempt>? ORDER BY attempt LIMIT 201"
+      ],
+      "old": {
+        "operation": "execution.attempts",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.004874999999998408,
+          "p95": 0.0160420000000272,
+          "p99": 0.0160420000000272,
+          "max": 0.0160420000000272
+        },
+        "rows": 10
+      },
+      "current": {
+        "operation": "execution.attempts",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.0035829999999918982,
+          "p95": 0.010333000000002812,
+          "p99": 0.010333000000002812,
+          "max": 0.010333000000002812
+        },
+        "rows": 10
+      },
+      "oldRowsPerCall": 1,
+      "currentRowsPerCall": 1,
+      "oldBindings": 3,
+      "currentBindings": 3,
+      "currentPlan": [
+        {
+          "id": 5,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH node_attempts USING INDEX sqlite_autoindex_node_attempts_1 (run_id=? AND execution_key=? AND attempt>?)"
+        }
+      ]
+    },
+    {
+      "operation": "scheduler.running",
+      "sameSqlText": true,
+      "sql": [
+        "SELECT r.id,t.cursor,r.owner_token,r.heartbeat_at\n      FROM runs r LEFT JOIN cloud_turns t ON r.id=t.run_id WHERE r.status='running'\n      AND (t.next_at IS NULL OR t.next_at<=?) ORDER BY r.created_at,r.id LIMIT ?"
+      ],
+      "oldSql": [
+        "SELECT r.id,t.cursor,r.owner_token,r.heartbeat_at\n      FROM runs r LEFT JOIN cloud_turns t ON r.id=t.run_id WHERE r.status='running'\n      AND (t.next_at IS NULL OR t.next_at<=?) ORDER BY r.created_at,r.id LIMIT ?"
+      ],
+      "old": {
+        "operation": "scheduler.running",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.0015420000000005984,
+          "p95": 0.018292000000002417,
+          "p99": 0.018292000000002417,
+          "max": 0.018292000000002417
+        },
+        "rows": 0
+      },
+      "current": {
+        "operation": "scheduler.running",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.0014579999999853044,
+          "p95": 0.020375000000001364,
+          "p99": 0.020375000000001364,
+          "max": 0.020375000000001364
+        },
+        "rows": 0
+      },
+      "oldRowsPerCall": 0,
+      "currentRowsPerCall": 0,
+      "oldBindings": 2,
+      "currentBindings": 2,
+      "currentPlan": [
+        {
+          "id": 9,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH r USING INDEX runs_status_created_id (status=?)"
+        },
+        {
+          "id": 14,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH t USING INDEX sqlite_autoindex_cloud_turns_1 (run_id=?) LEFT-JOIN"
+        }
+      ]
+    },
+    {
+      "operation": "scheduler.ready",
+      "sameSqlText": true,
+      "sql": [
+        "SELECT r.id,t.cursor,r.owner_token,r.heartbeat_at\n      FROM runs r LEFT JOIN cloud_turns t ON r.id=t.run_id\n      WHERE r.owner_token IS NULL AND (r.status='queued' OR (r.status='suspended' AND r.wake_at<=?))\n      AND (t.error IS NULL OR t.next_at<=?)\n      ORDER BY r.created_at,r.id LIMIT ?"
+      ],
+      "oldSql": [
+        "SELECT r.id,t.cursor,r.owner_token,r.heartbeat_at\n      FROM runs r LEFT JOIN cloud_turns t ON r.id=t.run_id\n      WHERE r.owner_token IS NULL AND (r.status='queued' OR (r.status='suspended' AND r.wake_at<=?))\n      AND (t.error IS NULL OR t.next_at<=?)\n      ORDER BY r.created_at,r.id LIMIT ?"
+      ],
+      "old": {
+        "operation": "scheduler.ready",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.005458000000004404,
+          "p95": 0.020375000000001364,
+          "p99": 0.020375000000001364,
+          "max": 0.020375000000001364
+        },
+        "rows": 0
+      },
+      "current": {
+        "operation": "scheduler.ready",
+        "calls": 10,
+        "sqlMs": {
+          "count": 10,
+          "p50": 0.0052080000000103155,
+          "p95": 0.01712499999999295,
+          "p99": 0.01712499999999295,
+          "max": 0.01712499999999295
+        },
+        "rows": 0
+      },
+      "oldRowsPerCall": 0,
+      "currentRowsPerCall": 0,
+      "oldBindings": 3,
+      "currentBindings": 3,
+      "currentPlan": [
+        {
+          "id": 10,
+          "parent": 0,
+          "notused": 0,
+          "detail": "MULTI-INDEX OR"
+        },
+        {
+          "id": 11,
+          "parent": 10,
+          "notused": 0,
+          "detail": "INDEX 1"
+        },
+        {
+          "id": 19,
+          "parent": 11,
+          "notused": 0,
+          "detail": "SEARCH r USING INDEX runs_due (status=?)"
+        },
+        {
+          "id": 24,
+          "parent": 10,
+          "notused": 0,
+          "detail": "INDEX 2"
+        },
+        {
+          "id": 36,
+          "parent": 24,
+          "notused": 0,
+          "detail": "SEARCH r USING INDEX runs_due (status=? AND wake_at<?)"
+        },
+        {
+          "id": 50,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH t USING INDEX sqlite_autoindex_cloud_turns_1 (run_id=?) LEFT-JOIN"
+        },
+        {
+          "id": 79,
+          "parent": 0,
+          "notused": 0,
+          "detail": "USE TEMP B-TREE FOR ORDER BY"
+        }
+      ]
+    }
+  ],
+  "hooks": [
+    {
+      "limit": 50,
+      "oldBindings": 51,
+      "newBindings": 2,
+      "sameResultDigest": true,
+      "rows": 50
+    },
+    {
+      "limit": 99,
+      "oldBindings": 100,
+      "newBindings": 2,
+      "sameResultDigest": true,
+      "rows": 99
+    },
+    {
+      "limit": 100,
+      "oldBindings": 101,
+      "newBindings": 2,
+      "sameResultDigest": true,
+      "rows": 100
+    },
+    {
+      "limit": 200,
+      "oldBindings": 201,
+      "newBindings": 2,
+      "sameResultDigest": true,
+      "rows": 200
+    }
+  ],
+  "counts": [
+    {
+      "table": "runs",
+      "old": 528,
+      "current": 528
+    },
+    {
+      "table": "node_runs",
+      "old": 4721,
+      "current": 4721
+    },
+    {
+      "table": "node_attempts",
+      "old": 4746,
+      "current": 4746
+    },
+    {
+      "table": "node_scopes",
+      "old": 604,
+      "current": 604
+    },
+    {
+      "table": "logs",
+      "old": 2727,
+      "current": 2727
+    },
+    {
+      "table": "events",
+      "old": 16913,
+      "current": 17525
+    },
+    {
+      "table": "waits",
+      "old": 126,
+      "current": 126
+    },
+    {
+      "table": "cloud_turns",
+      "old": 528,
+      "current": 528
+    }
+  ],
+  "lifecycle": {
+    "old": {
+      "runs": 525,
+      "statuses": {
+        "succeeded": 461,
+        "failed": 64
+      },
+      "queueToClaimMs": {
+        "count": 525,
+        "p50": 31,
+        "p95": 2222,
+        "p99": 3140,
+        "max": 3845
+      },
+      "queueToFirstNodeMs": {
+        "count": 525,
+        "p50": 31,
+        "p95": 2222,
+        "p99": 3140,
+        "max": 3845
+      },
+      "terminalFromCreationMs": {
+        "count": 525,
+        "p50": 3014,
+        "p95": 40577,
+        "p99": 48061,
+        "max": 50372
+      },
+      "terminalFromClaimMs": {
+        "count": 525,
+        "p50": 2486,
+        "p95": 40520,
+        "p99": 48049,
+        "max": 50356
+      }
+    },
+    "current": {
+      "runs": 525,
+      "statuses": {
+        "succeeded": 461,
+        "failed": 64
+      },
+      "queueToClaimMs": {
+        "count": 525,
+        "p50": 31,
+        "p95": 5173,
+        "p99": 6967,
+        "max": 10086
+      },
+      "queueToFirstNodeMs": {
+        "count": 525,
+        "p50": 31,
+        "p95": 5173,
+        "p99": 6967,
+        "max": 10086
+      },
+      "terminalFromCreationMs": {
+        "count": 525,
+        "p50": 6104,
+        "p95": 45753,
+        "p99": 54084,
+        "max": 63367
+      },
+      "terminalFromClaimMs": {
+        "count": 525,
+        "p50": 4837,
+        "p95": 45638,
+        "p99": 52585,
+        "max": 57754
+      }
+    },
+    "allCompletedWaitMs": {
+      "count": 126,
+      "p50": 31515,
+      "p95": 47538,
+      "p99": 49336,
+      "max": 50129
+    },
+    "pendingWaits": 0
+  },
+  "limits": [
+    "Native Bun/SQLite read-only standalone copy, not Workerd SQL.",
+    "Ten repetitions per exact query shape on an uncontrolled shared host; cohort lane may concurrently read the copy. Root held fullcheck during timing but environment was not isolated.",
+    "SQL durations exclude EXPLAIN and result hashing. Outer operation duration includes first EXPLAIN and excludes result hashing. View conversion and app-side feed filtering are outside SQL duration.",
+    "Terminal dataset contains zero ready/running rows, so scheduler timings do not establish active scheduler scaling.",
+    "Grouped runCountsByDefinition and summary R2 read counts were not timed by this preserved metrics script."
+  ]
+}

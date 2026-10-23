@@ -1,0 +1,22 @@
+{
+  "at": "2026-10-23T16:15:31.014883+00:00",
+  "command": "bun run check",
+  "exitCode": 0,
+  "build": "passed",
+  "lint": "passed",
+  "typecheck": "passed",
+  "tests": {
+    "passed": 1283,
+    "skipped": 3,
+    "failed": 0,
+    "assertions": 671228,
+    "files": 112,
+    "testDurationSeconds": 79.2
+  },
+  "log": ".loopy/architecture-tests/check-final.log",
+  "logSha256": "280c49ddd30bdbf7f33945f234b1233e5d39a75bde593e5082da3e571cce8a9d",
+  "limits": [
+    "Opt-in real Docker unit case skipped; seven separately recorded actual Docker/DO/R2 scenarios passed.",
+    "Legacy tests used normal OS temporary-root behavior with explicit project markers; new architecture fixtures use isolated worktree roots."
+  ]
+}

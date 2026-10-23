@@ -1,6 +1,6 @@
 # Full phase 2 rollout plan, draft
 
-No cloud action is authorized. Phase 1's final repository check and authenticated dashboard acceptance have passed. This draft does not yet request deployment approval because the staging adapter and configuration prerequisites below remain unimplemented. The branch stays separate from main even after cloud approval.
+No cloud action is authorized. Phase 1's final repository check and authenticated dashboard acceptance have passed. This draft does not yet request deployment approval because the staging adapter and configuration prerequisites below remain unimplemented. The later architecture request separately authorizes verified main integration, including automatic watcher reloads. That authorization does not permit cloud execution or deployment.
 
 ## Full staging scope after provider verification
 
@@ -13,6 +13,7 @@ Use these resource names, subject to the account owner confirming availability:
 | Cloudflare Worker | `loopy-cloud-staging`, authenticated API and dashboard static assets on one origin |
 | SQLite DO namespace | `Workspace`, one object per authenticated workspace; existing schema and alarms |
 | R2 Standard bucket | `loopy-staging-artifacts`, immutable compiled graphs, bundles and source |
+| R2 Standard bucket | `loopy-staging-results`, immutable execution result bytes referenced by receipt authority |
 | SQLite DO namespace | `SandboxReceipts`, durable provider admissions, Modal IDs and terminal receipts |
 | Cloudflare Container | `loopy-modal-bridge-staging`, one `basic` instance running the Bun TypeScript Modal adapter |
 | Modal app | `loopy-sandboxes-staging`, safe CPU-only sandboxes, no GPU requests |
@@ -27,7 +28,7 @@ The official Modal TypeScript SDK supports Bun, Node 22+ and Deno. Its documenta
 These files and commands are planned, not present or executed. Cloud approval should authorize the staging rollout only after the following code has a reviewed local diff and passing contract tests.
 
 1. Add a `ModalBackend` behind the existing asynchronous attempt contract. Pin an exact `modal` package version and a Bun worker image digest. Use explicit injected credentials so the SDK never reads a personal profile. Persist admission and provider identity before starting effects. A lost create response must reconcile by a stable provider identity or stop uncertain; it must not create a second sandbox.
-2. Replace bridge filesystem receipt writes with `SandboxReceipts` DO RPC. Reuse exclusive admission, request-hash conflict and terminal fencing semantics. A container restart must never produce `none` for admitted work. Keep deadlines durable and allow the workspace alarm to trigger reconciliation when the bridge is asleep.
+2. Adapt the locally implemented `SandboxReceipts` DO and immutable R2 result adapter to the staging transport. The architecture repeat exercises this composition through Wrangler and Docker; the HTTP client still rejects remote endpoints. Preserve exclusive admission, request-hash conflicts, session fencing and result-before-pointer publication when adding authenticated remote transport. Verify bridge replacement and provider identity recovery against Modal. Local acceptance does not establish those provider guarantees.
 3. Validate Modal shared-volume commit/reload semantics for parallel nodes. Docker's shared writable volume is not proof that separate Modal sandboxes see the same writes. If the provider cannot provide that contract, use one sandbox per run with bounded concurrent processes or explicit artifact exchange. Do not silently accept weaker filesystem behavior.
 4. Add a separate `apps/cloud/wrangler.staging.jsonc`. It must not inherit local tokens or localhost provider URLs. Configure same-origin dashboard assets, DO migrations, R2 binding, the bridge container, concurrency 2 initially, HTTP limits and disabled public preview URLs. Keep local configuration unchanged.
 5. Add workspace-scoped authentication for the staging owner and explicit service-to-service authentication. Use Workers secrets for the Modal token pair and bridge authentication, injected only into the bridge. Workflow secrets remain disabled for the initial fixture rollout. Do not broaden network access for workflows to reach the Modal control API.

@@ -1,0 +1,17 @@
+{
+  "production": {
+    "added": 4146,
+    "deleted": 1377,
+    "files": 66
+  },
+  "tooling/config": {
+    "added": 1130,
+    "deleted": 347,
+    "files": 40
+  },
+  "tests": {
+    "added": 8782,
+    "deleted": 32,
+    "files": 78
+  }
+}

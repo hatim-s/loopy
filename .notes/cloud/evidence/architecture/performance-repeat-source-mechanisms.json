@@ -1,0 +1,46 @@
+{
+  "at": "2026-10-23T15:56:49.822Z",
+  "sources": [
+    {
+      "path": "packages/loopy/src/store/sqlite/query-runs.ts",
+      "sha256": "45b5e48edefa14c4aef5d54802cfedca629755e272fec5d6dcd6ad68d30d535b"
+    },
+    {
+      "path": "packages/loopy/src/store/memory-query-runs.ts",
+      "sha256": "d777123d65410cf96364f4f110edd11f935c3a8710a6b4a44cc3bcb852db7820"
+    },
+    {
+      "path": "packages/loopy/src/service/run-views.ts",
+      "sha256": "913d98ceff037f832d509ed07f58c5c96d1017963908b5c03615d9df6a3c0c99"
+    },
+    {
+      "path": "apps/cloud/src/artifacts.ts",
+      "sha256": "9ce6fe605e0b844b9777adebf5585685eee76624be25bfa94af6059a5803d621"
+    },
+    {
+      "path": "apps/cloud/src/artifacts-definitions.ts",
+      "sha256": "52845c7bd1427297858c169a7a8134974eb55485014d00314b2c8f057cbfdf9c"
+    },
+    {
+      "path": "packages/loopy/_tests_/definition-summaries-workerd.test.ts",
+      "sha256": "1948881c8d680719ff485261b9153687424ed73c38a46bfb609fa3a7a4814a0c"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "One authoritative grouped run-count input scan, O(N) over retained runs, plus grouping and mapping cost",
+      "source": "packages/loopy/src/store/sqlite/query-runs.ts:133-139",
+      "caller": "packages/loopy/src/service/run-views.ts:100-107",
+      "measuredByHttp": false
+    },
+    {
+      "claim": "Warm generation-matched summary path returns before graph R2 read",
+      "source": "apps/cloud/src/artifacts.ts:69-85",
+      "projection": "apps/cloud/src/artifacts-definitions.ts:48-97",
+      "testAssertions": "packages/loopy/_tests_/definition-summaries-workerd.test.ts:112-130,216-244",
+      "independentPriorReview": ".notes/cloud/architecture/data-review-2.md",
+      "testsRunByThisLane": false,
+      "liveR2CountsCaptured": false
+    }
+  ]
+}

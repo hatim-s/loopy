@@ -1,0 +1,202 @@
+{
+  "at": "2026-10-23T15:54:21.092Z",
+  "scope": "API MEASUREMENT DONE",
+  "profile": "architecture",
+  "batch": "playground-architecture-2026-10-23T15-18-37-705Z",
+  "continuous": {
+    "pid": 46381,
+    "sessionId": 90588,
+    "signal": "SIGTERM",
+    "signalAt": "2026-10-23T15:51:08.833Z",
+    "exitCode": 0
+  },
+  "postload": {
+    "pid": 69992,
+    "sessionId": 91801,
+    "exitCode": 0
+  },
+  "matchedPostload": {
+    "sessionId": 66998,
+    "exitCode": 0
+  },
+  "inventory": {
+    "sessionId": 66336,
+    "exitCode": 0,
+    "count": 528,
+    "unique": 528,
+    "statuses": {
+      "succeeded": 464,
+      "failed": 64
+    },
+    "primaryJournal": 525,
+    "missing": [],
+    "statusMismatches": [],
+    "pageCount": 11,
+    "preflights": [
+      {
+        "id": "79078fb4-a871-4f74-9bcf-3e422f1ceb52",
+        "slug": "playground-c-data-migration",
+        "status": "succeeded",
+        "createdAt": "2026-10-23T15:28:24.076Z",
+        "updatedAt": "2026-10-23T15:28:36.455Z"
+      },
+      {
+        "id": "8ebb0e76-4391-4818-8a54-e910aa9ef3ca",
+        "slug": "playground-b-test-matrix",
+        "status": "succeeded",
+        "createdAt": "2026-10-23T15:28:22.756Z",
+        "updatedAt": "2026-10-23T15:28:25.794Z"
+      },
+      {
+        "id": "3b677343-45e8-49b2-80f2-b30e68127b04",
+        "slug": "playground-a-format-report",
+        "status": "succeeded",
+        "createdAt": "2026-10-23T15:28:05.713Z",
+        "updatedAt": "2026-10-23T15:28:07.269Z"
+      }
+    ],
+    "primaryCount": 525,
+    "primaryStatuses": {
+      "succeeded": 461,
+      "failed": 64
+    }
+  },
+  "captures": [
+    {
+      "phase": "baseline-empty",
+      "path": ".notes/cloud/evidence/architecture/playground-performance-baseline-empty.json",
+      "sha256": "3b1986d8e804f4e092c3fe5a16a6c9e3750a438a1baa13b8f84400c8b5157384",
+      "startedAt": "2026-10-23T15:24:47.426Z",
+      "endedAt": "2026-10-23T15:26:18.123Z",
+      "samples": 140,
+      "failures": 0
+    },
+    {
+      "phase": "baseline-small",
+      "path": ".notes/cloud/evidence/architecture/playground-performance-baseline-small.json",
+      "sha256": "cbe5057b2004d291889a62a36f5b6335dafc6bd0e9d0a1f15d9a37d15265f593",
+      "startedAt": "2026-10-23T15:31:42.901Z",
+      "endedAt": "2026-10-23T15:33:13.755Z",
+      "samples": 178,
+      "failures": 0
+    },
+    {
+      "phase": "during-load",
+      "path": ".notes/cloud/evidence/architecture/playground-performance-during-load.json",
+      "sha256": "9ff0de14cb5bb83a3879c26ffb5154dae7378bd8a8904b541ad894ddd8499207",
+      "startedAt": "2026-10-23T15:34:38.555Z",
+      "endedAt": "2026-10-23T15:51:09.715Z",
+      "samples": 1282,
+      "failures": 0
+    },
+    {
+      "phase": "matched-load",
+      "path": ".notes/cloud/evidence/architecture/playground-performance-matched-load.json",
+      "sha256": "57ba7ed4ae71dfbd2abd9a316357e20858d629a53ef683b6e29ccf45666dbe76",
+      "startedAt": "2026-10-23T15:37:36.201Z",
+      "endedAt": "2026-10-23T15:38:30.739Z",
+      "samples": 36,
+      "failures": 0
+    },
+    {
+      "phase": "postload",
+      "path": ".notes/cloud/evidence/architecture/playground-performance-postload.json",
+      "sha256": "6d2265fa2c213bf1639eb76b86ca27c015a55ab880ad2ea57ab29d2fcff73147",
+      "startedAt": "2026-10-23T15:51:14.094Z",
+      "endedAt": "2026-10-23T15:52:45.005Z",
+      "samples": 178,
+      "failures": 0
+    },
+    {
+      "phase": "matched-postload",
+      "path": ".notes/cloud/evidence/architecture/playground-performance-matched-postload.json",
+      "sha256": "ee084153fa934c73a6c702dd1d520bc72562fe324b3ced015ed0e503e3af7f6a",
+      "startedAt": "2026-10-23T15:52:47.940Z",
+      "endedAt": "2026-10-23T15:53:23.953Z",
+      "samples": 36,
+      "failures": 0
+    },
+    {
+      "phase": "postload-inventory",
+      "path": ".notes/cloud/evidence/architecture/playground-performance-postload-inventory.json",
+      "sha256": "b696b825df4d99123ada33abc48a4c6092239bb9244877aba0d27e6608b63983",
+      "startedAt": "2026-10-23T15:53:32.424Z",
+      "endedAt": "2026-10-23T15:53:42.548Z",
+      "samples": null,
+      "failures": null
+    }
+  ],
+  "metricsSourcesUnchanged": true,
+  "sourceHashes": [
+    {
+      "path": "scripts/playground/metrics-daemon-sql.ts",
+      "sha256": "090809c2390d5768571400d1d3ebee8ce537eb2225e7516f5a3692a32bfeed5b"
+    },
+    {
+      "path": "scripts/playground/metrics-inventory.ts",
+      "sha256": "06a78fa1fe82c28dcc9966d1cc2537a712c1b2e8f1421b751302b826f48df605"
+    },
+    {
+      "path": "scripts/playground/metrics-journal.ts",
+      "sha256": "ea124560b92916c934cfe49723db87dd0568712ebae673736fedac6ad81b293a"
+    },
+    {
+      "path": "scripts/playground/metrics-lifecycle.ts",
+      "sha256": "4f055fecf3d07fc0f0d8fcc3ec5a72f25ad58df3be5d993a47c3a8bacbf9f961"
+    },
+    {
+      "path": "scripts/playground/metrics-matched.ts",
+      "sha256": "b4f6af4bb9ff51fd8b3e58eab70884765d92804fc39450451c20a0b5589400af"
+    },
+    {
+      "path": "scripts/playground/metrics-request.ts",
+      "sha256": "221bbc2300d252bd945ff0e737a081f830a3f5d13b0b514d6dd747a3aa82c9e1"
+    },
+    {
+      "path": "scripts/playground/metrics-resources.ts",
+      "sha256": "d07d6fc96c42ed743fed02a5dcd4e9f8fbad1c843ce1f3836d76727f2f2faa36"
+    },
+    {
+      "path": "scripts/playground/metrics-runtime.ts",
+      "sha256": "6c8990af87fd57fb4070594c52a7007c57787e183828d3ef1175c3a62d762380"
+    },
+    {
+      "path": "scripts/playground/metrics-sampler.ts",
+      "sha256": "6b2a78581076a7d7b41e68d846ff50523bbca9800387f1ced83c363aeccffecc"
+    },
+    {
+      "path": "scripts/playground/metrics-segments.ts",
+      "sha256": "e4ee410930f59bc8d8d709f44c1c1940bab0d7bcf0928ab305f1490ddb939fef"
+    },
+    {
+      "path": "scripts/playground/metrics-snapshot.ts",
+      "sha256": "89b66d4c18f08198dab8c292ad658db302839e80c566d29becf3bc12ebd23a2b"
+    },
+    {
+      "path": "scripts/playground/metrics-sql-driver.ts",
+      "sha256": "433d4c98f37d4c2e31d3501037bf7c397c135825529bab9161c47558b4226cbe"
+    },
+    {
+      "path": "scripts/playground/metrics-sql-queries.ts",
+      "sha256": "412926675741224b11b9c3c460ee865b0ef6ee411f9902430505dbed7f5b49e3"
+    },
+    {
+      "path": "scripts/playground/metrics-sql.ts",
+      "sha256": "15ba3c8c59204c057eabebce4b61bbd13327c4d58e96f038f1250d8f454fb295"
+    },
+    {
+      "path": "scripts/playground/metrics-statistics.ts",
+      "sha256": "768ad51b7cf2ad4a4138521f8584f05f6c49481e10b760710dd155207029651e"
+    },
+    {
+      "path": "scripts/playground/metrics.ts",
+      "sha256": "a28e0ce43de7c5c74851897b485e8aeead5210c91f3f2770625b3c700919cc36"
+    }
+  ],
+  "rootSourceFreezeSha256": "34369d678d2d9baf06841c5309e066c2e0b6aacf0d934d03c922d98bf73d682c",
+  "limits": [
+    "No sampler remains running. No extraAPI probes or liveDB access.",
+    "Root collector/graph reads were gated until all listed raw captures finished.",
+    "Inventory is authoritative only for the observed528rows, bounded to20pages of50."
+  ]
+}

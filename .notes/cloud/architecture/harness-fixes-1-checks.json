@@ -1,0 +1,539 @@
+{
+  "at": "2026-10-23 15:02:07 UTC",
+  "head": "6ffecdfd60e16aaa335467684d918b3cd8b44813",
+  "scope": "Findings 1 and 2 plus the requested architecture image selection; no collector edits",
+  "sourceStable": true,
+  "realServicesLaunched": 0,
+  "realPortsProbed": 0,
+  "realSignals": 0,
+  "realWorkloadRuns": 0,
+  "liveGateWrites": 0,
+  "oldStateReads": 0,
+  "commits": 0,
+  "reviewFixDelta": {
+    "added": 709,
+    "deleted": 97,
+    "files": [
+      {
+        "path": "scripts/playground/stack.ts",
+        "beforeSha256": "90c37bc288af8cfe8f550a586205ff2c4cf6c087a192e5f272ce719052671baa",
+        "sha256": "d96009b9295cc38b096a3d0d4e8c6df2d555ffebdc04786ac8a045cf84c22607",
+        "added": 28,
+        "deleted": 36,
+        "lines": 88
+      },
+      {
+        "path": "scripts/playground/stack-identity.ts",
+        "beforeSha256": null,
+        "sha256": "882e6302235e50497f05329af2a39bec9e04a452d670dda17086022499b11794",
+        "added": 110,
+        "deleted": 0,
+        "lines": 110
+      },
+      {
+        "path": "scripts/playground/supervisor.ts",
+        "beforeSha256": "6068c198047a859cc08baa39883e93265659d0088fde449bb13788fc2f07614b",
+        "sha256": "2703c1dd00900e3a6320ee7f571f0eec6a04dbc56caadd0486ee5147ccc51d7f",
+        "added": 15,
+        "deleted": 4,
+        "lines": 160
+      },
+      {
+        "path": "scripts/playground/index.ts",
+        "beforeSha256": "3b8e0837b6963b58c1edce4dc47820c2a378a742843d2aaa110e8f84277fe6f0",
+        "sha256": "e6c7de53ba24934aa447822cd39bbdccbf0d3ccc39e5c5b5e48209cd949b98f5",
+        "added": 12,
+        "deleted": 2,
+        "lines": 57
+      },
+      {
+        "path": "scripts/playground/baseline.ts",
+        "beforeSha256": "0c5fb40f8b65c9166ebed3d86b8297e4f92c81cd97cbb0c94a12d5c3641b9366",
+        "sha256": "bec431ec1ee849f55c0b3a0a10fc32934546812bda718519f0e6d766be045487",
+        "added": 60,
+        "deleted": 2,
+        "lines": 75
+      },
+      {
+        "path": "scripts/playground/prepare.ts",
+        "beforeSha256": "03c926dda877898a5f38251971891dc9c68b95df41168979b4ba37bbd228ee3f",
+        "sha256": "07a50bcaf1212bb5d1d70652d271b99309803bce6745e51978ffd61fdedd2b8b",
+        "added": 28,
+        "deleted": 10,
+        "lines": 131
+      },
+      {
+        "path": "scripts/playground/metrics-statistics.ts",
+        "beforeSha256": "b532042350c496762c8c1d804970220184759a0129a0bcf4844c6f285b4a8c6f",
+        "sha256": "768ad51b7cf2ad4a4138521f8584f05f6c49481e10b760710dd155207029651e",
+        "added": 15,
+        "deleted": 11,
+        "lines": 53
+      },
+      {
+        "path": "scripts/playground/metrics-segments.ts",
+        "beforeSha256": "64220dc1339e10b59465dd5d972a5193ef46c71dd00e70b2ab8e4f4172e04703",
+        "sha256": "e4ee410930f59bc8d8d709f44c1c1940bab0d7bcf0928ab305f1490ddb939fef",
+        "added": 1,
+        "deleted": 13,
+        "lines": 152
+      },
+      {
+        "path": "scripts/playground/profile.ts",
+        "beforeSha256": "9fdf65bd8227d216023e757a796f34eff920fb2878178840a7c9283dfa62f3e3",
+        "sha256": "7dbd4fb14dac25a04a2fb29e1818bad69e158a811366a6d21e23fe594adf6712",
+        "added": 1,
+        "deleted": 0,
+        "lines": 38
+      },
+      {
+        "path": "scripts/playground/config.ts",
+        "beforeSha256": "06da67f2830cb1d2f22385078c10428365dee9052f23d31f0470c3e180b007df",
+        "sha256": "0c4581ac49ea8217f739bc228d9cd137c9a46203b0b73c3a160635f41573ab98",
+        "added": 1,
+        "deleted": 1,
+        "lines": 66
+      },
+      {
+        "path": "scripts/playground/_tests_/profile.test.ts",
+        "beforeSha256": "cf906451a960b65e8ebc3baf9e9059227f8c17d82dc1fe53d6062a6ad4c2f1ab",
+        "sha256": "82d2343c6e574af7477231503fb4f4cd4d9f0edb3af31bb597fe75cad7a6a1fe",
+        "added": 2,
+        "deleted": 18,
+        "lines": 143
+      },
+      {
+        "path": "scripts/playground/_tests_/baseline-fixture.ts",
+        "beforeSha256": null,
+        "sha256": "1dc4b279dcac85b8c6a140279f3513d0fd1170a7861d552280379d7373aa0239",
+        "added": 50,
+        "deleted": 0,
+        "lines": 50
+      },
+      {
+        "path": "scripts/playground/_tests_/baseline-gate.test.ts",
+        "beforeSha256": null,
+        "sha256": "10fe9430a7418eeca939ae87157406f2363f94faf6999f86bef2a68a3be91ff3",
+        "added": 196,
+        "deleted": 0,
+        "lines": 196
+      },
+      {
+        "path": "scripts/playground/_tests_/stack-identity.test.ts",
+        "beforeSha256": null,
+        "sha256": "97fcc76dbddf7eb624492ef27fc6401138fd99c40fb9e70d002d7c2e12003cf4",
+        "added": 190,
+        "deleted": 0,
+        "lines": 190
+      }
+    ]
+  },
+  "wholeHarnessPin": {
+    "files": 65,
+    "sha256": "e3b426b75e1d57f1a98dcfdd8599fe8438940a3b70d6013eab3d54a8ab66d7f4",
+    "method": "SHA256 of sorted UTF-8 relativePath + NUL + fileSha256 + newline records",
+    "entries": [
+      {
+        "path": "scripts/daemon-playground/analyze.ts",
+        "sha256": "1deb3568dda2db26778152e24a2c900dbaa1a625a5c78404633275f65a13601c"
+      },
+      {
+        "path": "scripts/daemon-playground/backup.py",
+        "sha256": "f298a32cec9cc4e8af40e00288921b079ad3d9ba11b55350003c4abc041ed2fc"
+      },
+      {
+        "path": "scripts/daemon-playground/backup.ts",
+        "sha256": "9e09b8d42f603816cf100585834e7b47b08429e188a4b440feb9deb7c4ffbcf0"
+      },
+      {
+        "path": "scripts/daemon-playground/capture.ts",
+        "sha256": "afc9721a54274bf73b0a7f28f926097da4e1dac793af351af48764c90a3b8dd1"
+      },
+      {
+        "path": "scripts/daemon-playground/closed-executions.ts",
+        "sha256": "7e7d27df43c284c7de0b37e534c9665cde41702859a26b21efc413b30f0a524f"
+      },
+      {
+        "path": "scripts/daemon-playground/config.ts",
+        "sha256": "61b5aa989103edecf725370f55a97d7f74188e3583ab84ab58acd0a4c8768dcc"
+      },
+      {
+        "path": "scripts/daemon-playground/daemon.ts",
+        "sha256": "65e378aaab31c11b913a94db9f1ed3b3b1cd64e11f35244a0ec83f90699f4d29"
+      },
+      {
+        "path": "scripts/daemon-playground/outcomes.ts",
+        "sha256": "af6111a17d3492b382909a2f0e1e0ac72b1b51ca748bc74572d868c131c046d3"
+      },
+      {
+        "path": "scripts/daemon-playground/prepare.ts",
+        "sha256": "2ed621ede78f00a479271bb4b046b28112eb08a4bd635b654333dfbc2173a9c0"
+      },
+      {
+        "path": "scripts/daemon-playground/report-schema.ts",
+        "sha256": "9a4526d40346d61eb64d80107a13251c99b05ccb28eded760ebe1171e17d80b2"
+      },
+      {
+        "path": "scripts/daemon-playground/run.ts",
+        "sha256": "0be0fdb487ce2bcf21b1c94dd54098d5c607fb63f3caf78f72215f6a51217aeb"
+      },
+      {
+        "path": "scripts/daemon-playground/semantics.ts",
+        "sha256": "a98d5d0e3eec585c578ca4c0fb93ae6a62c505b757f5b8505281c1cf577c633c"
+      },
+      {
+        "path": "scripts/daemon-playground/source.ts",
+        "sha256": "43a13856c852ead26dc4c8fd5073c971d5dfb6b9e6c800f6785aafc13ce77c16"
+      },
+      {
+        "path": "scripts/daemon-playground/waits.ts",
+        "sha256": "36eb61ea264e0f9215ebfd8e0c3862191fc54633d859ed3efb6bd99550a13dbc"
+      },
+      {
+        "path": "scripts/playground/_tests_/baseline-fixture.ts",
+        "sha256": "1dc4b279dcac85b8c6a140279f3513d0fd1170a7861d552280379d7373aa0239"
+      },
+      {
+        "path": "scripts/playground/_tests_/baseline-gate.test.ts",
+        "sha256": "10fe9430a7418eeca939ae87157406f2363f94faf6999f86bef2a68a3be91ff3"
+      },
+      {
+        "path": "scripts/playground/_tests_/profile.test.ts",
+        "sha256": "82d2343c6e574af7477231503fb4f4cd4d9f0edb3af31bb597fe75cad7a6a1fe"
+      },
+      {
+        "path": "scripts/playground/_tests_/receipt-evidence.test.ts",
+        "sha256": "09ff2af225fe2af3e3641d201f7a95b6c2101b4b06289607d55580867c3dda3f"
+      },
+      {
+        "path": "scripts/playground/_tests_/receipt-inventory.test.ts",
+        "sha256": "d8bd36cd5e87c3c3b8cc24a8f67374adde4d457a06b0d87bb916948820039b90"
+      },
+      {
+        "path": "scripts/playground/_tests_/receipt-selection.test.ts",
+        "sha256": "43f20071f2cc7e892a6b0b22d160a482758a35416aacc22340d6e2974995479f"
+      },
+      {
+        "path": "scripts/playground/_tests_/stack-identity.test.ts",
+        "sha256": "97fcc76dbddf7eb624492ef27fc6401138fd99c40fb9e70d002d7c2e12003cf4"
+      },
+      {
+        "path": "scripts/playground/approval.ts",
+        "sha256": "5d907733c9c2c8c83d8fb1718482fc7237e6a4aa2ad524eefcd46549bf82f5ee"
+      },
+      {
+        "path": "scripts/playground/artifacts.ts",
+        "sha256": "6ff4d71ff37f5942579a56ce3dded1399f62253907897799f938c51870161c42"
+      },
+      {
+        "path": "scripts/playground/baseline.ts",
+        "sha256": "bec431ec1ee849f55c0b3a0a10fc32934546812bda718519f0e6d766be045487"
+      },
+      {
+        "path": "scripts/playground/client.ts",
+        "sha256": "7806673911064109207e2a721494a4367cb522f62f1303ee8cd931046f924aa0"
+      },
+      {
+        "path": "scripts/playground/cohort.ts",
+        "sha256": "f6ef224480da583e6611e5cf0a133924adc7b210536b1d3126920c1c8902806c"
+      },
+      {
+        "path": "scripts/playground/config-schema.ts",
+        "sha256": "b8cb38a4bcb85c65a4ef417a190b53b835a9395cab4f469663e4f484c9ffaa83"
+      },
+      {
+        "path": "scripts/playground/config.ts",
+        "sha256": "0c4581ac49ea8217f739bc228d9cd137c9a46203b0b73c3a160635f41573ab98"
+      },
+      {
+        "path": "scripts/playground/guard.ts",
+        "sha256": "1213d36290bf1cf94a7587cc54d6320bda41cba2d6a6ccc29943af8b278c42a9"
+      },
+      {
+        "path": "scripts/playground/index.ts",
+        "sha256": "e6c7de53ba24934aa447822cd39bbdccbf0d3ccc39e5c5b5e48209cd949b98f5"
+      },
+      {
+        "path": "scripts/playground/journal.ts",
+        "sha256": "d5b0dfccb453a5dc48c51cb8117937447969e9a647f8282f05830346403aa992"
+      },
+      {
+        "path": "scripts/playground/metrics-daemon-sql.ts",
+        "sha256": "090809c2390d5768571400d1d3ebee8ce537eb2225e7516f5a3692a32bfeed5b"
+      },
+      {
+        "path": "scripts/playground/metrics-inventory.ts",
+        "sha256": "06a78fa1fe82c28dcc9966d1cc2537a712c1b2e8f1421b751302b826f48df605"
+      },
+      {
+        "path": "scripts/playground/metrics-journal.ts",
+        "sha256": "ea124560b92916c934cfe49723db87dd0568712ebae673736fedac6ad81b293a"
+      },
+      {
+        "path": "scripts/playground/metrics-lifecycle.ts",
+        "sha256": "4f055fecf3d07fc0f0d8fcc3ec5a72f25ad58df3be5d993a47c3a8bacbf9f961"
+      },
+      {
+        "path": "scripts/playground/metrics-matched.ts",
+        "sha256": "b4f6af4bb9ff51fd8b3e58eab70884765d92804fc39450451c20a0b5589400af"
+      },
+      {
+        "path": "scripts/playground/metrics-request.ts",
+        "sha256": "221bbc2300d252bd945ff0e737a081f830a3f5d13b0b514d6dd747a3aa82c9e1"
+      },
+      {
+        "path": "scripts/playground/metrics-resources.ts",
+        "sha256": "d07d6fc96c42ed743fed02a5dcd4e9f8fbad1c843ce1f3836d76727f2f2faa36"
+      },
+      {
+        "path": "scripts/playground/metrics-runtime.ts",
+        "sha256": "6c8990af87fd57fb4070594c52a7007c57787e183828d3ef1175c3a62d762380"
+      },
+      {
+        "path": "scripts/playground/metrics-sampler.ts",
+        "sha256": "6b2a78581076a7d7b41e68d846ff50523bbca9800387f1ced83c363aeccffecc"
+      },
+      {
+        "path": "scripts/playground/metrics-segments.ts",
+        "sha256": "e4ee410930f59bc8d8d709f44c1c1940bab0d7bcf0928ab305f1490ddb939fef"
+      },
+      {
+        "path": "scripts/playground/metrics-snapshot.ts",
+        "sha256": "89b66d4c18f08198dab8c292ad658db302839e80c566d29becf3bc12ebd23a2b"
+      },
+      {
+        "path": "scripts/playground/metrics-sql-driver.ts",
+        "sha256": "433d4c98f37d4c2e31d3501037bf7c397c135825529bab9161c47558b4226cbe"
+      },
+      {
+        "path": "scripts/playground/metrics-sql-queries.ts",
+        "sha256": "412926675741224b11b9c3c460ee865b0ef6ee411f9902430505dbed7f5b49e3"
+      },
+      {
+        "path": "scripts/playground/metrics-sql.ts",
+        "sha256": "15ba3c8c59204c057eabebce4b61bbd13327c4d58e96f038f1250d8f454fb295"
+      },
+      {
+        "path": "scripts/playground/metrics-statistics.ts",
+        "sha256": "768ad51b7cf2ad4a4138521f8584f05f6c49481e10b760710dd155207029651e"
+      },
+      {
+        "path": "scripts/playground/metrics.ts",
+        "sha256": "a28e0ce43de7c5c74851897b485e8aeead5210c91f3f2770625b3c700919cc36"
+      },
+      {
+        "path": "scripts/playground/outcomes.ts",
+        "sha256": "e6de226126461b46d11b9708961f737e9c1ed2e07cc757cb6b0d29ec54e93aee"
+      },
+      {
+        "path": "scripts/playground/prepare.ts",
+        "sha256": "07a50bcaf1212bb5d1d70652d271b99309803bce6745e51978ffd61fdedd2b8b"
+      },
+      {
+        "path": "scripts/playground/profile.ts",
+        "sha256": "7dbd4fb14dac25a04a2fb29e1818bad69e158a811366a6d21e23fe594adf6712"
+      },
+      {
+        "path": "scripts/playground/provider.ts",
+        "sha256": "a9c46001be9c1f18a782cef748a0f8e55282d7ac76d24ed51bf0c94c0f4146da"
+      },
+      {
+        "path": "scripts/playground/readiness.ts",
+        "sha256": "638f9370f293a612cc2313d4cb20a1d5b3e6704dd77ba1c534b4e2d341349d93"
+      },
+      {
+        "path": "scripts/playground/receipt-bindings.ts",
+        "sha256": "d42b06d1e5070ff6695606c3ba3eae787a0408d11d6829aef880098b5887966b"
+      },
+      {
+        "path": "scripts/playground/receipt-evidence.ts",
+        "sha256": "268c887347100e6e5a96573f0046306dde778d474eb69737917b131738a35fc5"
+      },
+      {
+        "path": "scripts/playground/receipt-inventory.ts",
+        "sha256": "bdba5f3fc3c31471dfaaeee1a0b5f0d2c7c69e53bf047190361050bd79d4d0a4"
+      },
+      {
+        "path": "scripts/playground/receipt-selection.ts",
+        "sha256": "07c5befac3554d800c14e8a5d4c46ebce4c1cad0b1785120808170f63b71635e"
+      },
+      {
+        "path": "scripts/playground/repository.ts",
+        "sha256": "4cad5ac6dead0285ed47ab76293df81de2d70e4b1a8e8ddac64788d00c875ea4"
+      },
+      {
+        "path": "scripts/playground/run.ts",
+        "sha256": "7a11e6c61f9185ac8bf8ca864a3b6548bcedf9dd471a7ce23538c513387ef5ec"
+      },
+      {
+        "path": "scripts/playground/runtime-limit.ts",
+        "sha256": "d98d94bc915ba77fc8b16cf83f23417f0d010022b49782ce12afff7d51497d5f"
+      },
+      {
+        "path": "scripts/playground/stack-config.ts",
+        "sha256": "4f550d58d62ac1855de604e0a5e29864e1b97876cc0f419839417761735956c2"
+      },
+      {
+        "path": "scripts/playground/stack-identity.ts",
+        "sha256": "882e6302235e50497f05329af2a39bec9e04a452d670dda17086022499b11794"
+      },
+      {
+        "path": "scripts/playground/stack.ts",
+        "sha256": "d96009b9295cc38b096a3d0d4e8c6df2d555ffebdc04786ac8a045cf84c22607"
+      },
+      {
+        "path": "scripts/playground/supervisor.ts",
+        "sha256": "2703c1dd00900e3a6320ee7f571f0eec6a04dbc56caadd0486ee5147ccc51d7f"
+      },
+      {
+        "path": "scripts/playground/tsconfig.json",
+        "sha256": "39bfccb7b3f9ca624ecb19dfd5651c5522dd6971d70a1df3fb3ea26701b82ae0"
+      },
+      {
+        "path": "scripts/playground/verify-receipts.ts",
+        "sha256": "51e8cc13a79c99ab9179638d46b7448a5d057dbd4d56e3c9e847fe2914030537"
+      }
+    ]
+  },
+  "checks": [
+    {
+      "command": "bun --no-env-file test scripts/playground/_tests_/baseline-gate.test.ts scripts/playground/_tests_/stack-identity.test.ts",
+      "exitCode": 0,
+      "output": "10 pass, 0 fail, 114 expect calls; 2 files"
+    },
+    {
+      "command": "bun --no-env-file test scripts/playground/_tests_/profile.test.ts scripts/playground/_tests_/receipt-selection.test.ts scripts/playground/_tests_/receipt-evidence.test.ts scripts/playground/_tests_/baseline-gate.test.ts scripts/playground/_tests_/stack-identity.test.ts",
+      "exitCode": 0,
+      "output": "18 pass, 0 fail, 173 expect calls; 5 files"
+    },
+    {
+      "command": "LOOPY_PLAYGROUND_PROFILE=architecture bun --no-env-file test scripts/playground/_tests_/profile.test.ts scripts/playground/_tests_/receipt-selection.test.ts scripts/playground/_tests_/receipt-evidence.test.ts scripts/playground/_tests_/baseline-gate.test.ts scripts/playground/_tests_/stack-identity.test.ts",
+      "exitCode": 0,
+      "output": "18 pass, 0 fail, 173 expect calls; 5 files"
+    },
+    {
+      "command": "bun x --no-install biome check scripts/playground/{stack,stack-identity,supervisor,index,baseline,prepare,metrics-statistics,metrics-segments,profile,config}.ts scripts/playground/_tests_/{baseline-fixture,baseline-gate.test,stack-identity.test,profile.test}.ts",
+      "exitCode": 0,
+      "output": "Checked 14 files. No fixes applied."
+    },
+    {
+      "command": "bun x --no-install eslint scripts/playground/{stack,stack-identity,supervisor,index,baseline,prepare,metrics-statistics,metrics-segments,profile,config}.ts scripts/playground/_tests_/{baseline-fixture,baseline-gate.test,stack-identity.test,profile.test}.ts",
+      "exitCode": 0,
+      "output": ""
+    },
+    {
+      "command": "bun x --no-install tsc --noEmit -p scripts/playground/tsconfig.json",
+      "exitCode": 0,
+      "output": ""
+    },
+    {
+      "command": "git diff --check -- <the 14 source paths in reviewFixDelta.files>",
+      "exitCode": 0,
+      "output": ""
+    }
+  ],
+  "negativeControls": [
+    {
+      "name": "stop-command-nonce",
+      "file": "scripts/playground/stack-identity.ts",
+      "before": "observation.command !== expectedArgv.join(\" \")",
+      "after": "false",
+      "result": "Caught by offline assertion in disposable source copy; no real process operations"
+    },
+    {
+      "name": "stop-process-group",
+      "file": "scripts/playground/stack-identity.ts",
+      "before": "observation.pgid !== manifest.pgid",
+      "after": "false",
+      "result": "Caught by offline assertion in disposable source copy; no real process operations"
+    },
+    {
+      "name": "stop-selected-profile",
+      "file": "scripts/playground/stack-identity.ts",
+      "before": "manifest.identity.profile !== selection.profile",
+      "after": "false",
+      "result": "Caught by offline assertion in disposable source copy; no real process operations"
+    },
+    {
+      "name": "stop-selected-state",
+      "file": "scripts/playground/stack-identity.ts",
+      "before": "manifest.identity.state !== selection.state",
+      "after": "false",
+      "result": "Caught by offline assertion in disposable source copy; no real process operations"
+    },
+    {
+      "name": "stop-selected-root",
+      "file": "scripts/playground/stack-identity.ts",
+      "before": "manifest.identity.root !== selection.root",
+      "after": "false",
+      "result": "Caught by offline assertion in disposable source copy; no real process operations"
+    },
+    {
+      "name": "baseline-phase",
+      "file": "scripts/playground/baseline.ts",
+      "before": "phase: z.enum([\"baseline\", \"baseline-small\"])",
+      "after": "phase: z.string()",
+      "result": "Caught by offline assertion in disposable source copy; no real process operations"
+    },
+    {
+      "name": "baseline-success-coverage",
+      "file": "scripts/playground/baseline.ts",
+      "before": "if (missing.length > 0)",
+      "after": "if (false)",
+      "result": "Caught by offline assertion in disposable source copy; no real process operations"
+    },
+    {
+      "name": "architecture-image",
+      "file": "scripts/playground/profile.ts",
+      "before": "\"loopy-sandbox:architecture-bun-1.4.0\"",
+      "after": "\"loopy-sandbox:bun-1.4.0\"",
+      "result": "Caught by offline assertion in disposable source copy; no real process operations"
+    }
+  ],
+  "negativeControlCommand": "bun --no-env-file test <disposable-copy>/scripts/playground/_tests_/stack-identity.test.ts <disposable-copy>/scripts/playground/_tests_/baseline-gate.test.ts <disposable-copy>/scripts/playground/_tests_/profile.test.ts",
+  "testReplacement": {
+    "path": "scripts/playground/_tests_/profile.test.ts",
+    "name": "architecture arm accepts only a populated baseline for its own batch and evidence directory",
+    "reason": "Replaced the weak helper-only assertion with actual-arm tests and usable producer-generated baseline fixtures; no production behavior coverage removed"
+  },
+  "rootReportedFullCheck": {
+    "passed": 1252,
+    "skipped": 3,
+    "provenance": "Root/user report before this fix round; not rerun by this lane"
+  },
+  "architectureImage": "loopy-sandbox:architecture-bun-1.4.0",
+  "defaultImage": "loopy-sandbox:bun-1.4.0",
+  "imageBuiltByThisLane": false,
+  "baseline": {
+    "preferredPhase": "baseline-small",
+    "documentedAlias": "baseline",
+    "rejectedPhases": ["baseline-empty", "during-load", "postload"],
+    "requiredEndpoints": [
+      "runs.latest",
+      "loopies.counts",
+      "runs.waiting",
+      "runs.failed",
+      "overview.counts",
+      "logs.latest",
+      "events.latest",
+      "daemon",
+      "runs.page2",
+      "runs.slug",
+      "logs.text",
+      "events.run-filter",
+      "logs.page2",
+      "events.page2"
+    ]
+  },
+  "report": {
+    "path": ".notes/cloud/architecture/harness-fixes-1.md",
+    "sha256": "f54b5847d6360dbc6b901f7e58e5151a79df4ecfb563ab44bdb2957870e0f7f6"
+  },
+  "remainingLimits": [
+    "Independent round 2 and new root full check",
+    "Live ps command rendering and owned process lifecycle acceptance",
+    "Root image build and exact digest",
+    "Actual ports/baselines/workloads/DO-R2 acceptance",
+    "ps observation and group signal are not one atomic kernel operation"
+  ]
+}

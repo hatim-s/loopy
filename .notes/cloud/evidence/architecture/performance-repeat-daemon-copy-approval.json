@@ -1,0 +1,18 @@
+{
+  "at": "2026-10-23T16:06:09.861Z",
+  "path": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-daemon-architecture/daemon-readonly.sqlite",
+  "canonical": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-daemon-architecture/daemon-readonly.sqlite",
+  "expectedHash": "ed037ac95b469b5a30616afb505fa1d2e6edfb8a4d4538250108d75a2c0b3bad",
+  "observedHash": "ed037ac95b469b5a30616afb505fa1d2e6edfb8a4d4538250108d75a2c0b3bad",
+  "bytes": 2457600,
+  "sidecars": [
+    "daemon-readonly.sqlite-shm"
+  ],
+  "rootApproval": {
+    "stopped": true,
+    "sourceCopiedByRoot": true,
+    "sourceApiMatchedIds": 45
+  },
+  "daemonEvidenceSha256": "d468f5cd0ff940608de0f9cdf27c624126064dba1c0044ecc8734d16e4ed07aa",
+  "daemonApiIds": 45
+}

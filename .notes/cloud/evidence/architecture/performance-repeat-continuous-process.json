@@ -1,0 +1,27 @@
+{
+  "at": "2026-10-23T15:34:55.354Z",
+  "phase": "during-load",
+  "pid": 46381,
+  "sessionId": 90588,
+  "command": "env LOOPY_PLAYGROUND_PROFILE=architecture bun --no-env-file scripts/playground/metrics.ts during-load 3600 2",
+  "state": "stopped-gracefully",
+  "maximumSeconds": 3600,
+  "targetRequestsPerSecond": 2,
+  "output": ".notes/cloud/evidence/architecture/playground-performance-during-load.json",
+  "stop": "env LOOPY_PLAYGROUND_PROFILE=architecture bun --no-env-file -e 'process.kill(46381, \"SIGTERM\")'",
+  "rootDispatchAt": "2026-10-23T15:35:21Z",
+  "firstPrimaryIntentAt": "2026-10-23T15:35:22.353Z",
+  "firstPrimaryAdmittedAt": "2026-10-23T15:35:22.363Z",
+  "captureStartedAt": "2026-10-23T15:34:38.555Z",
+  "signalAt": "2026-10-23T15:51:08.833Z",
+  "exitCode": 0,
+  "finalCapture": {
+    "phase": "during-load",
+    "path": ".notes/cloud/evidence/architecture/playground-performance-during-load.json",
+    "sha256": "9ff0de14cb5bb83a3879c26ffb5154dae7378bd8a8904b541ad894ddd8499207",
+    "startedAt": "2026-10-23T15:34:38.555Z",
+    "endedAt": "2026-10-23T15:51:09.715Z",
+    "samples": 1282,
+    "failures": 0
+  }
+}

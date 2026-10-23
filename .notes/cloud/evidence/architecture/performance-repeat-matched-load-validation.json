@@ -1,0 +1,409 @@
+{
+  "at": "2026-10-23T15:39:02.630Z",
+  "phase": "matched-load",
+  "command": "env LOOPY_PLAYGROUND_PROFILE=architecture bun --no-env-file scripts/playground/metrics-matched.ts matched-load",
+  "sessionId": 8095,
+  "exitCode": 0,
+  "startedAt": "2026-10-23T15:37:36.201Z",
+  "updatedAt": "2026-10-23T15:38:30.739Z",
+  "batch": "playground-architecture-2026-10-23T15-18-37-705Z",
+  "plannedRequests": 36,
+  "actualSamples": 36,
+  "pairs": 18,
+  "failures": [],
+  "statuses": {
+    "200": 36
+  },
+  "minimumObservedStartSpacingMs": 1000,
+  "captureSha256": "57ba7ed4ae71dfbd2abd9a316357e20858d629a53ef683b6e29ccf45666dbe76",
+  "triggerEvidence": {
+    "checkedAt": "2026-10-23T15:37:31.661Z",
+    "journalRecords": 118,
+    "elapsedFromFirstIntentMs": 129308,
+    "samplerObservedRetainedRuns": 100,
+    "samplerObservedAt": "2026-10-23T15:37:06.303Z"
+  },
+  "oldPath": ".notes/cloud/evidence/playground-performance-matched-load.json",
+  "comparison": [
+    {
+      "endpoint": "runs.direct",
+      "old": {
+        "endpoint": "runs.direct",
+        "samples": 6,
+        "statuses": {
+          "200": 6
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 6,
+          "p50": 79.85379099999955,
+          "p95": 594.036791,
+          "p99": 594.036791,
+          "max": 594.036791
+        },
+        "bytes": {
+          "count": 6,
+          "p50": 32366,
+          "p95": 32511,
+          "p99": 32511,
+          "max": 32511
+        }
+      },
+      "current": {
+        "endpoint": "runs.direct",
+        "samples": 6,
+        "statuses": {
+          "200": 6
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 6,
+          "p50": 404.1189579999991,
+          "p95": 1392.8396660000017,
+          "p99": 1392.8396660000017,
+          "max": 1392.8396660000017
+        },
+        "bytes": {
+          "count": 6,
+          "p50": 32613,
+          "p95": 32906,
+          "p99": 32906,
+          "max": 32906
+        }
+      }
+    },
+    {
+      "endpoint": "runs.shared",
+      "old": {
+        "endpoint": "runs.shared",
+        "samples": 6,
+        "statuses": {
+          "200": 6
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 6,
+          "p50": 17.503999999998996,
+          "p95": 1536.6664170000004,
+          "p99": 1536.6664170000004,
+          "max": 1536.6664170000004
+        },
+        "bytes": {
+          "count": 6,
+          "p50": 32439,
+          "p95": 32530,
+          "p99": 32530,
+          "max": 32530
+        }
+      },
+      "current": {
+        "endpoint": "runs.shared",
+        "samples": 6,
+        "statuses": {
+          "200": 6
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 6,
+          "p50": 2020.6963329999999,
+          "p95": 5450.297541999999,
+          "p99": 5450.297541999999,
+          "max": 5450.297541999999
+        },
+        "bytes": {
+          "count": 6,
+          "p50": 32396,
+          "p95": 32526,
+          "p99": 32526,
+          "max": 32526
+        }
+      }
+    },
+    {
+      "endpoint": "loopies.direct",
+      "old": {
+        "endpoint": "loopies.direct",
+        "samples": 6,
+        "statuses": {
+          "200": 6
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 6,
+          "p50": 114.6362500000032,
+          "p95": 621.0392089999987,
+          "p99": 621.0392089999987,
+          "max": 621.0392089999987
+        },
+        "bytes": {
+          "count": 6,
+          "p50": 117366,
+          "p95": 119618,
+          "p99": 119618,
+          "max": 119618
+        }
+      },
+      "current": {
+        "endpoint": "loopies.direct",
+        "samples": 6,
+        "statuses": {
+          "200": 6
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 6,
+          "p50": 370.0123750000057,
+          "p95": 1815.8784579999992,
+          "p99": 1815.8784579999992,
+          "max": 1815.8784579999992
+        },
+        "bytes": {
+          "count": 6,
+          "p50": 101841,
+          "p95": 104315,
+          "p99": 104315,
+          "max": 104315
+        }
+      }
+    },
+    {
+      "endpoint": "loopies.shared",
+      "old": {
+        "endpoint": "loopies.shared",
+        "samples": 6,
+        "statuses": {
+          "200": 6
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 6,
+          "p50": 199.97329200000058,
+          "p95": 994.7599169999994,
+          "p99": 994.7599169999994,
+          "max": 994.7599169999994
+        },
+        "bytes": {
+          "count": 6,
+          "p50": 118067,
+          "p95": 118847,
+          "p99": 118847,
+          "max": 118847
+        }
+      },
+      "current": {
+        "endpoint": "loopies.shared",
+        "samples": 6,
+        "statuses": {
+          "200": 6
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 6,
+          "p50": 46.66116599999805,
+          "p95": 6518.371415999998,
+          "p99": 6518.371415999998,
+          "max": 6518.371415999998
+        },
+        "bytes": {
+          "count": 6,
+          "p50": 101965,
+          "p95": 103585,
+          "p99": 103585,
+          "max": 103585
+        }
+      }
+    },
+    {
+      "endpoint": "events.direct",
+      "old": {
+        "endpoint": "events.direct",
+        "samples": 6,
+        "statuses": {
+          "200": 6
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 6,
+          "p50": 114.13154100000247,
+          "p95": 561.4802500000005,
+          "p99": 561.4802500000005,
+          "max": 561.4802500000005
+        },
+        "bytes": {
+          "count": 6,
+          "p50": 11738,
+          "p95": 11946,
+          "p99": 11946,
+          "max": 11946
+        }
+      },
+      "current": {
+        "endpoint": "events.direct",
+        "samples": 6,
+        "statuses": {
+          "200": 6
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 6,
+          "p50": 7.195625000000291,
+          "p95": 972.0818330000038,
+          "p99": 972.0818330000038,
+          "max": 972.0818330000038
+        },
+        "bytes": {
+          "count": 6,
+          "p50": 11711,
+          "p95": 11850,
+          "p99": 11850,
+          "max": 11850
+        }
+      }
+    },
+    {
+      "endpoint": "events.shared",
+      "old": {
+        "endpoint": "events.shared",
+        "samples": 6,
+        "statuses": {
+          "200": 6
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 6,
+          "p50": 8.90912500000195,
+          "p95": 2530.0214579999956,
+          "p99": 2530.0214579999956,
+          "max": 2530.0214579999956
+        },
+        "bytes": {
+          "count": 6,
+          "p50": 11773,
+          "p95": 11842,
+          "p99": 11842,
+          "max": 11842
+        }
+      },
+      "current": {
+        "endpoint": "events.shared",
+        "samples": 6,
+        "statuses": {
+          "200": 6
+        },
+        "failures": 0,
+        "latencyMs": {
+          "count": 6,
+          "p50": 8.563458999997238,
+          "p95": 802.9221249999973,
+          "p99": 802.9221249999973,
+          "max": 802.9221249999973
+        },
+        "bytes": {
+          "count": 6,
+          "p50": 11720,
+          "p95": 11858,
+          "p99": 11858,
+          "max": 11858
+        }
+      }
+    }
+  ],
+  "retainedRunObservations": [
+    {
+      "at": "2026-10-23T15:37:58.948Z",
+      "endpoint": "loopies.direct",
+      "items": 15,
+      "retainedRuns": 134,
+      "running": 1,
+      "queued": 1
+    },
+    {
+      "at": "2026-10-23T15:38:00.214Z",
+      "endpoint": "loopies.shared",
+      "items": 15,
+      "retainedRuns": 135,
+      "running": 4,
+      "queued": 0
+    },
+    {
+      "at": "2026-10-23T15:38:01.215Z",
+      "endpoint": "loopies.shared",
+      "items": 15,
+      "retainedRuns": 136,
+      "running": 3,
+      "queued": 0
+    },
+    {
+      "at": "2026-10-23T15:38:02.785Z",
+      "endpoint": "loopies.direct",
+      "items": 15,
+      "retainedRuns": 136,
+      "running": 3,
+      "queued": 0
+    },
+    {
+      "at": "2026-10-23T15:38:03.786Z",
+      "endpoint": "loopies.direct",
+      "items": 15,
+      "retainedRuns": 136,
+      "running": 1,
+      "queued": 0
+    },
+    {
+      "at": "2026-10-23T15:38:05.416Z",
+      "endpoint": "loopies.shared",
+      "items": 15,
+      "retainedRuns": 138,
+      "running": 4,
+      "queued": 0
+    },
+    {
+      "at": "2026-10-23T15:38:06.416Z",
+      "endpoint": "loopies.shared",
+      "items": 15,
+      "retainedRuns": 141,
+      "running": 3,
+      "queued": 0
+    },
+    {
+      "at": "2026-10-23T15:38:12.936Z",
+      "endpoint": "loopies.direct",
+      "items": 15,
+      "retainedRuns": 142,
+      "running": 4,
+      "queued": 0
+    },
+    {
+      "at": "2026-10-23T15:38:13.938Z",
+      "endpoint": "loopies.direct",
+      "items": 15,
+      "retainedRuns": 144,
+      "running": 3,
+      "queued": 2
+    },
+    {
+      "at": "2026-10-23T15:38:15.755Z",
+      "endpoint": "loopies.shared",
+      "items": 15,
+      "retainedRuns": 144,
+      "running": 3,
+      "queued": 2
+    },
+    {
+      "at": "2026-10-23T15:38:16.756Z",
+      "endpoint": "loopies.shared",
+      "items": 15,
+      "retainedRuns": 145,
+      "running": 4,
+      "queued": 1
+    },
+    {
+      "at": "2026-10-23T15:38:17.756Z",
+      "endpoint": "loopies.direct",
+      "items": 15,
+      "retainedRuns": 145,
+      "running": 2,
+      "queued": 1
+    }
+  ]
+}

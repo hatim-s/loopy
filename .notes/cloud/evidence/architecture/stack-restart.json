@@ -1,0 +1,21 @@
+{
+  "at": "2026-10-23T16:21:59.955Z",
+  "status": "passed",
+  "batch": "playground-architecture-2026-10-23T15-18-37-705Z",
+  "runCount": 528,
+  "pages": [
+    200,
+    200,
+    128
+  ],
+  "statuses": {
+    "succeeded": 464,
+    "failed": 64
+  },
+  "dashboardStatus": 200,
+  "noNewRuns": true,
+  "limits": [
+    "Read-only comparison after restarting the same architecture state.",
+    "Receipt session may advance on bridge restart; raw and standalone snapshots remain retained."
+  ]
+}

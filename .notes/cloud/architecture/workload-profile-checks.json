@@ -1,0 +1,336 @@
+{
+  "at": "2026-10-23T14:29:46.895600+00:00",
+  "startingHead": "6ffecdfd60e16aaa335467684d918b3cd8b44813",
+  "observedHead": "6ffecdfd60e16aaa335467684d918b3cd8b44813",
+  "scope": [
+    "scripts/playground",
+    "scripts/daemon-playground",
+    ".notes/cloud/architecture/workload-profile.md",
+    ".notes/cloud/architecture/workload-profile-checks.json"
+  ],
+  "launches": 0,
+  "workloadRuns": 0,
+  "privateOldConfigsRead": false,
+  "commits": 0,
+  "gatesWritten": [],
+  "portsProbedInThisLane": [],
+  "checks": [
+    {
+      "command": "bun test scripts/playground/_tests_",
+      "exitCode": 0,
+      "output": "9 pass, 0 fail, 61 expect calls, 3 files"
+    },
+    {
+      "command": "LOOPY_PLAYGROUND_PROFILE=architecture bun test scripts/playground/_tests_",
+      "exitCode": 0,
+      "output": "9 pass, 0 fail, 61 expect calls, 3 files"
+    },
+    {
+      "command": "bun x --no-install biome check scripts/playground scripts/daemon-playground",
+      "exitCode": 0,
+      "output": "Checked 57 files. No fixes applied."
+    },
+    {
+      "command": "bun x --no-install eslint scripts/playground scripts/daemon-playground",
+      "exitCode": 0,
+      "output": ""
+    },
+    {
+      "command": "bun x --no-install tsc --noEmit -p scripts/playground/tsconfig.json",
+      "exitCode": 0,
+      "output": ""
+    },
+    {
+      "command": "git diff --check -- scripts/playground scripts/daemon-playground",
+      "exitCode": 0,
+      "output": ""
+    }
+  ],
+  "negativeControls": [
+    {
+      "name": "profile-namespace",
+      "method": "Mutated copied source under disposable temporary root; ran copied offline tests; required assertion failure",
+      "result": "caught"
+    },
+    {
+      "name": "profile-rejection",
+      "method": "Mutated copied source under disposable temporary root; ran copied offline tests; required assertion failure",
+      "result": "caught"
+    },
+    {
+      "name": "copy-containment",
+      "method": "Mutated copied source under disposable temporary root; ran copied offline tests; required assertion failure",
+      "result": "caught"
+    },
+    {
+      "name": "copy-hash",
+      "method": "Mutated copied source under disposable temporary root; ran copied offline tests; required assertion failure",
+      "result": "caught"
+    },
+    {
+      "name": "credential-isolation",
+      "method": "Mutated copied source under disposable temporary root; ran copied offline tests; required assertion failure",
+      "result": "caught"
+    },
+    {
+      "name": "baseline-samples",
+      "method": "Mutated copied source under disposable temporary root; ran copied offline tests; required assertion failure",
+      "result": "caught"
+    },
+    {
+      "name": "fresh-receipts",
+      "method": "Mutated copied source under disposable temporary root; ran copied offline tests; required assertion failure",
+      "result": "caught"
+    },
+    {
+      "name": "worker-liveness",
+      "method": "Mutated copied source under disposable temporary root; ran copied offline tests; required assertion failure",
+      "result": "caught"
+    },
+    {
+      "name": "terminal-result-hash",
+      "method": "Mutated copied source under disposable temporary root; ran copied offline tests; required assertion failure",
+      "result": "caught"
+    }
+  ],
+  "fixtures": {
+    "path": "packages/loopy/_tests_/fixtures/playground",
+    "unchangedFromStartingHead": true,
+    "files": 47,
+    "sha256": "a543c987ac688368fe998d5d23e2ae6f219a1717974e3df705c2b548486bb404",
+    "hashMethod": "SHA256 of sorted relative path + NUL + file bytes, concatenated; this is a source-tree audit hash, not the existing repository marker algorithm"
+  },
+  "sourceChanges": {
+    "files": 30,
+    "added": 917,
+    "deleted": 254,
+    "filesAndHashes": [
+      {
+        "path": "scripts/daemon-playground/config.ts",
+        "sha256": "61b5aa989103edecf725370f55a97d7f74188e3583ab84ab58acd0a4c8768dcc",
+        "added": 6,
+        "deleted": 4,
+        "lines": 43
+      },
+      {
+        "path": "scripts/daemon-playground/prepare.ts",
+        "sha256": "2ed621ede78f00a479271bb4b046b28112eb08a4bd635b654333dfbc2173a9c0",
+        "added": 2,
+        "deleted": 1,
+        "lines": 179
+      },
+      {
+        "path": "scripts/playground/_tests_/profile.test.ts",
+        "sha256": "cf906451a960b65e8ebc3baf9e9059227f8c17d82dc1fe53d6062a6ad4c2f1ab",
+        "added": 159,
+        "deleted": 0,
+        "lines": 159
+      },
+      {
+        "path": "scripts/playground/_tests_/receipt-evidence.test.ts",
+        "sha256": "09ff2af225fe2af3e3641d201f7a95b6c2101b4b06289607d55580867c3dda3f",
+        "added": 82,
+        "deleted": 0,
+        "lines": 82
+      },
+      {
+        "path": "scripts/playground/_tests_/receipt-selection.test.ts",
+        "sha256": "43f20071f2cc7e892a6b0b22d160a482758a35416aacc22340d6e2974995479f",
+        "added": 73,
+        "deleted": 0,
+        "lines": 73
+      },
+      {
+        "path": "scripts/playground/baseline.ts",
+        "sha256": "0c5fb40f8b65c9166ebed3d86b8297e4f92c81cd97cbb0c94a12d5c3641b9366",
+        "added": 17,
+        "deleted": 0,
+        "lines": 17
+      },
+      {
+        "path": "scripts/playground/cohort.ts",
+        "sha256": "f6ef224480da583e6611e5cf0a133924adc7b210536b1d3126920c1c8902806c",
+        "added": 3,
+        "deleted": 7,
+        "lines": 154
+      },
+      {
+        "path": "scripts/playground/config-schema.ts",
+        "sha256": "b8cb38a4bcb85c65a4ef417a190b53b835a9395cab4f469663e4f484c9ffaa83",
+        "added": 36,
+        "deleted": 0,
+        "lines": 36
+      },
+      {
+        "path": "scripts/playground/config.ts",
+        "sha256": "06da67f2830cb1d2f22385078c10428365dee9052f23d31f0470c3e180b007df",
+        "added": 20,
+        "deleted": 23,
+        "lines": 66
+      },
+      {
+        "path": "scripts/playground/metrics-daemon-sql.ts",
+        "sha256": "090809c2390d5768571400d1d3ebee8ce537eb2225e7516f5a3692a32bfeed5b",
+        "added": 5,
+        "deleted": 8,
+        "lines": 117
+      },
+      {
+        "path": "scripts/playground/metrics-inventory.ts",
+        "sha256": "06a78fa1fe82c28dcc9966d1cc2537a712c1b2e8f1421b751302b826f48df605",
+        "added": 3,
+        "deleted": 6,
+        "lines": 124
+      },
+      {
+        "path": "scripts/playground/metrics-journal.ts",
+        "sha256": "ea124560b92916c934cfe49723db87dd0568712ebae673736fedac6ad81b293a",
+        "added": 2,
+        "deleted": 5,
+        "lines": 141
+      },
+      {
+        "path": "scripts/playground/metrics-matched.ts",
+        "sha256": "b4f6af4bb9ff51fd8b3e58eab70884765d92804fc39450451c20a0b5589400af",
+        "added": 2,
+        "deleted": 2,
+        "lines": 140
+      },
+      {
+        "path": "scripts/playground/metrics-runtime.ts",
+        "sha256": "6c8990af87fd57fb4070594c52a7007c57787e183828d3ef1175c3a62d762380",
+        "added": 4,
+        "deleted": 10,
+        "lines": 150
+      },
+      {
+        "path": "scripts/playground/metrics-segments.ts",
+        "sha256": "64220dc1339e10b59465dd5d972a5193ef46c71dd00e70b2ab8e4f4172e04703",
+        "added": 3,
+        "deleted": 5,
+        "lines": 164
+      },
+      {
+        "path": "scripts/playground/metrics-snapshot.ts",
+        "sha256": "89b66d4c18f08198dab8c292ad658db302839e80c566d29becf3bc12ebd23a2b",
+        "added": 37,
+        "deleted": 5,
+        "lines": 46
+      },
+      {
+        "path": "scripts/playground/metrics-sql.ts",
+        "sha256": "15ba3c8c59204c057eabebce4b61bbd13327c4d58e96f038f1250d8f454fb295",
+        "added": 16,
+        "deleted": 7,
+        "lines": 206
+      },
+      {
+        "path": "scripts/playground/metrics.ts",
+        "sha256": "a28e0ce43de7c5c74851897b485e8aeead5210c91f3f2770625b3c700919cc36",
+        "added": 2,
+        "deleted": 2,
+        "lines": 66
+      },
+      {
+        "path": "scripts/playground/prepare.ts",
+        "sha256": "03c926dda877898a5f38251971891dc9c68b95df41168979b4ba37bbd228ee3f",
+        "added": 9,
+        "deleted": 4,
+        "lines": 113
+      },
+      {
+        "path": "scripts/playground/profile.ts",
+        "sha256": "9fdf65bd8227d216023e757a796f34eff920fb2878178840a7c9283dfa62f3e3",
+        "added": 37,
+        "deleted": 0,
+        "lines": 37
+      },
+      {
+        "path": "scripts/playground/provider.ts",
+        "sha256": "a9c46001be9c1f18a782cef748a0f8e55282d7ac76d24ed51bf0c94c0f4146da",
+        "added": 31,
+        "deleted": 4,
+        "lines": 64
+      },
+      {
+        "path": "scripts/playground/readiness.ts",
+        "sha256": "638f9370f293a612cc2313d4cb20a1d5b3e6704dd77ba1c534b4e2d341349d93",
+        "added": 37,
+        "deleted": 0,
+        "lines": 37
+      },
+      {
+        "path": "scripts/playground/receipt-bindings.ts",
+        "sha256": "d42b06d1e5070ff6695606c3ba3eae787a0408d11d6829aef880098b5887966b",
+        "added": 22,
+        "deleted": 0,
+        "lines": 22
+      },
+      {
+        "path": "scripts/playground/receipt-evidence.ts",
+        "sha256": "268c887347100e6e5a96573f0046306dde778d474eb69737917b131738a35fc5",
+        "added": 54,
+        "deleted": 0,
+        "lines": 54
+      },
+      {
+        "path": "scripts/playground/receipt-selection.ts",
+        "sha256": "07c5befac3554d800c14e8a5d4c46ebce4c1cad0b1785120808170f63b71635e",
+        "added": 13,
+        "deleted": 0,
+        "lines": 13
+      },
+      {
+        "path": "scripts/playground/repository.ts",
+        "sha256": "4cad5ac6dead0285ed47ab76293df81de2d70e4b1a8e8ddac64788d00c875ea4",
+        "added": 2,
+        "deleted": 1,
+        "lines": 283
+      },
+      {
+        "path": "scripts/playground/stack-config.ts",
+        "sha256": "4f550d58d62ac1855de604e0a5e29864e1b97876cc0f419839417761735956c2",
+        "added": 80,
+        "deleted": 0,
+        "lines": 80
+      },
+      {
+        "path": "scripts/playground/stack.ts",
+        "sha256": "90c37bc288af8cfe8f550a586205ff2c4cf6c087a192e5f272ce719052671baa",
+        "added": 6,
+        "deleted": 160,
+        "lines": 96
+      },
+      {
+        "path": "scripts/playground/supervisor.ts",
+        "sha256": "6068c198047a859cc08baa39883e93265659d0088fde449bb13788fc2f07614b",
+        "added": 149,
+        "deleted": 0,
+        "lines": 149
+      },
+      {
+        "path": "scripts/playground/tsconfig.json",
+        "sha256": "39bfccb7b3f9ca624ecb19dfd5651c5522dd6971d70a1df3fb3ea26701b82ae0",
+        "added": 5,
+        "deleted": 0,
+        "lines": 5
+      }
+    ]
+  },
+  "testsDeletedOrMoved": [],
+  "documents": [
+    {
+      "path": ".notes/cloud/architecture/workload-profile.md",
+      "sha256": "a17190c0d71ee1e9dcefaf0c47a5491996561d375554c2170faaf60fbf0cafc7"
+    }
+  ],
+  "remainingLimits": [
+    "No actual port availability observation",
+    "No service or workload launch",
+    "No live DO/R2 use or authority identity/read-amplification proof",
+    "No provider failure/restart/export fencing exercise",
+    "No browser acceptance",
+    "No root-supplied verified closed-copy dataset",
+    "Root full check and main integration remain pending"
+  ]
+}

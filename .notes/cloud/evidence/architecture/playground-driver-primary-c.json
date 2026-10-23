@@ -1,0 +1,2098 @@
+{
+  "status": "passed",
+  "scope": "local-wrangler-docker",
+  "batch": "playground-architecture-2026-10-23T15-18-37-705Z",
+  "group": "c",
+  "phase": "primary",
+  "startedAt": "2026-10-23T15:35:22.131Z",
+  "endedAt": "2026-10-23T15:49:20.039Z",
+  "planned": 125,
+  "completed": 125,
+  "results": [
+    {
+      "runId": "af519d4d-1822-466c-a1fb-11942e7654d5",
+      "slug": "playground-c-sleep-resume",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-sleep-resume/af519d4d-1822-466c-a1fb-11942e7654d5.json",
+        "sha256": "8fc263c614793decbdf55ef5240383610e955a142ac884efa93db9bd413cb122",
+        "bytes": 325
+      }
+    },
+    {
+      "runId": "1dcce6ed-1689-49e0-b29e-a68cfd25c7f0",
+      "slug": "playground-c-repository-validation",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-repository-validation/1dcce6ed-1689-49e0-b29e-a68cfd25c7f0.json",
+        "sha256": "36753a5fe3e9220d7d49140a0a64e3837518bed0b2fd99bb55c1f535108916fb",
+        "bytes": 381
+      }
+    },
+    {
+      "runId": "ae1ddd42-3ac0-40eb-adf5-d5396472e22f",
+      "slug": "playground-c-data-migration",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:35:28.014Z",
+        "dueAt": 1792769738014,
+        "resolvedAt": "2026-10-23T15:35:38.542Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-data-migration/ae1ddd42-3ac0-40eb-adf5-d5396472e22f.json",
+        "sha256": "d37016610b51f31930fc350cf09559bdeaf76a15610e3fcd72b3f2c3c07a6c96",
+        "bytes": 393
+      }
+    },
+    {
+      "runId": "5efed7fe-e33f-47c0-9233-e21959ddbfe6",
+      "slug": "playground-c-security-review",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:35:30.757Z",
+        "dueAt": 1792769740757,
+        "resolvedAt": "2026-10-23T15:35:41.864Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-security-review/5efed7fe-e33f-47c0-9233-e21959ddbfe6.json",
+        "sha256": "9c0436a0d9487fce8bea6fb1b539a1332a0f0387c6a08d186df76d1c83329bb9",
+        "bytes": 399
+      }
+    },
+    {
+      "runId": "8f6bc474-b495-48f5-a2ab-c5409fae5fea",
+      "slug": "playground-c-artifact-manifest",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:35:39.435Z",
+        "dueAt": 1792769749435,
+        "resolvedAt": "2026-10-23T15:35:49.821Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-artifact-manifest/8f6bc474-b495-48f5-a2ab-c5409fae5fea.json",
+        "sha256": "25902427f998ebd1ce1e0c15f486d35f6dfecf07dd6d5032c7625d2d40417e4a",
+        "bytes": 310
+      }
+    },
+    {
+      "runId": "c29df2f6-bbf7-428b-a608-0f13d17fc00d",
+      "slug": "playground-c-sleep-resume",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-sleep-resume/c29df2f6-bbf7-428b-a608-0f13d17fc00d.json",
+        "sha256": "fd034fd16d4cd11145bef812927c9923d0a710a87f43de7535a6e93f6e8e86b6",
+        "bytes": 325
+      }
+    },
+    {
+      "runId": "bcdc7273-8834-4271-8af0-1b62cecf8bcf",
+      "slug": "playground-c-repository-validation",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-repository-validation/bcdc7273-8834-4271-8af0-1b62cecf8bcf.json",
+        "sha256": "d324d9b8fd079dabfac0f37f03b4c985174581870d867231babedd1fb35a81b5",
+        "bytes": 381
+      }
+    },
+    {
+      "runId": "1e87e479-6e4c-4384-91f1-5e8965ce465b",
+      "slug": "playground-c-data-migration",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:35:45.845Z",
+        "dueAt": 1792769762845,
+        "resolvedAt": "2026-10-23T15:36:07.669Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-data-migration/1e87e479-6e4c-4384-91f1-5e8965ce465b.json",
+        "sha256": "6b574bc4fcd91b2981669db6b78dd08b40d1591dbaeb95466df5f6232fe1deb4",
+        "bytes": 393
+      }
+    },
+    {
+      "runId": "e9d76cda-3acb-46f0-b069-50ad64f68420",
+      "slug": "playground-c-security-review",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:35:49.799Z",
+        "dueAt": 1792769766799,
+        "resolvedAt": "2026-10-23T15:36:07.709Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-security-review/e9d76cda-3acb-46f0-b069-50ad64f68420.json",
+        "sha256": "eb0a294ef5e65ff88bcf018b6e1ec4414fbb9949e067848f9fac7b4cfad3ab6c",
+        "bytes": 399
+      }
+    },
+    {
+      "runId": "c9f77e0c-d303-484d-991e-d4e77cd448c2",
+      "slug": "playground-c-sleep-resume",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-sleep-resume/c9f77e0c-d303-484d-991e-d4e77cd448c2.json",
+        "sha256": "6ee1f4a1cd2713d98bedf1390dbbee99397d5295aa782b780c9829fd6052248a",
+        "bytes": 325
+      }
+    },
+    {
+      "runId": "8db9b126-a494-41c6-b92e-8f691bc0b822",
+      "slug": "playground-c-repository-validation",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-repository-validation/8db9b126-a494-41c6-b92e-8f691bc0b822.json",
+        "sha256": "e7500ce702771ae06a1ff9fd567f4c105a82a246b3a5e5147adc44afc55f6c4a",
+        "bytes": 381
+      }
+    },
+    {
+      "runId": "e615799f-e641-426c-b0e4-bb0c4956504e",
+      "slug": "playground-c-artifact-manifest",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:36:01.714Z",
+        "dueAt": 1792769778714,
+        "resolvedAt": "2026-10-23T15:36:21.257Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-artifact-manifest/e615799f-e641-426c-b0e4-bb0c4956504e.json",
+        "sha256": "bf6109ec11cdf817039484d4ee7480c05279b5e898ed5a3e99983cab1c40b115",
+        "bytes": 310
+      }
+    },
+    {
+      "runId": "58166b69-74f6-412c-9335-efe9a8f11567",
+      "slug": "playground-c-data-migration",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:36:06.502Z",
+        "dueAt": 1792769790502,
+        "resolvedAt": "2026-10-23T15:36:30.636Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-data-migration/58166b69-74f6-412c-9335-efe9a8f11567.json",
+        "sha256": "b2e2b39ffc3173c0c0bb5b912953b1e408ac4c3832ad047d2b4a49ac1f247b11",
+        "bytes": 393
+      }
+    },
+    {
+      "runId": "f00432b9-3d4c-42a2-ac3f-af71059b25e7",
+      "slug": "playground-c-security-review",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:36:13.926Z",
+        "dueAt": 1792769797926,
+        "resolvedAt": "2026-10-23T15:36:38.421Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-security-review/f00432b9-3d4c-42a2-ac3f-af71059b25e7.json",
+        "sha256": "0dcf0c3c034f838b58d3fb63be9dbac0560ca0d168dbc99212c5d28ff6d48e1e",
+        "bytes": 399
+      }
+    },
+    {
+      "runId": "c141345a-285d-4e94-b043-e357c10a69b4",
+      "slug": "playground-c-sleep-resume",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-sleep-resume/c141345a-285d-4e94-b043-e357c10a69b4.json",
+        "sha256": "689ac4118201a6208e1d85c364708e2f14faeb7cfc4174a150ecbd3b86fa1bff",
+        "bytes": 325
+      }
+    },
+    {
+      "runId": "47101b80-d42c-4a7b-91cd-8803864cba92",
+      "slug": "playground-c-repository-validation",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-repository-validation/47101b80-d42c-4a7b-91cd-8803864cba92.json",
+        "sha256": "a4b91d2183291e64caeddccc4ae617408a5fab1114cf93cc1305a141943555d3",
+        "bytes": 381
+      }
+    },
+    {
+      "runId": "9d2e67d1-96af-4755-b839-3176c28e6200",
+      "slug": "playground-c-artifact-manifest",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:36:27.597Z",
+        "dueAt": 1792769811597,
+        "resolvedAt": "2026-10-23T15:36:53.602Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-artifact-manifest/9d2e67d1-96af-4755-b839-3176c28e6200.json",
+        "sha256": "e8eac0782e099c1909128451968752ec39c2a651c0f9fdbb93ffb9b010e8df28",
+        "bytes": 310
+      }
+    },
+    {
+      "runId": "08eaeeee-2ce6-4e5d-9b3e-70cdb57e9712",
+      "slug": "playground-c-data-migration",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:36:27.561Z",
+        "dueAt": 1792769818561,
+        "resolvedAt": "2026-10-23T15:37:00.694Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-data-migration/08eaeeee-2ce6-4e5d-9b3e-70cdb57e9712.json",
+        "sha256": "bc29805589e7c674056035aa1ec496b00e98ab6a6a15f54be1121bd0022a17f2",
+        "bytes": 393
+      }
+    },
+    {
+      "runId": "43b1a426-e415-450a-baf8-b729ecf1cc71",
+      "slug": "playground-c-security-review",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:36:37.516Z",
+        "dueAt": 1792769828516,
+        "resolvedAt": "2026-10-23T15:37:09.782Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-security-review/43b1a426-e415-450a-baf8-b729ecf1cc71.json",
+        "sha256": "7d6445f3f3e58861f2155dccc27d8f3ad4c53476ff0f7501009036943ba16135",
+        "bytes": 399
+      }
+    },
+    {
+      "runId": "de0e190f-429a-4312-a3a8-df43317647ea",
+      "slug": "playground-c-sleep-resume",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-sleep-resume/de0e190f-429a-4312-a3a8-df43317647ea.json",
+        "sha256": "1ea0ed2d0fe77ddcc2671d6f32be253d3c20f602a1f523c82bc56455cebe196f",
+        "bytes": 326
+      }
+    },
+    {
+      "runId": "65254f4d-a32e-440c-bfa6-7c629585140f",
+      "slug": "playground-c-repository-validation",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-repository-validation/65254f4d-a32e-440c-bfa6-7c629585140f.json",
+        "sha256": "9a4ae0906f988e653750fef6be5621a2ae15e0b27ef9bbc9669ab4c5b3d9a4b1",
+        "bytes": 381
+      }
+    },
+    {
+      "runId": "981aac53-cdbb-4701-b48f-28bef784a675",
+      "slug": "playground-c-artifact-manifest",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:37:00.677Z",
+        "dueAt": 1792769851677,
+        "resolvedAt": "2026-10-23T15:37:33.621Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-artifact-manifest/981aac53-cdbb-4701-b48f-28bef784a675.json",
+        "sha256": "70bcbd5b59ababf42b31994bfadcbea1c6000d540f5ab2e7ec21423c9b015d89",
+        "bytes": 310
+      }
+    },
+    {
+      "runId": "60420ab6-413a-4385-9693-2b4d4f666271",
+      "slug": "playground-c-security-review",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:37:08.206Z",
+        "dueAt": 1792769866206,
+        "resolvedAt": "2026-10-23T15:37:47.698Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-security-review/60420ab6-413a-4385-9693-2b4d4f666271.json",
+        "sha256": "15d07a0cfe1176f665fab11ca925a82f89cd6ca0928c19489c6b0b0548995516",
+        "bytes": 399
+      }
+    },
+    {
+      "runId": "85e368f1-dead-41fc-8f30-397c7c3ad7de",
+      "slug": "playground-c-data-migration",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:37:00.618Z",
+        "dueAt": 1792769858618,
+        "resolvedAt": "2026-10-23T15:37:47.579Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-data-migration/85e368f1-dead-41fc-8f30-397c7c3ad7de.json",
+        "sha256": "63952178da3a5015a5c9e5f3ce0374857d141b2254e7c4021d3b826c4e306dde",
+        "bytes": 393
+      }
+    },
+    {
+      "runId": "7ea6912b-5585-4979-b14c-d78d9afbe2b2",
+      "slug": "playground-c-artifact-manifest",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:37:24.613Z",
+        "dueAt": 1792769882613,
+        "resolvedAt": "2026-10-23T15:38:02.800Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-artifact-manifest/7ea6912b-5585-4979-b14c-d78d9afbe2b2.json",
+        "sha256": "c5689b07373db3550a9130f8068949b1249719f403af7d8c85a57d8d6c292767",
+        "bytes": 310
+      }
+    },
+    {
+      "runId": "e3fc67e2-dbf9-4038-9c83-3f5d06705e0f",
+      "slug": "playground-c-sleep-resume",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "f672402e-42ea-4a43-a02d-e6a72e0b70c9",
+      "slug": "playground-c-repository-validation",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "027ef190-16c1-4909-9d79-e80922088c7d",
+      "slug": "playground-c-data-migration",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:37:45.250Z",
+        "dueAt": 1792769910250,
+        "resolvedAt": "2026-10-23T15:38:30.832Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-data-migration/027ef190-16c1-4909-9d79-e80922088c7d.json",
+        "sha256": "94b39f80c78876f38a058b99773ea4338733f168648e9ba1ed6b89367a296905",
+        "bytes": 393
+      }
+    },
+    {
+      "runId": "c70a19c2-64e1-438e-9c2b-f9659a180b79",
+      "slug": "playground-c-data-migration",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:38:21.600Z",
+        "dueAt": 1792769917600,
+        "resolvedAt": "2026-10-23T15:38:39.121Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-data-migration/c70a19c2-64e1-438e-9c2b-f9659a180b79.json",
+        "sha256": "2685a797e6b3668ba0368d021540badd540b4889fa4dfbc0bca483993ab1e254",
+        "bytes": 393
+      }
+    },
+    {
+      "runId": "161c54cf-280b-4ffb-bafc-ea160f2a444d",
+      "slug": "playground-c-security-review",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:38:01.631Z",
+        "dueAt": 1792769926631,
+        "resolvedAt": "2026-10-23T15:38:46.725Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-security-review/161c54cf-280b-4ffb-bafc-ea160f2a444d.json",
+        "sha256": "b51b272eb61a2f1b026d1b72b0159aa14fa97c5ec9d821ffe4e4fa5d07f1f73f",
+        "bytes": 399
+      }
+    },
+    {
+      "runId": "6fc877c1-0eaa-45ec-896b-4323274dc2cf",
+      "slug": "playground-c-sleep-resume",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-sleep-resume/6fc877c1-0eaa-45ec-896b-4323274dc2cf.json",
+        "sha256": "b5e81fff54310f346952e0657f87153c6c05652df878f2c3e71c306ee9df5245",
+        "bytes": 326
+      }
+    },
+    {
+      "runId": "61b0586a-ee1e-473d-b2c8-deceb42b3126",
+      "slug": "playground-c-repository-validation",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-repository-validation/61b0586a-ee1e-473d-b2c8-deceb42b3126.json",
+        "sha256": "b108f04bbea1fa3c47e473c8aa5233fd8ff1f4a041509e87a9ce4f838f4e8bfd",
+        "bytes": 381
+      }
+    },
+    {
+      "runId": "e01f3d77-0da7-4429-81a2-57e326f3b8f9",
+      "slug": "playground-c-security-review",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:38:36.089Z",
+        "dueAt": 1792769932089,
+        "resolvedAt": "2026-10-23T15:38:54.270Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-security-review/e01f3d77-0da7-4429-81a2-57e326f3b8f9.json",
+        "sha256": "0c3b886d8520ca31cd1e858231ceb0c17a31c0d5eebe9ad0754bf31f26edf40b",
+        "bytes": 399
+      }
+    },
+    {
+      "runId": "556d586c-0be2-4e8d-a3a0-4144aa3e0008",
+      "slug": "playground-c-artifact-manifest",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:38:19.182Z",
+        "dueAt": 1792769944182,
+        "resolvedAt": "2026-10-23T15:39:04.223Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-artifact-manifest/556d586c-0be2-4e8d-a3a0-4144aa3e0008.json",
+        "sha256": "4de0bfa6607b567141292cff54d012964835f035629ea4309fee82ee0ee4b3e4",
+        "bytes": 310
+      }
+    },
+    {
+      "runId": "12f53a42-64f7-410c-afac-18b082fb812f",
+      "slug": "playground-c-sleep-resume",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-sleep-resume/12f53a42-64f7-410c-afac-18b082fb812f.json",
+        "sha256": "6a384217674e9d3f1298e8f6cce2f3f962419edb5082e6c7d59e2f9e7a7652ac",
+        "bytes": 325
+      }
+    },
+    {
+      "runId": "7418bdc3-43b0-48d5-b8a7-1d24b7f1e5ca",
+      "slug": "playground-c-artifact-manifest",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:38:58.555Z",
+        "dueAt": 1792769954555,
+        "resolvedAt": "2026-10-23T15:39:16.010Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-artifact-manifest/7418bdc3-43b0-48d5-b8a7-1d24b7f1e5ca.json",
+        "sha256": "7f363c45e88c19920ce5e1bdcf634ee934f9696275337abf78b7dfb61d1abdd2",
+        "bytes": 310
+      }
+    },
+    {
+      "runId": "f48510a1-4ecb-49c0-b5d4-d12794ddbe64",
+      "slug": "playground-c-data-migration",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:38:58.620Z",
+        "dueAt": 1792769961620,
+        "resolvedAt": "2026-10-23T15:39:24.503Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-data-migration/f48510a1-4ecb-49c0-b5d4-d12794ddbe64.json",
+        "sha256": "7d1716d3112d52d2c7f3d02df42136f55756043940f0a80ab254bf9707e6f651",
+        "bytes": 393
+      }
+    },
+    {
+      "runId": "9b5ea255-61e8-4626-9c44-2c3f2d226750",
+      "slug": "playground-c-repository-validation",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-repository-validation/9b5ea255-61e8-4626-9c44-2c3f2d226750.json",
+        "sha256": "295c3a4eb4747bfa9d4c44f14770daeadae91c520601658863f911155e8686c4",
+        "bytes": 381
+      }
+    },
+    {
+      "runId": "620a6ce0-39e7-4e81-8565-5f3e810b4553",
+      "slug": "playground-c-security-review",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:39:00.756Z",
+        "dueAt": 1792769963756,
+        "resolvedAt": "2026-10-23T15:39:29.031Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-security-review/620a6ce0-39e7-4e81-8565-5f3e810b4553.json",
+        "sha256": "5abc6cace107cd5e74c874c87fa5052b6bb3650b926fde6067ffeb69bcee93cd",
+        "bytes": 399
+      }
+    },
+    {
+      "runId": "8acc7603-10e5-4bf1-bff7-4de046911a4f",
+      "slug": "playground-c-sleep-resume",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-sleep-resume/8acc7603-10e5-4bf1-bff7-4de046911a4f.json",
+        "sha256": "eb5fe43c6102d4920ac1af881978420a5f33da9205303dc0e761ff82bbf1b1a5",
+        "bytes": 325
+      }
+    },
+    {
+      "runId": "d3c8d3f9-b2b9-4abc-8f89-3b126d00354f",
+      "slug": "playground-c-repository-validation",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-repository-validation/d3c8d3f9-b2b9-4abc-8f89-3b126d00354f.json",
+        "sha256": "25832567b8c5c0c350b276dcc9fc88748915169ba1a6910357d684a0a082533b",
+        "bytes": 381
+      }
+    },
+    {
+      "runId": "9e03a7e3-e97b-46e8-afba-6ba55c581dcb",
+      "slug": "playground-c-artifact-manifest",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:39:29.060Z",
+        "dueAt": 1792769992060,
+        "resolvedAt": "2026-10-23T15:39:53.021Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-artifact-manifest/9e03a7e3-e97b-46e8-afba-6ba55c581dcb.json",
+        "sha256": "a861dc11360dee66092c5836efdc4f944e7fe816786d820131a61c1ba7e09254",
+        "bytes": 310
+      }
+    },
+    {
+      "runId": "b68290e1-1e11-4158-b30f-3d596a76de9a",
+      "slug": "playground-c-security-review",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:39:37.974Z",
+        "dueAt": 1792770007974,
+        "resolvedAt": "2026-10-23T15:40:08.026Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-security-review/b68290e1-1e11-4158-b30f-3d596a76de9a.json",
+        "sha256": "d049aeee1b2e8765c16926ce094560d47eb43c51702ae6d1b44a5478bebfc3ec",
+        "bytes": 399
+      }
+    },
+    {
+      "runId": "15db29b0-22c2-4626-b0a6-9fcb5936569c",
+      "slug": "playground-c-data-migration",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:39:38.033Z",
+        "dueAt": 1792770008033,
+        "resolvedAt": "2026-10-23T15:40:08.082Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-data-migration/15db29b0-22c2-4626-b0a6-9fcb5936569c.json",
+        "sha256": "56dfde94a5314080758b66a44e70ec9bb97d9647f743741bc752cbea480ce7eb",
+        "bytes": 393
+      }
+    },
+    {
+      "runId": "5dd62b28-a04e-45f1-a641-59589ddc1bfd",
+      "slug": "playground-c-sleep-resume",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-sleep-resume/5dd62b28-a04e-45f1-a641-59589ddc1bfd.json",
+        "sha256": "4e84cdc0763d9828a3702a1fed8d8e9c5a254addf5457bb40db2dbc10bf8ab04",
+        "bytes": 325
+      }
+    },
+    {
+      "runId": "12e90e6f-74fb-4b6c-92f1-fb14ecbb1ab3",
+      "slug": "playground-c-repository-validation",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-repository-validation/12e90e6f-74fb-4b6c-92f1-fb14ecbb1ab3.json",
+        "sha256": "e50c8f70fb2cb30450ae647ca36173114aee21635fa5025fa39e879d84c3925a",
+        "bytes": 381
+      }
+    },
+    {
+      "runId": "2ca2fcdb-9ec1-435b-ad69-7852eb3563f7",
+      "slug": "playground-c-artifact-manifest",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:39:57.257Z",
+        "dueAt": 1792770027257,
+        "resolvedAt": "2026-10-23T15:40:32.308Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-artifact-manifest/2ca2fcdb-9ec1-435b-ad69-7852eb3563f7.json",
+        "sha256": "8182b08ad9d0057a3ecd06bb9b2b74aa49f29e15cd3f5f88be5c77fa33cf5252",
+        "bytes": 310
+      }
+    },
+    {
+      "runId": "8bb04940-10dc-4e70-8369-fa44ef9640f9",
+      "slug": "playground-c-data-migration",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:40:02.115Z",
+        "dueAt": 1792770039115,
+        "resolvedAt": "2026-10-23T15:40:41.371Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-data-migration/8bb04940-10dc-4e70-8369-fa44ef9640f9.json",
+        "sha256": "3912f2b63874ad8fc1df302ba995854898e2c1c662035a3df5d8ec7f97b19b6d",
+        "bytes": 393
+      }
+    },
+    {
+      "runId": "894c6bcb-347d-4412-acfe-2187fe49907e",
+      "slug": "playground-c-security-review",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:40:12.186Z",
+        "dueAt": 1792770049186,
+        "resolvedAt": "2026-10-23T15:40:50.297Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-security-review/894c6bcb-347d-4412-acfe-2187fe49907e.json",
+        "sha256": "971fd456d909eac57b250ae96cd9de497ad9dfa710014198890367b6dcb46ba1",
+        "bytes": 399
+      }
+    },
+    {
+      "runId": "2c3b8042-62d9-463e-b66e-a05f32a73b00",
+      "slug": "playground-c-sleep-resume",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-sleep-resume/2c3b8042-62d9-463e-b66e-a05f32a73b00.json",
+        "sha256": "04f7f5aba178c0a6c7f365aeb626cb9d1de28fbdda3989ed9ae344865b0c3af1",
+        "bytes": 326
+      }
+    },
+    {
+      "runId": "8e4886ad-4bc8-429a-aa50-38b92ef737b2",
+      "slug": "playground-c-artifact-manifest",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:40:36.727Z",
+        "dueAt": 1792770073727,
+        "resolvedAt": "2026-10-23T15:41:14.993Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-artifact-manifest/8e4886ad-4bc8-429a-aa50-38b92ef737b2.json",
+        "sha256": "041e299f10d7ea8cd0a1c633e3243d209c2fb8b28a186da1d45e59f46df03eab",
+        "bytes": 310
+      }
+    },
+    {
+      "runId": "c36a2b49-b786-4abb-ba73-d37532f70ebe",
+      "slug": "playground-c-repository-validation",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-repository-validation/c36a2b49-b786-4abb-ba73-d37532f70ebe.json",
+        "sha256": "6d45884ced753bda2710402f2d72d7287399249aecd20abfe7d88f8bc5a260aa",
+        "bytes": 382
+      }
+    },
+    {
+      "runId": "5282a4c2-aba3-4949-b44b-8d75ddfd8179",
+      "slug": "playground-c-data-migration",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:40:46.818Z",
+        "dueAt": 1792770090818,
+        "resolvedAt": "2026-10-23T15:41:34.026Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-data-migration/5282a4c2-aba3-4949-b44b-8d75ddfd8179.json",
+        "sha256": "2bf165f97afce5f4ca260d62cdff164d7129b2f0054ae0ac4c96177d9b33616b",
+        "bytes": 394
+      }
+    },
+    {
+      "runId": "e5e591ba-4813-4852-a8ac-608ba6c2a933",
+      "slug": "playground-c-data-migration",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:41:26.661Z",
+        "dueAt": 1792770101661,
+        "resolvedAt": "2026-10-23T15:41:41.749Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-data-migration/e5e591ba-4813-4852-a8ac-608ba6c2a933.json",
+        "sha256": "b8b09001ae07fc40d10d11fecfe6deec95c01d052b13a8ccd6a786de650c306a",
+        "bytes": 394
+      }
+    },
+    {
+      "runId": "61a4b456-41a8-4b2c-8e8d-2b4a41fef2cf",
+      "slug": "playground-c-security-review",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:41:00.143Z",
+        "dueAt": 1792770104143,
+        "resolvedAt": "2026-10-23T15:41:44.699Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-security-review/61a4b456-41a8-4b2c-8e8d-2b4a41fef2cf.json",
+        "sha256": "60e3e797c767f4424735865889e5171e576149fc3f71e2fe6d8fcbdb9eef9859",
+        "bytes": 400
+      }
+    },
+    {
+      "runId": "257c9173-fbcf-45a7-baa9-26251944e74e",
+      "slug": "playground-c-sleep-resume",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "6ebe7310-8aa3-4dd1-a98e-7f09ed163cce",
+      "slug": "playground-c-repository-validation",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "6e4f8903-df35-4a40-a582-766966f2a8fd",
+      "slug": "playground-c-security-review",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:41:40.851Z",
+        "dueAt": 1792770115851,
+        "resolvedAt": "2026-10-23T15:41:55.947Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-security-review/6e4f8903-df35-4a40-a582-766966f2a8fd.json",
+        "sha256": "0a8453abe2867b5a922996754ff9b8c78ee70483499603b5cc4c9179c7ceb445",
+        "bytes": 400
+      }
+    },
+    {
+      "runId": "518246e3-1580-44b6-b072-0d7a5f0474f0",
+      "slug": "playground-c-artifact-manifest",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:41:22.679Z",
+        "dueAt": 1792770126679,
+        "resolvedAt": "2026-10-23T15:42:08.949Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-artifact-manifest/518246e3-1580-44b6-b072-0d7a5f0474f0.json",
+        "sha256": "d8ccbd0e88966270ed526302eb98d72994b57ccc15ebd3e993e67322f299ae30",
+        "bytes": 311
+      }
+    },
+    {
+      "runId": "1a387fc3-056f-4f45-a3dc-38ff84b7127e",
+      "slug": "playground-c-artifact-manifest",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:41:52.832Z",
+        "dueAt": 1792770127832,
+        "resolvedAt": "2026-10-23T15:42:09.061Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-artifact-manifest/1a387fc3-056f-4f45-a3dc-38ff84b7127e.json",
+        "sha256": "a848bb4f9184e45c1b8859baa0f15fbdb5a822df29fde8b2edb2f304e23d1188",
+        "bytes": 311
+      }
+    },
+    {
+      "runId": "380fc6d2-5301-4452-9804-315b7a64b606",
+      "slug": "playground-c-sleep-resume",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-sleep-resume/380fc6d2-5301-4452-9804-315b7a64b606.json",
+        "sha256": "8085f60ecbe39767c4315fe40841cdc2f15cbf65ebb97c402ed9bb9321f36a41",
+        "bytes": 327
+      }
+    },
+    {
+      "runId": "9f6d07dc-bd21-4856-87a4-98d2ad883012",
+      "slug": "playground-c-repository-validation",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-repository-validation/9f6d07dc-bd21-4856-87a4-98d2ad883012.json",
+        "sha256": "eebc053a61a5747b74b1f8e5aa00bfd075788c993bfda50ee68ce3011259a8d2",
+        "bytes": 382
+      }
+    },
+    {
+      "runId": "944daa72-ddf8-4887-9014-ad7dda8194ba",
+      "slug": "playground-c-data-migration",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:41:53.943Z",
+        "dueAt": 1792770135943,
+        "resolvedAt": "2026-10-23T15:42:20.705Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-data-migration/944daa72-ddf8-4887-9014-ad7dda8194ba.json",
+        "sha256": "e59489368f3635016b043319ee5f38412d36e2b5c36c99becdf94288b2569213",
+        "bytes": 394
+      }
+    },
+    {
+      "runId": "af60acbf-4fe0-4cd5-9172-129e7a72cd60",
+      "slug": "playground-c-security-review",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:42:03.114Z",
+        "dueAt": 1792770145114,
+        "resolvedAt": "2026-10-23T15:42:25.465Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-security-review/af60acbf-4fe0-4cd5-9172-129e7a72cd60.json",
+        "sha256": "aad9011409549c2167a4bb8d4a5f8f674a5bbf2c58cc2696b6055b9368f03d84",
+        "bytes": 400
+      }
+    },
+    {
+      "runId": "a12bb489-87ba-4399-991f-f009a4ce03a8",
+      "slug": "playground-c-sleep-resume",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-sleep-resume/a12bb489-87ba-4399-991f-f009a4ce03a8.json",
+        "sha256": "67220c76b4ae5788ddebde964c54f729240080be5c3c717561af079b389e7d9b",
+        "bytes": 327
+      }
+    },
+    {
+      "runId": "383974d8-ed65-42d9-ab59-4a3183f9a3c7",
+      "slug": "playground-c-repository-validation",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-repository-validation/383974d8-ed65-42d9-ab59-4a3183f9a3c7.json",
+        "sha256": "ec30a03a6ddb57a009ab9c792069ef0d942a373691b6a2f01f4de52d6e7482ff",
+        "bytes": 382
+      }
+    },
+    {
+      "runId": "f8b0f319-53b8-4e33-a4d6-589da517903c",
+      "slug": "playground-c-artifact-manifest",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:42:27.971Z",
+        "dueAt": 1792770169971,
+        "resolvedAt": "2026-10-23T15:42:52.045Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-artifact-manifest/f8b0f319-53b8-4e33-a4d6-589da517903c.json",
+        "sha256": "693ab370229da9c7ac0ba23ef243d9c30100920d1fc56623deb42f0d66d9774c",
+        "bytes": 311
+      }
+    },
+    {
+      "runId": "26e24997-c66f-448d-982b-2e61f384ab2d",
+      "slug": "playground-c-security-review",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:42:31.516Z",
+        "dueAt": 1792770180516,
+        "resolvedAt": "2026-10-23T15:43:13.082Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-security-review/26e24997-c66f-448d-982b-2e61f384ab2d.json",
+        "sha256": "121807878d135134fa303a587f39705bc988def54e915c708a85eed2b19bb1ec",
+        "bytes": 400
+      }
+    },
+    {
+      "runId": "1167f340-5fa2-49ac-b9ad-73477f37cb0f",
+      "slug": "playground-c-data-migration",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:42:31.468Z",
+        "dueAt": 1792770180468,
+        "resolvedAt": "2026-10-23T15:43:13.034Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-data-migration/1167f340-5fa2-49ac-b9ad-73477f37cb0f.json",
+        "sha256": "32fec5b002051139d480a973e339d5d2b9a8f7f010a24c167c91947382820854",
+        "bytes": 394
+      }
+    },
+    {
+      "runId": "67782fde-4e8c-4a8b-8854-e5b799988536",
+      "slug": "playground-c-artifact-manifest",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:42:51.927Z",
+        "dueAt": 1792770200927,
+        "resolvedAt": "2026-10-23T15:43:23.664Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-artifact-manifest/67782fde-4e8c-4a8b-8854-e5b799988536.json",
+        "sha256": "ce2d2acb3e47b8c2f0624bd66205a910971333d87597df4bb8e10058789962a4",
+        "bytes": 311
+      }
+    },
+    {
+      "runId": "b7f45bd1-9425-492b-a7f0-3fbd5dba2156",
+      "slug": "playground-c-sleep-resume",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-sleep-resume/b7f45bd1-9425-492b-a7f0-3fbd5dba2156.json",
+        "sha256": "558e91c407a33351e8ed5ddbb418c2d82e476fe611c274798f94f20bca66f754",
+        "bytes": 326
+      }
+    },
+    {
+      "runId": "db783181-7c52-465d-871a-da99b50fce49",
+      "slug": "playground-c-repository-validation",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-repository-validation/db783181-7c52-465d-871a-da99b50fce49.json",
+        "sha256": "575f161c2bfb9f4f5e36ef2a13b90ed4dc28e4bfa4ae54aa054cb6c9add763d7",
+        "bytes": 382
+      }
+    },
+    {
+      "runId": "42ba8746-2944-419f-8711-0a0293e3ce08",
+      "slug": "playground-c-data-migration",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:43:07.833Z",
+        "dueAt": 1792770223833,
+        "resolvedAt": "2026-10-23T15:43:45.061Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-data-migration/42ba8746-2944-419f-8711-0a0293e3ce08.json",
+        "sha256": "7e9b6d1d9b84c1e71fe2511c77b58339f26ef0c313dfd262e7cac20be4b50272",
+        "bytes": 394
+      }
+    },
+    {
+      "runId": "80188bdb-c569-41a8-a882-826e003aef8b",
+      "slug": "playground-c-security-review",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:43:22.308Z",
+        "dueAt": 1792770238308,
+        "resolvedAt": "2026-10-23T15:44:01.462Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-security-review/80188bdb-c569-41a8-a882-826e003aef8b.json",
+        "sha256": "99dff6e5c7b896d337a44608665229e36d61f92d9b3db9f67be6037a96bf51bc",
+        "bytes": 400
+      }
+    },
+    {
+      "runId": "a02c8817-6a1a-4b14-b1a2-e559e98fb9be",
+      "slug": "playground-c-sleep-resume",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-sleep-resume/a02c8817-6a1a-4b14-b1a2-e559e98fb9be.json",
+        "sha256": "563f81ac371ad387d7ec1e0725ca1a86ec7d7bf96d27515955229b59203dcd33",
+        "bytes": 326
+      }
+    },
+    {
+      "runId": "0795eacf-57ef-4c72-a13f-5c94340bc716",
+      "slug": "playground-c-artifact-manifest",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:43:41.044Z",
+        "dueAt": 1792770257044,
+        "resolvedAt": "2026-10-23T15:44:20.203Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-artifact-manifest/0795eacf-57ef-4c72-a13f-5c94340bc716.json",
+        "sha256": "1558e37f12b8999c0568bd92eeeaea9c94f5024fd2d8248807a5aacf944ee75e",
+        "bytes": 311
+      }
+    },
+    {
+      "runId": "6982d1b7-6238-4e4d-bf4f-ccc155436240",
+      "slug": "playground-c-repository-validation",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-repository-validation/6982d1b7-6238-4e4d-bf4f-ccc155436240.json",
+        "sha256": "d19ad42d055fdeb9fc7bd844d7cab19daf3117ec635d6e55cd21baef66b90b4c",
+        "bytes": 382
+      }
+    },
+    {
+      "runId": "e9aae2fc-f3b4-4e7a-b028-73d6cb43cb09",
+      "slug": "playground-c-data-migration",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:43:52.822Z",
+        "dueAt": 1792770275822,
+        "resolvedAt": "2026-10-23T15:44:38.631Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-data-migration/e9aae2fc-f3b4-4e7a-b028-73d6cb43cb09.json",
+        "sha256": "fc71737c922ec39e8ddcf56d21d9e366d124d064c050b760d0f88316b383c9af",
+        "bytes": 394
+      }
+    },
+    {
+      "runId": "6810cc8c-783a-4e9e-8345-ebe90524982e",
+      "slug": "playground-c-security-review",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:44:01.582Z",
+        "dueAt": 1792770284582,
+        "resolvedAt": "2026-10-23T15:44:47.543Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-security-review/6810cc8c-783a-4e9e-8345-ebe90524982e.json",
+        "sha256": "8506cd0f3842666effa942bdb5b0b2d4e3cabf02d160d1d87dbdf120138625c6",
+        "bytes": 400
+      }
+    },
+    {
+      "runId": "32ab93e9-5df4-4389-bd29-b0203173abcd",
+      "slug": "playground-c-data-migration",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:44:37.179Z",
+        "dueAt": 1792770291179,
+        "resolvedAt": "2026-10-23T15:44:54.089Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-data-migration/32ab93e9-5df4-4389-bd29-b0203173abcd.json",
+        "sha256": "cbccc75213e9958f754da4653eeb3987c34d5afdb1f7f09b8221be7db0457599",
+        "bytes": 394
+      }
+    },
+    {
+      "runId": "7246ea54-d822-4919-bc62-4d3f5d373363",
+      "slug": "playground-c-sleep-resume",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-sleep-resume/7246ea54-d822-4919-bc62-4d3f5d373363.json",
+        "sha256": "d1242e916791091c2524633df91288a2e7175c29252b1bb413377a1152fb4b89",
+        "bytes": 326
+      }
+    },
+    {
+      "runId": "046b03af-270a-498c-b101-00f9a86af819",
+      "slug": "playground-c-repository-validation",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-repository-validation/046b03af-270a-498c-b101-00f9a86af819.json",
+        "sha256": "b0c364c62a01a1200db00d7437a158b32223ffbdca81b84f4b1a802bdc12bffe",
+        "bytes": 382
+      }
+    },
+    {
+      "runId": "6d78e27e-28ce-43df-a1b5-b69e40870fa5",
+      "slug": "playground-c-security-review",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:44:50.980Z",
+        "dueAt": 1792770304980,
+        "resolvedAt": "2026-10-23T15:45:09.068Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-security-review/6d78e27e-28ce-43df-a1b5-b69e40870fa5.json",
+        "sha256": "af6d15beb2897f67875eb74ab87c5eeb0cefb477e061a9e0b579b5985e7b8adb",
+        "bytes": 400
+      }
+    },
+    {
+      "runId": "1fc2a986-d5a9-4c56-8011-650d87aba889",
+      "slug": "playground-c-artifact-manifest",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:44:38.704Z",
+        "dueAt": 1792770321704,
+        "resolvedAt": "2026-10-23T15:45:25.888Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-artifact-manifest/1fc2a986-d5a9-4c56-8011-650d87aba889.json",
+        "sha256": "1611a93335fd760ed5fb0124a33af8544ff9d27035e5a05befe4f660cd1d1dba",
+        "bytes": 311
+      }
+    },
+    {
+      "runId": "6fb5d8f8-d091-4c97-b2d6-0209c2fcaa30",
+      "slug": "playground-c-artifact-manifest",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:45:19.409Z",
+        "dueAt": 1792770333409,
+        "resolvedAt": "2026-10-23T15:45:34.694Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-artifact-manifest/6fb5d8f8-d091-4c97-b2d6-0209c2fcaa30.json",
+        "sha256": "7233990d2e2d0a84ea80c3e7bf915408295297291e5ce414ccd991b199ffc8b3",
+        "bytes": 311
+      }
+    },
+    {
+      "runId": "8437a21e-5591-47c4-aa4f-dc50bf1839eb",
+      "slug": "playground-c-sleep-resume",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "9ead54cd-ef3b-4707-895c-bf15e53adc22",
+      "slug": "playground-c-security-review",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:45:18.096Z",
+        "dueAt": 1792770339096,
+        "resolvedAt": "2026-10-23T15:45:42.437Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-security-review/9ead54cd-ef3b-4707-895c-bf15e53adc22.json",
+        "sha256": "71f29ca5e2b679b1d8d435fb82b61cd1dd1f50d8af504816e052ba3ef3e1e41c",
+        "bytes": 400
+      }
+    },
+    {
+      "runId": "8ff38231-c193-4627-8ecb-4da2ced63660",
+      "slug": "playground-c-repository-validation",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "c8922f3c-1039-446e-9a06-b5ecc092ccdb",
+      "slug": "playground-c-data-migration",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:45:18.096Z",
+        "dueAt": 1792770339096,
+        "resolvedAt": "2026-10-23T15:45:42.426Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-data-migration/c8922f3c-1039-446e-9a06-b5ecc092ccdb.json",
+        "sha256": "bc1d30df1ee10f3503940ca111242c8f96a4766e9942f1b1b857df7a4cb43ccd",
+        "bytes": 394
+      }
+    },
+    {
+      "runId": "6c0a704f-2bae-43a8-b823-bd718fec40de",
+      "slug": "playground-c-sleep-resume",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-sleep-resume/6c0a704f-2bae-43a8-b823-bd718fec40de.json",
+        "sha256": "3d2ec244e0110d178778da22e44f1dab8a6a770aa4683e1755cca717341f52c8",
+        "bytes": 327
+      }
+    },
+    {
+      "runId": "c22f5798-0367-4ab3-95a7-83f39594bd50",
+      "slug": "playground-c-repository-validation",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-repository-validation/c22f5798-0367-4ab3-95a7-83f39594bd50.json",
+        "sha256": "251162061153dbf306829132b639c247bfe4e2789d1663c3020ff863443e2a2a",
+        "bytes": 382
+      }
+    },
+    {
+      "runId": "337e0877-b4a9-456f-9093-0d96c16019b1",
+      "slug": "playground-c-artifact-manifest",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:45:44.841Z",
+        "dueAt": 1792770365841,
+        "resolvedAt": "2026-10-23T15:46:06.235Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-artifact-manifest/337e0877-b4a9-456f-9093-0d96c16019b1.json",
+        "sha256": "d03a8fc665d54c05dfcc71ddbb06652fe4905acaacca6a0549df9f6dddee50d1",
+        "bytes": 311
+      }
+    },
+    {
+      "runId": "11663550-484d-4688-8d08-943a3a3ef867",
+      "slug": "playground-c-security-review",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:45:50.502Z",
+        "dueAt": 1792770378502,
+        "resolvedAt": "2026-10-23T15:46:19.502Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-security-review/11663550-484d-4688-8d08-943a3a3ef867.json",
+        "sha256": "8bb0a8683e5bdd5e15ae67796262c068a596e4c5f22fe3322f3f0c2bdbfb587c",
+        "bytes": 400
+      }
+    },
+    {
+      "runId": "9cd2fde1-07ef-4eff-9b34-ff89131cada6",
+      "slug": "playground-c-data-migration",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:45:50.474Z",
+        "dueAt": 1792770378474,
+        "resolvedAt": "2026-10-23T15:46:19.472Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-data-migration/9cd2fde1-07ef-4eff-9b34-ff89131cada6.json",
+        "sha256": "6f3abcea49613b711d6172189a656542f209c78940d9109ee5388bbf1d986e41",
+        "bytes": 394
+      }
+    },
+    {
+      "runId": "888addc0-9859-49eb-91fa-2b011c0633ec",
+      "slug": "playground-c-sleep-resume",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-sleep-resume/888addc0-9859-49eb-91fa-2b011c0633ec.json",
+        "sha256": "db9824ca076456dd59f222f02c4096062bba3249cbf2f3beab53f154ef1aecb8",
+        "bytes": 327
+      }
+    },
+    {
+      "runId": "cd5ba7e3-6e71-46b6-a7c1-859aa2734fef",
+      "slug": "playground-c-artifact-manifest",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:45:59.034Z",
+        "dueAt": 1792770387034,
+        "resolvedAt": "2026-10-23T15:46:27.541Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-artifact-manifest/cd5ba7e3-6e71-46b6-a7c1-859aa2734fef.json",
+        "sha256": "5eb732f89131f862dfffb50fc69c88fda8ef812088da97ad4fb98c1dd7d5bb27",
+        "bytes": 311
+      }
+    },
+    {
+      "runId": "3ef5b789-de9f-49a2-9f4d-fcfec1ee91f4",
+      "slug": "playground-c-repository-validation",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-repository-validation/3ef5b789-de9f-49a2-9f4d-fcfec1ee91f4.json",
+        "sha256": "d07634027a34dd21c175116ace79aea798ef4ec267ad37bffd877623311408be",
+        "bytes": 382
+      }
+    },
+    {
+      "runId": "99ff6aba-657d-4886-a3b6-48f805ac0ac1",
+      "slug": "playground-c-data-migration",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:46:09.749Z",
+        "dueAt": 1792770404749,
+        "resolvedAt": "2026-10-23T15:46:46.183Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-data-migration/99ff6aba-657d-4886-a3b6-48f805ac0ac1.json",
+        "sha256": "ec50f3989db91314215ccc53244bb5e27b214748ee38f9919ed86d255770e0ab",
+        "bytes": 394
+      }
+    },
+    {
+      "runId": "8a4564cf-093d-444d-bcf4-f9631ce526fc",
+      "slug": "playground-c-security-review",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:46:22.469Z",
+        "dueAt": 1792770417469,
+        "resolvedAt": "2026-10-23T15:46:57.875Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-security-review/8a4564cf-093d-444d-bcf4-f9631ce526fc.json",
+        "sha256": "cb0c084ae977eb59edb64fbc9ee9191a20698ad91f2a3928312562405d707173",
+        "bytes": 400
+      }
+    },
+    {
+      "runId": "853d6ec4-d1e9-49ed-bd1e-6de510aa23c1",
+      "slug": "playground-c-sleep-resume",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-sleep-resume/853d6ec4-d1e9-49ed-bd1e-6de510aa23c1.json",
+        "sha256": "12c15b879f61684e54cd92681aca330f78ebf45d813d91fa4d67655149654296",
+        "bytes": 326
+      }
+    },
+    {
+      "runId": "d0dc8fa0-30e8-4032-98d8-d6d18562c7cd",
+      "slug": "playground-c-repository-validation",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-repository-validation/d0dc8fa0-30e8-4032-98d8-d6d18562c7cd.json",
+        "sha256": "a4f97068cfee6eaac03ba0b0e5af3b1629bf9dec0c4de4f4638626b9c8ab9670",
+        "bytes": 382
+      }
+    },
+    {
+      "runId": "6bea4c94-a040-45dc-991e-26409e857785",
+      "slug": "playground-c-artifact-manifest",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:46:32.431Z",
+        "dueAt": 1792770427431,
+        "resolvedAt": "2026-10-23T15:47:07.652Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-artifact-manifest/6bea4c94-a040-45dc-991e-26409e857785.json",
+        "sha256": "bb630f51527444f730e5add97f57f4a6ca35ed768757f3d5fdc91684b9f41d26",
+        "bytes": 311
+      }
+    },
+    {
+      "runId": "a21eeffb-2918-400b-bb9c-0d5c26e33a9e",
+      "slug": "playground-c-data-migration",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:46:32.468Z",
+        "dueAt": 1792770434468,
+        "resolvedAt": "2026-10-23T15:47:14.766Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-data-migration/a21eeffb-2918-400b-bb9c-0d5c26e33a9e.json",
+        "sha256": "b362d939d0393141f1befa0dd62478a5bebe29cac7e3e7bf4b58b9540ec2e459",
+        "bytes": 394
+      }
+    },
+    {
+      "runId": "17d841e1-f431-4e38-9695-32b4360e0b57",
+      "slug": "playground-c-data-migration",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:47:11.628Z",
+        "dueAt": 1792770444628,
+        "resolvedAt": "2026-10-23T15:47:24.798Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-data-migration/17d841e1-f431-4e38-9695-32b4360e0b57.json",
+        "sha256": "c723740243d1214b9ff995885ec0dec82cb768cba0e4a938258a142633c04541",
+        "bytes": 394
+      }
+    },
+    {
+      "runId": "0e83e996-a538-4852-94aa-0381594eb5d7",
+      "slug": "playground-c-sleep-resume",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-sleep-resume/0e83e996-a538-4852-94aa-0381594eb5d7.json",
+        "sha256": "63665bd66c9d28f92e420f8524fe403dc64e54169f59990081eb7fa858432e26",
+        "bytes": 326
+      }
+    },
+    {
+      "runId": "7e1b8d83-b7f9-4bcb-90c2-14d4c9203dcc",
+      "slug": "playground-c-security-review",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:46:49.734Z",
+        "dueAt": 1792770451734,
+        "resolvedAt": "2026-10-23T15:47:32.728Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-security-review/7e1b8d83-b7f9-4bcb-90c2-14d4c9203dcc.json",
+        "sha256": "89750a768821737db2247f4054c8dda49c9f08f997a0d3fcfae680c585ad4e95",
+        "bytes": 400
+      }
+    },
+    {
+      "runId": "8c0725a0-eb30-4e66-87ab-cb8a08a476da",
+      "slug": "playground-c-security-review",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:47:18.052Z",
+        "dueAt": 1792770451052,
+        "resolvedAt": "2026-10-23T15:47:31.754Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-security-review/8c0725a0-eb30-4e66-87ab-cb8a08a476da.json",
+        "sha256": "8cc4f804e33f3abedc6b28cbc1bd88eee7777cf80fad0d3e7fbbedc1f0a666c5",
+        "bytes": 400
+      }
+    },
+    {
+      "runId": "b8a98eef-6318-4b04-979d-59f36675484b",
+      "slug": "playground-c-repository-validation",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-repository-validation/b8a98eef-6318-4b04-979d-59f36675484b.json",
+        "sha256": "aedfbf1fa5d3c22e3897405125823d62a72da9590a01772f31f2b89cae2ee1de",
+        "bytes": 382
+      }
+    },
+    {
+      "runId": "a3b11a8a-842b-4e8c-8920-d19b0f2ad25d",
+      "slug": "playground-c-artifact-manifest",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:47:38.086Z",
+        "dueAt": 1792770471086,
+        "resolvedAt": "2026-10-23T15:47:51.456Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-artifact-manifest/a3b11a8a-842b-4e8c-8920-d19b0f2ad25d.json",
+        "sha256": "8e7ee5862bd9ff80242c6393fb44ec809658cbe03ec63dcf4824c3696f6fad52",
+        "bytes": 311
+      }
+    },
+    {
+      "runId": "e4699d83-c9ec-441b-8182-df62a3752d59",
+      "slug": "playground-c-artifact-manifest",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:47:10.598Z",
+        "dueAt": 1792770472598,
+        "resolvedAt": "2026-10-23T15:47:53.417Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-artifact-manifest/e4699d83-c9ec-441b-8182-df62a3752d59.json",
+        "sha256": "2fe07455947c997236972a030941c10de7cef9cb187adad4f45e814bf68b570f",
+        "bytes": 311
+      }
+    },
+    {
+      "runId": "65faf3d5-3715-44fc-8d42-046f63b8a8d3",
+      "slug": "playground-c-sleep-resume",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-sleep-resume/65faf3d5-3715-44fc-8d42-046f63b8a8d3.json",
+        "sha256": "ab5d00bc0c463e7a6c50c5ddbcde536e94d78315259f44309bc7bb775ffaa43a",
+        "bytes": 326
+      }
+    },
+    {
+      "runId": "cc232cdb-d2d1-44cf-968c-a06bd5449a91",
+      "slug": "playground-c-repository-validation",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-repository-validation/cc232cdb-d2d1-44cf-968c-a06bd5449a91.json",
+        "sha256": "27e3c6c5c7abc115d8d8a3e1ddfabf1dbba98762a3df4a22a8d874e325807a28",
+        "bytes": 382
+      }
+    },
+    {
+      "runId": "5ff2ff45-98e1-4ba0-bd41-a610131fe794",
+      "slug": "playground-c-data-migration",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:47:38.084Z",
+        "dueAt": 1792770478084,
+        "resolvedAt": "2026-10-23T15:47:59.265Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-data-migration/5ff2ff45-98e1-4ba0-bd41-a610131fe794.json",
+        "sha256": "f9c2a384286e792f324181d7a7752085bfbbd306eb48016bfed1020c14447a33",
+        "bytes": 394
+      }
+    },
+    {
+      "runId": "77a5adab-9ebe-4393-95fb-6f5a728796b8",
+      "slug": "playground-c-security-review",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:47:38.981Z",
+        "dueAt": 1792770478981,
+        "resolvedAt": "2026-10-23T15:48:00.177Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-security-review/77a5adab-9ebe-4393-95fb-6f5a728796b8.json",
+        "sha256": "fef413745eb668194866a37dba64f463d6d1397f38ce0b02503377bf6d5448db",
+        "bytes": 400
+      }
+    },
+    {
+      "runId": "9e4c8920-920e-44f9-b571-7fd5e4f3240b",
+      "slug": "playground-c-sleep-resume",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "a2e75b45-b1ad-4c0b-b221-b8305507e233",
+      "slug": "playground-c-repository-validation",
+      "expected": "failed",
+      "actual": "failed",
+      "classification": "controlled-failure",
+      "wait": null,
+      "artifact": null
+    },
+    {
+      "runId": "dc623c01-a630-4d01-96a9-a54b92d50319",
+      "slug": "playground-c-artifact-manifest",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:48:02.864Z",
+        "dueAt": 1792770502864,
+        "resolvedAt": "2026-10-23T15:48:23.883Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-artifact-manifest/dc623c01-a630-4d01-96a9-a54b92d50319.json",
+        "sha256": "6b73e73245fce3f3b14340fc9863f5a2f78faae90259c537b1735855ac068a32",
+        "bytes": 311
+      }
+    },
+    {
+      "runId": "c248da42-fea8-4c83-b6f3-bff74663b838",
+      "slug": "playground-c-data-migration",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:48:02.815Z",
+        "dueAt": 1792770509815,
+        "resolvedAt": "2026-10-23T15:48:29.974Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-data-migration/c248da42-fea8-4c83-b6f3-bff74663b838.json",
+        "sha256": "31ca46e8328f824f35213fbeec63be3fed85ce8450ffeb6450851b42738def87",
+        "bytes": 394
+      }
+    },
+    {
+      "runId": "fe338543-5326-40dd-90ce-70c69408701e",
+      "slug": "playground-c-security-review",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:48:03.824Z",
+        "dueAt": 1792770510824,
+        "resolvedAt": "2026-10-23T15:48:32.492Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-security-review/fe338543-5326-40dd-90ce-70c69408701e.json",
+        "sha256": "ae90d90cba18992d99ce07a7f0401cb5d766cf874964d2e8b469b63dfa76519e",
+        "bytes": 400
+      }
+    },
+    {
+      "runId": "30c12601-572d-495e-b44a-a5a2defccf92",
+      "slug": "playground-c-sleep-resume",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-sleep-resume/30c12601-572d-495e-b44a-a5a2defccf92.json",
+        "sha256": "3b462bfad151fcfa13ec4e6724513d1a3bbeee091885ed1103a0df42d29ecd1d",
+        "bytes": 327
+      }
+    },
+    {
+      "runId": "d9a9052c-bae9-402a-bdc4-59bcde305764",
+      "slug": "playground-c-artifact-manifest",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:48:10.093Z",
+        "dueAt": 1792770517093,
+        "resolvedAt": "2026-10-23T15:48:38.457Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-artifact-manifest/d9a9052c-bae9-402a-bdc4-59bcde305764.json",
+        "sha256": "aff91a9540497cf8d2d061821b18ebfc8bbc6c0abb9c5feacaa4356786baffac",
+        "bytes": 311
+      }
+    },
+    {
+      "runId": "0a8a18a5-fe34-489e-934f-55e1faa3c446",
+      "slug": "playground-c-repository-validation",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": null,
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-repository-validation/0a8a18a5-fe34-489e-934f-55e1faa3c446.json",
+        "sha256": "7e3f8d11749ecbe7b65c351e8f04671cbc302f444a8933cf3b30c1877760e03d",
+        "bytes": 382
+      }
+    },
+    {
+      "runId": "efbd3515-2f22-4d65-be62-22b12a26db5d",
+      "slug": "playground-c-data-migration",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:48:27.007Z",
+        "dueAt": 1792770541007,
+        "resolvedAt": "2026-10-23T15:49:01.818Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-data-migration/efbd3515-2f22-4d65-be62-22b12a26db5d.json",
+        "sha256": "e57810bf105619e9d335cccf5f0ad733de8fbb1994738fa6e0adb57d5367f295",
+        "bytes": 394
+      }
+    },
+    {
+      "runId": "9f465eb3-8b5d-4655-8067-9d5de6ae9d71",
+      "slug": "playground-c-security-review",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:48:33.644Z",
+        "dueAt": 1792770547644,
+        "resolvedAt": "2026-10-23T15:49:08.096Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-security-review/9f465eb3-8b5d-4655-8067-9d5de6ae9d71.json",
+        "sha256": "583231bf6fa86587963f8c86e3659879987855881ed3a21d4b584b2f5cc2e367",
+        "bytes": 400
+      }
+    },
+    {
+      "runId": "900b2c46-136f-4a3d-baed-525145a7b3c2",
+      "slug": "playground-c-artifact-manifest",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:48:43.115Z",
+        "dueAt": 1792770557115,
+        "resolvedAt": "2026-10-23T15:49:18.121Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z/playground-c-artifact-manifest/900b2c46-136f-4a3d-baed-525145a7b3c2.json",
+        "sha256": "9aab53281c5397c1675a5acf3f0a158a70786623edb512931fc5a7713a10971a",
+        "bytes": 311
+      }
+    }
+  ]
+}

@@ -11,3 +11,7 @@ test-results/
 
 # Local Cloudflare build artifacts.
 .wrangler/
+
+# Preserve local diagnostic databases without committing SQLite files or sidecars.
+.notes/**/*.sqlite
+.notes/**/*.sqlite-*

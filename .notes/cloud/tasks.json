@@ -452,5 +452,480 @@
       "reasoningEffort": "high",
       "serviceTier": "default"
     }
+  },
+  {
+    "requestId": "loopy-arch-receipts-assess-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-arch-receipts-assess-01",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    },
+    "scope": "Read-only architecture assessment; report only."
+  },
+  {
+    "requestId": "loopy-arch-core-assess-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-arch-core-assess-01",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    },
+    "scope": "Read-only architecture assessment; report only."
+  },
+  {
+    "requestId": "loopy-arch-data-assess-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-arch-data-assess-01",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    },
+    "scope": "Read-only architecture assessment; report only."
+  },
+  {
+    "requestId": "loopy-architecture-fable-review-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-architecture-fable-review-01",
+    "providerInstanceId": "claudeAgent",
+    "model": "claude-fable-5-1",
+    "options": {
+      "effort": "high"
+    },
+    "scope": "Architecture review before implementation; report only."
+  },
+  {
+    "requestId": "loopy-arch-local-receipts-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-arch-local-receipts-01",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    },
+    "scope": "Implementation after Fable review; bounded ownership in task prompt."
+  },
+  {
+    "requestId": "loopy-arch-sandbox-authority-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-arch-sandbox-authority-01",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    },
+    "scope": "Implementation after Fable review; bounded ownership in task prompt."
+  },
+  {
+    "requestId": "loopy-arch-host-policy-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-arch-host-policy-01",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    },
+    "scope": "Implementation after Fable review; bounded ownership in task prompt."
+  },
+  {
+    "requestId": "loopy-arch-count-scope-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-arch-count-scope-01",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    },
+    "scope": "Implementation after Fable review; bounded ownership in task prompt."
+  },
+  {
+    "requestId": "loopy-arch-definition-summaries-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-arch-definition-summaries-01",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    },
+    "scope": "Implementation after Fable review; bounded ownership in task prompt."
+  },
+  {
+    "requestId": "loopy-arch-workload-profile-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-arch-workload-profile-01",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    },
+    "scope": "Implementation after Fable review; bounded ownership in task prompt."
+  },
+  {
+    "requestId": "loopy-arch-durable-receipts-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-arch-durable-receipts-01",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    },
+    "scope": "Implementation after Fable review; bounded ownership in task prompt."
+  },
+  {
+    "requestId": "loopy-arch-count-scope-copied-data-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Athread-send%3Aloopy-arch-count-scope-copied-data-01",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-arch-local-receipts-review-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-arch-local-receipts-review-01",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-arch-host-review-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-arch-host-review-01",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    },
+    "scope": "Independent implementation review; report only."
+  },
+  {
+    "requestId": "loopy-arch-data-review-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-arch-data-review-01",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    },
+    "scope": "Independent implementation review; report only."
+  },
+  {
+    "requestId": "loopy-arch-harness-review-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-arch-harness-review-01",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    },
+    "scope": "Independent implementation review; report only."
+  },
+  {
+    "requestId": "loopy-arch-sandbox-review-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-arch-sandbox-review-01",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    },
+    "scope": "Independent cross-adapter receipt review; report only."
+  },
+  {
+    "requestId": "loopy-arch-summary-size-fix-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Athread-send%3Aloopy-arch-summary-size-fix-01",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-arch-harness-gates-fix-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Athread-send%3Aloopy-arch-harness-gates-fix-01",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-arch-sandbox-shutdown-fix-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Athread-send%3Aloopy-arch-sandbox-shutdown-fix-01",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-arch-docker-durable-proof-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-arch-docker-durable-proof-01",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-arch-sandbox-review-02",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-arch-sandbox-review-02",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    },
+    "scope": "Fresh independent review after shutdown correction; report only."
+  },
+  {
+    "requestId": "loopy-arch-data-review-02",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-arch-data-review-02",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-arch-harness-review-02",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-arch-harness-review-02",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-arch-docker-durable-run-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Athread-send%3Aloopy-arch-docker-durable-run-01",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-arch-docker-proxy-fix-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Athread-send%3Aloopy-arch-docker-proxy-fix-01",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-arch-fixture-isolation-fix-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-arch-fixture-isolation-fix-01",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-arch-docker-durable-run-02",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Athread-send%3Aloopy-arch-docker-durable-run-02",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-arch-performance-repeat-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-arch-performance-repeat-01",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-arch-baseline-empty-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Athread-send%3Aloopy-arch-baseline-empty-01",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-arch-repeat-cohorts-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-arch-repeat-cohorts-01",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-arch-repeat-daemon-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-arch-repeat-daemon-01",
+    "providerInstanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-arch-daemon-prepare-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Athread-send%3Aloopy-arch-daemon-prepare-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-arch-baseline-small-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Athread-send%3Aloopy-arch-baseline-small-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-arch-during-load-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Athread-send%3Aloopy-arch-during-load-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-arch-primary-boundary-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Athread-send%3Aloopy-arch-primary-boundary-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-arch-read-queue-assess-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-arch-read-queue-assess-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-arch-closed-snapshot-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-arch-closed-snapshot-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-arch-metrics-terminal-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Athread-send%3Aloopy-arch-metrics-terminal-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-arch-read-queue-proof-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Athread-send%3Aloopy-arch-read-queue-proof-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-arch-closed-snapshot-run-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Athread-send%3Aloopy-arch-closed-snapshot-run-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-arch-daemon-45-run-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Athread-send%3Aloopy-arch-daemon-45-run-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-arch-acceptance-review-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Adelegate-task%3Aloopy-arch-acceptance-review-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-arch-read-queue-run-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Athread-send%3Aloopy-arch-read-queue-run-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-arch-daemon-sql-repeat-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Athread-send%3Aloopy-arch-daemon-sql-repeat-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
+  },
+  {
+    "requestId": "loopy-arch-cloud-sql-repeat-01",
+    "taskId": "node:delegated-task:command%3Amcp%3Ad9248895-ca73-4a0b-9e1a-b1088a998e3c%3Athread-send%3Aloopy-arch-cloud-sql-repeat-01",
+    "model": "gpt-6.1-sol",
+    "providerInstanceId": "codex",
+    "options": {
+      "reasoningEffort": "high",
+      "serviceTier": "default"
+    }
   }
 ]

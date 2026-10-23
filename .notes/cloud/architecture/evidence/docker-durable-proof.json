@@ -1,0 +1,294 @@
+{
+  "status": "passed",
+  "scenarioCount": 7,
+  "attemptIdentities": 5,
+  "actualWorkers": 4,
+  "elapsedMs": 22705,
+  "completionResults": [
+    {
+      "id": "f4e68ad147117084cd674b5b31f78d7a96f27d7896eb23180803f25b4673b3ce",
+      "runId": "shared",
+      "attempt": 1,
+      "result": {
+        "sha256": "051f633844df807329e6d41792409379e2cf957a3765059460d993a6ceca646c",
+        "size": 53
+      },
+      "retainedR2Blobs": [
+        "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/architecture-tests/docker-durable-MRu6UN/r2/proof-results/blobs/ab2027256e8c56c1854a5e2f3ea7d1ddd191a6639db8e0adc754b22e092f22e8000001a16952bff0"
+      ],
+      "admittingSessionEpoch": 1
+    },
+    {
+      "id": "caf11b137c0d84fefa41f7d5147c010be4b607a4b20243ce1e5ca994cbccb6f0",
+      "runId": "shared",
+      "attempt": 2,
+      "result": {
+        "sha256": "0b28acbc2340b16574fbf5247e3a93955b6e3c76cf7df0d369840817b63104bd",
+        "size": 53
+      },
+      "retainedR2Blobs": [
+        "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/architecture-tests/docker-durable-MRu6UN/r2/proof-results/blobs/e6aa6575b52ae4040e5fc34623257fe37d061f873d491407a84de456fe73f179000001a16952cec9"
+      ],
+      "admittingSessionEpoch": 2
+    },
+    {
+      "id": "5e9aaf05f903e91bbc59602c63cee83c50d9f02dd40cdb3acbcf3dc0caae9efc",
+      "runId": "killed",
+      "attempt": 1,
+      "result": {
+        "sha256": "ad4cd2699b8e2221d58ff439985e3c125725f65072f848d71d70b4f474aad142",
+        "size": 173
+      },
+      "retainedR2Blobs": [
+        "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/architecture-tests/docker-durable-MRu6UN/r2/proof-results/blobs/3b2cb52c7a4638eddcccb1076a34202adde16fbf024f881a21f34b2c2f5ba0a2000001a16952d44c"
+      ],
+      "admittingSessionEpoch": 2
+    },
+    {
+      "id": "3429f4885c6a0db3f03c3c1122858170ac9bd725f75d362bfa95dcc3f1fa72b2",
+      "runId": "deadline",
+      "attempt": 1,
+      "result": {
+        "sha256": "8cb01558738872f2580ec1eb956377beb768c18807caf7783f175404775ceaf7",
+        "size": 135
+      },
+      "retainedR2Blobs": [
+        "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/architecture-tests/docker-durable-MRu6UN/r2/proof-results/blobs/ab22d42b547f5c36e7d82e856f0da77017381e23cc6c7e51eeb614eb515ffa39000001a16952f521"
+      ],
+      "admittingSessionEpoch": 2
+    },
+    {
+      "id": "3cacb7a43423e4006a4bb5ffaed4746aea146eb5945590c5995860979f795f78",
+      "runId": "shutdown-no-start",
+      "attempt": 1,
+      "result": {
+        "sha256": "f9c9d378663b8cc549e83a5928bd77324a88a319595528cdf180c8a7c5bb38cb",
+        "size": 162
+      },
+      "retainedR2Blobs": [
+        "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/architecture-tests/docker-durable-MRu6UN/r2/proof-results/blobs/584cebacf363acc59a71cd4a636917746289beebaef58da981124249a6bfdd79000001a16952f6df"
+      ],
+      "admittingSessionEpoch": 2
+    }
+  ],
+  "proofs": [
+    {
+      "at": "2026-10-23T15:13:17.756Z",
+      "proof": "duplicate-lost-ack-reconstruction-export",
+      "terminal": {
+        "kind": "finished",
+        "result": {
+          "kind": "succeeded",
+          "output": {
+            "proof": "A"
+          },
+          "logs": []
+        }
+      },
+      "secondTerminal": {
+        "kind": "finished",
+        "result": {
+          "kind": "succeeded",
+          "output": {
+            "proof": "B"
+          },
+          "logs": []
+        }
+      },
+      "saved": {
+        "kind": "finished",
+        "plan": {
+          "workspace": "proof",
+          "executionKey": {
+            "runId": "shared",
+            "nodeId": "0:code",
+            "scope": []
+          },
+          "attempt": 1,
+          "id": "f4e68ad147117084cd674b5b31f78d7a96f27d7896eb23180803f25b4673b3ce",
+          "requestHash": "062722cf600b02824bb17ed9c403b39ba12c3ccc731a80ae5ba57e635816cac4",
+          "container": "loopy-attempt-f4e68ad147117084cd674b5b31f78d7a96f27d7896eb23180803f25b4673b3ce",
+          "inputVolume": "loopy-input-f4e68ad147117084cd674b5b31f78d7a96f27d7896eb23180803f25b4673b3ce",
+          "volume": "loopy-workspace-af2b4019f4c64df301ab9ec6e48722a317f3428b6eaf95e7b0de364d59a1ce24",
+          "deadline": 1792768400646
+        },
+        "session": {
+          "epoch": 1,
+          "nonce": "691d6da3-0de2-4ee6-b0b9-0d5f63304577"
+        },
+        "result": {
+          "kind": "blob",
+          "ref": {
+            "sha256": "051f633844df807329e6d41792409379e2cf957a3765059460d993a6ceca646c",
+            "size": 53
+          }
+        }
+      },
+      "artifact": {
+        "path": "count.txt",
+        "bytes": "QQpCCg==",
+        "sha256": "daee1cd25194ae952d046ad9b9c81d3c07dc5332440b58d6d7461b248be56712",
+        "size": 4
+      },
+      "container": {
+        "Id": "f2f7e38058d4363487c345e86aacb3779b8ba8b562c5193a6a3fb1d4a4edf186",
+        "Config": {
+          "Labels": {
+            "loopy.sandbox.owner": "94971a740405e98d2992b034a99e2a7a747db49f66d4057366511e5927f8308d",
+            "loopy.sandbox.request": "062722cf600b02824bb17ed9c403b39ba12c3ccc731a80ae5ba57e635816cac4",
+            "org.opencontainers.image.created": "2026-08-20T14:09:38.872Z",
+            "org.opencontainers.image.description": "Incredibly fast JavaScript runtime, bundler, test runner, and package manager \u2013 all in one",
+            "org.opencontainers.image.licenses": "NOASSERTION",
+            "org.opencontainers.image.revision": "34cbb9a40b4bd1bd767d134a7065e66c2432a676",
+            "org.opencontainers.image.source": "https://github.com/oven-sh/bun",
+            "org.opencontainers.image.title": "bun",
+            "org.opencontainers.image.url": "https://github.com/oven-sh/bun",
+            "org.opencontainers.image.version": "1.4.0"
+          }
+        },
+        "State": {
+          "Running": false,
+          "Status": "exited",
+          "StartedAt": "2026-10-23T15:13:13.020583415Z",
+          "FinishedAt": "2026-10-23T15:13:13.097115083Z"
+        }
+      },
+      "oldGuard": {
+        "token": "b776fa4c-0c08-44cc-b1d8-07919f4b3232",
+        "session": {
+          "epoch": 1,
+          "nonce": "691d6da3-0de2-4ee6-b0b9-0d5f63304577"
+        },
+        "attemptId": "f4e68ad147117084cd674b5b31f78d7a96f27d7896eb23180803f25b4673b3ce",
+        "volume": "loopy-workspace-af2b4019f4c64df301ab9ec6e48722a317f3428b6eaf95e7b0de364d59a1ce24",
+        "helper": "loopy-artifact-f4e68ad147117084cd674b5b31f78d7a96f27d7896eb23180803f25b4673b3ce"
+      }
+    },
+    {
+      "at": "2026-10-23T15:13:26.986Z",
+      "proof": "actual-docker-kill-and-deadline",
+      "before": {
+        "Id": "faf9323444a8e7bff2ba66284f9cdf638bea054c2ad2f4827f0096433f41c655",
+        "Config": {
+          "Labels": {
+            "loopy.sandbox.owner": "94971a740405e98d2992b034a99e2a7a747db49f66d4057366511e5927f8308d",
+            "loopy.sandbox.request": "4476eb88001f553adbd5c93bc9e41ac78ed232672bf7334fcd9f550088601620",
+            "org.opencontainers.image.created": "2026-08-20T14:09:38.872Z",
+            "org.opencontainers.image.description": "Incredibly fast JavaScript runtime, bundler, test runner, and package manager \u2013 all in one",
+            "org.opencontainers.image.licenses": "NOASSERTION",
+            "org.opencontainers.image.revision": "34cbb9a40b4bd1bd767d134a7065e66c2432a676",
+            "org.opencontainers.image.source": "https://github.com/oven-sh/bun",
+            "org.opencontainers.image.title": "bun",
+            "org.opencontainers.image.url": "https://github.com/oven-sh/bun",
+            "org.opencontainers.image.version": "1.4.0"
+          }
+        },
+        "State": {
+          "Running": true,
+          "Status": "running",
+          "StartedAt": "2026-10-23T15:13:18.168366696Z",
+          "FinishedAt": "0001-01-01T00:00:00Z"
+        }
+      },
+      "terminal": {
+        "kind": "finished",
+        "result": {
+          "kind": "failed",
+          "error": {
+            "code": "uncertain",
+            "message": "Attempt worker disappeared or exited without a terminal result. It will not be repeated."
+          },
+          "exitCode": null,
+          "logs": []
+        }
+      },
+      "timeoutSaved": {
+        "kind": "started",
+        "plan": {
+          "workspace": "proof",
+          "executionKey": {
+            "runId": "deadline",
+            "nodeId": "0:code",
+            "scope": []
+          },
+          "attempt": 1,
+          "id": "3429f4885c6a0db3f03c3c1122858170ac9bd725f75d362bfa95dcc3f1fa72b2",
+          "requestHash": "4c8a9ee39a4872d611bf11458c9015e7615906349cf4914d0be9fbe7d61a966a",
+          "container": "loopy-attempt-3429f4885c6a0db3f03c3c1122858170ac9bd725f75d362bfa95dcc3f1fa72b2",
+          "inputVolume": "loopy-input-3429f4885c6a0db3f03c3c1122858170ac9bd725f75d362bfa95dcc3f1fa72b2",
+          "volume": "loopy-workspace-fcc6446f3c352cf5f38fdcef8ff8f3c4d36b28fe5e17f7102bb61d234a5da560",
+          "deadline": 1792768406641
+        },
+        "session": {
+          "epoch": 2,
+          "nonce": "d9c79932-1255-4d3e-b3da-7c60aa9fc9a7"
+        }
+      },
+      "timedOut": {
+        "kind": "finished",
+        "result": {
+          "kind": "failed",
+          "error": {
+            "code": "execution",
+            "message": "Attempt timed out. Its owned container was killed."
+          },
+          "exitCode": null,
+          "logs": []
+        }
+      }
+    },
+    {
+      "at": "2026-10-23T15:13:27.268Z",
+      "proof": "shutdown-read-outage-no-restart",
+      "closeMs": 0.45158400000036636,
+      "settled": {
+        "kind": "rejected",
+        "error": "TypeError: The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()"
+      },
+      "terminal": {
+        "kind": "finished",
+        "result": {
+          "kind": "failed",
+          "error": {
+            "code": "uncertain",
+            "message": "Attempt has a started receipt but no started worker. It will not be repeated."
+          },
+          "exitCode": null,
+          "logs": []
+        }
+      },
+      "saved": {
+        "kind": "started",
+        "plan": {
+          "workspace": "proof",
+          "executionKey": {
+            "runId": "shutdown-no-start",
+            "nodeId": "0:code",
+            "scope": []
+          },
+          "attempt": 1,
+          "id": "3cacb7a43423e4006a4bb5ffaed4746aea146eb5945590c5995860979f795f78",
+          "requestHash": "c637b0f1fa1431d2a50acedd582cf854ad089aae04617785ee82b714d80097a3",
+          "container": "loopy-attempt-3cacb7a43423e4006a4bb5ffaed4746aea146eb5945590c5995860979f795f78",
+          "inputVolume": "loopy-input-3cacb7a43423e4006a4bb5ffaed4746aea146eb5945590c5995860979f795f78",
+          "volume": "loopy-workspace-8fb6498fee3d2bbf33a6957374cd349eeec66e5c1046201aa2f1ca694b251ab3",
+          "deadline": 1792768414987
+        },
+        "session": {
+          "epoch": 2,
+          "nonce": "d9c79932-1255-4d3e-b3da-7c60aa9fc9a7"
+        }
+      }
+    }
+  ],
+  "admissionReplyFaults": 2,
+  "readOutageReplies": 4,
+  "activeHelperCleanupFaults": 5,
+  "rawEvidenceSha256": "7ea26dd268b072c7b3e39e08ec17644aee232f8e543b6e12745ff9cec97a786f",
+  "rawDirectory": ".loopy/architecture-tests/docker-durable-MRu6UN",
+  "limits": [
+    "Actual local workerd SQLite/R2 and Docker, not remote provider parity.",
+    "Acknowledgement/read and helper-cleanup faults injected around actual operations.",
+    "Workerd disposal/reconstruction was graceful; worker/deadline kills and bridge shutdown were actual."
+  ]
+}

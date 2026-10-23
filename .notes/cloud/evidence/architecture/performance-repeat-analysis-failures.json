@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-23T15:54:54.410Z",
+  "failures": [
+    {
+      "command": "env LOOPY_PLAYGROUND_PROFILE=architecture bun --no-env-file scripts/playground/metrics-runtime.ts",
+      "exitCode": 1,
+      "error": "ENOENT reading playground-performance-segments.json",
+      "cause": "Started runtime analysis concurrently with its segment-file producer",
+      "resolution": "Segments finished successfully. Reran runtime analysis sequentially after its dependency existed. No API or database probe was involved."
+    }
+  ]
+}

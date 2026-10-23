@@ -1,0 +1,32 @@
+{
+  "at": "2026-10-23T16:09:01.580019+00:00",
+  "ownedPids": [
+    {
+      "pid": 36701,
+      "absent": true
+    },
+    {
+      "pid": 36832,
+      "absent": true
+    }
+  ],
+  "port15370NoListener": true,
+  "loadMarkerRetained": true,
+  "daemonDiscoveryAbsent": true,
+  "backupAndPrimaryHashesUnchanged": true,
+  "manifest": {
+    ".notes/cloud/evidence/architecture/playground-daemon-execution-checks.json": "3c6bbfb11462483fc7e74f5225b41290948d062efc5ec61e2edd318380987e23",
+    ".notes/cloud/evidence/architecture/playground-daemon-executions.json": "328dccc0c1fc7b252d7b439d05ffbc7478d53081650b7ccb7c6a73f312b91788",
+    ".notes/cloud/evidence/architecture/playground-daemon-offline-audit.py": "9e854f92635b4df76f5f70a6d2e8bd4f898e841b168ae10474976ca3d7b900b1",
+    ".notes/cloud/evidence/architecture/playground-daemon-offline-checks.json": "6d01ef682764870b50326a5e578f2723c49cec89e4ab7fe849fcda5de226ac41",
+    ".notes/cloud/evidence/architecture/playground-daemon-preflight.json": "b9359d7489976d37fdc14abfcf125b9e499b4ddc9ca8a3894b4e752682502cfc",
+    ".notes/cloud/evidence/architecture/playground-daemon-preparation-checks.json": "5b2e9b74085982988d69d21099584efe730d8036bd59674164faf1dab573c255",
+    ".notes/cloud/evidence/architecture/playground-daemon-preparation.sqlite": "11185c70093854e8f5436ebe231d9261453e8ffe96bc3bda8daff834c57dc5f2",
+    ".notes/cloud/evidence/architecture/playground-daemon-preparation.sqlite-shm": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb",
+    ".notes/cloud/evidence/architecture/playground-daemon-progress.json": "bb1d3095d6690345524a65a0b21776c6872d3da76cc16e1b85af6e7fe18a4428",
+    ".notes/cloud/evidence/architecture/playground-daemon-semantics.json": "ab525f0492aa1196e43174f676a58bfed5a2b3faeb4ed34b7c598eb4d670ddb3",
+    ".notes/cloud/evidence/architecture/playground-daemon.json": "d468f5cd0ff940608de0f9cdf27c624126064dba1c0044ecc8734d16e4ed07aa",
+    ".notes/cloud/architecture/daemon-repeat.md": "2b90e98cf194fd212e6bad47a04c3f6a61cfee25962b98955e680f95fe956c4b"
+  },
+  "scope": "Assigned report, daemon supplemental evidence and authorized fresh harness state only; no production or fixture edits, tests deleted/moved, full checks, commits or child tasks."
+}

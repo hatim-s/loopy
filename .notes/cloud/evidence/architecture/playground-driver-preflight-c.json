@@ -1,0 +1,32 @@
+{
+  "status": "passed",
+  "scope": "local-wrangler-docker",
+  "batch": "playground-architecture-2026-10-23T15-18-37-705Z",
+  "group": "c",
+  "phase": "preflight",
+  "startedAt": "2026-10-23T15:28:24.069Z",
+  "endedAt": "2026-10-23T15:28:37.679Z",
+  "planned": 1,
+  "completed": 1,
+  "results": [
+    {
+      "runId": "79078fb4-a871-4f74-9bcf-3e422f1ceb52",
+      "slug": "playground-c-data-migration",
+      "expected": "succeeded",
+      "actual": "succeeded",
+      "classification": "success",
+      "wait": {
+        "hook": "approval",
+        "observedAt": "2026-10-23T15:28:25.107Z",
+        "dueAt": 1792769315107,
+        "resolvedAt": "2026-10-23T15:28:35.946Z"
+      },
+      "artifact": {
+        "expectedPath": "loopies-playground/results/result.json",
+        "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/results/playground-architecture-2026-10-23T15-18-37-705Z-preflight/playground-c-data-migration/79078fb4-a871-4f74-9bcf-3e422f1ceb52.json",
+        "sha256": "622c5569785389692b74a20def128cfffea5d92ff555f280db0322239e2b106f",
+        "bytes": 403
+      }
+    }
+  ]
+}

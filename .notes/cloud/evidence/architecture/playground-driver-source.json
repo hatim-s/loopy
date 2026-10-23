@@ -1,0 +1,100 @@
+{
+  "batch": "playground-architecture-2026-10-23T15-18-37-705Z",
+  "at": "2026-10-23T15:27:37.836Z",
+  "repository": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground",
+  "commit": "95d1e5b4769f149c98692cc41897e09a80da8741",
+  "files": 51,
+  "sourceHash": "a213d51dab78b89a140ebcc1c792daa18558d9fb428330bdc21b650400de9c89",
+  "revisions": [
+    {
+      "group": "a",
+      "slug": "playground-a-format-report",
+      "revision": "8719bacad96bd34311d5fd129025c6d9f3918ff876d16e5c1da319b43d4a8438",
+      "file": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/fixtures/a/format-report.ts"
+    },
+    {
+      "group": "a",
+      "slug": "playground-a-lint-report",
+      "revision": "187d3590132464b5d72d1842d4953ec16a307cc8fc45b16a5f19d8f2551e3e35",
+      "file": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/fixtures/a/lint-report.ts"
+    },
+    {
+      "group": "a",
+      "slug": "playground-a-dependency-audit",
+      "revision": "7b1bed15e15724d16b219789a64670709b8d477a2f926085c60e74fc2121fa8c",
+      "file": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/fixtures/a/dependency-audit.ts"
+    },
+    {
+      "group": "a",
+      "slug": "playground-a-changelog-approval",
+      "revision": "1361e4f07a21195ef4d44288b4386aae3fc437f2f20df48a6f2ce80a00a6225d",
+      "file": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/fixtures/a/changelog-approval.ts"
+    },
+    {
+      "group": "a",
+      "slug": "playground-a-generated-docs",
+      "revision": "7898ac1622c846c733ee2057b57466a1cf89c9bbf0813045849eed70f8c67eaf",
+      "file": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/fixtures/a/generated-docs.ts"
+    },
+    {
+      "group": "b",
+      "slug": "playground-b-test-matrix",
+      "revision": "bc0626b63cddad528d14be99dca74ab446a184470a4728461aaaba4369cf57eb",
+      "file": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/fixtures/b/test-matrix.ts"
+    },
+    {
+      "group": "b",
+      "slug": "playground-b-parallel-build",
+      "revision": "67dac2d2c52ce7d034d2ae2d70b39c39241b6b36ded47b5ce3f9032a5c96188d",
+      "file": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/fixtures/b/parallel-build.ts"
+    },
+    {
+      "group": "b",
+      "slug": "playground-b-retry-marker",
+      "revision": "803bf3d21ecf401c0c5b1b4e971caa4ab71440090b3743efb5248fa7215d155e",
+      "file": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/fixtures/b/retry-marker.ts"
+    },
+    {
+      "group": "b",
+      "slug": "playground-b-release-approval",
+      "revision": "4d9b508a56880f57cfb7b3a7cb79ede4ab8069d8bbe9c1aae59dc36080dcfab7",
+      "file": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/fixtures/b/release-approval.ts"
+    },
+    {
+      "group": "b",
+      "slug": "playground-b-log-audit",
+      "revision": "e16509a1be1b992d57f8b14777796c60b38821047fb0d00f5999419c2e8efbfc",
+      "file": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/fixtures/b/log-audit.ts"
+    },
+    {
+      "group": "c",
+      "slug": "playground-c-data-migration",
+      "revision": "54332c24625dde822ab5c7f9eac3f5a27ea18274523f03207f2e3cbcd986d8a1",
+      "file": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/fixtures/c/data-migration.ts"
+    },
+    {
+      "group": "c",
+      "slug": "playground-c-security-review",
+      "revision": "362d09237232913e210d1abfd37fea101a5b005616a1f2a412a6172efa1af1d0",
+      "file": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/fixtures/c/security-review.ts"
+    },
+    {
+      "group": "c",
+      "slug": "playground-c-sleep-resume",
+      "revision": "2693b483d30d426f3e74eb4fbaba8c59fa3a055d65659d467431973fb7ee197b",
+      "file": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/fixtures/c/sleep-resume.ts"
+    },
+    {
+      "group": "c",
+      "slug": "playground-c-repository-validation",
+      "revision": "f31007f0260dedb14931fdbea8a16250dfa8f3d9aa41f9f16ee10380a50a458d",
+      "file": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/fixtures/c/repository-validation.ts"
+    },
+    {
+      "group": "c",
+      "slug": "playground-c-artifact-manifest",
+      "revision": "e7ece965b257a07d032625e45baa3cf165768727d96722e313858ffa61f58b08",
+      "file": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/loopies-playground/fixtures/c/artifact-manifest.ts"
+    }
+  ]
+}

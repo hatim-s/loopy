@@ -1,0 +1,157 @@
+{
+  "phase": "DAEMONPREPARE",
+  "authorization": "FROZEN + DAEMONPREPARE root gate open; DAEMON45GATE closed",
+  "command": "LOOPY_PLAYGROUND_PROFILE=architecture bun --no-env-file scripts/daemon-playground/prepare.ts",
+  "invocations": 1,
+  "startedAt": "2026-10-23T15:29:12.743783+00:00",
+  "upstreamCommit": "95d1e5b4769f149c98692cc41897e09a80da8741",
+  "upstreamMarker": "a213d51dab78b89a140ebcc1c792daa18558d9fb428330bdc21b650400de9c89",
+  "normalizedFixtureTreeSha256": "4623ccc20a2f9bfb824dc0f0c8ce848401ae960d336e8c21f1dabb08d5642bfa",
+  "runtimeBefore": {
+    "observedAt": "2026-10-23T15:29:12.780467+00:00",
+    "files": 278,
+    "sha256": "21d9f556d7fcd706e688d1f59e86075c1ac8d4f34c478f531f225bca0a780575"
+  },
+  "harnessHashes": {
+    "scripts/daemon-playground/analyze.ts": "1deb3568dda2db26778152e24a2c900dbaa1a625a5c78404633275f65a13601c",
+    "scripts/daemon-playground/backup.py": "f298a32cec9cc4e8af40e00288921b079ad3d9ba11b55350003c4abc041ed2fc",
+    "scripts/daemon-playground/backup.ts": "9e09b8d42f603816cf100585834e7b47b08429e188a4b440feb9deb7c4ffbcf0",
+    "scripts/daemon-playground/capture.ts": "afc9721a54274bf73b0a7f28f926097da4e1dac793af351af48764c90a3b8dd1",
+    "scripts/daemon-playground/closed-executions.ts": "7e7d27df43c284c7de0b37e534c9665cde41702859a26b21efc413b30f0a524f",
+    "scripts/daemon-playground/config.ts": "61b5aa989103edecf725370f55a97d7f74188e3583ab84ab58acd0a4c8768dcc",
+    "scripts/daemon-playground/daemon.ts": "65e378aaab31c11b913a94db9f1ed3b3b1cd64e11f35244a0ec83f90699f4d29",
+    "scripts/daemon-playground/outcomes.ts": "af6111a17d3492b382909a2f0e1e0ac72b1b51ca748bc74572d868c131c046d3",
+    "scripts/daemon-playground/prepare.ts": "2ed621ede78f00a479271bb4b046b28112eb08a4bd635b654333dfbc2173a9c0",
+    "scripts/daemon-playground/report-schema.ts": "9a4526d40346d61eb64d80107a13251c99b05ccb28eded760ebe1171e17d80b2",
+    "scripts/daemon-playground/run.ts": "0be0fdb487ce2bcf21b1c94dd54098d5c607fb63f3caf78f72215f6a51217aeb",
+    "scripts/daemon-playground/semantics.ts": "a98d5d0e3eec585c578ca4c0fb93ae6a62c505b757f5b8505281c1cf577c633c",
+    "scripts/daemon-playground/source.ts": "43a13856c852ead26dc4c8fd5073c971d5dfb6b9e6c800f6785aafc13ce77c16",
+    "scripts/daemon-playground/waits.ts": "36eb61ea264e0f9215ebfd8e0c3862191fc54633d859ed3efb6bd99550a13dbc"
+  },
+  "ownedDaemonRecords": [
+    {
+      "pid": 4056,
+      "port": 15370,
+      "startedAt": "2026-10-23T15:29:13.005Z",
+      "exited": true,
+      "observedAfterExitAt": "2026-10-23T15:29:24.830740+00:00"
+    }
+  ],
+  "portFreeBefore": true,
+  "preparePid": 4053,
+  "exitCode": 0,
+  "stdout": "Frozen source compiled and saved through the public CLI. No runs started; daemon stopped.\n",
+  "stderr": "",
+  "endedAt": "2026-10-23T15:29:24.786411+00:00",
+  "runtimeAfter": {
+    "observedAt": "2026-10-23T15:29:24.830596+00:00",
+    "files": 278,
+    "sha256": "21d9f556d7fcd706e688d1f59e86075c1ac8d4f34c478f531f225bca0a780575"
+  },
+  "daemonRecordRemoved": true,
+  "portFreeAfter": false,
+  "loadMarkerAbsent": true,
+  "status": "preparation-verified",
+  "portFreeAfterReuseAddressProbe": true,
+  "listenerCheck": {
+    "command": "lsof -nP -iTCP:15370 -sTCP:LISTEN",
+    "exitCode": 1,
+    "stdout": "",
+    "stderr": "",
+    "noListener": true
+  },
+  "portProbeQualification": "Immediate plain bind returned unavailable after process exit. Later SO_REUSEADDR bind succeeded and lsof found no TCP listener. No daemon restart occurred.",
+  "workspaceMarkers": [
+    {
+      "workspace": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-daemon-architecture/workspaces/playground-a-lint-report",
+      "marker": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-daemon-architecture/workspaces/playground-a-lint-report/.loopy/loopies",
+      "markerBirthTime": 1792769352.871308,
+      "saved": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-daemon-architecture/workspaces/playground-a-lint-report/.loopy/loopies/playground-a-lint-report.json",
+      "savedBirthTime": 1792769353.2889397,
+      "markerPredatesSavedEntry": true,
+      "savedEntrySha256": "d48282d81ce0b4ef70936b49ed8e7f69ba4d3ace931624cb491ad4cf977cfadc"
+    },
+    {
+      "workspace": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-daemon-architecture/workspaces/playground-b-parallel-build",
+      "marker": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-daemon-architecture/workspaces/playground-b-parallel-build/.loopy/loopies",
+      "markerBirthTime": 1792769352.871482,
+      "saved": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-daemon-architecture/workspaces/playground-b-parallel-build/.loopy/loopies/playground-b-parallel-build.json",
+      "savedBirthTime": 1792769353.6045468,
+      "markerPredatesSavedEntry": true,
+      "savedEntrySha256": "521ef808149dc5abf0aa9429cd9f7695cd3bf8a60b2645c7f75417aa8c051a49"
+    },
+    {
+      "workspace": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-daemon-architecture/workspaces/playground-b-retry-marker",
+      "marker": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-daemon-architecture/workspaces/playground-b-retry-marker/.loopy/loopies",
+      "markerBirthTime": 1792769352.8716424,
+      "saved": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-daemon-architecture/workspaces/playground-b-retry-marker/.loopy/loopies/playground-b-retry-marker.json",
+      "savedBirthTime": 1792769354.2985702,
+      "markerPredatesSavedEntry": true,
+      "savedEntrySha256": "e54c7e1fab009cf3cb536209448b09316045aa14309e45811af1504285e84ede"
+    },
+    {
+      "workspace": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-daemon-architecture/workspaces/playground-c-repository-validation",
+      "marker": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-daemon-architecture/workspaces/playground-c-repository-validation/.loopy/loopies",
+      "markerBirthTime": 1792769352.871814,
+      "saved": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-daemon-architecture/workspaces/playground-c-repository-validation/.loopy/loopies/playground-c-repository-validation.json",
+      "savedBirthTime": 1792769354.515372,
+      "markerPredatesSavedEntry": true,
+      "savedEntrySha256": "ce3122c5d62ae14e51cee6525b1807bee976ad7cdfd3103e82ae74cea8a3e8cf"
+    },
+    {
+      "workspace": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-daemon-architecture/workspaces/playground-c-security-review",
+      "marker": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-daemon-architecture/workspaces/playground-c-security-review/.loopy/loopies",
+      "markerBirthTime": 1792769352.8719845,
+      "saved": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-daemon-architecture/workspaces/playground-c-security-review/.loopy/loopies/playground-c-security-review.json",
+      "savedBirthTime": 1792769354.7452273,
+      "markerPredatesSavedEntry": true,
+      "savedEntrySha256": "60bef473921757eddf6f2e65ce3967cfa1a2a57bc1f55b09bdbc05186d66cef5"
+    }
+  ],
+  "manifestSha256": "b9359d7489976d37fdc14abfcf125b9e499b4ddc9ca8a3894b4e752682502cfc",
+  "zeroRunBackup": {
+    "method": "sqlite3_backup from read-only source after owned daemon exit",
+    "source": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-daemon-architecture/home/runs.sqlite",
+    "destination": "/Users/hatim.shakir/projects/loopy/cloud-integration/.notes/cloud/evidence/architecture/playground-daemon-preparation.sqlite",
+    "destinationJournal": "delete",
+    "sidecarsBefore": [
+      {
+        "suffix": "-wal",
+        "bytes": 0
+      },
+      {
+        "suffix": "-shm",
+        "bytes": 32768
+      }
+    ],
+    "sidecarsAfter": [
+      {
+        "suffix": "-wal",
+        "bytes": 0
+      },
+      {
+        "suffix": "-shm",
+        "bytes": 32768
+      }
+    ],
+    "sourceRows": [],
+    "copiedRows": [],
+    "integrity": "ok",
+    "matchesSource": true,
+    "matchesApi": true,
+    "matches45ApiRuns": false,
+    "qualification": "Empty expected census asserts zero runs; the preparation API graph reads verified five definitions. No workflow-admission API was called. matches45ApiRuns is false as expected before the closed 45-run gate.",
+    "sourceSha256Before": "7732a7ba04f6973c3dd9ccd6c0236ab46e6bccd01be5f37891b80d55444a3393",
+    "sourceSha256After": "7732a7ba04f6973c3dd9ccd6c0236ab46e6bccd01be5f37891b80d55444a3393",
+    "destinationSha256": "11185c70093854e8f5436ebe231d9261453e8ffe96bc3bda8daff834c57dc5f2"
+  },
+  "verifiedZeroRuns": true,
+  "verifiedFiveSaves": true,
+  "sourceStableDuringPreparation": true,
+  "verifiedAt": "2026-10-23T15:30:16.159792+00:00",
+  "rootSuppliedFreeze": {
+    "files": 467,
+    "sha256": "93e0bcd0fccac0dbf8deff30aa0eb9e4b18ec15cac090c2ec6d8cb00ae8edc52",
+    "provenance": "Root supplied; distinct from this lane runtime-only 278-file hash"
+  }
+}

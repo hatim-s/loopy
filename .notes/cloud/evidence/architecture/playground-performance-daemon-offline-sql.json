@@ -1,0 +1,181 @@
+{
+  "scope": "supplied-stopped-daemon-backup-readonly-identity-and-plans",
+  "at": "2026-10-23T16:06:17.123Z",
+  "path": "/Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-daemon-architecture/daemon-readonly.sqlite",
+  "beforeHash": "ed037ac95b469b5a30616afb505fa1d2e6edfb8a4d4538250108d75a2c0b3bad",
+  "integrity": [
+    {
+      "integrity_check": "ok"
+    }
+  ],
+  "journal": {
+    "journal_mode": "delete"
+  },
+  "inventory": {
+    "matched": true,
+    "ids": 45,
+    "statuses": [
+      {
+        "status": "failed",
+        "count": 6
+      },
+      {
+        "status": "succeeded",
+        "count": 39
+      }
+    ]
+  },
+  "daemonInterval": {
+    "startedAt": "2026-10-23T16:00:25.841Z",
+    "endedAt": "2026-10-23T16:02:43.466Z"
+  },
+  "counts": [
+    {
+      "table": "runs",
+      "rows": 45
+    },
+    {
+      "table": "node_runs",
+      "rows": 457
+    },
+    {
+      "table": "node_attempts",
+      "rows": 466
+    },
+    {
+      "table": "node_scopes",
+      "rows": 72
+    },
+    {
+      "table": "logs",
+      "rows": 400
+    },
+    {
+      "table": "events",
+      "rows": 1329
+    },
+    {
+      "table": "waits",
+      "rows": 9
+    }
+  ],
+  "plans": [
+    {
+      "name": "runs.latest",
+      "source": "packages/loopy/src/store/sqlite/query-runs.ts",
+      "sql": "SELECT r.id,r.slug,r.revision,r.workspace,r.status,r.error,r.wake_at,r.next_retry_at,r.created_at,r.updated_at,r.owner_token,r.owner_pid,r.owner_host,r.heartbeat_at,\n CASE WHEN length(CAST(r.input_json AS BLOB))>16384 THEN 'null' ELSE r.input_json END AS input_json,\n CASE WHEN length(CAST(r.output_json AS BLOB))>16384 THEN 'null' ELSE r.output_json END AS output_json,\n length(CAST(r.input_json AS BLOB)) AS input_bytes,length(CAST(r.output_json AS BLOB)) AS output_bytes FROM runs r  ORDER BY r.created_at DESC,r.id DESC LIMIT ?",
+      "parameterCount": 1,
+      "plan": [
+        {
+          "id": 7,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SCAN r USING INDEX runs_created_id"
+        }
+      ]
+    },
+    {
+      "name": "runs.failed",
+      "source": "packages/loopy/src/store/sqlite/query-runs.ts",
+      "sql": "SELECT r.id,r.slug,r.revision,r.workspace,r.status,r.error,r.wake_at,r.next_retry_at,r.created_at,r.updated_at,r.owner_token,r.owner_pid,r.owner_host,r.heartbeat_at,\n CASE WHEN length(CAST(r.input_json AS BLOB))>16384 THEN 'null' ELSE r.input_json END AS input_json,\n CASE WHEN length(CAST(r.output_json AS BLOB))>16384 THEN 'null' ELSE r.output_json END AS output_json,\n length(CAST(r.input_json AS BLOB)) AS input_bytes,length(CAST(r.output_json AS BLOB)) AS output_bytes FROM runs r WHERE r.status=? ORDER BY r.created_at DESC,r.id DESC LIMIT ?",
+      "parameterCount": 2,
+      "plan": [
+        {
+          "id": 7,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH r USING INDEX runs_status_created_id (status=?)"
+        }
+      ]
+    },
+    {
+      "name": "counts.all",
+      "source": "packages/loopy/src/store/sqlite/query-runs.ts",
+      "sql": "SELECT status,count(*) AS count FROM runs r  GROUP BY status",
+      "parameterCount": 0,
+      "plan": [
+        {
+          "id": 6,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SCAN r USING COVERING INDEX runs_due"
+        }
+      ]
+    },
+    {
+      "name": "logs.candidates",
+      "source": "packages/loopy/src/store/sqlite/query-feeds.ts",
+      "sql": "SELECT l.id,l.run_id AS runId,r.slug,r.workspace,r.status,l.seq,l.at,l.node_id AS nodeId,l.execution_key AS executionKey,l.attempt,l.level,substr(l.message,1,1024) AS message,l.data_bytes AS dataBytes,instr(lower(l.message),lower(?))>0 AS textMatches FROM logs l JOIN runs r ON r.id=l.run_id WHERE l.id<? ORDER BY l.id DESC LIMIT 2001",
+      "parameterCount": 2,
+      "plan": [
+        {
+          "id": 6,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH l USING INTEGER PRIMARY KEY (rowid<?)"
+        },
+        {
+          "id": 8,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH r USING INDEX sqlite_autoindex_runs_1 (id=?)"
+        }
+      ]
+    },
+    {
+      "name": "events.candidates",
+      "source": "packages/loopy/src/store/sqlite/query-feeds.ts",
+      "sql": "SELECT e.sequence,e.at,e.txn,e.run_id AS runId,COALESCE(r.slug,e.slug) AS slug,COALESCE(r.workspace,e.workspace) AS workspace,r.status,e.node_id AS nodeId,e.entity,e.kind FROM events e LEFT JOIN runs r ON r.id=e.run_id WHERE e.sequence<? ORDER BY e.sequence DESC LIMIT 2001",
+      "parameterCount": 1,
+      "plan": [
+        {
+          "id": 6,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH e USING INTEGER PRIMARY KEY (rowid<?)"
+        },
+        {
+          "id": 8,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH r USING INDEX sqlite_autoindex_runs_1 (id=?) LEFT-JOIN"
+        }
+      ]
+    },
+    {
+      "name": "executions.page",
+      "source": "packages/loopy/src/store/sqlite/query-nodes.ts",
+      "sql": "SELECT execution_key,CASE WHEN status='succeeded' AND length(CAST(output AS BLOB))>16384 THEN json_remove(json_set(record,'$.output',NULL),'$.inputView') ELSE json_remove(record,'$.inputView') END AS record,CASE WHEN status='succeeded' THEN length(CAST(output AS BLOB)) ELSE 0 END AS bytes FROM node_runs WHERE run_id=? AND scope=? ORDER BY execution_key LIMIT ?",
+      "parameterCount": 3,
+      "plan": [
+        {
+          "id": 7,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH node_runs USING INDEX node_runs_scope (run_id=? AND scope=?)"
+        }
+      ]
+    },
+    {
+      "name": "execution.attempts",
+      "source": "packages/loopy/src/store/sqlite/query-nodes.ts",
+      "sql": "SELECT attempt,length(CAST(record->'$.output' AS BLOB)) AS bytes,CASE WHEN json_type(record,'$.output') IS NOT NULL AND length(CAST(record->'$.output' AS BLOB))>16384 THEN json_set(record,'$.output',NULL) ELSE record END AS record FROM node_attempts WHERE run_id=? AND execution_key=? AND attempt>? ORDER BY attempt LIMIT 201",
+      "parameterCount": 3,
+      "plan": [
+        {
+          "id": 5,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SEARCH node_attempts USING INDEX sqlite_autoindex_node_attempts_1 (run_id=? AND execution_key=? AND attempt>?)"
+        }
+      ]
+    }
+  ],
+  "limits": [
+    "Only supplied daemon-readonly.sqlite was opened;no live home DB,API requests,restarts,migrations or writes.",
+    "No query timings collected. Host Bun/SQLite differs from cloud DO/Docker.",
+    "Plans identify mechanisms for this45-run data;they do not establish production scalability or runtime parity.",
+    "The cloud-native timing artifact and daemon plans are not a controlled hardware comparison."
+  ],
+  "afterHash": "ed037ac95b469b5a30616afb505fa1d2e6edfb8a4d4538250108d75a2c0b3bad"
+}

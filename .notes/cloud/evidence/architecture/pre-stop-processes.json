@@ -1,0 +1,95 @@
+{
+  "at": "2026-10-23T15:58:48.780748+00:00",
+  "listeners": {
+    "4310": [
+      "81432"
+    ],
+    "4173": [
+      "41194"
+    ],
+    "14870": [],
+    "14871": [],
+    "14872": [],
+    "14873": [],
+    "15070": [],
+    "15071": [],
+    "15072": [],
+    "15073": [],
+    "15270": [
+      "35389"
+    ],
+    "15271": [
+      "35523"
+    ],
+    "15272": [
+      "35557"
+    ],
+    "15273": [
+      "35389"
+    ]
+  },
+  "ownedProcessGroup": [
+    {
+      "pid": 35171,
+      "ppid": 1,
+      "pgid": 35171,
+      "command": "/Users/hatim.shakir/.bun/bin/bun --no-env-file /Users/hatim.shakir/projects/loopy/cloud-integration/scripts/playground/index.ts serve --profile architecture --state-root /Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture --launch-nonce 09085d95-269c-45f5-a5e2-9c4530350973"
+    },
+    {
+      "pid": 35285,
+      "ppid": 35171,
+      "pgid": 35171,
+      "command": "node /Users/hatim.shakir/projects/loopy/cloud-integration/node_modules/.bin/wrangler dev --local --config /Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/wrangler.json --persist-to /Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/wrangler --env-file /Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/worker.dev.vars"
+    },
+    {
+      "pid": 35302,
+      "ppid": 35285,
+      "pgid": 35171,
+      "command": "/Users/hatim.shakir/.local/share/fnm/node-versions/v24.14.1/installation/bin/node --no-warnings /Users/hatim.shakir/projects/loopy/cloud-integration/node_modules/.bun/wrangler@4.152.0+b35ac5897ad54762/node_modules/wrangler/wrangler-dist/cli.js dev --local --config /Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/wrangler.json --persist-to /Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/wrangler --env-file /Users/hatim.shakir/projects/loopy/cloud-integration/.loopy/playground-architecture/worker.dev.vars"
+    },
+    {
+      "pid": 35357,
+      "ppid": 35302,
+      "pgid": 35171,
+      "command": "/Users/hatim.shakir/.bun/install/cache/links/@esbuild+darwin-arm64@0.28.2-7aa809be835b58ea/node_modules/@esbuild/darwin-arm64/bin/esbuild --service=0.28.2 --ping"
+    },
+    {
+      "pid": 35389,
+      "ppid": 35302,
+      "pgid": 35171,
+      "command": "/Users/hatim.shakir/.bun/install/cache/links/@cloudflare+workerd-darwin-arm64@1.20261019.1-3890b444c6bb86b8/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd serve --binary --experimental --socket-addr=entry=127.0.0.1:15270 --external-addr=loopback=127.0.0.1:52006 --control-fd=3 -"
+    },
+    {
+      "pid": 35407,
+      "ppid": 35302,
+      "pgid": 35171,
+      "command": "/Users/hatim.shakir/.bun/install/cache/links/@cloudflare+workerd-darwin-arm64@1.20261019.1-3890b444c6bb86b8/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd serve --binary --experimental --socket-addr=entry=127.0.0.1:0 --external-addr=loopback=127.0.0.1:52008 --control-fd=3 - --inspector-addr=127.0.0.1:0 --debug-port=127.0.0.1:0"
+    },
+    {
+      "pid": 35523,
+      "ppid": 35171,
+      "pgid": 35171,
+      "command": "/Users/hatim.shakir/.bun/bin/bun --no-env-file /Users/hatim.shakir/projects/loopy/cloud-integration/scripts/playground/provider.ts"
+    },
+    {
+      "pid": 35524,
+      "ppid": 35171,
+      "pgid": 35171,
+      "command": "/Users/hatim.shakir/.bun/bin/bun run --cwd apps/dashboard dev --host 127.0.0.1 --port 15272 --strictPort"
+    },
+    {
+      "pid": 35557,
+      "ppid": 35524,
+      "pgid": 35171,
+      "command": "node /Users/hatim.shakir/projects/loopy/cloud-integration/apps/dashboard/node_modules/.bin/vite --host 127.0.0.1 --port 15272 --strictPort"
+    },
+    {
+      "pid": 35607,
+      "ppid": 35557,
+      "pgid": 35171,
+      "command": "/Users/hatim.shakir/.bun/install/cache/links/@esbuild+darwin-arm64@0.25.12-5c988bcaf394fe84/node_modules/@esbuild/darwin-arm64/bin/esbuild --service=0.25.12 --ping"
+    }
+  ],
+  "owner": 35171,
+  "pgid": 35171
+}
