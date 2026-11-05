@@ -116,7 +116,8 @@ test("save starts the daemon on demand and leaves artifact writes to the service
     f.file,
     `import {loopy} from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/graph/index.ts"))}; export default loopy("on-demand", {input:{},run:()=>null});`,
   );
-  const [result, concurrent] = await Promise.all([cli(f, "save", f.file), cli(f, "save", f.file)]);
+  // List takes no save lock, so both startup contenders must succeed.
+  const [result, concurrent] = await Promise.all([cli(f, "save", f.file), cli(f, "list")]);
   const record = readDaemonFile(f.home);
 
   if (record) {
