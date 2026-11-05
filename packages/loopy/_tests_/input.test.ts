@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test";
+import { Effect } from "effect";
+import { decodeBoundary } from "../src/contract/index.js";
 
 test("dashboard json field coercion parses values and reports invalid JSON", async () => {
   const { coerceInput, inputFields } = await import(
@@ -49,7 +51,7 @@ test("RecordSpec round-trips every field type through contracts and input bounda
     "../../../apps/dashboard/src/lib/input-form.js"
   );
 
-  const output = outputSchema.parse({
+  const output = decodeBoundary(outputSchema)({
     kind: "record",
     fields: JSON.parse(JSON.stringify(allFields)),
   });
@@ -61,7 +63,9 @@ test("RecordSpec round-trips every field type through contracts and input bounda
   const spec = output.fields;
   expect(spec).toEqual(allFields);
   expect(Object.values(allFields)).toEqual([...FIELD_TYPES]);
-  expect(graphSchema.parse({ ...approveDemoGraph, input: spec }).input).toEqual(allFields);
+  expect(decodeBoundary(graphSchema)({ ...approveDemoGraph, input: spec }).input).toEqual(
+    allFields,
+  );
 
   const namedInput = Object.fromEntries(
     Object.entries(allValues).map(([key, value]) => [
@@ -70,13 +74,15 @@ test("RecordSpec round-trips every field type through contracts and input bounda
     ]),
   );
 
-  const input = await graphInput(spec, {
-    home: "/unused",
-    cwd: "/unused",
-    values: {},
-    positionals: [],
-    namedInput,
-  });
+  const input = await Effect.runPromise(
+    graphInput(spec, {
+      home: "/unused",
+      cwd: "/unused",
+      values: {},
+      positionals: [],
+      namedInput,
+    }),
+  );
 
   expect(input).toEqual(allValues);
   expect(coerceInput(inputFields(allFields), namedInput)).toEqual({
@@ -100,13 +106,15 @@ for (const [kind, invalid] of [
 
     const spec = { items: kind };
     await expect(
-      graphInput(spec, {
-        home: "/unused",
-        cwd: "/unused",
-        values: {},
-        positionals: [],
-        namedInput: { items: JSON.stringify(invalid) },
-      }),
+      Effect.runPromise(
+        graphInput(spec, {
+          home: "/unused",
+          cwd: "/unused",
+          values: {},
+          positionals: [],
+          namedInput: { items: JSON.stringify(invalid) },
+        }),
+      ),
     ).rejects.toThrow(`Input --items must be a ${kind}. Provide a valid value.`);
     expect(coerceInput(inputFields(spec), { items: JSON.stringify(invalid) })).toEqual({
       valid: false,

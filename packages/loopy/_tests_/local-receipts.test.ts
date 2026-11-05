@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { lstat, readFile, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { Effect } from "effect";
 import type { ExecutionResult } from "../src/core/index.js";
 import { ExecutionWorker } from "../src/executor/execution.js";
 import { LocalExecutor } from "../src/executor/local.js";
@@ -11,30 +12,35 @@ const result: ExecutionResult = { kind: "succeeded", output: 42, logs: [] };
 
 test("filesystem claims are exclusive, private and retain the saved single-file format", async () => {
   const f = await receiptsFixture();
-  expect(await f.receipts.read(f.identity)).toBeNull();
-  expect(await f.receipts.claim(f.identity)).toEqual({ kind: "created" });
-  expect(await f.receipts.claim(f.identity)).toEqual({
+  expect(await Effect.runPromise(f.receipts.read(f.identity))).toBeNull();
+  expect(await Effect.runPromise(f.receipts.claim(f.identity))).toEqual({ kind: "created" });
+  expect(await Effect.runPromise(f.receipts.claim(f.identity))).toEqual({
     kind: "existing",
     receipt: { ...f.identity, kind: "started", pid: process.pid },
   });
-  const path = await receiptPath(f.home, f.key, 1);
+  const path = await Effect.runPromise(receiptPath(f.home, f.key, 1));
   expect((await lstat(path)).mode & 0o777).toBe(0o600);
   expect((await lstat(dirname(path))).mode & 0o777).toBe(0o700);
   const finished = { ...f.identity, kind: "finished" as const, result };
-  expect(await f.receipts.finish(finished)).toEqual(finished);
+  expect(await Effect.runPromise(f.receipts.finish(finished))).toEqual(finished);
   const bytes = await readFile(path, "utf8");
   const reopened = new FilesystemReceipts(f.home);
-  expect(await reopened.read(f.identity)).toEqual(finished);
-  expect(await reopened.claim(f.identity)).toEqual({ kind: "existing", receipt: finished });
+  expect(await Effect.runPromise(reopened.read(f.identity))).toEqual(finished);
+  expect(await Effect.runPromise(reopened.claim(f.identity))).toEqual({
+    kind: "existing",
+    receipt: finished,
+  });
   expect(
-    await reopened.finish({ ...finished, result: { ...result, output: "replacement" } }),
+    await Effect.runPromise(
+      reopened.finish({ ...finished, result: { ...result, output: "replacement" } }),
+    ),
   ).toEqual(finished);
   expect(await readFile(path, "utf8")).toBe(bytes);
 });
 
 test("saved started and finished receipts decode without rewriting, corruption fails closed", async () => {
   const f = await receiptsFixture();
-  const path = await receiptPath(f.home, f.key, 1);
+  const path = await Effect.runPromise(receiptPath(f.home, f.key, 1));
 
   const values = [
     { ...f.identity, kind: "started", pid: process.pid },
@@ -54,48 +60,68 @@ test("saved started and finished receipts decode without rewriting, corruption f
   for (const value of values) {
     const bytes = `${JSON.stringify(value, null, 2)}\n`;
     await writeFile(path, bytes);
-    expect(await f.receipts.read(f.identity)).toEqual(value);
+    expect(await Effect.runPromise(f.receipts.read(f.identity))).toEqual(value);
     expect(await readFile(path, "utf8")).toBe(bytes);
   }
 
   await writeFile(path, "{");
-  await expect(f.receipts.read(f.identity)).rejects.toBeInstanceOf(SyntaxError);
-  await expect(f.receipts.claim(f.identity)).rejects.toBeInstanceOf(SyntaxError);
+  await expect(Effect.runPromise(f.receipts.read(f.identity))).rejects.toMatchObject({
+    _tag: "ExecutorError",
+    cause: expect.any(SyntaxError),
+  });
+  await expect(Effect.runPromise(f.receipts.claim(f.identity))).rejects.toMatchObject({
+    _tag: "ExecutorError",
+    cause: expect.any(SyntaxError),
+  });
 });
 
 test("receipt reads reject a saved foreign execution identity or attempt", async () => {
   const f = await receiptsFixture();
-  const path = await receiptPath(f.home, f.key, 1);
+  const path = await Effect.runPromise(receiptPath(f.home, f.key, 1));
 
   for (const identity of [
     { ...f.identity, executionKey: { ...f.key, runId: "foreign" } },
     { ...f.identity, attempt: 2 },
   ]) {
     await writeFile(path, JSON.stringify({ ...identity, kind: "finished", result }));
-    await expect(f.executor.lookup(f.key, 1)).rejects.toThrow(
-      "Receipt identity does not match this execution attempt.",
-    );
+    await expect(Effect.runPromise(f.executor.lookup(f.key, 1))).rejects.toMatchObject({
+      _tag: "ExecutorError",
+      cause: expect.objectContaining({
+        message: "Receipt identity does not match this execution attempt.",
+      }),
+    });
   }
 });
 
 test("receipt directories reject symlinks and encode traversal run ids", async () => {
   const f = await receiptsFixture();
   await symlink(f.workspace, join(f.home, "receipts"));
-  await expect(f.receipts.claim(f.identity)).rejects.toThrow(
-    "Receipt directories must be real directories inside the daemon home.",
-  );
+  await expect(Effect.runPromise(f.receipts.claim(f.identity))).rejects.toMatchObject({
+    _tag: "ExecutorError",
+    cause: expect.objectContaining({
+      message: "Receipt directories must be real directories inside the daemon home.",
+    }),
+  });
   const isolated = new FilesystemReceipts(join(f.root, "isolated-home"));
   const identity = { ...f.identity, executionKey: { ...f.key, runId: "../outside" } };
-  expect(await isolated.claim(identity)).toEqual({ kind: "created" });
-  expect(await isolated.read(identity)).toMatchObject({ ...identity, kind: "started" });
+  expect(await Effect.runPromise(isolated.claim(identity))).toEqual({ kind: "created" });
+  expect(await Effect.runPromise(isolated.read(identity))).toMatchObject({
+    ...identity,
+    kind: "started",
+  });
 });
 
 test("unclaimed work cannot publish a terminal receipt", async () => {
   const f = await receiptsFixture();
-  await expect(f.receipts.finish({ ...f.identity, kind: "finished", result })).rejects.toThrow(
-    "Execution has no claimed receipt. Claim it before performing work.",
-  );
-  expect(await f.receipts.read(f.identity)).toBeNull();
+  await expect(
+    Effect.runPromise(f.receipts.finish({ ...f.identity, kind: "finished", result })),
+  ).rejects.toMatchObject({
+    _tag: "ExecutorError",
+    cause: expect.objectContaining({
+      message: "Execution has no claimed receipt. Claim it before performing work.",
+    }),
+  });
+  expect(await Effect.runPromise(f.receipts.read(f.identity))).toBeNull();
 });
 
 test("two execution workers sharing a receipt perform the side effect once", async () => {
@@ -115,13 +141,13 @@ test("two execution workers sharing a receipt perform the side effect once", asy
     });
 
   const outcomes = await Promise.allSettled([
-    worker().execute(f.key, 1, f.spec, new AbortController().signal),
-    worker().execute(f.key, 1, f.spec, new AbortController().signal),
+    Effect.runPromise(worker().execute(f.key, 1, f.spec, new AbortController().signal)),
+    Effect.runPromise(worker().execute(f.key, 1, f.spec, new AbortController().signal)),
   ]);
 
   expect(outcomes.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(1);
   expect(await readFile(join(f.workspace, "effect"), "utf8")).toBe("once\n");
-  expect(await f.receipts.read(f.identity)).toMatchObject({
+  expect(await Effect.runPromise(f.receipts.read(f.identity))).toMatchObject({
     kind: "finished",
     result: { kind: "succeeded", output: 42 },
   });
@@ -135,8 +161,8 @@ test("competing local parents cannot give two trusted children the same effect",
   );
 
   const outcomes = await Promise.allSettled([
-    f.executor.execute(f.key, 1, f.spec, new AbortController().signal),
-    f.executor.execute(f.key, 1, f.spec, new AbortController().signal),
+    Effect.runPromise(f.executor.execute(f.key, 1, f.spec, new AbortController().signal)),
+    Effect.runPromise(f.executor.execute(f.key, 1, f.spec, new AbortController().signal)),
   ]);
 
   expect(
@@ -145,7 +171,7 @@ test("competing local parents cannot give two trusted children the same effect",
     ),
   ).toBe(true);
   expect(await readFile(join(f.workspace, "effect"), "utf8")).toBe("once\n");
-  expect(await f.receipts.read(f.identity)).toMatchObject({
+  expect(await Effect.runPromise(f.receipts.read(f.identity))).toMatchObject({
     kind: "finished",
     result: { kind: "succeeded", output: 42 },
   });
@@ -155,9 +181,16 @@ test("trusted child receives a parsed descriptor instead of the injected receipt
   const f = await receiptsFixture();
   Object.assign(f.receipts, { cannotSerialize: 1n });
   await writeFile(f.bundle, "console.log(42);");
-  const completed = await f.executor.execute(f.key, 1, f.spec, new AbortController().signal);
+
+  const completed = await Effect.runPromise(
+    f.executor.execute(f.key, 1, f.spec, new AbortController().signal),
+  );
+
   expect(completed).toMatchObject({ kind: "succeeded", output: 42 });
-  expect(await f.receipts.read(f.identity)).toMatchObject({ kind: "finished", result: completed });
+  expect(await Effect.runPromise(f.receipts.read(f.identity))).toMatchObject({
+    kind: "finished",
+    result: completed,
+  });
   expect(
     () =>
       new LocalExecutor({
@@ -177,7 +210,9 @@ test("a live trusted child retains completion authority, a killed child becomes 
     'await Bun.write("effect", "once"); await Bun.sleep(1500); console.log(42);',
   );
 
-  const completion = f.executor.execute(f.key, 1, f.spec, new AbortController().signal).then(
+  const completion = Effect.runPromise(
+    f.executor.execute(f.key, 1, f.spec, new AbortController().signal),
+  ).then(
     () => "resolved",
     () => "rejected",
   );
@@ -190,7 +225,7 @@ test("a live trusted child retains completion authority, a killed child becomes 
     await Bun.sleep(10);
   }
 
-  const receipt = await f.receipts.read(f.identity);
+  const receipt = await Effect.runPromise(f.receipts.read(f.identity));
 
   if (receipt?.kind !== "started") {
     throw new Error("Expected a live trusted child receipt.");
@@ -198,13 +233,18 @@ test("a live trusted child retains completion authority, a killed child becomes 
 
   try {
     expect(await Bun.file(join(f.workspace, "effect")).exists()).toBe(true);
-    expect(await f.executor.lookup(f.key, 1)).toEqual({ kind: "started" });
-    await expect(f.receipts.finish({ ...f.identity, kind: "finished", result })).rejects.toThrow(
-      "Execution worker is still alive. Reconcile its receipt before finishing.",
-    );
+    expect(await Effect.runPromise(f.executor.lookup(f.key, 1))).toEqual({ kind: "started" });
+    await expect(
+      Effect.runPromise(f.receipts.finish({ ...f.identity, kind: "finished", result })),
+    ).rejects.toMatchObject({
+      _tag: "ExecutorError",
+      cause: expect.objectContaining({
+        message: "Execution worker is still alive. Reconcile its receipt before finishing.",
+      }),
+    });
     process.kill(receipt.pid, "SIGKILL");
     expect(await completion).toBe("rejected");
-    const terminal = await f.executor.lookup(f.key, 1);
+    const terminal = await Effect.runPromise(f.executor.lookup(f.key, 1));
     expect(terminal).toMatchObject({
       kind: "finished",
       result: {
@@ -217,12 +257,12 @@ test("a live trusted child retains completion authority, a killed child becomes 
       throw new Error("Expected a terminal uncertainty receipt.");
     }
 
-    expect(await f.executor.execute(f.key, 1, f.spec, new AbortController().signal)).toEqual(
-      terminal.result,
-    );
+    expect(
+      await Effect.runPromise(f.executor.execute(f.key, 1, f.spec, new AbortController().signal)),
+    ).toEqual(terminal.result);
     await Bun.sleep(1600);
     expect(await readFile(join(f.workspace, "effect"), "utf8")).toBe("once");
-    expect(await f.executor.lookup(f.key, 1)).toEqual(terminal);
+    expect(await Effect.runPromise(f.executor.lookup(f.key, 1))).toEqual(terminal);
   } finally {
     try {
       process.kill(receipt.pid, "SIGKILL");

@@ -1,61 +1,75 @@
 import { constants } from "node:fs";
 import { access, realpath, stat } from "node:fs/promises";
 import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { Effect } from "effect";
+import { errnoCode } from "../../core/index.js";
+import { rejected } from "../spawn.js";
+import { absentPath, filesystem } from "./io.js";
 
 export const ENV_EXEC = "/usr/bin/env";
 
-/** True when `child` is `parent` or lives below it. */
+/** True when child is parent or lives below it. */
 export function within(parent: string, child: string): boolean {
   const path = relative(parent, child);
 
   return path === "" || (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path));
 }
 
-export async function executable(path: string): Promise<boolean> {
-  try {
-    await access(path, constants.X_OK);
+export const executable = Effect.fn(function* (path: string) {
+  return yield* Effect.gen(function* () {
+    yield* filesystem(() => access(path, constants.X_OK));
 
-    return (await stat(path)).isFile();
-  } catch {
-    return false;
-  }
-}
+    return (yield* filesystem(() => stat(path))).isFile();
+  }).pipe(Effect.catchIf(absentPath, () => Effect.succeed(false)));
+});
 
-/** The real path of `program`, searched on `path` unless it already names a directory. */
-export async function resolveProgram(program: string, cwd: string, path: string): Promise<string> {
+/** Resolve an executable against the command directory and its PATH. */
+export const resolveProgram = Effect.fn(function* (program: string, cwd: string, path: string) {
   const candidates = program.includes(sep)
     ? [resolve(cwd, program)]
     : path.split(delimiter).map((directory) => resolve(cwd, directory, program));
 
   for (const candidate of candidates) {
-    if (await executable(candidate)) {
-      return realpath(candidate);
+    if (
+      yield* executable(candidate).pipe(
+        Effect.catchIf(
+          (error) => errnoCode(error.cause) === "ELOOP",
+          (error) => Effect.fail(rejected(error.cause)),
+        ),
+      )
+    ) {
+      return yield* filesystem(() => realpath(candidate));
     }
   }
 
-  throw new Error(`Executable '${program}' was not found.`);
-}
+  return yield* Effect.fail(rejected(new Error(`Executable '${program}' was not found.`)));
+});
 
-/** The nearest package root above a program inside the home directory, if any. */
-export async function packageDirectory(program: string, home: string): Promise<string | undefined> {
+/** The nearest package root above a program inside home, if any. */
+export const packageDirectory = Effect.fn(function* (program: string, home: string) {
   if (!within(home, program)) {
     return undefined;
   }
 
   for (let directory = dirname(program); within(home, directory) && directory !== home; ) {
-    try {
-      await access(join(directory, "package.json"));
+    const path = join(directory, "package.json");
 
+    const exists = yield* filesystem(() => access(path)).pipe(
+      Effect.as(true),
+      Effect.catchIf(absentPath, () => Effect.succeed(false)),
+    );
+
+    if (exists) {
       return directory;
-    } catch {
-      directory = dirname(directory);
     }
+
+    directory = dirname(directory);
   }
 
   return undefined;
-}
+});
 
-/** `NAME=value` pairs for `env -i`, rejecting names that would split or truncate. */
+/** Reject environment names or values that split or truncate launcher arguments. */
 export function envArgs(env: NodeJS.ProcessEnv): string[] {
   return Object.entries(env).map(([name, value]) => {
     if (!name || name.includes("=") || name.includes("\0") || value?.includes("\0")) {

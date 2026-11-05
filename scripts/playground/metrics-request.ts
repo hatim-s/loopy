@@ -1,4 +1,5 @@
-import type { z } from "zod";
+import type { Schema } from "effect";
+import { decodeBoundary } from "../../packages/loopy/src/contract/index.js";
 import type { Sample } from "./metrics-statistics.js";
 
 type Request = (path: string, signal: AbortSignal) => Promise<Response>;
@@ -9,7 +10,7 @@ export function createMeasure(request: Request, samples: Sample[]) {
   return async function measure<T>(
     endpoint: string,
     path: string,
-    schema: z.ZodType<T>,
+    schema: Schema.Codec<T, unknown, never, never>,
     observe: (value: T) => Observation = () => ({}),
   ) {
     const began = performance.now();
@@ -74,15 +75,12 @@ export function createMeasure(request: Request, samples: Sample[]) {
 
       try {
         const value: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-        const parsed = schema.safeParse(value);
+        const parsed = decodeBoundary(schema)(value);
         sample.parseMs = performance.now() - parseStart;
 
-        if (parsed.success) {
-          sample.observation = observe(parsed.data);
-        } else {
-          sample.failure = "schema";
-        }
+        sample.observation = observe(parsed);
       } catch {
+        sample.parseMs = performance.now() - parseStart;
         sample.failure = "schema";
       }
     } catch {

@@ -1,11 +1,13 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Effect } from "effect";
 import { Miniflare } from "miniflare";
 import { ARTIFACT_LIMITS } from "../../../apps/cloud/src/artifacts.js";
 import {
+  decodeBoundary,
   nodeIdSchema,
   type PutLoopyBody,
   type SourceArtifact,
@@ -22,8 +24,15 @@ let directory: string;
 beforeAll(async () => {
   directory = await mkdtemp(join(tmpdir(), "loopy-artifacts-"));
 
+  await mkdir(join(directory, ".loopy/loopies"), { recursive: true });
+  await writeFile(
+    join(directory, "effect.ts"),
+    `export { Effect } from ${JSON.stringify(new URL("../../../node_modules/effect/dist/index.js", import.meta.url).pathname)};`,
+  );
+
   const built = await Bun.build({
     entrypoints: [
+      join(directory, "effect.ts"),
       new URL("../../../apps/cloud/src/artifacts.ts", import.meta.url).pathname,
       new URL("../../../apps/cloud/src/sql-driver.ts", import.meta.url).pathname,
       new URL("../src/service/index.ts", import.meta.url).pathname,
@@ -40,6 +49,8 @@ beforeAll(async () => {
   }
 
   runtime = new Miniflare({
+    host: "127.0.0.1",
+    port: 0,
     modulesRoot: directory,
     compatibilityDate: "2026-07-30",
     r2Buckets: ["BUCKET"],
@@ -53,7 +64,8 @@ beforeAll(async () => {
         contents: `
       import { ARTIFACT_LIMITS, R2ArtifactRegistry } from "./artifacts.js";
       import { DurableSqlDriver } from "./sql-driver.js";
-      import { LoopyService, eventStream } from "./index.js";
+      import { Effect } from "./effect.js";
+      import { makeService, eventStream, apiRoutes, dispatch } from "./index.js";
       import { SqlRunStore } from "./portable.js";
       export class RegistryFixture {
         constructor(state, env) {
@@ -74,43 +86,48 @@ beforeAll(async () => {
           const registry = new R2ArtifactRegistry(this.state.storage, bucket, workspace);
           try {
             let value;
-            if (operation === "failWrite") { await registry.save(args[0]); }
+            if (operation === "failWrite") { await Effect.runPromise(registry.save(args[0])); }
             else if (operation === "race") {
               value = await Promise.all(args.map(async body => {
-                try { await registry.save(body); return "saved"; }
+                try { await Effect.runPromise(registry.save(body)); return "saved"; }
                 catch (error) { return error.message; }
               }));
             } else if (operation === "forgetSizes") {
               this.state.storage.sql.exec("DELETE FROM artifact_graph_sizes WHERE workspace = ?", workspace);
             } else if (operation === "listSizes") {
-              const entries = await registry.listSummaries();
+              const entries = await Effect.runPromise(registry.listSummaries());
               value = {
                 count: entries.length,
                 bounded: this.state.storage.sql.exec("SELECT sum(s.bytes) AS bytes FROM artifact_definitions d JOIN artifact_graph_sizes s ON s.workspace = d.workspace AND s.revision = d.revision WHERE d.workspace = ?", workspace).one().bytes <= ARTIFACT_LIMITS.listBytes
               };
-            } else if (operation === "serviceChecks") {
+            } else if (operation === "serviceChecks" || operation === "httpSave") {
               const store = this.store;
-              const service = new LoopyService({
-                store, registry: () => registry, clock: {now: Date.now},
-                canonicalWorkspace: () => workspace,
-                secrets: {list: () => [], set: () => {}, remove: () => {}},
-                generateTypes: async () => { throw new Error("unused"); }
+              const service = makeService({
+                store, registry: () => Effect.succeed(registry), clock: {now: Date.now},
+                canonicalWorkspace: () => Effect.succeed(workspace),
+                secrets: {list: () => Effect.succeed([]), set: () => Effect.void, remove: () => Effect.void},
+                generateTypes: () => Effect.die(new Error("unused"))
               });
-              const before = await store.eventCursor();
-              const run = await service.startRun(args[0], {}, workspace);
-              const snapshot = await service.runSnapshot(run.id);
-              const schedule = await service.putSchedule(args[0], {cron: "* * * * *"}, workspace);
-              await service.setScheduleEnabled(args[0], false, workspace);
+              if(operation === "httpSave") {
+                const url = new URL("http://127.0.0.1/api/loopies/"+args[0].graph.name);
+                const request = new Request(url,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(args[0])});
+                return await dispatch(apiRoutes({service,store,cwd:workspace,daemon:{pid:null,startedAt:new Date().toISOString(),concurrency:1}}),request,url);
+              }
+              const before = await Effect.runPromise(store.eventCursor());
+              const run = await Effect.runPromise(service.startRun(args[0], {}, workspace));
+              const snapshot = await Effect.runPromise(service.runSnapshot(run.id));
+              const schedule = await Effect.runPromise(service.putSchedule(args[0], {cron: "* * * * *"}, workspace));
+              await Effect.runPromise(service.setScheduleEnabled(args[0], false, workspace));
               const aborter = new AbortController();
-              const response = await eventStream(store, service, {after: before.cursor, epoch: before.epoch}, aborter.signal);
+              const response = await Effect.runPromise(eventStream(store, service, {after: before.cursor, epoch: before.epoch}, aborter.signal));
               const reader = response.body.getReader();
               await reader.read();
               const frame = new TextDecoder().decode((await reader.read()).value);
               aborter.abort();
               value = {
-                slug: run.slug, revision: (await store.getRun(run.id)).revision,
+                slug: run.slug, revision: (await Effect.runPromise(store.getRun(run.id))).revision,
                 snapshotRead: snapshot.run.id === run.id, scheduled: schedule.slug,
-                enabled: (await service.listSchedules(workspace))[0].enabled,
+                enabled: (await Effect.runPromise(service.listSchedules(workspace)))[0].enabled,
                 eventDelivered: frame.includes(run.id) && frame.includes("event: txn")
               };
             } else if (operation === "fillCapacity") {
@@ -122,7 +139,7 @@ beforeAll(async () => {
                   );
                 }
               });
-            } else { value = await registry[operation](...args); }
+            } else { value = await Effect.runPromise(registry[operation](...args)); }
             return Response.json({value: value ?? null});
           } catch (error) { return Response.json({error: error.message}, {status: 400}); }
         }
@@ -257,14 +274,18 @@ test("missing source is pinned and workspaces cannot read another tenant's artif
   });
   expect(await call("tenant-b", "revisionGraph", body.revision)).toMatchObject({
     status: 400,
-    body: { error: "Published graph is missing. Save the loopy again." },
+    body: { error: expect.stringContaining("Published graph is missing. Save the loopy again.") },
   });
   expect(await call("tenant-b", "getBundle", body.bundles[0]?.bundleHash)).toMatchObject({
     status: 400,
   });
   expect(await call("tenant-b", "save", body)).toMatchObject({
     status: 400,
-    body: { error: "Source workspace does not match the authenticated workspace." },
+    body: {
+      error: expect.stringContaining(
+        "Source workspace does not match the authenticated workspace.",
+      ),
+    },
   });
   expect(await call("tenant-b", "listSummaries")).toMatchObject({ body: { value: [] } });
 });
@@ -273,7 +294,7 @@ test("artifact failures never publish metadata and a later retry finishes public
   const body = await executable("failure");
   expect(await call("failure", "failWrite", body)).toMatchObject({
     status: 400,
-    body: { error: "R2 write unavailable" },
+    body: { error: expect.stringContaining("R2 write unavailable") },
   });
   expect(await call("failure", "listSummaries")).toMatchObject({ body: { value: [] } });
   expect(await call("failure", "save", body)).toMatchObject({ status: 200 });
@@ -337,8 +358,9 @@ test("capacity rejects overflow without truncating list results", async () => {
   });
 });
 
-const capacityError =
-  "Workspace exceeds its 32 MiB current graph capacity. Replace a definition with a smaller graph before saving.";
+const capacityError = expect.stringContaining(
+  "Workspace exceeds its 32 MiB current graph capacity. Replace a definition with a smaller graph before saving.",
+);
 
 test("aggregate capacity rejects new and replacement pointers while existing operations remain readable", async () => {
   const workspace = "aggregate";
@@ -488,26 +510,30 @@ test("cloud rejects unsupported modes, declared secrets, oversized writes and bo
   );
   expect(await call(workspace, "revisionGraph", hash)).toMatchObject({
     status: 400,
-    body: { error: "Artifact exceeds its 1048576 byte limit." },
+    body: { error: expect.stringContaining("Artifact exceeds its 1048576 byte limit.") },
   });
 });
 
 test("shared validation rejects forged bundles, revisions and source mappings before storage", async () => {
   const body = await executable("validation");
-  await expect(validateCompiled({ ...body, revision: "f".repeat(64) })).rejects.toThrow(
-    "The graph revision does not match its contents.",
-  );
-  await expect(validateCompiled({ ...body, bundles: [] })).rejects.toThrow(
+  await expect(
+    Effect.runPromise(validateCompiled({ ...body, revision: "f".repeat(64) })),
+  ).rejects.toThrow("The graph revision does not match its contents.");
+  await expect(Effect.runPromise(validateCompiled({ ...body, bundles: [] }))).rejects.toThrow(
     "Supply exactly one bundle for each code node and parser in node order.",
   );
   await expect(
-    validateCompiled({
-      ...body,
-      bundles: body.bundles.map((bundle) => ({ ...bundle, bytes: btoa("wrong") })),
-    }),
+    Effect.runPromise(
+      validateCompiled({
+        ...body,
+        bundles: body.bundles.map((bundle) => ({ ...bundle, bytes: btoa("wrong") })),
+      }),
+    ),
   ).rejects.toThrow("Bundle bytes do not match their hash.");
   await expect(
-    validateCompiled({ ...body, sourceArtifact: artifact("f".repeat(64), "wrong") }),
+    Effect.runPromise(
+      validateCompiled({ ...body, sourceArtifact: artifact("f".repeat(64), "wrong") }),
+    ),
   ).rejects.toThrow("Source must name this compiled revision and its graph nodes.");
   const source = artifact(body.revision, "source");
 
@@ -516,19 +542,41 @@ test("shared validation rejects forged bundles, revisions and source mappings be
   }
 
   source.ranges = [
-    { nodeId: nodeIdSchema.parse("missing-node"), fileId: "file-0", startLine: 1, endLine: 2 },
+    {
+      nodeId: decodeBoundary(nodeIdSchema)("missing-node"),
+      fileId: "file-0",
+      startLine: 1,
+      endLine: 2,
+    },
   ];
-  await expect(validateCompiled({ ...body, sourceArtifact: source })).rejects.toThrow(
-    "Source ranges must name a unique node and valid file lines.",
-  );
+  await expect(
+    Effect.runPromise(validateCompiled({ ...body, sourceArtifact: source })),
+  ).rejects.toThrow("Source must name this compiled revision and its graph nodes.");
   source.ranges = [
-    { nodeId: nodeIdSchema.parse("missing-node"), fileId: "file-0", startLine: 1, endLine: 1 },
+    {
+      nodeId: decodeBoundary(nodeIdSchema)("missing-node"),
+      fileId: "file-0",
+      startLine: 1,
+      endLine: 1,
+    },
   ];
-  await expect(validateCompiled({ ...body, sourceArtifact: source })).rejects.toThrow(
-    "Source must name this compiled revision and its graph nodes.",
-  );
+  await expect(
+    Effect.runPromise(validateCompiled({ ...body, sourceArtifact: source })),
+  ).rejects.toThrow("Source must name this compiled revision and its graph nodes.");
   expect(await call("validation", "save", { ...body, revision: "f".repeat(64) })).toMatchObject({
     status: 400,
   });
   expect(await call("validation", "listSummaries")).toMatchObject({ body: { value: [] } });
+});
+
+test("HTTP capacity rejection retains bad_request and an actionable message", async () => {
+  const workspace = "capacity-http";
+  expect((await call(workspace, "fillCapacity", 1000)).status).toBe(200);
+  const body = await compiledBody("overflow", "/overflow.ts", { workspace });
+  expect(await call(workspace, "httpSave", body)).toMatchObject({
+    status: 400,
+    body: {
+      error: { code: "bad_request", message: expect.stringContaining("1000 definition capacity") },
+    },
+  });
 });

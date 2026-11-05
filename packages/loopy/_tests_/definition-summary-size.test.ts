@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { z } from "zod";
+import { Schema } from "effect";
 import { ARTIFACT_LIMITS } from "../../../apps/cloud/src/artifacts-storage.js";
 import { definitionSummarySchema } from "../src/contract/index.js";
 import { canonicalJson, revision } from "../src/core/index.js";
@@ -16,22 +16,24 @@ afterAll(async () => {
   await harness?.cleanup();
 });
 
-const summary = z.object({
+const summary = Schema.Struct({
   value: definitionSummarySchema,
-  graphReads: z.number(),
-  artifactWrites: z.number(),
+  graphReads: Schema.Number,
+  artifactWrites: Schema.Number,
 });
 
-const inspect = z.object({
-  value: z.object({
-    pointer: z.object({
-      generation: z.string(),
-      saved_at: z.string(),
-      revision: z.string(),
-      sourceBytes: z.number(),
+const inspect = Schema.Struct({
+  value: Schema.Struct({
+    pointer: Schema.Struct({
+      generation: Schema.String,
+      saved_at: Schema.String,
+      revision: Schema.String,
+      sourceBytes: Schema.Number,
     }),
-    projection: z.object({ generation: z.string(), projection_json: z.string() }).nullable(),
-    pointerColumns: z.array(z.string()),
+    projection: Schema.NullOr(
+      Schema.Struct({ generation: Schema.String, projection_json: Schema.String }),
+    ),
+    pointerColumns: Schema.Array(Schema.String),
   }),
 });
 
@@ -46,15 +48,18 @@ for (const sourceBytes of [1_100_001, ARTIFACT_LIMITS.metadataRowBytes + 300]) {
     const legacy = await harness.probe(instance, { operation: "legacy", body });
     expect(legacy).toMatchObject({ status: 200 });
 
-    const before = z
-      .object({
-        value: z.object({ pointer: inspect.shape.value.shape.pointer, projection: z.null() }),
-      })
-      .parse(legacy.body).value;
+    const before = Schema.decodeUnknownSync(
+      Schema.Struct({
+        value: Schema.Struct({
+          pointer: inspect.fields.value.fields.pointer,
+          projection: Schema.Null,
+        }),
+      }),
+    )(legacy.body).value;
 
     const response = await harness.probe(instance, { operation: "summary" });
     expect(response).toMatchObject({ status: 200 });
-    const first = summary.parse(response.body);
+    const first = Schema.decodeUnknownSync(summary)(response.body);
     expect(first).toMatchObject({
       value: {
         source: body.source.path,
@@ -80,12 +85,16 @@ for (const sourceBytes of [1_100_001, ARTIFACT_LIMITS.metadataRowBytes + 300]) {
       },
     });
     await harness.evict(instance);
-    expect(summary.parse((await harness.probe(instance, { operation: "summary" })).body)).toEqual({
+    expect(
+      Schema.decodeUnknownSync(summary)(
+        (await harness.probe(instance, { operation: "summary" })).body,
+      ),
+    ).toEqual({
       ...first,
       graphReads: 0,
     });
 
-    const after = inspect.parse(
+    const after = Schema.decodeUnknownSync(inspect)(
       (await harness.probe(instance, { operation: "inspect" })).body,
     ).value;
 
@@ -96,14 +105,16 @@ for (const sourceBytes of [1_100_001, ARTIFACT_LIMITS.metadataRowBytes + 300]) {
         status: 400,
         body: {
           error:
-            "Definition source metadata exceeds the cloud SQL row byte budget. Shorten its source path before saving.",
+            "Compiled artifact validation failed. Definition source metadata exceeds the cloud SQL row byte budget. Shorten its source path before saving.",
           graphReads: 0,
           artifactWrites: 0,
         },
       });
-      expect(summary.parse((await harness.probe(instance, { operation: "summary" })).body)).toEqual(
-        { ...first, graphReads: 0 },
-      );
+      expect(
+        Schema.decodeUnknownSync(summary)(
+          (await harness.probe(instance, { operation: "summary" })).body,
+        ),
+      ).toEqual({ ...first, graphReads: 0 });
     }
 
     expect(after.pointerColumns).not.toContain("summary_json");
@@ -131,7 +142,7 @@ for (const [name, pattern] of [
     expect(utf8(canonicalJson(body.graph))).toBe(ARTIFACT_LIMITS.graphBytes);
     const saved = await harness.probe(`maximum-${name}`, { operation: "save", body });
     expect(saved).toMatchObject({ status: 200, body: { graphReads: 0, artifactWrites: 2 } });
-    expect(summary.parse(saved.body).value).toMatchObject({
+    expect(Schema.decodeUnknownSync(summary)(saved.body).value).toMatchObject({
       source,
       description: body.graph.meta.description,
       input: body.graph.input,
@@ -142,7 +153,7 @@ for (const [name, pattern] of [
       body: { graphReads: 0, artifactWrites: 0 },
     });
 
-    const stored = inspect.parse(
+    const stored = Schema.decodeUnknownSync(inspect)(
       (await harness.probe(`maximum-${name}`, { operation: "inspect" })).body,
     ).value;
 
@@ -162,7 +173,7 @@ for (const [name, source] of [
       status: 400,
       body: {
         error:
-          "Definition source metadata exceeds the cloud SQL row byte budget. Shorten its source path before saving.",
+          "Compiled artifact validation failed. Definition source metadata exceeds the cloud SQL row byte budget. Shorten its source path before saving.",
         graphReads: 0,
         artifactWrites: 0,
       },
@@ -188,7 +199,7 @@ test("JSON-root graph publication stores schema input within the row budget", as
     body: { value: { input: "schema" }, artifactWrites: 2 },
   });
 
-  const stored = inspect.parse(
+  const stored = Schema.decodeUnknownSync(inspect)(
     (await harness.probe("json-input", { operation: "inspect" })).body,
   ).value;
 

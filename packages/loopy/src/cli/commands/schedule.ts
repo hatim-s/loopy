@@ -1,51 +1,58 @@
+import { Effect } from "effect";
 import { routes } from "../../contract/index.js";
 import { request } from "../client.js";
 import { type CliContext, requireTarget } from "../context.js";
+import { CliError } from "../errors.js";
 import { jsonInput } from "../input.js";
 import { printJson } from "../output.js";
 
-export async function runSchedule(context: CliContext): Promise<void> {
-  const slug = requireTarget(context, "Slug");
-  const { off, enable, disable, cron, tz } = context.values;
-  const actions = Number(!!off) + Number(!!enable) + Number(!!disable);
+export function runSchedule(context: CliContext) {
+  return Effect.gen(function* () {
+    const slug = yield* requireTarget(context, "Slug");
+    const { off, enable, disable, cron, tz } = context.values;
+    const actions = Number(!!off) + Number(!!enable) + Number(!!disable);
 
-  if (
-    actions > 1 ||
-    (actions > 0 &&
-      (cron !== undefined || tz !== undefined || context.values["input-json"] !== undefined))
-  ) {
-    throw new Error("Choose one schedule action: --cron, --off, --enable, or --disable.");
-  }
+    if (
+      actions > 1 ||
+      (actions > 0 &&
+        (cron !== undefined || tz !== undefined || context.values["input-json"] !== undefined))
+    ) {
+      return yield* Effect.fail(
+        new CliError({
+          message: "Choose one schedule action: --cron, --off, --enable, or --disable.",
+        }),
+      );
+    }
 
-  const path = `/loopies/${encodeURIComponent(slug)}/schedule`;
+    const path = `/loopies/${encodeURIComponent(slug)}/schedule`;
+    const workspace = `?workspace=${encodeURIComponent(context.cwd)}`;
 
-  const workspace = `?workspace=${encodeURIComponent(context.cwd)}`;
+    if (off) {
+      printJson(
+        yield* request(context, `${path}${workspace}`, routes.deleteSchedule.response, {
+          method: "DELETE",
+        }),
+      );
 
-  if (off) {
+      return;
+    }
+
+    if (enable || disable) {
+      printJson(
+        yield* request(context, `${path}/enabled${workspace}`, routes.setScheduleEnabled.response, {
+          method: "POST",
+          body: { enabled: !!enable },
+        }),
+      );
+
+      return;
+    }
+
     printJson(
-      await request(context, `${path}${workspace}`, routes.deleteSchedule.response, {
-        method: "DELETE",
+      yield* request(context, `${path}${workspace}`, routes.putSchedule.response, {
+        method: "PUT",
+        body: { cron, tz, input: yield* jsonInput(context) },
       }),
     );
-
-    return;
-  }
-
-  if (enable || disable) {
-    printJson(
-      await request(context, `${path}/enabled${workspace}`, routes.setScheduleEnabled.response, {
-        method: "POST",
-        body: { enabled: !!enable },
-      }),
-    );
-
-    return;
-  }
-
-  printJson(
-    await request(context, `${path}${workspace}`, routes.putSchedule.response, {
-      method: "PUT",
-      body: { cron, tz, input: await jsonInput(context) },
-    }),
-  );
+  });
 }

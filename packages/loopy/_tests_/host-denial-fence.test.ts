@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { Effect } from "effect";
 import { activateDurable } from "../src/host/durable.js";
 import { loopy, sh } from "../src/sdk/graph/index.js";
 import { MemoryStore } from "../src/store/index.js";
@@ -15,28 +16,34 @@ test("an admission denial reloads state and cannot overwrite a newer persisted a
   }).graph;
 
   const at = newRun().createdAt;
-  await store.createRun(newRun());
-  await store.acquireRateLimit("shared", 1, 60_000, at);
-  provider.lookup = async (key) => {
-    const previous = await store.getNodeRun(key);
+  await Effect.runPromise(store.createRun(newRun()));
+  await Effect.runPromise(store.acquireRateLimit("shared", 1, 60_000, at));
+  provider.lookup = (key) => {
+    return Effect.gen(function* () {
+      const previous = yield* store.getNodeRun(key);
 
-    if (!previous) {
-      throw new Error("Expected committed attempt.");
-    }
+      if (!previous) {
+        throw new Error("Expected committed attempt.");
+      }
 
-    await store.apply({
-      runId: "run",
-      token: "owner",
-      effects: [{ kind: "write_node_run", nodeRun: { ...previous, attempt: 2 } }],
-    });
+      yield* store.apply({
+        runId: "run",
+        token: "owner",
+        effects: [{ kind: "write_node_run", nodeRun: { ...previous, attempt: 2 } }],
+      });
 
-    return { kind: "none" };
+      return { kind: "none" as const };
+    }).pipe(Effect.orDie);
   };
 
   expect(
-    await activateDurable({ store, provider, graph, runId: "run", token: "owner", at }),
+    await Effect.runPromise(
+      activateDurable({ store, provider, graph, runId: "run", token: "owner", at }),
+    ),
   ).toMatchObject({ status: "pending" });
-  expect(await store.getNodeRuns("run")).toMatchObject([{ status: "running", attempt: 2 }]);
+  expect(await Effect.runPromise(store.getNodeRuns("run"))).toMatchObject([
+    { status: "running", attempt: 2 },
+  ]);
   expect(provider.starts).toEqual([]);
-  expect(await store.getLogs("run")).toEqual([]);
+  expect(await Effect.runPromise(store.getLogs("run"))).toEqual([]);
 });

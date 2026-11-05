@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { Schema } from "effect";
 import {
   hookRecordSchema,
   jsonSchema,
@@ -16,6 +16,7 @@ import {
   type Schedule,
 } from "../../core/index.js";
 import { EVENT_RETENTION } from "../event-outbox.js";
+import { storedDecoder, storedValueDecoder } from "../row-codec.js";
 import type { EventRow, LogRow, RunRow, ScheduleRow } from "./store-schema.js";
 
 export const SQL = {
@@ -135,63 +136,83 @@ export function rowToSchedule(row: ScheduleRow): Schedule {
 }
 
 export function rowToLog(row: LogRow) {
-  return logRecordSchema.parse(JSON.parse(row.record));
+  return decodeLogRecord(row.record);
 }
 
-const runSchema = z
-  .object({
-    id: z.string(),
-    slug: z.string(),
-    revision: z.string(),
-    workspace: z.string(),
-    input: jsonSchema,
-    status: runStatusSchema,
-    createdAt: z.string(),
-    updatedAt: z.string(),
-  })
-  .extend({
-    output: jsonSchema.optional(),
-    error: z.string().optional(),
-    wakeAt: z.string().optional(),
-    nextRetryAt: z.string().optional(),
-    owner: z
-      .strictObject({
-        token: z.string(),
-        pid: z.number().int().nullable(),
-        host: z.string(),
-        heartbeatAt: z.string(),
-      })
-      .optional(),
-  })
-  .strict();
+const runSchema = Schema.Struct({
+  id: Schema.String,
+  slug: Schema.String,
+  revision: Schema.String,
+  workspace: Schema.String,
+  input: jsonSchema,
+  status: runStatusSchema,
+  createdAt: Schema.String,
+  updatedAt: Schema.String,
+  output: Schema.optional(jsonSchema),
+  error: Schema.optional(Schema.String),
+  wakeAt: Schema.optional(Schema.String),
+  nextRetryAt: Schema.optional(Schema.String),
+  owner: Schema.optional(
+    Schema.Struct({
+      token: Schema.String,
+      pid: Schema.NullOr(Schema.Int),
+      host: Schema.String,
+      heartbeatAt: Schema.String,
+    }),
+  ),
+});
 
-const eventSchema = z.union([
-  z.object({ entity: z.literal("hook"), kind: z.enum(HOOK_EVENT_KINDS), record: hookRecordSchema }),
-  z.object({ entity: z.literal("run"), kind: z.enum(RUN_EVENT_KINDS), record: runSchema }),
-  z.object({ entity: z.literal("node"), kind: z.enum(NODE_RUN_STATUSES), record: nodeRunSchema }),
-  z.object({ entity: z.literal("log"), kind: z.literal("written"), record: logRecordSchema }),
-  z.object({
-    entity: z.literal("schedule"),
-    kind: z.enum(SCHEDULE_EVENT_KINDS),
+const eventSchema = Schema.Union([
+  Schema.Struct({
+    entity: Schema.Literal("hook"),
+    kind: Schema.Literals(HOOK_EVENT_KINDS),
+    record: hookRecordSchema,
+  }),
+  Schema.Struct({
+    entity: Schema.Literal("run"),
+    kind: Schema.Literals(RUN_EVENT_KINDS),
+    record: runSchema,
+  }),
+  Schema.Struct({
+    entity: Schema.Literal("node"),
+    kind: Schema.Literals(NODE_RUN_STATUSES),
+    record: nodeRunSchema,
+  }),
+  Schema.Struct({
+    entity: Schema.Literal("log"),
+    kind: Schema.Literal("written"),
+    record: logRecordSchema,
+  }),
+  Schema.Struct({
+    entity: Schema.Literal("schedule"),
+    kind: Schema.Literals(SCHEDULE_EVENT_KINDS),
     record: scheduleSchema,
   }),
-  z.object({
-    entity: z.literal("schedule"),
-    kind: z.literal("deleted"),
-    record: z.object({ workspace: z.string(), slug: z.string() }),
+  Schema.Struct({
+    entity: Schema.Literal("schedule"),
+    kind: Schema.Literal("deleted"),
+    record: Schema.Struct({ workspace: Schema.String, slug: Schema.String }),
   }),
 ]);
 
 export function rowToEvent(row: EventRow) {
-  const change = eventSchema.parse({
+  const change = decodeEvent({
     entity: row.entity,
     kind: row.kind,
-    record: JSON.parse(row.record),
+    record: decodeEventRecord(row.record),
   });
 
   return { ...change, sequence: row.sequence, at: row.at, txn: row.txn, runId: row.run_id };
 }
 
 function decode(text: string) {
-  return jsonSchema.parse(JSON.parse(text));
+  return decodeJson(text);
 }
+
+const decodeLogRecord = storedDecoder(logRecordSchema, "logs");
+
+const decodeJson = storedDecoder(jsonSchema, "runs/schedules JSON");
+
+const decodeEvent = storedValueDecoder(eventSchema, "events");
+
+const decodeEventRecord = storedDecoder(Schema.Unknown, "events");

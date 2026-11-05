@@ -1,75 +1,128 @@
 import { resolve } from "node:path";
-import type { z } from "zod";
-import { errorBodySchema } from "../contract/index.js";
+import { Data, Effect, Schema } from "effect";
+import { boundaryOptions, errorBodySchema } from "../contract/index.js";
 import { readDaemonFile } from "../local/index.js";
 import type { CliContext } from "./context.js";
+import { CliError, cliSync } from "./errors.js";
 
 type ClientContext = Pick<CliContext, "home" | "cwd">;
 
-async function daemon(context: ClientContext) {
-  const current = readDaemonFile(context.home);
+export class HttpError extends Data.TaggedError("HttpError")<{
+  status: number;
+  code: typeof errorBodySchema.Type.error.code;
+  message: string;
+}> {}
+
+export class TransportError extends Data.TaggedError("TransportError")<{
+  operation: "fetch" | "decode";
+  cause: unknown;
+}> {
+  override get message() {
+    return `Daemon HTTP ${this.operation} failed. Inspect the daemon before retrying a mutation.`;
+  }
+}
+
+const daemon = Effect.fn(function* (context: ClientContext) {
+  const current = yield* cliSync(() => readDaemonFile(context.home));
 
   if (current) {
     return current;
   }
 
-  const child = Bun.spawn(
-    [
-      process.execPath,
-      resolve(import.meta.dir, import.meta.path.endsWith(".ts") ? "index.ts" : "index.js"),
-      "--home",
-      context.home,
-      "--cwd",
-      context.cwd,
-      "daemon",
-      "run",
-      "--port",
-      "0",
-    ],
-    { cwd: context.cwd, stdin: "ignore", stdout: "ignore", stderr: "ignore" },
+  const spawn = cliSync(() =>
+    Bun.spawn(
+      [
+        process.execPath,
+        resolve(import.meta.dir, import.meta.path.endsWith(".ts") ? "index.ts" : "index.js"),
+        "--home",
+        context.home,
+        "--cwd",
+        context.cwd,
+        "daemon",
+        "run",
+        "--port",
+        "0",
+      ],
+      { cwd: context.cwd, stdin: "ignore", stdout: "ignore", stderr: "ignore" },
+    ),
   );
 
-  child.unref();
+  let discovered = false;
 
-  for (let attempt = 0; attempt < 100; attempt++) {
-    const record = readDaemonFile(context.home);
+  return yield* Effect.acquireUseRelease(
+    spawn,
+    (child) =>
+      Effect.gen(function* () {
+        child.unref();
 
-    if (record) {
-      // A concurrent command may have started the daemon that won discovery.
-      if (record.pid !== child.pid) {
-        child.kill();
-      }
+        for (let attempt = 0; attempt < 100; attempt++) {
+          const record = yield* cliSync(() => readDaemonFile(context.home));
 
-      return record;
-    }
+          if (record) {
+            // A concurrent command may have started the daemon that won discovery.
+            if (record.pid !== child.pid) {
+              child.kill();
+            }
 
-    await Bun.sleep(50);
-  }
+            discovered = true;
 
-  child.kill();
-  throw new Error("The daemon did not start. Run loopy daemon run to inspect the error.");
-}
+            return record;
+          }
 
-export async function request<T>(
+          yield* Effect.sleep(50);
+        }
+
+        return yield* Effect.fail(
+          new CliError({
+            message: "The daemon did not start. Run loopy daemon run to inspect the error.",
+          }),
+        );
+      }),
+    (child) =>
+      Effect.sync(() => {
+        if (!discovered) {
+          child.kill();
+        }
+      }),
+  );
+});
+
+export const request = <S extends Schema.Top & { readonly DecodingServices: never }>(
   context: ClientContext,
   path: string,
-  schema: z.ZodType<T>,
+  schema: S,
   options: { method: "GET" | "POST" | "PUT" | "DELETE"; body?: object } = { method: "GET" },
-): Promise<T> {
-  const record = await daemon(context);
+) =>
+  Effect.gen(function* () {
+    const record = yield* daemon(context);
 
-  const response = await fetch(`http://127.0.0.1:${record.port}/api${path}`, {
-    method: options.method,
-    headers: { Authorization: `Bearer ${record.token}`, "Content-Type": "application/json" },
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    // Consume the body while fetch still owns its cancellation signal. Never retry mutations.
+    const { ok, status, value } = yield* Effect.tryPromise({
+      try: async (signal) => {
+        const response = await fetch(`http://127.0.0.1:${record.port}/api${path}`, {
+          method: options.method,
+          headers: { Authorization: `Bearer ${record.token}`, "Content-Type": "application/json" },
+          body: options.body === undefined ? undefined : JSON.stringify(options.body),
+          signal,
+        });
+
+        const value: unknown = await response.json();
+
+        return { ok: response.ok, status: response.status, value };
+      },
+      catch: (cause) => new TransportError({ operation: "fetch", cause }),
+    });
+
+    if (!ok) {
+      const { error } = yield* Schema.decodeUnknownEffect(errorBodySchema)(
+        value,
+        boundaryOptions,
+      ).pipe(Effect.mapError((cause) => new TransportError({ operation: "decode", cause })));
+
+      return yield* Effect.fail(new HttpError({ status, ...error }));
+    }
+
+    return yield* Schema.decodeUnknownEffect(schema)(value, boundaryOptions).pipe(
+      Effect.mapError((cause) => new TransportError({ operation: "decode", cause })),
+    );
   });
-
-  // BOUNDARY: HTTP data is parsed once through the shared response or error schema.
-  const value: unknown = await response.json();
-
-  if (!response.ok) {
-    throw new Error(errorBodySchema.parse(value).error.message);
-  }
-
-  return schema.parse(value);
-}

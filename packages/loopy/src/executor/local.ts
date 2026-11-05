@@ -1,15 +1,18 @@
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Effect } from "effect";
 import {
   durationMs,
   type ExecutionKey,
   type ExecutionMode,
-  type ExecutionResult,
   type ExecutionSpec,
   type Executor,
+  ExecutorError,
 } from "../core/index.js";
 import { spawnCaptured } from "../local/execution-host.js";
+import { specBundles } from "./prepare.js";
 import { FilesystemReceipts } from "./receipts.js";
+import { workerFailure } from "./response.js";
 
 type Options = {
   home: string;
@@ -30,73 +33,49 @@ export class LocalExecutor implements Executor {
       throw new Error("Execution receipts must use the protected daemon home.");
     }
   }
-  async lookup(key: ExecutionKey, attempt: number) {
-    const identity = { executionKey: key, attempt };
-    const receipt = await this.receipts.read(identity);
+  lookup = Effect.fn("LocalExecutor.lookup")(function* (
+    this: LocalExecutor,
+    key: ExecutionKey,
+    attempt: number,
+  ) {
+    const receipt = yield* this.receipts.reconcile({ executionKey: key, attempt });
 
-    if (!receipt) {
-      return { kind: "none" as const };
-    }
-
-    if (receipt.kind !== "started") {
-      return receipt;
-    }
-
-    try {
-      process.kill(receipt.pid, 0);
-
-      return { kind: "started" as const };
-    } catch (cause) {
-      if (!(cause instanceof Error && "code" in cause && cause.code === "ESRCH")) {
-        throw cause;
-      }
-
-      const latest = await this.receipts.read(identity);
-
-      if (latest?.kind === "finished") {
-        return latest;
-      }
-
-      const result: ExecutionResult = {
-        kind: "failed",
-        error: {
-          code: "uncertain",
-          message:
-            "Executor stopped with an unfinished receipt. Inspect the workspace before starting a new run.",
-        },
-        exitCode: null,
-        logs: [],
-      };
-
-      return this.receipts.finish({ kind: "finished", ...identity, result });
-    }
-  }
-  async execute(
+    return receipt.kind === "finished" ? receipt.receipt : receipt;
+  });
+  execute = Effect.fn("LocalExecutor.execute")(function* (
+    this: LocalExecutor,
     key: ExecutionKey,
     attempt: number,
     spec: ExecutionSpec,
     signal: AbortSignal,
-  ): Promise<ExecutionResult> {
-    const previous = await this.lookup(key, attempt);
+  ) {
+    const previous = yield* this.lookup(key, attempt);
 
     if (previous.kind === "finished") {
       return previous.result;
     }
 
     if (previous.kind === "started") {
-      throw new Error("Execution already started. Reconcile its receipt.");
+      return yield* Effect.fail(
+        new ExecutorError({
+          operation: "execute",
+          cause: new Error("Execution already started. Reconcile its receipt."),
+        }),
+      );
     }
 
-    const hashes =
-      spec.kind === "code" ? [spec.bundleHash] : spec.parse ? [spec.parse.bundleHash] : [];
+    const hashes = specBundles(spec);
 
-    const bundles = Object.fromEntries(hashes.map((hash) => [hash, this.options.bundlePath(hash)]));
+    const bundles = yield* Effect.try({
+      try: () => Object.fromEntries(hashes.map((hash) => [hash, this.options.bundlePath(hash)])),
+      catch: (cause) => new ExecutorError({ operation: "execute", cause }),
+    });
 
     const worker = fileURLToPath(
       new URL(import.meta.url.endsWith(".ts") ? "./worker.ts" : "./worker.js", import.meta.url),
     );
 
-    const output = await spawnCaptured(
+    const completed = yield* spawnCaptured(
       {
         program: process.execPath,
         args: ["--no-env-file", worker],
@@ -126,25 +105,56 @@ export class LocalExecutor implements Executor {
               (spec.parse === null ? 0 : 300_000) +
               30_000,
         maxOutputBytes: 64 * 1024,
+        // Let the worker escalate its own process group and persist its receipt first.
+        killGraceMs: 10_000,
       },
       signal,
       performance.now(),
+    ).pipe(
+      Effect.map((output) => ({ kind: "output" as const, output })),
+      Effect.catchTag("CommandExecutionError", (cause) =>
+        Effect.succeed({ kind: "failure" as const, cause, output: cause.output }),
+      ),
     );
 
-    const receipt = await this.lookup(key, attempt);
+    const observed = yield* this.receipts.read({ executionKey: key, attempt });
 
-    if (receipt.kind !== "finished") {
-      return {
-        kind: "failed",
-        error: {
-          code: "protocol",
-          message: `Executor exited without a completion receipt. ${output.stderr.slice(-500)}`,
-        },
-        exitCode: output.exitCode,
-        logs: [],
-      };
+    if (observed?.kind === "finished") {
+      return observed.result;
     }
 
-    return receipt.result;
-  }
+    const failure = workerFailure(completed.output.stdout);
+    const receipt = yield* this.receipts.reconcile({ executionKey: key, attempt });
+
+    if (receipt.kind === "finished" && receipt.source === "stored") {
+      return receipt.receipt.result;
+    }
+
+    // A trusted infrastructure report cannot reopen the reconciled attempt.
+    if (failure !== undefined) {
+      return yield* Effect.fail(
+        new ExecutorError({ operation: failure.operation, cause: new Error(failure.message) }),
+      );
+    }
+
+    // Sealing an unfinished receipt does not turn a failed worker transport into success.
+    if (completed.kind === "failure") {
+      return yield* Effect.fail(
+        new ExecutorError({ operation: "execute", cause: completed.cause }),
+      );
+    }
+
+    if (receipt.kind === "finished") {
+      return receipt.receipt.result;
+    }
+
+    return yield* Effect.fail(
+      new ExecutorError({
+        operation: "execute",
+        cause: new Error(
+          `Executor exited without a completion receipt. ${completed.output.stderr.slice(-500)}`,
+        ),
+      }),
+    );
+  });
 }

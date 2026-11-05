@@ -1,4 +1,5 @@
 import { skipToken, type UseQueryResult, useQuery } from "@tanstack/react-query";
+import type { Schema } from "effect";
 import {
   executionKeyString,
   type GraphRevisionView,
@@ -11,7 +12,6 @@ import {
   type ServerEvent,
 } from "loopy/contract";
 import { useEffect, useMemo, useState } from "react";
-import type { z } from "zod";
 import { useBackend } from "../router-context.ts";
 import { keys } from "./keys.ts";
 import {
@@ -221,7 +221,7 @@ export function useLoopyGraph(slug: string, workspace: string): Loaded<GraphRevi
 
 export function useRunPayload(
   runId: string | null,
-): Lazy<z.output<typeof routes.runPayload.response>> {
+): Lazy<Schema.Schema.Type<typeof routes.runPayload.response>> {
   const query = useQuery(runPayloadQuery(useBackend(), runId));
 
   return runId === null ? { state: "idle" } : loaded(query);

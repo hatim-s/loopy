@@ -1,22 +1,27 @@
-import type { z } from "zod";
+import type { Schema } from "effect";
+import { struct } from "./codec.js";
+
 import { type SavedLoopy, savedLoopySchema } from "./compiled-loopy.js";
 import type { Graph } from "./graph.js";
 import { loopyViewSchema } from "./views.js";
 
-export const definitionSummarySchema = savedLoopySchema
-  .pick({
-    slug: true,
-    revision: true,
-    source: true,
-    savedAt: true,
-    scope: true,
-    description: true,
-    schedule: true,
-    mode: true,
-  })
-  .extend({ input: loopyViewSchema.shape.input });
+export const definitionSummarySchema = struct({
+  ...savedLoopySchema.mapFields(
+    ({ slug, revision, source, savedAt, scope, description, schedule, mode }) => ({
+      slug,
+      revision,
+      source,
+      savedAt,
+      scope,
+      description,
+      schedule,
+      mode,
+    }),
+  ).fields,
+  input: loopyViewSchema.fields.input,
+});
 
-export type DefinitionSummary = z.infer<typeof definitionSummarySchema>;
+export type DefinitionSummary = Schema.Schema.Type<typeof definitionSummarySchema>;
 
 export function definitionInput(graph: Pick<Graph, "input" | "inputValidation">) {
   return graph.inputValidation?.root === "json" ? "schema" : graph.input;

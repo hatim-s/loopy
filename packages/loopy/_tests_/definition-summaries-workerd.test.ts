@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { resolve } from "node:path";
+import { Schema } from "effect";
 import type { Miniflare } from "miniflare";
-import { z } from "zod";
 import { definitionSummarySchema, type PutLoopyBody } from "../src/contract/index.js";
 import { revision } from "../src/core/index.js";
 import { compiledBody } from "./compiled-fixture.js";
@@ -30,20 +30,20 @@ function probe(instance: string, input: SummaryProbeRequest) {
   return harness.probe(instance, { body: input });
 }
 
-const summaryResult = z.object({
-  value: definitionSummarySchema.nullable(),
-  graphReads: z.number(),
+const summaryResult = Schema.Struct({
+  value: Schema.NullOr(definitionSummarySchema),
+  graphReads: Schema.Number,
 });
 
-const pointer = z.object({
-  revision: z.string(),
-  source: z.string(),
-  saved_at: z.string(),
-  generation: z.string(),
-  projection_json: z.string().nullable(),
+const pointer = Schema.Struct({
+  revision: Schema.String,
+  source: Schema.String,
+  saved_at: Schema.String,
+  generation: Schema.String,
+  projection_json: Schema.NullOr(Schema.String),
 });
 
-const pointerResult = z.object({ value: pointer, graphReads: z.number() });
+const pointerResult = Schema.Struct({ value: pointer, graphReads: Schema.Number });
 
 function fixture(description: string): Promise<PutLoopyBody> {
   return compiledBody("summary", "/entry.ts", { workspace: "summaries", description });
@@ -75,7 +75,11 @@ test("cloud SQL projections preserve legacy pointers and backfill outside transa
     },
     graphReads: 0,
   });
-  const first = summaryResult.parse((await probe("legacy", { operation: "summary" })).body);
+
+  const first = Schema.decodeUnknownSync(summaryResult)(
+    (await probe("legacy", { operation: "summary" })).body,
+  );
+
   expect(first).toMatchObject({
     value: {
       revision: body.revision,
@@ -95,27 +99,29 @@ test("cloud SQL projections preserve legacy pointers and backfill outside transa
     body: { value: [first.value], graphReads: 0 },
   });
   expect(
-    pointerResult.parse((await probe("legacy", { operation: "pointer" })).body).value,
+    Schema.decodeUnknownSync(pointerResult)((await probe("legacy", { operation: "pointer" })).body)
+      .value,
   ).toMatchObject({ saved_at: "legacy-saved-at", generation: "legacy-generation" });
 });
 
 test("same save repairs missing or corrupt summaries without changing generation or savedAt", async () => {
   const body = await fixture("same-save");
 
-  const original = pointerResult.parse(
+  const original = Schema.decodeUnknownSync(pointerResult)(
     (await probe("same", { operation: "save", body })).body,
   ).value;
 
   for (const operation of ["forget", "corruptSummary"] as const) {
     expect((await probe("same", { operation })).status).toBe(200);
 
-    const repaired = pointerResult.parse(
+    const repaired = Schema.decodeUnknownSync(pointerResult)(
       (await probe("same", { operation: "save", body })).body,
     ).value;
 
     expect(repaired).toEqual(original);
     expect(
-      summaryResult.parse((await probe("same", { operation: "summary" })).body).graphReads,
+      Schema.decodeUnknownSync(summaryResult)((await probe("same", { operation: "summary" })).body)
+        .graphReads,
     ).toBe(0);
   }
 });
@@ -140,14 +146,14 @@ for (const oldGraph of ["valid", "missing", "corrupt"] as const) {
 
     const response = await probe(`race-${oldGraph}`, { operation: "race", body: changed });
     expect(response).toMatchObject({ status: 200 });
-    const raced = summaryResult.parse(response.body);
+    const raced = Schema.decodeUnknownSync(summaryResult)(response.body);
 
     expect(raced).toMatchObject({
       value: { description: "after-race", revision: changed.revision },
       graphReads: 1,
     });
 
-    const saved = pointerResult.parse(
+    const saved = Schema.decodeUnknownSync(pointerResult)(
       (await probe(`race-${oldGraph}`, { operation: "pointer" })).body,
     ).value;
 
@@ -167,15 +173,18 @@ test("SQL failure rolls back the pointer, summary and generation together", asyn
   expect((await probe("rollback", { operation: "save", body })).status).toBe(200);
   const changed = await change(body, "must-not-publish");
 
-  const result = z
-    .object({ value: z.object({ before: pointer, after: pointer, error: z.string() }) })
-    .parse((await probe("rollback", { operation: "rollback", body: changed })).body);
+  const result = Schema.decodeUnknownSync(
+    Schema.Struct({
+      value: Schema.Struct({ before: pointer, after: pointer, error: Schema.String }),
+    }),
+  )((await probe("rollback", { operation: "rollback", body: changed })).body);
 
   expect(result.value.error).toContain("CHECK constraint failed");
   expect(result.value.after).toEqual(result.value.before);
   expect(
-    summaryResult.parse((await probe("rollback", { operation: "summary" })).body).value
-      ?.description,
+    Schema.decodeUnknownSync(summaryResult)(
+      (await probe("rollback", { operation: "summary" })).body,
+    ).value?.description,
   ).toBe("before-rollback");
 });
 
@@ -203,7 +212,8 @@ test("warm metadata endpoints read zero graphs while direct get, start and sched
     expect(await probe("warm", { operation })).toMatchObject({
       status: 400,
       body: {
-        error: "Stored graph does not match its revision. Save the loopy again.",
+        error:
+          "Could not verify graph. Stored graph does not match its revision. Save the loopy again.",
         code: null,
         graphReads: 1,
       },
@@ -231,7 +241,8 @@ test("warm metadata endpoints read zero graphs while direct get, start and sched
   expect(await probe("warm", { operation: "list" })).toMatchObject({
     status: 400,
     body: {
-      error: "Stored graph does not match its revision. Save the loopy again.",
+      error:
+        "Could not verify graph. Stored graph does not match its revision. Save the loopy again.",
       graphReads: 1,
     },
   });
@@ -256,8 +267,8 @@ for (const failure of ["missing", "corrupt"] as const) {
       body: {
         error:
           failure === "missing"
-            ? "Published graph is missing. Save the loopy again."
-            : "Stored graph is invalid. Save the loopy again.",
+            ? "Could not read graph. Published graph is missing. Save the loopy again."
+            : "Could not decode graph. Stored graph is invalid. Save the loopy again.",
         code: null,
         graphReads: 1,
       },

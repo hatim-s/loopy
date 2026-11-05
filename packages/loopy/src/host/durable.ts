@@ -1,3 +1,4 @@
+import { Data, Effect } from "effect";
 import {
   type ExecutionKey,
   type ExecutionSpec,
@@ -14,14 +15,25 @@ import { planActivation } from "./activation-plan.js";
 import { durableWakeAt } from "./durable-wake.js";
 import { type DurableWork, durableWorkId, reconcileDurableWork } from "./durable-work.js";
 
+export class DurableProviderError extends Data.TaggedError("DurableProviderError")<{
+  operation: "lookup" | "start";
+  reason: "transport" | "protocol";
+  message: string;
+  cause: unknown;
+}> {}
+
 /** Receipts are durable and keyed by the complete execution key and attempt.
  * start atomically deduplicates that identity and returns promptly, without waiting
  * for execution. lookup reports started while work lives, or a finished uncertain
- * result if its worker disappears. A transport failure throws instead of returning none.
+ * result if its worker disappears. A transport failure fails with DurableProviderError instead of returning none.
  */
 export interface DurableExecutionProvider {
-  lookup(key: ExecutionKey, attempt: number): Promise<Receipt>;
-  start(key: ExecutionKey, attempt: number, spec: ExecutionSpec): Promise<Receipt>;
+  lookup(key: ExecutionKey, attempt: number): Effect.Effect<Receipt, DurableProviderError>;
+  start(
+    key: ExecutionKey,
+    attempt: number,
+    spec: ExecutionSpec,
+  ): Effect.Effect<Receipt, DurableProviderError>;
 }
 
 export type DurableActivationOptions = {
@@ -64,23 +76,25 @@ function finished(run: RunRecord): DurableActivationResult | undefined {
   return { status: "finished", outcome, nextWakeAt: null, cursor: null };
 }
 
-async function own(store: Store, run: RunRecord, token: string): Promise<RunRecord> {
-  if (run.owner?.token === token) {
-    // Recover a turn interrupted between committing suspension and releasing ownership.
-    if (run.status === "suspended") {
-      await store.release(run.id, token);
+function own(store: Store, run: RunRecord, token: string) {
+  return Effect.gen(function* () {
+    if (run.owner?.token === token) {
+      // Recover a turn interrupted between committing suspension and releasing ownership.
+      if (run.status === "suspended") {
+        yield* store.release(run.id, token);
 
-      return store.claim(run.id, token);
+        return yield* store.claim(run.id, token);
+      }
+
+      if (!(yield* store.heartbeat(run.id, token))) {
+        return yield* Effect.fail(new OwnershipError(run.id));
+      }
+
+      return run;
     }
 
-    if (!(await store.heartbeat(run.id, token))) {
-      throw new OwnershipError(run.id);
-    }
-
-    return run;
-  }
-
-  return store.claim(run.id, token);
+    return yield* store.claim(run.id, token);
+  });
 }
 
 /** The caller serializes turns and hook mutations, coordinates SQL transactions,
@@ -89,103 +103,114 @@ async function own(store: Store, run: RunRecord, token: string): Promise<RunReco
  * reconciliation. A new owner session must wait for the Store lease to become stale.
  * No transaction may span provider calls. Providers must bound their own request time.
  */
-export async function activateDurable(
-  options: DurableActivationOptions,
-): Promise<DurableActivationResult> {
-  const { store, graph, runId, token, at } = options;
-  const maxWork = requirePositiveInteger(options.maxWork ?? 32, "maxWork");
-  const pollMs = requirePositiveInteger(options.pollMs ?? 1000, "pollMs");
-  const now = Date.parse(at);
+export function activateDurable(options: DurableActivationOptions) {
+  return Effect.gen(function* () {
+    const { store, graph, runId, token, at } = options;
+    const maxWork = requirePositiveInteger(options.maxWork ?? 32, "maxWork");
+    const pollMs = requirePositiveInteger(options.pollMs ?? 1000, "pollMs");
+    const now = Date.parse(at);
 
-  if (!Number.isFinite(now)) {
-    throw new Error("Activation time is invalid. Supply an ISO timestamp.");
-  }
-
-  let run = await store.getRun(runId);
-
-  if (!run) {
-    throw new Error(`Run '${runId}' does not exist. Create the run before activating it.`);
-  }
-
-  const terminal = finished(run);
-
-  if (terminal) {
-    if (run.owner?.token === token) {
-      await store.release(runId, token);
+    if (!Number.isFinite(now)) {
+      return yield* Effect.die(new Error("Activation time is invalid. Supply an ISO timestamp."));
     }
 
-    return terminal;
-  }
+    let run = yield* store.getRun(runId);
 
-  run = await own(store, run, token);
+    if (!run) {
+      return yield* Effect.die(
+        new Error(`Run '${runId}' does not exist. Create the run before activating it.`),
+      );
+    }
 
-  const queue = new Map<string, DurableWork>();
-  let cursor = options.cursor ?? null;
-  const input = run.input;
+    const terminal = finished(run);
 
-  async function commit(event: EngineEvent) {
-    const state = initialState(runId, input, await store.getNodeRuns(runId));
-    const transition = step(graph, state, event);
+    if (terminal) {
+      if (run.owner?.token === token) {
+        yield* store.release(runId, token);
+      }
 
-    const plan = planActivation(transition);
+      return terminal;
+    }
 
-    // Persist the whole transition before any provider work, even beyond this turn's budget.
-    await store.apply({ runId, token, effects: plan.storeEffects });
+    run = yield* own(store, run, token);
 
-    for (const effect of plan.work) {
-      if (effect.kind !== "schedule_retry") {
-        queue.set(durableWorkId(effect), effect);
+    const queue = new Map<string, DurableWork>();
+    let cursor = options.cursor ?? null;
+    const input = run.input;
+
+    const commit = (event: EngineEvent) =>
+      Effect.gen(function* () {
+        const state = initialState(runId, input, yield* store.getNodeRuns(runId));
+        const transition = step(graph, state, event);
+
+        const plan = planActivation(transition);
+
+        // Persist the whole transition before any provider work, even beyond this turn's budget.
+        yield* store.apply({ runId, token, effects: plan.storeEffects });
+
+        for (const effect of plan.work) {
+          if (effect.kind !== "schedule_retry") {
+            queue.set(durableWorkId(effect), effect);
+          }
+        }
+
+        return plan.disposition;
+      });
+
+    let disposition = yield* commit({ kind: "run_started", at });
+
+    for (let count = 0; count < maxWork && disposition.kind !== "finished"; count++) {
+      const ids = [...queue.keys()].sort();
+      const id = ids.find((id) => cursor === null || id > cursor) ?? ids[0];
+      const work = id === undefined ? undefined : queue.get(id);
+
+      if (id === undefined || !work) {
+        break;
+      }
+
+      queue.delete(id);
+      cursor = id;
+
+      const event = yield* reconcileDurableWork({
+        ...options,
+        work,
+      });
+
+      if (event) {
+        disposition = yield* commit(event);
       }
     }
 
-    return plan.disposition;
-  }
+    const current = yield* store.getRun(runId);
 
-  let disposition = await commit({ kind: "run_started", at });
-
-  for (let count = 0; count < maxWork && disposition.kind !== "finished"; count++) {
-    const ids = [...queue.keys()].sort();
-    const id = ids.find((id) => cursor === null || id > cursor) ?? ids[0];
-    const work = id === undefined ? undefined : queue.get(id);
-
-    if (id === undefined || !work) {
-      break;
+    if (!current) {
+      return yield* Effect.die(
+        new Error("Run disappeared during activation. Restore its persisted state."),
+      );
     }
 
-    queue.delete(id);
-    cursor = id;
+    const outcome = finished(current);
 
-    const event = await reconcileDurableWork({
-      ...options,
-      work,
+    if (outcome || current.status === "suspended") {
+      yield* store.release(runId, token);
+
+      return (
+        outcome ?? {
+          status: "suspended" as const,
+          nextWakeAt: current.wakeAt ?? null,
+          cursor: null,
+        }
+      );
+    }
+
+    const nextWakeAt = durableWakeAt({
+      nodes: yield* store.getNodeRuns(runId),
+      remaining: queue.values(),
+      now,
+      pollMs,
+      leaseMs: store.leaseMs,
     });
 
-    if (event) {
-      disposition = await commit(event);
-    }
-  }
-
-  const current = await store.getRun(runId);
-
-  if (!current) {
-    throw new Error("Run disappeared during activation. Restore its persisted state.");
-  }
-
-  const outcome = finished(current);
-
-  if (outcome || current.status === "suspended") {
-    await store.release(runId, token);
-
-    return outcome ?? { status: "suspended", nextWakeAt: current.wakeAt ?? null, cursor: null };
-  }
-
-  const nextWakeAt = durableWakeAt({
-    nodes: await store.getNodeRuns(runId),
-    remaining: queue.values(),
-    now,
-    pollMs,
-    leaseMs: store.leaseMs,
+    return { status: "pending", nextWakeAt, cursor } as const;
   });
-
-  return { status: "pending", nextWakeAt, cursor };
 }

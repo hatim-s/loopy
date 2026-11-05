@@ -1,28 +1,36 @@
 import type { HookRecord, WaitRecord } from "../../core/index.js";
 import type { EventTransaction } from "../event-outbox.js";
+import { storageOperation } from "../operation.js";
+import { storedDecoder } from "../row-codec.js";
 import { utc } from "../timestamps.js";
 import { publicHook } from "../wait.js";
 import { waitRecordSchema } from "../wait-schema.js";
 import { SqliteOwnership } from "./ownership.js";
+
+const decodeWaitRecord = storedDecoder(waitRecordSchema, "waits");
 
 export class SqliteWaitRecords extends SqliteOwnership {
   protected readWaits(runId: string): WaitRecord[] {
     return this.db
       .query<{ record: string }, [string]>("SELECT record FROM waits WHERE run_id=? ORDER BY rowid")
       .all(runId)
-      .map((row) => waitRecordSchema.parse(JSON.parse(row.record)));
+      .map((row) => decodeWaitRecord(row.record));
   }
 
   protected readHooks(runId: string): HookRecord[] {
     return this.readWaits(runId).map(publicHook);
   }
 
-  async getWaits(runId: string): Promise<WaitRecord[]> {
-    return this.readWaits(runId);
+  getWaits(runId: string) {
+    return storageOperation("getWaits", () => {
+      return this.readWaits(runId);
+    });
   }
 
-  async getWait(token: string): Promise<WaitRecord | undefined> {
-    return this.readWait(token);
+  getWait(token: string) {
+    return storageOperation("getWait", () => {
+      return this.readWait(token);
+    });
   }
 
   protected readWait(token: string): WaitRecord | undefined {
@@ -30,7 +38,7 @@ export class SqliteWaitRecords extends SqliteOwnership {
       .query<{ record: string }, [string]>("SELECT record FROM waits WHERE token=?")
       .get(token);
 
-    return row ? waitRecordSchema.parse(JSON.parse(row.record)) : undefined;
+    return row ? decodeWaitRecord(row.record) : undefined;
   }
 
   protected writeWait(wait: WaitRecord): void {

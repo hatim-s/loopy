@@ -7,6 +7,7 @@ import {
   type AuthoritySession,
   attemptRecordSchema,
   authoritySessionSchema,
+  decodeBoundary,
   type ExportRecord,
   exportRecordSchema,
 } from "../../../packages/loopy/src/contract/index.js";
@@ -55,7 +56,7 @@ export class ReceiptSql {
       )
       .toArray()[0];
 
-    return row ? authoritySessionSchema.parse(row) : null;
+    return row ? decodeBoundary(authoritySessionSchema)(row) : null;
   }
 
   checkSession(session: AuthoritySession): void {
@@ -103,7 +104,7 @@ export class ReceiptSql {
       return null;
     }
 
-    const record = attemptRecordSchema.parse(JSON.parse(row.record));
+    const record = decodeBoundary(attemptRecordSchema)(JSON.parse(row.record));
 
     if (
       record.plan.id !== row.id ||
@@ -141,7 +142,7 @@ export class ReceiptSql {
       return null;
     }
 
-    const record = exportRecordSchema.parse(JSON.parse(row.record));
+    const record = decodeBoundary(exportRecordSchema)(JSON.parse(row.record));
 
     if (
       record.token !== row.token ||

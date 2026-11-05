@@ -4,26 +4,30 @@ import {
   type Store,
   type StoreEffect,
   type WaitRecord,
-  type WaitResolution,
 } from "../core/index.js";
 import type { EventTransaction } from "./event-outbox.js";
 import { MemoryNodes } from "./memory-nodes.js";
+import { StoreInvariantError, storageOperation } from "./operation.js";
 import { earliestWakeAt, utc } from "./timestamps.js";
 import { checkSignal, publicHook, registerWait } from "./wait.js";
 
 export class MemoryWaits extends MemoryNodes {
-  async getWaits(runId: string): Promise<WaitRecord[]> {
-    return structuredClone([...this.waits.values()].filter((wait) => wait.runId === runId));
+  getWaits(runId: string) {
+    return storageOperation("getWaits", () => {
+      return structuredClone([...this.waits.values()].filter((wait) => wait.runId === runId));
+    });
   }
 
-  async getWait(token: string): Promise<WaitRecord | undefined> {
-    return structuredClone(this.waits.get(token));
+  getWait(token: string) {
+    return storageOperation("getWait", () => {
+      return structuredClone(this.waits.get(token));
+    });
   }
 
   protected override applyEffect(txn: EventTransaction, runId: string, effect: StoreEffect): void {
     if (effect.kind === "register_wait") {
       if (effect.executionKey.runId !== runId) {
-        throw new Error("Wait belongs to another run.");
+        throw new StoreInvariantError("Wait belongs to another run.");
       }
 
       const node = this.nodes.get(runId)?.get(executionKeyString(effect.executionKey));
@@ -91,46 +95,49 @@ export class MemoryWaits extends MemoryNodes {
     });
   }
 
-  async resolveWait({
-    token,
-    payload,
-    at,
-  }: Parameters<Store["resolveWait"]>[0]): Promise<WaitResolution> {
-    return this.commit((txn) => {
-      const wait = this.waits.get(token);
-      const node = wait && this.nodes.get(wait.runId)?.get(executionKeyString(wait.executionKey));
-      const run = wait && this.runs.get(wait.runId);
-      const rejected = checkSignal({ wait, node, run, payload, at });
+  resolveWait({ token, payload, at }: Parameters<Store["resolveWait"]>[0]) {
+    return storageOperation("resolveWait", () => {
+      return this.commit((txn) => {
+        const wait = this.waits.get(token);
+        const node = wait && this.nodes.get(wait.runId)?.get(executionKeyString(wait.executionKey));
+        const run = wait && this.runs.get(wait.runId);
+        const rejected = checkSignal({ wait, node, run, payload, at });
 
-      if (rejected) {
-        return rejected;
-      }
+        if (rejected) {
+          return rejected;
+        }
 
-      if (!wait || !node || !run) {
-        throw new Error("Validated wait disappeared.");
-      }
+        if (!wait || !node || !run) {
+          throw new StoreInvariantError("Validated wait disappeared.");
+        }
 
-      wait.payload = structuredClone(payload);
-      wait.resolvedAt = utc(at);
-      this.emit(txn, { entity: "hook", kind: "resolved", runId: run.id, record: publicHook(wait) });
-      this.applyEffect(txn, run.id, {
-        kind: "write_node_run",
-        nodeRun: {
-          key: node.key,
-          attempt: node.attempt,
-          maxAttempts: node.maxAttempts,
-          startedAt: node.startedAt,
-          receipt: node.receipt,
-          status: "succeeded",
-          output: payload,
-          endedAt: utc(at),
-        },
+        wait.payload = structuredClone(payload);
+        wait.resolvedAt = utc(at);
+        this.emit(txn, {
+          entity: "hook",
+          kind: "resolved" as const,
+          runId: run.id,
+          record: publicHook(wait),
+        });
+        this.applyEffect(txn, run.id, {
+          kind: "write_node_run",
+          nodeRun: {
+            key: node.key,
+            attempt: node.attempt,
+            maxAttempts: node.maxAttempts,
+            startedAt: node.startedAt,
+            receipt: node.receipt,
+            status: "succeeded",
+            output: payload,
+            endedAt: utc(at),
+          },
+        });
+        run.wakeAt = utc(at);
+        run.updatedAt = utc(at);
+        this.emit(txn, { entity: "run", kind: "woken", runId: run.id, record: run });
+
+        return { kind: "resolved" as const, runId: run.id };
       });
-      run.wakeAt = utc(at);
-      run.updatedAt = utc(at);
-      this.emit(txn, { entity: "run", kind: "woken", runId: run.id, record: run });
-
-      return { kind: "resolved", runId: run.id };
     });
   }
 }

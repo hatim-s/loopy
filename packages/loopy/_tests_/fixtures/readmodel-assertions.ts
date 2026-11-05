@@ -1,4 +1,5 @@
 import { expect } from "bun:test";
+import type { Effect } from "effect";
 import {
   emptyRunCounts,
   type RunStatus,
@@ -74,7 +75,7 @@ export function checkCountHistory(
 }
 
 export async function checkScopePages(
-  read: (query: ScopeItemsQuery) => ReturnType<Store["scopeItems"]>,
+  read: (query: ScopeItemsQuery) => Promise<Effect.Success<ReturnType<Store["scopeItems"]>>>,
 ) {
   for (const limit of [97, 98, 200]) {
     const terminal = await read({

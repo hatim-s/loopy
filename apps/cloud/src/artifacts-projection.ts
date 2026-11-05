@@ -1,4 +1,3 @@
-import type { z } from "zod";
 import {
   definitionInput,
   definitionSummarySchema,
@@ -6,15 +5,15 @@ import {
 } from "../../../packages/loopy/src/contract/index.js";
 import { ARTIFACT_LIMITS } from "./artifacts-storage.js";
 
-export const definitionProjectionSchema = definitionSummarySchema.pick({
-  scope: true,
-  description: true,
-  input: true,
-  schedule: true,
-  mode: true,
-});
+export const definitionProjectionSchema = definitionSummarySchema.mapFields((fields) => ({
+  scope: fields.scope,
+  description: fields.description,
+  input: fields.input,
+  schedule: fields.schedule,
+  mode: fields.mode,
+}));
 
-type DefinitionProjection = z.infer<typeof definitionProjectionSchema>;
+type DefinitionProjection = typeof definitionProjectionSchema.Type;
 
 const encoder = new TextEncoder();
 

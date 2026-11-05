@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { Effect } from "effect";
 import { Registry } from "../src/local/index.js";
 import { compiledBody } from "./compiled-fixture.js";
 
@@ -13,31 +14,44 @@ test("marked temporary projects isolate saves and global fallback from an ancest
   try {
     mkdirSync(join(root, ".loopy", "loopies"), { recursive: true });
     mkdirSync(project);
-    const ancestor = new Registry(home, root);
-    ancestor.save(await compiledBody("sentinel", join(root, "sentinel.ts")));
+    const ancestor = Effect.runSync(Registry.make(home, root));
+    Effect.runSync(ancestor.save(await compiledBody("sentinel", join(root, "sentinel.ts"))));
     const sentinel = join(ancestor.projectDirectory, "sentinel.json");
     const before = readFileSync(sentinel, "utf8");
 
     // An unmarked fixture inherits the ancestor before its first save.
-    expect(new Registry(home, project).project).toBe(root);
-    expect(new Registry(home, project).list().map((entry) => entry.slug)).toEqual(["sentinel"]);
+    expect(Effect.runSync(Registry.make(home, project)).project).toBe(root);
+    expect(
+      Effect.runSync(Effect.runSync(Registry.make(home, project)).list()).map(
+        (entry) => entry.slug,
+      ),
+    ).toEqual(["sentinel"]);
 
     for (const directory of [project, fallback]) {
       mkdirSync(join(directory, ".loopy", "loopies"), { recursive: true });
     }
 
-    const registry = new Registry(home, project);
+    const registry = Effect.runSync(Registry.make(home, project));
     expect(registry.project).toBe(project);
-    expect(registry.list()).toEqual([]);
-    registry.save(await compiledBody("local", join(project, "local.ts")));
-    registry.save(await compiledBody("global", join(project, "global.ts"), { scope: "global" }));
+    expect(Effect.runSync(registry.list())).toEqual([]);
+    Effect.runSync(registry.save(await compiledBody("local", join(project, "local.ts"))));
+    Effect.runSync(
+      registry.save(await compiledBody("global", join(project, "global.ts"), { scope: "global" })),
+    );
 
     const nested = join(project, "nested");
     mkdirSync(nested);
-    expect(new Registry(home, nested).project).toBe(project);
-    expect(new Registry(home, fallback).project).toBe(fallback);
-    expect(new Registry(home, fallback).list().map((entry) => entry.slug)).toEqual(["global"]);
-    expect(ancestor.list().map((entry) => entry.slug)).toEqual(["global", "sentinel"]);
+    expect(Effect.runSync(Registry.make(home, nested)).project).toBe(project);
+    expect(Effect.runSync(Registry.make(home, fallback)).project).toBe(fallback);
+    expect(
+      Effect.runSync(Effect.runSync(Registry.make(home, fallback)).list()).map(
+        (entry) => entry.slug,
+      ),
+    ).toEqual(["global"]);
+    expect(Effect.runSync(ancestor.list()).map((entry) => entry.slug)).toEqual([
+      "global",
+      "sentinel",
+    ]);
     expect(readFileSync(sentinel, "utf8")).toBe(before);
   } finally {
     rmSync(root, { recursive: true, force: true });

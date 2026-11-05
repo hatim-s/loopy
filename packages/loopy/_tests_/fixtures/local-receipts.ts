@@ -1,6 +1,7 @@
 import { afterEach } from "bun:test";
 import { mkdir, realpath, rm } from "node:fs/promises";
 import { resolve } from "node:path";
+import { Schema } from "effect";
 import { nodeIdSchema } from "../../src/contract/index.js";
 import type { ExecutionSpec } from "../../src/core/index.js";
 import { LocalExecutor } from "../../src/executor/local.js";
@@ -25,9 +26,10 @@ export async function receiptsFixture() {
   const workspace = resolve(home, "workspace");
   const receiptHome = resolve(home, "home");
   await mkdir(workspace, { mode: 0o700 });
+  await mkdir(resolve(workspace, ".loopy/loopies"), { recursive: true });
   await mkdir(receiptHome, { mode: 0o700 });
   const bundle = resolve(receiptHome, "bundle.js");
-  const key = { runId: "run", nodeId: nodeIdSchema.parse("0:code"), scope: [] };
+  const key = { runId: "run", nodeId: Schema.decodeUnknownSync(nodeIdSchema)("0:code"), scope: [] };
   const identity = { executionKey: key, attempt: 1 };
   const receipts = new FilesystemReceipts(receiptHome);
 

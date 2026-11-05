@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { SANDBOX_MAX_CAPTURE_BYTES } from "../../../packages/loopy/src/contract/index.js";
 import {
   CommandExecutionError,
@@ -14,38 +15,27 @@ export type ProcessOptions = {
   signal?: AbortSignal;
 };
 
-export type CommandRunner = (argv: string[], options: ProcessOptions) => Promise<CommandResult>;
+export type CommandRunner = (
+  argv: string[],
+  options: ProcessOptions,
+) => Effect.Effect<CommandResult, CommandExecutionError>;
 
-export class CaptureError extends Error {
-  constructor(readonly reason: "timeout" | "output_limit") {
-    super(reason === "timeout" ? "Process timed out." : "Process output exceeded its byte limit.");
-  }
-}
+export const runCommand: CommandRunner = (argv, options) =>
+  Effect.suspend(() => {
+    const [program, ...args] = argv;
 
-export const runCommand: CommandRunner = async (argv, options) => {
-  options.signal?.throwIfAborted();
-  const [program, ...args] = argv;
+    if (!program) {
+      return Effect.fail(
+        new CommandExecutionError({
+          reason: "unstarted",
+          message: "Supply a command program.",
+          output: { stdout: "", stderr: "", exitCode: -1, durationMs: 0 },
+          cause: undefined,
+        }),
+      );
+    }
 
-  if (!program) {
-    throw new Error("Supply a command program.");
-  }
-
-  const controller = new AbortController();
-  let timedOut = false;
-  const interrupted = () => controller.abort();
-  options.signal?.addEventListener("abort", interrupted, { once: true });
-
-  if (options.signal?.aborted) {
-    interrupted();
-  }
-
-  const timer = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, options.timeoutMs);
-
-  try {
-    return await spawnCaptured(
+    return spawnCaptured(
       {
         program,
         args,
@@ -54,24 +44,10 @@ export const runCommand: CommandRunner = async (argv, options) => {
         stdin: options.stdin,
       },
       {
-        timeoutMs: options.timeoutMs + 1000,
+        timeoutMs: options.timeoutMs,
         maxOutputBytes: options.maxBytes ?? SANDBOX_MAX_CAPTURE_BYTES,
       },
-      controller.signal,
+      options.signal,
       performance.now(),
     );
-  } catch (cause) {
-    if (cause instanceof CommandExecutionError && cause.code === "output_limit") {
-      throw new CaptureError("output_limit");
-    }
-
-    if (timedOut) {
-      throw new CaptureError("timeout");
-    }
-
-    throw cause;
-  } finally {
-    clearTimeout(timer);
-    options.signal?.removeEventListener("abort", interrupted);
-  }
-};
+  });

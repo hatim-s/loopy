@@ -1,6 +1,7 @@
 import type { DurableObjectState } from "@cloudflare/workers-types";
+import { Effect } from "effect";
 import { DurableSqlDriver } from "../../../../apps/cloud/src/sql-driver.js";
-import { routes } from "../../src/contract/index.js";
+import { decodeBoundary, routes } from "../../src/contract/index.js";
 import type { ScopeItemsQuery } from "../../src/core/index.js";
 import { SqlRunStore } from "../../src/store/portable.js";
 import { countHistory, readmodelAt } from "./readmodel-history.js";
@@ -36,8 +37,8 @@ export class ReadmodelProbe {
 
     if (url.pathname === "/reopen") {
       return Response.json({
-        rows: await store.runCountsByDefinition(),
-        cursor: await store.eventCursor(),
+        rows: await Effect.runPromise(store.runCountsByDefinition()),
+        cursor: await Effect.runPromise(store.eventCursor()),
         version: this.ctx.storage.sql
           .exec("SELECT value FROM meta WHERE key='schema_version'")
           .one(),
@@ -86,10 +87,10 @@ export class ReadmodelProbe {
       }
 
       if (status !== null) {
-        query.status = routes.scopeItems.query.shape.status.parse(status);
+        query.status = decodeBoundary(routes.scopeItems.query.fields.status)(status);
       }
 
-      return Response.json(await store.scopeItems("scope-run", query));
+      return Response.json(await Effect.runPromise(store.scopeItems("scope-run", query)));
     }
 
     return new Response("Unknown bounded query.", { status: 404 });

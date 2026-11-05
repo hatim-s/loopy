@@ -1,5 +1,7 @@
 import type { RuntimeEvent, RuntimeEventChange } from "../../core/index.js";
 import { EVENT_RETENTION, EventListeners, type EventTransaction } from "../event-outbox.js";
+import { StoredDataError, storageOperation } from "../operation.js";
+import { utc } from "../timestamps.js";
 import type { SqlDriver } from "./driver.js";
 import type { SqlStoreOptions } from "./owner-policy.js";
 import { initializeSqlSchema } from "./schema.js";
@@ -21,14 +23,16 @@ export class SqliteEvents {
     initializeSqlSchema(db);
   }
 
-  oldestEventSequence(): number | undefined {
-    return (
-      this.db
-        .query<{ oldest: number | null }, []>(
-          "SELECT COALESCE(MIN(sequence), (SELECT seq + 1 FROM sqlite_sequence WHERE name='events')) AS oldest FROM events",
-        )
-        .get()?.oldest ?? undefined
-    );
+  oldestEventSequence() {
+    return storageOperation("oldestEventSequence", () => {
+      return (
+        this.db
+          .query<{ oldest: number | null }, []>(
+            "SELECT COALESCE(MIN(sequence), (SELECT seq + 1 FROM sqlite_sequence WHERE name='events')) AS oldest FROM events",
+          )
+          .get()?.oldest ?? undefined
+      );
+    });
   }
 
   protected readonly listeners = new EventListeners();
@@ -37,26 +41,35 @@ export class SqliteEvents {
     return this.listeners.subscribe(listener);
   }
 
-  async events(after: number, limit: number): Promise<RuntimeEvent[]> {
-    return this.db.query<EventRow, [number, number]>(SQL.events).all(after, limit).map(rowToEvent);
+  events(after: number, limit: number) {
+    return storageOperation("events", () => {
+      return this.db
+        .query<EventRow, [number, number]>(SQL.events)
+        .all(after, limit)
+        .map(rowToEvent);
+    });
   }
 
-  async transactionEvents(txn: string, after: number): Promise<RuntimeEvent[]> {
-    return this.db
-      .query<EventRow, [string, number]>(SQL.transactionEvents)
-      .all(txn, after)
-      .map(rowToEvent);
+  transactionEvents(txn: string, after: number) {
+    return storageOperation("transactionEvents", () => {
+      return this.db
+        .query<EventRow, [string, number]>(SQL.transactionEvents)
+        .all(txn, after)
+        .map(rowToEvent);
+    });
   }
 
-  async epoch(): Promise<string> {
-    return this.readEpoch();
+  epoch() {
+    return storageOperation("epoch", () => {
+      return this.readEpoch();
+    });
   }
 
   protected readEpoch(): string {
     const row = this.db.query<{ value: string }, []>(SQL.epoch).get();
 
     if (!row) {
-      throw new Error("Store epoch is missing. Recreate the database.");
+      throw new StoredDataError("Store epoch is missing. Recreate the database.");
     }
 
     return row.value;
@@ -69,14 +82,18 @@ export class SqliteEvents {
     };
   }
 
-  async eventCursor(): Promise<{ cursor: number; epoch: string }> {
-    return this.db.transaction(() => this.readEventCursor(), "deferred");
+  eventCursor() {
+    return storageOperation("eventCursor", () => {
+      return this.db.transaction(() => this.readEventCursor(), "deferred");
+    });
   }
 
-  async pruneEvents(now: string): Promise<number> {
-    const cutoff = new Date(Date.parse(now) - EVENT_RETENTION.maxAgeMs).toISOString();
+  pruneEvents(now: string) {
+    return storageOperation("pruneEvents", () => {
+      const cutoff = new Date(Date.parse(now) - EVENT_RETENTION.maxAgeMs).toISOString();
 
-    return this.db.query(SQL.pruneEvents).run(cutoff).changes;
+      return this.db.query(SQL.pruneEvents).run(cutoff).changes;
+    });
   }
 
   protected commit<T>(change: (txn: EventTransaction) => T): T {
@@ -131,11 +148,11 @@ export class SqliteEvents {
     txn.events.push(rowToEvent(row));
   }
 
-  close(): void {
-    this.db.close?.();
+  close() {
+    return storageOperation("close", () => this.db.close?.());
   }
 
   protected timestamp(): string {
-    return new Date(this.now()).toISOString();
+    return utc(this.now());
   }
 }

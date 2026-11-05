@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { type ExecutionPage, routes } from "../../packages/loopy/src/contract/index.js";
 import { assert, equal, type Journey } from "./journey-client.js";
 
@@ -120,7 +121,7 @@ export async function isolation(journey: Journey, runId: string) {
     method: "POST",
     body: { input: { name: "fixture", chooseYes: true, items: [] }, workspace: "other" },
   });
-  const compiled = await journey.compiled("execution.ts");
+  const compiled = await Effect.runPromise(journey.compiled("execution.ts"));
   await journey.denied(`/loopies/${compiled.graph.name}`, 403, "forbidden", {
     method: "PUT",
     body: { ...compiled, source: { ...compiled.source, workspace: "other" } },

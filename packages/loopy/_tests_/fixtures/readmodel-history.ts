@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { emptyRunCounts, type RunRecord, type Store } from "../../src/core/index.js";
 
 export const readmodelAt = "2026-10-23T00:00:00.000Z";
@@ -16,12 +17,12 @@ export async function countHistory(store: Store) {
   ];
 
   async function snapshot(stage: string) {
-    const rows = await store.runCountsByDefinition();
+    const rows = await Effect.runPromise(store.runCountsByDefinition());
     const runs: RunRecord[] = [];
     let before: string | undefined;
 
     while (true) {
-      const page = await store.queryRuns({ now: readmodelAt, limit: 2, before });
+      const page = await Effect.runPromise(store.queryRuns({ now: readmodelAt, limit: 2, before }));
       runs.push(...page);
       const last = page.at(-1);
 
@@ -58,50 +59,60 @@ export async function countHistory(store: Store) {
   snapshots.push(await snapshot("empty"));
 
   for (const [index, identity] of identities.entries()) {
-    await store.createRun({
-      ...identity,
-      id: `count-${index}`,
-      revision: "synthetic-revision",
-      status: "queued",
-      input: { retained: index },
-      createdAt: readmodelAt,
-      updatedAt: readmodelAt,
-    });
+    await Effect.runPromise(
+      store.createRun({
+        ...identity,
+        id: `count-${index}`,
+        revision: "synthetic-revision",
+        status: "queued",
+        input: { retained: index },
+        createdAt: readmodelAt,
+        updatedAt: readmodelAt,
+      }),
+    );
   }
 
   snapshots.push(await snapshot("create"));
-  await store.claim("count-0", "owner");
+  await Effect.runPromise(store.claim("count-0", "owner"));
   snapshots.push(await snapshot("claim"));
-  await store.release("count-0", "owner");
+  await Effect.runPromise(store.release("count-0", "owner"));
   snapshots.push(await snapshot("release"));
-  await store.claim("count-0", "owner");
-  await store.finishRun("count-0", "owner", { status: "succeeded", output: { kept: true } });
+  await Effect.runPromise(store.claim("count-0", "owner"));
+  await Effect.runPromise(
+    store.finishRun("count-0", "owner", { status: "succeeded", output: { kept: true } }),
+  );
   snapshots.push(await snapshot("finish"));
-  await store.claim("count-1", "owner");
-  await store.suspend("count-1", "owner", "2026-10-23T01:00:00.000Z");
+  await Effect.runPromise(store.claim("count-1", "owner"));
+  await Effect.runPromise(store.suspend("count-1", "owner", "2026-10-23T01:00:00.000Z"));
   snapshots.push(await snapshot("suspend"));
-  await store.claim("count-2", "owner");
-  await store.finishRun("count-2", "owner", { status: "failed", error: "controlled failure" });
-  await store.claim("count-3", "owner");
-  await store.apply({
-    runId: "count-3",
-    token: "owner",
-    effects: [{ kind: "finish_run", outcome: { status: "cancelled" }, at: readmodelAt }],
-  });
+  await Effect.runPromise(store.claim("count-2", "owner"));
+  await Effect.runPromise(
+    store.finishRun("count-2", "owner", { status: "failed", error: "controlled failure" }),
+  );
+  await Effect.runPromise(store.claim("count-3", "owner"));
+  await Effect.runPromise(
+    store.apply({
+      runId: "count-3",
+      token: "owner",
+      effects: [{ kind: "finish_run", outcome: { status: "cancelled" }, at: readmodelAt }],
+    }),
+  );
   snapshots.push(await snapshot("terminal"));
-  await store.claim("count-4", "owner");
-  const before = await store.eventCursor();
+  await Effect.runPromise(store.claim("count-4", "owner"));
+  const before = await Effect.runPromise(store.eventCursor());
   let error: string | null = null;
 
   try {
-    await store.apply({
-      runId: "count-4",
-      token: "owner",
-      effects: [
-        { kind: "finish_run", outcome: { status: "succeeded", output: null }, at: readmodelAt },
-        { kind: "schedule_retry", at: "invalid-timestamp" },
-      ],
-    });
+    await Effect.runPromise(
+      store.apply({
+        runId: "count-4",
+        token: "owner",
+        effects: [
+          { kind: "finish_run", outcome: { status: "succeeded", output: null }, at: readmodelAt },
+          { kind: "schedule_retry", at: "invalid-timestamp" },
+        ],
+      }),
+    );
   } catch (cause) {
     if (!(cause instanceof Error)) {
       throw new Error("Unexpected non-error rollback failure.", { cause });
@@ -112,5 +123,5 @@ export async function countHistory(store: Store) {
 
   snapshots.push(await snapshot("rollback"));
 
-  return { snapshots, error, before, after: await store.eventCursor() };
+  return { snapshots, error, before, after: await Effect.runPromise(store.eventCursor()) };
 }

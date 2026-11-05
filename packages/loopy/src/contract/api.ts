@@ -1,4 +1,5 @@
-import { z } from "zod";
+import { Effect, Schema, SchemaGetter } from "effect";
+import { queryNumber, struct } from "./codec.js";
 import { putLoopyBodySchema } from "./compiled-loopy.js";
 import {
   eventHistoryPageSchema,
@@ -50,9 +51,9 @@ export const ERROR_CODES = [
   "invalid_timezone",
 ] as const;
 
-export const errorCodeSchema = z.enum(ERROR_CODES);
+export const errorCodeSchema = Schema.Literals(ERROR_CODES);
 
-export type ErrorCode = z.infer<typeof errorCodeSchema>;
+export type ErrorCode = Schema.Schema.Type<typeof errorCodeSchema>;
 
 export const DEFAULT_ERROR_MESSAGES = {
   not_yet: "This operation is not implemented yet.",
@@ -71,33 +72,47 @@ export const DEFAULT_ERROR_MESSAGES = {
   invalid_timezone: "The time zone is invalid. Provide an IANA time zone such as Asia/Kolkata.",
 } satisfies Record<ErrorCode, string>;
 
-export const errorBodySchema = z.strictObject({
-  error: z.strictObject({ code: errorCodeSchema, message: z.string() }),
+export const errorBodySchema = struct({
+  error: struct({ code: errorCodeSchema, message: Schema.String }),
 });
 
-export type ErrorBody = z.infer<typeof errorBodySchema>;
+export type ErrorBody = Schema.Schema.Type<typeof errorBodySchema>;
 
-const emptySchema = z.strictObject({});
+const emptySchema = Schema.Record(Schema.String, Schema.Never);
 
-const workspaceQuerySchema = z.strictObject({ workspace: z.string().optional() });
+const workspaceQuerySchema = struct({ workspace: Schema.optional(Schema.String) });
 
-const runParamsSchema = z.strictObject({ id: z.string() });
+const runParamsSchema = struct({ id: Schema.String });
 
-export const runsQuerySchema = z.strictObject({
+export const runsQuerySchema = struct({
   ...runFilterFields,
-  waiting: z
-    .union([z.boolean(), z.enum(["true", "false"]).transform((value) => value === "true")])
-    .optional(),
-  limit: z.coerce.number().int().positive().max(200).default(50),
-  before: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\|[^|]+$/)
-    .optional(),
+  waiting: Schema.optional(
+    Schema.Union([
+      Schema.Boolean,
+      Schema.Literals(["true", "false"]).pipe(
+        Schema.decodeTo(Schema.Boolean, {
+          decode: SchemaGetter.transform((value) => value === "true"),
+          encode: SchemaGetter.transform((value) =>
+            value ? ("true" as const) : ("false" as const),
+          ),
+        }),
+      ),
+    ]),
+  ),
+  limit: queryNumber
+    .check(Schema.isInt())
+    .check(Schema.isGreaterThan(0))
+    .check(Schema.isLessThanOrEqualTo(200))
+    .pipe(Schema.withDecodingDefault(Effect.succeed(50))),
+  before: Schema.optional(
+    Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\|[^|]+$/)),
+  ),
 });
 
-export type RunsQuery = z.input<typeof runsQuerySchema>;
+export type RunsQuery = Schema.Codec.Encoded<typeof runsQuerySchema>;
 
 /** The ID breaks timestamp ties so every run remains reachable. */
+
 export function encodeRunCursor(run: { createdAt: string; id: string }): string {
   return `${run.createdAt}|${run.id}`;
 }
@@ -108,43 +123,47 @@ export function decodeRunCursor(cursor: NonNullable<RunsQuery["before"]>) {
   return { createdAt: cursor.slice(0, separator), id: cursor.slice(separator + 1) };
 }
 
-export const logsQuerySchema = z.strictObject({
-  limit: z.coerce.number().int().positive().max(200).default(200),
-  after: z.coerce.number().int().nonnegative().optional(),
+export const logsQuerySchema = struct({
+  limit: queryNumber
+    .check(Schema.isInt())
+    .check(Schema.isGreaterThan(0))
+    .check(Schema.isLessThanOrEqualTo(200))
+    .pipe(Schema.withDecodingDefault(Effect.succeed(200))),
+  after: Schema.optional(queryNumber.check(Schema.isInt()).check(Schema.isGreaterThanOrEqualTo(0))),
 });
 
-export const eventsQuerySchema = z.strictObject({
-  after: z.coerce.number().int().nonnegative(),
-  epoch: z.string(),
+export const eventsQuerySchema = struct({
+  after: queryNumber.check(Schema.isInt()).check(Schema.isGreaterThanOrEqualTo(0)),
+  epoch: Schema.String,
 });
 
-export const startRunBodySchema = z.strictObject({
+export const startRunBodySchema = struct({
   input: jsonSchema,
-  workspace: z.string().optional(),
+  workspace: Schema.optional(Schema.String),
 });
 
-export const resolveHookBodySchema = z.strictObject({ payload: jsonSchema });
+export const resolveHookBodySchema = struct({ payload: jsonSchema });
 
-export const putScheduleBodySchema = z.strictObject({
-  cron: z.string().optional(),
-  tz: z.string().optional(),
-  input: jsonSchema.optional(),
-  enabled: z.boolean().optional(),
+export const putScheduleBodySchema = struct({
+  cron: Schema.optional(Schema.String),
+  tz: Schema.optional(Schema.String),
+  input: Schema.optional(jsonSchema),
+  enabled: Schema.optional(Schema.Boolean),
 });
 
-export type PutScheduleBody = z.infer<typeof putScheduleBodySchema>;
+export type PutScheduleBody = Schema.Schema.Type<typeof putScheduleBodySchema>;
 
-export const scheduleEnabledBodySchema = z.strictObject({ enabled: z.boolean() });
+export const scheduleEnabledBodySchema = struct({ enabled: Schema.Boolean });
 
-const scheduleParamsSchema = z.strictObject({ slug: z.string() });
+const scheduleParamsSchema = struct({ slug: Schema.String });
 
 type Route = {
   method: "GET" | "POST" | "PUT" | "DELETE";
   path: string;
-  params: z.ZodObject;
-  query: z.ZodObject;
-  body: z.ZodType;
-  response: z.ZodType;
+  params: Schema.Top;
+  query: Schema.Top;
+  body: Schema.Top;
+  response: Schema.Top;
 };
 
 export const routes = {
@@ -153,23 +172,23 @@ export const routes = {
     path: "/runs/:id/payload",
     params: runParamsSchema,
     query: emptySchema,
-    body: z.undefined(),
-    response: z.strictObject({ input: jsonSchema, output: jsonSchema.optional() }),
+    body: Schema.Undefined,
+    response: struct({ input: jsonSchema, output: Schema.optional(jsonSchema) }),
   },
   scopes: {
     method: "GET",
     path: "/runs/:id/scopes",
     params: runParamsSchema,
     query: scopesQuerySchema,
-    body: z.undefined(),
-    response: z.array(scopeCountsSchema),
+    body: Schema.Undefined,
+    response: Schema.Array(scopeCountsSchema).pipe(Schema.mutable),
   },
   overview: {
     method: "GET",
     path: "/overview",
     params: emptySchema,
     query: overviewQuerySchema,
-    body: z.undefined(),
+    body: Schema.Undefined,
     response: overviewSchema,
   },
   executions: {
@@ -177,7 +196,7 @@ export const routes = {
     path: "/runs/:id/executions",
     params: runParamsSchema,
     query: executionQuerySchema,
-    body: z.undefined(),
+    body: Schema.Undefined,
     response: executionPageSchema,
   },
   execution: {
@@ -185,7 +204,7 @@ export const routes = {
     path: "/runs/:id/execution",
     params: runParamsSchema,
     query: executionDetailQuerySchema,
-    body: z.undefined(),
+    body: Schema.Undefined,
     response: executionDetailSchema,
   },
   scopeItems: {
@@ -193,7 +212,7 @@ export const routes = {
     path: "/runs/:id/scope-items",
     params: runParamsSchema,
     query: scopeItemsQuerySchema,
-    body: z.undefined(),
+    body: Schema.Undefined,
     response: scopeItemsPageSchema,
   },
   globalLogs: {
@@ -201,15 +220,15 @@ export const routes = {
     path: "/logs",
     params: emptySchema,
     query: globalLogsQuerySchema,
-    body: z.undefined(),
+    body: Schema.Undefined,
     response: globalLogsPageSchema,
   },
   log: {
     method: "GET",
     path: "/logs/:id",
-    params: z.strictObject({ id: z.coerce.number().int().positive() }),
+    params: struct({ id: queryNumber.check(Schema.isInt()).check(Schema.isGreaterThan(0)) }),
     query: emptySchema,
-    body: z.undefined(),
+    body: Schema.Undefined,
     response: logDetailSchema,
   },
   eventHistory: {
@@ -217,15 +236,15 @@ export const routes = {
     path: "/event-history",
     params: emptySchema,
     query: eventHistoryQuerySchema,
-    body: z.undefined(),
+    body: Schema.Undefined,
     response: eventHistoryPageSchema,
   },
   event: {
     method: "GET",
     path: "/event-history/:sequence",
-    params: z.strictObject({ sequence: z.coerce.number().int().positive() }),
+    params: struct({ sequence: queryNumber.check(Schema.isInt()).check(Schema.isGreaterThan(0)) }),
     query: emptySchema,
-    body: z.undefined(),
+    body: Schema.Undefined,
     response: serverEventSchema,
   },
   source: {
@@ -233,7 +252,7 @@ export const routes = {
     path: "/loopies/:slug/source",
     params: scheduleParamsSchema,
     query: workspaceQuerySchema,
-    body: z.undefined(),
+    body: Schema.Undefined,
     response: sourceArtifactSchema,
   },
   runSource: {
@@ -241,7 +260,7 @@ export const routes = {
     path: "/runs/:id/source",
     params: runParamsSchema,
     query: emptySchema,
-    body: z.undefined(),
+    body: Schema.Undefined,
     response: sourceArtifactSchema,
   },
   secrets: {
@@ -249,45 +268,45 @@ export const routes = {
     path: "/secrets",
     params: emptySchema,
     query: emptySchema,
-    body: z.undefined(),
-    response: z.array(z.string()),
+    body: Schema.Undefined,
+    response: Schema.Array(Schema.String).pipe(Schema.mutable),
   },
   putSecret: {
     method: "PUT",
     path: "/secrets/:name",
-    params: z.strictObject({ name: z.string() }),
+    params: struct({ name: Schema.String }),
     query: emptySchema,
-    body: z.strictObject({ value: z.string() }),
-    response: z.strictObject({ name: z.string(), saved: z.literal(true) }),
+    body: struct({ value: Schema.String }),
+    response: struct({ name: Schema.String, saved: Schema.Literal(true) }),
   },
   deleteSecret: {
     method: "DELETE",
     path: "/secrets/:name",
-    params: z.strictObject({ name: z.string() }),
+    params: struct({ name: Schema.String }),
     query: emptySchema,
-    body: z.undefined(),
-    response: z.strictObject({ name: z.string(), removed: z.literal(true) }),
+    body: Schema.Undefined,
+    response: struct({ name: Schema.String, removed: Schema.Literal(true) }),
   },
   generateTypes: {
     method: "POST",
     path: "/types",
     params: emptySchema,
     query: emptySchema,
-    body: z.strictObject({
-      binary: z.string(),
-      path: z.array(z.string()),
-      name: z.string().nullable(),
+    body: struct({
+      binary: Schema.String,
+      path: Schema.Array(Schema.String).pipe(Schema.mutable),
+      name: Schema.NullOr(Schema.String),
     }),
-    response: z.strictObject({
-      source: z.string(),
-      warnings: z.array(z.string()),
-      help: z.string(),
+    response: struct({
+      source: Schema.String,
+      warnings: Schema.Array(Schema.String).pipe(Schema.mutable),
+      help: Schema.String,
     }),
   },
   resolveNamedHook: {
     method: "POST",
     path: "/runs/:id/hooks/:name",
-    params: z.strictObject({ id: z.string(), name: z.string() }),
+    params: struct({ id: Schema.String, name: Schema.String }),
     query: emptySchema,
     body: resolveHookBodySchema,
     response: runViewSchema,
@@ -304,8 +323,8 @@ export const routes = {
     method: "GET",
     path: "/loopies/:slug/graph",
     params: scheduleParamsSchema,
-    query: z.strictObject({ workspace: z.string().optional() }),
-    body: z.undefined(),
+    query: struct({ workspace: Schema.optional(Schema.String) }),
+    body: Schema.Undefined,
     response: graphRevisionViewSchema,
   },
   runGraph: {
@@ -313,7 +332,7 @@ export const routes = {
     path: "/runs/:id/graph",
     params: runParamsSchema,
     query: emptySchema,
-    body: z.undefined(),
+    body: Schema.Undefined,
     response: graphRevisionViewSchema,
   },
   scheduleOverview: {
@@ -321,7 +340,7 @@ export const routes = {
     path: "/schedules/overview",
     params: emptySchema,
     query: emptySchema,
-    body: z.undefined(),
+    body: Schema.Undefined,
     response: scheduleOverviewSchema,
   },
   schedules: {
@@ -329,8 +348,8 @@ export const routes = {
     path: "/schedules",
     params: emptySchema,
     query: workspaceQuerySchema,
-    body: z.undefined(),
-    response: z.array(scheduleViewSchema),
+    body: Schema.Undefined,
+    response: Schema.Array(scheduleViewSchema).pipe(Schema.mutable),
   },
   putSchedule: {
     method: "PUT",
@@ -353,31 +372,31 @@ export const routes = {
     path: "/loopies/:slug/schedule",
     params: scheduleParamsSchema,
     query: workspaceQuerySchema,
-    body: z.undefined(),
-    response: z.strictObject({ deleted: z.literal(true) }),
+    body: Schema.Undefined,
+    response: struct({ deleted: Schema.Literal(true) }),
   },
   loopies: {
     method: "GET",
     path: "/loopies",
     params: emptySchema,
     query: workspaceQuerySchema,
-    body: z.undefined(),
-    response: z.array(loopyViewSchema),
+    body: Schema.Undefined,
+    response: Schema.Array(loopyViewSchema).pipe(Schema.mutable),
   },
   runs: {
     method: "GET",
     path: "/runs",
     params: emptySchema,
     query: runsQuerySchema,
-    body: z.undefined(),
-    response: z.array(runViewSchema),
+    body: Schema.Undefined,
+    response: Schema.Array(runViewSchema).pipe(Schema.mutable),
   },
   run: {
     method: "GET",
     path: "/runs/:id",
     params: runParamsSchema,
     query: emptySchema,
-    body: z.undefined(),
+    body: Schema.Undefined,
     response: runSnapshotViewSchema,
   },
   logs: {
@@ -385,13 +404,13 @@ export const routes = {
     path: "/runs/:id/logs",
     params: runParamsSchema,
     query: logsQuerySchema,
-    body: z.undefined(),
-    response: z.array(logRecordSchema),
+    body: Schema.Undefined,
+    response: Schema.Array(logRecordSchema).pipe(Schema.mutable),
   },
   startRun: {
     method: "POST",
     path: "/loopies/:slug/runs",
-    params: z.strictObject({ slug: z.string() }),
+    params: struct({ slug: Schema.String }),
     query: emptySchema,
     body: startRunBodySchema,
     response: runViewSchema,
@@ -401,7 +420,7 @@ export const routes = {
     path: "/runs/:id/resume",
     params: runParamsSchema,
     query: emptySchema,
-    body: z.undefined(),
+    body: Schema.Undefined,
     response: runViewSchema,
   },
   cancelRun: {
@@ -409,13 +428,13 @@ export const routes = {
     path: "/runs/:id/cancel",
     params: runParamsSchema,
     query: emptySchema,
-    body: z.undefined(),
+    body: Schema.Undefined,
     response: runViewSchema,
   },
   resolveHook: {
     method: "POST",
     path: "/hooks/:token",
-    params: z.strictObject({ token: z.string() }),
+    params: struct({ token: Schema.String }),
     query: emptySchema,
     body: resolveHookBodySchema,
     response: runViewSchema,
@@ -425,7 +444,7 @@ export const routes = {
     path: "/daemon",
     params: emptySchema,
     query: emptySchema,
-    body: z.undefined(),
+    body: Schema.Undefined,
     response: daemonViewSchema,
   },
   events: {
@@ -433,7 +452,7 @@ export const routes = {
     path: "/events",
     params: emptySchema,
     query: eventsQuerySchema,
-    body: z.undefined(),
+    body: Schema.Undefined,
     response: serverEventSchema,
   },
   cursor: {
@@ -441,7 +460,7 @@ export const routes = {
     path: "/cursor",
     params: emptySchema,
     query: emptySchema,
-    body: z.undefined(),
+    body: Schema.Undefined,
     response: cursorViewSchema,
   },
 } as const satisfies Record<string, Route>;

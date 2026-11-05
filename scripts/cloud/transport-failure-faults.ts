@@ -1,6 +1,8 @@
 import { resolve } from "node:path";
+import { Effect } from "effect";
 import type { CommandRunner, ProcessOptions } from "../../apps/sandbox/src/process.js";
 import { runCommand } from "../../apps/sandbox/src/process.js";
+import { fixtureIO } from "./fixture-effect.js";
 import { assert, equal } from "./journey-client.js";
 import {
   type Config,
@@ -10,6 +12,7 @@ import {
   ownerOf,
   until,
 } from "./transport-failure-resources.js";
+import { withWaitClient } from "./wait-client.js";
 
 export type FaultMode = "kill_wait_client" | "unavailable_inspect_socket";
 
@@ -32,121 +35,152 @@ export class TransportFaults {
   constructor(
     private readonly config: Config,
     readonly mode: FaultMode,
+    private readonly commandRunner: CommandRunner = runCommand,
   ) {}
 
   restore() {
     this.outage = false;
   }
 
-  readonly runner: CommandRunner = async (argv, options) => {
-    equal(
-      argv.slice(0, 3),
-      ["docker", "--context", this.config.dockerContext],
-      "unexpected_docker_target",
-    );
-    const operation = argv.slice(3, argv[3] === "container" ? 5 : 4).join(" ");
-    this.calls.push({ operation, args: argv.slice(3), at: Date.now() });
-    this.activeCalls += 1;
-
-    try {
-      if (operation === "wait" && this.mode === "kill_wait_client" && !this.killedWait) {
-        return await this.killWait(argv, options);
-      }
-
-      if (
-        operation === "container inspect" &&
-        this.mode === "unavailable_inspect_socket" &&
-        this.events.length === 0
-      ) {
-        this.outage = true;
-      }
-
-      if (this.outage && ["container inspect", "container ls"].includes(operation)) {
-        // Only this invocation sees the absent socket. The selected context and daemon stay intact.
-        const socket = `/var/empty/loopy-transport-${ownerOf(this.config).slice(0, 16)}.sock`;
-
-        const output = await runCommand(
-          [argv[0] ?? "docker", "--host", `unix://${socket}`, ...argv.slice(3)],
-          options,
+  readonly runner: CommandRunner = (argv, options) =>
+    Effect.uninterruptibleMask((restore) =>
+      Effect.gen({ self: this }, function* () {
+        equal(
+          argv.slice(0, 3),
+          ["docker", "--context", this.config.dockerContext],
+          "unexpected_docker_target",
         );
+        const operation = argv.slice(3, argv[3] === "container" ? 5 : 4).join(" ");
+        this.calls.push({ operation, args: argv.slice(3), at: Date.now() });
+        this.activeCalls += 1;
 
-        assert(output.exitCode !== 0, "isolated_socket_unexpectedly_available");
-        assert(output.stderr.includes(socket), "cli_did_not_report_isolated_socket");
-        const saved = await oneReceipt(this.config);
-        const running = (await ownedContainer(this.config, saved)).State.Running;
-        assert(running, "worker_stopped_during_inspect_failure");
-        this.events.push({
-          operation,
-          exitCode: output.exitCode,
-          stderr: output.stderr.trim(),
-          at: new Date().toISOString(),
-          workerRunning: running,
-        });
+        return yield* restore(
+          Effect.gen({ self: this }, function* () {
+            if (operation === "wait" && this.mode === "kill_wait_client" && !this.killedWait) {
+              return yield* this.killWait(argv, options);
+            }
 
-        return output;
-      }
+            if (
+              operation === "container inspect" &&
+              this.mode === "unavailable_inspect_socket" &&
+              this.events.length === 0
+            ) {
+              this.outage = true;
+            }
 
-      return await runCommand(argv, options);
-    } finally {
-      this.activeCalls -= 1;
-    }
-  };
+            if (this.outage && ["container inspect", "container ls"].includes(operation)) {
+              // Only this invocation sees the absent socket. The selected context and daemon stay intact.
+              const socket = `/var/empty/loopy-transport-${ownerOf(this.config).slice(0, 16)}.sock`;
 
-  private async killWait(argv: string[], options: ProcessOptions) {
-    this.killedWait = true;
-    const saved = await oneReceipt(this.config);
-    await until(
-      () => marker(saved),
-      (text) => text === "started\n",
+              const output = yield* this.commandRunner(
+                [argv[0] ?? "docker", "--host", `unix://${socket}`, ...argv.slice(3)],
+                options,
+              );
+
+              assert(output.exitCode !== 0, "isolated_socket_unexpectedly_available");
+              assert(output.stderr.includes(socket), "cli_did_not_report_isolated_socket");
+              const saved = yield* oneReceipt(this.config).pipe(Effect.orDie);
+
+              const running = (yield* ownedContainer(this.config, saved).pipe(Effect.orDie)).State
+                .Running;
+
+              assert(running, "worker_stopped_during_inspect_failure");
+              this.events.push({
+                operation,
+                exitCode: output.exitCode,
+                stderr: output.stderr.trim(),
+                at: new Date().toISOString(),
+                workerRunning: running,
+              });
+
+              return output;
+            }
+
+            return yield* this.commandRunner(argv, options);
+          }),
+        ).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              this.activeCalls -= 1;
+            }),
+          ),
+        );
+      }),
     );
-    const started = Date.now();
 
-    const child = Bun.spawn(argv, {
-      cwd: options.cwd ?? resolve(this.config.worktree),
-      env: options.env,
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+  private killWait(argv: string[], options: ProcessOptions) {
+    return Effect.gen({ self: this }, function* () {
+      this.killedWait = true;
+      const saved = yield* oneReceipt(this.config).pipe(Effect.orDie);
+      yield* until(
+        () => marker(saved),
+        (text) => text === "started\n",
+      ).pipe(Effect.orDie);
+      const started = Date.now();
 
-    this.waitPids.push(child.pid);
-    const stdout = new Response(child.stdout).text();
-    const stderr = new Response(child.stderr).text();
+      return yield* withWaitClient(
+        Effect.sync(() => {
+          const child = Bun.spawn(argv, {
+            cwd: options.cwd ?? resolve(this.config.worktree),
+            env: options.env,
+            stdin: "ignore",
+            stdout: "pipe",
+            stderr: "pipe",
+          });
 
-    try {
-      await Bun.sleep(200);
-      assert(child.exitCode === null, "wait_client_not_in_flight");
-      assert(
-        (await ownedContainer(this.config, saved)).State.Running,
-        "worker_not_running_before_wait_kill",
+          this.waitPids.push(child.pid);
+
+          return {
+            pid: child.pid,
+            get exitCode() {
+              return child.exitCode;
+            },
+            kill: () => {
+              child.kill("SIGKILL");
+            },
+            exited: child.exited,
+            stdout: new Response(child.stdout).text(),
+            stderr: new Response(child.stderr).text(),
+          };
+        }),
+        (child) =>
+          Effect.gen({ self: this }, function* () {
+            yield* Effect.sleep(200);
+            assert(child.exitCode === null, "wait_client_not_in_flight");
+            assert(
+              (yield* ownedContainer(this.config, saved).pipe(Effect.orDie)).State.Running,
+              "worker_not_running_before_wait_kill",
+            );
+            child.kill();
+
+            const exitCode = yield* fixtureIO("wait client exit", () => child.exited).pipe(
+              Effect.orDie,
+            );
+
+            assert(exitCode !== 0, "wait_client_kill_succeeded_unexpectedly");
+
+            const running = (yield* ownedContainer(this.config, saved).pipe(Effect.orDie)).State
+              .Running;
+
+            assert(running, "worker_stopped_with_wait_client");
+            this.events.push({
+              operation: "wait",
+              exitCode,
+              pid: child.pid,
+              signal: "SIGKILL",
+              at: new Date().toISOString(),
+              workerRunning: running,
+            });
+            this.outage = true;
+
+            return {
+              stdout: yield* fixtureIO("stdout", () => child.stdout).pipe(Effect.orDie),
+              stderr: yield* fixtureIO("stderr", () => child.stderr).pipe(Effect.orDie),
+              exitCode,
+              durationMs: Date.now() - started,
+            };
+          }),
       );
-      child.kill("SIGKILL");
-      const exitCode = await child.exited;
-      assert(exitCode !== 0, "wait_client_kill_succeeded_unexpectedly");
-      const running = (await ownedContainer(this.config, saved)).State.Running;
-      assert(running, "worker_stopped_with_wait_client");
-      this.events.push({
-        operation: "wait",
-        exitCode,
-        pid: child.pid,
-        signal: "SIGKILL",
-        at: new Date().toISOString(),
-        workerRunning: running,
-      });
-      this.outage = true;
-
-      return {
-        stdout: await stdout,
-        stderr: await stderr,
-        exitCode,
-        durationMs: Date.now() - started,
-      };
-    } finally {
-      if (child.exitCode === null) {
-        child.kill("SIGKILL");
-      }
-
-      await Promise.all([child.exited, stdout, stderr]);
-    }
+    });
   }
 }

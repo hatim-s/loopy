@@ -1,4 +1,5 @@
-import { scheduleSchema } from "../../../packages/loopy/src/contract/index.js";
+import { Cause, Effect, Exit } from "effect";
+import { decodeBoundary, scheduleSchema } from "../../../packages/loopy/src/contract/index.js";
 import {
   errorMessage,
   nextFire,
@@ -7,6 +8,7 @@ import {
 } from "../../../packages/loopy/src/core/index.js";
 import type { SqlRunStore } from "../../../packages/loopy/src/store/portable.js";
 import type { R2ArtifactRegistry } from "./artifacts.js";
+import { CloudError, cloudSync } from "./operation.js";
 import type { SchedulerStorage } from "./scheduler.js";
 
 export class WorkspaceSchedules {
@@ -26,12 +28,14 @@ export class WorkspaceSchedules {
     )`);
   }
 
-  async tick(now: string): Promise<void> {
-    const { store, registry, workspace, storage } = this.options;
+  tick(now: string) {
+    return Effect.gen({ self: this }, function* () {
+      const { store, registry, workspace, storage } = this.options;
 
-    const rows = storage.sql
-      .exec<{ slug: string; version: number; record: string }>(
-        `SELECT s.slug,s.version,json_patch(json_object(
+      const rows = yield* cloudSync("read cloud SQL", () =>
+        storage.sql
+          .exec<{ slug: string; version: number; record: string }>(
+            `SELECT s.slug,s.version,json_patch(json_object(
         'workspace',s.workspace,'slug',s.slug,'cron',s.cron,'tz',s.tz,'input',json(s.input_json),
         'enabled',json('true'),'version',s.version,'nextFireAt',s.next_fire_at),
         CASE WHEN s.last_fire_key IS NULL THEN '{}' ELSE json_object('lastFireKey',s.last_fire_key) END) AS record
@@ -39,74 +43,104 @@ export class WorkspaceSchedules {
         ON s.workspace=t.workspace AND s.slug=t.slug AND s.version=t.version
         WHERE s.enabled=1 AND s.next_fire_at<=? AND (t.next_at IS NULL OR t.next_at<=?)
         ORDER BY s.next_fire_at,s.slug LIMIT 32`,
-        now,
-        now,
-      )
-      .toArray();
+            now,
+            now,
+          )
+          .toArray(),
+      );
 
-    for (const row of rows) {
-      try {
-        const schedule = scheduleSchema.parse(JSON.parse(row.record));
-        const saved = await registry.get(schedule.slug);
+      for (const row of rows) {
+        const result = yield* Effect.exit(
+          Effect.gen(function* () {
+            const schedule = yield* cloudSync("decode schedule", () =>
+              decodeBoundary(scheduleSchema)(JSON.parse(row.record)),
+            );
 
-        if (saved === null) {
-          throw new Error(
-            `No saved loopy '${schedule.slug}'. Save it again before retrying the schedule.`,
-          );
-        }
+            const saved = yield* registry.get(schedule.slug);
 
-        const input = validateGraphInput(saved.graph, schedule.input);
+            if (saved === null) {
+              return yield* Effect.fail(
+                new CloudError({
+                  operation: "read saved schedule",
+                  cause: `No saved loopy '${schedule.slug}'. Save it again before retrying the schedule.`,
+                }),
+              );
+            }
 
-        if (!input.ok) {
-          await store.setScheduleEnabled({ workspace, slug: schedule.slug, enabled: false });
-          storage.sql.exec(
-            "INSERT OR REPLACE INTO meta(key,value) VALUES (?,?)",
-            `schedule_error:${schedule.slug}`,
-            `Schedule disabled because the saved input no longer matches the current graph: ${input.error}`.slice(
-              0,
-              1000,
-            ),
-          );
-          continue;
-        }
+            const input = validateGraphInput(saved.graph, schedule.input);
 
-        // Coalesce missed ticks into one run, retaining the fire identity across retries.
-        await store.fireSchedule({
-          workspace,
-          slug: schedule.slug,
-          version: schedule.version,
-          fireKey: `${schedule.slug}@${schedule.nextFireAt}`,
-          nextFireAt: nextFire(parseCron(schedule.cron), new Date(now), schedule.tz).toISOString(),
-          run: {
-            id: crypto.randomUUID(),
-            slug: schedule.slug,
-            revision: saved.revision,
-            workspace,
-            input: input.value,
-            status: "queued",
-            createdAt: now,
-            updatedAt: now,
-          },
-        });
-        storage.sql.exec(
-          "DELETE FROM cloud_schedule_turns WHERE workspace=? AND slug=?",
-          workspace,
-          schedule.slug,
+            if (!input.ok) {
+              yield* store.setScheduleEnabled({ workspace, slug: schedule.slug, enabled: false });
+              yield* cloudSync("cloud SQL", () =>
+                storage.sql.exec(
+                  "INSERT OR REPLACE INTO meta(key,value) VALUES (?,?)",
+                  `schedule_error:${schedule.slug}`,
+                  `Schedule disabled because the saved input no longer matches the current graph: ${input.error}`.slice(
+                    0,
+                    1000,
+                  ),
+                ),
+              );
+
+              return;
+            }
+
+            // Coalesce missed ticks into one run, retaining the fire identity across retries.
+            yield* store.fireSchedule({
+              workspace,
+              slug: schedule.slug,
+              version: schedule.version,
+              fireKey: `${schedule.slug}@${schedule.nextFireAt}`,
+              nextFireAt: nextFire(
+                parseCron(schedule.cron),
+                new Date(now),
+                schedule.tz,
+              ).toISOString(),
+              run: {
+                id: crypto.randomUUID(),
+                slug: schedule.slug,
+                revision: saved.revision,
+                workspace,
+                input: input.value,
+                status: "queued",
+                createdAt: now,
+                updatedAt: now,
+              },
+            });
+            yield* cloudSync("cloud SQL", () =>
+              storage.sql.exec(
+                "DELETE FROM cloud_schedule_turns WHERE workspace=? AND slug=?",
+                workspace,
+                schedule.slug,
+              ),
+            );
+            yield* cloudSync("cloud SQL", () =>
+              storage.sql.exec("DELETE FROM meta WHERE key=?", `schedule_error:${schedule.slug}`),
+            );
+          }),
         );
-        storage.sql.exec("DELETE FROM meta WHERE key=?", `schedule_error:${schedule.slug}`);
-      } catch (cause) {
-        // Excluding failures until this persisted deadline lets later schedules enter the batch.
-        storage.sql.exec(
-          `INSERT INTO cloud_schedule_turns(workspace,slug,version,next_at,error) VALUES (?,?,?,?,?)
+
+        if (Exit.isFailure(result)) {
+          if (Cause.hasInterrupts(result.cause)) {
+            return yield* Effect.failCause(result.cause);
+          }
+
+          const cause = result.cause;
+          // Excluding failures until this persisted deadline lets later schedules enter the batch.
+          yield* cloudSync("cloud SQL", () =>
+            storage.sql.exec(
+              `INSERT INTO cloud_schedule_turns(workspace,slug,version,next_at,error) VALUES (?,?,?,?,?)
           ON CONFLICT(workspace,slug) DO UPDATE SET
           version=excluded.version,next_at=excluded.next_at,error=excluded.error`,
-          workspace,
-          row.slug,
-          row.version,
-          new Date(Date.now() + 5000).toISOString(),
-          errorMessage(cause).slice(0, 1000),
-        );
+              workspace,
+              row.slug,
+              row.version,
+              new Date(Date.now() + 5000).toISOString(),
+              errorMessage(Cause.squash(cause)).slice(0, 1000),
+            ),
+          );
+        }
       }
-    }
+    });
   }
 }

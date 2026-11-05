@@ -1,39 +1,45 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { z } from "zod";
+import { Effect, Result, Schema } from "effect";
 import {
+  decodeBoundary,
   SANDBOX_MAX_CAPTURE_BYTES,
   type SandboxAttemptRequest,
   type SandboxExecutionResult,
   sandboxExecutionResultSchema,
 } from "../../../packages/loopy/src/contract/index.js";
+import { CommandExecutionError } from "../../../packages/loopy/src/core/index.js";
 import type { SandboxConfig } from "./config.js";
 import { DockerClient } from "./docker-client.js";
-import { CaptureError, type CommandRunner, runCommand } from "./process.js";
+import { attemptContainerArgs, inputContainerArgs } from "./docker-plan.js";
+import type { SandboxOperationError } from "./operations.js";
+import { checked, failure, io } from "./operations.js";
+import { type CommandRunner, runCommand } from "./process.js";
 import type { StartedReceipt } from "./receipts.js";
 import { boundedResult, failed } from "./result.js";
 
-const inspectionSchema = z
-  .array(
-    z.object({
-      Config: z.object({ Labels: z.record(z.string(), z.string()) }),
-      State: z.object({
-        Status: z.string(),
-        Running: z.boolean(),
-        ExitCode: z.number(),
-        OOMKilled: z.boolean(),
-      }),
+const inspectionSchema = Schema.Array(
+  Schema.Struct({
+    Config: Schema.Struct({ Labels: Schema.Record(Schema.String, Schema.String) }),
+    State: Schema.Struct({
+      Status: Schema.String,
+      Running: Schema.Boolean,
+      ExitCode: Schema.Finite,
+      OOMKilled: Schema.Boolean,
     }),
-  )
-  .length(1);
+  }),
+).check(Schema.makeFilter((items) => items.length === 1));
 
 export interface AttemptBackend {
   start(
     receipt: StartedReceipt,
     request: SandboxAttemptRequest,
     signal?: AbortSignal,
-  ): Promise<SandboxExecutionResult>;
-  recover(receipt: StartedReceipt, signal?: AbortSignal): Promise<SandboxExecutionResult>;
+  ): Effect.Effect<SandboxExecutionResult, SandboxOperationError | CommandExecutionError>;
+  recover(
+    receipt: StartedReceipt,
+    signal?: AbortSignal,
+  ): Effect.Effect<SandboxExecutionResult, SandboxOperationError | CommandExecutionError>;
 }
 
 export class DockerBackend implements AttemptBackend {
@@ -42,230 +48,208 @@ export class DockerBackend implements AttemptBackend {
     private readonly runner: CommandRunner = runCommand,
   ) {}
 
-  private async inspect(client: DockerClient, receipt: StartedReceipt) {
-    const output = await client.call(["container", "inspect", receipt.container]);
+  private inspect(client: DockerClient, receipt: StartedReceipt) {
+    return Effect.gen({ self: this }, function* () {
+      const output = yield* client.call(["container", "inspect", receipt.container]);
 
-    if (output.exitCode !== 0) {
-      const listed = await client.required([
-        "container",
-        "ls",
-        "--all",
-        "--filter",
-        `name=^/${receipt.container}$`,
-        "--format",
-        "{{.Names}}",
-      ]);
+      if (output.exitCode !== 0) {
+        const listed = yield* client.required([
+          "container",
+          "ls",
+          "--all",
+          "--filter",
+          `name=^/${receipt.container}$`,
+          "--format",
+          "{{.Names}}",
+        ]);
 
-      if (!listed.stdout.trim()) {
-        return null;
-      }
+        if (!listed.stdout.trim()) {
+          return null;
+        }
 
-      throw new Error("Cannot inspect the owned attempt container.");
-    }
-
-    const container = inspectionSchema.parse(JSON.parse(output.stdout))[0];
-
-    if (
-      !container ||
-      container.Config.Labels["loopy.sandbox.owner"] !== client.owner ||
-      container.Config.Labels["loopy.sandbox.request"] !== receipt.requestHash
-    ) {
-      throw new Error("Attempt container ownership does not match its durable receipt.");
-    }
-
-    return container.State;
-  }
-
-  async start(receipt: StartedReceipt, request: SandboxAttemptRequest, signal?: AbortSignal) {
-    const client = new DockerClient(this.config, this.runner, signal);
-    const directory = await mkdtemp(join(this.config.stateRoot, "staging", "attempt-"));
-
-    try {
-      await writeFile(join(directory, "request.json"), JSON.stringify(request.spec), {
-        mode: 0o444,
-      });
-
-      for (const bundle of request.bundles) {
-        await writeFile(
-          join(directory, `${bundle.hash}.mjs`),
-          Buffer.from(bundle.bytes, "base64"),
-          { mode: 0o444 },
+        return yield* Effect.fail(
+          failure("docker", new Error("Cannot inspect the owned attempt container.")),
         );
       }
 
-      // Docker cannot copy into a read-only root. A stopped helper fills a dedicated
-      // volume, then the execution container mounts that input volume read-only.
-      const helper = `${receipt.container}-input`;
-      await client.required([
-        "create",
-        "--name",
-        helper,
-        "--label",
-        `loopy.sandbox.owner=${client.owner}`,
-        "--label",
-        `loopy.sandbox.request=${receipt.requestHash}`,
-        "--network",
-        "none",
-        "--user",
-        "1000:1000",
-        "--cap-drop",
-        "ALL",
-        "--security-opt",
-        "no-new-privileges:true",
-        "--read-only",
-        "--mount",
-        `type=volume,source=${receipt.inputVolume},target=/input`,
-        this.config.image,
-      ]);
-      await client.required(["cp", `${directory}/.`, `${helper}:/input/`]);
-      await client.required(["rm", helper]);
-      await client.required([
-        "create",
-        "--name",
-        receipt.container,
-        "--label",
-        `loopy.sandbox.owner=${client.owner}`,
-        "--label",
-        `loopy.sandbox.request=${receipt.requestHash}`,
-        "--network",
-        "none",
-        "--user",
-        "1000:1000",
-        "--cap-drop",
-        "ALL",
-        "--security-opt",
-        "no-new-privileges:true",
-        "--read-only",
-        "--tmpfs",
-        "/tmp:rw,noexec,nosuid,size=64m,mode=1777",
-        "--memory",
-        this.config.memory,
-        "--memory-swap",
-        this.config.memory,
-        "--cpus",
-        String(this.config.cpus),
-        "--pids-limit",
-        String(this.config.pids),
-        "--ulimit",
-        "nofile=256:256",
-        "--init",
-        "--log-driver",
-        "local",
-        "--log-opt",
-        "max-size=4m",
-        "--log-opt",
-        "max-file=1",
-        "--log-opt",
-        "compress=false",
-        "--mount",
-        `type=volume,source=${receipt.volume},target=/workspace`,
-        "--mount",
-        `type=volume,source=${receipt.inputVolume},target=/input,readonly`,
-        "--workdir",
-        "/workspace",
-        "--env",
-        "HOME=/workspace",
-        "--env",
-        "TMPDIR=/tmp",
-        "--entrypoint",
-        "bun",
-        this.config.image,
-        "/opt/loopy/worker.js",
-      ]);
+      const container = (yield* checked("inspection", () =>
+        Schema.decodeUnknownSync(inspectionSchema)(JSON.parse(output.stdout)),
+      ))[0];
 
-      if (Date.now() >= receipt.deadline) {
-        return failed("execution", "Attempt timed out before its container started.");
+      if (
+        !container ||
+        container.Config.Labels["loopy.sandbox.owner"] !== client.owner ||
+        container.Config.Labels["loopy.sandbox.request"] !== receipt.requestHash
+      ) {
+        return yield* Effect.fail(
+          failure(
+            "docker",
+            new Error("Attempt container ownership does not match its durable receipt."),
+          ),
+        );
       }
 
-      await client.required(["start", receipt.container]);
-    } finally {
-      await rm(directory, { recursive: true, force: true });
-    }
-
-    return this.recover(receipt, signal);
+      return container.State;
+    });
   }
 
-  private async waitForWorker(client: DockerClient, receipt: StartedReceipt) {
-    const remaining = receipt.deadline - Date.now();
+  start(receipt: StartedReceipt, request: SandboxAttemptRequest, signal?: AbortSignal) {
+    return Effect.gen({ self: this }, function* () {
+      const client = new DockerClient(this.config, this.runner, signal);
 
-    try {
-      if (remaining <= 0) {
-        throw new CaptureError("timeout");
+      const early = yield* Effect.acquireUseRelease(
+        io("staging directory", () => mkdtemp(join(this.config.stateRoot, "staging", "attempt-"))),
+        (directory) =>
+          Effect.gen({ self: this }, function* () {
+            yield* io("staging", () =>
+              writeFile(join(directory, "request.json"), JSON.stringify(request.spec), {
+                mode: 0o444,
+              }),
+            ).pipe(Effect.uninterruptible);
+
+            for (const bundle of request.bundles) {
+              yield* io("staging", () =>
+                writeFile(
+                  join(directory, `${bundle.hash}.mjs`),
+                  Buffer.from(bundle.bytes, "base64"),
+                  { mode: 0o444 },
+                ),
+              ).pipe(Effect.uninterruptible);
+            }
+
+            // Docker cannot copy into a read-only root. A stopped helper fills a dedicated
+            // volume, then the execution container mounts that input volume read-only.
+            const helper = `${receipt.container}-input`;
+            yield* client.required(inputContainerArgs(this.config, receipt, client.owner));
+            yield* client.required(["cp", `${directory}/.`, `${helper}:/input/`]);
+            yield* client.required(["rm", helper]);
+            yield* client.required(attemptContainerArgs(this.config, receipt, client.owner));
+
+            if (Date.now() >= receipt.deadline) {
+              return failed("execution", "Attempt timed out before its container started.");
+            }
+
+            yield* client.required(["start", receipt.container]);
+          }),
+        (directory) =>
+          Effect.gen({ self: this }, function* () {
+            yield* io("docker", () => rm(directory, { recursive: true, force: true }));
+          }),
+      );
+
+      if (early) {
+        return early;
       }
 
-      await client.required(["wait", receipt.container], {
-        timeoutMs: remaining,
-        maxBytes: 1024,
-      });
-    } catch (cause) {
-      if (!(cause instanceof CaptureError && cause.reason === "timeout")) {
-        throw cause;
-      }
-
-      const current = await this.inspect(client, receipt);
-
-      if (current?.Running) {
-        await client.required(["kill", receipt.container]);
-      }
-
-      const stopped = await this.inspect(client, receipt);
-
-      if (stopped?.Running) {
-        throw new Error("Attempt container termination is not yet confirmed.");
-      }
-
-      return "timed_out" as const;
-    }
-
-    return "stopped" as const;
+      return yield* this.recover(receipt, signal);
+    });
   }
 
-  async recover(receipt: StartedReceipt, signal?: AbortSignal): Promise<SandboxExecutionResult> {
-    const client = new DockerClient(this.config, this.runner, signal);
-    const state = await this.inspect(client, receipt);
+  private waitForWorker(client: DockerClient, receipt: StartedReceipt) {
+    return Effect.gen({ self: this }, function* () {
+      const remaining = receipt.deadline - Date.now();
 
-    if (state?.Status === "created") {
-      // Removing a never-started container also fences a Docker start whose acknowledgement was lost.
-      await client.required(["rm", "--force", receipt.container]);
+      const waited = yield* (
+        remaining <= 0
+          ? Effect.fail(
+              new CommandExecutionError({
+                reason: "timeout",
+                message: "Process timed out.",
+                output: { stdout: "", stderr: "", exitCode: -1, durationMs: 0 },
+                cause: undefined,
+              }),
+            )
+          : client.required(["wait", receipt.container], { timeoutMs: remaining, maxBytes: 1024 })
+      ).pipe(Effect.result);
 
-      if ((await this.inspect(client, receipt)) !== null) {
-        throw new Error("Attempt container removal is not yet confirmed.");
+      if (Result.isFailure(waited)) {
+        if (
+          !(waited.failure instanceof CommandExecutionError && waited.failure.reason === "timeout")
+        ) {
+          return yield* Effect.fail(waited.failure);
+        }
+
+        const current = yield* this.inspect(client, receipt);
+
+        if (current?.Running) {
+          yield* client.required(["kill", receipt.container]);
+        }
+
+        const stopped = yield* this.inspect(client, receipt);
+
+        if (stopped?.Running) {
+          return yield* Effect.fail(
+            failure("docker", new Error("Attempt container termination is not yet confirmed.")),
+          );
+        }
+
+        return "timed_out" as const;
       }
-    }
 
-    if (state === null || state.Status === "created") {
-      return failed(
-        "uncertain",
-        "Attempt has a started receipt but no started worker. It will not be repeated.",
-      );
-    }
+      return "stopped" as const;
+    });
+  }
 
-    if (state.Running && (await this.waitForWorker(client, receipt)) === "timed_out") {
-      return failed("execution", "Attempt timed out. Its owned container was killed.");
-    }
+  recover(receipt: StartedReceipt, signal?: AbortSignal) {
+    return Effect.gen({ self: this }, function* () {
+      const client = new DockerClient(this.config, this.runner, signal);
+      const state = yield* this.inspect(client, receipt);
 
-    const final = await this.inspect(client, receipt);
+      if (state?.Status === "created") {
+        // Removing a never-started container also fences a Docker start whose acknowledgement was lost.
+        yield* client.required(["rm", "--force", receipt.container]);
 
-    if (final?.Running) {
-      throw new Error("Attempt worker remains running after Docker wait.");
-    }
+        if ((yield* this.inspect(client, receipt)) !== null) {
+          return yield* Effect.fail(
+            failure("docker", new Error("Attempt container removal is not yet confirmed.")),
+          );
+        }
+      }
 
-    if (!final || final.Status !== "exited" || final.ExitCode !== 0 || final.OOMKilled) {
-      return failed(
-        "uncertain",
-        "Attempt worker disappeared or exited without a terminal result. It will not be repeated.",
-      );
-    }
+      if (state === null || state.Status === "created") {
+        return failed(
+          "uncertain",
+          "Attempt has a started receipt but no started worker. It will not be repeated.",
+        );
+      }
 
-    try {
-      const output = await client.required(["logs", receipt.container], {
-        timeoutMs: 30_000,
-        maxBytes: SANDBOX_MAX_CAPTURE_BYTES,
-      });
+      if (state.Running && (yield* this.waitForWorker(client, receipt)) === "timed_out") {
+        return failed("execution", "Attempt timed out. Its owned container was killed.");
+      }
 
-      return boundedResult(sandboxExecutionResultSchema.parse(JSON.parse(output.stdout)));
-    } catch (cause) {
-      if (cause instanceof CaptureError && cause.reason === "output_limit") {
+      const final = yield* this.inspect(client, receipt);
+
+      if (final?.Running) {
+        return yield* Effect.fail(
+          failure("docker", new Error("Attempt worker remains running after Docker wait.")),
+        );
+      }
+
+      if (!final || final.Status !== "exited" || final.ExitCode !== 0 || final.OOMKilled) {
+        return failed(
+          "uncertain",
+          "Attempt worker disappeared or exited without a terminal result. It will not be repeated.",
+        );
+      }
+
+      const terminal = yield* Effect.gen(function* () {
+        const output = yield* client.required(["logs", receipt.container], {
+          timeoutMs: 30_000,
+          maxBytes: SANDBOX_MAX_CAPTURE_BYTES,
+        });
+
+        return yield* checked("worker result", () =>
+          boundedResult(decodeBoundary(sandboxExecutionResultSchema)(JSON.parse(output.stdout))),
+        );
+      }).pipe(Effect.result);
+
+      if (Result.isSuccess(terminal)) {
+        return terminal.success;
+      }
+
+      const cause = terminal.failure;
+
+      if (cause instanceof CommandExecutionError && cause.reason === "output_limit") {
         return failed("output_limit", "Attempt worker output exceeded its byte limit.");
       }
 
@@ -273,6 +257,6 @@ export class DockerBackend implements AttemptBackend {
         "uncertain",
         "Attempt worker did not leave a valid terminal result. It will not be repeated.",
       );
-    }
+    });
   }
 }

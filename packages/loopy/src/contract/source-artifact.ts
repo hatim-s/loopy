@@ -1,4 +1,6 @@
-import { z } from "zod";
+import { Schema } from "effect";
+import { struct } from "./codec.js";
+
 import { nodeIdSchema } from "./graph.js";
 
 export const MAX_SOURCE_BYTES = 256 * 1024;
@@ -7,38 +9,40 @@ export const MAX_SOURCE_FILES = 32;
 
 export const MAX_SOURCE_RANGES = 10_000;
 
-const revisionSchema = z.string().regex(/^[a-f0-9]{64}$/);
+const revisionSchema = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/));
 
-const fileIdSchema = z.string().regex(/^file-[0-9]+$/);
+const fileIdSchema = Schema.String.check(Schema.isPattern(/^file-[0-9]+$/));
 
-const sourceFileSchema = z.strictObject({
+const sourceFileSchema = struct({
   id: fileIdSchema,
-  path: z
-    .string()
-    .min(1)
-    .max(255)
-    .regex(/^[^/\\\0]+$/)
-    .refine((path) => path !== "." && path !== ".."),
-  content: z.string().max(MAX_SOURCE_BYTES),
+  path: Schema.String.check(Schema.isMinLength(1))
+    .check(Schema.isMaxLength(255))
+    .check(Schema.isPattern(/^[^/\\\0]+$/))
+    .check(Schema.makeFilter((path) => path !== "." && path !== "..")),
+  content: Schema.String.check(Schema.isMaxLength(MAX_SOURCE_BYTES)),
 });
 
-const sourceRangeSchema = z.strictObject({
+const sourceRangeSchema = struct({
   nodeId: nodeIdSchema,
   fileId: fileIdSchema,
-  startLine: z.number().int().positive(),
-  endLine: z.number().int().positive(),
+  startLine: Schema.Int.check(Schema.isGreaterThan(0)),
+  endLine: Schema.Int.check(Schema.isGreaterThan(0)),
 });
 
-export const sourceArtifactSchema = z.discriminatedUnion("status", [
-  z
-    .strictObject({
-      version: z.literal(1),
-      status: z.literal("available"),
-      revision: revisionSchema,
-      files: z.array(sourceFileSchema).min(1).max(MAX_SOURCE_FILES),
-      ranges: z.array(sourceRangeSchema).max(MAX_SOURCE_RANGES),
-    })
-    .superRefine((artifact, context) => {
+export const sourceArtifactSchema = Schema.Union([
+  struct({
+    version: Schema.Literal(1),
+    status: Schema.Literal("available"),
+    revision: revisionSchema,
+    files: Schema.Array(sourceFileSchema)
+      .pipe(Schema.mutable)
+      .check(Schema.isMinLength(1))
+      .check(Schema.isMaxLength(MAX_SOURCE_FILES)),
+    ranges: Schema.Array(sourceRangeSchema)
+      .pipe(Schema.mutable)
+      .check(Schema.isMaxLength(MAX_SOURCE_RANGES)),
+  }).check(
+    Schema.makeFilter((artifact) => {
       const files = new Map(
         artifact.files.map((file) => [file.id, file.content.split("\n").length]),
       );
@@ -55,11 +59,7 @@ export const sourceArtifactSchema = z.discriminatedUnion("status", [
         bytes > MAX_SOURCE_BYTES ||
         new TextEncoder().encode(JSON.stringify(artifact)).length > MAX_SOURCE_BYTES * 2
       ) {
-        context.addIssue({
-          code: "custom",
-          message:
-            "Source files must be unique, fit within 256 KiB, and use at most 512 KiB of JSON.",
-        });
+        return "Source files must be unique, fit within 256 KiB, and use at most 512 KiB of JSON.";
       }
 
       for (const range of artifact.ranges) {
@@ -71,21 +71,21 @@ export const sourceArtifactSchema = z.discriminatedUnion("status", [
           range.endLine > lines ||
           nodes.has(range.nodeId)
         ) {
-          context.addIssue({
-            code: "custom",
-            message: "Source ranges must name a unique node and valid file lines.",
-          });
+          return "Source ranges must name a unique node and valid file lines.";
         }
 
         nodes.add(range.nodeId);
       }
+
+      return true;
     }),
-  z.strictObject({
-    version: z.literal(1),
-    status: z.literal("unavailable"),
+  ),
+  struct({
+    version: Schema.Literal(1),
+    status: Schema.Literal("unavailable"),
     revision: revisionSchema,
-    reason: z.enum(["not_captured", "too_large", "redacted"]),
+    reason: Schema.Literals(["not_captured", "too_large", "redacted"]),
   }),
 ]);
 
-export type SourceArtifact = z.infer<typeof sourceArtifactSchema>;
+export type SourceArtifact = Schema.Schema.Type<typeof sourceArtifactSchema>;

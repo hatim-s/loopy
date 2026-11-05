@@ -1,21 +1,31 @@
-import type { ExecutionResult, ExecutionSpec, Executor, RunRecord } from "../src/core/index.js";
+import { Effect } from "effect";
+import {
+  type ExecutionResult,
+  type ExecutionSpec,
+  type Executor,
+  ExecutorError,
+  type RunRecord,
+} from "../src/core/index.js";
 
 export class FakeExecutor implements Executor {
   calls: ExecutionSpec[] = [];
   result: ExecutionResult = { kind: "succeeded", output: null, logs: [] };
   failure: Error | null = null;
-  async lookup() {
-    return { kind: "none" as const };
+  lookup() {
+    return Effect.succeed({ kind: "none" as const });
   }
-  async execute(...args: Parameters<Executor["execute"]>) {
+  execute(...args: Parameters<Executor["execute"]>) {
     const [, , spec] = args;
-    this.calls.push(spec);
 
-    if (this.failure) {
-      throw this.failure;
-    }
+    return Effect.suspend(() => {
+      this.calls.push(spec);
 
-    return this.result;
+      if (this.failure) {
+        return Effect.fail(new ExecutorError({ operation: "execute", cause: this.failure }));
+      }
+
+      return Effect.succeed(this.result);
+    });
   }
 }
 

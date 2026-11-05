@@ -1,6 +1,7 @@
 import { expect, spyOn, test } from "bun:test";
 import { InfiniteQueryObserver, QueryClient } from "@tanstack/react-query";
 import {
+  decodeBoundary,
   encodeRunCursor,
   nodeRunViewSchema,
   type RunSnapshotView,
@@ -223,7 +224,7 @@ test("the displayed run page keeps its next cursor after the oldest row leaves",
 
 test("map item pagination retains at most 200 rows and continues numeric cursors", async () => {
   const nodeRuns = Array.from(Array.from({ length: 250 }).keys(), (index) =>
-    nodeRunViewSchema.parse({
+    decodeBoundary(nodeRunViewSchema)({
       key: { runId: queued.id, nodeId: "1:work", scope: [{ nodeId: "0:map", index }] },
       status: "running",
       attempt: 1,

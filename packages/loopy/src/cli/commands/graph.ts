@@ -1,8 +1,10 @@
 import { resolve } from "node:path";
+import { Effect } from "effect";
 import { compile } from "../../compiler/index.js";
 import { type GraphView, graphView, routes } from "../../contract/index.js";
 import { request } from "../client.js";
 import { type CliContext, requireTarget } from "../context.js";
+import { CliError, cliIO, diagnosticsError } from "../errors.js";
 import { printJson, printLine } from "../output.js";
 
 function text(graph: GraphView) {
@@ -26,42 +28,37 @@ function text(graph: GraphView) {
     .join("\n");
 }
 
-export async function runGraph(context: CliContext): Promise<void> {
-  const target = requireTarget(context, "Name or file");
-  const format = context.values.format ?? "json";
+export function runGraph(context: CliContext) {
+  return Effect.gen(function* () {
+    const target = yield* requireTarget(context, "Name or file");
+    const format = context.values.format ?? "json";
 
-  if (format !== "json" && format !== "text") {
-    throw new Error("Use --format json or --format text.");
-  }
-
-  let graph: GraphView;
-
-  if (await Bun.file(resolve(context.cwd, target)).exists()) {
-    const result = await compile(resolve(context.cwd, target));
-
-    if (!result.ok) {
-      throw new Error(
-        result.diagnostics
-          .map(
-            (value) =>
-              `${value.file}:${value.line}:${value.column} [${value.code}] ${value.message}`,
-          )
-          .join("\n"),
-      );
+    if (format !== "json" && format !== "text") {
+      return yield* Effect.fail(new CliError({ message: "Use --format json or --format text." }));
     }
 
-    graph = graphView(result.graph);
-  } else {
-    ({ graph } = await request(
-      context,
-      `/loopies/${encodeURIComponent(target)}/graph?workspace=${encodeURIComponent(context.cwd)}`,
-      routes.graph.response,
-    ));
-  }
+    let graph: GraphView;
 
-  if (format === "text") {
-    printLine(text(graph));
-  } else {
-    printJson(graph);
-  }
+    if (yield* cliIO(() => Bun.file(resolve(context.cwd, target)).exists())) {
+      const result = yield* compile(resolve(context.cwd, target));
+
+      if (!result.ok) {
+        return yield* Effect.fail(diagnosticsError(result.diagnostics));
+      }
+
+      graph = graphView(result.graph);
+    } else {
+      ({ graph } = yield* request(
+        context,
+        `/loopies/${encodeURIComponent(target)}/graph?workspace=${encodeURIComponent(context.cwd)}`,
+        routes.graph.response,
+      ));
+    }
+
+    if (format === "text") {
+      printLine(text(graph));
+    } else {
+      printJson(graph);
+    }
+  });
 }

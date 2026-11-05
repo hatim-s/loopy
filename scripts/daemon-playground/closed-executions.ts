@@ -1,7 +1,11 @@
 import { Database } from "bun:sqlite";
 import { join } from "node:path";
 import { z } from "zod";
-import { logRecordSchema, nodeRunSchema } from "../../packages/loopy/src/contract/index.ts";
+import {
+  decodeBoundary,
+  logRecordSchema,
+  nodeRunSchema,
+} from "../../packages/loopy/src/contract/index.ts";
 import { state, writeEvidence } from "./config.ts";
 
 const rowsSchema = z.array(z.object({ record: z.string() }));
@@ -13,7 +17,7 @@ export async function closedExecutions() {
   try {
     const nodes = rowsSchema
       .parse(database.query("SELECT record FROM node_runs ORDER BY run_id,execution_key").all())
-      .map((row) => nodeRunSchema.parse(JSON.parse(row.record)));
+      .map((row) => decodeBoundary(nodeRunSchema)(JSON.parse(row.record)));
 
     const attempts = rowsSchema
       .parse(
@@ -21,11 +25,11 @@ export async function closedExecutions() {
           .query("SELECT record FROM node_attempts ORDER BY run_id,execution_key,attempt")
           .all(),
       )
-      .map((row) => nodeRunSchema.parse(JSON.parse(row.record)));
+      .map((row) => decodeBoundary(nodeRunSchema)(JSON.parse(row.record)));
 
     const logs = rowsSchema
       .parse(database.query("SELECT record FROM logs ORDER BY run_id,seq").all())
-      .map((row) => logRecordSchema.parse(JSON.parse(row.record)));
+      .map((row) => decodeBoundary(logRecordSchema)(JSON.parse(row.record)));
 
     const revisions = z
       .array(z.object({ id: z.string(), slug: z.string(), revision: z.string() }))

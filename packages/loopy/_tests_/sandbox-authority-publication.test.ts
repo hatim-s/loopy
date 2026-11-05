@@ -1,12 +1,15 @@
 import { afterEach, expect, test } from "bun:test";
 import { readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { Effect } from "effect";
 import type { ArtifactReader } from "../../../apps/sandbox/src/artifacts.js";
 import { Attempts } from "../../../apps/sandbox/src/attempts.js";
 import { FilesystemAuthority } from "../../../apps/sandbox/src/filesystem-authority.js";
+import { failure } from "../../../apps/sandbox/src/operations.js";
 import type { AuthorityInput } from "../src/contract/sandbox-journal-rpc.js";
 import { artifactReader, successful, uncertain } from "./fixtures/sandbox-authority.js";
 import { cleanup, fixture, open } from "./fixtures/sandbox-authority-lifecycle.js";
+import { run } from "./fixtures/sandbox-run.js";
 
 afterEach(cleanup);
 
@@ -15,12 +18,16 @@ test("observed terminal result survives result and terminal-pointer publication 
 
   class FailingComplete extends FilesystemAuthority {
     failures = 1;
-    override async complete(input: AuthorityInput<"complete">) {
-      if (this.failures-- > 0) {
-        throw new Error("Pointer unavailable");
-      }
+    override complete(input: AuthorityInput<"complete">) {
+      const basecomplete = super.complete.bind(this);
 
-      return super.complete(input);
+      return Effect.gen({ self: this }, function* () {
+        if (this.failures-- > 0) {
+          return yield* Effect.fail(failure("fixture", new Error("Pointer unavailable")));
+        }
+
+        return yield* basecomplete(input);
+      });
     }
   }
 
@@ -32,30 +39,35 @@ test("observed terminal result survives result and terminal-pointer publication 
     authority,
     artifactReader,
     resultsFor: (workspace) => ({
-      put: async (result) => {
-        puts++;
+      put: (result) =>
+        Effect.gen(function* () {
+          puts++;
 
-        if (puts === 1) {
-          throw new Error("Bytes unavailable");
-        }
+          if (puts === 1) {
+            return yield* Effect.fail(failure("fixture", new Error("Bytes unavailable")));
+          }
 
-        return resultsFor(workspace).put(result);
-      },
+          return yield* resultsFor(workspace).put(result);
+        }),
       get: (ref) => resultsFor(workspace).get(ref),
     }),
     backend: {
-      start: async () => successful,
-      recover: async () => {
-        recoveries++;
+      start: () =>
+        Effect.gen(function* () {
+          return successful;
+        }),
+      recover: () =>
+        Effect.gen(function* () {
+          recoveries++;
 
-        return uncertain;
-      },
+          return uncertain;
+        }),
     },
   });
 
-  await service.start(request);
-  await service.drain();
-  expect(await service.lookup(request)).toEqual({ kind: "finished", result: successful });
+  await run(service.start(request));
+  await run(service.drain());
+  expect(await run(service.lookup(request))).toEqual({ kind: "finished", result: successful });
   expect(puts).toBe(3);
   expect(recoveries).toBe(0);
 });
@@ -67,22 +79,34 @@ test("failed helper cleanup holds its guard across requests and restart while un
   let exports = 0;
 
   const reader: ArtifactReader = {
-    read: async (receipt, path) => {
-      exports++;
-      helperPresent = true;
+    read: (receipt, path) =>
+      Effect.gen(function* () {
+        exports++;
+        helperPresent = true;
 
-      return artifactReader.read(receipt, path);
-    },
-    cleanup: async () => {
-      if (cleanupFails && helperPresent) {
-        throw new Error("Docker cleanup unavailable");
-      }
+        return yield* artifactReader.read(receipt, path);
+      }),
+    cleanup: () =>
+      Effect.gen(function* () {
+        if (cleanupFails && helperPresent) {
+          return yield* Effect.fail(failure("fixture", new Error("Docker cleanup unavailable")));
+        }
 
-      helperPresent = false;
-    },
+        helperPresent = false;
+      }),
   };
 
-  const backend = { start: async () => successful, recover: async () => uncertain };
+  const backend = {
+    start: () =>
+      Effect.gen(function* () {
+        return successful;
+      }),
+    recover: () =>
+      Effect.gen(function* () {
+        return uncertain;
+      }),
+  };
+
   const authority = new FilesystemAuthority(config.stateRoot);
 
   const first = await open(config, {
@@ -93,15 +117,17 @@ test("failed helper cleanup holds its guard across requests and restart while un
     close: () => authority.close(),
   });
 
-  await first.start(request);
-  await first.drain();
-  await expect(first.artifact({ ...request, path: "out.txt" })).rejects.toMatchObject({
+  await run(first.start(request));
+  await run(first.drain());
+  await expect(run(first.artifact({ ...request, path: "out.txt" }))).rejects.toMatchObject({
     code: "conflict",
   });
   expect(helperPresent).toBe(true);
-  expect((await authority.recoverable({ after: null, limit: 200 })).exports).toHaveLength(1);
-  await expect(first.start({ ...request, attempt: 2 })).rejects.toMatchObject({ code: "conflict" });
-  await first.close();
+  expect((await run(authority.recoverable({ after: null, limit: 200 }))).exports).toHaveLength(1);
+  await expect(run(first.start({ ...request, attempt: 2 }))).rejects.toMatchObject({
+    code: "conflict",
+  });
+  await run(first.close());
   const successor = new FilesystemAuthority(config.stateRoot);
 
   const second = await open(config, {
@@ -111,29 +137,37 @@ test("failed helper cleanup holds its guard across requests and restart while un
     backend,
   });
 
-  await expect(second.start({ ...request, attempt: 2 })).rejects.toMatchObject({
+  await expect(run(second.start({ ...request, attempt: 2 }))).rejects.toMatchObject({
     code: "conflict",
   });
-  await second.start({ ...request, executionKey: { ...request.executionKey, runId: "other" } });
-  expect((await successor.recoverable({ after: null, limit: 200 })).exports).toHaveLength(1);
+  await run(
+    second.start({ ...request, executionKey: { ...request.executionKey, runId: "other" } }),
+  );
+  expect((await run(successor.recoverable({ after: null, limit: 200 }))).exports).toHaveLength(1);
   expect(exports).toBe(1);
   cleanupFails = false;
-  await second.start({ ...request, attempt: 2 });
-  await second.drain();
+  await run(second.start({ ...request, attempt: 2 }));
+  await run(second.drain());
   expect(helperPresent).toBe(false);
-  expect((await successor.recoverable({ after: null, limit: 200 })).exports).toHaveLength(0);
+  expect((await run(successor.recoverable({ after: null, limit: 200 }))).exports).toHaveLength(0);
 });
 
 test("dependency construction happens under the process lock, and root path validation remains strict", async () => {
   const { config } = await fixture();
   let called = false;
   await expect(
-    Attempts.open(config, async () => {
-      called = true;
-      const lock = JSON.parse(await Bun.file(join(config.stateRoot, "service.lock")).text());
-      expect(lock.pid).toBe(process.pid);
-      throw new Error("Factory rejected populated filesystem receipts");
-    }),
+    run(
+      Effect.scoped(
+        Attempts.open(config, () =>
+          Effect.promise(async () => {
+            called = true;
+            const lock = JSON.parse(await Bun.file(join(config.stateRoot, "service.lock")).text());
+            expect(lock.pid).toBe(process.pid);
+            throw new Error("Factory rejected populated filesystem receipts");
+          }),
+        ),
+      ),
+    ),
   ).rejects.toThrow("populated filesystem receipts");
   expect(called).toBe(true);
   await writeFile(join(config.stateRoot, "receipts", "unrelated.txt"), "preserved");
@@ -149,20 +183,26 @@ test("oversized terminal metadata becomes a publishable output-limit result", as
     resultsFor,
     artifactReader,
     backend: {
-      start: async () => ({
-        ...uncertain,
-        kind: "failed",
-        error: { code: "execution", message: "x".repeat(2 * 1024 * 1024) },
-        exitCode: null,
-        logs: [],
-      }),
-      recover: async () => uncertain,
+      start: () =>
+        Effect.gen(function* () {
+          return {
+            ...uncertain,
+            kind: "failed",
+            error: { code: "execution", message: "x".repeat(2 * 1024 * 1024) },
+            exitCode: null,
+            logs: [],
+          };
+        }),
+      recover: () =>
+        Effect.gen(function* () {
+          return uncertain;
+        }),
     },
   });
 
-  await service.start(request);
-  await service.drain();
-  const receipt = await service.lookup(request);
+  await run(service.start(request));
+  await run(service.drain());
+  const receipt = await run(service.lookup(request));
   expect(
     receipt.kind === "finished" && receipt.result.kind === "failed" && receipt.result.error.code,
   ).toBe("output_limit");
@@ -179,39 +219,54 @@ test("artifact export uses terminal authority without reading unavailable result
     authority,
     resultsFor: (workspace) => ({
       put: (result) => resultsFor(workspace).put(result),
-      get: async () => {
-        reads++;
-        throw new Error("Terminal result storage unavailable");
-      },
+      get: () =>
+        Effect.gen(function* () {
+          reads++;
+
+          return yield* Effect.fail(
+            failure("fixture", new Error("Terminal result storage unavailable")),
+          );
+        }),
     }),
     artifactReader: {
-      read: async (plan, path) => {
-        exports++;
-        expect(
-          (await authority.exportGuards({ after: null, limit: 1, volume: plan.volume })).exports,
-        ).toHaveLength(1);
+      read: (plan, path) =>
+        Effect.gen(function* () {
+          exports++;
+          expect(
+            (yield* authority.exportGuards({ after: null, limit: 1, volume: plan.volume })).exports,
+          ).toHaveLength(1);
 
-        return artifactReader.read(plan, path);
-      },
-      cleanup: async () => {
-        cleanups++;
-      },
+          return yield* artifactReader.read(plan, path);
+        }),
+      cleanup: () =>
+        Effect.gen(function* () {
+          cleanups++;
+        }),
     },
-    backend: { start: async () => successful, recover: async () => uncertain },
+    backend: {
+      start: () =>
+        Effect.gen(function* () {
+          return successful;
+        }),
+      recover: () =>
+        Effect.gen(function* () {
+          return uncertain;
+        }),
+    },
   });
 
-  await service.start(request);
-  await service.drain();
-  await expect(service.lookup(request)).rejects.toThrow("Terminal result storage unavailable");
+  await run(service.start(request));
+  await run(service.drain());
+  await expect(run(service.lookup(request))).rejects.toThrow("Terminal result storage unavailable");
   expect(reads).toBe(1);
-  expect(await service.artifact({ ...request, path: "out.txt" })).toEqual(
-    await artifactReader.read(plan(), "out.txt"),
+  expect(await run(service.artifact({ ...request, path: "out.txt" }))).toEqual(
+    await run(artifactReader.read(plan(), "out.txt")),
   );
   expect(reads).toBe(1);
   expect(exports).toBe(1);
   expect(cleanups).toBe(1);
   expect(
-    (await authority.exportGuards({ after: null, limit: 1, volume: plan().volume })).exports,
+    (await run(authority.exportGuards({ after: null, limit: 1, volume: plan().volume }))).exports,
   ).toHaveLength(0);
 });
 
@@ -221,15 +276,23 @@ test("new admission reconciles only export metadata despite multiple pages of un
   class CountingAuthority extends FilesystemAuthority {
     recoveryQueries = 0;
     exportQueries: AuthorityInput<"exportGuards">[] = [];
-    override async recoverable(input: AuthorityInput<"recoverable">) {
-      this.recoveryQueries++;
+    override recoverable(input: AuthorityInput<"recoverable">) {
+      const baserecoverable = super.recoverable.bind(this);
 
-      return super.recoverable(input);
+      return Effect.gen({ self: this }, function* () {
+        this.recoveryQueries++;
+
+        return yield* baserecoverable(input);
+      });
     }
-    override async exportGuards(input: AuthorityInput<"exportGuards">) {
-      this.exportQueries.push(input);
+    override exportGuards(input: AuthorityInput<"exportGuards">) {
+      const baseexportGuards = super.exportGuards.bind(this);
 
-      return super.exportGuards(input);
+      return Effect.gen({ self: this }, function* () {
+        this.exportQueries.push(input);
+
+        return yield* baseexportGuards(input);
+      });
     }
   }
 
@@ -239,7 +302,16 @@ test("new admission reconciles only export metadata despite multiple pages of un
     authority,
     resultsFor,
     artifactReader,
-    backend: { start: async () => successful, recover: async () => uncertain },
+    backend: {
+      start: () =>
+        Effect.gen(function* () {
+          return successful;
+        }),
+      recover: () =>
+        Effect.gen(function* () {
+          return uncertain;
+        }),
+    },
   });
 
   const session = { epoch: 1, nonce: "historical-session" };
@@ -267,9 +339,9 @@ test("new admission reconciles only export metadata despite multiple pages of un
   expect((await readdir(join(config.stateRoot, "receipts"))).length).toBe(402);
   const before = authority.recoveryQueries;
   authority.exportQueries.length = 0;
-  await service.start(request);
-  await service.drain();
-  expect(await service.lookup(request)).toEqual({ kind: "finished", result: successful });
+  await run(service.start(request));
+  await run(service.drain());
+  expect(await run(service.lookup(request))).toEqual({ kind: "finished", result: successful });
   expect(authority.recoveryQueries).toBe(before);
   expect(authority.exportQueries).toEqual([{ after: null, limit: 200, volume: plan().volume }]);
 });

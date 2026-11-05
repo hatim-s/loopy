@@ -1,3 +1,4 @@
+import { Data, type Effect } from "effect";
 import type { ExecutionKey, Node } from "./graph.js";
 import type { Json } from "./model.js";
 
@@ -42,6 +43,15 @@ export interface Executor {
     attempt: number,
     spec: ExecutionSpec,
     signal: AbortSignal,
-  ): Promise<ExecutionResult>;
-  lookup(executionKey: ExecutionKey, attempt: number): Promise<Receipt>;
+  ): Effect.Effect<ExecutionResult, ExecutorError>;
+  lookup(executionKey: ExecutionKey, attempt: number): Effect.Effect<Receipt, ExecutorError>;
 }
+
+export const EXECUTOR_OPERATIONS = ["receipt", "lookup", "execute", "secret"] as const;
+
+/** Infrastructure failures never become durable node failures. Reconcile started work before retrying. */
+export class ExecutorError extends Data.TaggedError("ExecutorError")<{
+  operation: (typeof EXECUTOR_OPERATIONS)[number];
+  cause: unknown;
+  diagnostic?: string;
+}> {}

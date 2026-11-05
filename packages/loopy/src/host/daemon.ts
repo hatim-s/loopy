@@ -1,266 +1,257 @@
-import {
-  errorMessage,
-  OwnershipError,
-  type RunRecord,
-  type Schedule,
-  type Store,
-} from "../core/index.js";
-import { type ActivationOptions, activate } from "./activate.js";
-import { type Clock, SYSTEM_CLOCK } from "./clock.js";
+import { Cause, Clock, Deferred, Effect, Fiber, Queue, Scope, Semaphore } from "effect";
+import type { RunRecord, Schedule, Store } from "../core/index.js";
+import type { ActivationOptions } from "./activate.js";
+import { activateRun, type PreparationError } from "./daemon-activation.js";
 import { ActivationPool } from "./pool.js";
-import { ScheduleScheduler } from "./schedules.js";
+import { type ScheduleRevisionError, ScheduleScheduler } from "./schedules.js";
 
-const PRUNE_INTERVAL_MS = 3_600_000;
-
-type DaemonOptions = {
+export type DaemonOptions = {
   store: Store;
-  prepare: (run: RunRecord) => Promise<Pick<ActivationOptions, "graph" | "executor" | "signal">>;
-  clock?: Clock;
+  prepare: (
+    run: RunRecord,
+  ) => Effect.Effect<Pick<ActivationOptions, "graph" | "executor">, PreparationError>;
   concurrency: number;
-  revisionFor: (schedule: Schedule) => string | Promise<string>;
-  onError?: (error: Error, run?: RunRecord) => void;
-  sleep?: (milliseconds: number, signal: AbortSignal) => Promise<void>;
+  revisionFor: (schedule: Schedule) => Effect.Effect<string, ScheduleRevisionError>;
+  onError?: (cause: Cause.Cause<unknown>, run?: RunRecord) => void;
 };
 
-type TickResult = { fired: number; activated: number };
-
-function sleep(milliseconds: number, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve) => {
-    if (signal.aborted) {
-      resolve();
-
-      return;
+/** The root scope owns subscriptions and admitted workers. stop drains before composition closes it. */
+export const makeDaemon = (options: DaemonOptions) =>
+  Effect.gen(function* () {
+    if (!Number.isSafeInteger(options.concurrency) || options.concurrency < 1) {
+      return yield* Effect.die(new Error("Daemon concurrency must be a positive integer."));
     }
 
-    const finish = () => {
-      clearTimeout(timer);
-      signal.removeEventListener("abort", finish);
-      resolve();
-    };
+    const scope = yield* Effect.scope;
+    const inbox = yield* Queue.sliding<void>(1);
+    const lock = yield* Semaphore.make(1);
 
-    const timer = setTimeout(finish, milliseconds);
-    signal.addEventListener("abort", finish, { once: true });
-  });
-}
+    const wake = Effect.sync(() => {
+      Queue.offerUnsafe(inbox, undefined);
+    });
 
-export class Daemon {
-  private readonly clock: Clock;
-  private readonly pool: ActivationPool;
-  private readonly schedules: ScheduleScheduler;
-  private nextPruneAt = 0;
-  private stopped = false;
-  private wakeRequested = false;
-  private waiting?: AbortController;
-  private ticking?: Promise<TickResult>;
-  private running?: Promise<void>;
-  private readonly unsubscribe: () => void;
+    let stopped = false;
+    let nextPruneAt = 0;
+    let ticks = 0;
+    let ticksDone = Deferred.makeUnsafe<void>();
+    yield* Deferred.succeed(ticksDone, undefined);
 
-  constructor(private readonly options: DaemonOptions) {
-    this.clock = options.clock ?? SYSTEM_CLOCK;
-    this.schedules = new ScheduleScheduler({
+    const report = (cause: Cause.Cause<unknown>, run?: RunRecord) =>
+      Effect.sync(() => options.onError?.(cause, run));
+
+    const pool = new ActivationPool(
+      options.concurrency,
+      (run) =>
+        activateRun(
+          {
+            store: options.store,
+            prepare: options.prepare,
+            stopped: () => stopped,
+            onError: (cause, run) => options.onError?.(cause, run),
+          },
+          run,
+        ),
+      () => {
+        Queue.offerUnsafe(inbox, undefined);
+      },
+    );
+
+    const schedules = new ScheduleScheduler({
       store: options.store,
       revisionFor: options.revisionFor,
-      stopped: () => this.stopped,
-      onError: (error) => this.report(error),
+      stopped: () => stopped,
+      onError: (cause) => options.onError?.(cause),
     });
-    const { concurrency } = options;
 
-    if (!Number.isSafeInteger(concurrency) || concurrency < 1) {
-      throw new Error("Daemon concurrency must be a positive integer. Supply at least one worker.");
-    }
-
-    this.pool = new ActivationPool(
-      concurrency,
-      (run) => this.activateRun(run),
-      () => this.wake(),
+    yield* Effect.acquireRelease(
+      Effect.sync(() =>
+        options.store.subscribe((events) => {
+          if (
+            events.some((event) =>
+              event.entity === "run"
+                ? event.kind === "woken" ||
+                  (event.kind === "created" && event.record.status === "queued")
+                : event.entity === "schedule" && event.kind === "saved",
+            )
+          ) {
+            Queue.offerUnsafe(inbox, undefined);
+          }
+        }),
+      ),
+      (unsubscribe) => Effect.sync(unsubscribe),
     );
-    this.unsubscribe = options.store.subscribe((events) => {
-      if (
-        this.running &&
-        events.some((event) =>
-          event.entity === "run"
-            ? event.kind === "woken" ||
-              (event.kind === "created" && event.record.status === "queued")
-            : event.entity === "schedule" && event.kind === "saved",
-        )
-      ) {
-        this.wake();
+
+    const dueWork = Effect.gen(function* () {
+      const time = yield* Clock.currentTimeMillis;
+      const now = new Date(time).toISOString();
+
+      if (time >= nextPruneAt) {
+        yield* options.store.pruneEvents(now);
+        nextPruneAt = time + 3_600_000;
       }
-    });
-  }
 
-  tick(): Promise<TickResult> {
-    if (this.stopped) {
-      return Promise.resolve({ fired: 0, activated: 0 });
-    }
-
-    this.ticking ??= this.performTick().finally(() => {
-      this.ticking = undefined;
+      return { fired: yield* schedules.tick(now), runs: yield* options.store.dueRuns(now) };
     });
 
-    return this.ticking;
-  }
+    const admit = (run: RunRecord) =>
+      lock
+        .withPermit(
+          Effect.gen(function* () {
+            if (stopped || pool.has(run.id)) {
+              return { kind: "skip" } as const;
+            }
 
-  run(): Promise<void> {
-    this.running ??= this.loop().finally(() => {
-      this.running = undefined;
+            if (pool.active >= options.concurrency) {
+              return { kind: "full", fibers: pool.fibers() } as const;
+            }
+
+            return { kind: "started", fiber: yield* pool.start(run) } as const;
+          }),
+        )
+        .pipe(Effect.provideService(Scope.Scope, scope));
+
+    const tickBody = Effect.gen(function* () {
+      const due = yield* lock.withPermit(
+        Effect.suspend(() => (stopped ? Effect.succeed({ fired: 0, runs: [] }) : dueWork)),
+      );
+
+      const admitted: Fiber.Fiber<boolean, Effect.Error<ReturnType<typeof activateRun>>>[] = [];
+
+      for (const run of due.runs) {
+        while (!stopped) {
+          const result = yield* admit(run);
+
+          if (result.kind === "full") {
+            // Waiting outside the permit leaves scans and schedule mutations live.
+            yield* Effect.forEach(result.fibers, Fiber.join, {
+              concurrency: "unbounded",
+              discard: true,
+            });
+            continue;
+          }
+
+          if (result.kind === "started" && result.fiber) {
+            admitted.push(result.fiber);
+          }
+
+          break;
+        }
+      }
+
+      const progress = yield* Effect.forEach(admitted, Fiber.join, { concurrency: "unbounded" });
+
+      return { fired: due.fired, activated: progress.filter(Boolean).length };
     });
 
-    return this.running;
-  }
+    const tick = Effect.acquireUseRelease(
+      Effect.sync(() => {
+        if (ticks++ === 0) {
+          ticksDone = Deferred.makeUnsafe<void>();
+        }
+      }),
+      () => tickBody,
+      () =>
+        Effect.gen(function* () {
+          if (--ticks === 0) {
+            yield* Deferred.succeed(ticksDone, undefined);
+          }
+        }),
+    );
 
-  wake(): void {
-    this.wakeRequested = true;
-    this.waiting?.abort();
-  }
+    const wait = (milliseconds: number) =>
+      Effect.raceFirst(Queue.take(inbox), Effect.sleep(milliseconds));
 
-  async stop(): Promise<void> {
-    this.stopped = true;
-    this.unsubscribe();
-    this.wake();
-    await this.ticking;
-    await this.running;
-    await this.pool.drain();
-  }
+    const waitDuration = (minimum: number) =>
+      Effect.gen(function* () {
+        const now = yield* Clock.currentTimeMillis;
+        const wakeAt = yield* options.store.nextWakeAt();
 
-  private async loop(): Promise<void> {
-    let delay = 1000;
+        const deadlines = (yield* options.store.listSchedules())
+          .filter((schedule) => schedule.enabled)
+          .map((schedule) => Date.parse(schedule.nextFireAt));
 
-    while (!this.stopped) {
-      try {
-        const { fired, runs } = await this.dueWork();
-
-        for (const run of runs) {
-          this.pool.start(run);
+        if (wakeAt) {
+          deadlines.push(Date.parse(wakeAt));
         }
 
-        const progress = fired + this.pool.takeProgress();
-        await this.wait({ minimum: progress > 0 ? 0 : delay });
-        delay = progress > 0 ? 1000 : Math.min(5000, delay * 2);
-      } catch (error) {
-        this.report(error);
-        await this.wait({ milliseconds: 5000 });
-      }
-    }
-
-    await this.pool.drain();
-  }
-
-  private async dueWork() {
-    const time = this.clock.now();
-    const now = new Date(time).toISOString();
-
-    if (time >= this.nextPruneAt) {
-      await this.options.store.pruneEvents(now);
-      this.nextPruneAt = time + PRUNE_INTERVAL_MS;
-    }
-
-    const fired = await this.schedules.tick(now);
-    const runs = await this.options.store.dueRuns(now);
-
-    return { fired, runs };
-  }
-
-  private async performTick(): Promise<TickResult> {
-    const { fired, runs } = await this.dueWork();
-    const activated = await this.pool.activateAll(runs);
-
-    return { fired, activated };
-  }
-
-  private async activateRun(run: RunRecord): Promise<boolean> {
-    if (this.stopped) {
-      return false;
-    }
-
-    try {
-      const prepared = await this.prepareRun(run);
-
-      if (!prepared) {
-        return true;
-      }
-
-      await activate({
-        runId: run.id,
-        store: this.options.store,
-        clock: this.clock,
-        ...prepared,
+        return Math.max(
+          minimum,
+          Math.min(
+            pool.active > 0 && minimum > 0 ? minimum : 5000,
+            ...deadlines.map((at) => at - now),
+          ),
+        );
       });
 
-      return true;
-    } catch (error) {
-      if (!(error instanceof OwnershipError)) {
-        this.report(error, run);
+    const loop = Effect.gen(function* () {
+      let backoff = 1000;
+
+      while (!stopped) {
+        yield* Effect.gen(function* () {
+          const fired = yield* lock
+            .withPermit(
+              Effect.gen(function* () {
+                if (stopped) {
+                  return 0;
+                }
+
+                const due = yield* dueWork;
+
+                for (const run of due.runs) {
+                  yield* pool.start(run);
+                }
+
+                return due.fired;
+              }),
+            )
+            .pipe(Effect.provideService(Scope.Scope, scope));
+
+          const progress = fired + pool.takeProgress();
+
+          if (!stopped) {
+            yield* wait(yield* waitDuration(progress > 0 ? 0 : backoff));
+          }
+
+          backoff = progress > 0 ? 1000 : Math.min(5000, backoff * 2);
+        }).pipe(
+          Effect.catchCause((cause) =>
+            Cause.hasInterrupts(cause)
+              ? Effect.failCause(cause)
+              : report(cause).pipe(Effect.andThen(stopped ? Effect.void : wait(5000))),
+          ),
+        );
+      }
+    });
+
+    let running: Deferred.Deferred<void> | undefined;
+
+    const run = Effect.suspend(() => {
+      if (running) {
+        return Deferred.await(running);
       }
 
-      return false;
-    }
-  }
-
-  private async prepareRun(run: RunRecord) {
-    try {
-      return await this.options.prepare(run);
-    } catch (error) {
-      const { store } = this.options;
-      const token = crypto.randomUUID();
-      await store.claim(run.id, token);
-
-      try {
-        await store.finishRun(run.id, token, { status: "failed", error: errorMessage(error) });
-      } finally {
-        await store.release(run.id, token);
+      if (stopped) {
+        return Effect.void;
       }
 
-      this.report(error, run);
+      const done = Deferred.makeUnsafe<void>();
+      running = done;
 
-      return undefined;
-    }
-  }
+      return loop.pipe(Effect.ensuring(Deferred.succeed(done, undefined)));
+    });
 
-  private report(cause: unknown, run?: RunRecord): void {
-    const error = cause instanceof Error ? cause : new Error(errorMessage(cause));
-    this.options.onError?.(error, run);
-  }
+    const stop = Effect.gen(function* () {
+      stopped = true;
+      yield* wake;
+      // A scan already in flight must finish before subscriptions/storage can close.
+      yield* lock.withPermit(Effect.void);
+      yield* pool.drain();
+      yield* Deferred.await(ticksDone);
 
-  private async wait(delay: { milliseconds: number } | { minimum: number }): Promise<void> {
-    const controller = new AbortController();
-    this.waiting = controller;
-
-    try {
-      if (this.stopped || this.wakeRequested) {
-        return;
+      if (running) {
+        yield* Deferred.await(running);
       }
+    });
 
-      const milliseconds =
-        "milliseconds" in delay ? delay.milliseconds : await this.waitDuration(delay.minimum);
-
-      await (this.options.sleep ?? sleep)(milliseconds, controller.signal);
-    } finally {
-      this.waiting = undefined;
-      this.wakeRequested = false;
-    }
-  }
-
-  private async waitDuration(minimum: number): Promise<number> {
-    const [wakeAt, schedules] = await Promise.all([
-      this.options.store.nextWakeAt(),
-      this.options.store.listSchedules(),
-    ]);
-
-    const deadlines = schedules
-      .filter((schedule) => schedule.enabled)
-      .map((schedule) => Date.parse(schedule.nextFireAt));
-
-    if (wakeAt !== undefined) {
-      deadlines.push(Date.parse(wakeAt));
-    }
-
-    return Math.max(
-      minimum,
-      Math.min(
-        this.pool.active > 0 && minimum > 0 ? minimum : 5000,
-        ...deadlines.map((at) => at - this.clock.now()),
-      ),
-    );
-  }
-}
+    return { tick, run, wake, stop };
+  });

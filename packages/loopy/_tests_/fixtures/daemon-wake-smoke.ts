@@ -1,15 +1,31 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
+import { Schema } from "effect";
 import { type Json, runSnapshotViewSchema, runViewSchema } from "../../src/contract/index.ts";
 import { readDaemonFile } from "../../src/local/index.ts";
 import { CLI, fixture, save } from "../cli-fixture.ts";
 
 const repo = resolve(import.meta.dir, "../../../..");
 
-const evidenceDirectory = join(repo, ".notes/cloud/evidence");
+const evidenceDirectory = resolve(repo, process.argv[2] ?? ".loopy/evidence/daemon-wake-smoke");
+
+const branchResult = Bun.spawnSync(["git", "branch", "--show-current"], {
+  cwd: repo,
+  env: { PATH: process.env.PATH },
+  stdout: "pipe",
+  stderr: "pipe",
+});
+
+if (branchResult.exitCode !== 0) {
+  throw new Error("Cannot identify the checkout branch for smoke evidence.");
+}
+
+const branch = branchResult.stdout.toString().trim();
 
 const evidence = join(evidenceDirectory, "daemon-wake-smoke.json");
+
+mkdirSync(evidenceDirectory, { recursive: true });
 
 const f = fixture("daemon-wake-smoke", 'run: () => sh(["printf", "daemon-wake-smoke"])');
 
@@ -124,7 +140,7 @@ try {
     const admittedAt = new Date().toISOString();
     const admissionStart = performance.now();
 
-    const run = runViewSchema.parse(
+    const run = Schema.decodeUnknownSync(runViewSchema, { onExcessProperty: "error" })(
       await request("/loopies/daemon-wake-smoke/runs", {
         workspace: f.cwd,
         input: {},
@@ -133,7 +149,10 @@ try {
 
     const admissionMs = performance.now() - admissionStart;
     const deadline = Date.now() + 8000;
-    let snapshot = runSnapshotViewSchema.parse(await request(`/runs/${run.id}`));
+
+    let snapshot = Schema.decodeUnknownSync(runSnapshotViewSchema, { onExcessProperty: "error" })(
+      await request(`/runs/${run.id}`),
+    );
 
     while (snapshot.run.status !== "succeeded") {
       if (snapshot.run.status === "failed" || Date.now() >= deadline) {
@@ -143,7 +162,9 @@ try {
       }
 
       await Bun.sleep(10);
-      snapshot = runSnapshotViewSchema.parse(await request(`/runs/${run.id}`));
+      snapshot = Schema.decodeUnknownSync(runSnapshotViewSchema, { onExcessProperty: "error" })(
+        await request(`/runs/${run.id}`),
+      );
     }
 
     const firstNodeAt = snapshot.nodeRuns.map((node) => node.startedAt).sort()[0];
@@ -195,7 +216,7 @@ try {
       {
         measuredAt: new Date().toISOString(),
         bun: Bun.version,
-        branch: "cloud-integration",
+        branch,
         cwd: repo,
         isolatedHome: f.home,
         isolatedWorkspace: f.cwd,

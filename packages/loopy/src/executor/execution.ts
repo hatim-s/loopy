@@ -1,199 +1,275 @@
-import { realpath } from "node:fs/promises";
+import { Cause, Effect, Exit } from "effect";
 import {
   CommandExecutionError,
   durationMs,
   type ExecutionKey,
-  type ExecutionMode,
   type ExecutionResult,
   type ExecutionSpec,
   type Executor,
+  ExecutorError,
   errorMessage,
   type Json,
   limitLogs,
 } from "../core/index.js";
-import {
-  executeLocalCommand,
-  renderCommand,
-  SecretStore,
-  secretRedactor,
-  spawnCaptured,
-  withBundleSandbox,
-} from "../local/execution-host.js";
+import { executeLocalCommand, spawnCaptured, withBundleSandbox } from "../local/execution-host.js";
+import { type ExecutionOptions, type PreparedExecution, prepareExecution } from "./prepare.js";
 import { bundleResult } from "./protocol.js";
 import type { FilesystemReceipts } from "./receipts.js";
 
-type Options = {
-  home: string;
-  workspace: string;
-  mode: ExecutionMode;
-  secrets: readonly string[];
-  bundlePath: (hash: string) => string;
-  receipts: FilesystemReceipts;
-};
+type Options = ExecutionOptions & { receipts: FilesystemReceipts };
 
 export class ExecutionWorker implements Executor {
-  private readonly env: Record<string, string>;
-  private readonly redact: ReturnType<typeof secretRedactor>;
-  constructor(private readonly options: Options) {
-    const store = new SecretStore(options.home);
-    this.env = Object.fromEntries(options.secrets.map((name) => [name, store.get(name)]));
-    this.redact = secretRedactor(Object.values(this.env));
-  }
-  async lookup(key: ExecutionKey, attempt: number) {
+  constructor(private readonly options: Options) {}
+  lookup = Effect.fn("ExecutionWorker.lookup")(function* (
+    this: ExecutionWorker,
+    key: ExecutionKey,
+    attempt: number,
+  ) {
     return (
-      (await this.options.receipts.read({ executionKey: key, attempt })) ?? {
+      (yield* this.options.receipts.read({ executionKey: key, attempt })) ?? {
         kind: "none" as const,
       }
     );
-  }
-  async execute(
+  });
+  execute = Effect.fn("ExecutionWorker.execute")(function* (
+    this: ExecutionWorker,
     key: ExecutionKey,
     attempt: number,
     spec: ExecutionSpec,
     signal: AbortSignal,
-  ): Promise<ExecutionResult> {
-    const claim = await this.options.receipts.claim({ executionKey: key, attempt });
+  ) {
+    const previous = yield* this.lookup(key, attempt);
 
-    if (claim.kind === "existing") {
-      if (claim.receipt.kind === "finished") {
-        return claim.receipt.result;
-      }
-
-      throw new Error("Execution already started. Reconcile its receipt.");
+    if (previous.kind === "finished") {
+      return previous.result;
     }
 
-    let result: ExecutionResult;
+    if (previous.kind === "started") {
+      return yield* Effect.fail(
+        new ExecutorError({
+          operation: "execute",
+          cause: new Error("Execution already started. Reconcile its receipt."),
+        }),
+      );
+    }
 
-    try {
-      result = await this.perform(spec, signal);
-    } catch (cause) {
-      result = {
+    const environment = yield* prepareExecution(this.options, spec);
+
+    return yield* Effect.gen({ self: this }, function* () {
+      const claim = yield* this.options.receipts.claim({ executionKey: key, attempt });
+
+      if (claim.kind === "existing") {
+        if (claim.receipt.kind === "finished") {
+          return claim.receipt.result;
+        }
+
+        return yield* Effect.fail(
+          new ExecutorError({
+            operation: "execute",
+            cause: new Error("Execution already started. Reconcile its receipt."),
+          }),
+        );
+      }
+
+      const result = yield* this.perform(spec, signal, environment);
+
+      const receipt = yield* this.options.receipts.finish({
+        kind: "finished",
+        result: { ...result, logs: limitLogs(result.logs) },
+        executionKey: key,
+        attempt,
+      });
+
+      return receipt.result;
+    }).pipe(
+      Effect.mapError(
+        (error) =>
+          new ExecutorError({
+            operation: error.operation,
+            cause: error.cause,
+            diagnostic: environment.redact(errorMessage(error.cause)),
+          }),
+      ),
+    );
+  });
+  private bundle = Effect.fn("ExecutionWorker.bundle")(function* (
+    this: ExecutionWorker,
+    hash: string,
+    input: Json,
+    timeoutMs: number,
+    signal: AbortSignal,
+    { env, redact, home, workspace, bundles }: PreparedExecution,
+  ) {
+    const bundle = bundles[hash];
+
+    if (bundle === undefined) {
+      return yield* Effect.die(new Error("Prepared bundle is missing."));
+    }
+
+    const cleanupLogs: { message: string; data: Json }[] = [];
+
+    return yield* withBundleSandbox(
+      { bundle, workspace, network: this.options.mode === "full", home },
+      ({ program, args }) =>
+        spawnCaptured(
+          {
+            program,
+            args,
+            cwd: workspace,
+            env: {
+              PATH: process.env.PATH,
+              LANG: "C.UTF-8",
+              HOME: workspace,
+              TMPDIR: workspace,
+              ...env,
+            },
+            stdin: JSON.stringify(input),
+          },
+          { timeoutMs, maxOutputBytes: 2 * 1024 * 1024 },
+          signal,
+          performance.now(),
+        ),
+    ).pipe(
+      Effect.catchTag("BundleCleanupError", (error) => {
+        if (
+          Exit.isFailure(error.primary) &&
+          (Cause.hasInterrupts(error.primary.cause) ||
+            Cause.hasDies(error.primary.cause) ||
+            error.primary.cause.reasons.some(
+              (reason) =>
+                Cause.isFailReason(reason) &&
+                reason.error instanceof CommandExecutionError &&
+                reason.error.reason === "aborted",
+            ))
+        ) {
+          return Effect.failCause(Cause.combine(error.primary.cause, Cause.fail(error)));
+        }
+
+        cleanupLogs.push({ message: "cleanup", data: redact(errorMessage(error.cause.cause)) });
+
+        return error.primary;
+      }),
+      Effect.map((raw) => bundleResult(raw, redact)),
+      Effect.catchIf(
+        (cause): cause is CommandExecutionError =>
+          cause instanceof CommandExecutionError &&
+          cause.reason !== "unstarted" &&
+          cause.reason !== "aborted",
+        (cause) =>
+          Effect.succeed(
+            bundleResult(cause.output, redact, {
+              code: cause.reason === "output_limit" ? "output_limit" : "execution",
+              message: cause.message,
+            }),
+          ),
+      ),
+      Effect.map((result) => ({ ...result, logs: [...result.logs, ...cleanupLogs] })),
+      Effect.mapError((cause) => new ExecutorError({ operation: "execute", cause })),
+    );
+  });
+  private perform = Effect.fn("ExecutionWorker.perform")(function* (
+    this: ExecutionWorker,
+    spec: ExecutionSpec,
+    signal: AbortSignal,
+    environment: PreparedExecution,
+  ): Effect.fn.Return<ExecutionResult, ExecutorError> {
+    if (spec.kind === "code") {
+      return yield* this.bundle(spec.bundleHash, spec.input, spec.timeoutMs, signal, environment);
+    }
+
+    const { env, redact } = environment;
+
+    if (environment.command.kind === "rejected") {
+      return {
         kind: "failed",
-        error: {
-          code: cause instanceof CommandExecutionError ? cause.code : "execution",
-          message: this.redact(errorMessage(cause)),
-        },
+        error: { code: "execution", message: redact(environment.command.message) },
         exitCode: null,
         logs: [],
       };
     }
 
-    // Every path redacts its own values exactly once, so a secret inside the marker cannot nest.
-    result = { ...result, logs: limitLogs(result.logs) };
+    const [program, ...args] = environment.command.argv;
 
-    const receipt = await this.options.receipts.finish({
-      kind: "finished",
-      result,
-      executionKey: key,
-      attempt,
-    });
-
-    return receipt.result;
-  }
-  private async bundle(hash: string, input: Json, timeoutMs: number, signal: AbortSignal) {
-    const bundle = await realpath(this.options.bundlePath(hash));
-    const workspace = await realpath(this.options.workspace);
-
-    try {
-      const raw = await withBundleSandbox(
-        {
-          bundle,
-          workspace,
-          network: this.options.mode === "full",
-          home: await realpath(this.options.home),
-        },
-        ({ program, args }) =>
-          spawnCaptured(
-            {
-              program,
-              args,
-              cwd: workspace,
-              env: {
-                PATH: process.env.PATH,
-                LANG: "C.UTF-8",
-                HOME: workspace,
-                TMPDIR: workspace,
-                ...this.env,
-              },
-              stdin: JSON.stringify(input),
-            },
-            { timeoutMs, maxOutputBytes: 2 * 1024 * 1024 },
-            signal,
-            performance.now(),
-          ),
-      );
-
-      return bundleResult(raw, this.redact);
-    } catch (cause) {
-      if (!(cause instanceof CommandExecutionError)) {
-        throw cause;
-      }
-
-      return bundleResult(cause.output, this.redact, { code: cause.code, message: cause.message });
-    }
-  }
-  private async perform(spec: ExecutionSpec, signal: AbortSignal): Promise<ExecutionResult> {
-    if (spec.kind === "code") {
-      return this.bundle(spec.bundleHash, spec.input, spec.timeoutMs, signal);
+    if (program === undefined) {
+      return yield* Effect.die(new Error("Prepared command is missing."));
     }
 
-    const [program, ...args] = renderCommand(spec);
+    const home = environment.home;
+    const cleanupLogs: { message: string; data: Json }[] = [];
 
-    if (!program) {
-      throw new Error("Command argv is empty.");
-    }
+    const attempt = yield* executeLocalCommand(
+      {
+        program,
+        args,
+        cwd: spec.cwd ?? undefined,
+        env: spec.env,
+        stdin: spec.stdin ?? undefined,
+        maxOutputBytes: spec.node.options.maxOutputBytes,
+        timeoutMs:
+          spec.node.options.timeout === undefined
+            ? undefined
+            : durationMs(spec.node.options.timeout),
+      },
+      { ...this.options, protectedHome: home, sensitiveEnv: env, signal },
+    ).pipe(
+      Effect.catchTag("ProcessCleanupError", (error) => {
+        if (
+          Exit.isFailure(error.primary) &&
+          (Cause.hasInterrupts(error.primary.cause) ||
+            Cause.hasDies(error.primary.cause) ||
+            error.primary.cause.reasons.some(
+              (reason) =>
+                Cause.isFailReason(reason) &&
+                reason.error instanceof CommandExecutionError &&
+                reason.error.reason === "aborted",
+            ))
+        ) {
+          return Effect.failCause(Cause.combine(error.primary.cause, Cause.fail(error)));
+        }
 
-    let raw;
+        cleanupLogs.push({ message: "cleanup", data: redact(errorMessage(error.cause.cause)) });
 
-    try {
-      raw = await executeLocalCommand(
-        {
-          program,
-          args,
-          cwd: spec.cwd ?? undefined,
-          env: spec.env,
-          stdin: spec.stdin ?? undefined,
-          maxOutputBytes: spec.node.options.maxOutputBytes,
-          timeoutMs:
-            spec.node.options.timeout === undefined
-              ? undefined
-              : durationMs(spec.node.options.timeout),
-        },
-        {
-          ...this.options,
-          protectedHome: await realpath(this.options.home),
-          sensitiveEnv: this.env,
-          signal,
-        },
-      );
-    } catch (cause) {
-      if (!(cause instanceof CommandExecutionError)) {
-        throw cause;
-      }
+        return error.primary;
+      }),
+      Effect.map((raw) => ({ kind: "output" as const, raw })),
+      Effect.catchIf(
+        (cause): cause is CommandExecutionError =>
+          cause instanceof CommandExecutionError &&
+          cause.reason !== "unstarted" &&
+          cause.reason !== "aborted",
+        (cause) => Effect.succeed({ kind: "failure" as const, cause }),
+      ),
+      Effect.mapError((cause) => new ExecutorError({ operation: "execute", cause })),
+    );
+
+    if (attempt.kind === "failure") {
+      const { cause } = attempt;
 
       return {
         kind: "failed",
-        error: { code: cause.code, message: this.redact(cause.message) },
+        error: {
+          code: cause.reason === "output_limit" ? "output_limit" : "execution",
+          message: redact(errorMessage(cause)),
+        },
         exitCode: null,
         logs: [
-          { message: "stdout", data: this.redact(cause.output.stdout, true) },
-          { message: "stderr", data: this.redact(cause.output.stderr, true) },
+          { message: "stdout", data: redact(cause.output.stdout, true) },
+          { message: "stderr", data: redact(cause.output.stderr, true) },
+          ...cleanupLogs,
         ],
       };
     }
 
-    const result = {
-      stdout: raw.stdout,
-      stderr: raw.stderr,
-      exitCode: raw.exitCode,
-    };
+    const { raw } = attempt;
+    const result = { stdout: raw.stdout, stderr: raw.stderr, exitCode: raw.exitCode };
 
-    const stdout = this.redact(raw.stdout);
-    const stderr = this.redact(raw.stderr);
+    const stdout = redact(raw.stdout),
+      stderr = redact(raw.stderr);
 
     const logs = [
       { message: "stdout", data: stdout },
       { message: "stderr", data: stderr },
+      ...cleanupLogs,
     ];
 
     if (!spec.node.okExitCodes.includes(result.exitCode)) {
@@ -211,20 +287,17 @@ export class ExecutionWorker implements Executor {
     }
 
     if (spec.parse === null) {
-      return {
-        kind: "succeeded",
-        output: { stdout, stderr, exitCode: result.exitCode },
-        logs,
-      };
+      return { kind: "succeeded", output: { stdout, stderr, exitCode: result.exitCode }, logs };
     }
 
-    const parsed = await this.bundle(
+    const parsed = yield* this.bundle(
       spec.parse.bundleHash,
       { result, input: spec.parse.input },
       300_000,
       signal,
+      environment,
     );
 
     return { ...parsed, logs: [...logs, ...parsed.logs] };
-  }
+  });
 }

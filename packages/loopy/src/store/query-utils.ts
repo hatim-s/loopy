@@ -9,6 +9,7 @@ import {
   type RunFilter,
   type RunRecord,
 } from "../core/index.js";
+import { StoreRejectedError } from "./operation.js";
 
 export const FEED_SCAN_LIMIT = 2000;
 
@@ -30,7 +31,7 @@ export function overviewBuckets(query: OverviewQuery): Overview {
   );
 
   if (count < 1 || count > 744) {
-    throw new Error("Overview window must contain between 1 and 744 buckets.");
+    throw new StoreRejectedError("Overview window must contain between 1 and 744 buckets.");
   }
 
   return {

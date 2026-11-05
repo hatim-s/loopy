@@ -2,8 +2,9 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { evaluate } from "../src/compiler/evaluate.js";
-import { compile } from "../src/compiler/index.js";
+import { Effect } from "effect";
+import { evaluate as evaluateEffect } from "../src/compiler/evaluate.js";
+import { compile as compileEffect } from "../src/compiler/index.js";
 import { parseModuleOutput } from "../src/contract/index.js";
 import { canonicalJson, type Json, validateGraph } from "../src/core/index.js";
 import { compiledBody } from "./compiled-fixture.js";
@@ -170,9 +171,11 @@ test("evaluation has a hard ten second timeout", async () => {
   const { file } = await project("while(true){} export default {};");
   const source = await Bun.file(file).text();
   const started = performance.now();
-  await expect(evaluate(file, [{ file, source, evaluated: source }])).rejects.toThrow(
-    "timed out after 10000 ms",
-  );
+  await expect(evaluate(file, [{ file, source, evaluated: source }])).rejects.toMatchObject({
+    _tag: "AuthorError",
+    code: "evaluation_failed",
+    message: "Command timed out after 10000 ms.",
+  });
   expect(performance.now() - started).toBeLessThan(12_000);
 }, 15_000);
 
@@ -315,6 +318,11 @@ test("bundles execute the stdin/stdout protocol and preserve prepared parser inp
   }
 
   const command = compiled.graph.nodes.find((node) => node.kind === "command");
+
+  if (command?.kind !== "command") {
+    throw new Error("Missing command node.");
+  }
+
   expect(command?.parse?.input).toEqual({ args: ["hello"], flags: { suffix: "!" } });
 
   const execute = async (index: number, input: Json) => {
@@ -624,3 +632,61 @@ test("the public SDK entry compiles through the same graph builder", async () =>
     expect(result.graph.nodes.map((node) => node.kind)).toEqual(["log", "join"]);
   }
 });
+
+function compile(path: string) {
+  return Effect.runPromise(compileEffect(path));
+}
+
+function evaluate(...args: Parameters<typeof evaluateEffect>) {
+  return Effect.runPromise(evaluateEffect(...args));
+}
+
+for (const specifier of ["./missing", "not-a-real-loopy-fixture-package"]) {
+  test(`unresolved author import ${specifier} remains diagnostic data`, async () => {
+    const { root, file } = await project(
+      'import {loopy,code} from "__SDK__";export default loopy("broken",{input:{},run:()=>code("x",{in:{},out:{kind:"value",type:"number"},module:"./code.ts"})});',
+    );
+
+    await writeFile(
+      join(root, "code.ts"),
+      `import {value} from ${JSON.stringify(specifier)};export default ()=>value;`,
+    );
+    const result = await compile(file);
+    expect(result).toMatchObject({
+      ok: false,
+      diagnostics: [
+        expect.objectContaining({
+          code: specifier.startsWith(".") ? "source_error" : "bundle_failed",
+          message: expect.stringContaining(specifier.replace("./", "")),
+        }),
+      ],
+    });
+  });
+}
+
+test("a missing builder dependency remains a source diagnostic", async () => {
+  const { file } = await project('import {missing} from "./missing";export default missing;');
+  expect(await compile(file)).toMatchObject({
+    ok: false,
+    diagnostics: [
+      expect.objectContaining({
+        code: "source_error",
+        message: expect.stringContaining("missing"),
+      }),
+    ],
+  });
+});
+
+for (const [name, source, message] of [
+  ["invalid graph", "export default {graph:null};", "Expected object"],
+  ["output overflow", 'export default {graph:"x".repeat(17_000_000)};', "output exceeded"],
+] as const) {
+  test(`evaluator ${name} stays an author failure`, async () => {
+    const { file } = await project(source);
+    await expect(evaluate(file, [{ file, source, evaluated: source }])).rejects.toMatchObject({
+      _tag: "AuthorError",
+      code: "evaluation_failed",
+      message: expect.stringContaining(message),
+    });
+  });
+}

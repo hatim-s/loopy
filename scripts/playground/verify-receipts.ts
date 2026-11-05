@@ -1,13 +1,13 @@
 import { createHash } from "node:crypto";
 import { readdir } from "node:fs/promises";
 import { resolve } from "node:path";
-import { z } from "zod";
+import { Effect } from "effect";
 import { HttpSandboxAuthority } from "../../apps/sandbox/src/http-authority.js";
-import { executionKeySchema } from "../../packages/loopy/src/contract/index.js";
 import { executionKeyString } from "../../packages/loopy/src/core/index.js";
 import { atomic, config, evidenceDirectory, profile, sandboxState, state } from "./config.js";
 import { receiptEvidence } from "./receipt-evidence.js";
 import { receiptInventory } from "./receipt-inventory.js";
+import { decodeRuntimeQueue } from "./runtime-queue-schema.js";
 
 if (profile.name !== "architecture") {
   throw new Error("Receipt verification requires the isolated architecture profile.");
@@ -37,16 +37,10 @@ const queueBytes = await queueFile.text();
 
 const queueHash = createHash("sha256").update(queueBytes).digest("hex");
 
-const entrySchema = z.object({
-  executionKey: executionKeySchema,
-  attempt: z.number().int().positive(),
-  outcome: z.string(),
-});
-
 const entries = queueBytes
   .trim()
   .split("\n")
-  .map((line) => entrySchema.parse(JSON.parse(line)));
+  .map((line) => decodeRuntimeQueue(JSON.parse(line)));
 
 const identities = new Set<string>();
 
@@ -77,16 +71,18 @@ const records = [];
 for (const entry of entries) {
   const started = performance.now();
 
-  const checked = await receiptEvidence({
-    root: sandboxState,
-    identity: {
-      workspace: settings.workspace,
-      executionKey: entry.executionKey,
-      attempt: entry.attempt,
-    },
-    authority,
-    resultsFor: (workspace) => authority.resultsFor(workspace),
-  });
+  const checked = await Effect.runPromise(
+    receiptEvidence({
+      root: sandboxState,
+      identity: {
+        workspace: settings.workspace,
+        executionKey: entry.executionKey,
+        attempt: entry.attempt,
+      },
+      authority,
+      resultsFor: (workspace) => authority.resultsFor(workspace),
+    }),
+  );
 
   if (checked.resultKind !== (entry.outcome === "succeeded" ? "succeeded" : "failed")) {
     throw new Error("Authoritative result differs from the observed backend outcome.");

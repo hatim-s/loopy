@@ -1,5 +1,10 @@
 import { resolve } from "node:path";
-import { encodeRunCursor, type RunView, routes } from "../../packages/loopy/src/contract/index.js";
+import {
+  decodeBoundary,
+  encodeRunCursor,
+  type RunView,
+  routes,
+} from "../../packages/loopy/src/contract/index.js";
 import { PlaygroundClient } from "./client.js";
 import { atomic, evidenceDirectory, state } from "./config.js";
 import { admissionSchema } from "./journal.js";
@@ -30,7 +35,7 @@ for (let pageIndex = 0; pageIndex < 20; pageIndex++) {
     throw new Error("Post-load inventory request failed or exceeded8MiB.");
   }
 
-  const page = routes.runs.response.parse(JSON.parse(text));
+  const page = decodeBoundary(routes.runs.response)(JSON.parse(text));
   pages.push({
     pageIndex,
     at: new Date().toISOString(),

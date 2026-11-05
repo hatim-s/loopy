@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
+import { Effect } from "effect";
 import { HttpSandboxAuthority } from "../../../apps/sandbox/src/http-authority.js";
-import { AuthorityError, authorityCommandSchema } from "../src/contract/index.js";
+import { AuthorityError, authorityCommandSchema, decodeBoundary } from "../src/contract/index.js";
 import {
   bridgeToken,
   namespace,
@@ -19,10 +20,12 @@ afterAll(async () => {
 });
 
 async function session(nonce: string) {
-  return harness.authority.openSession({
-    expectedEpoch: (await harness.authority.status()).epoch,
-    nonce,
-  });
+  return Effect.runPromise(
+    harness.authority.openSession({
+      expectedEpoch: (await Effect.runPromise(harness.authority.status())).epoch,
+      nonce,
+    }),
+  );
 }
 
 test("actual workerd rolls back admission on a later SQLite constraint failure", async () => {
@@ -48,39 +51,47 @@ test("one concurrent admission grant pins its original plan and session through 
   const plan = harness.plan("admission");
 
   const replies = await Promise.all(
-    Array.from({ length: 12 }, () => harness.authority.admit({ session: current, plan })),
+    Array.from({ length: 12 }, () =>
+      Effect.runPromise(harness.authority.admit({ session: current, plan })),
+    ),
   );
 
   expect(replies.filter((reply) => reply.kind === "created")).toHaveLength(1);
   expect(replies.filter((reply) => reply.kind === "existing")).toHaveLength(11);
-  expect(await harness.authority.read(plan.id)).toEqual({
+  expect(await Effect.runPromise(harness.authority.read(plan.id))).toEqual({
     kind: "started",
     plan,
     session: current,
   });
   expect(
-    await harness.authority.admit({
-      session: current,
-      plan: { ...plan, deadline: plan.deadline + 1 },
-    }),
+    await Effect.runPromise(
+      harness.authority.admit({
+        session: current,
+        plan: { ...plan, deadline: plan.deadline + 1 },
+      }),
+    ),
   ).toEqual({
     kind: "existing",
     record: { kind: "started", plan, session: current },
   });
   expect(
-    await harness.authority.admit({
-      session: current,
-      plan: { ...plan, requestHash: "b".repeat(64) },
-    }),
+    await Effect.runPromise(
+      harness.authority.admit({
+        session: current,
+        plan: { ...plan, requestHash: "b".repeat(64) },
+      }),
+    ),
   ).toEqual({
     kind: "rejected",
     code: "request_conflict",
   });
   expect(
-    await harness.authority.admit({
-      session: current,
-      plan: { ...plan, container: `loopy-attempt-${"c".repeat(64)}` },
-    }),
+    await Effect.runPromise(
+      harness.authority.admit({
+        session: current,
+        plan: { ...plan, container: `loopy-attempt-${"c".repeat(64)}` },
+      }),
+    ),
   ).toEqual({
     kind: "rejected",
     code: "invalid_state",
@@ -90,57 +101,71 @@ test("one concurrent admission grant pins its original plan and session through 
 test("session CAS rejects delayed opens and stale writes; successor recovers the saved admitting session", async () => {
   const first = await session("first");
   const plan = harness.plan("stale");
-  await harness.authority.admit({ session: first, plan });
-  expect(await harness.authority.openSession({ expectedEpoch: 0, nonce: first.nonce })).toEqual(
-    first,
-  );
+  await Effect.runPromise(harness.authority.admit({ session: first, plan }));
+  expect(
+    await Effect.runPromise(
+      harness.authority.openSession({ expectedEpoch: 0, nonce: first.nonce }),
+    ),
+  ).toEqual(first);
   const second = await session("second");
   await expect(
-    harness.authority.openSession({ expectedEpoch: first.epoch, nonce: "delayed" }),
+    Effect.runPromise(
+      harness.authority.openSession({ expectedEpoch: first.epoch, nonce: "delayed" }),
+    ),
   ).rejects.toMatchObject({ code: "stale_session" });
   await expect(
-    harness.authority.openSession({ expectedEpoch: second.epoch, nonce: first.nonce }),
+    Effect.runPromise(
+      harness.authority.openSession({ expectedEpoch: second.epoch, nonce: first.nonce }),
+    ),
   ).rejects.toBeInstanceOf(AuthorityError);
-  expect(await harness.authority.admit({ session: first, plan })).toEqual({
+  expect(await Effect.runPromise(harness.authority.admit({ session: first, plan }))).toEqual({
     kind: "rejected",
     code: "stale_session",
   });
 
-  const ref = await harness.authority
-    .resultsFor("alpha")
-    .put({ kind: "succeeded", output: "done", logs: [] });
+  const ref = await Effect.runPromise(
+    harness.authority.resultsFor("alpha").put({ kind: "succeeded", output: "done", logs: [] }),
+  );
 
   expect(
-    await harness.authority.complete({
-      session: first,
-      id: plan.id,
-      requestHash: plan.requestHash,
-      result: ref,
-    }),
+    await Effect.runPromise(
+      harness.authority.complete({
+        session: first,
+        id: plan.id,
+        requestHash: plan.requestHash,
+        result: ref,
+      }),
+    ),
   ).toEqual({ kind: "rejected", code: "stale_session" });
   expect(
-    await harness.authority.complete({
-      session: second,
-      id: "f".repeat(64),
-      requestHash: plan.requestHash,
-      result: ref,
-    }),
+    await Effect.runPromise(
+      harness.authority.complete({
+        session: second,
+        id: "f".repeat(64),
+        requestHash: plan.requestHash,
+        result: ref,
+      }),
+    ),
   ).toEqual({ kind: "rejected", code: "missing" });
   expect(
-    await harness.authority.complete({
-      session: second,
-      id: plan.id,
-      requestHash: "b".repeat(64),
-      result: ref,
-    }),
+    await Effect.runPromise(
+      harness.authority.complete({
+        session: second,
+        id: plan.id,
+        requestHash: "b".repeat(64),
+        result: ref,
+      }),
+    ),
   ).toEqual({ kind: "rejected", code: "request_conflict" });
   expect(
-    await harness.authority.complete({
-      session: second,
-      id: plan.id,
-      requestHash: plan.requestHash,
-      result: ref,
-    }),
+    await Effect.runPromise(
+      harness.authority.complete({
+        session: second,
+        id: plan.id,
+        requestHash: plan.requestHash,
+        result: ref,
+      }),
+    ),
   ).toMatchObject({ kind: "finished", record: { session: first } });
 });
 
@@ -155,7 +180,7 @@ test("lost admission/completion responses survive full workerd reconstruction wi
     port: 0,
     async fetch(request) {
       const body = await request.text();
-      const command = authorityCommandSchema.parse(JSON.parse(body));
+      const command = decodeBoundary(authorityCommandSchema)(JSON.parse(body));
 
       if (command.operation === "read" && readUnavailable) {
         readUnavailable = false;
@@ -186,56 +211,68 @@ test("lost admission/completion responses survive full workerd reconstruction wi
   });
 
   try {
-    await expect(ambiguous.admit({ session: current, plan })).rejects.toThrow("HTTP 503");
-    await expect(ambiguous.read(plan.id)).rejects.toThrow("HTTP 503");
+    await expect(Effect.runPromise(ambiguous.admit({ session: current, plan }))).rejects.toThrow(
+      "HTTP 503",
+    );
+    await expect(Effect.runPromise(ambiguous.read(plan.id))).rejects.toThrow("HTTP 503");
     await harness.reopen();
-    expect(await harness.authority.read(plan.id)).toEqual({
+    expect(await Effect.runPromise(harness.authority.read(plan.id))).toEqual({
       kind: "started",
       plan,
       session: current,
     });
-    expect(await harness.authority.admit({ session: current, plan })).toMatchObject({
+    expect(
+      await Effect.runPromise(harness.authority.admit({ session: current, plan })),
+    ).toMatchObject({
       kind: "existing",
     });
 
-    const ref = await harness.authority
-      .resultsFor("alpha")
-      .put({ kind: "succeeded", output: "retained", logs: [] });
+    const ref = await Effect.runPromise(
+      harness.authority
+        .resultsFor("alpha")
+        .put({ kind: "succeeded", output: "retained", logs: [] }),
+    );
 
     await expect(
-      ambiguous.complete({
-        session: current,
-        id: plan.id,
-        requestHash: plan.requestHash,
-        result: ref,
-      }),
+      Effect.runPromise(
+        ambiguous.complete({
+          session: current,
+          id: plan.id,
+          requestHash: plan.requestHash,
+          result: ref,
+        }),
+      ),
     ).rejects.toThrow("HTTP 503");
     await harness.reopen();
     expect(
-      await harness.authority.complete({
-        session: current,
-        id: plan.id,
-        requestHash: plan.requestHash,
-        result: ref,
-      }),
+      await Effect.runPromise(
+        harness.authority.complete({
+          session: current,
+          id: plan.id,
+          requestHash: plan.requestHash,
+          result: ref,
+        }),
+      ),
     ).toMatchObject({ kind: "finished", record: { plan, result: { kind: "blob", ref } } });
-    expect(await harness.authority.resultsFor("alpha").get(ref)).toEqual({
+    expect(await Effect.runPromise(harness.authority.resultsFor("alpha").get(ref))).toEqual({
       kind: "succeeded",
       output: "retained",
       logs: [],
     });
 
-    const other = await harness.authority
-      .resultsFor("alpha")
-      .put({ kind: "succeeded", output: "changed", logs: [] });
+    const other = await Effect.runPromise(
+      harness.authority.resultsFor("alpha").put({ kind: "succeeded", output: "changed", logs: [] }),
+    );
 
     expect(
-      await harness.authority.complete({
-        session: current,
-        id: plan.id,
-        requestHash: plan.requestHash,
-        result: other,
-      }),
+      await Effect.runPromise(
+        harness.authority.complete({
+          session: current,
+          id: plan.id,
+          requestHash: plan.requestHash,
+          result: other,
+        }),
+      ),
     ).toEqual({ kind: "rejected", code: "request_conflict" });
   } finally {
     await proxy.stop(true);

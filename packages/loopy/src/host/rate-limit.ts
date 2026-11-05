@@ -1,48 +1,57 @@
-import { durationMs, type Executor, type Graph, type Store } from "../core/index.js";
-import type { Effect, EngineEvent } from "../engine/index.js";
+import { Effect } from "effect";
+import {
+  durationMs,
+  type ExecutionKey,
+  type Graph,
+  type Receipt,
+  type Store,
+} from "../core/index.js";
+import type { Effect as EngineEffect } from "../engine/index.js";
 
-type AdmissionOptions = {
+type AdmissionOptions<E> = {
   graph: Graph;
   store: Store;
-  lookup: Executor["lookup"];
+  lookup: (key: ExecutionKey, attempt: number) => Effect.Effect<Receipt, E>;
   at: string;
 };
 
-export async function acquireDispatch({
+export function acquireDispatch<E>({
   graph,
   store,
   lookup,
   at,
   dispatch,
-}: AdmissionOptions & {
-  dispatch: Extract<Effect, { kind: "dispatch" }>;
-}): Promise<Extract<EngineEvent, { kind: "rate_limited" }> | undefined> {
-  const node = graph.nodes.find((node) => node.id === dispatch.executionKey.nodeId);
+}: AdmissionOptions<E> & {
+  dispatch: Extract<EngineEffect, { kind: "dispatch" }>;
+}) {
+  return Effect.gen(function* () {
+    const node = graph.nodes.find((node) => node.id === dispatch.executionKey.nodeId);
 
-  if ((node?.kind !== "code" && node?.kind !== "command") || node.rateLimit === null) {
-    return;
-  }
+    if ((node?.kind !== "code" && node?.kind !== "command") || node.rateLimit === null) {
+      return;
+    }
 
-  if ((await lookup(dispatch.executionKey, dispatch.attempt)).kind !== "none") {
-    return;
-  }
+    if ((yield* lookup(dispatch.executionKey, dispatch.attempt)).kind !== "none") {
+      return;
+    }
 
-  const limit = node.rateLimit;
+    const limit = node.rateLimit;
 
-  const acquired = await store.acquireRateLimit(
-    limit.key,
-    limit.limit,
-    durationMs(limit.window),
-    at,
-  );
-
-  if (!acquired.ok) {
-    return {
-      kind: "rate_limited",
-      executionKey: dispatch.executionKey,
-      attempt: dispatch.attempt,
-      retryAt: acquired.retryAt,
+    const acquired = yield* store.acquireRateLimit(
+      limit.key,
+      limit.limit,
+      durationMs(limit.window),
       at,
-    };
-  }
+    );
+
+    if (!acquired.ok) {
+      return {
+        kind: "rate_limited" as const,
+        executionKey: dispatch.executionKey,
+        attempt: dispatch.attempt,
+        retryAt: acquired.retryAt,
+        at,
+      };
+    }
+  });
 }

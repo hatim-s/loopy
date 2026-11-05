@@ -1,36 +1,33 @@
-import type { z } from "zod";
-import { routes } from "../contract/index.js";
-import type { RuntimeEvent } from "../core/index.js";
+import { Effect, type Schema } from "effect";
+import { encodeBoundary, routes } from "../contract/index.js";
+import type { RuntimeEvent, Store } from "../core/index.js";
 import { ServiceError } from "./error.js";
-import type { LoopyService } from "./service.js";
+import type { Service } from "./service.js";
 
-export interface EventReader {
-  oldestEventSequence(): number | undefined;
-  epoch(): Promise<string>;
-  events(after: number, limit: number): Promise<RuntimeEvent[]>;
-  transactionEvents(txn: string, after: number): Promise<RuntimeEvent[]>;
-  subscribe(listener: (events: RuntimeEvent[]) => void): () => void;
-  /** Local SQLite polling detects commits made by other processes. */
-  dataVersion?(): number;
-}
+export type EventReader = Pick<
+  Store,
+  "oldestEventSequence" | "epoch" | "events" | "transactionEvents" | "subscribe" | "dataVersion"
+>;
 
-type EventService = Pick<LoopyService, "events">;
+type EventService = Pick<Service, "events">;
 
 // A full queue is normal while a reader drains; two seconds without a pull is a reader that stopped.
 const STALLED_READER_MS = 2000;
 
 const ENCODER = new TextEncoder();
 
-type EventsQuery = z.output<typeof routes.events.query>;
+const encodeEvent = encodeBoundary(routes.events.response);
 
-export async function eventStream(
+type EventsQuery = Schema.Schema.Type<typeof routes.events.query>;
+
+export const eventStream = Effect.fn("events.eventStream")(function* (
   store: EventReader,
   service: EventService,
   query: EventsQuery,
   signal: AbortSignal,
-): Promise<Response> {
-  await validateCursor(store, query.after, query.epoch);
-  await readTransaction(store, query.after);
+) {
+  yield* validateCursor(store, query.after, query.epoch);
+  yield* readTransaction(store, query.after);
 
   const feed = new EventFeed(store, service, query.after, query.epoch, signal);
 
@@ -50,13 +47,14 @@ export async function eventStream(
       "X-Content-Type-Options": "nosniff",
     },
   });
-}
+});
 
 class EventFeed {
   private closed = false;
   private pending = false;
-  private dirty = false;
+  private polling = false;
   private version?: number;
+  private dirty = false;
   private drained?: () => void;
   private stalled?: ReturnType<typeof setTimeout>;
   private tail?: ReturnType<typeof setInterval>;
@@ -70,9 +68,7 @@ class EventFeed {
     private cursor: number,
     private readonly epoch: string,
     private readonly signal: AbortSignal,
-  ) {
-    this.version = store.dataVersion?.();
-  }
+  ) {}
 
   start(controller: ReadableStreamDefaultController<Uint8Array>): void {
     this.controller = controller;
@@ -81,12 +77,31 @@ class EventFeed {
 
     if (this.store.dataVersion) {
       this.tail = setInterval(() => {
-        const next = this.store.dataVersion?.();
+        const dataVersion = this.store.dataVersion;
 
-        if (next !== this.version) {
-          this.version = next;
-          this.enqueue();
+        if (this.polling || this.closed || !dataVersion) {
+          return;
         }
+
+        this.polling = true;
+        void Effect.runPromise(dataVersion.call(this.store))
+          .then(
+            (version) => {
+              if (!this.closed && version !== this.version) {
+                this.version = version;
+                this.enqueue();
+              }
+            },
+            (error) => {
+              if (!this.closed) {
+                this.close();
+                this.controller?.error(error);
+              }
+            },
+          )
+          .finally(() => {
+            this.polling = false;
+          });
       }, 100);
     }
 
@@ -188,8 +203,8 @@ class EventFeed {
   private async drain(): Promise<void> {
     while (!this.closed) {
       this.dirty = false;
-      await validateCursor(this.store, this.cursor, this.epoch);
-      const events = await readTransaction(this.store, this.cursor);
+      await Effect.runPromise(validateCursor(this.store, this.cursor, this.epoch));
+      const events = await Effect.runPromise(readTransaction(this.store, this.cursor));
 
       if (events.length === 0) {
         return;
@@ -200,8 +215,8 @@ class EventFeed {
   }
 
   private async deliver(transaction: RuntimeEvent[]): Promise<void> {
-    const data = (await this.service.events(transaction)).map((event) =>
-      routes.events.response.parse(event),
+    const data = (await Effect.runPromise(this.service.events(transaction))).map((event) =>
+      encodeEvent(event),
     );
 
     this.cursor = transaction.at(-1)?.sequence ?? this.cursor;
@@ -209,34 +224,43 @@ class EventFeed {
   }
 }
 
-async function validateCursor(store: EventReader, after: number, epoch: string): Promise<void> {
-  const oldest = store.oldestEventSequence();
+const validateCursor = Effect.fn("events.validateCursor")(function* (
+  store: EventReader,
+  after: number,
+  epoch: string,
+) {
+  const oldest = yield* store.oldestEventSequence();
 
-  if (epoch !== (await store.epoch()) || (oldest !== undefined && after < oldest - 1)) {
-    throw new ServiceError("stale_cursor");
+  if (epoch !== (yield* store.epoch()) || (oldest !== undefined && after < oldest - 1)) {
+    return yield* Effect.fail(new ServiceError("stale_cursor"));
   }
-}
+});
 
-async function readTransaction(store: EventReader, after: number): Promise<RuntimeEvent[]> {
-  const [first] = await store.events(after, 1);
+const readTransaction = Effect.fn("events.readTransaction")(function* (
+  store: EventReader,
+  after: number,
+) {
+  const [first] = yield* store.events(after, 1);
 
   if (!first) {
     return [];
   }
 
-  const transaction = await store.transactionEvents(first.txn, 0);
+  const transaction = yield* store.transactionEvents(first.txn, 0);
 
   // Accepting a cursor inside a transaction would acknowledge an incomplete state change.
   if (transaction.some((event) => event.sequence <= after)) {
-    throw new ServiceError(
-      "stale_cursor",
-      "The event cursor splits a transaction. Fetch a fresh snapshot.",
+    return yield* Effect.fail(
+      new ServiceError(
+        "stale_cursor",
+        "The event cursor splits a transaction. Fetch a fresh snapshot.",
+      ),
     );
   }
 
   if (transaction[0]?.sequence !== first.sequence) {
-    throw new ServiceError("stale_cursor");
+    return yield* Effect.fail(new ServiceError("stale_cursor"));
   }
 
   return transaction;
-}
+});

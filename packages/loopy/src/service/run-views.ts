@@ -1,6 +1,6 @@
-import type { z } from "zod";
+import type { Schema } from "effect";
+import { Effect } from "effect";
 import {
-  type CursorView,
   type LoopyView,
   loopyView,
   type RunView,
@@ -16,7 +16,7 @@ import {
   type RuntimeEvent,
   type StatusCounts,
 } from "../core/index.js";
-import { DefinitionCatalog } from "./definition-catalog.js";
+import { type DefinitionCatalog, makeDefinitionCatalog } from "./definition-catalog.js";
 import { ServiceError } from "./error.js";
 import type { ServiceOptions } from "./registry.js";
 import { nodeEventPreview } from "./views.js";
@@ -39,29 +39,30 @@ function definitionCounts(rows: RunDefinitionCount[]) {
   return { projects, global };
 }
 
-export class ServiceRunViews {
-  constructor(private readonly options: ServiceOptions) {}
+export function makeRunViews(options: ServiceOptions) {
+  const timestamp = () => {
+    return new Date(options.clock.now()).toISOString();
+  };
 
-  private now() {
-    return new Date(this.options.clock.now()).toISOString();
-  }
+  const view = Effect.fn("run-views.view")(function* (run: RunRecord) {
+    return (yield* resolve([run]))(run);
+  });
 
-  async view(run: RunRecord): Promise<RunView> {
-    return (await this.resolve([run]))(run);
-  }
-
-  async resolve(runs: RunRecord[], catalog = new DefinitionCatalog(this.options.registry)) {
+  const resolve = Effect.fn("run-views.resolve")(function* (
+    runs: RunRecord[],
+    catalog: DefinitionCatalog = makeDefinitionCatalog(options.registry),
+  ) {
     const descriptions = new Map<RunRecord, string | null>();
 
     for (const run of runs) {
-      const summary = await catalog.summary(run.workspace, run.slug);
+      const summary = yield* catalog.summary(run.workspace, run.slug);
       // Runs outlive deleted definitions.
       descriptions.set(run, summary?.description ?? null);
     }
 
     const ids = runs.map((run) => run.id);
-    const now = this.now();
-    const hooks = await this.options.store.pendingHooks(ids, now);
+    const now = timestamp();
+    const hooks = yield* options.store.pendingHooks(ids, now);
 
     return (run: RunRecord): RunView => {
       const view = runView({
@@ -70,7 +71,7 @@ export class ServiceRunViews {
         steps: [],
         hooks: [],
         now,
-        leaseMs: this.options.store.leaseMs,
+        leaseMs: options.store.leaseMs,
       });
 
       const hook = hooks.get(run.id);
@@ -88,25 +89,27 @@ export class ServiceRunViews {
           }
         : view;
     };
-  }
+  });
 
-  async listRuns(query: z.output<typeof routes.runs.query>): Promise<RunView[]> {
-    const runs = await this.options.store.queryRuns({ ...query, now: this.now() });
-    const resolve = await this.resolve(runs);
+  const listRuns = Effect.fn("run-views.listRuns")(function* (
+    query: Schema.Schema.Type<typeof routes.runs.query>,
+  ) {
+    const runs = yield* options.store.queryRuns({ ...query, now: timestamp() });
+    const resolved = yield* resolve(runs);
 
-    return runs.map(resolve);
-  }
+    return runs.map(resolved);
+  });
 
-  async listLoopies(callerWorkspace = ""): Promise<LoopyView[]> {
-    const [workspaces, schedules, rows] = await Promise.all([
-      this.options.store.runWorkspaces(),
-      this.options.store.listSchedules(),
-      this.options.store.runCountsByDefinition(),
+  const listLoopies = Effect.fn("run-views.listLoopies")(function* (callerWorkspace = "") {
+    const [workspaces, schedules, rows] = yield* Effect.all([
+      options.store.runWorkspaces(),
+      options.store.listSchedules(),
+      options.store.runCountsByDefinition(),
     ]);
 
     const counts = definitionCounts(rows);
     const views = new Map<string, LoopyView>();
-    const catalog = new DefinitionCatalog(this.options.registry);
+    const catalog: DefinitionCatalog = makeDefinitionCatalog(options.registry);
 
     // Load each selected registry once before resolving recent runs across workspaces.
     const selected = new Set([
@@ -116,13 +119,13 @@ export class ServiceRunViews {
     ]);
 
     for (const workspace of selected) {
-      await catalog.list(workspace);
+      yield* catalog.list(workspace);
     }
 
     for (const workspace of selected) {
-      const { identity } = await catalog.resolve(workspace);
+      const { identity } = yield* catalog.resolve(workspace);
 
-      for (const saved of await catalog.list(workspace)) {
+      for (const saved of yield* catalog.list(workspace)) {
         if (views.has(saved.slug)) {
           continue;
         }
@@ -133,14 +136,14 @@ export class ServiceRunViews {
           filter.workspace = identity;
         }
 
-        const recent = await this.options.store.queryRuns({
+        const recent = yield* options.store.queryRuns({
           ...filter,
           limit: 10,
-          now: this.now(),
+          now: timestamp(),
         });
 
-        const resolve = await this.resolve(recent, catalog);
-        const latestRuns = recent.map(resolve);
+        const resolved = yield* resolve(recent, catalog);
+        const latestRuns = recent.map(resolved);
 
         const view = loopyView(
           { ...saved, workspace: identity },
@@ -165,28 +168,34 @@ export class ServiceRunViews {
     }
 
     return [...views.values()];
-  }
+  });
 
-  async runSnapshot(id: string) {
-    const snapshot = await this.options.store.dashboardSnapshot(id);
+  const runSnapshot = Effect.fn("run-views.runSnapshot")(function* (id: string) {
+    const snapshot = yield* options.store.dashboardSnapshot(id);
 
     if (!snapshot) {
-      throw new ServiceError("not_found", `No run '${id}'. Use loopy runs to list run ids.`);
+      return yield* Effect.fail(
+        new ServiceError("not_found", `No run '${id}'. Use loopy runs to list run ids.`),
+      );
     }
 
-    return { ...snapshot, run: await this.view(snapshot.run) };
-  }
+    return { ...snapshot, run: yield* view(snapshot.run) };
+  });
 
-  async events(transaction: RuntimeEvent[]) {
+  const events = Effect.fn("run-views.events")(function* (transaction: RuntimeEvent[]) {
     const runs = transaction.flatMap((event) => (event.entity === "run" ? [event.record] : []));
-    const view = await this.resolve(runs);
+    const view = yield* resolve(runs);
 
     return transaction.map((event) =>
       event.entity === "node" ? nodeEventPreview(event) : serverEvent(event, view),
     );
-  }
+  });
 
-  async cursor(): Promise<CursorView> {
-    return this.options.store.eventCursor();
-  }
+  const cursor = Effect.fn("run-views.cursor")(function* () {
+    return yield* options.store.eventCursor();
+  });
+
+  return { view, resolve, listRuns, listLoopies, runSnapshot, events, cursor };
 }
+
+export type RunViews = ReturnType<typeof makeRunViews>;

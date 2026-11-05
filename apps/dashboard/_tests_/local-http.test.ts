@@ -1,7 +1,9 @@
 import { afterAll, expect, spyOn, test } from "bun:test";
-import type { RunView } from "loopy/contract";
+import { Effect } from "effect";
+import { type RunView, routes } from "loopy/contract";
 import { BackendError } from "../src/backend/backend.ts";
-import { localHttpBackend } from "../src/backend/local-http.ts";
+import { runRequest } from "../src/backend/http-wire.ts";
+import { httpTransport, localHttpBackend } from "../src/backend/local-http.ts";
 
 const run: RunView = {
   id: "run/1",
@@ -352,4 +354,25 @@ test("session cursor uses its route schema and waiting booleans survive URL enco
   await expect(backend.cursor(AbortSignal.timeout(1000))).rejects.toMatchObject({
     code: "malformed_response",
   });
+});
+
+test("route descriptor mistakes stay programmer errors before fetch", async () => {
+  const { send } = httpTransport({ baseUrl: server.url.origin, token: "secret" });
+  await expect(
+    send(
+      { ...routes.run, params: routes.cursor.params },
+      { params: {}, query: {}, body: undefined },
+    ),
+  ).rejects.toThrow("Route /runs/:id needs the :id parameter.");
+});
+
+test("the Promise bridge preserves the caller's abort reason even when an operation fails", async () => {
+  const controller = new AbortController();
+  const reason = new Error("fixture abort reason");
+
+  const operation = Effect.sync(() => controller.abort(reason)).pipe(
+    Effect.andThen(Effect.fail(new BackendError("unreachable"))),
+  );
+
+  await expect(runRequest(operation, controller.signal)).rejects.toBe(reason);
 });

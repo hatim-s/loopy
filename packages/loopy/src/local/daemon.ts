@@ -1,13 +1,29 @@
 import { join } from "node:path";
-import type { RunRecord } from "../core/index.js";
+import type { Cause } from "effect";
+import { Clock, Data, Effect } from "effect";
+import { errorMessage, type RunRecord } from "../core/index.js";
 import { FilesystemReceipts, LocalExecutor } from "../executor/index.js";
-import { Daemon, SYSTEM_CLOCK } from "../host/index.js";
+import { makeDaemon, PreparationError, ScheduleRevisionError } from "../host/index.js";
 import type { SqliteRunStore } from "../store/index.js";
 import { readDaemonFile, removeDaemonFile, writeDaemonFile } from "./daemon-file.js";
 import { withLockDirectory } from "./fs.js";
 import { Registry } from "./registry.js";
 import { startServer } from "./server/start-server.js";
-import { LoopyService } from "./service.js";
+import { makeLocalService } from "./service.js";
+
+export class LocalDaemonError extends Data.TaggedError("LocalDaemonError")<{
+  operation: "start" | "stop";
+  cause: unknown;
+  reason: "failed" | "timeout";
+}> {
+  override get message() {
+    return this.operation === "start"
+      ? `Cannot start daemon: ${errorMessage(this.cause)}`
+      : this.reason === "timeout"
+        ? "Daemon shutdown timed out. Discovery was kept. Check the process before restarting."
+        : `Daemon shutdown failed: ${errorMessage(this.cause)} Discovery was kept. Check the process before restarting.`;
+  }
+}
 
 type DaemonOptions = {
   home: string;
@@ -16,129 +32,162 @@ type DaemonOptions = {
   concurrency: number;
   port?: number;
   assets?: string;
-  onError?: (error: Error, run?: RunRecord) => void;
+  onError?: (cause: Cause.Cause<unknown>, run?: RunRecord) => void;
 };
 
-function runtimeDaemon(options: DaemonOptions) {
-  const { home, store, concurrency, onError } = options;
-  const receipts = new FilesystemReceipts(home);
+/** The caller's scope must outlive requests and close before the store scope. */
+export const localDaemon = (options: DaemonOptions) =>
+  Effect.gen(function* () {
+    const receipts = new FilesystemReceipts(options.home);
 
-  return new Daemon({
-    store,
-    concurrency,
-    onError,
-    revisionFor: (schedule) => new Registry(home, schedule.workspace).get(schedule.slug).revision,
-    prepare: async (run) => {
-      const registry = new Registry(home, run.workspace);
-
-      const graph = await registry.revisionGraph(run.revision);
-
-      return {
-        graph,
-        executor: new LocalExecutor({
-          home,
-          receipts,
-          workspace: run.workspace,
-          mode: graph.meta.mode,
-          secrets: graph.meta.secrets,
-          bundlePath: (hash) => registry.bundlePath(hash),
-        }),
-      };
-    },
-  });
-}
-
-class LocalDaemon {
-  readonly startedAt = new Date(SYSTEM_CLOCK.now()).toISOString();
-  readonly concurrency: number;
-  private readonly daemon: Daemon;
-  private readonly service: LoopyService;
-  private readonly token = crypto.randomUUID();
-  private server?: ReturnType<typeof startServer>;
-  private stopping?: Promise<void>;
-
-  constructor(private readonly options: DaemonOptions) {
-    this.daemon = runtimeDaemon(options);
-    this.service = new LoopyService({
+    const daemon = yield* makeDaemon({
       store: options.store,
-      registry: (workspace) => new Registry(options.home, workspace || options.cwd),
-      clock: SYSTEM_CLOCK,
+      concurrency: options.concurrency,
+      onError: options.onError,
+      revisionFor: (schedule) =>
+        Effect.gen(function* () {
+          const registry = yield* Registry.make(options.home, schedule.workspace);
+
+          return (yield* registry.get(schedule.slug)).revision;
+        }).pipe(Effect.mapError((cause) => new ScheduleRevisionError({ cause }))),
+      prepare: (run) =>
+        Effect.gen(function* () {
+          const registry = yield* Registry.make(options.home, run.workspace);
+          const graph = yield* registry.revisionGraph(run.revision);
+
+          return {
+            graph,
+            executor: new LocalExecutor({
+              home: options.home,
+              receipts,
+              workspace: run.workspace,
+              mode: graph.meta.mode,
+              secrets: graph.meta.secrets,
+              bundlePath: (hash) => registry.bundlePath(hash),
+            }),
+          };
+        }).pipe(Effect.mapError((cause) => new PreparationError({ cause }))),
     });
-    this.concurrency = options.concurrency;
-  }
 
-  tick() {
-    return this.daemon.tick();
-  }
-  wake() {
-    this.daemon.wake();
-  }
+    const service = makeLocalService({
+      home: options.home,
+      cwd: options.cwd,
+      store: options.store,
+      clock: { now: Date.now },
+    });
 
-  start(): string {
-    if (this.server) {
-      return this.server.url;
-    }
+    const startedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
+    const token = crypto.randomUUID();
+    let server: ReturnType<typeof startServer> | undefined;
+    let stopped = false;
 
-    return withLockDirectory(join(this.options.home, "daemon-start.lock"), "daemon startup", () =>
-      this.startLocked(),
+    const start = Effect.suspend(() => {
+      if (server && !stopped) {
+        return Effect.succeed(server.url);
+      }
+
+      let created = false;
+
+      return Effect.try({
+        try: () =>
+          withLockDirectory(join(options.home, "daemon-start.lock"), "daemon startup", () => {
+            if (stopped) {
+              throw new Error("This daemon has stopped. Create a new daemon scope.");
+            }
+
+            if (server) {
+              return server.url;
+            }
+
+            if (readDaemonFile(options.home)) {
+              throw new Error(
+                "A daemon is already running for this home. Use loopy ui to open it.",
+              );
+            }
+
+            // Keep listener acquisition after discovery validation; publication-failure fixtures rely on this boundary.
+            server = startServer({
+              ...options,
+              service,
+              token,
+              daemon: { startedAt, concurrency: options.concurrency },
+            });
+            created = true;
+            writeDaemonFile(options.home, {
+              pid: process.pid,
+              port: server.port,
+              token,
+              startedAt,
+            });
+
+            return server.url;
+          }),
+        catch: (cause) => new LocalDaemonError({ operation: "start", reason: "failed", cause }),
+      }).pipe(
+        Effect.catchTag("LocalDaemonError", (error) => {
+          if (!created) {
+            return Effect.fail(error);
+          }
+
+          stopped = true;
+
+          return Effect.acquireUseRelease(
+            Effect.void,
+            () => Effect.fail(error),
+            () => closeListener,
+          );
+        }),
+      );
+    });
+
+    const closeListener = Effect.gen(function* () {
+      const active = server;
+
+      if (active) {
+        yield* Effect.tryPromise({
+          try: () => active.stop(),
+          catch: (cause) => new LocalDaemonError({ operation: "stop", reason: "failed", cause }),
+        }).pipe(
+          Effect.timeoutOrElse({
+            duration: 5000,
+            orElse: () =>
+              Effect.fail(
+                new LocalDaemonError({ operation: "stop", reason: "timeout", cause: undefined }),
+              ),
+          }),
+        );
+      }
+    });
+
+    const removeDiscovery = Effect.try({
+      try: () => removeDaemonFile(options.home, token),
+      catch: (cause) => new LocalDaemonError({ operation: "stop", reason: "failed", cause }),
+    });
+
+    const stop = yield* Effect.cached(
+      Effect.uninterruptible(
+        Effect.gen(function* () {
+          stopped = true;
+          // Stop accepting requests before joining workers and releasing the database.
+          yield* Effect.acquireUseRelease(
+            Effect.void,
+            () => closeListener,
+            () => daemon.stop,
+          );
+          yield* removeDiscovery;
+        }),
+      ),
     );
-  }
 
-  private startLocked(): string {
-    if (this.server) {
-      return this.server.url;
-    }
+    yield* Effect.addFinalizer(() => stop.pipe(Effect.orDie));
 
-    const { home, store, cwd, port, assets } = this.options;
-
-    if (readDaemonFile(home)) {
-      throw new Error("A daemon is already running for this home. Use loopy ui to open it.");
-    }
-
-    const server = startServer({
-      service: this.service,
-      daemon: this,
-      store,
-      token: this.token,
-      cwd,
-      port,
-      assets,
-    });
-
-    try {
-      writeDaemonFile(home, {
-        pid: process.pid,
-        port: server.port,
-        token: this.token,
-        startedAt: this.startedAt,
-      });
-    } catch (error) {
-      void server.stop();
-      throw error;
-    }
-
-    this.server = server;
-
-    return server.url;
-  }
-
-  run(): Promise<void> {
-    this.start();
-
-    return this.daemon.run();
-  }
-
-  stop(): Promise<void> {
-    this.stopping ??= (async () => {
-      await this.server?.stop();
-      await this.daemon.stop();
-      removeDaemonFile(this.options.home, this.token);
-    })();
-
-    return this.stopping;
-  }
-}
-
-export function localDaemon(options: DaemonOptions) {
-  return new LocalDaemon(options);
-}
+    return {
+      startedAt,
+      concurrency: options.concurrency,
+      start,
+      stop,
+      tick: daemon.tick,
+      wake: daemon.wake,
+      run: Effect.andThen(start, daemon.run),
+    };
+  });

@@ -1,13 +1,14 @@
 import { executionKeySchema, nodeRunSchema } from "../../contract/index.js";
 import {
   type NodePageQuery,
-  type NodeRun,
   type NodeRunStatus,
   type ScopeCounts,
   type ScopeItem,
   type ScopeItemsQuery,
 } from "../../core/index.js";
+import { storageOperation } from "../operation.js";
 import { PREVIEW_BYTES } from "../query-utils.js";
+import { storedDecoder } from "../row-codec.js";
 import { publicHook } from "../wait.js";
 import { waitRecordSchema } from "../wait-schema.js";
 import type { SqlValue } from "./driver.js";
@@ -17,6 +18,12 @@ import {
   RUN_PREVIEW_COLUMNS,
   SqliteQueryRuns,
 } from "./query-runs.js";
+
+const decodeNodeRun = storedDecoder(nodeRunSchema, "node_runs/node_attempts");
+
+const decodeScope = storedDecoder(executionKeySchema.fields.scope, "query-nodes");
+
+const decodeWaitRecord = storedDecoder(waitRecordSchema, "waits");
 
 export class SqliteQueryNodes extends SqliteQueryRuns {
   protected readNodePage(runId: string, query: NodePageQuery) {
@@ -54,7 +61,7 @@ export class SqliteQueryNodes extends SqliteQueryRuns {
     }
 
     return {
-      items: selected.map((row) => nodeRunSchema.parse(JSON.parse(row.record))),
+      items: selected.map((row) => decodeNodeRun(row.record)),
       next: rows.length > query.limit ? (selected.at(-1)?.execution_key ?? null) : null,
       truncatedOutputs,
     };
@@ -73,9 +80,9 @@ export class SqliteQueryNodes extends SqliteQueryRuns {
     const summaries = new Map<string, ScopeCounts>();
 
     for (const row of rows) {
-      const summary = summaries.get(row.map_node) ?? {
+      const summary: ScopeCounts = summaries.get(row.map_node) ?? {
         nodeId: row.map_node,
-        parentScope: executionKeySchema.shape.scope.parse(JSON.parse(parentScope)),
+        parentScope: decodeScope(parentScope),
         total: row.total,
         totalKind: "materialized" as const,
         counts: {},
@@ -88,134 +95,131 @@ export class SqliteQueryNodes extends SqliteQueryRuns {
     return [...summaries.values()];
   }
 
-  async nodePage(runId: string, query: NodePageQuery) {
-    return this.readNodePage(runId, query);
+  nodePage(runId: string, query: NodePageQuery) {
+    return storageOperation("nodePage", () => {
+      return this.readNodePage(runId, query);
+    });
   }
-  async scopeCounts(runId: string, parentScope = "[]") {
-    return this.readScopeCounts(runId, parentScope);
-  }
-
-  async scopeItems(runId: string, query: ScopeItemsQuery) {
-    const values: SqlValue[] = [runId, query.nodeId, query.parentScope, query.after ?? -1];
-    const status = query.status === undefined ? "" : " AND status=?";
-
-    if (query.status !== undefined) {
-      values.push(query.status);
-    }
-
-    values.push(Math.min(query.limit, 200) + 1);
-
-    const indices = this.db
-      .query<{ item_index: number }, SqlValue[]>(
-        `SELECT DISTINCT item_index FROM node_scopes WHERE run_id=? AND map_node=? AND parent_scope=? AND item_index>?${status} ORDER BY item_index LIMIT ?`,
-      )
-      .all(...values);
-
-    const selected = indices.slice(0, query.limit);
-
-    if (selected.length === 0) {
-      return { items: [], next: null };
-    }
-
-    const rows = this.db
-      .query<{ item_index: number; status: NodeRunStatus; count: number }, SqlValue[]>(
-        `SELECT item_index,status,count(*) AS count FROM node_scopes WHERE run_id=? AND map_node=? AND parent_scope=? AND item_index IN (SELECT value FROM json_each(?)) GROUP BY item_index,status ORDER BY item_index`,
-      )
-      .all(
-        runId,
-        query.nodeId,
-        query.parentScope,
-        JSON.stringify(selected.map((row) => row.item_index)),
-      );
-
-    const items = new Map<number, ScopeItem>();
-
-    for (const row of rows) {
-      const item = items.get(row.item_index) ?? { index: row.item_index, counts: {} };
-      item.counts[row.status] = row.count;
-      items.set(row.item_index, item);
-    }
-
-    return {
-      items: [...items.values()],
-      next: indices.length > query.limit ? (selected.at(-1)?.item_index ?? null) : null,
-    };
+  scopeCounts(runId: string, parentScope = "[]") {
+    return storageOperation("scopeCounts", () => {
+      return this.readScopeCounts(runId, parentScope);
+    });
   }
 
-  async dashboardSnapshot(id: string) {
-    return this.db.transaction(() => {
-      const row = this.db
-        .query<PreviewRunRow, [string]>(`SELECT ${RUN_PREVIEW_COLUMNS} FROM runs r WHERE r.id=?`)
-        .get(id);
+  scopeItems(runId: string, query: ScopeItemsQuery) {
+    return storageOperation("scopeItems", () => {
+      const values: SqlValue[] = [runId, query.nodeId, query.parentScope, query.after ?? -1];
+      const status = query.status === undefined ? "" : " AND status=?";
 
-      if (!row) {
+      if (query.status !== undefined) {
+        values.push(query.status);
+      }
+
+      values.push(Math.min(query.limit, 200) + 1);
+
+      const indices = this.db
+        .query<{ item_index: number }, SqlValue[]>(
+          `SELECT DISTINCT item_index FROM node_scopes WHERE run_id=? AND map_node=? AND parent_scope=? AND item_index>?${status} ORDER BY item_index LIMIT ?`,
+        )
+        .all(...values);
+
+      const selected = indices.slice(0, query.limit);
+
+      if (selected.length === 0) {
+        return { items: [], next: null };
+      }
+
+      const rows = this.db
+        .query<{ item_index: number; status: NodeRunStatus; count: number }, SqlValue[]>(
+          `SELECT item_index,status,count(*) AS count FROM node_scopes WHERE run_id=? AND map_node=? AND parent_scope=? AND item_index IN (SELECT value FROM json_each(?)) GROUP BY item_index,status ORDER BY item_index`,
+        )
+        .all(
+          runId,
+          query.nodeId,
+          query.parentScope,
+          JSON.stringify(selected.map((row) => row.item_index)),
+        );
+
+      const items = new Map<number, ScopeItem>();
+
+      for (const row of rows) {
+        const item = items.get(row.item_index) ?? { index: row.item_index, counts: {} };
+        item.counts[row.status] = row.count;
+        items.set(row.item_index, item);
+      }
+
+      return {
+        items: [...items.values()],
+        next: indices.length > query.limit ? (selected.at(-1)?.item_index ?? null) : null,
+      };
+    });
+  }
+
+  dashboardSnapshot(id: string) {
+    return storageOperation("dashboardSnapshot", () => {
+      return this.db.transaction(() => {
+        const row = this.db
+          .query<PreviewRunRow, [string]>(`SELECT ${RUN_PREVIEW_COLUMNS} FROM runs r WHERE r.id=?`)
+          .get(id);
+
+        if (!row) {
+          return undefined;
+        }
+
+        const nodes = this.readNodePage(id, { scope: "[]", limit: 200 });
+
+        const hooks = this.db
+          .query<{ record: string }, [string]>(
+            "SELECT record FROM waits WHERE run_id=? ORDER BY rowid LIMIT 201",
+          )
+          .all(id);
+
+        return {
+          run: previewRun(row),
+          nodeRuns: nodes.items,
+          nodeRunsNext: nodes.next,
+          truncatedOutputs: nodes.truncatedOutputs,
+          scopes: this.readScopeCounts(id),
+          steps: [],
+          logs: [],
+          hooks: hooks.slice(0, 200).map((row) => publicHook(decodeWaitRecord(row.record))),
+          hooksTruncated: hooks.length > 200,
+          ...this.readEventCursor(),
+        };
+      }, "deferred");
+    });
+  }
+
+  execution(runId: string, key: string, after = 0) {
+    return storageOperation("execution", () => {
+      const node = this.readNode(runId, key);
+
+      if (!node) {
         return undefined;
       }
 
-      const nodes = this.readNodePage(id, { scope: "[]", limit: 200 });
-
-      const hooks = this.db
-        .query<{ record: string }, [string]>(
-          "SELECT record FROM waits WHERE run_id=? ORDER BY rowid LIMIT 201",
+      const rows = this.db
+        .query<{ record: string; attempt: number; bytes: number | null }, [string, string, number]>(
+          "SELECT attempt,length(CAST(record->'$.output' AS BLOB)) AS bytes,CASE WHEN json_type(record,'$.output') IS NOT NULL AND length(CAST(record->'$.output' AS BLOB))>16384 THEN json_set(record,'$.output',NULL) ELSE record END AS record FROM node_attempts WHERE run_id=? AND execution_key=? AND attempt>? ORDER BY attempt LIMIT 201",
         )
-        .all(id);
+        .all(runId, key, after);
+
+      const attempts = rows.slice(0, 200).map((row) => decodeNodeRun(row.record));
+
+      const truncatedAttempts: Record<string, number> = {};
+
+      for (const row of rows.slice(0, 200)) {
+        if (row.bytes !== null && row.bytes > PREVIEW_BYTES) {
+          truncatedAttempts[String(row.attempt)] = row.bytes;
+        }
+      }
 
       return {
-        run: previewRun(row),
-        nodeRuns: nodes.items,
-        nodeRunsNext: nodes.next,
-        truncatedOutputs: nodes.truncatedOutputs,
-        scopes: this.readScopeCounts(id),
-        steps: [],
-        logs: [],
-        hooks: hooks
-          .slice(0, 200)
-          .map((row) => publicHook(waitRecordSchema.parse(JSON.parse(row.record)))),
-        hooksTruncated: hooks.length > 200,
-        ...this.readEventCursor(),
+        node,
+        attempts,
+        truncatedAttempts,
+        attemptsNext: rows.length > 200 ? (attempts.at(-1)?.attempt ?? null) : null,
       };
-    }, "deferred");
-  }
-
-  async execution(
-    runId: string,
-    key: string,
-    after = 0,
-  ): Promise<
-    | {
-        node: NodeRun;
-        attempts: NodeRun[];
-        attemptsNext: number | null;
-        truncatedAttempts: Record<string, number>;
-      }
-    | undefined
-  > {
-    const node = this.readNode(runId, key);
-
-    if (!node) {
-      return undefined;
-    }
-
-    const rows = this.db
-      .query<{ record: string; attempt: number; bytes: number | null }, [string, string, number]>(
-        "SELECT attempt,length(CAST(record->'$.output' AS BLOB)) AS bytes,CASE WHEN json_type(record,'$.output') IS NOT NULL AND length(CAST(record->'$.output' AS BLOB))>16384 THEN json_set(record,'$.output',NULL) ELSE record END AS record FROM node_attempts WHERE run_id=? AND execution_key=? AND attempt>? ORDER BY attempt LIMIT 201",
-      )
-      .all(runId, key, after);
-
-    const attempts = rows.slice(0, 200).map((row) => nodeRunSchema.parse(JSON.parse(row.record)));
-    const truncatedAttempts: Record<string, number> = {};
-
-    for (const row of rows.slice(0, 200)) {
-      if (row.bytes !== null && row.bytes > PREVIEW_BYTES) {
-        truncatedAttempts[String(row.attempt)] = row.bytes;
-      }
-    }
-
-    return {
-      node,
-      attempts,
-      truncatedAttempts,
-      attemptsNext: rows.length > 200 ? (attempts.at(-1)?.attempt ?? null) : null,
-    };
+    });
   }
 }

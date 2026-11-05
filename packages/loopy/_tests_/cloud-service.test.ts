@@ -1,5 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
+import { Effect, Schema } from "effect";
 import {
+  decodeBoundary,
   definitionSummary,
   graphView,
   nodeIdSchema,
@@ -13,7 +15,8 @@ import {
   apiRoutes,
   dispatch,
   eventStream,
-  LoopyService,
+  makeService,
+  RegistryError,
   ServiceError,
 } from "../src/service/index.js";
 import { SqlRunStore } from "../src/store/portable.js";
@@ -36,8 +39,8 @@ afterEach(() => {
   }
 });
 
-function unsupported(): never {
-  throw new ServiceError("not_yet", "This operation is unavailable on this host.");
+function unsupported() {
+  return Effect.fail(new ServiceError("not_yet", "This operation is unavailable on this host."));
 }
 
 function fixture() {
@@ -54,58 +57,66 @@ function fixture() {
   const sources = new Map<string, SourceArtifact>();
 
   const registry: ArtifactRegistry = {
-    workspace: async () => "cloud-workspace",
-    listSummaries: async () => [...entries.values()].map(definitionSummary),
-    summary: async (slug) => {
-      const saved = entries.get(slug);
+    workspace: () => Effect.succeed("cloud-workspace"),
+    listSummaries: () => Effect.sync(() => [...entries.values()].map(definitionSummary)),
+    summary: (slug) =>
+      Effect.sync(() => {
+        const saved = entries.get(slug);
 
-      return saved ? definitionSummary(saved) : null;
-    },
-    get: async (slug) => entries.get(slug) ?? null,
-    revisionGraph: async (hash) => {
-      const graph = graphs.get(hash);
+        return saved ? definitionSummary(saved) : null;
+      }),
+    get: (slug) => Effect.sync(() => entries.get(slug) ?? null),
+    revisionGraph: (hash) =>
+      Effect.suspend(() => {
+        const graph = graphs.get(hash);
 
-      if (!graph) {
-        throw new Error("Graph revision is missing.");
-      }
+        if (!graph) {
+          return Effect.fail(
+            new RegistryError({ operation: "read graph", cause: "Graph revision is missing." }),
+          );
+        }
 
-      return graph;
-    },
-    revisionSource: async (slug, hash) =>
-      sources.get(`${slug}:${hash}`) ?? {
-        version: 1,
-        status: "unavailable",
-        revision: hash,
-        reason: "not_captured",
-      },
-    save: async (body) => {
-      const { graph } = body;
-      entries.set(graph.name, {
-        version: 2,
-        slug: graph.name,
-        graph,
-        revision: body.revision,
-        bundles: [],
-        source: body.source.path,
-        input: graph.input,
-        ...graph.meta,
-        savedAt: new Date(now).toISOString(),
-      });
-      graphs.set(body.revision, graph);
+        return Effect.succeed(graph);
+      }),
+    revisionSource: (slug, hash) =>
+      Effect.sync(
+        () =>
+          sources.get(`${slug}:${hash}`) ?? {
+            version: 1,
+            status: "unavailable",
+            revision: hash,
+            reason: "not_captured",
+          },
+      ),
+    save: (body) =>
+      Effect.sync(() => {
+        const { graph } = body;
+        entries.set(graph.name, {
+          version: 2,
+          slug: graph.name,
+          graph,
+          revision: body.revision,
+          bundles: [],
+          source: body.source.path,
+          input: graph.input,
+          ...graph.meta,
+          savedAt: new Date(now).toISOString(),
+        });
+        graphs.set(body.revision, graph);
 
-      if (body.sourceArtifact) {
-        sources.set(`${graph.name}:${body.revision}`, body.sourceArtifact);
-      }
-    },
+        if (body.sourceArtifact) {
+          sources.set(`${graph.name}:${body.revision}`, body.sourceArtifact);
+        }
+      }),
   };
 
-  const service = new LoopyService({
+  const service = makeService({
     store,
-    registry: () => registry,
+    registry: () => Effect.succeed(registry),
     clock: { now: () => now },
-    canonicalWorkspace: (workspace) => workspace,
+    canonicalWorkspace: (workspace) => Effect.succeed(workspace),
     secrets: { list: unsupported, set: unsupported, remove: unsupported },
-    generateTypes: async () => unsupported(),
+    generateTypes: unsupported,
   });
 
   return { store, service };
@@ -123,13 +134,19 @@ test("portable service validates input and pins graph/source revisions through a
     files: [{ id: "file-1", path: "portable.ts", content: "original source" }],
     ranges: [],
   };
-  await service.putLoopy("portable", first);
-  await expect(service.startRun("portable", {}, "cloud-workspace")).rejects.toMatchObject({
+  await Effect.runPromise(service.putLoopy("portable", first));
+  await expect(
+    Effect.runPromise(service.startRun("portable", {}, "cloud-workspace")),
+  ).rejects.toMatchObject({
     code: "bad_request",
   });
-  expect(await store.listRuns()).toEqual([]);
-  const run = await service.startRun("portable", { name: "Hatim" }, "cloud-workspace");
-  expect(await store.getRun(run.id)).toMatchObject({
+  expect(await Effect.runPromise(store.listRuns())).toEqual([]);
+
+  const run = await Effect.runPromise(
+    service.startRun("portable", { name: "Hatim" }, "cloud-workspace"),
+  );
+
+  expect(await Effect.runPromise(store.getRun(run.id))).toMatchObject({
     workspace: "cloud-workspace",
     revision: first.revision,
   });
@@ -145,18 +162,20 @@ test("portable service validates input and pins graph/source revisions through a
     files: [{ id: "file-1", path: "portable.ts", content: "updated source" }],
     ranges: [],
   };
-  await service.putLoopy("portable", second);
-  expect(await service.graph("portable", "cloud-workspace")).toEqual({
+  await Effect.runPromise(service.putLoopy("portable", second));
+  expect(await Effect.runPromise(service.graph("portable", "cloud-workspace"))).toEqual({
     revision: second.revision,
     graph: graphView(second.graph),
   });
-  expect(await service.runGraph(run.id)).toEqual({
+  expect(await Effect.runPromise(service.runGraph(run.id))).toEqual({
     revision: first.revision,
     graph: graphView(first.graph),
   });
-  expect(await service.runSource(run.id)).toEqual(first.sourceArtifact);
-  expect(await service.loopySource("portable", "cloud-workspace")).toEqual(second.sourceArtifact);
-  expect(await service.listLoopies("cloud-workspace")).toMatchObject([
+  expect(await Effect.runPromise(service.runSource(run.id))).toEqual(first.sourceArtifact);
+  expect(await Effect.runPromise(service.loopySource("portable", "cloud-workspace"))).toEqual(
+    second.sourceArtifact,
+  );
+  expect(await Effect.runPromise(service.listLoopies("cloud-workspace"))).toMatchObject([
     { slug: "portable", description: "Updated definition", counts: { queued: 1 } },
   ]);
 });
@@ -168,16 +187,18 @@ test("portable schedules use registry workspace identity", async () => {
     schedule: { cron: "0 * * * *", tz: "UTC" },
   });
 
-  await service.putLoopy("portable", body);
-  expect(await service.putSchedule("portable", {}, "alias")).toMatchObject({
+  await Effect.runPromise(service.putLoopy("portable", body));
+  expect(await Effect.runPromise(service.putSchedule("portable", {}, "alias"))).toMatchObject({
     workspace: "cloud-workspace",
   });
-  expect(await service.listSchedules("alias")).toHaveLength(1);
-  expect(await service.setScheduleEnabled("portable", false, "alias")).toMatchObject({
+  expect(await Effect.runPromise(service.listSchedules("alias"))).toHaveLength(1);
+  expect(
+    await Effect.runPromise(service.setScheduleEnabled("portable", false, "alias")),
+  ).toMatchObject({
     enabled: false,
   });
-  await service.deleteSchedule("portable", "alias");
-  expect(await service.listSchedules("alias")).toEqual([]);
+  await Effect.runPromise(service.deleteSchedule("portable", "alias"));
+  expect(await Effect.runPromise(service.listSchedules("alias"))).toEqual([]);
 });
 
 test("portable routes use explicit daemon identity and return unsupported operation errors", async () => {
@@ -192,7 +213,10 @@ test("portable routes use explicit daemon identity and return unsupported operat
 
   const daemonRequest = new Request("https://loopy.example/api/daemon");
   const daemon = await dispatch(table, daemonRequest, new URL(daemonRequest.url));
-  expect(routes.daemon.response.parse(await daemon.json())).toMatchObject({ pid: 0, running: 0 });
+  expect(decodeBoundary(routes.daemon.response)(await daemon.json())).toMatchObject({
+    pid: 0,
+    running: 0,
+  });
 
   for (const request of [
     new Request("https://loopy.example/api/secrets"),
@@ -234,32 +258,34 @@ test("portable routes use explicit daemon identity and return unsupported operat
     });
   }
 
-  expect(await store.listRuns()).toEqual([]);
-  expect(await store.listSchedules()).toEqual([]);
+  expect(await Effect.runPromise(store.listRuns())).toEqual([]);
+  expect(await Effect.runPromise(store.listSchedules())).toEqual([]);
 });
 
 async function seededTransaction() {
   const f = fixture();
   const body = await compiledBody("portable", "/virtual/portable.ts");
-  await f.service.putLoopy("portable", body);
-  const run = await f.service.startRun("portable", {}, "cloud-workspace");
-  await f.store.claim(run.id, "owner");
-  const before = await f.store.eventCursor();
-  await f.store.apply({
-    runId: run.id,
-    token: "owner",
-    effects: ["first", "second"].map((nodeId) => ({
-      kind: "write_node_run",
-      nodeRun: {
-        key: { runId: run.id, nodeId: nodeIdSchema.parse(nodeId), scope: [] },
-        status: "running",
-        attempt: 1,
-        maxAttempts: 1,
-        startedAt: new Date(now).toISOString(),
-        receipt: "none",
-      },
-    })),
-  });
+  await Effect.runPromise(f.service.putLoopy("portable", body));
+  const run = await Effect.runPromise(f.service.startRun("portable", {}, "cloud-workspace"));
+  await Effect.runPromise(f.store.claim(run.id, "owner"));
+  const before = await Effect.runPromise(f.store.eventCursor());
+  await Effect.runPromise(
+    f.store.apply({
+      runId: run.id,
+      token: "owner",
+      effects: ["first", "second"].map((nodeId) => ({
+        kind: "write_node_run",
+        nodeRun: {
+          key: { runId: run.id, nodeId: decodeBoundary(nodeIdSchema)(nodeId), scope: [] },
+          status: "running",
+          attempt: 1,
+          maxAttempts: 1,
+          startedAt: new Date(now).toISOString(),
+          receipt: "none",
+        },
+      })),
+    }),
+  );
 
   return { ...f, before };
 }
@@ -270,17 +296,14 @@ test("portable SSE delivers whole SQL transactions and aborts without polling", 
   const aborter = new AbortController();
   aborters.push(aborter);
 
-  const response = await eventStream(
-    store,
-    service,
-    { after: before.cursor, epoch: before.epoch },
-    aborter.signal,
+  const response = await Effect.runPromise(
+    eventStream(store, service, { after: before.cursor, epoch: before.epoch }, aborter.signal),
   );
 
   const reader = response.body!.getReader();
   expect(new TextDecoder().decode((await reader.read()).value)).toBe(": connected\n\n");
   const frame = new TextDecoder().decode((await reader.read()).value);
-  const events = await store.events(before.cursor, 10);
+  const events = await Effect.runPromise(store.events(before.cursor, 10));
   expect(frame).toContain(`id: ${events.at(-1)!.sequence}\nevent: txn\n`);
 
   const data = frame
@@ -289,10 +312,9 @@ test("portable SSE delivers whole SQL transactions and aborts without polling", 
     .slice(6);
 
   expect(
-    routes.events.response
-      .array()
-      .parse(JSON.parse(data))
-      .map((event) => event.sequence),
+    decodeBoundary(Schema.Array(routes.events.response))(JSON.parse(data)).map(
+      (event) => event.sequence,
+    ),
   ).toEqual(events.map((event) => event.sequence));
   const waiting = reader.read();
   aborter.abort();
@@ -301,16 +323,22 @@ test("portable SSE delivers whole SQL transactions and aborts without polling", 
 
 test("portable SSE rejects partial transaction cursors, epoch changes and pruned history", async () => {
   const { store, service, before } = await seededTransaction();
-  const [first] = await store.events(before.cursor, 10);
+  const [first] = await Effect.runPromise(store.events(before.cursor, 10));
   const signal = new AbortController().signal;
   await expect(
-    eventStream(store, service, { after: first!.sequence, epoch: before.epoch }, signal),
+    Effect.runPromise(
+      eventStream(store, service, { after: first!.sequence, epoch: before.epoch }, signal),
+    ),
   ).rejects.toMatchObject({ code: "stale_cursor" });
   await expect(
-    eventStream(store, service, { after: before.cursor, epoch: "other" }, signal),
+    Effect.runPromise(
+      eventStream(store, service, { after: before.cursor, epoch: "other" }, signal),
+    ),
   ).rejects.toMatchObject({ code: "stale_cursor" });
-  await store.pruneEvents("2027-10-22T00:00:00.000Z");
+  await Effect.runPromise(store.pruneEvents("2027-10-22T00:00:00.000Z"));
   await expect(
-    eventStream(store, service, { after: before.cursor, epoch: before.epoch }, signal),
+    Effect.runPromise(
+      eventStream(store, service, { after: before.cursor, epoch: before.epoch }, signal),
+    ),
   ).rejects.toMatchObject({ code: "stale_cursor" });
 });

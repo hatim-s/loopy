@@ -9,7 +9,9 @@ import {
   readFileSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
+import { Effect } from "effect";
 import { isString, requireRecord, setOwnProperty, validateSecretName } from "../core/index.js";
+import { SecretError } from "../service/index.js";
 import { errnoCode, withLockDirectory, writeFileAtomically } from "./fs.js";
 import { defaultHome } from "./home.js";
 
@@ -101,7 +103,7 @@ export class SecretStore {
     }
   }
 
-  snapshot(): Record<string, string> {
+  private readSnapshot(): Record<string, string> {
     if (!this.directoryExists(false)) {
       return {};
     }
@@ -136,41 +138,81 @@ export class SecretStore {
     return parseSecrets(value);
   }
 
-  list(): string[] {
-    return Object.keys(this.snapshot()).sort();
+  snapshot() {
+    return Effect.try({
+      try: () => this.readSnapshot(),
+      catch: (cause) => new SecretError({ operation: "read", reason: "io", cause }),
+    });
   }
-
-  get(name: string): string {
-    validateSecretName(name);
-    const values = this.snapshot();
-    const value = Object.hasOwn(values, name) ? values[name] : undefined;
-
-    if (value === undefined) {
-      throw new Error(`No stored secret '${name}'. Use loopy secrets set ${name}.`);
-    }
-
-    return value;
+  list() {
+    return this.snapshot().pipe(Effect.map((values) => Object.keys(values).sort()));
   }
+  values(names: readonly string[]) {
+    return this.snapshot().pipe(
+      Effect.flatMap((snapshot) =>
+        Effect.try({
+          try: () => {
+            const selected: Record<string, string> = {};
 
+            for (const name of names) {
+              const value = Object.hasOwn(snapshot, name) ? snapshot[name] : undefined;
+
+              if (value === undefined) {
+                throw new Error(`No stored secret '${name}'. Use loopy secrets set ${name}.`);
+              }
+
+              setOwnProperty(selected, name, value);
+            }
+
+            return selected;
+          },
+          catch: (cause) => new SecretError({ operation: "get", reason: "missing", cause }),
+        }),
+      ),
+    );
+  }
+  private validate(name: string, value?: string) {
+    return Effect.try({
+      try: () => {
+        validateSecretName(name);
+
+        if (value !== undefined) {
+          validateSecretValue(value);
+        }
+      },
+      catch: (cause) => new SecretError({ operation: "validate", reason: "invalid", cause }),
+    });
+  }
   private update(change: (values: Record<string, string>) => void): void {
     this.directoryExists(true);
     withLockDirectory(join(this.directory, ".secrets.lock"), "secret update", () => {
-      const values = this.snapshot();
+      const values = this.readSnapshot();
       change(values);
       writeFileAtomically(this.file, `${JSON.stringify(values)}\n`, 0o600);
     });
   }
 
-  set(name: string, value: string): void {
-    validateSecretName(name);
-    validateSecretValue(value);
-    this.update((values) => setOwnProperty(values, name, value));
+  set(name: string, value: string) {
+    return this.validate(name, value).pipe(
+      Effect.flatMap(() =>
+        Effect.try({
+          try: () => this.update((values) => setOwnProperty(values, name, value)),
+          catch: (cause) => new SecretError({ operation: "set", reason: "io", cause }),
+        }),
+      ),
+    );
   }
-
-  remove(name: string): void {
-    validateSecretName(name);
-    this.update((values) => {
-      delete values[name];
-    });
+  remove(name: string) {
+    return this.validate(name).pipe(
+      Effect.flatMap(() =>
+        Effect.try({
+          try: () =>
+            this.update((values) => {
+              delete values[name];
+            }),
+          catch: (cause) => new SecretError({ operation: "remove", reason: "io", cause }),
+        }),
+      ),
+    );
   }
 }

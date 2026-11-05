@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { Schema } from "effect";
 import { jsonSchema } from "../contract/index.js";
 import {
   type AttemptLog,
@@ -11,11 +11,11 @@ import { redactValue } from "./redact.js";
 
 type Redact = (text: string, truncated?: boolean) => string;
 
-const logSchema = z.strictObject({ message: z.string(), data: jsonSchema });
+const logSchema = Schema.Struct({ message: Schema.String, data: jsonSchema });
 
 function parseRecord(line: string): AttemptLog | undefined {
   try {
-    return logSchema.parse(JSON.parse(line));
+    return Schema.decodeUnknownSync(logSchema)(JSON.parse(line), { onExcessProperty: "error" });
   } catch {
     return undefined;
   }
@@ -57,7 +57,7 @@ function stderrLogs(stderr: string, redact: Redact, cut: boolean): AttemptLog[] 
 
 function parseOutput(line: string) {
   try {
-    return jsonSchema.parse(JSON.parse(line));
+    return Schema.decodeUnknownSync(jsonSchema)(JSON.parse(line));
   } catch {
     return undefined;
   }

@@ -2,6 +2,7 @@ import "@fontsource-variable/geist";
 import "@fontsource-variable/geist-mono";
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRouter, RouterProvider } from "@tanstack/react-router";
+import { decodeBoundary } from "loopy/contract";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BackendError, type LoopyBackend } from "./backend/backend.ts";
@@ -33,7 +34,7 @@ async function createSession(): Promise<Session> {
 
   const mode = import.meta.env.VITE_BACKEND ?? "http";
 
-  const config = backendConfigSchema.parse(
+  const config = decodeBoundary(backendConfigSchema)(
     mode === "http" ? { mode, baseUrl: import.meta.env.VITE_API_BASE_URL } : { mode },
   );
 

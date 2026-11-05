@@ -129,9 +129,8 @@ test("layers import downward, and only through the target layer's index", () => 
 
       if (!specifier.startsWith(".")) {
         if (
-          layer === "core" ||
-          layer === "engine" ||
-          (layer === "contract" && specifier !== "zod")
+          (layer === "core" || layer === "engine" || layer === "contract") &&
+          specifier !== "effect"
         ) {
           violations.push(`${name} may only import relative specifiers (${specifier}).`);
         }

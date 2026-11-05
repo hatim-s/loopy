@@ -121,7 +121,7 @@ async function respond(request: Request, options: RequestOptions): Promise<Respo
       request,
       error instanceof URIError
         ? json({ error: errorMessage(error) }, 400)
-        : errorResponse("internal", errorMessage(error)),
+        : errorResponse("internal"),
     );
   }
 }

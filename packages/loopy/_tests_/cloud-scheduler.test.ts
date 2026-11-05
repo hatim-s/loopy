@@ -1,4 +1,5 @@
 import { afterEach, expect, setSystemTime, test } from "bun:test";
+import { Cause, Effect } from "effect";
 import type { R2ArtifactRegistry } from "../../../apps/cloud/src/artifacts.js";
 import { type SchedulerStorage, WorkspaceScheduler } from "../../../apps/cloud/src/scheduler.js";
 import type { SavedLoopy } from "../src/contract/index.js";
@@ -9,10 +10,12 @@ import {
   type Json,
   type Receipt,
   revision,
+  StorageError,
   type Store,
 } from "../src/core/index.js";
-import type { DurableExecutionProvider } from "../src/host/index.js";
+import { type DurableExecutionProvider, DurableProviderError } from "../src/host/index.js";
 import { code, loopy, sleep, wait } from "../src/sdk/graph/index.js";
+import { RegistryError } from "../src/service/index.js";
 import { SqlRunStore, type SqlValue } from "../src/store/portable.js";
 import { BunSqlDriver } from "../src/store/sqlite/bun-driver.js";
 
@@ -70,30 +73,59 @@ class InterruptedStore extends SqlRunStore {
   releaseFailures = 0;
   fireFailures = new Map<string, "before" | "after">();
 
-  override async release(id: string, token: string) {
-    if (this.releaseFailures > 0) {
-      this.releaseFailures--;
-      throw new Error("Release interrupted after suspension committed.");
-    }
+  override release(id: string, token: string) {
+    return Effect.gen({ self: this }, function* () {
+      if (this.releaseFailures > 0) {
+        this.releaseFailures--;
 
+        return yield* Effect.fail(
+          new StorageError({
+            operation: "release",
+            reason: "unavailable",
+            cause: new Error("Release interrupted after suspension committed."),
+          }),
+        );
+      }
+
+      return yield* this.baseRelease(id, token);
+    });
+  }
+  private baseRelease(id: string, token: string) {
     return super.release(id, token);
   }
 
-  override async fireSchedule(options: Parameters<Store["fireSchedule"]>[0]) {
-    const failure = this.fireFailures.get(options.slug);
-    this.fireFailures.delete(options.slug);
+  override fireSchedule(options: Parameters<Store["fireSchedule"]>[0]) {
+    return Effect.gen({ self: this }, function* () {
+      const failure = this.fireFailures.get(options.slug);
+      this.fireFailures.delete(options.slug);
 
-    if (failure === "before") {
-      throw new Error("Schedule transaction unavailable.");
-    }
+      if (failure === "before") {
+        return yield* Effect.fail(
+          new StorageError({
+            operation: "fire",
+            reason: "unavailable",
+            cause: new Error("Schedule transaction unavailable."),
+          }),
+        );
+      }
 
-    const fired = await super.fireSchedule(options);
+      const fired = yield* this.baseFire(options);
 
-    if (failure === "after") {
-      throw new Error("Schedule commit response lost.");
-    }
+      if (failure === "after") {
+        return yield* Effect.fail(
+          new StorageError({
+            operation: "fire",
+            reason: "unavailable",
+            cause: new Error("Schedule commit response lost."),
+          }),
+        );
+      }
 
-    return fired;
+      return fired;
+    });
+  }
+  private baseFire(options: Parameters<Store["fireSchedule"]>[0]) {
+    return super.fireSchedule(options);
   }
 }
 
@@ -121,24 +153,34 @@ class Registry implements Pick<R2ArtifactRegistry, "get" | "revisionGraph"> {
     return hash;
   }
 
-  async get(slug: string) {
-    this.reads.set(slug, (this.reads.get(slug) ?? 0) + 1);
+  get(slug: string) {
+    return Effect.try({
+      try: () => {
+        this.reads.set(slug, (this.reads.get(slug) ?? 0) + 1);
 
-    if (this.failures.has(slug)) {
-      throw new Error(`Registry unavailable. ${"x".repeat(2000)}`);
-    }
+        if (this.failures.has(slug)) {
+          throw new Error(`Registry unavailable. ${"x".repeat(2000)}`);
+        }
 
-    return this.current.get(slug) ?? null;
+        return this.current.get(slug) ?? null;
+      },
+      catch: (cause) => new RegistryError({ operation: "get", cause }),
+    });
   }
 
-  async revisionGraph(hash: string) {
-    const graph = this.graphs.get(hash);
+  revisionGraph(hash: string) {
+    return Effect.try({
+      try: () => {
+        const graph = this.graphs.get(hash);
 
-    if (!graph) {
-      throw new Error(`Missing fixture revision ${hash}.`);
-    }
+        if (!graph) {
+          throw new Error(`Missing fixture revision ${hash}.`);
+        }
 
-    return graph;
+        return graph;
+      },
+      catch: (cause) => new RegistryError({ operation: "revisionGraph", cause }),
+    });
   }
 }
 
@@ -150,17 +192,31 @@ class Provider implements DurableExecutionProvider {
 
   constructor(private readonly store: SqlRunStore) {}
 
-  async lookup(key: ExecutionKey, attempt: number): Promise<Receipt> {
-    return this.receipts.get(`${executionKeyString(key)}/${attempt}`) ?? { kind: "none" };
+  lookup(key: ExecutionKey, attempt: number) {
+    return Effect.sync(
+      (): Receipt => this.receipts.get(`${executionKeyString(key)}/${attempt}`) ?? { kind: "none" },
+    );
   }
 
-  async start(key: ExecutionKey, attempt: number) {
-    const id = `${executionKeyString(key)}/${attempt}`;
-    this.starts.push(id);
-    this.runningCounts.push((await this.store.listRuns({ status: "running" })).length);
-    this.receipts.set(id, this.result);
+  start(key: ExecutionKey, attempt: number) {
+    return Effect.gen({ self: this }, function* () {
+      const id = `${executionKeyString(key)}/${attempt}`;
+      this.starts.push(id);
+      this.runningCounts.push((yield* this.store.listRuns({ status: "running" })).length);
+      this.receipts.set(id, this.result);
 
-    return this.result;
+      return this.result;
+    }).pipe(
+      Effect.mapError(
+        (cause) =>
+          new DurableProviderError({
+            operation: "start",
+            reason: "transport",
+            message: "Fixture storage unavailable",
+            cause,
+          }),
+      ),
+    );
   }
 
   finishAll() {
@@ -216,29 +272,33 @@ function fixture(concurrency = 3) {
     scheduler,
     at: (ms: number) => setSystemTime(base + ms),
     async run(id: string, graph: Graph, input: Json = {}) {
-      await store.createRun({
-        id,
-        slug: graph.name,
-        revision: await registry.save(graph),
-        workspace,
-        input,
-        status: "queued",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
+      await Effect.runPromise(
+        store.createRun({
+          id,
+          slug: graph.name,
+          revision: await registry.save(graph),
+          workspace,
+          input,
+          status: "queued",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }),
+      );
     },
     async schedule(graph: Graph, input: Json = {}) {
       await registry.save(graph);
 
-      return store.putSchedule({
-        workspace,
-        slug: graph.name,
-        cron: "* * * * *",
-        tz: "UTC",
-        input,
-        enabled: true,
-        nextFireAt: new Date(base).toISOString(),
-      });
+      return Effect.runPromise(
+        store.putSchedule({
+          workspace,
+          slug: graph.name,
+          cron: "* * * * *",
+          tz: "UTC",
+          input,
+          enabled: true,
+          nextFireAt: new Date(base).toISOString(),
+        }),
+      );
     },
   };
 }
@@ -259,55 +319,56 @@ for (const owner of ["fresh foreign", "expired foreign", "same token"] as const)
       f.provider.result = { kind: "finished", result: { kind: "succeeded", output: 1, logs: [] } };
       await f.run("paused", paused);
       f.store.releaseFailures = 1;
-      await f.scheduler().tick();
-      expect(await f.store.getRun("paused")).toMatchObject({
+      await Effect.runPromise(f.scheduler().tick());
+      expect(await Effect.runPromise(f.store.getRun("paused"))).toMatchObject({
         status: "suspended",
         owner: { token: "original" },
       });
       expect(f.storage.alarm).toBe(base + 1000);
       expect(f.db.query("SELECT error FROM cloud_turns").get()).toEqual({
-        error: "Release interrupted after suspension committed.",
+        error:
+          "Storage operation 'release' failed: Release interrupted after suspension committed.",
       });
 
       const scheduler = f.scheduler(owner === "same token" ? "original" : "replacement");
       f.at(owner === "expired foreign" ? 10_001 : 1000);
-      await scheduler.tick();
+      await Effect.runPromise(scheduler.tick());
 
       if (owner === "fresh foreign") {
-        expect((await f.store.getRun("paused"))?.owner?.token).toBe("original");
+        expect((await Effect.runPromise(f.store.getRun("paused")))?.owner?.token).toBe("original");
         expect(f.storage.alarm).toBe(base + 10_001);
         f.at(10_000);
-        await scheduler.tick();
-        expect((await f.store.getRun("paused"))?.owner?.token).toBe("original");
+        await Effect.runPromise(scheduler.tick());
+        expect((await Effect.runPromise(f.store.getRun("paused")))?.owner?.token).toBe("original");
         f.at(10_001);
-        await scheduler.tick();
+        await Effect.runPromise(scheduler.tick());
       }
 
-      expect((await f.store.getRun("paused"))?.owner).toBeUndefined();
+      expect((await Effect.runPromise(f.store.getRun("paused")))?.owner).toBeUndefined();
       expect(f.provider.starts).toHaveLength(1);
 
       if (waiting === "indefinite wait") {
-        expect((await f.store.getRun("paused"))?.status).toBe("suspended");
-        expect(await f.store.getWaits("paused")).toHaveLength(1);
+        expect((await Effect.runPromise(f.store.getRun("paused")))?.status).toBe("suspended");
+        expect(await Effect.runPromise(f.store.getWaits("paused"))).toHaveLength(1);
         expect(f.storage.alarm).toBeNull();
         f.at(120_000);
-        await scheduler.tick();
-        expect((await f.store.getRun("paused"))?.status).toBe("suspended");
-        expect(await f.store.getWaits("paused")).toHaveLength(1);
+        await Effect.runPromise(scheduler.tick());
+        expect((await Effect.runPromise(f.store.getRun("paused")))?.status).toBe("suspended");
+        expect(await Effect.runPromise(f.store.getWaits("paused"))).toHaveLength(1);
         expect(f.provider.starts).toHaveLength(1);
         expect(f.storage.alarm).toBeNull();
       } else {
         if (waiting === "future sleep") {
-          expect(await f.store.getRun("paused")).toMatchObject({
+          expect(await Effect.runPromise(f.store.getRun("paused"))).toMatchObject({
             status: "suspended",
             wakeAt: new Date(base + 60_000).toISOString(),
           });
           expect(f.storage.alarm).toBe(base + 60_000);
           f.at(60_000);
-          await scheduler.tick();
+          await Effect.runPromise(scheduler.tick());
         }
 
-        expect((await f.store.getRun("paused"))?.status).toBe("succeeded");
+        expect((await Effect.runPromise(f.store.getRun("paused")))?.status).toBe("succeeded");
         expect(f.storage.alarm).toBeNull();
         expect(f.provider.starts).toHaveLength(1);
       }
@@ -326,9 +387,9 @@ test("a resolved hook supersedes the previous timeout alarm", async () => {
       }),
     ),
   );
-  await f.scheduler().tick();
+  await Effect.runPromise(f.scheduler().tick());
   expect(f.storage.alarm).toBe(base + 60_000);
-  const hook = (await f.store.getWaits("approval"))[0];
+  const hook = (await Effect.runPromise(f.store.getWaits("approval")))[0];
 
   if (!hook) {
     throw new Error("Expected a persisted hook.");
@@ -336,10 +397,12 @@ test("a resolved hook supersedes the previous timeout alarm", async () => {
 
   f.at(1000);
   expect(
-    await f.store.resolveWait({ token: hook.token, payload: true, at: new Date().toISOString() }),
+    await Effect.runPromise(
+      f.store.resolveWait({ token: hook.token, payload: true, at: new Date().toISOString() }),
+    ),
   ).toMatchObject({ kind: "resolved" });
-  await f.scheduler().tick();
-  expect((await f.store.getRun("approval"))?.status).toBe("succeeded");
+  await Effect.runPromise(f.scheduler().tick());
+  expect((await Effect.runPromise(f.store.getRun("approval")))?.status).toBe("succeeded");
   expect(f.storage.alarm).toBeNull();
 });
 
@@ -351,19 +414,19 @@ test("a second release failure persists a retry without reactivating an indefini
   );
   f.store.releaseFailures = 2;
   const scheduler = f.scheduler();
-  await scheduler.tick();
+  await Effect.runPromise(scheduler.tick());
   f.at(1000);
-  await scheduler.tick();
+  await Effect.runPromise(scheduler.tick());
   expect(f.storage.alarm).toBe(base + 2000);
-  expect((await f.store.getRun("paused"))?.owner?.token).toBe("original");
+  expect((await Effect.runPromise(f.store.getRun("paused")))?.owner?.token).toBe("original");
   f.at(1500);
-  await scheduler.tick();
-  expect((await f.store.getRun("paused"))?.owner?.token).toBe("original");
+  await Effect.runPromise(scheduler.tick());
+  expect((await Effect.runPromise(f.store.getRun("paused")))?.owner?.token).toBe("original");
   expect(f.storage.alarm).toBe(base + 2000);
   f.at(2000);
-  await scheduler.tick();
-  expect((await f.store.getRun("paused"))?.owner).toBeUndefined();
-  expect(await f.store.getWaits("paused")).toHaveLength(1);
+  await Effect.runPromise(scheduler.tick());
+  expect((await Effect.runPromise(f.store.getRun("paused")))?.owner).toBeUndefined();
+  expect(await Effect.runPromise(f.store.getWaits("paused"))).toHaveLength(1);
   expect(f.provider.starts).toEqual([]);
   expect(f.storage.alarm).toBeNull();
 });
@@ -379,26 +442,26 @@ test("suspended recovery releases an expired owner while every execution slot is
 
   await f.run("paused", paused);
   f.store.releaseFailures = 1;
-  await f.scheduler().tick();
+  await Effect.runPromise(f.scheduler().tick());
   await f.run("blocker", graph("blocker"));
-  await f.scheduler().tick();
+  await Effect.runPromise(f.scheduler().tick());
   expect(f.provider.starts).toHaveLength(1);
   f.at(10_001);
   const scheduler = f.scheduler("replacement");
-  await scheduler.tick();
-  expect(await f.store.getRun("paused")).toMatchObject({
+  await Effect.runPromise(scheduler.tick());
+  expect(await Effect.runPromise(f.store.getRun("paused"))).toMatchObject({
     status: "suspended",
     wakeAt: new Date(base + 1000).toISOString(),
   });
-  expect((await f.store.getRun("paused"))?.owner).toBeUndefined();
+  expect((await Effect.runPromise(f.store.getRun("paused")))?.owner).toBeUndefined();
   expect(f.provider.starts).toHaveLength(1);
   expect(f.storage.alarm).toBe(base + 10_501);
   f.provider.finishAll();
   f.at(10_501);
-  await scheduler.tick();
+  await Effect.runPromise(scheduler.tick());
   f.at(10_551);
-  await scheduler.tick();
-  expect((await f.store.getRun("paused"))?.status).toBe("running");
+  await Effect.runPromise(scheduler.tick());
+  expect((await Effect.runPromise(f.store.getRun("paused")))?.status).toBe("running");
   expect(f.provider.starts).toHaveLength(2);
   expect(f.provider.runningCounts).toEqual([1, 1]);
 });
@@ -406,7 +469,7 @@ test("suspended recovery releases an expired owner while every execution slot is
 test("invalid input, absent definitions and registry failures isolate schedules and recover", async () => {
   const f = fixture();
   await f.run("running", graph("running"));
-  await f.scheduler().tick();
+  await Effect.runPromise(f.scheduler().tick());
   f.provider.finishAll();
   f.at(500);
   await f.run("queued", graph("queued"));
@@ -419,11 +482,15 @@ test("invalid input, absent definitions and registry failures isolate schedules 
   await f.schedule(graph("missing"));
   f.registry.current.delete("missing");
   await f.schedule(graph("healthy"));
-  await f.scheduler().tick();
-  expect((await f.store.getRun("running"))?.status).toBe("succeeded");
-  expect((await f.store.getRun("queued"))?.status).toBe("running");
-  expect(await f.store.listRuns({ slug: "healthy" })).toMatchObject([{ status: "running" }]);
-  expect((await f.store.listSchedules()).find((s) => s.slug === "invalid")?.enabled).toBe(false);
+  await Effect.runPromise(f.scheduler().tick());
+  expect((await Effect.runPromise(f.store.getRun("running")))?.status).toBe("succeeded");
+  expect((await Effect.runPromise(f.store.getRun("queued")))?.status).toBe("running");
+  expect(await Effect.runPromise(f.store.listRuns({ slug: "healthy" }))).toMatchObject([
+    { status: "running" },
+  ]);
+  expect(
+    (await Effect.runPromise(f.store.listSchedules())).find((s) => s.slug === "invalid")?.enabled,
+  ).toBe(false);
   expect(
     f.db
       .query<{ value: string }, []>("SELECT value FROM meta WHERE key='schedule_error:invalid'")
@@ -439,10 +506,12 @@ test("invalid input, absent definitions and registry failures isolate schedules 
     .get();
 
   expect(retry?.next_at).toBe(new Date(base + 5500).toISOString());
-  expect(retry?.error).toStartWith("Registry unavailable.");
+  expect(retry?.error).toStartWith("Could not get. Registry unavailable.");
   expect(retry?.error.length).toBe(1000);
-  expect(await f.store.listRuns({ slug: "missing" })).toEqual([]);
-  expect((await f.store.listSchedules()).find((s) => s.slug === "missing")?.enabled).toBe(true);
+  expect(await Effect.runPromise(f.store.listRuns({ slug: "missing" }))).toEqual([]);
+  expect(
+    (await Effect.runPromise(f.store.listSchedules())).find((s) => s.slug === "missing")?.enabled,
+  ).toBe(true);
   expect(
     f.db.query("SELECT next_at,error FROM cloud_schedule_turns WHERE slug='missing'").get(),
   ).toEqual({
@@ -452,7 +521,7 @@ test("invalid input, absent definitions and registry failures isolate schedules 
   expect(f.db.query("SELECT value FROM meta WHERE key='cloud_scheduler_error'").get()).toBeNull();
   f.at(1000);
   f.provider.finishAll();
-  await f.scheduler("original").tick();
+  await Effect.runPromise(f.scheduler("original").tick());
   expect(f.registry.reads.get("transient")).toBe(1);
   expect(f.registry.reads.get("missing")).toBe(1);
   expect(f.storage.alarm).toBe(base + 5500);
@@ -460,16 +529,20 @@ test("invalid input, absent definitions and registry failures isolate schedules 
   const restored = graph("missing", () => work("restored"));
   const restoredRevision = await f.registry.save(restored);
   f.at(5500);
-  await f.scheduler().tick();
-  expect(await f.store.listRuns({ slug: "transient" })).toHaveLength(1);
-  expect(await f.store.listRuns({ slug: "healthy" })).toHaveLength(1);
+  await Effect.runPromise(f.scheduler().tick());
+  expect(await Effect.runPromise(f.store.listRuns({ slug: "transient" }))).toHaveLength(1);
+  expect(await Effect.runPromise(f.store.listRuns({ slug: "healthy" }))).toHaveLength(1);
   expect(f.db.query("SELECT * FROM cloud_schedule_turns").all()).toEqual([]);
-  expect((await f.store.listRuns({ slug: "transient" }))[0]?.status).toBe("running");
-  expect(await f.store.listRuns({ slug: "missing" })).toMatchObject([
+  expect((await Effect.runPromise(f.store.listRuns({ slug: "transient" })))[0]?.status).toBe(
+    "running",
+  );
+  expect(await Effect.runPromise(f.store.listRuns({ slug: "missing" }))).toMatchObject([
     { status: "running", revision: restoredRevision },
   ]);
   await f.registry.save(graph("missing", () => work("later")));
-  expect((await f.store.listRuns({ slug: "missing" }))[0]?.revision).toBe(restoredRevision);
+  expect((await Effect.runPromise(f.store.listRuns({ slug: "missing" })))[0]?.revision).toBe(
+    restoredRevision,
+  );
 });
 
 for (const failure of ["before", "after"] as const) {
@@ -478,24 +551,28 @@ for (const failure of ["before", "after"] as const) {
     await f.schedule(graph("broken"));
     await f.schedule(graph("healthy"));
     f.store.fireFailures.set("broken", failure);
-    await f.scheduler().tick();
-    expect(await f.store.listRuns({ slug: "healthy" })).toMatchObject([{ status: "running" }]);
-    expect(await f.store.listRuns({ slug: "broken" })).toHaveLength(failure === "before" ? 0 : 1);
+    await Effect.runPromise(f.scheduler().tick());
+    expect(await Effect.runPromise(f.store.listRuns({ slug: "healthy" }))).toMatchObject([
+      { status: "running" },
+    ]);
+    expect(await Effect.runPromise(f.store.listRuns({ slug: "broken" }))).toHaveLength(
+      failure === "before" ? 0 : 1,
+    );
     expect(f.db.query("SELECT error FROM cloud_schedule_turns").get()).toEqual({
       error:
         failure === "before"
-          ? "Schedule transaction unavailable."
-          : "Schedule commit response lost.",
+          ? "Storage operation 'fire' failed: Schedule transaction unavailable."
+          : "Storage operation 'fire' failed: Schedule commit response lost.",
     });
     f.provider.finishAll();
     f.at(500);
-    await f.scheduler().tick();
+    await Effect.runPromise(f.scheduler().tick());
     expect(f.registry.reads.get("broken")).toBe(1);
     expect(f.storage.alarm).toBe(base + (failure === "before" ? 5000 : 60_000));
     f.at(5000);
-    await f.scheduler().tick();
-    expect(await f.store.listRuns({ slug: "broken" })).toHaveLength(1);
-    expect(await f.store.listRuns({ slug: "healthy" })).toHaveLength(1);
+    await Effect.runPromise(f.scheduler().tick());
+    expect(await Effect.runPromise(f.store.listRuns({ slug: "broken" }))).toHaveLength(1);
+    expect(await Effect.runPromise(f.store.listRuns({ slug: "healthy" }))).toHaveLength(1);
   });
 }
 
@@ -510,13 +587,62 @@ test("a full failing schedule batch yields to later schedules on the next alarm"
 
   await f.schedule(graph("healthy"));
   await f.run("queued", graph("queued"));
-  await f.scheduler().tick();
-  expect((await f.store.getRun("queued"))?.status).toBe("running");
-  expect(await f.store.listRuns({ slug: "healthy" })).toEqual([]);
+  await Effect.runPromise(f.scheduler().tick());
+  expect((await Effect.runPromise(f.store.getRun("queued")))?.status).toBe("running");
+  expect(await Effect.runPromise(f.store.listRuns({ slug: "healthy" }))).toEqual([]);
   expect(f.storage.alarm).toBe(base + 50);
   f.at(50);
-  await f.scheduler().tick();
-  expect(await f.store.listRuns({ slug: "healthy" })).toMatchObject([{ status: "running" }]);
+  await Effect.runPromise(f.scheduler().tick());
+  expect(await Effect.runPromise(f.store.listRuns({ slug: "healthy" }))).toMatchObject([
+    { status: "running" },
+  ]);
   expect(f.registry.reads.get("broken-00")).toBe(1);
   expect(f.storage.alarm).toBe(base + 500);
+});
+
+test("scheduler isolates provider and schedule defects and retains recovery alarms", async () => {
+  const f = fixture();
+  const broken = graph("broken");
+  const healthy = graph("healthy");
+  await f.run("broken", broken);
+  await f.run("healthy", healthy);
+  const lookup = f.provider.lookup.bind(f.provider);
+  f.provider.lookup = (key, attempt) =>
+    key.runId === "broken" ? Effect.die(new Error("provider defect")) : lookup(key, attempt);
+  await Effect.runPromise(f.scheduler().tick());
+  expect(await Effect.runPromise(f.store.getRun("healthy"))).toMatchObject({ status: "running" });
+  expect(f.db.query("SELECT error FROM cloud_turns WHERE run_id='broken'").get()).toMatchObject({
+    error: "provider defect",
+  });
+  await f.schedule(graph("broken-schedule"));
+  await f.schedule(graph("healthy-schedule"));
+  const get = f.registry.get.bind(f.registry);
+  f.registry.get = (slug) =>
+    slug === "broken-schedule" ? Effect.die(new Error("schedule defect")) : get(slug);
+  await Effect.runPromise(f.scheduler().tick());
+  expect(await Effect.runPromise(f.store.listRuns({ slug: "healthy-schedule" }))).toHaveLength(1);
+  expect(
+    f.db.query("SELECT error FROM cloud_schedule_turns WHERE slug='broken-schedule'").get(),
+  ).toMatchObject({ error: "schedule defect" });
+  f.store.pruneEvents = () => Effect.die(new Error("prune defect"));
+  await Effect.runPromise(f.scheduler().tick());
+  expect(f.db.query("SELECT value FROM meta WHERE key='cloud_scheduler_error'").get()).toEqual({
+    value: "prune defect",
+  });
+  expect(f.storage.alarm).toBe(base + 5000);
+});
+
+test("scheduler interruption preserves the recovery alarm without recording a failure", async () => {
+  const f = fixture();
+  await f.run("interrupted", graph("interrupted"));
+  f.provider.lookup = () => Effect.interrupt;
+  const exit = await Effect.runPromiseExit(f.scheduler().tick());
+  expect(exit._tag).toBe("Failure");
+
+  if (exit._tag === "Failure") {
+    expect(Cause.hasInterrupts(exit.cause)).toBe(true);
+  }
+
+  expect(f.storage.alarm).toBe(base + 5000);
+  expect(f.db.query("SELECT value FROM meta WHERE key='cloud_scheduler_error'").get()).toBeNull();
 });

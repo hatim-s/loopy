@@ -37,10 +37,9 @@ Global options:
 Choose one input source: named flags, --input-json, or --input-file.
 Named inputs coerce numbers and booleans from the loopy's record specification.
 In a terminal, missing required record fields are prompted before running.
-Standard Schema inputs require --input-json or --input-file.
 Use --key=value for dash-prefixed values; use -- --key value for reserved names.
 
-Saved TypeScript is trusted code executed during save and activation.
+Author definitions compile during save; workers execute their pinned bundles.
 Declare mode and secrets in loopy(). Sandbox runs deny network and restrict writes
 outside the workspace. A failed sandbox launch never falls back to full mode.
 `;

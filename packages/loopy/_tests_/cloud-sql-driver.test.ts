@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
+import { Effect, Schema } from "effect";
 import { nodeIdSchema } from "../src/contract/index.js";
 import type { Store, StoreEffect } from "../src/core/index.js";
 import { EVENT_RETENTION, MemoryStore } from "../src/store/index.js";
@@ -79,11 +80,11 @@ test("portable entry bundles for browsers without Bun or Node dependencies", asy
 
 test("portable schema reopens with its epoch, records and cursor intact", async () => {
   const { store, driver, sqlite } = fixture();
-  await store.createRun(newRun());
-  const cursor = await store.eventCursor();
+  await Effect.runPromise(store.createRun(newRun()));
+  const cursor = await Effect.runPromise(store.eventCursor());
   const reopened = new SqlRunStore(driver, { owner });
-  expect(await reopened.eventCursor()).toEqual(cursor);
-  expect(await reopened.getRun("run")).toEqual(newRun());
+  expect(await Effect.runPromise(reopened.eventCursor())).toEqual(cursor);
+  expect(await Effect.runPromise(reopened.getRun("run"))).toEqual(newRun());
   expect(sqlite.query("PRAGMA user_version").get()).toEqual({ user_version: 0 });
   expect(sqlite.query("SELECT value FROM meta WHERE key='schema_version'").get()).toEqual({
     value: "15",
@@ -187,7 +188,11 @@ for (const version of [13, 14]) {
 function logEffects(count: number): StoreEffect[] {
   return [...Array(count).keys()].map((index) => ({
     kind: "write_log",
-    executionKey: { runId: "run", nodeId: nodeIdSchema.parse("0:code"), scope: [] },
+    executionKey: {
+      runId: "run",
+      nodeId: Schema.decodeUnknownSync(nodeIdSchema)("0:code"),
+      scope: [],
+    },
     attempt: 1,
     at,
     log: { message: `line ${index}`, data: null },
@@ -199,10 +204,10 @@ for (const kind of ["portable", "memory"] as const) {
     let tick = Date.parse(at);
     const now = () => tick++;
     const store: Store = kind === "portable" ? fixture({ now }).store : new MemoryStore(now);
-    await store.createRun(newRun());
-    await store.claim("run", "owner");
-    await store.apply({ runId: "run", token: "owner", effects: logEffects(2) });
-    const events = await store.events(0, 10);
+    await Effect.runPromise(store.createRun(newRun()));
+    await Effect.runPromise(store.claim("run", "owner"));
+    await Effect.runPromise(store.apply({ runId: "run", token: "owner", effects: logEffects(2) }));
+    const events = await Effect.runPromise(store.events(0, 10));
     const tail = events.at(-1);
 
     if (!tail) {
@@ -211,20 +216,20 @@ for (const kind of ["portable", "memory"] as const) {
 
     expect(events[2]?.txn).toBe(tail.txn);
     const pruneAt = new Date(Date.parse(tail.at) + EVENT_RETENTION.maxAgeMs).toISOString();
-    expect(await store.pruneEvents(pruneAt)).toBe(4);
-    expect(await store.events(0, 10)).toEqual([]);
-    expect(await store.eventCursor()).toMatchObject({ cursor: 4 });
-    await store.heartbeat("run", "owner");
-    expect((await store.events(0, 10))[0]?.sequence).toBe(5);
+    expect(await Effect.runPromise(store.pruneEvents(pruneAt))).toBe(4);
+    expect(await Effect.runPromise(store.events(0, 10))).toEqual([]);
+    expect(await Effect.runPromise(store.eventCursor())).toMatchObject({ cursor: 4 });
+    await Effect.runPromise(store.heartbeat("run", "owner"));
+    expect((await Effect.runPromise(store.events(0, 10)))[0]?.sequence).toBe(5);
   });
 }
 
 test("row retention removes an entire transaction prefix and keeps replay boundaries", async () => {
   const { store, sqlite } = fixture({ now: () => Date.parse(at) });
-  await store.createRun(newRun());
-  await store.claim("run", "owner");
-  await store.apply({ runId: "run", token: "owner", effects: logEffects(2) });
-  const batch = (await store.events(2, 10))[0];
+  await Effect.runPromise(store.createRun(newRun()));
+  await Effect.runPromise(store.claim("run", "owner"));
+  await Effect.runPromise(store.apply({ runId: "run", token: "owner", effects: logEffects(2) }));
+  const batch = (await Effect.runPromise(store.events(2, 10)))[0];
 
   if (!batch) {
     throw new Error("Missing batch event.");
@@ -237,11 +242,11 @@ test("row retention removes an entire transaction prefix and keeps replay bounda
     SELECT ?,CAST(x AS TEXT),entity,kind,run_id,record FROM n JOIN events ON sequence=1`)
     .run(at);
   sqlite.query("UPDATE events SET at=? WHERE sequence=1").run("2026-10-14T00:00:00.000Z");
-  expect(await store.pruneEvents(at)).toBe(4);
-  expect(store.oldestEventSequence()).toBe(5);
-  expect(await store.transactionEvents(batch.txn, 0)).toEqual([]);
-  expect((await store.events(4, 1))[0]?.sequence).toBe(5);
-  expect(await store.eventCursor()).toMatchObject({ cursor: 100003 });
+  expect(await Effect.runPromise(store.pruneEvents(at))).toBe(4);
+  expect(await Effect.runPromise(store.oldestEventSequence())).toBe(5);
+  expect(await Effect.runPromise(store.transactionEvents(batch.txn, 0))).toEqual([]);
+  expect((await Effect.runPromise(store.events(4, 1)))[0]?.sequence).toBe(5);
+  expect(await Effect.runPromise(store.eventCursor())).toMatchObject({ cursor: 100003 });
 });
 
 test("portable initialization ignores Cloudflare internal tables and retains nullable owner identity", async () => {
@@ -254,18 +259,20 @@ test("portable initialization ignores Cloudflare internal tables and retains nul
   const driver = new PortableDriver(sqlite);
   let now = Date.parse(at);
   const store = new SqlRunStore(driver, { owner, now: () => now, leaseMs: 1000 });
-  await store.createRun(newRun());
-  expect(await store.claim("run", "first")).toMatchObject({
+  await Effect.runPromise(store.createRun(newRun()));
+  expect(await Effect.runPromise(store.claim("run", "first"))).toMatchObject({
     owner: { token: "first", pid: null, host: owner.identity.host },
   });
-  expect((await store.events(0, 10)).at(-1)).toMatchObject({ record: { owner: { pid: null } } });
+  expect((await Effect.runPromise(store.events(0, 10))).at(-1)).toMatchObject({
+    record: { owner: { pid: null } },
+  });
   now += 1000;
-  await expect(store.claim("run", "second")).rejects.toThrow("not owned");
+  await expect(Effect.runPromise(store.claim("run", "second"))).rejects.toThrow("not owned");
   now++;
-  expect(await store.claim("run", "second")).toMatchObject({
+  expect(await Effect.runPromise(store.claim("run", "second"))).toMatchObject({
     owner: { token: "second", pid: null },
   });
-  expect(await store.heartbeat("run", "first")).toBe(false);
+  expect(await Effect.runPromise(store.heartbeat("run", "first"))).toBe(false);
   expect(sqlite.query("SELECT value FROM __cf_kv WHERE key='saved'").get()).toEqual({
     value: "retained",
   });
@@ -274,16 +281,16 @@ test("portable initialization ignores Cloudflare internal tables and retains nul
 test("memory row retention keeps the stricter cap when an older event also expires", async () => {
   let now = Date.parse(at) - 1;
   const store = new MemoryStore(() => now);
-  await store.createRun(newRun());
+  await Effect.runPromise(store.createRun(newRun()));
   now++;
-  await store.claim("run", "owner");
-  await store.apply({ runId: "run", token: "owner", effects: logEffects(2) });
+  await Effect.runPromise(store.claim("run", "owner"));
+  await Effect.runPromise(store.apply({ runId: "run", token: "owner", effects: logEffects(2) }));
 
   for (let index = 0; index < 99_999; index++) {
-    await store.heartbeat("run", "owner");
+    await Effect.runPromise(store.heartbeat("run", "owner"));
   }
 
   const pruneAt = new Date(now + EVENT_RETENTION.maxAgeMs).toISOString();
-  expect(await store.pruneEvents(pruneAt)).toBe(4);
-  expect(store.oldestEventSequence()).toBe(5);
+  expect(await Effect.runPromise(store.pruneEvents(pruneAt))).toBe(4);
+  expect(await Effect.runPromise(store.oldestEventSequence())).toBe(5);
 });

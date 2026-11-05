@@ -21,6 +21,8 @@ export {
   scheduleEnabledBodySchema,
 } from "./api.js";
 
+export { boundaryOptions, decodeBoundary, encodeBoundary } from "./codec.js";
+
 export {
   type PutLoopyBody,
   putLoopyBodySchema,
@@ -28,7 +30,11 @@ export {
   savedLoopySchema,
 } from "./compiled-loopy.js";
 
-export { validateCompiled } from "./compiled-validation.js";
+export {
+  CompiledHashError,
+  CompiledValidationError,
+  validateCompiled,
+} from "./compiled-validation.js";
 
 export * from "./dashboard.js";
 

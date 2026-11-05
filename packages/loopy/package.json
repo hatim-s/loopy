@@ -41,7 +41,7 @@
     "prepack": "bun ../../scripts/build.ts"
   },
   "dependencies": {
-    "oxc-parser": "^0.154.0",
-    "zod": "4.6.7"
+    "effect": "4.1.2",
+    "oxc-parser": "^0.154.0"
   }
 }

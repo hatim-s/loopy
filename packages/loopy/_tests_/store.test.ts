@@ -1,18 +1,9 @@
 import { afterEach } from "bun:test";
-import { SqliteRunStore } from "../src/store/index.js";
 import { storeContract } from "./store-contract.js";
+import { createTestStores } from "./store-fixture.js";
 
-const stores: SqliteRunStore[] = [];
+const { openTestStore, closeTestStores } = createTestStores();
 
-afterEach(() => {
-  for (const store of stores.splice(0)) {
-    store.close();
-  }
-});
+afterEach(closeTestStores);
 
-storeContract("sqlite", (options) => {
-  const store = new SqliteRunStore(":memory:", options?.now, options);
-  stores.push(store);
-
-  return store;
-});
+storeContract("sqlite", (options) => openTestStore(":memory:", options?.now, options));

@@ -1,15 +1,18 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
+import { Effect } from "effect";
 import { attemptHash } from "../../../apps/sandbox/src/admission.js";
 import {
+  decodeBoundary,
   finishedAttemptRecordSchema,
   sandboxAttemptIdentitySchema,
   sandboxExecutionResultSchema,
 } from "../../../packages/loopy/src/contract/index.js";
 import { receiptEvidence } from "../receipt-evidence.js";
+import { decodeRuntimeQueue } from "../runtime-queue-schema.js";
 
 // These are synthetic typed inputs. No receipt authority or workload is started.
-const identity = sandboxAttemptIdentitySchema.parse({
+const identity = decodeBoundary(sandboxAttemptIdentitySchema)({
   workspace: "playground",
   executionKey: { runId: "synthetic-run", nodeId: "0:code", scope: [] },
   attempt: 1,
@@ -19,7 +22,7 @@ const root = "/synthetic/runtime-root/.loopy/cloud/sandbox";
 
 const id = attemptHash({ root, ...identity });
 
-const result = sandboxExecutionResultSchema.parse({
+const result = decodeBoundary(sandboxExecutionResultSchema)({
   kind: "succeeded",
   output: { ok: true },
   logs: [],
@@ -32,7 +35,7 @@ const ref = {
   size: Buffer.byteLength(bytes),
 };
 
-const record = finishedAttemptRecordSchema.parse({
+const record = decodeBoundary(finishedAttemptRecordSchema)({
   kind: "finished",
   plan: {
     ...identity,
@@ -51,32 +54,65 @@ function options(value = result) {
   return {
     root,
     identity,
-    authority: { read: async () => record },
+    authority: { read: () => Effect.succeed(record) },
     resultsFor: () => ({
-      get: async () => value,
-      put: async () => {
-        throw new Error("Evidence must never publish results.");
-      },
+      get: () => Effect.succeed(value),
+      put: () => Effect.die(new Error("Evidence must never publish results.")),
     }),
   };
 }
 
 test("receipt evidence verifies immutable bytes and rejects wrong identities, inline and corrupt results", async () => {
-  const evidence = await receiptEvidence(options());
+  const queue = decodeRuntimeQueue(
+    JSON.parse(
+      JSON.stringify({
+        executionKey: identity.executionKey,
+        attempt: identity.attempt,
+        queuedAt: "2026-11-05T00:00:00.000Z",
+        acquiredAt: "2026-11-05T00:00:00.001Z",
+        finishedAt: "2026-11-05T00:00:00.002Z",
+        queueWaitMs: 1,
+        backendDurationMs: 1,
+        outcome: "succeeded",
+      }),
+    ),
+  );
+
+  const evidence = await Effect.runPromise(
+    receiptEvidence({
+      ...options(),
+      identity: {
+        workspace: identity.workspace,
+        executionKey: queue.executionKey,
+        attempt: queue.attempt,
+      },
+    }),
+  );
+
   expect(evidence.id).toBe(id);
   expect(evidence.resultRef).toEqual(ref);
   expect(evidence.receiptMode).toBe("durable-object");
-  await expect(receiptEvidence({ ...options(), root: "/wrong-root" })).rejects.toThrow(
-    "execution identity",
-  );
   await expect(
-    receiptEvidence({
-      ...options(),
-      authority: { read: async () => ({ ...record, result: { kind: "inline", value: result } }) },
-    }),
+    Effect.runPromise(receiptEvidence({ ...options(), root: "/wrong-root" })),
+  ).rejects.toThrow("execution identity");
+  await expect(
+    Effect.runPromise(
+      receiptEvidence({
+        ...options(),
+        authority: {
+          read: () =>
+            Effect.succeed({ ...record, result: { kind: "inline" as const, value: result } }),
+        },
+      }),
+    ),
   ).rejects.toThrow("immutable result bytes");
-  const corrupted = sandboxExecutionResultSchema.parse({ ...result, output: { ok: false } });
-  await expect(receiptEvidence(options(corrupted))).rejects.toThrow(
+
+  const corrupted = decodeBoundary(sandboxExecutionResultSchema)({
+    ...result,
+    output: { ok: false },
+  });
+
+  await expect(Effect.runPromise(receiptEvidence(options(corrupted)))).rejects.toThrow(
     "authoritative result reference",
   );
 });

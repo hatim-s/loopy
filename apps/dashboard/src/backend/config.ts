@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { Schema, SchemaGetter } from "effect";
 
 export function httpBaseUrl(value: string): string {
   const url = new URL(value);
@@ -16,11 +16,18 @@ export function httpBaseUrl(value: string): string {
   return url.href.replace(/\/+$/, "");
 }
 
-export const backendConfigSchema = z.discriminatedUnion("mode", [
-  z.strictObject({
-    mode: z.literal("http"),
-    baseUrl: z.string().transform(httpBaseUrl).optional(),
-    workspace: z.undefined().optional(),
+export const backendConfigSchema = Schema.Union([
+  Schema.Struct({
+    mode: Schema.Literal("http"),
+    baseUrl: Schema.optional(
+      Schema.String.pipe(
+        Schema.decodeTo(Schema.String, {
+          decode: SchemaGetter.transform(httpBaseUrl),
+          encode: SchemaGetter.passthrough(),
+        }),
+      ),
+    ),
+    workspace: Schema.optional(Schema.Undefined),
   }),
-  z.strictObject({ mode: z.literal("fake"), workspace: z.undefined().optional() }),
+  Schema.Struct({ mode: Schema.Literal("fake"), workspace: Schema.optional(Schema.Undefined) }),
 ]);

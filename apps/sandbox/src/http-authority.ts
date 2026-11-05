@@ -1,15 +1,16 @@
-import type { z } from "zod";
+import type { Schema } from "effect";
+import { Effect } from "effect";
 import {
   type AuthorityCommand,
   AuthorityError,
   type AuthorityInput,
   authorityErrorSchema,
   authorityOperations,
-  type ImmutableResults,
+  decodeBoundary,
   resultOperations,
   SANDBOX_MAX_REQUEST_BYTES,
-  type SandboxAttemptAuthority,
 } from "../../../packages/loopy/src/contract/index.js";
+import { failure, type ImmutableResults, type SandboxAttemptAuthority } from "./operations.js";
 
 export class HttpSandboxAuthority implements SandboxAttemptAuthority {
   private readonly endpoint: URL;
@@ -34,39 +35,45 @@ export class HttpSandboxAuthority implements SandboxAttemptAuthority {
     this.endpoint = new URL("/internal/sandbox-receipts", base);
   }
 
-  private async request<T>(command: AuthorityCommand, schema: z.ZodType<T>): Promise<T> {
-    const response = await fetch(this.endpoint, {
-      method: "POST",
-      redirect: "error",
-      headers: {
-        Authorization: `Bearer ${this.options.token}`,
-        "X-Loopy-Receipts-Namespace": this.options.namespace,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(command),
-      signal: AbortSignal.timeout(5000),
-    });
+  private request<S extends Schema.ConstraintDecoder<unknown>>(
+    command: AuthorityCommand,
+    schema: S,
+  ) {
+    return Effect.tryPromise({
+      try: async (signal) => {
+        const response = await fetch(this.endpoint, {
+          method: "POST",
+          redirect: "error",
+          headers: {
+            Authorization: `Bearer ${this.options.token}`,
+            "X-Loopy-Receipts-Namespace": this.options.namespace,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(command),
+          signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
+        });
 
-    if (!response.ok) {
-      if (response.status === 409) {
-        const body: unknown = JSON.parse(await this.body(response));
-        const rejected = authorityErrorSchema.safeParse(body);
+        if (!response.ok) {
+          if (response.status === 409) {
+            const body: unknown = JSON.parse(await this.body(response));
+            const rejected = decodeBoundary(authorityErrorSchema)(body);
+            throw new AuthorityError(rejected.error);
+          }
 
-        if (rejected.success) {
-          throw new AuthorityError(rejected.data.error);
+          await response.body?.cancel();
+
+          throw new Error(
+            `Receipt authority returned HTTP ${response.status}. Restore local storage before resuming.`,
+          );
         }
-      }
 
-      await response.body?.cancel();
+        const body: unknown = JSON.parse(await this.body(response));
 
-      throw new Error(
-        `Receipt authority returned HTTP ${response.status}. Restore local storage before resuming.`,
-      );
-    }
-
-    const body: unknown = JSON.parse(await this.body(response));
-
-    return schema.parse(body);
+        return decodeBoundary(schema)(body);
+      },
+      catch: (cause) =>
+        cause instanceof AuthorityError ? cause : failure("authority HTTP", cause),
+    });
   }
 
   private async body(response: Response): Promise<string> {
@@ -102,48 +109,51 @@ export class HttpSandboxAuthority implements SandboxAttemptAuthority {
     return Buffer.concat(chunks).toString("utf8");
   }
 
-  async status() {
+  status() {
     return this.request({ operation: "status", input: {} }, authorityOperations.status.output);
   }
 
-  async openSession(input: AuthorityInput<"openSession">) {
+  openSession(input: AuthorityInput<"openSession">) {
     return this.request(
       { operation: "openSession", input },
       authorityOperations.openSession.output,
     );
   }
 
-  async read(id: string) {
+  read(id: string) {
     return this.request({ operation: "read", input: { id } }, authorityOperations.read.output);
   }
 
-  async admit(input: AuthorityInput<"admit">) {
+  admit(input: AuthorityInput<"admit">) {
     return this.request({ operation: "admit", input }, authorityOperations.admit.output);
   }
 
-  async complete(input: AuthorityInput<"complete">) {
+  complete(input: AuthorityInput<"complete">) {
     return this.request({ operation: "complete", input }, authorityOperations.complete.output);
   }
 
-  async beginExport(input: AuthorityInput<"beginExport">) {
+  beginExport(input: AuthorityInput<"beginExport">) {
     return this.request(
       { operation: "beginExport", input },
       authorityOperations.beginExport.output,
     );
   }
 
-  async endExport(input: AuthorityInput<"endExport">): Promise<void> {
-    await this.request({ operation: "endExport", input }, authorityOperations.endExport.output);
+  endExport(input: AuthorityInput<"endExport">) {
+    return this.request(
+      { operation: "endExport", input },
+      authorityOperations.endExport.output,
+    ).pipe(Effect.asVoid);
   }
 
-  async exportGuards(input: AuthorityInput<"exportGuards">) {
+  exportGuards(input: AuthorityInput<"exportGuards">) {
     return this.request(
       { operation: "exportGuards", input },
       authorityOperations.exportGuards.output,
     );
   }
 
-  async recoverable(input: AuthorityInput<"recoverable">) {
+  recoverable(input: AuthorityInput<"recoverable">) {
     return this.request(
       { operation: "recoverable", input },
       authorityOperations.recoverable.output,
@@ -152,12 +162,12 @@ export class HttpSandboxAuthority implements SandboxAttemptAuthority {
 
   resultsFor(workspace: string): ImmutableResults {
     return {
-      put: async (value) =>
+      put: (value) =>
         this.request(
           { operation: "resultPut", input: { workspace, value } },
           resultOperations.resultPut.output,
         ),
-      get: async (ref) =>
+      get: (ref) =>
         this.request(
           { operation: "resultGet", input: { workspace, ref } },
           resultOperations.resultGet.output,

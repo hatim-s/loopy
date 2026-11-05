@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { z } from "zod";
+import { Schema } from "effect";
 import { LastRuns } from "../components/loopies/last-runs.tsx";
 import { CronReading, FireTime } from "../components/schedules/schedule-text.tsx";
 import { Icon } from "../components/ui/icon.tsx";
@@ -16,18 +16,19 @@ import {
   loopyTable,
   successRate,
 } from "../lib/loopy-table.ts";
+import { searchField } from "../lib/search.ts";
 import { useLoopyRows } from "../lib/ui-data.ts";
 import type { LoopyRow } from "../lib/view-models.ts";
 
-const searchSchema = z.object({
-  q: z.string().optional().catch(undefined),
-  show: z.enum(LOOPY_FILTERS).optional().catch(undefined),
-  sort: z.enum(LOOPY_SORTS).optional().catch(undefined),
-  desc: z.boolean().optional().catch(undefined),
+const searchSchema = Schema.Struct({
+  q: searchField(Schema.String),
+  show: searchField(Schema.Literals(LOOPY_FILTERS)),
+  sort: searchField(Schema.Literals(LOOPY_SORTS)),
+  desc: searchField(Schema.Boolean),
 });
 
 export const Route = createFileRoute("/loopies/")({
-  validateSearch: searchSchema,
+  validateSearch: Schema.decodeUnknownSync(searchSchema),
   component: LoopiesPage,
 });
 

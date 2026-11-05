@@ -2,8 +2,8 @@ import { afterEach, expect, spyOn, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SYSTEM_CLOCK } from "../../../packages/loopy/src/host/index.ts";
-import { LoopyService, openRunStore, Registry } from "../../../packages/loopy/src/local/index.ts";
+import { Effect, Exit, Scope } from "effect";
+import { makeLocalService, openRunStore } from "../../../packages/loopy/src/local/index.ts";
 import { originSecurity } from "../../../packages/loopy/src/local/server/security.ts";
 import {
   createRequestHandler,
@@ -20,21 +20,25 @@ afterEach(async () => {
   }
 });
 
-function fixture() {
+async function fixture() {
   const root = mkdtempSync(join(tmpdir(), "loopy-connection-"));
   mkdirSync(join(root, ".loopy", "loopies"), { recursive: true });
   const home = join(root, "home");
-  const store = openRunStore(home);
-
-  const service = new LoopyService({
-    store,
-    registry: () => new Registry(home, root),
-    clock: SYSTEM_CLOCK,
+  const scope = Scope.makeUnsafe();
+  cleanups.push(async () => {
+    await Effect.runPromise(Scope.close(scope, Exit.void));
+    rmSync(root, { recursive: true, force: true });
   });
 
-  cleanups.push(() => {
-    store.close();
-    rmSync(root, { recursive: true, force: true });
+  const store = await Effect.runPromise(
+    openRunStore(home).pipe(Effect.provideService(Scope.Scope, scope)),
+  );
+
+  const service = makeLocalService({
+    store,
+    home,
+    cwd: root,
+    clock: { now: Date.now },
   });
 
   return {
@@ -47,8 +51,8 @@ function fixture() {
   };
 }
 
-function launch(allowedOrigins?: string[]) {
-  const options = fixture();
+async function launch(allowedOrigins?: string[]) {
+  const options = await fixture();
   const server = startServer({ ...options, port: 0, allowedOrigins });
   cleanups.push(() => server.stop());
 
@@ -56,7 +60,7 @@ function launch(allowedOrigins?: string[]) {
 }
 
 test("remote adapter authenticates against an isolated real server with explicit browser policy", async () => {
-  const f = launch(["https://dashboard.example"]);
+  const f = await launch(["https://dashboard.example"]);
   const fetchRequest = globalThis.fetch;
   const calls: RequestInit[] = [];
 
@@ -115,7 +119,7 @@ test("remote adapter authenticates against an isolated real server with explicit
   }
 
   expect((await request(f.baseUrl)).status).toBe(200);
-  const epoch = await f.store.epoch();
+  const epoch = await Effect.runPromise(f.store.epoch());
   const controller = new AbortController();
 
   const stream = await fetch(`${f.baseUrl}/api/events?after=0&epoch=${epoch}`, {
@@ -133,7 +137,7 @@ test("remote adapter authenticates against an isolated real server with explicit
 });
 
 test("preflight needs an allowed origin, method and headers but never bypasses actual auth", async () => {
-  const f = launch(["https://dashboard.example"]);
+  const f = await launch(["https://dashboard.example"]);
 
   const preflight = (origin: string, method = "POST", headers = "authorization, content-type") =>
     fetch(`${f.baseUrl}/api/runs`, {
@@ -159,7 +163,7 @@ test("preflight needs an allowed origin, method and headers but never bypasses a
     (await fetch(`${f.baseUrl}/api/runs`, { headers: { Origin: "https://dashboard.example" } }))
       .status,
   ).toBe(401);
-  const local = launch();
+  const local = await launch();
   expect(
     (
       await fetch(`${local.baseUrl}/api/cursor`, {
@@ -177,7 +181,7 @@ test("preflight needs an allowed origin, method and headers but never bypasses a
 });
 
 test("public host handler uses its configured origin without trusting forwarded hosts", async () => {
-  const options = fixture();
+  const options = await fixture();
 
   const handler = createRequestHandler({
     ...options,
@@ -223,7 +227,7 @@ test("public host handler uses its configured origin without trusting forwarded 
 });
 
 test("access gate opens only for the current token and sends nothing without one", async () => {
-  const f = launch();
+  const f = await launch();
 
   const access = (token: string | null, baseUrl = f.baseUrl) =>
     checkAccess(localHttpBackend({ baseUrl, token }), token);

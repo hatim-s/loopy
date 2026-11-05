@@ -1,9 +1,10 @@
 import type { DurableObjectState, R2Bucket } from "@cloudflare/workers-types";
+import { Effect } from "effect";
 import { R2ArtifactRegistry } from "../../../../apps/cloud/src/artifacts.js";
 import { DurableSqlDriver } from "../../../../apps/cloud/src/sql-driver.js";
-import { nodeIdSchema } from "../../src/contract/index.js";
+import { decodeBoundary, nodeIdSchema } from "../../src/contract/index.js";
 import type { RunRecord } from "../../src/core/index.js";
-import { apiRoutes, dispatch, LoopyService } from "../../src/service/index.js";
+import { apiRoutes, dispatch, makeService } from "../../src/service/index.js";
 import { SqlRunStore } from "../../src/store/portable.js";
 
 const at = "2026-10-22T00:00:00.000Z";
@@ -31,55 +32,57 @@ async function seed(store: SqlRunStore) {
       record.output = null;
     }
 
-    await store.createRun(record);
+    await Effect.runPromise(store.createRun(record));
 
     if (index >= 203) {
       continue;
     }
 
-    const key = { runId: id, nodeId: nodeIdSchema.parse("approval"), scope: [] };
+    const key = { runId: id, nodeId: decodeBoundary(nodeIdSchema)("approval"), scope: [] };
     const wakeAt = index === 202 ? at : index % 2 === 0 ? later : null;
-    await store.claim(id, "owner");
-    await store.apply({
-      runId: id,
-      token: "owner",
-      effects: [
-        {
-          kind: "write_node_run",
-          nodeRun: {
-            key,
-            attempt: 1,
-            maxAttempts: 1,
-            receipt: "none",
-            startedAt: at,
-            status: "waiting",
-            wakeAt,
+    await Effect.runPromise(store.claim(id, "owner"));
+    await Effect.runPromise(
+      store.apply({
+        runId: id,
+        token: "owner",
+        effects: [
+          {
+            kind: "write_node_run",
+            nodeRun: {
+              key,
+              attempt: 1,
+              maxAttempts: 1,
+              receipt: "none",
+              startedAt: at,
+              status: "waiting",
+              wakeAt,
+            },
           },
-        },
-        {
-          kind: "register_wait",
-          executionKey: key,
-          name: `approve-${id}`,
-          payload: { kind: "value", type: "boolean" },
-          at,
-        },
-        index === 201
-          ? { kind: "finish_run", outcome: { status: "succeeded", output: null }, at }
-          : { kind: "suspend_run", wakeAt, at },
-      ],
-    });
+          {
+            kind: "register_wait",
+            executionKey: key,
+            name: `approve-${id}`,
+            payload: { kind: "value", type: "boolean" },
+            at,
+          },
+          index === 201
+            ? { kind: "finish_run", outcome: { status: "succeeded", output: null }, at }
+            : { kind: "suspend_run", wakeAt, at },
+        ],
+      }),
+    );
 
-    const hook = (await store.getWaits(id))[0];
+    const hook = (await Effect.runPromise(store.getWaits(id)))[0];
 
     if (!hook) {
       throw new Error(`Synthetic hook for '${id}' was not persisted.`);
     }
 
     if (index === 200) {
-      await store.resolveWait({ token: hook.token, payload: true, at });
+      await Effect.runPromise(store.resolveWait({ token: hook.token, payload: true, at }));
     }
 
-    hooks.push({ ...(await store.getWaits(id))[0], expiresAt: wakeAt });
+    hooks.push({ ...(await Effect.runPromise(store.getWaits(id)))[0], expiresAt: wakeAt });
   }
 
   return { total: 205, hooks };
@@ -103,15 +106,13 @@ export async function paginationResponse(
 
   const registry = new R2ArtifactRegistry(ctx.storage, bucket, "pagination");
 
-  const unsupported = (): never => {
-    throw new Error("Pagination probe only supports run queries.");
-  };
+  const unsupported = () => Effect.die(new Error("Pagination probe only supports run queries."));
 
-  const service = new LoopyService({
+  const service = makeService({
     store,
     clock: { now: () => Date.parse(at) },
-    registry: () => registry,
-    canonicalWorkspace: () => "pagination",
+    registry: () => Effect.succeed(registry),
+    canonicalWorkspace: () => Effect.succeed("pagination"),
     secrets: { list: unsupported, set: unsupported, remove: unsupported },
     generateTypes: unsupported,
   });

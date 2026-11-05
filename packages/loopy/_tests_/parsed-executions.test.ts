@@ -1,17 +1,34 @@
-import { expect, test } from "bun:test";
+import { afterEach, expect, test } from "bun:test";
 import { writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { Effect, Exit, Scope } from "effect";
 import { compile } from "../src/compiler/index.js";
 import { LocalExecutor } from "../src/executor/index.js";
 import { activate } from "../src/host/index.js";
-import { SqliteRunStore } from "../src/store/index.js";
+import { makeSqliteRunStore } from "../src/store/index.js";
 import { newRun } from "./fixture.js";
 import { fixture } from "./fixtures/executor.js";
+
+const scopes: Scope.Closeable[] = [];
+
+afterEach(async () => {
+  for (const scope of scopes.splice(0).reverse()) {
+    await Effect.runPromise(Scope.close(scope, Exit.void));
+  }
+});
+
+function fixtureScope() {
+  const scope = Scope.makeUnsafe();
+  scopes.push(scope);
+
+  return scope;
+}
 
 test("real parsed git, filesystem, text and redirecting curl executions persist their graph results", async () => {
   const f = await fixture();
 
   const init = Bun.spawn(["git", "init", "--quiet", f.workspace], {
+    env: { PATH: process.env.PATH, HOME: f.home, LOOPY_HOME: f.home, LANG: "C.UTF-8" },
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -30,7 +47,11 @@ test("real parsed git, filesystem, text and redirecting curl executions persist 
     },
   });
 
-  const store = new SqliteRunStore(":memory:");
+  const scope = fixtureScope();
+
+  const store = await Effect.runPromise(
+    makeSqliteRunStore(":memory:").pipe(Effect.provideService(Scope.Scope, scope)),
+  );
 
   try {
     const source = join(f.workspace, "parsed.ts");
@@ -45,7 +66,7 @@ export default loopy("parsed", {input: {}, mode: "full", run: () => {
   return {repository, path, counts, response};
 }});`,
     );
-    const compiled = await compile(source);
+    const compiled = await Effect.runPromise(compile(source));
 
     if (!compiled.ok) {
       throw new Error(JSON.stringify(compiled.diagnostics));
@@ -63,7 +84,9 @@ export default loopy("parsed", {input: {}, mode: "full", run: () => {
       bundlePath: (hash) => join(f.home, "bundles", `${hash}.js`),
     });
 
-    await store.createRun({ ...newRun(), workspace: f.workspace, revision: compiled.revision });
+    await Effect.runPromise(
+      store.createRun({ ...newRun(), workspace: f.workspace, revision: compiled.revision }),
+    );
 
     const expected = {
       repository: f.workspace,
@@ -79,20 +102,25 @@ export default loopy("parsed", {input: {}, mode: "full", run: () => {
       },
     };
 
-    expect(await activate({ store, executor, graph: compiled.graph, runId: "run" })).toMatchObject({
+    expect(
+      await Effect.runPromise(activate({ store, executor, graph: compiled.graph, runId: "run" })),
+    ).toMatchObject({
       status: "succeeded",
       output: expected,
     });
-    const nodes = await store.getNodeRuns("run");
+    const nodes = await Effect.runPromise(store.getNodeRuns("run"));
     expect(nodes.slice(0, 4)).toMatchObject([
       { status: "succeeded", output: expected.repository },
       { status: "succeeded", output: expected.path },
       { status: "succeeded", output: expected.counts },
       { status: "succeeded", output: expected.response },
     ]);
-    expect(await store.getRun("run")).toMatchObject({ status: "succeeded", output: expected });
+    expect(await Effect.runPromise(store.getRun("run"))).toMatchObject({
+      status: "succeeded",
+      output: expected,
+    });
   } finally {
-    store.close();
+    await Effect.runPromise(Scope.close(scope, Exit.void));
     server.stop(true);
   }
 });

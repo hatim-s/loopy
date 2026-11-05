@@ -32,9 +32,3 @@ export type AuthorModule = {
   evaluated: string;
   sourceCalls?: SourceCall[];
 };
-
-export type Restricted = {
-  ok: true;
-  modules: AuthorModule[];
-  parsers: Map<string, ParserSource>;
-};

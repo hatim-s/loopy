@@ -1,5 +1,6 @@
 import type { DurableObjectNamespace, R2Bucket } from "@cloudflare/workers-types";
-import { z } from "zod";
+import { Schema } from "effect";
+import { decodeBoundary } from "../../../packages/loopy/src/contract/index.js";
 
 export interface Environment {
   WORKSPACES: DurableObjectNamespace;
@@ -16,22 +17,21 @@ export interface Environment {
   RECEIPTS_ROOT: string;
 }
 
-const principalsSchema = z
-  .array(
-    z.strictObject({
-      token: z.string().min(32),
-      workspace: z.string().regex(/^[a-z][a-z0-9-]{0,62}$/),
-    }),
-  )
-  .min(1)
-  .max(16);
+const principalsSchema = Schema.Array(
+  Schema.Struct({
+    token: Schema.String.check(Schema.isMinLength(32)),
+    workspace: Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9-]{0,62}$/)),
+  }),
+).check(Schema.isMinLength(1), Schema.isMaxLength(16));
+
+const concurrencySchema = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 16 }));
 
 export function principals(env: Environment) {
-  return principalsSchema.parse(JSON.parse(env.LOCAL_AUTH));
+  return decodeBoundary(principalsSchema)(JSON.parse(env.LOCAL_AUTH));
 }
 
 export function concurrency(env: Environment): number {
-  return z.coerce.number().int().min(1).max(16).parse(env.CONCURRENCY);
+  return decodeBoundary(concurrencySchema)(Number(env.CONCURRENCY));
 }
 
 export function localEndpoint(value: string): URL {

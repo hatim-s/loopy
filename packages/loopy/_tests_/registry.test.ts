@@ -2,6 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Effect } from "effect";
 import { Registry } from "../src/local/index.js";
 import { compiledBody } from "./compiled-fixture.js";
 
@@ -28,72 +29,93 @@ afterEach(() => {
 
 test("registry lookup uses the nearest project root and falls back to global entries", async () => {
   const f = fixture();
-  const registry = new Registry(f.home, f.project);
+  const registry = Effect.runSync(Registry.make(f.home, f.project));
   const definition = await compiledBody("saved", f.source);
-  registry.save({
-    ...definition,
-    revision: "a".repeat(64),
-    graph: { ...definition.graph, meta: { ...definition.graph.meta, scope: "global" } },
-    source: { ...definition.source, path: f.source },
-  });
+  Effect.runSync(
+    registry.save({
+      ...definition,
+      revision: "a".repeat(64),
+      graph: { ...definition.graph, meta: { ...definition.graph.meta, scope: "global" } },
+      source: { ...definition.source, path: f.source },
+    }),
+  );
   const projectSource = join(f.project, "local.ts");
   writeFileSync(projectSource, "");
-  registry.save({
-    ...definition,
-    revision: "b".repeat(64),
-    source: { ...definition.source, path: projectSource },
-  });
+  Effect.runSync(
+    registry.save({
+      ...definition,
+      revision: "b".repeat(64),
+      source: { ...definition.source, path: projectSource },
+    }),
+  );
   const child = join(f.project, "nested", "child");
   mkdirSync(child, { recursive: true });
-  expect(new Registry(f.home, child).project).toBe(f.project);
-  expect(new Registry(f.home, child).get("saved").revision).toBe("b".repeat(64));
-  expect(new Registry(f.home, f.root).get("saved").revision).toBe("a".repeat(64));
-  expect(new Registry(f.home, child).list()).toHaveLength(1);
+  expect(Effect.runSync(Registry.make(f.home, child)).project).toBe(f.project);
+  expect(Effect.runSync(Effect.runSync(Registry.make(f.home, child)).get("saved")).revision).toBe(
+    "b".repeat(64),
+  );
+  expect(Effect.runSync(Effect.runSync(Registry.make(f.home, f.root)).get("saved")).revision).toBe(
+    "a".repeat(64),
+  );
+  expect(Effect.runSync(Effect.runSync(Registry.make(f.home, child)).list())).toHaveLength(1);
 });
 
 test("changing scope removes only the other entry owned by the same source", async () => {
   const f = fixture();
-  const registry = new Registry(f.home, f.project);
+  const registry = Effect.runSync(Registry.make(f.home, f.project));
   const definition = await compiledBody("saved", f.source);
-  registry.save({
-    ...definition,
-    revision: "a".repeat(64),
-    graph: { ...definition.graph, meta: { ...definition.graph.meta, scope: "global" } },
-    source: { ...definition.source, path: f.source },
-  });
-  registry.save({
-    ...definition,
-    revision: "b".repeat(64),
-    source: { ...definition.source, path: f.source },
-  });
+  Effect.runSync(
+    registry.save({
+      ...definition,
+      revision: "a".repeat(64),
+      graph: { ...definition.graph, meta: { ...definition.graph.meta, scope: "global" } },
+      source: { ...definition.source, path: f.source },
+    }),
+  );
+  Effect.runSync(
+    registry.save({
+      ...definition,
+      revision: "b".repeat(64),
+      source: { ...definition.source, path: f.source },
+    }),
+  );
   expect(existsSync(join(f.home, "loopies", "saved.json"))).toBe(false);
-  registry.save({
-    ...definition,
-    revision: "c".repeat(64),
-    graph: { ...definition.graph, meta: { ...definition.graph.meta, scope: "global" } },
-    source: { ...definition.source, path: f.source },
-  });
+  Effect.runSync(
+    registry.save({
+      ...definition,
+      revision: "c".repeat(64),
+      graph: { ...definition.graph, meta: { ...definition.graph.meta, scope: "global" } },
+      source: { ...definition.source, path: f.source },
+    }),
+  );
   expect(existsSync(join(f.project, ".loopy", "loopies", "saved.json"))).toBe(false);
   const other = join(f.project, "other.ts");
   writeFileSync(other, "");
-  registry.save({
-    ...definition,
-    revision: "d".repeat(64),
-    source: { ...definition.source, path: other },
-  });
-  expect(new Registry(f.home, f.root).get("saved").revision).toBe("c".repeat(64));
-  expect(registry.get("saved").revision).toBe("d".repeat(64));
+  Effect.runSync(
+    registry.save({
+      ...definition,
+      revision: "d".repeat(64),
+      source: { ...definition.source, path: other },
+    }),
+  );
+  expect(Effect.runSync(Effect.runSync(Registry.make(f.home, f.root)).get("saved")).revision).toBe(
+    "c".repeat(64),
+  );
+  expect(Effect.runSync(registry.get("saved")).revision).toBe("d".repeat(64));
 });
 
 test("stale registry entries are ignored and replaced without preserving the old format", async () => {
   const f = fixture();
-  const registry = new Registry(f.home, f.project);
+  const registry = Effect.runSync(Registry.make(f.home, f.project));
   mkdirSync(registry.projectDirectory, { recursive: true });
   const file = join(registry.projectDirectory, "saved.json");
   writeFileSync(file, JSON.stringify({ slug: "saved", source: "different", bundleHash: "old" }));
-  expect(registry.list()).toEqual([]);
-  expect(() => registry.get("saved")).toThrow("No saved loopy");
-  registry.save(await compiledBody("saved", f.source));
-  expect(registry.get("saved")).toMatchObject({ version: 2, graph: { name: "saved" } });
-  expect(registry.get("saved")).not.toHaveProperty("bundleHash");
+  expect(Effect.runSync(registry.list())).toEqual([]);
+  expect(() => Effect.runSync(registry.get("saved"))).toThrow("No saved loopy");
+  Effect.runSync(registry.save(await compiledBody("saved", f.source)));
+  expect(Effect.runSync(registry.get("saved"))).toMatchObject({
+    version: 2,
+    graph: { name: "saved" },
+  });
+  expect(Effect.runSync(registry.get("saved"))).not.toHaveProperty("bundleHash");
 });

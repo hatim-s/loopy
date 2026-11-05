@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { nodeRunSchema } from "../src/contract/index.js";
+import { decodeBoundary, nodeRunSchema } from "../src/contract/index.js";
 import { type Graph, type Json, outputBytes } from "../src/core/index.js";
 import { type EngineState, initialState, step } from "../src/engine/index.js";
 import { code, loopy, map, sh } from "../src/sdk/graph/index.js";
@@ -51,7 +51,7 @@ test("code records resolved inputs before dispatch and keeps its own snapshot", 
 
   expect(dispatch?.spec).toMatchObject({ kind: "code", input: { subject: input.subject } });
   expect(recorded?.inputView).toEqual({ state: "available", value: { subject: input.subject } });
-  expect(nodeRunSchema.parse(recorded).inputView).toEqual(recorded?.inputView);
+  expect(decodeBoundary(nodeRunSchema)(recorded).inputView).toEqual(recorded?.inputView);
   expect(result.effects[0]).toEqual({ kind: "write_node_run", nodeRun: recorded });
   expect(result.effects[1]).toBe(dispatch);
 

@@ -1,17 +1,19 @@
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { definitionSummary } from "../../src/contract/index.js";
+import { Effect } from "effect";
+
 import { type RunRecord, revision } from "../../src/core/index.js";
 import { Registry } from "../../src/local/registry.js";
-import { type ArtifactRegistry, LoopyService } from "../../src/service/index.js";
+import { makeArtifactRegistry } from "../../src/local/save-compiled.js";
+import { type ArtifactRegistry, makeService, RegistryError } from "../../src/service/index.js";
 import { MemoryStore } from "../../src/store/index.js";
 import { compiledBody } from "../compiled-fixture.js";
 
 export class SummaryCountsStore extends MemoryStore {
   groupedReads = 0;
 
-  override async runCountsByDefinition() {
+  override runCountsByDefinition() {
     // Lists must group counts once instead of querying once per definition.
     this.groupedReads++;
 
@@ -19,7 +21,7 @@ export class SummaryCountsStore extends MemoryStore {
   }
 }
 
-export function summaryServiceFixture() {
+export async function summaryServiceFixture() {
   const directory = realpathSync(mkdtempSync(join(tmpdir(), "loopy-summary-service-")));
   const home = join(directory, "home");
   const a = join(directory, "a");
@@ -39,56 +41,53 @@ export function summaryServiceFixture() {
 
   const store = new SummaryCountsStore();
 
+  const registries = new Map<string, Registry>();
+
+  for (const workspace of [a, b]) {
+    registries.set(workspace, await Effect.runPromise(Registry.make(home, workspace)));
+  }
+
   const registry = (workspace: string) =>
-    new Registry(home, workspace === "" || workspace === "alias" ? a : workspace);
+    registries.get(workspace === "" || workspace === "alias" ? a : workspace)!;
 
-  const adapter = (workspace: string): ArtifactRegistry => {
+  const adapter = (workspace: string): Effect.Effect<ArtifactRegistry> => {
     const native = registry(workspace);
+    const base = makeArtifactRegistry(native);
 
-    return {
-      workspace: async () => native.project,
-      listSummaries: async () => {
-        calls.lists.set(native.project, (calls.lists.get(native.project) ?? 0) + 1);
+    return Effect.succeed({
+      ...base,
+      listSummaries: () =>
+        Effect.sync(() => {
+          calls.lists.set(native.project, (calls.lists.get(native.project) ?? 0) + 1);
+        }).pipe(Effect.andThen(base.listSummaries())),
+      summary: (slug) =>
+        Effect.sync(() => {
+          const key = JSON.stringify([native.project, slug]);
+          calls.summaries.set(key, (calls.summaries.get(key) ?? 0) + 1);
+        }).pipe(Effect.andThen(base.summary(slug))),
+      get: (slug) =>
+        Effect.suspend(() => {
+          calls.graphs.push(slug);
 
-        return native.list().map(definitionSummary);
-      },
-      summary: async (slug) => {
-        const key = JSON.stringify([native.project, slug]);
-        calls.summaries.set(key, (calls.summaries.get(key) ?? 0) + 1);
-        const saved = native.list().find((entry) => entry.slug === slug);
-
-        return saved ? definitionSummary(saved) : null;
-      },
-      get: async (slug) => {
-        calls.graphs.push(slug);
-
-        if (slug === "missing") {
-          return null;
-        }
-
-        if (slug === "corrupt") {
-          throw new Error("Stored graph is corrupt.");
-        }
-
-        return native.get(slug);
-      },
-      save: async (body) => {
-        native.save(body);
-      },
-      revisionGraph: (hash) => native.revisionGraph(hash),
-      revisionSource: (slug, hash) => native.revisionSource(slug, hash),
-    };
+          return slug === "corrupt"
+            ? Effect.fail(
+                new RegistryError({
+                  operation: "read",
+                  cause: new Error("Stored graph is corrupt."),
+                }),
+              )
+            : base.get(slug);
+        }),
+    });
   };
 
-  const service = new LoopyService({
+  const service = makeService({
     store,
     registry: adapter,
     clock: { now: () => Date.parse("2026-10-23T00:00:00.000Z") },
-    canonicalWorkspace: async (workspace) => registry(workspace).project,
-    secrets: { list: () => [], set: () => {}, remove: () => {} },
-    generateTypes: async () => {
-      throw new Error("Unused fixture operation.");
-    },
+    canonicalWorkspace: (workspace) => Effect.succeed(registry(workspace).project),
+    secrets: { list: () => Effect.succeed([]), set: () => Effect.void, remove: () => Effect.void },
+    generateTypes: () => Effect.die(new Error("Unused fixture operation.")),
   });
 
   const save = async (workspace: string, slug: string, scope: "global" | "project" = "project") => {
@@ -101,7 +100,7 @@ export function summaryServiceFixture() {
     body.graph.inputValidation = { root: "json", minItems: {}, unknownKeys: "reject" };
     body.revision = await revision(body.graph);
 
-    return registry(workspace).save(body);
+    return Effect.runPromise(registry(workspace).save(body));
   };
 
   const run = async (id: string, workspace: string, slug: string, status: RunRecord["status"]) => {
@@ -126,7 +125,7 @@ export function summaryServiceFixture() {
       record.error = "controlled";
     }
 
-    await store.createRun(record);
+    await Effect.runPromise(store.createRun(record));
 
     return record;
   };
@@ -134,6 +133,7 @@ export function summaryServiceFixture() {
   return {
     a,
     b,
+    home,
     store,
     service,
     calls,

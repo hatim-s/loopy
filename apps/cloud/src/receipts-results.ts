@@ -1,15 +1,17 @@
 import type { R2Bucket } from "@cloudflare/workers-types";
+import { Effect } from "effect";
 import {
-  type ImmutableResults,
+  decodeBoundary,
   type ResultRef,
   SANDBOX_MAX_CAPTURE_BYTES,
   type SandboxExecutionResult,
   sandboxExecutionResultSchema,
 } from "../../../packages/loopy/src/contract/index.js";
 import { canonicalJson } from "../../../packages/loopy/src/core/index.js";
+import { CloudError, cloudSync, platform } from "./operation.js";
 import { receiptHash } from "./receipts-identity.js";
 
-export class R2ImmutableResults implements ImmutableResults {
+export class R2ImmutableResults {
   private readonly prefix: string;
 
   constructor(
@@ -20,56 +22,84 @@ export class R2ImmutableResults implements ImmutableResults {
     this.prefix = `receipts/${encodeURIComponent(namespace)}/workspaces/${encodeURIComponent(workspace)}/results/`;
   }
 
-  async put(result: SandboxExecutionResult): Promise<ResultRef> {
-    let bytes = new TextEncoder().encode(canonicalJson(result));
+  put(result: SandboxExecutionResult) {
+    return Effect.gen({ self: this }, function* () {
+      let bytes = new TextEncoder().encode(canonicalJson(result));
 
-    if (bytes.byteLength > SANDBOX_MAX_CAPTURE_BYTES) {
-      bytes = new TextEncoder().encode(
-        canonicalJson({
-          kind: "failed",
-          error: { code: "output_limit", message: "Serialized attempt result exceeds 2 MiB." },
-          exitCode: null,
-          logs: [],
+      if (bytes.byteLength > SANDBOX_MAX_CAPTURE_BYTES) {
+        bytes = new TextEncoder().encode(
+          canonicalJson({
+            kind: "failed",
+            error: { code: "output_limit", message: "Serialized attempt result exceeds 2 MiB." },
+            exitCode: null,
+            logs: [],
+          }),
+        );
+      }
+
+      const ref = { sha256: yield* receiptHash(bytes), size: bytes.byteLength };
+
+      const created = yield* platform("publish immutable bytes", () =>
+        this.bucket.put(this.prefix + ref.sha256, bytes, {
+          onlyIf: { etagDoesNotMatch: "*" },
         }),
       );
-    }
 
-    const ref = { sha256: await receiptHash(bytes), size: bytes.byteLength };
+      if (!created) {
+        // An existing object must verify before its digest can be reused.
+        yield* this.get(ref);
+      }
 
-    const created = await this.bucket.put(this.prefix + ref.sha256, bytes, {
-      onlyIf: { etagDoesNotMatch: "*" },
+      return ref;
     });
-
-    if (!created) {
-      // An existing object must verify before its digest can be reused.
-      await this.get(ref);
-    }
-
-    return ref;
   }
 
-  async get(ref: ResultRef): Promise<SandboxExecutionResult> {
-    const object = await this.bucket.get(this.prefix + ref.sha256, {
-      range: { offset: 0, length: ref.size + 1 },
+  get(ref: ResultRef) {
+    return Effect.gen({ self: this }, function* () {
+      const object = yield* platform("read immutable bytes", () =>
+        this.bucket.get(this.prefix + ref.sha256, {
+          range: { offset: 0, length: ref.size + 1 },
+        }),
+      );
+
+      if (!object) {
+        return yield* Effect.fail(
+          new CloudError({
+            operation: "verify result",
+            cause: "Immutable result is missing. Restore receipt storage before resuming.",
+          }),
+        );
+      }
+
+      if (object.size !== ref.size || object.size > SANDBOX_MAX_CAPTURE_BYTES) {
+        yield* platform("cancel artifact read", () => object.body.cancel());
+
+        return yield* Effect.fail(
+          new CloudError({
+            operation: "verify result",
+            cause: "Immutable result size does not match its receipt.",
+          }),
+        );
+      }
+
+      const bytes = new Uint8Array(
+        yield* platform("read artifact bytes", () => object.arrayBuffer()),
+      );
+
+      if (bytes.byteLength !== ref.size || (yield* receiptHash(bytes)) !== ref.sha256) {
+        return yield* Effect.fail(
+          new CloudError({
+            operation: "verify result",
+            cause: "Immutable result hash does not match its receipt.",
+          }),
+        );
+      }
+
+      return yield* cloudSync("decode immutable result", () =>
+        decodeBoundary(sandboxExecutionResultSchema)(
+          JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)),
+        ),
+      );
     });
-
-    if (!object) {
-      throw new Error("Immutable result is missing. Restore receipt storage before resuming.");
-    }
-
-    if (object.size !== ref.size || object.size > SANDBOX_MAX_CAPTURE_BYTES) {
-      await object.body.cancel();
-      throw new Error("Immutable result size does not match its receipt.");
-    }
-
-    const bytes = new Uint8Array(await object.arrayBuffer());
-
-    if (bytes.byteLength !== ref.size || (await receiptHash(bytes)) !== ref.sha256) {
-      throw new Error("Immutable result hash does not match its receipt.");
-    }
-
-    return sandboxExecutionResultSchema.parse(
-      JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)),
-    );
   }
 }

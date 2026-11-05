@@ -1,12 +1,14 @@
 import { realpath } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Effect } from "effect";
 import { type Expression, type Node, parseSync, Visitor } from "oxc-parser";
 import { isString } from "../core/index.js";
 import { diagnostic } from "./diagnostic.js";
+import { type AuthorError, authorSource, type CompilationError, compilerIO } from "./errors.js";
 import type { CompilerDiagnostic } from "./types.js";
 
-export async function modulePath(specifier: string, file: string) {
+export const modulePath = Effect.fn(function* (specifier: string, file: string) {
   const path = specifier.startsWith("file:")
     ? fileURLToPath(specifier)
     : resolve(dirname(file), specifier);
@@ -16,13 +18,13 @@ export async function modulePath(specifier: string, file: string) {
     path.replace(/\.js$/, ".ts"),
     ...[".ts", ".tsx", ".js", "/index.ts", "/index.js"].map((suffix) => path + suffix),
   ]) {
-    if (await Bun.file(candidate).exists()) {
-      return realpath(candidate);
+    if (yield* compilerIO("source exists", candidate, () => Bun.file(candidate).exists())) {
+      return yield* compilerIO("resolve source", candidate, () => realpath(candidate));
     }
   }
 
   return path;
-}
+});
 
 const runtimeCode = {
   literalCalls: new Set(["require", "importSync", "import"]),
@@ -203,19 +205,21 @@ export function checkImports(file: string, source: string, diagnostics: Compiler
   return dependencies;
 }
 
-export async function checkModuleImports(
+export function checkModuleImports(
   file: string,
   diagnostics: CompilerDiagnostic[],
   seen = new Set<string>(),
-): Promise<void> {
-  if (seen.has(file) || file.endsWith(".json")) {
-    return;
-  }
+): Effect.Effect<void, CompilationError | AuthorError> {
+  return Effect.gen(function* () {
+    if (seen.has(file) || file.endsWith(".json")) {
+      return;
+    }
 
-  seen.add(file);
-  const source = await Bun.file(file).text();
+    seen.add(file);
+    const source = yield* authorSource("read source", file, () => Bun.file(file).text());
 
-  for (const specifier of checkImports(file, source, diagnostics)) {
-    await checkModuleImports(await modulePath(specifier, file), diagnostics, seen);
-  }
+    for (const specifier of checkImports(file, source, diagnostics)) {
+      yield* checkModuleImports(yield* modulePath(specifier, file), diagnostics, seen);
+    }
+  });
 }

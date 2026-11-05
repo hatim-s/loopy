@@ -1,10 +1,12 @@
 import { expect, test } from "bun:test";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { Effect } from "effect";
 import type { Json } from "../src/core/index.js";
 import { revision } from "../src/core/index.js";
-import { activate, SYSTEM_CLOCK } from "../src/host/index.js";
-import { LoopyService, Registry } from "../src/local/index.js";
+import { activate } from "../src/host/index.js";
+import { Registry } from "../src/local/registry.js";
+import { makeLocalService } from "../src/local/service.js";
 import { loopy } from "../src/sdk/graph/index.js";
 import { MemoryStore } from "../src/store/index.js";
 import { FakeExecutor } from "./fixture.js";
@@ -20,16 +22,24 @@ async function setup() {
     run: ({ input }) => input,
   });
 
-  const registry = new Registry(f.home, f.workspace);
-  registry.save({
-    graph,
-    revision: await revision(graph),
-    bundles: [],
-    replace: false,
-    source: { path: source, workspace: f.workspace },
-  });
+  const registry = await Effect.runPromise(Registry.make(f.home, f.workspace));
+  await Effect.runPromise(
+    registry.save({
+      graph,
+      revision: await revision(graph),
+      bundles: [],
+      replace: false,
+      source: { path: source, workspace: f.workspace },
+    }),
+  );
   const store = new MemoryStore();
-  const service = new LoopyService({ store, registry: () => registry, clock: SYSTEM_CLOCK });
+
+  const service = makeLocalService({
+    store,
+    home: f.home,
+    cwd: f.workspace,
+    clock: { now: Date.now },
+  });
 
   return { ...f, graph, store, service };
 }
@@ -44,10 +54,10 @@ const invalidInputs: Json[] = [
 for (const input of invalidInputs) {
   test("invalid graph input leaves no queued run", async () => {
     const f = await setup();
-    await expect(f.service.startRun("input", input, f.workspace)).rejects.toThrow(
-      "Input does not match the saved graph schema.",
-    );
-    expect(await f.store.listRuns()).toEqual([]);
+    await expect(
+      Effect.runPromise(f.service.startRun("input", input, f.workspace)),
+    ).rejects.toThrow("Input does not match the saved graph schema.");
+    expect(await Effect.runPromise(f.store.listRuns())).toEqual([]);
   });
 }
 
@@ -59,15 +69,17 @@ const validInputs: Json[] = [
 for (const input of validInputs) {
   test("required and optional primitive inputs persist and resolve through the graph", async () => {
     const f = await setup();
-    const run = await f.service.startRun("input", input, f.workspace);
-    expect((await f.store.getRun(run.id))?.input).toEqual(input);
+    const run = await Effect.runPromise(f.service.startRun("input", input, f.workspace));
+    expect((await Effect.runPromise(f.store.getRun(run.id)))?.input).toEqual(input);
     expect(
-      await activate({
-        runId: run.id,
-        store: f.store,
-        graph: f.graph,
-        executor: new FakeExecutor(),
-      }),
+      await Effect.runPromise(
+        activate({
+          runId: run.id,
+          store: f.store,
+          graph: f.graph,
+          executor: new FakeExecutor(),
+        }),
+      ),
     ).toEqual({ status: "succeeded", output: input });
   });
 }

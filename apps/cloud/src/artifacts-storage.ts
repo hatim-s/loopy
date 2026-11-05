@@ -1,4 +1,6 @@
 import type { R2Bucket } from "@cloudflare/workers-types";
+import { Effect } from "effect";
+import { CloudError, platform } from "./operation.js";
 
 export const ARTIFACT_LIMITS = {
   definitions: 1000,
@@ -26,32 +28,53 @@ export class ArtifactStorage {
     this.prefix = `workspaces/${encodeURIComponent(workspace)}/`;
   }
 
-  async put(key: string, bytes: string | Uint8Array): Promise<void> {
-    await this.bucket.put(this.prefix + key, bytes, { onlyIf: { etagDoesNotMatch: "*" } });
+  put(key: string, bytes: string | Uint8Array) {
+    return Effect.gen({ self: this }, function* () {
+      yield* platform("publish immutable bytes", () =>
+        this.bucket.put(this.prefix + key, bytes, { onlyIf: { etagDoesNotMatch: "*" } }),
+      );
+    });
   }
 
-  async read(key: string, limit: number): Promise<Uint8Array | null> {
-    // The range bounds the response even before inspecting R2's object size.
-    const object = await this.bucket.get(this.prefix + key, {
-      range: { offset: 0, length: limit + 1 },
+  read(key: string, limit: number) {
+    return Effect.gen({ self: this }, function* () {
+      // The range bounds the response even before inspecting R2's object size.
+      const object = yield* platform("read immutable bytes", () =>
+        this.bucket.get(this.prefix + key, {
+          range: { offset: 0, length: limit + 1 },
+        }),
+      );
+
+      if (!object) {
+        return null;
+      }
+
+      if (object.size > limit) {
+        yield* platform("cancel artifact read", () => object.body.cancel());
+
+        return yield* Effect.fail(
+          new CloudError({
+            operation: "read artifact",
+            cause: `Artifact exceeds its ${limit} byte limit.`,
+          }),
+        );
+      }
+
+      const bytes = new Uint8Array(
+        yield* platform("read artifact bytes", () => object.arrayBuffer()),
+      );
+
+      if (bytes.byteLength > limit) {
+        return yield* Effect.fail(
+          new CloudError({
+            operation: "read artifact",
+            cause: `Artifact exceeds its ${limit} byte limit.`,
+          }),
+        );
+      }
+
+      return bytes;
     });
-
-    if (!object) {
-      return null;
-    }
-
-    if (object.size > limit) {
-      await object.body.cancel();
-      throw new Error(`Artifact exceeds its ${limit} byte limit.`);
-    }
-
-    const bytes = new Uint8Array(await object.arrayBuffer());
-
-    if (bytes.byteLength > limit) {
-      throw new Error(`Artifact exceeds its ${limit} byte limit.`);
-    }
-
-    return bytes;
   }
 }
 

@@ -1,10 +1,15 @@
 import type { DurableObjectStorage } from "@cloudflare/workers-types";
 import {
   type DefinitionSummary,
+  decodeBoundary,
   definitionSummary,
   type PutLoopyBody,
 } from "../../../packages/loopy/src/contract/index.js";
 import { validateSlug } from "../../../packages/loopy/src/core/index.js";
+import {
+  ArtifactValidationError,
+  RegistryConflictError,
+} from "../../../packages/loopy/src/service/index.js";
 import { ArtifactCapacity } from "./artifacts-capacity.js";
 import {
   checkProjectionRow,
@@ -93,7 +98,7 @@ export class ArtifactDefinitions {
       revision: row.revision,
       source: row.source,
       savedAt: row.saved_at,
-      ...definitionProjectionSchema.parse(JSON.parse(row.projection_json)),
+      ...decodeBoundary(definitionProjectionSchema)(JSON.parse(row.projection_json)),
     };
   }
 
@@ -143,9 +148,10 @@ export class ArtifactDefinitions {
       this.checkOwner(current, body);
 
       if (current?.generation !== previous?.generation) {
-        throw new Error(
-          "The definition changed during save. Retry against its current source owner.",
-        );
+        throw new RegistryConflictError({
+          slug: body.graph.name,
+          message: "The definition changed during save. Retry against its current source owner.",
+        });
       }
 
       this.checkCapacity(current);
@@ -200,17 +206,19 @@ export class ArtifactDefinitions {
       .one().count;
 
     if (count >= ARTIFACT_LIMITS.definitions) {
-      throw new Error(
-        "Workspace has reached its 1000 definition capacity. Replace an existing definition or remove one first.",
-      );
+      throw new ArtifactValidationError({
+        cause:
+          "Workspace has reached its 1000 definition capacity. Replace an existing definition or remove one first.",
+      });
     }
   }
 
   private checkOwner(previous: Publication | null, body: PutLoopyBody): void {
     if (previous && previous.source !== body.source.path && !body.replace) {
-      throw new Error(
-        `Slug '${body.graph.name}' belongs to another source. Rename it or use --replace.`,
-      );
+      throw new RegistryConflictError({
+        slug: body.graph.name,
+        message: `Slug '${body.graph.name}' belongs to another source. Rename it or use --replace.`,
+      });
     }
   }
 }

@@ -2,38 +2,79 @@ import { existsSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
+import { Data, Effect } from "effect";
+import { errorMessage } from "../core/index.js";
+import { spawnCaptured } from "./spawn.js";
+
+export class DaemonInstallError extends Data.TaggedError("DaemonInstallError")<{
+  message: string;
+  cause?: unknown;
+}> {}
+
+export const installSync = <A>(run: () => A) =>
+  Effect.try({
+    try: run,
+    catch: (cause) =>
+      new DaemonInstallError({
+        message: errorMessage(cause),
+        cause,
+      }),
+  });
+
+const installIO = <A>(run: () => Promise<A>) =>
+  Effect.tryPromise({
+    try: run,
+    catch: (cause) =>
+      new DaemonInstallError({ message: "Daemon service file operation failed.", cause }),
+  });
+
 export type DaemonExecResult = { code: number; stdout: string; stderr: string };
 
 export type DaemonOperations = {
-  /** Undefined content removes the file. Writing content creates parent directories. */
-  writeFile: (path: string, content: string | undefined) => Promise<void>;
-  exists: (path: string) => Promise<boolean>;
-  exec: (argv: string[]) => Promise<DaemonExecResult>;
+  writeFile: (path: string, content: string | undefined) => Effect.Effect<void, DaemonInstallError>;
+  exists: (path: string) => Effect.Effect<boolean, DaemonInstallError>;
+  exec: (argv: string[]) => Effect.Effect<DaemonExecResult, DaemonInstallError>;
 };
 
 export const daemonOperations: DaemonOperations = {
-  writeFile: async (path, content) => {
-    if (content === undefined) {
-      await rm(path, { force: true });
+  writeFile: (path, content) =>
+    Effect.gen(function* () {
+      if (content === undefined) {
+        yield* installIO(() => rm(path, { force: true }));
 
-      return;
-    }
+        return;
+      }
 
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, content);
-  },
-  exists: async (path) => existsSync(path),
-  exec: async (argv) => {
-    const child = Bun.spawn(argv, { stdout: "pipe", stderr: "pipe" });
+      yield* installIO(() => mkdir(dirname(path), { recursive: true }));
+      yield* installIO(() => writeFile(path, content));
+    }),
+  exists: (path) => installSync(() => existsSync(path)),
+  exec: (argv) =>
+    Effect.gen(function* () {
+      const [program, ...args] = argv;
 
-    const [code, stdout, stderr] = await Promise.all([
-      child.exited,
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-    ]);
+      if (!program) {
+        return yield* Effect.fail(new DaemonInstallError({ message: "Service command is empty." }));
+      }
 
-    return { code, stdout, stderr };
-  },
+      const result = yield* spawnCaptured(
+        { program, args, cwd: process.cwd(), env: process.env },
+        { timeoutMs: 30000, maxOutputBytes: 1024 * 1024 },
+        undefined,
+        performance.now(),
+      ).pipe(
+        Effect.mapError(
+          (cause) =>
+            new DaemonInstallError({
+              message:
+                "Daemon service command failed. Inspect the service manager before retrying.",
+              cause,
+            }),
+        ),
+      );
+
+      return { code: result.exitCode, stdout: result.stdout, stderr: result.stderr };
+    }),
 };
 
 function xml(value: string): string {

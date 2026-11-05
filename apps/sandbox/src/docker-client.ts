@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
+import { Effect } from "effect";
 import type { SandboxConfig } from "./config.js";
+import { failure } from "./operations.js";
 import { type CommandRunner, runCommand } from "./process.js";
 
 type CaptureLimits = { timeoutMs?: number; maxBytes?: number };
@@ -27,13 +29,20 @@ export class DockerClient {
     });
   }
 
-  async required(args: string[], limits?: CaptureLimits) {
-    const output = await this.call(args, limits);
+  required(args: string[], limits?: CaptureLimits) {
+    return Effect.gen({ self: this }, function* () {
+      const output = yield* this.call(args, limits);
 
-    if (output.exitCode !== 0) {
-      throw new Error(`Docker ${args[0]} failed. Inspect the selected Docker context.`);
-    }
+      if (output.exitCode !== 0) {
+        return yield* Effect.fail(
+          failure(
+            "Docker command",
+            new Error(`Docker ${args[0]} failed. Inspect the selected Docker context.`),
+          ),
+        );
+      }
 
-    return output;
+      return output;
+    });
   }
 }

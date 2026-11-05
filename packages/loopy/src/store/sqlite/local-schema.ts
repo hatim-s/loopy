@@ -1,3 +1,4 @@
+import { StoreRejectedError } from "../operation.js";
 import type { SqlDriver } from "./driver.js";
 import { applyQuerySchema } from "./query-schema.js";
 import { createSqlSchema, markSqlSchema } from "./schema.js";
@@ -37,7 +38,7 @@ export function initializeLocalSchema(db: SqlDriver): void {
       .all();
 
     if (tables.length > 0 || version !== 0) {
-      throw new Error(
+      throw new StoreRejectedError(
         `Database schema ${version} cannot be opened by this runtime. Preserve this home and migrate its saved definitions into a separate home.`,
       );
     }

@@ -1,4 +1,5 @@
-import { routes } from "../../packages/loopy/src/contract/index.js";
+import { Result, Schema } from "effect";
+import { boundaryOptions, routes } from "../../packages/loopy/src/contract/index.js";
 import { assert, equal, type Journey, JourneyFailure } from "./journey-client.js";
 
 export async function frame(journey: Journey, after: number, epoch: string, lastEventId?: number) {
@@ -37,8 +38,15 @@ export async function frame(journey: Journey, after: number, epoch: string, last
         const data = frame.split("\n").find((line) => line.startsWith("data: "));
 
         if (data) {
-          const events = routes.events.response.array().safeParse(JSON.parse(data.slice(6)));
-          assert(events.success && events.data.length > 0, "sse_transaction_schema_failed");
+          const decoded = Schema.decodeUnknownResult(
+            Schema.Array(routes.events.response),
+            boundaryOptions,
+          )(JSON.parse(data.slice(6)));
+
+          assert(Result.isSuccess(decoded), "sse_transaction_schema_failed");
+          const events = decoded.success;
+
+          assert(events.length > 0, "sse_transaction_schema_failed");
 
           const id = Number(
             frame
@@ -47,14 +55,14 @@ export async function frame(journey: Journey, after: number, epoch: string, last
               ?.slice(4),
           );
 
-          equal(id, events.data.at(-1)?.sequence, "sse_id_not_transaction_end");
+          equal(id, events.at(-1)?.sequence, "sse_id_not_transaction_end");
           assert(
-            events.data.every((event) => event.sequence > (lastEventId ?? after)),
+            events.every((event) => event.sequence > (lastEventId ?? after)),
             "sse_replayed_acknowledged_events",
           );
-          equal(new Set(events.data.map((event) => event.txn)).size, 1, "sse_mixed_transactions");
+          equal(new Set(events.map((event) => event.txn)).size, 1, "sse_mixed_transactions");
 
-          return { id, events: events.data };
+          return { id, events: events };
         }
 
         separator = buffer.indexOf("\n\n");

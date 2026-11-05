@@ -2,8 +2,9 @@ import { expect } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Effect } from "effect";
 import { OwnershipError } from "../src/core/index.js";
-import { activateDurable } from "../src/host/durable.js";
+import { activateDurable, type DurableActivationResult } from "../src/host/durable.js";
 import { MemoryStore } from "../src/store/index.js";
 import { SqlRunStore } from "../src/store/portable.js";
 import { BunSqlDriver } from "../src/store/sqlite/bun-driver.js";
@@ -37,10 +38,12 @@ export async function replayPolicy(
 
   const provider = new PolicyProvider();
   const admit = provider.start.bind(provider);
-  provider.start = async (key, attempt) => {
-    expect(await store.getNodeRun(key)).toMatchObject({ status: "running", attempt });
+  provider.start = (key, attempt) => {
+    return Effect.gen(function* () {
+      expect(yield* store.getNodeRun(key)).toMatchObject({ status: "running", attempt });
 
-    return admit(key, attempt);
+      return yield* admit(key, attempt);
+    }).pipe(Effect.orDie);
   };
 
   const graph = policyGraph();
@@ -50,7 +53,7 @@ export async function replayPolicy(
     throw new Error("Expected execution node.");
   }
 
-  await store.createRun(newRun());
+  await Effect.runPromise(store.createRun(newRun()));
   let cursor: string | null = null;
 
   try {
@@ -89,49 +92,59 @@ export async function replayPolicy(
         }
 
         case "signal": {
-          const hook = (await store.getWaits("run"))[0];
+          const hook = (await Effect.runPromise(store.getWaits("run")))[0];
 
           if (!hook) {
             throw new Error("Expected registered hook.");
           }
 
           expect(
-            await store.resolveWait({ token: hook.token, payload: true, at: at() }),
+            await Effect.runPromise(
+              store.resolveWait({ token: hook.token, payload: true, at: at() }),
+            ),
           ).toMatchObject({ kind: "resolved" });
           break;
         }
 
         default: {
           if (action === "lookup_loss") {
-            provider.lookup = async () => {
-              throw new Error("lookup unavailable");
+            provider.lookup = () => {
+              return Effect.gen(function* () {
+                throw new Error("lookup unavailable");
+              }).pipe(Effect.orDie);
             };
           }
 
           if (action === "start_loss") {
-            provider.start = async (key, attempt) => {
-              await start(key, attempt);
-              throw new Error("start response lost");
+            provider.start = (key, attempt) => {
+              return Effect.gen(function* () {
+                yield* start(key, attempt);
+                throw new Error("start response lost");
+              }).pipe(Effect.orDie);
             };
           }
 
           if (action === "release_loss") {
-            store.release = async () => {
-              throw new Error("release interrupted");
+            store.release = () => {
+              return Effect.gen(function* () {
+                throw new Error("release interrupted");
+              });
             };
           }
 
           try {
-            const result = await activateDurable({
-              store,
-              provider,
-              graph,
-              runId: "run",
-              token: `owner${model.token}`,
-              at: at(),
-              maxWork,
-              cursor,
-            });
+            const result: DurableActivationResult = await Effect.runPromise(
+              activateDurable({
+                store,
+                provider,
+                graph,
+                runId: "run",
+                token: `owner${model.token}`,
+                at: at(),
+                maxWork,
+                cursor,
+              }),
+            );
 
             cursor = result.cursor;
           } catch (cause) {
@@ -150,7 +163,7 @@ export async function replayPolicy(
 
       model = expected.state;
       expect(error).toBe(expected.error);
-      const run = await store.getRun("run");
+      const run = await Effect.runPromise(store.getRun("run"));
       expect(run?.status).toBe(model.run);
       expect(run?.owner?.token ?? null).toBe(model.owner === null ? null : `owner${model.owner}`);
 
@@ -160,15 +173,20 @@ export async function replayPolicy(
         );
       }
 
-      const node = await store.getNodeRun({ runId: "run", nodeId: codeNode.id, scope: [] });
+      const node = await Effect.runPromise(
+        store.getNodeRun({ runId: "run", nodeId: codeNode.id, scope: [] }),
+      );
+
       expect(node?.status ?? "new").toBe(model.node);
       expect(node?.attempt ?? 0).toBe(model.attempt);
       expect(provider.starts).toHaveLength(model.starts);
       expect(new Set(provider.starts.map((item) => provider.id(item.key, item.attempt))).size).toBe(
         model.starts,
       );
-      expect((await store.getLogs("run")).map((log) => log.message)).toEqual(model.logs);
-      const hook = (await store.getWaits("run"))[0];
+      expect((await Effect.runPromise(store.getLogs("run"))).map((log) => log.message)).toEqual(
+        model.logs,
+      );
+      const hook = (await Effect.runPromise(store.getWaits("run")))[0];
       expect(
         hook ? (hook.resolvedAt ? "resolved" : hook.expiredAt ? "expired" : "waiting") : "new",
       ).toBe(model.wait);

@@ -5,5 +5,8 @@ export function readmodelDirectory() {
   const parent = resolve(import.meta.dir, "../../../..", ".loopy/architecture-tests");
   mkdirSync(parent, { recursive: true });
 
-  return mkdtempSync(join(parent, "readmodel-"));
+  const directory = mkdtempSync(join(parent, "readmodel-"));
+  mkdirSync(join(directory, ".loopy/loopies"), { recursive: true });
+
+  return directory;
 }

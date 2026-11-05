@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { gzipSync } from "node:zlib";
+import { Effect } from "effect";
 import { z } from "zod";
 import { HttpSandboxAuthority } from "../../../../apps/sandbox/src/http-authority.js";
 import { type Bridge, resources } from "./architecture-docker-resources.js";
@@ -91,7 +92,7 @@ export async function proxySanityProbe() {
           namespace: "proxy-sanity",
         });
 
-        assert.deepEqual(await authority.status(), { epoch: 0 });
+        assert.deepEqual(await Effect.runPromise(authority.status()), { epoch: 0 });
 
         const direct = decodedProxyResponse(
           new Response(bytes, {

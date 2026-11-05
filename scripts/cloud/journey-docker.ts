@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
+import { Effect } from "effect";
 import { z } from "zod";
 import { routes } from "../../packages/loopy/src/contract/index.js";
 import { canonicalJson, type ExecutionKey } from "../../packages/loopy/src/core/index.js";
@@ -13,7 +14,7 @@ async function receipt(key: ExecutionKey, attempt: number) {
     .update(canonicalJson({ root: stateRoot, workspace: "fixtures", executionKey: key, attempt }))
     .digest("hex");
 
-  const saved = await filesystemReceipt(stateRoot, id);
+  const saved = await Effect.runPromise(filesystemReceipt(stateRoot, id));
   assert(
     saved.workspace === "fixtures" && saved.executionKey.runId === key.runId,
     "docker_receipt_identity_mismatch",

@@ -1,51 +1,82 @@
+import { Cause, Data, Effect } from "effect";
 import { errorResponse } from "../../../packages/loopy/src/service/index.js";
+import { CloudError, platform } from "./operation.js";
 
 export const MAX_REQUEST_BYTES = 24 * 1024 * 1024;
 
-export async function boundedRequest(request: Request): Promise<Request | Response> {
-  if (!request.body) {
-    return request;
-  }
+export class BodyLimitError extends Data.TaggedError("BodyLimitError")<{ limit: number }> {}
 
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
+function readBytes(body: ReadableStream<Uint8Array>, limit: number) {
+  return Effect.acquireUseRelease(
+    Effect.sync(() => body.getReader()),
+    (reader) =>
+      Effect.gen(function* () {
+        const chunks: Uint8Array[] = [];
+        let size = 0;
 
-  try {
-    while (true) {
-      const next = await reader.read();
+        while (true) {
+          const next = yield* platform("read body", () => reader.read());
 
-      if (next.done) {
-        break;
-      }
+          if (next.done) {
+            break;
+          }
 
-      size += next.value.byteLength;
+          size += next.value.byteLength;
 
-      if (size > MAX_REQUEST_BYTES) {
-        await reader.cancel();
+          if (size > limit) {
+            return yield* Effect.fail(new BodyLimitError({ limit }));
+          }
 
-        return errorResponse("bad_request", "Request exceeds the 24 MiB cloud artifact limit.");
-      }
+          chunks.push(next.value);
+        }
 
-      chunks.push(next.value);
+        const bytes = new Uint8Array(size);
+        let offset = 0;
+
+        for (const chunk of chunks) {
+          bytes.set(chunk, offset);
+          offset += chunk.length;
+        }
+
+        return bytes;
+      }),
+    (reader, exit) =>
+      (exit._tag === "Success"
+        ? Effect.void
+        : Effect.interruptible(platform("cancel body", () => reader.cancel())).pipe(
+            Effect.timeoutOrElse({
+              duration: 1000,
+              orElse: () =>
+                Effect.fail(
+                  new CloudError({
+                    operation: "cancel body",
+                    cause: "Body cancellation exceeded 1000 ms. The producer may still be running.",
+                  }),
+                ),
+            }),
+          )
+      ).pipe(Effect.ensuring(Effect.sync(() => reader.releaseLock()))),
+  );
+}
+
+export function boundedRequest(request: Request) {
+  return Effect.gen(function* () {
+    if (!request.body) {
+      return request;
     }
-  } finally {
-    reader.releaseLock();
-  }
 
-  const body = new Uint8Array(size);
-  let offset = 0;
+    const bytes = yield* recoverBodyLimit(readBytes(request.body, MAX_REQUEST_BYTES));
 
-  for (const chunk of chunks) {
-    body.set(chunk, offset);
-    offset += chunk.length;
-  }
+    if (bytes === null) {
+      return errorResponse("bad_request", "Request exceeds the 24 MiB cloud artifact limit.");
+    }
 
-  return new Request(request.url, {
-    method: request.method,
-    headers: request.headers,
-    body,
-    signal: request.signal,
+    return new Request(request.url, {
+      method: request.method,
+      headers: request.headers,
+      body: bytes,
+      signal: request.signal,
+    });
   });
 }
 
@@ -55,34 +86,29 @@ export function acceptsOrigin(request: Request): boolean {
   return origin === null || origin === new URL(request.url).origin;
 }
 
-export async function readBoundedText(response: Response, limit: number): Promise<string> {
-  if (!response.body) {
-    throw new Error("Sandbox returned an empty receipt.");
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let text = "";
-  let size = 0;
-
-  try {
-    while (true) {
-      const part = await reader.read();
-
-      if (part.done) {
-        return text + decoder.decode();
-      }
-
-      size += part.value.byteLength;
-
-      if (size > limit) {
-        await reader.cancel();
-        throw new Error("Sandbox receipt exceeds its byte limit.");
-      }
-
-      text += decoder.decode(part.value, { stream: true });
+export function readBoundedText(response: Response, limit: number) {
+  return Effect.gen(function* () {
+    if (!response.body) {
+      return yield* Effect.fail(
+        new CloudError({ operation: "read body", cause: "Sandbox returned an empty receipt." }),
+      );
     }
-  } finally {
-    reader.releaseLock();
-  }
+
+    return new TextDecoder().decode(yield* readBytes(response.body, limit));
+  });
+}
+
+/** Only a sole limit rejection is a client error; cleanup failures retain the full Cause. */
+export function recoverBodyLimit<A>(read: Effect.Effect<A, CloudError | BodyLimitError>) {
+  return read.pipe(
+    Effect.catchCause((cause) => {
+      const reason = cause.reasons.length === 1 ? cause.reasons[0] : undefined;
+
+      if (reason && Cause.isFailReason(reason) && reason.error._tag === "BodyLimitError") {
+        return Effect.succeed(null);
+      }
+
+      return Effect.failCause(cause);
+    }),
+  );
 }

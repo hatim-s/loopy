@@ -1,12 +1,14 @@
+import { Effect } from "effect";
 import { parseSync } from "oxc-parser";
 import { diagnostic } from "./diagnostic.js";
+import { authorSource } from "./errors.js";
 import { checkModuleImports } from "./module-imports.js";
 import type { CompilerDiagnostic } from "./types.js";
 
-export async function checkCodeModule(path: string) {
+export const checkCodeModule = Effect.fn(function* (path: string) {
   const diagnostics: CompilerDiagnostic[] = [];
-  await checkModuleImports(path, diagnostics);
-  const source = await Bun.file(path).text();
+  yield* checkModuleImports(path, diagnostics);
+  const source = yield* authorSource("read code module", path, () => Bun.file(path).text());
   const { program, errors } = parseSync(path, source, { sourceType: "module" });
 
   if (errors.length > 0) {
@@ -73,4 +75,4 @@ export async function checkCodeModule(path: string) {
   return diagnostics.length > 0
     ? { ok: false as const, diagnostics }
     : { ok: true as const, diagnostics };
-}
+});

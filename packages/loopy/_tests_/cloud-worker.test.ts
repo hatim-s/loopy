@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { resolve } from "node:path";
+import { Schema } from "effect";
 import { Miniflare } from "miniflare";
-import { z } from "zod";
-import { encodeRunCursor, jsonSchema, routes } from "../src/contract/index.js";
+import { decodeBoundary, encodeRunCursor, jsonSchema, routes } from "../src/contract/index.js";
 import { revision } from "../src/core/index.js";
 import { log, loopy, wait } from "../src/sdk/graph/index.js";
 import { waitRecordSchema } from "../src/store/wait-schema.js";
@@ -91,7 +91,7 @@ async function probe(command: string, instance = command) {
   const body: unknown = await response.json();
   expect({ status: response.status, body }).toMatchObject({ status: 200 });
 
-  return jsonSchema.parse(body);
+  return decodeBoundary(jsonSchema)(body);
 }
 
 function api(
@@ -116,7 +116,7 @@ function api(
 
 test("workerd rolls back logs, usage and outbox rows when an apply batch fails", async () => {
   expect(await probe("rollback")).toMatchObject({
-    error: "Invalid time value",
+    error: "Invalid store timestamp 'invalid-date'. Validate timestamps before persistence.",
     before: { cursor: 2 },
     after: { cursor: 2 },
     logs: [],
@@ -146,7 +146,7 @@ test("workerd reopens durable records and fences stale lease owners without emit
 
 test("workerd schedule fire rolls back its pointer on conflict and deduplicates a repeated fire", async () => {
   expect(await probe("schedules")).toMatchObject({
-    error: "Run 'run' already exists. Use a new run ID.",
+    error: "Storage operation 'fireSchedule' failed: Run 'run' already exists. Use a new run ID.",
     before: { cursor: 2 },
     rolledBack: { schedule: { nextFireAt: "2026-10-22T00:00:00.000Z" }, cursor: { cursor: 2 } },
     fired: true,
@@ -196,12 +196,14 @@ test("workerd run pages retain all pending hooks through the 200-row contract li
   const object = namespace.get(namespace.idFromName("pagination"));
   const seeded = await object.fetch("http://probe/pagination/seed");
 
-  const seed = z
-    .object({
-      total: z.number(),
-      hooks: z.array(waitRecordSchema.extend({ expiresAt: z.string().nullable() })),
-    })
-    .parse(await seeded.json());
+  const seed = decodeBoundary(
+    Schema.Struct({
+      total: Schema.Number,
+      hooks: Schema.Array(
+        Schema.Struct({ ...waitRecordSchema.fields, expiresAt: Schema.NullOr(Schema.String) }),
+      ),
+    }),
+  )(await seeded.json());
 
   const seededHooks = new Map(seed.hooks.map((hook) => [hook.runId, hook]));
   expect({ status: seeded.status, seed }).toMatchObject({ status: 200 });
@@ -219,7 +221,7 @@ test("workerd run pages retain all pending hooks through the 200-row contract li
     const body: unknown = await response.json();
     expect({ status: response.status, body }).toMatchObject({ status: 200 });
 
-    return routes.runs.response.parse(body);
+    return decodeBoundary(routes.runs.response)(body);
   }
 
   const boundaries = [];
@@ -230,7 +232,7 @@ test("workerd run pages retain all pending hooks through the 200-row contract li
     boundaries.push({
       limit,
       status: response.status,
-      result: response.ok ? routes.runs.response.parse(body).length : body,
+      result: response.ok ? decodeBoundary(routes.runs.response)(body).length : body,
     });
   }
 
@@ -342,11 +344,11 @@ test("Worker rejects invalid save/run inputs without publishing or creating runs
     ).status,
   ).toBe(403);
   const runs = await api("/runs?slug=input-check");
-  expect(routes.runs.response.parse(await runs.json())).toEqual([]);
+  expect(decodeBoundary(routes.runs.response)(await runs.json())).toEqual([]);
   expect(
-    routes.loopies.response
-      .parse(await (await api("/loopies")).json())
-      .some(({ slug }) => slug === "invalid"),
+    decodeBoundary(routes.loopies.response)(await (await api("/loopies")).json()).some(
+      ({ slug }) => slug === "invalid",
+    ),
   ).toBe(false);
 });
 
@@ -366,16 +368,19 @@ test("Worker alarm persists hooks and supports SQL dashboard queries without cro
   body.revision = await revision(body.graph);
   expect((await api("/loopies/alarm-wait", { method: "PUT", body })).status).toBe(200);
 
-  const started = routes.startRun.response.parse(
+  const started = decodeBoundary(routes.startRun.response)(
     await (await api("/loopies/alarm-wait/runs", { method: "POST", body: { input: {} } })).json(),
   );
 
-  let snapshot = routes.run.response.parse(await (await api(`/runs/${started.id}`)).json());
+  let snapshot = decodeBoundary(routes.run.response)(
+    await (await api(`/runs/${started.id}`)).json(),
+  );
+
   const deadline = Date.now() + 5000;
 
   while (snapshot.hooks.length === 0 && Date.now() < deadline) {
     await Bun.sleep(25);
-    snapshot = routes.run.response.parse(await (await api(`/runs/${started.id}`)).json());
+    snapshot = decodeBoundary(routes.run.response)(await (await api(`/runs/${started.id}`)).json());
   }
 
   const hook = snapshot.hooks[0];
@@ -405,15 +410,19 @@ test("Worker alarm persists hooks and supports SQL dashboard queries without cro
       })
     ).status,
   ).toBe(404);
-  const feed = routes.globalLogs.response.parse(await (await api("/logs?text=approval")).json());
+
+  const feed = decodeBoundary(routes.globalLogs.response)(
+    await (await api("/logs?text=approval")).json(),
+  );
+
   expect(feed.items).toMatchObject([{ runId: started.id, message: "Synthetic approval ready" }]);
   expect(
-    routes.globalLogs.response.parse(
+    decodeBoundary(routes.globalLogs.response)(
       await (await api("/logs?text=approval", { token: tokenB })).json(),
     ).items,
   ).toEqual([]);
 
-  const history = routes.eventHistory.response.parse(
+  const history = decodeBoundary(routes.eventHistory.response)(
     await (await api(`/event-history?runId=${started.id}`)).json(),
   );
 
@@ -421,7 +430,7 @@ test("Worker alarm persists hooks and supports SQL dashboard queries without cro
     true,
   );
   expect(
-    routes.eventHistory.response.parse(
+    decodeBoundary(routes.eventHistory.response)(
       await (await api(`/event-history?runId=${started.id}`, { token: tokenB })).json(),
     ).items,
   ).toEqual([]);
@@ -431,7 +440,9 @@ test("Worker alarm persists hooks and supports SQL dashboard queries without cro
   ).toBe(404);
   const executions = await api(`/runs/${started.id}/executions`);
   expect(executions.status).toBe(200);
-  expect(routes.executions.response.parse(await executions.json()).items.length).toBeGreaterThan(0);
+  expect(
+    decodeBoundary(routes.executions.response)(await executions.json()).items.length,
+  ).toBeGreaterThan(0);
 
   const window = new URLSearchParams({
     from: new Date(Date.now() - 60_000).toISOString(),
@@ -440,7 +451,7 @@ test("Worker alarm persists hooks and supports SQL dashboard queries without cro
 
   const overview = await api(`/overview?${window}`);
   expect(overview.status).toBe(200);
-  routes.overview.response.parse(await overview.json());
+  decodeBoundary(routes.overview.response)(await overview.json());
   expect(
     (
       await api(`/hooks/${hook.token}`, {
@@ -474,7 +485,7 @@ test("Worker pins historical graph/source revisions and isolates tenant runs, ho
   expect((await api("/loopies/tenant-proof", { method: "PUT", body: first })).status).toBe(200);
   const start = await api("/loopies/tenant-proof/runs", { method: "POST", body: { input: {} } });
   expect(start.status).toBe(200);
-  const started = routes.startRun.response.parse(await start.json());
+  const started = decodeBoundary(routes.startRun.response)(await start.json());
   const second = structuredClone(first);
   second.graph.meta.description = "second revision";
   second.revision = await revision(second.graph);
@@ -485,11 +496,13 @@ test("Worker pins historical graph/source revisions and isolates tenant runs, ho
   };
   expect((await api("/loopies/tenant-proof", { method: "PUT", body: second })).status).toBe(200);
   const latest = await api("/loopies/tenant-proof/graph");
-  expect(routes.graph.response.parse(await latest.json())).toMatchObject({
+  expect(decodeBoundary(routes.graph.response)(await latest.json())).toMatchObject({
     revision: second.revision,
   });
   expect(
-    routes.source.response.parse(await (await api("/loopies/tenant-proof/source")).json()),
+    decodeBoundary(routes.source.response)(
+      await (await api("/loopies/tenant-proof/source")).json(),
+    ),
   ).toEqual(second.sourceArtifact);
   const overwrite = structuredClone(first);
   overwrite.sourceArtifact = {
@@ -498,11 +511,11 @@ test("Worker pins historical graph/source revisions and isolates tenant runs, ho
   };
   expect((await api("/loopies/tenant-proof", { method: "PUT", body: overwrite })).status).toBe(200);
   const historical = await api(`/runs/${started.id}/source`);
-  expect(routes.runSource.response.parse(await historical.json())).toMatchObject(
+  expect(decodeBoundary(routes.runSource.response)(await historical.json())).toMatchObject(
     first.sourceArtifact,
   );
   const graph = await api(`/runs/${started.id}/graph`);
-  expect(routes.runGraph.response.parse(await graph.json())).toMatchObject({
+  expect(decodeBoundary(routes.runGraph.response)(await graph.json())).toMatchObject({
     revision: first.revision,
   });
 
@@ -526,9 +539,9 @@ test("Worker pins historical graph/source revisions and isolates tenant runs, ho
       })
     ).status,
   ).toBe(404);
-  const alphaCursor = routes.cursor.response.parse(await (await api("/cursor")).json());
+  const alphaCursor = decodeBoundary(routes.cursor.response)(await (await api("/cursor")).json());
 
-  const bravoCursor = routes.cursor.response.parse(
+  const bravoCursor = decodeBoundary(routes.cursor.response)(
     await (await api("/cursor", { token: tokenB })).json(),
   );
 
@@ -536,9 +549,9 @@ test("Worker pins historical graph/source revisions and isolates tenant runs, ho
   expect((await api(`/events?after=0&epoch=${alphaCursor.epoch}`, { token: tokenB })).status).toBe(
     410,
   );
-  expect(routes.runs.response.parse(await (await api("/runs", { token: tokenB })).json())).toEqual(
-    [],
-  );
+  expect(
+    decodeBoundary(routes.runs.response)(await (await api("/runs", { token: tokenB })).json()),
+  ).toEqual([]);
   const bravo = structuredClone(first);
   bravo.source.workspace = "bravo";
   bravo.sourceArtifact = {
@@ -549,11 +562,13 @@ test("Worker pins historical graph/source revisions and isolates tenant runs, ho
     (await api("/loopies/tenant-proof", { token: tokenB, method: "PUT", body: bravo })).status,
   ).toBe(200);
   expect(
-    routes.source.response.parse(
+    decodeBoundary(routes.source.response)(
       await (await api("/loopies/tenant-proof/source", { token: tokenB })).json(),
     ),
   ).toEqual(bravo.sourceArtifact);
   expect(
-    routes.source.response.parse(await (await api("/loopies/tenant-proof/source")).json()),
+    decodeBoundary(routes.source.response)(
+      await (await api("/loopies/tenant-proof/source")).json(),
+    ),
   ).toEqual(first.sourceArtifact);
 });

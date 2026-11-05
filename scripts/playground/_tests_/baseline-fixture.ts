@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { Schema } from "effect";
 import { createMeasure } from "../metrics-request.js";
 import type { Sample } from "../metrics-statistics.js";
 
@@ -31,7 +31,7 @@ export async function baselineReceipt(failure: "none" | "transport" = "none") {
   }, samples);
 
   for (const endpoint of expectedEndpoints) {
-    await measure(endpoint, "/synthetic", z.object({ ok: z.literal(true) }));
+    await measure(endpoint, "/synthetic", Schema.Struct({ ok: Schema.Literal(true) }));
   }
 
   return {

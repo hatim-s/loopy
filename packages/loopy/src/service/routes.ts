@@ -1,15 +1,18 @@
-import { z } from "zod";
+import { Cause, Effect, Exit, Schema } from "effect";
 import {
   type DaemonView,
   DEFAULT_ERROR_MESSAGES,
+  decodeBoundary,
   type ErrorCode,
+  encodeBoundary,
   routes,
 } from "../contract/index.js";
 import type { Store } from "../core/index.js";
 import { ServiceError } from "./error.js";
 import type { EventReader } from "./events.js";
 import { eventStream } from "./events.js";
-import type { LoopyService } from "./service.js";
+import { SecretError } from "./registry.js";
+import type { Service } from "./service.js";
 
 const STATUS: Record<ErrorCode, number> = {
   not_yet: 501,
@@ -41,7 +44,8 @@ export function errorResponse(code: ErrorCode, message = DEFAULT_ERROR_MESSAGES[
 }
 
 export type RouteDependencies = {
-  service: LoopyService;
+  service: Service;
+  onError?: (cause: Cause.Cause<unknown>) => void;
   store: Pick<Store, "getLogs" | "runningCount" | "nextWakeAt"> & EventReader;
   cwd: string;
   daemon: Pick<DaemonView, "pid" | "startedAt" | "concurrency">;
@@ -50,134 +54,173 @@ export type RouteDependencies = {
 type Schemas<P, Q, B, R> = {
   method: string;
   path: string;
-  params: z.ZodType<P>;
-  query: z.ZodType<Q>;
-  body: z.ZodType<B>;
-  response: z.ZodType<R>;
+  params: Schema.Codec<P, unknown>;
+  query: Schema.Codec<Q, unknown>;
+  body: Schema.Codec<B, unknown>;
+  response: Schema.Codec<R, unknown>;
 };
 
-function endpoint<P, Q, B, R>(
+function makeEndpoint<P, Q, B, R, E>(
   route: Schemas<P, Q, B, R>,
-  handle: (context: { params: P; query: Q; body: B; request: Request }) => Promise<R | Response>,
+  handle: (context: {
+    params: P;
+    query: Q;
+    body: B;
+    request: Request;
+  }) => Effect.Effect<R | Response, E>,
+  onError?: RouteDependencies["onError"],
 ) {
+  const encode = encodeBoundary(route.response);
+
   return {
     ...route,
     async handle(params: Record<string, string>, request: Request, url: URL) {
-      const parsed = await parseRequest(route, params, request, url);
-      const result = await handle({ ...parsed, request });
+      const exit = await Effect.runPromiseExit(
+        parseRequest(route, params, request, url).pipe(
+          Effect.flatMap((parsed) => handle({ ...parsed, request })),
+          Effect.map((result) => (result instanceof Response ? result : json(encode(result)))),
+        ),
+      );
 
-      if (result instanceof Response) {
-        return result;
+      if (Exit.isFailure(exit)) {
+        const reasons = exit.cause.reasons;
+
+        if (reasons.length === 1 && reasons[0] && Cause.isFailReason(reasons[0])) {
+          const error = reasons[0].error;
+
+          if (error instanceof ServiceError) {
+            return errorResponse(error.code, error.message);
+          }
+
+          if (error instanceof SecretError && error.reason === "invalid") {
+            return errorResponse("bad_request");
+          }
+        }
+
+        onError?.(exit.cause);
+
+        return errorResponse("internal");
       }
 
-      return json(route.response.parse(result));
+      return exit.value;
     },
   };
 }
 
 // BOUNDARY: URL captures, search values and JSON enter the contract here.
-async function parseRequest<P, Q, B>(
+const parseRequest = Effect.fn("Http.decodeRequest")(function* <P, Q, B>(
   route: Omit<Schemas<P, Q, B, unknown>, "method" | "response">,
   params: Record<string, string>,
   request: Request,
   url: URL,
 ) {
-  try {
-    const query = Object.fromEntries(url.searchParams);
+  const query = Object.fromEntries(url.searchParams);
 
-    if (route.path === routes.events.path) {
-      const last = request.headers.get("Last-Event-ID");
+  if (route.path === routes.events.path) {
+    const last = request.headers.get("Last-Event-ID");
 
-      if (last !== null) {
-        query.after = last;
-      }
+    if (last !== null) {
+      query.after = last;
     }
-
-    const body: unknown =
-      ["POST", "PUT"].includes(request.method) && request.body ? await request.json() : undefined;
-
-    return {
-      params: route.params.parse(params),
-      query: route.query.parse(query),
-      body: route.body.parse(body),
-    };
-  } catch (error) {
-    if (error instanceof z.ZodError || error instanceof SyntaxError) {
-      throw new ServiceError("bad_request");
-    }
-
-    throw error;
   }
-}
 
-export function apiRoutes({ service, store, cwd, daemon }: RouteDependencies) {
-  return [
-    endpoint(routes.scheduleOverview, async () => service.scheduleOverview()),
-    endpoint(routes.secrets, async () => service.listSecrets()),
-    endpoint(routes.putSecret, async ({ params, body }) =>
-      service.putSecret(params.name, body.value),
+  const body: unknown =
+    ["POST", "PUT"].includes(request.method) && request.body
+      ? yield* Effect.tryPromise({ try: () => request.json(), catch: (cause) => cause }).pipe(
+          Effect.catch((error) =>
+            error instanceof SyntaxError
+              ? Effect.fail(new ServiceError("bad_request"))
+              : Effect.die(error),
+          ),
+        )
+      : undefined;
+
+  return yield* Effect.try({
+    try: () => ({
+      params: decodeBoundary(route.params)(params),
+      query: decodeBoundary(route.query)(query),
+      body: decodeBoundary(route.body)(body),
+    }),
+    catch: (error) => error,
+  }).pipe(
+    Effect.catch((error) =>
+      Schema.isSchemaError(error)
+        ? Effect.fail(new ServiceError("bad_request"))
+        : Effect.die(error),
     ),
-    endpoint(routes.deleteSecret, async ({ params }) => service.deleteSecret(params.name)),
-    endpoint(routes.generateTypes, async ({ body }) => service.generateTypes(body)),
-    endpoint(routes.resolveNamedHook, async ({ params, body }) =>
+  );
+});
+
+export function apiRoutes({ service, store, cwd, daemon, onError }: RouteDependencies) {
+  const endpoint: typeof makeEndpoint = (route, handle) => makeEndpoint(route, handle, onError);
+
+  return [
+    endpoint(routes.scheduleOverview, () => service.scheduleOverview()),
+    endpoint(routes.secrets, () => service.listSecrets()),
+    endpoint(routes.putSecret, ({ params, body }) => service.putSecret(params.name, body.value)),
+    endpoint(routes.deleteSecret, ({ params }) => service.deleteSecret(params.name)),
+    endpoint(routes.generateTypes, ({ body }) => service.generateTypes(body)),
+    endpoint(routes.resolveNamedHook, ({ params, body }) =>
       service.resolveNamedHook(params.id, params.name, body.payload),
     ),
-    endpoint(routes.putLoopy, async ({ params: { slug }, body }) => service.putLoopy(slug, body)),
-    endpoint(routes.graph, async ({ params: { slug }, query }) =>
+    endpoint(routes.putLoopy, ({ params: { slug }, body }) => service.putLoopy(slug, body)),
+    endpoint(routes.graph, ({ params: { slug }, query }) =>
       service.graph(slug, query.workspace ?? cwd),
     ),
-    endpoint(routes.runGraph, async ({ params: { id } }) => service.runGraph(id)),
-    endpoint(routes.source, async ({ params: { slug }, query }) =>
+    endpoint(routes.runGraph, ({ params: { id } }) => service.runGraph(id)),
+    endpoint(routes.source, ({ params: { slug }, query }) =>
       service.loopySource(slug, query.workspace ?? cwd),
     ),
-    endpoint(routes.runSource, async ({ params: { id } }) => service.runSource(id)),
-    endpoint(routes.overview, async ({ query }) => service.overview(query)),
-    endpoint(routes.executions, async ({ params: { id }, query }) => service.executions(id, query)),
-    endpoint(routes.execution, async ({ params: { id }, query }) => service.execution(id, query)),
-    endpoint(routes.scopes, async ({ params: { id }, query }) => service.scopes(id, query)),
-    endpoint(routes.runPayload, async ({ params: { id } }) => service.runPayload(id)),
-    endpoint(routes.scopeItems, async ({ params: { id }, query }) => service.scopeItems(id, query)),
-    endpoint(routes.globalLogs, async ({ query }) => service.globalLogs(query)),
-    endpoint(routes.log, async ({ params: { id } }) => service.log(id)),
-    endpoint(routes.eventHistory, async ({ query }) => service.eventHistory(query)),
-    endpoint(routes.event, async ({ params: { sequence } }) => service.event(sequence)),
-    endpoint(routes.schedules, async ({ query }) => service.listSchedules(query.workspace)),
-    endpoint(routes.putSchedule, async ({ params: { slug }, body, query }) =>
+    endpoint(routes.runSource, ({ params: { id } }) => service.runSource(id)),
+    endpoint(routes.overview, ({ query }) => service.overview(query)),
+    endpoint(routes.executions, ({ params: { id }, query }) => service.executions(id, query)),
+    endpoint(routes.execution, ({ params: { id }, query }) => service.execution(id, query)),
+    endpoint(routes.scopes, ({ params: { id }, query }) => service.scopes(id, query)),
+    endpoint(routes.runPayload, ({ params: { id } }) => service.runPayload(id)),
+    endpoint(routes.scopeItems, ({ params: { id }, query }) => service.scopeItems(id, query)),
+    endpoint(routes.globalLogs, ({ query }) => service.globalLogs(query)),
+    endpoint(routes.log, ({ params: { id } }) => service.log(id)),
+    endpoint(routes.eventHistory, ({ query }) => service.eventHistory(query)),
+    endpoint(routes.event, ({ params: { sequence } }) => service.event(sequence)),
+    endpoint(routes.schedules, ({ query }) => service.listSchedules(query.workspace)),
+    endpoint(routes.putSchedule, ({ params: { slug }, body, query }) =>
       service.putSchedule(slug, body, query.workspace),
     ),
-    endpoint(routes.setScheduleEnabled, async ({ params: { slug }, body, query }) =>
+    endpoint(routes.setScheduleEnabled, ({ params: { slug }, body, query }) =>
       service.setScheduleEnabled(slug, body.enabled, query.workspace),
     ),
-    endpoint(routes.deleteSchedule, async ({ params: { slug }, query }) =>
+    endpoint(routes.deleteSchedule, ({ params: { slug }, query }) =>
       service.deleteSchedule(slug, query.workspace),
     ),
-    endpoint(routes.loopies, async ({ query }) => service.listLoopies(query.workspace)),
-    endpoint(routes.runs, async ({ query }) => service.listRuns(query)),
-    endpoint(routes.run, async ({ params: { id } }) => service.runSnapshot(id)),
-    endpoint(routes.logs, async ({ params: { id }, query }) => {
-      await service.requireRun(id);
-
-      return store.getLogs(id, query.after, query.limit);
-    }),
-    endpoint(routes.startRun, async ({ params: { slug }, body }) =>
+    endpoint(routes.loopies, ({ query }) => service.listLoopies(query.workspace)),
+    endpoint(routes.runs, ({ query }) => service.listRuns(query)),
+    endpoint(routes.run, ({ params: { id } }) => service.runSnapshot(id)),
+    endpoint(routes.logs, ({ params: { id }, query }) =>
+      service.logs(id, query.after, query.limit),
+    ),
+    endpoint(routes.startRun, ({ params: { slug }, body }) =>
       service.startRun(slug, body.input, body.workspace ?? cwd),
     ),
-    endpoint(routes.resumeRun, async ({ params: { id } }) => service.resumeRun(id)),
-    endpoint(routes.cancelRun, async ({ params: { id } }) => service.cancelRun(id)),
-    endpoint(routes.resolveHook, async ({ params: { token }, body }) =>
+    endpoint(routes.resumeRun, ({ params: { id } }) => service.resumeRun(id)),
+    endpoint(routes.cancelRun, ({ params: { id } }) => service.cancelRun(id)),
+    endpoint(routes.resolveHook, ({ params: { token }, body }) =>
       service.resolveHook(token, body.payload),
     ),
-    endpoint(routes.daemon, async () => ({
-      pid: daemon.pid,
-      startedAt: daemon.startedAt,
-      concurrency: daemon.concurrency,
-      running: await store.runningCount(),
-      nextWakeAt: (await store.nextWakeAt()) ?? null,
-    })),
-    endpoint(routes.events, async ({ query, request }) =>
+    endpoint(routes.daemon, () =>
+      Effect.gen(function* () {
+        return {
+          pid: daemon.pid,
+          startedAt: daemon.startedAt,
+          concurrency: daemon.concurrency,
+          running: yield* store.runningCount(),
+          nextWakeAt: (yield* store.nextWakeAt()) ?? null,
+        };
+      }),
+    ),
+    endpoint(routes.events, ({ query, request }) =>
       eventStream(store, service, query, request.signal),
     ),
-    endpoint(routes.cursor, async () => service.cursor()),
+    endpoint(routes.cursor, () => service.cursor()),
   ];
 }
 

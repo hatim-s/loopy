@@ -1,12 +1,14 @@
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, realpath, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { Effect } from "effect";
 import { attemptHash } from "../../../../apps/sandbox/src/admission.js";
 import type { ArtifactReader } from "../../../../apps/sandbox/src/artifacts.js";
 import { sandboxConfigSchema, validateStateRoot } from "../../../../apps/sandbox/src/config.js";
 import { FilesystemAuthority } from "../../../../apps/sandbox/src/filesystem-authority.js";
 import { FilesystemResults } from "../../../../apps/sandbox/src/immutable-results.js";
 import {
+  decodeBoundary,
   nodeIdSchema,
   type SandboxExecutionResult,
   sandboxAttemptRequestSchema,
@@ -27,13 +29,16 @@ export const uncertain: SandboxExecutionResult = {
 };
 
 export const artifactReader: ArtifactReader = {
-  cleanup: async () => {},
-  read: async (...[, path]) => ({
-    path,
-    bytes: "",
-    size: 0,
-    sha256: createHash("sha256").update("").digest("hex"),
-  }),
+  cleanup: () => Effect.gen(function* () {}),
+  read: (...[, path]) =>
+    Effect.gen(function* () {
+      return {
+        path,
+        bytes: "",
+        size: 0,
+        sha256: createHash("sha256").update("").digest("hex"),
+      };
+    }),
 };
 
 export async function authorityFixture() {
@@ -43,7 +48,7 @@ export async function authorityFixture() {
   await writeFile(join(root, "package.json"), JSON.stringify({ private: true }));
   await mkdir(join(root, ".loopy/loopies"), { recursive: true });
 
-  const config = sandboxConfigSchema.parse({
+  const config = decodeBoundary(sandboxConfigSchema)({
     worktree: root,
     stateRoot: join(root, ".loopy/cloud/sandbox"),
     token: "sandbox-authority-test-token-32-characters",
@@ -58,9 +63,9 @@ export async function authorityFixture() {
   const bytes = Buffer.from("export default () => 1;");
   const hash = createHash("sha256").update(bytes).digest("hex");
 
-  const request = sandboxAttemptRequestSchema.parse({
+  const request = decodeBoundary(sandboxAttemptRequestSchema)({
     workspace: "fixture",
-    executionKey: { runId: "run", nodeId: nodeIdSchema.parse("0:code"), scope: [] },
+    executionKey: { runId: "run", nodeId: decodeBoundary(nodeIdSchema)("0:code"), scope: [] },
     attempt: 1,
     spec: { kind: "code", bundleHash: hash, input: {}, timeoutMs: 1000 },
     bundles: [{ hash, bytes: bytes.toString("base64") }],

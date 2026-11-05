@@ -1,18 +1,22 @@
-import { z } from "zod";
+import { Effect, Schema } from "effect";
 import { FilesystemReceipts, receiptSchema } from "../../src/executor/receipts.js";
 
-const request = z
-  .strictObject({
-    home: z.string(),
-    identity: receiptSchema.options[0].pick({ executionKey: true, attempt: true }),
-    ready: z.string(),
-    finish: z.string(),
-  })
-  .parse(await Bun.stdin.json());
+const request = Schema.decodeUnknownSync(
+  Schema.Struct({
+    home: Schema.String,
+    identity: Schema.Struct({
+      executionKey: receiptSchema.members[0].fields.executionKey,
+      attempt: receiptSchema.members[0].fields.attempt,
+    }),
+    ready: Schema.String,
+    finish: Schema.String,
+  }),
+  { onExcessProperty: "error" },
+)(await Bun.stdin.json());
 
 const receipts = new FilesystemReceipts(request.home);
 
-await receipts.claim(request.identity);
+await Effect.runPromise(receipts.claim(request.identity));
 
 await Bun.write(request.ready, "claimed");
 
@@ -24,8 +28,10 @@ if (!(await Bun.file(request.finish).exists())) {
   throw new Error("Receipt publication gate was not released.");
 }
 
-await receipts.finish({
-  ...request.identity,
-  kind: "finished",
-  result: { kind: "succeeded", output: 42, logs: [] },
-});
+await Effect.runPromise(
+  receipts.finish({
+    ...request.identity,
+    kind: "finished",
+    result: { kind: "succeeded", output: 42, logs: [] },
+  }),
+);

@@ -8,15 +8,16 @@ import {
   type ModelAction,
   modelStep,
 } from "./fixtures/sandbox-authority-model.js";
+import { run } from "./fixtures/sandbox-run.js";
 
 async function replay(trace: ModelAction[]) {
   const fixture = await authorityFixture();
   const { authority, plan, resultsFor } = fixture;
-  const first = await authority.openSession({ expectedEpoch: 0, nonce: "first" });
+  const first = await run(authority.openSession({ expectedEpoch: 0, nonce: "first" }));
   let current = first;
   let model = initialModel();
-  const a = await resultsFor("fixture").put(successful);
-  const b = await resultsFor("fixture").put(uncertain);
+  const a = await run(resultsFor("fixture").put(successful));
+  const b = await run(resultsFor("fixture").put(uncertain));
   const plans = [plan(), plan(2), plan(1, "other")] as const;
 
   async function apply(action: ModelAction): Promise<string> {
@@ -24,7 +25,7 @@ async function replay(trace: ModelAction[]) {
 
     switch (action) {
       case "rotate":
-        current = await authority.openSession({ expectedEpoch: 1, nonce: "second" });
+        current = await run(authority.openSession({ expectedEpoch: 1, nonce: "second" }));
 
         return "session";
       case "admit0":
@@ -34,10 +35,12 @@ async function replay(trace: ModelAction[]) {
       case "changed0": {
         const target = action === "admit1" ? plans[1] : action === "admit2" ? plans[2] : plans[0];
 
-        const reply = await authority.admit({
-          session,
-          plan: action === "changed0" ? { ...target, requestHash: "a".repeat(64) } : target,
-        });
+        const reply = await run(
+          authority.admit({
+            session,
+            plan: action === "changed0" ? { ...target, requestHash: "a".repeat(64) } : target,
+          }),
+        );
 
         return reply.kind === "rejected" ? reply.code : reply.kind;
       }
@@ -45,22 +48,26 @@ async function replay(trace: ModelAction[]) {
       case "completeA":
       case "completeB":
       case "staleComplete": {
-        const reply = await authority.complete({
-          session,
-          id: plans[0].id,
-          requestHash: plans[0].requestHash,
-          result: action === "completeB" ? b : a,
-        });
+        const reply = await run(
+          authority.complete({
+            session,
+            id: plans[0].id,
+            requestHash: plans[0].requestHash,
+            result: action === "completeB" ? b : a,
+          }),
+        );
 
         return reply.kind === "rejected" ? reply.code : reply.kind;
       }
 
       case "begin": {
-        const reply = await authority.beginExport({
-          session,
-          attemptId: plans[0].id,
-          token: "guard",
-        });
+        const reply = await run(
+          authority.beginExport({
+            session,
+            attemptId: plans[0].id,
+            token: "guard",
+          }),
+        );
 
         return reply.kind === "rejected" ? reply.code : reply.kind;
       }
@@ -69,10 +76,12 @@ async function replay(trace: ModelAction[]) {
       case "staleEnd":
       case "foreignEnd": {
         try {
-          await authority.endExport({
-            session,
-            token: action === "foreignEnd" ? "foreign" : "guard",
-          });
+          await run(
+            authority.endExport({
+              session,
+              token: action === "foreignEnd" ? "foreign" : "guard",
+            }),
+          );
 
           return "released";
         } catch (cause) {
@@ -111,7 +120,7 @@ async function replay(trace: ModelAction[]) {
           throw new Error("Missing plan");
         }
 
-        const record = await authority.read(target.id);
+        const record = await run(authority.read(target.id));
         const expectedAttempt = model.attempts[attempt];
 
         if (!expectedAttempt) {
@@ -129,12 +138,12 @@ async function replay(trace: ModelAction[]) {
       }
 
       expect(
-        (await authority.recoverable({ after: null, limit: 200 })).exports.length,
+        (await run(authority.recoverable({ after: null, limit: 200 }))).exports.length,
         context,
       ).toBe(model.guard ? 1 : 0);
     }
   } finally {
-    await authority.close();
+    await run(authority.close());
     await rm(fixture.root, { recursive: true, force: true });
   }
 }

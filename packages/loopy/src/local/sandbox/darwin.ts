@@ -1,5 +1,10 @@
 import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
+import { Effect } from "effect";
+import type { CommandExecutionError } from "../../core/index.js";
+import { rejected, unstarted } from "../spawn.js";
+import type { ProcessFilesystemError } from "./io.js";
+import { filesystem } from "./io.js";
 import type { SandboxOptions } from "./launcher.js";
 import { ENV_EXEC, envArgs, executable, packageDirectory, within } from "./paths.js";
 
@@ -20,7 +25,7 @@ function sbpl(path: string): string {
  * Hides the user's home and denies network access. The workspace and scratch
  * directory are writable; the program and its package stay readable under home.
  */
-export async function macSandbox({
+export function macSandbox({
   program,
   workspace,
   env,
@@ -28,39 +33,57 @@ export async function macSandbox({
   helper,
   protectedHome,
   mode,
-}: SandboxOptions): Promise<[string, string[]]> {
-  if (!(await executable(SANDBOX_EXEC))) {
-    throw new Error("Sandbox mode requires /usr/bin/sandbox-exec on macOS.");
-  }
+}: SandboxOptions) {
+  return Effect.gen(function* (): Effect.fn.Return<
+    [string, string[]],
+    CommandExecutionError | ProcessFilesystemError
+  > {
+    const environmentArgs = yield* Effect.try({ try: () => envArgs(env), catch: rejected });
 
-  const home = await realpath(homedir());
+    if (!(yield* executable(SANDBOX_EXEC))) {
+      return yield* Effect.fail(
+        unstarted(new Error("Sandbox mode requires /usr/bin/sandbox-exec on macOS.")),
+      );
+    }
 
-  const allowedPackage = within(workspace, program)
-    ? undefined
-    : await packageDirectory(program, home);
+    const home = yield* filesystem(() => realpath(homedir()));
 
-  const profile = [
-    "(version 1)",
-    mode === "full" ? "(allow default)" : "(deny default)",
-    "(allow process-exec)",
-    "(allow process-fork)",
-    "(allow sysctl-read)",
-    "(allow file-read*)",
-    ...(mode === "sandbox" && !within(workspace, home)
-      ? [`(deny file-read* (subpath ${sbpl(home)}))`]
-      : []),
-    `(allow file-read* (subpath ${sbpl(workspace)}))`,
-    `(allow file-read* (literal ${sbpl(program)}))`,
-    ...(helper ? [`(allow file-read* (literal ${sbpl(helper)}))`] : []),
-    ...(allowedPackage ? [`(allow file-read* (subpath ${sbpl(allowedPackage)}))`] : []),
-    `(allow file-read* (subpath ${sbpl(scratch)}))`,
-    `(allow file-write* (subpath ${sbpl(scratch)}))`,
-    `(allow file-write* (subpath ${sbpl(workspace)}))`,
-    '(allow file-write* (literal "/dev/null") (literal "/dev/tty"))',
-    '(allow file-read* (literal "/dev/null") (literal "/dev/zero") (literal "/dev/tty"))',
-    ...(protectedHome ? [`(deny file-read* file-write* (subpath ${sbpl(protectedHome)}))`] : []),
-    ...(mode === "full" ? [] : ["(deny network*)"]),
-  ].join("\n");
+    const allowedPackage = within(workspace, program)
+      ? undefined
+      : yield* packageDirectory(program, home);
 
-  return [SANDBOX_EXEC, ["-p", profile, ENV_EXEC, "-i", "--", ...envArgs(env), helper ?? program]];
+    const profile = yield* Effect.try({
+      try: () =>
+        [
+          "(version 1)",
+          mode === "full" ? "(allow default)" : "(deny default)",
+          "(allow process-exec)",
+          "(allow process-fork)",
+          "(allow sysctl-read)",
+          "(allow file-read*)",
+          ...(mode === "sandbox" && !within(workspace, home)
+            ? [`(deny file-read* (subpath ${sbpl(home)}))`]
+            : []),
+          `(allow file-read* (subpath ${sbpl(workspace)}))`,
+          `(allow file-read* (literal ${sbpl(program)}))`,
+          ...(helper ? [`(allow file-read* (literal ${sbpl(helper)}))`] : []),
+          ...(allowedPackage ? [`(allow file-read* (subpath ${sbpl(allowedPackage)}))`] : []),
+          `(allow file-read* (subpath ${sbpl(scratch)}))`,
+          `(allow file-write* (subpath ${sbpl(scratch)}))`,
+          `(allow file-write* (subpath ${sbpl(workspace)}))`,
+          '(allow file-write* (literal "/dev/null") (literal "/dev/tty"))',
+          '(allow file-read* (literal "/dev/null") (literal "/dev/zero") (literal "/dev/tty"))',
+          ...(protectedHome
+            ? [`(deny file-read* file-write* (subpath ${sbpl(protectedHome)}))`]
+            : []),
+          ...(mode === "full" ? [] : ["(deny network*)"]),
+        ].join("\n"),
+      catch: unstarted,
+    });
+
+    return [
+      SANDBOX_EXEC,
+      ["-p", profile, ENV_EXEC, "-i", "--", ...environmentArgs, helper ?? program],
+    ];
+  });
 }

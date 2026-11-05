@@ -12,13 +12,21 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { Effect, Exit, Scope } from "effect";
 import { localDaemon, openRunStore } from "../src/local/index.js";
 import { secretRedactor } from "../src/local/secret-redactor.js";
 import { SecretStore } from "../src/local/secrets.js";
 
-const directories: string[] = [];
+const scopes: Scope.Closeable[] = [];
 
-const daemons: { stop(): Promise<void> }[] = [];
+function fixtureScope() {
+  const scope = Scope.makeUnsafe();
+  scopes.push(scope);
+
+  return scope;
+}
+
+const directories: string[] = [];
 
 function setup() {
   const directory = mkdtempSync(join(tmpdir(), "loopy-secrets-"));
@@ -28,7 +36,9 @@ function setup() {
 }
 
 afterEach(async () => {
-  await Promise.all(daemons.splice(0).map((daemon) => daemon.stop()));
+  for (const scope of scopes.splice(0).reverse()) {
+    await Effect.runPromise(Scope.close(scope, Exit.void));
+  }
 
   for (const directory of directories.splice(0)) {
     rmSync(directory, { recursive: true, force: true });
@@ -37,25 +47,30 @@ afterEach(async () => {
 
 test("private CRUD preserves other secrets and lists names only", () => {
   const { store } = setup();
-  expect(store.list()).toEqual([]);
-  store.set("orbit-cookie", "private-cookie");
-  store.set("other", "other-value");
-  store.set("orbit-cookie", "rotated-cookie");
-  expect(store.get("orbit-cookie")).toBe("rotated-cookie");
-  expect(store.list()).toEqual(["orbit-cookie", "other"]);
+  expect(Effect.runSync(store.list())).toEqual([]);
+  Effect.runSync(store.set("orbit-cookie", "private-cookie"));
+  Effect.runSync(store.set("other", "other-value"));
+  Effect.runSync(store.set("orbit-cookie", "rotated-cookie"));
+  expect(Effect.runSync(store.values(["orbit-cookie"]))).toEqual({
+    "orbit-cookie": "rotated-cookie",
+  });
+  expect(Effect.runSync(store.list())).toEqual(["orbit-cookie", "other"]);
   expect(statSync(store.directory).mode & 0o777).toBe(0o700);
   expect(statSync(store.file).mode & 0o777).toBe(0o600);
-  store.remove("orbit-cookie");
-  expect(store.get("other")).toBe("other-value");
-  expect(() => store.get("orbit-cookie")).toThrow("No stored secret");
+  Effect.runSync(store.remove("orbit-cookie"));
+  expect(Effect.runSync(store.values(["other"]))).toEqual({ other: "other-value" });
+  expect(Effect.runSync(Effect.flip(store.values(["orbit-cookie"])))).toMatchObject({
+    _tag: "SecretError",
+    cause: expect.objectContaining({ message: expect.stringContaining("No stored secret") }),
+  });
 });
 
 test("repairs permissive permissions before reading", () => {
   const { store } = setup();
-  store.set("one", "value");
+  Effect.runSync(store.set("one", "value"));
   chmodSync(store.directory, 0o755);
   chmodSync(store.file, 0o644);
-  expect(store.get("one")).toBe("value");
+  expect(Effect.runSync(store.values(["one"]))).toEqual({ one: "value" });
   expect(statSync(store.directory).mode & 0o777).toBe(0o700);
   expect(statSync(store.file).mode & 0o777).toBe(0o600);
 });
@@ -65,61 +80,96 @@ test("refuses symlink directories, symlink files, and hard links", () => {
   const target = join(directory, "target");
   mkdirSync(target);
   symlinkSync(target, store.directory);
-  expect(() => store.set("one", "value")).toThrow("real directory");
+  expect(Effect.runSync(Effect.flip(store.set("one", "value")))).toMatchObject({
+    _tag: "SecretError",
+    cause: expect.objectContaining({ message: expect.stringContaining("real directory") }),
+  });
   rmSync(store.directory);
   mkdirSync(store.directory);
   const original = join(directory, "original.json");
   writeFileSync(original, '{"one":"private-value"}');
   symlinkSync(original, store.file);
-  expect(() => store.get("one")).toThrow("Cannot open");
+  expect(Effect.runSync(Effect.flip(store.values(["one"])))).toMatchObject({
+    _tag: "SecretError",
+    cause: expect.objectContaining({ message: expect.stringContaining("Cannot open") }),
+  });
   rmSync(store.file);
   linkSync(original, store.file);
-  expect(() => store.get("one")).toThrow("hard links");
+  expect(Effect.runSync(Effect.flip(store.values(["one"])))).toMatchObject({
+    _tag: "SecretError",
+    cause: expect.objectContaining({ message: expect.stringContaining("hard links") }),
+  });
   expect(readFileSync(original, "utf8")).toContain("private-value");
 });
 
 test("a competing writer cannot overwrite the store", () => {
   const { store } = setup();
-  store.set("one", "value");
+  Effect.runSync(store.set("one", "value"));
   mkdirSync(join(store.directory, ".secrets.lock"));
-  expect(() => store.set("two", "value")).toThrow("Another secret update");
-  expect(store.list()).toEqual(["one"]);
+  expect(Effect.runSync(Effect.flip(store.set("two", "value")))).toMatchObject({
+    _tag: "SecretError",
+    cause: expect.objectContaining({ message: expect.stringContaining("Another secret update") }),
+  });
+  expect(Effect.runSync(store.list())).toEqual(["one"]);
 });
 
 test("malformed stores and invalid values never echo secret contents", () => {
   const { store } = setup();
-  store.set("one", "value");
+  Effect.runSync(store.set("one", "value"));
   writeFileSync(store.file, '{"one":"sensitive-marker" BROKEN}');
-  expect(() => store.snapshot()).toThrow("The secret store contains invalid JSON.");
-  expect(() => store.set("../bad", "value")).toThrow("Secret names");
-  expect(() => store.set("one", "\0sensitive-marker")).toThrow("no NUL");
+  expect(Effect.runSync(Effect.flip(store.snapshot()))).toMatchObject({
+    _tag: "SecretError",
+    cause: expect.objectContaining({
+      message: expect.stringContaining("The secret store contains invalid JSON."),
+    }),
+  });
+  expect(Effect.runSync(Effect.flip(store.set("../bad", "value")))).toMatchObject({
+    _tag: "SecretError",
+    cause: expect.objectContaining({ message: expect.stringContaining("Secret names") }),
+  });
+  expect(Effect.runSync(Effect.flip(store.set("one", "\0sensitive-marker")))).toMatchObject({
+    _tag: "SecretError",
+    cause: expect.objectContaining({ message: expect.stringContaining("no NUL") }),
+  });
 });
 
 test("CLI stdin entry and name-only listing do not disclose values", async () => {
   const { directory, store } = setup();
   mkdirSync(join(directory, ".loopy", "loopies"), { recursive: true });
-  const runStore = openRunStore(store.directory);
+  const scope = fixtureScope();
 
-  const daemon = localDaemon({
-    home: store.directory,
-    cwd: directory,
-    store: runStore,
-    concurrency: 4,
-    port: 0,
-  });
+  const runStore = await Effect.runPromise(
+    openRunStore(store.directory).pipe(Effect.provideService(Scope.Scope, scope)),
+  );
 
-  daemon.start();
-  daemons.push({
-    async stop() {
-      await daemon.stop();
-      runStore.close();
-    },
-  });
-  const command = [process.execPath, resolve(import.meta.dir, "../src/cli/index.ts")];
+  const daemon = await Effect.runPromise(
+    localDaemon({
+      home: store.directory,
+      cwd: directory,
+      store: runStore,
+      concurrency: 4,
+      port: 0,
+    }).pipe(Effect.provideService(Scope.Scope, scope)),
+  );
+
+  await Effect.runPromise(daemon.start);
+
+  const command = [
+    process.execPath,
+    "--no-env-file",
+    resolve(import.meta.dir, "../src/cli/index.ts"),
+  ];
+
+  const env = {
+    PATH: process.env.PATH,
+    LANG: "C.UTF-8",
+    HOME: directory,
+    LOOPY_HOME: store.directory,
+  };
 
   const child = Bun.spawn(
     [...command, "secrets", "set", "orbit-cookie", "--stdin", "--home", store.directory],
-    { cwd: directory, stdin: "pipe", stdout: "pipe", stderr: "pipe" },
+    { cwd: directory, env, stdin: "pipe", stdout: "pipe", stderr: "pipe" },
   );
 
   child.stdin.write("sensitive-marker\n");
@@ -127,10 +177,13 @@ test("CLI stdin entry and name-only listing do not disclose values", async () =>
   expect(await child.exited).toBe(0);
   expect(await new Response(child.stdout).text()).not.toContain("sensitive-marker");
   expect(await new Response(child.stderr).text()).not.toContain("sensitive-marker");
-  expect(store.get("orbit-cookie")).toBe("sensitive-marker");
+  expect(Effect.runSync(store.values(["orbit-cookie"]))).toEqual({
+    "orbit-cookie": "sensitive-marker",
+  });
 
   const listed = Bun.spawn([...command, "secrets", "list", "--home", store.directory], {
     cwd: directory,
+    env,
     stdout: "pipe",
     stderr: "pipe",
   });

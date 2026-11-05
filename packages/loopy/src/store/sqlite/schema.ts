@@ -1,3 +1,4 @@
+import { StoreRejectedError } from "../operation.js";
 import type { SqlDriver } from "./driver.js";
 import { SCHEDULE_OVERVIEW_INDEX, SCHEMA_VERSION, WAIT_SCHEMA } from "./store-schema.js";
 
@@ -103,7 +104,7 @@ export function initializeSqlSchema(db: SqlDriver): void {
       : undefined;
 
     if (version !== String(SCHEMA_VERSION)) {
-      throw new Error(
+      throw new StoreRejectedError(
         `SQL store schema ${version ?? "unknown"} cannot be opened. Preserve the database and migrate it before opening this store.`,
       );
     }

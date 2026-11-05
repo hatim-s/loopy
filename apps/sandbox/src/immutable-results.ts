@@ -1,17 +1,18 @@
 import { createHash, randomUUID } from "node:crypto";
 import { link, open, unlink } from "node:fs/promises";
 import { join } from "node:path";
+import { Effect } from "effect";
 import {
+  decodeBoundary,
   SANDBOX_MAX_CAPTURE_BYTES,
   type SandboxExecutionResult,
   sandboxExecutionResultSchema,
 } from "../../../packages/loopy/src/contract/index.js";
-import type {
-  ImmutableResults,
-  ResultRef,
-} from "../../../packages/loopy/src/contract/sandbox-journal.js";
+import type { ResultRef } from "../../../packages/loopy/src/contract/sandbox-journal.js";
 import { canonicalJson } from "../../../packages/loopy/src/core/index.js";
 import { readBytes, syncDirectory } from "./journal-files.js";
+import type { ImmutableResults } from "./operations.js";
+import { checked, failure, io } from "./operations.js";
 
 export function resultBytes(result: SandboxExecutionResult) {
   const bytes = Buffer.from(canonicalJson(result));
@@ -42,48 +43,63 @@ export class FilesystemResults implements ImmutableResults {
     return join(this.root, "results", `${this.prefix}-${ref.sha256}.json`);
   }
 
-  async get(ref: ResultRef) {
-    const bytes = await readBytes(this.path(ref));
+  get(ref: ResultRef) {
+    return Effect.gen({ self: this }, function* () {
+      const bytes = yield* io("immutable-results", () => readBytes(this.path(ref)));
 
-    if (
-      !bytes ||
-      bytes.byteLength !== ref.size ||
-      createHash("sha256").update(bytes).digest("hex") !== ref.sha256
-    ) {
-      throw new Error(
-        "Sandbox result bytes are missing or do not match their immutable reference.",
+      if (
+        !bytes ||
+        bytes.byteLength !== ref.size ||
+        createHash("sha256").update(bytes).digest("hex") !== ref.sha256
+      ) {
+        return yield* Effect.fail(
+          failure(
+            "immutable-results",
+            new Error(
+              "Sandbox result bytes are missing or do not match their immutable reference.",
+            ),
+          ),
+        );
+      }
+
+      return yield* checked("decode", () =>
+        decodeBoundary(sandboxExecutionResultSchema)(JSON.parse(bytes.toString("utf8"))),
       );
-    }
-
-    return sandboxExecutionResultSchema.parse(JSON.parse(bytes.toString("utf8")));
+    }).pipe(Effect.uninterruptible);
   }
 
-  async put(result: SandboxExecutionResult) {
-    const bytes = resultBytes(result);
-    const ref = resultReference(result);
-    const directory = join(this.root, "results");
-    const temporary = join(directory, `${randomUUID()}.tmp`);
-    const file = await open(temporary, "wx", 0o600);
+  put(result: SandboxExecutionResult) {
+    return Effect.gen({ self: this }, function* () {
+      const bytes = yield* checked("result bytes", () => resultBytes(result));
+      const ref = resultReference(result);
+      const directory = join(this.root, "results");
+      const temporary = join(directory, `${randomUUID()}.tmp`);
 
-    try {
-      await file.writeFile(bytes);
-      await file.sync();
-    } finally {
-      await file.close();
-    }
+      return yield* Effect.acquireUseRelease(
+        io("result open", () => open(temporary, "wx", 0o600)),
+        (file) =>
+          Effect.gen({ self: this }, function* () {
+            yield* io("result write", () => file.writeFile(bytes));
+            yield* io("result sync", () => file.sync());
+            yield* io("result link", () =>
+              link(temporary, this.path(ref)).catch((cause: unknown) => {
+                if (!(cause instanceof Error && "code" in cause && cause.code === "EEXIST")) {
+                  throw cause;
+                }
+              }),
+            );
+            yield* io("result directory sync", () => syncDirectory(directory));
+            yield* this.get(ref);
 
-    try {
-      await link(temporary, this.path(ref)).catch((cause: unknown) => {
-        if (!(cause instanceof Error && "code" in cause && cause.code === "EEXIST")) {
-          throw cause;
-        }
-      });
-      await syncDirectory(directory);
-      await this.get(ref);
-
-      return ref;
-    } finally {
-      await unlink(temporary);
-    }
+            return ref;
+          }),
+        (file) =>
+          Effect.acquireUseRelease(
+            Effect.void,
+            () => io("result close", () => file.close()),
+            () => io("result temporary removal", () => unlink(temporary)),
+          ),
+      );
+    }).pipe(Effect.uninterruptible);
   }
 }

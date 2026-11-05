@@ -1,194 +1,171 @@
-import { type ExecutionResult, errorMessage, executionKeyString } from "../core/index.js";
-import type { Effect, EngineEvent } from "../engine/index.js";
+import { Cause, Clock, Data, Effect, Exit, Queue } from "effect";
+import { executionKeyString } from "../core/index.js";
+import type { EngineEvent } from "../engine/index.js";
 import type { ActivationOptions } from "./activate.js";
 import type { ActivationWorkEffect } from "./activation-plan.js";
-import type { Clock } from "./clock.js";
 import { completionEvent } from "./completion-event.js";
 import { acquireDispatch } from "./rate-limit.js";
 
-async function execute(
+const timestamp = Effect.map(Clock.currentTimeMillis, (now) => new Date(now).toISOString());
+
+function execute(
   options: ActivationOptions,
-  dispatch: Extract<Effect, { kind: "dispatch" }>,
-  signal: AbortSignal,
-): Promise<ExecutionResult> {
-  const { executor, store, runId } = options;
+  work: Extract<ActivationWorkEffect, { kind: "dispatch" }>,
+) {
+  return Effect.gen(function* () {
+    while (true) {
+      const receipt = yield* options.executor.lookup(work.executionKey, work.attempt);
 
-  while (true) {
-    const receipt = await executor.lookup(dispatch.executionKey, dispatch.attempt);
+      if (receipt.kind === "finished") {
+        return receipt.result;
+      }
 
-    if (receipt.kind === "finished") {
-      return receipt.result;
+      if (receipt.kind === "none") {
+        // The signal bridge belongs to the Executor contract until that owner removes it.
+        return yield* Effect.scoped(
+          Effect.flatMap(Effect.abortSignal, (signal) =>
+            options.executor.execute(work.executionKey, work.attempt, work.spec, signal),
+          ),
+        );
+      }
+
+      // Started receipts are never re-executed, including after observer interruption.
+      yield* Effect.sleep(100);
     }
-
-    if (receipt.kind === "none") {
-      return executor.execute(dispatch.executionKey, dispatch.attempt, dispatch.spec, signal);
-    }
-
-    // A started receipt is uncertain. Keep reconciling while the executor owns the attempt.
-    if (signal.aborted) {
-      throw new Error("Execution reconciliation interrupted. Resume the run.");
-    }
-
-    if (!(await store.getRun(runId))?.owner) {
-      throw new Error("Run lost ownership during reconciliation.");
-    }
-
-    await new Promise<void>((resolve) => setTimeout(resolve, 100));
-  }
-}
-
-async function waitForRetry(clock: Clock, at: string, signal: AbortSignal): Promise<void> {
-  signal.throwIfAborted();
-  await new Promise<void>((resolve, reject) => {
-    const cancel = clock.timeout(finish, Math.max(0, Date.parse(at) - clock.now()));
-
-    function finish() {
-      signal.removeEventListener("abort", abort);
-      resolve();
-    }
-
-    function abort() {
-      cancel();
-      reject(new Error("Retry interrupted. Resume the run."));
-    }
-
-    signal.addEventListener("abort", abort, { once: true });
   });
 }
 
-type PendingResult =
-  | { kind: "event"; id: string; event: EngineEvent }
-  | { kind: "error"; id: string; error: Error };
+function perform(options: ActivationOptions, work: ActivationWorkEffect) {
+  return Effect.gen(function* () {
+    if (work.kind === "dispatch") {
+      const denial = yield* acquireDispatch({
+        graph: options.graph,
+        store: options.store,
+        lookup: (key, attempt) => options.executor.lookup(key, attempt),
+        dispatch: work,
+        at: yield* timestamp,
+      });
 
-export class ActivationWork {
-  private readonly controller = new AbortController();
-  private readonly pending = new Map<string, Promise<PendingResult>>();
-  readonly signal: AbortSignal;
-  private readonly signalled: EngineEvent[] = [];
-  private signalWaiter?: (result: PendingResult) => void;
-  private readonly unsubscribe: () => void;
-
-  constructor(
-    private readonly options: ActivationOptions,
-    private readonly clock: Clock,
-  ) {
-    this.signal = options.signal
-      ? AbortSignal.any([options.signal, this.controller.signal])
-      : this.controller.signal;
-    this.unsubscribe = options.store.subscribe((events) => {
-      if (
-        !events.some(
-          (event) =>
-            event.runId === options.runId && event.entity === "hook" && event.kind === "resolved",
-        )
-      ) {
-        return;
+      if (denial) {
+        return denial;
       }
 
-      const event: EngineEvent = { kind: "retry_due", at: this.timestamp() };
-
-      if (this.signalWaiter) {
-        this.signalWaiter({ kind: "event", id: "signal", event });
-        this.signalWaiter = undefined;
-      } else {
-        this.signalled.push(event);
-      }
-    });
-  }
-
-  private timestamp() {
-    return new Date(this.clock.now()).toISOString();
-  }
-
-  private start(id: string, work: () => Promise<EngineEvent>) {
-    if (this.pending.has(id)) {
-      return;
+      return completionEvent(work, yield* execute(options, work), yield* timestamp);
     }
 
-    this.pending.set(
-      id,
-      work().then(
-        (event): PendingResult => ({ kind: "event", id, event }),
-        (cause): PendingResult => ({
-          kind: "error",
-          id,
-          error: cause instanceof Error ? cause : new Error(errorMessage(cause)),
+    if (work.kind === "schedule_retry") {
+      yield* Effect.sleep(Math.max(0, Date.parse(work.at) - (yield* Clock.currentTimeMillis)));
+
+      return { kind: "retry_due", at: yield* timestamp } satisfies EngineEvent;
+    }
+
+    return {
+      kind: "value_sampled",
+      executionKey: work.executionKey,
+      value: work.valueKind === "uuid" ? crypto.randomUUID() : Math.random(),
+      at: yield* timestamp,
+    } satisfies EngineEvent;
+  });
+}
+
+type WorkError = Effect.Error<ReturnType<typeof perform>>;
+
+export class ActivationWorkCleanupFailed extends Data.TaggedError("ActivationWorkCleanupFailed")<{
+  runId: string;
+  primary: Exit.Exit<unknown, unknown>;
+  attempts: readonly Exit.Exit<EngineEvent, WorkError>[];
+}> {}
+
+type Message =
+  | { kind: "completion"; id: string; exit: Exit.Exit<EngineEvent, WorkError> }
+  | { kind: "wake" };
+
+export const makeActivationWork = (options: ActivationOptions) =>
+  Effect.gen(function* () {
+    const inbox = yield* Queue.unbounded<Message>();
+    const pending = new Map<string, Exit.Exit<EngineEvent, WorkError> | undefined>();
+    let wakeQueued = false;
+    yield* Effect.acquireRelease(
+      Effect.sync(() =>
+        options.store.subscribe((events) => {
+          if (
+            !wakeQueued &&
+            events.some(
+              (event) =>
+                event.runId === options.runId &&
+                event.entity === "hook" &&
+                event.kind === "resolved",
+            )
+          ) {
+            wakeQueued = true;
+            Queue.offerUnsafe(inbox, { kind: "wake" });
+          }
         }),
       ),
+      (unsubscribe) => Effect.sync(unsubscribe),
     );
-  }
 
-  dispatch(effects: ActivationWorkEffect[]) {
-    for (const effect of effects) {
-      if (effect.kind === "dispatch") {
-        this.start(`${executionKeyString(effect.executionKey)}/${effect.attempt}`, async () => {
-          const denial = await acquireDispatch({
-            graph: this.options.graph,
-            store: this.options.store,
-            lookup: this.options.executor.lookup.bind(this.options.executor),
-            dispatch: effect,
-            at: this.timestamp(),
-          });
+    const dispatch = (effects: ActivationWorkEffect[]) =>
+      Effect.gen(function* () {
+        for (const work of effects) {
+          const id =
+            work.kind === "schedule_retry"
+              ? `retry/${work.at}`
+              : `${executionKeyString(work.executionKey)}/${work.kind === "dispatch" ? work.attempt : "sample"}`;
 
-          return (
-            denial ??
-            completionEvent(
-              effect,
-              await execute(this.options, effect, this.signal),
-              this.timestamp(),
-            )
+          if (pending.has(id)) {
+            continue;
+          }
+
+          pending.set(id, undefined);
+          yield* perform(options, work).pipe(
+            Effect.onExit((exit) =>
+              Effect.sync(() => {
+                pending.set(id, exit);
+                Queue.offerUnsafe(inbox, { kind: "completion", id, exit });
+              }),
+            ),
+            Effect.forkScoped,
           );
-        });
+        }
+      });
+
+    const next = Effect.gen(function* () {
+      if (pending.size === 0 && !wakeQueued) {
+        return yield* Effect.die(new Error("Active run has no pending execution."));
       }
 
-      if (effect.kind === "sample") {
-        this.start(`sample/${executionKeyString(effect.executionKey)}`, async () => ({
-          kind: "value_sampled",
-          executionKey: effect.executionKey,
-          value: effect.valueKind === "uuid" ? crypto.randomUUID() : Math.random(),
-          at: this.timestamp(),
-        }));
+      const message = yield* Queue.take(inbox);
+
+      if (message.kind === "wake") {
+        wakeQueued = false;
+
+        return { kind: "retry_due", at: yield* timestamp } satisfies EngineEvent;
       }
 
-      if (effect.kind === "schedule_retry") {
-        this.start(`retry/${effect.at}`, async () => {
-          await waitForRetry(this.clock, effect.at, this.signal);
+      pending.delete(message.id);
 
-          return { kind: "retry_due", at: this.timestamp() };
-        });
-      }
-    }
-  }
-
-  async next(): Promise<EngineEvent> {
-    const queued = this.signalled.shift();
-
-    if (queued) {
-      return queued;
-    }
-
-    if (this.pending.size === 0) {
-      throw new Error("Active run has no pending execution.");
-    }
-
-    const signal = new Promise<PendingResult>((resolve) => {
-      this.signalWaiter = resolve;
+      return yield* message.exit;
     });
 
-    const result = await Promise.race([...this.pending.values(), signal]);
-    this.signalWaiter = undefined;
-    this.pending.delete(result.id);
+    const checkCleanup = (primary: Exit.Exit<unknown, unknown>) =>
+      Effect.suspend(() => {
+        const failures = [...pending.values()].flatMap((exit) =>
+          exit !== undefined && Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)
+            ? [exit]
+            : [],
+        );
 
-    if (result.kind === "error") {
-      throw result.error;
-    }
+        return failures.length === 0
+          ? Effect.void
+          : Effect.fail(
+              new ActivationWorkCleanupFailed({
+                runId: options.runId,
+                primary,
+                attempts: failures,
+              }),
+            );
+      });
 
-    return result.event;
-  }
-
-  async close() {
-    this.unsubscribe();
-    this.controller.abort();
-    await Promise.allSettled(this.pending.values());
-  }
-}
+    return { dispatch, next, checkCleanup };
+  });

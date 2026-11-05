@@ -1,11 +1,14 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { Effect, Layer } from "effect";
+import { StoreService } from "../../core/index.js";
+import { storageOperation } from "../operation.js";
 import { SqlRunStore } from "../portable.js";
 import { BunSqlDriver } from "./bun-driver.js";
 import { localOwnerPolicy } from "./local-owner.js";
 import { initializeLocalSchema } from "./local-schema.js";
 
-export class SqliteRunStore extends SqlRunStore {
+class LocalSqlStore extends SqlRunStore {
   constructor(file: string, now: () => number = Date.now, options: { leaseMs?: number } = {}) {
     const db = new BunSqlDriver(file);
 
@@ -18,15 +21,35 @@ export class SqliteRunStore extends SqlRunStore {
     }
   }
 
-  dataVersion(): number {
-    return (
-      this.db.query<{ data_version: number }, []>("PRAGMA data_version").get()?.data_version ?? 0
+  dataVersion() {
+    return storageOperation(
+      "dataVersion",
+      () =>
+        this.db.query<{ data_version: number }, []>("PRAGMA data_version").get()?.data_version ?? 0,
     );
   }
 }
 
-export function openRunStore(home: string, options: { leaseMs?: number } = {}) {
-  mkdirSync(home, { recursive: true, mode: 0o700 });
+export type SqliteRunStore = LocalSqlStore;
 
-  return new SqliteRunStore(join(home, "runs.sqlite"), Date.now, options);
+export function openRunStore(home: string, options: { leaseMs?: number } = {}) {
+  return Effect.gen(function* () {
+    yield* storageOperation("prepareHome", () => mkdirSync(home, { recursive: true, mode: 0o700 }));
+
+    return yield* makeSqliteRunStore(join(home, "runs.sqlite"), Date.now, options);
+  });
 }
+
+export const makeSqliteRunStore = (
+  file: string,
+  now: () => number = Date.now,
+  options: { leaseMs?: number } = {},
+) =>
+  Effect.acquireRelease(
+    storageOperation("open", () => new LocalSqlStore(file, now, options)),
+    (store) => store.close().pipe(Effect.orDie),
+  );
+
+// Reuse this layer value throughout one daemon build to share one connection.
+export const sqliteStoreLayer = (file: string, options: { leaseMs?: number } = {}) =>
+  Layer.effect(StoreService, makeSqliteRunStore(file, Date.now, options));

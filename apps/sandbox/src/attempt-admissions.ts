@@ -1,3 +1,4 @@
+import { Effect, Result, Semaphore } from "effect";
 import {
   type SandboxAttemptRequest,
   type SandboxReceipt,
@@ -10,15 +11,25 @@ import {
   workspaceVolumeInput,
 } from "../../../packages/loopy/src/contract/sandbox-journal.js";
 import { durationMs } from "../../../packages/loopy/src/core/index.js";
-import { AttemptConflict, attemptHash, attemptId, validateBundles } from "./admission.js";
+import {
+  AttemptConflict,
+  attemptHash,
+  attemptId,
+  InvalidAttempt,
+  validateBundles,
+} from "./admission.js";
 import type { AttemptDependencies } from "./attempt-dependencies.js";
 import type { AttemptExports } from "./attempt-exports.js";
 import type { AttemptMonitors } from "./attempt-monitor.js";
 import { resolveAdmissionRead } from "./attempt-reconciliation.js";
 import type { SandboxConfig } from "./config.js";
+import type { SandboxFailure } from "./operations.js";
+import { failure } from "./operations.js";
+import { publicReceipt } from "./receipt-view.js";
+import type { Stopping } from "./stopping.js";
 
 export class AttemptAdmissions {
-  private readonly admissions = new Map<string, Promise<SandboxReceipt>>();
+  private readonly admissions = new Map<string, { mutex: Semaphore.Semaphore; users: number }>();
   // Never clear issued ids: a stale started read can arrive after terminal publication.
   private readonly issued = new Set<string>();
   private readonly retained = new Map<
@@ -30,56 +41,71 @@ export class AttemptAdmissions {
   private readonly session: AuthoritySession;
   private readonly monitors: AttemptMonitors;
   private readonly exports: AttemptExports;
-  private readonly signal: AbortSignal;
-  private readonly publicReceipt: (record: AttemptRecord | null) => Promise<SandboxReceipt>;
+  private readonly stopping: Stopping;
   constructor(options: {
     config: SandboxConfig;
     dependencies: AttemptDependencies;
     session: AuthoritySession;
     monitors: AttemptMonitors;
     exports: AttemptExports;
-    signal: AbortSignal;
-    publicReceipt: (record: AttemptRecord | null) => Promise<SandboxReceipt>;
+    stopping: Stopping;
   }) {
     this.config = options.config;
     this.dependencies = options.dependencies;
     this.session = options.session;
     this.monitors = options.monitors;
     this.exports = options.exports;
-    this.signal = options.signal;
-    this.publicReceipt = options.publicReceipt;
+    this.stopping = options.stopping;
   }
 
-  async wait(id: string) {
-    await this.admissions.get(id);
+  wait(id: string) {
+    return Effect.suspend(() =>
+      this.admissions.has(id) ? this.withAdmission(id, Effect.void) : Effect.void,
+    );
   }
-  async settle() {
-    await Promise.allSettled(this.admissions.values());
+  private withAdmission<A, E>(id: string, operation: Effect.Effect<A, E>) {
+    return Effect.uninterruptibleMask((restore) =>
+      Effect.suspend(() => {
+        let entry = this.admissions.get(id);
+
+        if (!entry) {
+          entry = { mutex: Semaphore.makeUnsafe(1), users: 0 };
+          this.admissions.set(id, entry);
+        }
+
+        const current = entry;
+        current.users++;
+
+        return restore(current.mutex.withPermit(operation)).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              current.users--;
+
+              if (current.users === 0) {
+                this.admissions.delete(id);
+              }
+            }),
+          ),
+        );
+      }),
+    );
   }
+  start(request: SandboxAttemptRequest): Effect.Effect<SandboxReceipt, SandboxFailure> {
+    return Effect.gen({ self: this }, function* () {
+      if (this.stopping.stopped) {
+        return yield* Effect.fail(
+          new AttemptConflict("Sandbox service is stopping. Retry after restart."),
+        );
+      }
 
-  async start(request: SandboxAttemptRequest): Promise<SandboxReceipt> {
-    if (this.signal.aborted) {
-      throw new AttemptConflict("Sandbox service is stopping. Retry after restart.");
-    }
+      yield* Effect.try({
+        try: () => validateBundles(request),
+        catch: (cause) => (cause instanceof InvalidAttempt ? cause : failure("bundles", cause)),
+      });
+      const id = attemptId(this.config.stateRoot, request);
 
-    validateBundles(request);
-    const id = attemptId(this.config.stateRoot, request);
-    const previous = this.admissions.get(id);
-
-    if (previous) {
-      await previous;
-
-      return this.start(request);
-    }
-
-    const admission = this.admit(id, request);
-    this.admissions.set(id, admission);
-
-    try {
-      return await admission;
-    } finally {
-      this.admissions.delete(id);
-    }
+      return yield* this.withAdmission(id, this.admit(id, request));
+    });
   }
 
   private plan(id: string, requestHash: string, request: SandboxAttemptRequest): DockerAttemptPlan {
@@ -107,99 +133,112 @@ export class AttemptAdmissions {
   }
 
   observe(record: AttemptRecord) {
-    const retained = this.retained.get(record.plan.id);
+    return Effect.gen({ self: this }, function* () {
+      const retained = this.retained.get(record.plan.id);
 
-    if (record.kind === "started") {
-      this.monitor(
-        record,
-        retained?.requestHash === record.plan.requestHash ? retained.request : undefined,
-      );
-    }
+      if (record.kind === "started") {
+        yield* this.monitor(
+          record,
+          retained?.requestHash === record.plan.requestHash ? retained.request : undefined,
+        );
+      }
 
-    this.retained.delete(record.plan.id);
+      this.retained.delete(record.plan.id);
+    });
   }
 
   monitor(record: Extract<AttemptRecord, { kind: "started" }>, request?: SandboxAttemptRequest) {
-    if (this.signal.aborted) {
-      return;
-    }
-
-    this.retained.delete(record.plan.id);
-
-    if (this.monitors.has(record.plan.id)) {
-      return;
-    }
-
-    const receipt = { ...record.plan, kind: "started" } as const;
-
-    const sameSession =
-      record.session.epoch === this.session.epoch && record.session.nonce === this.session.nonce;
-
-    if (request && sameSession && !this.issued.has(record.plan.id)) {
-      // Set before invoking start, including synchronous backend callbacks and thrown calls.
-      this.issued.add(record.plan.id);
-      this.monitors.launch(record, () =>
-        this.dependencies.backend.start(receipt, request, this.signal),
-      );
-    } else {
-      this.monitors.launch(record, () => this.dependencies.backend.recover(receipt, this.signal));
-    }
-  }
-
-  private async publishAdmission(plan: DockerAttemptPlan, request: SandboxAttemptRequest) {
-    const authority = this.dependencies.authority;
-    let reply;
-
-    try {
-      reply = await authority.admit({ session: this.session, plan });
-    } catch (cause) {
-      // A null resolving read may precede a delayed remote commit. Lookup keeps this obligation.
-      this.retained.set(plan.id, { request, requestHash: plan.requestHash });
-
-      return resolveAdmissionRead({
-        authority,
-        id: plan.id,
-        signal: this.signal,
-        cause: cause instanceof Error ? cause : new Error("Admission response failed.", { cause }),
-      });
-    }
-
-    if (reply.kind === "rejected") {
-      throw new AttemptConflict(`Attempt admission was rejected: ${reply.code}.`);
-    }
-
-    return reply.record;
-  }
-
-  private async admit(id: string, request: SandboxAttemptRequest): Promise<SandboxReceipt> {
-    const authority = this.dependencies.authority;
-
-    const requestHash = attemptHash({
-      ...request,
-      bundles: [...request.bundles].sort((a, b) => a.hash.localeCompare(b.hash)),
-    });
-
-    let record = await authority.read(id);
-
-    if (record === null) {
-      const plan = this.plan(id, requestHash, request);
-      await this.exports.reconcile(plan.volume);
-
-      if (this.signal.aborted) {
-        throw new AttemptConflict("Sandbox service is stopping.");
+    return Effect.gen({ self: this }, function* () {
+      if (this.stopping.stopped) {
+        return;
       }
 
-      record = await this.publishAdmission(plan, request);
-    }
+      this.retained.delete(record.plan.id);
 
-    if (record.plan.requestHash !== requestHash) {
-      throw new AttemptConflict("Attempt identity already has different request content.");
-    }
+      if (this.monitors.has(record.plan.id)) {
+        return;
+      }
 
-    if (record.kind === "started") {
-      this.monitor(record, request);
-    }
+      const receipt = { ...record.plan, kind: "started" } as const;
 
-    return this.publicReceipt(record);
+      const sameSession =
+        record.session.epoch === this.session.epoch && record.session.nonce === this.session.nonce;
+
+      if (request && sameSession && !this.issued.has(record.plan.id)) {
+        // Record issuance before forking so a later observation can only recover.
+        this.issued.add(record.plan.id);
+        yield* this.monitors.launch(record, () =>
+          this.dependencies.backend.start(receipt, request, this.stopping.signal),
+        );
+      } else {
+        yield* this.monitors.launch(record, () =>
+          this.dependencies.backend.recover(receipt, this.stopping.signal),
+        );
+      }
+    });
+  }
+
+  private publishAdmission(plan: DockerAttemptPlan, request: SandboxAttemptRequest) {
+    return Effect.gen({ self: this }, function* () {
+      const authority = this.dependencies.authority;
+      const admitted = yield* authority.admit({ session: this.session, plan }).pipe(Effect.result);
+
+      if (Result.isFailure(admitted)) {
+        this.retained.set(plan.id, { request, requestHash: plan.requestHash });
+
+        return yield* resolveAdmissionRead({
+          authority,
+          id: plan.id,
+          stopping: this.stopping,
+          cause: admitted.failure,
+        });
+      }
+
+      const reply = admitted.success;
+
+      if (reply.kind === "rejected") {
+        return yield* Effect.fail(
+          new AttemptConflict(`Attempt admission was rejected: ${reply.code}.`),
+        );
+      }
+
+      return reply.record;
+    });
+  }
+
+  private admit(id: string, request: SandboxAttemptRequest) {
+    return Effect.gen({ self: this }, function* () {
+      const authority = this.dependencies.authority;
+
+      const requestHash = attemptHash({
+        ...request,
+        bundles: [...request.bundles].sort((a, b) => a.hash.localeCompare(b.hash)),
+      });
+
+      let record = yield* authority.read(id);
+
+      if (record === null) {
+        const plan = this.plan(id, requestHash, request);
+        yield* this.exports.reconcile(plan.volume);
+
+        if (this.stopping.stopped) {
+          return yield* Effect.fail(new AttemptConflict("Sandbox service is stopping."));
+        }
+
+        record = yield* this.publishAdmission(plan, request);
+      }
+
+      if (record.plan.requestHash !== requestHash) {
+        return yield* Effect.fail(
+          new AttemptConflict("Attempt identity already has different request content."),
+        );
+      }
+
+      if (record.kind === "started") {
+        yield* this.monitor(record, request);
+      }
+
+      return yield* publicReceipt(this.dependencies.resultsFor, record);
+    });
   }
 }

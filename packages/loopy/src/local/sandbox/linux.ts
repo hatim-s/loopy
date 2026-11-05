@@ -1,6 +1,11 @@
 import { realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, relative, sep } from "node:path";
+import { Effect } from "effect";
+import type { CommandExecutionError } from "../../core/index.js";
+import { rejected, unstarted } from "../spawn.js";
+import type { ProcessFilesystemError } from "./io.js";
+import { absentPath, filesystem } from "./io.js";
 import type { SandboxOptions } from "./launcher.js";
 import { ENV_EXEC, envArgs, executable, packageDirectory, within } from "./paths.js";
 
@@ -9,22 +14,23 @@ const BWRAP_CANDIDATES = ["/usr/bin/bwrap", "/bin/bwrap"];
 /** Growing bwrap argv plus the tmpfs mounts that hide the host's directories. */
 type MountPlan = { args: string[]; tmpfs: string[]; created: Set<string> };
 
-async function findBwrap(): Promise<string> {
-  for (const candidate of BWRAP_CANDIDATES) {
-    if (await executable(candidate)) {
-      return candidate;
+function findBwrap() {
+  return Effect.gen(function* () {
+    for (const candidate of BWRAP_CANDIDATES) {
+      if (yield* executable(candidate)) {
+        return candidate;
+      }
     }
-  }
 
-  throw new Error("Sandbox mode requires bubblewrap on Linux.");
+    return yield* Effect.fail(unstarted(new Error("Sandbox mode requires bubblewrap on Linux.")));
+  });
 }
 
-async function isDirectory(path: string): Promise<boolean> {
-  try {
-    return (await stat(path)).isDirectory();
-  } catch {
-    return false;
-  }
+function isDirectory(path: string) {
+  return filesystem(() => stat(path)).pipe(
+    Effect.map((value) => value.isDirectory()),
+    Effect.catchIf(absentPath, () => Effect.succeed(false)),
+  );
 }
 
 function tmpfsOver(plan: MountPlan, path: string): string | undefined {
@@ -72,45 +78,45 @@ function hideHome(plan: MountPlan, home: string): void {
   plan.tmpfs.unshift(home);
 }
 
-async function programMountOf(
-  program: string,
-  workspace: string,
-  home: string,
-): Promise<string | undefined> {
-  if (within(workspace, program) || !within(home, program)) {
-    return undefined;
-  }
+function programMountOf(program: string, workspace: string, home: string) {
+  return Effect.gen(function* () {
+    if (within(workspace, program) || !within(home, program)) {
+      return undefined;
+    }
 
-  return (await packageDirectory(program, home)) ?? program;
+    return (yield* packageDirectory(program, home)) ?? program;
+  });
 }
 
-async function bindProgram(
+function bindProgram(
   plan: MountPlan,
   paths: { program: string; workspace: string; home: string; helper?: string },
-): Promise<void> {
-  const { program, workspace, home, helper } = paths;
-  const { args } = plan;
-  const programMount = await programMountOf(program, workspace, home);
-  prepareUnderTmpfs(plan, workspace, true);
+) {
+  return Effect.gen(function* () {
+    const { program, workspace, home, helper } = paths;
+    const { args } = plan;
+    const programMount = yield* programMountOf(program, workspace, home);
+    prepareUnderTmpfs(plan, workspace, true);
 
-  if (programMount) {
-    prepareUnderTmpfs(plan, programMount, await isDirectory(programMount));
-    args.push("--ro-bind", programMount, programMount);
-  }
+    if (programMount) {
+      prepareUnderTmpfs(plan, programMount, yield* isDirectory(programMount));
+      args.push("--ro-bind", programMount, programMount);
+    }
 
-  const helperCovered =
-    !helper || within(workspace, helper) || Boolean(programMount && within(programMount, helper));
+    const helperCovered =
+      !helper || within(workspace, helper) || Boolean(programMount && within(programMount, helper));
 
-  if (helper && !helperCovered && prepareUnderTmpfs(plan, helper, false)) {
-    args.push("--ro-bind", helper, helper);
-  }
+    if (helper && !helperCovered && prepareUnderTmpfs(plan, helper, false)) {
+      args.push("--ro-bind", helper, helper);
+    }
+  });
 }
 
 /**
  * Read-only root, tmpfs over /tmp, /run and the home directory, then the
  * workspace (and the program's package, if it lives under home) bound back in.
  */
-export async function linuxSandbox({
+export function linuxSandbox({
   program,
   workspace,
   cwd,
@@ -119,62 +125,70 @@ export async function linuxSandbox({
   helper,
   protectedHome,
   mode,
-}: SandboxOptions): Promise<[string, string[]]> {
-  const bwrap = await findBwrap();
+}: SandboxOptions) {
+  return Effect.gen(function* (): Effect.fn.Return<
+    [string, string[]],
+    CommandExecutionError | ProcessFilesystemError
+  > {
+    const environmentArgs = yield* Effect.try({ try: () => envArgs(env), catch: rejected });
+    const bwrap = yield* findBwrap();
 
-  if (mode === "full") {
-    return [
-      bwrap,
-      [
-        "--die-with-parent",
-        "--unshare-all",
-        "--share-net",
-        "--bind",
-        "/",
-        "/",
-        ...(protectedHome ? ["--tmpfs", protectedHome, "--remount-ro", protectedHome] : []),
-        "--proc",
-        "/proc",
-        "--dev",
-        "/dev",
-        "--chdir",
-        cwd,
-        "--",
-        ENV_EXEC,
-        "-i",
-        "--",
-        ...envArgs(env),
-        helper ?? program,
-      ],
-    ];
-  }
+    if (mode === "full") {
+      return [
+        bwrap,
+        [
+          "--die-with-parent",
+          "--unshare-all",
+          "--share-net",
+          "--bind",
+          "/",
+          "/",
+          ...(protectedHome ? ["--tmpfs", protectedHome, "--remount-ro", protectedHome] : []),
+          "--proc",
+          "/proc",
+          "--dev",
+          "/dev",
+          "--chdir",
+          cwd,
+          "--",
+          ENV_EXEC,
+          "-i",
+          "--",
+          ...environmentArgs,
+          helper ?? program,
+        ],
+      ];
+    }
 
-  const home = await realpath(homedir());
+    const home = yield* filesystem(() => realpath(homedir()));
 
-  if (home === "/") {
-    throw new Error("Sandbox mode requires a private home directory.");
-  }
+    if (home === "/") {
+      return yield* Effect.fail(
+        unstarted(new Error("Sandbox mode requires a private home directory.")),
+      );
+    }
 
-  const args = ["--die-with-parent", "--new-session", "--unshare-all", "--ro-bind", "/", "/"];
-  args.push("--tmpfs", "/tmp", "--proc", "/proc", "--dev", "/dev");
+    const args = ["--die-with-parent", "--new-session", "--unshare-all", "--ro-bind", "/", "/"];
+    args.push("--tmpfs", "/tmp", "--proc", "/proc", "--dev", "/dev");
 
-  // Some Linux environments have no /run mount.
-  if (await isDirectory("/run")) {
-    args.push("--tmpfs", "/run");
-  }
+    // Some Linux environments have no /run mount.
+    if (yield* isDirectory("/run")) {
+      args.push("--tmpfs", "/run");
+    }
 
-  const plan: MountPlan = { args, tmpfs: ["/tmp", "/run"], created: new Set() };
-  hideHome(plan, home);
+    const plan: MountPlan = { args, tmpfs: ["/tmp", "/run"], created: new Set() };
+    hideHome(plan, home);
 
-  await bindProgram(plan, { program, workspace, home, helper });
-  prepareUnderTmpfs(plan, scratch, true);
-  args.push("--bind", scratch, scratch, "--bind", workspace, workspace);
+    yield* bindProgram(plan, { program, workspace, home, helper });
+    prepareUnderTmpfs(plan, scratch, true);
+    args.push("--bind", scratch, scratch, "--bind", workspace, workspace);
 
-  if (protectedHome) {
-    args.push("--tmpfs", protectedHome, "--remount-ro", protectedHome);
-  }
+    if (protectedHome) {
+      args.push("--tmpfs", protectedHome, "--remount-ro", protectedHome);
+    }
 
-  args.push("--chdir", cwd, "--", ENV_EXEC, "-i", "--", ...envArgs(env), helper ?? program);
+    args.push("--chdir", cwd, "--", ENV_EXEC, "-i", "--", ...environmentArgs, helper ?? program);
 
-  return [bwrap, args];
+    return [bwrap, args];
+  });
 }

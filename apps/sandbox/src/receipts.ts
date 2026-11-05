@@ -2,19 +2,24 @@ import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { open, unlink } from "node:fs/promises";
 import { join } from "node:path";
-import { z } from "zod";
-import { sandboxExecutionResultSchema } from "../../../packages/loopy/src/contract/index.js";
+import { Schema } from "effect";
+import { struct } from "../../../packages/loopy/src/contract/codec.js";
+import {
+  decodeBoundary,
+  sandboxExecutionResultSchema,
+} from "../../../packages/loopy/src/contract/index.js";
 import { dockerAttemptPlanSchema } from "../../../packages/loopy/src/contract/sandbox-journal.js";
 
-export const storedReceiptSchema = z.discriminatedUnion("kind", [
-  dockerAttemptPlanSchema.extend({ kind: z.literal("started") }),
-  dockerAttemptPlanSchema.extend({
-    kind: z.literal("finished"),
+export const storedReceiptSchema = Schema.Union([
+  struct({ ...dockerAttemptPlanSchema.fields, kind: Schema.Literal("started") }),
+  struct({
+    ...dockerAttemptPlanSchema.fields,
+    kind: Schema.Literal("finished"),
     result: sandboxExecutionResultSchema,
   }),
 ]);
 
-export type StoredReceipt = z.infer<typeof storedReceiptSchema>;
+export type StoredReceipt = Schema.Schema.Type<typeof storedReceiptSchema>;
 
 export type StartedReceipt = Extract<StoredReceipt, { kind: "started" }>;
 
@@ -28,7 +33,7 @@ async function syncDirectory(path: string) {
   }
 }
 
-const lockSchema = z.strictObject({ pid: z.number().int().positive(), nonce: z.string() });
+const lockSchema = struct({ pid: Schema.Int.check(Schema.isGreaterThan(0)), nonce: Schema.String });
 
 async function readLock(path: string) {
   try {
@@ -41,7 +46,7 @@ async function readLock(path: string) {
         throw new Error("Sandbox process lock must be a bounded regular file.");
       }
 
-      return lockSchema.parse(JSON.parse(await file.readFile("utf8")));
+      return decodeBoundary(lockSchema)(JSON.parse(await file.readFile("utf8")));
     } finally {
       await file.close();
     }

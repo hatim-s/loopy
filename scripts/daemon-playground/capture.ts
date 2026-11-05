@@ -2,7 +2,11 @@ import { createHash } from "node:crypto";
 import { cp, lstat, mkdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { z } from "zod";
-import { type RunSnapshotView, routes } from "../../packages/loopy/src/contract/index.ts";
+import {
+  decodeBoundary,
+  type RunSnapshotView,
+  routes,
+} from "../../packages/loopy/src/contract/index.ts";
 import { executionKeyString } from "../../packages/loopy/src/core/index.ts";
 import { receiptSchema } from "../../packages/loopy/src/executor/receipts.ts";
 import { home, state } from "./config.ts";
@@ -51,7 +55,7 @@ export async function receiptInventory(runId: string) {
   return Promise.all(
     files.map(async (file) => {
       const bytes = await readFile(file);
-      const receipt = receiptSchema.parse(JSON.parse(bytes.toString("utf8")));
+      const receipt = decodeBoundary(receiptSchema)(JSON.parse(bytes.toString("utf8")));
 
       return {
         path: relative(home, file),

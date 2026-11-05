@@ -1,74 +1,69 @@
 import { expect, test } from "bun:test";
-import { Daemon } from "../src/host/index.js";
+import { type Cause, Effect, Fiber, Queue } from "effect";
+import { TestClock } from "effect/testing";
+import { makeDaemon } from "../src/host/index.js";
 import { loopy, wait } from "../src/sdk/graph/index.js";
 import { MemoryStore } from "../src/store/index.js";
 import { FakeExecutor, newRun } from "./fixture.js";
 
 test("daemon leaves an indefinite sleep when a durable approval signal wakes its run", async () => {
-  const store = new MemoryStore();
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const now = Date.parse(newRun().createdAt);
+        yield* TestClock.setTime(now);
+        const store = new MemoryStore(() => now);
 
-  const graph = loopy("prompt", {
-    input: {},
-    run: () => wait("approve", { payload: { kind: "value", type: "boolean" } }),
-  }).graph;
+        const graph = loopy("prompt", {
+          input: {},
+          run: () => wait("approve", { payload: { kind: "value", type: "boolean" } }),
+        }).graph;
 
-  await store.createRun({ ...newRun(), input: {} });
-  const errors: Error[] = [];
-  let sleeping: (() => void) | undefined;
-
-  const asleep = new Promise<void>((resolve) => {
-    sleeping = resolve;
-  });
-
-  const finished = new Promise<void>((resolve) => {
-    store.subscribe((events) => {
-      if (events.some((event) => event.entity === "run" && event.kind === "finished")) {
-        resolve();
-      }
-    });
-  });
-
-  const daemon = new Daemon({
-    store,
-    concurrency: 1,
-    revisionFor: () => "bundle",
-    prepare: async () => ({ graph, executor: new FakeExecutor() }),
-    onError: (error) => errors.push(error),
-    sleep: async (...args) => {
-      const [, signal] = args;
-      sleeping?.();
-
-      if (!signal.aborted) {
-        await new Promise<void>((resolve) =>
-          signal.addEventListener("abort", () => resolve(), { once: true }),
+        yield* store.createRun({ ...newRun(), input: {} });
+        const errors: Cause.Cause<unknown>[] = [];
+        const inbox = yield* Queue.unbounded<void>();
+        yield* Effect.acquireRelease(
+          Effect.sync(() =>
+            store.subscribe((events) => {
+              if (events.some((event) => event.entity === "run" && event.kind === "finished")) {
+                Queue.offerUnsafe(inbox, undefined);
+              }
+            }),
+          ),
+          (unsubscribe) => Effect.sync(unsubscribe),
         );
-      }
-    },
-  });
 
-  await daemon.tick();
-  const running = daemon.run();
+        const daemon = yield* makeDaemon({
+          store,
+          concurrency: 1,
+          revisionFor: () => Effect.succeed("bundle"),
+          prepare: () => Effect.succeed({ graph, executor: new FakeExecutor() }),
+          onError: (cause) => {
+            errors.push(cause);
+          },
+        });
 
-  try {
-    await asleep;
-    const hook = (await store.getWaits("run"))[0];
+        yield* daemon.tick;
+        const running = yield* Effect.forkChild(daemon.run);
+        yield* TestClock.adjust(0);
+        const hook = (yield* store.getWaits("run"))[0];
 
-    if (!hook) {
-      throw new Error("Missing wait.");
-    }
+        if (!hook) {
+          throw new Error("Missing wait.");
+        }
 
-    expect((await store.getRun("run"))?.status).toBe("suspended");
-    await store.resolveWait({ token: hook.token, payload: true, at: new Date().toISOString() });
-    await Promise.race([
-      finished,
-      Bun.sleep(500).then(() => {
-        throw new Error("Daemon did not wake after signal.");
+        expect((yield* store.getRun("run"))?.status).toBe("suspended");
+        yield* store.resolveWait({
+          token: hook.token,
+          payload: true,
+          at: new Date(now).toISOString(),
+        });
+        yield* Queue.take(inbox);
+        expect(yield* store.getRun("run")).toMatchObject({ status: "succeeded", output: true });
+        expect(errors).toEqual([]);
+        yield* daemon.stop;
+        yield* Fiber.join(running);
       }),
-    ]);
-    expect(await store.getRun("run")).toMatchObject({ status: "succeeded", output: true });
-    expect(errors).toEqual([]);
-  } finally {
-    await daemon.stop();
-    await running;
-  }
+    ).pipe(Effect.provide(TestClock.layer())),
+  );
 });

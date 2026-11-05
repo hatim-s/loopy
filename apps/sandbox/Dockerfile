@@ -1,6 +1,6 @@
 FROM oven/bun:1.4.0 AS build
 WORKDIR /build
-RUN bun add --exact zod@4.6.7
+RUN bun add --exact effect@4.1.2
 COPY packages/loopy/src ./packages/loopy/src
 COPY apps/sandbox/src ./apps/sandbox/src
 RUN bun build apps/sandbox/src/worker.ts --target=bun --outfile=/worker.js \

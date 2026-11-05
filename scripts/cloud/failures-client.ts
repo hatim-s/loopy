@@ -1,9 +1,11 @@
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
-import type { z } from "zod";
+import type { Schema } from "effect";
+import { Effect } from "effect";
 import type { storedReceiptSchema } from "../../apps/sandbox/src/receipts.js";
 import { compile } from "../../packages/loopy/src/compiler/index.js";
 import {
+  decodeBoundary,
   type Json,
   putLoopyBodySchema,
   type RunSnapshotView,
@@ -29,9 +31,9 @@ export class FailureJourney {
   readonly startedAt = new Date().toISOString();
 
   async json<T>(
-    schema: z.ZodType<T>,
+    schema: Schema.Codec<T, unknown, never, never>,
     path: string,
-    body?: Json | z.infer<typeof putLoopyBodySchema>,
+    body?: Json | Schema.Schema.Type<typeof putLoopyBodySchema>,
     method = "POST",
   ): Promise<T> {
     const response = await fetch(`${api}/api${path}`, {
@@ -43,10 +45,14 @@ export class FailureJourney {
 
     assert(response.ok, "failure_journey_http_error", { path, httpStatus: response.status });
 
-    return schema.parse(await response.json());
+    return decodeBoundary(schema)(await response.json());
   }
 
-  async provider<T>(schema: z.ZodType<T>, path: string, body?: SandboxAttemptRequest) {
+  async provider<T>(
+    schema: Schema.Codec<T, unknown, never, never>,
+    path: string,
+    body?: SandboxAttemptRequest,
+  ) {
     const response = await fetch(`${sandbox}${path}`, {
       method: body === undefined ? "GET" : "POST",
       headers: {
@@ -59,32 +65,34 @@ export class FailureJourney {
 
     assert(response.ok, "provider_http_error", { httpStatus: response.status });
 
-    return schema.parse(await response.json());
+    return decodeBoundary(schema)(await response.json());
   }
 
-  async upload(name: string) {
-    const path = resolve(root, "packages/loopy/_tests_/fixtures/cloud", name);
-    const compiled = await compile(path);
-    assert(compiled.ok, "failure_fixture_compile_failed", {
-      fixture: name,
-      diagnostics: compiled.ok
-        ? []
-        : compiled.diagnostics.map((value) => `${value.code}:${value.line}:${value.column}`),
-    });
+  compiled(name: string) {
+    return Effect.gen({ self: this }, function* () {
+      const path = resolve(root, "packages/loopy/_tests_/fixtures/cloud", name);
+      const compiled = yield* compile(path);
+      assert(compiled.ok, "failure_fixture_compile_failed", {
+        fixture: name,
+        diagnostics: compiled.ok
+          ? []
+          : compiled.diagnostics.map((value) => `${value.code}:${value.line}:${value.column}`),
+      });
 
-    const body = putLoopyBodySchema.parse({
-      graph: compiled.graph,
-      revision: compiled.revision,
-      sourceArtifact: compiled.sourceArtifact,
-      bundles: compiled.bundles.map((bundle) => ({
-        ...bundle,
-        bytes: Buffer.from(bundle.bytes).toString("base64"),
-      })),
-      source: { path, workspace: "fixtures" },
-      replace: true,
-    });
+      const body = decodeBoundary(putLoopyBodySchema)({
+        graph: compiled.graph,
+        revision: compiled.revision,
+        sourceArtifact: compiled.sourceArtifact,
+        bundles: compiled.bundles.map((bundle) => ({
+          ...bundle,
+          bytes: Buffer.from(bundle.bytes).toString("base64"),
+        })),
+        source: { path, workspace: "fixtures" },
+        replace: true,
+      });
 
-    await this.json(routes.putLoopy.response, `/loopies/${body.graph.name}`, body, "PUT");
+      return body;
+    });
   }
 
   async start(slug: string) {
@@ -175,7 +183,7 @@ export class FailureJourney {
       "effect_not_observed",
     );
 
-    const spec = sandboxExecutionSpecSchema.parse(
+    const spec = decodeBoundary(sandboxExecutionSpecSchema)(
       JSON.parse(
         await docker([
           "exec",
@@ -202,7 +210,7 @@ export class FailureJourney {
     };
   }
 
-  async artifact(receipt: z.infer<typeof storedReceiptSchema>) {
+  async artifact(receipt: Schema.Schema.Type<typeof storedReceiptSchema>) {
     const query = new URLSearchParams({
       workspace: "fixtures",
       key: JSON.stringify(receipt.executionKey),

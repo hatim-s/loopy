@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
+import { Effect } from "effect";
 import { HttpSandboxAuthority } from "../../../apps/sandbox/src/http-authority.js";
 import { SANDBOX_MAX_REQUEST_BYTES } from "../src/contract/index.js";
 import {
@@ -38,15 +39,19 @@ async function internal(
     headers.set("Origin", options.origin);
   }
 
-  const worker = await harness.runtime.getWorker("cloud");
+  const forwarder = await harness.runtime.getWorker("rollback");
 
-  return worker.fetch(options.url ?? "http://127.0.0.1/internal/sandbox-receipts", {
-    method: options.method ?? "POST",
-    headers: [...headers],
-    body:
-      options.method === "GET"
-        ? undefined
-        : (options.body ?? JSON.stringify({ operation: "status", input: {} })),
+  return forwarder.fetch("http://probe/forward", {
+    method: "POST",
+    body: JSON.stringify({
+      url: options.url ?? "http://127.0.0.1/internal/sandbox-receipts",
+      method: options.method ?? "POST",
+      headers: Object.fromEntries(headers),
+      body:
+        options.method === "GET"
+          ? undefined
+          : (options.body ?? JSON.stringify({ operation: "status", input: {} })),
+    }),
   });
 }
 
@@ -71,7 +76,7 @@ test("internal routes separate bridge and principal credentials and reject names
 });
 
 test("malformed, extra-field and oversized commands cannot mutate the authority", async () => {
-  const before = await harness.authority.status();
+  const before = await Effect.runPromise(harness.authority.status());
   expect((await internal({ body: "{" })).status).toBe(400);
   expect(
     (
@@ -84,23 +89,30 @@ test("malformed, extra-field and oversized commands cannot mutate the authority"
     ).status,
   ).toBe(400);
   expect((await internal({ body: "x".repeat(SANDBOX_MAX_REQUEST_BYTES + 1) })).status).toBe(400);
-  expect(await harness.authority.status()).toEqual(before);
+  expect(await Effect.runPromise(harness.authority.status())).toEqual(before);
 });
 
 test("root-derived identities include ordered scope and cannot name another authority's Docker resources", async () => {
-  const session = await harness.authority.openSession({ expectedEpoch: 0, nonce: "identity" });
+  const session = await Effect.runPromise(
+    harness.authority.openSession({ expectedEpoch: 0, nonce: "identity" }),
+  );
+
   const plan = harness.plan("identity");
   expect(
-    await harness.authority.admit({
-      session,
-      plan: { ...plan, volume: `loopy-workspace-${"f".repeat(64)}` },
-    }),
+    await Effect.runPromise(
+      harness.authority.admit({
+        session,
+        plan: { ...plan, volume: `loopy-workspace-${"f".repeat(64)}` },
+      }),
+    ),
   ).toEqual({ kind: "rejected", code: "invalid_state" });
-  expect(await harness.authority.admit({ session, plan: { ...plan, attempt: 2 } })).toEqual({
+  expect(
+    await Effect.runPromise(harness.authority.admit({ session, plan: { ...plan, attempt: 2 } })),
+  ).toEqual({
     kind: "rejected",
     code: "invalid_state",
   });
-  expect(await harness.authority.read(plan.id)).toBeNull();
+  expect(await Effect.runPromise(harness.authority.read(plan.id))).toBeNull();
 });
 
 test("HTTP adapter refuses cloud origins and rejects malformed operation responses", async () => {
@@ -129,7 +141,7 @@ test("HTTP adapter refuses cloud origins and rejects malformed operation respons
       namespace,
     });
 
-    await expect(client.read("f".repeat(64))).rejects.toThrow("Invalid");
+    await expect(Effect.runPromise(client.read("f".repeat(64)))).rejects.toThrow("Expected");
   } finally {
     await server.stop(true);
   }

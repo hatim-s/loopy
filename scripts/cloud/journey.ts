@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { type CursorView, routes } from "../../packages/loopy/src/contract/index.js";
 import { assert, equal, Journey } from "./journey-client.js";
 import { docker } from "./journey-docker.js";
@@ -26,7 +27,7 @@ async function main() {
   });
 
   await journey.check("compile_upload_graph_bundles_source", async () => {
-    const body = await journey.compiled("execution.ts");
+    const body = await Effect.runPromise(journey.compiled("execution.ts"));
     assert(body.bundles.length === 2, "expected_two_compiled_bundles");
     assert(body.sourceArtifact?.status === "available", "source_not_captured");
     await journey.upload(body);
@@ -93,7 +94,7 @@ async function main() {
   });
 
   await journey.check("approval_wait_and_invalid_payload", async () => {
-    const first = await journey.compiled("approval-one.ts");
+    const first = await Effect.runPromise(journey.compiled("approval-one.ts"));
     firstRevision = first.revision;
     await journey.upload(first);
     firstSource = await journey.json(
@@ -129,7 +130,7 @@ async function main() {
 
   await journey.check("revision_pinning_after_new_save_and_approval_resolve", async () => {
     assert(approvalId && firstRevision, "approval_case_dependency_missing");
-    const second = await journey.compiled("approval-two.ts");
+    const second = await Effect.runPromise(journey.compiled("approval-two.ts"));
     assert(second.revision !== firstRevision, "revision_fixture_did_not_change");
     await journey.upload(second);
 

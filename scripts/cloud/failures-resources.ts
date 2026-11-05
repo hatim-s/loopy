@@ -1,5 +1,6 @@
 import { readdir } from "node:fs/promises";
 import { resolve } from "node:path";
+import { Effect } from "effect";
 import { z } from "zod";
 import { environment, owner, root, sandboxState } from "./failures-config.js";
 import { filesystemReceipt } from "./filesystem-receipt.js";
@@ -42,10 +43,12 @@ export async function receipts() {
   const directory = resolve(sandboxState, "receipts");
   const files = await readdir(directory);
 
-  return Promise.all(
-    files
-      .filter((file) => /^[a-f0-9]{64}\.json$/.test(file))
-      .map((file) => filesystemReceipt(sandboxState, file.slice(0, -5))),
+  return Effect.runPromise(
+    Effect.all(
+      files
+        .filter((file) => /^[a-f0-9]{64}\.json$/.test(file))
+        .map((file) => filesystemReceipt(sandboxState, file.slice(0, -5))),
+    ),
   );
 }
 

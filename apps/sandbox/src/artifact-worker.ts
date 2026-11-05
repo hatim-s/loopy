@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
+import { Effect, Result } from "effect";
 import {
+  decodeBoundary,
   SANDBOX_MAX_ARTIFACT_BYTES,
   type SandboxArtifact,
   type SandboxArtifactRead,
@@ -9,8 +11,9 @@ import {
 } from "../../../packages/loopy/src/contract/index.js";
 import { errnoCode } from "../../../packages/loopy/src/core/index.js";
 import { ArtifactError } from "./artifact-error.js";
+import { failure } from "./operations.js";
 
-export async function readArtifact(path: string): Promise<SandboxArtifact> {
+async function readArtifactFile(path: string): Promise<SandboxArtifact> {
   const directories = [];
   let file;
 
@@ -102,12 +105,29 @@ export async function readArtifact(path: string): Promise<SandboxArtifact> {
   }
 }
 
+export function readArtifact(path: string) {
+  return Effect.tryPromise({
+    try: () => readArtifactFile(path),
+    catch: (cause) => (cause instanceof ArtifactError ? cause : failure("artifact file", cause)),
+  }).pipe(Effect.uninterruptible);
+}
+
 if (import.meta.main) {
   let response: SandboxArtifactRead;
 
   try {
-    const path = sandboxArtifactPathSchema.parse(process.argv[2]);
-    response = { kind: "artifact", artifact: await readArtifact(path) };
+    const path = decodeBoundary(sandboxArtifactPathSchema)(process.argv[2]);
+    const read = await Effect.runPromise(readArtifact(path).pipe(Effect.result));
+
+    if (Result.isFailure(read)) {
+      throw read.failure instanceof ArtifactError
+        ? read.failure
+        : "cause" in read.failure
+          ? read.failure.cause
+          : read.failure;
+    }
+
+    response = { kind: "artifact", artifact: read.success };
   } catch (cause) {
     if (cause instanceof ArtifactError) {
       response = { kind: "error", error: { code: cause.code, message: cause.message } };

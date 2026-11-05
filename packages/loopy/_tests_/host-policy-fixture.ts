@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import type { ExecutionKey, ExecutionResult, Receipt } from "../src/core/index.js";
 import { executionKeyString } from "../src/core/index.js";
 import type { DurableExecutionProvider } from "../src/host/durable.js";
@@ -53,16 +54,20 @@ export class PolicyProvider implements DurableExecutionProvider {
     return `${executionKeyString(key)}/${attempt}`;
   }
 
-  async lookup(key: ExecutionKey, attempt: number): Promise<Receipt> {
-    this.lookups.push(this.id(key, attempt));
+  lookup(key: ExecutionKey, attempt: number) {
+    return Effect.gen({ self: this }, function* () {
+      this.lookups.push(this.id(key, attempt));
 
-    return this.receipts.get(this.id(key, attempt)) ?? { kind: "none" };
+      return this.receipts.get(this.id(key, attempt)) ?? { kind: "none" as const };
+    });
   }
 
-  async start(key: ExecutionKey, attempt: number): Promise<Receipt> {
-    this.starts.push({ key, attempt });
-    this.receipts.set(this.id(key, attempt), { kind: "started" });
+  start(key: ExecutionKey, attempt: number): Effect.Effect<Receipt> {
+    return Effect.gen({ self: this }, function* () {
+      this.starts.push({ key, attempt });
+      this.receipts.set(this.id(key, attempt), { kind: "started" as const });
 
-    return { kind: "started" };
+      return { kind: "started" as const };
+    });
   }
 }

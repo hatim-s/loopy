@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { Data } from "effect";
 import {
   SANDBOX_MAX_BUNDLE_BYTES,
   type SandboxAttemptIdentity,
@@ -7,9 +8,17 @@ import {
 import { attemptIdInput } from "../../../packages/loopy/src/contract/sandbox-journal.js";
 import { canonicalJson } from "../../../packages/loopy/src/core/index.js";
 
-export class InvalidAttempt extends Error {}
+export class InvalidAttempt extends Data.TaggedError("InvalidAttempt")<{ message: string }> {
+  constructor(message: string) {
+    super({ message });
+  }
+}
 
-export class AttemptConflict extends Error {}
+export class AttemptConflict extends Data.TaggedError("AttemptConflict")<{ message: string }> {
+  constructor(message: string) {
+    super({ message });
+  }
+}
 
 export function attemptHash(
   value:

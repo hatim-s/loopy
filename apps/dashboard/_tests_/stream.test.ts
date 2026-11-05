@@ -1,6 +1,7 @@
 import { expect, spyOn, test } from "bun:test";
 import { type InfiniteData, QueryClient, QueryObserver } from "@tanstack/react-query";
 import {
+  decodeBoundary,
   executionKeyString,
   type NodeRunView,
   nodeRunViewSchema,
@@ -147,7 +148,7 @@ test("a list keeps a run that is newer than the event", () => {
 });
 
 function nodeEvent(sequence: number, index: number, attempt: number, status: string) {
-  const record: NodeRunView = nodeRunViewSchema.parse({
+  const record: NodeRunView = decodeBoundary(nodeRunViewSchema)({
     key: { runId: run.id, nodeId: `1:classify-${index}`, scope: [] },
     attempt,
     maxAttempts: 3,
@@ -846,7 +847,7 @@ test("stream overflow keeps the execution keyset boundary and preview metadata b
   const keysWritten: string[] = [];
 
   for (let index = 0; index < 201; index++) {
-    const record = nodeRunViewSchema.parse({
+    const record = decodeBoundary(nodeRunViewSchema)({
       key: { runId: run.id, nodeId: `${index}:work`, scope: [] },
       attempt: 1,
       maxAttempts: 1,
@@ -907,7 +908,7 @@ test("scoped node bursts invalidate aggregates and refetch active queries once",
 
     const scoped: ServerEvent = {
       ...root,
-      record: nodeRunViewSchema.parse({
+      record: decodeBoundary(nodeRunViewSchema)({
         ...root.record,
         key: { ...root.record.key, scope: [{ nodeId: "0:map", index: 0 }] },
       }),

@@ -1,23 +1,26 @@
-import { z } from "zod";
-import { SANDBOX_MAX_REQUEST_BYTES } from "../../../packages/loopy/src/contract/index.js";
+import { Effect, Schema } from "effect";
+import {
+  decodeBoundary,
+  SANDBOX_MAX_REQUEST_BYTES,
+} from "../../../packages/loopy/src/contract/index.js";
 import type { Environment } from "./environment.js";
 import { principals } from "./environment.js";
-import { readBoundedText } from "./http.js";
+import { readBoundedText, recoverBodyLimit } from "./http.js";
+import { platform } from "./operation.js";
 
 export const RECEIPTS_PATH = "/internal/sandbox-receipts";
 
-const configurationSchema = z.strictObject({
-  token: z.string().min(32).max(256),
-  namespace: z
-    .string()
-    .min(1)
-    .max(256)
-    .regex(/^[A-Za-z0-9_-]+$/),
-  root: z
-    .string()
-    .min(1)
-    .max(4096)
-    .refine(
+const configurationSchema = Schema.Struct({
+  token: Schema.String.check(Schema.isMinLength(32), Schema.isMaxLength(256)),
+  namespace: Schema.String.check(
+    Schema.isMinLength(1),
+    Schema.isMaxLength(256),
+    Schema.isPattern(/^[A-Za-z0-9_-]+$/),
+  ),
+  root: Schema.String.check(
+    Schema.isMinLength(1),
+    Schema.isMaxLength(4096),
+    Schema.makeFilter(
       (root) =>
         root.startsWith("/") &&
         root
@@ -25,10 +28,11 @@ const configurationSchema = z.strictObject({
           .split("/")
           .every((part) => part !== "" && part !== "." && part !== ".."),
     ),
+  ),
 });
 
 export function receiptsConfiguration(env: Environment) {
-  const config = configurationSchema.parse({
+  const config = decodeBoundary(configurationSchema)({
     token: env.RECEIPTS_TOKEN,
     namespace: env.RECEIPTS_NAMESPACE,
     root: env.RECEIPTS_ROOT,
@@ -71,31 +75,39 @@ export function receiptAccess(request: Request, env: Environment): Response | nu
   return null;
 }
 
-export async function routeReceipts(request: Request, env: Environment): Promise<Response> {
-  const rejected = receiptAccess(request, env);
+export function routeReceipts(request: Request, env: Environment) {
+  return Effect.gen(function* () {
+    const rejected = receiptAccess(request, env);
 
-  if (rejected) {
-    return rejected;
-  }
+    if (rejected) {
+      return rejected;
+    }
 
-  const stub = env.SANDBOX_RECEIPTS.get(env.SANDBOX_RECEIPTS.idFromName(env.RECEIPTS_NAMESPACE));
+    const stub = env.SANDBOX_RECEIPTS.get(env.SANDBOX_RECEIPTS.idFromName(env.RECEIPTS_NAMESPACE));
 
-  let body: string;
+    if (request.body === null) {
+      return Response.json({ error: "invalid_request" }, { status: 400 });
+    }
 
-  try {
-    body = await readBoundedText(new Response(request.body), SANDBOX_MAX_REQUEST_BYTES);
-  } catch {
-    return Response.json({ error: "invalid_request" }, { status: 400 });
-  }
+    const body = yield* recoverBodyLimit(
+      readBoundedText(new Response(request.body), SANDBOX_MAX_REQUEST_BYTES),
+    );
 
-  const response = await stub.fetch(request.url, {
-    method: request.method,
-    headers: [...request.headers],
-    body,
-  });
+    if (body === null) {
+      return Response.json({ error: "invalid_request" }, { status: 400 });
+    }
 
-  return new Response(await response.arrayBuffer(), {
-    status: response.status,
-    headers: [...response.headers],
+    const response = yield* platform("forward receipt command", () =>
+      stub.fetch(request.url, {
+        method: request.method,
+        headers: [...request.headers],
+        body,
+      }),
+    );
+
+    return new Response(yield* platform("read receipt response", () => response.arrayBuffer()), {
+      status: response.status,
+      headers: [...response.headers],
+    });
   });
 }

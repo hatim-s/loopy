@@ -1,75 +1,114 @@
-import type { z } from "zod";
-import { type routes, type SourceArtifact, serverEvent } from "../contract/index.js";
+import type { Schema } from "effect";
+import { Effect } from "effect";
+import { type routes, serverEvent } from "../contract/index.js";
 import { requireDefinition } from "./definition.js";
 import { ServiceError } from "./error.js";
 import type { ServiceOptions } from "./registry.js";
-import type { ServiceRunViews } from "./run-views.js";
+import { makeRunAccess } from "./run-access.js";
+import type { RunViews } from "./run-views.js";
 import { nodeDetailEvent } from "./views.js";
 
-export class ServiceQueries {
-  constructor(
-    private readonly options: ServiceOptions,
-    private readonly runViews: ServiceRunViews,
-  ) {}
+export function makeRunQueries(options: ServiceOptions, runViews: RunViews) {
+  const { requireRun, runGraph } = makeRunAccess(options);
 
-  private async readRunReference(id: string) {
-    const run = await this.options.store.runReference(id);
+  const runPayload = Effect.fn("queries.runPayload")(function* (id: string) {
+    const run = yield* requireRun(id);
+
+    return run.output === undefined
+      ? { input: run.input }
+      : { input: run.input, output: run.output };
+  });
+
+  const logs = Effect.fn("queries.logs")(function* (id: string, after?: number, limit?: number) {
+    yield* requireRun(id);
+
+    return yield* options.store.getLogs(id, after, limit);
+  });
+
+  const readRunReference = Effect.fn("queries.readRunReference")(function* (id: string) {
+    const run = yield* options.store.runReference(id);
 
     if (!run) {
-      throw new ServiceError("not_found");
+      return yield* Effect.fail(new ServiceError("not_found"));
     }
 
     return run;
-  }
+  });
 
-  async overview(query: z.output<typeof routes.overview.query>) {
-    return this.options.store.overview(query);
-  }
-  async executions(id: string, query: z.output<typeof routes.executions.query>) {
-    await this.readRunReference(id);
+  const overview = Effect.fn("queries.overview")(function* (
+    query: Schema.Schema.Type<typeof routes.overview.query>,
+  ) {
+    return yield* options.store.overview(query);
+  });
 
-    return this.options.store.nodePage(id, query);
-  }
-  async scopes(id: string, query: z.output<typeof routes.scopes.query>) {
-    await this.readRunReference(id);
+  const executions = Effect.fn("queries.executions")(function* (
+    id: string,
+    query: Schema.Schema.Type<typeof routes.executions.query>,
+  ) {
+    yield* readRunReference(id);
 
-    return this.options.store.scopeCounts(id, query.parentScope);
-  }
-  async scopeItems(id: string, query: z.output<typeof routes.scopeItems.query>) {
-    await this.readRunReference(id);
+    return yield* options.store.nodePage(id, query);
+  });
 
-    return this.options.store.scopeItems(id, query);
-  }
-  async execution(id: string, query: z.output<typeof routes.execution.query>) {
-    await this.readRunReference(id);
-    const detail = await this.options.store.execution(id, query.key, query.attemptsAfter);
+  const scopes = Effect.fn("queries.scopes")(function* (
+    id: string,
+    query: Schema.Schema.Type<typeof routes.scopes.query>,
+  ) {
+    yield* readRunReference(id);
+
+    return yield* options.store.scopeCounts(id, query.parentScope);
+  });
+
+  const scopeItems = Effect.fn("queries.scopeItems")(function* (
+    id: string,
+    query: Schema.Schema.Type<typeof routes.scopeItems.query>,
+  ) {
+    yield* readRunReference(id);
+
+    return yield* options.store.scopeItems(id, query);
+  });
+
+  const execution = Effect.fn("queries.execution")(function* (
+    id: string,
+    query: Schema.Schema.Type<typeof routes.execution.query>,
+  ) {
+    yield* readRunReference(id);
+    const detail = yield* options.store.execution(id, query.key, query.attemptsAfter);
 
     if (!detail) {
-      throw new ServiceError("not_found");
+      return yield* Effect.fail(new ServiceError("not_found"));
     }
 
     return detail;
-  }
-  async globalLogs(query: z.output<typeof routes.globalLogs.query>) {
-    return this.options.store.logPage(query);
-  }
-  async log(id: number) {
-    const log = await this.options.store.logDetail(id);
+  });
+
+  const globalLogs = Effect.fn("queries.globalLogs")(function* (
+    query: Schema.Schema.Type<typeof routes.globalLogs.query>,
+  ) {
+    return yield* options.store.logPage(query);
+  });
+
+  const log = Effect.fn("queries.log")(function* (id: number) {
+    const log = yield* options.store.logDetail(id);
 
     if (!log) {
-      throw new ServiceError("not_found");
+      return yield* Effect.fail(new ServiceError("not_found"));
     }
 
     return log;
-  }
-  async eventHistory(query: z.output<typeof routes.eventHistory.query>) {
-    return this.options.store.eventPage(query);
-  }
-  async event(sequence: number) {
-    const event = await this.options.store.eventDetail(sequence);
+  });
+
+  const eventHistory = Effect.fn("queries.eventHistory")(function* (
+    query: Schema.Schema.Type<typeof routes.eventHistory.query>,
+  ) {
+    return yield* options.store.eventPage(query);
+  });
+
+  const event = Effect.fn("queries.event")(function* (sequence: number) {
+    const event = yield* options.store.eventDetail(sequence);
 
     if (!event) {
-      throw new ServiceError("not_found");
+      return yield* Effect.fail(new ServiceError("not_found"));
     }
 
     if (event.entity === "node") {
@@ -78,18 +117,39 @@ export class ServiceQueries {
 
     return serverEvent(
       event,
-      await this.runViews.resolve(event.entity === "run" ? [event.record] : []),
+      yield* runViews.resolve(event.entity === "run" ? [event.record] : []),
     );
-  }
-  async runSource(id: string): Promise<SourceArtifact> {
-    const run = await this.readRunReference(id);
+  });
 
-    return this.options.registry(run.workspace).revisionSource(run.slug, run.revision);
-  }
-  async loopySource(slug: string, workspace: string): Promise<SourceArtifact> {
-    const registry = this.options.registry(workspace);
-    const saved = await requireDefinition(registry, slug);
+  const runSource = Effect.fn("queries.runSource")(function* (id: string) {
+    const run = yield* readRunReference(id);
 
-    return registry.revisionSource(slug, saved.revision);
-  }
+    return yield* (yield* options.registry(run.workspace)).revisionSource(run.slug, run.revision);
+  });
+
+  const loopySource = Effect.fn("queries.loopySource")(function* (slug: string, workspace: string) {
+    const registry = yield* options.registry(workspace);
+    const saved = yield* requireDefinition(registry, slug);
+
+    return yield* registry.revisionSource(slug, saved.revision);
+  });
+
+  return {
+    runGraph,
+    runPayload,
+    logs,
+    overview,
+    executions,
+    scopes,
+    scopeItems,
+    execution,
+    globalLogs,
+    log,
+    eventHistory,
+    event,
+    runSource,
+    loopySource,
+  };
 }
+
+export type RunQueries = ReturnType<typeof makeRunQueries>;

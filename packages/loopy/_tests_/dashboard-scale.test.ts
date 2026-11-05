@@ -2,7 +2,8 @@ import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
-import { executionKeyString, routes } from "../src/contract/index.js";
+import { Effect } from "effect";
+import { decodeBoundary, executionKeyString, routes } from "../src/contract/index.js";
 import { RUN_PREVIEW_COLUMNS } from "../src/store/sqlite/query-runs.js";
 import { largeMapFixture, manyRunsFixture } from "./dashboard-scale-fixture.js";
 
@@ -13,7 +14,13 @@ function bytes<T>(value: T) {
 export async function benchmarkDashboardQueries() {
   const map = await largeMapFixture();
   const runs = await manyRunsFixture();
-  const measurements: { name: string; ms: number; bytes: number; rows: number }[] = [];
+
+  const measurements: {
+    name: string;
+    ms: number;
+    bytes: number;
+    rows: number;
+  }[] = [];
 
   async function measure<T extends object>(
     name: string,
@@ -32,10 +39,10 @@ export async function benchmarkDashboardQueries() {
     return result;
   }
 
-  const snapshot = routes.run.response.parse(
+  const snapshot = decodeBoundary(routes.run.response)(
     await measure(
       "10k map slim snapshot",
-      () => map.service.runSnapshot(map.runId),
+      () => Effect.runPromise(map.service.runSnapshot(map.runId)),
       (value) => value.nodeRuns.length,
     ),
   );
@@ -48,7 +55,10 @@ export async function benchmarkDashboardQueries() {
 
   const items = await measure(
     "10k map item page50",
-    () => map.store.scopeItems(map.runId, { nodeId: map.mapNodeId, parentScope: "[]", limit: 50 }),
+    () =>
+      Effect.runPromise(
+        map.store.scopeItems(map.runId, { nodeId: map.mapNodeId, parentScope: "[]", limit: 50 }),
+      ),
     (value) => value.items.length,
   );
 
@@ -58,24 +68,28 @@ export async function benchmarkDashboardQueries() {
   const selected = await measure(
     "10k map selected item",
     () =>
-      map.store.nodePage(map.runId, {
-        scope: JSON.stringify([{ nodeId: map.mapNodeId, index: 9999 }]),
-        limit: 50,
-      }),
+      Effect.runPromise(
+        map.store.nodePage(map.runId, {
+          scope: JSON.stringify([{ nodeId: map.mapNodeId, index: 9999 }]),
+          limit: 50,
+        }),
+      ),
     (value) => value.items.length,
   );
 
   expect(selected.items).toHaveLength(1);
   expect(selected.items[0]).not.toHaveProperty("inputView");
   const key = selected.items[0] ? executionKeyString(selected.items[0].key) : "";
-  const detail = await map.service.execution(map.runId, { key });
+  const detail = await Effect.runPromise(map.service.execution(map.runId, { key }));
   expect(detail.node.inputView?.state).toBe("available");
-  expect((await map.service.runSource(map.runId)).status).toBe("available");
-  expect((await map.service.runGraph(map.runId)).graph.name).toBe("reindex-docs");
+  expect((await Effect.runPromise(map.service.runSource(map.runId))).status).toBe("available");
+  expect((await Effect.runPromise(map.service.runGraph(map.runId))).graph.name).toBe(
+    "reindex-docs",
+  );
 
   const logs = await measure(
     "10k map log page100",
-    () => map.store.logPage({ runId: map.runId, limit: 100 }),
+    () => Effect.runPromise(map.store.logPage({ runId: map.runId, limit: 100 })),
     (value) => value.items.length,
   );
 
@@ -85,7 +99,7 @@ export async function benchmarkDashboardQueries() {
 
   const events = await measure(
     "10k map event page100",
-    () => map.store.eventPage({ runId: map.runId, limit: 100 }),
+    () => Effect.runPromise(map.store.eventPage({ runId: map.runId, limit: 100 })),
     (value) => value.items.length,
   );
 
@@ -94,7 +108,7 @@ export async function benchmarkDashboardQueries() {
 
   const page = await measure(
     "10k workflow run page50",
-    () => runs.service.listRuns({ limit: 50 }),
+    () => Effect.runPromise(runs.service.listRuns({ limit: 50 })),
     (value) => value.length,
   );
 
@@ -102,10 +116,12 @@ export async function benchmarkDashboardQueries() {
   const last = page.at(-1);
   expect(last).toBeDefined();
 
-  const next = await runs.service.listRuns({
-    limit: 50,
-    before: last ? `${last.createdAt}|${last.id}` : undefined,
-  });
+  const next = await Effect.runPromise(
+    runs.service.listRuns({
+      limit: 50,
+      before: last ? `${last.createdAt}|${last.id}` : undefined,
+    }),
+  );
 
   expect(next).toHaveLength(50);
   expect(new Set([...page, ...next].map((run) => run.id)).size).toBe(100);
@@ -113,11 +129,13 @@ export async function benchmarkDashboardQueries() {
   const summary = await measure(
     "10k workflow overview",
     () =>
-      runs.service.overview({
-        from: "2026-10-15T00:00:00.000Z",
-        to: "2026-10-22T00:00:00.000Z",
-        bucketSeconds: 3600,
-      }),
+      Effect.runPromise(
+        runs.service.overview({
+          from: "2026-10-15T00:00:00.000Z",
+          to: "2026-10-22T00:00:00.000Z",
+          bucketSeconds: 3600,
+        }),
+      ),
     (value) => value.buckets.length,
   );
 
@@ -127,7 +145,7 @@ export async function benchmarkDashboardQueries() {
 
   const loopies = await measure(
     "10k workflow loopy summaries/latest10",
-    () => runs.service.listLoopies(runs.root),
+    () => Effect.runPromise(runs.service.listLoopies(runs.root)),
     (value) => value.length,
   );
 
@@ -193,7 +211,12 @@ export async function benchmarkDashboardQueries() {
   ] as const) {
     const db = new Database(join(home, "runs.sqlite"), { readonly: true });
     plans[name] = db
-      .query<{ detail: string }, (string | number)[]>(`EXPLAIN QUERY PLAN ${sql}`)
+      .query<
+        {
+          detail: string;
+        },
+        (string | number)[]
+      >(`EXPLAIN QUERY PLAN ${sql}`)
       .all(...params);
     db.close();
   }
@@ -237,8 +260,8 @@ test("dashboard queries bound payloads independently across 10k map rows and 10k
       note: result.note,
     };
 
-    result.map.store.close();
-    result.runs.store.close();
+    await Effect.runPromise(result.map.store.close());
+    await Effect.runPromise(result.runs.store.close());
     await Bun.write(
       process.env.LOOPY_QUERY_RECEIPT ?? join(result.map.root, "benchmark.json"),
       JSON.stringify(receipt, null, 2),
@@ -249,7 +272,7 @@ test("dashboard queries bound payloads independently across 10k map rows and 10k
   }
 
   for (const fixture of [result.map, result.runs]) {
-    fixture.store.close();
+    await Effect.runPromise(fixture.store.close());
     rmSync(fixture.root, { recursive: true, force: true });
   }
 }, 60000);

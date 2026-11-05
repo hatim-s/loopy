@@ -13,6 +13,8 @@ import {
   type WaitRecord,
   type WaitResolution,
 } from "../core/index.js";
+import { StoreInvariantError } from "./operation.js";
+import { utc } from "./timestamps.js";
 
 export function publicHook(wait: WaitRecord): HookRecord {
   const hook: HookRecord = {
@@ -44,7 +46,7 @@ export function registerWait(
   waits: WaitRecord[],
 ): WaitRecord | undefined {
   if (!node || node.status !== "waiting") {
-    throw new Error("Register a wait only after persisting its waiting node.");
+    throw new StoreInvariantError("Register a wait only after persisting its waiting node.");
   }
 
   if (
@@ -60,7 +62,7 @@ export function registerWait(
     runId: node.key.runId,
     seq: waits.reduce((max, wait) => Math.max(max, wait.seq), 0) + 1,
     name: effect.name,
-    createdAt: new Date(effect.at).toISOString(),
+    createdAt: utc(effect.at),
   };
 }
 

@@ -1,74 +1,64 @@
+import { Effect, Fiber, type Scope } from "effect";
 import type { RunRecord } from "../core/index.js";
 
-export class ActivationPool {
-  private readonly pending = new Map<string, Promise<boolean>>();
+/** The caller's scope owns every admitted activation. Membership outlives completion until cleanup. */
+export class ActivationPool<E = never> {
+  private readonly pending = new Map<string, Fiber.Fiber<boolean, E>>();
   private progress = 0;
-
   constructor(
     private readonly concurrency: number,
-    private readonly activate: (run: RunRecord) => Promise<boolean>,
+    private readonly activate: (run: RunRecord) => Effect.Effect<boolean, E>,
     private readonly onProgress: () => void,
   ) {}
 
-  start(run: RunRecord): Promise<boolean> | undefined {
-    if (this.pending.has(run.id) || this.pending.size >= this.concurrency) {
-      return undefined;
-    }
-
-    const activation = this.activate(run).then((progress) => {
-      this.pending.delete(run.id);
-
-      if (progress) {
-        this.progress++;
-        this.onProgress();
+  start(run: RunRecord): Effect.Effect<Fiber.Fiber<boolean, E> | undefined, never, Scope.Scope> {
+    return Effect.gen({ self: this }, function* () {
+      if (this.pending.has(run.id) || this.pending.size >= this.concurrency) {
+        return;
       }
 
-      return progress;
+      const fiber = yield* this.activate(run).pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            this.pending.delete(run.id);
+          }),
+        ),
+        Effect.tap((progress) =>
+          Effect.sync(() => {
+            if (progress) {
+              this.progress++;
+              this.onProgress();
+            }
+          }),
+        ),
+        Effect.forkScoped({ startImmediately: false }),
+      );
+
+      this.pending.set(run.id, fiber);
+
+      return fiber;
     });
-
-    this.pending.set(run.id, activation);
-
-    return activation;
   }
 
-  async activateAll(runs: RunRecord[]): Promise<number> {
-    let activated = 0;
-    let pending: Promise<boolean>[] = [];
-
-    for (const run of runs) {
-      if (this.pending.has(run.id)) {
-        continue;
-      }
-
-      let activation = this.start(run);
-
-      if (!activation) {
-        activated += (await Promise.all(pending)).filter(Boolean).length;
-        pending = [];
-        await this.drain();
-        activation = this.start(run);
-      }
-
-      if (activation) {
-        pending.push(activation);
-      }
-    }
-
-    return activated + (await Promise.all(pending)).filter(Boolean).length;
+  has(runId: string) {
+    return this.pending.has(runId);
   }
-
-  get active(): number {
+  fibers() {
+    return [...this.pending.values()];
+  }
+  get active() {
     return this.pending.size;
   }
-
-  takeProgress(): number {
+  takeProgress() {
     const progress = this.progress;
     this.progress = 0;
 
     return progress;
   }
-
-  async drain(): Promise<void> {
-    await Promise.all(this.pending.values());
+  drain() {
+    return Effect.forEach([...this.pending.values()], Fiber.join, {
+      concurrency: "unbounded",
+      discard: true,
+    });
   }
 }

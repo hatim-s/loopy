@@ -1,15 +1,11 @@
 import { randomUUID } from "node:crypto";
-import {
-  type SandboxArtifact,
-  type SandboxArtifactRequest,
-  type SandboxAttemptIdentity,
-  type SandboxAttemptRequest,
-  type SandboxReceipt,
+import { Cause, Effect, Exit, Fiber, FiberMap, FiberSet, Scope } from "effect";
+import type {
+  SandboxArtifactRequest,
+  SandboxAttemptIdentity,
+  SandboxAttemptRequest,
 } from "../../../packages/loopy/src/contract/index.js";
-import {
-  type AttemptRecord,
-  type AuthoritySession,
-} from "../../../packages/loopy/src/contract/sandbox-journal.js";
+import type { AuthoritySession } from "../../../packages/loopy/src/contract/sandbox-journal.js";
 import { attemptId } from "./admission.js";
 import { ArtifactError } from "./artifact-error.js";
 import { AttemptAdmissions } from "./attempt-admissions.js";
@@ -17,37 +13,32 @@ import type { AttemptDependencies, AttemptDependenciesFactory } from "./attempt-
 import { AttemptExports, recoveryRecords } from "./attempt-exports.js";
 import { AttemptMonitors } from "./attempt-monitor.js";
 import { type SandboxConfig, validateStateRoot } from "./config.js";
+import { failure, io, type SandboxFailure } from "./operations.js";
+import { publicReceipt } from "./receipt-view.js";
 import { lockStateRoot } from "./receipts.js";
+import { Stopping } from "./stopping.js";
 
 export { AttemptConflict } from "./admission.js";
 
 export class Attempts {
-  private readonly artifactOperations = new Set<Promise<SandboxArtifact>>();
-  private readonly stopping = new AbortController();
   private readonly admissions: AttemptAdmissions;
   private readonly monitors: AttemptMonitors;
   private readonly exports: AttemptExports;
-  private closing: Promise<void> | null = null;
-
-  private readonly config: SandboxConfig;
-  private readonly dependencies: AttemptDependencies;
-  private readonly unlock: () => Promise<void>;
-  private constructor(options: {
-    config: SandboxConfig;
-    dependencies: AttemptDependencies;
-    session: AuthoritySession;
-    unlock: () => Promise<void>;
-  }) {
-    const { config, dependencies, session, unlock } = options;
-    this.config = config;
-    this.dependencies = dependencies;
-    this.unlock = unlock;
+  private constructor(
+    private readonly config: SandboxConfig,
+    private readonly dependencies: AttemptDependencies,
+    session: AuthoritySession,
+    private readonly scope: Scope.Closeable,
+    private readonly closeResources: Effect.Effect<void, SandboxFailure>,
+    private readonly stopping: Stopping,
+    private readonly operations: FiberSet.FiberSet<unknown, SandboxFailure>,
+    active: FiberMap.FiberMap<string, void, never>,
+  ) {
     this.monitors = new AttemptMonitors({
-      authority: dependencies.authority,
-      resultsFor: dependencies.resultsFor,
-      backend: dependencies.backend,
+      ...dependencies,
       session,
-      signal: this.stopping.signal,
+      stopping,
+      active,
     });
     this.exports = new AttemptExports(dependencies.authority, dependencies.artifactReader, session);
     this.admissions = new AttemptAdmissions({
@@ -56,127 +47,175 @@ export class Attempts {
       session,
       monitors: this.monitors,
       exports: this.exports,
-      signal: this.stopping.signal,
-      publicReceipt: (record) => this.publicReceipt(record),
+      stopping,
     });
   }
+  static open(config: SandboxConfig, createDependencies: AttemptDependenciesFactory) {
+    return Effect.gen(function* () {
+      const resources = yield* Scope.make();
 
-  static async open(config: SandboxConfig, createDependencies: AttemptDependenciesFactory) {
-    await validateStateRoot(config);
-    const unlock = await lockStateRoot(config.stateRoot);
-    let dependencies: AttemptDependencies | undefined;
+      const closeResources = yield* Effect.cached(
+        Scope.close(resources, Exit.void).pipe(
+          Effect.catchCause((cause) =>
+            Effect.fail(
+              failure(
+                "resource release",
+                cause,
+                "Sandbox resource release failed. Inspect the state root before restarting.",
+              ),
+            ),
+          ),
+          Effect.uninterruptible,
+        ),
+      );
 
-    try {
-      dependencies = await createDependencies();
-      const authority = dependencies.authority;
-      const { epoch } = await authority.status();
-      const session = await authority.openSession({ expectedEpoch: epoch, nonce: randomUUID() });
-      const attempts = new Attempts({ config, dependencies, session, unlock });
-      const recovered = await recoveryRecords(authority);
-      await attempts.exports.reconcileGuards(recovered.exports);
+      yield* Effect.addFinalizer(() => closeResources.pipe(Effect.orDie));
 
-      for (const record of recovered.attempts) {
-        attempts.admissions.monitor(record);
-      }
+      return yield* Effect.gen(function* () {
+        yield* io("state root", () => validateStateRoot(config));
+        yield* Effect.acquireRelease(
+          io("lock", () => lockStateRoot(config.stateRoot)),
+          (unlock) => io("unlock", unlock).pipe(Effect.orDie),
+        );
 
-      return attempts;
-    } catch (cause) {
-      await dependencies?.close?.();
-      await unlock();
-      throw cause;
-    }
+        const dependencies = yield* Effect.acquireRelease(createDependencies(), (value) =>
+          (value.close?.() ?? Effect.void).pipe(Effect.orDie),
+        );
+
+        const { epoch } = yield* dependencies.authority.status();
+
+        const session = yield* dependencies.authority.openSession({
+          expectedEpoch: epoch,
+          nonce: randomUUID(),
+        });
+
+        const scope = yield* Effect.acquireRelease(Scope.make(), (scope) =>
+          Scope.close(scope, Exit.void),
+        );
+
+        const operations = yield* FiberSet.make<unknown, SandboxFailure>().pipe(
+          Effect.provideService(Scope.Scope, scope),
+        );
+
+        const active = yield* FiberMap.make<string, void, never>().pipe(
+          Effect.provideService(Scope.Scope, scope),
+        );
+
+        const stopping = yield* Stopping.make();
+
+        const attempts = new Attempts(
+          config,
+          dependencies,
+          session,
+          scope,
+          closeResources,
+          stopping,
+          operations,
+          active,
+        );
+
+        yield* Effect.addFinalizer(() => attempts.stopWork());
+        const recovered = yield* recoveryRecords(dependencies.authority);
+        yield* attempts.exports.reconcileGuards(recovered.exports);
+
+        for (const record of recovered.attempts) {
+          yield* attempts.admissions.monitor(record);
+        }
+
+        return attempts;
+      }).pipe(
+        Effect.provideService(Scope.Scope, resources),
+        Effect.onExit((exit) =>
+          Exit.isFailure(exit) ? closeResources.pipe(Effect.orDie) : Effect.void,
+        ),
+      );
+    });
   }
+  private supervise<A>(
+    operation: Effect.Effect<A, SandboxFailure>,
+  ): Effect.Effect<A, SandboxFailure> {
+    return Effect.uninterruptibleMask((restore) =>
+      Effect.gen({ self: this }, function* () {
+        if (this.stopping.stopped) {
+          return yield* Effect.fail(
+            new ArtifactError("conflict", "Sandbox service is stopping. Retry after restart."),
+          );
+        }
 
-  private async publicReceipt(record: AttemptRecord | null): Promise<SandboxReceipt> {
-    if (record === null) {
-      return { kind: "none" };
-    }
+        const fiber = yield* FiberSet.run(this.operations, operation);
 
-    if (record.kind === "started") {
-      return { kind: "started" };
-    }
+        return yield* restore(Fiber.join(fiber)).pipe(
+          Effect.catchCause((cause) => {
+            if (this.stopping.stopped && cause.reasons.every(Cause.isInterruptReason)) {
+              return Effect.fail(
+                new ArtifactError("conflict", "Sandbox service is stopping. Retry after restart."),
+              );
+            }
 
-    const result =
-      record.result.kind === "inline"
-        ? record.result.value
-        : await this.dependencies.resultsFor(record.plan.workspace).get(record.result.ref);
-
-    return { kind: "finished", result };
+            return Effect.failCause(cause);
+          }),
+        );
+      }),
+    );
   }
+  lookup(identity: SandboxAttemptIdentity) {
+    return this.supervise(
+      Effect.gen({ self: this }, function* () {
+        const id = attemptId(this.config.stateRoot, identity);
+        yield* this.admissions.wait(id);
 
-  async lookup(identity: SandboxAttemptIdentity) {
-    const id = attemptId(this.config.stateRoot, identity);
-    await this.admissions.wait(id);
+        if (this.monitors.has(id)) {
+          return { kind: "started" } as const;
+        }
 
-    // Only authoritative started records enter the monitor map.
-    if (this.monitors.has(id)) {
-      return { kind: "started" } as const;
-    }
+        const record = yield* this.dependencies.authority.read(id);
 
-    const record = await this.dependencies.authority.read(id);
+        if (record) {
+          yield* this.admissions.observe(record);
+        }
 
-    if (record) {
-      this.admissions.observe(record);
-    }
-
-    return this.publicReceipt(record);
+        return yield* publicReceipt(this.dependencies.resultsFor, record);
+      }),
+    );
   }
-
   start(request: SandboxAttemptRequest) {
-    return this.admissions.start(request);
+    return this.supervise(this.admissions.start(request));
   }
+  artifact(request: SandboxArtifactRequest) {
+    return this.supervise(
+      Effect.gen({ self: this }, function* () {
+        const id = attemptId(this.config.stateRoot, request);
+        yield* this.admissions.wait(id);
+        const record = yield* this.dependencies.authority.read(id);
 
-  async artifact(request: SandboxArtifactRequest) {
-    if (this.stopping.signal.aborted) {
-      throw new ArtifactError("conflict", "Sandbox service is stopping. Retry after restart.");
-    }
+        if (!record) {
+          return yield* Effect.fail(
+            new ArtifactError("not_found", "Artifact attempt receipt was not found."),
+          );
+        }
 
-    const operation = (async () => {
-      const id = attemptId(this.config.stateRoot, request);
-      await this.admissions.wait(id);
+        if (record.kind !== "finished") {
+          return yield* Effect.fail(
+            new ArtifactError("conflict", "Artifact export requires a finished attempt."),
+          );
+        }
 
-      const record = await this.dependencies.authority.read(id);
-
-      if (!record) {
-        throw new ArtifactError("not_found", "Artifact attempt receipt was not found.");
-      }
-
-      if (record.kind !== "finished") {
-        throw new ArtifactError("conflict", "Artifact export requires a finished attempt.");
-      }
-
-      return this.exports.read(record, request);
-    })();
-
-    this.artifactOperations.add(operation);
-
-    try {
-      return await operation;
-    } finally {
-      this.artifactOperations.delete(operation);
-    }
+        return yield* this.exports.read(record, request);
+      }),
+    );
   }
-
-  async drain() {
-    await this.monitors.drain();
+  drain() {
+    return this.monitors.drain();
   }
-
   close() {
-    this.closing ??= this.shutdown();
-
-    return this.closing;
+    return Effect.uninterruptible(this.closeResources);
   }
-
-  private async shutdown() {
-    this.stopping.abort();
-
-    try {
-      await this.admissions.settle();
-      await this.drain();
-      await Promise.allSettled(this.artifactOperations);
-      await this.dependencies.close?.();
-    } finally {
-      await this.unlock();
-    }
+  private stopWork() {
+    return Effect.gen({ self: this }, function* () {
+      yield* this.stopping.stop();
+      yield* FiberSet.awaitEmpty(this.operations);
+      yield* this.drain();
+      yield* Scope.close(this.scope, Exit.void);
+    }).pipe(Effect.uninterruptible);
   }
 }

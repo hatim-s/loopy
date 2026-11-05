@@ -1,150 +1,170 @@
 import type { Schedule, ScheduleOverview } from "../../core/index.js";
 import { type Store } from "../../core/index.js";
 import { type EventTransaction } from "../event-outbox.js";
+import { StoreRejectedError, storageOperation } from "../operation.js";
+import { utc } from "../timestamps.js";
 import { rowToSchedule, SQL } from "./store-rows.js";
 import { type ScheduleRow } from "./store-schema.js";
 import { SqliteWaits } from "./waits.js";
 
 export class SqliteSchedules extends SqliteWaits {
-  async putSchedule(schedule: Omit<Schedule, "version">): Promise<Schedule> {
-    return this.commit((txn) => {
-      const row = this.db
-        .query<
-          ScheduleRow,
-          [string, string, string, string, string, number, string | null, string]
-        >(SQL.putSchedule)
-        .get(
-          schedule.workspace,
-          schedule.slug,
-          schedule.cron,
-          schedule.tz,
-          JSON.stringify(schedule.input),
-          Number(schedule.enabled),
-          schedule.lastFireKey ?? null,
-          new Date(schedule.nextFireAt).toISOString(),
-        );
+  putSchedule(schedule: Omit<Schedule, "version">) {
+    return storageOperation("putSchedule", () => {
+      return this.commit((txn) => {
+        const row = this.db
+          .query<
+            ScheduleRow,
+            [string, string, string, string, string, number, string | null, string]
+          >(SQL.putSchedule)
+          .get(
+            schedule.workspace,
+            schedule.slug,
+            schedule.cron,
+            schedule.tz,
+            JSON.stringify(schedule.input),
+            Number(schedule.enabled),
+            schedule.lastFireKey ?? null,
+            utc(schedule.nextFireAt),
+          );
 
-      if (!row) {
-        throw new Error("Schedule was not saved. Restore storage.");
-      }
+        if (!row) {
+          throw new Error("Schedule was not saved. Restore storage.");
+        }
 
-      this.emitSchedule(txn, schedule, "saved");
+        this.emitSchedule(txn, schedule, "saved");
 
-      return rowToSchedule(row);
+        return rowToSchedule(row);
+      });
     });
   }
 
-  async setScheduleEnabled({
+  setScheduleEnabled({
     workspace,
     slug,
     enabled,
     nextFireAt,
-  }: Parameters<Store["setScheduleEnabled"]>[0]): Promise<Schedule> {
-    return this.commit((txn) => {
-      const row = this.db
-        .query<ScheduleRow, [number, string | null, string, string]>(SQL.setScheduleEnabled)
-        .get(Number(enabled), nextFireAt ?? null, workspace, slug);
+  }: Parameters<Store["setScheduleEnabled"]>[0]) {
+    return storageOperation("setScheduleEnabled", () => {
+      return this.commit((txn) => {
+        const row = this.db
+          .query<ScheduleRow, [number, string | null, string, string]>(SQL.setScheduleEnabled)
+          .get(Number(enabled), nextFireAt === undefined ? null : utc(nextFireAt), workspace, slug);
 
-      if (!row) {
-        throw new Error(`Schedule '${slug}' does not exist. Save the schedule before toggling it.`);
-      }
+        if (!row) {
+          throw new StoreRejectedError(
+            `Schedule '${slug}' does not exist. Save the schedule before toggling it.`,
+          );
+        }
 
-      this.emitSchedule(txn, row, "saved");
+        this.emitSchedule(txn, row, "saved");
 
-      return rowToSchedule(row);
+        return rowToSchedule(row);
+      });
     });
   }
 
-  async advanceSchedule(options: Parameters<Store["advanceSchedule"]>[0]): Promise<boolean> {
-    return this.commit((txn) => {
-      const { workspace, slug, version, nextFireAt } = options;
+  advanceSchedule(options: Parameters<Store["advanceSchedule"]>[0]) {
+    return storageOperation("advanceSchedule", () => {
+      return this.commit((txn) => {
+        const { workspace, slug, version, nextFireAt } = options;
 
-      const updated = this.db
-        .query(SQL.advanceSchedule)
-        .run(new Date(nextFireAt).toISOString(), workspace, slug, version);
+        const updated = this.db
+          .query(SQL.advanceSchedule)
+          .run(utc(nextFireAt), workspace, slug, version);
 
-      if (!updated.changes) {
-        return false;
-      }
+        if (!updated.changes) {
+          return false;
+        }
 
-      this.emitSchedule(txn, options, "saved");
+        this.emitSchedule(txn, options, "saved");
 
-      return true;
+        return true;
+      });
     });
   }
 
-  async scheduleOverview(): Promise<ScheduleOverview> {
-    return this.db.transaction(
-      () => ({
-        workspaces: this.db
-          .query<{ workspace: string }, []>(
-            "SELECT DISTINCT workspace FROM schedules ORDER BY workspace",
-          )
-          .all()
-          .map((row) => row.workspace),
-        active: this.db
-          .query<{ count: number }, []>("SELECT COUNT(*) AS count FROM schedules WHERE enabled=1")
-          .get()!.count,
-        next: this.db
-          .query<ScheduleOverview["next"][number], []>(
-            `SELECT workspace,slug,cron,tz,next_fire_at AS nextFireAt FROM schedules
+  scheduleOverview() {
+    return storageOperation("scheduleOverview", () => {
+      return this.db.transaction(
+        () => ({
+          workspaces: this.db
+            .query<{ workspace: string }, []>(
+              "SELECT DISTINCT workspace FROM schedules ORDER BY workspace",
+            )
+            .all()
+            .map((row) => row.workspace),
+          active: this.db
+            .query<{ count: number }, []>("SELECT COUNT(*) AS count FROM schedules WHERE enabled=1")
+            .get()!.count,
+          next: this.db
+            .query<ScheduleOverview["next"][number], []>(
+              `SELECT workspace,slug,cron,tz,next_fire_at AS nextFireAt FROM schedules
            WHERE enabled=1 ORDER BY next_fire_at,workspace,slug LIMIT 10`,
-          )
-          .all(),
-      }),
-      "deferred",
-    );
-  }
-
-  async listSchedules(): Promise<Schedule[]> {
-    return this.db.query<ScheduleRow, []>(SQL.schedules).all().map(rowToSchedule);
-  }
-
-  async deleteSchedule(workspace: string, slug: string): Promise<void> {
-    this.commit((txn) => {
-      const row = this.db.query<ScheduleRow, [string, string]>(SQL.schedule).get(workspace, slug);
-
-      if (this.db.query(SQL.deleteSchedule).run(workspace, slug).changes && row) {
-        const record = rowToSchedule(row);
-        this.emit(txn, {
-          entity: "schedule",
-          kind: "deleted",
-          runId: null,
-          record: { workspace: record.workspace, slug: record.slug },
-        });
-      }
+            )
+            .all(),
+        }),
+        "deferred",
+      );
     });
   }
 
-  async fireSchedule(options: Parameters<Store["fireSchedule"]>[0]): Promise<boolean> {
-    return this.commit((txn) => {
-      const { workspace, slug, version, fireKey, run, nextFireAt } = options;
+  listSchedules() {
+    return storageOperation("listSchedules", () => {
+      return this.db.query<ScheduleRow, []>(SQL.schedules).all().map(rowToSchedule);
+    });
+  }
 
-      const schedule = this.db
-        .query<ScheduleRow, [string, string]>(SQL.schedule)
-        .get(workspace, slug);
+  deleteSchedule(workspace: string, slug: string) {
+    return storageOperation("deleteSchedule", () => {
+      this.commit((txn) => {
+        const row = this.db.query<ScheduleRow, [string, string]>(SQL.schedule).get(workspace, slug);
 
-      if (!schedule) {
-        throw new Error(`Schedule '${slug}' does not exist. Save the schedule before firing it.`);
-      }
+        if (this.db.query(SQL.deleteSchedule).run(workspace, slug).changes && row) {
+          const record = rowToSchedule(row);
+          this.emit(txn, {
+            entity: "schedule",
+            kind: "deleted",
+            runId: null,
+            record: { workspace: record.workspace, slug: record.slug },
+          });
+        }
+      });
+    });
+  }
 
-      const updated = this.db
-        .query(SQL.fireSchedule)
-        .run(fireKey, new Date(nextFireAt).toISOString(), workspace, slug, version, fireKey);
+  fireSchedule(options: Parameters<Store["fireSchedule"]>[0]) {
+    return storageOperation("fireSchedule", () => {
+      return this.commit((txn) => {
+        const { workspace, slug, version, fireKey, run, nextFireAt } = options;
 
-      if (!updated.changes) {
-        return false;
-      }
+        const schedule = this.db
+          .query<ScheduleRow, [string, string]>(SQL.schedule)
+          .get(workspace, slug);
 
-      if (this.row(run.id)) {
-        throw new Error(`Run '${run.id}' already exists. Use a new run ID.`);
-      }
+        if (!schedule) {
+          throw new StoreRejectedError(
+            `Schedule '${slug}' does not exist. Save the schedule before firing it.`,
+          );
+        }
 
-      this.insertRun(run);
-      this.emitRun(txn, run.id, "created");
-      this.emitSchedule(txn, schedule, "fired");
+        const updated = this.db
+          .query(SQL.fireSchedule)
+          .run(fireKey, utc(nextFireAt), workspace, slug, version, fireKey);
 
-      return true;
+        if (!updated.changes) {
+          return false;
+        }
+
+        if (this.row(run.id)) {
+          throw new StoreRejectedError(`Run '${run.id}' already exists. Use a new run ID.`);
+        }
+
+        this.insertRun(run);
+        this.emitRun(txn, run.id, "created");
+        this.emitSchedule(txn, schedule, "fired");
+
+        return true;
+      });
     });
   }
 

@@ -1,4 +1,5 @@
 import {
+  decodeBoundary,
   type Json,
   sandboxAttemptIdentitySchema,
   sandboxAttemptRequestSchema,
@@ -63,8 +64,8 @@ export function readQueueProvider(
 
         const identity =
           request.method === "POST"
-            ? sandboxAttemptRequestSchema.parse(body)
-            : sandboxAttemptIdentitySchema.parse({
+            ? decodeBoundary(sandboxAttemptRequestSchema)(body)
+            : decodeBoundary(sandboxAttemptIdentitySchema)({
                 workspace: url.searchParams.get("workspace"),
                 executionKey: JSON.parse(url.searchParams.get("key") ?? "null"),
                 attempt: Number(url.searchParams.get("attempt")),
@@ -83,7 +84,7 @@ export function readQueueProvider(
             await hold();
           }
 
-          return Response.json(sandboxReceiptSchema.parse({ kind: "none" }));
+          return Response.json(decodeBoundary(sandboxReceiptSchema)({ kind: "none" }));
         }
 
         const id = JSON.stringify([identity.workspace, identity.executionKey, identity.attempt]);
@@ -95,7 +96,7 @@ export function readQueueProvider(
         }
 
         return Response.json(
-          sandboxReceiptSchema.parse({
+          decodeBoundary(sandboxReceiptSchema)({
             kind: "finished",
             result: {
               kind: "succeeded",

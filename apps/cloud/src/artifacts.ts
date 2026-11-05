@@ -1,6 +1,8 @@
 import type { DurableObjectStorage, R2Bucket } from "@cloudflare/workers-types";
+import { Effect, Result } from "effect";
 import {
   type DefinitionSummary,
+  decodeBoundary,
   definitionSummary,
   type Graph,
   graphSchema,
@@ -11,7 +13,12 @@ import {
   validateCompiled,
 } from "../../../packages/loopy/src/contract/index.js";
 import { canonicalJson, revision, validateSlug } from "../../../packages/loopy/src/core/index.js";
-import type { ArtifactRegistry } from "../../../packages/loopy/src/service/index.js";
+import {
+  type ArtifactRegistry,
+  ArtifactValidationError,
+  RegistryConflictError,
+  RegistryError,
+} from "../../../packages/loopy/src/service/index.js";
 import { ArtifactDefinitions, type Publication } from "./artifacts-definitions.js";
 import { ARTIFACT_LIMITS, ArtifactStorage, bytesToBase64, hashKey } from "./artifacts-storage.js";
 import { artifactEntry, checkArtifactLimits } from "./artifacts-validation.js";
@@ -20,10 +27,24 @@ export { ARTIFACT_LIMITS } from "./artifacts-storage.js";
 
 const decoder = new TextDecoder();
 
+const publicationSync = <A>(operation: string, work: () => A) =>
+  Effect.try({
+    try: work,
+    catch: (cause) =>
+      cause instanceof RegistryConflictError || cause instanceof ArtifactValidationError
+        ? cause
+        : new RegistryError({ operation, cause }),
+  });
+
+const sync = <A>(operation: string, work: () => A) =>
+  Effect.try({ try: work, catch: (cause) => new RegistryError({ operation, cause }) });
+
+const registryError = (operation: string) => (cause: unknown) =>
+  new RegistryError({ operation, cause });
+
 export class R2ArtifactRegistry implements ArtifactRegistry {
   private readonly artifacts: ArtifactStorage;
   private readonly definitions: ArtifactDefinitions;
-
   constructor(
     storage: Pick<DurableObjectStorage, "sql" | "transactionSync">,
     bucket: Pick<R2Bucket, "get" | "put">,
@@ -32,178 +53,264 @@ export class R2ArtifactRegistry implements ArtifactRegistry {
     this.artifacts = new ArtifactStorage(bucket, workspaceId);
     this.definitions = new ArtifactDefinitions(storage, this.artifacts, workspaceId);
   }
-
-  async workspace(): Promise<string> {
-    return this.workspaceId;
+  workspace() {
+    return Effect.succeed(this.workspaceId);
   }
+  listSummaries() {
+    return Effect.gen({ self: this }, function* () {
+      const summaries: DefinitionSummary[] = [];
+      const budget = { remaining: ARTIFACT_LIMITS.listBytes };
 
-  async listSummaries(): Promise<DefinitionSummary[]> {
-    const summaries: DefinitionSummary[] = [];
-    const budget = { remaining: ARTIFACT_LIMITS.listBytes };
+      for (const row of yield* sync("list definitions", () => this.definitions.pointers())) {
+        const summary = yield* this.resolveSummary(row, budget);
 
-    for (const row of this.definitions.pointers()) {
-      const summary = await this.resolveSummary(row, budget);
+        if (summary === null) {
+          return yield* Effect.fail(
+            new RegistryError({
+              operation: "list definitions",
+              cause: "The definition disappeared during listing. Retry the request.",
+            }),
+          );
+        }
 
-      if (summary === null) {
-        throw new Error("The definition disappeared during listing. Retry the request.");
+        summaries.push(summary);
       }
 
-      summaries.push(summary);
-    }
-
-    return summaries;
-  }
-
-  async summary(slug: string): Promise<DefinitionSummary | null> {
-    return this.resolveSummary(this.definitions.pointer(slug), {
-      remaining: ARTIFACT_LIMITS.listBytes,
+      return summaries;
     });
   }
-
-  private async resolveSummary(
+  summary(slug: string) {
+    return Effect.gen({ self: this }, function* () {
+      return yield* this.resolveSummary(
+        yield* sync("read definition", () => this.definitions.pointer(slug)),
+        { remaining: ARTIFACT_LIMITS.listBytes },
+      );
+    });
+  }
+  private resolveSummary(
     row: Publication | null,
     budget: { remaining: number },
-  ): Promise<DefinitionSummary | null> {
-    let current = row;
+  ): Effect.Effect<DefinitionSummary | null, RegistryError> {
+    return Effect.gen({ self: this }, function* () {
+      let current = row;
 
-    for (let attempt = 0; attempt < 8; attempt++) {
-      if (current === null) {
+      for (let attempt = 0; attempt < 8; attempt++) {
+        if (current === null) {
+          return null;
+        }
+
+        const publication = current;
+        const saved = yield* sync("decode summary", () => this.definitions.summary(publication));
+
+        if (saved !== null) {
+          return saved;
+        }
+
+        const repaired = yield* Effect.result(
+          Effect.gen({ self: this }, function* () {
+            const key = yield* sync(
+              "graph key",
+              () => `graphs/${hashKey(publication.revision)}.json`,
+            );
+
+            const bytes = yield* this.artifacts
+              .read(key, Math.min(budget.remaining, ARTIFACT_LIMITS.graphBytes))
+              .pipe(Effect.mapError(registryError("read graph")));
+
+            if (!bytes) {
+              return yield* Effect.fail(
+                new RegistryError({
+                  operation: "read graph",
+                  cause: "Published graph is missing. Save the loopy again.",
+                }),
+              );
+            }
+
+            budget.remaining -= bytes.byteLength;
+            const graph = yield* this.parseGraph(bytes, publication.revision);
+
+            return yield* sync("repair summary", () =>
+              this.definitions.repair(
+                publication,
+                definitionSummary(artifactEntry(publication, graph)),
+              ),
+            );
+          }),
+        );
+
+        if (Result.isSuccess(repaired)) {
+          current = repaired.success;
+        } else {
+          const latest = yield* sync("read replacement", () =>
+            this.definitions.pointer(publication.slug),
+          );
+
+          if (latest?.generation === publication.generation) {
+            return yield* Effect.fail(repaired.failure);
+          }
+
+          // A replacement can make the old graph irrelevant while its read is in flight.
+          current = latest;
+        }
+      }
+
+      return yield* Effect.fail(
+        new RegistryError({
+          operation: "repair summary",
+          cause: "The definition kept changing during summary backfill. Retry the request.",
+        }),
+      );
+    });
+  }
+  get(slug: string): Effect.Effect<SavedLoopy | null, RegistryError> {
+    return Effect.gen({ self: this }, function* () {
+      const row = yield* sync("read definition", () => this.definitions.pointer(slug));
+
+      if (!row) {
         return null;
       }
 
-      const saved = this.definitions.summary(current);
+      const graph = yield* this.revisionGraph(row.revision);
 
-      if (saved !== null) {
-        return saved;
+      return yield* sync("read entry", () => artifactEntry(row, graph));
+    });
+  }
+  private parseGraph(bytes: Uint8Array, hash: string) {
+    return Effect.gen(function* () {
+      const graph = yield* Effect.try({
+        try: () => decodeBoundary(graphSchema)(JSON.parse(decoder.decode(bytes))),
+        catch: (cause) =>
+          new RegistryError({
+            operation: "decode graph",
+            cause: new Error("Stored graph is invalid. Save the loopy again.", { cause }),
+          }),
+      });
+
+      const actual = yield* Effect.tryPromise({
+        try: () => revision(graph),
+        catch: registryError("hash graph"),
+      });
+
+      if (actual !== hash) {
+        return yield* Effect.fail(
+          new RegistryError({
+            operation: "verify graph",
+            cause: "Stored graph does not match its revision. Save the loopy again.",
+          }),
+        );
       }
 
-      const publication = current;
+      return graph;
+    });
+  }
+  revisionGraph(hash: string): Effect.Effect<Graph, RegistryError> {
+    return Effect.gen({ self: this }, function* () {
+      const key = yield* sync("graph key", () => `graphs/${hashKey(hash)}.json`);
 
-      try {
-        const bytes = await this.artifacts.read(
-          `graphs/${hashKey(publication.revision)}.json`,
-          Math.min(budget.remaining, ARTIFACT_LIMITS.graphBytes),
+      const bytes = yield* this.artifacts
+        .read(key, ARTIFACT_LIMITS.graphBytes)
+        .pipe(Effect.mapError(registryError("read graph")));
+
+      if (!bytes) {
+        return yield* Effect.fail(
+          new RegistryError({
+            operation: "read graph",
+            cause: "Published graph is missing. Save the loopy again.",
+          }),
         );
-
-        if (!bytes) {
-          throw new Error("Published graph is missing. Save the loopy again.");
-        }
-
-        budget.remaining -= bytes.byteLength;
-        const graph = await this.parseGraph(bytes, publication.revision);
-        current = this.definitions.repair(
-          publication,
-          definitionSummary(artifactEntry(publication, graph)),
-        );
-      } catch (error) {
-        const latest = this.definitions.pointer(publication.slug);
-
-        if (latest?.generation === publication.generation) {
-          throw error;
-        }
-
-        // A replacement can make the old graph irrelevant while its read is in flight.
-        current = latest;
       }
-    }
 
-    throw new Error("The definition kept changing during summary backfill. Retry the request.");
+      return yield* this.parseGraph(bytes, hash);
+    });
   }
+  revisionSource(slug: string, hash: string): Effect.Effect<SourceArtifact, RegistryError> {
+    return Effect.gen({ self: this }, function* () {
+      const key = yield* sync("source key", () => {
+        validateSlug(slug);
 
-  async get(slug: string): Promise<SavedLoopy | null> {
-    const row = this.definitions.pointer(slug);
+        return `sources/${slug}/${hashKey(hash)}.json`;
+      });
 
-    if (!row) {
-      return null;
-    }
+      const bytes = yield* this.artifacts
+        .read(key, ARTIFACT_LIMITS.sourceBytes)
+        .pipe(Effect.mapError(registryError("read source")));
 
-    return artifactEntry(row, await this.revisionGraph(row.revision));
+      const artifact: SourceArtifact = bytes
+        ? yield* sync("decode source", () =>
+            decodeBoundary(sourceArtifactSchema)(JSON.parse(decoder.decode(bytes))),
+          )
+        : { version: 1, status: "unavailable", revision: hash, reason: "not_captured" };
+
+      if (artifact.revision !== hash) {
+        return yield* Effect.fail(
+          new RegistryError({
+            operation: "verify source",
+            cause: "Source artifact does not match the requested revision.",
+          }),
+        );
+      }
+
+      return artifact;
+    });
   }
+  getBundle(hash: string) {
+    return Effect.gen({ self: this }, function* () {
+      const key = yield* sync("bundle key", () => `bundles/${hashKey(hash)}.js`);
 
-  private async parseGraph(bytes: Uint8Array, hash: string): Promise<Graph> {
-    let graph: Graph;
+      const bytes = yield* this.artifacts
+        .read(key, ARTIFACT_LIMITS.bundleBytes)
+        .pipe(Effect.mapError(registryError("read bundle")));
 
-    try {
-      graph = graphSchema.parse(JSON.parse(decoder.decode(bytes)));
-    } catch (cause) {
-      throw new Error("Stored graph is invalid. Save the loopy again.", { cause });
-    }
+      if (!bytes) {
+        return yield* Effect.fail(
+          new RegistryError({
+            operation: "read bundle",
+            cause: "Published bundle is missing. Save the loopy again.",
+          }),
+        );
+      }
 
-    if ((await revision(graph)) !== hash) {
-      throw new Error("Stored graph does not match its revision. Save the loopy again.");
-    }
-
-    return graph;
+      return bytesToBase64(bytes);
+    });
   }
+  save(body: PutLoopyBody) {
+    return Effect.gen({ self: this }, function* () {
+      yield* Effect.try({
+        try: () => checkArtifactLimits(body, this.workspaceId),
+        catch: (cause) => new ArtifactValidationError({ cause }),
+      });
 
-  async revisionGraph(hash: string): Promise<Graph> {
-    const bytes = await this.artifacts.read(
-      `graphs/${hashKey(hash)}.json`,
-      ARTIFACT_LIMITS.graphBytes,
-    );
+      const previous = yield* publicationSync("prepare publication", () =>
+        this.definitions.prepare(body),
+      );
 
-    if (!bytes) {
-      throw new Error("Published graph is missing. Save the loopy again.");
-    }
+      const { bundles, sourceArtifact } = yield* validateCompiled(body).pipe(
+        Effect.mapError((cause) => new ArtifactValidationError({ cause })),
+      );
 
-    return this.parseGraph(bytes, hash);
-  }
+      const graph = new TextEncoder().encode(canonicalJson(body.graph));
+      yield* this.definitions.capacity
+        .measureCurrent(body.graph.name)
+        .pipe(Effect.mapError(registryError("measure capacity")));
+      yield* publicationSync("check capacity", () =>
+        this.definitions.capacity.check(body.graph.name, graph.byteLength),
+      );
 
-  async revisionSource(slug: string, hash: string): Promise<SourceArtifact> {
-    validateSlug(slug);
+      for (const bundle of bundles) {
+        yield* this.artifacts
+          .put(`bundles/${bundle.bundleHash}.js`, bundle.bytes)
+          .pipe(Effect.mapError(registryError("write bundle")));
+      }
 
-    const bytes = await this.artifacts.read(
-      `sources/${slug}/${hashKey(hash)}.json`,
-      ARTIFACT_LIMITS.sourceBytes,
-    );
-
-    const artifact = bytes
-      ? sourceArtifactSchema.parse(JSON.parse(decoder.decode(bytes)))
-      : this.unavailable(hash);
-
-    if (artifact.revision !== hash) {
-      throw new Error("Source artifact does not match the requested revision.");
-    }
-
-    return artifact;
-  }
-
-  async getBundle(hash: string): Promise<string> {
-    const bytes = await this.artifacts.read(
-      `bundles/${hashKey(hash)}.js`,
-      ARTIFACT_LIMITS.bundleBytes,
-    );
-
-    if (!bytes) {
-      throw new Error("Published bundle is missing. Save the loopy again.");
-    }
-
-    return bytesToBase64(bytes);
-  }
-
-  private unavailable(hash: string): SourceArtifact {
-    return { version: 1, status: "unavailable", revision: hash, reason: "not_captured" };
-  }
-
-  async save(body: PutLoopyBody): Promise<void> {
-    checkArtifactLimits(body, this.workspaceId);
-    const previous = this.definitions.prepare(body);
-
-    const { bundles, sourceArtifact } = await validateCompiled(body);
-    const graph = new TextEncoder().encode(canonicalJson(body.graph));
-    await this.definitions.capacity.measureCurrent(body.graph.name);
-    this.definitions.capacity.check(body.graph.name, graph.byteLength);
-
-    for (const bundle of bundles) {
-      await this.artifacts.put(`bundles/${bundle.bundleHash}.js`, bundle.bytes);
-    }
-
-    await this.artifacts.put(
-      `sources/${body.graph.name}/${body.revision}.json`,
-      canonicalJson(sourceArtifact),
-    );
-    await this.artifacts.put(`graphs/${body.revision}.json`, graph);
-
-    this.definitions.publish(body, previous, graph.byteLength);
+      yield* this.artifacts
+        .put(`sources/${body.graph.name}/${body.revision}.json`, canonicalJson(sourceArtifact))
+        .pipe(Effect.mapError(registryError("write source")));
+      yield* this.artifacts
+        .put(`graphs/${body.revision}.json`, graph)
+        .pipe(Effect.mapError(registryError("write graph")));
+      yield* publicationSync("publish definition", () =>
+        this.definitions.publish(body, previous, graph.byteLength),
+      );
+    });
   }
 }

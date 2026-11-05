@@ -1,39 +1,30 @@
 import { resolve } from "node:path";
+import { Result, Schema } from "effect";
 import { z } from "zod";
-import { executionKeySchema } from "../../packages/loopy/src/contract/index.js";
+import { boundaryOptions } from "../../packages/loopy/src/contract/index.js";
 import { atomic, evidenceDirectory, state } from "./config.js";
 import { distribution } from "./metrics-statistics.js";
-
-const queueSchema = z.object({
-  executionKey: executionKeySchema,
-  attempt: z.number().int(),
-  queuedAt: z.string(),
-  acquiredAt: z.string(),
-  finishedAt: z.string(),
-  queueWaitMs: z.number().nonnegative(),
-  backendDurationMs: z.number().nonnegative(),
-  outcome: z.string(),
-});
+import { runtimeQueueSchema } from "./runtime-queue-schema.js";
 
 const boundary = z
   .object({ firstIntent: z.string(), lastTerminal: z.string() })
   .parse(await Bun.file(resolve(evidenceDirectory, "playground-performance-segments.json")).json());
 
-const queue: z.infer<typeof queueSchema>[] = [];
+const queue: Schema.Schema.Type<typeof runtimeQueueSchema>[] = [];
 
 let invalidQueueLines = 0;
 
 for (const line of (await Bun.file(resolve(state, "runtime-queue.jsonl")).text())
   .trim()
   .split("\n")) {
-  const parsed = queueSchema.safeParse(JSON.parse(line));
+  const parsed = Schema.decodeUnknownResult(runtimeQueueSchema, boundaryOptions)(JSON.parse(line));
 
-  if (parsed.success) {
+  if (Result.isSuccess(parsed)) {
     if (
-      parsed.data.queuedAt >= boundary.firstIntent &&
-      parsed.data.queuedAt <= boundary.lastTerminal
+      parsed.success.queuedAt >= boundary.firstIntent &&
+      parsed.success.queuedAt <= boundary.lastTerminal
     ) {
-      queue.push(parsed.data);
+      queue.push(parsed.success);
     }
   } else {
     invalidQueueLines++;

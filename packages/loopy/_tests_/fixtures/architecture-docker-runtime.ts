@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { Miniflare } from "miniflare";
 import { HttpSandboxAuthority } from "../../../../apps/sandbox/src/http-authority.js";
+import { decodeBoundary } from "../../src/contract/index.js";
 import { authorityCommandSchema } from "../../src/contract/sandbox-journal-rpc.js";
 
 export const repository = resolve(import.meta.dir, "../../../..");
@@ -81,6 +82,7 @@ export async function dockerRuntime() {
   const parent = join(repository, ".loopy/architecture-tests");
   await mkdir(parent, { recursive: true });
   const directory = await realpath(await mkdtemp(join(parent, "docker-durable-")));
+  await mkdir(join(directory, ".loopy/loopies"), { recursive: true });
   const stateRoot = join(directory, ".loopy/cloud/sandbox");
   const events: (ProofEvent & { at: string })[] = [];
   const faults = { admissionRepliesDropped: 0, readsBlocked: 0 };
@@ -142,7 +144,7 @@ export async function dockerRuntime() {
     port: 0,
     async fetch(request) {
       const body = await request.text();
-      const command = authorityCommandSchema.parse(JSON.parse(body));
+      const command = decodeBoundary(authorityCommandSchema)(JSON.parse(body));
 
       if (
         fault.kind === "admission" &&

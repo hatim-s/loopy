@@ -6,7 +6,7 @@
     "start": "bun src/index.ts"
   },
   "dependencies": {
-    "loopy": "workspace:*",
-    "zod": "4.6.7"
+    "effect": "4.1.2",
+    "loopy": "workspace:*"
   }
 }

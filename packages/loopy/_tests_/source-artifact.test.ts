@@ -2,8 +2,10 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { Effect, Schema } from "effect";
 import { compile } from "../src/compiler/index.js";
 import {
+  decodeBoundary,
   MAX_SOURCE_BYTES,
   putLoopyBodySchema,
   type SourceArtifact,
@@ -40,7 +42,7 @@ function artifact(revision: string, content: string): SourceArtifact {
 }
 
 async function compiled(file: string, root: string) {
-  const result = await compile(file);
+  const result = await Effect.runPromise(compile(file));
 
   if (!result.ok) {
     throw new Error(JSON.stringify(result.diagnostics));
@@ -67,20 +69,26 @@ test("source stays pinned after author edits, same-revision saves and later revi
     files: [{ content: source }],
     ranges: [{ nodeId: first.graph.nodes[0]?.id, startLine: 3, endLine: 3 }],
   });
-  const registry = new Registry(f.home, f.root);
-  await saveCompiled(registry, first);
+  const registry = await Effect.runPromise(Registry.make(f.home, f.root));
+  await Effect.runPromise(saveCompiled(registry, first));
   await writeFile(f.file, `\n${source}`);
   const formatting = await compiled(f.file, f.root);
   expect(formatting.revision).toBe(first.revision);
-  await saveCompiled(registry, formatting);
-  expect(await registry.revisionSource("pinned", first.revision)).toEqual(first.sourceArtifact);
+  await Effect.runPromise(saveCompiled(registry, formatting));
+  expect(await Effect.runPromise(registry.revisionSource("pinned", first.revision))).toEqual(
+    first.sourceArtifact,
+  );
   await writeFile(f.file, source.replace('wait("hook"', 'wait("changed"'));
   const changed = await compiled(f.file, f.root);
   expect(changed.revision).not.toBe(first.revision);
-  await saveCompiled(registry, changed);
+  await Effect.runPromise(saveCompiled(registry, changed));
   await rm(f.file);
-  expect(await registry.revisionSource("pinned", first.revision)).toEqual(first.sourceArtifact);
-  expect(await registry.revisionSource("pinned", changed.revision)).toEqual(changed.sourceArtifact);
+  expect(await Effect.runPromise(registry.revisionSource("pinned", first.revision))).toEqual(
+    first.sourceArtifact,
+  );
+  expect(await Effect.runPromise(registry.revisionSource("pinned", changed.revision))).toEqual(
+    changed.sourceArtifact,
+  );
   expect(
     (await stat(join(f.home, "sources", "pinned", `${first.revision}.json`))).mode & 0o777,
   ).toBe(0o600);
@@ -89,8 +97,8 @@ test("source stays pinned after author edits, same-revision saves and later revi
 test("old registry metadata never gains today's source for an existing revision", async () => {
   const f = await fixture();
   const body = await compiledBody("legacy", f.file);
-  const registry = new Registry(f.home, f.root);
-  registry.save(body);
+  const registry = await Effect.runPromise(Registry.make(f.home, f.root));
+  await Effect.runPromise(registry.save(body));
 
   const unavailable = {
     version: 1,
@@ -99,37 +107,54 @@ test("old registry metadata never gains today's source for an existing revision"
     reason: "not_captured",
   } satisfies SourceArtifact;
 
-  expect(await registry.revisionSource("legacy", body.revision)).toEqual(unavailable);
-  await saveCompiled(registry, { ...body, sourceArtifact: artifact(body.revision, "today") });
-  expect(await registry.revisionSource("legacy", body.revision)).toEqual(unavailable);
-  expect(registry.get("legacy").version).toBe(2);
+  expect(await Effect.runPromise(registry.revisionSource("legacy", body.revision))).toEqual(
+    unavailable,
+  );
+  await Effect.runPromise(
+    saveCompiled(registry, { ...body, sourceArtifact: artifact(body.revision, "today") }),
+  );
+  expect(await Effect.runPromise(registry.revisionSource("legacy", body.revision))).toEqual(
+    unavailable,
+  );
+  expect((await Effect.runPromise(registry.get("legacy"))).version).toBe(2);
 });
 
 test("source lookup rejects traversal and never opens source metadata paths", async () => {
   const f = await fixture();
   const body = await compiledBody("safe", join(f.root, "never-read-this.ts"));
-  const registry = new Registry(f.home, f.root);
-  await saveCompiled(registry, body);
-  await expect(registry.revisionSource("../outside", body.revision)).rejects.toThrow();
-  await expect(registry.revisionSource("safe", "../../outside")).rejects.toThrow();
-  await expect(registry.revisionSource("safe", body.revision)).resolves.toMatchObject({
+  const registry = await Effect.runPromise(Registry.make(f.home, f.root));
+  await Effect.runPromise(saveCompiled(registry, body));
+  await expect(
+    Effect.runPromise(registry.revisionSource("../outside", body.revision)),
+  ).rejects.toThrow();
+  await expect(
+    Effect.runPromise(registry.revisionSource("safe", "../../outside")),
+  ).rejects.toThrow();
+  await expect(
+    Effect.runPromise(registry.revisionSource("safe", body.revision)),
+  ).resolves.toMatchObject({
     status: "unavailable",
     reason: "not_captured",
   });
   expect(
-    sourceArtifactSchema.safeParse({
-      ...artifact(body.revision, "x"),
-      files: [{ id: "file-0", path: "../outside", content: "x" }],
-    }).success,
+    Schema.decodeUnknownExit(sourceArtifactSchema)(
+      {
+        ...artifact(body.revision, "x"),
+        files: [{ id: "file-0", path: "../outside", content: "x" }],
+      },
+      { onExcessProperty: "error" },
+    )._tag === "Success",
   ).toBe(false);
 });
 
-test("save validates source identity, exact ranges and byte caps", async () => {
+test("source boundaries validate ranges and byte caps while save checks graph identity", async () => {
   const f = await fixture();
   const body = await compiledBody("validated", f.file);
-  const registry = new Registry(f.home, f.root);
+  const registry = await Effect.runPromise(Registry.make(f.home, f.root));
   await expect(
-    saveCompiled(registry, { ...body, sourceArtifact: artifact("a".repeat(64), "x") }),
+    Effect.runPromise(
+      saveCompiled(registry, { ...body, sourceArtifact: artifact("a".repeat(64), "x") }),
+    ),
   ).rejects.toThrow("Source must name");
   const available = artifact(body.revision, "x");
   expect(available.status).toBe("available");
@@ -138,35 +163,43 @@ test("save validates source identity, exact ranges and byte caps", async () => {
     throw new Error("Expected source");
   }
 
-  await expect(
-    saveCompiled(registry, {
+  expect(() =>
+    decodeBoundary(putLoopyBodySchema)({
       ...body,
       sourceArtifact: {
         ...available,
         ranges: [{ nodeId: body.graph.entry, fileId: "file-0", startLine: 2, endLine: 2 }],
       },
     }),
-  ).rejects.toThrow();
+  ).toThrow();
   await expect(
-    saveCompiled(registry, {
-      ...body,
-      sourceArtifact: sourceArtifactSchema.parse({
-        ...available,
-        ranges: [{ nodeId: "missing", fileId: "file-0", startLine: 1, endLine: 1 }],
+    Effect.runPromise(
+      saveCompiled(registry, {
+        ...body,
+        sourceArtifact: decodeBoundary(sourceArtifactSchema)({
+          ...available,
+          ranges: [{ nodeId: "missing", fileId: "file-0", startLine: 1, endLine: 1 }],
+        }),
       }),
-    }),
+    ),
   ).rejects.toThrow("Source must name");
   expect(
-    putLoopyBodySchema.safeParse({
-      ...body,
-      sourceArtifact: { ...available, resolvedSecrets: { TOKEN: "forbidden" } },
-    }).success,
+    Schema.decodeUnknownExit(putLoopyBodySchema)(
+      {
+        ...body,
+        sourceArtifact: { ...available, resolvedSecrets: { TOKEN: "forbidden" } },
+      },
+      { onExcessProperty: "error" },
+    )._tag === "Success",
   ).toBe(false);
   expect(
-    sourceArtifactSchema.safeParse(artifact(body.revision, "é".repeat(MAX_SOURCE_BYTES))).success,
+    Schema.decodeUnknownExit(sourceArtifactSchema)(
+      artifact(body.revision, "é".repeat(MAX_SOURCE_BYTES)),
+      { onExcessProperty: "error" },
+    )._tag === "Success",
   ).toBe(false);
   await writeFile(f.file, " ".repeat(MAX_SOURCE_BYTES + 1));
-  expect(await compile(f.file)).toMatchObject({
+  expect(await Effect.runPromise(compile(f.file))).toMatchObject({
     ok: false,
     diagnostics: [{ code: "source_error" }],
   });
@@ -175,14 +208,16 @@ test("save validates source identity, exact ranges and byte caps", async () => {
 test("source containing a stored secret is withheld before persistence and on later retrieval", async () => {
   const f = await fixture();
   const body = await compiledBody("private", f.file);
-  const registry = new Registry(f.home, f.root);
+  const registry = await Effect.runPromise(Registry.make(f.home, f.root));
   const secrets = new SecretStore(f.home);
-  secrets.set("TOKEN", "private-token-42");
-  await saveCompiled(registry, {
-    ...body,
-    sourceArtifact: artifact(body.revision, '// "private-token-42"'),
-  });
-  expect(await registry.revisionSource("private", body.revision)).toMatchObject({
+  await Effect.runPromise(secrets.set("TOKEN", "private-token-42"));
+  await Effect.runPromise(
+    saveCompiled(registry, {
+      ...body,
+      sourceArtifact: artifact(body.revision, '// "private-token-42"'),
+    }),
+  );
+  expect(await Effect.runPromise(registry.revisionSource("private", body.revision))).toMatchObject({
     status: "unavailable",
     reason: "redacted",
   });
@@ -190,12 +225,14 @@ test("source containing a stored secret is withheld before persistence and on la
     await readFile(join(f.home, "sources", "private", `${body.revision}.json`), "utf8"),
   ).not.toContain("private-token-42");
   const later = await compiledBody("later", f.file);
-  await saveCompiled(registry, {
-    ...later,
-    sourceArtifact: artifact(later.revision, "secret-added-later"),
-  });
-  secrets.set("LATER", "secret-added-later");
-  expect(await registry.revisionSource("later", later.revision)).toMatchObject({
+  await Effect.runPromise(
+    saveCompiled(registry, {
+      ...later,
+      sourceArtifact: artifact(later.revision, "secret-added-later"),
+    }),
+  );
+  await Effect.runPromise(secrets.set("LATER", "secret-added-later"));
+  expect(await Effect.runPromise(registry.revisionSource("later", later.revision))).toMatchObject({
     status: "unavailable",
     reason: "redacted",
   });

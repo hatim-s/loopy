@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
+import { Effect } from "effect";
 import { routes } from "../../packages/loopy/src/contract/index.js";
 import { FailureJourney } from "./failures-client.js";
 import { root } from "./failures-config.js";
@@ -13,13 +14,16 @@ let approvalId: string | undefined;
 await journey.check("isolated_stack_start_and_compile", async () => {
   await journey.stack.start();
 
-  for (const fixture of [
-    "failure-command.ts",
-    "failure-timeout.ts",
-    "failure-approval.ts",
-    "failure-schedule.ts",
-  ]) {
-    await journey.upload(fixture);
+  const bodies = await Effect.runPromise(
+    Effect.forEach(
+      ["failure-command.ts", "failure-timeout.ts", "failure-approval.ts", "failure-schedule.ts"],
+      (fixture) => journey.compiled(fixture),
+      { concurrency: 1 },
+    ),
+  );
+
+  for (const body of bodies) {
+    await journey.json(routes.putLoopy.response, `/loopies/${body.graph.name}`, body, "PUT");
   }
 
   return { compiledFixtures: 4, apiPort: 14970, sandboxPort: 14971, inspectorPort: 14973 };

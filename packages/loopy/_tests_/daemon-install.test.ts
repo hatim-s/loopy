@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { Effect } from "effect";
 import { parseCliArgs } from "../src/cli/args.js";
 import { daemonStatus, installDaemon, uninstallDaemon } from "../src/local/daemon-install.js";
 import type { DaemonExecResult, DaemonOperations } from "../src/local/daemon-install-files.js";
@@ -16,21 +17,23 @@ function fixture(platform: string, replies: DaemonExecResult[] = []) {
   const commands: string[][] = [];
 
   const operations: DaemonOperations = {
-    writeFile: async (path, content) => {
-      if (content === undefined) {
-        files.delete(path);
+    writeFile: (path, content) =>
+      Effect.sync(() => {
+        if (content === undefined) {
+          files.delete(path);
 
-        return;
-      }
+          return;
+        }
 
-      files.set(path, content);
-    },
-    exists: async (path) => files.has(path),
-    exec: async (argv) => {
-      commands.push(argv);
+        files.set(path, content);
+      }),
+    exists: (path) => Effect.succeed(files.has(path)),
+    exec: (argv) =>
+      Effect.sync(() => {
+        commands.push(argv);
 
-      return replies.shift() ?? ok;
-    },
+        return replies.shift() ?? ok;
+      }),
   };
 
   return {
@@ -51,11 +54,13 @@ function fixture(platform: string, replies: DaemonExecResult[] = []) {
 
 test("macOS plist retains absolute argv, environment, working directory and log paths", async () => {
   const { options, files, commands } = fixture("darwin");
-  await installDaemon({
-    ...options,
-    home: "/data/hatim & loopy",
-    args: ["/opt/cli.js", "--concurrency", "7"],
-  });
+  await Effect.runPromise(
+    installDaemon({
+      ...options,
+      home: "/data/hatim & loopy",
+      args: ["/opt/cli.js", "--concurrency", "7"],
+    }),
+  );
   const content = files.get(plist);
   expect(content).toContain("<key>Label</key><string>com.loopy.daemon</string>");
   expect(content).toContain(
@@ -80,11 +85,13 @@ test("macOS plist retains absolute argv, environment, working directory and log 
 
 test("Linux unit escapes command expansion and supplies environment and persistent logs", async () => {
   const { options, files, commands } = fixture("linux");
-  await installDaemon({
-    ...options,
-    home: "/data/loopy % $HOME",
-    args: ["/opt/cli with spaces.js"],
-  });
+  await Effect.runPromise(
+    installDaemon({
+      ...options,
+      home: "/data/loopy % $HOME",
+      args: ["/opt/cli with spaces.js"],
+    }),
+  );
   const content = files.get(unit);
   expect(content).toContain(
     'ExecStart="/opt/bun" "/opt/cli with spaces.js" "daemon" "run" "--home" "/data/loopy %% $$HOME"',
@@ -106,18 +113,18 @@ test("Linux unit escapes command expansion and supplies environment and persiste
 for (const platform of ["darwin", "linux"]) {
   test(`${platform} reinstall overwrites the same definition and restarts`, async () => {
     const { options, files, commands } = fixture(platform);
-    await installDaemon(options);
+    await Effect.runPromise(installDaemon(options));
     const first = commands.splice(0);
-    await installDaemon({ ...options, executable: "/new/bun" });
+    await Effect.runPromise(installDaemon({ ...options, executable: "/new/bun" }));
     expect(files.size).toBe(2);
     expect(files.get(platform === "darwin" ? plist : unit)).toContain("/new/bun");
     expect(commands).toEqual(first);
   });
   test(`${platform} uninstall removes the definition after stopping`, async () => {
     const { options, files, commands } = fixture(platform);
-    await installDaemon(options);
+    await Effect.runPromise(installDaemon(options));
     commands.splice(0);
-    await uninstallDaemon(options);
+    await Effect.runPromise(uninstallDaemon(options));
     expect(files.has(platform === "darwin" ? plist : unit)).toBe(false);
     expect(commands).toEqual(
       platform === "darwin"
@@ -132,7 +139,7 @@ for (const platform of ["darwin", "linux"]) {
 
 test("older launchctl falls back to unload and load -w", async () => {
   const { options, commands } = fixture("darwin", [ok, { ...ok, code: 1 }]);
-  await installDaemon(options);
+  await Effect.runPromise(installDaemon(options));
   expect(commands).toEqual([
     ["launchctl", "bootout", target],
     ["launchctl", "bootstrap", "gui/501", plist],
@@ -149,7 +156,7 @@ for (const item of [
   test(`launchctl status parses ${item.state}`, async () => {
     const { options, commands } = fixture("darwin", [{ ...ok, ...item }]);
     const expected = "pid" in item ? { state: item.state, pid: item.pid } : { state: item.state };
-    expect(await daemonStatus(options)).toEqual(expected);
+    expect(await Effect.runPromise(daemonStatus(options))).toEqual(expected);
     expect(commands).toEqual([["launchctl", "print", target]]);
   });
 }
@@ -186,7 +193,7 @@ for (const item of [
       { ...ok, stdout: item.info },
     ]);
 
-    expect(await daemonStatus(options)).toEqual(item.expected);
+    expect(await Effect.runPromise(daemonStatus(options))).toEqual(item.expected);
     expect(commands).toEqual([
       ["systemctl", "--user", "is-active", "loopy-daemon.service"],
       ["systemctl", "--user", "show", "-p", "MainPID", "-p", "LoadState", "loopy-daemon.service"],
@@ -200,18 +207,20 @@ test("supervisor failures are errors rather than an absent service", async () =>
     { ...ok, code: 1 },
   ]);
 
-  await expect(daemonStatus(options)).rejects.toThrow(
+  await expect(Effect.runPromise(daemonStatus(options))).rejects.toThrow(
     "Cannot inspect the daemon. Check systemctl --user status loopy-daemon.service and retry.",
   );
   const mac = fixture("darwin", [{ ...ok, code: 1 }]);
-  await expect(daemonStatus(mac.options)).rejects.toThrow("Cannot inspect the daemon.");
+  await expect(Effect.runPromise(daemonStatus(mac.options))).rejects.toThrow(
+    "Cannot inspect the daemon.",
+  );
 });
 
 test("unsupported platforms reject every service action without side effects", async () => {
   const { options, commands, files } = fixture("win32");
 
   for (const action of [installDaemon, uninstallDaemon, daemonStatus]) {
-    await expect(action(options)).rejects.toThrow(
+    await expect(Effect.runPromise(action(options))).rejects.toThrow(
       "Daemon services require macOS or Linux. Run loopy daemon run under a supervisor.",
     );
   }
@@ -222,12 +231,12 @@ test("unsupported platforms reject every service action without side effects", a
 
 test("install rejects relative paths and line injection before writing", async () => {
   const { options, files } = fixture("linux");
-  await expect(installDaemon({ ...options, executable: "bun" })).rejects.toThrow(
+  await expect(Effect.runPromise(installDaemon({ ...options, executable: "bun" }))).rejects.toThrow(
     "Daemon paths must be absolute.",
   );
-  await expect(installDaemon({ ...options, home: "/data/loopy\nRestart=no" })).rejects.toThrow(
-    "Service values cannot contain NUL or line breaks.",
-  );
+  await expect(
+    Effect.runPromise(installDaemon({ ...options, home: "/data/loopy\nRestart=no" })),
+  ).rejects.toThrow("Service values cannot contain NUL or line breaks.");
   expect(files.size).toBe(0);
 });
 
@@ -240,14 +249,16 @@ test("install concurrency is parsed as a daemon option", () => {
 
 test("failed install and uninstall report errors without deleting the definition", async () => {
   const failed = fixture("linux", [{ ...ok, code: 1, stderr: "No user bus" }]);
-  await expect(installDaemon(failed.options)).rejects.toThrow(
+  await expect(Effect.runPromise(installDaemon(failed.options))).rejects.toThrow(
     "Check your user service manager and retry.",
   );
   expect(failed.commands).toEqual([["systemctl", "--user", "daemon-reload"]]);
   const installed = fixture("linux");
-  await installDaemon(installed.options);
-  installed.options.operations.exec = async () => ({ ...ok, code: 1 });
-  await expect(uninstallDaemon(installed.options)).rejects.toThrow("Cannot disable the daemon.");
+  await Effect.runPromise(installDaemon(installed.options));
+  installed.options.operations.exec = () => Effect.succeed({ ...ok, code: 1 });
+  await expect(Effect.runPromise(uninstallDaemon(installed.options))).rejects.toThrow(
+    "Cannot disable the daemon.",
+  );
   expect(installed.files.has(unit)).toBe(true);
 });
 
@@ -259,7 +270,7 @@ test("older launchctl uninstall uses unload when bootout is unavailable", async 
   ]);
 
   files.set(plist, "installed");
-  await uninstallDaemon(options);
+  await Effect.runPromise(uninstallDaemon(options));
   expect(files.has(plist)).toBe(false);
   expect(commands).toEqual([
     ["launchctl", "bootout", target],
@@ -271,12 +282,12 @@ test("older launchctl uninstall uses unload when bootout is unavailable", async 
 test("unloaded macOS service with a plist is stopped", async () => {
   const { options, files } = fixture("darwin", [{ ...ok, code: 113 }]);
   files.set(plist, "installed");
-  expect(await daemonStatus(options)).toEqual({ state: "stopped" });
+  expect(await Effect.runPromise(daemonStatus(options))).toEqual({ state: "stopped" });
 });
 
 test("unloaded macOS service without a plist is not installed", async () => {
   const { options } = fixture("darwin", [{ ...ok, code: 113 }]);
-  expect(await daemonStatus(options)).toEqual({ state: "not-installed" });
+  expect(await Effect.runPromise(daemonStatus(options))).toEqual({ state: "not-installed" });
 });
 
 test("zero-exit load rejects when the service remains unloaded", async () => {
@@ -288,7 +299,7 @@ test("zero-exit load rejects when the service remains unloaded", async () => {
     { ...ok, code: 113 },
   ]);
 
-  await expect(installDaemon(options)).rejects.toThrow(
+  await expect(Effect.runPromise(installDaemon(options))).rejects.toThrow(
     `Daemon did not load. Check launchctl print ${target} and the daemon logs, then retry installation.`,
   );
   expect(commands.at(-1)).toEqual(["launchctl", "print", target]);
@@ -297,7 +308,7 @@ test("zero-exit load rejects when the service remains unloaded", async () => {
 test("zero-exit unload keeps the plist when the service remains loaded", async () => {
   const { options, files, commands } = fixture("darwin", [{ ...ok, code: 1 }, ok, ok]);
   files.set(plist, "installed");
-  await expect(uninstallDaemon(options)).rejects.toThrow(
+  await expect(Effect.runPromise(uninstallDaemon(options))).rejects.toThrow(
     `Cannot confirm the daemon was unloaded. Check launchctl print ${target} and retry uninstallation. The plist has been kept.`,
   );
   expect(files.get(plist)).toBe("installed");

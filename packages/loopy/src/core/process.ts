@@ -1,16 +1,13 @@
+import { Data } from "effect";
 import type { CommandResult } from "./model.js";
 
-export class CommandExecutionError extends Error {
-  constructor(
-    message: string,
-    readonly output: CommandResult,
-    options?: ErrorOptions,
-    readonly code: "execution" | "output_limit" = "execution",
-  ) {
-    super(message, options);
-    this.name = "CommandExecutionError";
-  }
-}
+/** A process boundary failure. Only timeout and output_limit are author evaluation limits. */
+export class CommandExecutionError extends Data.TaggedError("CommandExecutionError")<{
+  reason: "rejected" | "unstarted" | "timeout" | "output_limit" | "aborted" | "process";
+  message: string;
+  output: CommandResult;
+  cause?: unknown;
+}> {}
 
 export type ResolvedCommand = {
   program: string;

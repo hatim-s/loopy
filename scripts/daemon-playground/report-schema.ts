@@ -1,44 +1,69 @@
-import { z } from "zod";
-import { jsonSchema, routes } from "../../packages/loopy/src/contract/index.ts";
+import { Effect, Schema, SchemaGetter } from "effect";
+import { boundaryOptions, jsonSchema, routes } from "../../packages/loopy/src/contract/index.ts";
 
-const recordSchema = z.object({
-  slug: z.string(),
-  input: z.object({
-    batch: z.string(),
-    ordinal: z.number(),
-    fail: z.boolean(),
-    items: z.array(z.number()),
+const recordSchema = Schema.Struct({
+  slug: Schema.String,
+  input: Schema.Struct({
+    batch: Schema.String,
+    ordinal: Schema.Number,
+    fail: Schema.Boolean,
+    items: Schema.Array(Schema.Number),
   }),
-  run: z
-    .record(z.string(), jsonSchema)
-    .transform((value) => routes.startRun.response.parse({ ...value, waitingOn: null })),
-  nodeRuns: routes.run.response.shape.nodeRuns,
-  receipts: z.array(
-    z.object({ path: z.string(), sha256: z.string(), kind: z.string(), attempt: z.number() }),
+  run: Schema.Record(Schema.String, jsonSchema).pipe(
+    Schema.decodeTo(routes.startRun.response, {
+      decode: SchemaGetter.transformEffect((value) =>
+        Schema.decodeUnknownEffect(
+          routes.startRun.response,
+          boundaryOptions,
+        )({ ...value, waitingOn: null }).pipe(Effect.mapError((error) => error.issue)),
+      ),
+      encode: SchemaGetter.passthrough(),
+    }),
   ),
-  outputs: z.array(z.object({ path: z.string(), bytes: z.number(), sha256: z.string() })),
-  outputDirectory: z.string(),
-  observedMs: z.number(),
-  admissionMs: z.number(),
-  firstNodeStartedAt: z.string().nullable(),
-  hold: z.object({ heldMs: z.number(), approved: z.boolean() }).nullable(),
-  matched: z.literal(true),
+  nodeRuns: Schema.Unknown.pipe(
+    Schema.decodeTo(routes.run.response.fields.nodeRuns, {
+      decode: SchemaGetter.transformEffect((value) =>
+        Schema.decodeUnknownEffect(
+          routes.run.response.fields.nodeRuns,
+          boundaryOptions,
+        )(value).pipe(Effect.mapError((error) => error.issue)),
+      ),
+      encode: SchemaGetter.passthrough(),
+    }),
+  ),
+  receipts: Schema.Array(
+    Schema.Struct({
+      path: Schema.String,
+      sha256: Schema.String,
+      kind: Schema.String,
+      attempt: Schema.Number,
+    }),
+  ),
+  outputs: Schema.Array(
+    Schema.Struct({ path: Schema.String, bytes: Schema.Number, sha256: Schema.String }),
+  ),
+  outputDirectory: Schema.String,
+  observedMs: Schema.Number,
+  admissionMs: Schema.Number,
+  firstNodeStartedAt: Schema.NullOr(Schema.String),
+  hold: Schema.NullOr(Schema.Struct({ heldMs: Schema.Number, approved: Schema.Boolean })),
+  matched: Schema.Literal(true),
 });
 
-export const reportSchema = z.object({
-  startedAt: z.string(),
-  endedAt: z.string(),
-  completed: z.literal(45),
-  matched: z.literal(45),
-  records: z.array(recordSchema).length(45),
-  restartProof: z.object({
-    runId: z.string(),
-    before: z.array(z.object({ path: z.string(), sha256: z.string() })),
+export const reportSchema = Schema.Struct({
+  startedAt: Schema.String,
+  endedAt: Schema.String,
+  completed: Schema.Literal(45),
+  matched: Schema.Literal(45),
+  records: Schema.Array(recordSchema).check(Schema.isBetweenLength(45, 45)),
+  restartProof: Schema.Struct({
+    runId: Schema.String,
+    before: Schema.Array(Schema.Struct({ path: Schema.String, sha256: Schema.String })),
   }),
 });
 
-export type DaemonRunRecord = z.infer<typeof recordSchema>;
+export type DaemonRunRecord = Schema.Schema.Type<typeof recordSchema>;
 
-export const preflightSchema = z.object({
-  revisions: z.array(z.object({ slug: z.string(), revision: z.string() })),
+export const preflightSchema = Schema.Struct({
+  revisions: Schema.Array(Schema.Struct({ slug: Schema.String, revision: Schema.String })),
 });

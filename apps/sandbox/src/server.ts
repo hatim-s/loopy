@@ -1,17 +1,22 @@
 import { timingSafeEqual } from "node:crypto";
+import { Cause, Effect, Exit, Result, Schema, Scope } from "effect";
 import {
+  decodeBoundary,
   SANDBOX_MAX_REQUEST_BYTES,
+  type SandboxArtifact,
   type SandboxError,
+  type SandboxReceipt,
   sandboxArtifactRequestSchema,
   sandboxAttemptIdentitySchema,
   sandboxAttemptRequestSchema,
 } from "../../../packages/loopy/src/contract/index.js";
 import { InvalidAttempt } from "./admission.js";
-import { ArtifactError } from "./artifact-error.js";
+import { ArtifactError, ExportCleanupError } from "./artifact-error.js";
 import type { AttemptDependenciesFactory } from "./attempt-dependencies.js";
 import { AttemptConflict, Attempts } from "./attempts.js";
 import { type SandboxConfig, sandboxConfigSchema } from "./config.js";
 import { filesystemDependencies } from "./filesystem.js";
+import { checked, failure, io, type SandboxFailure } from "./operations.js";
 
 class RequestTooLarge extends Error {}
 
@@ -56,8 +61,12 @@ function authenticated(request: Request, token: string) {
   return supplied.byteLength === expected.byteLength && timingSafeEqual(supplied, expected);
 }
 
-// BOUNDARY: Only known exception classes become public HTTP errors.
+// Only known failures become public HTTP errors.
 function requestError(cause: unknown) {
+  if (cause instanceof ExportCleanupError) {
+    return error("conflict", cause.message, 409);
+  }
+
   if (cause instanceof ArtifactError) {
     const status = {
       unauthorized: 401,
@@ -94,6 +103,27 @@ function requestError(cause: unknown) {
   );
 }
 
+function httpFailure(cause: Cause.Cause<SandboxFailure>) {
+  if (Cause.hasInterrupts(cause) || cause.reasons.some(Cause.isDieReason)) {
+    return Effect.logError(cause).pipe(Effect.andThen(Effect.failCause(cause)));
+  }
+
+  const failures = cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error);
+  const cleanup = failures.find((error) => error instanceof ExportCleanupError);
+
+  const response = cleanup
+    ? error("conflict", cleanup.message, 409)
+    : failures.length === 1
+      ? requestError(failures[0])
+      : requestError(cause);
+
+  return Effect.logError(cause).pipe(Effect.as(response));
+}
+
+function responseJson(value: SandboxReceipt | SandboxArtifact | Response, status = 200) {
+  return value instanceof Response ? value : Response.json(value, { status });
+}
+
 export function attemptHandler(attempts: Attempts, token: string) {
   return async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
@@ -108,9 +138,11 @@ export function attemptHandler(attempts: Attempts, token: string) {
 
     try {
       if (request.method === "POST" && url.pathname === "/attempts") {
-        const parsed = sandboxAttemptRequestSchema.safeParse(await readBody(request));
+        const parsed = Schema.decodeUnknownResult(sandboxAttemptRequestSchema, {
+          onExcessProperty: "error",
+        })(await readBody(request));
 
-        if (!parsed.success) {
+        if (Result.isFailure(parsed)) {
           return error(
             "invalid_request",
             "Request does not match the sandbox attempt schema.",
@@ -118,18 +150,24 @@ export function attemptHandler(attempts: Attempts, token: string) {
           );
         }
 
-        return Response.json(await attempts.start(parsed.data), { status: 202 });
+        const response = await Effect.runPromise(
+          attempts.start(parsed.success).pipe(Effect.catchCause(httpFailure)),
+        );
+
+        return responseJson(response, 202);
       }
 
       if (request.method === "GET" && url.pathname === "/artifacts") {
-        const parsed = sandboxArtifactRequestSchema.safeParse({
+        const parsed = Schema.decodeUnknownResult(sandboxArtifactRequestSchema, {
+          onExcessProperty: "error",
+        })({
           workspace: url.searchParams.get("workspace"),
           executionKey: JSON.parse(url.searchParams.get("key") ?? "null"),
           attempt: Number(url.searchParams.get("attempt")),
           path: url.searchParams.get("path"),
         });
 
-        if (!parsed.success) {
+        if (Result.isFailure(parsed)) {
           return error(
             "invalid_request",
             "Supply an attempt identity and a relative artifact file path.",
@@ -137,17 +175,23 @@ export function attemptHandler(attempts: Attempts, token: string) {
           );
         }
 
-        return Response.json(await attempts.artifact(parsed.data));
+        const response = await Effect.runPromise(
+          attempts.artifact(parsed.success).pipe(Effect.catchCause(httpFailure)),
+        );
+
+        return responseJson(response);
       }
 
       if (request.method === "GET" && url.pathname === "/attempts") {
-        const parsed = sandboxAttemptIdentitySchema.safeParse({
+        const parsed = Schema.decodeUnknownResult(sandboxAttemptIdentitySchema, {
+          onExcessProperty: "error",
+        })({
           workspace: url.searchParams.get("workspace"),
           executionKey: JSON.parse(url.searchParams.get("key") ?? "null"),
           attempt: Number(url.searchParams.get("attempt")),
         });
 
-        if (!parsed.success) {
+        if (Result.isFailure(parsed)) {
           return error(
             "invalid_request",
             "Supply workspace, JSON execution key and positive attempt.",
@@ -155,7 +199,11 @@ export function attemptHandler(attempts: Attempts, token: string) {
           );
         }
 
-        return Response.json(await attempts.lookup(parsed.data));
+        const response = await Effect.runPromise(
+          attempts.lookup(parsed.success).pipe(Effect.catchCause(httpFailure)),
+        );
+
+        return responseJson(response);
       }
 
       return error("not_found", "Sandbox route was not found.", 404);
@@ -165,36 +213,69 @@ export function attemptHandler(attempts: Attempts, token: string) {
   };
 }
 
-export async function startSandbox(
+export function startSandbox(
   input: SandboxConfig,
   createDependencies?: AttemptDependenciesFactory,
 ) {
-  const config = sandboxConfigSchema.parse(input);
+  return Effect.gen(function* () {
+    const resources = yield* Scope.make();
 
-  const attempts = await Attempts.open(
-    config,
-    createDependencies ?? filesystemDependencies(config),
-  );
+    const closeResources = yield* Effect.cached(
+      Scope.close(resources, Exit.void).pipe(
+        Effect.catchCause((cause) =>
+          Effect.fail(
+            failure(
+              "server release",
+              cause,
+              "Sandbox server release failed. Inspect durable state before restarting.",
+            ),
+          ),
+        ),
+        Effect.uninterruptible,
+      ),
+    );
 
-  try {
-    const server = Bun.serve({
-      hostname: config.hostname,
-      port: config.port,
-      maxRequestBodySize: SANDBOX_MAX_REQUEST_BYTES,
-      fetch: attemptHandler(attempts, config.token),
-    });
+    yield* Effect.addFinalizer(() => Effect.uninterruptible(closeResources).pipe(Effect.orDie));
 
-    return {
-      server,
-      attempts,
-      close: async () => {
-        const stopped = server.stop(true);
-        await attempts.close();
-        await stopped;
-      },
-    };
-  } catch (cause) {
-    await attempts.close();
-    throw cause;
-  }
+    return yield* Effect.gen(function* () {
+      const config = yield* checked("configuration", () =>
+        decodeBoundary(sandboxConfigSchema)(input),
+      );
+
+      const attempts = yield* Attempts.open(
+        config,
+        createDependencies ?? filesystemDependencies(config),
+      );
+
+      const server = yield* Effect.acquireRelease(
+        checked("HTTP server", () =>
+          Bun.serve({
+            hostname: config.hostname,
+            port: config.port,
+            maxRequestBodySize: SANDBOX_MAX_REQUEST_BYTES,
+            fetch: attemptHandler(attempts, config.token),
+          }),
+        ),
+        (server) =>
+          Effect.gen(function* () {
+            const stopped = yield* Effect.sync(() => server.stop(true));
+            yield* attempts.close();
+            yield* io("HTTP stop", () => stopped);
+          }).pipe(Effect.orDie),
+      );
+
+      return {
+        server,
+        attempts,
+        close: () => Effect.uninterruptible(closeResources),
+      };
+    }).pipe(
+      Effect.provideService(Scope.Scope, resources),
+      Effect.onExit((exit) =>
+        Exit.isFailure(exit)
+          ? Effect.uninterruptible(closeResources).pipe(Effect.orDie)
+          : Effect.void,
+      ),
+    );
+  });
 }

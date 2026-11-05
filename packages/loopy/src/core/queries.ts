@@ -1,3 +1,4 @@
+import type { Effect } from "effect";
 import type { ExecutionKey, NodeRun, NodeRunStatus } from "./graph.js";
 import type {
   HookRecord,
@@ -9,6 +10,7 @@ import type {
   RuntimeEvent,
   Schedule,
 } from "./model.js";
+import type { StorageError } from "./store.js";
 
 export type RunFilter = {
   slug?: string;
@@ -143,43 +145,47 @@ export type ScheduleOverview = {
 };
 
 export interface DashboardReader {
-  scheduleOverview(): Promise<ScheduleOverview>;
-  dashboardSnapshot(id: string): Promise<DashboardSnapshot | undefined>;
+  scheduleOverview(): Effect.Effect<ScheduleOverview, StorageError>;
+  dashboardSnapshot(id: string): Effect.Effect<DashboardSnapshot | undefined, StorageError>;
   runReference(
     id: string,
-  ): Promise<Pick<RunRecord, "id" | "slug" | "workspace" | "revision"> | undefined>;
-  runningCount(): Promise<number>;
-  queryRuns(query: RunPageQuery): Promise<RunRecord[]>;
-  runCountsByDefinition(): Promise<RunDefinitionCount[]>;
-  runWorkspaces(): Promise<string[]>;
+  ): Effect.Effect<
+    Pick<RunRecord, "id" | "slug" | "workspace" | "revision"> | undefined,
+    StorageError
+  >;
+  runningCount(): Effect.Effect<number, StorageError>;
+  queryRuns(query: RunPageQuery): Effect.Effect<RunRecord[], StorageError>;
+  runCountsByDefinition(): Effect.Effect<RunDefinitionCount[], StorageError>;
+  runWorkspaces(): Effect.Effect<string[], StorageError>;
   pendingHooks(
     ids: string[],
     now: string,
-  ): Promise<Map<string, HookRecord & { expiresAt: string | null }>>;
-  overview(query: OverviewQuery): Promise<Overview>;
-  nodePage(runId: string, query: NodePageQuery): Promise<NodePage>;
-  scopeCounts(runId: string, parentScope?: string): Promise<ScopeCounts[]>;
+  ): Effect.Effect<Map<string, HookRecord & { expiresAt: string | null }>, StorageError>;
+  overview(query: OverviewQuery): Effect.Effect<Overview, StorageError>;
+  nodePage(runId: string, query: NodePageQuery): Effect.Effect<NodePage, StorageError>;
+  scopeCounts(runId: string, parentScope?: string): Effect.Effect<ScopeCounts[], StorageError>;
   scopeItems(
     runId: string,
     query: ScopeItemsQuery,
-  ): Promise<{ items: ScopeItem[]; next: number | null }>;
+  ): Effect.Effect<{ items: ScopeItem[]; next: number | null }, StorageError>;
   execution(
     runId: string,
     key: string,
     after?: number,
-  ): Promise<
+  ): Effect.Effect<
     | {
         node: NodeRun;
         attempts: NodeRun[];
         attemptsNext: number | null;
         truncatedAttempts: Record<string, number>;
       }
-    | undefined
+    | undefined,
+    StorageError
   >;
-  logPage(query: LogPageQuery): Promise<FeedPage<LogSummary>>;
-  logDetail(id: number): Promise<{ id: number; log: LogRecord } | undefined>;
-  eventPage(query: EventPageQuery): Promise<FeedPage<EventSummary>>;
-  eventDetail(sequence: number): Promise<RuntimeEvent | undefined>;
+  logPage(query: LogPageQuery): Effect.Effect<FeedPage<LogSummary>, StorageError>;
+  logDetail(id: number): Effect.Effect<{ id: number; log: LogRecord } | undefined, StorageError>;
+  eventPage(query: EventPageQuery): Effect.Effect<FeedPage<EventSummary>, StorageError>;
+  eventDetail(sequence: number): Effect.Effect<RuntimeEvent | undefined, StorageError>;
 }
 
 export function emptyRunCounts(): StatusCounts {

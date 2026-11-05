@@ -1,4 +1,5 @@
 import { parseArgs } from "node:util";
+import { Effect } from "effect";
 import { z } from "zod";
 import { cohort, recover } from "./cohort.js";
 import { arm, prepare } from "./prepare.js";
@@ -36,7 +37,7 @@ switch (command) {
     await status();
     break;
   case "prepare":
-    await prepare();
+    await Effect.runPromise(prepare());
     break;
   case "arm":
     await arm(z.string().min(1).parse(values.baseline));

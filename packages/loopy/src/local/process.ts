@@ -1,16 +1,20 @@
 import { mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { Data, Effect, Exit } from "effect";
 import type { CommandResult, ExecutionMode } from "../core/index.js";
 import {
   CommandExecutionError,
+  errnoCode,
   type ResolvedCommand,
   requirePositiveInteger,
 } from "../core/index.js";
+import type { ProcessFilesystemError } from "./sandbox/io.js";
+import { filesystem } from "./sandbox/io.js";
 import { sandboxLauncher } from "./sandbox/launcher.js";
 import { envArgs, resolveProgram, within } from "./sandbox/paths.js";
 import type { Launch, Limits } from "./spawn.js";
-import { emptyOutput, spawnCaptured, unstarted } from "./spawn.js";
+import { emptyOutput, rejected, spawnCaptured, unstarted } from "./spawn.js";
 
 type ProcessCommand = ResolvedCommand & { maxOutputBytes?: number };
 
@@ -74,147 +78,191 @@ function launchEnvironment(command: ProcessCommand, mode: ExecutionMode): NodeJS
  * Full environments can contain ambient credentials, so they travel through
  * stdin with declared secrets instead of appearing in the sandbox launch argv.
  */
-async function sandboxLaunch(command: ProcessCommand, context: SandboxContext): Promise<Launch> {
-  const { program, workspace, cwd, scratch, env, sensitiveEnv } = context;
+function sandboxLaunch(command: ProcessCommand, context: SandboxContext) {
+  return Effect.gen(function* () {
+    const { program, workspace, cwd, scratch, env, sensitiveEnv } = context;
 
-  const privateEnvironment =
-    context.mode === "full" || (sensitiveEnv !== undefined && Object.keys(sensitiveEnv).length > 0);
+    const privateEnvironment =
+      context.mode === "full" ||
+      (sensitiveEnv !== undefined && Object.keys(sensitiveEnv).length > 0);
 
-  const helper = privateEnvironment ? await realpath(process.execPath) : undefined;
-  const childEnv = { ...env, ...sensitiveEnv };
-  const launcherEnv = privateEnvironment ? { PATH: env.PATH, LANG: env.LANG } : env;
+    const helper = privateEnvironment
+      ? yield* filesystem(() => realpath(process.execPath))
+      : undefined;
 
-  const [launcher, prefix] = await sandboxLauncher({
-    program,
-    workspace,
-    cwd,
-    env: launcherEnv,
-    scratch,
-    helper,
-    protectedHome: context.protectedHome,
-    mode: context.mode,
-  });
+    const childEnv = { ...env, ...sensitiveEnv };
+    const launcherEnv = privateEnvironment ? { PATH: env.PATH, LANG: env.LANG } : env;
 
-  const launch: Launch = {
-    cwd,
-    env: { PATH: "/usr/bin:/bin", LANG: "C" },
-    program: launcher,
-    args: [],
-  };
-
-  if (!privateEnvironment) {
-    return { ...launch, args: [...prefix, ...command.args], stdin: command.stdin };
-  }
-
-  return {
-    ...launch,
-    args: [...prefix, "-e", PRIVATE_ENV_LAUNCHER],
-    stdin: JSON.stringify({
+    const [launcher, prefix] = yield* sandboxLauncher({
       program,
-      args: command.args,
-      env: childEnv,
-      stdin: command.stdin,
-    }),
-  };
+      workspace,
+      cwd,
+      env: launcherEnv,
+      scratch,
+      helper,
+      protectedHome: context.protectedHome,
+      mode: context.mode,
+    });
+
+    const launch: Launch = {
+      cwd,
+      env: { PATH: "/usr/bin:/bin", LANG: "C" },
+      program: launcher,
+      args: [],
+    };
+
+    if (!privateEnvironment) {
+      return { ...launch, args: [...prefix, ...command.args], stdin: command.stdin };
+    }
+
+    return {
+      ...launch,
+      args: [...prefix, "-e", PRIVATE_ENV_LAUNCHER],
+      stdin: JSON.stringify({
+        program,
+        args: command.args,
+        env: childEnv,
+        stdin: command.stdin,
+      }),
+    };
+  });
 }
 
-export async function prepareLaunch(
-  command: ProcessCommand,
-  options: LocalExecutionOptions,
-): Promise<Launch & { scratch?: string }> {
-  const workspace = await realpath(options.workspace);
-  const cwd = await realpath(resolve(workspace, command.cwd ?? "."));
+export function prepareLaunch(command: ProcessCommand, options: LocalExecutionOptions) {
+  return Effect.gen(function* () {
+    const workspace = yield* filesystem(() => realpath(options.workspace));
 
-  if (options.mode === "sandbox" && !within(workspace, cwd)) {
-    throw new Error(
-      `Command directory '${command.cwd}' is outside the sandbox workspace. Choose a directory inside the workspace.`,
+    const cwd = yield* filesystem(() => realpath(resolve(workspace, command.cwd ?? "."))).pipe(
+      Effect.catchIf(
+        (error) => ["ENOENT", "ENOTDIR", "EACCES", "ELOOP"].includes(errnoCode(error.cause) ?? ""),
+        (error) => Effect.fail(rejected(error.cause)),
+      ),
     );
-  }
 
-  if (!(await stat(cwd)).isDirectory()) {
-    throw new Error(`Command directory '${cwd}' is not a directory. Choose an existing directory.`);
-  }
+    if (options.mode === "sandbox" && !within(workspace, cwd)) {
+      return yield* Effect.fail(
+        rejected(
+          new Error(
+            `Command directory '${command.cwd}' is outside the sandbox workspace. Choose a directory inside the workspace.`,
+          ),
+        ),
+      );
+    }
 
-  const env = launchEnvironment(command, options.mode);
-  const effectiveEnv = { ...env, ...options.sensitiveEnv };
-  // Validate without putting sensitive values into launcher arguments.
-  envArgs(effectiveEnv);
-  const program = await resolveProgram(command.program, cwd, effectiveEnv.PATH ?? "");
+    if (!(yield* filesystem(() => stat(cwd))).isDirectory()) {
+      return yield* Effect.fail(
+        rejected(
+          new Error(`Command directory '${cwd}' is not a directory. Choose an existing directory.`),
+        ),
+      );
+    }
 
-  if (options.mode === "full" && !options.protectedHome) {
-    return { cwd, env: effectiveEnv, program, args: command.args, stdin: command.stdin };
-  }
+    const env = launchEnvironment(command, options.mode);
+    const effectiveEnv = { ...env, ...options.sensitiveEnv };
+    // Validate without putting sensitive values into launcher arguments.
+    yield* Effect.try({ try: () => envArgs(effectiveEnv), catch: rejected });
+    const program = yield* resolveProgram(command.program, cwd, effectiveEnv.PATH ?? "");
 
-  if (options.mode !== "sandbox" && options.mode !== "full") {
-    throw new Error(`Execution mode '${options.mode}' is unknown. Choose full or sandbox.`);
-  }
+    if (options.mode === "full" && !options.protectedHome) {
+      return { cwd, env: effectiveEnv, program, args: command.args, stdin: command.stdin };
+    }
 
-  return prepareSandbox(command, options, { program, workspace, cwd });
+    if (options.mode !== "sandbox" && options.mode !== "full") {
+      return yield* Effect.fail(
+        unstarted(
+          new Error(`Execution mode '${options.mode}' is unknown. Choose full or sandbox.`),
+        ),
+      );
+    }
+
+    return yield* prepareSandbox(command, options, { program, workspace, cwd });
+  });
 }
 
-async function prepareSandbox(
+function prepareSandbox(
   command: ProcessCommand,
   options: LocalExecutionOptions,
   paths: { program: string; workspace: string; cwd: string },
-): Promise<Launch & { scratch: string }> {
-  const scratch = await realpath(await mkdtemp(join(tmpdir(), "loopy-run-")));
+) {
+  return Effect.acquireUseRelease(
+    filesystem(() => mkdtemp(join(tmpdir(), "loopy-run-"))),
+    (directory) =>
+      Effect.gen(function* () {
+        const scratch = yield* filesystem(() => realpath(directory));
+        const env = launchEnvironment(command, options.mode);
 
-  try {
-    const env = launchEnvironment(command, options.mode);
+        if (options.mode === "sandbox") {
+          env.HOME = scratch;
+          env.TMPDIR = scratch;
+        }
 
-    if (options.mode === "sandbox") {
-      env.HOME = scratch;
-      env.TMPDIR = scratch;
-    }
+        const protectedHome = options.protectedHome;
 
-    const launch = await sandboxLaunch(command, {
-      ...paths,
-      env,
-      scratch,
-      sensitiveEnv: options.sensitiveEnv,
-      protectedHome: options.protectedHome,
-      mode: options.mode,
-    });
+        const launch = yield* sandboxLaunch(command, {
+          ...paths,
+          env,
+          scratch,
+          sensitiveEnv: options.sensitiveEnv,
+          protectedHome:
+            protectedHome === undefined
+              ? undefined
+              : yield* filesystem(() => realpath(protectedHome)),
+          mode: options.mode,
+        });
 
-    return { ...launch, scratch };
-  } catch (error) {
-    await rm(scratch, { recursive: true, force: true });
-    throw error;
-  }
+        return { ...launch, scratch };
+      }),
+    (directory, primary) =>
+      Exit.isSuccess(primary)
+        ? Effect.void
+        : filesystem(() => rm(directory, { recursive: true, force: true })),
+  );
 }
 
-export async function executeLocalCommand(
-  command: ProcessCommand,
-  options: LocalExecutionOptions,
-): Promise<CommandResult> {
-  const aborted = () =>
-    new CommandExecutionError("Command aborted.", emptyOutput(), {
-      cause: options.signal?.reason,
-    });
+export function executeLocalCommand(command: ProcessCommand, options: LocalExecutionOptions) {
+  return Effect.gen(function* () {
+    const aborted = () =>
+      new CommandExecutionError({
+        message: "Command aborted.",
+        output: emptyOutput(),
+        cause: options.signal?.reason,
+        reason: "aborted",
+      });
 
-  if (options.signal?.aborted) {
-    throw aborted();
-  }
-
-  let launch: Awaited<ReturnType<typeof prepareLaunch>>;
-  let limits: Limits;
-
-  try {
-    limits = commandLimits(command);
-    launch = await prepareLaunch(command, options);
-  } catch (error) {
-    throw unstarted(error);
-  }
-
-  try {
     if (options.signal?.aborted) {
-      throw aborted();
+      return yield* Effect.fail(aborted());
     }
 
-    return await spawnCaptured(launch, limits, options.signal, performance.now());
-  } finally {
-    if (launch.scratch) {
-      await rm(launch.scratch, { recursive: true, force: true });
-    }
-  }
+    const limits = yield* Effect.try({ try: () => commandLimits(command), catch: rejected });
+
+    return yield* Effect.acquireUseRelease(
+      prepareLaunch(command, options),
+      (launch) =>
+        Effect.exit(
+          options.signal?.aborted
+            ? Effect.fail(aborted())
+            : spawnCaptured(launch, limits, options.signal, performance.now()),
+        ),
+      (launch, primary) =>
+        "scratch" in launch
+          ? filesystem(() => rm(launch.scratch, { recursive: true, force: true })).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new ProcessCleanupError({
+                    cause,
+                    primary: Exit.isSuccess(primary)
+                      ? primary.value
+                      : Exit.failCause(primary.cause),
+                  }),
+              ),
+            )
+          : Effect.void,
+    ).pipe(Effect.flatMap((primary) => primary));
+  });
 }
+
+/** Retains the process outcome if scratch removal fails after termination. */
+export class ProcessCleanupError extends Data.TaggedError("ProcessCleanupError")<{
+  cause: ProcessFilesystemError;
+  primary: Exit.Exit<CommandResult, CommandExecutionError | ProcessFilesystemError>;
+}> {}

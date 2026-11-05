@@ -1,11 +1,12 @@
 import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { Effect } from "effect";
 import { compile } from "../src/compiler/index.js";
 import { requireRecord } from "../src/core/index.js";
 import { LocalExecutor } from "../src/executor/index.js";
-import { activate, SYSTEM_CLOCK } from "../src/host/index.js";
-import { LoopyService, openRunStore, Registry } from "../src/local/index.js";
+import { activate } from "../src/host/index.js";
+import { makeLocalService, openRunStore, Registry } from "../src/local/index.js";
 
 export const roots: string[] = [];
 
@@ -31,6 +32,7 @@ export default loopy(${JSON.stringify(name)}, { input: {}, ${definition} });`,
 export async function cli(f: ReturnType<typeof fixture>, ...args: string[]) {
   const child = Bun.spawn([process.execPath, CLI, "--home", f.home, ...args], {
     cwd: f.cwd,
+    env: { PATH: process.env.PATH, HOME: f.cwd, TMPDIR: f.cwd, LOOPY_HOME: f.home },
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -49,69 +51,77 @@ export function object(text: string) {
 }
 
 export async function save(f: ReturnType<typeof fixture>) {
-  const result = await compile(f.file);
+  const result = await Effect.runPromise(compile(f.file));
 
   if (!result.ok) {
     throw new Error(JSON.stringify(result.diagnostics));
   }
 
-  const store = openRunStore(f.home);
+  return Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const store = yield* openRunStore(f.home);
 
-  try {
-    const service = new LoopyService({
-      store,
-      registry: () => new Registry(f.home, f.cwd),
-      clock: SYSTEM_CLOCK,
-    });
+        const service = makeLocalService({
+          store,
+          home: f.home,
+          cwd: f.cwd,
+          clock: { now: Date.now },
+        });
 
-    await service.putLoopy(result.graph.name, {
-      ...result,
-      bundles: result.bundles.map((bundle) => ({
-        ...bundle,
-        bytes: Buffer.from(bundle.bytes).toString("base64"),
-      })),
-      source: { path: f.file, workspace: f.cwd },
-      replace: false,
-    });
+        yield* service.putLoopy(result.graph.name, {
+          ...result,
+          bundles: result.bundles.map((bundle) => ({
+            ...bundle,
+            bytes: Buffer.from(bundle.bytes).toString("base64"),
+          })),
+          source: { path: f.file, workspace: f.cwd },
+          replace: false,
+        });
+        const registry = yield* Registry.make(f.home, f.cwd);
 
-    return new Registry(f.home, f.cwd).get(result.graph.name);
-  } finally {
-    store.close();
-  }
+        return yield* registry.get(result.graph.name);
+      }),
+    ),
+  );
 }
 
 export async function runFixture(f: ReturnType<typeof fixture>) {
-  const saved = new Registry(f.home, f.cwd).list()[0];
+  return Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const registry = yield* Registry.make(f.home, f.cwd);
+        const saved = (yield* registry.list())[0];
 
-  if (!saved) {
-    throw new Error("Save fixture before running it.");
-  }
+        if (!saved) {
+          throw new Error("Save fixture before running it.");
+        }
 
-  const store = openRunStore(f.home);
+        const store = yield* openRunStore(f.home);
 
-  const service = new LoopyService({
-    store,
-    registry: () => new Registry(f.home, f.cwd),
-    clock: SYSTEM_CLOCK,
-  });
+        const service = makeLocalService({
+          store,
+          home: f.home,
+          cwd: f.cwd,
+          clock: { now: Date.now },
+        });
 
-  try {
-    const run = await service.startRun(saved.slug, {}, f.cwd);
-    await activate({
-      store,
-      runId: run.id,
-      graph: saved.graph,
-      executor: new LocalExecutor({
-        home: f.home,
-        workspace: f.cwd,
-        mode: saved.mode,
-        secrets: saved.secrets,
-        bundlePath: (hash) => new Registry(f.home, f.cwd).bundlePath(hash),
+        const run = yield* service.startRun(saved.slug, {}, f.cwd);
+        yield* activate({
+          store,
+          runId: run.id,
+          graph: saved.graph,
+          executor: new LocalExecutor({
+            home: f.home,
+            workspace: f.cwd,
+            mode: saved.mode,
+            secrets: saved.secrets,
+            bundlePath: (hash) => registry.bundlePath(hash),
+          }),
+        });
+
+        return { stdout: JSON.stringify(yield* store.getRun(run.id)), stderr: "", code: 0 };
       }),
-    });
-
-    return { stdout: JSON.stringify(await store.getRun(run.id)), stderr: "", code: 0 };
-  } finally {
-    store.close();
-  }
+    ),
+  );
 }

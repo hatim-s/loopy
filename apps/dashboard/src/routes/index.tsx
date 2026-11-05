@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { Schema } from "effect";
 import type { ReactNode } from "react";
-import { z } from "zod";
 import { AwaitingYou, NextScheduled, RunningNow } from "../components/overview/live-lists.tsx";
 import {
   ChartLegend,
@@ -12,15 +12,19 @@ import { Load, Note } from "../components/ui/load.tsx";
 import { Segmented } from "../components/ui/segmented.tsx";
 import { StatusGlyph } from "../components/ui/status.tsx";
 import { useClock } from "../lib/clock.ts";
+import { searchField } from "../lib/search.ts";
 import { useDaemon, useOverview, useRunPages } from "../lib/ui-data.ts";
 import { PERIODS, type Period, type StatusCounts } from "../lib/view-models.ts";
 
-const searchSchema = z.object({
-  period: z.enum(PERIODS).optional().catch(undefined),
-  metric: z.enum(["runs", "failed"]).optional().catch(undefined),
+const searchSchema = Schema.Struct({
+  period: searchField(Schema.Literals(PERIODS)),
+  metric: searchField(Schema.Literals(["runs", "failed"])),
 });
 
-export const Route = createFileRoute("/")({ validateSearch: searchSchema, component: Overview });
+export const Route = createFileRoute("/")({
+  validateSearch: Schema.decodeUnknownSync(searchSchema),
+  component: Overview,
+});
 
 const PERIOD_TEXT = {
   "1h": "Last hour",

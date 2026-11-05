@@ -1,5 +1,4 @@
 import { nodeRunSchema } from "../../contract/index.js";
-import type { LogRecord, RunSnapshot } from "../../core/index.js";
 import {
   type ExecutionKey,
   executionKeyString,
@@ -8,10 +7,14 @@ import {
 } from "../../core/index.js";
 import { type EventTransaction } from "../event-outbox.js";
 import { checkLogBytes, checkNodeWrite, logRecord } from "../node-write.js";
+import { ownedStorageOperation, StoreInvariantError, storageOperation } from "../operation.js";
+import { storedDecoder } from "../row-codec.js";
 import { earliestWakeAt, normalizeNode, utc } from "../timestamps.js";
 import { SqliteRuns } from "./runs.js";
 import { rowToLog, rowToRun, SQL } from "./store-rows.js";
 import { type LogRow } from "./store-schema.js";
+
+const decodeNodeRun = storedDecoder(nodeRunSchema, "node_runs");
 
 export class SqliteNodes extends SqliteRuns {
   protected readNodes(runId: string): NodeRun[] {
@@ -20,7 +23,7 @@ export class SqliteNodes extends SqliteRuns {
         "SELECT record FROM node_runs WHERE run_id=? ORDER BY rowid",
       )
       .all(runId)
-      .map((row) => nodeRunSchema.parse(JSON.parse(row.record)));
+      .map((row) => decodeNodeRun(row.record));
   }
 
   protected readNode(runId: string, key: string): NodeRun | undefined {
@@ -30,41 +33,39 @@ export class SqliteNodes extends SqliteRuns {
       )
       .get(runId, key);
 
-    return row ? nodeRunSchema.parse(JSON.parse(row.record)) : undefined;
+    return row ? decodeNodeRun(row.record) : undefined;
   }
 
-  async getNodeRun(key: ExecutionKey): Promise<NodeRun | undefined> {
-    return this.readNode(key.runId, executionKeyString(key));
+  getNodeRun(key: ExecutionKey) {
+    return storageOperation("getNodeRun", () => {
+      return this.readNode(key.runId, executionKeyString(key));
+    });
   }
 
-  async getNodeRuns(runId: string): Promise<NodeRun[]> {
-    return this.readNodes(runId);
+  getNodeRuns(runId: string) {
+    return storageOperation("getNodeRuns", () => {
+      return this.readNodes(runId);
+    });
   }
 
-  async apply({
-    runId,
-    token,
-    effects,
-  }: {
-    runId: string;
-    token: string;
-    effects: StoreEffect[];
-  }): Promise<void> {
-    this.commit((txn) => {
-      const run = this.owned(runId, token);
-      this.requireRunning(run);
-      // A stale batch may clear the signal wake before it reaches its suspend effect.
-      const wakeAtBeforeApply = run.wake_at;
+  apply({ runId, token, effects }: { runId: string; token: string; effects: StoreEffect[] }) {
+    return ownedStorageOperation("apply", () => {
+      this.commit((txn) => {
+        const run = this.owned(runId, token);
+        this.requireRunning(run);
+        // A stale batch may clear the signal wake before it reaches its suspend effect.
+        const wakeAtBeforeApply = run.wake_at;
 
-      for (const effect of effects) {
-        this.applyEffect(
-          txn,
-          runId,
-          effect.kind === "suspend_run"
-            ? { ...effect, wakeAt: earliestWakeAt(wakeAtBeforeApply, effect.wakeAt) }
-            : effect,
-        );
-      }
+        for (const effect of effects) {
+          this.applyEffect(
+            txn,
+            runId,
+            effect.kind === "suspend_run"
+              ? { ...effect, wakeAt: earliestWakeAt(wakeAtBeforeApply, effect.wakeAt) }
+              : effect,
+          );
+        }
+      });
     });
   }
 
@@ -145,7 +146,7 @@ export class SqliteNodes extends SqliteRuns {
 
       case "write_log": {
         if (effect.executionKey.runId !== runId) {
-          throw new Error("Log belongs to another run.");
+          throw new StoreInvariantError("Log belongs to another run.");
         }
 
         this.writeLog(txn, effect);
@@ -209,29 +210,33 @@ export class SqliteNodes extends SqliteRuns {
     this.emit(txn, { entity: "log", kind: "written", runId: record.runId, record });
   }
 
-  async getLogs(runId: string, after = 0, limit = 200): Promise<LogRecord[]> {
-    return this.db
-      .query<LogRow, [string, number, number]>(`${SQL.logs} LIMIT ?`)
-      .all(runId, after, Math.min(limit, 200))
-      .map(rowToLog);
+  getLogs(runId: string, after = 0, limit = 200) {
+    return storageOperation("getLogs", () => {
+      return this.db
+        .query<LogRow, [string, number, number]>(`${SQL.logs} LIMIT ?`)
+        .all(runId, after, Math.min(limit, 200))
+        .map(rowToLog);
+    });
   }
 
-  async snapshotRun(id: string): Promise<RunSnapshot | undefined> {
-    return this.db.transaction(() => {
-      const row = this.row(id);
+  snapshotRun(id: string) {
+    return storageOperation("snapshotRun", () => {
+      return this.db.transaction(() => {
+        const row = this.row(id);
 
-      if (!row) {
-        return undefined;
-      }
+        if (!row) {
+          return undefined;
+        }
 
-      return {
-        run: rowToRun(row),
-        nodeRuns: this.readNodes(id),
-        steps: [],
-        logs: this.db.query<LogRow, [string, number]>(SQL.logs).all(id, 0).map(rowToLog),
-        hooks: this.readHooks(id),
-        ...this.readEventCursor(),
-      };
-    }, "deferred");
+        return {
+          run: rowToRun(row),
+          nodeRuns: this.readNodes(id),
+          steps: [],
+          logs: this.db.query<LogRow, [string, number]>(SQL.logs).all(id, 0).map(rowToLog),
+          hooks: this.readHooks(id),
+          ...this.readEventCursor(),
+        };
+      }, "deferred");
+    });
   }
 }

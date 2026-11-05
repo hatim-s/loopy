@@ -3,13 +3,27 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Effect, Exit, Scope } from "effect";
 import type { Store } from "../src/core/index.js";
-import { MemoryStore, SqliteRunStore } from "../src/store/index.js";
+import { MemoryStore, makeSqliteRunStore } from "../src/store/index.js";
 import { SCHEMA, WAIT_SCHEMA } from "../src/store/sqlite/store-schema.js";
+
+const scopes: Scope.Closeable[] = [];
+
+function fixtureScope() {
+  const scope = Scope.makeUnsafe();
+  scopes.push(scope);
+
+  return scope;
+}
 
 const cleanups: (() => void)[] = [];
 
-afterEach(() => {
+afterEach(async () => {
+  for (const scope of scopes.splice(0).reverse()) {
+    await Effect.runPromise(Scope.close(scope, Exit.void));
+  }
+
   for (const cleanup of cleanups.splice(0).reverse()) {
     cleanup();
   }
@@ -18,24 +32,38 @@ afterEach(() => {
 for (const kind of ["memory", "sqlite"] as const) {
   test(`${kind} schedule overview counts all workspaces and caps ordered summaries without input`, async () => {
     const root = mkdtempSync(join(tmpdir(), "loopy-schedule-overview-"));
-    const sqlite = kind === "sqlite" ? new SqliteRunStore(join(root, "runs.sqlite")) : null;
-    const store: Store = sqlite ?? new MemoryStore();
     cleanups.push(() => {
-      sqlite?.close();
       rmSync(root, { recursive: true, force: true });
     });
-    expect(await store.scheduleOverview()).toEqual({ workspaces: [], active: 0, next: [] });
+
+    const sqlite =
+      kind === "sqlite"
+        ? await Effect.runPromise(
+            makeSqliteRunStore(join(root, "runs.sqlite")).pipe(
+              Effect.provideService(Scope.Scope, fixtureScope()),
+            ),
+          )
+        : null;
+
+    const store: Store = sqlite ?? new MemoryStore();
+    expect(await Effect.runPromise(store.scheduleOverview())).toEqual({
+      workspaces: [],
+      active: 0,
+      next: [],
+    });
 
     for (let index = 14; index >= 0; index--) {
-      await store.putSchedule({
-        workspace: index === 0 ? "/a" : `/b${String(index).padStart(2, "0")}`,
-        slug: "shared",
-        cron: "@daily",
-        tz: "UTC",
-        input: { privatePayload: "x".repeat(20_000) },
-        enabled: index !== 0,
-        nextFireAt: "2030-01-01T00:00:00.000Z",
-      });
+      await Effect.runPromise(
+        store.putSchedule({
+          workspace: index === 0 ? "/a" : `/b${String(index).padStart(2, "0")}`,
+          slug: "shared",
+          cron: "@daily",
+          tz: "UTC",
+          input: { privatePayload: "x".repeat(20_000) },
+          enabled: index !== 0,
+          nextFireAt: "2030-01-01T00:00:00.000Z",
+        }),
+      );
     }
 
     // Input parsing is forbidden on this read, even if a retained payload is unreadable.
@@ -45,7 +73,7 @@ for (const kind of ["memory", "sqlite"] as const) {
       db.close();
     }
 
-    const overview = await store.scheduleOverview();
+    const overview = await Effect.runPromise(store.scheduleOverview());
     expect(overview.workspaces).toEqual([
       "/a",
       ...[...Array(14).keys()].map((index) => `/b${String(index + 1).padStart(2, "0")}`),
@@ -72,8 +100,11 @@ for (const version of [13, 14, 15]) {
     const file = join(root, "runs.sqlite");
 
     if (version === 15) {
-      const store = new SqliteRunStore(file);
-      store.close();
+      const store = await Effect.runPromise(
+        makeSqliteRunStore(file).pipe(Effect.provideService(Scope.Scope, fixtureScope())),
+      );
+
+      await Effect.runPromise(store.close());
     }
 
     const db = new Database(file);
@@ -106,18 +137,21 @@ for (const version of [13, 14, 15]) {
     db.exec(`PRAGMA user_version=${version}`);
     db.close();
 
-    const store = new SqliteRunStore(file);
-    expect(await store.epoch()).toBe("schedule-retained");
-    expect((await store.listSchedules())[0]).toMatchObject({
+    const store = await Effect.runPromise(
+      makeSqliteRunStore(file).pipe(Effect.provideService(Scope.Scope, fixtureScope())),
+    );
+
+    expect(await Effect.runPromise(store.epoch())).toBe("schedule-retained");
+    expect((await Effect.runPromise(store.listSchedules()))[0]).toMatchObject({
       workspace: "/b",
       slug: "shared",
       version: 9,
       lastFireKey: "old-fire",
       input: { retained: true },
     });
-    expect((await store.events(0, 10))[0]?.txn).toBe("schedule-retained-txn");
-    expect((await store.scheduleOverview()).active).toBe(1);
-    store.close();
+    expect((await Effect.runPromise(store.events(0, 10)))[0]?.txn).toBe("schedule-retained-txn");
+    expect((await Effect.runPromise(store.scheduleOverview())).active).toBe(1);
+    await Effect.runPromise(store.close());
 
     const persisted = new Database(file);
     expect(persisted.query("PRAGMA user_version").get()).toEqual({ user_version: 15 });
@@ -131,9 +165,13 @@ for (const version of [13, 14, 15]) {
     expect(plans.some((plan) => plan.detail.includes("schedules_enabled_next"))).toBe(true);
     expect(plans.some((plan) => plan.detail.includes("TEMP B-TREE"))).toBe(false);
     persisted.close();
-    const reopened = new SqliteRunStore(file);
-    expect(await reopened.epoch()).toBe("schedule-retained");
-    expect((await reopened.listSchedules())[0]?.version).toBe(9);
-    reopened.close();
+
+    const reopened = await Effect.runPromise(
+      makeSqliteRunStore(file).pipe(Effect.provideService(Scope.Scope, fixtureScope())),
+    );
+
+    expect(await Effect.runPromise(reopened.epoch())).toBe("schedule-retained");
+    expect((await Effect.runPromise(reopened.listSchedules()))[0]?.version).toBe(9);
+    await Effect.runPromise(reopened.close());
   });
 }

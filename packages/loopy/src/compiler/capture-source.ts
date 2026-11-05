@@ -1,4 +1,5 @@
 import { basename } from "node:path";
+import { Schema } from "effect";
 import { type SourceArtifact, sourceArtifactSchema } from "../contract/index.js";
 import type { Graph } from "../core/index.js";
 import type { AuthorModule } from "./types.js";
@@ -36,7 +37,7 @@ export function captureSource(
     ];
   });
 
-  const result = sourceArtifactSchema.safeParse({
+  const result = Schema.decodeUnknownResult(sourceArtifactSchema, { onExcessProperty: "error" })({
     version: 1,
     status: "available",
     revision,
@@ -48,7 +49,7 @@ export function captureSource(
     ranges,
   });
 
-  return result.success
-    ? result.data
+  return result._tag === "Success"
+    ? result.success
     : { version: 1, status: "unavailable", revision, reason: "too_large" };
 }

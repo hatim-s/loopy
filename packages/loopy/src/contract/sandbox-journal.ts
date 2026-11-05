@@ -1,4 +1,6 @@
-import { z } from "zod";
+import { Schema } from "effect";
+import { struct } from "./codec.js";
+
 import { hashSchema } from "./compiled-loopy.js";
 import {
   SANDBOX_MAX_CAPTURE_BYTES,
@@ -8,57 +10,60 @@ import {
   sandboxExecutionResultSchema,
 } from "./sandbox.js";
 
-export const authoritySessionSchema = z.strictObject({
-  epoch: z.number().int().positive(),
-  nonce: z.string().min(1).max(256),
+export const authoritySessionSchema = struct({
+  epoch: Schema.Int.check(Schema.isGreaterThan(0)),
+  nonce: Schema.String.check(Schema.isMinLength(1)).check(Schema.isMaxLength(256)),
 });
 
-export const dockerAttemptPlanSchema = sandboxAttemptIdentitySchema.extend({
+export const dockerAttemptPlanSchema = struct({
+  ...sandboxAttemptIdentitySchema.fields,
   id: hashSchema,
   requestHash: hashSchema,
-  container: z.string().regex(/^loopy-attempt-[a-f0-9]{64}$/),
-  inputVolume: z.string().regex(/^loopy-input-[a-f0-9]{64}$/),
-  volume: z.string().regex(/^loopy-workspace-[a-f0-9]{64}$/),
-  deadline: z.number().int().positive(),
+  container: Schema.String.check(Schema.isPattern(/^loopy-attempt-[a-f0-9]{64}$/)),
+  inputVolume: Schema.String.check(Schema.isPattern(/^loopy-input-[a-f0-9]{64}$/)),
+  volume: Schema.String.check(Schema.isPattern(/^loopy-workspace-[a-f0-9]{64}$/)),
+  deadline: Schema.Int.check(Schema.isGreaterThan(0)),
 });
 
-export const resultRefSchema = z.strictObject({
+export const resultRefSchema = struct({
   sha256: hashSchema,
-  size: z.number().int().positive().max(SANDBOX_MAX_CAPTURE_BYTES),
+  size: Schema.Int.check(Schema.isGreaterThan(0)).check(
+    Schema.isLessThanOrEqualTo(SANDBOX_MAX_CAPTURE_BYTES),
+  ),
 });
 
-export const resultLocationSchema = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("blob"), ref: resultRefSchema }),
-  z.strictObject({ kind: z.literal("inline"), value: sandboxExecutionResultSchema }),
+export const resultLocationSchema = Schema.Union([
+  struct({ kind: Schema.Literal("blob"), ref: resultRefSchema }),
+  struct({ kind: Schema.Literal("inline"), value: sandboxExecutionResultSchema }),
 ]);
 
-export const startedAttemptRecordSchema = z.strictObject({
-  kind: z.literal("started"),
+export const startedAttemptRecordSchema = struct({
+  kind: Schema.Literal("started"),
   plan: dockerAttemptPlanSchema,
   session: authoritySessionSchema,
 });
 
-export const finishedAttemptRecordSchema = z.strictObject({
-  kind: z.literal("finished"),
+export const finishedAttemptRecordSchema = struct({
+  kind: Schema.Literal("finished"),
   plan: dockerAttemptPlanSchema,
   session: authoritySessionSchema,
   result: resultLocationSchema,
 });
 
-export const attemptRecordSchema = z.discriminatedUnion("kind", [
+export const attemptRecordSchema = Schema.Union([
   startedAttemptRecordSchema,
   finishedAttemptRecordSchema,
 ]);
 
-export const exportRecordSchema = z.strictObject({
-  token: z.string().min(1).max(256),
+export const exportRecordSchema = struct({
+  token: Schema.String.check(Schema.isMinLength(1)).check(Schema.isMaxLength(256)),
   session: authoritySessionSchema,
   attemptId: hashSchema,
-  volume: dockerAttemptPlanSchema.shape.volume,
-  helper: z.string().regex(/^loopy-artifact-[a-f0-9]{64}$/),
+  volume: dockerAttemptPlanSchema.fields.volume,
+  helper: Schema.String.check(Schema.isPattern(/^loopy-artifact-[a-f0-9]{64}$/)),
 });
 
-export const authorityFailureSchema = z.enum([
+export const authorityFailureSchema = Schema.Literals([
   "request_conflict",
   "workspace_busy",
   "stale_session",
@@ -66,19 +71,19 @@ export const authorityFailureSchema = z.enum([
   "invalid_state",
 ]);
 
-export type AuthoritySession = z.infer<typeof authoritySessionSchema>;
+export type AuthoritySession = Schema.Schema.Type<typeof authoritySessionSchema>;
 
-export type DockerAttemptPlan = z.infer<typeof dockerAttemptPlanSchema>;
+export type DockerAttemptPlan = Schema.Schema.Type<typeof dockerAttemptPlanSchema>;
 
-export type ResultRef = z.infer<typeof resultRefSchema>;
+export type ResultRef = Schema.Schema.Type<typeof resultRefSchema>;
 
-export type ResultLocation = z.infer<typeof resultLocationSchema>;
+export type ResultLocation = Schema.Schema.Type<typeof resultLocationSchema>;
 
-export type AttemptRecord = z.infer<typeof attemptRecordSchema>;
+export type AttemptRecord = Schema.Schema.Type<typeof attemptRecordSchema>;
 
-export type ExportRecord = z.infer<typeof exportRecordSchema>;
+export type ExportRecord = Schema.Schema.Type<typeof exportRecordSchema>;
 
-export type AuthorityFailure = z.infer<typeof authorityFailureSchema>;
+export type AuthorityFailure = Schema.Schema.Type<typeof authorityFailureSchema>;
 
 export class AuthorityError extends Error {
   constructor(readonly code: AuthorityFailure) {

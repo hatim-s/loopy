@@ -2,9 +2,11 @@ import { afterEach, expect, spyOn, test } from "bun:test";
 import { mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { get, type IncomingMessage } from "node:http";
 import { join, resolve } from "node:path";
+import { Effect, Schema, Scope } from "effect";
 import {
   cursorViewSchema,
   daemonViewSchema,
+  decodeBoundary,
   type ErrorCode,
   encodeRunCursor,
   errorBodySchema,
@@ -16,12 +18,10 @@ import {
   scheduleViewSchema,
   serverEventSchema,
 } from "../src/contract/index.js";
-import { requireRecord, revision } from "../src/core/index.js";
-import { SYSTEM_CLOCK } from "../src/host/index.js";
+import { type RuntimeEvent, requireRecord, revision } from "../src/core/index.js";
 import {
-  LoopyService,
   localDaemon,
-  openRunStore,
+  makeLocalService,
   Registry,
   readDaemonFile,
   ServiceError,
@@ -30,10 +30,11 @@ import { eventStream } from "../src/local/server/events.js";
 import { apiRoutes, dispatch } from "../src/local/server/routes.js";
 import { CLI, fixture, object, roots, runFixture, save } from "./cli-fixture.js";
 import { newRun } from "./fixture.js";
+import { fixtureScope, fixtureStore } from "./fixtures/service-runtime.js";
 
 const daemonMetadata = { startedAt: new Date(0).toISOString(), concurrency: 4 };
 
-const servers: ReturnType<typeof startDaemon>[] = [];
+const servers: Awaited<ReturnType<typeof startDaemon>>[] = [];
 
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => server.stop()));
@@ -43,25 +44,29 @@ afterEach(async () => {
   }
 });
 
-function startDaemon(options: { home: string; cwd: string; port: number; assets?: string }) {
-  const store = openRunStore(options.home);
-  const daemon = localDaemon({ concurrency: 4, ...options, store });
+async function startDaemon(options: { home: string; cwd: string; port: number; assets?: string }) {
+  const store = await fixtureStore(options.home);
+
+  const daemon = await Effect.runPromise(
+    localDaemon({ concurrency: 4, ...options, store }).pipe(
+      Effect.provideService(Scope.Scope, fixtureScope()),
+    ),
+  );
 
   return {
-    url: daemon.start(),
+    url: await Effect.runPromise(daemon.start),
     async stop() {
-      await daemon.stop();
-      store.close();
+      await Effect.runPromise(daemon.stop);
+      await Effect.runPromise(store.close());
     },
   };
 }
 
 test("API returns run records, step traces and cursor logs", async () => {
   const f = fixture("api", `run: () => { log("first"); log("second"); return 2; }`);
-
   await save(f);
   const run = object((await runFixture(f)).stdout);
-  const server = startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
+  const server = await startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
   const token = new URLSearchParams(url.hash.slice(1)).get("token");
@@ -92,7 +97,7 @@ test("the daemon server requires its token and origin, serves pinned assets and 
   const assets = join(f.cwd, "assets");
   mkdirSync(assets);
   writeFileSync(join(assets, "index.html"), "original dashboard");
-  const server = startDaemon({ home: f.home, cwd: f.cwd, assets, port: 0 });
+  const server = await startDaemon({ home: f.home, cwd: f.cwd, assets, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
   const token = new URLSearchParams(url.hash.slice(1)).get("token");
@@ -108,7 +113,7 @@ test("the daemon server requires its token and origin, serves pinned assets and 
   for (const [headers, status, code] of rejections) {
     const response = await fetch(`${url.origin}/api/runs`, { headers });
     expect(response.status).toBe(status);
-    expect(errorBodySchema.parse(await response.json()).error.code).toBe(code);
+    expect(decodeBoundary(errorBodySchema)(await response.json()).error.code).toBe(code);
   }
 
   expect(await (await fetch(`${url.origin}/api/loopies`, { headers })).json()).toMatchObject([
@@ -125,7 +130,7 @@ test("API distinguishes invalid cursors from registry failures", async () => {
   const f = fixture("server-errors", "run: () => 1");
   await save(f);
   const run = object((await runFixture(f)).stdout);
-  const server = startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
+  const server = await startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
   const token = new URLSearchParams(url.hash.slice(1)).get("token");
@@ -134,22 +139,21 @@ test("API distinguishes invalid cursors from registry failures", async () => {
   for (const path of [`/api/runs/${run.id}/logs?after=bad`, "/api/runs?limit=300"]) {
     const response = await fetch(`${url.origin}${path}`, { headers });
     expect(response.status).toBe(400);
-    expect(errorBodySchema.parse(await response.json()).error.code).toBe("bad_request");
+    expect(decodeBoundary(errorBodySchema)(await response.json()).error.code).toBe("bad_request");
   }
 
   writeFileSync(join(f.cwd, ".loopy", "loopies", "server-errors.json"), "invalid JSON");
   const failed = await fetch(`${url.origin}/api/loopies`, { headers });
   expect(failed.status).toBe(500);
-  expect(errorBodySchema.parse(await failed.json()).error.code).toBe("internal");
+  expect(decodeBoundary(errorBodySchema)(await failed.json()).error.code).toBe("internal");
   expect((await fetch(`${url.origin}/api/config`, { headers })).status).toBe(404);
 });
 
 test("API returns the contract snapshot, rejects unknown query keys and keeps cursor log reads", async () => {
   const f = fixture("summary", 'run: () => { log("hello"); return 1; }');
-
   await save(f);
   const run = object((await runFixture(f)).stdout);
-  const server = startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
+  const server = await startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
   const token = new URLSearchParams(url.hash.slice(1)).get("token");
@@ -170,11 +174,13 @@ test("API returns the contract snapshot, rejects unknown query keys and keeps cu
 test("contract routes start, snapshot, resume and cancel without exposing owner tokens", async () => {
   const f = fixture("contract", "run: () => null");
   await save(f);
-  const initialStore = openRunStore(f.home);
-  await initialStore.createRun({ ...newRun(), id: "initial", slug: "contract", workspace: f.cwd });
-  initialStore.close();
+  const initialStore = await fixtureStore(f.home);
+  await Effect.runPromise(
+    initialStore.createRun({ ...newRun(), id: "initial", slug: "contract", workspace: f.cwd }),
+  );
+  await Effect.runPromise(initialStore.close());
   const initial = { id: "initial" };
-  const server = startDaemon({ ...f, port: 0 });
+  const server = await startDaemon({ ...f, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
 
@@ -190,33 +196,39 @@ test("contract routes start, snapshot, resume and cancel without exposing owner 
       body: body === null ? undefined : JSON.stringify(body),
     });
 
-  const snapshot = runSnapshotViewSchema.parse(await (await request(`/runs/${initial.id}`)).json());
+  const snapshot = decodeBoundary(runSnapshotViewSchema)(
+    await (await request(`/runs/${initial.id}`)).json(),
+  );
+
   expect(snapshot.run.waitingOn).toBeNull();
   expect(JSON.stringify(snapshot)).not.toContain('"owner":{"token"');
   expect(snapshot.run.owner).toBeNull();
 
-  const started = runViewSchema.parse(
+  const started = decodeBoundary(runViewSchema)(
     await (await request("/loopies/contract/runs", { input: {}, workspace: f.cwd })).json(),
   );
 
   expect(started.status).toBe("queued");
   expect((await request(`/runs/${started.id}/resume`, null)).status).toBe(200);
   expect(
-    runViewSchema.parse(await (await request(`/runs/${started.id}/cancel`, null)).json()).status,
+    decodeBoundary(runViewSchema)(await (await request(`/runs/${started.id}/cancel`, null)).json())
+      .status,
   ).toBe("cancelled");
   expect((await request(`/runs/${started.id}/cancel`, null)).status).toBe(409);
   expect((await request("/runs/missing/resume", null)).status).toBe(404);
   expect((await request("/loopies/contract/runs", {})).status).toBe(400);
-  expect(daemonViewSchema.parse(await (await request("/daemon")).json()).pid).toBe(process.pid);
-  const store = openRunStore(f.home);
+  expect(decodeBoundary(daemonViewSchema)(await (await request("/daemon")).json()).pid).toBe(
+    process.pid,
+  );
+  const store = await fixtureStore(f.home);
 
   try {
-    await store.claim(String(initial.id), "private-fencing-token");
+    await Effect.runPromise(store.claim(String(initial.id), "private-fencing-token"));
     const owned = await (await request(`/runs/${initial.id}`)).text();
     expect(owned).not.toContain("private-fencing-token");
     expect((await request(`/runs/${initial.id}/cancel`, null)).status).toBe(409);
   } finally {
-    store.close();
+    await Effect.runPromise(store.close());
   }
 });
 
@@ -226,7 +238,7 @@ test("SPA routes fall back to pinned index but missing files stay 404", async ()
   const assets = join(f.cwd, "assets");
   mkdirSync(assets);
   writeFileSync(join(assets, "index.html"), "SPA");
-  const server = startDaemon({ ...f, port: 0, assets });
+  const server = await startDaemon({ ...f, port: 0, assets });
   servers.push(server);
   const origin = new URL(server.url).origin;
   expect(await (await fetch(`${origin}/runs/some-run`)).text()).toBe("SPA");
@@ -235,19 +247,20 @@ test("SPA routes fall back to pinned index but missing files stay 404", async ()
   const headers = { Authorization: `Bearer ${readDaemonFile(f.home)!.token}` };
   const bare = await fetch(`${origin}/api`, { headers });
   expect(bare.status).toBe(404);
-  expect(errorBodySchema.parse(await bare.json()).error.code).toBe("not_found");
+  expect(decodeBoundary(errorBodySchema)(await bare.json()).error.code).toBe("not_found");
   expect((await fetch(`${origin}/`, { headers: { Host: "evil.example" } })).status).toBe(403);
 });
 
 async function serviceFixture(name: string) {
   const f = fixture(name, "run: () => 1");
   await save(f);
-  const store = openRunStore(f.home);
+  const store = await fixtureStore(f.home);
 
-  const service = new LoopyService({
+  const service = makeLocalService({
     store,
-    registry: () => new Registry(f.home, f.cwd),
-    clock: SYSTEM_CLOCK,
+    clock: { now: Date.now },
+    home: f.home,
+    cwd: f.cwd,
   });
 
   return { f, store, service };
@@ -257,7 +270,7 @@ test("native definition routes return 404 for absence and 500 for corrupt saved 
   const f = fixture("corrupt-definition", "run: () => 1");
   await save(f);
   writeFileSync(join(f.cwd, ".loopy", "loopies", "corrupt-definition.json"), "{invalid");
-  const server = startDaemon({ ...f, port: 0 });
+  const server = await startDaemon({ ...f, port: 0 });
   servers.push(server);
   const origin = new URL(server.url).origin;
   const headers = { Authorization: `Bearer ${readDaemonFile(f.home)!.token}` };
@@ -277,7 +290,7 @@ test("native definition routes return 404 for absence and 500 for corrupt saved 
         body: body === undefined ? undefined : JSON.stringify(body),
       });
 
-      const error = errorBodySchema.parse(await response.json()).error;
+      const error = decodeBoundary(errorBodySchema)(await response.json()).error;
       expect(response.status).toBe(slug === "absent" ? 404 : 500);
       expect(error.code).toBe(slug === "absent" ? "not_found" : "internal");
 
@@ -297,7 +310,7 @@ function parseFrame(lines: string[]) {
     return undefined;
   }
 
-  const events = serverEventSchema.array().parse(JSON.parse(data));
+  const events = decodeBoundary(Schema.Array(serverEventSchema))(JSON.parse(data));
 
   return {
     id: Number(lines.find((line) => line.startsWith("id: "))?.slice(4)),
@@ -321,7 +334,13 @@ function fragment(body: ReadableStream<Uint8Array>) {
 function captureFrames(body: ReadableStream<Uint8Array>) {
   const reader = body.getReader();
   const decoder = new TextDecoder();
-  const frames: { id: number; sequences: number[]; transactions: string[] }[] = [];
+
+  const frames: {
+    id: number;
+    sequences: number[];
+    transactions: string[];
+  }[] = [];
+
   let buffer = "";
 
   const reading = (async () => {
@@ -331,7 +350,6 @@ function captureFrames(body: ReadableStream<Uint8Array>) {
       for (let end = buffer.indexOf("\n\n"); end >= 0; end = buffer.indexOf("\n\n")) {
         const lines = buffer.slice(0, end).split("\n");
         buffer = buffer.slice(end + 2);
-
         const frame = parseFrame(lines);
 
         if (frame) {
@@ -354,13 +372,17 @@ function captureFrames(body: ReadableStream<Uint8Array>) {
   };
 }
 
-function expectedFrames(events: Awaited<ReturnType<ReturnType<typeof openRunStore>["events"]>>) {
-  const frames: { id: number; sequences: number[]; transactions: string[] }[] = [];
+function expectedFrames(events: RuntimeEvent[]) {
+  const frames: {
+    id: number;
+    sequences: number[];
+    transactions: string[];
+  }[] = [];
 
   for (const event of events) {
     const last = frames.at(-1);
 
-    if (last?.transactions[0] === event.txn) {
+    if (last && last.transactions[0] === event.txn) {
       last.id = event.sequence;
       last.sequences.push(event.sequence);
     } else {
@@ -373,17 +395,22 @@ function expectedFrames(events: Awaited<ReturnType<ReturnType<typeof openRunStor
 
 async function externalRun(
   home: string,
-  run: Parameters<ReturnType<typeof openRunStore>["createRun"]>[0],
+  run: Parameters<Awaited<ReturnType<typeof fixtureStore>>["createRun"]>[0],
 ) {
   const child = Bun.spawn(
     [
       process.execPath,
       "-e",
-      `import { openRunStore } from ${JSON.stringify(resolve(import.meta.dir, "../src/local/index.ts"))}; const store = openRunStore(process.argv[1]); await store.createRun(JSON.parse(process.argv[2])); store.close();`,
+      `import { Effect } from "effect"; import { openRunStore } from ${JSON.stringify(resolve(import.meta.dir, "../src/local/index.ts"))}; await Effect.runPromise(Effect.scoped(Effect.gen(function* () { const store = yield* openRunStore(process.argv[1]); yield* store.createRun(JSON.parse(process.argv[2])); })));`,
       home,
       JSON.stringify(run),
     ],
-    { stdout: "pipe", stderr: "pipe" },
+    {
+      cwd: home,
+      env: { PATH: process.env.PATH, HOME: home, LOOPY_HOME: home },
+      stdout: "pipe",
+      stderr: "pipe",
+    },
   );
 
   expect(await child.exited).toBe(0);
@@ -405,7 +432,7 @@ function replayRun(workspace: string) {
 async function reconnectFrames(
   endpoint: string,
   headers: Record<string, string>,
-  events: Awaited<ReturnType<ReturnType<typeof openRunStore>["events"]>>,
+  events: RuntimeEvent[],
 ) {
   const cursor = events[0]!.sequence;
 
@@ -421,9 +448,15 @@ async function reconnectFrames(
 test("SSE delivers exact transactions across replay, cross-process writes and Last-Event-ID reconnect", async () => {
   const f = fixture("events", "run: () => 1");
   await save(f);
-  const store = openRunStore(f.home);
-  const daemon = localDaemon({ concurrency: 4, ...f, store, port: 0 });
-  const url = new URL(daemon.start());
+  const store = await fixtureStore(f.home);
+
+  const daemon = await Effect.runPromise(
+    localDaemon({ concurrency: 4, ...f, store, port: 0 }).pipe(
+      Effect.provideService(Scope.Scope, fixtureScope()),
+    ),
+  );
+
+  const url = new URL(await Effect.runPromise(daemon.start));
 
   const headers = {
     Authorization: `Bearer ${new URLSearchParams(url.hash.slice(1)).get("token")}`,
@@ -432,32 +465,30 @@ test("SSE delivers exact transactions across replay, cross-process writes and La
   const run = replayRun(f.cwd);
 
   try {
-    await store.createRun(run);
-    const endpoint = `${url.origin}/api/events?after=0&epoch=${await store.epoch()}`;
+    await Effect.runPromise(store.createRun(run));
+    const endpoint = `${url.origin}/api/events?after=0&epoch=${await Effect.runPromise(store.epoch())}`;
     expect((await fetch(`${url.origin}/api/events?after=0&epoch=wrong`, { headers })).status).toBe(
       410,
     );
     const response = await fetch(endpoint, { headers });
     expect(response.headers.get("content-type")).toBe("text/event-stream");
     const capture = captureFrames(fragment(response.body!));
-
     await externalRun(f.home, { ...run, id: "external" });
-    await store.claim(run.id, "owner");
-    const events = await store.events(0, 100);
+    await Effect.runPromise(store.claim(run.id, "owner"));
+    const events = await Effect.runPromise(store.events(0, 100));
     expect(await capture.finish()).toEqual(expectedFrames(events));
     await reconnectFrames(endpoint, headers, events);
-    await store.pruneEvents("2100-01-01T00:00:00.000Z");
-    await store.createRun({ ...run, id: "retained" });
+    await Effect.runPromise(store.pruneEvents("2100-01-01T00:00:00.000Z"));
+    await Effect.runPromise(store.createRun({ ...run, id: "retained" }));
     expect((await fetch(endpoint, { headers })).status).toBe(410);
   } finally {
-    await daemon.stop();
-    store.close();
+    await Effect.runPromise(daemon.stop);
+    await Effect.runPromise(store.close());
   }
 });
 
 test("SSE disconnect removes the subscriber and stops polling", async () => {
   const { store, service } = await serviceFixture("disconnect");
-
   let active = 0;
   const original = store.subscribe.bind(store);
 
@@ -473,11 +504,13 @@ test("SSE disconnect removes the subscriber and stops polling", async () => {
 
   const version = spyOn(store, "dataVersion");
 
-  const response = await eventStream(
-    store,
-    service,
-    { after: 0, epoch: await store.epoch() },
-    new AbortController().signal,
+  const response = await Effect.runPromise(
+    eventStream(
+      store,
+      service,
+      { after: 0, epoch: await Effect.runPromise(store.epoch()) },
+      new AbortController().signal,
+    ),
   );
 
   const unsubscribe = subscribe.mock.results[0]?.value;
@@ -487,7 +520,7 @@ test("SSE disconnect removes the subscriber and stops polling", async () => {
   const calls = version.mock.calls.length;
   await Bun.sleep(220);
   expect(version.mock.calls.length).toBe(calls);
-  store.close();
+  await Effect.runPromise(store.close());
   subscribe.mockRestore();
   version.mockRestore();
 });
@@ -495,32 +528,40 @@ test("SSE disconnect removes the subscriber and stops polling", async () => {
 test("response validation rejects a view with extra fields", async () => {
   const { f, store, service } = await serviceFixture("leak");
 
-  const leaking = (await service.listLoopies()).map((loopy) => ({
+  const leaking = (await Effect.runPromise(service.listLoopies())).map((loopy) => ({
     ...loopy,
     secrets: ["private"],
   }));
 
-  const list = spyOn(service, "listLoopies").mockResolvedValue(leaking);
+  const list = spyOn(service, "listLoopies").mockReturnValue(Effect.succeed(leaking));
   const request = new Request("http://127.0.0.1/api/loopies");
 
   try {
-    await expect(
-      dispatch(
-        apiRoutes({ service, store, cwd: f.cwd, daemon: daemonMetadata }),
-        request,
-        new URL(request.url),
-      ),
-    ).rejects.toThrow("unrecognized_keys");
+    const causes: unknown[] = [];
+
+    const response = await dispatch(
+      apiRoutes({
+        service,
+        store,
+        cwd: f.cwd,
+        daemon: daemonMetadata,
+        onError: (cause) => causes.push(cause),
+      }),
+      request,
+      new URL(request.url),
+    );
+
+    expect(response.status).toBe(500);
+    expect(causes).toHaveLength(1);
   } finally {
     list.mockRestore();
-    store.close();
+    await Effect.runPromise(store.close());
   }
 });
 
 test("service error codes serialize with their HTTP status", async () => {
   const { f, store, service } = await serviceFixture("errors");
-
-  const request = new Request("http://127.0.0.1/api/runs");
+  const request = new Request("http://127.0.0.1/api/runs/run");
 
   const cases: [ErrorCode, number][] = [
     ["not_found", 404],
@@ -537,11 +578,11 @@ test("service error codes serialize with their HTTP status", async () => {
     ["invalid_timezone", 400],
   ];
 
-  const list = spyOn(service, "listRuns");
+  const list = spyOn(service, "runSnapshot");
 
   try {
     for (const [code, status] of cases) {
-      list.mockRejectedValue(new ServiceError(code));
+      list.mockReturnValue(Effect.fail(new ServiceError(code)));
 
       const response = await dispatch(
         apiRoutes({ service, store, cwd: f.cwd, daemon: daemonMetadata }),
@@ -550,15 +591,15 @@ test("service error codes serialize with their HTTP status", async () => {
       );
 
       expect(response.status).toBe(status);
-      expect(errorBodySchema.parse(await response.json()).error.code).toBe(code);
+      expect(decodeBoundary(errorBodySchema)(await response.json()).error.code).toBe(code);
     }
   } finally {
     list.mockRestore();
-    store.close();
+    await Effect.runPromise(store.close());
   }
 });
 
-async function recoveryRun(store: ReturnType<typeof openRunStore>, workspace: string) {
+async function recoveryRun(store: Awaited<ReturnType<typeof fixtureStore>>, workspace: string) {
   const run = {
     id: "batch",
     slug: "batch",
@@ -571,23 +612,24 @@ async function recoveryRun(store: ReturnType<typeof openRunStore>, workspace: st
     owner: { token: "old", host: "another-host", pid: 1, heartbeatAt: new Date(0).toISOString() },
   } as const;
 
-  await store.createRun(run);
-
-  await store.apply({
-    runId: run.id,
-    token: "old",
-    effects: [...Array(505).keys()].map((seq) => ({
-      kind: "write_node_run",
-      nodeRun: {
-        key: { runId: run.id, nodeId: nodeIdSchema.parse(`node-${seq}`), scope: [] },
-        status: "running",
-        attempt: 1,
-        maxAttempts: 1,
-        startedAt: run.createdAt,
-        receipt: "none",
-      },
-    })),
-  });
+  await Effect.runPromise(store.createRun(run));
+  await Effect.runPromise(
+    store.apply({
+      runId: run.id,
+      token: "old",
+      effects: [...Array(505).keys()].map((seq) => ({
+        kind: "write_node_run",
+        nodeRun: {
+          key: { runId: run.id, nodeId: decodeBoundary(nodeIdSchema)(`node-${seq}`), scope: [] },
+          status: "running",
+          attempt: 1,
+          maxAttempts: 1,
+          startedAt: run.createdAt,
+          receipt: "none",
+        },
+      })),
+    }),
+  );
 
   return run;
 }
@@ -599,20 +641,22 @@ test("SSE keeps a node transaction whole across the replay batch limit", async (
     await recoveryRun(store, f.cwd);
     const cursor = 1;
 
-    const response = await eventStream(
-      store,
-      service,
-      { after: cursor, epoch: await store.epoch() },
-      new AbortController().signal,
+    const response = await Effect.runPromise(
+      eventStream(
+        store,
+        service,
+        { after: cursor, epoch: await Effect.runPromise(store.epoch()) },
+        new AbortController().signal,
+      ),
     );
 
     const frames = await captureFrames(response.body!).finish();
-    const events = await store.events(cursor, 1000);
+    const events = await Effect.runPromise(store.events(cursor, 1000));
     expect(events).toHaveLength(505);
     expect(frames).toEqual(expectedFrames(events));
     expect(frames).toHaveLength(1);
   } finally {
-    store.close();
+    await Effect.runPromise(store.close());
   }
 });
 
@@ -621,7 +665,12 @@ test("daemon run stdout never contains its bearer token", async () => {
 
   const child = Bun.spawn(
     [process.execPath, CLI, "--home", f.home, "daemon", "run", "--port", "0"],
-    { cwd: f.cwd, stdout: "pipe", stderr: "pipe" },
+    {
+      cwd: f.cwd,
+      env: { PATH: process.env.PATH, HOME: f.cwd, LOOPY_HOME: f.home },
+      stdout: "pipe",
+      stderr: "pipe",
+    },
   );
 
   try {
@@ -648,31 +697,42 @@ test("run paging includes every run sharing a timestamp", async () => {
 
   try {
     for (const id of ["a", "b"]) {
-      await store.createRun({
-        id,
-        slug: "paging",
-        workspace: f.cwd,
-        revision: "a".repeat(64),
-        input: {},
-        status: "queued",
-        createdAt: "2026-10-17T00:00:00.000Z",
-        updatedAt: "2026-10-17T00:00:00.000Z",
-      });
+      await Effect.runPromise(
+        store.createRun({
+          id,
+          slug: "paging",
+          workspace: f.cwd,
+          revision: "a".repeat(64),
+          input: {},
+          status: "queued",
+          createdAt: "2026-10-17T00:00:00.000Z",
+          updatedAt: "2026-10-17T00:00:00.000Z",
+        }),
+      );
     }
 
-    const first = await service.listRuns(routes.runs.query.parse({ limit: 1 }));
+    const first = await Effect.runPromise(
+      service.listRuns(decodeBoundary(routes.runs.query)({ limit: 1 })),
+    );
+
     expect(first.map((run) => run.id)).toEqual(["b"]);
 
-    const second = await service.listRuns(
-      routes.runs.query.parse({ limit: 1, before: encodeRunCursor(first[0]!) }),
+    const second = await Effect.runPromise(
+      service.listRuns(
+        decodeBoundary(routes.runs.query)({ limit: 1, before: encodeRunCursor(first[0]!) }),
+      ),
     );
 
     expect(second.map((run) => run.id)).toEqual(["a"]);
     expect(
-      await service.listRuns(routes.runs.query.parse({ before: encodeRunCursor(second[0]!) })),
+      await Effect.runPromise(
+        service.listRuns(
+          decodeBoundary(routes.runs.query)({ before: encodeRunCursor(second[0]!) }),
+        ),
+      ),
     ).toEqual([]);
   } finally {
-    store.close();
+    await Effect.runPromise(store.close());
   }
 });
 
@@ -685,11 +745,17 @@ async function httpEvents(name: string) {
     owner: { token: "owner", host: "fixture", pid: 1, heartbeatAt: new Date().toISOString() },
   };
 
-  await store.createRun(run);
-  const daemon = localDaemon({ concurrency: 4, ...f, store, port: 0 });
-  const url = new URL(daemon.start());
+  await Effect.runPromise(store.createRun(run));
+
+  const daemon = await Effect.runPromise(
+    localDaemon({ concurrency: 4, ...f, store, port: 0 }).pipe(
+      Effect.provideService(Scope.Scope, fixtureScope()),
+    ),
+  );
+
+  const url = new URL(await Effect.runPromise(daemon.start));
   const headers = { Authorization: `Bearer ${readDaemonFile(f.home)!.token}` };
-  const endpoint = `${url.origin}/api/events?after=0&epoch=${await store.epoch()}`;
+  const endpoint = `${url.origin}/api/events?after=0&epoch=${await Effect.runPromise(store.epoch())}`;
 
   return {
     store,
@@ -697,32 +763,38 @@ async function httpEvents(name: string) {
     headers,
     endpoint,
     async write(id: number, rows: number) {
-      const after = (await store.eventCursor()).cursor;
+      const after = (await Effect.runPromise(store.eventCursor())).cursor;
       // Each output survives the 16 KiB preview cap. Rows share one durable transaction.
-      const output = "x".repeat(16_000);
-      await store.apply({
-        runId: run.id,
-        token: "owner",
-        effects: [...Array(rows).keys()].map((index) => ({
-          kind: "write_node_run" as const,
-          nodeRun: {
-            key: {
-              runId: run.id,
-              nodeId: nodeIdSchema.parse(`txn-${id}-node-${index}`),
-              scope: [],
+      const output = "x".repeat(16000);
+      await Effect.runPromise(
+        store.apply({
+          runId: run.id,
+          token: "owner",
+          effects: [...Array(rows).keys()].map((index) => ({
+            kind: "write_node_run" as const,
+            nodeRun: {
+              key: {
+                runId: run.id,
+                nodeId: decodeBoundary(nodeIdSchema)(`txn-${id}-node-${index}`),
+                scope: [],
+              },
+              status: "succeeded" as const,
+              attempt: 1,
+              maxAttempts: 1,
+              startedAt: run.createdAt,
+              endedAt: run.createdAt,
+              receipt: "finished" as const,
+              output,
             },
-            status: "succeeded" as const,
-            attempt: 1,
-            maxAttempts: 1,
-            startedAt: run.createdAt,
-            endedAt: run.createdAt,
-            receipt: "finished" as const,
-            output,
-          },
-        })),
-      });
-      const events = await store.events(after, rows);
-      const data = serverEventSchema.array().parse(await service.events(events));
+          })),
+        }),
+      );
+      const events = await Effect.runPromise(store.events(after, rows));
+
+      const data = decodeBoundary(Schema.Array(serverEventSchema))(
+        await Effect.runPromise(service.events(events)),
+      );
+
       expect(data).toHaveLength(rows);
       expect(
         data.every(
@@ -739,8 +811,8 @@ async function httpEvents(name: string) {
     connect: (id: number) =>
       fetch(endpoint, { headers: { ...headers, "Last-Event-ID": String(id) } }),
     async close() {
-      await daemon.stop();
-      store.close();
+      await Effect.runPromise(daemon.stop);
+      await Effect.runPromise(store.close());
     },
   };
 }
@@ -758,18 +830,20 @@ test("SSE HTTP replay drains 45 large transactions from Last-Event-ID 1 in order
 
   try {
     for (let id = 2; id <= 46; id++) {
-      expect(await http.write(id, 4)).toBeGreaterThan(64_000);
+      expect(await http.write(id, 4)).toBeGreaterThan(64000);
     }
 
     const response = await http.connect(1);
     expect(response.status).toBe(200);
     const capture = captureFrames(response.body!);
     await waitForFrames(capture, 45);
-    expect(await capture.finish()).toEqual(expectedFrames(await http.store.events(1, 1000)));
+    expect(await capture.finish()).toEqual(
+      expectedFrames(await Effect.runPromise(http.store.events(1, 1000))),
+    );
   } finally {
     await http.close();
   }
-}, 15_000);
+}, 15000);
 
 test("SSE HTTP replays a transaction over 1 MiB and live-delivers another whole frame", async () => {
   const http = await httpEvents("oversized-replay");
@@ -781,11 +855,13 @@ test("SSE HTTP replays a transaction over 1 MiB and live-delivers another whole 
     await waitForFrames(capture, 1);
     expect(await http.write(3, 80)).toBeGreaterThan(1024 * 1024);
     await waitForFrames(capture, 2);
-    expect(await capture.finish()).toEqual(expectedFrames(await http.store.events(1, 1000)));
+    expect(await capture.finish()).toEqual(
+      expectedFrames(await Effect.runPromise(http.store.events(1, 1000))),
+    );
   } finally {
     await http.close();
   }
-}, 15_000);
+}, 15000);
 
 async function unreadHttp(http: Awaited<ReturnType<typeof httpEvents>>) {
   const response = await new Promise<IncomingMessage>((resolve, reject) => {
@@ -850,7 +926,6 @@ async function stalledHttpReader(name: string) {
     const response = await http.connect(1);
     const capture = captureFrames(response.body!);
     await Bun.sleep(50);
-
     let bytes = 0;
 
     // Exceed macOS loopback buffer autotuning while keeping every output below the preview cap.
@@ -861,7 +936,7 @@ async function stalledHttpReader(name: string) {
     expect(bytes).toBeGreaterThan(64 * 1024 * 1024);
 
     const expected = expectedFrames(
-      await http.store.events(1, PRESSURE_TRANSACTIONS * PRESSURE_ROWS),
+      await Effect.runPromise(http.store.events(1, PRESSURE_TRANSACTIONS * PRESSURE_ROWS)),
     );
 
     expect(expected).toHaveLength(PRESSURE_TRANSACTIONS);
@@ -884,7 +959,7 @@ async function stalledHttpReader(name: string) {
 test("SSE HTTP closes a client that never reads while a concurrent reader gets every transaction", async () => {
   const { http } = await stalledHttpReader("unread-http");
   await http.close();
-}, 20_000);
+}, 20000);
 
 test("SSE HTTP reconnect from a closed client's last id has no gap", async () => {
   const { http, lastId } = await stalledHttpReader("unread-reconnect");
@@ -894,7 +969,7 @@ test("SSE HTTP reconnect from a closed client's last id has no gap", async () =>
     const capture = captureFrames(response.body!);
 
     const expected = expectedFrames(
-      await http.store.events(lastId, PRESSURE_TRANSACTIONS * PRESSURE_ROWS),
+      await Effect.runPromise(http.store.events(lastId, PRESSURE_TRANSACTIONS * PRESSURE_ROWS)),
     );
 
     expect(expected.length).toBeGreaterThan(0);
@@ -903,24 +978,29 @@ test("SSE HTTP reconnect from a closed client's last id has no gap", async () =>
   } finally {
     await http.close();
   }
-}, 20_000);
+}, 20000);
 
 test("local server leaves event pruning to the runtime daemon", async () => {
   const { f, store } = await serviceFixture("retention-owner");
   const prune = spyOn(store, "pruneEvents");
-  const daemon = localDaemon({ concurrency: 4, ...f, store, port: 0 });
+
+  const daemon = await Effect.runPromise(
+    localDaemon({ concurrency: 4, ...f, store, port: 0 }).pipe(
+      Effect.provideService(Scope.Scope, fixtureScope()),
+    ),
+  );
 
   try {
-    daemon.start();
+    await Effect.runPromise(daemon.start);
     expect(prune).not.toHaveBeenCalled();
-    await daemon.tick();
+    await Effect.runPromise(daemon.tick);
     expect(prune).toHaveBeenCalledTimes(1);
-    await daemon.tick();
+    await Effect.runPromise(daemon.tick);
     expect(prune).toHaveBeenCalledTimes(1);
   } finally {
-    await daemon.stop();
+    await Effect.runPromise(daemon.stop);
     prune.mockRestore();
-    store.close();
+    await Effect.runPromise(store.close());
   }
 });
 
@@ -949,14 +1029,17 @@ test("schedule routes round trip validated views and report status codes", async
     expect(await (await request("/schedules")).json()).toEqual([]);
     const response = await request(path, "PUT", { cron: "* * * * *" });
     expect(response.status).toBe(200);
-    const saved = scheduleViewSchema.parse(await response.json());
+    const saved = decodeBoundary(scheduleViewSchema)(await response.json());
     expect(saved).toMatchObject({ slug: "schedule-api", enabled: true, lastFireKey: null });
     expect(await (await request("/schedules")).json()).toEqual([saved]);
     expect(
       await (await request(`${path}/enabled`, "POST", { enabled: false })).json(),
     ).toMatchObject({ enabled: false });
 
-    const invalidBodies: { body: Json; code: ErrorCode }[] = [
+    const invalidBodies: {
+      body: Json;
+      code: ErrorCode;
+    }[] = [
       { body: { cron: "invalid" }, code: "invalid_cron" },
       { body: { cron: "* * * * *", tz: "Bad/Zone" }, code: "invalid_timezone" },
       { body: {}, code: "invalid_schedule" },
@@ -965,17 +1048,17 @@ test("schedule routes round trip validated views and report status codes", async
     for (const { body, code } of invalidBodies) {
       const invalid = await request(path, "PUT", body);
       expect(invalid.status).toBe(400);
-      expect(errorBodySchema.parse(await invalid.json()).error.code).toBe(code);
+      expect(decodeBoundary(errorBodySchema)(await invalid.json()).error.code).toBe(code);
     }
 
     const malformed = await request(path, "PUT", { enabled: "no" });
     expect(malformed.status).toBe(400);
-    expect(errorBodySchema.parse(await malformed.json()).error.code).toBe("bad_request");
+    expect(decodeBoundary(errorBodySchema)(await malformed.json()).error.code).toBe("bad_request");
     expect((await request("/loopies/missing/schedule", "PUT", {})).status).toBe(404);
     expect(await (await request(path, "DELETE")).json()).toEqual({ deleted: true });
     expect((await request(`${path}/enabled`, "POST", { enabled: true })).status).toBe(404);
   } finally {
-    store.close();
+    await Effect.runPromise(store.close());
   }
 });
 
@@ -983,11 +1066,13 @@ test("schedule PUT publishes a saved SSE frame", async () => {
   const { store, service, request } = await scheduleApi();
   const controller = new AbortController();
 
-  const stream = await eventStream(
-    store,
-    service,
-    { after: 0, epoch: await store.epoch() },
-    controller.signal,
+  const stream = await Effect.runPromise(
+    eventStream(
+      store,
+      service,
+      { after: 0, epoch: await Effect.runPromise(store.epoch()) },
+      controller.signal,
+    ),
   );
 
   const reader = stream.body!.getReader();
@@ -1000,19 +1085,21 @@ test("schedule PUT publishes a saved SSE frame", async () => {
     const frame = new TextDecoder().decode((await reader.read()).value);
     const data = frame.split("\n").find((line) => line.startsWith("data: "));
     expect(data).toBeDefined();
-    expect(serverEventSchema.array().parse(JSON.parse(data!.slice(6)))).toMatchObject([
+    expect(
+      decodeBoundary(Schema.Array(serverEventSchema))(JSON.parse(data!.slice(6))),
+    ).toMatchObject([
       { entity: "schedule", kind: "saved", record: { slug: "schedule-api", cron: "* * * * *" } },
     ]);
   } finally {
     controller.abort();
     await reader.cancel();
-    store.close();
+    await Effect.runPromise(store.close());
   }
 });
 
 test("cursor endpoint bootstraps an empty dashboard and follows new events", async () => {
   const f = fixture("cursor", "run: () => 1");
-  const server = startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
+  const server = await startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
   const token = new URLSearchParams(url.hash.slice(1)).get("token");
@@ -1020,18 +1107,18 @@ test("cursor endpoint bootstraps an empty dashboard and follows new events", asy
   const request = () => fetch(`${url.origin}/api/cursor`, { headers });
   const response = await request();
   expect(response.status).toBe(200);
-  const initial = cursorViewSchema.parse(await response.json());
+  const initial = decodeBoundary(cursorViewSchema)(await response.json());
   expect(initial.cursor).toBe(0);
   expect(initial.epoch).toBeString();
-  const store = openRunStore(f.home);
+  const store = await fixtureStore(f.home);
 
   try {
-    await store.createRun(newRun());
-    const current = cursorViewSchema.parse(await (await request()).json());
+    await Effect.runPromise(store.createRun(newRun()));
+    const current = decodeBoundary(cursorViewSchema)(await (await request()).json());
     expect(current).toEqual({ cursor: 1, epoch: initial.epoch });
-    expect(current).toEqual(await store.eventCursor());
+    expect(current).toEqual(await Effect.runPromise(store.eventCursor()));
   } finally {
-    store.close();
+    await Effect.runPromise(store.close());
   }
 });
 
@@ -1057,7 +1144,7 @@ test("compiled save route verifies artifacts, stores private bundles and returns
     join(f.cwd, "answer.ts"),
     'throw new Error("Must not execute while saving."); export default () => 42;',
   );
-  const result = await compile(source);
+  const result = await Effect.runPromise(compile(source));
 
   if (!result.ok) {
     throw new Error(JSON.stringify(result.diagnostics));
@@ -1102,8 +1189,8 @@ test("compiled save route verifies artifacts, stores private bundles and returns
   expect(response.status).toBe(200);
   const serialized = JSON.stringify(await response.json());
   expect(serialized).not.toMatch(/"(?:bytes|bundleHash|source|revision)":/);
-  const registry = new Registry(f.home, f.cwd);
-  const saved = registry.get("compiled-save");
+  const registry = await Effect.runPromise(Registry.make(f.home, f.cwd));
+  const saved = await Effect.runPromise(registry.get("compiled-save"));
 
   const paths = [
     join(registry.projectDirectory, "compiled-save.json"),
@@ -1113,7 +1200,7 @@ test("compiled save route verifies artifacts, stores private bundles and returns
 
   const before = artifactState(paths);
   expect((await put(body)).status).toBe(200);
-  expect(registry.get("compiled-save")).toEqual(saved);
+  expect(await Effect.runPromise(registry.get("compiled-save"))).toEqual(saved);
   expect(artifactState(paths)).toEqual(before);
   expect(
     (
@@ -1146,7 +1233,7 @@ test("compiled save route verifies artifacts, stores private bundles and returns
   const globalBefore = artifactState(globalPaths);
   expect((await put(globalBody)).status).toBe(200);
   expect(artifactState(globalPaths)).toEqual(globalBefore);
-  expect(registry.get("compiled-save")).toEqual(saved);
+  expect(await Effect.runPromise(registry.get("compiled-save"))).toEqual(saved);
   expect(saved.revision).toBe(result.revision);
   expect(saved.bundles).toEqual(
     result.bundles.map(({ nodeId, bundleHash }) => ({ nodeId, bundleHash })),
@@ -1169,27 +1256,29 @@ test("saving another revision retains the earlier graph and executable artifacts
     source,
     `import {loopy,code} from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/graph/index.ts"))}; export default loopy("revisions", {input:{},run:()=>code("value",{in:{},out:{kind:"value",type:"number"},module:"./value.ts"})});`,
   );
-  const registry = new Registry(f.home, f.cwd);
+  const registry = await Effect.runPromise(Registry.make(f.home, f.cwd));
   const revisions: string[] = [];
 
   for (const value of [1, 2]) {
     await Bun.write(join(f.cwd, "value.ts"), `export default ()=>${value};`);
-    const compiled = await compile(source);
+    const compiled = await Effect.runPromise(compile(source));
 
     if (!compiled.ok) {
       throw new Error(JSON.stringify(compiled.diagnostics));
     }
 
-    await service.putLoopy("revisions", {
-      ...(await compiledBody("revisions", source)),
-      replace: true,
-      graph: compiled.graph,
-      revision: compiled.revision,
-      bundles: compiled.bundles.map((bundle) => ({
-        ...bundle,
-        bytes: Buffer.from(bundle.bytes).toString("base64"),
-      })),
-    });
+    await Effect.runPromise(
+      service.putLoopy("revisions", {
+        ...(await compiledBody("revisions", source)),
+        replace: true,
+        graph: compiled.graph,
+        revision: compiled.revision,
+        bundles: compiled.bundles.map((bundle) => ({
+          ...bundle,
+          bytes: Buffer.from(bundle.bytes).toString("base64"),
+        })),
+      }),
+    );
     revisions.push(compiled.revision);
   }
 
@@ -1201,5 +1290,5 @@ test("saving another revision retains the earlier graph and executable artifacts
     expect(statSync(registry.graphPath(revision)).mode & 0o777).toBe(0o600);
   }
 
-  expect(revisions.at(-1)).toBe(registry.get("revisions").revision);
+  expect(revisions.at(-1)).toBe((await Effect.runPromise(registry.get("revisions"))).revision);
 });

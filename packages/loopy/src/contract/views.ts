@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { Schema } from "effect";
 import {
   EXECUTION_MODES,
   FIELD_TYPES,
@@ -9,6 +9,8 @@ import {
   SCHEDULE_EVENT_KINDS,
   STEP_STATUSES,
 } from "../core/index.js";
+import { struct } from "./codec.js";
+
 import { scopeCountsSchema } from "./dashboard.js";
 import { nodeRunViewSchema } from "./graph.js";
 import { jsonSchema } from "./json.js";
@@ -20,158 +22,179 @@ import {
   stepRecordSchema,
 } from "./records.js";
 
-const runBaseSchema = z.strictObject({
-  id: z.string(),
-  slug: z.string(),
-  workspace: z.string(),
-  loopy: z.strictObject({ slug: z.string(), description: z.string().nullable() }),
+const runBaseSchema = struct({
+  id: Schema.String,
+  slug: Schema.String,
+  workspace: Schema.String,
+  loopy: struct({ slug: Schema.String, description: Schema.NullOr(Schema.String) }),
   input: jsonSchema,
-  truncatedFields: z
-    .strictObject({
-      input: z.number().int().nonnegative().optional(),
-      output: z.number().int().nonnegative().optional(),
-    })
-    .optional(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-  owner: z
-    .strictObject({
-      pid: z.number().int().nonnegative().nullable(),
-      host: z.string(),
-      heartbeatAt: z.string(),
-    })
-    .nullable(),
-  ownerStale: z.boolean(),
-  waitingOn: z
-    .strictObject({
-      hook: z.string(),
-      token: z.string(),
-      seq: z.number().int().nonnegative(),
-      expiresAt: z.string().nullable(),
-      since: z.string(),
-    })
-    .nullable(),
+  truncatedFields: Schema.optional(
+    struct({
+      input: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+      output: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+    }),
+  ),
+  createdAt: Schema.String,
+  updatedAt: Schema.String,
+  owner: Schema.NullOr(
+    struct({
+      pid: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+      host: Schema.String,
+      heartbeatAt: Schema.String,
+    }),
+  ),
+  ownerStale: Schema.Boolean,
+  waitingOn: Schema.NullOr(
+    struct({
+      hook: Schema.String,
+      token: Schema.String,
+      seq: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+      expiresAt: Schema.NullOr(Schema.String),
+      since: Schema.String,
+    }),
+  ),
 });
 
-export const runViewSchema = z.discriminatedUnion("status", [
-  runBaseSchema.extend({ status: z.literal("queued") }),
-  runBaseSchema.extend({ status: z.literal("running") }),
-  runBaseSchema.extend({ status: z.literal("cancelled") }),
-  runBaseSchema.extend({ status: z.literal("succeeded"), output: jsonSchema }),
-  runBaseSchema.extend({ status: z.literal("failed"), error: z.string() }),
-  runBaseSchema.extend({ status: z.literal("suspended"), wakeAt: z.string().nullable() }),
+export const runViewSchema = Schema.Union([
+  struct({ ...runBaseSchema.fields, status: Schema.Literal("queued") }),
+  struct({ ...runBaseSchema.fields, status: Schema.Literal("running") }),
+  struct({ ...runBaseSchema.fields, status: Schema.Literal("cancelled") }),
+  struct({ ...runBaseSchema.fields, status: Schema.Literal("succeeded"), output: jsonSchema }),
+  struct({ ...runBaseSchema.fields, status: Schema.Literal("failed"), error: Schema.String }),
+  struct({
+    ...runBaseSchema.fields,
+    status: Schema.Literal("suspended"),
+    wakeAt: Schema.NullOr(Schema.String),
+  }),
 ]);
 
-export type RunView = z.infer<typeof runViewSchema>;
+export type RunView = Schema.Schema.Type<typeof runViewSchema>;
 
-export const scheduleViewSchema = scheduleSchema.extend({
-  lastFireKey: z.string().nullable(),
+export const scheduleViewSchema = struct({
+  ...scheduleSchema.fields,
+  lastFireKey: Schema.NullOr(Schema.String),
 });
 
-export type ScheduleView = z.infer<typeof scheduleViewSchema>;
+export type ScheduleView = Schema.Schema.Type<typeof scheduleViewSchema>;
 
-export const loopyViewSchema = z.strictObject({
-  slug: z.string(),
+export const loopyViewSchema = struct({
+  slug: Schema.String,
   /** The project root whose registry resolved this entry. Graph and start requests send it back. */
-  workspace: z.string(),
-  description: z.string().nullable(),
-  scope: z.enum(LOOPY_SCOPES),
-  mode: z.enum(EXECUTION_MODES),
-  input: z.union([z.record(z.string(), z.enum(FIELD_TYPES)), z.literal("schema")]),
-  schedule: z
-    .strictObject({
-      cron: z.string(),
-      tz: z.string(),
-      enabled: z.boolean(),
-      nextFireAt: z.string().nullable(),
-    })
-    .nullable(),
-  lastRun: runViewSchema.nullable(),
-  counts: z.record(runStatusSchema, z.number().int().nonnegative()),
-  latestRuns: z.array(runViewSchema).max(10).optional(),
+
+  workspace: Schema.String,
+  description: Schema.NullOr(Schema.String),
+  scope: Schema.Literals(LOOPY_SCOPES),
+  mode: Schema.Literals(EXECUTION_MODES),
+  input: Schema.Union([
+    Schema.Record(Schema.String, Schema.mutableKey(Schema.Literals(FIELD_TYPES))),
+    Schema.Literal("schema"),
+  ]),
+  schedule: Schema.NullOr(
+    struct({
+      cron: Schema.String,
+      tz: Schema.String,
+      enabled: Schema.Boolean,
+      nextFireAt: Schema.NullOr(Schema.String),
+    }),
+  ),
+  lastRun: Schema.NullOr(runViewSchema),
+  counts: Schema.Record(
+    runStatusSchema,
+    Schema.mutableKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+  ),
+  latestRuns: Schema.optional(
+    Schema.Array(runViewSchema).pipe(Schema.mutable).check(Schema.isMaxLength(10)),
+  ),
 });
 
-export type LoopyView = z.infer<typeof loopyViewSchema>;
+export type LoopyView = Schema.Schema.Type<typeof loopyViewSchema>;
 
-export const runSnapshotViewSchema = z.strictObject({
+export const runSnapshotViewSchema = struct({
   run: runViewSchema,
-  nodeRuns: z.array(nodeRunViewSchema),
-  scopes: z.array(scopeCountsSchema).optional(),
-  nodeRunsNext: z.string().nullable().optional(),
-  truncatedOutputs: z.record(z.string(), z.number()).optional(),
-  hooksTruncated: z.boolean().optional(),
-  steps: z.array(stepRecordSchema),
-  logs: z.array(logRecordSchema),
-  hooks: z.array(hookRecordSchema),
-  cursor: z.number().int().nonnegative(),
-  epoch: z.string(),
+  nodeRuns: Schema.Array(nodeRunViewSchema).pipe(Schema.mutable),
+  scopes: Schema.optional(Schema.Array(scopeCountsSchema).pipe(Schema.mutable)),
+  nodeRunsNext: Schema.optional(Schema.NullOr(Schema.String)),
+  truncatedOutputs: Schema.optional(Schema.Record(Schema.String, Schema.mutableKey(Schema.Finite))),
+  hooksTruncated: Schema.optional(Schema.Boolean),
+  steps: Schema.Array(stepRecordSchema).pipe(Schema.mutable),
+  logs: Schema.Array(logRecordSchema).pipe(Schema.mutable),
+  hooks: Schema.Array(hookRecordSchema).pipe(Schema.mutable),
+  cursor: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  epoch: Schema.String,
 });
 
-export type RunSnapshotView = z.infer<typeof runSnapshotViewSchema>;
+export type RunSnapshotView = Schema.Schema.Type<typeof runSnapshotViewSchema>;
 
-export const daemonViewSchema = z.strictObject({
-  pid: z.number().int().nonnegative().nullable(),
-  startedAt: z.string(),
-  concurrency: z.number().int().positive(),
-  running: z.number().int().nonnegative(),
-  nextWakeAt: z.string().nullable(),
+export const daemonViewSchema = struct({
+  pid: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+  startedAt: Schema.String,
+  concurrency: Schema.Int.check(Schema.isGreaterThan(0)),
+  running: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  nextWakeAt: Schema.NullOr(Schema.String),
 });
 
-export type DaemonView = z.infer<typeof daemonViewSchema>;
+export type DaemonView = Schema.Schema.Type<typeof daemonViewSchema>;
 
-const eventBaseSchema = z.strictObject({
-  truncatedOutputBytes: z.number().int().nonnegative().optional(),
-  sequence: z.number().int().nonnegative(),
-  at: z.string(),
-  txn: z.string(),
-  runId: z.string().nullable(),
+const eventBaseSchema = struct({
+  truncatedOutputBytes: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+  sequence: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  at: Schema.String,
+  txn: Schema.String,
+  runId: Schema.NullOr(Schema.String),
 });
 
-export const serverEventSchema = z.discriminatedUnion("entity", [
-  eventBaseSchema.extend({
-    entity: z.literal("run"),
-    kind: z.enum(RUN_EVENT_KINDS),
+export const serverEventSchema = Schema.Union([
+  struct({
+    ...eventBaseSchema.fields,
+    entity: Schema.Literal("run"),
+    kind: Schema.Literals(RUN_EVENT_KINDS),
     record: runViewSchema,
   }),
-  eventBaseSchema.extend({
-    entity: z.literal("node"),
-    kind: z.enum(NODE_RUN_STATUSES),
+  struct({
+    ...eventBaseSchema.fields,
+    entity: Schema.Literal("node"),
+    kind: Schema.Literals(NODE_RUN_STATUSES),
     record: nodeRunViewSchema,
   }),
-  eventBaseSchema.extend({
-    entity: z.literal("step"),
-    kind: z.enum(STEP_STATUSES),
+  struct({
+    ...eventBaseSchema.fields,
+    entity: Schema.Literal("step"),
+    kind: Schema.Literals(STEP_STATUSES),
     record: stepRecordSchema,
   }),
-  eventBaseSchema.extend({
-    entity: z.literal("log"),
-    kind: z.literal("written"),
+  struct({
+    ...eventBaseSchema.fields,
+    entity: Schema.Literal("log"),
+    kind: Schema.Literal("written"),
     record: logRecordSchema,
   }),
-  eventBaseSchema.extend({
-    entity: z.literal("hook"),
-    kind: z.enum(HOOK_EVENT_KINDS),
+  struct({
+    ...eventBaseSchema.fields,
+    entity: Schema.Literal("hook"),
+    kind: Schema.Literals(HOOK_EVENT_KINDS),
     record: hookRecordSchema,
   }),
-  z.discriminatedUnion("kind", [
-    eventBaseSchema.extend({
-      entity: z.literal("schedule"),
-      kind: z.enum(SCHEDULE_EVENT_KINDS),
+  Schema.Union([
+    struct({
+      ...eventBaseSchema.fields,
+      entity: Schema.Literal("schedule"),
+      kind: Schema.Literals(SCHEDULE_EVENT_KINDS),
       record: scheduleSchema,
     }),
-    eventBaseSchema.extend({
-      entity: z.literal("schedule"),
-      kind: z.literal("deleted"),
-      record: z.strictObject({ workspace: z.string(), slug: z.string() }),
+    struct({
+      ...eventBaseSchema.fields,
+      entity: Schema.Literal("schedule"),
+      kind: Schema.Literal("deleted"),
+      record: struct({ workspace: Schema.String, slug: Schema.String }),
     }),
   ]),
 ]);
 
-export type ServerEvent = z.infer<typeof serverEventSchema>;
+export type ServerEvent = Schema.Schema.Type<typeof serverEventSchema>;
 
-export const cursorViewSchema = z.strictObject({
-  cursor: z.number().int().nonnegative(),
-  epoch: z.string(),
+export const cursorViewSchema = struct({
+  cursor: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  epoch: Schema.String,
 });
 
-export type CursorView = z.infer<typeof cursorViewSchema>;
+export type CursorView = Schema.Schema.Type<typeof cursorViewSchema>;

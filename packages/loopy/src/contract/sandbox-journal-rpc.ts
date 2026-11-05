@@ -1,4 +1,6 @@
-import { z } from "zod";
+import { Schema } from "effect";
+import { struct } from "./codec.js";
+
 import { hashSchema } from "./compiled-loopy.js";
 import { sandboxExecutionResultSchema } from "./sandbox.js";
 import {
@@ -13,83 +15,89 @@ import {
   startedAttemptRecordSchema,
 } from "./sandbox-journal.js";
 
-const rejected = z.strictObject({ kind: z.literal("rejected"), code: authorityFailureSchema });
+const rejected = struct({ kind: Schema.Literal("rejected"), code: authorityFailureSchema });
 
 const session = { session: authoritySessionSchema };
 
 export const authorityOperations = {
   status: {
-    input: z.strictObject({}),
-    output: z.strictObject({ epoch: z.number().int().nonnegative() }),
+    input: struct({}),
+    output: struct({ epoch: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)) }),
   },
   openSession: {
-    input: z.strictObject({
-      expectedEpoch: z.number().int().nonnegative(),
-      nonce: z.string().min(1).max(256),
+    input: struct({
+      expectedEpoch: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+      nonce: Schema.String.check(Schema.isMinLength(1)).check(Schema.isMaxLength(256)),
     }),
     output: authoritySessionSchema,
   },
-  read: {
-    input: z.strictObject({ id: hashSchema }),
-    output: attemptRecordSchema.nullable(),
-  },
+  read: { input: struct({ id: hashSchema }), output: Schema.NullOr(attemptRecordSchema) },
   admit: {
-    input: z.strictObject({ ...session, plan: dockerAttemptPlanSchema }),
-    output: z.discriminatedUnion("kind", [
-      z.strictObject({ kind: z.literal("created"), record: startedAttemptRecordSchema }),
-      z.strictObject({ kind: z.literal("existing"), record: attemptRecordSchema }),
+    input: struct({ ...session, plan: dockerAttemptPlanSchema }),
+    output: Schema.Union([
+      struct({ kind: Schema.Literal("created"), record: startedAttemptRecordSchema }),
+      struct({ kind: Schema.Literal("existing"), record: attemptRecordSchema }),
       rejected,
     ]),
   },
   complete: {
-    input: z.strictObject({
-      ...session,
-      id: hashSchema,
-      requestHash: hashSchema,
-      result: resultRefSchema,
-    }),
-    output: z.discriminatedUnion("kind", [
-      z.strictObject({ kind: z.literal("finished"), record: finishedAttemptRecordSchema }),
+    input: struct({ ...session, id: hashSchema, requestHash: hashSchema, result: resultRefSchema }),
+    output: Schema.Union([
+      struct({ kind: Schema.Literal("finished"), record: finishedAttemptRecordSchema }),
       rejected,
     ]),
   },
   beginExport: {
-    input: z.strictObject({ ...session, attemptId: hashSchema, token: z.string().min(1).max(256) }),
-    output: z.discriminatedUnion("kind", [
-      z.strictObject({ kind: z.literal("granted"), record: exportRecordSchema }),
+    input: struct({
+      ...session,
+      attemptId: hashSchema,
+      token: Schema.String.check(Schema.isMinLength(1)).check(Schema.isMaxLength(256)),
+    }),
+    output: Schema.Union([
+      struct({ kind: Schema.Literal("granted"), record: exportRecordSchema }),
       rejected,
     ]),
   },
   endExport: {
-    input: z.strictObject({ ...session, token: z.string().min(1).max(256) }),
-    output: z.null(),
+    input: struct({
+      ...session,
+      token: Schema.String.check(Schema.isMinLength(1)).check(Schema.isMaxLength(256)),
+    }),
+    output: Schema.Null,
   },
   exportGuards: {
-    input: z.strictObject({
-      after: z.string().max(256).nullable(),
-      limit: z.number().int().min(1).max(200),
-      volume: dockerAttemptPlanSchema.shape.volume,
+    input: struct({
+      after: Schema.NullOr(Schema.String.check(Schema.isMaxLength(256))),
+      limit: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).check(
+        Schema.isLessThanOrEqualTo(200),
+      ),
+      volume: dockerAttemptPlanSchema.fields.volume,
     }),
-    output: z.strictObject({ exports: z.array(exportRecordSchema), next: z.string().nullable() }),
+    output: struct({
+      exports: Schema.Array(exportRecordSchema).pipe(Schema.mutable),
+      next: Schema.NullOr(Schema.String),
+    }),
   },
   recoverable: {
-    input: z.strictObject({
-      after: z.string().nullable(),
-      limit: z.number().int().min(1).max(200),
+    input: struct({
+      after: Schema.NullOr(Schema.String),
+      limit: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).check(
+        Schema.isLessThanOrEqualTo(200),
+      ),
     }),
-    output: z.strictObject({
-      attempts: z.array(startedAttemptRecordSchema),
-      exports: z.array(exportRecordSchema),
-      next: z.string().nullable(),
+    output: struct({
+      attempts: Schema.Array(startedAttemptRecordSchema).pipe(Schema.mutable),
+      exports: Schema.Array(exportRecordSchema).pipe(Schema.mutable),
+      next: Schema.NullOr(Schema.String),
     }),
   },
 };
 
-export type AuthorityInput<K extends keyof typeof authorityOperations> = z.infer<
+export type AuthorityInput<K extends keyof typeof authorityOperations> = Schema.Schema.Type<
   (typeof authorityOperations)[K]["input"]
 >;
 
-export type AuthorityOutput<K extends keyof typeof authorityOperations> = z.infer<
+export type AuthorityOutput<K extends keyof typeof authorityOperations> = Schema.Schema.Type<
   (typeof authorityOperations)[K]["output"]
 >;
 
@@ -107,47 +115,44 @@ export interface SandboxAttemptAuthority {
 
 export const resultOperations = {
   resultPut: {
-    input: z.strictObject({
-      workspace: dockerAttemptPlanSchema.shape.workspace,
+    input: struct({
+      workspace: dockerAttemptPlanSchema.fields.workspace,
       value: sandboxExecutionResultSchema,
     }),
     output: resultRefSchema,
   },
   resultGet: {
-    input: z.strictObject({
-      workspace: dockerAttemptPlanSchema.shape.workspace,
-      ref: resultRefSchema,
-    }),
+    input: struct({ workspace: dockerAttemptPlanSchema.fields.workspace, ref: resultRefSchema }),
     output: sandboxExecutionResultSchema,
   },
 };
 
-export const authorityCommandSchema = z.discriminatedUnion("operation", [
-  z.strictObject({ operation: z.literal("status"), input: authorityOperations.status.input }),
-  z.strictObject({
-    operation: z.literal("openSession"),
+export const authorityCommandSchema = Schema.Union([
+  struct({ operation: Schema.Literal("status"), input: authorityOperations.status.input }),
+  struct({
+    operation: Schema.Literal("openSession"),
     input: authorityOperations.openSession.input,
   }),
-  z.strictObject({ operation: z.literal("read"), input: authorityOperations.read.input }),
-  z.strictObject({ operation: z.literal("admit"), input: authorityOperations.admit.input }),
-  z.strictObject({ operation: z.literal("complete"), input: authorityOperations.complete.input }),
-  z.strictObject({
-    operation: z.literal("beginExport"),
+  struct({ operation: Schema.Literal("read"), input: authorityOperations.read.input }),
+  struct({ operation: Schema.Literal("admit"), input: authorityOperations.admit.input }),
+  struct({ operation: Schema.Literal("complete"), input: authorityOperations.complete.input }),
+  struct({
+    operation: Schema.Literal("beginExport"),
     input: authorityOperations.beginExport.input,
   }),
-  z.strictObject({ operation: z.literal("endExport"), input: authorityOperations.endExport.input }),
-  z.strictObject({
-    operation: z.literal("exportGuards"),
+  struct({ operation: Schema.Literal("endExport"), input: authorityOperations.endExport.input }),
+  struct({
+    operation: Schema.Literal("exportGuards"),
     input: authorityOperations.exportGuards.input,
   }),
-  z.strictObject({
-    operation: z.literal("recoverable"),
+  struct({
+    operation: Schema.Literal("recoverable"),
     input: authorityOperations.recoverable.input,
   }),
-  z.strictObject({ operation: z.literal("resultPut"), input: resultOperations.resultPut.input }),
-  z.strictObject({ operation: z.literal("resultGet"), input: resultOperations.resultGet.input }),
+  struct({ operation: Schema.Literal("resultPut"), input: resultOperations.resultPut.input }),
+  struct({ operation: Schema.Literal("resultGet"), input: resultOperations.resultGet.input }),
 ]);
 
-export const authorityErrorSchema = z.strictObject({ error: authorityFailureSchema });
+export const authorityErrorSchema = struct({ error: authorityFailureSchema });
 
-export type AuthorityCommand = z.infer<typeof authorityCommandSchema>;
+export type AuthorityCommand = Schema.Schema.Type<typeof authorityCommandSchema>;

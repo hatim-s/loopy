@@ -4,7 +4,7 @@ import { readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { Miniflare } from "miniflare";
-import { routes } from "../src/contract/index.js";
+import { decodeBoundary, routes } from "../src/contract/index.js";
 import { revision } from "../src/core/index.js";
 import { loopy, sh } from "../src/sdk/graph/index.js";
 import { compiledBody } from "./compiled-fixture.js";
@@ -116,7 +116,7 @@ test("production Workspace queues runs, loopies and event history during provide
         await bounded(runtime.ready, "workerd startup", 10_000);
         const controlWarm = await api("/runs?limit=50", controlToken);
         expect(controlWarm.status).toBe(200);
-        expect(routes.runs.response.parse(controlWarm.body)).toEqual([]);
+        expect(decodeBoundary(routes.runs.response)(controlWarm.body)).toEqual([]);
 
         const body = await compiledBody("read-queue", "synthetic/read-queue.ts", {
           workspace: mode,
@@ -129,7 +129,7 @@ test("production Workspace queues runs, loopies and event history during provide
         body.revision = await revision(body.graph);
         const saved = await api("/loopies/read-queue", token, { method: "PUT", body });
         expect(saved.status).toBe(200);
-        routes.putLoopy.response.parse(saved.body);
+        decodeBoundary(routes.putLoopy.response)(saved.body);
 
         const started = await api("/loopies/read-queue/runs", token, {
           method: "POST",
@@ -137,7 +137,7 @@ test("production Workspace queues runs, loopies and event history during provide
         });
 
         expect(started.status).toBe(200);
-        const run = routes.startRun.response.parse(started.body);
+        const run = decodeBoundary(routes.startRun.response)(started.body);
         await bounded(provider.entered, "provider hold entry", 5000);
         expect(provider.releaseReason).toBeNull();
 
@@ -149,7 +149,7 @@ test("production Workspace queues runs, loopies and event history during provide
         void allReads.catch(() => undefined);
         const control = await bounded(api(paths[0], controlToken), "control read", 1500);
         expect(control.status).toBe(200);
-        expect(routes.runs.response.parse(control.body)).toEqual([]);
+        expect(decodeBoundary(routes.runs.response)(control.body)).toEqual([]);
         await delay(200);
         expect(provider.releaseReason).toBeNull();
         expect(
@@ -164,16 +164,18 @@ test("production Workspace queues runs, loopies and event history during provide
         expect(runs?.status).toBe(200);
         expect(loopies?.status).toBe(200);
         expect(history?.status).toBe(200);
-        expect(routes.runs.response.parse(runs?.body)).toMatchObject([
+        expect(decodeBoundary(routes.runs.response)(runs?.body)).toMatchObject([
           { id: run.id, status: "succeeded" },
         ]);
-        expect(routes.loopies.response.parse(loopies?.body)).toMatchObject([
+        expect(decodeBoundary(routes.loopies.response)(loopies?.body)).toMatchObject([
           { slug: "read-queue" },
         ]);
-        expect(routes.eventHistory.response.parse(history?.body).items.length).toBeGreaterThan(0);
+        expect(
+          decodeBoundary(routes.eventHistory.response)(history?.body).items.length,
+        ).toBeGreaterThan(0);
         const snapshot = await api(`/runs/${run.id}`);
         expect(snapshot.status).toBe(200);
-        expect(routes.run.response.parse(snapshot.body).run.status).toBe("succeeded");
+        expect(decodeBoundary(routes.run.response)(snapshot.body).run.status).toBe("succeeded");
         expect(provider.admissions).toHaveLength(1);
         expect(new Set(provider.admissions).size).toBe(1);
         expect(provider.lookups).toBe(1);

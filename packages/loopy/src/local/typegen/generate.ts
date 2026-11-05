@@ -1,51 +1,60 @@
 import { execFile } from "node:child_process";
 import { basename } from "node:path";
-import { promisify } from "node:util";
-import { errorMessage, isRecord, isString } from "../../core/index.js";
+import { Data, Effect } from "effect";
+import { errorMessage } from "../../core/index.js";
 import { identifier } from "./names.js";
 import { parseCliHelp } from "./parse-help.js";
 import { renderCommandSource } from "./render.js";
 
-const execFileAsync = promisify(execFile);
-
-/** Combined stdout and stderr, since many CLIs print help to stderr or exit nonzero. */
-export async function outputOf(binary: string, args: string[]): Promise<string> {
-  try {
-    const result = await execFileAsync(binary, args, {
-      encoding: "utf8",
-      timeout: 10_000,
-      maxBuffer: 1_048_576,
-    });
-
-    return `${result.stdout}\n${result.stderr}`.trim();
-  } catch (error) {
-    const partial = isRecord(error) ? error : {};
-    const stdout = isString(partial.stdout) ? partial.stdout : "";
-    const stderr = isString(partial.stderr) ? partial.stderr : "";
-    const output = `${stdout}\n${stderr}`.trim();
-
-    if (output) {
-      return output;
-    }
-
-    throw new Error(`Could not run ${binary} ${args.join(" ")}. ${errorMessage(error)}`);
+export class TypeGenerationError extends Data.TaggedError("TypeGenerationError")<{
+  binary: string;
+  args: string[];
+  cause: unknown;
+}> {
+  override get message() {
+    return `Could not run ${this.binary} ${this.args.join(" ")}. ${errorMessage(this.cause)}`;
   }
 }
 
-export async function generateCommand(
+/** Combined stdout and stderr, since many CLIs print help to stderr or exit nonzero. */
+export function outputOf(binary: string, args: string[]) {
+  return Effect.tryPromise({
+    try: (signal) =>
+      new Promise<string>((resolve, reject) => {
+        execFile(
+          binary,
+          args,
+          { encoding: "utf8", timeout: 10_000, maxBuffer: 1_048_576, signal },
+          (error, stdout, stderr) => {
+            const output = `${stdout}\n${stderr}`.trim();
+
+            if (error && !output) {
+              reject(error);
+            } else {
+              resolve(output);
+            }
+          },
+        );
+      }),
+    catch: (cause) => new TypeGenerationError({ binary, args, cause }),
+  });
+}
+
+export const generateCommand = Effect.fn(function* (
   binary: string,
   path: string[],
   options: { name?: string } = {},
-): Promise<{ source: string; help: string; warnings: string[] }> {
-  const help = await outputOf(binary, [...path, "--help"]);
-  const version = await outputOf(binary, ["--version"]).catch(() => "unknown");
+) {
+  const help = yield* outputOf(binary, [...path, "--help"]);
+
+  // Version is advisory. Failure to obtain help remains a typed failure.
+  const version = yield* outputOf(binary, ["--version"]).pipe(
+    Effect.catchTag("TypeGenerationError", () => Effect.succeed("unknown")),
+  );
+
   const parsed = parseCliHelp(binary, path, help);
   const name = options.name ?? identifier([basename(binary), ...path].join("-"));
   const descriptor = { ...parsed.descriptor, observedVersion: version.split("\n")[0] ?? version };
 
-  return {
-    source: renderCommandSource(name, descriptor),
-    help,
-    warnings: parsed.warnings,
-  };
-}
+  return { source: renderCommandSource(name, descriptor), help, warnings: parsed.warnings };
+});

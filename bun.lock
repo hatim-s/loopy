@@ -8,6 +8,7 @@
         "@biomejs/biome": "2.2.2",
         "@cloudflare/workers-types": "5.20261022.1",
         "bun-types": "1.4.0",
+        "effect": "4.1.2",
         "eslint": "10.8.1",
         "eslint-plugin-sonarjs": "4.2.2",
         "eslint-plugin-unicorn": "77.0.0",
@@ -23,7 +24,7 @@
     "apps/cloud": {
       "name": "@loopy/cloud-local",
       "dependencies": {
-        "zod": "4.6.7",
+        "effect": "4.1.2",
       },
     },
     "apps/dashboard": {
@@ -36,9 +37,9 @@
         "@tanstack/react-query": "5.104.3",
         "@tanstack/react-router": "1.170.45",
         "@xyflow/react": "12.12.0",
+        "effect": "4.1.2",
         "react": "19.1.1",
         "react-dom": "19.1.1",
-        "zod": "4.6.7",
       },
       "devDependencies": {
         "@tailwindcss/vite": "4.3.3",
@@ -53,8 +54,8 @@
     "apps/sandbox": {
       "name": "@loopy/sandbox",
       "dependencies": {
+        "effect": "4.1.2",
         "loopy": "workspace:*",
-        "zod": "4.6.7",
       },
     },
     "apps/site": {
@@ -80,8 +81,8 @@
         "loopy": "./dist/cli/index.js",
       },
       "dependencies": {
+        "effect": "4.1.2",
         "oxc-parser": "^0.154.0",
-        "zod": "4.6.7",
       },
     },
   },
@@ -663,6 +664,8 @@
     "detect-libc": ["detect-libc@2.1.2", "", {}, "sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ=="],
 
     "diff": ["diff@9.0.0", "", {}, "sha512-svtcdpS8CgJyqAjEQIXdb3OjhFVVYjzGAPO8WGCmRbrml64SPw/jJD4GoE98aR7r25A0XcgrK3F02yw9R/vhQw=="],
+
+    "effect": ["effect@4.1.2", "", {}, "sha512-d3Oah1WyKxFLFh19yWheS5IXIVaITzxZ71JkE1rkUozq/6EcJSU5nPk5bF2QrSygZ3SQoiNQB8TsxFriyMeMaQ=="],
 
     "electron-to-chromium": ["electron-to-chromium@1.5.438", "", {}, "sha512-AN9xMU1hJiT65LkCUPL1DZm5TCbOPb2Qsm5pYwFLEXp6/qj9SdT4yMiqs7Qqstwvkn1zF7l36SRGt+s6XcJ0FA=="],
 

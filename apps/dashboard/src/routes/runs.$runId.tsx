@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { Schema } from "effect";
 import {
   executionKeySchema,
   type GraphRevisionView,
@@ -6,7 +7,6 @@ import {
   type RunSnapshotView,
 } from "loopy/contract";
 import { type ReactNode, useEffect, useMemo } from "react";
-import { z } from "zod";
 import { SourcePane } from "../components/code/source-pane.tsx";
 import { ErrorBanner } from "../components/error-banner.tsx";
 import { GraphPane } from "../components/graph/graph-pane.tsx";
@@ -21,6 +21,7 @@ import { useClock } from "../lib/clock.ts";
 import { type GraphModel, graphModel } from "../lib/graph.ts";
 import { layoutGraph } from "../lib/graph-layout.ts";
 import { firstInside, owningMap, perItemNodes, runMarks } from "../lib/run-marks.ts";
+import { searchField } from "../lib/search.ts";
 import {
   useExecutions,
   useLoopyGraph,
@@ -38,14 +39,14 @@ type View = (typeof VIEWS)[number];
 const VIEW_LABEL = { code: "Code", split: "Both", graph: "Graph" } satisfies Record<View, string>;
 
 /** Unknown values in a pasted URL fall back to the default view instead of an error page. */
-const searchSchema = z.object({
-  node: z.string().optional().catch(undefined),
-  item: executionKeySchema.shape.scope.optional().catch(undefined),
-  view: z.enum(VIEWS).optional().catch(undefined),
+const searchSchema = Schema.Struct({
+  node: searchField(Schema.String),
+  item: searchField(executionKeySchema.fields.scope),
+  view: searchField(Schema.Literals(VIEWS)),
 });
 
 export const Route = createFileRoute("/runs/$runId")({
-  validateSearch: searchSchema,
+  validateSearch: Schema.decodeUnknownSync(searchSchema),
   component: RunPage,
 });
 
@@ -211,7 +212,7 @@ function Workspace(props: {
   );
 
   // A key set to undefined clears it; a key left out keeps its value.
-  const setSearch = (patch: Partial<z.output<typeof searchSchema>>) =>
+  const setSearch = (patch: Partial<Schema.Schema.Type<typeof searchSchema>>) =>
     void navigate({ search: (prev) => ({ ...prev, ...patch }), replace: true });
 
   const select = (id: string | null) => setSearch({ node: id ?? undefined });

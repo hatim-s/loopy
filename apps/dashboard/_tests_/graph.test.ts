@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import {
+  decodeBoundary,
   executionKeyString,
   graphRevisionViewSchema,
   type LogRecord,
@@ -30,7 +31,7 @@ function record(
     receipt: "started",
   };
 
-  return nodeRunViewSchema.parse(
+  return decodeBoundary(nodeRunViewSchema)(
     status === "succeeded"
       ? { ...base, status, output: null, endedAt: AT }
       : status === "failed"
@@ -279,7 +280,7 @@ test("two calls of one subgraph far apart get separate frames", () => {
   const retag = (id: string) =>
     calls.has(id) ? id.replace(/^(\d+):(?:publish\/)?/, "$1:deploy/") : id;
 
-  const twice = graphRevisionViewSchema.parse({
+  const twice = decodeBoundary(graphRevisionViewSchema)({
     ...RELEASE,
     graph: {
       ...RELEASE.graph,
@@ -331,7 +332,7 @@ test("the first view frames the run where it is: inner work in flight, else fail
     graphModel(RELEASE.graph, {
       status: "running",
       coverage: [{ scope: [], complete: true }],
-      nodeRuns: nodeRuns.map((entry) => nodeRunViewSchema.parse(entry)),
+      nodeRuns: nodeRuns.map((entry) => decodeBoundary(nodeRunViewSchema)(entry)),
     });
 
   const live = parse([scoped("15:map", "running"), scoped("16:publish/build", "running")]);

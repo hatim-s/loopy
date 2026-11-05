@@ -1,176 +1,179 @@
 # Loopy
 
-A loopy is an async TypeScript function with durable steps. Save it by name, run it with typed input, and inspect its step trace and logs. The replay engine records completed steps in SQLite. After a sleep, retry or interrupted process, it runs the function from the top and returns recorded results for completed steps.
+Loopy compiles TypeScript workflow definitions into durable graphs. Save a graph by name, queue a run with typed input, and inspect its executions and logs. Runs pin a graph revision. The host resumes persisted graph state and reconciles execution receipts before dispatching work.
 
-Requires Bun 1.4 or newer. The package root is the authoring SDK. `loopy/runtime` exposes the replay engine and store contracts; `loopy/local` provides SQLite, processes, bundling and the local daemon.
+Requires Bun 1.4 or newer. Runtime operations use Effect 4.1.2. The graph builder and reducer remain synchronous.
 
 ## Try it
 
 ```sh
 bun install
 bun run check
-bun run loopy save examples/hello.loopy.ts
-bun run loopy run hello --name Hatim --enthusiastic true
-bun run loopy runs hello
-bun run loopy ui
+bun run loopy daemon run
 ```
 
-`loopy ui` prints the authenticated URL for the dashboard served by the daemon. Open it in your browser. If no daemon is running, the command starts one in the foreground. Keep that terminal open.
-
-To install the CLI globally, run `bun run install:global`. The installer builds and packs the package into `~/.loopy/packages/loopy-<sha256>.tgz`, installs it with Bun, and prints a command for adding the same archive to a project. A project that imports `loopy` needs its own dependency. Put `bun pm bin -g` on your PATH.
-
-## Dashboard
-
-The dashboard has Overview, Loopies, Runs, Logs and Schedules views. Overview counts and chart buckets come from the selected time window. Loopies show their latest ten runs and schedule. Definition pages place code and graph side by side, with either pane collapsible. Run pages start with revision-pinned code and disclose selected executions, map iterations, inputs, outputs, errors and attempts on demand. Older definitions without captured source show a labeled compiled outline.
-
-Logs are diagnostic output. The secondary Runtime events tab shows durable state transitions, transaction identity and retained event history. Both views page summaries and load payloads when opened. Approval controls and schedule edits use the same authenticated API as the CLI. The daemon pill shows current process and worker counts. One event stream updates bounded session caches; reconnects resume from the cursor, and stale cursors or a changed store epoch trigger a refetch.
-
-The browser defaults to its page origin. A separately hosted dashboard can set `VITE_API_BASE_URL` at build time to a trusted HTTP or HTTPS API base URL, including a path prefix. Query parameters cannot change that destination. Tokens remain scoped to that API in tab session storage. HTTP requests omit cookies and reject redirects. Server hosts can use `createRequestHandler` from `loopy/local`, supply a trusted `publicOrigin`, and explicitly allow additional browser origins with `allowedOrigins`. Every API request still requires a bearer token. The local daemon stays on loopback. A cloud deployment must supply its own hosting, durable storage, TLS and appropriate CSP; this repository does not provision them.
-
-## Write a loopy
-
-Save this as `review.loopy.ts` in a project with the `loopy` dependency:
+Keep the daemon running. Save this as `hello.loopy.ts` in a project with a `loopy` dependency:
 
 ```ts
-import { defineCommand, git, loopy } from "loopy";
+import { format, log, loopy } from "loopy";
 
-const codex = defineCommand({
-  key: "codex.exec",
-  program: "codex",
-  path: ["exec"],
-  positionals: [{ name: "prompt" }],
-  positionalSeparator: true,
-  flags: { sandbox: { cli: "--sandbox", kind: "string", choices: ["read-only"] } },
-});
-
-export default loopy({
-  name: "review",
-  description: "Review tracked changes without editing files.",
-  mode: "full",
-  input: { "instructions?": "string" },
-  run: async ({ input, log }) => {
-    const changes = await git.diff();
-
-    if (changes.length === 0) {
-      log.info("No changes to review.");
-
-      return { outcome: "clean", review: null };
-    }
-
-    const diff = (await git.diff.raw()).stdout;
-    const result = await codex(
-      { args: ["-"], flags: { sandbox: "read-only" } },
-      { stdin: `Review these changes.\n${diff}\n${input.instructions ?? "Find bugs."}`, timeout: "10m" },
-    );
-    const review = result.stdout.trim();
-    log.info("Review completed.", { characters: review.length });
-
-    return { outcome: "reviewed", review };
+export default loopy("hello", {
+  input: { name: "string" },
+  run: ({ input }) => {
+    const greeting = format("Hello, {name}!", { name: input.get("name") });
+    log(greeting);
+    return { greeting };
   },
 });
 ```
 
-`loopy()` accepts a name, description, input schema, scope, mode, secret names, optional schedule and `run` function. The default scope is `project`; the default mode is `sandbox`. Use `scope: "global"` to make a loopy available from other projects. Saving bundles the definition and its imports. Inside the bundle, each module's `import.meta.url`, `path`, `file` and `dir` still name its source file, so `fileURLToPath(new URL("./cli.py", import.meta.url))` finds a sibling script. Existing runs retain their original bundle when you save a new version.
-
-A record input specification supports `string`, `number` and `boolean`; suffix an optional key with `?`. Named CLI flags coerce those types and prompt for missing required fields in a terminal. Standard Schema v1 validators are also supported, with their inferred input type passed to `run`. Use JSON input for Standard Schema definitions.
+In another terminal:
 
 ```sh
-loopy save review.loopy.ts
-loopy run review --instructions "Check error handling."
-loopy run review --input-json '{"instructions":"Check error handling."}'
-loopy run review --input-file input.json
+bun run loopy graph hello.loopy.ts
+bun run loopy save hello.loopy.ts
+bun run loopy run hello --name Hatim
+bun run loopy runs hello
+bun run loopy ui
 ```
 
-Choose one input source per invocation. Use `--key=value` for values starting with `--`, or `-- --key value` for input names that collide with command options. Mode belongs in the definition. `--home` chooses the local home, and `--cwd` chooses the workspace for a new run. Resume keeps the original workspace.
+`run` queues work through the daemon API and returns the run record. `ui` prints the authenticated dashboard URL and starts a foreground daemon if needed. A project importing `loopy` needs its own dependency. `bun run install:global` builds and installs a private package archive for CLI use.
+
+## Author graphs
+
+The `run` callback builds a graph during compilation. SDK calls return references to future values. Use `branch`, `switch_`, `map`, `parallel`, `rescue` and `finally_` to construct control flow. Use `code` for separately bundled executable modules and `sh`, `git`, `fs`, `text`, `net` or `archive` for command nodes. The compiler restricts author syntax and evaluates a snapshot; the daemon does not import the author definition.
+
+Input records support `string`, `number` and `boolean`. Suffix an optional field name with `?`. Named CLI flags coerce these types; JSON input is also supported:
+
+```sh
+loopy run hello --input-json '{"name":"Hatim"}'
+loopy run hello --input-file input.json
+```
+
+Choose one input source. Use `--key=value` for dash-prefixed values or `-- --key value` for input names that collide with command options. Definitions may set description, mode, scope, declared secrets and schedule. The defaults are project scope and sandbox mode. Saving a new version leaves existing runs pinned to their original graph and bundles.
+
+The workflows under `examples/` still use the removed executable step SDK. Their migration belongs to PR 7; they are not runnable examples of the current builder. The graph fixtures under `packages/loopy/_tests_` exercise the current API.
 
 ## Run, inspect and schedule
 
 ```sh
 loopy list
-loopy runs review
 loopy inspect <run-id>
-loopy logs <run-id>
 loopy logs <run-id> --follow
 loopy resume <run-id>
 loopy cancel <run-id>
-
-loopy run review --detach
-loopy daemon run --concurrency 4
-loopy schedule review --cron '0 9 * * 1-5' --tz Asia/Kolkata
-loopy schedule review --disable
-loopy schedule review --enable
-loopy schedule review --off
+loopy hook <run-id> approve --payload '{"approved":true}'
+loopy schedule hello --cron '0 9 * * 1-5' --tz Asia/Kolkata --input-json '{"name":"Hatim"}'
+loopy schedule hello --disable
+loopy schedule hello --enable
+loopy schedule hello --off
 ```
 
-An inline run activates until it finishes or suspends without a wake time. For a timed sleep or retry, it waits and activates again. Ctrl-C and SIGTERM leave unfinished work resumable. `--detach` creates a queued run without executing it; the foreground daemon claims queued and due runs. `resume` continues queued, suspended or abandoned runs. A finished run stays finished; start a new run to try a failed workflow again. Cancellation requires a claimable run. Stop its runner before cancelling an actively owned run.
+Data commands use authenticated daemon HTTP. Only daemon control opens local SQLite. Resume wakes a claimable run; it does not reset terminal outcomes. Cancellation rejects actively owned runs and unfinished executions or started graphs whose finally cleanup cannot yet be driven safely.
 
-`runs [slug]` prints the stored runs as a JSON array. Dashboard run lists use SQL keyset pages ordered by creation time and ID. The HTTP API accepts `slug`, `workspace`, `status`, `waiting`, `from`, `to`, `limit` and `before` filters. Large input and output values become explicit previews; `/api/runs/<id>/payload` loads them on demand.
+`wait` nodes persist hook registrations and optional deadlines. `sleep` nodes persist wake times. Neither requires a timer to remain alive while the run is suspended. Schedules retain their workspace and use optimistic versions; missed fires are not backfilled. Keep the daemon running to claim queued and due work.
 
-`inspect` returns a slim snapshot with the run, root executions, bounded hook history, map counts, event cursor and store epoch. Logs and map executions have separate paging endpoints. Run statuses are `queued`, `running`, `suspended`, `succeeded`, `failed` and `cancelled`. Each execution records its key, attempt, status and result or error. Attempts retained before the dashboard migration contain only the latest known attempt. `logs --follow` emits one JSON object per line.
+The dashboard shows definition source and graphs, revision-pinned runs, execution attempts, logs and schedules. Lists use bounded pages. A transaction event stream updates caches, resumes from cursors and refetches after cursor expiry or a store epoch change. API destinations are configured at build time, not through URL query parameters. Tokens stay scoped to the selected API; requests omit cookies and reject redirects.
 
-A definition can include `schedule: { cron: "0 9 * * 1-5", tz: "Asia/Kolkata" }`. `loopy schedule <slug>` uses those defaults; flags override them. Pass schedule input with `--input-json`. `--disable` pauses a saved schedule; `--enable` resumes it. `--off` deletes it. These actions cannot be combined with each other or with cron, timezone or input flags. Schedules retain their workspace, even when the daemon starts elsewhere. Missed fires are not backfilled. Scheduling stores the next fire time; keep `loopy daemon run` running to execute it. Cron uses five fields and defaults to UTC. Command options are scoped: `--follow` belongs to logs, `--concurrency` to daemon run and install, and `--cron`, `--tz`, `--enable`, `--disable` and `--off` to schedule.
+## Execution and recovery
 
-### Run the daemon as a service
+The host persists an execution before dispatch and fences completions by execution key and attempt. Store writes require the current owner token. Node writes, waits, retry deadlines, outcomes and event outbox entries commit atomically.
 
-```sh
-loopy daemon install --concurrency 4
-loopy daemon status
-loopy daemon uninstall
+Workers claim an exclusive started receipt and publish a finished receipt atomically. A finished receipt wins during reconciliation. A confirmed-dead worker with only a started receipt becomes `uncertain`; Loopy does not repeat that attempt. An interrupted transport remains an infrastructure failure instead of becoming a retryable business error. An external side effect may have happened before interruption, so inspect uncertain results before starting replacement work.
+
+Local activation owns its worker fibers and joins cleanup before releasing ownership. Graceful daemon stop drains active work. Ownership loss interrupts local workers. Durable cloud activation returns after a bounded turn and retains provider ownership for later reconciliation.
+
+Graph failures are outcome values. Infrastructure errors use tagged Effect error channels. Defects, interruption and cleanup failures retain their Causes where composition needs them; they are not classified by matching message text. Worker wire diagnostics are bounded and do not serialize the entire in-process Cause.
+
+## Architecture
+
+Public entries are `loopy` and `loopy/graph` for authoring, `loopy/engine` for the reducer, `loopy/local` for local composition and `loopy/contract` for browser-safe wire schemas. There is no `loopy/runtime` entry.
+
+```mermaid
+flowchart TD
+  CLI[CLI] --> Local[Local composition]
+  CLI --> Compiler[Restricted compiler]
+  Compiler --> SDK[Compile-only graph builder]
+  Compiler --> Local
+  Compiler --> Core
+  Compiler --> Contract
+  SDK --> Core
+  Dashboard[Dashboard] --> Contract[Effect wire schemas]
+  Local --> Service[Portable service operations]
+  Local --> Host[Activation and scheduling]
+  Local --> Store[Atomic persistence]
+  Local --> Executor[Workers and receipts]
+  Cloud[Cloud Worker and Durable Objects] --> Service
+  Cloud --> Host
+  Host --> Engine[Pure graph reducer]
+  Engine --> Core[Graph and execution contracts]
+  Store --> Core
+  Store --> Contract
+  Executor --> Core
+  Executor --> Contract
+  Executor --> Bridge[Local execution OS bridge]
+  Service --> Core
+  Service --> Contract
 ```
 
-`loopy daemon status` reads `<home>/daemon.json` and prints the live daemon's PID, port, bearer token and start time. It prints `{ "state": "stopped" }` when no live daemon is recorded. The daemon creates this private file at startup and removes it on shutdown.
+| Module | Owns |
+| --- | --- |
+| `core`, `contract` | Domain contracts, tagged errors and shared Effect Schema codecs |
+| `engine` | Pure graph transitions, references and retry policy |
+| `host` | Activation lifetime, leases, admission, scheduling and reconciliation |
+| `store` | Atomic state changes, queries and transaction event delivery |
+| `executor` | Worker dispatch, bounded protocol and durable receipts |
+| `compiler`, `sdk` | Restricted graph construction and executable artifact production |
+| `service` | Portable operations over injected persistence and registries |
+| `local`, `cli` | Files, processes, scoped daemon composition and HTTP commands |
+| `apps/cloud`, `apps/sandbox` | Provider adapters, durable turns and sandbox attempt supervision |
 
-Install starts a launchd user agent on macOS or a systemd user unit on Linux.
-Reinstall updates the service and restarts it. Use `--home /absolute/path` when
-installing to select another Loopy home. Output and errors append to
-`<home>/logs/daemon.log`, normally `~/.loopy/logs/daemon.log`.
-The service runs in your user session. On Linux, use systemd user lingering if
-it must keep running after logout. Keep Bun and the installed CLI at their
-installation paths, then reinstall the service after moving either one.
+Modules expose operations that hide their transaction, resource or protocol details. Effect factories and layers acquire resources at composition boundaries. Memory stores, fake executors and injected clocks exercise the same contracts as production adapters. Cross-layer imports go through the target module's index and are enforced by the architecture test.
 
-## Typed shell wrappers
-
-`git`, `fs`, `text`, `net` and `archive` expose typed commands. Each call records one command step. Git parsers return structured results:
-
-```ts
-const status = await git.status();
-log.info("Working tree read.", {
-  branch: status.branch,
-  staged: status.staged.length,
-  unstaged: status.unstaged.length,
-  untracked: status.untracked.length,
-});
+```mermaid
+sequenceDiagram
+  participant H as Host
+  participant S as Store
+  participant E as Executor
+  participant R as Receipt storage
+  H->>S: Claim run and load persisted node state
+  H->>H: Reduce graph event
+  H->>S: Commit effects and outbox with owner fence
+  H->>E: Dispatch committed work and look up receipt
+  E->>R: Read and reconcile receipt
+  alt Finished receipt
+    E-->>H: Recorded outcome as completion event
+  else Started receipt
+    E-->>H: Keep observing without re-execution
+  else No receipt
+    H->>E: Execute admitted attempt
+    E->>R: Claim started receipt
+    E->>E: Run owned worker
+    E->>R: Publish finished receipt
+    E-->>H: Outcome as completion event
+  end
+  H->>H: Reduce completion event
+  H->>S: Commit resulting effects and outbox atomically
 ```
 
-Use `.raw()` on a parsed command for its `stdout`, `stderr`, `exitCode` and `durationMs`. Parser-owned output flags are protected on parsed calls. Other wrappers return command results unless their descriptor supplies a parser.
-
-`sh.run("git diff --stat")` parses a small argv syntax with quotes and escapes. It does not expand variables or glob patterns, or support pipes, redirects and command substitution. Use `sh.exec(["program", ...args])` for dynamic arguments. Both accept stdin, cwd, environment, timeout and retry options. Do not wrap shell calls in `step`; they are already steps.
-
-Generate a wrapper for another CLI with `loopy types codex exec --out codex.ts --name codexExec`. Review the generated descriptor and warnings, then import its `defineCommand` wrapper. Help text can omit repeatability or alternative usage forms.
-
-## Determinism and retries
-
-The engine identifies a step by its sequence and checks its key on replay. Keep branches and code between steps deterministic. Put external reads and effects in a shell wrapper or `step("name", fn)`. Step results must be JSON. Use context `now()`, `random()` and `uuid()` instead of unrecorded time or randomness. Await each call, for example `const at = await now()`, `const value = await random()` and `const id = await uuid()`. These calls also create steps. `sleep("1h")` persists a wake time and suspends without keeping a timer alive in the daemon.
-
-Steps cannot nest, including shell calls inside a function step. A function step receives `{ log, attempt }` for attempt-specific logs. Use workflow `log.info`, `log.warn` and `log.error` between steps. The engine deduplicates workflow logs by replay position and retains logs from each executed step attempt. `parallel`, bounded `map` and `race` compose step calls; recorded completion order controls replay delivery. A changed step key fails with a nondeterminism error even if workflow code catches it.
-
-Composition accepts functions that return promises:
-
-```ts
-const [status, files] = await parallel([() => git.status(), () => git.lsFiles()]);
-const results = await map(items, async (item, index) => processItem(item, index), { concurrency: 4 });
-const first = await race([() => queryPrimary(), () => queryReplica()]);
+```mermaid
+flowchart TD
+  Turn[Claim activation] --> Reduce[Reduce persisted graph state]
+  Reduce --> Persist[Commit durable effects]
+  Persist --> Work{Next action}
+  Work -->|Runnable| Receipt{Reconcile receipt for dispatched work}
+  Receipt -->|Finished| Complete[Completion event]
+  Receipt -->|Started| Observe[Wait or return from durable turn]
+  Observe --> Receipt
+  Receipt -->|None| Dispatch[Claim receipt and execute admitted attempt]
+  Dispatch --> Complete
+  Complete --> Reduce
+  Work -->|Wait or retry deadline| Suspend[Persisted wait or retry]
+  Work -->|Terminal| Finish[Persisted outcome]
+  Work -->|Ownership lost| Stop[Interrupt and join local workers]
 ```
 
-The default is three attempts with exponential delays starting at one second, doubling to a 60-second cap without jitter. Function failures, spawn failures and timeouts can retry. Nonzero command exits require `retry: { retryOn: "exit" }`; parser errors and non-JSON outputs fail without retry. Set `retry: { attempts: 1 }` to disable automatic retries. Durations accept milliseconds or strings such as `"30s"`, `"10m"`, `"1h"` and `"2d"`.
-
-Runners heartbeat every 15 seconds while holding a run. After a crash, resume or the daemon can reclaim ownership once its heartbeat is more than 60 seconds old. On the same host, a dead PID permits immediate recovery. The `--lease-ms` global option overrides the lease duration. Unfinished running steps retry with the next attempt number. A process can finish an effect before its result is persisted. Crash recovery can execute that unfinished step again. Use idempotent operations or external idempotency keys for publication and other effects that must not repeat.
-
-## Execution and secrets
-
-Sandbox mode denies network access and confines writes to the workspace using sandbox-exec on macOS or bwrap on Linux. Other platforms have no supported sandbox and reject sandbox mode. Device access includes /dev/null and /dev/tty writes on macOS. An unavailable or failed sandbox never falls back to full permissions. `mode: "full"` runs with the host environment and permissions; use it deliberately for network tools and automation that needs other checkouts. Saved TypeScript executes during save and activation, so only save code you trust.
-
-Declare `secrets: ["NPM_TOKEN"]` in the definition and store each value privately:
+## Secrets and local state
 
 ```sh
 loopy secrets set NPM_TOKEN
@@ -179,60 +182,16 @@ loopy secrets list
 loopy secrets remove NPM_TOKEN
 ```
 
-The local executor reads declared values at activation and injects them as environment variables at process launch. It redacts those values from command output and execution errors, including truncated output prefixes. Missing values prevent execution. The store is plaintext with user-only permissions; default secrets live at `~/.loopy/secrets.json`. A custom home keeps `secrets.json` inside that home.
+Declare secret names in the definition. The executor reads one validated snapshot, injects only declared values and redacts them from command diagnostics. Missing secrets prevent receipt claim and execution. The secret file is plaintext with user-only permissions. Inputs, argv, explicit environment, stdin and results are persisted; keep credentials out of those fields.
 
-Run records retain input, command argv, explicit environment and stdin, step results, errors and logs. Keep credentials out of those fields. Redaction covers declared command secrets; it does not make arbitrary workflow data private.
+Sandbox mode denies network and restricts filesystem access using platform sandbox tools. Executable bundles retain filesystem restrictions even when full mode permits network. Unsupported or failed sandbox launches do not fall back to broader permissions. Only save trusted source and executable modules.
 
-## Local files
+`--home` or `LOOPY_HOME` selects the home containing registry metadata, historical graphs, captured sources, bundles, receipts, secrets and `runs.sqlite`. Project lookup selects the nearest ancestor with `.loopy/loopies`. A slug belongs to its canonical source file; `save --replace` transfers that ownership. SQLite schema 15 upgrades schemas 13 and 14 atomically and rejects unsupported populated databases without resetting them.
 
-```text
-~/.loopy/
-  secrets.json
-  daemon.json
-  logs/daemon.log
-  loopies/<slug>.json
-  graphs/<revision>.json
-  sources/<slug>/<revision>.json
-  bundles/<sha256>.js
-  receipts/<run>/<execution>/<attempt>.json
-  runs.sqlite
-<project>/.loopy/loopies/<slug>.json
-```
+`loopy daemon install` installs a user service through launchd or systemd. `daemon status` reads private discovery metadata; `daemon uninstall` removes the service. Pass an absolute `--home` to select isolated state. Logs append to `<home>/logs/daemon.log`.
 
-Set `LOOPY_HOME` or pass `--home` to move the home. Project lookup checks the nearest ancestor containing `.loopy/loopies`; project entries override global entries. A slug belongs to its canonical source file. Use `loopy save <file.ts> --replace` to transfer ownership. Schema 15 upgrades schema 13 and 14 in a transaction and preserves existing records and the store epoch. Unsupported populated schemas fail without resetting the database.
+## Development
 
-## Examples
+Run `bun run check` before pushing. It builds the package and dashboard, checks lint and types, then runs package, dashboard and workload tests. Tests use temporary homes, explicit registry markers and injected dependencies. Real Docker acceptance is opt-in; local workerd coverage does not establish deployed-provider acceptance.
 
-- [Hello](examples/hello.loopy.ts) records a greeting as a function step.
-- [Review](examples/review.loopy.ts) reads a parsed Git diff and asks Codex for a review.
-- [Uacode asset sync](examples/uacode-asset-sync/asset-sync-pr.loopy.ts) previews or applies exported assets, then publishes a focused PR. See its [inputs and prerequisites](examples/uacode-asset-sync/README.md).
-- [WWW prompt sync](examples/www-uacode-sync/www-uacode-sync.loopy.ts) maps prompts and skills into uacode assets and publishes one PR per changed base. See its [run instructions](examples/www-uacode-sync/README.md).
-
-## Rate limits
-
-Set shared per-key limits in `<home>/config.json`, for example
-`{ "rateLimits": { "codex": "10/1h", "gh": "60/1m" } }`. The CLI and daemon
-read this file at startup. A `rateLimit` key absent from config.json fails the step.
-Completed steps replay without acquiring a slot; waiting for a slot does not consume
-an attempt.
-
-```ts
-await step("generate", () => generate(), { rateLimit: "codex" });
-```
-
-## Hooks
-
-`hook()` suspends a run until an external signal supplies JSON. Without a timeout,
-inline `loopy run` prints the hook name and run ID and exits successfully with a
-suspended run. Resolve it, then continue with `loopy resume <run-id>`:
-
-```ts
-const approval = await hook("approve");
-// loopy hook <run-id> approve --payload '{"ok":true}'
-```
-
-Pass `{ timeout: "1h" }` to set a deadline. A timeout fails the step without retrying.
-`loopy inspect <run-id>` shows names and tokens. Local automation can POST a JSON
-body to `/api/hooks/<token>` on the daemon server with
-`Authorization: Bearer <daemon-token>`, using the token from the dashboard URL. The same authentication and
-origin checks apply. This endpoint is for local automation, not public webhooks.
+See [AGENTS.md](AGENTS.md) for module ownership, [the cloud README](apps/cloud/README.md) for provider boundaries and [the sandbox README](apps/sandbox/README.md) for retained receipt rules.

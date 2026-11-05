@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
+import { Effect } from "effect";
 import { routes, sandboxArtifactSchema } from "../../packages/loopy/src/contract/index.js";
 import { assert, equal, Journey } from "./journey-client.js";
 
 const journey = await Journey.open();
 
-await journey.upload(await journey.compiled("execution.ts"));
+await journey.upload(await Effect.runPromise(journey.compiled("execution.ts")));
 
 const run = await journey.start("cloud-journey-execution", {
   name: "fixture",

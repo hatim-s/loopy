@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
-import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { QueryClient } from "@tanstack/react-query";
+import { Effect, Exit, Scope } from "effect";
 import { executionKeyString, type ScheduleView } from "loopy/contract";
 import { startServer } from "../../../packages/loopy/src/local/server/start-server.ts";
 import { localHttpBackend } from "../src/backend/local-http.ts";
@@ -22,11 +22,13 @@ afterEach(async () => {
 });
 
 async function fixture() {
-  const f = await reviewDataFixture();
-  cleanups.push(() => {
-    f.store.close();
-    rmSync(f.root, { recursive: true, force: true });
-  });
+  const scope = Scope.makeUnsafe();
+  cleanups.push(() => Effect.runPromise(Scope.close(scope, Exit.void)));
+
+  const f = await Effect.runPromise(
+    reviewDataFixture().pipe(Effect.provideService(Scope.Scope, scope)),
+  );
+
   const token = "isolated-review-test";
 
   const server = startServer({
@@ -51,7 +53,7 @@ async function fixture() {
 test("schedule HTTP and cache mutations keep default A and project B independent for the same slug", async () => {
   const { backend, service, workspaceA, workspaceB } = await fixture();
   const body = { cron: "@daily", tz: "UTC", input: { items: ["item"] }, enabled: true };
-  const a = await service.putSchedule("review-data", body);
+  const a = await Effect.runPromise(service.putSchedule("review-data", body));
   const b = await backend.putSchedule("review-data", workspaceB, { ...body, cron: "@hourly" });
   expect(a.workspace).toBe(workspaceA);
   expect(b.workspace).toBe(workspaceB);
@@ -235,7 +237,10 @@ test("fresh HTTP schedule overview discovers enabled B hidden by default A's sam
 
   expect(discovered.flat()).toEqual([b]);
 
-  const a = await service.putSchedule("review-data", { ...body, enabled: false });
+  const a = await Effect.runPromise(
+    service.putSchedule("review-data", { ...body, enabled: false }),
+  );
+
   const client = new QueryClient();
   cleanups.push(() => client.clear());
   client.setQueryData(keys.schedules(workspaceA), [a]);
@@ -296,15 +301,17 @@ test("fresh HTTP schedule overview discovers enabled B hidden by default A's sam
   await backend.deleteSchedule(recreated.slug, workspaceB);
 
   for (let index = 0; index < 12; index++) {
-    await store.putSchedule({
-      workspace: workspaceB,
-      cron: b.cron,
-      tz: b.tz,
-      input: body.input,
-      enabled: true,
-      slug: `bounded-${index}`,
-      nextFireAt: `2030-01-${String(index + 1).padStart(2, "0")}T00:00:00.000Z`,
-    });
+    await Effect.runPromise(
+      store.putSchedule({
+        workspace: workspaceB,
+        cron: b.cron,
+        tz: b.tz,
+        input: body.input,
+        enabled: true,
+        slug: `bounded-${index}`,
+        nextFireAt: `2030-01-${String(index + 1).padStart(2, "0")}T00:00:00.000Z`,
+      }),
+    );
   }
 
   const bounded = await backend.scheduleOverview();

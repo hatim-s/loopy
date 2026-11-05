@@ -7,6 +7,8 @@ import type {
 } from "../core/index.js";
 import { type NodeRun, type RateLimitWindow, type WaitRecord } from "../core/index.js";
 import { EVENT_RETENTION, EventListeners, type EventTransaction } from "./event-outbox.js";
+import { storageOperation } from "./operation.js";
+import { utc } from "./timestamps.js";
 
 export class MemoryEvents {
   protected limits = new Map<string, RateLimitWindow>();
@@ -48,45 +50,63 @@ export class MemoryEvents {
     return this.listeners.subscribe(listener);
   }
 
-  oldestEventSequence(): number | undefined {
-    return this.eventLog[0]?.sequence ?? (this.sequence === 0 ? undefined : this.sequence + 1);
+  oldestEventSequence() {
+    return storageOperation("oldestEventSequence", () => {
+      return this.eventLog[0]?.sequence ?? (this.sequence === 0 ? undefined : this.sequence + 1);
+    });
   }
 
-  async events(after: number, limit: number): Promise<RuntimeEvent[]> {
-    return structuredClone(this.eventLog.filter((event) => event.sequence > after).slice(0, limit));
+  events(after: number, limit: number) {
+    return storageOperation("events", () => {
+      return structuredClone(
+        this.eventLog.filter((event) => event.sequence > after).slice(0, limit),
+      );
+    });
   }
 
-  async epoch(): Promise<string> {
-    return this.storeEpoch;
+  transactionEvents(txn: string, after: number) {
+    return storageOperation("transactionEvents", () =>
+      structuredClone(this.eventLog.filter((event) => event.txn === txn && event.sequence > after)),
+    );
   }
 
-  async eventCursor(): Promise<{ cursor: number; epoch: string }> {
-    return { cursor: this.sequence, epoch: this.storeEpoch };
+  epoch() {
+    return storageOperation("epoch", () => {
+      return this.storeEpoch;
+    });
   }
 
-  async pruneEvents(now: string): Promise<number> {
-    const cutoff = Date.parse(now) - EVENT_RETENTION.maxAgeMs;
+  eventCursor() {
+    return storageOperation("eventCursor", () => {
+      return { cursor: this.sequence, epoch: this.storeEpoch };
+    });
+  }
 
-    let boundary = Math.max(-1, this.eventLog.length - EVENT_RETENTION.maxRows - 1);
+  pruneEvents(now: string) {
+    return storageOperation("pruneEvents", () => {
+      const cutoff = Date.parse(now) - EVENT_RETENTION.maxAgeMs;
 
-    for (let index = 0; index < this.eventLog.length; index++) {
-      const event = this.eventLog[index];
+      let boundary = Math.max(-1, this.eventLog.length - EVENT_RETENTION.maxRows - 1);
 
-      if (event && Date.parse(event.at) < cutoff) {
-        boundary = Math.max(boundary, index);
+      for (let index = 0; index < this.eventLog.length; index++) {
+        const event = this.eventLog[index];
+
+        if (event && Date.parse(event.at) < cutoff) {
+          boundary = Math.max(boundary, index);
+        }
       }
-    }
 
-    const transaction = this.eventLog[boundary]?.txn;
+      const transaction = this.eventLog[boundary]?.txn;
 
-    while (transaction !== undefined && this.eventLog[boundary + 1]?.txn === transaction) {
-      boundary++;
-    }
+      while (transaction !== undefined && this.eventLog[boundary + 1]?.txn === transaction) {
+        boundary++;
+      }
 
-    const deleted = boundary + 1;
-    this.eventLog = this.eventLog.slice(deleted);
+      const deleted = boundary + 1;
+      this.eventLog = this.eventLog.slice(deleted);
 
-    return deleted;
+      return deleted;
+    });
   }
 
   protected commit<T>(change: (txn: EventTransaction) => T): T {
@@ -141,6 +161,6 @@ export class MemoryEvents {
   }
 
   protected timestamp(): string {
-    return new Date(this.now()).toISOString();
+    return utc(this.now());
   }
 }

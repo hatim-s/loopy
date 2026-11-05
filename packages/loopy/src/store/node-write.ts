@@ -7,15 +7,16 @@ import {
   outputBytes,
   type StoreEffect,
 } from "../core/index.js";
+import { StoreInvariantError, StoreRejectedError } from "./operation.js";
 import { utc } from "./timestamps.js";
 
 export function checkNodeWrite(runId: string, node: NodeRun) {
   if (node.key.runId !== runId) {
-    throw new Error("Node run belongs to another run.");
+    throw new StoreInvariantError("Node run belongs to another run.");
   }
 
   if (node.status === "succeeded" && outputBytes(node.output) > MAX_OUTPUT_BYTES) {
-    throw new Error("Node output exceeds the 1 MiB inline limit.");
+    throw new StoreRejectedError("Node output exceeds the 1 MiB inline limit.");
   }
 }
 
@@ -27,7 +28,7 @@ export function checkLogBytes(previousBytes: number, log: LogRecord): number {
   const bytes = previousBytes + logBytes(log);
 
   if (bytes > MAX_LOG_BYTES) {
-    throw new Error("Attempt logs exceed the 64 KiB limit.");
+    throw new StoreRejectedError("Attempt logs exceed the 64 KiB limit.");
   }
 
   return bytes;

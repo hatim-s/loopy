@@ -1,12 +1,13 @@
 import { mkdir, open } from "node:fs/promises";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
-import type { z } from "zod";
+import type { Schema } from "effect";
 import type { routes } from "../../packages/loopy/src/contract/index.ts";
+import { decodeBoundary } from "../../packages/loopy/src/contract/index.ts";
 
 type Mutation =
-  | z.output<typeof routes.startRun.body>
-  | z.output<typeof routes.resolveNamedHook.body>;
+  | Schema.Schema.Type<typeof routes.startRun.body>
+  | Schema.Schema.Type<typeof routes.resolveNamedHook.body>;
 
 import { errorBodySchema } from "../../packages/loopy/src/contract/index.ts";
 import { readDaemonFile } from "../../packages/loopy/src/local/index.ts";
@@ -128,7 +129,7 @@ export class OwnedDaemon {
     return { exitCode, rejected: exitCode !== 0, reason: stderr.trim() };
   }
 
-  async request<T>(path: string, schema: z.ZodType<T>, body?: Mutation) {
+  async request<T>(path: string, schema: Schema.Codec<T, unknown, never, never>, body?: Mutation) {
     const record = readDaemonFile(home);
 
     if (!this.child || record?.pid !== this.child.pid || record.port !== port) {
@@ -145,10 +146,10 @@ export class OwnedDaemon {
     const value: unknown = await response.json();
 
     if (!response.ok) {
-      throw new Error(`${response.status}: ${errorBodySchema.parse(value).error.code}`);
+      throw new Error(`${response.status}: ${decodeBoundary(errorBodySchema)(value).error.code}`);
     }
 
-    return schema.parse(value);
+    return decodeBoundary(schema)(value);
   }
 
   async stop(signal: "SIGTERM" | "SIGKILL" = "SIGTERM") {

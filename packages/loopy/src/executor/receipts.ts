@@ -1,32 +1,58 @@
 import { lstat, mkdir, open, readFile, realpath, rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { z } from "zod";
+import { Effect, Schema } from "effect";
 import { executionKeySchema, sandboxExecutionResultSchema } from "../contract/index.js";
-import { type ExecutionKey, errnoCode, executionKeyString } from "../core/index.js";
+import {
+  type ExecutionKey,
+  type ExecutionResult,
+  ExecutorError,
+  errnoCode,
+  executionKeyString,
+} from "../core/index.js";
 
-export const filesystemReceiptsDescriptorSchema = z.strictObject({
-  kind: z.literal("filesystem"),
-  home: z.string().min(1),
+export const filesystemReceiptsDescriptorSchema = Schema.Struct({
+  kind: Schema.Literal("filesystem"),
+  home: Schema.NonEmptyString,
 });
 
-export type FilesystemReceiptsDescriptor = z.infer<typeof filesystemReceiptsDescriptorSchema>;
+export type FilesystemReceiptsDescriptor = typeof filesystemReceiptsDescriptorSchema.Type;
 
-const identity = { executionKey: executionKeySchema, attempt: z.number().int().positive() };
+const identity = {
+  executionKey: executionKeySchema,
+  attempt: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
+};
 
-export const receiptSchema = z.discriminatedUnion("kind", [
-  z.object({ ...identity, kind: z.literal("started"), pid: z.number().int().positive() }),
-  z.object({ ...identity, kind: z.literal("finished"), result: sandboxExecutionResultSchema }),
+export const receiptSchema = Schema.Union([
+  Schema.Struct({
+    ...identity,
+    kind: Schema.Literal("started"),
+    pid: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
+  }),
+  Schema.Struct({
+    ...identity,
+    kind: Schema.Literal("finished"),
+    result: sandboxExecutionResultSchema,
+  }),
 ]);
 
-export type LocalReceipt = z.infer<typeof receiptSchema>;
+export type LocalReceipt = typeof receiptSchema.Type;
 
 export type AttemptIdentity = Pick<LocalReceipt, "executionKey" | "attempt">;
 
 export type FinishedLocalReceipt = Extract<LocalReceipt, { kind: "finished" }>;
 
-export async function receiptPath(home: string, key: ExecutionKey, attempt: number) {
-  await mkdir(home, { recursive: true, mode: 0o700 });
-  let directory = await realpath(home);
+const io = <A>(body: () => PromiseLike<A>) =>
+  Effect.tryPromise({
+    try: body,
+    catch: (cause) => new ExecutorError({ operation: "receipt", cause }),
+  });
+
+const rejected = (message: string) =>
+  Effect.fail(new ExecutorError({ operation: "receipt", cause: new Error(message) }));
+
+export const receiptPath = Effect.fn(function* (home: string, key: ExecutionKey, attempt: number) {
+  yield* io(() => mkdir(home, { recursive: true, mode: 0o700 }));
+  let directory = yield* io(() => realpath(home));
 
   for (const segment of [
     "receipts",
@@ -34,150 +60,236 @@ export async function receiptPath(home: string, key: ExecutionKey, attempt: numb
     encodeURIComponent(executionKeyString(key)),
   ]) {
     directory = join(directory, segment);
+    const path = directory;
+    yield* io(() => mkdir(path, { mode: 0o700 })).pipe(
+      Effect.catchIf(
+        (error) => errnoCode(error.cause) === "EEXIST",
+        () => Effect.void,
+      ),
+    );
 
-    try {
-      await mkdir(directory, { mode: 0o700 });
-    } catch (cause) {
-      if (errnoCode(cause) !== "EEXIST") {
-        throw cause;
-      }
-    }
-
-    if (!(await lstat(directory)).isDirectory()) {
-      throw new Error("Receipt directories must be real directories inside the daemon home.");
+    if (!(yield* io(() => lstat(path))).isDirectory()) {
+      return yield* rejected(
+        "Receipt directories must be real directories inside the daemon home.",
+      );
     }
   }
 
   return join(directory, `${attempt}.json`);
+});
+
+function syncDirectory(path: string) {
+  return Effect.acquireUseRelease(
+    io(() => open(dirname(path), "r")),
+    (file) => io(() => file.sync()),
+    (file) => io(() => file.close()),
+  );
 }
 
-async function syncDirectory(path: string) {
-  const directory = await open(dirname(path), "r");
-
-  try {
-    await directory.sync();
-  } finally {
-    await directory.close();
-  }
+function writeExclusive(path: string, value: FinishedLocalReceipt) {
+  return Effect.acquireUseRelease(
+    io(() => open(path, "wx", 0o600)),
+    (file) =>
+      Effect.gen(function* () {
+        yield* io(() => file.writeFile(JSON.stringify(value)));
+        yield* io(() => file.sync());
+      }),
+    (file) => io(() => file.close()),
+  );
 }
 
-/**
- * Terminal writers are serialized by child liveness, not rename. Only the claiming
- * child finishes live work. A parent must confirm its death and reread first.
- */
+/** Only the claiming child finishes live work. A parent confirms death and rereads first. */
 export class FilesystemReceipts {
   constructor(private readonly home: string) {}
-
   get descriptor(): FilesystemReceiptsDescriptor {
     return { kind: "filesystem", home: this.home };
   }
 
-  async read(identity: AttemptIdentity): Promise<LocalReceipt | null> {
-    const path = await receiptPath(this.home, identity.executionKey, identity.attempt);
-    let receipt: LocalReceipt;
+  read = Effect.fn("FilesystemReceipts.read")(function* (
+    this: FilesystemReceipts,
+    identity: AttemptIdentity,
+  ) {
+    const path = yield* receiptPath(this.home, identity.executionKey, identity.attempt);
 
-    try {
-      receipt = receiptSchema.parse(JSON.parse(await readFile(path, "utf8")));
-    } catch (cause) {
-      if (errnoCode(cause) === "ENOENT") {
-        return null;
-      }
+    const text = yield* io(() => readFile(path, "utf8")).pipe(
+      Effect.catchIf(
+        (error) => errnoCode(error.cause) === "ENOENT",
+        () => Effect.succeed(null),
+      ),
+    );
 
-      throw cause;
+    if (text === null) {
+      return null;
     }
+
+    const receipt = yield* Effect.try({
+      try: () => Schema.decodeUnknownSync(receiptSchema)(JSON.parse(text)),
+      catch: (cause) => new ExecutorError({ operation: "receipt", cause }),
+    });
 
     if (
       executionKeyString(receipt.executionKey) !== executionKeyString(identity.executionKey) ||
       receipt.attempt !== identity.attempt
     ) {
-      throw new Error("Receipt identity does not match this execution attempt.");
+      return yield* rejected("Receipt identity does not match this execution attempt.");
     }
 
     return receipt;
-  }
+  });
 
-  async claim(identity: AttemptIdentity) {
-    const path = await receiptPath(this.home, identity.executionKey, identity.attempt);
-    let file;
+  claim = Effect.fn("FilesystemReceipts.claim")(function* (
+    this: FilesystemReceipts,
+    identity: AttemptIdentity,
+  ) {
+    const path = yield* receiptPath(this.home, identity.executionKey, identity.attempt);
 
-    try {
-      file = await open(path, "wx", 0o600);
-    } catch (cause) {
-      if (errnoCode(cause) !== "EEXIST") {
-        throw cause;
-      }
+    // Mask the exclusive creation through fsync. Interruption must not leave an empty claim.
+    return yield* Effect.uninterruptible(
+      Effect.gen({ self: this }, function* () {
+        const file = yield* io(() => open(path, "wx", 0o600)).pipe(
+          Effect.catchIf(
+            (error) => errnoCode(error.cause) === "EEXIST",
+            () => Effect.succeed(null),
+          ),
+        );
 
-      const receipt = await this.read(identity);
+        if (file === null) {
+          const receipt = yield* this.read(identity);
 
-      if (!receipt) {
-        throw new Error("Claimed receipt disappeared. Inspect the daemon home before retrying.");
-      }
+          if (!receipt) {
+            return yield* rejected(
+              "Claimed receipt disappeared. Inspect the daemon home before retrying.",
+            );
+          }
 
-      return { kind: "existing" as const, receipt };
+          return { kind: "existing" as const, receipt };
+        }
+
+        yield* Effect.acquireUseRelease(
+          Effect.succeed(file),
+          (file) =>
+            Effect.gen(function* () {
+              yield* io(() =>
+                file.writeFile(JSON.stringify({ ...identity, kind: "started", pid: process.pid })),
+              );
+              yield* io(() => file.sync());
+            }),
+          (file) => io(() => file.close()),
+        );
+        yield* syncDirectory(path);
+
+        return { kind: "created" as const };
+      }),
+    );
+  });
+
+  private observeClaim = Effect.fn(function* (
+    this: FilesystemReceipts,
+    receipt: Extract<LocalReceipt, { kind: "started" }>,
+  ) {
+    const dead = yield* Effect.try({
+      try: () => {
+        process.kill(receipt.pid, 0);
+
+        return false;
+      },
+      catch: (cause) => new ExecutorError({ operation: "receipt", cause }),
+    }).pipe(
+      Effect.catchIf(
+        (error) => errnoCode(error.cause) === "ESRCH",
+        () => Effect.succeed(true),
+      ),
+    );
+
+    if (!dead) {
+      return { kind: "started" as const };
     }
 
-    try {
-      await file.writeFile(JSON.stringify({ ...identity, kind: "started", pid: process.pid }));
-      await file.sync();
-    } finally {
-      await file.close();
+    const latest = yield* this.read(receipt);
+
+    return latest?.kind === "finished" ? latest : { kind: "dead" as const };
+  });
+
+  private publish = Effect.fn(function* (this: FilesystemReceipts, value: FinishedLocalReceipt) {
+    const path = yield* receiptPath(this.home, value.executionKey, value.attempt);
+
+    return yield* Effect.uninterruptible(
+      Effect.gen(function* () {
+        const temporary = `${path}.${process.pid}.tmp`;
+        yield* writeExclusive(temporary, value);
+        yield* io(() => rename(temporary, path));
+        yield* syncDirectory(path);
+
+        return value;
+      }),
+    );
+  });
+
+  /** Report whether this observer sealed uncertainty or found an existing completion. */
+  reconcile = Effect.fn("FilesystemReceipts.reconcile")(function* (
+    this: FilesystemReceipts,
+    identity: AttemptIdentity,
+  ) {
+    const receipt = yield* this.read(identity);
+
+    if (!receipt) {
+      return { kind: "none" as const };
     }
 
-    await syncDirectory(path);
+    const observed = receipt.kind === "started" ? yield* this.observeClaim(receipt) : receipt;
 
-    return { kind: "created" as const };
-  }
+    if (observed.kind === "finished") {
+      return { kind: "finished" as const, receipt: observed, source: "stored" as const };
+    }
 
-  async finish(value: FinishedLocalReceipt): Promise<FinishedLocalReceipt> {
-    const receipt = await this.read(value);
+    if (observed.kind === "started") {
+      return observed;
+    }
+
+    const result: ExecutionResult = {
+      kind: "failed",
+      error: {
+        code: "uncertain",
+        message:
+          "Executor stopped with an unfinished receipt. Inspect the workspace before starting a new run.",
+      },
+      exitCode: null,
+      logs: [],
+    };
+
+    const finished = yield* this.publish({ kind: "finished", ...identity, result });
+
+    return { kind: "finished" as const, receipt: finished, source: "reconciled" as const };
+  });
+
+  finish = Effect.fn("FilesystemReceipts.finish")(function* (
+    this: FilesystemReceipts,
+    value: FinishedLocalReceipt,
+  ): Effect.fn.Return<FinishedLocalReceipt, ExecutorError> {
+    const receipt = yield* this.read(value);
 
     if (receipt?.kind === "finished") {
       return receipt;
     }
 
     if (!receipt) {
-      throw new Error("Execution has no claimed receipt. Claim it before performing work.");
+      return yield* rejected("Execution has no claimed receipt. Claim it before performing work.");
     }
 
     if (receipt.pid !== process.pid) {
-      try {
-        process.kill(receipt.pid, 0);
-      } catch (cause) {
-        if (errnoCode(cause) !== "ESRCH") {
-          throw cause;
-        }
+      const observed = yield* this.observeClaim(receipt);
 
-        // A child can publish between the first read and the confirmed death.
-        const latest = await this.read(value);
-
-        if (latest?.kind === "finished") {
-          return latest;
-        }
-
-        return this.publish(value);
+      if (observed.kind === "finished") {
+        return observed;
       }
 
-      throw new Error("Execution worker is still alive. Reconcile its receipt before finishing.");
+      if (observed.kind === "started") {
+        return yield* rejected(
+          "Execution worker is still alive. Reconcile its receipt before finishing.",
+        );
+      }
     }
 
-    return this.publish(value);
-  }
-
-  private async publish(value: FinishedLocalReceipt): Promise<FinishedLocalReceipt> {
-    const path = await receiptPath(this.home, value.executionKey, value.attempt);
-    const temporary = `${path}.${process.pid}.tmp`;
-    const file = await open(temporary, "wx", 0o600);
-
-    try {
-      await file.writeFile(JSON.stringify(value));
-      await file.sync();
-    } finally {
-      await file.close();
-    }
-
-    await rename(temporary, path);
-    await syncDirectory(path);
-
-    return value;
-  }
+    return yield* this.publish(value);
+  });
 }

@@ -1,26 +1,23 @@
 import type { DurableObjectState } from "@cloudflare/workers-types";
+import { Effect, Semaphore } from "effect";
 import {
   apiRoutes,
   dispatch,
   errorResponse,
+  GenerationError,
   json,
-  LoopyService,
+  makeService,
+  SecretError,
   ServiceError,
 } from "../../../packages/loopy/src/service/index.js";
 import { SqlRunStore } from "../../../packages/loopy/src/store/portable.js";
 import { artifactResponse } from "./artifact-route.js";
 import { R2ArtifactRegistry } from "./artifacts.js";
 import { concurrency, type Environment } from "./environment.js";
+import { platform } from "./operation.js";
 import { SandboxProvider } from "./provider.js";
 import { WorkspaceScheduler } from "./scheduler.js";
 import { DurableSqlDriver } from "./sql-driver.js";
-
-function unsupported(): never {
-  throw new ServiceError(
-    "not_yet",
-    "Cloud phase 1 does not store secrets or generate command types. Compile safe fixtures locally.",
-  );
-}
 
 export class Workspace {
   private readonly store: SqlRunStore;
@@ -29,7 +26,7 @@ export class Workspace {
   private scheduler?: WorkspaceScheduler;
   private provider?: SandboxProvider;
   private routes?: ReturnType<typeof apiRoutes>;
-  private serial: Promise<void> = Promise.resolve();
+  private readonly serial = Semaphore.makeUnsafe(1);
 
   constructor(
     private readonly ctx: DurableObjectState,
@@ -55,25 +52,42 @@ export class Workspace {
   private initialize(workspace: string): void {
     const registry = new R2ArtifactRegistry(this.ctx.storage, this.env.ARTIFACTS, workspace);
 
-    const requireWorkspace = (value: string) => {
-      if (value !== "" && value !== workspace) {
-        throw new ServiceError("forbidden", "This credential belongs to a different workspace.");
-      }
+    const requireWorkspace = (value: string) =>
+      value !== "" && value !== workspace
+        ? Effect.fail(
+            new ServiceError("forbidden", "This credential belongs to a different workspace."),
+          )
+        : Effect.succeed(workspace);
 
-      return workspace;
-    };
-
-    const service = new LoopyService({
+    const service = makeService({
       store: this.store,
       clock: { now: Date.now },
       canonicalWorkspace: requireWorkspace,
-      registry: (value) => {
-        requireWorkspace(value);
-
-        return registry;
+      registry: (value) => requireWorkspace(value).pipe(Effect.as(registry)),
+      secrets: {
+        list: () =>
+          Effect.fail(
+            new SecretError({
+              operation: "read",
+              reason: "io",
+              cause: "Cloud secrets unsupported",
+            }),
+          ),
+        set: () =>
+          Effect.fail(
+            new SecretError({ operation: "set", reason: "io", cause: "Cloud secrets unsupported" }),
+          ),
+        remove: () =>
+          Effect.fail(
+            new SecretError({
+              operation: "remove",
+              reason: "io",
+              cause: "Cloud secrets unsupported",
+            }),
+          ),
       },
-      secrets: { list: unsupported, set: unsupported, remove: unsupported },
-      generateTypes: unsupported,
+      generateTypes: () =>
+        Effect.fail(new GenerationError({ cause: "Cloud generation unsupported" })),
     });
 
     this.routes = apiRoutes({
@@ -99,90 +113,99 @@ export class Workspace {
     });
   }
 
-  private exclusive<T>(work: () => Promise<T>): Promise<T> {
-    const pending = this.serial.then(work);
-    this.serial = pending.then(
-      () => undefined,
-      () => undefined,
-    );
-
-    return pending;
-  }
-
   fetch(request: Request): Promise<Response> {
-    return this.exclusive(async () => {
-      const workspace = request.headers.get("X-Loopy-Workspace");
+    return Effect.runPromise(
+      this.serial
+        .withPermit(
+          Effect.gen({ self: this }, function* () {
+            const workspace = request.headers.get("X-Loopy-Workspace");
 
-      if (!workspace || !/^[a-z][a-z0-9-]{0,62}$/.test(workspace)) {
-        return errorResponse("forbidden");
-      }
+            if (!workspace || !/^[a-z][a-z0-9-]{0,62}$/.test(workspace)) {
+              return errorResponse("forbidden");
+            }
 
-      const row = this.ctx.storage.sql
-        .exec<{ value: string }>("SELECT value FROM meta WHERE key='workspace'")
-        .toArray()[0];
+            const row = this.ctx.storage.sql
+              .exec<{ value: string }>("SELECT value FROM meta WHERE key='workspace'")
+              .toArray()[0];
 
-      if (row && row.value !== workspace) {
-        return errorResponse("forbidden");
-      }
+            if (row && row.value !== workspace) {
+              return errorResponse("forbidden");
+            }
 
-      if (!row) {
-        this.ctx.storage.sql.exec("INSERT INTO meta(key,value) VALUES ('workspace',?)", workspace);
-        this.initialize(workspace);
-      }
+            if (!row) {
+              this.ctx.storage.sql.exec(
+                "INSERT INTO meta(key,value) VALUES ('workspace',?)",
+                workspace,
+              );
+              this.initialize(workspace);
+            }
 
-      if (!this.routes || !this.scheduler || !this.provider) {
-        throw new Error("Workspace initialization did not complete.");
-      }
+            if (!this.routes || !this.scheduler || !this.provider) {
+              return yield* Effect.die(new Error("Workspace initialization did not complete."));
+            }
 
-      const url = new URL(request.url);
+            const url = new URL(request.url);
 
-      if (url.searchParams.has("workspace") && url.searchParams.get("workspace") !== workspace) {
-        return errorResponse("forbidden");
-      }
+            if (
+              url.searchParams.has("workspace") &&
+              url.searchParams.get("workspace") !== workspace
+            ) {
+              return errorResponse("forbidden");
+            }
 
-      if (url.pathname === "/api/cloud/status") {
-        return json({
-          stage: "local",
-          workspace,
-          alarm: await this.ctx.storage.getAlarm(),
-          errors: this.ctx.storage.sql
-            .exec("SELECT run_id,error FROM cloud_turns WHERE error IS NOT NULL LIMIT 20")
-            .toArray(),
-          schedulerError:
-            this.ctx.storage.sql
-              .exec<{ value: string }>("SELECT value FROM meta WHERE key='cloud_scheduler_error'")
-              .toArray()[0]?.value ?? null,
-        });
-      }
+            if (url.pathname === "/api/cloud/status") {
+              return json({
+                stage: "local",
+                workspace,
+                alarm: yield* platform("get alarm", () => this.ctx.storage.getAlarm()),
+                errors: this.ctx.storage.sql
+                  .exec("SELECT run_id,error FROM cloud_turns WHERE error IS NOT NULL LIMIT 20")
+                  .toArray(),
+                schedulerError:
+                  this.ctx.storage.sql
+                    .exec<{ value: string }>(
+                      "SELECT value FROM meta WHERE key='cloud_scheduler_error'",
+                    )
+                    .toArray()[0]?.value ?? null,
+              });
+            }
 
-      if (!["GET", "HEAD"].includes(request.method)) {
-        await this.scheduler.wake();
-      }
+            if (!["GET", "HEAD"].includes(request.method)) {
+              yield* this.scheduler.wake();
+            }
 
-      try {
-        if (request.method === "GET" && url.pathname === "/api/cloud/artifacts") {
-          return await artifactResponse({
-            url,
-            workspace,
-            store: this.store,
-            provider: this.provider,
-          });
-        }
+            if (
+              url.pathname === "/api/secrets" ||
+              url.pathname.startsWith("/api/secrets/") ||
+              url.pathname === "/api/types"
+            ) {
+              return errorResponse(
+                "not_yet",
+                "Cloud phase 1 does not store secrets or generate command types. Compile safe fixtures locally.",
+              );
+            }
 
-        return await dispatch(this.routes, request, url);
-      } catch (cause) {
-        if (cause instanceof ServiceError) {
-          return errorResponse(cause.code, cause.message);
-        }
+            if (request.method === "GET" && url.pathname === "/api/cloud/artifacts") {
+              return yield* artifactResponse({
+                url,
+                workspace,
+                store: this.store,
+                provider: this.provider,
+              });
+            }
 
-        return errorResponse("internal");
-      }
-    });
+            const routes = this.routes;
+
+            return yield* platform("dispatch HTTP", () => dispatch(routes, request, url));
+          }),
+        )
+        .pipe(Effect.catchCause(() => Effect.succeed(errorResponse("internal")))),
+    );
   }
 
   alarm(): Promise<void> {
-    return this.exclusive(async () => {
-      await this.scheduler?.tick();
-    });
+    return Effect.runPromise(
+      this.serial.withPermit(Effect.suspend(() => this.scheduler?.tick() ?? Effect.void)),
+    );
   }
 }

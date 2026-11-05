@@ -1,13 +1,34 @@
+import { Data, Effect } from "effect";
 import { revision, validateGraph } from "../core/index.js";
 import type { PutLoopyBody } from "./compiled-loopy.js";
-import { sourceArtifactSchema } from "./source-artifact.js";
+import type { SourceArtifact } from "./source-artifact.js";
 
-/** Verifies compiled contents before either local or cloud storage writes them. */
-export async function validateCompiled(body: PutLoopyBody) {
+export class CompiledValidationError extends Data.TaggedError("CompiledValidationError")<{
+  code:
+    | "invalid_graph"
+    | "invalid_bundles"
+    | "revision_mismatch"
+    | "bundle_mismatch"
+    | "invalid_source";
+  message: string;
+}> {}
+
+export class CompiledHashError extends Data.TaggedError("CompiledHashError")<{ cause: unknown }> {}
+
+/** Accepts a PutLoopyBody already decoded at its boundary and verifies compiled content before storage. */
+
+export const validateCompiled = Effect.fn("contract.validateCompiled")(function* (
+  body: PutLoopyBody,
+) {
   const diagnostics = validateGraph(body.graph);
 
   if (diagnostics.length > 0) {
-    throw new Error(diagnostics.map((item) => item.message).join("\n"));
+    return yield* Effect.fail(
+      new CompiledValidationError({
+        code: "invalid_graph",
+        message: diagnostics.map((item) => item.message).join("\n"),
+      }),
+    );
   }
 
   const expected = body.graph.nodes.flatMap((node) =>
@@ -27,38 +48,60 @@ export async function validateCompiled(body: PutLoopyBody) {
         value.bundleHash !== body.bundles[index]?.bundleHash,
     )
   ) {
-    throw new Error("Supply exactly one bundle for each code node and parser in node order.");
+    return yield* Effect.fail(
+      new CompiledValidationError({
+        code: "invalid_bundles",
+        message: "Supply exactly one bundle for each code node and parser in node order.",
+      }),
+    );
   }
 
-  if ((await revision(body.graph)) !== body.revision) {
-    throw new Error("The graph revision does not match its contents.");
+  if (
+    (yield* Effect.tryPromise({
+      try: () => revision(body.graph),
+      catch: (cause) => new CompiledHashError({ cause }),
+    })) !== body.revision
+  ) {
+    return yield* Effect.fail(
+      new CompiledValidationError({
+        code: "revision_mismatch",
+        message: "The graph revision does not match its contents.",
+      }),
+    );
   }
 
   const bundles = [];
 
   for (const value of body.bundles) {
     const bytes = Uint8Array.from(atob(value.bytes), (character) => character.charCodeAt(0));
-    const digest = await crypto.subtle.digest("SHA-256", bytes);
+
+    const digest = yield* Effect.tryPromise({
+      try: () => crypto.subtle.digest("SHA-256", bytes),
+      catch: (cause) => new CompiledHashError({ cause }),
+    });
 
     const hash = Array.from(new Uint8Array(digest), (byte) =>
       byte.toString(16).padStart(2, "0"),
     ).join("");
 
     if (hash !== value.bundleHash) {
-      throw new Error("Bundle bytes do not match their hash.");
+      return yield* Effect.fail(
+        new CompiledValidationError({
+          code: "bundle_mismatch",
+          message: "Bundle bytes do not match their hash.",
+        }),
+      );
     }
 
     bundles.push({ ...value, bytes });
   }
 
-  const sourceArtifact = sourceArtifactSchema.parse(
-    body.sourceArtifact ?? {
-      version: 1,
-      status: "unavailable",
-      revision: body.revision,
-      reason: "not_captured",
-    },
-  );
+  const sourceArtifact: SourceArtifact = body.sourceArtifact ?? {
+    version: 1,
+    status: "unavailable",
+    revision: body.revision,
+    reason: "not_captured",
+  };
 
   const nodeIds = new Set(body.graph.nodes.map((node) => node.id));
 
@@ -67,8 +110,13 @@ export async function validateCompiled(body: PutLoopyBody) {
     (sourceArtifact.status === "available" &&
       sourceArtifact.ranges.some((range) => !nodeIds.has(range.nodeId)))
   ) {
-    throw new Error("Source must name this compiled revision and its graph nodes.");
+    return yield* Effect.fail(
+      new CompiledValidationError({
+        code: "invalid_source",
+        message: "Source must name this compiled revision and its graph nodes.",
+      }),
+    );
   }
 
   return { bundles, sourceArtifact };
-}
+});

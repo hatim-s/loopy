@@ -1,117 +1,121 @@
-import { z } from "zod";
+import { Schema } from "effect";
 import { LOG_LEVELS, RUN_STATUSES, STEP_KINDS } from "../core/index.js";
+import { struct } from "./codec.js";
+
 import { jsonSchema } from "./json.js";
 
 // Every counter the engine records is a nonnegative integer; the wire must not loosen that.
-const counter = z.number().int().nonnegative();
+const counter = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
-export const runStatusSchema = z.enum(RUN_STATUSES);
+export const runStatusSchema = Schema.Literals(RUN_STATUSES);
 
-export type RunStatus = z.infer<typeof runStatusSchema>;
+export type RunStatus = Schema.Schema.Type<typeof runStatusSchema>;
 
-export const runOutcomeSchema = z.discriminatedUnion("status", [
-  z.strictObject({ status: z.literal("succeeded"), output: jsonSchema }),
-  z.strictObject({ status: z.literal("failed"), error: z.string() }),
-  z.strictObject({ status: z.literal("cancelled") }),
+export const runOutcomeSchema = Schema.Union([
+  struct({ status: Schema.Literal("succeeded"), output: jsonSchema }),
+  struct({ status: Schema.Literal("failed"), error: Schema.String }),
+  struct({ status: Schema.Literal("cancelled") }),
 ]);
 
-export type RunOutcome = z.infer<typeof runOutcomeSchema>;
+export type RunOutcome = Schema.Schema.Type<typeof runOutcomeSchema>;
 
-const stepBaseSchema = z.strictObject({
-  runId: z.string(),
+const stepBaseSchema = struct({
+  runId: Schema.String,
   seq: counter,
-  key: z.string(),
-  kind: z.enum(STEP_KINDS),
+  key: Schema.String,
+  kind: Schema.Literals(STEP_KINDS),
   input: jsonSchema,
   attempt: counter,
   maxAttempts: counter,
-  startedAt: z.string(),
+  startedAt: Schema.String,
 });
 
-export const stepRecordSchema = z.discriminatedUnion("status", [
-  stepBaseSchema.extend({ status: z.literal("running") }),
-  stepBaseSchema.extend({
-    status: z.literal("succeeded"),
+export const stepRecordSchema = Schema.Union([
+  struct({ ...stepBaseSchema.fields, status: Schema.Literal("running") }),
+  struct({
+    ...stepBaseSchema.fields,
+    status: Schema.Literal("succeeded"),
     output: jsonSchema,
-    endedAt: z.string(),
+    endedAt: Schema.String,
     finishOrder: counter,
   }),
-  stepBaseSchema.extend({
-    status: z.literal("failed"),
-    error: z.string(),
-    endedAt: z.string(),
+  struct({
+    ...stepBaseSchema.fields,
+    status: Schema.Literal("failed"),
+    error: Schema.String,
+    endedAt: Schema.String,
     finishOrder: counter,
   }),
-  stepBaseSchema.extend({
-    status: z.literal("retrying"),
-    error: z.string(),
-    nextRetryAt: z.string(),
-    endedAt: z.string(),
+  struct({
+    ...stepBaseSchema.fields,
+    status: Schema.Literal("retrying"),
+    error: Schema.String,
+    nextRetryAt: Schema.String,
+    endedAt: Schema.String,
   }),
-  stepBaseSchema.extend({ status: z.literal("sleeping"), wakeAt: z.string() }),
-  stepBaseSchema.extend({ status: z.literal("waiting"), wakeAt: z.string().optional() }),
+  struct({ ...stepBaseSchema.fields, status: Schema.Literal("sleeping"), wakeAt: Schema.String }),
+  struct({
+    ...stepBaseSchema.fields,
+    status: Schema.Literal("waiting"),
+    wakeAt: Schema.optional(Schema.String),
+  }),
 ]);
 
-export type StepRecord = z.infer<typeof stepRecordSchema>;
+export type StepRecord = Schema.Schema.Type<typeof stepRecordSchema>;
 
-export const logPositionSchema = z.discriminatedUnion("kind", [
-  z.strictObject({
-    kind: z.literal("node"),
-    executionKey: z.string(),
+export const logPositionSchema = Schema.Union([
+  struct({
+    kind: Schema.Literal("node"),
+    executionKey: Schema.String,
     attempt: counter,
     index: counter,
   }),
-  z.strictObject({
-    kind: z.literal("workflow"),
+  struct({
+    kind: Schema.Literal("workflow"),
     afterStep: counter,
     afterFinish: counter,
     index: counter,
   }),
-  z.strictObject({
-    kind: z.literal("step"),
-    seq: counter,
-    attempt: counter,
-    index: counter,
-  }),
+  struct({ kind: Schema.Literal("step"), seq: counter, attempt: counter, index: counter }),
 ]);
 
-export type LogPosition = z.infer<typeof logPositionSchema>;
+export type LogPosition = Schema.Schema.Type<typeof logPositionSchema>;
 
-export const logRecordSchema = z.strictObject({
-  runId: z.string(),
+export const logRecordSchema = struct({
+  runId: Schema.String,
   seq: counter,
   position: logPositionSchema,
-  level: z.enum(LOG_LEVELS),
-  message: z.string(),
-  data: jsonSchema.optional(),
-  at: z.string(),
+  level: Schema.Literals(LOG_LEVELS),
+  message: Schema.String,
+  data: Schema.optional(jsonSchema),
+  at: Schema.String,
 });
 
-export type LogRecord = z.infer<typeof logRecordSchema>;
+export type LogRecord = Schema.Schema.Type<typeof logRecordSchema>;
 
-export const hookRecordSchema = z.strictObject({
-  token: z.string(),
-  runId: z.string(),
+export const hookRecordSchema = struct({
+  token: Schema.String,
+  runId: Schema.String,
   seq: counter,
-  name: z.string(),
-  createdAt: z.string(),
-  payload: jsonSchema.optional(),
-  resolvedAt: z.string().optional(),
-  expiredAt: z.string().optional(),
+  name: Schema.String,
+  createdAt: Schema.String,
+  payload: Schema.optional(jsonSchema),
+  resolvedAt: Schema.optional(Schema.String),
+  expiredAt: Schema.optional(Schema.String),
 });
 
-export type HookRecord = z.infer<typeof hookRecordSchema>;
+export type HookRecord = Schema.Schema.Type<typeof hookRecordSchema>;
 
-export const scheduleSchema = z.strictObject({
-  version: z.number().int(),
-  workspace: z.string(),
-  slug: z.string(),
-  cron: z.string(),
-  tz: z.string(),
+export const scheduleSchema = struct({
+  version: Schema.Int,
+  workspace: Schema.String,
+  slug: Schema.String,
+  cron: Schema.String,
+  tz: Schema.String,
   input: jsonSchema,
-  enabled: z.boolean(),
-  lastFireKey: z.string().optional(),
-  nextFireAt: z.string(),
+  enabled: Schema.Boolean,
+  lastFireKey: Schema.optional(Schema.String),
+  nextFireAt: Schema.String,
 });
 
-export type Schedule = z.infer<typeof scheduleSchema>;
+export type Schedule = Schema.Schema.Type<typeof scheduleSchema>;

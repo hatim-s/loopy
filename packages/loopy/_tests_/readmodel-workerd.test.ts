@@ -1,8 +1,13 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { resolve } from "node:path";
+import { Schema } from "effect";
 import type { Miniflare } from "miniflare";
-import { z } from "zod";
-import { routes, runStatusSchema, statusCountsSchema } from "../src/contract/index.js";
+import {
+  decodeBoundary,
+  routes,
+  runStatusSchema,
+  statusCountsSchema,
+} from "../src/contract/index.js";
 import { checkCountHistory, checkScopePages } from "./fixtures/readmodel-assertions.js";
 import { probeRuntime } from "./fixtures/workerd-probe.js";
 
@@ -30,52 +35,67 @@ async function probe(path: string, instance = "scopes") {
   return response.body;
 }
 
-const row = z.object({
-  workspace: z.string(),
-  slug: z.string(),
+const row = Schema.Struct({
+  workspace: Schema.String,
+  slug: Schema.String,
   status: runStatusSchema,
-  count: z.number(),
+  count: Schema.Number,
 });
 
-const cursor = z.object({ cursor: z.number(), epoch: z.string() });
+const cursor = Schema.Struct({ cursor: Schema.Number, epoch: Schema.String });
 
-const schemaRows = z.array(
-  z.object({ type: z.string(), name: z.string(), sql: z.string().nullable() }),
+const schemaRows = Schema.Array(
+  Schema.Struct({ type: Schema.String, name: Schema.String, sql: Schema.NullOr(Schema.String) }),
 );
 
 test("workerd grouped counts match per-filter queries through transitions, rollback and unchanged schema-15 reopening", async () => {
-  const result = z
-    .object({
-      before: schemaRows,
-      after: schemaRows,
-      version: z.object({ value: z.literal("15") }),
-      history: z.object({
-        error: z.string().nullable(),
-        before: cursor,
-        after: cursor,
-        snapshots: z.array(
-          z.object({
-            stage: z.string(),
-            rows: z.array(row),
+  const resultSchema = Schema.Struct({
+    before: schemaRows,
+    after: schemaRows,
+    version: Schema.Struct({ value: Schema.Literal("15") }),
+    history: Schema.Struct({
+      error: Schema.NullOr(Schema.String),
+      before: cursor,
+      after: cursor,
+      snapshots: Schema.mutable(
+        Schema.Array(
+          Schema.Struct({
+            stage: Schema.String,
+            rows: Schema.mutable(Schema.Array(row)),
             global: statusCountsSchema,
-            filters: z.array(
-              z.object({ workspace: z.string(), slug: z.string(), counts: statusCountsSchema }),
+            filters: Schema.mutable(
+              Schema.Array(
+                Schema.Struct({
+                  workspace: Schema.String,
+                  slug: Schema.String,
+                  counts: statusCountsSchema,
+                }),
+              ),
             ),
           }),
         ),
-      }),
-    })
-    .parse(await probe("/counts", "counts"));
+      ),
+    }),
+  });
 
-  checkCountHistory(result.history, "Invalid time value");
+  const result = decodeBoundary(resultSchema)(await probe("/counts", "counts"));
+
+  checkCountHistory(
+    result.history,
+    "Invalid store timestamp 'invalid-timestamp'. Validate timestamps before persistence.",
+  );
   expect(result.after).toEqual(result.before);
   expect(result.version).toEqual({ value: "15" });
   expect(result.after.filter(({ type }) => type === "trigger")).toEqual([]);
   await runtime.unsafeEvictDurableObject("readmodel", "ReadmodelProbe", { name: "counts" });
 
-  const reopened = z
-    .object({ rows: z.array(row), cursor, version: z.object({ value: z.literal("15") }) })
-    .parse(await probe("/reopen", "counts"));
+  const reopenedSchema = Schema.Struct({
+    rows: Schema.mutable(Schema.Array(row)),
+    cursor,
+    version: Schema.Struct({ value: Schema.Literal("15") }),
+  });
+
+  const reopened = decodeBoundary(reopenedSchema)(await probe("/reopen", "counts"));
 
   expect(reopened.rows).toEqual(result.history.snapshots.at(-1)?.rows ?? []);
   expect(reopened.cursor).toEqual(result.history.after);
@@ -95,7 +115,7 @@ test("workerd scope pages keep numeric cursor traversal, status selection and al
       params.set("after", String(query.after));
     }
 
-    return routes.scopeItems.response.parse(await probe(`/scope?${params}`));
+    return decodeBoundary(routes.scopeItems.response)(await probe(`/scope?${params}`));
   });
 });
 
@@ -103,7 +123,10 @@ test("negative control: workerd accepts old 97-index bindings and rejects old 98
   expect(await probe("/old?limit=97")).toEqual({ error: null });
 
   for (const limit of [98, 200]) {
-    const result = z.object({ error: z.string() }).parse(await probe(`/old?limit=${limit}`));
+    const result = decodeBoundary(Schema.Struct({ error: Schema.String }))(
+      await probe(`/old?limit=${limit}`),
+    );
+
     expect(result.error).toContain("too many SQL variables");
   }
 });

@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
+import { Effect } from "effect";
 import type { AttemptDependencies } from "../../../apps/sandbox/src/attempt-dependencies.js";
 import { FilesystemAuthority } from "../../../apps/sandbox/src/filesystem-authority.js";
-import { startSandbox } from "../../../apps/sandbox/src/server.js";
+import { failure } from "../../../apps/sandbox/src/operations.js";
 import type { AuthorityInput } from "../src/contract/sandbox-journal-rpc.js";
 import {
   artifactReader,
@@ -11,6 +12,7 @@ import {
   successful,
   uncertain,
 } from "./fixtures/sandbox-authority.js";
+import { openSandbox, run } from "./fixtures/sandbox-run.js";
 
 function within<T>(operation: Promise<T>, message: string) {
   const deadline = Promise.withResolvers<never>();
@@ -20,7 +22,7 @@ function within<T>(operation: Promise<T>, message: string) {
 }
 
 async function post(
-  service: Awaited<ReturnType<typeof startSandbox>>,
+  service: Awaited<ReturnType<typeof openSandbox>>,
   fixture: Awaited<ReturnType<typeof authorityFixture>>,
 ) {
   try {
@@ -39,18 +41,28 @@ async function post(
 class UnavailableAfterAdmit extends FilesystemAuthority {
   readonly reconciling = Promise.withResolvers<void>();
   unavailable = false;
-  override async admit(input: AuthorityInput<"admit">): Promise<never> {
-    await super.admit(input);
-    this.unavailable = true;
-    throw new Error("Committed admission reply lost");
-  }
-  override async read(id: string) {
-    if (this.unavailable) {
-      this.reconciling.resolve();
-      throw new Error("Authority remains unavailable");
-    }
+  override admit(input: AuthorityInput<"admit">) {
+    const baseadmit = super.admit.bind(this);
 
-    return super.read(id);
+    return Effect.gen({ self: this }, function* () {
+      yield* baseadmit(input);
+      this.unavailable = true;
+
+      return yield* Effect.fail(failure("fixture", new Error("Committed admission reply lost")));
+    });
+  }
+  override read(id: string) {
+    const baseread = super.read.bind(this);
+
+    return Effect.gen({ self: this }, function* () {
+      if (this.unavailable) {
+        this.reconciling.resolve();
+
+        return yield* Effect.fail(failure("fixture", new Error("Authority remains unavailable")));
+      }
+
+      return yield* baseread(id);
+    });
   }
 }
 
@@ -62,28 +74,33 @@ test("server close aborts an outage-bound admission handler and successor only r
   let dependencyCloses = 0;
 
   const backend = {
-    start: async () => {
-      starts++;
+    start: () =>
+      Effect.gen(function* () {
+        starts++;
 
-      return successful;
-    },
-    recover: async () => {
-      recoveries++;
+        return successful;
+      }),
+    recover: () =>
+      Effect.gen(function* () {
+        recoveries++;
 
-      return uncertain;
-    },
+        return uncertain;
+      }),
   };
 
-  const service = await startSandbox(fixture.config, async () => ({
-    authority,
-    resultsFor: fixture.resultsFor,
-    artifactReader,
-    backend,
-    close: async () => {
-      dependencyCloses++;
-      await authority.close();
-    },
-  }));
+  const service = await openSandbox(fixture.config, () =>
+    Effect.promise(async () => ({
+      authority,
+      resultsFor: fixture.resultsFor,
+      artifactReader,
+      backend,
+      close: () =>
+        Effect.gen(function* () {
+          dependencyCloses++;
+          yield* authority.close();
+        }),
+    })),
+  );
 
   const pending = post(service, fixture);
   let closing: Promise<void> | undefined;
@@ -91,7 +108,7 @@ test("server close aborts an outage-bound admission handler and successor only r
   try {
     await within(authority.reconciling.promise, "POST handler did not reach reconciliation");
     expect(await Bun.file(join(fixture.config.stateRoot, "service.lock")).exists()).toBe(true);
-    closing = service.close();
+    closing = run(service.close());
     await within(closing, "Server shutdown waited for unavailable admission reconciliation");
     await within(pending, "HTTP request remained pending after server close");
     expect(authority.unavailable).toBe(true);
@@ -99,29 +116,31 @@ test("server close aborts an outage-bound admission handler and successor only r
     expect(dependencyCloses).toBe(1);
     expect(await Bun.file(join(fixture.config.stateRoot, "service.lock")).exists()).toBe(false);
 
-    const successor = await startSandbox(fixture.config, async () => ({
-      authority: new FilesystemAuthority(fixture.config.stateRoot),
-      resultsFor: fixture.resultsFor,
-      artifactReader,
-      backend,
-    }));
+    const successor = await openSandbox(fixture.config, () =>
+      Effect.promise(async () => ({
+        authority: new FilesystemAuthority(fixture.config.stateRoot),
+        resultsFor: fixture.resultsFor,
+        artifactReader,
+        backend,
+      })),
+    );
 
     try {
-      await successor.attempts.drain();
-      expect(await successor.attempts.lookup(fixture.request)).toEqual({
+      await run(successor.attempts.drain());
+      expect(await run(successor.attempts.lookup(fixture.request))).toEqual({
         kind: "finished",
         result: uncertain,
       });
       expect(starts).toBe(0);
       expect(recoveries).toBe(1);
     } finally {
-      await successor.close();
+      await run(successor.close());
     }
   } finally {
     // Drain even when the original ordering is temporarily restored as a negative control.
-    await service.attempts.close();
+    await run(service.attempts.close());
     await closing;
-    await service.close();
+    await run(service.close());
     await pending;
     await rm(fixture.root, { recursive: true, force: true });
   }
@@ -140,45 +159,52 @@ async function assertDrainOrdering(kind: "effect" | "artifact") {
     authority: fixture.authority,
     resultsFor: fixture.resultsFor,
     backend: {
-      start: async () => {
-        if (kind === "effect") {
-          entered.resolve();
-          await finish.promise;
-          drained = true;
-        }
+      start: () =>
+        Effect.gen(function* () {
+          if (kind === "effect") {
+            entered.resolve();
+            yield* Effect.promise(() => finish.promise);
+            drained = true;
+          }
 
-        return successful;
-      },
-      recover: async () => uncertain,
+          return successful;
+        }),
+      recover: () =>
+        Effect.gen(function* () {
+          return uncertain;
+        }),
     },
     artifactReader: {
-      read: async (receipt, path) => {
-        entered.resolve();
+      read: (receipt, path) =>
+        Effect.gen(function* () {
+          entered.resolve();
 
-        return artifactReader.read(receipt, path);
-      },
-      cleanup: async () => {
-        await finish.promise;
-        drained = true;
-      },
+          return yield* artifactReader.read(receipt, path);
+        }),
+      cleanup: () =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() => finish.promise);
+          drained = true;
+        }),
     },
-    close: async () => {
-      dependencyCloses++;
-      expect(drained).toBe(true);
-      dependenciesClosing.resolve();
-      await releaseDependency.promise;
-      await fixture.authority.close();
-    },
+    close: () =>
+      Effect.gen(function* () {
+        dependencyCloses++;
+        expect(drained).toBe(true);
+        dependenciesClosing.resolve();
+        yield* Effect.promise(() => releaseDependency.promise);
+        yield* fixture.authority.close();
+      }),
   };
 
-  const service = await startSandbox(fixture.config, async () => dependencies);
+  const service = await openSandbox(fixture.config, () => Effect.promise(async () => dependencies));
   let request = Promise.resolve();
   let closing: Promise<void> | undefined;
 
   try {
     if (kind === "artifact") {
-      await service.attempts.start(fixture.request);
-      await service.attempts.drain();
+      await run(service.attempts.start(fixture.request));
+      await run(service.attempts.drain());
       const url = new URL("/artifacts", service.server.url);
       url.searchParams.set("workspace", fixture.request.workspace);
       url.searchParams.set("key", JSON.stringify(fixture.request.executionKey));
@@ -195,8 +221,8 @@ async function assertDrainOrdering(kind: "effect" | "artifact") {
     }
 
     await within(entered.promise, "In-flight work did not start");
-    closing = service.close();
-    await expect(service.attempts.start({ ...fixture.request, attempt: 2 })).rejects.toThrow(
+    closing = run(service.close());
+    await expect(run(service.attempts.start({ ...fixture.request, attempt: 2 }))).rejects.toThrow(
       "stopping",
     );
     expect(await Bun.file(join(fixture.config.stateRoot, "service.lock")).exists()).toBe(true);
@@ -213,9 +239,9 @@ async function assertDrainOrdering(kind: "effect" | "artifact") {
   } finally {
     finish.resolve();
     releaseDependency.resolve();
-    await service.attempts.close();
+    await run(service.attempts.close());
     await closing;
-    await service.close();
+    await run(service.close());
     await request;
     await rm(fixture.root, { recursive: true, force: true });
   }

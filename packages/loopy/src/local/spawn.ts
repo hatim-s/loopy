@@ -1,5 +1,6 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { spawn } from "node:child_process";
+import { Effect } from "effect";
 import type { CommandResult } from "../core/index.js";
 import { CommandExecutionError, errorMessage } from "../core/index.js";
 
@@ -15,7 +16,7 @@ export type Launch = {
   stdin?: string;
 };
 
-export type Limits = { timeoutMs: number; maxOutputBytes: number };
+export type Limits = { timeoutMs: number; maxOutputBytes: number; killGraceMs?: number };
 
 export function emptyOutput(): CommandResult {
   return { stdout: "", stderr: "", exitCode: -1, durationMs: 0 };
@@ -23,7 +24,22 @@ export function emptyOutput(): CommandResult {
 
 /** An error raised before the process spawned, so retrying it is safe. */
 export function unstarted(cause: unknown): CommandExecutionError {
-  return new CommandExecutionError(errorMessage(cause), emptyOutput(), { cause });
+  return new CommandExecutionError({
+    message: errorMessage(cause),
+    output: emptyOutput(),
+    cause,
+    reason: "unstarted",
+  });
+}
+
+/** Invalid author input has a known outcome and stays in durable command failure data. */
+export function rejected(cause: unknown): CommandExecutionError {
+  return new CommandExecutionError({
+    message: errorMessage(cause),
+    output: emptyOutput(),
+    cause,
+    reason: "rejected",
+  });
 }
 
 function killTree(child: ChildProcessWithoutNullStreams, signal: NodeJS.Signals): void {
@@ -93,8 +109,31 @@ export function spawnCaptured(
   limits: Limits,
   signal: AbortSignal | undefined,
   started: number,
-): Promise<CommandResult> {
-  return new Promise((resolveOutput, rejectOutput) => {
+): Effect.Effect<CommandResult, CommandExecutionError> {
+  return Effect.callback((resume) => {
+    if (signal?.aborted) {
+      resume(
+        Effect.fail(
+          new CommandExecutionError({
+            message: "Command aborted.",
+            output: emptyOutput(),
+            cause: signal.reason,
+            reason: "aborted",
+          }),
+        ),
+      );
+
+      return;
+    }
+
+    let complete!: () => void;
+
+    const closed = new Promise<void>((resolve) => {
+      complete = resolve;
+    });
+
+    const resolveOutput = (value: CommandResult) => resume(Effect.succeed(value));
+    const rejectOutput = (error: CommandExecutionError) => resume(Effect.fail(error));
     let child: ChildProcessWithoutNullStreams;
 
     try {
@@ -109,32 +148,35 @@ export function spawnCaptured(
     const stderr: Buffer[] = [];
     const budget = { bytes: 0 };
     let failure: Error | undefined;
-    let failureCode: "execution" | "output_limit" = "execution";
+    let failureReason: CommandExecutionError["reason"] = "process";
     let settled = false;
     let exited = false;
     let killTimer: ReturnType<typeof setTimeout> | undefined;
     let drainTimer: ReturnType<typeof setTimeout> | undefined;
 
-    const stop = (error: Error, code: "execution" | "output_limit" = "execution") => {
+    const stop = (error: Error, reason: CommandExecutionError["reason"]) => {
       if (failure) {
         return;
       }
 
       failure = error;
-      failureCode = code;
+      failureReason = reason;
       killTree(child, "SIGTERM");
 
       if (!exited) {
-        killTimer = setTimeout(() => killTree(child, "SIGKILL"), KILL_GRACE_MS);
+        killTimer = setTimeout(
+          () => killTree(child, "SIGKILL"),
+          limits.killGraceMs ?? KILL_GRACE_MS,
+        );
         killTimer.unref();
       }
     };
 
-    const onAbort = () => stop(new Error("Command aborted.", { cause: signal?.reason }));
+    const onAbort = () => stop(new Error("Command aborted.", { cause: signal?.reason }), "aborted");
     signal?.addEventListener("abort", onAbort, { once: true });
 
     const timeout = setTimeout(
-      () => stop(new Error(`Command timed out after ${limits.timeoutMs} ms.`)),
+      () => stop(new Error(`Command timed out after ${limits.timeoutMs} ms.`), "timeout"),
       limits.timeoutMs,
     );
 
@@ -146,6 +188,7 @@ export function spawnCaptured(
       }
 
       settled = true;
+      complete();
 
       if (!exited) {
         killTree(child, "SIGKILL");
@@ -171,7 +214,12 @@ export function spawnCaptured(
 
       if (reason) {
         rejectOutput(
-          new CommandExecutionError(reason.message, output, { cause: reason }, failureCode),
+          new CommandExecutionError({
+            message: reason.message,
+            output,
+            cause: reason,
+            reason: child.pid === undefined ? "unstarted" : failureReason,
+          }),
         );
 
         return;
@@ -204,5 +252,19 @@ export function spawnCaptured(
     child.once("error", (error) => finish(null, null, error));
     child.once("close", (code, exitSignal) => finish(code, exitSignal));
     child.stdin.end(launch.stdin);
+
+    if (signal?.aborted) {
+      onAbort();
+    }
+
+    // Interrupting the fiber requests termination, then waits for group kill and pipe drain.
+    // The caller may remove sandbox files only after this finalizer completes.
+    return Effect.promise(() => {
+      if (!settled) {
+        stop(new Error("Command interrupted."), "aborted");
+      }
+
+      return closed;
+    });
   });
 }

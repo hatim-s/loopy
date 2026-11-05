@@ -1,12 +1,15 @@
 import { afterEach, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { nodeIdSchema } from "../src/contract/index.js";
+import { Effect, Exit, Scope } from "effect";
+import { decodeBoundary, nodeIdSchema } from "../src/contract/index.js";
 import { localDaemon, openRunStore, Registry, readDaemonFile } from "../src/local/index.js";
 import { cli, fixture, object, roots } from "./cli-fixture.js";
 import { newRun } from "./fixture.js";
 
-const daemons: { stop(): Promise<void> }[] = [];
+const daemons: {
+  stop(): Promise<void>;
+}[] = [];
 
 afterEach(async () => {
   await Promise.all(daemons.splice(0).map((daemon) => daemon.stop()));
@@ -16,27 +19,30 @@ afterEach(async () => {
   }
 });
 
-function graphFixture(name = "compiled") {
+async function graphFixture(name = "compiled") {
   const f = fixture(name, "run: () => null");
   writeFileSync(
     f.file,
     `import { loopy, log } from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/graph/index.ts"))}; export default loopy(${JSON.stringify(name)}, { input: {count: "number"}, run: ({input}) => {log("ready"); return input.get("count");}});`,
   );
-  const store = openRunStore(f.home);
-  const daemon = localDaemon({ ...f, store, concurrency: 4, port: 0 });
-  daemon.start();
-  daemons.push({
-    async stop() {
-      await daemon.stop();
-      store.close();
-    },
-  });
+  const scope = Effect.runSync(Scope.make());
+  daemons.push({ stop: () => Effect.runPromise(Scope.close(scope, Exit.void)) });
+
+  const { store } = await Effect.runPromise(
+    Effect.gen(function* () {
+      const store = yield* openRunStore(f.home);
+      const daemon = yield* localDaemon({ ...f, store, concurrency: 4, port: 0 });
+      yield* daemon.start;
+
+      return { store };
+    }).pipe(Effect.provideService(Scope.Scope, scope)),
+  );
 
   return { ...f, store };
 }
 
 test("save posts a compiled graph and graph prints the same redacted view by file and name", async () => {
-  const f = graphFixture();
+  const f = await graphFixture();
   const saved = await cli(f, "save", f.file);
   expect(saved).toMatchObject({ code: 0, stderr: "" });
   const view = object(saved.stdout);
@@ -46,7 +52,7 @@ test("save posts a compiled graph and graph prints the same redacted view by fil
   const text = await cli(f, "graph", "compiled", "--format", "text");
   expect(text.code).toBe(0);
   expect(text.stdout).toContain("0:log log [next -> 1:join]");
-  const entry = new Registry(f.home, f.cwd).get("compiled");
+  const entry = await registryEntry(f.home, f.cwd, "compiled");
   expect(entry).toMatchObject({
     version: 2,
     graph: { name: "compiled" },
@@ -57,16 +63,16 @@ test("save posts a compiled graph and graph prints the same redacted view by fil
 });
 
 test("HTTP commands queue schema-validated graph runs and pin the saved revision", async () => {
-  const f = graphFixture();
+  const f = await graphFixture();
   expect((await cli(f, "save", f.file)).code).toBe(0);
   expect((await cli(f, "run", "compiled", "--count", "bad")).code).toBe(1);
-  expect(await f.store.listRuns()).toEqual([]);
+  expect(await Effect.runPromise(f.store.listRuns())).toEqual([]);
   const queued = await cli(f, "run", "compiled", "--count", "2");
   expect(queued).toMatchObject({ code: 0, stderr: "" });
   const run = object(queued.stdout);
   expect(run).toMatchObject({ status: "queued", input: { count: 2 } });
-  expect(await f.store.getRun(String(run.id))).toMatchObject({
-    revision: new Registry(f.home, f.cwd).get("compiled").revision,
+  expect(await Effect.runPromise(f.store.getRun(String(run.id)))).toMatchObject({
+    revision: (await registryEntry(f.home, f.cwd, "compiled")).revision,
   });
   expect(object((await cli(f, "inspect", String(run.id))).stdout).run).toMatchObject({
     id: run.id,
@@ -77,7 +83,7 @@ test("HTTP commands queue schema-validated graph runs and pin the saved revision
 });
 
 test("save rejects another source until --replace and locates absolute files beside their source", async () => {
-  const f = graphFixture();
+  const f = await graphFixture();
   expect((await cli(f, "save", f.file)).code).toBe(0);
   const other = join(f.cwd, "other.ts");
   writeFileSync(other, await Bun.file(f.file).text());
@@ -87,11 +93,11 @@ test("save rejects another source until --replace and locates absolute files bes
   const caller = join(f.cwd, "caller");
   mkdirSync(caller);
   expect((await cli({ ...f, cwd: caller }, "save", other)).code).toBe(0);
-  expect(new Registry(f.home, f.cwd).get("compiled").source).toBe(other);
+  expect((await registryEntry(f.home, f.cwd, "compiled")).source).toBe(other);
 });
 
 test("compiler diagnostics include locations and do not create registry entries", async () => {
-  const f = graphFixture();
+  const f = await graphFixture();
   writeFileSync(
     f.file,
     `import {loopy} from "loopy/graph"; export default loopy("bad", {input:{},run:async()=>1});`,
@@ -99,11 +105,13 @@ test("compiler diagnostics include locations and do not create registry entries"
   const result = await cli(f, "save", f.file);
   expect(result.code).toBe(1);
   expect(result.stderr).toContain("[synchronous_run]");
-  expect(new Registry(f.home, f.cwd).list()).toEqual([]);
+  expect(
+    await Effect.runPromise(Effect.flatMap(Registry.make(f.home, f.cwd), (r) => r.list())),
+  ).toEqual([]);
 });
 
 test("CLI rejects invalid graph formats and short leases", async () => {
-  const f = graphFixture();
+  const f = await graphFixture();
   expect((await cli(f, "graph", f.file, "--format", "svg")).stderr).toContain(
     "--format json or --format text",
   );
@@ -135,11 +143,11 @@ test("save starts the daemon on demand and leaves artifact writes to the service
   expect(result).toMatchObject({ code: 0, stderr: "" });
   expect(concurrent).toMatchObject({ code: 0, stderr: "" });
   expect(record?.pid).not.toBe(process.pid);
-  expect(new Registry(f.home, f.cwd).get("on-demand").graph.name).toBe("on-demand");
+  expect((await registryEntry(f.home, f.cwd, "on-demand")).graph.name).toBe("on-demand");
 });
 
 test("list and schedules use the caller workspace when the daemon started elsewhere", async () => {
-  const f = graphFixture();
+  const f = await graphFixture();
   const other = join(f.cwd, "other");
   mkdirSync(other);
   const file = join(other, "other.ts");
@@ -154,23 +162,29 @@ test("list and schedules use the caller workspace when the daemon started elsewh
 });
 
 test("types uses the daemon's command-help endpoint and writes the returned source", async () => {
-  const f = graphFixture();
+  const f = await graphFixture();
   const result = await cli(f, "types", "git", "--out", "git.ts");
   expect(result.code).toBe(0);
   expect(await Bun.file(join(f.cwd, "git.ts")).text()).toContain("defineCommand");
 });
 
 test("an absolute source in another project is registered beside that source", async () => {
-  const source = graphFixture("external-source");
+  const source = await graphFixture("external-source");
   const caller = fixture("unrelated-caller", "run: () => null");
   const saved = await cli({ ...caller, home: source.home }, "save", source.file);
   expect(saved).toMatchObject({ code: 0, stderr: "" });
-  expect(new Registry(source.home, source.cwd).get("external-source").source).toBe(source.file);
-  expect(new Registry(source.home, caller.cwd).list()).toEqual([]);
+  expect((await registryEntry(source.home, source.cwd, "external-source")).source).toBe(
+    source.file,
+  );
+  expect(
+    await Effect.runPromise(
+      Effect.flatMap(Registry.make(source.home, caller.cwd), (r) => r.list()),
+    ),
+  ).toEqual([]);
 });
 
 test("save preserves every author option from graph meta", async () => {
-  const f = graphFixture("metadata");
+  const f = await graphFixture("metadata");
 
   const meta = {
     description: "Author metadata",
@@ -185,12 +199,12 @@ test("save preserves every author option from graph meta", async () => {
     `import {loopy} from "loopy/graph"; export default loopy("metadata", {${JSON.stringify(meta).slice(1, -1)},input:{count:"number"},run:({input})=>input.get("count")});`,
   );
   expect(await cli(f, "save", f.file)).toMatchObject({ code: 0, stderr: "" });
-  const saved = new Registry(f.home, f.cwd).get("metadata");
+  const saved = await registryEntry(f.home, f.cwd, "metadata");
   expect(saved).toMatchObject({ ...meta, input: { count: "number" }, graph: { meta } });
 });
 
 test("HTTP schedule enable, disable and off persist their state", async () => {
-  const f = graphFixture();
+  const f = await graphFixture();
   expect((await cli(f, "save", f.file)).code).toBe(0);
   expect(
     await cli(f, "schedule", "compiled", "--cron", "0 * * * *", "--input-json", '{"count":2}'),
@@ -203,24 +217,26 @@ test("HTTP schedule enable, disable and off persist their state", async () => {
     expect(object((await cli(f, "schedule", "compiled", action)).stdout)).toMatchObject({
       enabled,
     });
-    expect(await f.store.listSchedules()).toMatchObject([
+    expect(await Effect.runPromise(f.store.listSchedules())).toMatchObject([
       { enabled, input: { count: 2 }, cron: "0 * * * *" },
     ]);
     expect(JSON.parse((await cli(f, "list")).stdout)).toMatchObject([{ schedule: { enabled } }]);
   }
 
   expect((await cli(f, "schedule", "compiled", "--off")).code).toBe(0);
-  expect(await f.store.listSchedules()).toEqual([]);
+  expect(await Effect.runPromise(f.store.listSchedules())).toEqual([]);
 });
 
 test("HTTP cancel refuses an active owner and inspect diagnoses a missing run", async () => {
-  const f = graphFixture();
-  await f.store.createRun({ ...newRun(), id: "owned", slug: "compiled", workspace: f.cwd });
-  await f.store.claim("owned", "active-owner");
+  const f = await graphFixture();
+  await Effect.runPromise(
+    f.store.createRun({ ...newRun(), id: "owned", slug: "compiled", workspace: f.cwd }),
+  );
+  await Effect.runPromise(f.store.claim("owned", "active-owner"));
   const cancelled = await cli(f, "cancel", "owned");
   expect(cancelled.code).toBe(1);
   expect(cancelled.stderr).toContain("owned");
-  expect(await f.store.getRun("owned")).toMatchObject({
+  expect(await Effect.runPromise(f.store.getRun("owned"))).toMatchObject({
     status: "running",
     owner: { token: "active-owner" },
   });
@@ -230,28 +246,38 @@ test("HTTP cancel refuses an active owner and inspect diagnoses a missing run", 
 });
 
 test("HTTP logs drains every page for normal output and terminal follow", async () => {
-  const f = graphFixture();
-  await f.store.createRun({ ...newRun(), id: "logged", slug: "compiled", workspace: f.cwd });
-  await f.store.claim("logged", "log-owner");
+  const f = await graphFixture();
+  await Effect.runPromise(
+    f.store.createRun({ ...newRun(), id: "logged", slug: "compiled", workspace: f.cwd }),
+  );
+  await Effect.runPromise(f.store.claim("logged", "log-owner"));
 
   for (const index of [...Array(250).keys()]) {
-    await f.store.apply({
-      runId: "logged",
-      token: "log-owner",
-      effects: [
-        {
-          kind: "write_log",
-          executionKey: { runId: "logged", nodeId: nodeIdSchema.parse("0:log"), scope: [] },
-          attempt: 1,
-          log: { message: `line ${index}`, data: null },
-          at: new Date().toISOString(),
-        },
-      ],
-    });
+    await Effect.runPromise(
+      f.store.apply({
+        runId: "logged",
+        token: "log-owner",
+        effects: [
+          {
+            kind: "write_log",
+            executionKey: {
+              runId: "logged",
+              nodeId: decodeBoundary(nodeIdSchema)("0:log"),
+              scope: [],
+            },
+            attempt: 1,
+            log: { message: `line ${index}`, data: null },
+            at: new Date().toISOString(),
+          },
+        ],
+      }),
+    );
   }
 
-  await f.store.finishRun("logged", "log-owner", { status: "succeeded", output: null });
-  await f.store.release("logged", "log-owner");
+  await Effect.runPromise(
+    f.store.finishRun("logged", "log-owner", { status: "succeeded", output: null }),
+  );
+  await Effect.runPromise(f.store.release("logged", "log-owner"));
   const result = await cli(f, "logs", "logged", "--follow");
   expect(result).toMatchObject({ code: 0, stderr: "" });
 
@@ -273,7 +299,7 @@ test("HTTP logs drains every page for normal output and terminal follow", async 
 });
 
 test("HTTP run reports named JSON input errors before creating a run", async () => {
-  const f = graphFixture();
+  const f = await graphFixture();
   writeFileSync(
     f.file,
     'import {loopy} from "loopy/graph"; export default loopy("compiled",{input:{payload:"json",values:"number[]"},run:()=>null});',
@@ -289,5 +315,9 @@ test("HTTP run reports named JSON input errors before creating a run", async () 
     expect(result.stderr).toContain(message ?? "");
   }
 
-  expect(await f.store.listRuns()).toEqual([]);
+  expect(await Effect.runPromise(f.store.listRuns())).toEqual([]);
 });
+
+function registryEntry(home: string, cwd: string, slug: string) {
+  return Effect.runPromise(Effect.flatMap(Registry.make(home, cwd), (r) => r.get(slug)));
+}

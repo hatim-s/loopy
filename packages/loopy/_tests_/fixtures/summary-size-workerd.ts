@@ -1,18 +1,18 @@
 import type { DurableObjectState, R2Bucket } from "@cloudflare/workers-types";
-import { z } from "zod";
+import { Effect, Schema } from "effect";
 import { R2ArtifactRegistry } from "../../../../apps/cloud/src/artifacts.js";
 import { DurableSqlDriver } from "../../../../apps/cloud/src/sql-driver.js";
-import { putLoopyBodySchema, validateCompiled } from "../../src/contract/index.js";
+import { decodeBoundary, putLoopyBodySchema, validateCompiled } from "../../src/contract/index.js";
 import { canonicalJson, errorMessage } from "../../src/core/index.js";
-import { LoopyService } from "../../src/service/index.js";
+import { makeService } from "../../src/service/index.js";
 import { SqlRunStore } from "../../src/store/portable.js";
 
-const requestSchema = z.object({
-  operation: z.enum(["legacy", "save", "summary", "list", "service", "inspect"]),
-  body: putLoopyBodySchema.optional(),
+const requestSchema = Schema.Struct({
+  operation: Schema.Literals(["legacy", "save", "summary", "list", "service", "inspect"]),
+  body: Schema.optionalKey(putLoopyBodySchema),
 });
 
-export type SummarySizeRequest = z.input<typeof requestSchema>;
+export type SummarySizeRequest = typeof requestSchema.Type;
 
 const workspace = "summaries";
 
@@ -23,7 +23,7 @@ export class SummarySizeProbe {
   ) {}
 
   async fetch(request: Request): Promise<Response> {
-    const input = requestSchema.parse(await request.json());
+    const input = decodeBoundary(requestSchema)(await request.json());
     let artifactWrites = 0;
     let graphReads = 0;
 
@@ -48,8 +48,8 @@ export class SummarySizeProbe {
       });
 
       if (input.operation === "legacy") {
-        const body = putLoopyBodySchema.parse(input.body);
-        await validateCompiled(body);
+        const body = decodeBoundary(putLoopyBodySchema)(input.body);
+        await Effect.runPromise(validateCompiled(body));
         this.ctx.storage.sql.exec(`CREATE TABLE artifact_definitions (
           workspace TEXT NOT NULL, slug TEXT NOT NULL, revision TEXT NOT NULL,
           source TEXT NOT NULL, saved_at TEXT NOT NULL, generation TEXT NOT NULL,
@@ -100,50 +100,54 @@ export class SummarySizeProbe {
           };
           break;
         case "save":
-          await registry.save(putLoopyBodySchema.parse(input.body));
-          value = await registry.summary("summary");
+          await Effect.runPromise(registry.save(decodeBoundary(putLoopyBodySchema)(input.body)));
+          value = await Effect.runPromise(registry.summary("summary"));
           break;
         case "summary":
-          value = await registry.summary("summary");
+          value = await Effect.runPromise(registry.summary("summary"));
           break;
         case "list":
-          value = await registry.listSummaries();
+          value = await Effect.runPromise(registry.listSummaries());
           break;
         case "service": {
-          const summary = await registry.summary("summary");
+          const summary = await Effect.runPromise(registry.summary("summary"));
 
           if (!summary) {
             throw new Error("Synthetic definition is missing.");
           }
 
-          if (!(await store.getRun("size-run"))) {
+          if (!(await Effect.runPromise(store.getRun("size-run")))) {
             const at = new Date().toISOString();
-            await store.createRun({
-              id: "size-run",
-              workspace,
-              slug: "summary",
-              revision: summary.revision,
-              input: {},
-              status: "queued",
-              createdAt: at,
-              updatedAt: at,
-            });
+            await Effect.runPromise(
+              store.createRun({
+                id: "size-run",
+                workspace,
+                slug: "summary",
+                revision: summary.revision,
+                input: {},
+                status: "queued",
+                createdAt: at,
+                updatedAt: at,
+              }),
+            );
           }
 
-          const service = new LoopyService({
+          const service = makeService({
             store,
-            registry: () => registry,
+            registry: () => Effect.succeed(registry),
             clock: { now: Date.now },
-            canonicalWorkspace: () => workspace,
-            secrets: { list: () => [], set: () => {}, remove: () => {} },
-            generateTypes: async () => {
-              throw new Error("Unused synthetic operation.");
+            canonicalWorkspace: () => Effect.succeed(workspace),
+            secrets: {
+              list: () => Effect.succeed([]),
+              set: () => Effect.void,
+              remove: () => Effect.void,
             },
+            generateTypes: () => Effect.die(new Error("Unused synthetic operation")),
           });
 
           value = {
-            loopies: await service.listLoopies(workspace),
-            runs: await service.listRuns({ limit: 200 }),
+            loopies: await Effect.runPromise(service.listLoopies(workspace)),
+            runs: await Effect.runPromise(service.listRuns({ limit: 200 })),
           };
           break;
         }

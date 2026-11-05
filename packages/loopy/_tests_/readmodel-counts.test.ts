@@ -2,33 +2,47 @@ import { Database } from "bun:sqlite";
 import { afterEach, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
-import { MemoryStore, SqliteRunStore } from "../src/store/index.js";
+import { Effect, Exit, Scope } from "effect";
+import { MemoryStore, makeSqliteRunStore } from "../src/store/index.js";
 import { checkCountHistory } from "./fixtures/readmodel-assertions.js";
 import { readmodelDirectory } from "./fixtures/readmodel-directory.js";
 import { countHistory, readmodelAt } from "./fixtures/readmodel-history.js";
 
-const cleanups: (() => void)[] = [];
+const cleanups: (() => void | Promise<void>)[] = [];
 
-afterEach(() => {
+afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) {
-    cleanup();
+    await cleanup();
   }
 });
 
 for (const memory of [false, true]) {
   test(`${memory ? "memory" : "sqlite"} grouped counts match filtered authoritative runs through transitions and rollback`, async () => {
     const directory = readmodelDirectory();
-    const file = join(directory, "runs.sqlite");
-    const sqlite = memory ? null : new SqliteRunStore(file, () => Date.parse(readmodelAt));
-    const store = sqlite ?? new MemoryStore(() => Date.parse(readmodelAt));
+    const scope = Effect.runSync(Scope.make());
     cleanups.push(() => {
-      sqlite?.close();
       rmSync(directory, { recursive: true, force: true });
     });
-    checkCountHistory(await countHistory(store), "Invalid Date");
+    cleanups.push(() => Effect.runPromise(Scope.close(scope, Exit.void)));
+    const file = join(directory, "runs.sqlite");
+
+    const sqlite = memory
+      ? null
+      : await Effect.runPromise(
+          makeSqliteRunStore(file, () => Date.parse(readmodelAt)).pipe(
+            Effect.provideService(Scope.Scope, scope),
+          ),
+        );
+
+    const store = sqlite ?? new MemoryStore(() => Date.parse(readmodelAt));
+
+    checkCountHistory(
+      await countHistory(store),
+      "Invalid store timestamp 'invalid-timestamp'. Validate timestamps before persistence.",
+    );
 
     if (!sqlite) {
-      const rows = await store.runCountsByDefinition();
+      const rows = await Effect.runPromise(store.runCountsByDefinition());
       const row = rows[0];
 
       if (!row) {
@@ -36,7 +50,7 @@ for (const memory of [false, true]) {
       }
 
       row.count = 999;
-      expect(await store.runCountsByDefinition()).not.toEqual(rows);
+      expect(await Effect.runPromise(store.runCountsByDefinition())).not.toEqual(rows);
 
       return;
     }
@@ -49,16 +63,21 @@ for (const memory of [false, true]) {
       )
       .all();
 
-    const records = await sqlite.listRuns();
-    const cursor = await sqlite.eventCursor();
-    const rows = await sqlite.runCountsByDefinition();
-    sqlite.close();
-    const reopened = new SqliteRunStore(file, () => Date.parse(readmodelAt));
+    const records = await Effect.runPromise(sqlite.listRuns());
+    const cursor = await Effect.runPromise(sqlite.eventCursor());
+    const rows = await Effect.runPromise(sqlite.runCountsByDefinition());
+    await Effect.runPromise(sqlite.close());
+
+    const reopened = await Effect.runPromise(
+      makeSqliteRunStore(file, () => Date.parse(readmodelAt)).pipe(
+        Effect.provideService(Scope.Scope, scope),
+      ),
+    );
 
     try {
-      expect(await reopened.runCountsByDefinition()).toEqual(rows);
-      expect(await reopened.listRuns()).toEqual(records);
-      expect(await reopened.eventCursor()).toEqual(cursor);
+      expect(await Effect.runPromise(reopened.runCountsByDefinition())).toEqual(rows);
+      expect(await Effect.runPromise(reopened.listRuns())).toEqual(records);
+      expect(await Effect.runPromise(reopened.eventCursor())).toEqual(cursor);
       expect(db.query("PRAGMA user_version").get()).toEqual({ user_version: 15 });
       expect(db.query("SELECT value FROM meta WHERE key='schema_version'").get()).toEqual({
         value: "15",
@@ -72,7 +91,7 @@ for (const memory of [false, true]) {
       ).toEqual(schema);
       expect(schema.filter((row) => row.type === "trigger")).toEqual([]);
     } finally {
-      reopened.close();
+      await Effect.runPromise(reopened.close());
       db.close();
     }
   });

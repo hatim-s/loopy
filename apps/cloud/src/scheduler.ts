@@ -1,4 +1,5 @@
 import type { DurableObjectStorage, SqlStorageCursor } from "@cloudflare/workers-types";
+import { Cause, Effect, Exit } from "effect";
 import { errorMessage } from "../../../packages/loopy/src/core/index.js";
 import {
   activateDurable,
@@ -6,6 +7,7 @@ import {
 } from "../../../packages/loopy/src/host/index.js";
 import type { SqlRunStore, SqlValue } from "../../../packages/loopy/src/store/portable.js";
 import type { R2ArtifactRegistry } from "./artifacts.js";
+import { cloudSync, platform } from "./operation.js";
 import { WorkspaceSchedules } from "./scheduler-schedules.js";
 
 export type SchedulerStorage = Pick<
@@ -47,12 +49,14 @@ export class WorkspaceScheduler {
     this.schedules = new WorkspaceSchedules(options);
   }
 
-  async wake(at = Date.now()): Promise<void> {
-    const current = await this.options.storage.getAlarm();
+  wake(at = Date.now()) {
+    return Effect.gen({ self: this }, function* () {
+      const current = yield* platform("get alarm", () => this.options.storage.getAlarm());
 
-    if (current === null || at < current) {
-      await this.options.storage.setAlarm(at);
-    }
+      if (current === null || at < current) {
+        yield* platform("set alarm", () => this.options.storage.setAlarm(at));
+      }
+    });
   }
 
   private foreignLease(candidate: Candidate): string | null {
@@ -69,36 +73,47 @@ export class WorkspaceScheduler {
     return null;
   }
 
-  private async releaseSuspended(now: string): Promise<void> {
-    const { storage, store } = this.options;
+  private releaseSuspended(now: string) {
+    return Effect.gen({ self: this }, function* () {
+      const { storage, store } = this.options;
 
-    const rows = storage.sql
-      .exec<Candidate>(
-        `SELECT r.id,t.cursor,r.owner_token,r.heartbeat_at FROM runs r
+      const rows = yield* cloudSync("read cloud SQL", () =>
+        storage.sql
+          .exec<Candidate>(
+            `SELECT r.id,t.cursor,r.owner_token,r.heartbeat_at FROM runs r
       LEFT JOIN cloud_turns t ON r.id=t.run_id
       WHERE r.status='suspended' AND r.owner_token IS NOT NULL
       AND (t.next_at IS NULL OR t.next_at<=?)
       ORDER BY COALESCE(t.next_at,r.created_at),r.id LIMIT 32`,
-        now,
-      )
-      .toArray();
+            now,
+          )
+          .toArray(),
+      );
 
-    for (const row of rows) {
-      let nextAt = this.foreignLease(row);
-      let error: string | null = null;
+      for (const row of rows) {
+        let nextAt = this.foreignLease(row);
+        let error: string | null = null;
 
-      try {
-        if (nextAt === null && row.owner_token !== null) {
-          // Suspension already committed. Releasing it preserves waits without taking a slot.
-          await store.release(row.id, row.owner_token);
+        // Suspension already committed. Releasing it preserves waits without taking a slot.
+        const released = yield* Effect.exit(
+          nextAt === null && row.owner_token !== null
+            ? store.release(row.id, row.owner_token)
+            : Effect.void,
+        );
+
+        if (Exit.isFailure(released)) {
+          if (Cause.hasInterrupts(released.cause)) {
+            return yield* Effect.failCause(released.cause);
+          }
+
+          const cause = released.cause;
+          nextAt = new Date(Date.now() + 1000).toISOString();
+          error = errorMessage(Cause.squash(cause)).slice(0, 1000);
         }
-      } catch (cause) {
-        nextAt = new Date(Date.now() + 1000).toISOString();
-        error = errorMessage(cause).slice(0, 1000);
-      }
 
-      this.saveTurn(row, nextAt ?? now, null, error);
-    }
+        yield* cloudSync("cloud SQL", () => this.saveTurn(row, nextAt ?? now, null, error));
+      }
+    });
   }
 
   private saveTurn(
@@ -177,69 +192,91 @@ export class WorkspaceScheduler {
     return dates.length === 0 ? null : Math.max(now + 50, Math.min(...dates));
   }
 
-  async tick(): Promise<void> {
-    const { storage, store, registry, provider, token } = this.options;
-    const now = new Date().toISOString();
-    // A crash anywhere after this write leaves a recovery wakeup.
-    await storage.setAlarm(Date.now() + 5000);
+  tick() {
+    return Effect.gen({ self: this }, function* () {
+      const { storage, store, registry, provider, token } = this.options;
+      const now = new Date().toISOString();
+      yield* platform("set recovery alarm", () => storage.setAlarm(Date.now() + 5000));
 
-    try {
-      await this.schedules.tick(now);
-      await this.releaseSuspended(now);
+      const turn = yield* Effect.exit(
+        Effect.gen({ self: this }, function* () {
+          yield* this.schedules.tick(now);
+          yield* this.releaseSuspended(now);
 
-      for (const candidate of this.candidates(now)) {
-        let nextAt = new Date(Date.now() + 1000).toISOString();
-        let cursor = candidate.cursor;
-        let error: string | null = null;
+          for (const candidate of yield* cloudSync("scheduler candidates", () =>
+            this.candidates(now),
+          )) {
+            let nextAt = new Date(Date.now() + 1000).toISOString();
+            let cursor = candidate.cursor;
+            let error: string | null = null;
+            const lease = this.foreignLease(candidate);
 
-        try {
-          const lease = this.foreignLease(candidate);
+            if (lease === null) {
+              const result = yield* Effect.exit(
+                Effect.gen(function* () {
+                  const run = yield* store.getRun(candidate.id);
 
-          if (lease === null) {
-            const run = await store.getRun(candidate.id);
+                  if (!run) {
+                    return null;
+                  }
 
-            if (!run) {
-              continue;
+                  return yield* activateDurable({
+                    store,
+                    graph: yield* registry.revisionGraph(run.revision),
+                    runId: run.id,
+                    provider,
+                    token,
+                    at: new Date().toISOString(),
+                    cursor,
+                    maxWork: 16,
+                    pollMs: 500,
+                  });
+                }),
+              );
+
+              if (Exit.isFailure(result)) {
+                if (Cause.hasInterrupts(result.cause)) {
+                  return yield* Effect.failCause(result.cause);
+                }
+
+                error = errorMessage(Cause.squash(result.cause)).slice(0, 1000);
+              } else if (result.value === null) {
+                continue;
+              } else {
+                cursor = result.value.cursor;
+                nextAt = result.value.nextWakeAt ?? now;
+              }
+            } else {
+              nextAt = lease;
             }
 
-            const result = await activateDurable({
-              store,
-              graph: await registry.revisionGraph(run.revision),
-              runId: run.id,
-              provider,
-              token,
-              at: new Date().toISOString(),
-              cursor,
-              maxWork: 16,
-              pollMs: 500,
-            });
-
-            cursor = result.cursor;
-            nextAt = result.nextWakeAt ?? now;
-          } else {
-            nextAt = lease;
+            yield* cloudSync("persist turn", () => this.saveTurn(candidate, nextAt, cursor, error));
           }
-        } catch (cause) {
-          error = errorMessage(cause).slice(0, 1000);
+
+          yield* store.pruneEvents(now);
+          const next = yield* cloudSync("next alarm", () => this.next(Date.now()));
+
+          if (next === null) {
+            yield* platform("delete alarm", () => storage.deleteAlarm());
+          } else {
+            yield* platform("set alarm", () => storage.setAlarm(next));
+          }
+        }),
+      );
+
+      if (Exit.isFailure(turn)) {
+        if (Cause.hasInterrupts(turn.cause)) {
+          return yield* Effect.failCause(turn.cause);
         }
 
-        this.saveTurn(candidate, nextAt, cursor, error);
+        yield* cloudSync("record scheduler failure", () =>
+          storage.sql.exec(
+            "INSERT OR REPLACE INTO meta(key,value) VALUES ('cloud_scheduler_error',?)",
+            errorMessage(Cause.squash(turn.cause)).slice(0, 1000),
+          ),
+        );
+        yield* platform("set recovery alarm", () => storage.setAlarm(Date.now() + 5000));
       }
-
-      await store.pruneEvents(now);
-      const next = this.next(Date.now());
-
-      if (next === null) {
-        await storage.deleteAlarm();
-      } else {
-        await storage.setAlarm(next);
-      }
-    } catch (cause) {
-      storage.sql.exec(
-        "INSERT OR REPLACE INTO meta(key,value) VALUES ('cloud_scheduler_error',?)",
-        errorMessage(cause).slice(0, 1000),
-      );
-      await storage.setAlarm(Date.now() + 5000);
-    }
+    });
   }
 }

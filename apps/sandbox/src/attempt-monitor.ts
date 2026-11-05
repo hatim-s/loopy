@@ -1,112 +1,95 @@
-import { setTimeout as delay } from "node:timers/promises";
+import { Effect, FiberMap, Result } from "effect";
 import type { SandboxExecutionResult } from "../../../packages/loopy/src/contract/index.js";
 import {
   type AttemptRecord,
   AuthorityError,
   type AuthoritySession,
-  type ResultsFor,
 } from "../../../packages/loopy/src/contract/sandbox-journal.js";
-import type { SandboxAttemptAuthority } from "../../../packages/loopy/src/contract/sandbox-journal-rpc.js";
 import type { AttemptBackend } from "./docker.js";
+import type { ResultsFor, SandboxAttemptAuthority, SandboxFailure } from "./operations.js";
 import { boundedResult } from "./result.js";
-
-export async function pause(backoffMs: number, signal: AbortSignal) {
-  try {
-    await delay(backoffMs, undefined, { signal });
-
-    return !signal.aborted;
-  } catch {
-    return false;
-  }
-}
+import type { Stopping } from "./stopping.js";
 
 export class AttemptMonitors {
-  private readonly active = new Map<string, Promise<void>>();
-  private readonly authority: SandboxAttemptAuthority;
-  private readonly resultsFor: ResultsFor;
-  private readonly backend: AttemptBackend;
-  private readonly session: AuthoritySession;
-  private readonly signal: AbortSignal;
-  constructor(options: {
-    authority: SandboxAttemptAuthority;
-    resultsFor: ResultsFor;
-    backend: AttemptBackend;
-    session: AuthoritySession;
-    signal: AbortSignal;
-  }) {
-    this.authority = options.authority;
-    this.resultsFor = options.resultsFor;
-    this.backend = options.backend;
-    this.session = options.session;
-    this.signal = options.signal;
-  }
-
+  constructor(
+    private readonly options: {
+      authority: SandboxAttemptAuthority;
+      resultsFor: ResultsFor;
+      backend: AttemptBackend;
+      session: AuthoritySession;
+      stopping: Stopping;
+      active: FiberMap.FiberMap<string, void, never>;
+    },
+  ) {}
   has(id: string) {
-    return this.active.has(id);
+    return FiberMap.hasUnsafe(this.options.active, id);
   }
-
   launch(
     record: Extract<AttemptRecord, { kind: "started" }>,
-    perform: () => ReturnType<AttemptBackend["recover"]>,
+    perform: () => Effect.Effect<SandboxExecutionResult, SandboxFailure>,
   ) {
-    if (this.active.has(record.plan.id) || this.signal.aborted) {
-      return;
-    }
-
-    const operation = this.monitor(record, perform);
-    this.active.set(record.plan.id, operation);
-    void operation.then(() => this.active.delete(record.plan.id));
-  }
-
-  private async monitor(
-    record: Extract<AttemptRecord, { kind: "started" }>,
-    perform: () => ReturnType<AttemptBackend["recover"]>,
-  ) {
-    const receipt = { ...record.plan, kind: "started" } as const;
-    let observed: SandboxExecutionResult | null = null;
-    let backoff = 100;
-    let reconcile = perform;
-
-    while (!this.signal.aborted) {
-      try {
-        observed ??= boundedResult(await reconcile());
-
-        if (this.signal.aborted) {
-          return;
-        }
-
-        const result = await this.resultsFor(record.plan.workspace).put(observed);
-
-        if (this.signal.aborted) {
-          return;
-        }
-
-        const completed = await this.authority.complete({
-          session: this.session,
-          id: record.plan.id,
-          requestHash: record.plan.requestHash,
-          result,
-        });
-
-        if (completed.kind === "rejected") {
-          throw new AuthorityError(completed.code);
-        }
-
+    return Effect.gen({ self: this }, function* () {
+      if (this.has(record.plan.id) || this.options.stopping.stopped) {
         return;
-      } catch {
-        // Once observed, a terminal result survives publication failure without another Docker read.
-        reconcile = () => this.backend.recover(receipt, this.signal);
+      }
 
-        if (!(await pause(backoff, this.signal))) {
+      // The service scope owns reconciliation after the admitting request disconnects.
+      yield* FiberMap.run(this.options.active, record.plan.id, this.monitor(record, perform), {
+        onlyIfMissing: true,
+      });
+    });
+  }
+  private monitor(
+    record: Extract<AttemptRecord, { kind: "started" }>,
+    perform: () => Effect.Effect<SandboxExecutionResult, SandboxFailure>,
+  ) {
+    return Effect.gen({ self: this }, function* () {
+      const { authority, backend, resultsFor, stopping, session } = this.options;
+      const signal = stopping.signal;
+      const receipt = { ...record.plan, kind: "started" } as const;
+      let observed: SandboxExecutionResult | null = null;
+      let reconcile = perform;
+      let backoff = 100;
+
+      while (!stopping.stopped) {
+        const attempt = yield* Effect.gen(function* () {
+          observed ??= boundedResult(yield* reconcile());
+
+          if (stopping.stopped) {
+            return;
+          }
+
+          const result = yield* resultsFor(record.plan.workspace).put(observed);
+
+          if (stopping.stopped) {
+            return;
+          }
+
+          const completed = yield* authority.complete({
+            session,
+            id: record.plan.id,
+            requestHash: record.plan.requestHash,
+            result,
+          });
+
+          if (completed.kind === "rejected") {
+            return yield* Effect.fail(new AuthorityError(completed.code));
+          }
+        }).pipe(Effect.result);
+
+        if (Result.isSuccess(attempt)) {
           return;
         }
 
+        // Never reissue start, even when its acknowledgement was lost.
+        reconcile = () => backend.recover(receipt, signal);
+        yield* stopping.pause(backoff);
         backoff = Math.min(backoff * 2, 5000);
       }
-    }
+    });
   }
 
-  async drain() {
-    await Promise.all(this.active.values());
+  drain() {
+    return FiberMap.awaitEmpty(this.options.active);
   }
 }

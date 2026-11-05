@@ -1,10 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { z } from "zod";
+import { Schema } from "effect";
 import { RunTable } from "../components/runs/run-table.tsx";
 import { Load, Note } from "../components/ui/load.tsx";
 import { PagerFoot } from "../components/ui/pager.tsx";
 import { Segmented } from "../components/ui/segmented.tsx";
 import { useClock } from "../lib/clock.ts";
+import { searchField } from "../lib/search.ts";
 import { useLoopyRows, useRunPages } from "../lib/ui-data.ts";
 import { PERIODS, type RunListFilters } from "../lib/view-models.ts";
 
@@ -25,14 +26,14 @@ const TAB_LABEL = {
 const PERIOD_TABS = ["all", ...PERIODS] as const;
 
 /** Unknown values in a pasted URL fall back to the default view instead of an error page. */
-const searchSchema = z.object({
-  status: z.enum(STATUS_TABS).optional().catch(undefined),
-  slug: z.string().optional().catch(undefined),
-  period: z.enum(PERIODS).optional().catch(undefined),
+const searchSchema = Schema.Struct({
+  status: searchField(Schema.Literals(STATUS_TABS)),
+  slug: searchField(Schema.String),
+  period: searchField(Schema.Literals(PERIODS)),
 });
 
 export const Route = createFileRoute("/runs/")({
-  validateSearch: searchSchema,
+  validateSearch: Schema.decodeUnknownSync(searchSchema),
   component: RunsPage,
 });
 

@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { Schema } from "effect";
 import { closedExecutions } from "./closed-executions.ts";
 import { evidence, writeEvidence } from "./config.ts";
 import { preflightSchema, reportSchema } from "./report-schema.ts";
@@ -17,13 +18,13 @@ function distribution(values: number[]) {
 }
 
 export async function analyze() {
-  const report = reportSchema.parse(
+  const report = Schema.decodeUnknownSync(reportSchema)(
     await Bun.file(join(evidence, "playground-daemon.json")).json(),
   );
 
   const executions = await closedExecutions();
 
-  const preflight = preflightSchema.parse(
+  const preflight = Schema.decodeUnknownSync(preflightSchema)(
     await Bun.file(join(evidence, "playground-daemon-preflight.json")).json(),
   );
 

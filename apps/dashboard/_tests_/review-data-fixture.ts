@@ -1,15 +1,18 @@
 import { Database } from "bun:sqlite";
-import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { Effect } from "effect";
 import { compile } from "../../../packages/loopy/src/compiler/index.ts";
 import type { NodeRun, StoreEffect } from "../../../packages/loopy/src/core/index.ts";
-import { SYSTEM_CLOCK } from "../../../packages/loopy/src/host/index.ts";
-import { LoopyService, openRunStore, Registry } from "../../../packages/loopy/src/local/index.ts";
+import { makeLocalService, openRunStore } from "../../../packages/loopy/src/local/index.ts";
 
 /** Persisted synthetic records let HTTP and browser checks inspect the same bounded pages. */
-export async function reviewDataFixture() {
+export const reviewDataFixture = Effect.fn(function* () {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "loopy-review-data-")));
+  yield* Effect.addFinalizer(() =>
+    Effect.sync(() => rmSync(root, { recursive: true, force: true })),
+  );
   const home = join(root, "home");
   const workspaceA = join(root, "project-a");
   const workspaceB = join(root, "project-b");
@@ -34,18 +37,19 @@ return "done";
 }, {onError: "fail"});
 }});`,
   );
-  const compiled = await compile(source);
+  const compiled = yield* compile(source);
 
   if (!compiled.ok) {
     throw new Error(JSON.stringify(compiled.diagnostics));
   }
 
-  const store = openRunStore(home);
+  const store = yield* openRunStore(home);
 
-  const service = new LoopyService({
+  const service = makeLocalService({
     store,
-    registry: (workspace) => new Registry(home, workspace || workspaceA),
-    clock: SYSTEM_CLOCK,
+    home,
+    cwd: workspaceA,
+    clock: { now: Date.now },
   });
 
   const definition = {
@@ -60,7 +64,7 @@ return "done";
   };
 
   for (const workspace of [workspaceA, workspaceB]) {
-    await service.putLoopy("review-data", {
+    yield* service.putLoopy("review-data", {
       ...definition,
       source: { path: source, workspace },
     });
@@ -68,7 +72,7 @@ return "done";
 
   const runId = "review-data-201-51";
   const at = new Date().toISOString();
-  await store.createRun({
+  yield* store.createRun({
     id: runId,
     slug: "review-data",
     workspace: workspaceA,
@@ -78,7 +82,7 @@ return "done";
     createdAt: at,
     updatedAt: at,
   });
-  await store.claim(runId, "synthetic-owner");
+  yield* store.claim(runId, "synthetic-owner");
   const map = compiled.graph.nodes.find((node) => node.kind === "map");
 
   if (!map) {
@@ -120,8 +124,8 @@ return "done";
   }
 
   effects.push({ kind: "finish_run", outcome: { status: "succeeded", output: null }, at });
-  await store.apply({ runId, token: "synthetic-owner", effects });
-  await store.release(runId, "synthetic-owner");
+  yield* store.apply({ runId, token: "synthetic-owner", effects });
+  yield* store.release(runId, "synthetic-owner");
 
   // Historical message-only logs omit data, while executor write effects require a JSON value.
   const db = new Database(join(home, "runs.sqlite"));
@@ -131,4 +135,4 @@ return "done";
   db.close();
 
   return { root, home, workspaceA, workspaceB, source, runId, store, service, itemScope, records };
-}
+});

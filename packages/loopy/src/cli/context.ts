@@ -1,4 +1,6 @@
+import { Effect } from "effect";
 import type { ParsedCliArgs } from "./args.js";
+import { CliError } from "./errors.js";
 
 export type CliContext = {
   home: string;
@@ -10,37 +12,41 @@ export type CliContext = {
   namedInput: Record<string, string> | undefined;
 };
 
-export function requireArgument(value: string | undefined, label: string): string {
+export const requireArgument = Effect.fn(function* (value: string | undefined, label: string) {
   if (!value) {
-    throw new Error(`${label} is required. Run loopy --help for usage.`);
+    return yield* Effect.fail(
+      new CliError({ message: `${label} is required. Run loopy --help for usage.` }),
+    );
   }
 
   return value;
-}
+});
 
-export function expectNoArguments(context: CliContext): void {
-  if (context.positionals.length) {
-    throw new Error(`Unexpected arguments: ${context.positionals.join(" ")}.`);
-  }
-}
+export const expectNoArguments = (context: CliContext) =>
+  context.positionals.length
+    ? Effect.fail(
+        new CliError({ message: `Unexpected arguments: ${context.positionals.join(" ")}.` }),
+      )
+    : Effect.void;
 
-/** The one positional a command accepts, or undefined when it was left out. */
-export function optionalTarget(context: CliContext): string | undefined {
+export const optionalTarget = Effect.fn(function* (context: CliContext) {
   const [target, ...extra] = context.positionals;
 
   if (extra.length) {
-    throw new Error(`Unexpected arguments: ${extra.join(" ")}.`);
+    return yield* Effect.fail(
+      new CliError({ message: `Unexpected arguments: ${extra.join(" ")}.` }),
+    );
   }
 
   return target;
-}
+});
 
-export function requireTarget(context: CliContext, label: string): string {
-  return requireArgument(optionalTarget(context), label);
-}
+export const requireTarget = Effect.fn(function* (context: CliContext, label: string) {
+  return yield* requireArgument(yield* optionalTarget(context), label);
+});
 
-export function requireHead(context: CliContext, label: string) {
+export const requireHead = Effect.fn(function* (context: CliContext, label: string) {
   const [head, ...rest] = context.positionals;
 
-  return { head: requireArgument(head, label), rest };
-}
+  return { head: yield* requireArgument(head, label), rest };
+});

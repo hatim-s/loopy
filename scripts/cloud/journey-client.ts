@@ -1,9 +1,12 @@
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
+import type { Schema } from "effect";
+import { Effect } from "effect";
 import { z } from "zod";
 import { compile } from "../../packages/loopy/src/compiler/index.js";
 import {
+  decodeBoundary,
   errorBodySchema,
   type Json,
   putLoopyBodySchema,
@@ -149,17 +152,20 @@ export class Journey {
   }
 
   async json<T>(
-    schema: z.ZodType<T>,
+    schema: Schema.Codec<T, unknown, never, never>,
     path: string,
     options: Parameters<Journey["request"]>[1] = {},
   ): Promise<T> {
     const response = await this.request(path, options);
     assert(response.ok, "unexpected_http_status", { path, httpStatus: response.status });
 
-    return this.readJson(response, schema, path);
+    return this.readJson(response, schema);
   }
 
-  private async readJson<T>(response: Response, schema: z.ZodType<T>, path: string): Promise<T> {
+  private async readJson<T>(
+    response: Response,
+    schema: Schema.Codec<T, unknown, never, never>,
+  ): Promise<T> {
     if (!response.headers.get("content-type")?.includes("application/json")) {
       await response.body?.cancel();
       throw new JourneyFailure({
@@ -172,13 +178,7 @@ export class Journey {
     assert(Buffer.byteLength(text) <= 8 * 1024 * 1024, "response_exceeds_8_mib");
 
     try {
-      const parsed = schema.safeParse(JSON.parse(text));
-      assert(parsed.success, "response_schema_failed", {
-        path,
-        issues: parsed.error?.issues.map((issue) => `${issue.code}:${issue.path.join(".")}`) ?? [],
-      });
-
-      return parsed.data;
+      return decodeBoundary(schema)(JSON.parse(text));
     } catch {
       throw new JourneyFailure({ failure: "invalid_json_response", httpStatus: response.status });
     }
@@ -192,7 +192,7 @@ export class Journey {
   ) {
     const response = await this.request(path, options);
     const actualStatus = response.status;
-    const parsed = await this.readJson(response, errorBodySchema, path);
+    const parsed = await this.readJson(response, errorBodySchema);
     assert(actualStatus === status && parsed.error.code === code, "expected_denial_failed", {
       path,
       expectedStatus: status,
@@ -202,30 +202,32 @@ export class Journey {
     });
   }
 
-  async compiled(name: string) {
-    const path = resolve(root, "packages/loopy/_tests_/fixtures/cloud", name);
-    const result = await compile(path);
-    assert(result.ok, "fixture_compile_failed", {
-      fixture: name,
-      diagnostics: result.ok
-        ? []
-        : result.diagnostics.map((value) => `${value.code}:${value.line}:${value.column}`),
-    });
+  compiled(name: string) {
+    return Effect.gen(function* () {
+      const path = resolve(root, "packages/loopy/_tests_/fixtures/cloud", name);
+      const result = yield* compile(path);
+      assert(result.ok, "fixture_compile_failed", {
+        fixture: name,
+        diagnostics: result.ok
+          ? []
+          : result.diagnostics.map((value) => `${value.code}:${value.line}:${value.column}`),
+      });
 
-    return putLoopyBodySchema.parse({
-      graph: result.graph,
-      revision: result.revision,
-      sourceArtifact: result.sourceArtifact,
-      bundles: result.bundles.map((bundle) => ({
-        ...bundle,
-        bytes: Buffer.from(bundle.bytes).toString("base64"),
-      })),
-      source: { path, workspace: "fixtures" },
-      replace: true,
+      return decodeBoundary(putLoopyBodySchema)({
+        graph: result.graph,
+        revision: result.revision,
+        sourceArtifact: result.sourceArtifact,
+        bundles: result.bundles.map((bundle) => ({
+          ...bundle,
+          bytes: Buffer.from(bundle.bytes).toString("base64"),
+        })),
+        source: { path, workspace: "fixtures" },
+        replace: true,
+      });
     });
   }
 
-  async upload(body: z.infer<typeof putLoopyBodySchema>) {
+  async upload(body: Schema.Schema.Type<typeof putLoopyBodySchema>) {
     await this.json(routes.putLoopy.response, `/loopies/${body.graph.name}`, {
       method: "PUT",
       body,

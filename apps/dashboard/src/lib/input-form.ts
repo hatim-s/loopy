@@ -1,4 +1,10 @@
-import { isFieldValue, type Json, jsonSchema, type LoopyView } from "loopy/contract";
+import {
+  decodeBoundary,
+  isFieldValue,
+  type Json,
+  jsonSchema,
+  type LoopyView,
+} from "loopy/contract";
 
 export type RecordSpec = Exclude<LoopyView["input"], "schema">;
 
@@ -107,7 +113,7 @@ export type ParsedJson = { valid: true; value: Json } | { valid: false };
 /** Editor text for a loopy whose input is a schema; the server checks it against the schema. */
 export function parseJsonInput(text: string): ParsedJson {
   try {
-    return { valid: true, value: jsonSchema.parse(JSON.parse(text)) };
+    return { valid: true, value: decodeBoundary(jsonSchema)(JSON.parse(text)) };
   } catch {
     return { valid: false };
   }

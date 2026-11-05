@@ -1,48 +1,47 @@
-import { z } from "zod";
+import { Schema } from "effect";
+import { struct } from "./codec.js";
+
 import { graphMetaSchema, graphSchema, nodeIdSchema } from "./graph.js";
 import { sourceArtifactSchema } from "./source-artifact.js";
 
-export const hashSchema = z.string().regex(/^[a-f0-9]{64}$/);
+export const hashSchema = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/));
 
-export const bundleReferenceSchema = z.strictObject({
-  nodeId: nodeIdSchema,
-  bundleHash: hashSchema,
-});
+export const bundleReferenceSchema = struct({ nodeId: nodeIdSchema, bundleHash: hashSchema });
 
-export const sourceMetadataSchema = z.strictObject({
-  path: z.string(),
-  workspace: z.string(),
-});
+export const sourceMetadataSchema = struct({ path: Schema.String, workspace: Schema.String });
 
-export const putLoopyBodySchema = z.strictObject({
+export const putLoopyBodySchema = struct({
   graph: graphSchema,
   revision: hashSchema,
-  bundles: z.array(
-    bundleReferenceSchema.extend({
-      bytes: z.string().regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/),
+  bundles: Schema.Array(
+    struct({
+      ...bundleReferenceSchema.fields,
+      bytes: Schema.String.check(
+        Schema.isPattern(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/),
+      ),
     }),
-  ),
+  ).pipe(Schema.mutable),
   source: sourceMetadataSchema,
-  sourceArtifact: sourceArtifactSchema.optional(),
-  replace: z.boolean(),
+  sourceArtifact: Schema.optional(sourceArtifactSchema),
+  replace: Schema.Boolean,
 });
 
-export type PutLoopyBody = z.infer<typeof putLoopyBodySchema>;
+export type PutLoopyBody = Schema.Schema.Type<typeof putLoopyBodySchema>;
 
-export const savedLoopySchema = z.strictObject({
-  version: z.literal(2),
-  slug: z.string(),
-  scope: graphMetaSchema.shape.scope,
+export const savedLoopySchema = struct({
+  version: Schema.Literal(2),
+  slug: Schema.String,
+  scope: graphMetaSchema.fields.scope,
   graph: graphSchema,
   revision: hashSchema,
-  bundles: z.array(bundleReferenceSchema),
-  source: z.string(),
-  description: z.string().nullable(),
-  input: graphSchema.shape.input,
-  schedule: graphMetaSchema.shape.schedule,
-  mode: graphMetaSchema.shape.mode,
-  secrets: graphMetaSchema.shape.secrets,
-  savedAt: z.string(),
+  bundles: Schema.Array(bundleReferenceSchema).pipe(Schema.mutable),
+  source: Schema.String,
+  description: Schema.NullOr(Schema.String),
+  input: graphSchema.fields.input,
+  schedule: graphMetaSchema.fields.schedule,
+  mode: graphMetaSchema.fields.mode,
+  secrets: graphMetaSchema.fields.secrets,
+  savedAt: Schema.String,
 });
 
-export type SavedLoopy = z.infer<typeof savedLoopySchema>;
+export type SavedLoopy = Schema.Schema.Type<typeof savedLoopySchema>;

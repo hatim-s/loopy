@@ -1,4 +1,9 @@
-export { openRunStore, SqliteRunStore } from "../store/index.js";
+export {
+  makeSqliteRunStore,
+  openRunStore,
+  type SqliteRunStore,
+  sqliteStoreLayer,
+} from "../store/index.js";
 
 export { compilerLauncher } from "./compiler-launcher.js";
 
@@ -16,7 +21,7 @@ export { SecretStore, validateSecretValue } from "./secrets.js";
 
 export { createRequestHandler, DEFAULT_PORT, type ServerOptions } from "./server/start-server.js";
 
-export { LoopyService, ServiceError } from "./service.js";
+export { type LocalService, makeLocalService, ServiceError } from "./service.js";
 
 export { inlineImportMeta, sourcePaths } from "./source-paths.js";
 

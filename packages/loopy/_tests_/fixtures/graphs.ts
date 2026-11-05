@@ -1,7 +1,8 @@
+import { Schema } from "effect";
 import { graphSchema } from "../../src/contract/index.js";
 
 // This boundary fixture fixes the builder's call-order ids and explicit scope joins for H2.
-export const approveDemoGraph = graphSchema.parse({
+export const approveDemoGraph = Schema.decodeUnknownSync(graphSchema)({
   version: 1,
   meta: { description: null, schedule: null, secrets: [], mode: "sandbox", scope: "project" },
   name: "approve-demo",

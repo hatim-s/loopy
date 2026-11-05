@@ -1,7 +1,8 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import type { z } from "zod";
+import type { Schema } from "effect";
 import type { Json, putLoopyBodySchema } from "../../packages/loopy/src/contract/index.js";
+import { decodeBoundary } from "../../packages/loopy/src/contract/index.js";
 import { type Config, config, state } from "./config.js";
 
 export class PlaygroundClient {
@@ -69,9 +70,9 @@ export class PlaygroundClient {
   }
 
   async json<T>(
-    schema: z.ZodType<T>,
+    schema: Schema.Codec<T, unknown, never, never>,
     path: string,
-    body?: Json | z.infer<typeof putLoopyBodySchema>,
+    body?: Json | Schema.Schema.Type<typeof putLoopyBodySchema>,
     method = "POST",
   ) {
     const response = await this.request(path, undefined, {
@@ -86,6 +87,6 @@ export class PlaygroundClient {
       );
     }
 
-    return schema.parse(await response.json());
+    return decodeBoundary(schema)(await response.json());
   }
 }

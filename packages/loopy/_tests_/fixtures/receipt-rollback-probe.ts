@@ -1,7 +1,8 @@
 import type { DurableObjectState } from "@cloudflare/workers-types";
+import { Schema } from "effect";
 import { ReceiptAuthority } from "../../../../apps/cloud/src/receipts-authority.js";
 import { ReceiptSql } from "../../../../apps/cloud/src/receipts-sql.js";
-import { authorityOperations } from "../../src/contract/index.js";
+import { authorityOperations, decodeBoundary } from "../../src/contract/index.js";
 import { receiptRecoveryProbe } from "./receipt-recovery-probe.js";
 
 export class ReceiptRollbackProbe {
@@ -10,7 +11,7 @@ export class ReceiptRollbackProbe {
   async fetch(request: Request) {
     const db = new ReceiptSql(this.ctx.storage, "rollback", "/synthetic/rollback");
     const authority = new ReceiptAuthority(db);
-    const input = authorityOperations.admit.input.parse(await request.json());
+    const input = decodeBoundary(authorityOperations.admit.input)(await request.json());
     db.openSession({ expectedEpoch: 0, nonce: input.session.nonce });
 
     if (new URL(request.url).pathname === "/recovery") {
@@ -34,6 +35,22 @@ export class ReceiptRollbackProbe {
   }
 }
 
+const forwardedRequest = Schema.Struct({
+  url: Schema.String,
+  method: Schema.String,
+  headers: Schema.Record(Schema.String, Schema.String),
+  body: Schema.optionalKey(Schema.String),
+});
+
 export default {
-  fetch: () => new Response("Probe requires its Durable Object binding.", { status: 404 }),
+  async fetch(request: Request, env: { CLOUD: { fetch(request: Request): Promise<Response> } }) {
+    if (new URL(request.url).pathname !== "/forward") {
+      return new Response("Probe requires its Durable Object binding.", { status: 404 });
+    }
+
+    const input = decodeBoundary(forwardedRequest)(await request.json());
+
+    // Construct inside workerd so Miniflare's control proxy cannot consume Origin or rewrite the URL.
+    return env.CLOUD.fetch(new Request(input.url, input));
+  },
 };

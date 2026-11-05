@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { Effect } from "effect";
 import {
+  decodeBoundary,
   type SandboxAttemptRequest,
   sandboxArtifactSchema,
   sandboxReceiptSchema,
@@ -30,7 +32,7 @@ export function client(service: Bridge, owned: DockerResources) {
 
       assert.equal(response.status, expected, await response.clone().text());
 
-      return expected === 202 ? sandboxReceiptSchema.parse(await response.json()) : null;
+      return expected === 202 ? decodeBoundary(sandboxReceiptSchema)(await response.json()) : null;
     },
     async lookup(request: SandboxAttemptRequest) {
       const response = await fetch(url(request, "/attempts"), {
@@ -40,7 +42,7 @@ export function client(service: Bridge, owned: DockerResources) {
 
       assert.equal(response.status, 200);
 
-      return sandboxReceiptSchema.parse(await response.json());
+      return decodeBoundary(sandboxReceiptSchema)(await response.json());
     },
     async artifact(request: SandboxAttemptRequest, path: string, authenticated = true) {
       const target = url(request, "/artifacts");
@@ -55,7 +57,7 @@ export function client(service: Bridge, owned: DockerResources) {
 }
 
 async function finished(service: Bridge, owned: DockerResources, request: SandboxAttemptRequest) {
-  await bounded(service.attempts.drain(), "Worker completion", 20_000);
+  await bounded(Effect.runPromise(service.attempts.drain()), "Worker completion", 20_000);
   const receipt = await client(service, owned).lookup(request);
   assert.equal(receipt.kind, "finished");
   const saved = await owned.plan(request);
@@ -112,7 +114,7 @@ export async function durableAndGuard(
     await owned.inspect(helper),
     "An actual helper must remain after injected cleanup failure.",
   );
-  const guards = await runtime.direct.recoverable({ after: null, limit: 200 });
+  const guards = await Effect.runPromise(runtime.direct.recoverable({ after: null, limit: 200 }));
   assert.equal(guards.exports.length, 1);
   assert.equal(guards.exports[0]?.helper, helper);
   await http.post(second, 409);
@@ -134,7 +136,11 @@ export async function durableAndGuard(
   assert.equal((await owned.inspect(saved.plan.container))?.Id, state.Id);
   assert.equal((await owned.inspect(saved.plan.container))?.State.StartedAt, state.State.StartedAt);
   await http.post(second, 409);
-  assert.equal((await runtime.direct.recoverable({ after: null, limit: 200 })).exports.length, 1);
+  assert.equal(
+    (await Effect.runPromise(runtime.direct.recoverable({ after: null, limit: 200 }))).exports
+      .length,
+    1,
+  );
   assert(await owned.inspect(helper));
   owned.healCleanup();
   runtime.loseAdmission(3);
@@ -148,10 +154,14 @@ export async function durableAndGuard(
   assert.equal(runtime.faults.admissionRepliesDropped, 1);
   assert.equal(runtime.faults.readsBlocked, 3);
   assert.equal(await owned.inspect(helper), null);
-  assert.equal((await runtime.direct.recoverable({ after: null, limit: 200 })).exports.length, 0);
+  assert.equal(
+    (await Effect.runPromise(runtime.direct.recoverable({ after: null, limit: 200 }))).exports
+      .length,
+    0,
+  );
   const exported = await http.artifact(second, "count.txt");
   assert.equal(exported.status, 200);
-  const artifact = sandboxArtifactSchema.parse(await exported.json());
+  const artifact = decodeBoundary(sandboxArtifactSchema)(await exported.json());
   assert.equal(Buffer.from(artifact.bytes, "base64").toString(), "A\nB\n");
   runtime.record({
     proof: "duplicate-lost-ack-reconstruction-export",
@@ -239,7 +249,7 @@ export async function shutdownOutage(
     );
 
   await eventually(
-    async () => (await runtime.direct.read(owned.id(request))) !== null,
+    async () => (await Effect.runPromise(runtime.direct.read(owned.id(request)))) !== null,
     "Shutdown admission committed",
   );
   await eventually(

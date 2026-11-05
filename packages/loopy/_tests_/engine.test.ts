@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { graphSchema } from "../src/contract/index.js";
+import { decodeBoundary, graphSchema } from "../src/contract/index.js";
 import { type ExecutionKey, type ExecutionResult, type Json } from "../src/core/index.js";
 import { type EngineEvent, initialState, step } from "../src/engine/index.js";
 import { loopy, sh } from "../src/sdk/graph/index.js";
@@ -18,7 +18,7 @@ function sequence() {
 
   draft.module.bundleHash = "a".repeat(64);
 
-  return graphSchema.parse({
+  return decodeBoundary(graphSchema)({
     ...graph,
     nodes: [
       draft,

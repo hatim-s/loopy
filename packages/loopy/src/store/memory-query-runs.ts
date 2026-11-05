@@ -6,23 +6,33 @@ import {
   type RunPageQuery,
 } from "../core/index.js";
 import { MemorySchedules } from "./memory-schedules.js";
+import { storageOperation } from "./operation.js";
 import { matchesRun, overviewBuckets } from "./query-utils.js";
 
 export class MemoryQueryRuns extends MemorySchedules {
-  async runReference(id: string) {
-    const run = this.runs.get(id);
+  runReference(id: string) {
+    return storageOperation("runReference", () => {
+      const run = this.runs.get(id);
 
-    return run
-      ? { id: run.id, slug: run.slug, workspace: run.workspace, revision: run.revision }
-      : undefined;
+      return run
+        ? { id: run.id, slug: run.slug, workspace: run.workspace, revision: run.revision }
+        : undefined;
+    });
   }
-  async runningCount() {
-    return [...this.runs.values()].filter((run) => run.status === "running").length;
+  runningCount() {
+    return storageOperation("runningCount", () => {
+      return [...this.runs.values()].filter((run) => run.status === "running").length;
+    });
   }
-  async runWorkspaces() {
-    return [...new Set([...this.runs.values()].map((run) => run.workspace))];
+  runWorkspaces() {
+    return storageOperation("runWorkspaces", () => {
+      return [...new Set([...this.runs.values()].map((run) => run.workspace))];
+    });
   }
-  async pendingHooks(ids: string[], now: string) {
+  pendingHooks(ids: string[], now: string) {
+    return storageOperation("pendingHooks", () => this.readPendingHooks(ids, now));
+  }
+  protected readPendingHooks(ids: string[], now: string) {
     const hooks = new Map<string, HookRecord & { expiresAt: string | null }>();
 
     for (const wait of this.waits.values()) {
@@ -47,59 +57,71 @@ export class MemoryQueryRuns extends MemorySchedules {
 
     return hooks;
   }
-  async queryRuns(query: RunPageQuery) {
-    const hooks =
-      query.waiting === undefined
-        ? undefined
-        : await this.pendingHooks([...this.runs.keys()], query.now);
+  queryRuns(query: RunPageQuery) {
+    return storageOperation("queryRuns", () => {
+      const hooks =
+        query.waiting === undefined
+          ? undefined
+          : this.readPendingHooks([...this.runs.keys()], query.now);
 
-    return structuredClone(
-      [...this.runs.values()]
-        .filter(
-          (run) =>
-            matchesRun(run, query) &&
-            (query.waiting === undefined || hooks?.has(run.id) === query.waiting) &&
-            (query.before === undefined || `${run.createdAt}|${run.id}` < query.before),
-        )
-        .sort((a, b) =>
-          a.createdAt === b.createdAt ? (a.id < b.id ? 1 : -1) : a.createdAt < b.createdAt ? 1 : -1,
-        )
-        .slice(0, Math.min(query.limit, 200)),
-    );
-  }
-  async runCountsByDefinition(): Promise<RunDefinitionCount[]> {
-    const counts = new Map<string, RunDefinitionCount>();
-
-    for (const { workspace, slug, status } of this.runs.values()) {
-      const key = JSON.stringify([workspace, slug, status]);
-      const row = counts.get(key) ?? { workspace, slug, status, count: 0 };
-      row.count++;
-      counts.set(key, row);
-    }
-
-    return [...counts.values()];
-  }
-  async overview(query: OverviewQuery) {
-    const result = overviewBuckets(query);
-
-    for (const run of this.runs.values()) {
-      if (!matchesRun(run, query)) {
-        continue;
-      }
-
-      const bucket =
-        result.buckets[
-          Math.floor(
-            (Date.parse(run.createdAt) - Date.parse(query.from)) / (query.bucketSeconds * 1000),
+      return structuredClone(
+        [...this.runs.values()]
+          .filter(
+            (run) =>
+              matchesRun(run, query) &&
+              (query.waiting === undefined || hooks?.has(run.id) === query.waiting) &&
+              (query.before === undefined || `${run.createdAt}|${run.id}` < query.before),
           )
-        ];
+          .sort((a, b) =>
+            a.createdAt === b.createdAt
+              ? a.id < b.id
+                ? 1
+                : -1
+              : a.createdAt < b.createdAt
+                ? 1
+                : -1,
+          )
+          .slice(0, Math.min(query.limit, 200)),
+      );
+    });
+  }
+  runCountsByDefinition() {
+    return storageOperation("runCountsByDefinition", () => {
+      const counts = new Map<string, RunDefinitionCount>();
 
-      if (bucket) {
-        bucket.counts[run.status]++;
-        result.counts[run.status]++;
+      for (const { workspace, slug, status } of this.runs.values()) {
+        const key = JSON.stringify([workspace, slug, status]);
+        const row = counts.get(key) ?? { workspace, slug, status, count: 0 };
+        row.count++;
+        counts.set(key, row);
       }
-    }
 
-    return result;
+      return [...counts.values()];
+    });
+  }
+  overview(query: OverviewQuery) {
+    return storageOperation("overview", () => {
+      const result = overviewBuckets(query);
+
+      for (const run of this.runs.values()) {
+        if (!matchesRun(run, query)) {
+          continue;
+        }
+
+        const bucket =
+          result.buckets[
+            Math.floor(
+              (Date.parse(run.createdAt) - Date.parse(query.from)) / (query.bucketSeconds * 1000),
+            )
+          ];
+
+        if (bucket) {
+          bucket.counts[run.status]++;
+          result.counts[run.status]++;
+        }
+      }
+
+      return result;
+    });
   }
 }

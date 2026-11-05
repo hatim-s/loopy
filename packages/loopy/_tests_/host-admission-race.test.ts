@@ -1,87 +1,100 @@
 import { expect, test } from "bun:test";
+import { Deferred, Effect, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import type { Executor } from "../src/core/index.js";
 import { activate } from "../src/host/activate.js";
-import type { Clock } from "../src/host/clock.js";
 import { loopy, parallel, sh, wait } from "../src/sdk/graph/index.js";
 import { MemoryStore } from "../src/store/index.js";
 import { newRun } from "./fixture.js";
 
-test("local admission commits work first and reloads a signal before reducing rate denial", async () => {
-  let now = Date.parse(newRun().createdAt);
-  const timer = Promise.withResolvers<() => void>();
+test("admission commits work first and reloads a signal before reducing denial", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      let now = Date.parse(newRun().createdAt);
+      yield* TestClock.setTime(now);
+      const denied = yield* Deferred.make<void>();
 
-  const clock: Clock = {
-    now: () => now,
-    timeout: (callback, ms) => {
-      timer.resolve(() => {
-        now += ms;
-        callback();
-      });
-
-      return () => {};
-    },
-  };
-
-  const store = new MemoryStore(clock.now);
-
-  const graph = loopy("admission-race", {
-    input: {},
-    run: () =>
-      parallel({
-        work: () => sh(["true"], { rateLimit: { key: "shared", limit: 1, window: "1m" } }),
-        approval: () => wait("approve", { payload: { kind: "value", type: "boolean" } }),
-      }),
-  }).graph;
-
-  await store.createRun(newRun());
-  await store.acquireRateLimit("shared", 1, 60_000, newRun().createdAt);
-  const acquire = store.acquireRateLimit.bind(store);
-  let signalled = false;
-  store.acquireRateLimit = async (...args) => {
-    if (!signalled) {
-      signalled = true;
-      const hook = (await store.getWaits("run"))[0];
-      expect(await store.getNodeRuns("run")).toEqual(
-        expect.arrayContaining([expect.objectContaining({ status: "running", attempt: 1 })]),
-      );
-
-      if (!hook) {
-        throw new Error("Admission started before the wait was committed.");
+      class RecordingStore extends MemoryStore {
+        override apply(batch: Parameters<MemoryStore["apply"]>[0]) {
+          return super
+            .apply(batch)
+            .pipe(
+              Effect.tap(() =>
+                batch.effects.some((effect) => effect.kind === "schedule_retry")
+                  ? Deferred.succeed(denied, undefined)
+                  : Effect.void,
+              ),
+            );
+        }
       }
 
-      expect(
-        await store.resolveWait({
-          token: hook.token,
-          payload: true,
-          at: new Date(now).toISOString(),
-        }),
-      ).toMatchObject({ kind: "resolved" });
-    }
+      const store = new RecordingStore(() => now);
 
-    return acquire(...args);
-  };
+      const graph = loopy("admission-race", {
+        input: {},
+        run: () =>
+          parallel({
+            work: () => sh(["true"], { rateLimit: { key: "shared", limit: 1, window: "1m" } }),
+            approval: () => wait("approve", { payload: { kind: "value", type: "boolean" } }),
+          }),
+      }).graph;
 
-  const attempts: number[] = [];
+      yield* store.createRun(newRun());
+      yield* store.acquireRateLimit("shared", 1, 60_000, newRun().createdAt);
+      const acquire = store.acquireRateLimit.bind(store);
+      let signalled = false;
+      store.acquireRateLimit = (...args) =>
+        Effect.gen(function* () {
+          if (!signalled) {
+            signalled = true;
+            const hook = (yield* store.getWaits("run"))[0];
+            expect(yield* store.getNodeRuns("run")).toEqual(
+              expect.arrayContaining([expect.objectContaining({ status: "running", attempt: 1 })]),
+            );
 
-  const executor: Executor = {
-    lookup: async () => ({ kind: "none" }),
-    execute: async (...[, attempt]) => {
-      attempts.push(attempt);
+            if (!hook) {
+              throw new Error("Admission preceded wait commit.");
+            }
 
-      return { kind: "succeeded", output: { stdout: "", stderr: "", exitCode: 0 }, logs: [] };
-    },
-  };
+            expect(
+              yield* store.resolveWait({
+                token: hook.token,
+                payload: true,
+                at: new Date(now).toISOString(),
+              }),
+            ).toMatchObject({ kind: "resolved" });
+          }
 
-  const running = activate({ store, graph, executor, clock, runId: "run" });
-  const resume = await timer.promise;
-  expect(await store.getNodeRuns("run")).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({ status: "succeeded", output: true }),
-      expect.objectContaining({ status: "rate_limited", attempt: 1 }),
-    ]),
+          return yield* acquire(...args);
+        });
+      const attempts: number[] = [];
+
+      const executor: Executor = {
+        lookup: () => Effect.succeed({ kind: "none" }),
+        execute: (...[, attempt]) =>
+          Effect.sync(() => {
+            attempts.push(attempt);
+
+            return { kind: "succeeded", output: { stdout: "", stderr: "", exitCode: 0 }, logs: [] };
+          }),
+      };
+
+      const running = yield* Effect.forkChild(activate({ store, graph, executor, runId: "run" }));
+      yield* Deferred.await(denied);
+      expect(yield* store.getNodeRuns("run")).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ status: "succeeded", output: true }),
+          expect.objectContaining({ status: "rate_limited", attempt: 1 }),
+        ]),
+      );
+      expect(attempts).toEqual([]);
+      now += 60_000;
+      yield* TestClock.adjust(60_000);
+      expect(yield* Fiber.join(running)).toMatchObject({
+        status: "succeeded",
+        output: { approval: true },
+      });
+      expect(attempts).toEqual([1]);
+    }).pipe(Effect.provide(TestClock.layer())),
   );
-  expect(attempts).toEqual([]);
-  resume();
-  expect(await running).toMatchObject({ status: "succeeded", output: { approval: true } });
-  expect(attempts).toEqual([1]);
 });

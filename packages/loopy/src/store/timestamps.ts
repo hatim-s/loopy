@@ -1,7 +1,16 @@
 import type { NodeRun, RunRecord } from "../core/index.js";
+import { StoreInvariantError } from "./operation.js";
 
-export function utc(value: string): string {
-  return new Date(value).toISOString();
+export function utc(value: string | number): string {
+  const date = new Date(value);
+
+  if (!Number.isFinite(date.getTime())) {
+    throw new StoreInvariantError(
+      `Invalid store timestamp '${value}'. Validate timestamps before persistence.`,
+    );
+  }
+
+  return date.toISOString();
 }
 
 export function earliestWakeAt(...values: (string | null | undefined)[]): string | null {

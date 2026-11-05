@@ -1,4 +1,5 @@
 import { dirname, resolve } from "node:path";
+import { Effect } from "effect";
 import { type Expression, parseSync, type Statement } from "oxc-parser";
 import { MAX_SOURCE_BYTES, MAX_SOURCE_FILES } from "../contract/index.js";
 import { builtinCommandKeys } from "../sdk/graph-host.js";
@@ -14,9 +15,10 @@ import {
   unwrap,
 } from "./ast.js";
 import { diagnostic } from "./diagnostic.js";
+import { AuthorError, authorSource, type CompilationError } from "./errors.js";
 import { checkCodeModule } from "./module.js";
 import { modulePath } from "./module-imports.js";
-import type { AuthorModule, CompilerDiagnostic, ParserSource, Restricted } from "./types.js";
+import type { AuthorModule, CompilerDiagnostic, ParserSource } from "./types.js";
 
 function parserSource(context: Context, node: Expression) {
   if (
@@ -121,7 +123,11 @@ function importBindings(
   }
 }
 
-async function inspectImports(context: Context, statements: Statement[], state: Inspection) {
+const inspectImports = Effect.fn(function* (
+  context: Context,
+  statements: Statement[],
+  state: Inspection,
+) {
   const { file } = context;
   const { scopes, modules } = state;
 
@@ -153,7 +159,7 @@ async function inspectImports(context: Context, statements: Statement[], state: 
         continue;
       }
 
-      const dependency = await modulePath(specifier, file);
+      const dependency = yield* modulePath(specifier, file);
 
       if (scopes.has(dependency)) {
         imported = scopes.get(dependency) ?? new Map();
@@ -161,13 +167,13 @@ async function inspectImports(context: Context, statements: Statement[], state: 
         refuse(context, statement, "cyclic_import", "Builder imports cannot be cyclic.");
         continue;
       } else {
-        imported = await inspectModule(dependency, state);
+        imported = yield* inspectModule(dependency, state);
       }
     }
 
     importBindings(context, statement, sdk, imported);
   }
-}
+});
 
 function inspectConstants(
   context: Context,
@@ -262,88 +268,106 @@ function inspectStatements(context: Context, statements: Statement[], requireLoo
   }
 }
 
-async function inspectModule(file: string, state: Inspection): Promise<Scope> {
-  const { modules, parsers, diagnostics, scopes } = state;
-  const input = Bun.file(file);
+function inspectModule(
+  file: string,
+  state: Inspection,
+): Effect.Effect<Scope, CompilationError | AuthorError> {
+  return Effect.gen(function* () {
+    const { modules, parsers, diagnostics, scopes } = state;
+    const input = Bun.file(file);
 
-  if (modules.size >= MAX_SOURCE_FILES) {
-    throw new Error("Builder source must fit within 32 files.");
-  }
-
-  const source = await input.slice(0, MAX_SOURCE_BYTES - state.sourceBytes + 1).text();
-  state.sourceBytes += Buffer.byteLength(source);
-
-  if (state.sourceBytes > MAX_SOURCE_BYTES) {
-    throw new Error("Builder source must fit within 256 KiB.");
-  }
-
-  const parsed = parseSync(file, source, { sourceType: "module", preserveParens: false });
-
-  for (const error of parsed.errors) {
-    diagnostics.push(
-      diagnostic(file, source, error.labels[0]?.start ?? 0, "syntax_error", error.message),
-    );
-  }
-
-  const scope: Scope = new Map();
-  modules.set(file, { file, source, evaluated: source });
-
-  const context: Context = {
-    file,
-    source,
-    scope,
-    diagnostics,
-    edits: [],
-    parsers,
-    sourceCalls: [],
-  };
-
-  await inspectImports(context, parsed.program.body, state);
-
-  for (const statement of parsed.program.body) {
-    const node = declarations(statement);
-
-    if (node?.type === "FunctionDeclaration" && node.id) {
-      scope.set(node.id.name, "function");
+    if (modules.size >= MAX_SOURCE_FILES) {
+      return yield* Effect.fail(
+        new AuthorError({
+          code: "source_error",
+          file,
+          message: "Builder source must fit within 32 files.",
+        }),
+      );
     }
-  }
 
-  inspectStatements(context, parsed.program.body, file === state.entry);
-
-  if (
-    file === state.entry &&
-    !parsed.program.body.some((statement) => statement.type === "ExportDefaultDeclaration")
-  ) {
-    diagnostics.push(
-      diagnostic(file, source, 0, "default_loopy", "Default-export a loopy() builder result."),
+    const source = yield* authorSource("read author source", file, () =>
+      input.slice(0, MAX_SOURCE_BYTES - state.sourceBytes + 1).text(),
     );
-  }
 
-  for (const edit of context.edits) {
-    // BOUNDARY: The edit text was produced by JSON.stringify from a resolved module path.
-    const modulePath: string = JSON.parse(edit.text);
+    state.sourceBytes += Buffer.byteLength(source);
 
-    const checked = await checkCodeModule(modulePath);
-    diagnostics.push(...checked.diagnostics);
-  }
+    if (state.sourceBytes > MAX_SOURCE_BYTES) {
+      return yield* Effect.fail(
+        new AuthorError({
+          code: "source_error",
+          file,
+          message: "Builder source must fit within 256 KiB.",
+        }),
+      );
+    }
 
-  const evaluated = context.edits
-    .sort((a, b) => b.start - a.start)
-    .reduce((text, edit) => text.slice(0, edit.start) + edit.text + text.slice(edit.end), source);
+    const parsed = parseSync(file, source, { sourceType: "module", preserveParens: false });
 
-  modules.set(file, { file, source, evaluated, sourceCalls: context.sourceCalls });
-  scopes.set(file, scope);
+    for (const error of parsed.errors) {
+      diagnostics.push(
+        diagnostic(file, source, error.labels[0]?.start ?? 0, "syntax_error", error.message),
+      );
+    }
 
-  return scope;
+    const scope: Scope = new Map();
+    modules.set(file, { file, source, evaluated: source });
+
+    const context: Context = {
+      file,
+      source,
+      scope,
+      diagnostics,
+      edits: [],
+      parsers,
+      sourceCalls: [],
+    };
+
+    yield* inspectImports(context, parsed.program.body, state);
+
+    for (const statement of parsed.program.body) {
+      const node = declarations(statement);
+
+      if (node?.type === "FunctionDeclaration" && node.id) {
+        scope.set(node.id.name, "function");
+      }
+    }
+
+    inspectStatements(context, parsed.program.body, file === state.entry);
+
+    if (
+      file === state.entry &&
+      !parsed.program.body.some((statement) => statement.type === "ExportDefaultDeclaration")
+    ) {
+      diagnostics.push(
+        diagnostic(file, source, 0, "default_loopy", "Default-export a loopy() builder result."),
+      );
+    }
+
+    for (const edit of context.edits) {
+      // BOUNDARY: The edit text was produced by JSON.stringify from a resolved module path.
+      const modulePath: string = JSON.parse(edit.text);
+
+      const checked = yield* checkCodeModule(modulePath);
+      diagnostics.push(...checked.diagnostics);
+    }
+
+    const evaluated = context.edits
+      .sort((a, b) => b.start - a.start)
+      .reduce((text, edit) => text.slice(0, edit.start) + edit.text + text.slice(edit.end), source);
+
+    modules.set(file, { file, source, evaluated, sourceCalls: context.sourceCalls });
+    scopes.set(file, scope);
+
+    return scope;
+  });
 }
 
-export async function restrict(
-  file: string,
-): Promise<Restricted | { ok: false; diagnostics: CompilerDiagnostic[] }> {
+export const restrict = Effect.fn(function* (file: string) {
   const modules = new Map<string, AuthorModule>();
   const parsers = new Map<string, ParserSource>();
   const diagnostics: CompilerDiagnostic[] = [];
-  await inspectModule(file, {
+  yield* inspectModule(file, {
     modules,
     parsers,
     diagnostics,
@@ -353,11 +377,11 @@ export async function restrict(
   });
 
   for (const parser of parsers.values()) {
-    const checked = await checkCodeModule(parser.file);
+    const checked = yield* checkCodeModule(parser.file);
     diagnostics.push(...checked.diagnostics);
   }
 
   return diagnostics.length > 0
-    ? { ok: false, diagnostics }
-    : { ok: true, modules: [...modules.values()], parsers };
-}
+    ? { ok: false as const, diagnostics }
+    : { ok: true as const, modules: [...modules.values()], parsers };
+});

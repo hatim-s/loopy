@@ -1,5 +1,5 @@
-import { z } from "zod";
+import { Schema } from "effect";
 
-export const jsonSchema = z.json();
+export const jsonSchema = Schema.MutableJson;
 
-export type Json = z.infer<typeof jsonSchema>;
+export type Json = Schema.Schema.Type<typeof jsonSchema>;

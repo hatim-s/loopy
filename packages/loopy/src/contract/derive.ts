@@ -96,11 +96,7 @@ export function runView(options: RunViewOptions): RunView {
   const { run, now, leaseMs } = options;
 
   const owner = run.owner
-    ? {
-        pid: run.owner.pid,
-        host: run.owner.host,
-        heartbeatAt: run.owner.heartbeatAt,
-      }
+    ? { pid: run.owner.pid, host: run.owner.host, heartbeatAt: run.owner.heartbeatAt }
     : null;
 
   const input = previewPayload(run.input);
@@ -136,7 +132,7 @@ export function runView(options: RunViewOptions): RunView {
   };
 
   if (Object.keys(truncatedFields).length > 0) {
-    view.truncatedFields = truncatedFields;
+    return { ...view, truncatedFields };
   }
 
   return view;
@@ -174,14 +170,7 @@ export function loopyView(
 ): LoopyView {
   const matching = runs.filter((run) => run.slug === saved.slug);
 
-  const counts: LoopyView["counts"] = {
-    queued: 0,
-    running: 0,
-    suspended: 0,
-    succeeded: 0,
-    failed: 0,
-    cancelled: 0,
-  };
+  const counts = { queued: 0, running: 0, suspended: 0, succeeded: 0, failed: 0, cancelled: 0 };
 
   let lastRun: RunView | null = null;
 

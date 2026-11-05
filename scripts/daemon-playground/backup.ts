@@ -1,27 +1,8 @@
 import { join } from "node:path";
-import { z } from "zod";
-import { type RunView, runStatusSchema } from "../../packages/loopy/src/contract/index.ts";
+import { decodeBoundary, type RunView } from "../../packages/loopy/src/contract/index.ts";
 import { readDaemonFile } from "../../packages/loopy/src/local/index.ts";
+import { backupSchema } from "./backup-schema.ts";
 import { environment, home, state } from "./config.ts";
-
-const rows = z.array(z.strictObject({ id: z.string(), status: runStatusSchema }));
-
-const sidecars = z.array(z.strictObject({ suffix: z.string(), bytes: z.number().nonnegative() }));
-
-const backupSchema = z.strictObject({
-  method: z.string(),
-  source: z.string(),
-  destination: z.string(),
-  destinationJournal: z.literal("delete"),
-  sidecarsBefore: sidecars,
-  sidecarsAfter: sidecars,
-  sourceRows: rows,
-  copiedRows: rows,
-  integrity: z.string(),
-  matchesSource: z.boolean(),
-  matchesApi: z.boolean().nullable(),
-  matches45ApiRuns: z.boolean(),
-});
 
 export async function backupClosedDatabase(
   apiRuns: Pick<RunView, "id" | "status">[] | null,
@@ -50,5 +31,5 @@ export async function backupClosedDatabase(
     throw new Error(`Closed diagnostic backup failed: ${stderr.trim()}`);
   }
 
-  return backupSchema.parse(JSON.parse(stdout));
+  return decodeBoundary(backupSchema)(JSON.parse(stdout));
 }

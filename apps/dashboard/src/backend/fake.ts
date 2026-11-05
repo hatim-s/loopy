@@ -1,5 +1,6 @@
 import {
   type DaemonView,
+  decodeBoundary,
   encodeRunCursor,
   executionKeyString,
   type GraphRevisionView,
@@ -329,8 +330,9 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
       });
     },
     runs: async (query) => {
-      const { slug, workspace, status, waiting, limit, before, from, to } =
-        routes.runs.query.parse(query);
+      const { slug, workspace, status, waiting, limit, before, from, to } = decodeBoundary(
+        routes.runs.query,
+      )(query);
 
       return [...snapshots.values()]
         .flatMap(({ run }) =>
@@ -467,7 +469,7 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
       return { deleted: true };
     },
     overview: async (input) => {
-      const query = routes.overview.query.parse(input);
+      const query = decodeBoundary(routes.overview.query)(input);
 
       const zero = () => ({
         queued: 0,
@@ -531,7 +533,7 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
         : { input: run.input };
     },
     scopes: async (id, input) => {
-      const query = routes.scopes.query.parse(input);
+      const query = decodeBoundary(routes.scopes.query)(input);
       const parent: NodeRunView["key"]["scope"] = JSON.parse(query.parentScope);
 
       const groups = new Map<
@@ -564,7 +566,7 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
       }));
     },
     executions: async (id, input) => {
-      const query = routes.executions.query.parse(input);
+      const query = decodeBoundary(routes.executions.query)(input);
 
       const items = nodes(id)
         .filter(
@@ -595,7 +597,7 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
       return { node, attempts: [node], attemptsNext: null };
     },
     scopeItems: async (id, input) => {
-      const query = routes.scopeItems.query.parse(input);
+      const query = decodeBoundary(routes.scopeItems.query)(input);
       const parent: NodeRunView["key"]["scope"] = JSON.parse(query.parentScope);
 
       const items = new Map<
@@ -632,7 +634,7 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
       };
     },
     globalLogs: async (input) => {
-      const query = routes.globalLogs.query.parse(input);
+      const query = decodeBoundary(routes.globalLogs.query)(input);
       const all = fakeLogs();
 
       const selected = all
@@ -684,7 +686,7 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
       return { id, log: row.log };
     },
     eventHistory: async (input) => {
-      const query = routes.eventHistory.query.parse(input);
+      const query = decodeBoundary(routes.eventHistory.query)(input);
       const all = released.flat();
 
       const selected = all

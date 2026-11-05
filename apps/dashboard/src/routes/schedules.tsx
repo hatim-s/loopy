@@ -1,13 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { Schema } from "effect";
 import { routes } from "loopy/contract";
 import { useState } from "react";
-import { z } from "zod";
 import { ErrorBanner } from "../components/error-banner.tsx";
 import { ScheduleForm } from "../components/schedules/schedule-form.tsx";
 import { ScheduleRow } from "../components/schedules/schedule-row.tsx";
 import { Load, Note } from "../components/ui/load.tsx";
 import { Segmented } from "../components/ui/segmented.tsx";
 import { useClock } from "../lib/clock.ts";
+import { searchField } from "../lib/search.ts";
 import {
   useLoopyRows,
   useScheduleOverview,
@@ -20,13 +21,13 @@ import type { LoopyRow } from "../lib/view-models.ts";
  * The workspace whose schedules show, and the loopy whose form is open. A schedule belongs to
  * one workspace, so its identity is workspace plus slug.
  */
-const searchSchema = z.object({
-  workspace: z.string().optional().catch(undefined),
-  slug: routes.putSchedule.params.shape.slug.optional().catch(undefined),
+const searchSchema = Schema.Struct({
+  workspace: searchField(Schema.String),
+  slug: searchField(routes.putSchedule.params.fields.slug),
 });
 
 export const Route = createFileRoute("/schedules")({
-  validateSearch: searchSchema,
+  validateSearch: Schema.decodeUnknownSync(searchSchema),
   component: SchedulesPage,
 });
 

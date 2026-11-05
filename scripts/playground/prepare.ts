@@ -1,73 +1,101 @@
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
+import { Data, Effect } from "effect";
 import { z } from "zod";
 import { compile } from "../../packages/loopy/src/compiler/index.js";
-import { putLoopyBodySchema, routes } from "../../packages/loopy/src/contract/index.js";
+import {
+  decodeBoundary,
+  putLoopyBodySchema,
+  routes,
+} from "../../packages/loopy/src/contract/index.js";
 import { requireCurrentBaseline } from "./baseline.js";
 import { PlaygroundClient } from "./client.js";
 import { atomic, evidenceDirectory, profile, root, state } from "./config.js";
 import { catalog, prepareRepository, repository } from "./repository.js";
 
-export async function prepare() {
-  const client = await PlaygroundClient.open();
-  const snapshot = await prepareRepository();
-  const revisions: { group: string; slug: string; revision: string; file: string }[] = [];
+export class PreparationError extends Data.TaggedError("PreparationError")<{
+  message: string;
+  cause?: unknown;
+}> {}
 
-  for (const group of ["a", "b", "c"] as const) {
-    for (const fixture of await catalog(group)) {
-      const file = resolve(repository, "fixtures", group, fixture.file);
-      const compiled = await compile(file);
+const io = <A>(operation: string, run: () => PromiseLike<A>) =>
+  Effect.tryPromise({
+    try: run,
+    catch: (cause) => new PreparationError({ message: `Playground ${operation} failed.`, cause }),
+  });
 
-      if (!compiled.ok) {
-        throw new Error(
-          `Mock repo fixture ${fixture.slug} failed compilation: ${compiled.diagnostics.map((value) => value.code).join(",")}`,
+export function prepare() {
+  return Effect.gen(function* () {
+    const client = yield* io("prepare fixture", () => PlaygroundClient.open());
+    const snapshot = yield* io("prepare fixture", () => prepareRepository());
+    const revisions: { group: string; slug: string; revision: string; file: string }[] = [];
+
+    for (const group of ["a", "b", "c"] as const) {
+      for (const fixture of yield* io("prepare fixture", () => catalog(group))) {
+        const file = resolve(repository, "fixtures", group, fixture.file);
+        const compiled = yield* compile(file);
+
+        if (!compiled.ok) {
+          return yield* Effect.fail(
+            new PreparationError({
+              message: `Mock repo fixture ${fixture.slug} failed compilation: ${compiled.diagnostics.map((value) => value.code).join(",")}`,
+            }),
+          );
+        }
+
+        if (compiled.graph.name !== fixture.slug) {
+          return yield* Effect.fail(
+            new PreparationError({
+              message: `Catalog slug ${fixture.slug} differs from compiled graph ${compiled.graph.name}.`,
+            }),
+          );
+        }
+
+        const body = decodeBoundary(putLoopyBodySchema)({
+          graph: compiled.graph,
+          revision: compiled.revision,
+          sourceArtifact: compiled.sourceArtifact,
+          bundles: compiled.bundles.map((bundle) => ({
+            ...bundle,
+            bytes: Buffer.from(bundle.bytes).toString("base64"),
+          })),
+          source: { path: file, workspace: "playground" },
+          replace: true,
+        });
+
+        yield* io("prepare fixture", () =>
+          client.json(routes.putLoopy.response, `/loopies/${fixture.slug}`, body, "PUT"),
         );
+        revisions.push({ group, slug: fixture.slug, revision: compiled.revision, file });
       }
-
-      if (compiled.graph.name !== fixture.slug) {
-        throw new Error(
-          `Catalog slug ${fixture.slug} differs from compiled graph ${compiled.graph.name}.`,
-        );
-      }
-
-      const body = putLoopyBodySchema.parse({
-        graph: compiled.graph,
-        revision: compiled.revision,
-        sourceArtifact: compiled.sourceArtifact,
-        bundles: compiled.bundles.map((bundle) => ({
-          ...bundle,
-          bytes: Buffer.from(bundle.bytes).toString("base64"),
-        })),
-        source: { path: file, workspace: "playground" },
-        replace: true,
-      });
-
-      await client.json(routes.putLoopy.response, `/loopies/${fixture.slug}`, body, "PUT");
-      revisions.push({ group, slug: fixture.slug, revision: compiled.revision, file });
     }
-  }
 
-  await mkdir(evidenceDirectory, { recursive: true });
+    yield* io("prepare fixture", () => mkdir(evidenceDirectory, { recursive: true }));
 
-  const evidence = {
-    batch: client.settings.batch,
-    at: new Date().toISOString(),
-    repository,
-    ...snapshot,
-    sourceHash: (await Bun.file(resolve(repository, ".playground-source-sha256")).text()).trim(),
-    revisions,
-  };
-
-  await atomic(resolve(evidenceDirectory, "playground-driver-source.json"), evidence);
-  await atomic(resolve(state, "source-ready.json"), evidence);
-  console.log(
-    JSON.stringify({
-      status: "source-ready",
+    const evidence = {
+      batch: client.settings.batch,
+      at: new Date().toISOString(),
       repository,
-      commit: snapshot.commit,
-      workflows: revisions.length,
-    }),
-  );
+      ...snapshot,
+      sourceHash: (yield* io("prepare fixture", () =>
+        Bun.file(resolve(repository, ".playground-source-sha256")).text(),
+      )).trim(),
+      revisions,
+    };
+
+    yield* io("prepare fixture", () =>
+      atomic(resolve(evidenceDirectory, "playground-driver-source.json"), evidence),
+    );
+    yield* io("prepare fixture", () => atomic(resolve(state, "source-ready.json"), evidence));
+    console.log(
+      JSON.stringify({
+        status: "source-ready",
+        repository,
+        commit: snapshot.commit,
+        workflows: revisions.length,
+      }),
+    );
+  });
 }
 
 interface ArmContext {

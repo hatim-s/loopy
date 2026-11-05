@@ -1,38 +1,38 @@
-import { errorBodySchema, routes, type ServerEvent, serverEventSchema } from "loopy/contract";
-import type { z } from "zod";
+import { Effect, Schema, Stream } from "effect";
+import { routes, type ServerEvent, serverEventSchema } from "loopy/contract";
 import {
   BackendError,
   type EventSubscription,
   type LoopyBackend,
   type StreamEnd,
 } from "./backend.ts";
-
 import { httpBaseUrl } from "./config.ts";
+import { decodeBody, errorFrom, httpRequests, readText, runRequest } from "./http-wire.ts";
 
 type Route = {
   method: string;
   path: string;
-  params: z.ZodType<Record<string, string | number>>;
-  query: z.ZodObject;
-  body: z.ZodType;
-  response: z.ZodType;
+  params: Schema.Codec<Record<string, string | number>, unknown>;
+  query: Schema.Codec<object, object>;
+  body: Schema.Codec<unknown, unknown>;
+  response: Schema.Codec<unknown, unknown>;
 };
 
 type Call<R extends Route> = {
-  params: z.output<R["params"]>;
-  query: z.input<R["query"]>;
-  body: z.output<R["body"]>;
+  params: Schema.Schema.Type<R["params"]>;
+  query: Schema.Codec.Encoded<R["query"]>;
+  body: Schema.Schema.Type<R["body"]>;
 };
 
 /** One SSE frame carries every event of one store transaction. */
-const batchSchema = serverEventSchema.array();
+const batchSchema = Schema.Array(serverEventSchema).pipe(Schema.mutable);
 
 const RETRY_MS = { first: 500, max: 10_000 } as const;
 
 function routeUrl(
   path: string,
   params: Record<string, string | number>,
-  query: z.input<Route["query"]>,
+  query: Schema.Codec.Encoded<Route["query"]>,
 ): string {
   const filled = path
     .split("/")
@@ -64,19 +64,6 @@ function routeUrl(
   return `/api${filled}${suffix}`;
 }
 
-async function failure(response: Response): Promise<BackendError> {
-  const body = decode(errorBodySchema, await response.text());
-
-  if (!body.valid) {
-    return new BackendError(
-      "malformed_response",
-      `The server answered ${response.status} without a readable error.`,
-    );
-  }
-
-  return new BackendError(body.value.error.code, body.value.error.message);
-}
-
 function frameData(frame: string): string {
   return frame
     .split("\n")
@@ -85,69 +72,32 @@ function frameData(frame: string): string {
     .join("\n");
 }
 
-// Read the stream by hand because EventSource cannot send the bearer header.
-async function* frames(body: ReadableStream<Uint8Array>): AsyncGenerator<string> {
-  const reader = body.getReader();
+// EventSource cannot send the bearer header. Stream owns reader cancellation and release.
+function frames(body: ReadableStream<Uint8Array>) {
   const decoder = new TextDecoder();
   let buffer = "";
 
-  let finished = false;
-
-  try {
-    while (true) {
-      const chunk = await reader.read();
-      finished = chunk.done;
-
-      if (chunk.done) {
-        return;
-      }
-
-      buffer = (buffer + decoder.decode(chunk.value, { stream: true })).replaceAll("\r\n", "\n");
+  return Stream.fromReadableStream({
+    evaluate: () => body,
+    onError: () => new BackendError("unreachable"),
+  }).pipe(
+    Stream.map((chunk) => {
+      buffer = (buffer + decoder.decode(chunk, { stream: true })).replaceAll("\r\n", "\n");
+      const result: string[] = [];
 
       for (let end = buffer.indexOf("\n\n"); end !== -1; end = buffer.indexOf("\n\n")) {
         const data = frameData(buffer.slice(0, end));
         buffer = buffer.slice(end + 2);
 
         if (data !== "") {
-          yield data;
+          result.push(data);
         }
       }
-    }
-  } finally {
-    try {
-      if (!finished) {
-        await reader.cancel();
-      }
-    } finally {
-      reader.releaseLock();
-    }
-  }
-}
 
-type Decoded<T> = { valid: true; value: T } | { valid: false };
-
-/** The one place wire text becomes data: JSON that fails its contract schema is invalid. */
-function decode<S extends z.ZodType>(schema: S, text: string): Decoded<z.output<S>> {
-  try {
-    const parsed = schema.safeParse(JSON.parse(text));
-
-    return parsed.success ? { valid: true, value: parsed.data } : { valid: false };
-  } catch {
-    return { valid: false };
-  }
-}
-
-function contractBody<S extends z.ZodType>(schema: S, text: string, path: string): z.output<S> {
-  const body = decode(schema, text);
-
-  if (!body.valid) {
-    throw new BackendError(
-      "malformed_response",
-      `${path} answered with a body that does not match the contract.`,
-    );
-  }
-
-  return body.value;
+      return result;
+    }),
+    Stream.flattenIterable,
+  );
 }
 
 function pause(ms: number, signal: AbortSignal): Promise<void> {
@@ -175,34 +125,18 @@ export type LocalHttpOptions = {
 
 export function httpTransport(
   { baseUrl, token }: LocalHttpOptions,
-  eventBatchSchema: z.ZodType<ServerEvent[]> = batchSchema,
+  eventBatchSchema: Schema.Codec<ServerEvent[]> = batchSchema,
 ) {
   const base = httpBaseUrl(baseUrl);
   const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
-  async function request(url: string, init: RequestInit): Promise<Response> {
-    try {
-      return await fetch(`${base}${url}`, {
-        ...init,
-        headers: { ...headers, ...init.headers },
-        credentials: "omit",
-        redirect: "error",
-        referrerPolicy: "no-referrer",
-      });
-    } catch (cause) {
-      if (init.signal?.aborted) {
-        throw cause;
-      }
-
-      throw new BackendError("unreachable");
-    }
-  }
+  const { withResponse, fetchText } = httpRequests(base, headers);
 
   async function send<R extends Route>(
     route: R,
     call: Call<R>,
     signal?: AbortSignal,
-  ): Promise<z.output<R["response"]>> {
+  ): Promise<R["response"]["Type"]> {
     const init: RequestInit = { method: route.method, signal };
 
     if (call.body !== undefined) {
@@ -210,15 +144,20 @@ export function httpTransport(
       init.headers = { "Content-Type": "application/json" };
     }
 
-    const response = await request(routeUrl(route.path, call.params, call.query), init);
+    const url = routeUrl(route.path, call.params, call.query);
 
-    if (!response.ok) {
-      throw await failure(response);
-    }
+    return runRequest(
+      Effect.gen(function* () {
+        const response = yield* fetchText(url, init);
 
-    const schema: R["response"] = route.response;
+        if (!response.ok) {
+          return yield* Effect.fail(yield* errorFrom(response.status, response.text));
+        }
 
-    return contractBody<R["response"]>(schema, await response.text(), route.path);
+        return yield* decodeBody(route.response, response.text, route.path);
+      }),
+      signal,
+    );
   }
 
   /** Follows one stream until the server drops it, and reports why it stopped. */
@@ -228,32 +167,38 @@ export function httpTransport(
   ): Promise<StreamEnd | "dropped"> {
     const { epoch, signal, onBatch, onState } = subscription;
     const url = routeUrl(routes.events.path, {}, { after: cursor.after, epoch });
-    const response = await request(url, { signal, headers: { Accept: "text/event-stream" } });
 
-    if (response.status === 410) {
-      const error = await failure(response);
+    return runRequest(
+      withResponse(url, { headers: { Accept: "text/event-stream" } }, (response) =>
+        Effect.gen(function* () {
+          if (response.status === 410 || !response.ok || response.body === null) {
+            const error = yield* errorFrom(response.status, yield* readText(response));
 
-      if (error.code === "stale_cursor") {
-        return "reset";
-      }
+            if (response.status === 410 && error.code === "stale_cursor") {
+              return "reset" as const;
+            }
 
-      throw error;
-    }
+            return yield* Effect.fail(error);
+          }
 
-    if (!response.ok || response.body === null) {
-      throw await failure(response);
-    }
+          onState("live");
+          yield* Stream.runForEach(frames(response.body), (data) =>
+            Effect.gen(function* () {
+              cursor.received = true;
+              const batch = yield* decodeBody(eventBatchSchema, data, routes.events.path);
+              cursor.after = batch.reduce(
+                (max, event) => Math.max(max, event.sequence),
+                cursor.after,
+              );
+              onBatch(batch);
+            }),
+          );
 
-    onState("live");
-
-    for await (const data of frames(response.body)) {
-      cursor.received = true;
-      const batch = contractBody(eventBatchSchema, data, routes.events.path);
-      cursor.after = batch.reduce((max, event) => Math.max(max, event.sequence), cursor.after);
-      onBatch(batch);
-    }
-
-    return "dropped";
+          return "dropped" as const;
+        }),
+      ),
+      signal,
+    );
   }
 
   async function events(subscription: EventSubscription): Promise<StreamEnd> {

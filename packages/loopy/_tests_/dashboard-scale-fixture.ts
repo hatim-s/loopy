@@ -1,10 +1,12 @@
 import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { Effect } from "effect";
 import { compile } from "../src/compiler/index.js";
+
 import { type NodeRun, type StoreEffect } from "../src/core/index.js";
-import { SYSTEM_CLOCK } from "../src/host/index.js";
-import { LoopyService, openRunStore, Registry, SqliteRunStore } from "../src/local/index.js";
+import { makeLocalService, Registry } from "../src/local/index.js";
+import { fixtureSqlite, fixtureStore } from "./fixtures/service-runtime.js";
 
 export async function largeMapFixture() {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "loopy-dashboard-10k-map-")));
@@ -27,33 +29,36 @@ export default loopy("reindex-docs", {
     join(root, "index-doc.ts"),
     "export default (input: {path:string}) => ({path:input.path});\n",
   );
-  const compiled = await compile(source);
+  const compiled = await Effect.runPromise(compile(source));
 
   if (!compiled.ok) {
     throw new Error(JSON.stringify(compiled.diagnostics));
   }
 
-  const registry = new Registry(home, root);
+  const registry = await Effect.runPromise(Registry.make(home, root));
   let now = Date.parse("2026-10-22T06:00:00.000Z");
-  const store = new SqliteRunStore(join(home, "runs.sqlite"), () => now);
+  const store = await fixtureSqlite(join(home, "runs.sqlite"), () => now);
 
-  const service = new LoopyService({
+  const service = makeLocalService({
     store,
-    registry: () => registry,
-    clock: { ...SYSTEM_CLOCK, now: () => now },
+    clock: { ...{ now: Date.now }, now: () => now },
+    home: home,
+    cwd: root,
   });
 
-  await service.putLoopy("reindex-docs", {
-    graph: compiled.graph,
-    revision: compiled.revision,
-    bundles: compiled.bundles.map((bundle) => ({
-      ...bundle,
-      bytes: Buffer.from(bundle.bytes).toString("base64"),
-    })),
-    source: { path: source, workspace: root },
-    sourceArtifact: compiled.sourceArtifact,
-    replace: false,
-  });
+  await Effect.runPromise(
+    service.putLoopy("reindex-docs", {
+      graph: compiled.graph,
+      revision: compiled.revision,
+      bundles: compiled.bundles.map((bundle) => ({
+        ...bundle,
+        bytes: Buffer.from(bundle.bytes).toString("base64"),
+      })),
+      source: { path: source, workspace: root },
+      sourceArtifact: compiled.sourceArtifact,
+      replace: false,
+    }),
+  );
   const runId = "synthetic-map-10000";
   const at = "2026-10-22T06:00:00.000Z";
 
@@ -69,17 +74,19 @@ export default loopy("reindex-docs", {
     throw new Error("Fixture graph lacks its map/code nodes.");
   }
 
-  await store.createRun({
-    id: runId,
-    slug: "reindex-docs",
-    workspace: root,
-    revision: compiled.revision,
-    input: { items },
-    status: "queued",
-    createdAt: at,
-    updatedAt: at,
-  });
-  await store.claim(runId, "synthetic-owner");
+  await Effect.runPromise(
+    store.createRun({
+      id: runId,
+      slug: "reindex-docs",
+      workspace: root,
+      revision: compiled.revision,
+      input: { items },
+      status: "queued",
+      createdAt: at,
+      updatedAt: at,
+    }),
+  );
+  await Effect.runPromise(store.claim(runId, "synthetic-owner"));
   const started = performance.now();
 
   for (let base = 0; base < items.length; base += 500) {
@@ -110,7 +117,7 @@ export default loopy("reindex-docs", {
       ];
     });
 
-    await store.apply({ runId, token: "synthetic-owner", effects });
+    await Effect.runPromise(store.apply({ runId, token: "synthetic-owner", effects }));
   }
 
   const rootEffects: StoreEffect[] = compiled.graph.nodes
@@ -130,19 +137,21 @@ export default loopy("reindex-docs", {
     }));
 
   now = Date.parse("2026-10-22T06:01:00.000Z");
-  await store.apply({
-    runId,
-    token: "synthetic-owner",
-    effects: [
-      ...rootEffects,
-      {
-        kind: "finish_run",
-        outcome: { status: "succeeded", output: items },
-        at: "2026-10-22T06:01:00.000Z",
-      },
-    ],
-  });
-  await store.release(runId, "synthetic-owner");
+  await Effect.runPromise(
+    store.apply({
+      runId,
+      token: "synthetic-owner",
+      effects: [
+        ...rootEffects,
+        {
+          kind: "finish_run",
+          outcome: { status: "succeeded", output: items },
+          at: "2026-10-22T06:01:00.000Z",
+        },
+      ],
+    }),
+  );
+  await Effect.runPromise(store.release(runId, "synthetic-owner"));
 
   return {
     root,
@@ -161,31 +170,39 @@ export async function manyRunsFixture() {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "loopy-dashboard-10k-runs-")));
   mkdirSync(join(root, ".loopy", "loopies"), { recursive: true });
   const home = join(root, "home");
-  const store = openRunStore(home);
-  const registry = new Registry(home, root);
-  const service = new LoopyService({ store, registry: () => registry, clock: SYSTEM_CLOCK });
+  const store = await fixtureStore(home);
+
+  const service = makeLocalService({
+    store,
+    clock: { now: Date.now },
+    home: home,
+    cwd: root,
+  });
+
   const source = join(root, "queue-drain.loopy.ts");
   writeFileSync(
     source,
     `import {loopy} from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/graph/index.ts"))};\nexport default loopy("queue-drain",{input:{},run:()=>null});\n`,
   );
-  const compiled = await compile(source);
+  const compiled = await Effect.runPromise(compile(source));
 
   if (!compiled.ok) {
     throw new Error(JSON.stringify(compiled.diagnostics));
   }
 
-  await service.putLoopy("queue-drain", {
-    graph: compiled.graph,
-    revision: compiled.revision,
-    bundles: compiled.bundles.map((bundle) => ({
-      ...bundle,
-      bytes: Buffer.from(bundle.bytes).toString("base64"),
-    })),
-    source: { path: source, workspace: root },
-    sourceArtifact: compiled.sourceArtifact,
-    replace: false,
-  });
+  await Effect.runPromise(
+    service.putLoopy("queue-drain", {
+      graph: compiled.graph,
+      revision: compiled.revision,
+      bundles: compiled.bundles.map((bundle) => ({
+        ...bundle,
+        bytes: Buffer.from(bundle.bytes).toString("base64"),
+      })),
+      source: { path: source, workspace: root },
+      sourceArtifact: compiled.sourceArtifact,
+      replace: false,
+    }),
+  );
   const started = performance.now();
 
   for (let index = 0; index < 10000; index++) {
@@ -193,17 +210,19 @@ export async function manyRunsFixture() {
       Date.parse("2026-10-15T00:00:00.000Z") + Math.floor(index / 2) * 60000,
     ).toISOString();
 
-    await store.createRun({
-      id: `run-${String(index).padStart(5, "0")}`,
-      slug: "queue-drain",
-      workspace: root,
-      revision: compiled.revision,
-      input: {},
-      status: index % 10 === 0 ? "failed" : "succeeded",
-      ...(index % 10 === 0 ? { error: "Synthetic failure" } : { output: null }),
-      createdAt: at,
-      updatedAt: at,
-    });
+    await Effect.runPromise(
+      store.createRun({
+        id: `run-${String(index).padStart(5, "0")}`,
+        slug: "queue-drain",
+        workspace: root,
+        revision: compiled.revision,
+        input: {},
+        status: index % 10 === 0 ? "failed" : "succeeded",
+        ...(index % 10 === 0 ? { error: "Synthetic failure" } : { output: null }),
+        createdAt: at,
+        updatedAt: at,
+      }),
+    );
   }
 
   return { root, home, store, service, ingestMs: performance.now() - started };

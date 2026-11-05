@@ -1,7 +1,8 @@
 import type { DurableObjectState, R2Bucket } from "@cloudflare/workers-types";
+import { Effect } from "effect";
 import { ArtifactStorage } from "../../../../apps/cloud/src/artifacts-storage.js";
 import { DurableSqlDriver } from "../../../../apps/cloud/src/sql-driver.js";
-import { nodeIdSchema } from "../../src/contract/index.js";
+import { decodeBoundary, nodeIdSchema } from "../../src/contract/index.js";
 import type { RunRecord, StoreEffect } from "../../src/core/index.js";
 import { EVENT_RETENTION } from "../../src/store/event-outbox.js";
 import { SqlRunStore } from "../../src/store/portable.js";
@@ -9,7 +10,7 @@ import { paginationResponse } from "./cloud-pagination-probe.js";
 
 const at = "2026-10-22T00:00:00.000Z";
 
-const key = { runId: "run", nodeId: nodeIdSchema.parse("approval"), scope: [] };
+const key = { runId: "run", nodeId: decodeBoundary(nodeIdSchema)("approval"), scope: [] };
 
 function run(id = "run"): RunRecord {
   return {
@@ -68,8 +69,8 @@ export class CloudWorkerProbe {
   private async command(path: string) {
     if (path === "/r2") {
       const storage = new ArtifactStorage(this.env.ARTIFACTS, "probe");
-      await storage.put("immutable", "original");
-      await storage.put("immutable", "replacement");
+      await Effect.runPromise(storage.put("immutable", "original"));
+      await Effect.runPromise(storage.put("immutable", "replacement"));
 
       const conditional = await this.env.ARTIFACTS.put("workspaces/probe/immutable", "third", {
         onlyIf: { etagDoesNotMatch: "*" },
@@ -78,10 +79,12 @@ export class CloudWorkerProbe {
       const other = new ArtifactStorage(this.env.ARTIFACTS, "other");
 
       return {
-        value: new TextDecoder().decode((await storage.read("immutable", 8)) ?? undefined),
+        value: new TextDecoder().decode(
+          (await Effect.runPromise(storage.read("immutable", 8))) ?? undefined,
+        ),
         conditionalRejected: conditional === null,
-        other: await other.read("immutable", 8),
-        oversized: await failure(() => storage.read("immutable", 7)),
+        other: await Effect.runPromise(other.read("immutable", 8)),
+        oversized: await failure(() => Effect.runPromise(storage.read("immutable", 7))),
       };
     }
 
@@ -97,33 +100,35 @@ export class CloudWorkerProbe {
 
     if (path === "/reopen") {
       return {
-        cursor: await store.eventCursor(),
+        cursor: await Effect.runPromise(store.eventCursor()),
         marker: await this.ctx.storage.get<string>("synthetic-marker"),
-        run: await store.getRun("run"),
+        run: await Effect.runPromise(store.getRun("run")),
       };
     }
 
     if (path === "/rollback") {
-      await store.createRun(run());
-      await store.claim("run", "owner");
-      const before = await store.eventCursor();
+      await Effect.runPromise(store.createRun(run()));
+      await Effect.runPromise(store.claim("run", "owner"));
+      const before = await Effect.runPromise(store.eventCursor());
       const published: unknown[] = [];
       store.subscribe((events) => published.push(...events));
 
       const error = await failure(() =>
-        store.apply({
-          runId: "run",
-          token: "owner",
-          effects: [...logs(), { kind: "schedule_retry", at: "invalid-date" }],
-        }),
+        Effect.runPromise(
+          store.apply({
+            runId: "run",
+            token: "owner",
+            effects: [...logs(), { kind: "schedule_retry", at: "invalid-date" }],
+          }),
+        ),
       );
 
-      const snapshot = await store.snapshotRun("run");
+      const snapshot = await Effect.runPromise(store.snapshotRun("run"));
 
       return {
         error,
         before,
-        after: await store.eventCursor(),
+        after: await Effect.runPromise(store.eventCursor()),
         logs: snapshot?.logs,
         published,
         usage: this.ctx.storage.sql.exec("SELECT * FROM log_attempt_usage").toArray(),
@@ -131,18 +136,18 @@ export class CloudWorkerProbe {
     }
 
     if (path === "/owners") {
-      await store.createRun(run());
-      await store.claim("run", "first");
-      const live = await failure(() => store.claim("run", "second"));
+      await Effect.runPromise(store.createRun(run()));
+      await Effect.runPromise(store.claim("run", "first"));
+      const live = await failure(() => Effect.runPromise(store.claim("run", "second")));
       tick += 1001;
-      await store.claim("run", "second");
-      const before = await store.eventCursor();
+      await Effect.runPromise(store.claim("run", "second"));
+      const before = await Effect.runPromise(store.eventCursor());
 
       const stale = await failure(() =>
-        store.apply({ runId: "run", token: "first", effects: logs() }),
+        Effect.runPromise(store.apply({ runId: "run", token: "first", effects: logs() })),
       );
 
-      const heartbeat = await store.heartbeat("run", "first");
+      const heartbeat = await Effect.runPromise(store.heartbeat("run", "first"));
 
       const reopened = new SqlRunStore(driver, {
         owner: { identity: { pid: null, host: "reopened" }, isAlive: () => false },
@@ -153,25 +158,27 @@ export class CloudWorkerProbe {
         stale,
         heartbeat,
         before,
-        after: await reopened.eventCursor(),
-        run: await reopened.getRun("run"),
+        after: await Effect.runPromise(reopened.eventCursor()),
+        run: await Effect.runPromise(reopened.getRun("run")),
         marker: await this.ctx.storage.get<string>("synthetic-marker"),
-        logs: await reopened.getLogs("run"),
+        logs: await Effect.runPromise(reopened.getLogs("run")),
       };
     }
 
     if (path === "/schedules") {
-      const schedule = await store.putSchedule({
-        workspace: "probe",
-        slug: "probe",
-        cron: "* * * * *",
-        tz: "UTC",
-        input: {},
-        enabled: true,
-        nextFireAt: at,
-      });
+      const schedule = await Effect.runPromise(
+        store.putSchedule({
+          workspace: "probe",
+          slug: "probe",
+          cron: "* * * * *",
+          tz: "UTC",
+          input: {},
+          enabled: true,
+          nextFireAt: at,
+        }),
+      );
 
-      await store.createRun(run());
+      await Effect.runPromise(store.createRun(run()));
 
       const fire = {
         workspace: "probe",
@@ -182,17 +189,20 @@ export class CloudWorkerProbe {
         run: run(),
       };
 
-      const before = await store.eventCursor();
-      const error = await failure(() => store.fireSchedule(fire));
+      const before = await Effect.runPromise(store.eventCursor());
+      const error = await failure(() => Effect.runPromise(store.fireSchedule(fire)));
 
       const rolledBack = {
-        schedule: (await store.listSchedules())[0],
-        cursor: await store.eventCursor(),
+        schedule: (await Effect.runPromise(store.listSchedules()))[0],
+        cursor: await Effect.runPromise(store.eventCursor()),
       };
 
-      const fired = await store.fireSchedule({ ...fire, run: run("scheduled") });
-      const cursor = await store.eventCursor();
-      const duplicate = await store.fireSchedule({ ...fire, run: run("duplicate") });
+      const fired = await Effect.runPromise(store.fireSchedule({ ...fire, run: run("scheduled") }));
+      const cursor = await Effect.runPromise(store.eventCursor());
+
+      const duplicate = await Effect.runPromise(
+        store.fireSchedule({ ...fire, run: run("duplicate") }),
+      );
 
       return {
         error,
@@ -201,64 +211,70 @@ export class CloudWorkerProbe {
         fired,
         duplicate,
         cursor,
-        after: await store.eventCursor(),
-        runs: (await store.listRuns()).map(({ id }) => id),
-        events: await store.events(before.cursor, 10),
+        after: await Effect.runPromise(store.eventCursor()),
+        runs: (await Effect.runPromise(store.listRuns())).map(({ id }) => id),
+        events: await Effect.runPromise(store.events(before.cursor, 10)),
       };
     }
 
     if (path === "/waits") {
-      await store.createRun(run());
-      await store.claim("run", "owner");
-      await store.apply({
-        runId: "run",
-        token: "owner",
-        effects: [
-          {
-            kind: "write_node_run",
-            nodeRun: {
-              key,
-              attempt: 1,
-              maxAttempts: 1,
-              receipt: "none",
-              startedAt: at,
-              status: "waiting",
-              wakeAt: "2026-10-22T01:00:00.000Z",
+      await Effect.runPromise(store.createRun(run()));
+      await Effect.runPromise(store.claim("run", "owner"));
+      await Effect.runPromise(
+        store.apply({
+          runId: "run",
+          token: "owner",
+          effects: [
+            {
+              kind: "write_node_run",
+              nodeRun: {
+                key,
+                attempt: 1,
+                maxAttempts: 1,
+                receipt: "none",
+                startedAt: at,
+                status: "waiting",
+                wakeAt: "2026-10-22T01:00:00.000Z",
+              },
             },
-          },
-          {
-            kind: "register_wait",
-            executionKey: key,
-            name: "approve",
-            payload: { kind: "record", fields: { approved: "boolean" } },
-            at,
-          },
-          { kind: "suspend_run", wakeAt: "2026-10-22T01:00:00.000Z", at },
-        ],
-      });
-      const wait = (await store.getWaits("run"))[0];
+            {
+              kind: "register_wait",
+              executionKey: key,
+              name: "approve",
+              payload: { kind: "record", fields: { approved: "boolean" } },
+              at,
+            },
+            { kind: "suspend_run", wakeAt: "2026-10-22T01:00:00.000Z", at },
+          ],
+        }),
+      );
+      const wait = (await Effect.runPromise(store.getWaits("run")))[0];
 
       if (!wait) {
         throw new Error("Wait was not persisted.");
       }
 
-      const before = await store.eventCursor();
+      const before = await Effect.runPromise(store.eventCursor());
 
-      const invalid = await store.resolveWait({
-        token: wait.token,
-        payload: { approved: "invalid" },
-        at,
-      });
+      const invalid = await Effect.runPromise(
+        store.resolveWait({
+          token: wait.token,
+          payload: { approved: "invalid" },
+          at,
+        }),
+      );
 
-      const unchanged = await store.eventCursor();
+      const unchanged = await Effect.runPromise(store.eventCursor());
 
       const results = await Promise.all(
         [true, false].map((payload) =>
-          store.resolveWait({ token: wait.token, payload: { approved: payload }, at }),
+          Effect.runPromise(
+            store.resolveWait({ token: wait.token, payload: { approved: payload }, at }),
+          ),
         ),
       );
 
-      const events = await store.events(before.cursor, 20);
+      const events = await Effect.runPromise(store.events(before.cursor, 20));
 
       return {
         invalid,
@@ -267,36 +283,36 @@ export class CloudWorkerProbe {
         results,
         events,
         transactions: [...new Set(events.map((event) => event.txn))].length,
-        snapshot: await store.snapshotRun("run"),
+        snapshot: await Effect.runPromise(store.snapshotRun("run")),
       };
     }
 
     if (path === "/prune") {
-      await store.createRun(run());
-      await store.claim("run", "owner");
-      await store.apply({ runId: "run", token: "owner", effects: logs() });
-      const events = await store.events(0, 10);
+      await Effect.runPromise(store.createRun(run()));
+      await Effect.runPromise(store.claim("run", "owner"));
+      await Effect.runPromise(store.apply({ runId: "run", token: "owner", effects: logs() }));
+      const events = await Effect.runPromise(store.events(0, 10));
       const tail = events.at(-1);
 
       if (!tail) {
         throw new Error("Missing transaction tail.");
       }
 
-      const removed = await store.pruneEvents(
-        new Date(Date.parse(tail.at) + EVENT_RETENTION.maxAgeMs).toISOString(),
+      const removed = await Effect.runPromise(
+        store.pruneEvents(new Date(Date.parse(tail.at) + EVENT_RETENTION.maxAgeMs).toISOString()),
       );
 
-      const empty = await store.events(0, 10);
-      const cursor = await store.eventCursor();
-      await store.heartbeat("run", "owner");
+      const empty = await Effect.runPromise(store.events(0, 10));
+      const cursor = await Effect.runPromise(store.eventCursor());
+      await Effect.runPromise(store.heartbeat("run", "owner"));
 
       return {
         events,
         removed,
         empty,
         cursor,
-        next: await store.events(cursor.cursor, 10),
-        oldest: store.oldestEventSequence(),
+        next: await Effect.runPromise(store.events(cursor.cursor, 10)),
+        oldest: await Effect.runPromise(store.oldestEventSequence()),
       };
     }
 

@@ -1,15 +1,24 @@
 import { expect, test } from "bun:test";
-import type { Store } from "../src/core/index.js";
-import { activate, type Clock } from "../src/host/index.js";
-import { code, loopy } from "../src/sdk/graph/index.js";
+import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
+import { TestClock } from "effect/testing";
+import { type Executor, OwnershipError, StorageError } from "../src/core/index.js";
+import {
+  ActivationWorkCleanupFailed,
+  activate,
+  DriverCleanupFailed,
+  LeaseReleaseFailed,
+} from "../src/host/index.js";
+import { code, loopy, parallel } from "../src/sdk/graph/index.js";
 import { MemoryStore } from "../src/store/index.js";
 import { FakeExecutor, newRun } from "./fixture.js";
 
-function graph() {
+function graph(wide = false) {
+  const work = () =>
+    code("work", { in: {}, out: { kind: "value", type: "number" }, module: "./work.ts" });
+
   const graph = loopy("test", {
     input: {},
-    run: () =>
-      code("work", { in: {}, out: { kind: "value", type: "number" }, module: "./work.ts" }),
+    run: () => (wide ? parallel({ first: work, second: work }) : work()),
   }).graph;
 
   for (const node of graph.nodes) {
@@ -21,121 +30,361 @@ function graph() {
   return graph;
 }
 
-async function execute(store: Store, executor = new FakeExecutor()) {
-  await store.createRun(newRun());
+const unavailable = (operation: string) =>
+  new StorageError({ operation, reason: "unavailable", cause: new Error(operation) });
 
-  return activate({ store, executor, graph: graph(), runId: "run" });
-}
+for (const primary of ["read", "graph", "interrupt"] as const) {
+  test(`release failure preserves full ${primary} exit`, async () => {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const started = yield* Deferred.make<void>();
 
-class ReadFailureStore extends MemoryStore {
-  override async getNodeRuns(): Promise<never> {
-    throw new Error("Nodes unavailable. Restore storage.");
-  }
-}
-
-class ReleaseFailureStore extends ReadFailureStore {
-  override async release(runId: string, token: string) {
-    await super.release(runId, token);
-    throw new Error("Release unavailable. Restore storage.");
-  }
-}
-
-test("node read failure releases ownership into a claimable suspension", async () => {
-  const store = new ReadFailureStore();
-  await expect(execute(store)).rejects.toThrow("Nodes unavailable");
-  expect(await store.getRun("run")).toMatchObject({ status: "suspended" });
-  expect((await store.getRun("run"))?.owner).toBeUndefined();
-  expect((await store.claim("run", "next")).status).toBe("running");
-});
-
-test("release failure remains the cause of the primary read failure", async () => {
-  await expect(execute(new ReleaseFailureStore())).rejects.toMatchObject({
-    message: "Nodes unavailable. Restore storage.",
-    cause: new Error("Release unavailable. Restore storage."),
-  });
-});
-
-for (const operation of ["dispatch", "finish"] as const) {
-  test(`${operation} persistence failure releases ownership and does not dispatch uncommitted work`, async () => {
-    class WriteFailureStore extends MemoryStore {
-      override async apply(batch: Parameters<Store["apply"]>[0]) {
-        if (
-          operation === "dispatch" ||
-          batch.effects.some((effect) => effect.kind === "finish_run")
-        ) {
-          throw new Error("Write unavailable. Restore storage.");
+        class BrokenStore extends MemoryStore {
+          override getNodeRuns(id: string) {
+            return primary === "read" ? Effect.fail(unavailable("read")) : super.getNodeRuns(id);
+          }
+          override release() {
+            return Effect.fail(unavailable("release"));
+          }
         }
 
-        return super.apply(batch);
+        const store = new BrokenStore();
+        yield* store.createRun(newRun());
+
+        const executor: Executor = {
+          lookup: () => Effect.succeed({ kind: "none" }),
+          execute: () =>
+            primary === "interrupt"
+              ? Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never))
+              : Effect.succeed({
+                  kind: "failed",
+                  error: { code: "protocol", message: "Invalid protocol" },
+                  exitCode: null,
+                  logs: [],
+                }),
+        };
+
+        const task = activate({ store, executor, graph: graph(), runId: "run" });
+
+        const exit =
+          primary === "interrupt"
+            ? yield* Effect.gen(function* () {
+                const fiber = yield* Effect.forkChild(task);
+                yield* Deferred.await(started);
+                yield* Fiber.interrupt(fiber);
+
+                return yield* Fiber.await(fiber);
+              })
+            : yield* Effect.exit(task);
+
+        expect(Exit.isFailure(exit)).toBe(true);
+
+        if (Exit.isFailure(exit)) {
+          const error = exit.cause.reasons
+            .filter(Cause.isFailReason)
+            .map((reason) => reason.error)
+            .find((error) => error instanceof LeaseReleaseFailed);
+
+          expect(error).toBeInstanceOf(LeaseReleaseFailed);
+
+          if (!(error instanceof LeaseReleaseFailed)) {
+            throw new Error("Missing release error");
+          }
+
+          if (primary === "graph") {
+            expect(Exit.isSuccess(error.primary) && error.primary.value).toEqual({
+              status: "failed",
+              error: "Invalid protocol",
+            });
+          } else {
+            expect(Exit.isFailure(error.primary)).toBe(true);
+          }
+
+          if (primary === "interrupt" && Exit.isFailure(error.primary)) {
+            expect(Cause.hasInterrupts(error.primary.cause)).toBe(true);
+          }
+        }
+      }),
+    );
+  });
+}
+
+test("ownership loss interrupts and joins work before fenced release", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const started = yield* Deferred.make<void>();
+      const events: string[] = [];
+
+      class LostStore extends MemoryStore {
+        override heartbeat() {
+          return Effect.succeed(false);
+        }
+        override release(id: string, token: string) {
+          return Effect.sync(() => {
+            events.push("release");
+          }).pipe(Effect.andThen(super.release(id, token)));
+        }
       }
-    }
 
-    const store = new WriteFailureStore();
-    const executor = new FakeExecutor();
-    executor.result = { kind: "succeeded", output: 42, logs: [] };
-    await expect(execute(store, executor)).rejects.toThrow("Write unavailable");
-    expect(executor.calls).toHaveLength(operation === "dispatch" ? 0 : 1);
-    expect((await store.getRun("run"))?.owner).toBeUndefined();
-    expect((await store.dueRuns(new Date().toISOString())).map((run) => run.id)).toEqual(["run"]);
-  });
-}
+      const store = new LostStore(undefined, 1000);
+      yield* store.createRun(newRun());
 
-test("release failure preserves a failed graph outcome as the primary message", async () => {
-  class TerminalReleaseFailureStore extends MemoryStore {
-    override async release(runId: string, token: string) {
-      await super.release(runId, token);
-      throw new Error("Release unavailable");
-    }
-  }
+      const executor: Executor = {
+        lookup: () => Effect.succeed({ kind: "none" }),
+        execute: () =>
+          Deferred.succeed(started, undefined).pipe(
+            Effect.andThen(Effect.never),
+            Effect.ensuring(
+              Effect.sync(() => {
+                events.push("stopped");
+              }),
+            ),
+          ),
+      };
 
-  const executor = new FakeExecutor();
-  executor.result = {
-    kind: "failed",
-    error: { code: "protocol", message: "Invalid bundle protocol" },
-    exitCode: null,
-    logs: [],
-  };
-  await expect(execute(new TerminalReleaseFailureStore(), executor)).rejects.toMatchObject({
-    message: "Invalid bundle protocol",
-    cause: new Error("Release unavailable"),
-  });
-});
+      const fiber = yield* Effect.forkChild(
+        activate({ store, executor, graph: graph(), runId: "run" }),
+      );
 
-test("all three attempts retain their own logs and indices", async () => {
-  let now = Date.parse(newRun().createdAt);
-
-  const clock: Clock = {
-    now: () => now,
-    timeout: (callback, ms) => {
-      queueMicrotask(() => {
-        now += ms;
-        callback();
-      });
-
-      return () => {};
-    },
-  };
-
-  const store = new MemoryStore(clock.now);
-  await store.createRun(newRun());
-  const executor = new FakeExecutor();
-  executor.execute = async (...[, attempt]) =>
-    attempt < 3
-      ? {
-          kind: "failed",
-          error: { code: "execution", message: "Temporary" },
-          exitCode: null,
-          logs: [{ message: "attempt", data: attempt }],
-        }
-      : { kind: "succeeded", output: 42, logs: [{ message: "attempt", data: attempt }] };
-  expect(await activate({ runId: "run", store, executor, graph: graph(), clock })).toEqual({
-    status: "succeeded",
-    output: 42,
-  });
-  expect((await store.getLogs("run")).map((log) => [log.data, log.position])).toEqual(
-    [1, 2, 3].map((attempt) => [
-      attempt,
-      { kind: "node", executionKey: '"run"/"0:work"', attempt, index: 0 },
-    ]),
+      yield* Deferred.await(started);
+      yield* TestClock.adjust(250);
+      const exit = yield* Fiber.await(fiber);
+      expect(
+        Exit.isFailure(exit) &&
+          exit.cause.reasons.some(
+            (reason) => Cause.isFailReason(reason) && reason.error instanceof OwnershipError,
+          ),
+      ).toBe(true);
+      expect(events).toEqual(["stopped", "release"]);
+      expect((yield* store.getRun("run"))?.owner).toBeUndefined();
+      expect((yield* store.getNodeRuns("run"))[0]).toMatchObject({ status: "running", attempt: 1 });
+    }).pipe(Effect.provide(TestClock.layer())),
   );
 });
+
+test("consuming first completion never interrupts its sibling", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const gate = yield* Deferred.make<void>();
+      const waiting = yield* Deferred.make<void>();
+      let executions = 0;
+      let stopped = false;
+
+      class RecordingStore extends MemoryStore {
+        override apply(batch: Parameters<MemoryStore["apply"]>[0]) {
+          return super
+            .apply(batch)
+            .pipe(
+              Effect.tap(() =>
+                batch.effects.some(
+                  (effect) =>
+                    effect.kind === "write_node_run" && effect.nodeRun.status === "succeeded",
+                )
+                  ? Deferred.succeed(waiting, undefined)
+                  : Effect.void,
+              ),
+            );
+        }
+      }
+
+      const store = new RecordingStore();
+      yield* store.createRun(newRun());
+
+      const executor: Executor = {
+        lookup: () => Effect.succeed({ kind: "none" }),
+        execute: () =>
+          Effect.suspend(() => {
+            executions++;
+
+            return executions === 1
+              ? Effect.succeed({ kind: "succeeded" as const, output: 42, logs: [] })
+              : Deferred.await(gate).pipe(
+                  Effect.as({ kind: "succeeded" as const, output: 42, logs: [] }),
+                  Effect.ensuring(
+                    Effect.sync(() => {
+                      stopped = true;
+                    }),
+                  ),
+                );
+          }),
+      };
+
+      const fiber = yield* Effect.forkChild(
+        activate({ store, executor, graph: graph(true), runId: "run" }),
+      );
+
+      yield* Deferred.await(waiting);
+      expect(stopped).toBe(false);
+      yield* Deferred.succeed(gate, undefined);
+      expect(yield* Fiber.join(fiber)).toMatchObject({ status: "succeeded" });
+      expect(executions).toBe(2);
+    }),
+  );
+});
+
+test("apply failure never dispatches uncommitted work and releases the lease", async () => {
+  class BrokenStore extends MemoryStore {
+    override apply() {
+      return Effect.fail(unavailable("apply"));
+    }
+  }
+
+  const store = new BrokenStore();
+  const executor = new FakeExecutor();
+  await Effect.runPromise(store.createRun(newRun()));
+
+  const exit = await Effect.runPromiseExit(
+    activate({ store, executor, graph: graph(), runId: "run" }),
+  );
+
+  expect(Exit.isFailure(exit)).toBe(true);
+  expect(executor.calls).toHaveLength(0);
+  expect((await Effect.runPromise(store.getRun("run")))?.owner).toBeUndefined();
+});
+
+test("a stalled release reports unknown completion and retains the graph exit", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const releasing = yield* Deferred.make<void>();
+
+      class StalledStore extends MemoryStore {
+        override release() {
+          return Deferred.succeed(releasing, undefined).pipe(Effect.andThen(Effect.never));
+        }
+      }
+
+      const store = new StalledStore();
+      yield* store.createRun(newRun());
+      const executor = new FakeExecutor();
+      executor.result = { kind: "succeeded", output: 42, logs: [] };
+
+      const fiber = yield* Effect.forkChild(
+        activate({ store, executor, graph: graph(), runId: "run" }),
+      );
+
+      yield* Deferred.await(releasing);
+      yield* TestClock.adjust(5000);
+      const exit = yield* Fiber.await(fiber);
+      expect(
+        Exit.isFailure(exit) &&
+          exit.cause.reasons.some(
+            (reason) => Cause.isFailReason(reason) && reason.error._tag === "LeaseReleaseUnknown",
+          ),
+      ).toBe(true);
+      expect((yield* store.getRun("run"))?.status).toBe("succeeded");
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+});
+
+test("interruption of a started receipt never repeats execution or business-cancels the run", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const observed = yield* Deferred.make<void>();
+      const store = new MemoryStore();
+      yield* store.createRun(newRun());
+      let executions = 0;
+
+      const executor: Executor = {
+        lookup: () =>
+          Deferred.succeed(observed, undefined).pipe(Effect.as({ kind: "started" as const })),
+        execute: () =>
+          Effect.sync(() => {
+            executions++;
+
+            return { kind: "succeeded", output: 42, logs: [] };
+          }),
+      };
+
+      const fiber = yield* Effect.forkChild(
+        activate({ store, executor, graph: graph(), runId: "run" }),
+      );
+
+      yield* Deferred.await(observed);
+      yield* Fiber.interrupt(fiber);
+      expect(executions).toBe(0);
+      expect((yield* store.getRun("run"))?.status).toBe("suspended");
+      expect((yield* store.getNodeRuns("run"))[0]).toMatchObject({ status: "running", attempt: 1 });
+    }),
+  );
+});
+
+for (const primary of ["ownership", "root"] as const) {
+  test(`${primary} interruption retains an executor cleanup defect after the inbox consumer stops`, async () => {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const entered = yield* Deferred.make<void>();
+        const defect = new Error("executor cleanup defect");
+
+        class LosingStore extends MemoryStore {
+          override heartbeat() {
+            return Effect.succeed(false);
+          }
+        }
+
+        const store = new LosingStore(undefined, 1000);
+
+        const executor: Executor = {
+          lookup: () => Effect.succeed({ kind: "none" }),
+          execute: () =>
+            Deferred.succeed(entered, undefined).pipe(
+              Effect.andThen(Effect.never),
+              Effect.ensuring(Effect.die(defect)),
+            ),
+        };
+
+        yield* store.createRun(newRun());
+
+        const fiber = yield* Effect.forkChild(
+          activate({ store, executor, graph: graph(), runId: "run" }),
+        );
+
+        yield* Deferred.await(entered);
+
+        if (primary === "ownership") {
+          yield* TestClock.adjust(250);
+        } else {
+          yield* Fiber.interrupt(fiber);
+        }
+
+        const exit = yield* Fiber.await(fiber);
+        expect(Exit.isFailure(exit)).toBe(true);
+
+        if (Exit.isFailure(exit)) {
+          const driver = exit.cause.reasons
+            .filter(Cause.isFailReason)
+            .map((reason) => reason.error)
+            .find((error) => error instanceof DriverCleanupFailed);
+
+          expect(driver).toBeInstanceOf(DriverCleanupFailed);
+
+          if (!(driver instanceof DriverCleanupFailed) || !Exit.isFailure(driver.driver)) {
+            throw new Error("Missing driver cleanup");
+          }
+
+          const work = driver.driver.cause.reasons
+            .filter(Cause.isFailReason)
+            .map((reason) => reason.error)
+            .find((error) => error instanceof ActivationWorkCleanupFailed);
+
+          expect(work).toBeInstanceOf(ActivationWorkCleanupFailed);
+
+          if (!(work instanceof ActivationWorkCleanupFailed)) {
+            throw new Error("Missing attempt cleanup");
+          }
+
+          expect(
+            work.attempts.some(
+              (attempt) =>
+                Exit.isFailure(attempt) &&
+                attempt.cause.reasons.some(
+                  (reason) => Cause.isDieReason(reason) && reason.defect === defect,
+                ),
+            ),
+          ).toBe(true);
+        }
+
+        expect((yield* store.getRun("run"))?.owner).toBeUndefined();
+      }).pipe(Effect.provide(TestClock.layer())),
+    );
+  });
+}

@@ -1,4 +1,6 @@
 import { parseArgs } from "node:util";
+import { Effect } from "effect";
+import { decodeBoundary } from "../../../packages/loopy/src/contract/index.js";
 import { sandboxConfigSchema } from "./config.js";
 import { startSandbox } from "./server.js";
 
@@ -18,7 +20,7 @@ const { values } = parseArgs({
   },
 });
 
-const config = sandboxConfigSchema.parse({
+const config = decodeBoundary(sandboxConfigSchema)({
   worktree: values.worktree,
   stateRoot: values["state-root"],
   dockerContext: values["docker-context"],
@@ -32,19 +34,21 @@ const config = sandboxConfigSchema.parse({
   token: process.env.LOOPY_SANDBOX_TOKEN,
 });
 
-const service = await startSandbox(config);
+await Effect.runPromise(
+  Effect.scoped(
+    Effect.gen(function* () {
+      const service = yield* startSandbox(config);
+      process.stderr.write(`Sandbox listening at ${service.server.url}\n`);
+      yield* Effect.callback<void>((resume) => {
+        const stop = () => resume(Effect.void);
+        process.once("SIGTERM", stop);
+        process.once("SIGINT", stop);
 
-process.stderr.write(`Sandbox listening at ${service.server.url}\n`);
-
-let closing = false;
-
-const stop = async () => {
-  if (!closing) {
-    closing = true;
-    await service.close();
-  }
-};
-
-process.on("SIGTERM", () => void stop());
-
-process.on("SIGINT", () => void stop());
+        return Effect.sync(() => {
+          process.off("SIGTERM", stop);
+          process.off("SIGINT", stop);
+        });
+      });
+    }),
+  ),
+);

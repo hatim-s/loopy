@@ -2,6 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { Effect, Exit, Scope } from "effect";
 import { daemonUrl, localDaemon, openRunStore, readDaemonFile } from "../src/local/index.js";
 
 const roots: string[] = [];
@@ -23,11 +24,20 @@ afterEach(() => {
 test("daemon publishes a private discovery file and removes it on clean shutdown", async () => {
   const home = directory();
   const cwd = directory();
-  const store = openRunStore(home);
-  const daemon = localDaemon({ home, cwd, store, port: 0, concurrency: 2 });
+  const scope = Effect.runSync(Scope.make());
 
   try {
-    const url = new URL(daemon.start());
+    const store = await Effect.runPromise(
+      openRunStore(home).pipe(Effect.provideService(Scope.Scope, scope)),
+    );
+
+    const daemon = await Effect.runPromise(
+      localDaemon({ home, cwd, store, port: 0, concurrency: 2 }).pipe(
+        Effect.provideService(Scope.Scope, scope),
+      ),
+    );
+
+    const url = new URL(await Effect.runPromise(daemon.start));
     expect(statSync(join(home, "daemon.json")).mode & 0o777).toBe(0o600);
     const record = readDaemonFile(home);
     expect(record).toMatchObject({
@@ -39,7 +49,12 @@ test("daemon publishes a private discovery file and removes it on clean shutdown
 
     const child = Bun.spawn(
       [process.execPath, resolve(import.meta.dir, "../src/cli/index.ts"), "--home", home, "ui"],
-      { cwd, stdout: "pipe", stderr: "pipe" },
+      {
+        cwd,
+        env: { PATH: process.env.PATH, HOME: cwd, TMPDIR: cwd, LOOPY_HOME: home },
+        stdout: "pipe",
+        stderr: "pipe",
+      },
     );
 
     expect((await new Response(child.stdout).text()).trim()).toBe(url.toString());
@@ -54,14 +69,18 @@ test("daemon publishes a private discovery file and removes it on clean shutdown
         "daemon",
         "status",
       ],
-      { stdout: "pipe", stderr: "pipe" },
+      {
+        cwd,
+        env: { PATH: process.env.PATH, HOME: cwd, TMPDIR: cwd, LOOPY_HOME: home },
+        stdout: "pipe",
+        stderr: "pipe",
+      },
     );
 
     expect(JSON.parse(await new Response(status.stdout).text())).toEqual(record);
     expect(await status.exited).toBe(0);
   } finally {
-    await daemon.stop();
-    store.close();
+    await Effect.runPromise(Scope.close(scope, Exit.void));
   }
 
   expect(existsSync(join(home, "daemon.json"))).toBe(false);
@@ -81,7 +100,12 @@ test("ui starts the foreground daemon when discovery is absent and removes it on
       "--port",
       "0",
     ],
-    { cwd, stdout: "pipe", stderr: "pipe" },
+    {
+      cwd,
+      env: { PATH: process.env.PATH, HOME: cwd, TMPDIR: cwd, LOOPY_HOME: home },
+      stdout: "pipe",
+      stderr: "pipe",
+    },
   );
 
   try {
@@ -102,4 +126,118 @@ test("ui starts the foreground daemon when discovery is absent and removes it on
     child.kill();
     await child.exited;
   }
+});
+
+test("second foreground daemon reports an actionable error", async () => {
+  const home = directory();
+  const cwd = directory();
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const store = yield* openRunStore(home);
+        const daemon = yield* localDaemon({ home, cwd, store, port: 0, concurrency: 1 });
+        yield* daemon.start;
+
+        const child = Bun.spawn(
+          [
+            process.execPath,
+            resolve(import.meta.dir, "../src/cli/index.ts"),
+            "--home",
+            home,
+            "daemon",
+            "run",
+            "--port",
+            "0",
+          ],
+          {
+            cwd,
+            env: { PATH: process.env.PATH, HOME: cwd, TMPDIR: cwd, LOOPY_HOME: home },
+            stdout: "pipe",
+            stderr: "pipe",
+          },
+        );
+
+        const stderr = yield* Effect.promise(() => new Response(child.stderr).text());
+        expect(yield* Effect.promise(() => child.exited)).toBe(1);
+        expect(stderr).toContain("A daemon is already running for this home");
+        expect(readDaemonFile(home)?.pid).toBe(process.pid);
+      }),
+    ),
+  );
+});
+
+test("failed discovery publication closes its listener and permanently rejects restart", async () => {
+  const home = directory();
+  const cwd = directory();
+  const probe = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("probe") });
+  const port = probe.port;
+  await probe.stop(true);
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const store = yield* openRunStore(home);
+
+        const daemon = yield* localDaemon({
+          home,
+          cwd,
+          store,
+          port,
+          concurrency: 1,
+          // Insert a real publication fault after discovery reads and before listener creation.
+          get assets() {
+            mkdirSync(join(home, "daemon.json"));
+
+            return join(cwd, "missing-assets");
+          },
+        });
+
+        const first = yield* Effect.flip(daemon.start);
+        expect(first.message).toContain("Cannot start daemon");
+        rmSync(join(home, "daemon.json"), { recursive: true });
+        const second = yield* Effect.flip(daemon.start);
+        expect(second.message).toContain("This daemon has stopped");
+        expect(readDaemonFile(home)).toBeUndefined();
+
+        const rebound = Bun.serve({
+          hostname: "127.0.0.1",
+          port,
+          fetch: () => new Response("rebound"),
+        });
+
+        yield* Effect.promise(() => rebound.stop(true));
+      }),
+    ),
+  );
+});
+
+test("an already published daemon starts again without touching a contested startup lock", async () => {
+  const home = directory();
+  const cwd = directory();
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const store = yield* openRunStore(home);
+        const daemon = yield* localDaemon({ home, cwd, store, port: 0, concurrency: 1 });
+        const url = yield* daemon.start;
+        const lock = join(home, "daemon-start.lock");
+        mkdirSync(lock);
+
+        try {
+          expect(yield* daemon.start).toBe(url);
+          const record = readDaemonFile(home);
+          expect(record).toBeDefined();
+
+          const response = yield* Effect.promise(() =>
+            fetch(`http://127.0.0.1:${record?.port}/api/daemon`, {
+              headers: { Authorization: `Bearer ${record?.token}` },
+            }),
+          );
+
+          expect(response.status).toBe(200);
+        } finally {
+          rmSync(lock, { recursive: true });
+        }
+      }),
+    ),
+  );
 });

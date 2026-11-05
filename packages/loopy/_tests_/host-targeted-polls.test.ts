@@ -2,11 +2,12 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Effect, Exit, Schema, Scope } from "effect";
 import { nodeIdSchema } from "../src/contract/index.js";
 import type { ExecutionKey, NodeRun, Store } from "../src/core/index.js";
 import { activateDurable } from "../src/host/durable.js";
 import { code, loopy, parallel, sh, wait } from "../src/sdk/graph/index.js";
-import { MemoryStore, SqliteRunStore } from "../src/store/index.js";
+import { MemoryStore, makeSqliteRunStore } from "../src/store/index.js";
 import { newRun } from "./fixture.js";
 import { PolicyProvider, policyGraph, policySuccess } from "./host-policy-fixture.js";
 
@@ -14,19 +15,27 @@ for (const backend of ["memory", "sqlite"] as const) {
   test(`${backend} targeted node reads preserve ordered scopes and detach nested data`, async () => {
     const root = mkdtempSync(join(tmpdir(), "loopy-host-node-"));
 
+    const scope = Scope.makeUnsafe();
+
     const store =
-      backend === "memory" ? new MemoryStore() : new SqliteRunStore(join(root, "runs.sqlite"));
+      backend === "memory"
+        ? new MemoryStore()
+        : await Effect.runPromise(
+            makeSqliteRunStore(join(root, "runs.sqlite")).pipe(
+              Effect.provideService(Scope.Scope, scope),
+            ),
+          );
 
     try {
-      await store.createRun(newRun());
-      await store.claim("run", "owner");
+      await Effect.runPromise(store.createRun(newRun()));
+      await Effect.runPromise(store.claim("run", "owner"));
 
       const key: ExecutionKey = {
         runId: "run",
-        nodeId: nodeIdSchema.parse("work"),
+        nodeId: Schema.decodeUnknownSync(nodeIdSchema)("work"),
         scope: [
-          { nodeId: nodeIdSchema.parse("outer"), index: 1 },
-          { nodeId: nodeIdSchema.parse("inner"), index: 2 },
+          { nodeId: Schema.decodeUnknownSync(nodeIdSchema)("outer"), index: 1 },
+          { nodeId: Schema.decodeUnknownSync(nodeIdSchema)("inner"), index: 2 },
         ],
       };
 
@@ -41,20 +50,31 @@ for (const backend of ["memory", "sqlite"] as const) {
         output: { nested: [42] },
       };
 
-      await store.apply({
-        runId: "run",
-        token: "owner",
-        effects: [{ kind: "write_node_run", nodeRun: node }],
-      });
-      expect(await store.getNodeRun({ ...key, runId: "missing" })).toBeUndefined();
-      expect(await store.getNodeRun({ ...key, scope: [...key.scope].reverse() })).toBeUndefined();
-      expect(
-        await store.getNodeRun({
-          ...key,
-          scope: [{ nodeId: nodeIdSchema.parse("outer"), index: 0 }, ...key.scope.slice(1)],
+      await Effect.runPromise(
+        store.apply({
+          runId: "run",
+          token: "owner",
+          effects: [{ kind: "write_node_run", nodeRun: node }],
         }),
+      );
+      expect(
+        await Effect.runPromise(store.getNodeRun({ ...key, runId: "missing" })),
       ).toBeUndefined();
-      const read = await store.getNodeRun(key);
+      expect(
+        await Effect.runPromise(store.getNodeRun({ ...key, scope: [...key.scope].reverse() })),
+      ).toBeUndefined();
+      expect(
+        await Effect.runPromise(
+          store.getNodeRun({
+            ...key,
+            scope: [
+              { nodeId: Schema.decodeUnknownSync(nodeIdSchema)("outer"), index: 0 },
+              ...key.scope.slice(1),
+            ],
+          }),
+        ),
+      ).toBeUndefined();
+      const read = await Effect.runPromise(store.getNodeRun(key));
       expect(read).toEqual(node);
 
       if (read?.status !== "succeeded") {
@@ -63,11 +83,9 @@ for (const backend of ["memory", "sqlite"] as const) {
 
       read.key.scope.reverse();
       read.output = { nested: [0] };
-      expect(await store.getNodeRun(key)).toEqual(node);
+      expect(await Effect.runPromise(store.getNodeRun(key))).toEqual(node);
     } finally {
-      if (store instanceof SqliteRunStore) {
-        store.close();
-      }
+      await Effect.runPromise(Scope.close(scope, Exit.void));
 
       rmSync(root, { recursive: true, force: true });
     }
@@ -80,22 +98,34 @@ test("started-only turns use two full reads plus B targeted reads without extra 
     targeted = 0;
     batches: Parameters<Store["apply"]>[0][] = [];
 
-    override async getNodeRuns(runId: string) {
-      this.full++;
+    override getNodeRuns(runId: string) {
+      const base = super.getNodeRuns(runId);
 
-      return super.getNodeRuns(runId);
+      return Effect.gen({ self: this }, function* () {
+        this.full++;
+
+        return yield* base;
+      });
     }
 
-    override async getNodeRun(key: ExecutionKey) {
-      this.targeted++;
+    override getNodeRun(key: ExecutionKey) {
+      const base = super.getNodeRun(key);
 
-      return super.getNodeRun(key);
+      return Effect.gen({ self: this }, function* () {
+        this.targeted++;
+
+        return yield* base;
+      });
     }
 
-    override async apply(batch: Parameters<Store["apply"]>[0]) {
-      this.batches.push(batch);
+    override apply(batch: Parameters<Store["apply"]>[0]) {
+      const base = super.apply(batch);
 
-      return super.apply(batch);
+      return Effect.gen({ self: this }, function* () {
+        this.batches.push(batch);
+
+        return yield* base;
+      });
     }
   }
 
@@ -127,20 +157,22 @@ test("started-only turns use two full reads plus B targeted reads without extra 
     }
   }
 
-  await store.createRun(newRun());
+  await Effect.runPromise(store.createRun(newRun()));
 
   const turn = (cursor: string | null, maxWork = 3) =>
-    activateDurable({
-      store,
-      provider,
-      graph,
-      runId: "run",
-      token: "owner",
-      at: new Date(now).toISOString(),
-      maxWork,
-      cursor,
-      pollMs: 1000,
-    });
+    Effect.runPromise(
+      activateDurable({
+        store,
+        provider,
+        graph,
+        runId: "run",
+        token: "owner",
+        at: new Date(now).toISOString(),
+        maxWork,
+        cursor,
+        pollMs: 1000,
+      }),
+    );
 
   let result = await turn(null, 9);
   expect(provider.starts).toHaveLength(9);
@@ -162,12 +194,16 @@ test("started-only turns use two full reads plus B targeted reads without extra 
     // The reconstruction batch remains. Receipt polls must add no second batch.
     expect(store.batches).toHaveLength(1);
     expect(result.nextWakeAt).toBe(new Date(now + 1000).toISOString());
-    expect((await store.getRun("run"))?.owner?.heartbeatAt).toBe(new Date(now).toISOString());
+    expect((await Effect.runPromise(store.getRun("run")))?.owner?.heartbeatAt).toBe(
+      new Date(now).toISOString(),
+    );
   }
 
   expect(new Set(provider.lookups).size).toBe(9);
   expect(provider.starts).toHaveLength(9);
-  await expect(store.claim("run", "foreign")).rejects.toThrow("not owned by this token");
+  await expect(Effect.runPromise(store.claim("run", "foreign"))).rejects.toThrow(
+    "not owned by this token",
+  );
 });
 
 for (const observation of ["completion", "denial"] as const) {
@@ -188,16 +224,18 @@ for (const observation of ["completion", "denial"] as const) {
           }).graph;
 
     const at = newRun().createdAt;
-    await store.createRun(newRun());
+    await Effect.runPromise(store.createRun(newRun()));
 
     const signal = async () => {
-      const hook = (await store.getWaits("run"))[0];
+      const hook = (await Effect.runPromise(store.getWaits("run")))[0];
 
       if (!hook) {
         throw new Error("Expected persisted wait.");
       }
 
-      expect(await store.resolveWait({ token: hook.token, payload: true, at })).toMatchObject({
+      expect(
+        await Effect.runPromise(store.resolveWait({ token: hook.token, payload: true, at })),
+      ).toMatchObject({
         kind: "resolved",
       });
     };
@@ -205,27 +243,33 @@ for (const observation of ["completion", "denial"] as const) {
     const options = { store, provider, graph, at, runId: "run", token: "owner" };
 
     if (observation === "completion") {
-      await activateDurable(options);
-      provider.lookup = async () => {
-        await signal();
+      await Effect.runPromise(activateDurable(options));
+      provider.lookup = () => {
+        return Effect.gen(function* () {
+          yield* Effect.promise(() => signal());
 
-        return { kind: "finished", result: policySuccess };
+          return { kind: "finished" as const, result: policySuccess };
+        }).pipe(Effect.orDie);
       };
 
-      expect(await activateDurable(options)).toMatchObject({
+      expect(await Effect.runPromise(activateDurable(options))).toMatchObject({
         outcome: { status: "succeeded", output: { work: 42, approval: true } },
       });
     } else {
-      await store.acquireRateLimit("limit", 1, 60_000, at);
+      await Effect.runPromise(store.acquireRateLimit("limit", 1, 60_000, at));
       const acquire = store.acquireRateLimit.bind(store);
-      store.acquireRateLimit = async (...args) => {
-        await signal();
+      store.acquireRateLimit = (...args) => {
+        return Effect.gen(function* () {
+          yield* Effect.promise(() => signal());
 
-        return acquire(...args);
+          return yield* acquire(...args);
+        });
       };
 
-      expect(await activateDurable(options)).toMatchObject({ status: "pending" });
-      expect(await store.getNodeRuns("run")).toEqual(
+      expect(await Effect.runPromise(activateDurable(options))).toMatchObject({
+        status: "pending",
+      });
+      expect(await Effect.runPromise(store.getNodeRuns("run"))).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ status: "succeeded", output: true }),
           expect.objectContaining({ status: "rate_limited", attempt: 1 }),

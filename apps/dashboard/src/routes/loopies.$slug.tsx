@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { Schema } from "effect";
 import type { GraphRevisionView } from "loopy/contract";
 import { useEffect, useMemo, useState } from "react";
-import { z } from "zod";
 import { SourcePane } from "../components/code/source-pane.tsx";
 import { GraphPane } from "../components/graph/graph-pane.tsx";
 import { NodePanel } from "../components/run/node-panel.tsx";
@@ -15,18 +15,19 @@ import { useClock } from "../lib/clock.ts";
 import { graphModel } from "../lib/graph.ts";
 import { layoutGraph } from "../lib/graph-layout.ts";
 import { definitionMarks } from "../lib/run-marks.ts";
+import { searchField } from "../lib/search.ts";
 import { useLoopyGraph, useLoopyRows, useLoopySource, useRunPages } from "../lib/ui-data.ts";
 import type { LoopyRow } from "../lib/view-models.ts";
 
 const PANES = ["both", "code", "graph"] as const;
 
-const searchSchema = z.object({
-  node: z.string().optional().catch(undefined),
-  panes: z.enum(PANES).optional().catch(undefined),
+const searchSchema = Schema.Struct({
+  node: searchField(Schema.String),
+  panes: searchField(Schema.Literals(PANES)),
 });
 
 export const Route = createFileRoute("/loopies/$slug")({
-  validateSearch: searchSchema,
+  validateSearch: Schema.decodeUnknownSync(searchSchema),
   component: LoopyPage,
 });
 

@@ -1,5 +1,5 @@
 import { expect, expectTypeOf, test } from "bun:test";
-import { graphSchema } from "../src/contract/index.js";
+import { decodeBoundary, graphSchema } from "../src/contract/index.js";
 import { type DiagnosticCode, graphTypeResolver, validateGraph } from "../src/core/index.js";
 import {
   and,
@@ -54,7 +54,7 @@ function compile(run: () => AuthorValue) {
   const result = loopy("test", { input: {}, run });
   expect(result.diagnostics).toEqual([]);
   expect(validateGraph(result.graph)).toEqual([]);
-  expect(graphSchema.parse(result.graph)).toEqual(result.graph);
+  expect(decodeBoundary(graphSchema)(result.graph)).toEqual(result.graph);
 
   return result.graph;
 }
@@ -104,7 +104,7 @@ test("approve-demo reproduces the canonical graph exactly", () => {
 
   expect(result.diagnostics).toEqual([]);
   expect(validateGraph(result.graph)).toEqual([]);
-  expect(graphSchema.parse(result.graph)).toEqual(approveDemoGraph);
+  expect(decodeBoundary(graphSchema)(result.graph)).toEqual(approveDemoGraph);
 });
 
 const simple = [
@@ -520,7 +520,7 @@ for (const [name, result, expectedName] of [
   test(`${name} example compiles to a validated graph without executing modules`, () => {
     expect(result.diagnostics).toEqual([]);
     expect(validateGraph(result.graph)).toEqual([]);
-    expect(graphSchema.parse(result.graph).nodes.length).toBeGreaterThan(2);
+    expect(decodeBoundary(graphSchema)(result.graph).nodes.length).toBeGreaterThan(2);
     expect(result.graph.name).toBe(expectedName);
   });
 }
@@ -874,7 +874,7 @@ for (const [kind, control] of [
 
     expect(result.diagnostics).toEqual([]);
     expect(validateGraph(result.graph)).toEqual(result.diagnostics);
-    expect(graphSchema.parse(result.graph)).toEqual(result.graph);
+    expect(decodeBoundary(graphSchema)(result.graph)).toEqual(result.graph);
   });
 }
 
@@ -956,7 +956,7 @@ test("a rescue accepts a map body ending in fail", () => {
 
   expect(result.diagnostics).toEqual([]);
   expect(validateGraph(result.graph)).toEqual([]);
-  expect(graphSchema.parse(result.graph)).toEqual(result.graph);
+  expect(decodeBoundary(graphSchema)(result.graph)).toEqual(result.graph);
 });
 
 for (const label of ["__proto__", "constructor", "prototype"]) {

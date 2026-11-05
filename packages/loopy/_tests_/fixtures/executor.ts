@@ -2,6 +2,7 @@ import { afterEach } from "bun:test";
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Schema } from "effect";
 import { nodeIdSchema } from "../../src/contract/index.js";
 import type { ExecutionSpec } from "../../src/core/index.js";
 import { initialState, step } from "../../src/engine/index.js";
@@ -23,7 +24,7 @@ export async function fixture() {
   const home = join(root, "home");
   await Bun.write(join(home, "bundles", "seed"), "bundle");
   const bundle = join(home, "bundles", "bundle.js");
-  const key = { runId: "run", nodeId: nodeIdSchema.parse("0:code"), scope: [] };
+  const key = { runId: "run", nodeId: Schema.decodeUnknownSync(nodeIdSchema)("0:code"), scope: [] };
 
   const executor = new LocalExecutor({
     home,

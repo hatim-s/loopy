@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { graphSchema } from "../src/contract/index.js";
+import { decodeBoundary, graphSchema } from "../src/contract/index.js";
 import { validateGraph, validateGraphInput } from "../src/core/index.js";
 import { loopy } from "../src/sdk/graph/index.js";
 
@@ -12,7 +12,7 @@ function graph() {
 }
 
 test("nonempty array input rejects empty and malformed values before execution", () => {
-  const definition = graphSchema.parse(graph());
+  const definition = decodeBoundary(graphSchema)(graph());
 
   expect(validateGraphInput(definition, { paths: [] }).ok).toBe(false);
   expect(validateGraphInput(definition, { paths: [12] }).ok).toBe(false);

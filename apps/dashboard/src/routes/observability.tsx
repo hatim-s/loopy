@@ -1,12 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { Schema } from "effect";
 import { runStatusSchema } from "loopy/contract";
 import { useState } from "react";
-import { z } from "zod";
 import { EventDrawer, EventTable } from "../components/observability/event-table.tsx";
 import { LogTable } from "../components/observability/log-table.tsx";
 import { Load, Note } from "../components/ui/load.tsx";
 import { PagerFoot, ScanNote } from "../components/ui/pager.tsx";
 import { Segmented } from "../components/ui/segmented.tsx";
+import { searchField } from "../lib/search.ts";
 import { useEventPages, useLogPages, useLoopyRows } from "../lib/ui-data.ts";
 import {
   type EventFilters,
@@ -18,7 +19,7 @@ import {
 
 const ENTITIES = ["run", "node", "step", "log", "hook", "schedule"] as const;
 
-const RUN_STATUSES = runStatusSchema.options;
+const RUN_STATUSES = runStatusSchema.literals;
 
 /** Suspended covers runs held on a hook and runs sleeping on a timer. */
 const STATUS_LABEL = {
@@ -34,27 +35,27 @@ const STATUS_LABEL = {
  * One URL search object for both tabs, so a filter set in Logs still applies in Runtime
  * events. Unknown values in a pasted URL fall back to defaults instead of an error page.
  */
-const searchSchema = z.object({
-  tab: z.enum(["logs", "events"]).optional().catch(undefined),
-  period: z.enum(PERIODS).optional().catch(undefined),
-  slug: z.string().optional().catch(undefined),
-  runId: z.string().optional().catch(undefined),
-  nodeId: z.string().optional().catch(undefined),
-  status: runStatusSchema.optional().catch(undefined),
-  level: z.enum(LOG_LEVELS).optional().catch(undefined),
-  text: z.string().optional().catch(undefined),
-  entity: z.enum(ENTITIES).optional().catch(undefined),
-  kind: z.string().optional().catch(undefined),
-  txn: z.string().optional().catch(undefined),
-  event: z.number().int().optional().catch(undefined),
+const searchSchema = Schema.Struct({
+  tab: searchField(Schema.Literals(["logs", "events"])),
+  period: searchField(Schema.Literals(PERIODS)),
+  slug: searchField(Schema.String),
+  runId: searchField(Schema.String),
+  nodeId: searchField(Schema.String),
+  status: searchField(runStatusSchema),
+  level: searchField(Schema.Literals(LOG_LEVELS)),
+  text: searchField(Schema.String),
+  entity: searchField(Schema.Literals(ENTITIES)),
+  kind: searchField(Schema.String),
+  txn: searchField(Schema.String),
+  event: searchField(Schema.Int),
 });
 
 export const Route = createFileRoute("/observability")({
-  validateSearch: searchSchema,
+  validateSearch: Schema.decodeUnknownSync(searchSchema),
   component: ObservabilityPage,
 });
 
-type Search = z.infer<typeof searchSchema>;
+type Search = Schema.Schema.Type<typeof searchSchema>;
 
 function Logs({ filters }: { filters: LogFilters }) {
   const pager = useLogPages(filters);

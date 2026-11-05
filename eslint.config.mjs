@@ -10,6 +10,8 @@ export default tseslint.config(
       "**/dist/**",
       "**/.wrangler/**",
       "coverage/**",
+      "research/effect-v4/**",
+      ".notes/effect-v4/**",
       ".loopy/**",
       "**/routeTree.gen.ts",
     ],

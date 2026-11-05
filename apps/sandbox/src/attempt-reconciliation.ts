@@ -1,41 +1,37 @@
-import { type AttemptRecord } from "../../../packages/loopy/src/contract/sandbox-journal.js";
-import type { SandboxAttemptAuthority } from "../../../packages/loopy/src/contract/sandbox-journal-rpc.js";
+import { Effect, Result } from "effect";
 import { AttemptConflict } from "./admission.js";
-import { pause } from "./attempt-monitor.js";
+import type { SandboxAttemptAuthority, SandboxFailure } from "./operations.js";
+import type { Stopping } from "./stopping.js";
 
-export async function resolveAdmissionRead({
+export function resolveAdmissionRead({
   authority,
   id,
-  signal,
+  stopping,
   cause,
 }: {
   authority: SandboxAttemptAuthority;
   id: string;
-  signal: AbortSignal;
-  cause: Error;
+  stopping: Stopping;
+  cause: SandboxFailure;
 }) {
-  let backoff = 100;
+  return Effect.gen(function* () {
+    let backoff = 100;
 
-  while (!signal.aborted) {
-    let record: AttemptRecord | null;
+    while (!stopping.stopped) {
+      const read = yield* authority.read(id).pipe(Effect.result);
 
-    try {
-      record = await authority.read(id);
-    } catch {
-      if (!(await pause(backoff, signal))) {
-        break;
+      if (Result.isSuccess(read)) {
+        if (read.success === null) {
+          return yield* Effect.fail(cause);
+        }
+
+        return read.success;
       }
 
+      yield* stopping.pause(backoff);
       backoff = Math.min(backoff * 2, 5000);
-      continue;
     }
 
-    if (record === null) {
-      throw cause;
-    }
-
-    return record;
-  }
-
-  throw new AttemptConflict("Sandbox service is stopping.");
+    return yield* Effect.fail(new AttemptConflict("Sandbox service is stopping."));
+  });
 }

@@ -1,14 +1,14 @@
 import type { DurableObjectState, R2Bucket } from "@cloudflare/workers-types";
-import { z } from "zod";
+import { Effect, Schema } from "effect";
 import { R2ArtifactRegistry } from "../../../../apps/cloud/src/artifacts.js";
 import { DurableSqlDriver } from "../../../../apps/cloud/src/sql-driver.js";
-import { putLoopyBodySchema } from "../../src/contract/index.js";
+import { decodeBoundary, putLoopyBodySchema } from "../../src/contract/index.js";
 import { canonicalJson, errorMessage } from "../../src/core/index.js";
-import { LoopyService } from "../../src/service/index.js";
+import { makeService } from "../../src/service/index.js";
 import { SqlRunStore } from "../../src/store/portable.js";
 
-const requestSchema = z.object({
-  operation: z.enum([
+const requestSchema = Schema.Struct({
+  operation: Schema.Literals([
     "legacy",
     "summary",
     "list",
@@ -23,11 +23,11 @@ const requestSchema = z.object({
     "schedule",
     "corruptSummary",
   ]),
-  body: putLoopyBodySchema.optional(),
-  slug: z.string().default("summary"),
+  body: Schema.optionalKey(putLoopyBodySchema),
+  slug: Schema.optionalKey(Schema.String),
 });
 
-export type SummaryProbeRequest = z.input<typeof requestSchema>;
+export type SummaryProbeRequest = typeof requestSchema.Type;
 
 const workspace = "summaries";
 
@@ -38,11 +38,12 @@ export class SummaryProbe {
   ) {}
 
   async fetch(request: Request): Promise<Response> {
-    const input = requestSchema.parse(await request.json());
+    const decoded = decodeBoundary(requestSchema)(await request.json());
+    const input = { ...decoded, slug: decoded.slug ?? "summary" };
     let graphReads = 0;
     let transactions = 0;
     let raced = false;
-    const body = () => putLoopyBodySchema.parse(input.body);
+    const body = () => decodeBoundary(putLoopyBodySchema)(input.body);
 
     const bucket: Pick<R2Bucket, "get" | "put"> = {
       put: this.env.BUCKET.put.bind(this.env.BUCKET),
@@ -59,7 +60,9 @@ export class SummaryProbe {
 
         if (input.operation === "race" && !raced && key.includes("/graphs/")) {
           raced = true;
-          await new R2ArtifactRegistry(this.ctx.storage, this.env.BUCKET, workspace).save(body());
+          await Effect.runPromise(
+            new R2ArtifactRegistry(this.ctx.storage, this.env.BUCKET, workspace).save(body()),
+          );
         }
 
         return object;
@@ -134,16 +137,16 @@ export class SummaryProbe {
           break;
         case "summary":
         case "race":
-          value = await registry.summary(input.slug);
+          value = await Effect.runPromise(registry.summary(input.slug));
           break;
         case "list":
-          value = await registry.listSummaries();
+          value = await Effect.runPromise(registry.listSummaries());
           break;
         case "get":
-          value = await registry.get(input.slug);
+          value = await Effect.runPromise(registry.get(input.slug));
           break;
         case "save":
-          await registry.save(body());
+          await Effect.runPromise(registry.save(body()));
           value = pointer();
           break;
         case "forget":
@@ -184,7 +187,9 @@ export class SummaryProbe {
           let error: string | null = null;
 
           try {
-            await new R2ArtifactRegistry(failing, bucket, workspace).save(body());
+            await Effect.runPromise(
+              new R2ArtifactRegistry(failing, bucket, workspace).save(body()),
+            );
           } catch (cause) {
             error = errorMessage(cause);
           }
@@ -196,25 +201,29 @@ export class SummaryProbe {
         case "service":
         case "start":
         case "schedule": {
-          const service = new LoopyService({
+          const service = makeService({
             store,
-            registry: () => registry,
+            registry: () => Effect.succeed(registry),
             clock: { now: Date.now },
-            canonicalWorkspace: () => workspace,
-            secrets: { list: () => [], set: () => {}, remove: () => {} },
-            generateTypes: async () => {
-              throw new Error("Unused synthetic operation");
+            canonicalWorkspace: () => Effect.succeed(workspace),
+            secrets: {
+              list: () => Effect.succeed([]),
+              set: () => Effect.void,
+              remove: () => Effect.void,
             },
+            generateTypes: () => Effect.die(new Error("Unused synthetic operation")),
           });
 
           if (input.operation === "start") {
-            value = await service.startRun(input.slug, {}, workspace);
+            value = await Effect.runPromise(service.startRun(input.slug, {}, workspace));
           } else if (input.operation === "schedule") {
-            value = await service.putSchedule(input.slug, { cron: "* * * * *" }, workspace);
+            value = await Effect.runPromise(
+              service.putSchedule(input.slug, { cron: "* * * * *" }, workspace),
+            );
           } else {
             value = {
-              loopies: await service.listLoopies(workspace),
-              runs: await service.listRuns({ limit: 200 }),
+              loopies: await Effect.runPromise(service.listLoopies(workspace)),
+              runs: await Effect.runPromise(service.listRuns({ limit: 200 })),
             };
           }
 

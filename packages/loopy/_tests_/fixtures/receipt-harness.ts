@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { Miniflare } from "miniflare";
 import { attemptHash } from "../../../../apps/sandbox/src/admission.js";
 import { HttpSandboxAuthority } from "../../../../apps/sandbox/src/http-authority.js";
-import { dockerAttemptPlanSchema, nodeIdSchema } from "../../src/contract/index.js";
+import { decodeBoundary, dockerAttemptPlanSchema, nodeIdSchema } from "../../src/contract/index.js";
 
 export const bridgeToken = "synthetic-receipt-bridge-credential-0001";
 
@@ -68,6 +68,7 @@ export async function receiptHarness(configuration: { stage?: string; token?: st
         },
         {
           name: "rollback",
+          serviceBindings: { CLOUD: "cloud" },
           modules: true,
           scriptPath: resolve(directory, "receipt-rollback-probe.js"),
           compatibilityDate: "2026-07-30",
@@ -102,10 +103,10 @@ export async function receiptHarness(configuration: { stage?: string; token?: st
       return new HttpSandboxAuthority({ url: origin, token: bridgeToken, namespace });
     },
     plan(runId: string, attempt = 1, workspace = "alpha") {
-      const executionKey = { runId, nodeId: nodeIdSchema.parse("0:command"), scope: [] };
+      const executionKey = { runId, nodeId: decodeBoundary(nodeIdSchema)("0:command"), scope: [] };
       const id = attemptHash({ root: stateRoot, workspace, executionKey, attempt });
 
-      return dockerAttemptPlanSchema.parse({
+      return decodeBoundary(dockerAttemptPlanSchema)({
         id,
         workspace,
         executionKey,

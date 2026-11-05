@@ -2,18 +2,22 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { Effect, Exit, Scope } from "effect";
 import { z } from "zod";
 import { attemptHash } from "../../../../apps/sandbox/src/admission.js";
 import { DockerArtifacts } from "../../../../apps/sandbox/src/artifacts.js";
 import { sandboxConfigSchema } from "../../../../apps/sandbox/src/config.js";
 import { type AttemptBackend, DockerBackend } from "../../../../apps/sandbox/src/docker.js";
+import { SandboxOperationError } from "../../../../apps/sandbox/src/operations.js";
 import { type CommandRunner, runCommand } from "../../../../apps/sandbox/src/process.js";
 import { startSandbox } from "../../../../apps/sandbox/src/server.js";
 import {
+  decodeBoundary,
   type SandboxAttemptRequest,
   sandboxAttemptRequestSchema,
 } from "../../src/contract/index.js";
 import type { DockerAttemptPlan } from "../../src/contract/sandbox-journal.js";
+import { CommandExecutionError } from "../../src/core/index.js";
 import { bounded, type DockerRuntime } from "./architecture-docker-runtime.js";
 
 export const context = "colima-loopy-cloud-phase1";
@@ -37,7 +41,7 @@ export function input(runId: string, source: string, attempt = 1): SandboxAttemp
   const bytes = Buffer.from(source);
   const hash = createHash("sha256").update(bytes).digest("hex");
 
-  return sandboxAttemptRequestSchema.parse({
+  return decodeBoundary(sandboxAttemptRequestSchema)({
     workspace: "proof",
     executionKey: { runId, nodeId: "0:code", scope: [] },
     attempt,
@@ -52,7 +56,7 @@ export function resources(
 ) {
   const { image, imageId } = selectedImage;
 
-  const config = sandboxConfigSchema.parse({
+  const config = decodeBoundary(sandboxConfigSchema)({
     worktree: runtime.directory,
     stateRoot: runtime.stateRoot,
     token: "architecture-docker-synthetic-sandbox-0001",
@@ -68,32 +72,43 @@ export function resources(
   const commands: object[] = [];
   let cleanupBlocked = false;
 
-  const runner: CommandRunner = async (argv, options) => {
-    assert.deepEqual(argv.slice(0, 3), ["docker", "--context", context]);
+  const runner: CommandRunner = (argv, options) =>
+    Effect.gen(function* () {
+      assert.deepEqual(argv.slice(0, 3), ["docker", "--context", context]);
 
-    if (
-      cleanupBlocked &&
-      argv[3] === "rm" &&
-      argv[4] === "--force" &&
-      argv[5]?.startsWith("loopy-artifact-")
-    ) {
-      runtime.record({ operation: "injected-helper-cleanup-failure", helper: argv[5] });
-      throw new Error("Injected helper cleanup outage before the actual Docker rm.");
-    }
+      if (
+        cleanupBlocked &&
+        argv[3] === "rm" &&
+        argv[4] === "--force" &&
+        argv[5]?.startsWith("loopy-artifact-")
+      ) {
+        runtime.record({ operation: "injected-helper-cleanup-failure", helper: argv[5] });
 
-    const at = new Date().toISOString();
-    const output = await runCommand(argv, options);
-    commands.push({ at, argv, ...output });
+        return yield* Effect.fail(
+          new CommandExecutionError({
+            reason: "unstarted",
+            output: { exitCode: 1, stdout: "", stderr: "", durationMs: 0 },
+            message: "Injected helper cleanup outage before the actual Docker rm.",
+            cause: null,
+          }),
+        );
+      }
 
-    return output;
-  };
+      const at = new Date().toISOString();
+      const output = yield* runCommand(argv, options);
+      commands.push({ at, argv, ...output });
+
+      return output;
+    });
 
   const docker = async (args: string[]) => {
-    const output = await runner(["docker", "--context", context, ...args], {
-      timeoutMs: 10_000,
-      maxBytes: 128 * 1024,
-      env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "" },
-    });
+    const output = await Effect.runPromise(
+      runner(["docker", "--context", context, ...args], {
+        timeoutMs: 10_000,
+        maxBytes: 128 * 1024,
+        env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "" },
+      }),
+    );
 
     assert.equal(output.exitCode, 0, `Docker ${args[0]} failed: ${output.stderr}`);
 
@@ -103,53 +118,55 @@ export function resources(
   const backend = new DockerBackend(config, runner);
   const reader = new DockerArtifacts(config, runner);
 
+  const recordIdentities = Effect.tryPromise({
+    try: () =>
+      writeFile(
+        join(runtime.directory, "resource-identities.json"),
+        JSON.stringify(
+          {
+            context,
+            image,
+            imageId,
+            owner,
+            plans: [...plans.values()],
+            starts: [...starts],
+            status: "active",
+          },
+          null,
+          2,
+        ),
+      ),
+    catch: (cause) =>
+      new SandboxOperationError({
+        operation: "fixture identities",
+        cause,
+        message: "Could not record resource identities.",
+      }),
+  });
+
   const countedBackend: AttemptBackend = {
-    async start(receipt, request, signal) {
-      plans.set(receipt.id, receipt);
-      starts.set(receipt.id, (starts.get(receipt.id) ?? 0) + 1);
-      runtime.record({ operation: "backend-start", receipt });
-      assert.equal(starts.get(receipt.id), 1, "An attempt must not issue a second backend start.");
-      await writeFile(
-        join(runtime.directory, "resource-identities.json"),
-        JSON.stringify(
-          {
-            context,
-            image,
-            imageId,
-            owner,
-            plans: [...plans.values()],
-            starts: [...starts],
-            status: "active",
-          },
-          null,
-          2,
-        ),
-      );
+    start: (receipt, request, signal) =>
+      Effect.gen(function* () {
+        plans.set(receipt.id, receipt);
+        starts.set(receipt.id, (starts.get(receipt.id) ?? 0) + 1);
+        runtime.record({ operation: "backend-start", receipt });
+        assert.equal(
+          starts.get(receipt.id),
+          1,
+          "An attempt must not issue a second backend start.",
+        );
+        yield* recordIdentities;
 
-      return backend.start(receipt, request, signal);
-    },
-    async recover(receipt, signal) {
-      plans.set(receipt.id, receipt);
-      runtime.record({ operation: "backend-recover", receipt });
-      await writeFile(
-        join(runtime.directory, "resource-identities.json"),
-        JSON.stringify(
-          {
-            context,
-            image,
-            imageId,
-            owner,
-            plans: [...plans.values()],
-            starts: [...starts],
-            status: "active",
-          },
-          null,
-          2,
-        ),
-      );
+        return yield* backend.start(receipt, request, signal);
+      }),
+    recover: (receipt, signal) =>
+      Effect.gen(function* () {
+        plans.set(receipt.id, receipt);
+        runtime.record({ operation: "backend-recover", receipt });
+        yield* recordIdentities;
 
-      return backend.recover(receipt, signal);
-    },
+        return yield* backend.recover(receipt, signal);
+      }),
   };
 
   function id(request: SandboxAttemptRequest) {
@@ -162,7 +179,7 @@ export function resources(
   }
 
   async function plan(request: SandboxAttemptRequest) {
-    const record = await runtime.direct.read(id(request));
+    const record = await Effect.runPromise(runtime.direct.read(id(request)));
     assert(record, "Expected an authoritative durable attempt record.");
     plans.set(record.plan.id, record.plan);
 
@@ -192,6 +209,23 @@ export function resources(
     return state;
   }
 
+  const scopes = new Map<Effect.Success<ReturnType<typeof startSandbox>>, Scope.Closeable>();
+
+  // Keep the same closing operation and scope until completion is observed, including after a timeout.
+  const closingScopes = new Map<Scope.Closeable, Promise<void>>();
+
+  async function closeScope(scope: Scope.Closeable) {
+    let closing = closingScopes.get(scope);
+
+    if (!closing) {
+      closing = Effect.runPromise(Scope.close(scope, Exit.void));
+      closingScopes.set(scope, closing);
+    }
+
+    await bounded(closing, "Fixture scope shutdown", 3000);
+    closingScopes.delete(scope);
+  }
+
   return {
     config,
     starts,
@@ -209,15 +243,45 @@ export function resources(
       assert.equal(await docker(["image", "inspect", "--format", "{{.Id}}", image]), imageId);
       runtime.record({ operation: "image-pinned", context, image, imageId, owner });
     },
-    open() {
-      return startSandbox(config, async () => ({
-        authority: runtime.authority,
-        resultsFor: (workspace) => runtime.authority.resultsFor(workspace),
-        backend: countedBackend,
-        artifactReader: reader,
-      }));
+    async open() {
+      const scope = Effect.runSync(Scope.make());
+
+      try {
+        const service = await Effect.runPromise(
+          startSandbox(config, () =>
+            Effect.succeed({
+              authority: runtime.authority,
+              resultsFor: (workspace) => runtime.authority.resultsFor(workspace),
+              backend: countedBackend,
+              artifactReader: reader,
+            }),
+          ).pipe(Effect.provideService(Scope.Scope, scope)),
+        );
+
+        scopes.set(service, scope);
+
+        return service;
+      } catch (cause) {
+        try {
+          await closeScope(scope);
+        } catch (cleanup) {
+          runtime.record({ operation: "scope-cleanup-unresolved", stateRoot: config.stateRoot });
+          throw new AggregateError(
+            [cause, cleanup],
+            "Sandbox startup failed and scope cleanup is unresolved.",
+          );
+        }
+
+        throw cause;
+      }
     },
     async cleanup() {
+      assert.equal(
+        closingScopes.size,
+        0,
+        "Scope shutdown is unresolved. Retain owned resources and reconcile closure before cleanup.",
+      );
+      assert.equal(scopes.size, 0, "A bridge still owns its resources. Stop it before cleanup.");
       cleanupBlocked = false;
       const errors: unknown[] = [];
 
@@ -306,14 +370,51 @@ export function resources(
       );
       assert.equal(errors.length, 0, errors.map(String).join("\n"));
     },
-    async stop(service: Awaited<ReturnType<typeof startSandbox>>) {
+    async stop(service: Effect.Success<ReturnType<typeof startSandbox>>) {
+      const errors: unknown[] = [];
+
       try {
-        await bounded(service.close(), "Bridge shutdown", 3000);
+        await bounded(Effect.runPromise(service.close()), "Bridge shutdown", 3000);
       } catch (cause) {
-        // Drain this owned fixture even if the public shutdown wrapper regresses.
-        await bounded(service.attempts.close(), "Emergency attempts shutdown", 10_000);
-        await service.server.stop(true);
-        throw cause;
+        errors.push(cause);
+
+        try {
+          await bounded(
+            Effect.runPromise(service.attempts.close()),
+            "Emergency attempts shutdown",
+            10_000,
+          );
+          await bounded(
+            Promise.resolve(service.server.stop(true)),
+            "Emergency HTTP shutdown",
+            3000,
+          );
+        } catch (cleanup) {
+          errors.push(cleanup);
+        }
+      }
+
+      const scope = scopes.get(service);
+
+      if (scope) {
+        try {
+          await closeScope(scope);
+          scopes.delete(service);
+        } catch (cleanup) {
+          errors.push(cleanup);
+          runtime.record({ operation: "scope-cleanup-unresolved", stateRoot: config.stateRoot });
+        }
+      }
+
+      if (errors.length === 1) {
+        throw errors[0];
+      }
+
+      if (errors.length > 1) {
+        throw new AggregateError(
+          errors,
+          "Bridge shutdown failed and cleanup has unresolved outcomes.",
+        );
       }
     },
   };

@@ -1,16 +1,16 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { z } from "zod";
+import { Schema } from "effect";
 import { errnoCode, writeFileAtomically } from "./fs.js";
 
-const daemonFileSchema = z.object({
-  pid: z.number().int().positive(),
-  port: z.number().int(),
-  token: z.string(),
-  startedAt: z.string(),
+const daemonFileSchema = Schema.Struct({
+  pid: Schema.Int.check(Schema.isGreaterThan(0)),
+  port: Schema.Int,
+  token: Schema.String,
+  startedAt: Schema.String,
 });
 
-type DaemonFile = z.infer<typeof daemonFileSchema>;
+type DaemonFile = typeof daemonFileSchema.Type;
 
 export function readDaemonFile(home: string): DaemonFile | undefined {
   const file = join(home, "daemon.json");
@@ -19,7 +19,7 @@ export function readDaemonFile(home: string): DaemonFile | undefined {
     return undefined;
   }
 
-  const record = daemonFileSchema.parse(JSON.parse(readFileSync(file, "utf8")));
+  const record = Schema.decodeUnknownSync(daemonFileSchema)(JSON.parse(readFileSync(file, "utf8")));
 
   try {
     process.kill(record.pid, 0);

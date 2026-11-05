@@ -1,3 +1,4 @@
+import type { Schema } from "effect";
 import {
   type CursorView,
   type DaemonView,
@@ -16,11 +17,9 @@ import {
   type ServerEvent,
 } from "loopy/contract";
 
-import type { z } from "zod";
+type ApiQuery<K extends keyof typeof routes> = Schema.Codec.Encoded<(typeof routes)[K]["query"]>;
 
-type ApiQuery<K extends keyof typeof routes> = z.input<(typeof routes)[K]["query"]>;
-
-type ApiResult<K extends keyof typeof routes> = z.output<(typeof routes)[K]["response"]>;
+type ApiResult<K extends keyof typeof routes> = Schema.Schema.Type<(typeof routes)[K]["response"]>;
 
 export type OverviewQuery = ApiQuery<"overview">;
 

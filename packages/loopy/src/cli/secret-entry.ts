@@ -1,71 +1,143 @@
 import { createInterface } from "node:readline";
 import { Writable } from "node:stream";
+import { Effect } from "effect";
+import { CliError } from "./errors.js";
 
 const SECRET_LIMIT_BYTES = 64 * 1024;
 
-// A trailing CRLF is stripped after reading, so it does not count against the limit.
 const LINE_ENDING_BYTES = 2;
 
-async function readPipedSecret(): Promise<string> {
+const readPipedSecret = Effect.suspend(() => {
   if (process.stdin.isTTY) {
-    throw new Error("--stdin requires piped input. Omit it to enter a secret privately.");
-  }
-
-  const chunks: Buffer[] = [];
-  let bytes = 0;
-
-  for await (const chunk of process.stdin) {
-    const buffer = Buffer.from(chunk);
-    bytes += buffer.length;
-
-    if (bytes > SECRET_LIMIT_BYTES + LINE_ENDING_BYTES) {
-      throw new Error("Secret input exceeds 64 KiB.");
-    }
-
-    chunks.push(buffer);
-  }
-
-  return Buffer.concat(chunks)
-    .toString("utf8")
-    .replace(/\r?\n$/, "");
-}
-
-async function readHiddenSecret(): Promise<string> {
-  if (!process.stdin.isTTY || !process.stderr.isTTY) {
-    throw new Error(
-      "Secret entry requires a terminal. Pipe the value with --stdin for automation.",
+    return Effect.fail(
+      new CliError({
+        message: "--stdin requires piped input. Omit it to enter a secret privately.",
+      }),
     );
   }
 
-  // readline echoes typed characters to its output; a muted sink keeps the value off screen.
-  const muted = new Writable({
-    write(...[, , done]) {
-      done();
-    },
+  return Effect.callback<string, CliError>((resume) => {
+    const chunks: Buffer[] = [];
+    let bytes = 0;
+    let finished = false;
+
+    const complete = (result: Effect.Effect<string, CliError>) => {
+      if (finished) {
+        return;
+      }
+
+      release();
+      resume(result);
+    };
+
+    const data = (chunk: Buffer) => {
+      bytes += chunk.length;
+
+      if (bytes > SECRET_LIMIT_BYTES + LINE_ENDING_BYTES) {
+        complete(Effect.fail(new CliError({ message: "Secret input exceeds 64 KiB." })));
+      } else {
+        chunks.push(chunk);
+      }
+    };
+
+    const end = () =>
+      complete(
+        Effect.succeed(
+          Buffer.concat(chunks)
+            .toString("utf8")
+            .replace(/\r?\n$/, ""),
+        ),
+      );
+
+    const error = (cause: Error) =>
+      complete(Effect.fail(new CliError({ message: "Secret input failed.", cause })));
+
+    const release = () => {
+      if (finished) {
+        return;
+      }
+
+      finished = true;
+      process.stdin.removeListener("data", data);
+      process.stdin.removeListener("end", end);
+      process.stdin.removeListener("error", error);
+      process.stdin.pause();
+    };
+
+    process.stdin.on("data", data);
+    process.stdin.once("end", end);
+    process.stdin.once("error", error);
+    process.stdin.resume();
+
+    return Effect.sync(release);
   });
+});
 
-  const terminal = createInterface({
-    input: process.stdin,
-    output: muted,
-    terminal: true,
-    historySize: 0,
-  });
+const readHiddenSecret = Effect.scoped(
+  Effect.gen(function* () {
+    if (!process.stdin.isTTY || !process.stderr.isTTY) {
+      return yield* Effect.fail(
+        new CliError({
+          message: "Secret entry requires a terminal. Pipe the value with --stdin for automation.",
+        }),
+      );
+    }
 
-  process.stderr.write("Secret value (hidden): ");
+    const terminal = yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        // A muted sink prevents readline from echoing secret characters.
+        const muted = new Writable({
+          write(...[, , done]) {
+            done();
+          },
+        });
 
-  try {
-    return await new Promise<string>((resolve, reject) => {
-      terminal.once("line", resolve);
-      terminal.once("close", () => reject(new Error("Secret entry cancelled.")));
-      terminal.once("SIGINT", () => terminal.close());
+        const dataListeners = process.stdin.listeners("data");
+
+        const reader = createInterface({
+          input: process.stdin,
+          output: muted,
+          terminal: true,
+          historySize: 0,
+        });
+
+        process.stderr.write("Secret value (hidden): ");
+
+        const ownedDataListeners = process.stdin
+          .listeners("data")
+          .filter((listener) => !dataListeners.includes(listener));
+
+        return { reader, muted, ownedDataListeners };
+      }),
+      ({ reader, muted, ownedDataListeners }) =>
+        Effect.sync(() => {
+          reader.close();
+
+          // The executable reads one hidden secret per process; remove only listeners created by this reader.
+          for (const listener of ownedDataListeners) {
+            process.stdin.removeListener("data", listener);
+          }
+
+          muted.end();
+          process.stderr.write("\n");
+        }),
+    );
+
+    return yield* Effect.callback<string, CliError>((resume) => {
+      const line = (value: string) => resume(Effect.succeed(value));
+      const close = () => resume(Effect.fail(new CliError({ message: "Secret entry cancelled." })));
+      const interrupt = () => terminal.reader.close();
+      terminal.reader.once("line", line);
+      terminal.reader.once("close", close);
+      terminal.reader.once("SIGINT", interrupt);
+
+      return Effect.sync(() => {
+        terminal.reader.removeListener("line", line);
+        terminal.reader.removeListener("close", close);
+        terminal.reader.removeListener("SIGINT", interrupt);
+      });
     });
-  } finally {
-    terminal.close();
-    muted.end();
-    process.stderr.write("\n");
-  }
-}
+  }),
+);
 
-export function readSecret(fromStdin: boolean): Promise<string> {
-  return fromStdin ? readPipedSecret() : readHiddenSecret();
-}
+export const readSecret = (fromStdin: boolean) => (fromStdin ? readPipedSecret : readHiddenSecret);

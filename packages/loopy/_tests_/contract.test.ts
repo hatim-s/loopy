@@ -1,7 +1,8 @@
 import { expect, expectTypeOf, test } from "bun:test";
+import { Option, Schema } from "effect";
+import type { SavedLoopy } from "../src/contract/index.js";
 import * as contract from "../src/contract/index.js";
 import type * as core from "../src/core/index.js";
-import type { SavedLoopy } from "../src/local/saved-loopy.js";
 import { newRun } from "./fixture.js";
 import { approveDemoGraph } from "./fixtures/graphs.js";
 
@@ -82,7 +83,14 @@ test("views strip fencing tokens and derive staleness at the lease boundary", ()
   const derived = view(run);
   expect(derived.owner).toEqual({ pid: 1, host: "host", heartbeatAt: now });
   expect(derived.owner).not.toHaveProperty("token");
-  expect(contract.runViewSchema.safeParse({ ...derived, owner: run.owner }).success).toBe(false);
+  expect(
+    Option.isSome(
+      Schema.decodeUnknownOption(
+        contract.runViewSchema,
+        contract.boundaryOptions,
+      )({ ...derived, owner: run.owner }),
+    ),
+  ).toBe(false);
   expect(derived.loopy).toEqual({ slug: "test", description: null });
   expect(derived.ownerStale).toBe(false);
   expect(
@@ -200,14 +208,14 @@ test("loopy views count matching runs and choose the newest without leaking regi
   expect(result).not.toHaveProperty("source");
   expect(result).not.toHaveProperty("secrets");
   expect(result).not.toHaveProperty("bundleHash");
-  expect(contract.loopyViewSchema.parse(result)).toEqual(result);
+  expect(contract.decodeBoundary(contract.loopyViewSchema)(result)).toEqual(result);
   expect(contract.loopyView({ ...saved, workspace: "/workspace" }, null, [])).toMatchObject({
     workspace: "/workspace",
     lastRun: null,
     schedule: null,
     counts: { queued: 0, succeeded: 0 },
   });
-  expect(contract.scheduleSchema.parse(schedule)).toEqual(schedule);
+  expect(contract.decodeBoundary(contract.scheduleSchema)(schedule)).toEqual(schedule);
 });
 
 test("route patterns are unique and every parameter has a schema", () => {
@@ -216,15 +224,22 @@ test("route patterns are unique and every parameter has a schema", () => {
 
   for (const route of routes) {
     const names = [...route.path.matchAll(/:([a-z]+)/g)].map((match) => match[0].slice(1));
-    expect(Object.keys(route.params.shape).sort()).toEqual(names.sort());
+    const fields = "fields" in route.params ? Object.keys(route.params.fields) : [];
+    expect(fields.sort()).toEqual(names.sort());
 
     expect(
-      route.params.safeParse(Object.fromEntries(names.map((parameter) => [parameter, "1"])))
-        .success,
+      Option.isSome(
+        Schema.decodeUnknownOption(
+          route.params,
+          contract.boundaryOptions,
+        )(Object.fromEntries(names.map((parameter) => [parameter, "1"]))),
+      ),
     ).toBe(true);
 
     if (names.length > 0) {
-      expect(route.params.safeParse({}).success).toBe(false);
+      expect(
+        Option.isSome(Schema.decodeUnknownOption(route.params, contract.boundaryOptions)({})),
+      ).toBe(false);
     }
   }
 });
@@ -263,8 +278,8 @@ test("serialized loopy and snapshot views exclude private registry and owner key
     epoch: "epoch",
   };
 
-  expect(contract.loopyViewSchema.parse(loopy)).toEqual(loopy);
-  expect(contract.runSnapshotViewSchema.parse(snapshot)).toEqual(snapshot);
+  expect(contract.decodeBoundary(contract.loopyViewSchema)(loopy)).toEqual(loopy);
+  expect(contract.decodeBoundary(contract.runSnapshotViewSchema)(snapshot)).toEqual(snapshot);
 
   for (const serialized of [JSON.stringify(loopy), JSON.stringify(snapshot)]) {
     expect(serialized).not.toMatch(/"(?:bundleHash|token|source|secrets)"\s*:/);
@@ -273,11 +288,21 @@ test("serialized loopy and snapshot views exclude private registry and owner key
 
 test("strict edges reject misspelled request keys and injected view tokens", () => {
   expect(
-    contract.routes.startRun.body.safeParse({ input: null, workspcae: "/workspace" }).success,
+    Option.isSome(
+      Schema.decodeUnknownOption(
+        contract.routes.startRun.body,
+        contract.boundaryOptions,
+      )({ input: null, workspcae: "/workspace" }),
+    ),
   ).toBe(false);
-  expect(contract.runViewSchema.safeParse({ ...view(newRun()), token: "private" }).success).toBe(
-    false,
-  );
+  expect(
+    Option.isSome(
+      Schema.decodeUnknownOption(
+        contract.runViewSchema,
+        contract.boundaryOptions,
+      )({ ...view(newRun()), token: "private" }),
+    ),
+  ).toBe(false);
 
   const described = contract.runView({
     run: newRun(),
@@ -297,14 +322,26 @@ test("run cursors preserve timestamp ties and reject timestamp-only paging", () 
     createdAt: "2026-10-17T00:00:00.000Z",
     id: "run-b",
   });
-  expect(contract.routes.runs.query.parse({ before: cursor })).toEqual({
+  expect(contract.decodeBoundary(contract.routes.runs.query)({ before: cursor })).toEqual({
     before: cursor,
     limit: 50,
   });
-  expect(contract.routes.runs.query.safeParse({ before: "2026-10-17T00:00:00.000Z" }).success).toBe(
-    false,
-  );
-  expect(contract.routes.runs.query.safeParse({ before: `${cursor}|extra` }).success).toBe(false);
+  expect(
+    Option.isSome(
+      Schema.decodeUnknownOption(
+        contract.routes.runs.query,
+        contract.boundaryOptions,
+      )({ before: "2026-10-17T00:00:00.000Z" }),
+    ),
+  ).toBe(false);
+  expect(
+    Option.isSome(
+      Schema.decodeUnknownOption(
+        contract.routes.runs.query,
+        contract.boundaryOptions,
+      )({ before: `${cursor}|extra` }),
+    ),
+  ).toBe(false);
 });
 
 test("schedule wire fields normalize core nullability and preserve every field", () => {
@@ -315,7 +352,7 @@ test("schedule wire fields normalize core nullability and preserve every field",
       }
     >
   >();
-  expect(contract.putScheduleBodySchema.parse({})).toEqual({});
+  expect(contract.decodeBoundary(contract.putScheduleBodySchema)({})).toEqual({});
 
   for (const body of [
     { cron: 1 },
@@ -323,11 +360,21 @@ test("schedule wire fields normalize core nullability and preserve every field",
     { input: undefined, enabled: "false" },
     { typo: true },
   ]) {
-    expect(contract.putScheduleBodySchema.safeParse(body).success).toBe(false);
+    expect(
+      Option.isSome(
+        Schema.decodeUnknownOption(contract.putScheduleBodySchema, contract.boundaryOptions)(body),
+      ),
+    ).toBe(false);
   }
 
-  expect(contract.scheduleEnabledBodySchema.safeParse({}).success).toBe(false);
-  expect(contract.scheduleEnabledBodySchema.parse({ enabled: false })).toEqual({ enabled: false });
+  expect(
+    Option.isSome(
+      Schema.decodeUnknownOption(contract.scheduleEnabledBodySchema, contract.boundaryOptions)({}),
+    ),
+  ).toBe(false);
+  expect(contract.decodeBoundary(contract.scheduleEnabledBodySchema)({ enabled: false })).toEqual({
+    enabled: false,
+  });
 });
 
 test("loopy declared schedule is visible until a persisted schedule overrides it", () => {
@@ -367,7 +414,9 @@ test("loopy declared schedule is visible until a persisted schedule overrides it
 test("cursor route rejects invalid cursors and extra response fields", () => {
   expect(contract.routes.cursor.method).toBe("GET");
   expect(contract.routes.cursor.path).toBe("/cursor");
-  expect(contract.routes.cursor.response.parse({ cursor: 0, epoch: "epoch" })).toEqual({
+  expect(
+    contract.decodeBoundary(contract.routes.cursor.response)({ cursor: 0, epoch: "epoch" }),
+  ).toEqual({
     cursor: 0,
     epoch: "epoch",
   });
@@ -379,7 +428,11 @@ test("cursor route rejects invalid cursors and extra response fields", () => {
     { cursor: 0 },
     { cursor: 0, epoch: "epoch", extra: true },
   ]) {
-    expect(contract.cursorViewSchema.safeParse(value).success).toBe(false);
+    expect(
+      Option.isSome(
+        Schema.decodeUnknownOption(contract.cursorViewSchema, contract.boundaryOptions)(value),
+      ),
+    ).toBe(false);
   }
 });
 
@@ -390,17 +443,24 @@ test("schedule validation errors cross the contract with default messages", () =
       message: contract.DEFAULT_ERROR_MESSAGES[code],
     };
 
-    expect(contract.errorBodySchema.parse({ error })).toEqual({ error });
+    expect(contract.decodeBoundary(contract.errorBodySchema)({ error })).toEqual({ error });
     expect(error.message.length).toBeGreaterThan(0);
   }
 });
 
 test("runs queries default to 50 and cap pages at 200", () => {
   const input: contract.RunsQuery = {};
-  const query = contract.routes.runs.query.parse(input);
+  const query = contract.decodeBoundary(contract.routes.runs.query)(input);
 
   expect(query).toEqual({ limit: 50 });
   expectTypeOf(query.limit).toEqualTypeOf<number>();
-  expect(contract.routes.runs.query.parse({ limit: "200" }).limit).toBe(200);
-  expect(contract.routes.runs.query.safeParse({ limit: 201 }).success).toBe(false);
+  expect(contract.decodeBoundary(contract.routes.runs.query)({ limit: "200" }).limit).toBe(200);
+  expect(
+    Option.isSome(
+      Schema.decodeUnknownOption(
+        contract.routes.runs.query,
+        contract.boundaryOptions,
+      )({ limit: 201 }),
+    ),
+  ).toBe(false);
 });

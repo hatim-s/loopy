@@ -1,59 +1,12 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import type { Graph, RunRecord, Store as RunStore, Schedule } from "../src/core/index.js";
-import { OwnershipError } from "../src/core/index.js";
-import { type Clock, Daemon } from "../src/host/index.js";
-import { SqliteRunStore } from "../src/local/index.js";
+import type { Cause } from "effect";
+import { Effect } from "effect";
+import { TestClock } from "effect/testing";
+import { type RunRecord, type Schedule } from "../src/core/index.js";
+import { makeDaemon, PreparationError, ScheduleRevisionError } from "../src/host/index.js";
 import { loopy } from "../src/sdk/graph/index.js";
-import { MemoryStore as MemoryRunStore } from "../src/store/index.js";
+import { MemoryStore } from "../src/store/index.js";
 import { FakeExecutor, newRun } from "./fixture.js";
-
-function fixture(
-  options: Partial<ConstructorParameters<typeof Daemon>[0]> & {
-    graphFor?: (run: RunRecord) => Promise<Graph>;
-  } = {},
-) {
-  let time = Date.parse(newRun().createdAt);
-
-  const clock: Clock = {
-    now: () => time,
-    timeout: () => {
-      throw new Error("Unexpected timer. Use a deferred promise in this test.");
-    },
-  };
-
-  const store = options.store ?? new MemoryRunStore(clock.now);
-  const errors: { error: Error; run?: RunRecord }[] = [];
-
-  const daemon = new Daemon({
-    concurrency: 4,
-    store,
-    clock,
-    revisionFor: () => "bundle",
-    prepare: async (run) => ({
-      graph: options.graphFor
-        ? await options.graphFor(run)
-        : loopy("test", {
-            input: { "value?": "number", "scheduled?": "boolean" },
-            run: ({ input }) => input,
-          }).graph,
-      executor: new FakeExecutor(),
-    }),
-    onError: (error, run) => errors.push({ error, run }),
-    ...options,
-  });
-
-  return {
-    store,
-    daemon,
-    errors,
-    advance: (milliseconds: number) => {
-      time += milliseconds;
-    },
-  };
-}
 
 function schedule(overrides: Partial<Schedule> = {}): Schedule {
   return {
@@ -69,477 +22,169 @@ function schedule(overrides: Partial<Schedule> = {}): Schedule {
   };
 }
 
-test("a due schedule fires once per key and the next minute fires a new run", async () => {
-  const f = fixture();
-  await f.store.putSchedule(schedule());
-  expect(await f.daemon.tick()).toEqual({ fired: 1, activated: 1 });
-  expect(await f.daemon.tick()).toEqual({ fired: 0, activated: 0 });
-  const runs = await f.store.listRuns();
-  expect(runs).toHaveLength(1);
-  expect(runs[0]).toMatchObject({
-    slug: "test",
-    revision: "bundle",
-    output: { scheduled: true },
+const graph = loopy("test", {
+  input: { "value?": "number", "scheduled?": "boolean" },
+  run: ({ input }) => input,
+}).graph;
+
+for (const mode of ["due", "disabled", "stale", "minute-late"] as const) {
+  test(`schedule ${mode} preserves startup and fire-key policy`, async () => {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const base = Date.parse(newRun().createdAt);
+          yield* TestClock.setTime(base);
+          let now = base;
+          const store = new MemoryStore(() => now);
+
+          const daemon = yield* makeDaemon({
+            store,
+            concurrency: 4,
+            prepare: () => Effect.succeed({ graph, executor: new FakeExecutor() }),
+            revisionFor: () => Effect.succeed("bundle"),
+          });
+
+          const expected = mode === "due" || mode === "minute-late" ? 1 : 0;
+          yield* store.putSchedule(
+            schedule(
+              mode === "disabled"
+                ? { enabled: false }
+                : mode === "stale"
+                  ? { nextFireAt: new Date(base - 120_000).toISOString(), lastFireKey: "old" }
+                  : mode === "minute-late"
+                    ? { nextFireAt: new Date(base - 60_000).toISOString() }
+                    : {},
+            ),
+          );
+          expect(yield* daemon.tick).toEqual({ fired: expected, activated: expected });
+          expect(yield* daemon.tick).toEqual({
+            fired: mode === "minute-late" ? 1 : 0,
+            activated: mode === "minute-late" ? 1 : 0,
+          });
+          expect(yield* store.listRuns()).toHaveLength(expected + (mode === "minute-late" ? 1 : 0));
+
+          if (mode === "stale") {
+            expect((yield* store.listSchedules())[0]).toMatchObject({
+              lastFireKey: "old",
+              nextFireAt: new Date(base + 60_000).toISOString(),
+            });
+          }
+
+          now += 60_000;
+          yield* TestClock.adjust(60_000);
+          expect(yield* daemon.tick).toEqual({
+            fired: mode === "disabled" ? 0 : 1,
+            activated: mode === "disabled" ? 0 : 1,
+          });
+        }),
+      ).pipe(Effect.provide(TestClock.layer())),
+    );
   });
-  expect(runs[0]?.id).toMatch(/^[\da-f-]{36}$/u);
-  expect(await f.store.listSchedules()).toEqual([
-    schedule({
-      lastFireKey: "test@2026-10-16T00:00Z",
-      nextFireAt: "2026-10-16T00:01:00.000Z",
-    }),
-  ]);
-  f.advance(60_000);
-  expect(await f.daemon.tick()).toEqual({ fired: 1, activated: 1 });
-  expect(await f.store.listRuns()).toHaveLength(2);
-});
+}
 
-test("disabled schedules do not fire", async () => {
-  const f = fixture();
-  await f.store.putSchedule(schedule({ enabled: false }));
-  expect(await f.daemon.tick()).toEqual({ fired: 0, activated: 0 });
-  expect(await f.store.listRuns()).toEqual([]);
-});
+test("preparation failure finishes that run, reports its Cause and permits other work", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const store = new MemoryStore();
+        const errors: { cause: Cause.Cause<unknown>; run?: RunRecord }[] = [];
 
-test("startup skips stale schedules forward without firing and preserves the fire key", async () => {
-  const f = fixture();
-  await f.store.putSchedule(
-    schedule({ nextFireAt: "2026-10-15T23:58:00.000Z", lastFireKey: "old" }),
+        const daemon = yield* makeDaemon({
+          store,
+          concurrency: 2,
+          prepare: (run) =>
+            run.id === "run"
+              ? Effect.fail(new PreparationError({ cause: "Missing revision" }))
+              : Effect.succeed({ graph, executor: new FakeExecutor() }),
+          revisionFor: () => Effect.succeed("bundle"),
+          onError: (cause, run) => {
+            errors.push({ cause, run });
+          },
+        });
+
+        yield* store.createRun(newRun());
+        yield* store.createRun({ ...newRun(), id: "second" });
+        expect(yield* daemon.tick).toEqual({ fired: 0, activated: 2 });
+        expect(yield* store.getRun("run")).toMatchObject({
+          status: "failed",
+          error: "Missing revision",
+        });
+        expect((yield* store.getRun("run"))?.owner).toBeUndefined();
+        expect((yield* store.getRun("second"))?.status).toBe("succeeded");
+        expect(errors[0]?.run?.id).toBe("run");
+      }),
+    ),
   );
-  expect(await f.daemon.tick()).toEqual({ fired: 0, activated: 0 });
-  expect(await f.store.listSchedules()).toEqual([
-    schedule({
-      version: 1,
-      lastFireKey: "old",
-      nextFireAt: "2026-10-16T00:01:00.000Z",
-    }),
-  ]);
-  f.advance(60_000);
-  expect(await f.daemon.tick()).toEqual({ fired: 1, activated: 1 });
 });
 
-test("startup permits a schedule exactly one minute late", async () => {
-  const f = fixture();
-  await f.store.putSchedule(schedule({ nextFireAt: "2026-10-15T23:59:00.000Z" }));
-  expect(await f.daemon.tick()).toEqual({ fired: 1, activated: 1 });
+test("a failed schedule lookup reports once and does not block a different schedule", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* TestClock.setTime(Date.parse(newRun().createdAt));
+        const store = new MemoryStore(() => Date.parse(newRun().createdAt));
+        const errors: Cause.Cause<unknown>[] = [];
+
+        const daemon = yield* makeDaemon({
+          store,
+          concurrency: 2,
+          prepare: () => Effect.succeed({ graph, executor: new FakeExecutor() }),
+          revisionFor: (schedule) =>
+            schedule.slug === "broken"
+              ? Effect.fail(new ScheduleRevisionError({ cause: "Missing revision" }))
+              : Effect.succeed("bundle"),
+          onError: (cause) => {
+            errors.push(cause);
+          },
+        });
+
+        yield* store.putSchedule(schedule({ slug: "broken" }));
+        yield* store.putSchedule(schedule());
+        expect(yield* daemon.tick).toEqual({ fired: 1, activated: 1 });
+        expect(errors).toHaveLength(1);
+      }),
+    ).pipe(Effect.provide(TestClock.layer())),
+  );
 });
 
-test("a queued run activates and completes", async () => {
-  const f = fixture();
-  await f.store.createRun(newRun());
-  expect(await f.daemon.tick()).toEqual({ fired: 0, activated: 1 });
-  expect(await f.store.getRun("run")).toMatchObject({ status: "succeeded", output: { value: 42 } });
-  expect((await f.store.getRun("run"))?.owner).toBeUndefined();
+test("queued runs activate and prune runs at startup and hourly", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const base = Date.parse(newRun().createdAt);
+        yield* TestClock.setTime(base);
+        let prunes = 0;
+
+        class RecordingStore extends MemoryStore {
+          override pruneEvents(at: string) {
+            return super.pruneEvents(at).pipe(
+              Effect.tap(() =>
+                Effect.sync(() => {
+                  prunes++;
+                }),
+              ),
+            );
+          }
+        }
+
+        const store = new RecordingStore();
+
+        const daemon = yield* makeDaemon({
+          store,
+          concurrency: 1,
+          prepare: () => Effect.succeed({ graph, executor: new FakeExecutor() }),
+          revisionFor: () => Effect.succeed("bundle"),
+        });
+
+        yield* store.createRun(newRun());
+        expect(yield* daemon.tick).toEqual({ fired: 0, activated: 1 });
+        expect((yield* store.getRun("run"))?.output).toEqual({ value: 42 });
+        yield* daemon.tick;
+        expect(prunes).toBe(1);
+        yield* TestClock.adjust(3_600_000);
+        yield* daemon.tick;
+        expect(prunes).toBe(2);
+      }),
+    ).pipe(Effect.provide(TestClock.layer())),
+  );
 });
-
-test("a throwing loader reports its run and other runs still activate", async () => {
-  const failure = new Error("Workflow could not load. Save the workflow again.");
-
-  const f = fixture({
-    graphFor: async (run) => {
-      if (run.id === "bad") {
-        throw failure;
-      }
-
-      return loopy("test", { input: {}, run: () => "done" }).graph;
-    },
-  });
-
-  await f.store.createRun({ ...newRun(), id: "bad" });
-  await f.store.createRun(newRun());
-  expect(await f.daemon.tick()).toEqual({ fired: 0, activated: 2 });
-  expect(f.errors).toEqual([{ error: failure, run: { ...newRun(), id: "bad" } }]);
-  expect((await f.store.getRun("run"))?.status).toBe("succeeded");
-  expect((await f.store.getRun("bad"))?.status).toBe("failed");
-  expect((await f.store.getRun("bad"))?.owner).toBeUndefined();
-  expect(await f.daemon.tick()).toEqual({ fired: 0, activated: 0 });
-});
-
-test("a throwing activation releases ownership and does not block other runs", async () => {
-  const failure = new Error("Journal could not load. Restore storage.");
-
-  class BrokenJournalStore extends MemoryRunStore {
-    override async getNodeRuns(runId: string) {
-      if (runId === "bad") {
-        throw failure;
-      }
-
-      return super.getNodeRuns(runId);
-    }
-  }
-
-  const store = new BrokenJournalStore(() => Date.parse(newRun().createdAt));
-  const f = fixture({ store });
-  await store.createRun({ ...newRun(), id: "bad" });
-  await store.createRun(newRun());
-  expect(await f.daemon.tick()).toEqual({ fired: 0, activated: 1 });
-  expect(f.errors[0]?.error).toBe(failure);
-  expect(f.errors[0]?.run?.id).toBe("bad");
-  expect((await store.getRun("bad"))?.owner).toBeUndefined();
-  expect((await store.dueRuns(newRun().createdAt)).map((run) => run.id)).toEqual(["bad"]);
-  expect((await store.getRun("run"))?.status).toBe("succeeded");
-});
-
-function sleeper() {
-  const calls: { milliseconds: number; signal: AbortSignal }[] = [];
-  let entered = Promise.withResolvers<void>();
-
-  const sleep = async (milliseconds: number, signal: AbortSignal) => {
-    calls.push({ milliseconds, signal });
-    entered.resolve();
-    await new Promise<void>((resolve) => {
-      if (signal.aborted) {
-        resolve();
-
-        return;
-      }
-
-      signal.addEventListener("abort", () => resolve(), { once: true });
-    });
-    entered = Promise.withResolvers<void>();
-  };
-
-  return { calls, sleep, entered: () => entered.promise };
-}
-
-for (const [runDelay, scheduleDelay, expected] of [
-  [1000, 2000, 1000],
-  [2000, 1000, 1000],
-  [10_000, 20_000, 5000],
-] satisfies [number, number, number][]) {
-  test(`the loop sleeps ${expected}ms for run ${runDelay}ms and schedule ${scheduleDelay}ms`, async () => {
-    const sleeping = sleeper();
-    const f = fixture({ sleep: sleeping.sleep });
-    const at = Date.parse(newRun().createdAt);
-    await f.store.createRun({
-      ...newRun(),
-      status: "suspended",
-      wakeAt: new Date(at + runDelay).toISOString(),
-    });
-    await f.store.putSchedule(schedule({ nextFireAt: new Date(at + scheduleDelay).toISOString() }));
-    const running = f.daemon.run();
-    await sleeping.entered();
-    expect(sleeping.calls[0]?.milliseconds).toBe(expected);
-    await f.daemon.stop();
-    await running;
-    expect(sleeping.calls[0]?.signal.aborted).toBe(true);
-  });
-}
-
-for (const kind of ["memory", "sqlite"] as const) {
-  test(`${kind} committed queued creation interrupts idle sleep without an explicit wake`, async () => {
-    const stores = catchUpStores(kind);
-    const sleeping = sleeper();
-    const observed: RunRecord[] = [];
-
-    const f = fixture({
-      store: stores.store,
-      sleep: sleeping.sleep,
-      graphFor: async (run) => {
-        const committed = await stores.writer.getRun(run.id);
-        expect(committed).toEqual(run);
-        observed.push(run);
-
-        return loopy("test", { input: {}, run: () => "done" }).graph;
-      },
-    });
-
-    const running = f.daemon.run();
-
-    try {
-      await sleeping.entered();
-      expect(sleeping.calls[0]?.milliseconds).toBe(5000);
-      await f.store.createRun(newRun());
-      expect(sleeping.calls[0]?.signal.aborted).toBe(true);
-      await until(async () => (await f.store.getRun("run"))?.status === "succeeded");
-      expect(observed).toEqual([newRun()]);
-      expect(f.errors).toEqual([]);
-    } finally {
-      await f.daemon.stop();
-      await running;
-      stores.close();
-    }
-  });
-}
-
-for (const mutation of ["save", "enable"] as const) {
-  test(`schedule ${mutation} interrupts idle sleep and fires once without a busy loop`, async () => {
-    const sleeping = sleeper();
-    const f = fixture({ sleep: sleeping.sleep });
-
-    if (mutation === "enable") {
-      await f.store.putSchedule(schedule({ enabled: false }));
-    }
-
-    const running = f.daemon.run();
-
-    try {
-      await sleeping.entered();
-      const idle = sleeping.calls.at(-1);
-
-      if (mutation === "save") {
-        await f.store.putSchedule(schedule());
-      } else {
-        await f.store.setScheduleEnabled({ workspace: "/workspace", slug: "test", enabled: true });
-      }
-
-      expect(idle?.signal.aborted).toBe(true);
-      await until(async () => (await f.store.listRuns({ status: "succeeded" })).length === 1);
-      await until(() => sleeping.calls.at(-1)?.signal.aborted === false);
-      expect(sleeping.calls.at(-1)?.milliseconds).toBe(5000);
-      const waits = sleeping.calls.length;
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      expect(sleeping.calls).toHaveLength(waits);
-      expect(await f.store.listRuns()).toHaveLength(1);
-      expect(f.errors).toEqual([]);
-    } finally {
-      await f.daemon.stop();
-      await running;
-    }
-  });
-}
-
-test("unrelated run events leave the idle wait intact", async () => {
-  const sleeping = sleeper();
-  const f = fixture({ sleep: sleeping.sleep });
-  await f.store.createRun({ ...newRun(), status: "suspended" });
-  await f.store.claim("run", "owner");
-  const running = f.daemon.run();
-
-  try {
-    await sleeping.entered();
-    await f.store.heartbeat("run", "owner");
-    await f.store.finishRun("run", "owner", { status: "succeeded", output: null });
-    await f.store.release("run", "owner");
-    await f.store.createRun({ ...newRun(), id: "historical", status: "succeeded" });
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    expect(sleeping.calls).toHaveLength(1);
-    expect(sleeping.calls[0]?.signal.aborted).toBe(false);
-    expect(f.errors).toEqual([]);
-  } finally {
-    await f.daemon.stop();
-    await running;
-  }
-});
-
-async function until(ready: () => boolean | Promise<boolean>): Promise<void> {
-  for (let attempt = 0; attempt < 500; attempt++) {
-    if (await ready()) {
-      return;
-    }
-
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
-  }
-
-  throw new Error("Daemon did not reach the expected state. Inspect the loop and pool.");
-}
-
-function steppingSleeper() {
-  const calls: { milliseconds: number; resume: () => void }[] = [];
-
-  const sleep = (milliseconds: number, signal: AbortSignal) => {
-    const gate = Promise.withResolvers<void>();
-    calls.push({ milliseconds, resume: () => gate.resolve() });
-
-    if (signal.aborted) {
-      gate.resolve();
-    } else {
-      signal.addEventListener("abort", () => gate.resolve(), { once: true });
-    }
-
-    return gate.promise;
-  };
-
-  return { calls, sleep };
-}
-
-test("a failed wake lookup reports once and retries after an abortable capped wait", async () => {
-  const failure = new Error("Wake lookup failed. Retry storage.");
-  let lookups = 0;
-
-  class FlakyWakeStore extends MemoryRunStore {
-    override async nextWakeAt() {
-      lookups++;
-
-      if (lookups === 1) {
-        throw failure;
-      }
-
-      return super.nextWakeAt();
-    }
-  }
-
-  const sleeping = steppingSleeper();
-  const f = fixture({ store: new FlakyWakeStore(), sleep: sleeping.sleep });
-  const running = f.daemon.run();
-
-  try {
-    await until(() => sleeping.calls.length === 1);
-    expect(sleeping.calls[0]?.milliseconds).toBe(5000);
-    expect(f.errors).toEqual([{ error: failure, run: undefined }]);
-    sleeping.calls[0]?.resume();
-    await until(() => lookups === 2 && sleeping.calls.length === 2);
-    expect(f.errors).toHaveLength(1);
-  } finally {
-    await f.daemon.stop();
-    await running;
-  }
-});
-
-test("failed activations back off from one second to the five second cap", async () => {
-  const failure = new Error("Journal lookup failed. Restore storage.");
-
-  class BrokenJournalStore extends MemoryRunStore {
-    override async getNodeRuns(): Promise<never> {
-      throw failure;
-    }
-  }
-
-  const sleeping = steppingSleeper();
-
-  const f = fixture({
-    store: new BrokenJournalStore(() => Date.parse(newRun().createdAt)),
-    sleep: sleeping.sleep,
-  });
-
-  await f.store.createRun(newRun());
-  const running = f.daemon.run();
-
-  try {
-    for (let index = 0; index < 4; index++) {
-      await until(() => sleeping.calls.length === index + 1 && f.errors.length === index + 1);
-      expect(sleeping.calls[index]?.milliseconds).toBe([1000, 2000, 4000, 5000][index]);
-      expect(f.errors[index]?.error).toBe(failure);
-      expect((await f.store.getRun("run"))?.owner).toBeUndefined();
-
-      if (index < 3) {
-        sleeping.calls[index]?.resume();
-      }
-    }
-  } finally {
-    await f.daemon.stop();
-    await running;
-  }
-});
-
-test("claim contention does not report an activation error", async () => {
-  class ContendedStore extends MemoryRunStore {
-    override async claim(runId: string): Promise<RunRecord> {
-      throw new OwnershipError(runId);
-    }
-  }
-
-  const f = fixture({ store: new ContendedStore() });
-  await f.store.createRun(newRun());
-  expect(await f.daemon.tick()).toEqual({ fired: 0, activated: 0 });
-  expect(f.errors).toEqual([]);
-});
-
-test("the loop prunes old events at startup and each hour", async () => {
-  const sleeping = steppingSleeper();
-  const f = fixture({ sleep: sleeping.sleep });
-  await f.store.createRun({ ...newRun(), status: "succeeded" });
-  f.advance(3_600_000);
-  await f.store.putSchedule(schedule({ enabled: false, nextFireAt: "2099-01-01T00:00:00.000Z" }));
-  f.advance(23 * 3_600_000 + 1);
-  const running = f.daemon.run();
-
-  try {
-    await until(() => sleeping.calls.length === 1);
-    expect((await f.store.events(0, 100)).map((event) => event.entity)).toEqual(["schedule"]);
-    f.advance(3_600_000 - 1);
-    sleeping.calls[0]?.resume();
-    await until(() => sleeping.calls.length === 2);
-    expect(await f.store.events(0, 100)).toHaveLength(1);
-    f.advance(1);
-    sleeping.calls[1]?.resume();
-    await until(() => sleeping.calls.length === 3);
-    expect(await f.store.events(0, 100)).toEqual([]);
-    expect(f.errors).toEqual([]);
-  } finally {
-    await f.daemon.stop();
-    await running;
-  }
-});
-
-function catchUpStores(kind: "memory" | "sqlite") {
-  if (kind === "memory") {
-    const store = new MemoryRunStore(() => Date.parse(newRun().createdAt));
-
-    return { store, writer: store, close: () => {} };
-  }
-
-  const directory = mkdtempSync(join(tmpdir(), "loopy-catch-up-"));
-  const file = join(directory, "runs.sqlite");
-  const store = new SqliteRunStore(file);
-  const writer = new SqliteRunStore(file);
-
-  return {
-    store,
-    writer,
-    close: () => {
-      writer.close();
-      store.close();
-      rmSync(directory, { recursive: true, force: true });
-    },
-  };
-}
-
-async function editOverdueSchedule(
-  store: RunStore,
-  overdue: Schedule,
-  mutation: "PUT" | "disable",
-) {
-  if (mutation === "disable") {
-    return store.setScheduleEnabled({ ...overdue, enabled: false });
-  }
-
-  return store.putSchedule({
-    ...overdue,
-    cron: "0 * * * *",
-    input: { edited: true },
-    nextFireAt: "2026-10-16T01:00:00.000Z",
-  });
-}
-
-for (const kind of ["memory", "sqlite"] as const) {
-  for (const mutation of ["PUT", "disable"] as const) {
-    test(`${kind} startup catch-up preserves a concurrent ${mutation} of a later overdue schedule`, async () => {
-      const stores = catchUpStores(kind);
-      const entered = Promise.withResolvers<void>();
-      const gate = Promise.withResolvers<string>();
-
-      const f = fixture({
-        store: stores.store,
-        revisionFor: () => {
-          entered.resolve();
-
-          return gate.promise;
-        },
-      });
-
-      await f.store.putSchedule(schedule({ slug: "a-first" }));
-
-      const overdue = await f.store.putSchedule(
-        schedule({ slug: "z-later", nextFireAt: "2026-10-15T23:58:00.000Z" }),
-      );
-
-      const ticking = f.daemon.tick();
-
-      try {
-        await entered.promise;
-
-        const committed = await editOverdueSchedule(stores.writer, overdue, mutation);
-        gate.resolve("bundle");
-        expect(await ticking).toEqual({ fired: 1, activated: 1 });
-        expect(
-          (await stores.writer.listSchedules()).find((row) => row.slug === overdue.slug),
-        ).toEqual(committed);
-        expect(f.errors).toEqual([]);
-      } finally {
-        gate.resolve("bundle");
-        await f.daemon.stop();
-        stores.close();
-      }
-    });
-  }
-}

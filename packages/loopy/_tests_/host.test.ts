@@ -1,199 +1,180 @@
 import { expect, test } from "bun:test";
+import { Deferred, Effect, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import type { Executor } from "../src/core/index.js";
 import { initialState, step } from "../src/engine/index.js";
-import { activate, type Clock } from "../src/host/index.js";
+import { activate } from "../src/host/index.js";
 import { code, loopy, sh } from "../src/sdk/graph/index.js";
 import { MemoryStore } from "../src/store/index.js";
 import { newRun } from "./fixture.js";
 
-function graph() {
+export function graph() {
   const graph = loopy("test", {
     input: {},
     run: () =>
-      code("work", { in: {}, out: { kind: "value", type: "number" }, module: "./work.ts" }),
+      code("work", {
+        in: {},
+        out: { kind: "value", type: "number" },
+        module: "./work.ts",
+      }),
   }).graph;
 
-  const node = graph.nodes[0];
-
-  if (node?.kind !== "code") {
-    throw new Error("Expected code node.");
+  for (const node of graph.nodes) {
+    if (node.kind === "code") {
+      node.module.bundleHash = "a".repeat(64);
+    }
   }
-
-  node.module.bundleHash = "a".repeat(64);
 
   return graph;
 }
 
 test.each(["none", "finished"] as const)(
-  "host resumes the same persisted attempt from a %s receipt",
+  "resumes persisted attempt from %s receipt",
   async (kind) => {
-    const store = new MemoryStore();
-    const plan = graph();
-    await store.createRun(newRun());
-    await store.claim("run", "old");
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const store = new MemoryStore();
+        const plan = graph();
+        yield* store.createRun(newRun());
+        yield* store.claim("run", "old");
 
-    const started = step(plan, initialState("run", {}), {
-      kind: "run_started",
-      at: newRun().createdAt,
-    });
+        const node = step(plan, initialState("run", {}), {
+          kind: "run_started",
+          at: newRun().createdAt,
+        }).state.nodeRuns[0];
 
-    const node = started.state.nodeRuns[0];
+        if (!node) {
+          throw new Error("Expected running node.");
+        }
 
-    if (!node) {
-      throw new Error("Expected running node.");
-    }
+        yield* store.apply({
+          runId: "run",
+          token: "old",
+          effects: [{ kind: "write_node_run", nodeRun: { ...node, attempt: 2 } }],
+        });
+        yield* store.release("run", "old");
+        let executions = 0;
 
-    await store.apply({
-      runId: "run",
-      token: "old",
-      effects: [{ kind: "write_node_run", nodeRun: { ...node, attempt: 2 } }],
-    });
-    await store.release("run", "old");
-    let executions = 0;
+        const result = {
+          kind: "succeeded" as const,
+          output: 42,
+          logs: [{ message: "result", data: null }],
+        };
 
-    const result = {
-      kind: "succeeded" as const,
-      output: 42,
-      logs: [{ message: "result", data: null }],
-    };
+        const executor: Executor = {
+          lookup: (key, attempt) =>
+            Effect.sync(() => {
+              expect(key).toEqual(node.key);
+              expect(attempt).toBe(2);
 
-    const executor: Executor = {
-      lookup: async (key, attempt) => {
-        expect(key).toEqual(node.key);
-        expect(attempt).toBe(2);
+              return kind === "finished" ? { kind, result } : { kind };
+            }),
+          execute: (key, attempt) =>
+            Effect.sync(() => {
+              expect(key).toEqual(node.key);
+              expect(attempt).toBe(2);
+              executions++;
 
-        return kind === "finished" ? { kind, result } : { kind };
-      },
-      execute: async (key, attempt) => {
-        expect(key).toEqual(node.key);
-        expect(attempt).toBe(2);
-        executions++;
+              return result;
+            }),
+        };
 
-        return result;
-      },
-    };
-
-    expect(await activate({ runId: "run", store, graph: plan, executor })).toEqual({
-      status: "succeeded",
-      output: 42,
-    });
-    expect(executions).toBe(kind === "none" ? 1 : 0);
-    expect(await store.getNodeRuns("run")).toMatchObject([
-      { attempt: 2, status: "succeeded", receipt: "finished" },
-      { status: "succeeded" },
-    ]);
-    expect(await store.getLogs("run")).toHaveLength(1);
+        expect(yield* activate({ runId: "run", store, graph: plan, executor })).toEqual({
+          status: "succeeded",
+          output: 42,
+        });
+        expect(executions).toBe(kind === "none" ? 1 : 0);
+        expect(yield* store.getNodeRuns("run")).toMatchObject([
+          { attempt: 2, status: "succeeded", receipt: "finished" },
+          { status: "succeeded" },
+        ]);
+        expect(yield* store.getLogs("run")).toHaveLength(1);
+      }),
+    );
   },
 );
 
-test("retry retains ownership and running status, persists its deadline and keeps logs per attempt", async () => {
-  let now = Date.parse(newRun().createdAt);
-  const waiting = Promise.withResolvers<() => void>();
+for (const mode of ["retry", "rate"] as const) {
+  test(`${mode} retains ownership and attempt while sleeping`, async () => {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const base = Date.parse(newRun().createdAt);
+        yield* TestClock.setTime(base);
+        let now = base;
+        const waiting = yield* Deferred.make<void>();
 
-  const clock: Clock = {
-    now: () => now,
-    timeout: (callback, milliseconds) => {
-      waiting.resolve(() => {
-        now += milliseconds;
-        callback();
-      });
-
-      return () => {};
-    },
-  };
-
-  const store = new MemoryStore(clock.now);
-  await store.createRun(newRun());
-
-  const executor: Executor = {
-    lookup: async () => ({ kind: "none" }),
-    execute: async (...args) =>
-      args[1] === 1
-        ? {
-            kind: "failed",
-            error: { code: "execution", message: "Temporary." },
-            exitCode: null,
-            logs: [{ message: "first", data: null }],
+        class RetryStore extends MemoryStore {
+          override apply(batch: Parameters<MemoryStore["apply"]>[0]) {
+            return super
+              .apply(batch)
+              .pipe(
+                Effect.tap(() =>
+                  batch.effects.some((effect) => effect.kind === "schedule_retry")
+                    ? Deferred.succeed(waiting, undefined)
+                    : Effect.void,
+                ),
+              );
           }
-        : { kind: "succeeded", output: 42, logs: [{ message: "second", data: null }] },
-  };
+        }
 
-  const running = activate({ runId: "run", store, executor, graph: graph(), clock });
-  const resume = await waiting.promise;
-  expect(await store.getRun("run")).toMatchObject({
-    status: "running",
-    owner: { token: expect.any(String) },
-    nextRetryAt: "2026-10-16T00:00:01.000Z",
+        const store = new RetryStore(() => now);
+        const attempts: number[] = [];
+
+        const plan =
+          mode === "retry"
+            ? graph()
+            : loopy("limited", {
+                input: {},
+                run: () => {
+                  const rateLimit = { key: "shared", limit: 2, window: "1m" } as const;
+                  sh(["printf", "first"], { rateLimit });
+                  sh(["printf", "second"], { rateLimit });
+
+                  return sh(["printf", "third"], { rateLimit });
+                },
+              }).graph;
+
+        const executor: Executor = {
+          lookup: () => Effect.succeed({ kind: "none" }),
+          execute: (...[, attempt]) =>
+            Effect.sync(() => {
+              attempts.push(attempt);
+
+              return mode === "retry" && attempt === 1
+                ? {
+                    kind: "failed" as const,
+                    error: { code: "execution" as const, message: "Temporary." },
+                    exitCode: null,
+                    logs: [{ message: "first", data: null }],
+                  }
+                : {
+                    kind: "succeeded" as const,
+                    output: mode === "retry" ? 42 : { stdout: "ok", stderr: "", exitCode: 0 },
+                    logs: [{ message: "second", data: null }],
+                  };
+            }),
+        };
+
+        yield* store.createRun(newRun());
+
+        const running = yield* Effect.forkChild(
+          activate({ runId: "run", store, graph: plan, executor }),
+        );
+
+        yield* Deferred.await(waiting);
+        yield* Effect.yieldNow;
+        expect(yield* store.getRun("run")).toMatchObject({
+          status: "running",
+          owner: { token: expect.any(String) },
+          nextRetryAt: new Date(base + (mode === "retry" ? 1000 : 60_000)).toISOString(),
+        });
+        expect(attempts).toEqual(mode === "retry" ? [1] : [1, 1]);
+        now += mode === "retry" ? 1000 : 60_000;
+        yield* TestClock.adjust(mode === "retry" ? 1000 : 60_000);
+        expect(yield* Fiber.join(running)).toMatchObject({ status: "succeeded" });
+        expect(attempts).toEqual(mode === "retry" ? [1, 2] : [1, 1, 1]);
+        expect((yield* store.getRun("run"))?.nextRetryAt).toBeUndefined();
+      }).pipe(Effect.provide(TestClock.layer())),
+    );
   });
-  expect(await store.getNodeRuns("run")).toMatchObject([{ status: "retrying", attempt: 1 }]);
-  resume();
-  expect(await running).toEqual({ status: "succeeded", output: 42 });
-  expect((await store.getRun("run"))?.nextRetryAt).toBeUndefined();
-  expect(
-    (await store.getLogs("run")).map((log) => [
-      log.message,
-      log.position.kind === "node" ? log.position.attempt : null,
-    ]),
-  ).toEqual([
-    ["first", 1],
-    ["second", 2],
-  ]);
-});
-
-test("a shared window of two delays the third dispatch without consuming an attempt", async () => {
-  let now = Date.parse(newRun().createdAt);
-  const waiting = Promise.withResolvers<() => void>();
-
-  const clock: Clock = {
-    now: () => now,
-    timeout: (callback, ms) => {
-      waiting.resolve(() => {
-        now += ms;
-        callback();
-      });
-
-      return () => {};
-    },
-  };
-
-  const store = new MemoryStore(clock.now);
-  const rateLimit = { key: "shared", limit: 2, window: "1m" } as const;
-
-  const plan = loopy("limited", {
-    input: {},
-    run: () => {
-      sh(["printf", "first"], { rateLimit });
-      sh(["printf", "second"], { rateLimit });
-
-      return sh(["printf", "third"], { rateLimit });
-    },
-  }).graph;
-
-  const attempts: number[] = [];
-
-  const executor: Executor = {
-    lookup: async () => ({ kind: "none" }),
-    execute: async (...[, attempt]) => {
-      attempts.push(attempt);
-
-      return { kind: "succeeded", output: { stdout: "ok", stderr: "", exitCode: 0 }, logs: [] };
-    },
-  };
-
-  await store.createRun(newRun());
-  const running = activate({ runId: "run", store, graph: plan, executor, clock });
-  const resume = await waiting.promise;
-  expect(attempts).toEqual([1, 1]);
-  expect(await store.getNodeRuns("run")).toMatchObject([
-    { status: "succeeded" },
-    { status: "succeeded" },
-    { status: "rate_limited", attempt: 1 },
-  ]);
-  expect(await store.getRun("run")).toMatchObject({
-    status: "running",
-    nextRetryAt: "2026-10-16T00:01:00.000Z",
-  });
-  resume();
-  expect(await running).toMatchObject({ status: "succeeded" });
-  expect(attempts).toEqual([1, 1, 1]);
-});
+}

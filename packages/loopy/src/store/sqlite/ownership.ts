@@ -1,4 +1,5 @@
 import { OwnershipError } from "../../core/index.js";
+import { StoreRejectedError } from "../operation.js";
 import { SqliteEvents } from "./events.js";
 import { SQL } from "./store-rows.js";
 import { type RunRow } from "./store-schema.js";
@@ -31,7 +32,7 @@ export class SqliteOwnership extends SqliteEvents {
     const row = this.row(runId);
 
     if (!row) {
-      throw new Error(`Run '${runId}' does not exist. Create the run first.`);
+      throw new StoreRejectedError(`Run '${runId}' does not exist. Create the run first.`);
     }
 
     return row;
@@ -49,7 +50,7 @@ export class SqliteOwnership extends SqliteEvents {
 
   protected requireRunning(row: RunRow): void {
     if (row.status !== "running") {
-      throw new Error(
+      throw new StoreRejectedError(
         `Run '${row.id}' cannot transition from '${row.status}'. Claim a queued or suspended run first.`,
       );
     }

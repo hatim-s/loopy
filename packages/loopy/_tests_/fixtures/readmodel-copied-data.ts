@@ -12,6 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { Effect, Exit, Scope } from "effect";
 import {
   emptyRunCounts,
   type RunDefinitionCount,
@@ -22,7 +23,7 @@ import {
 import { SqlRunStore } from "../../src/store/portable.js";
 import { BunSqlDriver } from "../../src/store/sqlite/bun-driver.js";
 import type { SqlValue } from "../../src/store/sqlite/driver.js";
-import { SqliteRunStore } from "../../src/store/sqlite/store.js";
+import { makeSqliteRunStore } from "../../src/store/sqlite/store.js";
 
 const root = resolve(import.meta.dir, "../../../..");
 
@@ -147,7 +148,7 @@ const order = (rows: RunDefinitionCount[]) =>
   );
 
 async function counts(store: Store, baseline: ReturnType<typeof snapshot>) {
-  const rows = await store.runCountsByDefinition();
+  const rows = await Effect.runPromise(store.runCountsByDefinition());
   const keys = rows.map(({ workspace, slug, status }) => JSON.stringify([workspace, slug, status]));
   assert.equal(new Set(keys).size, keys.length);
   assert.ok(rows.every(({ count }) => count > 0));
@@ -194,7 +195,10 @@ async function counts(store: Store, baseline: ReturnType<typeof snapshot>) {
     assert.deepEqual(actual, expected);
   }
 
-  assert.deepEqual(await store.eventCursor(), { epoch: baseline.epoch, cursor: baseline.cursor });
+  assert.deepEqual(await Effect.runPromise(store.eventCursor()), {
+    epoch: baseline.epoch,
+    cursor: baseline.cursor,
+  });
 
   return { rows: order(rows), identities: [...identities.values()], slugs };
 }
@@ -243,10 +247,14 @@ async function verify(source: (typeof sources)[number]) {
       let result: Awaited<ReturnType<typeof counts>> | undefined;
       let error: string | null = null;
 
+      const scope = Effect.runSync(Scope.make());
+
       try {
         const store =
           adapter === "native"
-            ? new SqliteRunStore(file)
+            ? await Effect.runPromise(
+                makeSqliteRunStore(file).pipe(Effect.provideService(Scope.Scope, scope)),
+              )
             : new SqlRunStore(new BunSqlDriver(file), {
                 owner: {
                   identity: { pid: null, host: "copied-data-verification" },
@@ -257,11 +265,13 @@ async function verify(source: (typeof sources)[number]) {
         try {
           result = await counts(store, baseline);
         } finally {
-          store.close();
+          await Effect.runPromise(store.close());
         }
       } catch (cause) {
         assert.ok(cause instanceof Error);
         error = cause.message;
+      } finally {
+        await Effect.runPromise(Scope.close(scope, Exit.void));
       }
 
       const after = snapshot(file);

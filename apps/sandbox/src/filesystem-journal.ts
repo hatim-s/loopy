@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { Effect, Result } from "effect";
+import { decodeBoundary } from "../../../packages/loopy/src/contract/index.js";
 import {
   type AttemptRecord,
   AuthorityError,
@@ -14,6 +16,7 @@ import {
 } from "../../../packages/loopy/src/contract/sandbox-journal.js";
 import { attemptHash, attemptId } from "./admission.js";
 import { readBytes } from "./journal-files.js";
+import { checked, failure, io } from "./operations.js";
 import { storedReceiptSchema } from "./receipts.js";
 
 export class FilesystemJournal {
@@ -29,67 +32,86 @@ export class FilesystemJournal {
     );
   }
 
-  async read(id: string): Promise<AttemptRecord | null> {
-    if (!/^[a-f0-9]{64}$/.test(id)) {
-      throw new AuthorityError("invalid_state");
-    }
+  read(id: string) {
+    return Effect.gen({ self: this }, function* () {
+      if (!/^[a-f0-9]{64}$/.test(id)) {
+        return yield* Effect.fail(new AuthorityError("invalid_state"));
+      }
 
-    const bytes = await readBytes(join(this.root, "receipts", `${id}.json`));
+      const bytes = yield* io("filesystem-journal", () =>
+        readBytes(join(this.root, "receipts", `${id}.json`)),
+      );
 
-    if (!bytes) {
-      return null;
-    }
+      if (!bytes) {
+        return null;
+      }
 
-    const value: unknown = JSON.parse(bytes.toString("utf8"));
-    const parsed = attemptRecordSchema.safeParse(value);
-    let record: AttemptRecord;
+      const value = yield* checked("receipt JSON", () => JSON.parse(bytes.toString("utf8")));
+      let record: AttemptRecord;
 
-    if (parsed.success) {
-      record = parsed.data;
-    } else {
-      const legacy = storedReceiptSchema.parse(value);
-      const { kind, ...fields } = legacy;
+      const decoded = yield* checked("receipt decode", () =>
+        decodeBoundary(attemptRecordSchema)(value),
+      ).pipe(Effect.result);
 
-      const plan = {
-        id: fields.id,
-        requestHash: fields.requestHash,
-        workspace: fields.workspace,
-        executionKey: fields.executionKey,
-        attempt: fields.attempt,
-        container: fields.container,
-        inputVolume: fields.inputVolume,
-        volume: fields.volume,
-        deadline: fields.deadline,
-      };
+      if (Result.isSuccess(decoded)) {
+        record = decoded.success;
+      } else {
+        const legacy = yield* checked("retained receipt decode", () =>
+          decodeBoundary(storedReceiptSchema)(value),
+        );
 
-      const session = { epoch: 1, nonce: "legacy-filesystem-recovery" };
-      record =
-        kind === "started"
-          ? { kind, plan, session }
-          : { kind, plan, session, result: { kind: "inline", value: legacy.result } };
-    }
+        const { kind, ...fields } = legacy;
 
-    if (record.plan.id !== id || !this.validPlan(record.plan)) {
-      throw new Error("Sandbox receipt identity does not match its configured root.");
-    }
+        const plan = {
+          id: fields.id,
+          requestHash: fields.requestHash,
+          workspace: fields.workspace,
+          executionKey: fields.executionKey,
+          attempt: fields.attempt,
+          container: fields.container,
+          inputVolume: fields.inputVolume,
+          volume: fields.volume,
+          deadline: fields.deadline,
+        };
 
-    return record;
+        const session = { epoch: 1, nonce: "legacy-filesystem-recovery" };
+        record =
+          kind === "started"
+            ? { kind, plan, session }
+            : { kind, plan, session, result: { kind: "inline", value: legacy.result } };
+      }
+
+      if (record.plan.id !== id || !this.validPlan(record.plan)) {
+        return yield* Effect.fail(
+          failure(
+            "filesystem-journal",
+            new Error("Sandbox receipt identity does not match its configured root."),
+          ),
+        );
+      }
+
+      return record;
+    }).pipe(Effect.uninterruptible);
   }
 
-  async records() {
-    const result: AttemptRecord[] = [];
+  records() {
+    return Effect.gen({ self: this }, function* () {
+      const result: AttemptRecord[] = [];
 
-    for (const name of await readdir(join(this.root, "receipts"))) {
-      if (/^[a-f0-9]{64}\.json$/.test(name)) {
-        const record = await this.read(name.slice(0, -5));
+      for (const name of yield* io("filesystem-journal", () =>
+        readdir(join(this.root, "receipts")),
+      )) {
+        if (/^[a-f0-9]{64}\.json$/.test(name)) {
+          const record = yield* this.read(name.slice(0, -5));
 
-        if (record) {
-          result.push(record);
+          if (record) {
+            result.push(record);
+          }
         }
       }
-    }
 
-    return result;
+      return result;
+    }).pipe(Effect.uninterruptible);
   }
 
   releasedPath(token: string) {
@@ -100,58 +122,87 @@ export class FilesystemJournal {
     );
   }
 
-  async released(token: string) {
-    const bytes = await readBytes(this.releasedPath(token));
+  released(token: string) {
+    return Effect.gen({ self: this }, function* () {
+      const bytes = yield* io("filesystem-journal", () => readBytes(this.releasedPath(token)));
 
-    if (!bytes) {
-      return null;
-    }
+      if (!bytes) {
+        return null;
+      }
 
-    const record = exportRecordSchema.parse(JSON.parse(bytes.toString("utf8")));
+      const record = yield* checked("export decode", () =>
+        decodeBoundary(exportRecordSchema)(JSON.parse(bytes.toString("utf8"))),
+      );
 
-    if (record.token !== token) {
-      throw new Error("Released export token does not match its path.");
-    }
+      if (record.token !== token) {
+        return yield* Effect.fail(
+          failure(
+            "filesystem-journal",
+            new Error("Released export token does not match its path."),
+          ),
+        );
+      }
 
-    return record;
+      return record;
+    }).pipe(Effect.uninterruptible);
   }
 
-  async exportMetadata() {
-    const result: ExportRecord[] = [];
+  exportMetadata() {
+    return Effect.gen({ self: this }, function* () {
+      const result: ExportRecord[] = [];
 
-    for (const name of await readdir(join(this.root, "exports"))) {
-      if (/^[a-f0-9]{64}\.json$/.test(name)) {
-        const bytes = await readBytes(join(this.root, "exports", name));
+      for (const name of yield* io("filesystem-journal", () =>
+        readdir(join(this.root, "exports")),
+      )) {
+        if (/^[a-f0-9]{64}\.json$/.test(name)) {
+          const bytes = yield* io("filesystem-journal", () =>
+            readBytes(join(this.root, "exports", name)),
+          );
 
-        if (bytes) {
-          const record = exportRecordSchema.parse(JSON.parse(bytes.toString("utf8")));
+          if (bytes) {
+            const record = yield* checked("export decode", () =>
+              decodeBoundary(exportRecordSchema)(JSON.parse(bytes.toString("utf8"))),
+            );
 
-          if (
-            `${record.attemptId}.json` !== name ||
-            record.helper !== artifactHelperName(record.attemptId)
-          ) {
-            throw new Error("Sandbox export guard identity does not match its path.");
+            if (
+              `${record.attemptId}.json` !== name ||
+              record.helper !== artifactHelperName(record.attemptId)
+            ) {
+              return yield* Effect.fail(
+                failure(
+                  "filesystem-journal",
+                  new Error("Sandbox export guard identity does not match its path."),
+                ),
+              );
+            }
+
+            result.push(record);
           }
-
-          result.push(record);
         }
       }
-    }
 
-    return result;
+      return result;
+    }).pipe(Effect.uninterruptible);
   }
 
-  async guards() {
-    const guards = await this.exportMetadata();
+  guards() {
+    return Effect.gen({ self: this }, function* () {
+      const guards = yield* this.exportMetadata();
 
-    for (const record of guards) {
-      const attempt = await this.read(record.attemptId);
+      for (const record of guards) {
+        const attempt = yield* this.read(record.attemptId);
 
-      if (!attempt || attempt.plan.volume !== record.volume) {
-        throw new Error("Sandbox export guard does not match its admitted workspace.");
+        if (!attempt || attempt.plan.volume !== record.volume) {
+          return yield* Effect.fail(
+            failure(
+              "filesystem-journal",
+              new Error("Sandbox export guard does not match its admitted workspace."),
+            ),
+          );
+        }
       }
-    }
 
-    return guards;
+      return guards;
+    }).pipe(Effect.uninterruptible);
   }
 }
