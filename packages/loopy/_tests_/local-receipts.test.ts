@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { lstat, readFile, symlink, writeFile } from "node:fs/promises";
+import { lstat, readdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { Effect } from "effect";
 import type { ExecutionResult } from "../src/core/index.js";
@@ -275,3 +275,58 @@ test("a live trusted child retains completion authority, a killed child becomes 
     await completion;
   }
 });
+
+for (const competing of [false, true]) {
+  test(`a paused claim write stays invisible and publishes exclusively, competitor ${competing}`, async () => {
+    const f = await receiptsFixture();
+    const ready = join(f.root, "claim-ready");
+    const release = join(f.root, "claim-release");
+    const path = await Effect.runPromise(receiptPath(f.home, f.key, 1));
+
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "--no-env-file",
+        join(import.meta.dir, "fixtures/paused-receipt-claim.ts"),
+      ],
+      {
+        cwd: f.workspace,
+        env: { PATH: process.env.PATH, HOME: f.home, LOOPY_HOME: f.home },
+        stdin: new Response(JSON.stringify({ home: f.home, identity: f.identity, ready, release })),
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+
+    try {
+      for (let index = 0; index < 500 && !(await Bun.file(ready).exists()); index++) {
+        await Bun.sleep(10);
+      }
+
+      expect(await Bun.file(ready).exists()).toBe(true);
+      expect(await Bun.file(path).exists()).toBe(false);
+      expect(await Effect.runPromise(f.receipts.read(f.identity))).toBeNull();
+
+      if (competing) {
+        expect(await Effect.runPromise(f.receipts.claim(f.identity))).toEqual({ kind: "created" });
+      }
+
+      await Bun.write(release, "publish");
+      expect(await child.exited).toBe(0);
+      expect(await new Response(child.stderr).text()).toBe("");
+      expect(JSON.parse(await new Response(child.stdout).text())).toMatchObject({
+        kind: competing ? "existing" : "created",
+      });
+      expect(await Effect.runPromise(f.receipts.read(f.identity))).toEqual({
+        ...f.identity,
+        kind: "started",
+        pid: competing ? process.pid : child.pid,
+      });
+      expect(await readdir(dirname(path))).toEqual(["1.json"]);
+    } finally {
+      await Bun.write(release, "release fixture");
+      child.kill("SIGKILL");
+      await child.exited;
+    }
+  });
+}

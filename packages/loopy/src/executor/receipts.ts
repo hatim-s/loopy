@@ -1,4 +1,14 @@
-import { lstat, mkdir, open, readFile, realpath, rename } from "node:fs/promises";
+import {
+  link,
+  lstat,
+  mkdir,
+  mkdtemp,
+  open,
+  readFile,
+  realpath,
+  rename,
+  rm,
+} from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { Effect, Schema } from "effect";
 import { executionKeySchema, sandboxExecutionResultSchema } from "../contract/index.js";
@@ -86,7 +96,7 @@ function syncDirectory(path: string) {
   );
 }
 
-function writeExclusive(path: string, value: FinishedLocalReceipt) {
+function writeExclusive(path: string, value: LocalReceipt) {
   return Effect.acquireUseRelease(
     io(() => open(path, "wx", 0o600)),
     (file) =>
@@ -143,42 +153,46 @@ export class FilesystemReceipts {
   ) {
     const path = yield* receiptPath(this.home, identity.executionKey, identity.attempt);
 
-    // Mask the exclusive creation through fsync. Interruption must not leave an empty claim.
+    // Publish complete bytes with an exclusive link. Readers must never see a partial claim.
     return yield* Effect.uninterruptible(
       Effect.gen({ self: this }, function* () {
-        const file = yield* io(() => open(path, "wx", 0o600)).pipe(
-          Effect.catchIf(
-            (error) => errnoCode(error.cause) === "EEXIST",
-            () => Effect.succeed(null),
-          ),
+        const created = yield* Effect.acquireUseRelease(
+          io(() => mkdtemp(`${path}.claim-`)),
+          (directory) =>
+            Effect.gen(function* () {
+              const temporary = join(directory, "started.json");
+              yield* writeExclusive(temporary, { ...identity, kind: "started", pid: process.pid });
+
+              const linked = yield* io(() => link(temporary, path)).pipe(
+                Effect.as(true),
+                Effect.catchIf(
+                  (error) => errnoCode(error.cause) === "EEXIST",
+                  () => Effect.succeed(false),
+                ),
+              );
+
+              if (linked) {
+                yield* syncDirectory(path);
+              }
+
+              return linked;
+            }),
+          (directory) => io(() => rm(directory, { recursive: true, force: true })),
         );
 
-        if (file === null) {
-          const receipt = yield* this.read(identity);
-
-          if (!receipt) {
-            return yield* rejected(
-              "Claimed receipt disappeared. Inspect the daemon home before retrying.",
-            );
-          }
-
-          return { kind: "existing" as const, receipt };
+        if (created) {
+          return { kind: "created" as const };
         }
 
-        yield* Effect.acquireUseRelease(
-          Effect.succeed(file),
-          (file) =>
-            Effect.gen(function* () {
-              yield* io(() =>
-                file.writeFile(JSON.stringify({ ...identity, kind: "started", pid: process.pid })),
-              );
-              yield* io(() => file.sync());
-            }),
-          (file) => io(() => file.close()),
-        );
-        yield* syncDirectory(path);
+        const receipt = yield* this.read(identity);
 
-        return { kind: "created" as const };
+        if (!receipt) {
+          return yield* rejected(
+            "Claimed receipt disappeared. Inspect the daemon home before retrying.",
+          );
+        }
+
+        return { kind: "existing" as const, receipt };
       }),
     );
   });
