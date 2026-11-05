@@ -10,7 +10,7 @@ export function linuxBundle({ bundle, workspace, bun, network, home }: BundleSan
     [string, string[]],
     CommandExecutionError | ProcessFilesystemError
   > {
-    const args = ["--die-with-parent", "--unshare-all"];
+    const args = ["--die-with-parent", "--unshare-all", "--cap-drop", "ALL"];
 
     if (network) {
       args.push("--share-net");
@@ -31,6 +31,8 @@ export function linuxBundle({ bundle, workspace, bun, network, home }: BundleSan
       "--bind",
       workspace,
       workspace,
+      "--perms",
+      "0111",
       "--tmpfs",
       home,
       "--ro-bind",
@@ -45,6 +47,8 @@ export function linuxBundle({ bundle, workspace, bun, network, home }: BundleSan
       "/dev",
       "--proc",
       "/proc",
+      "--remount-ro",
+      "/",
       "--chdir",
       workspace,
       "--",

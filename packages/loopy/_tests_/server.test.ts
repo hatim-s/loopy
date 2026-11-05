@@ -931,6 +931,8 @@ async function stalledHttpReader(name: string) {
     // Exceed macOS loopback buffer autotuning while keeping every output below the preview cap.
     for (let id = 2; id < PRESSURE_TRANSACTIONS + 2; id++) {
       bytes += await http.write(id, PRESSURE_ROWS);
+      // Let the active socket drain between synchronous SQLite transactions.
+      await Bun.sleep(0);
     }
 
     expect(bytes).toBeGreaterThan(64 * 1024 * 1024);
