@@ -1,5 +1,5 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { digest, type PlaygroundInput, repository } from "./repository.js";
+import { digest, type PlaygroundInput, repository } from "./repository";
 
 export default async function seed({ input, slug }: { input: PlaygroundInput; slug: string }) {
   for (const directory of ["data", "docs", "src", "results"]) {

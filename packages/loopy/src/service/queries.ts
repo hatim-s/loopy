@@ -1,12 +1,12 @@
 import type { Schema } from "effect";
 import { Effect } from "effect";
-import { type routes, serverEvent } from "../contract/index.js";
-import { requireDefinition } from "./definition.js";
-import { ServiceError } from "./error.js";
-import type { ServiceOptions } from "./registry.js";
-import { makeRunAccess } from "./run-access.js";
-import type { RunViews } from "./run-views.js";
-import { nodeDetailEvent } from "./views.js";
+import { type routes, serverEvent } from "../contract";
+import { requireDefinition } from "./definition";
+import { ServiceError } from "./error";
+import type { ServiceOptions } from "./registry";
+import { makeRunAccess } from "./run-access";
+import type { RunViews } from "./run-views";
+import { nodeDetailEvent } from "./views";
 
 export function makeRunQueries(options: ServiceOptions, runViews: RunViews) {
   const { requireRun, runGraph } = makeRunAccess(options);

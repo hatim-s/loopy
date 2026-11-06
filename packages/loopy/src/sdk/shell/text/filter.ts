@@ -1,6 +1,6 @@
-import { descriptorCommand } from "../../descriptor.js";
-import type { RenderInput } from "../../render-argv.js";
-import { parseGrep, parseGrepCount, parseUniqCount } from "../parse/text.js";
+import { descriptorCommand } from "../../descriptor";
+import type { RenderInput } from "../../render-argv";
+import { parseGrep, parseGrepCount, parseUniqCount } from "../parse/text";
 
 const GREP_FLAGS = {
   H: { cli: "-H", kind: "boolean" },

@@ -1,5 +1,5 @@
-import { canonicalJson } from "./canonical-json.js";
-import type { Graph } from "./graph.js";
+import { canonicalJson } from "./canonical-json";
+import type { Graph } from "./graph";
 
 export function revisionInput(graph: Graph): string {
   const hashes = graph.nodes.flatMap((node) =>

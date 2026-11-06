@@ -8,7 +8,7 @@ import {
   type NodeId,
   type Predicate,
   validateGraph,
-} from "../../core/index.js";
+} from "../../core";
 
 export class GraphBuildError extends Error {
   constructor(readonly diagnostic: Diagnostic) {

@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { profile } from "../playground/config.js";
+import { profile } from "../playground/config";
 
 export const root = resolve(import.meta.dir, "../..");
 

@@ -1,5 +1,5 @@
 import { writeFileSync } from "node:fs";
-import { type Input, root, writeResult } from "./repository.ts";
+import { type Input, root, writeResult } from "./repository";
 
 export default ({ rows, ...input }: Input & { rows: { score: number }[] }) => {
   const values = rows.map((row) => row.score);

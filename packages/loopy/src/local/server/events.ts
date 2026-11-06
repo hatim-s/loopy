@@ -1,1 +1,1 @@
-export { eventStream } from "../../service/index.js";
+export { eventStream } from "../../service";

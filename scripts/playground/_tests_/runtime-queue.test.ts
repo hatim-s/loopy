@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { decodeRuntimeQueue } from "../runtime-queue-schema.js";
+import { decodeRuntimeQueue } from "../runtime-queue-schema";
 
 test("receipt inventory accepts the exact full producer queue format", () => {
   const line = JSON.stringify({

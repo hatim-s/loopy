@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
-import type { Json } from "loopy";
-import { requestSchema } from "../../../examples/uacode-asset-sync/request.js";
+import { requestSchema } from "../../../examples/uacode-asset-sync/request";
 import {
   type Files,
   object,
@@ -9,18 +8,19 @@ import {
   read,
   readJson,
   writeJson as writeAssetJson,
-} from "../../../examples/www-uacode-sync/json-edit.ts";
+} from "../../../examples/www-uacode-sync/json-edit";
 import {
   parsePullRequests,
   selectPullRequest,
-} from "../../../examples/www-uacode-sync/publication.ts";
+} from "../../../examples/www-uacode-sync/publication";
 import {
   applyAssetSync,
   sourceText,
   syncCommitMessage,
   syncMetadata,
-} from "../../../examples/www-uacode-sync/sync.ts";
-import { makeFixture } from "./fixtures/examples.ts";
+} from "../../../examples/www-uacode-sync/sync";
+import type { Json } from "../src/sdk";
+import { makeFixture } from "./fixtures/examples";
 
 const root = "";
 

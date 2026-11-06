@@ -9,8 +9,8 @@ import {
   decodeBoundary,
   resultOperations,
   SANDBOX_MAX_REQUEST_BYTES,
-} from "../../../packages/loopy/src/contract/index.js";
-import { failure, type ImmutableResults, type SandboxAttemptAuthority } from "./operations.js";
+} from "../../../packages/loopy/src/contract";
+import { failure, type ImmutableResults, type SandboxAttemptAuthority } from "./operations";
 
 export class HttpSandboxAuthority implements SandboxAttemptAuthority {
   private readonly endpoint: URL;

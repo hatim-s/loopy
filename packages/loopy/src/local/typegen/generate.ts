@@ -1,10 +1,10 @@
 import { execFile } from "node:child_process";
 import { basename } from "node:path";
 import { Data, Effect } from "effect";
-import { errorMessage } from "../../core/index.js";
-import { identifier } from "./names.js";
-import { parseCliHelp } from "./parse-help.js";
-import { renderCommandSource } from "./render.js";
+import { errorMessage } from "../../core";
+import { identifier } from "./names";
+import { parseCliHelp } from "./parse-help";
+import { renderCommandSource } from "./render";
 
 export class TypeGenerationError extends Data.TaggedError("TypeGenerationError")<{
   binary: string;

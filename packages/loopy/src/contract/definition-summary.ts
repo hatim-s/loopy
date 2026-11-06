@@ -1,9 +1,9 @@
 import type { Schema } from "effect";
-import { struct } from "./codec.js";
+import { struct } from "./codec";
 
-import { type SavedLoopy, savedLoopySchema } from "./compiled-loopy.js";
-import type { Graph } from "./graph.js";
-import { loopyViewSchema } from "./views.js";
+import { type SavedLoopy, savedLoopySchema } from "./compiled-loopy";
+import type { Graph } from "./graph";
+import { loopyViewSchema } from "./views";
 
 export const definitionSummarySchema = struct({
   ...savedLoopySchema.mapFields(

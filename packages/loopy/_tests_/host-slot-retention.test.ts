@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
-import type { Executor } from "../src/core/index.js";
-import { activate, makeDaemon } from "../src/host/index.js";
-import { loopy, parallel, sh, sleep, wait } from "../src/sdk/graph/index.js";
-import { MemoryStore } from "../src/store/index.js";
-import { newRun } from "./fixture.js";
-import { policyGraph, policyRetry, policySuccess, policyWork } from "./host-policy-fixture.js";
+import type { Executor } from "../src/core";
+import { activate, makeDaemon } from "../src/host";
+import { loopy, parallel, sh, sleep, wait } from "../src/sdk/graph";
+import { MemoryStore } from "../src/store";
+import { newRun } from "./fixture";
+import { policyGraph, policyRetry, policySuccess, policyWork } from "./host-policy-fixture";
 
 for (const hold of ["retry", "rate-limit"] as const) {
   test(`concurrency one retains ${hold} beside a wait until its deadline`, async () => {

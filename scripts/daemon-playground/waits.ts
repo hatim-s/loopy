@@ -1,6 +1,6 @@
-import { type RunSnapshotView, routes } from "../../packages/loopy/src/contract/index.ts";
-import { receiptInventory } from "./capture.ts";
-import type { OwnedDaemon } from "./daemon.ts";
+import { type RunSnapshotView, routes } from "../../packages/loopy/src/contract";
+import { receiptInventory } from "./capture";
+import type { OwnedDaemon } from "./daemon";
 
 export const terminal = new Set(["succeeded", "failed", "cancelled"]);
 

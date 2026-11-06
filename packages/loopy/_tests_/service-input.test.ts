@@ -2,15 +2,15 @@ import { expect, test } from "bun:test";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect } from "effect";
-import type { Json } from "../src/core/index.js";
-import { revision } from "../src/core/index.js";
-import { activate } from "../src/host/index.js";
-import { Registry } from "../src/local/registry.js";
-import { makeLocalService } from "../src/local/service.js";
-import { loopy } from "../src/sdk/graph/index.js";
-import { MemoryStore } from "../src/store/index.js";
-import { FakeExecutor } from "./fixture.js";
-import { fixture } from "./fixtures/executor.js";
+import type { Json } from "../src/core";
+import { revision } from "../src/core";
+import { activate } from "../src/host";
+import { Registry } from "../src/local/registry";
+import { makeLocalService } from "../src/local/service";
+import { loopy } from "../src/sdk/graph";
+import { MemoryStore } from "../src/store";
+import { FakeExecutor } from "./fixture";
+import { fixture } from "./fixtures/executor";
 
 async function setup() {
   const f = await fixture();

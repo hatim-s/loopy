@@ -1,9 +1,9 @@
 import { Effect } from "effect";
-import { daemonUrl, readDaemonFile } from "../../local/index.js";
-import { type CliContext, expectNoArguments } from "../context.js";
-import { cliSync } from "../errors.js";
-import { printLine } from "../output.js";
-import { runForeground } from "./daemon.js";
+import { daemonUrl, readDaemonFile } from "../../local";
+import { type CliContext, expectNoArguments } from "../context";
+import { cliSync } from "../errors";
+import { printLine } from "../output";
+import { runForeground } from "./daemon";
 
 export function runUi(context: CliContext) {
   return Effect.gen(function* () {

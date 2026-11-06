@@ -1,6 +1,6 @@
-import type { GraphView } from "loopy/contract";
-import { predicateText, refText, valueText } from "./graph-text.ts";
-import type { SourceRange } from "./view-models.ts";
+import type { GraphView } from "../../../../packages/loopy/src/contract";
+import { predicateText, refText, valueText } from "./graph-text";
+import type { SourceRange } from "./view-models";
 
 type GraphNode = GraphView["nodes"][number];
 

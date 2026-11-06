@@ -1,8 +1,8 @@
 import { Effect, type Schema } from "effect";
-import { encodeBoundary, routes } from "../contract/index.js";
-import type { RuntimeEvent, Store } from "../core/index.js";
-import { ServiceError } from "./error.js";
-import type { Service } from "./service.js";
+import { encodeBoundary, routes } from "../contract";
+import type { RuntimeEvent, Store } from "../core";
+import { ServiceError } from "./error";
+import type { Service } from "./service";
 
 export type EventReader = Pick<
   Store,

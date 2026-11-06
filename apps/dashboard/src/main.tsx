@@ -2,20 +2,20 @@ import "@fontsource-variable/geist";
 import "@fontsource-variable/geist-mono";
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRouter, RouterProvider } from "@tanstack/react-router";
-import { decodeBoundary } from "loopy/contract";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { BackendError, type LoopyBackend } from "./backend/backend.ts";
-import { backendConfigSchema } from "./backend/config.ts";
-import { localHttpBackend } from "./backend/local-http.ts";
-import { AccessGate } from "./components/shell/access-gate.tsx";
+import { decodeBoundary } from "../../../packages/loopy/src/contract";
+import { BackendError, type LoopyBackend } from "./backend/backend";
+import { backendConfigSchema } from "./backend/config";
+import { localHttpBackend } from "./backend/local-http";
+import { AccessGate } from "./components/shell/access-gate";
 import {
   addressToken,
   browserConnection,
   checkAccess,
   closeOnUnauthorized,
-} from "./lib/connection.ts";
-import { routeTree } from "./routeTree.gen.ts";
+} from "./lib/connection";
+import { routeTree } from "./routeTree.gen";
 import "./style.css";
 
 type Session = {
@@ -40,8 +40,8 @@ async function createSession(): Promise<Session> {
 
   if (config.mode === "fake") {
     const [{ fakeBackend }, { demoScript }] = await Promise.all([
-      import("./backend/fake.ts"),
-      import("./backend/demo.ts"),
+      import("./backend/fake"),
+      import("./backend/demo"),
     ]);
 
     return { backend: fakeBackend(demoScript()) };

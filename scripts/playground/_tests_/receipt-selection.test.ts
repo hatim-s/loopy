@@ -2,9 +2,9 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { waitForWorker } from "../readiness.js";
-import { receiptBindingsSchema } from "../receipt-bindings.js";
-import { requireFreshDurableRoot } from "../receipt-selection.js";
+import { waitForWorker } from "../readiness";
+import { receiptBindingsSchema } from "../receipt/bindings";
+import { requireFreshDurableRoot } from "../receipt/selection";
 
 const roots: string[] = [];
 

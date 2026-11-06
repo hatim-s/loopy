@@ -10,18 +10,13 @@ import {
   type Schedule,
   type ScheduleView,
   type ServerEvent,
-} from "loopy/contract";
-import type { EventSubscription, StreamEnd } from "../src/backend/backend.ts";
-import { type EventDraft, fakeBackend } from "../src/backend/fake.ts";
-import { INBOX_QUERY, inboxGroups } from "../src/lib/inbox.ts";
-import { keys } from "../src/lib/keys.ts";
-import type { RunPage } from "../src/lib/queries.ts";
-import {
-  applyBatch,
-  applyScheduleView,
-  applyToSnapshot,
-  followSession,
-} from "../src/lib/stream.ts";
+} from "../../../packages/loopy/src/contract";
+import type { EventSubscription, StreamEnd } from "../src/backend/backend";
+import { type EventDraft, fakeBackend } from "../src/backend/fake";
+import { INBOX_QUERY, inboxGroups } from "../src/lib/inbox";
+import { keys } from "../src/lib/keys";
+import type { RunPage } from "../src/lib/queries";
+import { applyBatch, applyScheduleView, applyToSnapshot, followSession } from "../src/lib/stream";
 
 const AT = "2026-10-17T10:00:00.000Z";
 

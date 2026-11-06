@@ -1,6 +1,6 @@
-import type { RecordSpec } from "./graph.js";
-import type { Json } from "./model.js";
-import { isBoolean, isNumber, isRecord, isString } from "./validation.js";
+import type { RecordSpec } from "./graph";
+import type { Json } from "./model";
+import { isBoolean, isNumber, isRecord, isString } from "./validation";
 
 // BOUNDARY: Record inputs may contain arbitrary external JSON, but not host values.
 function isJson(value: unknown): value is Json {

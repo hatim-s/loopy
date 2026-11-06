@@ -1,9 +1,9 @@
 import { Effect } from "effect";
-import { routes } from "../../contract/index.js";
-import { isTerminalRun } from "../../core/index.js";
-import { request } from "../client.js";
-import { type CliContext, requireTarget } from "../context.js";
-import { printJson, printLine } from "../output.js";
+import { routes } from "../../contract";
+import { isTerminalRun } from "../../core";
+import { request } from "../client";
+import { type CliContext, requireTarget } from "../context";
+import { printJson, printLine } from "../output";
 
 const LOG_PAGE_SIZE = 200;
 

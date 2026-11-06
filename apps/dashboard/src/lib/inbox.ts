@@ -1,5 +1,5 @@
-import type { RunView } from "loopy/contract";
-import type { RunsQuery } from "../backend/backend.ts";
+import type { RunView } from "../../../../packages/loopy/src/contract";
+import type { RunsQuery } from "../backend/backend";
 
 export const INBOX_QUERY = {
   status: "suspended",

@@ -2,9 +2,9 @@ import { chmod } from "node:fs/promises";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
 import { z } from "zod";
-import { atomic, type Config, dashboard, profile, root, sandboxState, state } from "./config.js";
+import { atomic, type Config, dashboard, profile, root, sandboxState, state } from "./config";
 
-import { receiptBindingsSchema } from "./receipt-bindings.js";
+import { receiptBindingsSchema } from "./receipt/bindings";
 
 export const manifestPath = resolve(state, "processes.json");
 

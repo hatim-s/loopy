@@ -14,7 +14,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { z } from "zod";
-import { profile } from "./config.js";
+import { profile } from "./config";
 
 const execFileAsync = promisify(execFile);
 

@@ -3,10 +3,10 @@ import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Effect } from "effect";
 import { type Expression, type Node, parseSync, Visitor } from "oxc-parser";
-import { isString } from "../core/index.js";
-import { diagnostic } from "./diagnostic.js";
-import { type AuthorError, authorSource, type CompilationError, compilerIO } from "./errors.js";
-import type { CompilerDiagnostic } from "./types.js";
+import { isString } from "../core";
+import { diagnostic } from "./diagnostic";
+import { type AuthorError, authorSource, type CompilationError, compilerIO } from "./errors";
+import type { CompilerDiagnostic } from "./types";
 
 export const modulePath = Effect.fn(function* (specifier: string, file: string) {
   const path = specifier.startsWith("file:")

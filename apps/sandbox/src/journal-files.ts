@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import type {
   AttemptRecord,
   ExportRecord,
-} from "../../../packages/loopy/src/contract/sandbox-journal.js";
+} from "../../../packages/loopy/src/contract/sandbox-journal";
 
 export async function syncDirectory(path: string) {
   const directory = await open(path, "r");

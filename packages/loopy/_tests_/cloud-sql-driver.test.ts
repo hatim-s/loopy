@@ -1,8 +1,8 @@
 import { afterEach, expect, test } from "bun:test";
 import { Effect, Schema } from "effect";
-import { nodeIdSchema } from "../src/contract/index.js";
-import type { Store, StoreEffect } from "../src/core/index.js";
-import { EVENT_RETENTION, MemoryStore } from "../src/store/index.js";
+import { nodeIdSchema } from "../src/contract";
+import type { Store, StoreEffect } from "../src/core";
+import { EVENT_RETENTION, MemoryStore } from "../src/store";
 import {
   type SqlDriver,
   SqlRunStore,
@@ -10,12 +10,12 @@ import {
   type SqlStoreOptions,
   type SqlTransactionMode,
   type SqlValue,
-} from "../src/store/portable.js";
-import { BunSqlDriver } from "../src/store/sqlite/bun-driver.js";
-import { applyQuerySchema } from "../src/store/sqlite/query-schema.js";
-import { SCHEMA, WAIT_SCHEMA } from "../src/store/sqlite/store-schema.js";
-import { newRun } from "./fixture.js";
-import { storeContract } from "./store-contract.js";
+} from "../src/store/portable";
+import { BunSqlDriver } from "../src/store/sqlite/bun-driver";
+import { applyQuerySchema } from "../src/store/sqlite/query/schema";
+import { SCHEMA, WAIT_SCHEMA } from "../src/store/sqlite/store-schema";
+import { newRun } from "./fixture";
+import { storeContract } from "./store-contract";
 
 const drivers: BunSqlDriver[] = [];
 

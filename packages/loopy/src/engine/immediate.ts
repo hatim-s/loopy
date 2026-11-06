@@ -1,7 +1,7 @@
-import { type Json, limitLogs, MAX_OUTPUT_BYTES, type Node, outputBytes } from "../core/index.js";
-import { failNode } from "./failure.js";
-import { type Transition, write } from "./node-run.js";
-import { type ResolutionContext, resolve, sameExecution } from "./resolve.js";
+import { type Json, limitLogs, MAX_OUTPUT_BYTES, type Node, outputBytes } from "../core";
+import { failNode } from "./failure";
+import { type Transition, write } from "./node-run";
+import { type ResolutionContext, resolve, sameExecution } from "./resolve";
 
 export function immediate(
   transition: Transition,

@@ -1,4 +1,4 @@
-import { ago, timestamp } from "../lib/format.ts";
+import { ago, timestamp } from "../lib/format";
 
 const SAME_YEAR = new Intl.DateTimeFormat(undefined, {
   month: "short",

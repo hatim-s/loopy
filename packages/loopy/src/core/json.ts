@@ -1,5 +1,5 @@
-import type { Json } from "./model.js";
-import { isBoolean, isNumber, isString } from "./validation.js";
+import type { Json } from "./model";
+import { isBoolean, isNumber, isString } from "./validation";
 
 const MAX_DEPTH = 32;
 

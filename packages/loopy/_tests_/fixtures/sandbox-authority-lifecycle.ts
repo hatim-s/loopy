@@ -1,9 +1,9 @@
 import { rm } from "node:fs/promises";
 import { Effect, Exit, Scope } from "effect";
-import type { AttemptDependencies } from "../../../../apps/sandbox/src/attempt-dependencies.js";
-import { Attempts } from "../../../../apps/sandbox/src/attempts.js";
-import { authorityFixture } from "./sandbox-authority.js";
-import { run } from "./sandbox-run.js";
+import { Attempts } from "../../../../apps/sandbox/src/attempt";
+import type { AttemptDependencies } from "../../../../apps/sandbox/src/attempt/dependencies";
+import { authorityFixture } from "./sandbox-authority";
+import { run } from "./sandbox-run";
 
 const roots: string[] = [];
 

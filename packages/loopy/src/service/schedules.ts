@@ -1,10 +1,10 @@
 import { Effect } from "effect";
-import type { PutScheduleBody, SavedLoopy } from "../contract/index.js";
-import { errorMessage, nextFire, parseCron, type Schedule } from "../core/index.js";
-import { requireDefinition } from "./definition.js";
-import { ServiceError } from "./error.js";
-import { validateDefinitionInput } from "./input.js";
-import type { ServiceOptions } from "./registry.js";
+import type { PutScheduleBody, SavedLoopy } from "../contract";
+import { errorMessage, nextFire, parseCron, type Schedule } from "../core";
+import { requireDefinition } from "./definition";
+import { ServiceError } from "./error";
+import { validateDefinitionInput } from "./input";
+import type { ServiceOptions } from "./registry";
 
 export function makeScheduleOperations(options: ServiceOptions) {
   const scheduleTarget = Effect.fn("schedules.scheduleTarget")(function* (

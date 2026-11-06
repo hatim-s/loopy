@@ -8,8 +8,8 @@ import {
   type OverviewQuery,
   type RunFilter,
   type RunRecord,
-} from "../core/index.js";
-import { StoreRejectedError } from "./operation.js";
+} from "../core";
+import { StoreRejectedError } from "./operation";
 
 export const FEED_SCAN_LIMIT = 2000;
 

@@ -3,12 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
 
-import { type RunRecord, revision } from "../../src/core/index.js";
-import { Registry } from "../../src/local/registry.js";
-import { makeArtifactRegistry } from "../../src/local/save-compiled.js";
-import { type ArtifactRegistry, makeService, RegistryError } from "../../src/service/index.js";
-import { MemoryStore } from "../../src/store/index.js";
-import { compiledBody } from "../compiled-fixture.js";
+import { type RunRecord, revision } from "../../src/core";
+import { Registry } from "../../src/local/registry";
+import { makeArtifactRegistry } from "../../src/local/save-compiled";
+import { type ArtifactRegistry, makeService, RegistryError } from "../../src/service";
+import { MemoryStore } from "../../src/store";
+import { compiledBody } from "../compiled-fixture";
 
 export class SummaryCountsStore extends MemoryStore {
   groupedReads = 0;

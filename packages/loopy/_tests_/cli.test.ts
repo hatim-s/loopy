@@ -2,10 +2,10 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { Effect, Exit, Scope } from "effect";
-import { decodeBoundary, nodeIdSchema } from "../src/contract/index.js";
-import { localDaemon, openRunStore, Registry, readDaemonFile } from "../src/local/index.js";
-import { cli, fixture, object, roots } from "./cli-fixture.js";
-import { newRun } from "./fixture.js";
+import { decodeBoundary, nodeIdSchema } from "../src/contract";
+import { localDaemon, openRunStore, Registry, readDaemonFile } from "../src/local";
+import { cli, fixture, object, roots } from "./cli-fixture";
+import { newRun } from "./fixture";
 
 const daemons: {
   stop(): Promise<void>;

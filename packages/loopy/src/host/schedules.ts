@@ -1,5 +1,5 @@
 import { Cause, Data, Effect } from "effect";
-import { nextFire, parseCron, type RunRecord, type Schedule, type Store } from "../core/index.js";
+import { nextFire, parseCron, type RunRecord, type Schedule, type Store } from "../core";
 
 export class ScheduleRevisionError extends Data.TaggedError("ScheduleRevisionError")<{
   cause: unknown;

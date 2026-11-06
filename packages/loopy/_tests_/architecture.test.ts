@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import ts from "typescript";
 
@@ -97,9 +97,28 @@ function importsOf(file: string): string[] {
   return specifiers;
 }
 
-/** True for `./index`, `./index.js` and `./index.ts` alike. */
-function isBarrel(specifier: string): boolean {
-  return /\/index(\.[jt]s)?$/.test(specifier);
+function resolveImport(file: string, specifier: string): string {
+  const path = resolve(file, "..", specifier);
+
+  const candidates = [
+    path,
+    `${path}.ts`,
+    `${path}.tsx`,
+    join(path, "index.ts"),
+    join(path, "index.tsx"),
+  ];
+
+  const target = candidates.find((candidate) => existsSync(candidate) && /\.tsx?$/.test(candidate));
+
+  if (target === undefined) {
+    throw new Error(`${file} has an unresolved internal import (${specifier}).`);
+  }
+
+  return target;
+}
+
+function isBarrel(file: string): boolean {
+  return LAYERS.some((layer) => file === join(SOURCE, layer, "index.ts"));
 }
 
 test("core, engine and contract exports bundle without host dependencies", async () => {
@@ -142,14 +161,15 @@ test("layers import downward, and only through the target layer's index", () => 
         continue;
       }
 
-      const target = layerOf(resolve(file, "..", specifier));
+      const resolved = resolveImport(file, specifier);
+      const target = layerOf(resolved);
 
       if (target === layer) {
         if (
-          isBarrel(specifier) &&
+          isBarrel(resolved) &&
           !(
             (name === "sdk/graph-host.ts" || name === "sdk/index.ts") &&
-            specifier === "./graph/index.js"
+            resolved === join(SOURCE, "sdk/graph/index.ts")
           )
         ) {
           violations.push(`${name} imports its own barrel (${specifier}).`);
@@ -162,12 +182,12 @@ test("layers import downward, and only through the target layer's index", () => 
         violations.push(`${name} (${layer}) may not import ${target} (${specifier}).`);
       } else if (
         target === "sdk"
-          ? !/\/(?:host|graph-host)\.js$/.test(specifier)
-          : !isBarrel(specifier) &&
-            !(layer === "executor" && specifier === "../local/execution-host.js")
+          ? !["sdk/host.ts", "sdk/graph-host.ts"].includes(relative(SOURCE, resolved))
+          : !isBarrel(resolved) &&
+            !(layer === "executor" && resolved === join(SOURCE, "local/execution-host.ts"))
       ) {
         violations.push(
-          `${name} must import ${target} through ${target === "sdk" ? "sdk/host.js" : `${target}/index.js`} (${specifier}).`,
+          `${name} must import ${target} through ${target === "sdk" ? "sdk/host" : target} (${specifier}).`,
         );
       }
     }
@@ -183,16 +203,15 @@ test("the dashboard reaches the package only through the contract entry", () => 
     const name = relative(DASHBOARD, file);
 
     for (const specifier of importsOf(file)) {
-      if (
-        (specifier === "loopy" || specifier.startsWith("loopy/")) &&
-        specifier !== "loopy/contract"
-      ) {
-        violations.push(`${name} imports an entry other than loopy/contract (${specifier}).`);
-      } else if (
-        specifier.startsWith(".") &&
-        relative(DASHBOARD, resolve(file, "..", specifier)).startsWith("..")
-      ) {
-        violations.push(`${name} reaches outside the app (${specifier}).`);
+      if (specifier === "loopy" || specifier.startsWith("loopy/")) {
+        violations.push(`${name} imports the package through its alias (${specifier}).`);
+      } else if (specifier.startsWith(".") && !/\.(?:css|svg|png)$/.test(specifier)) {
+        const target = resolveImport(file, specifier);
+        const outsideApp = relative(DASHBOARD, target).startsWith("..");
+
+        if (outsideApp && target !== join(SOURCE, "contract/index.ts")) {
+          violations.push(`${name} reaches outside the contract entry (${specifier}).`);
+        }
       }
     }
   }

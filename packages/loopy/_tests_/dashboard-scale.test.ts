@@ -3,9 +3,9 @@ import { expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { decodeBoundary, executionKeyString, routes } from "../src/contract/index.js";
-import { RUN_PREVIEW_COLUMNS } from "../src/store/sqlite/query-runs.js";
-import { largeMapFixture, manyRunsFixture } from "./dashboard-scale-fixture.js";
+import { decodeBoundary, executionKeyString, routes } from "../src/contract";
+import { RUN_PREVIEW_COLUMNS } from "../src/store/sqlite/query/runs";
+import { largeMapFixture, manyRunsFixture } from "./dashboard-scale-fixture";
 
 function bytes<T>(value: T) {
   return new TextEncoder().encode(JSON.stringify(value)).byteLength;

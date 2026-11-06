@@ -1,6 +1,6 @@
 import { type FormEvent, type ReactNode, useEffect, useId, useState } from "react";
-import { type Access, addressToken, useAccess } from "../../lib/connection.ts";
-import { BrandMark } from "../brand-mark.tsx";
+import { type Access, addressToken, useAccess } from "../../lib/connection";
+import { BrandMark } from "../brand-mark";
 
 type Closed = Exclude<Access, "checking" | "open">;
 

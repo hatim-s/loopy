@@ -1,4 +1,4 @@
-import { descriptorCommand } from "../descriptor.js";
+import { descriptorCommand } from "../descriptor";
 
 export const archive = {
   tar: descriptorCommand({

@@ -1,8 +1,8 @@
-import { type CommandResult, command, sh } from "loopy";
-import { readOptions } from "../options.ts";
-import { object, parse, string } from "./json-edit.ts";
-import { parseCommit, parsePullRequests, selectPullRequest } from "./publication.ts";
-import type { Files } from "./sync.ts";
+import { type CommandResult, command, sh } from "../../packages/loopy/src/sdk";
+import { readOptions } from "../options";
+import { object, parse, string } from "./json-edit";
+import { parseCommit, parsePullRequests, selectPullRequest } from "./publication";
+import type { Files } from "./sync";
 
 export function remoteSha(repo: string, ref: string) {
   return command(

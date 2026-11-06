@@ -8,8 +8,8 @@ import {
   routes,
   type SavedLoopy,
   type SourceArtifact,
-} from "../src/contract/index.js";
-import { revision } from "../src/core/index.js";
+} from "../src/contract";
+import { revision } from "../src/core";
 import {
   type ArtifactRegistry,
   apiRoutes,
@@ -18,10 +18,10 @@ import {
   makeService,
   RegistryError,
   ServiceError,
-} from "../src/service/index.js";
-import { SqlRunStore } from "../src/store/portable.js";
-import { BunSqlDriver } from "../src/store/sqlite/bun-driver.js";
-import { compiledBody } from "./compiled-fixture.js";
+} from "../src/service";
+import { SqlRunStore } from "../src/store/portable";
+import { BunSqlDriver } from "../src/store/sqlite/bun-driver";
+import { compiledBody } from "./compiled-fixture";
 
 const drivers: BunSqlDriver[] = [];
 

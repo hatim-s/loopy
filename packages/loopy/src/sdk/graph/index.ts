@@ -1,7 +1,7 @@
-import { loopy as loopyImpl } from "./loopy.js";
-import { archive as archiveImpl } from "./nodes/archive.js";
-import { code as codeImpl } from "./nodes/code.js";
-import { defineCommand as defineCommandImpl, sh as shImpl } from "./nodes/command.js";
+import { loopy as loopyImpl } from "./loopy";
+import { archive as archiveImpl } from "./nodes/archive";
+import { code as codeImpl } from "./nodes/code";
+import { defineCommand as defineCommandImpl, sh as shImpl } from "./nodes/command";
 import {
   branch as branchImpl,
   fail as failImpl,
@@ -10,20 +10,20 @@ import {
   parallel as parallelImpl,
   rescue as rescueImpl,
   switch_ as switch_Impl,
-} from "./nodes/control.js";
-import { fs as fsImpl } from "./nodes/fs.js";
-import { git as gitImpl } from "./nodes/git.js";
-import { net as netImpl } from "./nodes/net.js";
-import { subgraph as subgraphImpl } from "./nodes/subgraph.js";
-import { text as textImpl } from "./nodes/text.js";
+} from "./nodes/control";
+import { fs as fsImpl } from "./nodes/fs";
+import { git as gitImpl } from "./nodes/git";
+import { net as netImpl } from "./nodes/net";
+import { subgraph as subgraphImpl } from "./nodes/subgraph";
+import { text as textImpl } from "./nodes/text";
 import {
   format as formatImpl,
   log as logImpl,
   now as nowImpl,
   random as randomImpl,
   uuid as uuidImpl,
-} from "./nodes/values.js";
-import { sleep as sleepImpl, wait as waitImpl } from "./nodes/wait.js";
+} from "./nodes/values";
+import { sleep as sleepImpl, wait as waitImpl } from "./nodes/wait";
 import {
   and as andImpl,
   eq as eqImpl,
@@ -38,7 +38,7 @@ import {
   not as notImpl,
   or as orImpl,
   size as sizeImpl,
-} from "./predicates.js";
+} from "./predicates";
 
 const exports = {
   loopy: loopyImpl,
@@ -120,11 +120,11 @@ export const {
   size,
 } = exports;
 
-export type { Ref } from "./ref.js";
+export type { Ref } from "./ref";
 
-export type { Infer } from "./types.js";
+export type { Infer } from "./types";
 
-export { GraphBuildError } from "./validate.js";
+export { GraphBuildError } from "./validate";
 
 type SdkFunction = (...args: never[]) => void;
 

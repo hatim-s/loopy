@@ -1,6 +1,6 @@
 import { Cause, Data, Effect } from "effect";
-import { errorResponse } from "../../../packages/loopy/src/service/index.js";
-import { CloudError, platform } from "./operation.js";
+import { errorResponse } from "../../../packages/loopy/src/service";
+import { CloudError, platform } from "./operation";
 
 export const MAX_REQUEST_BYTES = 24 * 1024 * 1024;
 

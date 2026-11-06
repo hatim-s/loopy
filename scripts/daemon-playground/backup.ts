@@ -1,8 +1,8 @@
 import { join } from "node:path";
-import { decodeBoundary, type RunView } from "../../packages/loopy/src/contract/index.ts";
-import { readDaemonFile } from "../../packages/loopy/src/local/index.ts";
-import { backupSchema } from "./backup-schema.ts";
-import { environment, home, state } from "./config.ts";
+import { decodeBoundary, type RunView } from "../../packages/loopy/src/contract";
+import { readDaemonFile } from "../../packages/loopy/src/local";
+import { backupSchema } from "./backup-schema";
+import { environment, home, state } from "./config";
 
 export async function backupClosedDatabase(
   apiRuns: Pick<RunView, "id" | "status">[] | null,

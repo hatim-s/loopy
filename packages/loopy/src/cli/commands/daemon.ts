@@ -7,12 +7,12 @@ import {
   localDaemon,
   readDaemonFile,
   uninstallDaemon,
-} from "../../local/index.js";
-import { type CliContext, requireTarget } from "../context.js";
-import { CliError, cliIO, cliSync } from "../errors.js";
-import { printJson, printLine, report } from "../output.js";
-import { onTermination } from "../signals.js";
-import { withRunStore } from "../store.js";
+} from "../../local";
+import { type CliContext, requireTarget } from "../context";
+import { CliError, cliIO, cliSync } from "../errors";
+import { printJson, printLine, report } from "../output";
+import { onTermination } from "../signals";
+import { withRunStore } from "../store";
 
 export const runDaemon = Effect.fn(function* (context: CliContext) {
   const action = yield* requireTarget(context, "Daemon action");

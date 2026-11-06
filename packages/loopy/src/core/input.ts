@@ -1,7 +1,7 @@
-import { isFieldValue } from "./field-value.js";
-import type { Graph, InputValidation, RecordSpec } from "./graph.js";
-import type { Json } from "./model.js";
-import { isNumber, isRecord, requireOneOf, requireRecord } from "./validation.js";
+import { isFieldValue } from "./field-value";
+import type { Graph, InputValidation, RecordSpec } from "./graph";
+import type { Json } from "./model";
+import { isNumber, isRecord, requireOneOf, requireRecord } from "./validation";
 
 // BOUNDARY: JavaScript builders can supply untyped validation options.
 export function parseInputValidation(value: unknown, fields: RecordSpec) {

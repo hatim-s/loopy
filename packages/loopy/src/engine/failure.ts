@@ -1,6 +1,6 @@
-import type { ExecutionError, ExecutionKey, Node } from "../core/index.js";
-import { type Transition, write } from "./node-run.js";
-import { sameExecution } from "./resolve.js";
+import type { ExecutionError, ExecutionKey, Node } from "../core";
+import { type Transition, write } from "./node-run";
+import { sameExecution } from "./resolve";
 
 export function failNode(
   transition: Transition,

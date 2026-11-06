@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import type { Infer } from "loopy/graph";
+import type { Infer } from "../../../../../src/sdk/graph";
 
 export type PlaygroundInput = Infer<{
   kind: "record";

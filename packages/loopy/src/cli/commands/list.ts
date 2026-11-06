@@ -1,8 +1,8 @@
 import { Effect } from "effect";
-import { routes } from "../../contract/index.js";
-import { request } from "../client.js";
-import { type CliContext, expectNoArguments } from "../context.js";
-import { printJson } from "../output.js";
+import { routes } from "../../contract";
+import { request } from "../client";
+import { type CliContext, expectNoArguments } from "../context";
+import { printJson } from "../output";
 
 export function runList(context: CliContext) {
   return Effect.gen(function* () {

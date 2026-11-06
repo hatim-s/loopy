@@ -1,9 +1,9 @@
-import { git as runtime } from "../../shell/git.js";
-import { defineCommand } from "./command.js";
+import { git as runtime } from "../../shell/git";
+import { defineCommand } from "./command";
 
 export const git = {
   status: defineCommand(
-    { ...runtime.status.descriptor, parse: "./parsers/git-status.ts" },
+    { ...runtime.status.descriptor, parse: "./parsers/git/status.ts" },
     {
       kind: "record",
       fields: {
@@ -20,23 +20,23 @@ export const git = {
     },
   ),
   diff: defineCommand(
-    { ...runtime.diff.descriptor, parse: "./parsers/git-diff.ts" },
+    { ...runtime.diff.descriptor, parse: "./parsers/git/diff.ts" },
     { kind: "value", type: "json[]" },
   ),
   diffNames: defineCommand(
-    { ...runtime.diffNames.descriptor, parse: "./parsers/git-diff-names.ts" },
+    { ...runtime.diffNames.descriptor, parse: "./parsers/git/diff-names.ts" },
     { kind: "value", type: "json[]" },
   ),
   log: defineCommand(
-    { ...runtime.log.descriptor, parse: "./parsers/git-log.ts" },
+    { ...runtime.log.descriptor, parse: "./parsers/git/log.ts" },
     { kind: "value", type: "json[]" },
   ),
   revParse: defineCommand(
-    { ...runtime.revParse.descriptor, parse: "./parsers/git-rev-parse.ts" },
+    { ...runtime.revParse.descriptor, parse: "./parsers/git/rev-parse.ts" },
     { kind: "value", type: "string" },
   ),
   lsFiles: defineCommand(
-    { ...runtime.lsFiles.descriptor, parse: "./parsers/git-ls-files.ts" },
+    { ...runtime.lsFiles.descriptor, parse: "./parsers/git/ls-files.ts" },
     { kind: "value", type: "string[]" },
   ),
   show: defineCommand(runtime.show.descriptor),
@@ -48,21 +48,21 @@ export const git = {
   checkout: defineCommand(runtime.checkout.descriptor),
   switch: defineCommand(runtime.switch.descriptor),
   branch: defineCommand(
-    { ...runtime.branch.descriptor, parse: "./parsers/git-branch.ts" },
+    { ...runtime.branch.descriptor, parse: "./parsers/git/branch.ts" },
     { kind: "value", type: "json[]" },
   ),
   remote: defineCommand(
-    { ...runtime.remote.descriptor, parse: "./parsers/git-remote.ts" },
+    { ...runtime.remote.descriptor, parse: "./parsers/git/remote.ts" },
     { kind: "value", type: "json[]" },
   ),
   tag: defineCommand(
-    { ...runtime.tag.descriptor, parse: "./parsers/git-tag.ts" },
+    { ...runtime.tag.descriptor, parse: "./parsers/git/tag.ts" },
     { kind: "value", type: "json[]" },
   ),
   worktree: {
     add: defineCommand(runtime.worktree.add.descriptor),
     list: defineCommand(
-      { ...runtime.worktree.list.descriptor, parse: "./parsers/git-worktree-list.ts" },
+      { ...runtime.worktree.list.descriptor, parse: "./parsers/git/worktree-list.ts" },
       { kind: "value", type: "json[]" },
     ),
     remove: defineCommand(runtime.worktree.remove.descriptor),
@@ -71,7 +71,7 @@ export const git = {
     push: defineCommand(runtime.stash.push.descriptor),
     pop: defineCommand(runtime.stash.pop.descriptor),
     list: defineCommand(
-      { ...runtime.stash.list.descriptor, parse: "./parsers/git-stash-list.ts" },
+      { ...runtime.stash.list.descriptor, parse: "./parsers/git/stash-list.ts" },
       { kind: "value", type: "json[]" },
     ),
   },

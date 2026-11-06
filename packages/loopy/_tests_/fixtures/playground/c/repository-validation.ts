@@ -1,4 +1,4 @@
-import { code, log, loopy, parallel } from "loopy/graph";
+import { code, log, loopy, parallel } from "../../../../src/sdk/graph";
 
 export default loopy("playground-c-repository-validation", {
   input: { batch: "string", ordinal: "number", fail: "boolean", items: "number[]" },

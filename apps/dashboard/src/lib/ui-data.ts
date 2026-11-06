@@ -1,5 +1,6 @@
 import { skipToken, type UseQueryResult, useQuery } from "@tanstack/react-query";
 import type { Schema } from "effect";
+import { useEffect, useMemo, useState } from "react";
 import {
   executionKeyString,
   type GraphRevisionView,
@@ -10,10 +11,9 @@ import {
   type ScheduleOverviewView,
   type ScheduleView,
   type ServerEvent,
-} from "loopy/contract";
-import { useEffect, useMemo, useState } from "react";
-import { useBackend } from "../router-context.ts";
-import { keys } from "./keys.ts";
+} from "../../../../packages/loopy/src/contract";
+import { useBackend } from "../router-context";
+import { keys } from "./keys";
 import {
   daemonQuery,
   eventQuery,
@@ -32,7 +32,7 @@ import {
   schedulesQuery,
   scopesQuery,
   workspaceLoopiesQuery,
-} from "./queries.ts";
+} from "./queries";
 import type {
   DaemonDetail,
   EventFilters,
@@ -55,7 +55,7 @@ import type {
   ScopeSummary,
   ScopeTuple,
   SourceView,
-} from "./view-models.ts";
+} from "./view-models";
 
 export const PERIOD_MS = {
   "1h": 3_600_000,

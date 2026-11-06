@@ -19,11 +19,11 @@ import {
   type RunFilter,
   type RunRecord,
   type Store,
-} from "../../src/core/index.js";
-import { SqlRunStore } from "../../src/store/portable.js";
-import { BunSqlDriver } from "../../src/store/sqlite/bun-driver.js";
-import type { SqlValue } from "../../src/store/sqlite/driver.js";
-import { makeSqliteRunStore } from "../../src/store/sqlite/store.js";
+} from "../../src/core";
+import { SqlRunStore } from "../../src/store/portable";
+import { BunSqlDriver } from "../../src/store/sqlite/bun-driver";
+import type { SqlValue } from "../../src/store/sqlite/driver";
+import { makeSqliteRunStore } from "../../src/store/sqlite/store";
 
 const root = resolve(import.meta.dir, "../../../..");
 

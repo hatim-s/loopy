@@ -2,11 +2,11 @@ import { expect, test } from "bun:test";
 import type { Cause } from "effect";
 import { Effect } from "effect";
 import { TestClock } from "effect/testing";
-import { type RunRecord, type Schedule } from "../src/core/index.js";
-import { makeDaemon, PreparationError, ScheduleRevisionError } from "../src/host/index.js";
-import { loopy } from "../src/sdk/graph/index.js";
-import { MemoryStore } from "../src/store/index.js";
-import { FakeExecutor, newRun } from "./fixture.js";
+import { type RunRecord, type Schedule } from "../src/core";
+import { makeDaemon, PreparationError, ScheduleRevisionError } from "../src/host";
+import { loopy } from "../src/sdk/graph";
+import { MemoryStore } from "../src/store";
+import { FakeExecutor, newRun } from "./fixture";
 
 function schedule(overrides: Partial<Schedule> = {}): Schedule {
   return {

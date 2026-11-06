@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import { type Input, root, writeResult } from "./repository.ts";
+import { type Input, root, writeResult } from "./repository";
 
 export default ({
   builds,

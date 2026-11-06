@@ -1,27 +1,27 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Schema } from "effect";
+import { type ReactNode, useEffect, useMemo } from "react";
 import {
   executionKeySchema,
   type GraphRevisionView,
   type NodeRunView,
   type RunSnapshotView,
-} from "loopy/contract";
-import { type ReactNode, useEffect, useMemo } from "react";
-import { SourcePane } from "../components/code/source-pane.tsx";
-import { ErrorBanner } from "../components/error-banner.tsx";
-import { GraphPane } from "../components/graph/graph-pane.tsx";
-import { MapPicker, type MapPlace, NodePanel } from "../components/run/node-panel.tsx";
-import { HookHistory, RunGuide } from "../components/run/run-guide.tsx";
-import { RunHeader } from "../components/run/run-header.tsx";
-import { RunTimeline } from "../components/run/run-timeline.tsx";
-import { Icon } from "../components/ui/icon.tsx";
-import { Load } from "../components/ui/load.tsx";
-import { Segmented } from "../components/ui/segmented.tsx";
-import { useClock } from "../lib/clock.ts";
-import { type GraphModel, graphModel } from "../lib/graph.ts";
-import { layoutGraph } from "../lib/graph-layout.ts";
-import { firstInside, owningMap, perItemNodes, runMarks } from "../lib/run-marks.ts";
-import { searchField } from "../lib/search.ts";
+} from "../../../../packages/loopy/src/contract";
+import { SourcePane } from "../components/code/source-pane";
+import { ErrorBanner } from "../components/error-banner";
+import { GraphPane } from "../components/graph/pane";
+import { HookHistory, RunGuide } from "../components/run/guide";
+import { RunHeader } from "../components/run/header";
+import { MapPicker, type MapPlace, NodePanel } from "../components/run/node-panel";
+import { RunTimeline } from "../components/run/timeline";
+import { Icon } from "../components/ui/icon";
+import { Load } from "../components/ui/load";
+import { Segmented } from "../components/ui/segmented";
+import { useClock } from "../lib/clock";
+import { type GraphModel, graphModel } from "../lib/graph";
+import { layoutGraph } from "../lib/graph-layout";
+import { firstInside, owningMap, perItemNodes, runMarks } from "../lib/run-marks";
+import { searchField } from "../lib/search";
 import {
   useExecutions,
   useLoopyGraph,
@@ -29,8 +29,8 @@ import {
   useRunSnapshot,
   useRunSource,
   useScopes,
-} from "../lib/ui-data.ts";
-import type { ScopeSummary, ScopeTuple } from "../lib/view-models.ts";
+} from "../lib/ui-data";
+import type { ScopeSummary, ScopeTuple } from "../lib/view-models";
 
 const VIEWS = ["code", "split", "graph"] as const;
 

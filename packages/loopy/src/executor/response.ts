@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { EXECUTOR_OPERATIONS, type ExecutorError, errorMessage } from "../core/index.js";
+import { EXECUTOR_OPERATIONS, type ExecutorError, errorMessage } from "../core";
 
 /** Only the trusted worker writes this bounded stdout record. Author output is captured separately. */
 export const workerFailureSchema = Schema.Struct({

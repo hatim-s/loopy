@@ -11,14 +11,14 @@ import {
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { Effect, Schema } from "effect";
-import { executionKeySchema, sandboxExecutionResultSchema } from "../contract/index.js";
+import { executionKeySchema, sandboxExecutionResultSchema } from "../contract";
 import {
   type ExecutionKey,
   type ExecutionResult,
   ExecutorError,
   errnoCode,
   executionKeyString,
-} from "../core/index.js";
+} from "../core";
 
 export const filesystemReceiptsDescriptorSchema = Schema.Struct({
   kind: Schema.Literal("filesystem"),

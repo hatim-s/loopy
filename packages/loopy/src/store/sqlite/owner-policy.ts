@@ -1,4 +1,4 @@
-import type { RunRecord } from "../../core/index.js";
+import type { RunRecord } from "../../core";
 
 type OwnerIdentity = Pick<NonNullable<RunRecord["owner"]>, "pid" | "host">;
 

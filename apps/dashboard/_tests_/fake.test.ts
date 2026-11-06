@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { fakeBackend } from "../src/backend/fake.ts";
+import { fakeBackend } from "../src/backend/fake";
 
 test("an undeclared schedule can be created from the PUT body on an empty page", async () => {
   const backend = fakeBackend({

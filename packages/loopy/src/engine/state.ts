@@ -6,7 +6,7 @@ import type {
   Json,
   NodeRun,
   RunOutcome,
-} from "../core/index.js";
+} from "../core";
 
 export type EngineState = {
   runId: string;

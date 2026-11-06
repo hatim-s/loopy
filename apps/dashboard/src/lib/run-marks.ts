@@ -1,8 +1,8 @@
-import type { GraphView, NodeRunView } from "loopy/contract";
-import type { NodeMark } from "../components/code/code-view.tsx";
-import { elapsed } from "./format.ts";
-import type { GraphModel, GraphNodeModel } from "./graph.ts";
-import type { ScopeSummary } from "./view-models.ts";
+import type { GraphView, NodeRunView } from "../../../../packages/loopy/src/contract";
+import type { NodeMark } from "../components/code/code-view";
+import { elapsed } from "./format";
+import type { GraphModel, GraphNodeModel } from "./graph";
+import type { ScopeSummary } from "./view-models";
 
 type GraphNode = GraphView["nodes"][number];
 

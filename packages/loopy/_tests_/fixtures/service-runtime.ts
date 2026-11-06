@@ -1,7 +1,7 @@
 import { afterEach } from "bun:test";
 import { Clock, Effect, Exit, Scope } from "effect";
-import { type DaemonOptions, makeDaemon } from "../../src/host/index.js";
-import { makeSqliteRunStore, openRunStore } from "../../src/store/index.js";
+import { type DaemonOptions, makeDaemon } from "../../src/host";
+import { makeSqliteRunStore, openRunStore } from "../../src/store";
 
 const scopes: Scope.Closeable[] = [];
 

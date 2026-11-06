@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
-import type { Executor } from "../src/core/index.js";
-import { makeDaemon } from "../src/host/index.js";
-import { loopy, sh } from "../src/sdk/graph/index.js";
-import { MemoryStore } from "../src/store/index.js";
-import { newRun } from "./fixture.js";
+import type { Executor } from "../src/core";
+import { makeDaemon } from "../src/host";
+import { loopy, sh } from "../src/sdk/graph";
+import { MemoryStore } from "../src/store";
+import { newRun } from "./fixture";
 
 test("six runs respect concurrency two across overlapping ticks", async () => {
   await Effect.runPromise(

@@ -1,12 +1,12 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { Effect, Layer } from "effect";
-import { StoreService } from "../../core/index.js";
-import { storageOperation } from "../operation.js";
-import { SqlRunStore } from "../portable.js";
-import { BunSqlDriver } from "./bun-driver.js";
-import { localOwnerPolicy } from "./local-owner.js";
-import { initializeLocalSchema } from "./local-schema.js";
+import { StoreService } from "../../core";
+import { storageOperation } from "../operation";
+import { SqlRunStore } from "../portable";
+import { BunSqlDriver } from "./bun-driver";
+import { localOwnerPolicy } from "./local-owner";
+import { initializeLocalSchema } from "./local-schema";
 
 class LocalSqlStore extends SqlRunStore {
   constructor(file: string, now: () => number = Date.now, options: { leaseMs?: number } = {}) {

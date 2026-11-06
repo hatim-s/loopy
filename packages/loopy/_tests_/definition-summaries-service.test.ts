@@ -7,10 +7,10 @@ import {
   definitionSummary,
   definitionSummarySchema,
   routes,
-} from "../src/contract/index.js";
-import { makeLocalService } from "../src/local/service.js";
+} from "../src/contract";
+import { makeLocalService } from "../src/local/service";
 
-import { summaryServiceFixture } from "./fixtures/summary-service.js";
+import { summaryServiceFixture } from "./fixtures/summary-service";
 
 const cleanups: (() => void | Promise<void>)[] = [];
 

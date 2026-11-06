@@ -1,8 +1,8 @@
 import { basename } from "node:path";
 import { Schema } from "effect";
-import { type SourceArtifact, sourceArtifactSchema } from "../contract/index.js";
-import type { Graph } from "../core/index.js";
-import type { AuthorModule } from "./types.js";
+import { type SourceArtifact, sourceArtifactSchema } from "../contract";
+import type { Graph } from "../core";
+import type { AuthorModule } from "./types";
 
 export function captureSource(
   graph: Graph,

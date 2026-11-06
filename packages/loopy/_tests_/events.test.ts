@@ -6,9 +6,9 @@ import {
   runView,
   serverEvent,
   serverEventSchema,
-} from "../src/contract/index.js";
-import { MemoryStore } from "../src/store/index.js";
-import { newRun } from "./fixture.js";
+} from "../src/contract";
+import { MemoryStore } from "../src/store";
+import { newRun } from "./fixture";
 
 test("node and run outbox events publish one isolated transaction and parse over SSE", async () => {
   const store = new MemoryStore();

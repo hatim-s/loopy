@@ -1,15 +1,15 @@
 import { Cause, Effect, Exit } from "effect";
-import { decodeBoundary, scheduleSchema } from "../../../packages/loopy/src/contract/index.js";
+import { decodeBoundary, scheduleSchema } from "../../../packages/loopy/src/contract";
 import {
   errorMessage,
   nextFire,
   parseCron,
   validateGraphInput,
-} from "../../../packages/loopy/src/core/index.js";
-import type { SqlRunStore } from "../../../packages/loopy/src/store/portable.js";
-import type { R2ArtifactRegistry } from "./artifacts.js";
-import { CloudError, cloudSync } from "./operation.js";
-import type { SchedulerStorage } from "./scheduler.js";
+} from "../../../packages/loopy/src/core";
+import type { SqlRunStore } from "../../../packages/loopy/src/store/portable";
+import type { R2ArtifactRegistry } from "./artifacts";
+import { CloudError, cloudSync } from "./operation";
+import type { SchedulerStorage } from "./scheduler";
 
 export class WorkspaceSchedules {
   constructor(

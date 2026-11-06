@@ -7,10 +7,10 @@ import {
   type RunView,
   type ScheduleView,
   type ServerEvent,
-} from "loopy/contract";
-import type { LoopyBackend, RunsQuery, StreamState } from "../backend/backend.ts";
-import { keys } from "./keys.ts";
-import type { RunPage } from "./queries.ts";
+} from "../../../../packages/loopy/src/contract";
+import type { LoopyBackend, RunsQuery, StreamState } from "../backend/backend";
+import { keys } from "./keys";
+import type { RunPage } from "./queries";
 
 export const SNAPSHOT_RECORD_LIMIT = 200;
 

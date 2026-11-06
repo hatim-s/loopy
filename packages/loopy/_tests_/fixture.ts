@@ -5,7 +5,7 @@ import {
   type Executor,
   ExecutorError,
   type RunRecord,
-} from "../src/core/index.js";
+} from "../src/core";
 
 export class FakeExecutor implements Executor {
   calls: ExecutionSpec[] = [];

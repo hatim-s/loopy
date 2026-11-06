@@ -1,6 +1,6 @@
-import { archive, fs, git, net, text } from "./graph/index.js";
+import { archive, fs, git, net, text } from "./graph";
 
-export { sdkCalls } from "./graph/index.js";
+export { sdkCalls } from "./graph";
 
 type Descriptor = { key?: string; namespace?: string; name?: string; parse?: string };
 

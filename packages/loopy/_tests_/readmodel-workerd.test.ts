@@ -2,14 +2,9 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { resolve } from "node:path";
 import { Schema } from "effect";
 import type { Miniflare } from "miniflare";
-import {
-  decodeBoundary,
-  routes,
-  runStatusSchema,
-  statusCountsSchema,
-} from "../src/contract/index.js";
-import { checkCountHistory, checkScopePages } from "./fixtures/readmodel-assertions.js";
-import { probeRuntime } from "./fixtures/workerd-probe.js";
+import { decodeBoundary, routes, runStatusSchema, statusCountsSchema } from "../src/contract";
+import { checkCountHistory, checkScopePages } from "./fixtures/readmodel-assertions";
+import { probeRuntime } from "./fixtures/workerd-probe";
 
 let runtime: Miniflare;
 

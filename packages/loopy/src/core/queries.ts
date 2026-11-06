@@ -1,5 +1,5 @@
 import type { Effect } from "effect";
-import type { ExecutionKey, NodeRun, NodeRunStatus } from "./graph.js";
+import type { ExecutionKey, NodeRun, NodeRunStatus } from "./graph";
 import type {
   HookRecord,
   LogLevel,
@@ -9,8 +9,8 @@ import type {
   RunStatus,
   RuntimeEvent,
   Schedule,
-} from "./model.js";
-import type { StorageError } from "./store.js";
+} from "./model";
+import type { StorageError } from "./store";
 
 export type RunFilter = {
   slug?: string;

@@ -2,16 +2,16 @@ import { afterEach, expect, test } from "bun:test";
 import { join } from "node:path";
 import { QueryClient } from "@tanstack/react-query";
 import { Effect, Exit, Scope } from "effect";
-import { executionKeyString, type ScheduleView } from "loopy/contract";
-import { startServer } from "../../../packages/loopy/src/local/server/start-server.ts";
-import { localHttpBackend } from "../src/backend/local-http.ts";
-import { graphModel } from "../src/lib/graph.ts";
-import { keys } from "../src/lib/keys.ts";
-import { toggleSchedule } from "../src/lib/mutations.ts";
-import { workspaceLoopiesQuery } from "../src/lib/queries.ts";
-import { runMarks } from "../src/lib/run-marks.ts";
-import { applyScheduleView, removeScheduleView } from "../src/lib/stream.ts";
-import { reviewDataFixture } from "./review-data-fixture.ts";
+import { executionKeyString, type ScheduleView } from "../../../packages/loopy/src/contract";
+import { startServer } from "../../../packages/loopy/src/local/server/start-server";
+import { localHttpBackend } from "../src/backend/local-http";
+import { graphModel } from "../src/lib/graph";
+import { keys } from "../src/lib/keys";
+import { toggleSchedule } from "../src/lib/mutations";
+import { workspaceLoopiesQuery } from "../src/lib/queries";
+import { runMarks } from "../src/lib/run-marks";
+import { applyScheduleView, removeScheduleView } from "../src/lib/stream";
+import { reviewDataFixture } from "./review-data-fixture";
 
 const cleanups: (() => void | Promise<void>)[] = [];
 

@@ -5,9 +5,9 @@ import {
   type SandboxAttemptRequest,
   sandboxArtifactSchema,
   sandboxReceiptSchema,
-} from "../../src/contract/index.js";
-import { type Bridge, type DockerResources, input } from "./architecture-docker-resources.js";
-import { bounded, type DockerRuntime, eventually } from "./architecture-docker-runtime.js";
+} from "../../src/contract";
+import { type Bridge, type DockerResources, input } from "./architecture-docker-resources";
+import { bounded, type DockerRuntime, eventually } from "./architecture-docker-runtime";
 
 export function client(service: Bridge, owned: DockerResources) {
   const headers = { authorization: `Bearer ${owned.config.token}` };

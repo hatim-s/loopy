@@ -7,9 +7,9 @@ import {
   type NodeRunView,
   type RunSnapshotView,
   type RunView,
-} from "loopy/contract";
-import { HELLO, RELEASE, REVIEW, TRIAGE_V1, TRIAGE_V2 } from "./demo-graphs.ts";
-import { base, type EventDraft, type FakeScript } from "./fake.ts";
+} from "../../../../packages/loopy/src/contract";
+import { HELLO, RELEASE, REVIEW, TRIAGE_V1, TRIAGE_V2 } from "./demo-graphs";
+import { base, type EventDraft, type FakeScript } from "./fake";
 
 const minutes = (count: number) => new Date(Date.now() + count * 60_000).toISOString();
 

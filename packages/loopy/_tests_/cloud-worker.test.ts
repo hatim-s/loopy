@@ -3,11 +3,11 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Schema } from "effect";
 import { Miniflare } from "miniflare";
-import { decodeBoundary, encodeRunCursor, jsonSchema, routes } from "../src/contract/index.js";
-import { revision } from "../src/core/index.js";
-import { log, loopy, wait } from "../src/sdk/graph/index.js";
-import { waitRecordSchema } from "../src/store/wait-schema.js";
-import { compiledBody } from "./compiled-fixture.js";
+import { decodeBoundary, encodeRunCursor, jsonSchema, routes } from "../src/contract";
+import { revision } from "../src/core";
+import { log, loopy, wait } from "../src/sdk/graph";
+import { waitRecordSchema } from "../src/store/wait-schema";
+import { compiledBody } from "./compiled-fixture";
 
 let runtime: Miniflare;
 

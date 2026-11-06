@@ -10,11 +10,11 @@ import {
   errorMessage,
   type Json,
   limitLogs,
-} from "../core/index.js";
-import { executeLocalCommand, spawnCaptured, withBundleSandbox } from "../local/execution-host.js";
-import { type ExecutionOptions, type PreparedExecution, prepareExecution } from "./prepare.js";
-import { bundleResult } from "./protocol.js";
-import type { FilesystemReceipts } from "./receipts.js";
+} from "../core";
+import { executeLocalCommand, spawnCaptured, withBundleSandbox } from "../local/execution-host";
+import { type ExecutionOptions, type PreparedExecution, prepareExecution } from "./prepare";
+import { bundleResult } from "./protocol";
+import type { FilesystemReceipts } from "./receipts";
 
 type Options = ExecutionOptions & { receipts: FilesystemReceipts };
 

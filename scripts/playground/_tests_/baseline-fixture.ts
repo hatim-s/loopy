@@ -1,6 +1,6 @@
 import { Schema } from "effect";
-import { createMeasure } from "../metrics-request.js";
-import type { Sample } from "../metrics-statistics.js";
+import { createMeasure } from "../metrics/request";
+import type { Sample } from "../metrics/statistics";
 
 export const expectedEndpoints = [
   "runs.latest",

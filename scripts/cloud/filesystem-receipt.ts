@@ -1,6 +1,6 @@
 import { Effect } from "effect";
-import { FilesystemAuthority } from "../../apps/sandbox/src/filesystem-authority.js";
-import { FilesystemResults } from "../../apps/sandbox/src/immutable-results.js";
+import { FilesystemAuthority } from "../../apps/sandbox/src/filesystem/authority";
+import { FilesystemResults } from "../../apps/sandbox/src/immutable-results";
 
 /** Read retained fixture state without opening a writer session or changing its format. */
 export function filesystemReceipt(root: string, id: string) {

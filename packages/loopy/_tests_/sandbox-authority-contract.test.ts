@@ -2,13 +2,13 @@ import { afterEach, expect, test } from "bun:test";
 import { readdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Result, Schema } from "effect";
-import { FilesystemAuthority } from "../../../apps/sandbox/src/filesystem-authority.js";
-import { resultReference } from "../../../apps/sandbox/src/immutable-results.js";
-import { AuthorityError } from "../src/contract/sandbox-journal.js";
-import type { AuthorityOutput } from "../src/contract/sandbox-journal-rpc.js";
-import { authorityCommandSchema } from "../src/contract/sandbox-journal-rpc.js";
-import { authorityFixture, successful, uncertain } from "./fixtures/sandbox-authority.js";
-import { run } from "./fixtures/sandbox-run.js";
+import { FilesystemAuthority } from "../../../apps/sandbox/src/filesystem/authority";
+import { resultReference } from "../../../apps/sandbox/src/immutable-results";
+import { AuthorityError } from "../src/contract/sandbox-journal";
+import type { AuthorityOutput } from "../src/contract/sandbox-journal-rpc";
+import { authorityCommandSchema } from "../src/contract/sandbox-journal-rpc";
+import { authorityFixture, successful, uncertain } from "./fixtures/sandbox-authority";
+import { run } from "./fixtures/sandbox-run";
 
 const roots: string[] = [];
 

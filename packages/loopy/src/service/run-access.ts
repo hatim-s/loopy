@@ -1,7 +1,7 @@
 import { Effect } from "effect";
-import { graphView } from "../contract/index.js";
-import { ServiceError } from "./error.js";
-import type { ServiceOptions } from "./registry.js";
+import { graphView } from "../contract";
+import { ServiceError } from "./error";
+import type { ServiceOptions } from "./registry";
 
 export function makeRunAccess(options: ServiceOptions) {
   const requireRun = Effect.fn("run-access.requireRun")(function* (id: string) {

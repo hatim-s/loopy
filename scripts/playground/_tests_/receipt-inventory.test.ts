@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { resolve } from "node:path";
-import type { Admission } from "../journal.js";
-import { receiptInventory } from "../receipt-inventory.js";
+import type { Admission } from "../journal";
+import { receiptInventory } from "../receipt/inventory";
 
 const batch = "synthetic-architecture";
 

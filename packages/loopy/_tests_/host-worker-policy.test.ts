@@ -3,13 +3,13 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Cause, Effect, Fiber } from "effect";
-import { type ExecutionKey, OwnershipError, StorageError } from "../src/core/index.js";
-import { LocalExecutor } from "../src/executor/index.js";
-import { FilesystemReceipts } from "../src/executor/receipts.js";
-import { activate, makeDaemon } from "../src/host/index.js";
-import { code, loopy, sh } from "../src/sdk/graph/index.js";
-import { MemoryStore } from "../src/store/index.js";
-import { newRun } from "./fixture.js";
+import { type ExecutionKey, OwnershipError, StorageError } from "../src/core";
+import { LocalExecutor } from "../src/executor";
+import { FilesystemReceipts } from "../src/executor/receipts";
+import { activate, makeDaemon } from "../src/host";
+import { code, loopy, sh } from "../src/sdk/graph";
+import { MemoryStore } from "../src/store";
+import { newRun } from "./fixture";
 
 function waitForMarker(path: string) {
   return Effect.gen(function* () {

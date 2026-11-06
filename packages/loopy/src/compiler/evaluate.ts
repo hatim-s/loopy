@@ -1,13 +1,13 @@
 import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { Effect, Schema } from "effect";
-import { diagnosticSchema, graphSchema } from "../contract/index.js";
-import { errorMessage } from "../core/index.js";
-import { compilerLauncher, spawnCaptured } from "../local/index.js";
-import { AuthorError, CompilationError, compilerIO, EvaluationError } from "./errors.js";
-import { typescriptPaths } from "./source.js";
-import type { AuthorModule } from "./types.js";
+import { diagnosticSchema, graphSchema } from "../contract";
+import { errorMessage } from "../core";
+import { compilerLauncher, spawnCaptured } from "../local";
+import { AuthorError, CompilationError, compilerIO, EvaluationError } from "./errors";
+import { typescriptPaths } from "./source";
+import type { AuthorModule } from "./types";
 
 const reportedDiagnostic = Schema.decodeUnknownResult(Schema.fromJsonString(diagnosticSchema), {
   onExcessProperty: "error",
@@ -48,15 +48,9 @@ export const evaluate = Effect.fn(function* (file: string, modules: AuthorModule
               {
                 name: "restricted-author-source",
                 setup(build) {
-                  build.onResolve({ filter: /^loopy(?:\/graph)?$/ }, async () => {
-                    const javascript = resolve(import.meta.dir, "../sdk/graph/index.js");
-
-                    return {
-                      path: (await Bun.file(javascript).exists())
-                        ? javascript
-                        : javascript.replace(/\.js$/, ".ts"),
-                    };
-                  });
+                  build.onResolve({ filter: /^loopy(?:\/graph)?$/ }, () => ({
+                    path: Bun.resolveSync("../sdk/graph", import.meta.dir),
+                  }));
                   build.onLoad({ filter: /\.[cm]?[jt]sx?$/ }, ({ path }) => {
                     const source = sources.get(path);
 

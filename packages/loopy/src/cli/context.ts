@@ -1,6 +1,6 @@
 import { Effect } from "effect";
-import type { ParsedCliArgs } from "./args.js";
-import { CliError } from "./errors.js";
+import type { ParsedCliArgs } from "./args";
+import { CliError } from "./errors";
 
 export type CliContext = {
   home: string;

@@ -1,8 +1,8 @@
 import { Schema } from "effect";
-import { LOG_LEVELS, RUN_STATUSES, STEP_KINDS } from "../core/index.js";
-import { struct } from "./codec.js";
+import { LOG_LEVELS, RUN_STATUSES, STEP_KINDS } from "../core";
+import { struct } from "./codec";
 
-import { jsonSchema } from "./json.js";
+import { jsonSchema } from "./json";
 
 // Every counter the engine records is a nonnegative integer; the wire must not loosen that.
 const counter = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));

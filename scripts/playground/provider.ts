@@ -1,16 +1,16 @@
 import { Effect } from "effect";
-import { DockerArtifacts } from "../../apps/sandbox/src/artifacts.js";
-import type { AttemptDependenciesFactory } from "../../apps/sandbox/src/attempt-dependencies.js";
-import { sandboxConfigSchema } from "../../apps/sandbox/src/config.js";
-import { DockerBackend } from "../../apps/sandbox/src/docker.js";
-import { filesystemDependencies } from "../../apps/sandbox/src/filesystem.js";
-import { HttpSandboxAuthority } from "../../apps/sandbox/src/http-authority.js";
-import { io } from "../../apps/sandbox/src/operations.js";
-import { startSandbox } from "../../apps/sandbox/src/server.js";
-import { decodeBoundary } from "../../packages/loopy/src/contract/index.js";
-import { config, dockerContext, image, profile, runtime, sandboxState } from "./config.js";
-import { requireFreshDurableRoot } from "./receipt-selection.js";
-import { boundedBackend } from "./runtime-limit.js";
+import { DockerArtifacts } from "../../apps/sandbox/src/artifacts";
+import type { AttemptDependenciesFactory } from "../../apps/sandbox/src/attempt/dependencies";
+import { sandboxConfigSchema } from "../../apps/sandbox/src/config";
+import { DockerBackend } from "../../apps/sandbox/src/docker";
+import { filesystemDependencies } from "../../apps/sandbox/src/filesystem";
+import { HttpSandboxAuthority } from "../../apps/sandbox/src/http-authority";
+import { io } from "../../apps/sandbox/src/operations";
+import { startSandbox } from "../../apps/sandbox/src/server";
+import { decodeBoundary } from "../../packages/loopy/src/contract";
+import { config, dockerContext, image, profile, runtime, sandboxState } from "./config";
+import { requireFreshDurableRoot } from "./receipt/selection";
+import { boundedBackend } from "./runtime-limit";
 
 const settings = await config();
 

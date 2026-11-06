@@ -2,16 +2,12 @@ import { createHash } from "node:crypto";
 import { cp, lstat, mkdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { z } from "zod";
-import {
-  decodeBoundary,
-  type RunSnapshotView,
-  routes,
-} from "../../packages/loopy/src/contract/index.ts";
-import { executionKeyString } from "../../packages/loopy/src/core/index.ts";
-import { receiptSchema } from "../../packages/loopy/src/executor/receipts.ts";
-import { home, state } from "./config.ts";
-import type { OwnedDaemon } from "./daemon.ts";
-import { treeFiles } from "./prepare.ts";
+import { decodeBoundary, type RunSnapshotView, routes } from "../../packages/loopy/src/contract";
+import { executionKeyString } from "../../packages/loopy/src/core";
+import { receiptSchema } from "../../packages/loopy/src/executor/receipts";
+import { home, state } from "./config";
+import type { OwnedDaemon } from "./daemon";
+import { treeFiles } from "./prepare";
 
 const artifactIdentitySchema = z.object({
   batch: z.string(),

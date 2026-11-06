@@ -2,9 +2,9 @@ import { expect, test } from "bun:test";
 import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Effect } from "effect";
-import { CommandExecutionError } from "../src/core/index.js";
-import { withBundleSandbox } from "../src/local/sandbox/bundle.js";
-import { fixture } from "./fixtures/executor.js";
+import { CommandExecutionError } from "../src/core";
+import { withBundleSandbox } from "../src/local/sandbox/bundle";
+import { fixture } from "./fixtures/executor";
 
 for (const primary of ["timeout", "interrupt", "defect"] as const) {
   test(`bundle cleanup retains its diagnostic and the complete ${primary} Exit`, async () => {

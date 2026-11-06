@@ -1,12 +1,12 @@
 import { afterEach, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { Effect, Scope } from "effect";
-import { applyToSnapshot } from "../../../apps/dashboard/src/lib/stream.ts";
-import { decodeBoundary, nodeIdSchema, routes } from "../src/contract/index.js";
-import { localDaemon, makeLocalService } from "../src/local/index.js";
-import { fixture, object, roots, runFixture, save } from "./cli-fixture.js";
-import { newRun } from "./fixture.js";
-import { fixtureScope, fixtureStore } from "./fixtures/service-runtime.js";
+import { applyToSnapshot } from "../../../apps/dashboard/src/lib/stream";
+import { decodeBoundary, nodeIdSchema, routes } from "../src/contract";
+import { localDaemon, makeLocalService } from "../src/local";
+import { fixture, object, roots, runFixture, save } from "./cli-fixture";
+import { newRun } from "./fixture";
+import { fixtureScope, fixtureStore } from "./fixtures/service-runtime";
 
 afterEach(async () => {
   for (const root of roots.splice(0)) {

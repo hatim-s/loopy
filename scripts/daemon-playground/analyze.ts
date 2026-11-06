@@ -1,9 +1,9 @@
 import { join } from "node:path";
 import { Schema } from "effect";
-import { closedExecutions } from "./closed-executions.ts";
-import { evidence, writeEvidence } from "./config.ts";
-import { preflightSchema, reportSchema } from "./report-schema.ts";
-import { requireEqual, sha, validators } from "./semantics.ts";
+import { closedExecutions } from "./closed-executions";
+import { evidence, writeEvidence } from "./config";
+import { preflightSchema, reportSchema } from "./report-schema";
+import { requireEqual, sha, validators } from "./semantics";
 
 function distribution(values: number[]) {
   const sorted = [...values].sort((a, b) => a - b);

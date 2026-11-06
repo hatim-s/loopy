@@ -2,12 +2,12 @@ import { createHash } from "node:crypto";
 import { readdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Effect } from "effect";
-import { HttpSandboxAuthority } from "../../apps/sandbox/src/http-authority.js";
-import { executionKeyString } from "../../packages/loopy/src/core/index.js";
-import { atomic, config, evidenceDirectory, profile, sandboxState, state } from "./config.js";
-import { receiptEvidence } from "./receipt-evidence.js";
-import { receiptInventory } from "./receipt-inventory.js";
-import { decodeRuntimeQueue } from "./runtime-queue-schema.js";
+import { HttpSandboxAuthority } from "../../apps/sandbox/src/http-authority";
+import { executionKeyString } from "../../packages/loopy/src/core";
+import { atomic, config, evidenceDirectory, profile, sandboxState, state } from "./config";
+import { receiptEvidence } from "./receipt/evidence";
+import { receiptInventory } from "./receipt/inventory";
+import { decodeRuntimeQueue } from "./runtime-queue-schema";
 
 if (profile.name !== "architecture") {
   throw new Error("Receipt verification requires the isolated architecture profile.");

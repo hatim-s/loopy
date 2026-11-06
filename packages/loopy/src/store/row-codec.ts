@@ -1,5 +1,5 @@
 import { flow, Result, Schema, SchemaIssue } from "effect";
-import { StoredDataError } from "./operation.js";
+import { StoredDataError } from "./operation";
 
 const formatIssue = SchemaIssue.makeFormatterDefault();
 

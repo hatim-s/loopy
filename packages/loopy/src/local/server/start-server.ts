@@ -1,10 +1,10 @@
 import { timingSafeEqual } from "node:crypto";
 import { resolve } from "node:path";
-import { errorMessage } from "../../core/index.js";
-import { daemonUrl } from "../daemon-file.js";
-import { serveAsset, snapshotAssets } from "./assets.js";
-import { apiRoutes, dispatch, errorResponse, json } from "./routes.js";
-import { type OriginPolicy, originSecurity } from "./security.js";
+import { errorMessage } from "../../core";
+import { daemonUrl } from "../daemon/file";
+import { serveAsset, snapshotAssets } from "./assets";
+import { apiRoutes, dispatch, errorResponse, json } from "./routes";
+import { type OriginPolicy, originSecurity } from "./security";
 
 export const DEFAULT_PORT = 4310;
 

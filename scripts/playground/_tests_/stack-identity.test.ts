@@ -2,8 +2,8 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { stop } from "../stack.js";
-import { parseServeIdentity, type StackSelection, supervisorArguments } from "../stack-identity.js";
+import { stop } from "../stack";
+import { parseServeIdentity, type StackSelection, supervisorArguments } from "../stack-identity";
 
 const roots: string[] = [];
 

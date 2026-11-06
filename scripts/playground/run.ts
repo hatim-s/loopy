@@ -1,11 +1,11 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { routes } from "../../packages/loopy/src/contract/index.js";
-import { updateApproval } from "./approval.js";
-import { materialize, verifySaved } from "./artifacts.js";
-import type { PlaygroundClient } from "./client.js";
-import { atomic, state } from "./config.js";
-import { guard } from "./guard.js";
+import { routes } from "../../packages/loopy/src/contract";
+import { updateApproval } from "./approval";
+import { materialize, verifySaved } from "./artifacts";
+import type { PlaygroundClient } from "./client";
+import { atomic, state } from "./config";
+import { guard } from "./guard";
 import {
   type Admission,
   admissionSchema,
@@ -15,9 +15,9 @@ import {
   progressSchema,
   record,
   resultSchema,
-} from "./journal.js";
-import { classification } from "./outcomes.js";
-import { type CatalogEntry } from "./repository.js";
+} from "./journal";
+import { classification } from "./outcomes";
+import { type CatalogEntry } from "./repository";
 
 export type Job = { fixture: CatalogEntry; ordinal: number };
 

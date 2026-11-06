@@ -1,4 +1,4 @@
-import { isRecord, isString, type Json } from "../core/index.js";
+import { isRecord, isString, type Json } from "../core";
 
 export function redactValue(input: Json, redact: (text: string) => string): Json {
   if (isString(input)) {

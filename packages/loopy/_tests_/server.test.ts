@@ -17,20 +17,20 @@ import {
   runViewSchema,
   scheduleViewSchema,
   serverEventSchema,
-} from "../src/contract/index.js";
-import { type RuntimeEvent, requireRecord, revision } from "../src/core/index.js";
+} from "../src/contract";
+import { type RuntimeEvent, requireRecord, revision } from "../src/core";
 import {
   localDaemon,
   makeLocalService,
   Registry,
   readDaemonFile,
   ServiceError,
-} from "../src/local/index.js";
-import { eventStream } from "../src/local/server/events.js";
-import { apiRoutes, dispatch } from "../src/local/server/routes.js";
-import { CLI, fixture, object, roots, runFixture, save } from "./cli-fixture.js";
-import { newRun } from "./fixture.js";
-import { fixtureScope, fixtureStore } from "./fixtures/service-runtime.js";
+} from "../src/local";
+import { eventStream } from "../src/local/server/events";
+import { apiRoutes, dispatch } from "../src/local/server/routes";
+import { CLI, fixture, object, roots, runFixture, save } from "./cli-fixture";
+import { newRun } from "./fixture";
+import { fixtureScope, fixtureStore } from "./fixtures/service-runtime";
 
 const daemonMetadata = { startedAt: new Date(0).toISOString(), concurrency: 4 };
 
@@ -1134,8 +1134,8 @@ function artifactState(paths: string[]) {
 
 test("compiled save route verifies artifacts, stores private bundles and returns only GraphView", async () => {
   const { f, service, store } = await serviceFixture("compiled-save");
-  const { compile } = await import("../src/compiler/index.js");
-  const { compiledBody } = await import("./compiled-fixture.js");
+  const { compile } = await import("../src/compiler");
+  const { compiledBody } = await import("./compiled-fixture");
   const source = join(f.cwd, "compiled.ts");
   const sdk = resolve(import.meta.dir, "../src/sdk/graph/index.ts");
   await Bun.write(
@@ -1251,8 +1251,8 @@ test("compiled save route verifies artifacts, stores private bundles and returns
 
 test("saving another revision retains the earlier graph and executable artifacts", async () => {
   const { f, service } = await serviceFixture("revisions");
-  const { compile } = await import("../src/compiler/index.js");
-  const { compiledBody } = await import("./compiled-fixture.js");
+  const { compile } = await import("../src/compiler");
+  const { compiledBody } = await import("./compiled-fixture");
   const source = join(f.cwd, "revision.ts");
   await Bun.write(
     source,

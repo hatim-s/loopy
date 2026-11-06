@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
-import type { SummarySizeRequest } from "./summary-size-workerd.js";
-import { probeRuntime } from "./workerd-probe.js";
+import type { SummarySizeRequest } from "./summary-size-workerd";
+import { probeRuntime } from "./workerd-probe";
 
 export async function summarySizeRuntime() {
   const harness = await probeRuntime({

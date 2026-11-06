@@ -1,4 +1,4 @@
-import type { Request } from "./request.ts";
+import type { Request } from "./request";
 
 export function syncPrompt(request: Request, base: string) {
   return [

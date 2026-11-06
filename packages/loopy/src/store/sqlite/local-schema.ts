@@ -1,8 +1,8 @@
-import { StoreRejectedError } from "../operation.js";
-import type { SqlDriver } from "./driver.js";
-import { applyQuerySchema } from "./query-schema.js";
-import { createSqlSchema, markSqlSchema } from "./schema.js";
-import { SCHEDULE_OVERVIEW_INDEX, SCHEMA_VERSION, WAIT_SCHEMA } from "./store-schema.js";
+import { StoreRejectedError } from "../operation";
+import type { SqlDriver } from "./driver";
+import { applyQuerySchema } from "./query/schema";
+import { createSqlSchema, markSqlSchema } from "./schema";
+import { SCHEDULE_OVERVIEW_INDEX, SCHEMA_VERSION, WAIT_SCHEMA } from "./store-schema";
 
 export function initializeLocalSchema(db: SqlDriver): void {
   db.exec("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000");

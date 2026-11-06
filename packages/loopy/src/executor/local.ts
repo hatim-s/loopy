@@ -8,11 +8,11 @@ import {
   type ExecutionSpec,
   type Executor,
   ExecutorError,
-} from "../core/index.js";
-import { spawnCaptured } from "../local/execution-host.js";
-import { specBundles } from "./prepare.js";
-import { FilesystemReceipts } from "./receipts.js";
-import { workerFailure } from "./response.js";
+} from "../core";
+import { spawnCaptured } from "../local/execution-host";
+import { specBundles } from "./prepare";
+import { FilesystemReceipts } from "./receipts";
+import { workerFailure } from "./response";
 
 type Options = {
   home: string;

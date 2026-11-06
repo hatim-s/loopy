@@ -1,10 +1,10 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { Schema } from "effect";
-import { ARTIFACT_LIMITS } from "../../../apps/cloud/src/artifacts-storage.js";
-import { definitionSummarySchema } from "../src/contract/index.js";
-import { canonicalJson, revision } from "../src/core/index.js";
-import { fillBytes, summarySizeBody, utf8 } from "./fixtures/summary-size-body.js";
-import { summarySizeRuntime } from "./fixtures/summary-size-runtime.js";
+import { ARTIFACT_LIMITS } from "../../../apps/cloud/src/artifacts/storage";
+import { definitionSummarySchema } from "../src/contract";
+import { canonicalJson, revision } from "../src/core";
+import { fillBytes, summarySizeBody, utf8 } from "./fixtures/summary-size-body";
+import { summarySizeRuntime } from "./fixtures/summary-size-runtime";
 
 let harness: Awaited<ReturnType<typeof summarySizeRuntime>>;
 

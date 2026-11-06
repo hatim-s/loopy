@@ -1,4 +1,4 @@
-import type { RuntimeEvent } from "../core/index.js";
+import type { RuntimeEvent } from "../core";
 
 export type EventTransaction = { id: string; events: RuntimeEvent[] };
 

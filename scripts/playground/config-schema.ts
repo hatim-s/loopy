@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { playgroundProfile } from "./profile.js";
+import type { playgroundProfile } from "./profile";
 
 export function playgroundConfigSchema(profile: ReturnType<typeof playgroundProfile>) {
   const baseConfigSchema = z.strictObject({

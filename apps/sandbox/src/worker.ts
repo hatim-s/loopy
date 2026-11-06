@@ -6,17 +6,13 @@ import {
   SANDBOX_MAX_CAPTURE_BYTES,
   type SandboxExecutionSpec,
   sandboxExecutionSpecSchema,
-} from "../../../packages/loopy/src/contract/index.js";
-import {
-  CommandExecutionError,
-  durationMs,
-  type Json,
-} from "../../../packages/loopy/src/core/index.js";
-import { bundleResult } from "../../../packages/loopy/src/executor/protocol.js";
-import { renderCommand } from "../../../packages/loopy/src/local/execution-host.js";
-import { io } from "./operations.js";
-import { runCommand } from "./process.js";
-import { boundedResult, failed } from "./result.js";
+} from "../../../packages/loopy/src/contract";
+import { CommandExecutionError, durationMs, type Json } from "../../../packages/loopy/src/core";
+import { bundleResult } from "../../../packages/loopy/src/executor/protocol";
+import { renderCommand } from "../../../packages/loopy/src/local/execution-host";
+import { io } from "./operations";
+import { runCommand } from "./process";
+import { boundedResult, failed } from "./result";
 
 const environment = {
   PATH: "/usr/local/bin:/usr/bin:/bin",

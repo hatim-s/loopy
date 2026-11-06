@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { BackendError } from "../backend/backend.ts";
-import { parseJsonInput } from "../lib/input-form.ts";
-import type { useResolveHook } from "../lib/mutations.ts";
-import { Button } from "./button.tsx";
+import { BackendError } from "../backend/backend";
+import { parseJsonInput } from "../lib/input-form";
+import type { useResolveHook } from "../lib/mutations";
+import { Button } from "./button";
 
 type Resolve = ReturnType<typeof useResolveHook>;
 

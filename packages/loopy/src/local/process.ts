@@ -2,19 +2,19 @@ import { mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Data, Effect, Exit } from "effect";
-import type { CommandResult, ExecutionMode } from "../core/index.js";
+import type { CommandResult, ExecutionMode } from "../core";
 import {
   CommandExecutionError,
   errnoCode,
   type ResolvedCommand,
   requirePositiveInteger,
-} from "../core/index.js";
-import type { ProcessFilesystemError } from "./sandbox/io.js";
-import { filesystem } from "./sandbox/io.js";
-import { sandboxLauncher } from "./sandbox/launcher.js";
-import { envArgs, resolveProgram, within } from "./sandbox/paths.js";
-import type { Launch, Limits } from "./spawn.js";
-import { emptyOutput, rejected, spawnCaptured, unstarted } from "./spawn.js";
+} from "../core";
+import type { ProcessFilesystemError } from "./sandbox/io";
+import { filesystem } from "./sandbox/io";
+import { sandboxLauncher } from "./sandbox/launcher";
+import { envArgs, resolveProgram, within } from "./sandbox/paths";
+import type { Launch, Limits } from "./spawn";
+import { emptyOutput, rejected, spawnCaptured, unstarted } from "./spawn";
 
 type ProcessCommand = ResolvedCommand & { maxOutputBytes?: number };
 

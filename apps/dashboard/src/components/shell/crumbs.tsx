@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { shortId } from "../../lib/format.ts";
+import { shortId } from "../../lib/format";
 
 type Crumb = { label: string; to?: "/loopies" | "/runs" };
 

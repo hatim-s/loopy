@@ -1,4 +1,4 @@
-import type { ExecutionKey, ExecutionSpec, StoreEffect } from "../core/index.js";
+import type { ExecutionKey, ExecutionSpec, StoreEffect } from "../core";
 
 export type Effect =
   | StoreEffect

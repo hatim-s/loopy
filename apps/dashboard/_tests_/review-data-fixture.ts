@@ -3,9 +3,9 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Effect } from "effect";
-import { compile } from "../../../packages/loopy/src/compiler/index.ts";
-import type { NodeRun, StoreEffect } from "../../../packages/loopy/src/core/index.ts";
-import { makeLocalService, openRunStore } from "../../../packages/loopy/src/local/index.ts";
+import { compile } from "../../../packages/loopy/src/compiler";
+import type { NodeRun, StoreEffect } from "../../../packages/loopy/src/core";
+import { makeLocalService, openRunStore } from "../../../packages/loopy/src/local";
 
 /** Persisted synthetic records let HTTP and browser checks inspect the same bounded pages. */
 export const reviewDataFixture = Effect.fn(function* () {

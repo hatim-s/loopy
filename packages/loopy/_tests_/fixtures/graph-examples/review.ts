@@ -1,4 +1,4 @@
-import { branch, code, git, log, loopy, lte, sh, size } from "../../../src/sdk/graph/index.js";
+import { branch, code, git, log, loopy, lte, sh, size } from "../../../src/sdk/graph";
 
 export default loopy("review", {
   input: { "instructions?": "string" },

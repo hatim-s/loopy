@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { archive, fs, git, net, sh, text } from "../src/sdk/graph/index.js";
-import { capture } from "./fixtures/command-capture.js";
+import { archive, fs, git, net, sh, text } from "../src/sdk/graph";
+import { capture } from "./fixtures/command-capture";
 
 test("zip exclusions trail archive operands", async () => {
   const { executor, result } = await capture(() =>

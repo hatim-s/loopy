@@ -6,8 +6,8 @@ import {
   parseSha256,
   parseUniqCount,
   parseWc,
-} from "../src/sdk/shell/parse/text.js";
-import { fixture, result } from "./shell-parse-fixture.js";
+} from "../src/sdk/shell/parse/text";
+import { fixture, result } from "./shell-parse-fixture";
 
 test("wc drops only the aggregate row for multiple file operands", async () => {
   expect(

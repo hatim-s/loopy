@@ -5,9 +5,9 @@ import type {
   RuntimeEvent,
   Schedule,
   StepRecord,
-} from "../core/index.js";
-import type { GraphView } from "./graph.js";
-import type { LoopyView, RunView, ServerEvent } from "./views.js";
+} from "../core";
+import type { GraphView } from "./graph";
+import type { LoopyView, RunView, ServerEvent } from "./views";
 
 type RunViewOptions = {
   run: RunRecord;

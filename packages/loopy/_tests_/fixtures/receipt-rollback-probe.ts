@@ -1,9 +1,9 @@
 import type { DurableObjectState } from "@cloudflare/workers-types";
 import { Schema } from "effect";
-import { ReceiptAuthority } from "../../../../apps/cloud/src/receipts-authority.js";
-import { ReceiptSql } from "../../../../apps/cloud/src/receipts-sql.js";
-import { authorityOperations, decodeBoundary } from "../../src/contract/index.js";
-import { receiptRecoveryProbe } from "./receipt-recovery-probe.js";
+import { ReceiptAuthority } from "../../../../apps/cloud/src/receipts/authority";
+import { ReceiptSql } from "../../../../apps/cloud/src/receipts/sql";
+import { authorityOperations, decodeBoundary } from "../../src/contract";
+import { receiptRecoveryProbe } from "./receipt-recovery-probe";
 
 export class ReceiptRollbackProbe {
   constructor(private readonly ctx: DurableObjectState) {}

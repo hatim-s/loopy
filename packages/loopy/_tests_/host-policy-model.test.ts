@@ -1,6 +1,6 @@
 import { test } from "bun:test";
-import { actions, initialModel, type ModelAction, modelStep } from "./host-policy-model.js";
-import { replayPolicy } from "./host-policy-replay.js";
+import { actions, initialModel, type ModelAction, modelStep } from "./host-policy-model";
+import { replayPolicy } from "./host-policy-replay";
 
 for (const budget of [1, 2]) {
   test(`bounded independent host model, depth eight, budget ${budget}`, async () => {

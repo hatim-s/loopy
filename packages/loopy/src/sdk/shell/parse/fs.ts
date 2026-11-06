@@ -1,5 +1,5 @@
-import type { CommandResult } from "../../../core/index.js";
-import { jsonValue, lines, nulFields, unexpected } from "./shared.js";
+import type { CommandResult } from "../../../core";
+import { jsonValue, lines, nulFields, unexpected } from "./shared";
 
 export type Find = string[];
 

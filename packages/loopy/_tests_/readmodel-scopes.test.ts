@@ -2,10 +2,10 @@ import { afterEach, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { Effect, Exit, Scope } from "effect";
-import { MemoryStore, makeSqliteRunStore } from "../src/store/index.js";
-import { checkScopePages } from "./fixtures/readmodel-assertions.js";
-import { readmodelDirectory } from "./fixtures/readmodel-directory.js";
-import { seedScopes } from "./fixtures/readmodel-scopes.js";
+import { MemoryStore, makeSqliteRunStore } from "../src/store";
+import { checkScopePages } from "./fixtures/readmodel-assertions";
+import { readmodelDirectory } from "./fixtures/readmodel-directory";
+import { seedScopes } from "./fixtures/readmodel-scopes";
 
 const cleanups: (() => void | Promise<void>)[] = [];
 

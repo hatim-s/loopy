@@ -1,5 +1,5 @@
 import { Effect, Fiber, type Scope } from "effect";
-import type { RunRecord } from "../core/index.js";
+import type { RunRecord } from "../core";
 
 /** The caller's scope owns every admitted activation. Membership outlives completion until cleanup. */
 export class ActivationPool<E = never> {

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { z } from "zod";
-import type { DaemonRunRecord } from "./report-schema.ts";
+import type { DaemonRunRecord } from "./report-schema";
 
 export function sha(bytes: string | Uint8Array) {
   return createHash("sha256").update(bytes).digest("hex");

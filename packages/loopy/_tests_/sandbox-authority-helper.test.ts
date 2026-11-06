@@ -2,10 +2,10 @@ import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { Effect } from "effect";
-import { DockerArtifacts } from "../../../apps/sandbox/src/artifacts.js";
-import type { CommandRunner } from "../../../apps/sandbox/src/process.js";
-import { authorityFixture } from "./fixtures/sandbox-authority.js";
-import { run } from "./fixtures/sandbox-run.js";
+import { DockerArtifacts } from "../../../apps/sandbox/src/artifacts";
+import type { CommandRunner } from "../../../apps/sandbox/src/process";
+import { authorityFixture } from "./fixtures/sandbox-authority";
+import { run } from "./fixtures/sandbox-run";
 
 test("helper cleanup checks exact name and labels, then verifies absence after removal", async () => {
   const { config, plan, root } = await authorityFixture();

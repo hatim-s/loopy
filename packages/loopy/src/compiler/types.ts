@@ -1,5 +1,5 @@
-import type { SourceArtifact } from "../contract/index.js";
-import type { CompilerDiagnosticCode, Diagnostic, Graph, NodeId } from "../core/index.js";
+import type { SourceArtifact } from "../contract";
+import type { CompilerDiagnosticCode, Diagnostic, Graph, NodeId } from "../core";
 
 export type CompilerDiagnostic = {
   code: CompilerDiagnosticCode;

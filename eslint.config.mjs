@@ -3,6 +3,44 @@ import unicorn from "eslint-plugin-unicorn";
 import tseslint from "typescript-eslint";
 import antiSlopConfig from "./tools/anti-slop/config.mjs";
 
+const relativeInternalImports = {
+  meta: {
+    type: "problem",
+    schema: [],
+    messages: {
+      alias: "Use a relative path for internal imports.",
+      extension: "Internal imports must omit code extensions and the index filename.",
+    },
+  },
+  create(context) {
+    function check(source) {
+      if (source?.type !== "Literal" || !['"', "'"].includes(source.raw?.[0])) {
+        return;
+      }
+
+      const value = source.value;
+
+      if (value === "loopy" || value.startsWith("loopy/") || value.startsWith("@/")) {
+        context.report({ node: source, messageId: "alias" });
+      } else if (
+        value.startsWith(".") &&
+        (/\.(?:[jt]sx?)(?:[?#].*)?$/.test(value) || /(?:^|\/)index(?:[?#].*)?$/.test(value))
+      ) {
+        context.report({ node: source, messageId: "extension" });
+      }
+    }
+
+    return {
+      ImportDeclaration: (node) => check(node.source),
+      ExportNamedDeclaration: (node) => check(node.source),
+      ExportAllDeclaration: (node) => check(node.source),
+      ImportExpression: (node) => check(node.source),
+      TSImportType: (node) => check(node.source),
+      TSExternalModuleReference: (node) => check(node.expression),
+    };
+  },
+};
+
 export default tseslint.config(
   {
     ignores: [
@@ -20,9 +58,14 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   {
     files: ["**/*.{js,mjs,cjs,jsx,ts,tsx}"],
-    plugins: { unicorn, sonarjs },
+    plugins: {
+      unicorn,
+      sonarjs,
+      internal: { rules: { "relative-imports": relativeInternalImports } },
+    },
     rules: {
       "sonarjs/cognitive-complexity": ["error", 20],
+      "internal/relative-imports": "error",
       "no-useless-concat": "error",
       curly: ["error", "all"],
       "@typescript-eslint/consistent-type-imports": "error",

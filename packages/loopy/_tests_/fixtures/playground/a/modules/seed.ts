@@ -1,4 +1,4 @@
-import { type Context, put, type RunInput, read } from "./repository.js";
+import { type Context, put, type RunInput, read } from "./repository";
 
 export default async (input: RunInput, context: Context) => {
   await put(

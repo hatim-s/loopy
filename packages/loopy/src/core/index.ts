@@ -1,38 +1,38 @@
-export { parseArgv } from "./argv.js";
+export { parseArgv } from "./argv";
 
-export { canonicalJson } from "./canonical-json.js";
+export { canonicalJson } from "./canonical-json";
 
-export { nextFire, parseCron } from "./cron.js";
+export { nextFire, parseCron } from "./cron";
 
-export * from "./duration.js";
+export * from "./duration";
 
-export * from "./effects.js";
+export * from "./effects";
 
-export { errnoCode, errorMessage } from "./errors.js";
+export { errnoCode, errorMessage } from "./errors";
 
-export * from "./executor.js";
+export * from "./executor";
 
-export { isFieldValue } from "./field-value.js";
+export { isFieldValue } from "./field-value";
 
-export * from "./graph.js";
+export * from "./graph";
 
-export { COMPILER_DIAGNOSTIC_CODES, type CompilerDiagnosticCode } from "./graph.js";
+export { COMPILER_DIAGNOSTIC_CODES, type CompilerDiagnosticCode } from "./graph";
 
-export { validateGraph } from "./graph-check.js";
+export { validateGraph } from "./graph/check";
 
-export { isReservedGraphName, nodeNames, RESERVED_GRAPH_NAMES } from "./graph-names.js";
+export { isReservedGraphName, nodeNames, RESERVED_GRAPH_NAMES } from "./graph/names";
 
-export { checkPredicate } from "./graph-predicate.js";
+export { checkPredicate } from "./graph/predicate";
 
-export { isRef, projectValue } from "./graph-ref.js";
+export { isRef, projectValue } from "./graph/ref";
 
-export { graphTypeResolver } from "./graph-type.js";
+export { graphTypeResolver } from "./graph/type";
 
-export { parseInputValidation, validateGraphInput } from "./input.js";
+export { parseInputValidation, validateGraphInput } from "./input";
 
-export { assertJson } from "./json.js";
+export { assertJson } from "./json";
 
-export { limitLogs } from "./logs.js";
+export { limitLogs } from "./logs";
 
 export type {
   CommandResult,
@@ -53,7 +53,7 @@ export type {
   StepKind,
   StepRecord,
   WaitingHookStep,
-} from "./model.js";
+} from "./model";
 
 export {
   EXECUTION_MODES,
@@ -65,19 +65,19 @@ export {
   SCHEDULE_EVENT_KINDS,
   STEP_KINDS,
   STEP_STATUSES,
-} from "./model.js";
+} from "./model";
 
-export { validateSecretName, validateSlug } from "./names.js";
+export { validateSecretName, validateSlug } from "./names";
 
-export * from "./process.js";
+export * from "./process";
 
-export * from "./queries.js";
+export * from "./queries";
 
-export * from "./rate-limit.js";
+export * from "./rate-limit";
 
-export { revision, revisionInput } from "./revision.js";
+export { revision, revisionInput } from "./revision";
 
-export * from "./store.js";
+export * from "./store";
 
 export {
   allowKeys,
@@ -92,4 +92,4 @@ export {
   requireRecord,
   requireString,
   setOwnProperty,
-} from "./validation.js";
+} from "./validation";

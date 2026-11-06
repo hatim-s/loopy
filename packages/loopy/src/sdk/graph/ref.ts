@@ -4,8 +4,8 @@ import {
   projectValue,
   type RefId,
   type Value,
-} from "../../core/index.js";
-import { refuse, validateLabel } from "./validate.js";
+} from "../../core";
+import { refuse, validateLabel } from "./validate";
 
 export const REF = Symbol("loopy.graph.ref");
 

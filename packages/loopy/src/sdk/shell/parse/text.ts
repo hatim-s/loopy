@@ -1,6 +1,6 @@
-import type { CommandResult, Json } from "../../../core/index.js";
-import type { RenderInput } from "../../render-argv.js";
-import { jsonValue, lines, unexpected } from "./shared.js";
+import type { CommandResult, Json } from "../../../core";
+import type { RenderInput } from "../../render-argv";
+import { jsonValue, lines, unexpected } from "./shared";
 
 export type Wc = { lines: number; words: number; bytes: number; file?: string };
 

@@ -1,6 +1,6 @@
 import { hostname } from "node:os";
-import { errnoCode } from "../../core/index.js";
-import type { SqlOwnerPolicy } from "./owner-policy.js";
+import { errnoCode } from "../../core";
+import type { SqlOwnerPolicy } from "./owner-policy";
 
 export function localOwnerPolicy(): SqlOwnerPolicy {
   const host = hostname();

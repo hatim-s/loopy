@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { root } from "./config.ts";
+import { root } from "./config";
 
 export async function runtimeSource() {
   const directory = join(root, "packages/loopy/src");

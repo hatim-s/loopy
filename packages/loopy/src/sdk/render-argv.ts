@@ -1,4 +1,4 @@
-import type { CommandDefinition, FlagDefinition } from "./define-command.js";
+import type { CommandDefinition, FlagDefinition } from "./define-command";
 
 // BOUNDARY: JavaScript command inputs are checked against descriptor flags and arity below.
 export type RenderInput = {

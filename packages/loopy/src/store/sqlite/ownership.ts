@@ -1,8 +1,8 @@
-import { OwnershipError } from "../../core/index.js";
-import { StoreRejectedError } from "../operation.js";
-import { SqliteEvents } from "./events.js";
-import { SQL } from "./store-rows.js";
-import { type RunRow } from "./store-schema.js";
+import { OwnershipError } from "../../core";
+import { StoreRejectedError } from "../operation";
+import { SqliteEvents } from "./events";
+import { SQL } from "./store-rows";
+import { type RunRow } from "./store-schema";
 
 export class SqliteOwnership extends SqliteEvents {
   protected stale(row: RunRow, now: number): boolean {

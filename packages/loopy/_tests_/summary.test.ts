@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { parseSummary } from "../../../examples/uacode-asset-sync/prompt.ts";
-import { requestSchema } from "../../../examples/uacode-asset-sync/request.ts";
+import { parseSummary } from "../../../examples/uacode-asset-sync/prompt";
+import { requestSchema } from "../../../examples/uacode-asset-sync/request";
 
 test("asset summary rejects outside paths, traversal, unsafe characters and unknown checks", async () => {
   const validated = await requestSchema["~standard"].validate({

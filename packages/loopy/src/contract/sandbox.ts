@@ -1,10 +1,10 @@
 import { Schema } from "effect";
-import { EXECUTION_ERROR_CODES } from "../core/index.js";
-import { struct } from "./codec.js";
+import { EXECUTION_ERROR_CODES } from "../core";
+import { struct } from "./codec";
 
-import { hashSchema } from "./compiled-loopy.js";
-import { executionKeySchema, nodeSchema } from "./graph.js";
-import { jsonSchema } from "./json.js";
+import { hashSchema } from "./compiled-loopy";
+import { executionKeySchema, nodeSchema } from "./graph";
+import { jsonSchema } from "./json";
 
 export const SANDBOX_MAX_REQUEST_BYTES = 16 * 1024 * 1024;
 

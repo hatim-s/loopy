@@ -4,7 +4,7 @@ import {
   sandboxAttemptIdentitySchema,
   sandboxAttemptRequestSchema,
   sandboxReceiptSchema,
-} from "../../src/contract/index.js";
+} from "../../src/contract";
 
 export type QueueProofDetails = Record<string, Json | undefined>;
 

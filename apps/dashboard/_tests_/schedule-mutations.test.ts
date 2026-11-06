@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
 import { QueryClient } from "@tanstack/react-query";
-import type { ScheduleView } from "loopy/contract";
-import { fakeBackend } from "../src/backend/fake.ts";
-import { keys } from "../src/lib/keys.ts";
-import { toggleSchedule } from "../src/lib/mutations.ts";
-import { applyBatch } from "../src/lib/stream.ts";
+import type { ScheduleView } from "../../../packages/loopy/src/contract";
+import { fakeBackend } from "../src/backend/fake";
+import { keys } from "../src/lib/keys";
+import { toggleSchedule } from "../src/lib/mutations";
+import { applyBatch } from "../src/lib/stream";
 
 const schedule: ScheduleView = {
   workspace: "/work",

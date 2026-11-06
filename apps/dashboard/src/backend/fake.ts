@@ -16,9 +16,9 @@ import {
   routes,
   type ScheduleView,
   type ServerEvent,
-} from "loopy/contract";
-import { applyToSnapshot } from "../lib/stream.ts";
-import { BackendError, type EventSubscription, type LoopyBackend } from "./backend.ts";
+} from "../../../../packages/loopy/src/contract";
+import { applyToSnapshot } from "../lib/stream";
+import { BackendError, type EventSubscription, type LoopyBackend } from "./backend";
 
 type Draft<E> = E extends ServerEvent ? Omit<E, "sequence" | "at" | "txn"> : never;
 

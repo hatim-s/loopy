@@ -1,15 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { Effect, Schema } from "effect";
-import { nodeIdSchema } from "../src/contract/index.js";
+import { nodeIdSchema } from "../src/contract";
 import {
   type NodeRun,
   OwnershipError,
   type RunOutcome,
   type Schedule,
   type Store,
-} from "../src/core/index.js";
-import { newRun } from "./fixture.js";
-import { storeRecordContract } from "./store-record-contract.js";
+} from "../src/core";
+import { newRun } from "./fixture";
+import { storeRecordContract } from "./store-record-contract";
 
 type StoreFactory = (options?: { now?: () => number; leaseMs?: number }) => Store | Promise<Store>;
 

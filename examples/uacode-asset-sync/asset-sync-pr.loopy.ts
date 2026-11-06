@@ -1,8 +1,8 @@
-import { fs, git, loopy, sh } from "loopy";
-import { codexExec } from "../codex.ts";
-import { readOptions, writeOptions } from "../options.ts";
-import { changedFiles, parseSummary, pullRequestBody, syncPrompt } from "./prompt.ts";
-import { type Request, requestSchema, script } from "./request.ts";
+import { fs, git, loopy, sh } from "../../packages/loopy/src/sdk";
+import { codexExec } from "../codex";
+import { readOptions, writeOptions } from "../options";
+import { changedFiles, parseSummary, pullRequestBody, syncPrompt } from "./prompt";
+import { type Request, requestSchema, script } from "./request";
 
 export default loopy({
   name: "uacode-asset-sync",

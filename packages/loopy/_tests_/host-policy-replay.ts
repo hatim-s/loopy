@@ -3,15 +3,15 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { OwnershipError } from "../src/core/index.js";
-import { activateDurable, type DurableActivationResult } from "../src/host/durable.js";
-import { MemoryStore } from "../src/store/index.js";
-import { SqlRunStore } from "../src/store/portable.js";
-import { BunSqlDriver } from "../src/store/sqlite/bun-driver.js";
-import { createSqlSchema } from "../src/store/sqlite/schema.js";
-import { newRun } from "./fixture.js";
-import { PolicyProvider, policyGraph, policyRetry, policySuccess } from "./host-policy-fixture.js";
-import { initialModel, type ModelAction, modelStep } from "./host-policy-model.js";
+import { OwnershipError } from "../src/core";
+import { activateDurable, type DurableActivationResult } from "../src/host/durable";
+import { MemoryStore } from "../src/store";
+import { SqlRunStore } from "../src/store/portable";
+import { BunSqlDriver } from "../src/store/sqlite/bun-driver";
+import { createSqlSchema } from "../src/store/sqlite/schema";
+import { newRun } from "./fixture";
+import { PolicyProvider, policyGraph, policyRetry, policySuccess } from "./host-policy-fixture";
+import { initialModel, type ModelAction, modelStep } from "./host-policy-model";
 
 export async function replayPolicy(
   trace: ModelAction[],

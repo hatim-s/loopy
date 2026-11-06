@@ -1,8 +1,8 @@
-import { type RunSnapshotView, routes } from "../../packages/loopy/src/contract/index.js";
-import type { PlaygroundClient } from "./client.js";
-import { atomic } from "./config.js";
-import { guard } from "./guard.js";
-import { type Admission, event, type Progress } from "./journal.js";
+import { type RunSnapshotView, routes } from "../../packages/loopy/src/contract";
+import type { PlaygroundClient } from "./client";
+import { atomic } from "./config";
+import { guard } from "./guard";
+import { type Admission, event, type Progress } from "./journal";
 
 export async function updateApproval(options: {
   client: PlaygroundClient;

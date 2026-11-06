@@ -1,28 +1,28 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { Effect } from "effect";
 import { Miniflare } from "miniflare";
-import { ARTIFACT_LIMITS } from "../../../apps/cloud/src/artifacts.js";
+import { ARTIFACT_LIMITS } from "../../../apps/cloud/src/artifacts";
 import {
   decodeBoundary,
   nodeIdSchema,
   type PutLoopyBody,
   type SourceArtifact,
   validateCompiled,
-} from "../src/contract/index.js";
-import { revision } from "../src/core/index.js";
-import { code, loopy } from "../src/sdk/graph/index.js";
-import { compiledBody } from "./compiled-fixture.js";
+} from "../src/contract";
+import { revision } from "../src/core";
+import { code, loopy } from "../src/sdk/graph";
+import { compiledBody } from "./compiled-fixture";
 
 let runtime: Miniflare;
 
 let directory: string;
 
 beforeAll(async () => {
-  directory = await mkdtemp(join(tmpdir(), "loopy-artifacts-"));
+  directory = await realpath(await mkdtemp(join(tmpdir(), "loopy-artifacts-")));
 
   await mkdir(join(directory, ".loopy/loopies"), { recursive: true });
   await writeFile(
@@ -30,10 +30,16 @@ beforeAll(async () => {
     `export { Effect } from ${JSON.stringify(new URL("../../../node_modules/effect/dist/index.js", import.meta.url).pathname)};`,
   );
 
+  // Give the artifact entry a distinct output name from the service barrel.
+  await writeFile(
+    join(directory, "artifacts.ts"),
+    `export * from ${JSON.stringify(relative(directory, new URL("../../../apps/cloud/src/artifacts", import.meta.url).pathname))};`,
+  );
+
   const built = await Bun.build({
     entrypoints: [
       join(directory, "effect.ts"),
-      new URL("../../../apps/cloud/src/artifacts.ts", import.meta.url).pathname,
+      join(directory, "artifacts.ts"),
       new URL("../../../apps/cloud/src/sql-driver.ts", import.meta.url).pathname,
       new URL("../src/service/index.ts", import.meta.url).pathname,
       new URL("../src/store/portable.ts", import.meta.url).pathname,

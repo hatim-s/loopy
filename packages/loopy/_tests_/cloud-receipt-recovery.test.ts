@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { type ReceiptHarness, receiptHarness } from "./fixtures/receipt-harness.js";
+import { type ReceiptHarness, receiptHarness } from "./fixtures/receipt-harness";
 
 let harness: ReceiptHarness;
 

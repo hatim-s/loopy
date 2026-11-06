@@ -5,17 +5,17 @@ export {
   activate,
   LeaseReleaseFailed,
   LeaseReleaseUnknown,
-} from "./activate.js";
+} from "./activation";
 
-export { ActivationWorkCleanupFailed } from "./activation-work.js";
+export { ActivationWorkCleanupFailed } from "./activation/work";
 
-export { type DaemonOptions, makeDaemon } from "./daemon.js";
+export { type DaemonOptions, makeDaemon } from "./daemon";
 
 export {
   PreparationError,
   PreparationReleaseFailed,
   PreparationReleaseUnknown,
-} from "./daemon-activation.js";
+} from "./daemon-activation";
 
 export {
   activateDurable,
@@ -23,8 +23,8 @@ export {
   type DurableActivationResult,
   type DurableExecutionProvider,
   DurableProviderError,
-} from "./durable.js";
+} from "./durable";
 
-export { DriverCleanupFailed } from "./heartbeat.js";
+export { DriverCleanupFailed } from "./heartbeat";
 
-export { ScheduleRevisionError } from "./schedules.js";
+export { ScheduleRevisionError } from "./schedules";

@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { OwnershipError, StorageError } from "../core/index.js";
+import { OwnershipError, StorageError } from "../core";
 
 // These markers are internal. They never cross the Store contract or wire boundary.
 export class StoreInvariantError extends Error {}

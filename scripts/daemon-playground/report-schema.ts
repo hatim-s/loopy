@@ -1,5 +1,5 @@
 import { Effect, Schema, SchemaGetter } from "effect";
-import { boundaryOptions, jsonSchema, routes } from "../../packages/loopy/src/contract/index.ts";
+import { boundaryOptions, jsonSchema, routes } from "../../packages/loopy/src/contract";
 
 const recordSchema = Schema.Struct({
   slug: Schema.String,

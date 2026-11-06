@@ -7,9 +7,9 @@ import {
   type RunSnapshotView,
   type RunView,
   type ServerEvent,
-} from "loopy/contract";
-import { fakeBackend } from "../src/backend/fake.ts";
-import { keys } from "../src/lib/keys.ts";
+} from "../../../packages/loopy/src/contract";
+import { fakeBackend } from "../src/backend/fake";
+import { keys } from "../src/lib/keys";
 import {
   eventPagesQuery,
   logPagesQuery,
@@ -17,8 +17,8 @@ import {
   type RunPage,
   runPagesQuery,
   scopeItemsQuery,
-} from "../src/lib/queries.ts";
-import { applyBatch, applyToSnapshot } from "../src/lib/stream.ts";
+} from "../src/lib/queries";
+import { applyBatch, applyToSnapshot } from "../src/lib/stream";
 
 const queued: RunView = {
   id: "run-a",

@@ -1,11 +1,9 @@
 import { expect, test } from "bun:test";
 import { Effect } from "effect";
-import { decodeBoundary } from "../src/contract/index.js";
+import { decodeBoundary } from "../src/contract";
 
 test("dashboard json field coercion parses values and reports invalid JSON", async () => {
-  const { coerceInput, inputFields } = await import(
-    "../../../apps/dashboard/src/lib/input-form.js"
-  );
+  const { coerceInput, inputFields } = await import("../../../apps/dashboard/src/lib/input-form");
 
   const fields = inputFields({ data: "json", "extra?": "json" });
   expect(coerceInput(fields, { data: '{"nested":[true,null,2]}' })).toEqual({
@@ -42,14 +40,12 @@ const allValues = {
 };
 
 test("RecordSpec round-trips every field type through contracts and input boundaries", async () => {
-  const { FIELD_TYPES } = await import("../src/core/index.js");
-  const { graphSchema, outputSchema } = await import("../src/contract/index.js");
-  const { graphInput } = await import("../src/cli/input.js");
-  const { approveDemoGraph } = await import("./fixtures/graphs.js");
+  const { FIELD_TYPES } = await import("../src/core");
+  const { graphSchema, outputSchema } = await import("../src/contract");
+  const { graphInput } = await import("../src/cli/input");
+  const { approveDemoGraph } = await import("./fixtures/graphs");
 
-  const { coerceInput, inputFields } = await import(
-    "../../../apps/dashboard/src/lib/input-form.js"
-  );
+  const { coerceInput, inputFields } = await import("../../../apps/dashboard/src/lib/input-form");
 
   const output = decodeBoundary(outputSchema)({
     kind: "record",
@@ -98,11 +94,9 @@ for (const [kind, invalid] of [
   ["json[]", {}],
 ] as const) {
   test(`${kind} rejects wrong elements or non-arrays at each input boundary`, async () => {
-    const { graphInput } = await import("../src/cli/input.js");
+    const { graphInput } = await import("../src/cli/input");
 
-    const { coerceInput, inputFields } = await import(
-      "../../../apps/dashboard/src/lib/input-form.js"
-    );
+    const { coerceInput, inputFields } = await import("../../../apps/dashboard/src/lib/input-form");
 
     const spec = { items: kind };
     await expect(

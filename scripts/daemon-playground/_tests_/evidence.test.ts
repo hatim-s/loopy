@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { Schema } from "effect";
-import { decodeBoundary, runStatusSchema } from "../../../packages/loopy/src/contract/index.ts";
-import { backupSchema } from "../backup-schema.ts";
-import { preflightSchema, reportSchema } from "../report-schema.ts";
+import { decodeBoundary, runStatusSchema } from "../../../packages/loopy/src/contract";
+import { backupSchema } from "../backup-schema";
+import { preflightSchema, reportSchema } from "../report-schema";
 
 const at = "2026-11-05T00:00:00.000Z";
 

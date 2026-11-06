@@ -2,16 +2,12 @@ import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Data, Effect } from "effect";
 import { z } from "zod";
-import { compile } from "../../packages/loopy/src/compiler/index.js";
-import {
-  decodeBoundary,
-  putLoopyBodySchema,
-  routes,
-} from "../../packages/loopy/src/contract/index.js";
-import { requireCurrentBaseline } from "./baseline.js";
-import { PlaygroundClient } from "./client.js";
-import { atomic, evidenceDirectory, profile, root, state } from "./config.js";
-import { catalog, prepareRepository, repository } from "./repository.js";
+import { compile } from "../../packages/loopy/src/compiler";
+import { decodeBoundary, putLoopyBodySchema, routes } from "../../packages/loopy/src/contract";
+import { requireCurrentBaseline } from "./baseline";
+import { PlaygroundClient } from "./client";
+import { atomic, evidenceDirectory, profile, root, state } from "./config";
+import { catalog, prepareRepository, repository } from "./repository";
 
 export class PreparationError extends Data.TaggedError("PreparationError")<{
   message: string;

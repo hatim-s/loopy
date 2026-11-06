@@ -6,9 +6,9 @@ import {
   isString,
   type Json,
   type Predicate,
-} from "../core/index.js";
-import { type ResolutionContext, reference, resolve } from "./resolve.js";
-import type { EngineState } from "./state.js";
+} from "../core";
+import { type ResolutionContext, reference, resolve } from "./resolve";
+import type { EngineState } from "./state";
 
 function operand(value: ComparisonOperand, state: EngineState, context: ResolutionContext): Json {
   const result = resolve(value, state, context);

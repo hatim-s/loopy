@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import type { Lazy, Loaded } from "../../lib/view-models.ts";
-import { ErrorBanner } from "../error-banner.tsx";
+import type { Lazy, Loaded } from "../../lib/view-models";
+import { ErrorBanner } from "../error-banner";
 
 /**
  * Renders a fetch in its three states. Loading shows `pending` in place, so the frame around it

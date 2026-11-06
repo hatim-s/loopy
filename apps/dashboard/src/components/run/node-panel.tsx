@@ -1,16 +1,16 @@
-import type { NodeRunView } from "loopy/contract";
 import { type ReactNode, useState } from "react";
-import type { GraphNodeModel } from "../../lib/graph.ts";
-import { nodeFacts } from "../../lib/node-facts.ts";
-import { useExecutions, useScopeItems } from "../../lib/ui-data.ts";
-import type { Page, Pager, ScopeItemRow, ScopeSummary, ScopeTuple } from "../../lib/view-models.ts";
-import { KindGlyph } from "../graph/kind-glyph.tsx";
-import { Icon } from "../ui/icon.tsx";
-import { Load } from "../ui/load.tsx";
-import { PagerFoot } from "../ui/pager.tsx";
-import { Segmented } from "../ui/segmented.tsx";
-import { StatusGlyph, StatusPill, statusTone, statusWord } from "../ui/status.tsx";
-import { ExecutionCard } from "./execution-card.tsx";
+import type { NodeRunView } from "../../../../../packages/loopy/src/contract";
+import type { GraphNodeModel } from "../../lib/graph";
+import { nodeFacts } from "../../lib/node-facts";
+import { useExecutions, useScopeItems } from "../../lib/ui-data";
+import type { Page, Pager, ScopeItemRow, ScopeSummary, ScopeTuple } from "../../lib/view-models";
+import { KindGlyph } from "../graph/kind-glyph";
+import { Icon } from "../ui/icon";
+import { Load } from "../ui/load";
+import { PagerFoot } from "../ui/pager";
+import { Segmented } from "../ui/segmented";
+import { StatusGlyph, StatusPill, statusTone, statusWord } from "../ui/status";
+import { ExecutionCard } from "./execution-card";
 
 function Section({
   title,

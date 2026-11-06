@@ -3,13 +3,13 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Exit, Schema, Scope } from "effect";
-import { nodeIdSchema } from "../src/contract/index.js";
-import type { ExecutionKey, NodeRun, Store } from "../src/core/index.js";
-import { activateDurable } from "../src/host/durable.js";
-import { code, loopy, parallel, sh, wait } from "../src/sdk/graph/index.js";
-import { MemoryStore, makeSqliteRunStore } from "../src/store/index.js";
-import { newRun } from "./fixture.js";
-import { PolicyProvider, policyGraph, policySuccess } from "./host-policy-fixture.js";
+import { nodeIdSchema } from "../src/contract";
+import type { ExecutionKey, NodeRun, Store } from "../src/core";
+import { activateDurable } from "../src/host/durable";
+import { code, loopy, parallel, sh, wait } from "../src/sdk/graph";
+import { MemoryStore, makeSqliteRunStore } from "../src/store";
+import { newRun } from "./fixture";
+import { PolicyProvider, policyGraph, policySuccess } from "./host-policy-fixture";
 
 for (const backend of ["memory", "sqlite"] as const) {
   test(`${backend} targeted node reads preserve ordered scopes and detach nested data`, async () => {

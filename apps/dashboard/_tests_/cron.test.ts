@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { describeCron } from "../src/lib/cron.ts";
+import { describeCron } from "../src/lib/cron";
 
 test("common cron patterns read as plain sentences", () => {
   expect(describeCron("*/5 * * * *")).toBe("Every 5 minutes");

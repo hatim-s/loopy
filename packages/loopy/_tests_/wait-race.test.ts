@@ -4,12 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Exit, Schema, Scope } from "effect";
 import { TestClock } from "effect/testing";
-import { nodeIdSchema } from "../src/contract/index.js";
-import type { NodeRun, Store } from "../src/core/index.js";
-import { activate } from "../src/host/index.js";
-import { loopy, wait } from "../src/sdk/graph/index.js";
-import { MemoryStore, makeSqliteRunStore } from "../src/store/index.js";
-import { FakeExecutor, newRun } from "./fixture.js";
+import { nodeIdSchema } from "../src/contract";
+import type { NodeRun, Store } from "../src/core";
+import { activate } from "../src/host";
+import { loopy, wait } from "../src/sdk/graph";
+import { MemoryStore, makeSqliteRunStore } from "../src/store";
+import { FakeExecutor, newRun } from "./fixture";
 
 const scopes: Scope.Closeable[] = [];
 

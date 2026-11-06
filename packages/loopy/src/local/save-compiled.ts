@@ -1,13 +1,13 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { definitionSummary, type PutLoopyBody, validateCompiled } from "../contract/index.js";
-import { canonicalJson } from "../core/index.js";
-import { type ArtifactRegistry, ArtifactValidationError, RegistryError } from "../service/index.js";
-import { writeFileAtomically } from "./fs.js";
-import type { Registry } from "./registry.js";
-import { registrySync } from "./registry.js";
-import { redactSourceArtifact } from "./source-view.js";
+import { definitionSummary, type PutLoopyBody, validateCompiled } from "../contract";
+import { canonicalJson } from "../core";
+import { type ArtifactRegistry, ArtifactValidationError, RegistryError } from "../service";
+import { writeFileAtomically } from "./fs";
+import type { Registry } from "./registry";
+import { registrySync } from "./registry";
+import { redactSourceArtifact } from "./source-view";
 
 export const saveCompiled = Effect.fn(function* (registry: Registry, body: PutLoopyBody) {
   const { bundles, sourceArtifact: artifact } = yield* validateCompiled(body).pipe(

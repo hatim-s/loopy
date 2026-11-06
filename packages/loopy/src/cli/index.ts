@@ -2,27 +2,27 @@
 import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Cause, Effect, Exit } from "effect";
-import { errorMessage } from "../core/index.js";
-import { defaultHome } from "../local/index.js";
-import { parseCliArgs } from "./args.js";
-import { runCancel } from "./commands/cancel.js";
-import { runDaemon } from "./commands/daemon.js";
-import { runGraph } from "./commands/graph.js";
-import { runHook } from "./commands/hook.js";
-import { runInspect } from "./commands/inspect.js";
-import { runList } from "./commands/list.js";
-import { runLogs } from "./commands/logs.js";
-import { runResume } from "./commands/resume.js";
-import { runRun } from "./commands/run.js";
-import { runRuns } from "./commands/runs.js";
-import { runSave } from "./commands/save.js";
-import { runSchedule } from "./commands/schedule.js";
-import { runSecrets } from "./commands/secrets.js";
-import { runTypes } from "./commands/types.js";
-import { runUi } from "./commands/ui.js";
-import { CliError, cliIO, cliSync } from "./errors.js";
-import { printLine, report } from "./output.js";
-import { usage } from "./usage.js";
+import { errorMessage } from "../core";
+import { defaultHome } from "../local";
+import { parseCliArgs } from "./args";
+import { runCancel } from "./commands/cancel";
+import { runDaemon } from "./commands/daemon";
+import { runGraph } from "./commands/graph";
+import { runHook } from "./commands/hook";
+import { runInspect } from "./commands/inspect";
+import { runList } from "./commands/list";
+import { runLogs } from "./commands/logs";
+import { runResume } from "./commands/resume";
+import { runRun } from "./commands/run";
+import { runRuns } from "./commands/runs";
+import { runSave } from "./commands/save";
+import { runSchedule } from "./commands/schedule";
+import { runSecrets } from "./commands/secrets";
+import { runTypes } from "./commands/types";
+import { runUi } from "./commands/ui";
+import { CliError, cliIO, cliSync } from "./errors";
+import { printLine, report } from "./output";
+import { usage } from "./usage";
 
 const COMMANDS = {
   graph: runGraph,

@@ -12,9 +12,9 @@ import {
   type StoreEffect,
   type WaitRecord,
   type WaitResolution,
-} from "../core/index.js";
-import { StoreInvariantError } from "./operation.js";
-import { utc } from "./timestamps.js";
+} from "../core";
+import { StoreInvariantError } from "./operation";
+import { utc } from "./timestamps";
 
 export function publicHook(wait: WaitRecord): HookRecord {
   const hook: HookRecord = {

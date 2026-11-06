@@ -1,12 +1,12 @@
 import { afterEach, expect, test } from "bun:test";
 import { Effect } from "effect";
-import { FilesystemAuthority } from "../../../apps/sandbox/src/filesystem-authority.js";
-import { failure } from "../../../apps/sandbox/src/operations.js";
-import type { SandboxExecutionResult } from "../src/contract/index.js";
-import type { AuthorityInput } from "../src/contract/sandbox-journal-rpc.js";
-import { artifactReader, successful, uncertain } from "./fixtures/sandbox-authority.js";
-import { cleanup, fixture, open } from "./fixtures/sandbox-authority-lifecycle.js";
-import { run } from "./fixtures/sandbox-run.js";
+import { FilesystemAuthority } from "../../../apps/sandbox/src/filesystem/authority";
+import { failure } from "../../../apps/sandbox/src/operations";
+import type { SandboxExecutionResult } from "../src/contract";
+import type { AuthorityInput } from "../src/contract/sandbox-journal-rpc";
+import { artifactReader, successful, uncertain } from "./fixtures/sandbox-authority";
+import { cleanup, fixture, open } from "./fixtures/sandbox-authority-lifecycle";
+import { run } from "./fixtures/sandbox-run";
 
 afterEach(cleanup);
 

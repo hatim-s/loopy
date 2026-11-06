@@ -4,11 +4,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Cause, Effect, Exit, Schema, Scope } from "effect";
-import { nodeIdSchema } from "../src/contract/index.js";
-import { type NodeRun, type Store } from "../src/core/index.js";
-import { MemoryStore, makeSqliteRunStore } from "../src/store/index.js";
-import { SCHEMA, WAIT_SCHEMA } from "../src/store/sqlite/store-schema.js";
-import { newRun } from "./fixture.js";
+import { nodeIdSchema } from "../src/contract";
+import { type NodeRun, type Store } from "../src/core";
+import { MemoryStore, makeSqliteRunStore } from "../src/store";
+import { SCHEMA, WAIT_SCHEMA } from "../src/store/sqlite/store-schema";
+import { newRun } from "./fixture";
 
 const scopes: Scope.Closeable[] = [];
 

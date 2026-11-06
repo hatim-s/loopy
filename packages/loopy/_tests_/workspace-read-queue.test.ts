@@ -4,16 +4,16 @@ import { readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { Miniflare } from "miniflare";
-import { decodeBoundary, routes } from "../src/contract/index.js";
-import { revision } from "../src/core/index.js";
-import { loopy, sh } from "../src/sdk/graph/index.js";
-import { compiledBody } from "./compiled-fixture.js";
-import { qualityTestRoot } from "./fixtures/quality-test-root.js";
+import { decodeBoundary, routes } from "../src/contract";
+import { revision } from "../src/core";
+import { loopy, sh } from "../src/sdk/graph";
+import { compiledBody } from "./compiled-fixture";
+import { qualityTestRoot } from "./fixtures/quality-test-root";
 import {
   type QueueProofDetails,
   type QueueProofEvent,
   readQueueProvider,
-} from "./fixtures/workspace-read-queue-provider.js";
+} from "./fixtures/workspace-read-queue-provider";
 
 const token = "read-queue-synthetic-principal-0000001";
 

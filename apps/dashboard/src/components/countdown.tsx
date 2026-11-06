@@ -1,4 +1,4 @@
-import { span, timestamp } from "../lib/format.ts";
+import { span, timestamp } from "../lib/format";
 
 /** "in 4m 10s" until the moment passes, then "due now". The caller owns the clock. */
 export function Countdown({ at, now }: { at: string; now: number }) {

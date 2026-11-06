@@ -1,10 +1,10 @@
-import { ERROR_FIELDS, type Predicate } from "../../../core/index.js";
-import { currentBuilder } from "../builder.js";
-import { recordPredicate } from "../predicates.js";
-import type { Ref } from "../ref.js";
-import { type AuthorValue, serialize, serializeRef } from "../ref.js";
-import type { InferRecord, Result } from "../types.js";
-import { validateLabel } from "../validate.js";
+import { ERROR_FIELDS, type Predicate } from "../../../core";
+import { currentBuilder } from "../builder";
+import { recordPredicate } from "../predicates";
+import type { Ref } from "../ref";
+import { type AuthorValue, serialize, serializeRef } from "../ref";
+import type { InferRecord, Result } from "../types";
+import { validateLabel } from "../validate";
 
 type Arm = () => AuthorValue;
 

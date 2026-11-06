@@ -2,10 +2,10 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { requireCurrentBaseline } from "../baseline.js";
-import { arm } from "../prepare.js";
-import { playgroundProfile } from "../profile.js";
-import { baselineReceipt, expectedEndpoints } from "./baseline-fixture.js";
+import { requireCurrentBaseline } from "../baseline";
+import { arm } from "../prepare";
+import { playgroundProfile } from "../profile";
+import { baselineReceipt, expectedEndpoints } from "./baseline-fixture";
 
 const roots: string[] = [];
 

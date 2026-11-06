@@ -2,9 +2,9 @@ import { constants } from "node:fs";
 import { access, realpath, stat } from "node:fs/promises";
 import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { Effect } from "effect";
-import { errnoCode } from "../../core/index.js";
-import { rejected } from "../spawn.js";
-import { absentPath, filesystem } from "./io.js";
+import { errnoCode } from "../../core";
+import { rejected } from "../spawn";
+import { absentPath, filesystem } from "./io";
 
 export const ENV_EXEC = "/usr/bin/env";
 

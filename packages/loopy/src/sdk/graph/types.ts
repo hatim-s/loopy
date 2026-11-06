@@ -1,6 +1,6 @@
-import type { Json, OutSchema, RecordSpec } from "../../core/index.js";
+import type { Json, OutSchema, RecordSpec } from "../../core";
 
-import type { RefValue } from "./ref.js";
+import type { RefValue } from "./ref";
 
 type Field = {
   string: string;

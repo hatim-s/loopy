@@ -1,5 +1,5 @@
 import { existsSync, writeFileSync } from "node:fs";
-import { type Context, type Input, readItems, root, writeResult } from "./repository.ts";
+import { type Context, type Input, readItems, root, writeResult } from "./repository";
 
 export default (input: Input, context: Context) => {
   const marker = `${root}/docs/retry-started.txt`;

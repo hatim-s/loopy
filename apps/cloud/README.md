@@ -38,11 +38,11 @@ The URL contains a bearer credential in its fragment. Do not paste it into chat,
 ## Exercise
 
 ```sh
-bun --no-env-file scripts/cloud/journey.ts
-bun --no-env-file scripts/cloud/artifact-journey.ts
-bun --no-env-file scripts/cloud/failures.ts
+bun --no-env-file scripts/cloud/journey/index.ts
+bun --no-env-file scripts/cloud/journey/artifact.ts
+bun --no-env-file scripts/cloud/failures/index.ts
 env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 \
-  bun --no-env-file scripts/cloud/transport-failure.ts
+  bun --no-env-file scripts/cloud/transport-failure/index.ts
 LOOPY_SANDBOX_DOCKER_CONTEXT=colima-loopy-cloud-phase1 \
   bun test packages/loopy/_tests_/cloud-sandbox.test.ts
 bun run check

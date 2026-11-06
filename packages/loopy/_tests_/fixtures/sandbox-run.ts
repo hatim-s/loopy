@@ -1,8 +1,8 @@
 import { Effect, Exit, Scope } from "effect";
-import type { AttemptDependenciesFactory } from "../../../../apps/sandbox/src/attempt-dependencies.js";
-import { Attempts } from "../../../../apps/sandbox/src/attempts.js";
-import type { SandboxConfig } from "../../../../apps/sandbox/src/config.js";
-import { startSandbox } from "../../../../apps/sandbox/src/server.js";
+import { Attempts } from "../../../../apps/sandbox/src/attempt";
+import type { AttemptDependenciesFactory } from "../../../../apps/sandbox/src/attempt/dependencies";
+import type { SandboxConfig } from "../../../../apps/sandbox/src/config";
+import { startSandbox } from "../../../../apps/sandbox/src/server";
 
 export const run = Effect.runPromise;
 

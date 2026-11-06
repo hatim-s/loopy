@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
-import { makeDaemon } from "../src/host/index.js";
-import { loopy } from "../src/sdk/graph/index.js";
-import { MemoryStore } from "../src/store/index.js";
-import { FakeExecutor, newRun } from "./fixture.js";
+import { makeDaemon } from "../src/host";
+import { loopy } from "../src/sdk/graph";
+import { MemoryStore } from "../src/store";
+import { FakeExecutor, newRun } from "./fixture";
 
 test("daemon wakes for a newly committed run and shuts down owned work", async () => {
   await Effect.runPromise(

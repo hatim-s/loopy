@@ -1,7 +1,7 @@
 import { Effect } from "effect";
-import type { SandboxReceipt } from "../../../packages/loopy/src/contract/index.js";
-import type { AttemptRecord } from "../../../packages/loopy/src/contract/sandbox-journal.js";
-import type { ResultsFor } from "./operations.js";
+import type { SandboxReceipt } from "../../../packages/loopy/src/contract";
+import type { AttemptRecord } from "../../../packages/loopy/src/contract/sandbox-journal";
+import type { ResultsFor } from "./operations";
 
 export function publicReceipt(resultsFor: ResultsFor, record: AttemptRecord | null) {
   return Effect.gen(function* () {

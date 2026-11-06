@@ -1,4 +1,4 @@
-import { code, log, loopy, wait } from "../../../src/sdk/graph/index.js";
+import { code, log, loopy, wait } from "../../../src/sdk/graph";
 
 export default loopy("cloud-journey-approval", {
   input: { name: "string" },

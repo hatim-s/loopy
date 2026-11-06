@@ -1,5 +1,5 @@
-export { compile } from "./compile.js";
+export { compile } from "./compile";
 
-export { CompilationError } from "./errors.js";
+export { CompilationError } from "./errors";
 
-export type { Bundle, CompileResult, CompilerDiagnostic } from "./types.js";
+export type { Bundle, CompileResult, CompilerDiagnostic } from "./types";

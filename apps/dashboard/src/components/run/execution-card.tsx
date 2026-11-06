@@ -1,15 +1,15 @@
-import { executionKeyString, type NodeRunView } from "loopy/contract";
 import { type ReactNode, useId, useState } from "react";
-import { clockTime, elapsed, timestamp } from "../../lib/format.ts";
-import { useExecution, useLogPages } from "../../lib/ui-data.ts";
-import type { ExecutionRow, LogRow } from "../../lib/view-models.ts";
-import { Countdown } from "../countdown.tsx";
-import { JsonBlock } from "../json-preview.tsx";
-import { LogDetail } from "../observability/log-table.tsx";
-import { bytes } from "../runs/run-table.tsx";
-import { Load } from "../ui/load.tsx";
-import { PagerFoot, ScanNote } from "../ui/pager.tsx";
-import { LevelPill, StatusPill } from "../ui/status.tsx";
+import { executionKeyString, type NodeRunView } from "../../../../../packages/loopy/src/contract";
+import { clockTime, elapsed, timestamp } from "../../lib/format";
+import { useExecution, useLogPages } from "../../lib/ui-data";
+import type { ExecutionRow, LogRow } from "../../lib/view-models";
+import { Countdown } from "../countdown";
+import { JsonBlock } from "../json-preview";
+import { LogDetail } from "../observability/log-table";
+import { bytes } from "../runs/run-table";
+import { Load } from "../ui/load";
+import { PagerFoot, ScanNote } from "../ui/pager";
+import { LevelPill, StatusPill } from "../ui/status";
 
 const TABS = ["output", "input", "attempts", "logs"] as const;
 

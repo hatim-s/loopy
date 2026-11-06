@@ -1,9 +1,9 @@
 import { parseArgs } from "node:util";
 import { Effect } from "effect";
 import { z } from "zod";
-import { cohort, recover } from "./cohort.js";
-import { arm, prepare } from "./prepare.js";
-import { serve, start, status, stop } from "./stack.js";
+import { cohort, recover } from "./cohort";
+import { arm, prepare } from "./prepare";
+import { serve, start, status, stop } from "./stack";
 
 const { positionals, values } = parseArgs({
   args: Bun.argv.slice(2),

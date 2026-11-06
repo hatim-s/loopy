@@ -1,7 +1,7 @@
-export type { Effect } from "./effects.js";
+export type { Effect } from "./effects";
 
-export { validateOutput } from "./output.js";
+export { validateOutput } from "./output";
 
-export { type EngineEvent, type EngineState, initialState } from "./state.js";
+export { type EngineEvent, type EngineState, initialState } from "./state";
 
-export { step } from "./step.js";
+export { step } from "./step";

@@ -1,6 +1,6 @@
 import { Data, type Effect } from "effect";
-import type { ExecutionKey, Node } from "./graph.js";
-import type { Json } from "./model.js";
+import type { ExecutionKey, Node } from "./graph";
+import type { Json } from "./model";
 
 export type ExecutionSpec =
   | { kind: "code"; bundleHash: string; input: Record<string, Json>; timeoutMs: number }

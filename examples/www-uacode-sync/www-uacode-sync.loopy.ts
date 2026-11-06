@@ -1,9 +1,9 @@
 import { mkdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { git, log, loopy, sh, step } from "loopy";
-import { readOptions, writeOptions } from "../options.ts";
-import { findPullRequest, readSnapshot, remoteSha } from "./github.ts";
-import { validateInput } from "./publication.ts";
+import { git, log, loopy, sh, step } from "../../packages/loopy/src/sdk";
+import { readOptions, writeOptions } from "../options";
+import { findPullRequest, readSnapshot, remoteSha } from "./github";
+import { validateInput } from "./publication";
 import {
   type Files,
   planSync,
@@ -11,8 +11,8 @@ import {
   sourceFiles,
   syncCommitMessage,
   targetFiles,
-} from "./sync.ts";
-import { verifyExisting } from "./verify.ts";
+} from "./sync";
+import { verifyExisting } from "./verify";
 
 export default loopy({
   name: "www-uacode-sync",

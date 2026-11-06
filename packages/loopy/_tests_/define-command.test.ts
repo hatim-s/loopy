@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { defineCommand, loopy, sh } from "../src/sdk/graph/index.js";
-import { base64Descriptor } from "../src/sdk/shell/text/format.js";
-import { capture } from "./fixtures/command-capture.js";
+import { defineCommand, loopy, sh } from "../src/sdk/graph";
+import { base64Descriptor } from "../src/sdk/shell/text/format";
+import { capture } from "./fixtures/command-capture";
 
 const probe = defineCommand({
   key: "test.probe",

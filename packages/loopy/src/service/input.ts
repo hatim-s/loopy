@@ -1,7 +1,7 @@
 import { Effect } from "effect";
-import type { Json, SavedLoopy } from "../contract/index.js";
-import { validateGraphInput } from "../core/index.js";
-import { ServiceError } from "./error.js";
+import type { Json, SavedLoopy } from "../contract";
+import { validateGraphInput } from "../core";
+import { ServiceError } from "./error";
 
 export const validateDefinitionInput = Effect.fn("input.validateDefinitionInput")(function* (
   saved: SavedLoopy,

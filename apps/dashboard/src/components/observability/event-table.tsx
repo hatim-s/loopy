@@ -1,12 +1,12 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
-import { shortId } from "../../lib/format.ts";
-import { useEvent } from "../../lib/ui-data.ts";
-import type { EventRow } from "../../lib/view-models.ts";
-import { JsonBlock } from "../json-preview.tsx";
-import { Icon } from "../ui/icon.tsx";
-import { Load } from "../ui/load.tsx";
-import { preciseTime } from "./log-table.tsx";
+import { shortId } from "../../lib/format";
+import { useEvent } from "../../lib/ui-data";
+import type { EventRow } from "../../lib/view-models";
+import { JsonBlock } from "../json-preview";
+import { Icon } from "../ui/icon";
+import { Load } from "../ui/load";
+import { preciseTime } from "./log-table";
 
 const KIND_TONE = new Map([
   ["succeeded", "bg-success"],

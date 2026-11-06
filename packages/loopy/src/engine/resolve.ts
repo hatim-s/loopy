@@ -7,8 +7,8 @@ import {
   projectValue,
   type Ref,
   type Value,
-} from "../core/index.js";
-import type { EngineState } from "./state.js";
+} from "../core";
+import type { EngineState } from "./state";
 
 export type ResolutionContext = {
   scope: ExecutionKey["scope"];

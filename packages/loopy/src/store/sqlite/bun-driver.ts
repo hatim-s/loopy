@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import type { SqlDriver, SqlStatement, SqlTransactionMode, SqlValue } from "./driver.js";
+import type { SqlDriver, SqlStatement, SqlTransactionMode, SqlValue } from "./driver";
 
 export class BunSqlDriver implements SqlDriver {
   private readonly db: Database;

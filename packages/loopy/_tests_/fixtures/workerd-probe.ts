@@ -1,7 +1,7 @@
 import { rm } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { Miniflare } from "miniflare";
-import { qualityTestRoot } from "./quality-test-root.js";
+import { qualityTestRoot } from "./quality-test-root";
 
 interface ProbeOptions {
   entry: string;

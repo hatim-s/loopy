@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { coerceInput, initialValues, inputFields, parseJsonInput } from "../src/lib/input-form.ts";
+import { coerceInput, initialValues, inputFields, parseJsonInput } from "../src/lib/input-form";
 
 const fields = inputFields({
   name: "string",

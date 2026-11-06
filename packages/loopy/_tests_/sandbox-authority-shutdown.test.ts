@@ -2,17 +2,17 @@ import { expect, test } from "bun:test";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect } from "effect";
-import type { AttemptDependencies } from "../../../apps/sandbox/src/attempt-dependencies.js";
-import { FilesystemAuthority } from "../../../apps/sandbox/src/filesystem-authority.js";
-import { failure } from "../../../apps/sandbox/src/operations.js";
-import type { AuthorityInput } from "../src/contract/sandbox-journal-rpc.js";
+import type { AttemptDependencies } from "../../../apps/sandbox/src/attempt/dependencies";
+import { FilesystemAuthority } from "../../../apps/sandbox/src/filesystem/authority";
+import { failure } from "../../../apps/sandbox/src/operations";
+import type { AuthorityInput } from "../src/contract/sandbox-journal-rpc";
 import {
   artifactReader,
   authorityFixture,
   successful,
   uncertain,
-} from "./fixtures/sandbox-authority.js";
-import { openSandbox, run } from "./fixtures/sandbox-run.js";
+} from "./fixtures/sandbox-authority";
+import { openSandbox, run } from "./fixtures/sandbox-run";
 
 function within<T>(operation: Promise<T>, message: string) {
   const deadline = Promise.withResolvers<never>();

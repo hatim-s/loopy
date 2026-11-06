@@ -6,10 +6,10 @@ import {
   isNumber,
   isReservedGraphName,
   isString,
-} from "../core/index.js";
-import { sdkCalls } from "../sdk/graph-host.js";
-import { diagnostic } from "./diagnostic.js";
-import type { CompilerDiagnostic, ParserSource, SourceCall } from "./types.js";
+} from "../core";
+import { sdkCalls } from "../sdk/graph-host";
+import { diagnostic } from "./diagnostic";
+import type { CompilerDiagnostic, ParserSource, SourceCall } from "./types";
 
 type Binding = "sdk" | "subgraph" | "command" | "value" | "ref" | "function" | "graph";
 

@@ -1,14 +1,11 @@
 import type { DurableObjectStorage, SqlStorageCursor } from "@cloudflare/workers-types";
 import { Cause, Effect, Exit } from "effect";
-import { errorMessage } from "../../../packages/loopy/src/core/index.js";
-import {
-  activateDurable,
-  type DurableExecutionProvider,
-} from "../../../packages/loopy/src/host/index.js";
-import type { SqlRunStore, SqlValue } from "../../../packages/loopy/src/store/portable.js";
-import type { R2ArtifactRegistry } from "./artifacts.js";
-import { cloudSync, platform } from "./operation.js";
-import { WorkspaceSchedules } from "./scheduler-schedules.js";
+import { errorMessage } from "../../../packages/loopy/src/core";
+import { activateDurable, type DurableExecutionProvider } from "../../../packages/loopy/src/host";
+import type { SqlRunStore, SqlValue } from "../../../packages/loopy/src/store/portable";
+import type { R2ArtifactRegistry } from "./artifacts";
+import { cloudSync, platform } from "./operation";
+import { WorkspaceSchedules } from "./scheduler-schedules";
 
 export type SchedulerStorage = Pick<
   DurableObjectStorage,

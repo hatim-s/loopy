@@ -1,5 +1,5 @@
-import { descriptorCommand } from "../../descriptor.js";
-import { parseWorktreeList } from "../parse/git.js";
+import { descriptorCommand } from "../../descriptor";
+import { parseWorktreeList } from "../parse/git";
 
 export const worktree = {
   add: descriptorCommand({

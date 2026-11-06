@@ -1,15 +1,15 @@
-import type { ExecutionSpec } from "../core/index.js";
-import { renderArgv } from "../sdk/host.js";
+import type { ExecutionSpec } from "../core";
+import { renderArgv } from "../sdk/host";
 
-export { executeLocalCommand } from "./process.js";
+export { executeLocalCommand } from "./process";
 
-export { withBundleSandbox } from "./sandbox/bundle.js";
+export { withBundleSandbox } from "./sandbox/bundle";
 
-export { secretRedactor } from "./secret-redactor.js";
+export { secretRedactor } from "./secret-redactor";
 
-export { SecretStore } from "./secrets.js";
+export { SecretStore } from "./secrets";
 
-export { spawnCaptured } from "./spawn.js";
+export { spawnCaptured } from "./spawn";
 
 export function renderCommand(spec: Extract<ExecutionSpec, { kind: "command" }>) {
   const [program, ...args] = spec.argv;

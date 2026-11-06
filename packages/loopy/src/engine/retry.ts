@@ -1,4 +1,4 @@
-import type { ExecutionError, GraphRetry } from "../core/index.js";
+import type { ExecutionError, GraphRetry } from "../core";
 
 export function retryDelayMs(attempt: number): number {
   return Math.min(1000 * 2 ** (attempt - 1), 60_000);

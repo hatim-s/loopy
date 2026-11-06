@@ -1,16 +1,16 @@
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
-import { type RunView, routes } from "../../packages/loopy/src/contract/index.ts";
-import { readDaemonFile } from "../../packages/loopy/src/local/index.ts";
-import { backupClosedDatabase } from "./backup.ts";
-import { capture } from "./capture.ts";
-import { home, source, state, writeEvidence } from "./config.ts";
-import { OwnedDaemon } from "./daemon.ts";
-import { expectedFailure, matchOutcome } from "./outcomes.ts";
-import { frozenHash, selections } from "./prepare.ts";
-import type { restartWhileWaiting } from "./waits.ts";
-import { holdApproval, terminal, waitSnapshot } from "./waits.ts";
+import { type RunView, routes } from "../../packages/loopy/src/contract";
+import { readDaemonFile } from "../../packages/loopy/src/local";
+import { backupClosedDatabase } from "./backup";
+import { capture } from "./capture";
+import { home, source, state, writeEvidence } from "./config";
+import { OwnedDaemon } from "./daemon";
+import { expectedFailure, matchOutcome } from "./outcomes";
+import { frozenHash, selections } from "./prepare";
+import type { restartWhileWaiting } from "./waits";
+import { holdApproval, terminal, waitSnapshot } from "./waits";
 
 const manifestSchema = z.object({ sourceHash: z.string(), plannedRuns: z.literal(45) });
 

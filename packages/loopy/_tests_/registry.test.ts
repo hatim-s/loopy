@@ -3,8 +3,8 @@ import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { Registry } from "../src/local/index.js";
-import { compiledBody } from "./compiled-fixture.js";
+import { Registry } from "../src/local";
+import { compiledBody } from "./compiled-fixture";
 
 const roots: string[] = [];
 

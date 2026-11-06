@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { initialState, step } from "../src/engine/index.js";
+import { initialState, step } from "../src/engine";
 import {
   fail,
   finally_,
@@ -11,8 +11,8 @@ import {
   sh,
   sleep,
   wait,
-} from "../src/sdk/graph/index.js";
-import { at, complete, dispatches, failed, start } from "./engine-control-fixture.js";
+} from "../src/sdk/graph";
+import { at, complete, dispatches, failed, start } from "./engine-control-fixture";
 
 test("map failure settles started item cleanup before outer cleanup and never starts later items", () => {
   const graph = loopy("settle", {

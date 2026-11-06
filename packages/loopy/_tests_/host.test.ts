@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
-import type { Executor } from "../src/core/index.js";
-import { initialState, step } from "../src/engine/index.js";
-import { activate } from "../src/host/index.js";
-import { code, loopy, sh } from "../src/sdk/graph/index.js";
-import { MemoryStore } from "../src/store/index.js";
-import { newRun } from "./fixture.js";
+import type { Executor } from "../src/core";
+import { initialState, step } from "../src/engine";
+import { activate } from "../src/host";
+import { code, loopy, sh } from "../src/sdk/graph";
+import { MemoryStore } from "../src/store";
+import { newRun } from "./fixture";
 
 export function graph() {
   const graph = loopy("test", {

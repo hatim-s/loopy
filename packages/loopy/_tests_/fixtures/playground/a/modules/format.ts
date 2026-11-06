@@ -1,4 +1,4 @@
-import { type Context, finish, put, type RunInput, read } from "./repository.js";
+import { type Context, finish, put, type RunInput, read } from "./repository";
 
 export default async (input: RunInput, context: Context) => {
   const changed: string[] = [];

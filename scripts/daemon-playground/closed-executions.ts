@@ -1,12 +1,8 @@
 import { Database } from "bun:sqlite";
 import { join } from "node:path";
 import { z } from "zod";
-import {
-  decodeBoundary,
-  logRecordSchema,
-  nodeRunSchema,
-} from "../../packages/loopy/src/contract/index.ts";
-import { state, writeEvidence } from "./config.ts";
+import { decodeBoundary, logRecordSchema, nodeRunSchema } from "../../packages/loopy/src/contract";
+import { state, writeEvidence } from "./config";
 
 const rowsSchema = z.array(z.object({ record: z.string() }));
 

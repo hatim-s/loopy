@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
 import { TestClock } from "effect/testing";
-import { OwnershipError, StorageError } from "../src/core/index.js";
-import { DriverCleanupFailed, withHeartbeat } from "../src/host/heartbeat.js";
-import { MemoryStore } from "../src/store/index.js";
-import { newRun } from "./fixture.js";
+import { OwnershipError, StorageError } from "../src/core";
+import { DriverCleanupFailed, withHeartbeat } from "../src/host/heartbeat";
+import { MemoryStore } from "../src/store";
+import { newRun } from "./fixture";
 
 test("heartbeat renews ownership using Effect time", async () => {
   await Effect.runPromise(

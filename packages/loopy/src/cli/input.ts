@@ -1,15 +1,9 @@
 import { resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { Effect } from "effect";
-import {
-  assertJson,
-  isFieldValue,
-  type Json,
-  type RecordSpec,
-  setOwnProperty,
-} from "../core/index.js";
-import type { CliContext } from "./context.js";
-import { CliError, cliIO, cliSync } from "./errors.js";
+import { assertJson, isFieldValue, type Json, type RecordSpec, setOwnProperty } from "../core";
+import type { CliContext } from "./context";
+import { CliError, cliIO, cliSync } from "./errors";
 
 export const jsonInput = Effect.fn(function* (context: CliContext) {
   const text = context.values["input-json"];

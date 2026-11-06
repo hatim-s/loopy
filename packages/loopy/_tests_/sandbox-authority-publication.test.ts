@@ -2,14 +2,14 @@ import { afterEach, expect, test } from "bun:test";
 import { readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect } from "effect";
-import type { ArtifactReader } from "../../../apps/sandbox/src/artifacts.js";
-import { Attempts } from "../../../apps/sandbox/src/attempts.js";
-import { FilesystemAuthority } from "../../../apps/sandbox/src/filesystem-authority.js";
-import { failure } from "../../../apps/sandbox/src/operations.js";
-import type { AuthorityInput } from "../src/contract/sandbox-journal-rpc.js";
-import { artifactReader, successful, uncertain } from "./fixtures/sandbox-authority.js";
-import { cleanup, fixture, open } from "./fixtures/sandbox-authority-lifecycle.js";
-import { run } from "./fixtures/sandbox-run.js";
+import type { ArtifactReader } from "../../../apps/sandbox/src/artifacts";
+import { Attempts } from "../../../apps/sandbox/src/attempt";
+import { FilesystemAuthority } from "../../../apps/sandbox/src/filesystem/authority";
+import { failure } from "../../../apps/sandbox/src/operations";
+import type { AuthorityInput } from "../src/contract/sandbox-journal-rpc";
+import { artifactReader, successful, uncertain } from "./fixtures/sandbox-authority";
+import { cleanup, fixture, open } from "./fixtures/sandbox-authority-lifecycle";
+import { run } from "./fixtures/sandbox-run";
 
 afterEach(cleanup);
 

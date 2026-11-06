@@ -1,12 +1,12 @@
-import type { RuntimeEvent, RuntimeEventChange } from "../../core/index.js";
-import { EVENT_RETENTION, EventListeners, type EventTransaction } from "../event-outbox.js";
-import { StoredDataError, storageOperation } from "../operation.js";
-import { utc } from "../timestamps.js";
-import type { SqlDriver } from "./driver.js";
-import type { SqlStoreOptions } from "./owner-policy.js";
-import { initializeSqlSchema } from "./schema.js";
-import { rowToEvent, SQL } from "./store-rows.js";
-import type { EventRow } from "./store-schema.js";
+import type { RuntimeEvent, RuntimeEventChange } from "../../core";
+import { EVENT_RETENTION, EventListeners, type EventTransaction } from "../event-outbox";
+import { StoredDataError, storageOperation } from "../operation";
+import { utc } from "../timestamps";
+import type { SqlDriver } from "./driver";
+import type { SqlStoreOptions } from "./owner-policy";
+import { initializeSqlSchema } from "./schema";
+import { rowToEvent, SQL } from "./store-rows";
+import type { EventRow } from "./store-schema";
 
 export class SqliteEvents {
   protected readonly now: () => number;

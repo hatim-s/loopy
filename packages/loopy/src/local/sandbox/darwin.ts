@@ -1,12 +1,12 @@
 import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { Effect } from "effect";
-import type { CommandExecutionError } from "../../core/index.js";
-import { rejected, unstarted } from "../spawn.js";
-import type { ProcessFilesystemError } from "./io.js";
-import { filesystem } from "./io.js";
-import type { SandboxOptions } from "./launcher.js";
-import { ENV_EXEC, envArgs, executable, packageDirectory, within } from "./paths.js";
+import type { CommandExecutionError } from "../../core";
+import { rejected, unstarted } from "../spawn";
+import type { ProcessFilesystemError } from "./io";
+import { filesystem } from "./io";
+import type { SandboxOptions } from "./launcher";
+import { ENV_EXEC, envArgs, executable, packageDirectory, within } from "./paths";
 
 const SANDBOX_EXEC = "/usr/bin/sandbox-exec";
 

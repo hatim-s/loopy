@@ -1,7 +1,7 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { z } from "zod";
-import { atomic, state } from "./config.js";
+import { atomic, state } from "./config";
 
 export const inputSchema = z.strictObject({
   batch: z.string(),

@@ -1,6 +1,6 @@
 import { Cause, Effect, Exit, Schema } from "effect";
-import { boundaryOptions, errorBodySchema } from "loopy/contract";
-import { BackendError } from "./backend.ts";
+import { boundaryOptions, errorBodySchema } from "../../../../packages/loopy/src/contract";
+import { BackendError } from "./backend";
 
 export async function runRequest<A>(
   operation: Effect.Effect<A, BackendError>,

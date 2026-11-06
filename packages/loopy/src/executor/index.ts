@@ -1,3 +1,3 @@
-export { LocalExecutor } from "./local.js";
+export { LocalExecutor } from "./local";
 
-export { FilesystemReceipts } from "./receipts.js";
+export { FilesystemReceipts } from "./receipts";

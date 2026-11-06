@@ -5,12 +5,12 @@ import {
   graphRevisionViewSchema,
   type LogRecord,
   nodeRunViewSchema,
-} from "loopy/contract";
-import { demoScript } from "../src/backend/demo.ts";
-import { RELEASE, REVIEW, TRIAGE_V1, TRIAGE_V2 } from "../src/backend/demo-graphs.ts";
-import { executionLogs, focusNodes, graphModel } from "../src/lib/graph.ts";
-import { graphGroups, layoutGraph } from "../src/lib/graph-layout.ts";
-import { predicateText } from "../src/lib/graph-text.ts";
+} from "../../../packages/loopy/src/contract";
+import { demoScript } from "../src/backend/demo";
+import { RELEASE, REVIEW, TRIAGE_V1, TRIAGE_V2 } from "../src/backend/demo-graphs";
+import { executionLogs, focusNodes, graphModel } from "../src/lib/graph";
+import { graphGroups, layoutGraph } from "../src/lib/graph-layout";
+import { predicateText } from "../src/lib/graph-text";
 
 const AT = "2026-10-19T10:00:00.000Z";
 

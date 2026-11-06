@@ -1,14 +1,14 @@
 import { Effect } from "effect";
-import { errorResponse, json } from "../../../packages/loopy/src/service/index.js";
-import type { Environment } from "./environment.js";
-import { principals } from "./environment.js";
-import { acceptsOrigin, boundedRequest } from "./http.js";
-import { platform } from "./operation.js";
-import { RECEIPTS_PATH, routeReceipts } from "./receipts-route.js";
+import { errorResponse, json } from "../../../packages/loopy/src/service";
+import type { Environment } from "./environment";
+import { principals } from "./environment";
+import { acceptsOrigin, boundedRequest } from "./http";
+import { platform } from "./operation";
+import { RECEIPTS_PATH, routeReceipts } from "./receipts/route";
 
-export { SandboxReceipts } from "./receipts.js";
+export { SandboxReceipts } from "./receipts";
 
-export { Workspace } from "./workspace.js";
+export { Workspace } from "./workspace";
 
 function handle(request: Request, env: Environment) {
   return Effect.gen(function* () {

@@ -1,9 +1,9 @@
 import { stat } from "node:fs/promises";
 import { Effect } from "effect";
-import type { CommandExecutionError } from "../../core/index.js";
-import type { BundleSandboxOptions } from "./bundle.js";
-import type { ProcessFilesystemError } from "./io.js";
-import { absentPath, filesystem } from "./io.js";
+import type { CommandExecutionError } from "../../core";
+import type { BundleSandboxOptions } from "./bundle";
+import type { ProcessFilesystemError } from "./io";
+import { absentPath, filesystem } from "./io";
 
 export function linuxBundle({ bundle, workspace, bun, network, home }: BundleSandboxOptions) {
   return Effect.gen(function* (): Effect.fn.Return<

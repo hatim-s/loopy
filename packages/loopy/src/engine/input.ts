@@ -1,4 +1,4 @@
-import { type ExecutionSpec, type NodeRun, outputBytes } from "../core/index.js";
+import { type ExecutionSpec, type NodeRun, outputBytes } from "../core";
 
 const MAX_INPUT_BYTES = 16 * 1024;
 

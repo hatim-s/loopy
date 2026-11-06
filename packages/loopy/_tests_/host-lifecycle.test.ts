@@ -1,16 +1,16 @@
 import { expect, test } from "bun:test";
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
 import { TestClock } from "effect/testing";
-import { type Executor, OwnershipError, StorageError } from "../src/core/index.js";
+import { type Executor, OwnershipError, StorageError } from "../src/core";
 import {
   ActivationWorkCleanupFailed,
   activate,
   DriverCleanupFailed,
   LeaseReleaseFailed,
-} from "../src/host/index.js";
-import { code, loopy, parallel } from "../src/sdk/graph/index.js";
-import { MemoryStore } from "../src/store/index.js";
-import { FakeExecutor, newRun } from "./fixture.js";
+} from "../src/host";
+import { code, loopy, parallel } from "../src/sdk/graph";
+import { MemoryStore } from "../src/store";
+import { FakeExecutor, newRun } from "./fixture";
 
 function graph(wide = false) {
   const work = () =>

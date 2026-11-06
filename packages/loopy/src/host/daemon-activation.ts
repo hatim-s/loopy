@@ -6,8 +6,8 @@ import {
   type RunRecord,
   type StorageError,
   type Store,
-} from "../core/index.js";
-import { type ActivationOptions, activate, LEASE_RELEASE_TIMEOUT_MS } from "./activate.js";
+} from "../core";
+import { type ActivationOptions, activate, LEASE_RELEASE_TIMEOUT_MS } from "./activation";
 
 export class PreparationError extends Data.TaggedError("PreparationError")<{ cause: unknown }> {}
 

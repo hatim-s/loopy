@@ -9,8 +9,8 @@ import {
   parseStat,
   parseTree,
   parseWhich,
-} from "../src/sdk/shell/parse/fs.js";
-import { fixture, result } from "./shell-parse-fixture.js";
+} from "../src/sdk/shell/parse/fs";
+import { fixture, result } from "./shell-parse-fixture";
 
 test("find and ls preserve NUL-delimited paths and list basenames", async () => {
   const paths = parseFind(result(await fixture("fs", "find")));

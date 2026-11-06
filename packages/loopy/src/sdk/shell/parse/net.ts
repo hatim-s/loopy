@@ -1,5 +1,5 @@
-import type { CommandResult } from "../../../core/index.js";
-import { jsonValue, unexpected } from "./shared.js";
+import type { CommandResult } from "../../../core";
+import { jsonValue, unexpected } from "./shared";
 
 export type Curl = {
   status: number;

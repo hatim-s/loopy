@@ -1,12 +1,7 @@
 import { realpath } from "node:fs/promises";
 import { Effect, Result } from "effect";
-import {
-  type ExecutionMode,
-  type ExecutionSpec,
-  ExecutorError,
-  errorMessage,
-} from "../core/index.js";
-import { renderCommand, SecretStore, secretRedactor } from "../local/execution-host.js";
+import { type ExecutionMode, type ExecutionSpec, ExecutorError, errorMessage } from "../core";
+import { renderCommand, SecretStore, secretRedactor } from "../local/execution-host";
 
 export type ExecutionOptions = {
   home: string;

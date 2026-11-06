@@ -1,12 +1,12 @@
-import type { Duration, RateLimit } from "../../../core/index.js";
-import { type GraphRetry, type OutSchema, parseArgv } from "../../../core/index.js";
-import { type CommandDescriptor, validateCommandDescriptor } from "../../define-command.js";
-import { currentBuilder } from "../builder.js";
-import { commandArgv } from "../command-argv.js";
-import type { CommandInput, CommandRawInput } from "../command-input.js";
-import { type AuthorValue, type Ref, type RefValue, serialize, serializeValues } from "../ref.js";
+import type { Duration, RateLimit } from "../../../core";
+import { type GraphRetry, type OutSchema, parseArgv } from "../../../core";
+import { type CommandDescriptor, validateCommandDescriptor } from "../../define-command";
+import { currentBuilder } from "../builder";
+import { commandArgv } from "../command-argv";
+import type { CommandInput, CommandRawInput } from "../command-input";
+import { type AuthorValue, type Ref, type RefValue, serialize, serializeValues } from "../ref";
 
-import type { Infer, SchemaFields } from "../types.js";
+import type { Infer, SchemaFields } from "../types";
 
 type Options = {
   label?: string;

@@ -1,14 +1,14 @@
 import { Schema } from "effect";
-import { struct } from "./codec.js";
+import { struct } from "./codec";
 
-import { hashSchema } from "./compiled-loopy.js";
+import { hashSchema } from "./compiled-loopy";
 import {
   SANDBOX_MAX_CAPTURE_BYTES,
   type SandboxAttemptIdentity,
   type SandboxExecutionResult,
   sandboxAttemptIdentitySchema,
   sandboxExecutionResultSchema,
-} from "./sandbox.js";
+} from "./sandbox";
 
 export const authoritySessionSchema = struct({
   epoch: Schema.Int.check(Schema.isGreaterThan(0)),

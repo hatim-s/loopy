@@ -12,9 +12,9 @@ import {
   type OutSchema,
   type RecordSpec,
   type RefId,
-} from "../../core/index.js";
-import { type AuthorValue, REF, type Ref, Reference, type RefValue, serialize } from "./ref.js";
-import { refuse, validate, validateLabel } from "./validate.js";
+} from "../../core";
+import { type AuthorValue, REF, type Ref, Reference, type RefValue, serialize } from "./ref";
+import { refuse, validate, validateLabel } from "./validate";
 
 type Tail = { id: NodeId; kind: "next" | "join" };
 

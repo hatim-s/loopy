@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
-import { RuntimeLimit } from "../runtime-limit.js";
+import { RuntimeLimit } from "../runtime-limit";
 
 test("interrupted waiters never execute and an interrupted holder releases capacity", async () => {
   await Effect.runPromise(

@@ -1,7 +1,7 @@
-import type { RouteDependencies } from "../../service/index.js";
-import { apiRoutes as portableRoutes } from "../../service/index.js";
+import type { RouteDependencies } from "../../service";
+import { apiRoutes as portableRoutes } from "../../service";
 
-export { dispatch, errorResponse, json } from "../../service/index.js";
+export { dispatch, errorResponse, json } from "../../service";
 
 export function apiRoutes(
   options: Omit<RouteDependencies, "daemon"> & {

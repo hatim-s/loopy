@@ -1,5 +1,5 @@
-import type { CommandResult } from "../../../core/index.js";
-import { lines, nulFields as splitNulFields } from "./shared.js";
+import type { CommandResult } from "../../../core";
+import { lines, nulFields as splitNulFields } from "./shared";
 
 export type Change = {
   path: string;

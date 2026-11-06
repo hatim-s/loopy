@@ -1,6 +1,6 @@
 import { Cause, Data, Effect } from "effect";
-import { type Diagnostic, errnoCode, errorMessage } from "../core/index.js";
-import type { CompileResult } from "./types.js";
+import { type Diagnostic, errnoCode, errorMessage } from "../core";
+import type { CompileResult } from "./types";
 
 /** Compiler infrastructure failures are distinct from author diagnostics. */
 export class CompilationError extends Data.TaggedError("CompilationError")<{

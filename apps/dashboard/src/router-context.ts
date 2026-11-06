@@ -1,6 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { useRouteContext } from "@tanstack/react-router";
-import type { LoopyBackend } from "./backend/backend.ts";
+import type { LoopyBackend } from "./backend/backend";
 
 export type RouterContext = { backend: LoopyBackend; queryClient: QueryClient };
 

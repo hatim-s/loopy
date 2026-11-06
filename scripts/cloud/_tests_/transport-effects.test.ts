@@ -1,14 +1,14 @@
 import { expect, test } from "bun:test";
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
-import { sandboxConfigSchema } from "../../../apps/sandbox/src/config.js";
-import { decodeBoundary } from "../../../packages/loopy/src/contract/index.js";
-import { CommandExecutionError } from "../../../packages/loopy/src/core/index.js";
-import { FixtureError, fixtureFailure } from "../fixture-effect.js";
-import { registerFixtureCleanup } from "../fixture-lifetime.js";
-import { JourneyFailure } from "../journey-client.js";
-import { TransportFaults } from "../transport-failure-faults.js";
-import { until } from "../transport-failure-resources.js";
-import { withWaitClient } from "../wait-client.js";
+import { sandboxConfigSchema } from "../../../apps/sandbox/src/config";
+import { decodeBoundary } from "../../../packages/loopy/src/contract";
+import { CommandExecutionError } from "../../../packages/loopy/src/core";
+import { FixtureError, fixtureFailure } from "../fixture-effect";
+import { registerFixtureCleanup } from "../fixture-lifetime";
+import { JourneyFailure } from "../journey/client";
+import { TransportFaults } from "../transport-failure/faults";
+import { until } from "../transport-failure/resources";
+import { withWaitClient } from "../wait-client";
 
 const config = decodeBoundary(sandboxConfigSchema)({
   worktree: "/synthetic/worktree",

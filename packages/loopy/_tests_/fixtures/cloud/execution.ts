@@ -8,7 +8,7 @@ import {
   map,
   parallel,
   sh,
-} from "../../../src/sdk/graph/index.js";
+} from "../../../src/sdk/graph";
 
 const printf = defineCommand({
   namespace: "fixture",

@@ -7,12 +7,12 @@ import {
   SANDBOX_MAX_CAPTURE_BYTES,
   type SandboxExecutionResult,
   sandboxExecutionResultSchema,
-} from "../../../packages/loopy/src/contract/index.js";
-import type { ResultRef } from "../../../packages/loopy/src/contract/sandbox-journal.js";
-import { canonicalJson } from "../../../packages/loopy/src/core/index.js";
-import { readBytes, syncDirectory } from "./journal-files.js";
-import type { ImmutableResults } from "./operations.js";
-import { checked, failure, io } from "./operations.js";
+} from "../../../packages/loopy/src/contract";
+import type { ResultRef } from "../../../packages/loopy/src/contract/sandbox-journal";
+import { canonicalJson } from "../../../packages/loopy/src/core";
+import { readBytes, syncDirectory } from "./journal-files";
+import type { ImmutableResults } from "./operations";
+import { checked, failure, io } from "./operations";
 
 export function resultBytes(result: SandboxExecutionResult) {
   const bytes = Buffer.from(canonicalJson(result));

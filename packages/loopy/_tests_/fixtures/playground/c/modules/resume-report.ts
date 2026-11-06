@@ -1,5 +1,5 @@
 import { writeFile } from "node:fs/promises";
-import { digest, type PlaygroundInput, readSource, repository, writeResult } from "./repository.js";
+import { digest, type PlaygroundInput, readSource, repository, writeResult } from "./repository";
 
 export default async function resumeReport({ input }: { input: PlaygroundInput }) {
   const source = await readSource("data/records.csv");

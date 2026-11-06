@@ -9,9 +9,9 @@ import {
   object as requireObject,
   string as requireString,
   writeJson,
-} from "./json-edit.ts";
+} from "./json-edit";
 
-export type { Files } from "./json-edit.ts";
+export type { Files } from "./json-edit";
 
 const ASSET_ROOT = "configs/platform-features/ai-agents/asset-repository";
 

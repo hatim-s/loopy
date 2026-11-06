@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { Schema } from "effect";
-import { type Json, runSnapshotViewSchema, runViewSchema } from "../../src/contract/index.ts";
-import { readDaemonFile } from "../../src/local/index.ts";
-import { CLI, fixture, save } from "../cli-fixture.ts";
+import { type Json, runSnapshotViewSchema, runViewSchema } from "../../src/contract";
+import { readDaemonFile } from "../../src/local";
+import { CLI, fixture, save } from "../cli-fixture";
 
 const repo = resolve(import.meta.dir, "../../../..");
 

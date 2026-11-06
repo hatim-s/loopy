@@ -2,11 +2,11 @@ import { Data, Effect } from "effect";
 import type {
   AuthorityError,
   ImmutableResults as WireResults,
-} from "../../../packages/loopy/src/contract/sandbox-journal.js";
-import type { SandboxAttemptAuthority as WireAuthority } from "../../../packages/loopy/src/contract/sandbox-journal-rpc.js";
-import type { CommandExecutionError } from "../../../packages/loopy/src/core/index.js";
-import type { AttemptConflict, InvalidAttempt } from "./admission.js";
-import type { ArtifactError, ExportCleanupError } from "./artifact-error.js";
+} from "../../../packages/loopy/src/contract/sandbox-journal";
+import type { SandboxAttemptAuthority as WireAuthority } from "../../../packages/loopy/src/contract/sandbox-journal-rpc";
+import type { CommandExecutionError } from "../../../packages/loopy/src/core";
+import type { AttemptConflict, InvalidAttempt } from "./admission";
+import type { ArtifactError, ExportCleanupError } from "./artifact-error";
 
 export class SandboxOperationError extends Data.TaggedError("SandboxOperationError")<{
   operation: string;

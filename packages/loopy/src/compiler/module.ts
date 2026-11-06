@@ -1,9 +1,9 @@
 import { Effect } from "effect";
 import { parseSync } from "oxc-parser";
-import { diagnostic } from "./diagnostic.js";
-import { authorSource } from "./errors.js";
-import { checkModuleImports } from "./module-imports.js";
-import type { CompilerDiagnostic } from "./types.js";
+import { diagnostic } from "./diagnostic";
+import { authorSource } from "./errors";
+import { checkModuleImports } from "./module-imports";
+import type { CompilerDiagnostic } from "./types";
 
 export const checkCodeModule = Effect.fn(function* (path: string) {
   const diagnostics: CompilerDiagnostic[] = [];

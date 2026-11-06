@@ -1,8 +1,8 @@
 import { Link } from "@tanstack/react-router";
-import { isTerminalRun, type RunView } from "loopy/contract";
-import { ago, elapsed, shortId } from "../../lib/format.ts";
-import { TimeStamp } from "../time-stamp.tsx";
-import { RunPill } from "../ui/status.tsx";
+import { isTerminalRun, type RunView } from "../../../../../packages/loopy/src/contract";
+import { ago, elapsed, shortId } from "../../lib/format";
+import { TimeStamp } from "../time-stamp";
+import { RunPill } from "../ui/status";
 
 /** How long a run took, or has taken so far. Terminal runs end at their last update. */
 export function runElapsed(run: RunView, now: number): number {

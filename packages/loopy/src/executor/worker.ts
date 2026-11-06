@@ -1,9 +1,9 @@
 import { Effect, Schema } from "effect";
-import { executionKeySchema, jsonSchema, nodeSchema } from "../contract/index.js";
-import { EXECUTION_MODES } from "../core/index.js";
-import { ExecutionWorker } from "./execution.js";
-import { FilesystemReceipts, filesystemReceiptsDescriptorSchema } from "./receipts.js";
-import { encodeWorkerFailure } from "./response.js";
+import { executionKeySchema, jsonSchema, nodeSchema } from "../contract";
+import { EXECUTION_MODES } from "../core";
+import { ExecutionWorker } from "./execution";
+import { FilesystemReceipts, filesystemReceiptsDescriptorSchema } from "./receipts";
+import { encodeWorkerFailure } from "./response";
 
 const dictionary = Schema.Record(Schema.String, jsonSchema);
 

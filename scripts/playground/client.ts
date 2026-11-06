@@ -1,9 +1,9 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Schema } from "effect";
-import type { Json, putLoopyBodySchema } from "../../packages/loopy/src/contract/index.js";
-import { decodeBoundary } from "../../packages/loopy/src/contract/index.js";
-import { type Config, config, state } from "./config.js";
+import type { Json, putLoopyBodySchema } from "../../packages/loopy/src/contract";
+import { decodeBoundary } from "../../packages/loopy/src/contract";
+import { type Config, config, state } from "./config";
 
 export class PlaygroundClient {
   private constructor(readonly settings: Config) {}

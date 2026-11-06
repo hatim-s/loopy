@@ -1,4 +1,4 @@
-import type { SourceRange } from "./view-models.ts";
+import type { SourceRange } from "./view-models";
 
 export type TokenKind = "plain" | "keyword" | "string" | "number" | "comment" | "call";
 

@@ -5,7 +5,7 @@ import type {
   OverviewQuery,
   RunsQuery,
   ScopeItemsQuery,
-} from "../backend/backend.ts";
+} from "../backend/backend";
 
 /** The filters a paged run list is keyed by; the page cursor lives in the query itself. */
 export type RunFilters = Omit<RunsQuery, "before" | "limit">;

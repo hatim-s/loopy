@@ -2,21 +2,21 @@ import { expect, test } from "bun:test";
 import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { Cause, Deferred, Effect, Exit, Fiber, Result } from "effect";
-import { ArtifactError } from "../../../apps/sandbox/src/artifact-error.js";
-import { DockerBackend } from "../../../apps/sandbox/src/docker.js";
-import { FilesystemAuthority } from "../../../apps/sandbox/src/filesystem-authority.js";
-import { HttpSandboxAuthority } from "../../../apps/sandbox/src/http-authority.js";
-import { failure, SandboxOperationError } from "../../../apps/sandbox/src/operations.js";
-import { startSandbox } from "../../../apps/sandbox/src/server.js";
-import { Stopping } from "../../../apps/sandbox/src/stopping.js";
-import { AuthorityError } from "../src/contract/sandbox-journal.js";
-import type { AuthorityInput } from "../src/contract/sandbox-journal-rpc.js";
+import { ArtifactError } from "../../../apps/sandbox/src/artifact-error";
+import { DockerBackend } from "../../../apps/sandbox/src/docker";
+import { FilesystemAuthority } from "../../../apps/sandbox/src/filesystem/authority";
+import { HttpSandboxAuthority } from "../../../apps/sandbox/src/http-authority";
+import { failure, SandboxOperationError } from "../../../apps/sandbox/src/operations";
+import { startSandbox } from "../../../apps/sandbox/src/server";
+import { Stopping } from "../../../apps/sandbox/src/stopping";
+import { AuthorityError } from "../src/contract/sandbox-journal";
+import type { AuthorityInput } from "../src/contract/sandbox-journal-rpc";
 import {
   artifactReader,
   authorityFixture,
   successful,
   uncertain,
-} from "./fixtures/sandbox-authority.js";
+} from "./fixtures/sandbox-authority";
 
 async function fixture(run: (value: Awaited<ReturnType<typeof boundaryFixture>>) => Promise<void>) {
   const value = await boundaryFixture();

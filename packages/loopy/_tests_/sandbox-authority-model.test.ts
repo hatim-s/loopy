@@ -1,14 +1,14 @@
 import { expect, test } from "bun:test";
 import { rm } from "node:fs/promises";
-import { AuthorityError, type AuthoritySession } from "../src/contract/sandbox-journal.js";
-import { authorityFixture, successful, uncertain } from "./fixtures/sandbox-authority.js";
+import { AuthorityError, type AuthoritySession } from "../src/contract/sandbox-journal";
+import { authorityFixture, successful, uncertain } from "./fixtures/sandbox-authority";
 import {
   enumerateAuthorityModel,
   initialModel,
   type ModelAction,
   modelStep,
-} from "./fixtures/sandbox-authority-model.js";
-import { run } from "./fixtures/sandbox-run.js";
+} from "./fixtures/sandbox-authority-model";
+import { run } from "./fixtures/sandbox-run";
 
 async function replay(trace: ModelAction[]) {
   const fixture = await authorityFixture();

@@ -1,8 +1,8 @@
 import { dirname, resolve } from "node:path";
 import { Effect } from "effect";
 import { type Expression, parseSync, type Statement } from "oxc-parser";
-import { MAX_SOURCE_BYTES, MAX_SOURCE_FILES } from "../contract/index.js";
-import { builtinCommandKeys } from "../sdk/graph-host.js";
+import { MAX_SOURCE_BYTES, MAX_SOURCE_FILES } from "../contract";
+import { builtinCommandKeys } from "../sdk/graph-host";
 import {
   type Context,
   callable,
@@ -13,12 +13,12 @@ import {
   refuse,
   type Scope,
   unwrap,
-} from "./ast.js";
-import { diagnostic } from "./diagnostic.js";
-import { AuthorError, authorSource, type CompilationError } from "./errors.js";
-import { checkCodeModule } from "./module.js";
-import { modulePath } from "./module-imports.js";
-import type { AuthorModule, CompilerDiagnostic, ParserSource } from "./types.js";
+} from "./ast";
+import { diagnostic } from "./diagnostic";
+import { AuthorError, authorSource, type CompilationError } from "./errors";
+import { checkCodeModule } from "./module";
+import { modulePath } from "./module-imports";
+import type { AuthorModule, CompilerDiagnostic, ParserSource } from "./types";
 
 function parserSource(context: Context, node: Expression) {
   if (
@@ -87,6 +87,7 @@ type Inspection = {
   diagnostics: CompilerDiagnostic[];
   scopes: Map<string, Scope>;
   entry: string;
+  sdkPaths: Set<string>;
   sourceBytes: number;
 };
 
@@ -138,13 +139,15 @@ const inspectImports = Effect.fn(function* (
 
     const specifier = statement.source.value;
 
+    const dependency =
+      specifier.startsWith(".") || specifier.startsWith("/")
+        ? yield* modulePath(specifier, file)
+        : undefined;
+
     const sdk =
       specifier === "loopy" ||
       specifier === "loopy/graph" ||
-      resolve(dirname(file), specifier) === resolve(import.meta.dir, "../sdk/index.ts") ||
-      resolve(dirname(file), specifier) === resolve(import.meta.dir, "../sdk/index.js") ||
-      resolve(dirname(file), specifier) === resolve(import.meta.dir, "../sdk/graph/index.ts") ||
-      resolve(dirname(file), specifier) === resolve(import.meta.dir, "../sdk/graph/index.js");
+      (dependency !== undefined && state.sdkPaths.has(dependency));
 
     let imported: Scope = new Map();
 
@@ -373,6 +376,10 @@ export const restrict = Effect.fn(function* (file: string) {
     diagnostics,
     scopes: new Map(),
     entry: file,
+    sdkPaths: new Set([
+      yield* modulePath("../sdk", import.meta.filename),
+      yield* modulePath("../sdk/graph", import.meta.filename),
+    ]),
     sourceBytes: 0,
   });
 

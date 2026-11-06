@@ -1,11 +1,11 @@
 import type { DurableObjectState, R2Bucket } from "@cloudflare/workers-types";
 import { Effect, Schema } from "effect";
-import { R2ArtifactRegistry } from "../../../../apps/cloud/src/artifacts.js";
-import { DurableSqlDriver } from "../../../../apps/cloud/src/sql-driver.js";
-import { decodeBoundary, putLoopyBodySchema, validateCompiled } from "../../src/contract/index.js";
-import { canonicalJson, errorMessage } from "../../src/core/index.js";
-import { makeService } from "../../src/service/index.js";
-import { SqlRunStore } from "../../src/store/portable.js";
+import { R2ArtifactRegistry } from "../../../../apps/cloud/src/artifacts";
+import { DurableSqlDriver } from "../../../../apps/cloud/src/sql-driver";
+import { decodeBoundary, putLoopyBodySchema, validateCompiled } from "../../src/contract";
+import { canonicalJson, errorMessage } from "../../src/core";
+import { makeService } from "../../src/service";
+import { SqlRunStore } from "../../src/store/portable";
 
 const requestSchema = Schema.Struct({
   operation: Schema.Literals(["legacy", "save", "summary", "list", "service", "inspect"]),

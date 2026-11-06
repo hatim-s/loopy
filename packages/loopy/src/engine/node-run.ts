@@ -1,7 +1,7 @@
-import type { NodeRun, RunOutcome } from "../core/index.js";
-import type { Effect } from "./effects.js";
-import { sameExecution } from "./resolve.js";
-import type { EngineState } from "./state.js";
+import type { NodeRun, RunOutcome } from "../core";
+import type { Effect } from "./effects";
+import { sameExecution } from "./resolve";
+import type { EngineState } from "./state";
 
 export type Transition = { state: EngineState; effects: Effect[] };
 

@@ -1,4 +1,4 @@
-import type { RunRecord } from "../../core/index.js";
+import type { RunRecord } from "../../core";
 
 export const SCHEMA_VERSION = 15;
 

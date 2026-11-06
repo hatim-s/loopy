@@ -1,14 +1,14 @@
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { Effect } from "effect";
-import type { Graph, Node } from "../core/index.js";
-import { sourcePaths } from "../local/index.js";
-import { commandParser } from "../sdk/graph-host.js";
-import { AuthorError, compilerIO } from "./errors.js";
-import { checkImports } from "./module-imports.js";
-import { runnerSource } from "./runner.js";
-import { typescriptPaths } from "./source.js";
-import type { Bundle, CompilerDiagnostic, ParserSource } from "./types.js";
+import type { Graph, Node } from "../core";
+import { sourcePaths } from "../local";
+import { commandParser } from "../sdk/graph-host";
+import { AuthorError, compilerIO } from "./errors";
+import { checkImports } from "./module-imports";
+import { runnerSource } from "./runner";
+import { typescriptPaths } from "./source";
+import type { Bundle, CompilerDiagnostic, ParserSource } from "./types";
 
 function buildModule(file: string, kind: "code" | "parser") {
   return compilerIO("bundle module", file, () =>

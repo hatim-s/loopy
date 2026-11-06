@@ -1,9 +1,9 @@
 import { Cause, Clock, Deferred, Effect, Fiber, Queue, Scope, Semaphore } from "effect";
-import type { RunRecord, Schedule, Store } from "../core/index.js";
-import type { ActivationOptions } from "./activate.js";
-import { activateRun, type PreparationError } from "./daemon-activation.js";
-import { ActivationPool } from "./pool.js";
-import { type ScheduleRevisionError, ScheduleScheduler } from "./schedules.js";
+import type { RunRecord, Schedule, Store } from "../core";
+import type { ActivationOptions } from "./activation";
+import { activateRun, type PreparationError } from "./daemon-activation";
+import { ActivationPool } from "./pool";
+import { type ScheduleRevisionError, ScheduleScheduler } from "./schedules";
 
 export type DaemonOptions = {
   store: Store;

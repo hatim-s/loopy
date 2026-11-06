@@ -1,4 +1,4 @@
-import { isRecord } from "./validation.js";
+import { isRecord } from "./validation";
 
 // BOUNDARY: Canonical JSON accepts serializable records, including optional fields omitted by JSON.
 export function canonicalJson(value: unknown): string {

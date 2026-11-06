@@ -2,10 +2,10 @@ import { expect, test } from "bun:test";
 import { chmod, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { Cause, Effect, Fiber, Schema } from "effect";
-import { ExecutionWorker } from "../src/executor/execution.js";
-import { FilesystemReceipts } from "../src/executor/receipts.js";
-import { workerFailure } from "../src/executor/response.js";
-import { commandSpec, fixture } from "./fixtures/executor.js";
+import { ExecutionWorker } from "../src/executor/execution";
+import { FilesystemReceipts } from "../src/executor/receipts";
+import { workerFailure } from "../src/executor/response";
+import { commandSpec, fixture } from "./fixtures/executor";
 
 const activeProgram =
   'require("node:fs").appendFileSync("runs", "x"); await Bun.write("ready.json", JSON.stringify({pid: process.pid})); await Bun.write("ready", "ready"); setInterval(() => {}, 1000);';

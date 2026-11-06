@@ -1,7 +1,7 @@
 import { Effect } from "effect";
-import { graphView, type PutLoopyBody } from "../contract/index.js";
-import { ServiceError } from "./error.js";
-import type { ArtifactRegistry, ServiceOptions } from "./registry.js";
+import { graphView, type PutLoopyBody } from "../contract";
+import { ServiceError } from "./error";
+import type { ArtifactRegistry, ServiceOptions } from "./registry";
 
 export const requireDefinition = Effect.fn("definition.requireDefinition")(function* (
   registry: ArtifactRegistry,

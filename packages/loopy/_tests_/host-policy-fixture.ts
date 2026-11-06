@@ -1,8 +1,8 @@
 import { Effect } from "effect";
-import type { ExecutionKey, ExecutionResult, Receipt } from "../src/core/index.js";
-import { executionKeyString } from "../src/core/index.js";
-import type { DurableExecutionProvider } from "../src/host/durable.js";
-import { code, loopy, parallel, wait } from "../src/sdk/graph/index.js";
+import type { ExecutionKey, ExecutionResult, Receipt } from "../src/core";
+import { executionKeyString } from "../src/core";
+import type { DurableExecutionProvider } from "../src/host/durable";
+import { code, loopy, parallel, wait } from "../src/sdk/graph";
 
 export const policySuccess: ExecutionResult = {
   kind: "succeeded",

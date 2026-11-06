@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { readCommit, readSnapshot, readTree } from "./github.ts";
-import { planSync, sourceFiles, syncMetadata, targetFiles } from "./sync.ts";
+import { readCommit, readSnapshot, readTree } from "./github";
+import { planSync, sourceFiles, syncMetadata, targetFiles } from "./sync";
 
 export function blobSha(contents: string) {
   const bytes = Buffer.from(contents);

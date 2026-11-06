@@ -1,12 +1,12 @@
-export { EVENT_RETENTION, EventListeners, type EventTransaction } from "./event-outbox.js";
+export { EVENT_RETENTION, EventListeners, type EventTransaction } from "./event-outbox";
 
-export { MemoryStore, makeMemoryStore, memoryStoreLayer } from "./memory.js";
+export { MemoryStore, makeMemoryStore, memoryStoreLayer } from "./memory";
 
 export {
   makeSqliteRunStore,
   openRunStore,
   type SqliteRunStore,
   sqliteStoreLayer,
-} from "./sqlite/store.js";
+} from "./sqlite/store";
 
-export { subscribeStore } from "./subscription.js";
+export { subscribeStore } from "./subscription";

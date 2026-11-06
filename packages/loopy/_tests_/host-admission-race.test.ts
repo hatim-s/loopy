@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
-import type { Executor } from "../src/core/index.js";
-import { activate } from "../src/host/activate.js";
-import { loopy, parallel, sh, wait } from "../src/sdk/graph/index.js";
-import { MemoryStore } from "../src/store/index.js";
-import { newRun } from "./fixture.js";
+import type { Executor } from "../src/core";
+import { activate } from "../src/host/activation";
+import { loopy, parallel, sh, wait } from "../src/sdk/graph";
+import { MemoryStore } from "../src/store";
+import { newRun } from "./fixture";
 
 test("admission commits work first and reloads a signal before reducing denial", async () => {
   await Effect.runPromise(

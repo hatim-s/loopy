@@ -1,5 +1,5 @@
 import { mkdirSync, writeFileSync } from "node:fs";
-import { type Context, type Input, root } from "./repository.ts";
+import { type Context, type Input, root } from "./repository";
 
 export default (input: Input, context: Context) => {
   mkdirSync(`${root}/src`, { recursive: true });

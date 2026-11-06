@@ -9,7 +9,7 @@ import {
   requireString,
   validateSecretName,
   validateSlug,
-} from "../../core/index.js";
+} from "../../core";
 
 // BOUNDARY: JavaScript author modules can pass malformed field schemas to the public builder.
 export function parseDefinitionInput(value: unknown) {

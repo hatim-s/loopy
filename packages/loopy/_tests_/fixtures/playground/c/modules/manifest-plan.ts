@@ -1,5 +1,5 @@
 import { writeFile } from "node:fs/promises";
-import { digest, readSource, repository, sourceFiles } from "./repository.js";
+import { digest, readSource, repository, sourceFiles } from "./repository";
 
 export default async function manifestPlan() {
   const entries: string[] = [];

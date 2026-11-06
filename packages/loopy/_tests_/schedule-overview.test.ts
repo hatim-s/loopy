@@ -4,9 +4,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Exit, Scope } from "effect";
-import type { Store } from "../src/core/index.js";
-import { MemoryStore, makeSqliteRunStore } from "../src/store/index.js";
-import { SCHEMA, WAIT_SCHEMA } from "../src/store/sqlite/store-schema.js";
+import type { Store } from "../src/core";
+import { MemoryStore, makeSqliteRunStore } from "../src/store";
+import { SCHEMA, WAIT_SCHEMA } from "../src/store/sqlite/store-schema";
 
 const scopes: Scope.Closeable[] = [];
 

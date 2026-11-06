@@ -4,18 +4,18 @@ import {
   decodeBoundary,
   type SandboxArtifact,
   sandboxArtifactReadSchema,
-} from "../../../packages/loopy/src/contract/index.js";
+} from "../../../packages/loopy/src/contract";
 import {
   artifactHelperName,
   type DockerAttemptPlan,
-} from "../../../packages/loopy/src/contract/sandbox-journal.js";
-import type { CommandExecutionError } from "../../../packages/loopy/src/core/index.js";
-import { ArtifactError } from "./artifact-error.js";
-import type { SandboxConfig } from "./config.js";
-import { DockerClient } from "./docker-client.js";
-import type { SandboxOperationError } from "./operations.js";
-import { checked, failure } from "./operations.js";
-import { type CommandRunner, runCommand } from "./process.js";
+} from "../../../packages/loopy/src/contract/sandbox-journal";
+import type { CommandExecutionError } from "../../../packages/loopy/src/core";
+import { ArtifactError } from "./artifact-error";
+import type { SandboxConfig } from "./config";
+import { DockerClient } from "./docker/client";
+import type { SandboxOperationError } from "./operations";
+import { checked, failure } from "./operations";
+import { type CommandRunner, runCommand } from "./process";
 
 export interface ArtifactReader {
   cleanup(

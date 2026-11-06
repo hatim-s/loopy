@@ -1,5 +1,5 @@
 import { writeFileSync } from "node:fs";
-import { type Context, type Input, readItems, root, writeResult } from "./repository.ts";
+import { type Context, type Input, readItems, root, writeResult } from "./repository";
 
 export default (input: Input & { approved: boolean }, context: Context) => {
   context.log("release-approval-received", { approved: input.approved, ordinal: input.ordinal });

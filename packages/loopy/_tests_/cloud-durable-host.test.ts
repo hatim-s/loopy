@@ -6,16 +6,16 @@ import {
   executionKeyString,
   type Graph,
   type Receipt,
-} from "../src/core/index.js";
+} from "../src/core";
 import {
   activateDurable,
   type DurableActivationOptions,
   type DurableExecutionProvider,
   DurableProviderError,
-} from "../src/host/durable.js";
-import { code, loopy, parallel, random, sh, sleep, uuid, wait } from "../src/sdk/graph/index.js";
-import { MemoryStore } from "../src/store/index.js";
-import { newRun } from "./fixture.js";
+} from "../src/host/durable";
+import { code, loopy, parallel, random, sh, sleep, uuid, wait } from "../src/sdk/graph";
+import { MemoryStore } from "../src/store";
+import { newRun } from "./fixture";
 
 const success: ExecutionResult = {
   kind: "succeeded",

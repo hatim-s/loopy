@@ -1,11 +1,11 @@
-import type { Schedule, ScheduleOverview } from "../../core/index.js";
-import { type Store } from "../../core/index.js";
-import { type EventTransaction } from "../event-outbox.js";
-import { StoreRejectedError, storageOperation } from "../operation.js";
-import { utc } from "../timestamps.js";
-import { rowToSchedule, SQL } from "./store-rows.js";
-import { type ScheduleRow } from "./store-schema.js";
-import { SqliteWaits } from "./waits.js";
+import type { Schedule, ScheduleOverview } from "../../core";
+import { type Store } from "../../core";
+import { type EventTransaction } from "../event-outbox";
+import { StoreRejectedError, storageOperation } from "../operation";
+import { utc } from "../timestamps";
+import { rowToSchedule, SQL } from "./store-rows";
+import { type ScheduleRow } from "./store-schema";
+import { SqliteWaits } from "./waits";
 
 export class SqliteSchedules extends SqliteWaits {
   putSchedule(schedule: Omit<Schedule, "version">) {

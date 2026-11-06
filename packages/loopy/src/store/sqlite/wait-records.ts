@@ -1,11 +1,11 @@
-import type { HookRecord, WaitRecord } from "../../core/index.js";
-import type { EventTransaction } from "../event-outbox.js";
-import { storageOperation } from "../operation.js";
-import { storedDecoder } from "../row-codec.js";
-import { utc } from "../timestamps.js";
-import { publicHook } from "../wait.js";
-import { waitRecordSchema } from "../wait-schema.js";
-import { SqliteOwnership } from "./ownership.js";
+import type { HookRecord, WaitRecord } from "../../core";
+import type { EventTransaction } from "../event-outbox";
+import { storageOperation } from "../operation";
+import { storedDecoder } from "../row-codec";
+import { utc } from "../timestamps";
+import { publicHook } from "../wait";
+import { waitRecordSchema } from "../wait-schema";
+import { SqliteOwnership } from "./ownership";
 
 const decodeWaitRecord = storedDecoder(waitRecordSchema, "waits");
 

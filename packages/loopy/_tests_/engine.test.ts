@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
-import { decodeBoundary, graphSchema } from "../src/contract/index.js";
-import { type ExecutionKey, type ExecutionResult, type Json } from "../src/core/index.js";
-import { type EngineEvent, initialState, step } from "../src/engine/index.js";
-import { loopy, sh } from "../src/sdk/graph/index.js";
-import { approveDemoGraph } from "./fixtures/graphs.js";
+import { decodeBoundary, graphSchema } from "../src/contract";
+import { type ExecutionKey, type ExecutionResult, type Json } from "../src/core";
+import { type EngineEvent, initialState, step } from "../src/engine";
+import { loopy, sh } from "../src/sdk/graph";
+import { approveDemoGraph } from "./fixtures/graphs";
 
 const at = "2026-10-18T00:00:00.000Z";
 

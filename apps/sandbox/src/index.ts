@@ -1,8 +1,8 @@
 import { parseArgs } from "node:util";
 import { Effect } from "effect";
-import { decodeBoundary } from "../../../packages/loopy/src/contract/index.js";
-import { sandboxConfigSchema } from "./config.js";
-import { startSandbox } from "./server.js";
+import { decodeBoundary } from "../../../packages/loopy/src/contract";
+import { sandboxConfigSchema } from "./config";
+import { startSandbox } from "./server";
 
 const { values } = parseArgs({
   args: Bun.argv.slice(2),

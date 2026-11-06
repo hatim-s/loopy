@@ -1,3 +1,3 @@
-export type { CommandDescriptor, FlagDefinition, PositionalDefinition } from "./define-command.js";
+export type { CommandDescriptor, FlagDefinition, PositionalDefinition } from "./define-command";
 
-export { renderArgv } from "./render-argv.js";
+export { renderArgv } from "./render-argv";

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import type { Page, Pager, ScanInfo } from "../../lib/view-models.ts";
-import { Icon } from "./icon.tsx";
+import type { Page, Pager, ScanInfo } from "../../lib/view-models";
+import { Icon } from "./icon";
 
 /**
  * The table footer: what the rows are on the left, the keyset pager on the right. Pages move

@@ -1,13 +1,13 @@
 import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Effect } from "effect";
-import { revision, validateGraph } from "../core/index.js";
-import { bundle } from "./bundle.js";
-import { captureSource } from "./capture-source.js";
-import { type CompilationError, compilerIO, recoverDiagnostics } from "./errors.js";
-import { evaluate } from "./evaluate.js";
-import { restrict } from "./restrict.js";
-import type { CompileResult } from "./types.js";
+import { revision, validateGraph } from "../core";
+import { bundle } from "./bundle";
+import { captureSource } from "./capture-source";
+import { type CompilationError, compilerIO, recoverDiagnostics } from "./errors";
+import { evaluate } from "./evaluate";
+import { restrict } from "./restrict";
+import type { CompileResult } from "./types";
 
 export const compile = (path: string): Effect.Effect<CompileResult, CompilationError> =>
   recoverDiagnostics(

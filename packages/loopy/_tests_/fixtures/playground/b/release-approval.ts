@@ -1,4 +1,4 @@
-import { code, log, loopy, wait } from "loopy/graph";
+import { code, log, loopy, wait } from "../../../../src/sdk/graph";
 
 export default loopy("playground-b-release-approval", {
   description: "Hold a synthetic release for approval, then write its release report",

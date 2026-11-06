@@ -1,5 +1,5 @@
-import { currentBuilder } from "../builder.js";
-import { type AuthorValue, isRef, type Ref, serialize, serializeRef } from "../ref.js";
+import { currentBuilder } from "../builder";
+import { type AuthorValue, isRef, type Ref, serialize, serializeRef } from "../ref";
 
 export function format(
   template: string,

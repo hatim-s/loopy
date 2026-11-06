@@ -1,7 +1,7 @@
 import { join } from "node:path";
-import type { Json } from "loopy";
-import { type Files, read } from "../../../../examples/www-uacode-sync/json-edit.ts";
-import { sourceFiles } from "../../../../examples/www-uacode-sync/sync.ts";
+import { type Files, read } from "../../../../examples/www-uacode-sync/json-edit";
+import { sourceFiles } from "../../../../examples/www-uacode-sync/sync";
+import type { Json } from "../../src/sdk";
 
 const root = "";
 

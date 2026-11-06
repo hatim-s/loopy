@@ -2,18 +2,18 @@ import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, realpath, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { Effect } from "effect";
-import { attemptHash } from "../../../../apps/sandbox/src/admission.js";
-import type { ArtifactReader } from "../../../../apps/sandbox/src/artifacts.js";
-import { sandboxConfigSchema, validateStateRoot } from "../../../../apps/sandbox/src/config.js";
-import { FilesystemAuthority } from "../../../../apps/sandbox/src/filesystem-authority.js";
-import { FilesystemResults } from "../../../../apps/sandbox/src/immutable-results.js";
+import { attemptHash } from "../../../../apps/sandbox/src/admission";
+import type { ArtifactReader } from "../../../../apps/sandbox/src/artifacts";
+import { sandboxConfigSchema, validateStateRoot } from "../../../../apps/sandbox/src/config";
+import { FilesystemAuthority } from "../../../../apps/sandbox/src/filesystem/authority";
+import { FilesystemResults } from "../../../../apps/sandbox/src/immutable-results";
 import {
   decodeBoundary,
   nodeIdSchema,
   type SandboxExecutionResult,
   sandboxAttemptRequestSchema,
-} from "../../src/contract/index.js";
-import type { DockerAttemptPlan } from "../../src/contract/sandbox-journal.js";
+} from "../../src/contract";
+import type { DockerAttemptPlan } from "../../src/contract/sandbox-journal";
 
 export const successful: SandboxExecutionResult = {
   kind: "succeeded",

@@ -10,10 +10,10 @@ import {
 } from "node:fs";
 import { join, resolve } from "node:path";
 import { Effect } from "effect";
-import { isString, requireRecord, setOwnProperty, validateSecretName } from "../core/index.js";
-import { SecretError } from "../service/index.js";
-import { errnoCode, withLockDirectory, writeFileAtomically } from "./fs.js";
-import { defaultHome } from "./home.js";
+import { isString, requireRecord, setOwnProperty, validateSecretName } from "../core";
+import { SecretError } from "../service";
+import { errnoCode, withLockDirectory, writeFileAtomically } from "./fs";
+import { defaultHome } from "./home";
 
 const MAX_VALUE_BYTES = 64 * 1024;
 

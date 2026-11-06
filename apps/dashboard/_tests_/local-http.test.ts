@@ -1,9 +1,9 @@
 import { afterAll, expect, spyOn, test } from "bun:test";
 import { Effect } from "effect";
-import { type RunView, routes } from "loopy/contract";
-import { BackendError } from "../src/backend/backend.ts";
-import { runRequest } from "../src/backend/http-wire.ts";
-import { httpTransport, localHttpBackend } from "../src/backend/local-http.ts";
+import { type RunView, routes } from "../../../packages/loopy/src/contract";
+import { BackendError } from "../src/backend/backend";
+import { runRequest } from "../src/backend/http-wire";
+import { httpTransport, localHttpBackend } from "../src/backend/local-http";
 
 const run: RunView = {
   id: "run/1",

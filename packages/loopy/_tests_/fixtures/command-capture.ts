@@ -1,7 +1,7 @@
-import type { ExecutionResult, ExecutionSpec, RunOutcome } from "../../src/core/index.js";
-import { initialState, step } from "../../src/engine/index.js";
-import { renderCommand } from "../../src/local/execution-host.js";
-import { loopy } from "../../src/sdk/graph/index.js";
+import type { ExecutionResult, ExecutionSpec, RunOutcome } from "../../src/core";
+import { initialState, step } from "../../src/engine";
+import { renderCommand } from "../../src/local/execution-host";
+import { loopy } from "../../src/sdk/graph";
 
 type Capture = {
   executor: { calls: { program: string; args: string[] }[] };

@@ -1,5 +1,5 @@
-import { git, loopy } from "loopy";
-import { codexExec } from "./codex.ts";
+import { git, loopy } from "../packages/loopy/src/sdk";
+import { codexExec } from "./codex";
 
 export default loopy({
   name: "review",

@@ -1,5 +1,5 @@
-export type { CommandResult, Json } from "../core/index.js";
+export type { CommandResult, Json } from "../core";
 
-export * from "./graph/index.js";
+export * from "./graph";
 
-export type { GraphCommandDescriptor as CommandDescriptor } from "./graph/nodes/command.js";
+export type { GraphCommandDescriptor as CommandDescriptor } from "./graph/nodes/command";

@@ -5,9 +5,9 @@ import {
   type LogRecord,
   type NodeRunView,
   type RunStatus,
-} from "loopy/contract";
-import { kindDetail } from "./graph-text.ts";
-import type { ScopeTuple } from "./view-models.ts";
+} from "../../../../packages/loopy/src/contract";
+import { kindDetail } from "./graph-text";
+import type { ScopeTuple } from "./view-models";
 
 type GraphNode = GraphView["nodes"][number];
 

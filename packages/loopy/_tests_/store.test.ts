@@ -1,6 +1,6 @@
 import { afterEach } from "bun:test";
-import { storeContract } from "./store-contract.js";
-import { createTestStores } from "./store-fixture.js";
+import { storeContract } from "./store-contract";
+import { createTestStores } from "./store-fixture";
 
 const { openTestStore, closeTestStores } = createTestStores();
 

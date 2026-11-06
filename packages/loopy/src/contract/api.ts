@@ -1,6 +1,6 @@
 import { Effect, Schema, SchemaGetter } from "effect";
-import { queryNumber, struct } from "./codec.js";
-import { putLoopyBodySchema } from "./compiled-loopy.js";
+import { queryNumber, struct } from "./codec";
+import { putLoopyBodySchema } from "./compiled-loopy";
 import {
   eventHistoryPageSchema,
   eventHistoryQuerySchema,
@@ -19,11 +19,11 @@ import {
   scopeItemsPageSchema,
   scopeItemsQuerySchema,
   scopesQuerySchema,
-} from "./dashboard.js";
-import { graphRevisionViewSchema, graphViewSchema } from "./graph.js";
-import { jsonSchema } from "./json.js";
-import { logRecordSchema } from "./records.js";
-import { sourceArtifactSchema } from "./source-artifact.js";
+} from "./dashboard";
+import { graphRevisionViewSchema, graphViewSchema } from "./graph";
+import { jsonSchema } from "./json";
+import { logRecordSchema } from "./records";
+import { sourceArtifactSchema } from "./source-artifact";
 import {
   cursorViewSchema,
   daemonViewSchema,
@@ -32,7 +32,7 @@ import {
   runViewSchema,
   scheduleViewSchema,
   serverEventSchema,
-} from "./views.js";
+} from "./views";
 
 export const ERROR_CODES = [
   "not_yet",

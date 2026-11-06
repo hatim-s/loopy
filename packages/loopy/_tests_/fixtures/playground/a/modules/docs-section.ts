@@ -1,4 +1,4 @@
-import { type Context, read } from "./repository.js";
+import { type Context, read } from "./repository";
 
 export default async ({ item, index }: { item: number; index: number }, context: Context) => {
   const path = index % 2 === 0 ? "src/math.ts" : "src/status.ts";

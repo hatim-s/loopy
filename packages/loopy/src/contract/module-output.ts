@@ -1,5 +1,5 @@
-import { decodeBoundary } from "./codec.js";
-import { jsonSchema } from "./json.js";
+import { decodeBoundary } from "./codec";
+import { jsonSchema } from "./json";
 
 export function parseModuleOutput(stdout: string) {
   const text = stdout.endsWith("\n") ? stdout.slice(0, -1) : stdout;

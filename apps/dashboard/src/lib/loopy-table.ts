@@ -1,5 +1,5 @@
-import type { LoopyView, RunStatus } from "loopy/contract";
-import type { LoopyRow } from "./view-models.ts";
+import type { LoopyView, RunStatus } from "../../../../packages/loopy/src/contract";
+import type { LoopyRow } from "./view-models";
 
 export const LOOPY_FILTERS = ["all", "scheduled", "failing", "active"] as const;
 

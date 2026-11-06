@@ -12,20 +12,15 @@ import {
   runtime,
   sandboxState,
   state,
-} from "./config.js";
-import { waitForWorker } from "./readiness.js";
-import {
-  cleanEnvironment,
-  manifestPath,
-  requireFreePorts,
-  writeStackConfig,
-} from "./stack-config.js";
+} from "./config";
+import { waitForWorker } from "./readiness";
+import { cleanEnvironment, manifestPath, requireFreePorts, writeStackConfig } from "./stack-config";
 import {
   parseServeIdentity,
   requireOwnedSupervisor,
   supervisorArguments,
   supervisorProcesses,
-} from "./stack-identity.js";
+} from "./stack-identity";
 
 export async function serve(input: Parameters<typeof parseServeIdentity>[0]) {
   const selection = { root, state, profile: profile.name ?? "default" } as const;

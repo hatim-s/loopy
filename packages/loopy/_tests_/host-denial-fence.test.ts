@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
 import { Effect } from "effect";
-import { activateDurable } from "../src/host/durable.js";
-import { loopy, sh } from "../src/sdk/graph/index.js";
-import { MemoryStore } from "../src/store/index.js";
-import { newRun } from "./fixture.js";
-import { PolicyProvider } from "./host-policy-fixture.js";
+import { activateDurable } from "../src/host/durable";
+import { loopy, sh } from "../src/sdk/graph";
+import { MemoryStore } from "../src/store";
+import { newRun } from "./fixture";
+import { PolicyProvider } from "./host-policy-fixture";
 
 test("an admission denial reloads state and cannot overwrite a newer persisted attempt", async () => {
   const store = new MemoryStore();

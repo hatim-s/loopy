@@ -3,16 +3,16 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Effect } from "effect";
-import { decodeBoundary, encodeRunCursor, graphView, routes } from "../src/contract/index.js";
-import type { Graph, RunRecord } from "../src/core/index.js";
-import { revision } from "../src/core/index.js";
-import { makeLocalService, Registry } from "../src/local/index.js";
-import { makeArtifactRegistry } from "../src/local/save-compiled.js";
-import { loopy } from "../src/sdk/graph/index.js";
-import { makeService } from "../src/service/index.js";
-import { compiledBody } from "./compiled-fixture.js";
-import { FakeExecutor } from "./fixture.js";
-import { fixtureDaemon, fixtureStore } from "./fixtures/service-runtime.js";
+import { decodeBoundary, encodeRunCursor, graphView, routes } from "../src/contract";
+import type { Graph, RunRecord } from "../src/core";
+import { revision } from "../src/core";
+import { makeLocalService, Registry } from "../src/local";
+import { makeArtifactRegistry } from "../src/local/save-compiled";
+import { loopy } from "../src/sdk/graph";
+import { makeService } from "../src/service";
+import { compiledBody } from "./compiled-fixture";
+import { FakeExecutor } from "./fixture";
+import { fixtureDaemon, fixtureStore } from "./fixtures/service-runtime";
 
 const cleanups: (() => void | Promise<void>)[] = [];
 

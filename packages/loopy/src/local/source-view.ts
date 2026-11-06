@@ -1,8 +1,8 @@
 import { Effect } from "effect";
-import type { SourceArtifact } from "../contract/index.js";
-import { canonicalJson } from "../core/index.js";
-import { secretRedactor } from "./secret-redactor.js";
-import { SecretStore } from "./secrets.js";
+import type { SourceArtifact } from "../contract";
+import { canonicalJson } from "../core";
+import { secretRedactor } from "./secret-redactor";
+import { SecretStore } from "./secrets";
 
 // Source never contains runtime substitutions. Withhold a snapshot that also contains a stored secret.
 export const redactSourceArtifact = (home: string, artifact: SourceArtifact) =>

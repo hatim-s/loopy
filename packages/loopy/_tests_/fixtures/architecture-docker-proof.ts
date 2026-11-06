@@ -4,8 +4,8 @@ import { join, relative } from "node:path";
 import { gzipSync } from "node:zlib";
 import { Effect } from "effect";
 import { z } from "zod";
-import { HttpSandboxAuthority } from "../../../../apps/sandbox/src/http-authority.js";
-import { type Bridge, resources } from "./architecture-docker-resources.js";
+import { HttpSandboxAuthority } from "../../../../apps/sandbox/src/http-authority";
+import { type Bridge, resources } from "./architecture-docker-resources";
 import {
   bounded,
   decodedProxyResponse,
@@ -13,12 +13,12 @@ import {
   filesBelow,
   repository,
   snapshot,
-} from "./architecture-docker-runtime.js";
+} from "./architecture-docker-runtime";
 import {
   durableAndGuard,
   killedAndDeadline,
   shutdownOutage,
-} from "./architecture-docker-scenarios.js";
+} from "./architecture-docker-scenarios";
 
 export async function proxySanityProbe() {
   const bytes = Buffer.from('{"epoch":0}');

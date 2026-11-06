@@ -1,7 +1,7 @@
 import { Effect } from "effect";
-import { decodeBoundary, nodeIdSchema } from "../../src/contract/index.js";
-import type { NodeRun, Store } from "../../src/core/index.js";
-import { readmodelAt } from "./readmodel-history.js";
+import { decodeBoundary, nodeIdSchema } from "../../src/contract";
+import type { NodeRun, Store } from "../../src/core";
+import { readmodelAt } from "./readmodel-history";
 
 export async function seedScopes(store: Store) {
   for (const id of ["scope-run", "other-run"]) {

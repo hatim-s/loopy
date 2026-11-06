@@ -9,8 +9,8 @@ import {
   PREDICATE_OPS,
   type Predicate,
   type RefId,
-} from "../core/index.js";
-import { struct } from "./codec.js";
+} from "../core";
+import { struct } from "./codec";
 
 // BOUNDARY: Graph ids are branded only after the wire has supplied nonempty strings.
 export const nodeIdSchema = Schema.declare<NodeId>(

@@ -1,6 +1,6 @@
-import type { AttemptLog } from "./executor.js";
-import type { ExecutionKey, NodeRun, OutSchema } from "./graph.js";
-import type { Json, RunOutcome } from "./model.js";
+import type { AttemptLog } from "./executor";
+import type { ExecutionKey, NodeRun, OutSchema } from "./graph";
+import type { Json, RunOutcome } from "./model";
 
 export type StoreEffect =
   | { kind: "write_node_run"; nodeRun: NodeRun }

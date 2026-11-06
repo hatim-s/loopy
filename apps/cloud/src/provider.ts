@@ -7,17 +7,17 @@ import {
   sandboxArtifactSchema,
   sandboxErrorSchema,
   sandboxReceiptSchema,
-} from "../../../packages/loopy/src/contract/index.js";
-import type { ExecutionKey, ExecutionSpec } from "../../../packages/loopy/src/core/index.js";
+} from "../../../packages/loopy/src/contract";
+import type { ExecutionKey, ExecutionSpec } from "../../../packages/loopy/src/core";
 import {
   type DurableExecutionProvider,
   DurableProviderError,
-} from "../../../packages/loopy/src/host/index.js";
-import type { R2ArtifactRegistry } from "./artifacts.js";
-import { localEndpoint } from "./environment.js";
-import { type BodyLimitError, readBoundedText } from "./http.js";
-import type { CloudProtocolError } from "./operation.js";
-import { CloudError, decodeProtocol, platform } from "./operation.js";
+} from "../../../packages/loopy/src/host";
+import type { R2ArtifactRegistry } from "./artifacts";
+import { localEndpoint } from "./environment";
+import { type BodyLimitError, readBoundedText } from "./http";
+import type { CloudProtocolError } from "./operation";
+import { CloudError, decodeProtocol, platform } from "./operation";
 
 export class SandboxProvider implements DurableExecutionProvider {
   private readonly base: URL;

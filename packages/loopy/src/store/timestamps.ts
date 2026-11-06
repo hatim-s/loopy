@@ -1,5 +1,5 @@
-import type { NodeRun, RunRecord } from "../core/index.js";
-import { StoreInvariantError } from "./operation.js";
+import type { NodeRun, RunRecord } from "../core";
+import { StoreInvariantError } from "./operation";
 
 export function utc(value: string | number): string {
   const date = new Date(value);

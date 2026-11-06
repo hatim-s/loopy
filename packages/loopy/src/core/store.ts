@@ -1,7 +1,7 @@
 import type { Effect } from "effect";
 import { Context, Data } from "effect";
-import type { StoreEffect } from "./effects.js";
-import type { ExecutionKey, NodeRun, OutSchema } from "./graph.js";
+import type { StoreEffect } from "./effects";
+import type { ExecutionKey, NodeRun, OutSchema } from "./graph";
 import type {
   HookRecord,
   Json,
@@ -12,9 +12,9 @@ import type {
   RunStatus,
   RuntimeEvent,
   Schedule,
-} from "./model.js";
-import type { DashboardReader } from "./queries.js";
-import type { RateLimitResult } from "./rate-limit.js";
+} from "./model";
+import type { DashboardReader } from "./queries";
+import type { RateLimitResult } from "./rate-limit";
 
 export class StorageError extends Data.TaggedError("StorageError")<{
   readonly operation: string;

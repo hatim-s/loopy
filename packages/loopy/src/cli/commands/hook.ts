@@ -1,10 +1,10 @@
 import { Effect } from "effect";
-import { routes } from "../../contract/index.js";
-import { assertJson } from "../../core/index.js";
-import { request } from "../client.js";
-import { type CliContext, requireHead, requireTarget } from "../context.js";
-import { CliError } from "../errors.js";
-import { printLine } from "../output.js";
+import { routes } from "../../contract";
+import { assertJson } from "../../core";
+import { request } from "../client";
+import { type CliContext, requireHead, requireTarget } from "../context";
+import { CliError } from "../errors";
+import { printLine } from "../output";
 
 export function runHook(context: CliContext) {
   return Effect.gen(function* () {

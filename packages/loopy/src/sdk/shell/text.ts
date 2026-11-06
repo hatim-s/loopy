@@ -1,5 +1,5 @@
-import { filter } from "./text/filter.js";
-import { format } from "./text/format.js";
+import { filter } from "./text/filter";
+import { format } from "./text/format";
 
 export const text = {
   ...filter,

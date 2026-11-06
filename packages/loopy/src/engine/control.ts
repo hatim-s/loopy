@@ -1,14 +1,7 @@
-import {
-  isBoolean,
-  isNumber,
-  isString,
-  type Json,
-  type Node,
-  setOwnProperty,
-} from "../core/index.js";
-import { predicate } from "./predicate.js";
-import { type ResolutionContext, resolve } from "./resolve.js";
-import { sequence, type Traversal, type TraversalResult } from "./traversal.js";
+import { isBoolean, isNumber, isString, type Json, type Node, setOwnProperty } from "../core";
+import { predicate } from "./predicate";
+import { type ResolutionContext, resolve } from "./resolve";
+import { sequence, type Traversal, type TraversalResult } from "./traversal";
 
 function mapped(
   traversal: Traversal,

@@ -1,7 +1,7 @@
-import type { Duration } from "./graph.js";
-import { isNumber } from "./validation.js";
+import type { Duration } from "./graph";
+import { isNumber } from "./validation";
 
-export type { Duration } from "./graph.js";
+export type { Duration } from "./graph";
 
 const UNITS = new Map([
   ["s", 1000],

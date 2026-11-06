@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { parseCliArgs } from "../src/cli/args.ts";
+import { parseCliArgs } from "../src/cli/args";
 
 test("named input preserves strings, equals signs, empty values, and own properties", () => {
   const parsed = parseCliArgs([

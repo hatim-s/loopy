@@ -1,6 +1,6 @@
-import { descriptorCommand } from "../descriptor.js";
-import type { RenderInput } from "../render-argv.js";
-import { CURL_WRITE_OUT, parseCurl } from "./parse/net.js";
+import { descriptorCommand } from "../descriptor";
+import type { RenderInput } from "../render-argv";
+import { CURL_WRITE_OUT, parseCurl } from "./parse/net";
 
 function curlInput(input: RenderInput): RenderInput {
   const urls = (input.args?.length ?? 0) + (input.flags?.url === undefined ? 0 : 1);

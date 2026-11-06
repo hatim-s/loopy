@@ -2,11 +2,11 @@ import { expect, test } from "bun:test";
 import { lstat, readdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { Effect } from "effect";
-import type { ExecutionResult } from "../src/core/index.js";
-import { ExecutionWorker } from "../src/executor/execution.js";
-import { LocalExecutor } from "../src/executor/local.js";
-import { FilesystemReceipts, type LocalReceipt, receiptPath } from "../src/executor/receipts.js";
-import { receiptsFixture } from "./fixtures/local-receipts.js";
+import type { ExecutionResult } from "../src/core";
+import { ExecutionWorker } from "../src/executor/execution";
+import { LocalExecutor } from "../src/executor/local";
+import { FilesystemReceipts, type LocalReceipt, receiptPath } from "../src/executor/receipts";
+import { receiptsFixture } from "./fixtures/local-receipts";
 
 const result: ExecutionResult = { kind: "succeeded", output: 42, logs: [] };
 

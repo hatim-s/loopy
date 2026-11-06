@@ -1,9 +1,9 @@
 import { appendFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Effect, Semaphore } from "effect";
-import type { AttemptBackend } from "../../apps/sandbox/src/docker.js";
-import { failure, io } from "../../apps/sandbox/src/operations.js";
-import { state } from "./config.js";
+import type { AttemptBackend } from "../../apps/sandbox/src/docker";
+import { failure, io } from "../../apps/sandbox/src/operations";
+import { state } from "./config";
 
 export class RuntimeLimit {
   private readonly semaphore;

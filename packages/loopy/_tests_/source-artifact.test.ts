@@ -3,17 +3,17 @@ import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Effect, Schema } from "effect";
-import { compile } from "../src/compiler/index.js";
+import { compile } from "../src/compiler";
 import {
   decodeBoundary,
   MAX_SOURCE_BYTES,
   putLoopyBodySchema,
   type SourceArtifact,
   sourceArtifactSchema,
-} from "../src/contract/index.js";
-import { Registry, SecretStore } from "../src/local/index.js";
-import { saveCompiled } from "../src/local/save-compiled.js";
-import { compiledBody } from "./compiled-fixture.js";
+} from "../src/contract";
+import { Registry, SecretStore } from "../src/local";
+import { saveCompiled } from "../src/local/save-compiled";
+import { compiledBody } from "./compiled-fixture";
 
 const roots: string[] = [];
 

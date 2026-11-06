@@ -1,5 +1,5 @@
 import { useId, useState } from "react";
-import type { OverviewBucket, StatusCounts } from "../../lib/view-models.ts";
+import type { OverviewBucket, StatusCounts } from "../../lib/view-models";
 
 /** What the chart stacks. In-flight folds queued, running and suspended into one series. */
 export const SERIES = [

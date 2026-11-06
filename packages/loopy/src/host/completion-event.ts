@@ -1,5 +1,5 @@
-import type { ExecutionResult } from "../core/index.js";
-import type { Effect, EngineEvent } from "../engine/index.js";
+import type { ExecutionResult } from "../core";
+import type { Effect, EngineEvent } from "../engine";
 
 export function completionEvent(
   dispatch: Extract<Effect, { kind: "dispatch" }>,

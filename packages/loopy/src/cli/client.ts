@@ -1,9 +1,9 @@
 import { resolve } from "node:path";
 import { Data, Effect, Schema } from "effect";
-import { boundaryOptions, errorBodySchema } from "../contract/index.js";
-import { readDaemonFile } from "../local/index.js";
-import type { CliContext } from "./context.js";
-import { CliError, cliSync } from "./errors.js";
+import { boundaryOptions, errorBodySchema } from "../contract";
+import { readDaemonFile } from "../local";
+import type { CliContext } from "./context";
+import { CliError, cliSync } from "./errors";
 
 type ClientContext = Pick<CliContext, "home" | "cwd">;
 

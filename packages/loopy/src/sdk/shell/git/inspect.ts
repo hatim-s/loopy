@@ -1,4 +1,4 @@
-import { descriptorCommand } from "../../descriptor.js";
+import { descriptorCommand } from "../../descriptor";
 import {
   LOG_FORMAT,
   parseDiff,
@@ -7,7 +7,7 @@ import {
   parseLsFiles,
   parseRevParse,
   parseStatus,
-} from "../parse/git.js";
+} from "../parse/git";
 
 export const inspect = {
   status: descriptorCommand({

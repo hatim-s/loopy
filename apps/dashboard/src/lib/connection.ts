@@ -1,9 +1,9 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useSyncExternalStore } from "react";
-import { BackendError, type LoopyBackend, type StreamState } from "../backend/backend.ts";
-import { httpBaseUrl } from "../backend/config.ts";
-import { useBackend } from "../router-context.ts";
-import { followSession } from "./stream.ts";
+import { BackendError, type LoopyBackend, type StreamState } from "../backend/backend";
+import { httpBaseUrl } from "../backend/config";
+import { useBackend } from "../router-context";
+import { followSession } from "./stream";
 
 /** idle: the application stream has not mounted yet. */
 export type ConnectionState = StreamState | "idle";

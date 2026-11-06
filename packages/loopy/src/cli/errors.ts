@@ -1,6 +1,6 @@
 import { Data, Effect } from "effect";
-import type { CompilerDiagnostic } from "../compiler/index.js";
-import { errorMessage } from "../core/index.js";
+import type { CompilerDiagnostic } from "../compiler";
+import { errorMessage } from "../core";
 
 export class CliError extends Data.TaggedError("CliError")<{
   message: string;

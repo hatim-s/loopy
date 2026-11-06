@@ -1,4 +1,4 @@
-import type { NodeRun } from "./graph.js";
+import type { NodeRun } from "./graph";
 
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 

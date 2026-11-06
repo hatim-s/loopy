@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { Schema } from "effect";
-import { searchField } from "../src/lib/search.ts";
+import { searchField } from "../src/lib/search";
 
 test("invalid URL fields fall back independently while valid filters survive", () => {
   const decode = Schema.decodeUnknownSync(

@@ -1,9 +1,9 @@
-import { makeDefinitionOperations } from "./definition.js";
-import { makeRunOperations } from "./mutations.js";
-import { makeRunQueries } from "./queries.js";
-import type { ServiceOptions } from "./registry.js";
-import { makeRunViews } from "./run-views.js";
-import { makeScheduleOperations } from "./schedules.js";
+import { makeDefinitionOperations } from "./definition";
+import { makeRunOperations } from "./mutations";
+import { makeRunQueries } from "./queries";
+import type { ServiceOptions } from "./registry";
+import { makeRunViews } from "./run-views";
+import { makeScheduleOperations } from "./schedules";
 
 export function makeService(options: ServiceOptions) {
   const { resolve, view, ...views } = makeRunViews(options);

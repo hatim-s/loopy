@@ -1,7 +1,7 @@
 import { realpath } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 import { z } from "zod";
-import { sampleSchema } from "./metrics-statistics.js";
+import { sampleSchema } from "./metrics/statistics";
 
 // Per-run detail requests are conditional and cannot be required before the first workload.
 export const baselineEndpoints = [

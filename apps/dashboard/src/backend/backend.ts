@@ -15,7 +15,7 @@ import {
   type routes,
   type ScheduleView,
   type ServerEvent,
-} from "loopy/contract";
+} from "../../../../packages/loopy/src/contract";
 
 type ApiQuery<K extends keyof typeof routes> = Schema.Codec.Encoded<(typeof routes)[K]["query"]>;
 
@@ -31,7 +31,7 @@ export type GlobalLogsQuery = ApiQuery<"globalLogs">;
 
 export type EventHistoryQuery = ApiQuery<"eventHistory">;
 
-export type { RunsQuery } from "loopy/contract";
+export type { RunsQuery } from "../../../../packages/loopy/src/contract";
 
 /** live: frames arrive. reconnecting: the transport is retrying. stale: it gave up. */
 export type StreamState = "connecting" | "live" | "reconnecting" | "stale";

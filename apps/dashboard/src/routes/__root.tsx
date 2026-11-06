@@ -1,12 +1,12 @@
 import { createRootRouteWithContext, Outlet } from "@tanstack/react-router";
 import { useState } from "react";
-import { RouteError } from "../components/error-banner.tsx";
-import { Crumbs } from "../components/shell/crumbs.tsx";
-import { DaemonPill } from "../components/shell/daemon-pill.tsx";
-import { Sidebar } from "../components/shell/sidebar.tsx";
-import { Icon } from "../components/ui/icon.tsx";
-import { useSessionStream } from "../lib/connection.ts";
-import type { RouterContext } from "../router-context.ts";
+import { RouteError } from "../components/error-banner";
+import { Crumbs } from "../components/shell/crumbs";
+import { DaemonPill } from "../components/shell/daemon-pill";
+import { Sidebar } from "../components/shell/sidebar";
+import { Icon } from "../components/ui/icon";
+import { useSessionStream } from "../lib/connection";
+import type { RouterContext } from "../router-context";
 
 export const Route = createRootRouteWithContext<RouterContext>()({
   component: Shell,

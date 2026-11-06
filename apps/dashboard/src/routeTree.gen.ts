@@ -9,15 +9,15 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
+import { Route as PageRouteImport } from './routes/page'
 import { Route as ObservabilityRouteImport } from './routes/observability'
 import { Route as SchedulesRouteImport } from './routes/schedules'
-import { Route as LoopiesIndexRouteImport } from './routes/loopies.index'
+import { Route as LoopiesPageRouteImport } from './routes/loopies.page'
 import { Route as LoopiesSlugRouteImport } from './routes/loopies.$slug'
-import { Route as RunsIndexRouteImport } from './routes/runs.index'
+import { Route as RunsPageRouteImport } from './routes/runs.page'
 import { Route as RunsRunIdRouteImport } from './routes/runs.$runId'
 
-const IndexRoute = IndexRouteImport.update({
+const PageRoute = PageRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
@@ -32,7 +32,7 @@ const SchedulesRoute = SchedulesRouteImport.update({
   path: '/schedules',
   getParentRoute: () => rootRouteImport,
 } as any)
-const LoopiesIndexRoute = LoopiesIndexRouteImport.update({
+const LoopiesPageRoute = LoopiesPageRouteImport.update({
   id: '/loopies/',
   path: '/loopies/',
   getParentRoute: () => rootRouteImport,
@@ -42,7 +42,7 @@ const LoopiesSlugRoute = LoopiesSlugRouteImport.update({
   path: '/loopies/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
-const RunsIndexRoute = RunsIndexRouteImport.update({
+const RunsPageRoute = RunsPageRouteImport.update({
   id: '/runs/',
   path: '/runs/',
   getParentRoute: () => rootRouteImport,
@@ -54,32 +54,32 @@ const RunsRunIdRoute = RunsRunIdRouteImport.update({
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
+  '/': typeof PageRoute
   '/observability': typeof ObservabilityRoute
   '/schedules': typeof SchedulesRoute
   '/loopies/$slug': typeof LoopiesSlugRoute
   '/runs/$runId': typeof RunsRunIdRoute
-  '/loopies/': typeof LoopiesIndexRoute
-  '/runs/': typeof RunsIndexRoute
+  '/loopies/': typeof LoopiesPageRoute
+  '/runs/': typeof RunsPageRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
+  '/': typeof PageRoute
   '/observability': typeof ObservabilityRoute
   '/schedules': typeof SchedulesRoute
   '/loopies/$slug': typeof LoopiesSlugRoute
   '/runs/$runId': typeof RunsRunIdRoute
-  '/loopies': typeof LoopiesIndexRoute
-  '/runs': typeof RunsIndexRoute
+  '/loopies': typeof LoopiesPageRoute
+  '/runs': typeof RunsPageRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
+  '/': typeof PageRoute
   '/observability': typeof ObservabilityRoute
   '/schedules': typeof SchedulesRoute
   '/loopies/$slug': typeof LoopiesSlugRoute
   '/runs/$runId': typeof RunsRunIdRoute
-  '/loopies/': typeof LoopiesIndexRoute
-  '/runs/': typeof RunsIndexRoute
+  '/loopies/': typeof LoopiesPageRoute
+  '/runs/': typeof RunsPageRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -112,13 +112,13 @@ export interface FileRouteTypes {
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
+  PageRoute: typeof PageRoute
   ObservabilityRoute: typeof ObservabilityRoute
   SchedulesRoute: typeof SchedulesRoute
   LoopiesSlugRoute: typeof LoopiesSlugRoute
   RunsRunIdRoute: typeof RunsRunIdRoute
-  LoopiesIndexRoute: typeof LoopiesIndexRoute
-  RunsIndexRoute: typeof RunsIndexRoute
+  LoopiesPageRoute: typeof LoopiesPageRoute
+  RunsPageRoute: typeof RunsPageRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -127,7 +127,7 @@ declare module '@tanstack/react-router' {
       id: '/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+      preLoaderRoute: typeof PageRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/observability': {
@@ -148,7 +148,7 @@ declare module '@tanstack/react-router' {
       id: '/loopies/'
       path: '/loopies'
       fullPath: '/loopies/'
-      preLoaderRoute: typeof LoopiesIndexRouteImport
+      preLoaderRoute: typeof LoopiesPageRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/loopies/$slug': {
@@ -162,7 +162,7 @@ declare module '@tanstack/react-router' {
       id: '/runs/'
       path: '/runs'
       fullPath: '/runs/'
-      preLoaderRoute: typeof RunsIndexRouteImport
+      preLoaderRoute: typeof RunsPageRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/runs/$runId': {
@@ -176,13 +176,13 @@ declare module '@tanstack/react-router' {
 }
 
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
+  PageRoute: PageRoute,
   ObservabilityRoute: ObservabilityRoute,
   SchedulesRoute: SchedulesRoute,
   LoopiesSlugRoute: LoopiesSlugRoute,
   RunsRunIdRoute: RunsRunIdRoute,
-  LoopiesIndexRoute: LoopiesIndexRoute,
-  RunsIndexRoute: RunsIndexRoute,
+  LoopiesPageRoute: LoopiesPageRoute,
+  RunsPageRoute: RunsPageRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

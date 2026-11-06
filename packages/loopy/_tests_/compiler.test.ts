@@ -1,13 +1,13 @@
 import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { Effect } from "effect";
-import { evaluate as evaluateEffect } from "../src/compiler/evaluate.js";
-import { compile as compileEffect } from "../src/compiler/index.js";
-import { parseModuleOutput } from "../src/contract/index.js";
-import { canonicalJson, type Json, validateGraph } from "../src/core/index.js";
-import { compiledBody } from "./compiled-fixture.js";
+import { compile as compileEffect } from "../src/compiler";
+import { evaluate as evaluateEffect } from "../src/compiler/evaluate";
+import { parseModuleOutput } from "../src/contract";
+import { canonicalJson, type Json, validateGraph } from "../src/core";
+import { compiledBody } from "./compiled-fixture";
 
 const sdk = resolve(import.meta.dir, "../src/sdk/graph/index.ts");
 
@@ -618,6 +618,18 @@ test("node_modules dependencies with literal dynamic imports bundle their helper
   await rm(join(root, "node_modules"), { recursive: true });
   const { default: run }: { default: () => Promise<number> } = await import(saved);
   expect(await run()).toBe(42);
+});
+
+test("relative extensionless SDK imports retain trusted builder bindings", async () => {
+  const f = await project("");
+  const specifier = relative(f.root, resolve(import.meta.dir, "../src/sdk/graph"));
+  await writeFile(
+    f.file,
+    `import {loopy,log} from ${JSON.stringify(specifier)}; export default loopy("relative-sdk", {input: {}, run: () => {log("hello"); return 1;}});`,
+  );
+
+  const result = await compile(f.file);
+  expect(result.ok).toBe(true);
 });
 
 test("the public SDK entry compiles through the same graph builder", async () => {

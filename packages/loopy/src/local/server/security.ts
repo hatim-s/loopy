@@ -1,4 +1,4 @@
-import { errorResponse } from "./routes.js";
+import { errorResponse } from "./routes";
 
 export type OriginPolicy = {
   publicOrigin: string;

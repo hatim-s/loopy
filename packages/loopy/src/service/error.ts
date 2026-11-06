@@ -1,5 +1,5 @@
 import { Data } from "effect";
-import { DEFAULT_ERROR_MESSAGES, type ErrorCode } from "../contract/index.js";
+import { DEFAULT_ERROR_MESSAGES, type ErrorCode } from "../contract";
 
 export class ServiceError extends Data.TaggedError("ServiceError")<{
   code: ErrorCode;

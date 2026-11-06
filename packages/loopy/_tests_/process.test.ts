@@ -13,9 +13,9 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Schema } from "effect";
-import { CommandExecutionError } from "../src/core/index.js";
-import { executeLocalCommand } from "../src/local/process.js";
-import { filesystem } from "../src/local/sandbox/io.js";
+import { CommandExecutionError } from "../src/core";
+import { executeLocalCommand } from "../src/local/process";
+import { filesystem } from "../src/local/sandbox/io";
 
 const workspaces: string[] = [];
 

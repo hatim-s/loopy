@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { fs, git, text } from "../src/sdk/graph/index.js";
-import { capture } from "./fixtures/command-capture.js";
+import { fs, git, text } from "../src/sdk/graph";
+import { capture } from "./fixtures/command-capture";
 
 test.each([
   [

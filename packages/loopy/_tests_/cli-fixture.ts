@@ -2,11 +2,11 @@ import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Effect } from "effect";
-import { compile } from "../src/compiler/index.js";
-import { requireRecord } from "../src/core/index.js";
-import { LocalExecutor } from "../src/executor/index.js";
-import { activate } from "../src/host/index.js";
-import { makeLocalService, openRunStore, Registry } from "../src/local/index.js";
+import { compile } from "../src/compiler";
+import { requireRecord } from "../src/core";
+import { LocalExecutor } from "../src/executor";
+import { activate } from "../src/host";
+import { makeLocalService, openRunStore, Registry } from "../src/local";
 
 export const roots: string[] = [];
 

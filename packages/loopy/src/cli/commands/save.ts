@@ -1,11 +1,11 @@
 import { dirname, relative, resolve } from "node:path";
 import { Effect } from "effect";
-import { compile } from "../../compiler/index.js";
-import { routes } from "../../contract/index.js";
-import { request } from "../client.js";
-import { type CliContext, requireTarget } from "../context.js";
-import { diagnosticsError } from "../errors.js";
-import { printJson } from "../output.js";
+import { compile } from "../../compiler";
+import { routes } from "../../contract";
+import { request } from "../client";
+import { type CliContext, requireTarget } from "../context";
+import { diagnosticsError } from "../errors";
+import { printJson } from "../output";
 
 export function runSave(context: CliContext) {
   return Effect.gen(function* () {

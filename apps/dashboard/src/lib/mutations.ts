@@ -1,9 +1,14 @@
 import { type QueryClient, useMutation, useQueryClient } from "@tanstack/react-query";
-import type { Json, PutScheduleBody, RunView, ScheduleView } from "loopy/contract";
-import type { LoopyBackend } from "../backend/backend.ts";
-import { useBackend } from "../router-context.ts";
-import { keys } from "./keys.ts";
-import { applyRunView, applyScheduleView, removeScheduleView } from "./stream.ts";
+import type {
+  Json,
+  PutScheduleBody,
+  RunView,
+  ScheduleView,
+} from "../../../../packages/loopy/src/contract";
+import type { LoopyBackend } from "../backend/backend";
+import { useBackend } from "../router-context";
+import { keys } from "./keys";
+import { applyRunView, applyScheduleView, removeScheduleView } from "./stream";
 
 /** A mutation that returns a run. The returned run is shown at once; the stream follows. */
 export function useRunMutation<Variables = void>(

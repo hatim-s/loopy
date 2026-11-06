@@ -1,18 +1,18 @@
 import { expect, test } from "bun:test";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { Effect, Schema } from "effect";
-import { graphSchema } from "../src/contract/index.js";
-import { isRecord } from "../src/core/index.js";
-import { initialState, step } from "../src/engine/index.js";
-import { LocalExecutor } from "../src/executor/index.js";
-import { receiptPath } from "../src/executor/receipts.js";
-import { activate } from "../src/host/index.js";
-import { SecretStore } from "../src/local/index.js";
-import { prepareLaunch } from "../src/local/process.js";
-import { loopy, sh } from "../src/sdk/graph/index.js";
-import { MemoryStore } from "../src/store/index.js";
-import { newRun } from "./fixture.js";
-import { commandSpec, fixture } from "./fixtures/executor.js";
+import { graphSchema } from "../src/contract";
+import { isRecord } from "../src/core";
+import { initialState, step } from "../src/engine";
+import { LocalExecutor } from "../src/executor";
+import { receiptPath } from "../src/executor/receipts";
+import { activate } from "../src/host";
+import { SecretStore } from "../src/local";
+import { prepareLaunch } from "../src/local/process";
+import { loopy, sh } from "../src/sdk/graph";
+import { MemoryStore } from "../src/store";
+import { newRun } from "./fixture";
+import { commandSpec, fixture } from "./fixtures/executor";
 
 test("full inherited environment stays out of sandbox launcher arguments", async () => {
   const f = await fixture();

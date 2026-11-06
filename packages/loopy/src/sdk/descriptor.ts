@@ -1,7 +1,7 @@
-import type { CommandDescriptor } from "./define-command.js";
+import type { CommandDescriptor } from "./define-command";
 
 export function descriptorCommand<const D extends CommandDescriptor>(descriptor: D) {
   return { descriptor };
 }
 
-export type { CommandDescriptor } from "./define-command.js";
+export type { CommandDescriptor } from "./define-command";

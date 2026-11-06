@@ -1,6 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
-import type { Json, LoopyView } from "loopy/contract";
 import { useState } from "react";
+import type { Json, LoopyView } from "../../../../packages/loopy/src/contract";
 import {
   coerceInput,
   type FieldIssue,
@@ -9,10 +9,10 @@ import {
   inputFields,
   parseJsonInput,
   type RecordSpec,
-} from "../lib/input-form.ts";
-import { useRunMutation } from "../lib/mutations.ts";
-import { Button } from "./button.tsx";
-import { ErrorBanner } from "./error-banner.tsx";
+} from "../lib/input-form";
+import { useRunMutation } from "../lib/mutations";
+import { Button } from "./button";
+import { ErrorBanner } from "./error-banner";
 
 const CONTROL = "field block w-full";
 

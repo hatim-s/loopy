@@ -1,13 +1,13 @@
 import { Effect } from "effect";
-import type { Store } from "../core/index.js";
-import { GenerationError, makeService, WorkspaceError } from "../service/index.js";
-import { canonicalPath } from "./fs.js";
-import { Registry } from "./registry.js";
-import { makeArtifactRegistry } from "./save-compiled.js";
-import { SecretStore } from "./secrets.js";
-import { generateCommand } from "./typegen/generate.js";
+import type { Store } from "../core";
+import { GenerationError, makeService, WorkspaceError } from "../service";
+import { canonicalPath } from "./fs";
+import { Registry } from "./registry";
+import { makeArtifactRegistry } from "./save-compiled";
+import { SecretStore } from "./secrets";
+import { generateCommand } from "./typegen/generate";
 
-export { ServiceError } from "../service/index.js";
+export { ServiceError } from "../service";
 
 export function makeLocalService(options: {
   home: string;

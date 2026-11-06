@@ -1,7 +1,7 @@
-import type { Duration, GraphRetry, OutSchema, RateLimit } from "../../../core/index.js";
-import { currentBuilder } from "../builder.js";
-import { type AuthorValue, serializeValues } from "../ref.js";
-import type { Infer, SchemaFields } from "../types.js";
+import type { Duration, GraphRetry, OutSchema, RateLimit } from "../../../core";
+import { currentBuilder } from "../builder";
+import { type AuthorValue, serializeValues } from "../ref";
+import type { Infer, SchemaFields } from "../types";
 
 export function code<const S extends OutSchema>(
   label: string,

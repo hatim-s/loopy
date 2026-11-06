@@ -13,9 +13,9 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Effect, Exit, Scope } from "effect";
-import { localDaemon, openRunStore } from "../src/local/index.js";
-import { secretRedactor } from "../src/local/secret-redactor.js";
-import { SecretStore } from "../src/local/secrets.js";
+import { localDaemon, openRunStore } from "../src/local";
+import { secretRedactor } from "../src/local/secret-redactor";
+import { SecretStore } from "../src/local/secrets";
 
 const scopes: Scope.Closeable[] = [];
 

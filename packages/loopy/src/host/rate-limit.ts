@@ -1,12 +1,6 @@
 import { Effect } from "effect";
-import {
-  durationMs,
-  type ExecutionKey,
-  type Graph,
-  type Receipt,
-  type Store,
-} from "../core/index.js";
-import type { Effect as EngineEffect } from "../engine/index.js";
+import { durationMs, type ExecutionKey, type Graph, type Receipt, type Store } from "../core";
+import type { Effect as EngineEffect } from "../engine";
 
 type AdmissionOptions<E> = {
   graph: Graph;

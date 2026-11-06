@@ -3,14 +3,14 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Exit, Scope } from "effect";
-import { makeLocalService, openRunStore } from "../../../packages/loopy/src/local/index.ts";
-import { originSecurity } from "../../../packages/loopy/src/local/server/security.ts";
+import { makeLocalService, openRunStore } from "../../../packages/loopy/src/local";
+import { originSecurity } from "../../../packages/loopy/src/local/server/security";
 import {
   createRequestHandler,
   startServer,
-} from "../../../packages/loopy/src/local/server/start-server.ts";
-import { localHttpBackend } from "../src/backend/local-http.ts";
-import { checkAccess } from "../src/lib/connection.ts";
+} from "../../../packages/loopy/src/local/server/start-server";
+import { localHttpBackend } from "../src/backend/local-http";
+import { checkAccess } from "../src/lib/connection";
 
 const cleanups: (() => void | Promise<void>)[] = [];
 

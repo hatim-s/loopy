@@ -1,4 +1,4 @@
-import { type Context, read } from "./repository.js";
+import { type Context, read } from "./repository";
 
 export default async ({ policy }: { policy: "inventory" | "review" }, context: Context) => {
   const rows = (await read(context, "dependencies.txt")).trim().split("\n");

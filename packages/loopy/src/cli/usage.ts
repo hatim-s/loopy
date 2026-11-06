@@ -1,4 +1,4 @@
-import { DEFAULT_PORT } from "../local/index.js";
+import { DEFAULT_PORT } from "../local";
 
 export function usage(): string {
   return `loopy: compiled workflow graphs for CLI tools

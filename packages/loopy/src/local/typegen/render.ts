@@ -1,5 +1,5 @@
-import type { CommandDescriptor, FlagDefinition, PositionalDefinition } from "../../sdk/host.js";
-import { isTypeScriptIdentifier } from "./names.js";
+import type { CommandDescriptor, FlagDefinition, PositionalDefinition } from "../../sdk/host";
+import { isTypeScriptIdentifier } from "./names";
 
 function key(name: string): string {
   return isTypeScriptIdentifier(name) ? name : JSON.stringify(name);

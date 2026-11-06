@@ -1,5 +1,5 @@
-import { descriptorCommand } from "../../descriptor.js";
-import { parseLs } from "../parse/fs.js";
+import { descriptorCommand } from "../../descriptor";
+import { parseLs } from "../parse/fs";
 
 const rawLs = descriptorCommand({
   namespace: "fs",

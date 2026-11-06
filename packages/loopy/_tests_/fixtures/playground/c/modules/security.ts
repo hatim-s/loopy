@@ -1,5 +1,5 @@
 import { writeFile } from "node:fs/promises";
-import { digest, type PlaygroundInput, readSource, repository, writeResult } from "./repository.js";
+import { digest, type PlaygroundInput, readSource, repository, writeResult } from "./repository";
 
 export default async function security({
   input,

@@ -1,4 +1,4 @@
-import { digest, readSource } from "./repository.js";
+import { digest, readSource } from "./repository";
 
 export default async function validateFile({ file }: { file: string }) {
   const content = await readSource(file);

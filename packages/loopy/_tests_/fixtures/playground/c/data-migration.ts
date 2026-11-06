@@ -1,4 +1,4 @@
-import { code, log, loopy, wait } from "loopy/graph";
+import { code, log, loopy, wait } from "../../../../src/sdk/graph";
 
 export default loopy("playground-c-data-migration", {
   input: { batch: "string", ordinal: "number", fail: "boolean", items: "number[]" },

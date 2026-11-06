@@ -1,18 +1,18 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { Effect } from "effect";
-import { receiptHash } from "../../../apps/cloud/src/receipts-identity.js";
+import { receiptHash } from "../../../apps/cloud/src/receipts/identity";
 import {
   type AuthorityCommand,
   decodeBoundary,
   resultOperations,
   SANDBOX_MAX_CAPTURE_BYTES,
-} from "../src/contract/index.js";
+} from "../src/contract";
 import {
   bridgeToken,
   namespace,
   type ReceiptHarness,
   receiptHarness,
-} from "./fixtures/receipt-harness.js";
+} from "./fixtures/receipt-harness";
 
 let harness: ReceiptHarness;
 

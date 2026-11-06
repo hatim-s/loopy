@@ -1,10 +1,7 @@
 import { Effect } from "effect";
-import { SANDBOX_MAX_CAPTURE_BYTES } from "../../../packages/loopy/src/contract/index.js";
-import {
-  CommandExecutionError,
-  type CommandResult,
-} from "../../../packages/loopy/src/core/index.js";
-import { spawnCaptured } from "../../../packages/loopy/src/local/execution-host.js";
+import { SANDBOX_MAX_CAPTURE_BYTES } from "../../../packages/loopy/src/contract";
+import { CommandExecutionError, type CommandResult } from "../../../packages/loopy/src/core";
+import { spawnCaptured } from "../../../packages/loopy/src/local/execution-host";
 
 export type ProcessOptions = {
   stdin?: string;

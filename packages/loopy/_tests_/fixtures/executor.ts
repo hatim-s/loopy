@@ -3,11 +3,11 @@ import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Schema } from "effect";
-import { nodeIdSchema } from "../../src/contract/index.js";
-import type { ExecutionSpec } from "../../src/core/index.js";
-import { initialState, step } from "../../src/engine/index.js";
-import { LocalExecutor } from "../../src/executor/index.js";
-import { loopy, sh } from "../../src/sdk/graph/index.js";
+import { nodeIdSchema } from "../../src/contract";
+import type { ExecutionSpec } from "../../src/core";
+import { initialState, step } from "../../src/engine";
+import { LocalExecutor } from "../../src/executor";
+import { loopy, sh } from "../../src/sdk/graph";
 
 const roots: string[] = [];
 

@@ -1,4 +1,4 @@
-import type { Duration } from "./duration.js";
+import type { Duration } from "./duration";
 
 export type RateLimit = { key: string; limit: number; window: Duration };
 

@@ -10,11 +10,11 @@ import {
   type SourceArtifact,
   savedLoopySchema,
   sourceArtifactSchema,
-} from "../contract/index.js";
-import { canonicalJson, isRecord, validateSlug } from "../core/index.js";
-import { RegistryConflictError, RegistryError } from "../service/index.js";
-import { canonicalPath, errnoCode, withLockDirectory, writeFileAtomically } from "./fs.js";
-import { redactSourceArtifact } from "./source-view.js";
+} from "../contract";
+import { canonicalJson, isRecord, validateSlug } from "../core";
+import { RegistryConflictError, RegistryError } from "../service";
+import { canonicalPath, errnoCode, withLockDirectory, writeFileAtomically } from "./fs";
+import { redactSourceArtifact } from "./source-view";
 
 function readEntry(file: string) {
   const value: unknown = JSON.parse(readFileSync(file, "utf8"));

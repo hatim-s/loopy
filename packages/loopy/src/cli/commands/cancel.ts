@@ -1,8 +1,8 @@
 import { Effect } from "effect";
-import { routes } from "../../contract/index.js";
-import { request } from "../client.js";
-import { type CliContext, requireTarget } from "../context.js";
-import { printJson } from "../output.js";
+import { routes } from "../../contract";
+import { request } from "../client";
+import { type CliContext, requireTarget } from "../context";
+import { printJson } from "../output";
 
 export function runCancel(context: CliContext) {
   return Effect.gen(function* () {

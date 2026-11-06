@@ -1,8 +1,8 @@
 import { Effect, Schema, SchemaGetter, SchemaIssue } from "effect";
-import { LOG_LEVELS, NODE_RUN_STATUSES } from "../core/index.js";
-import { decodeBoundary, isoDateTime, queryNumber, struct } from "./codec.js";
-import { executionKeySchema, nodeRunViewSchema } from "./graph.js";
-import { logRecordSchema, runStatusSchema } from "./records.js";
+import { LOG_LEVELS, NODE_RUN_STATUSES } from "../core";
+import { decodeBoundary, isoDateTime, queryNumber, struct } from "./codec";
+import { executionKeySchema, nodeRunViewSchema } from "./graph";
+import { logRecordSchema, runStatusSchema } from "./records";
 
 const iso = isoDateTime;
 

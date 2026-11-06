@@ -9,15 +9,15 @@ import {
   makeService,
   SecretError,
   ServiceError,
-} from "../../../packages/loopy/src/service/index.js";
-import { SqlRunStore } from "../../../packages/loopy/src/store/portable.js";
-import { artifactResponse } from "./artifact-route.js";
-import { R2ArtifactRegistry } from "./artifacts.js";
-import { concurrency, type Environment } from "./environment.js";
-import { platform } from "./operation.js";
-import { SandboxProvider } from "./provider.js";
-import { WorkspaceScheduler } from "./scheduler.js";
-import { DurableSqlDriver } from "./sql-driver.js";
+} from "../../../packages/loopy/src/service";
+import { SqlRunStore } from "../../../packages/loopy/src/store/portable";
+import { R2ArtifactRegistry } from "./artifacts";
+import { artifactResponse } from "./artifacts/route";
+import { concurrency, type Environment } from "./environment";
+import { platform } from "./operation";
+import { SandboxProvider } from "./provider";
+import { WorkspaceScheduler } from "./scheduler";
+import { DurableSqlDriver } from "./sql-driver";
 
 export class Workspace {
   private readonly store: SqlRunStore;

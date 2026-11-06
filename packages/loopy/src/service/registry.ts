@@ -6,10 +6,10 @@ import type {
   routes,
   SavedLoopy,
   SourceArtifact,
-} from "../contract/index.js";
-import type { Store } from "../core/index.js";
-import { errorMessage } from "../core/index.js";
-import type { ServiceError } from "./error.js";
+} from "../contract";
+import type { Store } from "../core";
+import { errorMessage } from "../core";
+import type { ServiceError } from "./error";
 
 export class RegistryError extends Data.TaggedError("RegistryError")<{
   operation: string;

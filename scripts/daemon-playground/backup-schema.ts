@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { runStatusSchema } from "../../packages/loopy/src/contract/index.ts";
+import { runStatusSchema } from "../../packages/loopy/src/contract";
 
 const rows = Schema.Array(Schema.Struct({ id: Schema.String, status: runStatusSchema }));
 

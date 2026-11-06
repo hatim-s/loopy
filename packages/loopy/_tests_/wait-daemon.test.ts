@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
 import { type Cause, Effect, Fiber, Queue } from "effect";
 import { TestClock } from "effect/testing";
-import { makeDaemon } from "../src/host/index.js";
-import { loopy, wait } from "../src/sdk/graph/index.js";
-import { MemoryStore } from "../src/store/index.js";
-import { FakeExecutor, newRun } from "./fixture.js";
+import { makeDaemon } from "../src/host";
+import { loopy, wait } from "../src/sdk/graph";
+import { MemoryStore } from "../src/store";
+import { FakeExecutor, newRun } from "./fixture";
 
 test("daemon leaves an indefinite sleep when a durable approval signal wakes its run", async () => {
   await Effect.runPromise(

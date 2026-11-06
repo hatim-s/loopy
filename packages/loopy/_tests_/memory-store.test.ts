@@ -1,4 +1,4 @@
-import { MemoryStore } from "../src/store/index.js";
-import { storeContract } from "./store-contract.js";
+import { MemoryStore } from "../src/store";
+import { storeContract } from "./store-contract";
 
 storeContract("memory", (options) => new MemoryStore(options?.now, options?.leaseMs));

@@ -4,21 +4,21 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect, Exit, Scope } from "effect";
 import { z } from "zod";
-import { attemptHash } from "../../../../apps/sandbox/src/admission.js";
-import { DockerArtifacts } from "../../../../apps/sandbox/src/artifacts.js";
-import { sandboxConfigSchema } from "../../../../apps/sandbox/src/config.js";
-import { type AttemptBackend, DockerBackend } from "../../../../apps/sandbox/src/docker.js";
-import { SandboxOperationError } from "../../../../apps/sandbox/src/operations.js";
-import { type CommandRunner, runCommand } from "../../../../apps/sandbox/src/process.js";
-import { startSandbox } from "../../../../apps/sandbox/src/server.js";
+import { attemptHash } from "../../../../apps/sandbox/src/admission";
+import { DockerArtifacts } from "../../../../apps/sandbox/src/artifacts";
+import { sandboxConfigSchema } from "../../../../apps/sandbox/src/config";
+import { type AttemptBackend, DockerBackend } from "../../../../apps/sandbox/src/docker";
+import { SandboxOperationError } from "../../../../apps/sandbox/src/operations";
+import { type CommandRunner, runCommand } from "../../../../apps/sandbox/src/process";
+import { startSandbox } from "../../../../apps/sandbox/src/server";
 import {
   decodeBoundary,
   type SandboxAttemptRequest,
   sandboxAttemptRequestSchema,
-} from "../../src/contract/index.js";
-import type { DockerAttemptPlan } from "../../src/contract/sandbox-journal.js";
-import { CommandExecutionError } from "../../src/core/index.js";
-import { bounded, type DockerRuntime } from "./architecture-docker-runtime.js";
+} from "../../src/contract";
+import type { DockerAttemptPlan } from "../../src/contract/sandbox-journal";
+import { CommandExecutionError } from "../../src/core";
+import { bounded, type DockerRuntime } from "./architecture-docker-runtime";
 
 export const context = "colima-loopy-cloud-phase1";
 

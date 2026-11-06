@@ -1,4 +1,4 @@
-import { descriptorCommand } from "../../descriptor.js";
+import { descriptorCommand } from "../../descriptor";
 import {
   parseDf,
   parseDu,
@@ -10,7 +10,7 @@ import {
   parseWhich,
   STAT_DARWIN_FORMAT,
   STAT_LINUX_FORMAT,
-} from "../parse/fs.js";
+} from "../parse/fs";
 
 export const metadata = {
   find: descriptorCommand({

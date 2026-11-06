@@ -1,4 +1,4 @@
-import { loopy, sh } from "../../../src/sdk/graph/index.js";
+import { loopy, sh } from "../../../src/sdk/graph";
 
 export default loopy("cloud-failure-timeout", {
   input: {},

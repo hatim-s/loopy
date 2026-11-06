@@ -1,11 +1,11 @@
 import type { DurableObjectState, R2Bucket } from "@cloudflare/workers-types";
 import { Effect } from "effect";
-import { R2ArtifactRegistry } from "../../../../apps/cloud/src/artifacts.js";
-import { DurableSqlDriver } from "../../../../apps/cloud/src/sql-driver.js";
-import { decodeBoundary, nodeIdSchema } from "../../src/contract/index.js";
-import type { RunRecord } from "../../src/core/index.js";
-import { apiRoutes, dispatch, makeService } from "../../src/service/index.js";
-import { SqlRunStore } from "../../src/store/portable.js";
+import { R2ArtifactRegistry } from "../../../../apps/cloud/src/artifacts";
+import { DurableSqlDriver } from "../../../../apps/cloud/src/sql-driver";
+import { decodeBoundary, nodeIdSchema } from "../../src/contract";
+import type { RunRecord } from "../../src/core";
+import { apiRoutes, dispatch, makeService } from "../../src/service";
+import { SqlRunStore } from "../../src/store/portable";
 
 const at = "2026-10-22T00:00:00.000Z";
 

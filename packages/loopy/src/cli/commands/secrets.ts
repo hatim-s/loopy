@@ -1,12 +1,12 @@
 import { Effect } from "effect";
-import { routes } from "../../contract/index.js";
-import { validateSecretName } from "../../core/index.js";
-import { validateSecretValue } from "../../local/index.js";
-import { request } from "../client.js";
-import { type CliContext, optionalTarget, requireHead } from "../context.js";
-import { CliError, cliSync } from "../errors.js";
-import { printJson } from "../output.js";
-import { readSecret } from "../secret-entry.js";
+import { routes } from "../../contract";
+import { validateSecretName } from "../../core";
+import { validateSecretValue } from "../../local";
+import { request } from "../client";
+import { type CliContext, optionalTarget, requireHead } from "../context";
+import { CliError, cliSync } from "../errors";
+import { printJson } from "../output";
+import { readSecret } from "../secret-entry";
 
 function storeSecret(context: CliContext, name: string | undefined) {
   return Effect.gen(function* () {

@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
-import { decodeBoundary, nodeRunSchema } from "../src/contract/index.js";
-import { type Graph, type Json, outputBytes } from "../src/core/index.js";
-import { type EngineState, initialState, step } from "../src/engine/index.js";
-import { code, loopy, map, sh } from "../src/sdk/graph/index.js";
-import { at, dispatches, failed, start } from "./engine-control-fixture.js";
-import { approveDemoGraph } from "./fixtures/graphs.js";
+import { decodeBoundary, nodeRunSchema } from "../src/contract";
+import { type Graph, type Json, outputBytes } from "../src/core";
+import { type EngineState, initialState, step } from "../src/engine";
+import { code, loopy, map, sh } from "../src/sdk/graph";
+import { at, dispatches, failed, start } from "./engine-control-fixture";
+import { approveDemoGraph } from "./fixtures/graphs";
 
 function codeGraph(): Graph {
   const graph = structuredClone(approveDemoGraph);

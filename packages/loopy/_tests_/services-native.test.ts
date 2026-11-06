@@ -2,16 +2,16 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Cause, Deferred, Effect, Exit, Fiber, Scope } from "effect";
-import { decodeBoundary, nodeIdSchema } from "../src/contract/index.js";
-import { StorageError } from "../src/core/index.js";
-import { Registry } from "../src/local/registry.js";
-import { SecretStore } from "../src/local/secrets.js";
-import { startServer } from "../src/local/server/start-server.js";
-import { makeLocalService } from "../src/local/service.js";
-import { makeService, ServiceError } from "../src/service/index.js";
-import { makeSqliteRunStore } from "../src/store/index.js";
-import { compiledBody } from "./compiled-fixture.js";
-import { qualityTestRoot } from "./fixtures/quality-test-root.js";
+import { decodeBoundary, nodeIdSchema } from "../src/contract";
+import { StorageError } from "../src/core";
+import { Registry } from "../src/local/registry";
+import { SecretStore } from "../src/local/secrets";
+import { startServer } from "../src/local/server/start-server";
+import { makeLocalService } from "../src/local/service";
+import { makeService, ServiceError } from "../src/service";
+import { makeSqliteRunStore } from "../src/store";
+import { compiledBody } from "./compiled-fixture";
+import { qualityTestRoot } from "./fixtures/quality-test-root";
 
 const cleanups: (() => Promise<void>)[] = [];
 

@@ -1,5 +1,5 @@
-import { type COMPARISON_OPS, type ComparisonOperand, type Predicate } from "../../core/index.js";
-import { currentBuilder } from "./builder.js";
+import { type COMPARISON_OPS, type ComparisonOperand, type Predicate } from "../../core";
+import { currentBuilder } from "./builder";
 import {
   type AuthorValue,
   checkSerialized,
@@ -9,8 +9,8 @@ import {
   type Size,
   serialize,
   serializeSize,
-} from "./ref.js";
-import { validatePredicate } from "./validate.js";
+} from "./ref";
+import { validatePredicate } from "./validate";
 
 type Operand = AuthorValue | Size;
 

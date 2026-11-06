@@ -1,5 +1,5 @@
 import { writeFileSync } from "node:fs";
-import { type Context, readItems, root } from "./repository.ts";
+import { type Context, readItems, root } from "./repository";
 
 export default ({ target }: { target: string }, context: Context) => {
   const values = readItems();

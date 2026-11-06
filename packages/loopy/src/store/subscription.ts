@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import type { RuntimeEvent, Store } from "../core/index.js";
+import type { RuntimeEvent, Store } from "../core";
 
 export const subscribeStore = (
   store: Pick<Store, "subscribe">,

@@ -1,6 +1,6 @@
 import { Effect } from "effect";
-import { openRunStore, type SqliteRunStore } from "../local/index.js";
-import type { CliContext } from "./context.js";
+import { openRunStore, type SqliteRunStore } from "../local";
+import type { CliContext } from "./context";
 
 /** Only daemon control owns a database; all data commands use HTTP. */
 export const withRunStore = <A, E, R>(

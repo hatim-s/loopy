@@ -3,11 +3,11 @@ import {
   type InputValidation,
   parseInputValidation,
   type RecordSpec,
-} from "../../core/index.js";
-import { GraphBuilder } from "./builder.js";
-import { parseDefinitionInput, parseDefinitionMeta } from "./definition.js";
-import { inputRef } from "./input.js";
-import type { AuthorValue } from "./ref.js";
+} from "../../core";
+import { GraphBuilder } from "./builder";
+import { parseDefinitionInput, parseDefinitionMeta } from "./definition";
+import { inputRef } from "./input";
+import type { AuthorValue } from "./ref";
 
 export function loopy<const S extends RecordSpec>(
   name: string,

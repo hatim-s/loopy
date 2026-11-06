@@ -1,5 +1,5 @@
-import type { ServerEvent } from "../contract/index.js";
-import type { RuntimeEvent } from "../core/index.js";
+import type { ServerEvent } from "../contract";
+import type { RuntimeEvent } from "../core";
 
 type NodeEvent = Extract<RuntimeEvent, { entity: "node" }>;
 

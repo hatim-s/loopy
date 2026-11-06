@@ -1,15 +1,15 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { Effect } from "effect";
-import { attemptHash } from "../../../apps/sandbox/src/admission.js";
+import { attemptHash } from "../../../apps/sandbox/src/admission";
 import {
   decodeBoundary,
   finishedAttemptRecordSchema,
   sandboxAttemptIdentitySchema,
   sandboxExecutionResultSchema,
-} from "../../../packages/loopy/src/contract/index.js";
-import { receiptEvidence } from "../receipt-evidence.js";
-import { decodeRuntimeQueue } from "../runtime-queue-schema.js";
+} from "../../../packages/loopy/src/contract";
+import { receiptEvidence } from "../receipt/evidence";
+import { decodeRuntimeQueue } from "../runtime-queue-schema";
 
 // These are synthetic typed inputs. No receipt authority or workload is started.
 const identity = decodeBoundary(sandboxAttemptIdentitySchema)({

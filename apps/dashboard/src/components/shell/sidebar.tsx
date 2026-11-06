@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
-import { useLoopyRows, useRunPages, useScheduleOverview } from "../../lib/ui-data.ts";
-import { BrandMark } from "../brand-mark.tsx";
-import { Icon, type IconName } from "../ui/icon.tsx";
+import { useLoopyRows, useRunPages, useScheduleOverview } from "../../lib/ui-data";
+import { BrandMark } from "../brand-mark";
+import { Icon, type IconName } from "../ui/icon";
 
 // The awaiting count reads one page; past it the sidebar says "20+" rather than guess.
 const AWAITING_PAGE = 20;

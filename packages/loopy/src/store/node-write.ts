@@ -6,9 +6,9 @@ import {
   type NodeRun,
   outputBytes,
   type StoreEffect,
-} from "../core/index.js";
-import { StoreInvariantError, StoreRejectedError } from "./operation.js";
-import { utc } from "./timestamps.js";
+} from "../core";
+import { StoreInvariantError, StoreRejectedError } from "./operation";
+import { utc } from "./timestamps";
 
 export function checkNodeWrite(runId: string, node: NodeRun) {
   if (node.key.runId !== runId) {

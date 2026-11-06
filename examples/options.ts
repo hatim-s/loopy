@@ -1,4 +1,4 @@
-import type { CommandOptions } from "loopy";
+import type { CommandOptions } from "../packages/loopy/src/sdk";
 
 export const readOptions = {
   retry: { attempts: 3, retryOn: "exit" },

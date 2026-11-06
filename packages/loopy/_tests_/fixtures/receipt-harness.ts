@@ -1,9 +1,9 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Miniflare } from "miniflare";
-import { attemptHash } from "../../../../apps/sandbox/src/admission.js";
-import { HttpSandboxAuthority } from "../../../../apps/sandbox/src/http-authority.js";
-import { decodeBoundary, dockerAttemptPlanSchema, nodeIdSchema } from "../../src/contract/index.js";
+import { attemptHash } from "../../../../apps/sandbox/src/admission";
+import { HttpSandboxAuthority } from "../../../../apps/sandbox/src/http-authority";
+import { decodeBoundary, dockerAttemptPlanSchema, nodeIdSchema } from "../../src/contract";
 
 export const bridgeToken = "synthetic-receipt-bridge-credential-0001";
 

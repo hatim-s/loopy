@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Effect, Exit, Scope } from "effect";
-import { daemonUrl, localDaemon, openRunStore, readDaemonFile } from "../src/local/index.js";
+import { daemonUrl, localDaemon, openRunStore, readDaemonFile } from "../src/local";
 
 const roots: string[] = [];
 

@@ -8,15 +8,15 @@ import {
   LOOPY_SCOPES,
   NODE_RUN_STATUSES,
   RECEIPT_KINDS,
-} from "../core/index.js";
-import { struct } from "./codec.js";
-import { nodeSchema, nodeViewSchema } from "./graph-nodes.js";
+} from "../core";
+import { struct } from "./codec";
+import { nodeSchema, nodeViewSchema } from "./graph-nodes";
 
-import type { outputSchema, valueSchema } from "./graph-values.js";
-import { graphRecord, labelSchema, nodeIdSchema, refSchema } from "./graph-values.js";
-import { jsonSchema } from "./json.js";
+import type { outputSchema, valueSchema } from "./graph-values";
+import { graphRecord, labelSchema, nodeIdSchema, refSchema } from "./graph-values";
+import { jsonSchema } from "./json";
 
-export { nodeSchema } from "./graph-nodes.js";
+export { nodeSchema } from "./graph-nodes";
 
 export {
   nodeIdSchema,
@@ -25,7 +25,7 @@ export {
   refIdSchema,
   refSchema,
   valueSchema,
-} from "./graph-values.js";
+} from "./graph-values";
 
 export const edgeSchema = Schema.Union([
   struct({

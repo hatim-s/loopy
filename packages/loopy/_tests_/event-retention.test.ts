@@ -1,9 +1,9 @@
 import { afterEach, expect, test } from "bun:test";
 import { Effect, Exit, Schema, Scope } from "effect";
-import { nodeIdSchema } from "../src/contract/index.js";
-import type { RuntimeEvent, Store } from "../src/core/index.js";
-import { MemoryStore, makeSqliteRunStore, subscribeStore } from "../src/store/index.js";
-import { newRun } from "./fixture.js";
+import { nodeIdSchema } from "../src/contract";
+import type { RuntimeEvent, Store } from "../src/core";
+import { MemoryStore, makeSqliteRunStore, subscribeStore } from "../src/store";
+import { newRun } from "./fixture";
 
 const scopes: Scope.Closeable[] = [];
 

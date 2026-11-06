@@ -1,6 +1,6 @@
-import { currentBuilder } from "../builder.js";
-import type { AuthorValue } from "../ref.js";
-import { validateLabel } from "../validate.js";
+import { currentBuilder } from "../builder";
+import type { AuthorValue } from "../ref";
+import { validateLabel } from "../validate";
 
 export function subgraph<A extends AuthorValue[], R extends AuthorValue>(
   label: string,

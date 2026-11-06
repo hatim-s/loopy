@@ -3,12 +3,9 @@ import { constants } from "node:fs";
 import { open, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { Schema } from "effect";
-import { struct } from "../../../packages/loopy/src/contract/codec.js";
-import {
-  decodeBoundary,
-  sandboxExecutionResultSchema,
-} from "../../../packages/loopy/src/contract/index.js";
-import { dockerAttemptPlanSchema } from "../../../packages/loopy/src/contract/sandbox-journal.js";
+import { decodeBoundary, sandboxExecutionResultSchema } from "../../../packages/loopy/src/contract";
+import { struct } from "../../../packages/loopy/src/contract/codec";
+import { dockerAttemptPlanSchema } from "../../../packages/loopy/src/contract/sandbox-journal";
 
 export const storedReceiptSchema = Schema.Union([
   struct({ ...dockerAttemptPlanSchema.fields, kind: Schema.Literal("started") }),

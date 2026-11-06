@@ -1,7 +1,7 @@
 import { type CSSProperties, memo, useEffect, useMemo, useRef } from "react";
-import { lineOwners, type TokenKind, tokenize } from "../../lib/code-lines.ts";
-import type { SourceFile, SourceRange } from "../../lib/view-models.ts";
-import { type Status, StatusGlyph, statusTone, statusWord } from "../ui/status.tsx";
+import { lineOwners, type TokenKind, tokenize } from "../../lib/code-lines";
+import type { SourceFile, SourceRange } from "../../lib/view-models";
+import { type Status, StatusGlyph, statusTone, statusWord } from "../ui/status";
 
 /** What the code view says about one node. A definition view passes marks without status. */
 export type NodeMark = {

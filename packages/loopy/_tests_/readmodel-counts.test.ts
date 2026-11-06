@@ -3,10 +3,10 @@ import { afterEach, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { Effect, Exit, Scope } from "effect";
-import { MemoryStore, makeSqliteRunStore } from "../src/store/index.js";
-import { checkCountHistory } from "./fixtures/readmodel-assertions.js";
-import { readmodelDirectory } from "./fixtures/readmodel-directory.js";
-import { countHistory, readmodelAt } from "./fixtures/readmodel-history.js";
+import { MemoryStore, makeSqliteRunStore } from "../src/store";
+import { checkCountHistory } from "./fixtures/readmodel-assertions";
+import { readmodelDirectory } from "./fixtures/readmodel-directory";
+import { countHistory, readmodelAt } from "./fixtures/readmodel-history";
 
 const cleanups: (() => void | Promise<void>)[] = [];
 

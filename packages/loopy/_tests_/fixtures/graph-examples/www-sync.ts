@@ -1,4 +1,4 @@
-import { code, log, loopy, uuid } from "../../../src/sdk/graph/index.js";
+import { code, log, loopy, uuid } from "../../../src/sdk/graph";
 
 export default loopy("www-uacode-sync", {
   input: {

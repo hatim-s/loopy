@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { decodeBoundary, executionKeySchema } from "../../packages/loopy/src/contract/index.js";
+import { decodeBoundary, executionKeySchema } from "../../packages/loopy/src/contract";
 
 export const runtimeQueueSchema = Schema.Struct({
   executionKey: executionKeySchema,

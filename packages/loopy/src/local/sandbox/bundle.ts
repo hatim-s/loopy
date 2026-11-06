@@ -3,14 +3,14 @@ import { copyFile, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Data, Effect, Exit } from "effect";
-import type { CommandExecutionError } from "../../core/index.js";
-import { type CommandResult } from "../../core/index.js";
-import { unstarted } from "../spawn.js";
-import { macBundle } from "./bundle-darwin.js";
-import { linuxBundle } from "./bundle-linux.js";
-import type { ProcessFilesystemError } from "./io.js";
-import { filesystem } from "./io.js";
-import { executable } from "./paths.js";
+import type { CommandExecutionError } from "../../core";
+import { type CommandResult } from "../../core";
+import { unstarted } from "../spawn";
+import { macBundle } from "./bundle-darwin";
+import { linuxBundle } from "./bundle-linux";
+import type { ProcessFilesystemError } from "./io";
+import { filesystem } from "./io";
+import { executable } from "./paths";
 
 type Options = { bundle: string; workspace: string; network: boolean; home: string };
 

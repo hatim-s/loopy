@@ -18,15 +18,11 @@ const fontPackages = ["@fontsource-variable/geist", "@fontsource-variable/geist-
 );
 
 export default defineConfig({
-  plugins: [tanstackRouter({ target: "react", autoCodeSplitting: true }), react(), tailwindcss()],
-  resolve: {
-    // The contract is read from source so dev mode does not depend on a package build.
-    alias: {
-      "loopy/contract": fileURLToPath(
-        new URL("../../packages/loopy/src/contract/index.ts", import.meta.url),
-      ),
-    },
-  },
+  plugins: [
+    tanstackRouter({ target: "react", autoCodeSplitting: true, indexToken: "page" }),
+    react(),
+    tailwindcss(),
+  ],
   server: {
     port: 4173,
     fs: {

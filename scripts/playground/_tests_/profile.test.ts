@@ -3,8 +3,8 @@ import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { approvedDiagnostic, diagnosticPath } from "../metrics-snapshot.js";
-import { playgroundProfile } from "../profile.js";
+import { approvedDiagnostic, diagnosticPath } from "../metrics/snapshot";
+import { playgroundProfile } from "../profile";
 
 const temporary: string[] = [];
 
@@ -96,7 +96,7 @@ test("diagnostics reject old profiles, directory symlinks, and unapproved or cha
 });
 
 test("architecture config requires explicit durable mode and a distinct receipt credential", async () => {
-  const { playgroundConfigSchema } = await import("../config-schema.js");
+  const { playgroundConfigSchema } = await import("../config-schema");
   const root = await freshRoot();
   const selected = playgroundProfile(root, "architecture");
   const schema = playgroundConfigSchema(selected);

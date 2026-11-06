@@ -1,5 +1,5 @@
-import { type RunSnapshotView, routes } from "../../packages/loopy/src/contract/index.ts";
-import type { OwnedDaemon } from "./daemon.ts";
+import { type RunSnapshotView, routes } from "../../packages/loopy/src/contract";
+import type { OwnedDaemon } from "./daemon";
 
 const failureLabels = new Map([
   ["playground-b-retry-marker", "retry-update"],

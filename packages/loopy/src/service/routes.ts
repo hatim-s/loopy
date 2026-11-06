@@ -6,13 +6,13 @@ import {
   type ErrorCode,
   encodeBoundary,
   routes,
-} from "../contract/index.js";
-import type { Store } from "../core/index.js";
-import { ServiceError } from "./error.js";
-import type { EventReader } from "./events.js";
-import { eventStream } from "./events.js";
-import { SecretError } from "./registry.js";
-import type { Service } from "./service.js";
+} from "../contract";
+import type { Store } from "../core";
+import { ServiceError } from "./error";
+import type { EventReader } from "./events";
+import { eventStream } from "./events";
+import { SecretError } from "./registry";
+import type { Service } from "./service";
 
 const STATUS: Record<ErrorCode, number> = {
   not_yet: 501,

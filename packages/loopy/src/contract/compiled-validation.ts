@@ -1,7 +1,7 @@
 import { Data, Effect } from "effect";
-import { revision, validateGraph } from "../core/index.js";
-import type { PutLoopyBody } from "./compiled-loopy.js";
-import type { SourceArtifact } from "./source-artifact.js";
+import { revision, validateGraph } from "../core";
+import type { PutLoopyBody } from "./compiled-loopy";
+import type { SourceArtifact } from "./source-artifact";
 
 export class CompiledValidationError extends Data.TaggedError("CompiledValidationError")<{
   code:

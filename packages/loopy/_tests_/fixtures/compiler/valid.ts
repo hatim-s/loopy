@@ -1,4 +1,4 @@
-import { code, fs, loopy } from "../../../src/sdk/graph/index.js";
+import { code, fs, loopy } from "../../../src/sdk/graph";
 
 export default loopy("compiled", {
   input: {},

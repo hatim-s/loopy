@@ -4,8 +4,8 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Cause, Effect, Exit } from "effect";
 import { Miniflare } from "miniflare";
-import { boundedRequest, readBoundedText } from "../../../apps/cloud/src/http.js";
-import { SandboxProvider } from "../../../apps/cloud/src/provider.js";
+import { boundedRequest, readBoundedText } from "../../../apps/cloud/src/http";
+import { SandboxProvider } from "../../../apps/cloud/src/provider";
 import {
   attemptIdInput,
   attemptResourceNames,
@@ -15,10 +15,10 @@ import {
   nodeIdSchema,
   resultOperations,
   workspaceVolumeInput,
-} from "../src/contract/index.js";
-import { canonicalJson, type Json } from "../src/core/index.js";
-import { RegistryError } from "../src/service/index.js";
-import { compiledBody } from "./compiled-fixture.js";
+} from "../src/contract";
+import { canonicalJson, type Json } from "../src/core";
+import { RegistryError } from "../src/service";
+import { compiledBody } from "./compiled-fixture";
 
 const root = resolve(import.meta.dir, "../../..");
 

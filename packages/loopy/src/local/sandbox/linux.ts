@@ -2,12 +2,12 @@ import { realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, relative, sep } from "node:path";
 import { Effect } from "effect";
-import type { CommandExecutionError } from "../../core/index.js";
-import { rejected, unstarted } from "../spawn.js";
-import type { ProcessFilesystemError } from "./io.js";
-import { absentPath, filesystem } from "./io.js";
-import type { SandboxOptions } from "./launcher.js";
-import { ENV_EXEC, envArgs, executable, packageDirectory, within } from "./paths.js";
+import type { CommandExecutionError } from "../../core";
+import { rejected, unstarted } from "../spawn";
+import type { ProcessFilesystemError } from "./io";
+import { absentPath, filesystem } from "./io";
+import type { SandboxOptions } from "./launcher";
+import { ENV_EXEC, envArgs, executable, packageDirectory, within } from "./paths";
 
 const BWRAP_CANDIDATES = ["/usr/bin/bwrap", "/bin/bwrap"];
 

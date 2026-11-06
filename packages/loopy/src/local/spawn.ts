@@ -1,8 +1,8 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { spawn } from "node:child_process";
 import { Effect } from "effect";
-import type { CommandResult } from "../core/index.js";
-import { CommandExecutionError, errorMessage } from "../core/index.js";
+import type { CommandResult } from "../core";
+import { CommandExecutionError, errorMessage } from "../core";
 
 const KILL_GRACE_MS = 5000;
 

@@ -1,7 +1,7 @@
 import { infiniteQueryOptions, queryOptions, skipToken } from "@tanstack/react-query";
-import { encodeRunCursor } from "loopy/contract";
-import type { LoopyBackend, OverviewQuery, RunsQuery } from "../backend/backend.ts";
-import { INBOX_QUERY, inboxGroups } from "./inbox.ts";
+import { encodeRunCursor } from "../../../../packages/loopy/src/contract";
+import type { LoopyBackend, OverviewQuery, RunsQuery } from "../backend/backend";
+import { INBOX_QUERY, inboxGroups } from "./inbox";
 import {
   type EventFilters,
   type ExecutionFilters,
@@ -9,7 +9,7 @@ import {
   type LogFilters,
   type RunFilters,
   type ScopeItemsFilters,
-} from "./keys.ts";
+} from "./keys";
 
 export const RUN_PAGE_SIZE = 25;
 

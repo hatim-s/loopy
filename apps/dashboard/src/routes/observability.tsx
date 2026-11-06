@@ -1,21 +1,21 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Schema } from "effect";
-import { runStatusSchema } from "loopy/contract";
 import { useState } from "react";
-import { EventDrawer, EventTable } from "../components/observability/event-table.tsx";
-import { LogTable } from "../components/observability/log-table.tsx";
-import { Load, Note } from "../components/ui/load.tsx";
-import { PagerFoot, ScanNote } from "../components/ui/pager.tsx";
-import { Segmented } from "../components/ui/segmented.tsx";
-import { searchField } from "../lib/search.ts";
-import { useEventPages, useLogPages, useLoopyRows } from "../lib/ui-data.ts";
+import { runStatusSchema } from "../../../../packages/loopy/src/contract";
+import { EventDrawer, EventTable } from "../components/observability/event-table";
+import { LogTable } from "../components/observability/log-table";
+import { Load, Note } from "../components/ui/load";
+import { PagerFoot, ScanNote } from "../components/ui/pager";
+import { Segmented } from "../components/ui/segmented";
+import { searchField } from "../lib/search";
+import { useEventPages, useLogPages, useLoopyRows } from "../lib/ui-data";
 import {
   type EventFilters,
   LOG_LEVELS,
   type LogFilters,
   PERIODS,
   type Period,
-} from "../lib/view-models.ts";
+} from "../lib/view-models";
 
 const ENTITIES = ["run", "node", "step", "log", "hook", "schedule"] as const;
 

@@ -1,10 +1,10 @@
 import { expect, expectTypeOf, test } from "bun:test";
 import { Option, Schema } from "effect";
-import type { SavedLoopy } from "../src/contract/index.js";
-import * as contract from "../src/contract/index.js";
-import type * as core from "../src/core/index.js";
-import { newRun } from "./fixture.js";
-import { approveDemoGraph } from "./fixtures/graphs.js";
+import type { SavedLoopy } from "../src/contract";
+import * as contract from "../src/contract";
+import type * as core from "../src/core";
+import { newRun } from "./fixture";
+import { approveDemoGraph } from "./fixtures/graphs";
 
 type Flatten<T> = T extends unknown ? { [Key in keyof T]: T[Key] } : never;
 

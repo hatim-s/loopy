@@ -1,4 +1,4 @@
-import { code, log, loopy } from "loopy/graph";
+import { code, log, loopy } from "../../../../src/sdk/graph";
 
 export default loopy("playground-b-retry-marker", {
   description: "A safe marker makes attempt one fail and attempt two update CI values",

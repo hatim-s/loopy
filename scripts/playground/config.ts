@@ -1,8 +1,8 @@
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { z } from "zod";
-import { playgroundConfigSchema } from "./config-schema.js";
-import { playgroundProfile } from "./profile.js";
+import { playgroundConfigSchema } from "./config-schema";
+import { playgroundProfile } from "./profile";
 
 export const root = resolve(import.meta.dir, "../..");
 

@@ -6,7 +6,7 @@ import {
   MAX_OUTPUT_BYTES,
   type OutSchema,
   outputBytes,
-} from "../core/index.js";
+} from "../core";
 
 export function validateOutput(output: Json, schema: OutSchema): ExecutionError | null {
   if (outputBytes(output) > MAX_OUTPUT_BYTES) {

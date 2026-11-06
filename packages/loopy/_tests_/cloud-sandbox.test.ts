@@ -12,15 +12,15 @@ import {
 } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { Effect, Result, Schema } from "effect";
-import type { ArtifactReader } from "../../../apps/sandbox/src/artifacts.js";
-import type { Attempts } from "../../../apps/sandbox/src/attempts.js";
-import { sandboxConfigSchema, validateStateRoot } from "../../../apps/sandbox/src/config.js";
-import { type AttemptBackend, DockerBackend } from "../../../apps/sandbox/src/docker.js";
-import { filesystemDependencies } from "../../../apps/sandbox/src/filesystem.js";
-import { failure } from "../../../apps/sandbox/src/operations.js";
-import { type CommandRunner, runCommand } from "../../../apps/sandbox/src/process.js";
-import { type StartedReceipt, storedReceiptSchema } from "../../../apps/sandbox/src/receipts.js";
-import { attemptHandler } from "../../../apps/sandbox/src/server.js";
+import type { ArtifactReader } from "../../../apps/sandbox/src/artifacts";
+import type { Attempts } from "../../../apps/sandbox/src/attempt";
+import { sandboxConfigSchema, validateStateRoot } from "../../../apps/sandbox/src/config";
+import { type AttemptBackend, DockerBackend } from "../../../apps/sandbox/src/docker";
+import { filesystemDependencies } from "../../../apps/sandbox/src/filesystem";
+import { failure } from "../../../apps/sandbox/src/operations";
+import { type CommandRunner, runCommand } from "../../../apps/sandbox/src/process";
+import { type StartedReceipt, storedReceiptSchema } from "../../../apps/sandbox/src/receipts";
+import { attemptHandler } from "../../../apps/sandbox/src/server";
 import {
   decodeBoundary,
   nodeIdSchema,
@@ -28,11 +28,11 @@ import {
   type SandboxExecutionResult,
   sandboxArtifactSchema,
   sandboxAttemptRequestSchema,
-} from "../src/contract/index.js";
-import { attemptRecordSchema } from "../src/contract/sandbox-journal.js";
-import { CommandExecutionError, canonicalJson } from "../src/core/index.js";
-import { commandSpec } from "./fixtures/executor.js";
-import { closeAttemptScopes, openAttempts, openSandbox, run } from "./fixtures/sandbox-run.js";
+} from "../src/contract";
+import { attemptRecordSchema } from "../src/contract/sandbox-journal";
+import { CommandExecutionError, canonicalJson } from "../src/core";
+import { commandSpec } from "./fixtures/executor";
+import { closeAttemptScopes, openAttempts, openSandbox, run } from "./fixtures/sandbox-run";
 
 const roots: string[] = [];
 

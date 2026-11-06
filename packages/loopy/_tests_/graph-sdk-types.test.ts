@@ -1,5 +1,5 @@
 import { expect, expectTypeOf, test } from "bun:test";
-import type { Json } from "../src/core/index.js";
+import type { Json } from "../src/core";
 import {
   code,
   defineCommand,
@@ -16,7 +16,7 @@ import {
   ne,
   type Ref,
   size,
-} from "../src/sdk/graph/index.js";
+} from "../src/sdk/graph";
 
 // This function is checked by tsc but never evaluated. Invalid author programs must not run.
 function operandTypes(

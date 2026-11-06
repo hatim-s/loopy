@@ -1,11 +1,11 @@
 import { Link } from "@tanstack/react-router";
 import { Fragment, useState } from "react";
-import { shortId } from "../../lib/format.ts";
-import { useLog } from "../../lib/ui-data.ts";
-import type { LogRow } from "../../lib/view-models.ts";
-import { JsonBlock } from "../json-preview.tsx";
-import { Load } from "../ui/load.tsx";
-import { LevelPill } from "../ui/status.tsx";
+import { shortId } from "../../lib/format";
+import { useLog } from "../../lib/ui-data";
+import type { LogRow } from "../../lib/view-models";
+import { JsonBlock } from "../json-preview";
+import { Load } from "../ui/load";
+import { LevelPill } from "../ui/status";
 
 const TIME = new Intl.DateTimeFormat(undefined, {
   hour: "2-digit",

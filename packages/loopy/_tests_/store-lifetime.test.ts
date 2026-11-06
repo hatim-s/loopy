@@ -3,12 +3,12 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Cause, Effect, Exit, Schema } from "effect";
-import { nodeIdSchema } from "../src/contract/index.js";
-import { StorageError, StoreService } from "../src/core/store.js";
-import { makeMemoryStore } from "../src/store/memory.js";
-import { makeSqliteRunStore, sqliteStoreLayer } from "../src/store/sqlite/store.js";
-import { subscribeStore } from "../src/store/subscription.js";
-import { newRun } from "./fixture.js";
+import { nodeIdSchema } from "../src/contract";
+import { StorageError, StoreService } from "../src/core/store";
+import { makeMemoryStore } from "../src/store/memory";
+import { makeSqliteRunStore, sqliteStoreLayer } from "../src/store/sqlite/store";
+import { subscribeStore } from "../src/store/subscription";
+import { newRun } from "./fixture";
 
 const nodeId = Schema.decodeUnknownSync(nodeIdSchema)("0:code");
 

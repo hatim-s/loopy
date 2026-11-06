@@ -1,5 +1,5 @@
-import type { CompilerDiagnosticCode } from "../core/index.js";
-import type { CompilerDiagnostic } from "./types.js";
+import type { CompilerDiagnosticCode } from "../core";
+import type { CompilerDiagnostic } from "./types";
 
 export function diagnostic(
   file: string,

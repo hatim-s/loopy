@@ -1,16 +1,9 @@
-import {
-  durationMs,
-  isBoolean,
-  isNumber,
-  isString,
-  type Node,
-  type NodeRun,
-} from "../core/index.js";
-import { captureInput } from "./input.js";
-import { write } from "./node-run.js";
-import { type ResolutionContext, resolve } from "./resolve.js";
-import { executionSpec } from "./spec.js";
-import type { Traversal, TraversalResult } from "./traversal.js";
+import { durationMs, isBoolean, isNumber, isString, type Node, type NodeRun } from "../core";
+import { captureInput } from "./input";
+import { write } from "./node-run";
+import { type ResolutionContext, resolve } from "./resolve";
+import { executionSpec } from "./spec";
+import type { Traversal, TraversalResult } from "./traversal";
 
 function dispatch(
   traversal: Traversal,

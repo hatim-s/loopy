@@ -8,19 +8,19 @@ import {
   RUN_EVENT_KINDS,
   SCHEDULE_EVENT_KINDS,
   STEP_STATUSES,
-} from "../core/index.js";
-import { struct } from "./codec.js";
+} from "../core";
+import { struct } from "./codec";
 
-import { scopeCountsSchema } from "./dashboard.js";
-import { nodeRunViewSchema } from "./graph.js";
-import { jsonSchema } from "./json.js";
+import { scopeCountsSchema } from "./dashboard";
+import { nodeRunViewSchema } from "./graph";
+import { jsonSchema } from "./json";
 import {
   hookRecordSchema,
   logRecordSchema,
   runStatusSchema,
   scheduleSchema,
   stepRecordSchema,
-} from "./records.js";
+} from "./records";
 
 const runBaseSchema = struct({
   id: Schema.String,

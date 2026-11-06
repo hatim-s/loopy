@@ -1,8 +1,8 @@
 import { Schema } from "effect";
-import { struct } from "./codec.js";
+import { struct } from "./codec";
 
-import { hashSchema } from "./compiled-loopy.js";
-import { sandboxExecutionResultSchema } from "./sandbox.js";
+import { hashSchema } from "./compiled-loopy";
+import { sandboxExecutionResultSchema } from "./sandbox";
 import {
   type AuthoritySession,
   attemptRecordSchema,
@@ -13,7 +13,7 @@ import {
   finishedAttemptRecordSchema,
   resultRefSchema,
   startedAttemptRecordSchema,
-} from "./sandbox-journal.js";
+} from "./sandbox-journal";
 
 const rejected = struct({ kind: Schema.Literal("rejected"), code: authorityFailureSchema });
 

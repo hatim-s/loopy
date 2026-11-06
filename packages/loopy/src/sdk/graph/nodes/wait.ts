@@ -1,6 +1,6 @@
-import type { Duration, OutSchema } from "../../../core/index.js";
-import { currentBuilder } from "../builder.js";
-import type { Infer, SchemaFields } from "../types.js";
+import type { Duration, OutSchema } from "../../../core";
+import { currentBuilder } from "../builder";
+import type { Infer, SchemaFields } from "../types";
 
 export function wait<const S extends OutSchema>(
   label: string,

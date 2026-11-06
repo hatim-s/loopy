@@ -1,6 +1,6 @@
 import { Schema } from "effect";
-import { durationMs, MAP_ERROR_MODES, NODE_KINDS, RETRY_BACKOFFS } from "../core/index.js";
-import { struct } from "./codec.js";
+import { durationMs, MAP_ERROR_MODES, NODE_KINDS, RETRY_BACKOFFS } from "../core";
+import { struct } from "./codec";
 
 import {
   durationSchema,
@@ -12,7 +12,7 @@ import {
   refIdSchema,
   refSchema,
   valueSchema,
-} from "./graph-values.js";
+} from "./graph-values";
 
 const rateLimitSchema = struct({
   key: Schema.String.check(Schema.isMinLength(1)),

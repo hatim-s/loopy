@@ -1,8 +1,8 @@
 import { Schema } from "effect";
-import { struct } from "./codec.js";
+import { struct } from "./codec";
 
-import { graphMetaSchema, graphSchema, nodeIdSchema } from "./graph.js";
-import { sourceArtifactSchema } from "./source-artifact.js";
+import { graphMetaSchema, graphSchema, nodeIdSchema } from "./graph";
+import { sourceArtifactSchema } from "./source-artifact";
 
 export const hashSchema = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/));
 

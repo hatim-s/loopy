@@ -1,13 +1,13 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { Effect } from "effect";
-import { HttpSandboxAuthority } from "../../../apps/sandbox/src/http-authority.js";
-import { AuthorityError, authorityCommandSchema, decodeBoundary } from "../src/contract/index.js";
+import { HttpSandboxAuthority } from "../../../apps/sandbox/src/http-authority";
+import { AuthorityError, authorityCommandSchema, decodeBoundary } from "../src/contract";
 import {
   bridgeToken,
   namespace,
   type ReceiptHarness,
   receiptHarness,
-} from "./fixtures/receipt-harness.js";
+} from "./fixtures/receipt-harness";
 
 let harness: ReceiptHarness;
 

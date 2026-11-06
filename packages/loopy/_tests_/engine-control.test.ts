@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { initialState, step } from "../src/engine/index.js";
+import { initialState, step } from "../src/engine";
 import {
   and,
   branch,
@@ -21,8 +21,8 @@ import {
   switch_,
   uuid,
   wait,
-} from "../src/sdk/graph/index.js";
-import { at, complete, dispatches, failed, start } from "./engine-control-fixture.js";
+} from "../src/sdk/graph";
+import { at, complete, dispatches, failed, start } from "./engine-control-fixture";
 
 test("branch and switch run only selected arms and resolve joined nested values", () => {
   const graph = loopy("selected", {

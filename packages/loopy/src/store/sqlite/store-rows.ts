@@ -6,7 +6,7 @@ import {
   nodeRunSchema,
   runStatusSchema,
   scheduleSchema,
-} from "../../contract/index.js";
+} from "../../contract";
 import {
   HOOK_EVENT_KINDS,
   NODE_RUN_STATUSES,
@@ -14,10 +14,10 @@ import {
   type RunRecord,
   SCHEDULE_EVENT_KINDS,
   type Schedule,
-} from "../../core/index.js";
-import { EVENT_RETENTION } from "../event-outbox.js";
-import { storedDecoder, storedValueDecoder } from "../row-codec.js";
-import type { EventRow, LogRow, RunRow, ScheduleRow } from "./store-schema.js";
+} from "../../core";
+import { EVENT_RETENTION } from "../event-outbox";
+import { storedDecoder, storedValueDecoder } from "../row-codec";
+import type { EventRow, LogRow, RunRow, ScheduleRow } from "./store-schema";
 
 export const SQL = {
   createEpoch: "INSERT INTO meta VALUES ('epoch',?)",

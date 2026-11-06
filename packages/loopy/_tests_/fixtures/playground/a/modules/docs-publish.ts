@@ -1,4 +1,4 @@
-import { type Context, finish, type RunInput, read } from "./repository.js";
+import { type Context, finish, type RunInput, read } from "./repository";
 
 type Input = Pick<RunInput, "batch" | "ordinal"> & { sections: string[] };
 

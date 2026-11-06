@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { z } from "zod";
-import { atomic, dockerContext, sandboxState, state } from "./config.js";
+import { atomic, dockerContext, sandboxState, state } from "./config";
 
 const owner = createHash("sha256").update(sandboxState).digest("hex");
 

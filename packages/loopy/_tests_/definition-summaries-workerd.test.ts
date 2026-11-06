@@ -2,11 +2,11 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { resolve } from "node:path";
 import { Schema } from "effect";
 import type { Miniflare } from "miniflare";
-import { definitionSummarySchema, type PutLoopyBody } from "../src/contract/index.js";
-import { revision } from "../src/core/index.js";
-import { compiledBody } from "./compiled-fixture.js";
-import type { SummaryProbeRequest } from "./fixtures/summary-workerd.js";
-import { probeRuntime } from "./fixtures/workerd-probe.js";
+import { definitionSummarySchema, type PutLoopyBody } from "../src/contract";
+import { revision } from "../src/core";
+import { compiledBody } from "./compiled-fixture";
+import type { SummaryProbeRequest } from "./fixtures/summary-workerd";
+import { probeRuntime } from "./fixtures/workerd-probe";
 
 let runtime: Miniflare;
 

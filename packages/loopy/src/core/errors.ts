@@ -1,4 +1,4 @@
-import { isRecord, isString } from "./validation.js";
+import { isRecord, isString } from "./validation";
 
 /** The message of anything thrown, for logs and API responses. */
 export function errorMessage(cause: unknown): string {

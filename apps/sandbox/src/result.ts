@@ -1,12 +1,8 @@
 import {
   SANDBOX_MAX_CAPTURE_BYTES,
   type SandboxExecutionResult,
-} from "../../../packages/loopy/src/contract/index.js";
-import {
-  limitLogs,
-  MAX_OUTPUT_BYTES,
-  outputBytes,
-} from "../../../packages/loopy/src/core/index.js";
+} from "../../../packages/loopy/src/contract";
+import { limitLogs, MAX_OUTPUT_BYTES, outputBytes } from "../../../packages/loopy/src/core";
 
 export function failed(
   code: Extract<SandboxExecutionResult, { kind: "failed" }>["error"]["code"],

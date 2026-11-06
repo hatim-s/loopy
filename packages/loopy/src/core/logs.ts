@@ -1,6 +1,6 @@
-import { MAX_LOG_BYTES, outputBytes } from "./effects.js";
-import type { AttemptLog } from "./executor.js";
-import { isString } from "./validation.js";
+import { MAX_LOG_BYTES, outputBytes } from "./effects";
+import type { AttemptLog } from "./executor";
+import { isString } from "./validation";
 
 export function limitLogs(logs: AttemptLog[]): AttemptLog[] {
   const bounded: AttemptLog[] = [];

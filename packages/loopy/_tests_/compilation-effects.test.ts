@@ -3,17 +3,17 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync }
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Cause, Effect, Exit } from "effect";
+import { compile } from "../src/compiler";
 import {
   AuthorError,
   CompilationError,
   EvaluationError,
   recoverDiagnostics,
-} from "../src/compiler/errors.js";
-import { compile } from "../src/compiler/index.js";
-import { Registry } from "../src/local/registry.js";
-import { makeArtifactRegistry, saveCompiled } from "../src/local/save-compiled.js";
-import { outputOf } from "../src/local/typegen/generate.js";
-import { compiledBody } from "./compiled-fixture.js";
+} from "../src/compiler/errors";
+import { Registry } from "../src/local/registry";
+import { makeArtifactRegistry, saveCompiled } from "../src/local/save-compiled";
+import { outputOf } from "../src/local/typegen/generate";
+import { compiledBody } from "./compiled-fixture";
 
 const roots: string[] = [];
 

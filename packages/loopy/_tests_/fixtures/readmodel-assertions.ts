@@ -6,8 +6,8 @@ import {
   type ScopeItem,
   type ScopeItemsQuery,
   type Store,
-} from "../../src/core/index.js";
-import type { countHistory } from "./readmodel-history.js";
+} from "../../src/core";
+import type { countHistory } from "./readmodel-history";
 
 export function checkCountHistory(
   history: Awaited<ReturnType<typeof countHistory>>,

@@ -1,6 +1,6 @@
-import { durationMs, type ExecutionSpec, isStringArray, type Node } from "../core/index.js";
-import { ROOT_CONTEXT, resolve, resolveValues } from "./resolve.js";
-import type { EngineState } from "./state.js";
+import { durationMs, type ExecutionSpec, isStringArray, type Node } from "../core";
+import { ROOT_CONTEXT, resolve, resolveValues } from "./resolve";
+import type { EngineState } from "./state";
 
 export function executionSpec(
   node: Extract<Node, { kind: "code" | "command" }>,

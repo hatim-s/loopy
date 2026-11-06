@@ -1,5 +1,5 @@
 import dagre from "@dagrejs/dagre";
-import type { GraphModel, GraphNodeModel, NodeRole } from "./graph.ts";
+import type { GraphModel, GraphNodeModel, NodeRole } from "./graph";
 
 type Size = { width: number; height: number };
 

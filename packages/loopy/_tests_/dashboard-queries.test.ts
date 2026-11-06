@@ -4,13 +4,13 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { decodeBoundary, nodeIdSchema, routes } from "../src/contract/index.js";
-import { executionKeyString, type LogRecord, type NodeRun, type Store } from "../src/core/index.js";
-import { makeLocalService } from "../src/local/index.js";
-import { MemoryStore } from "../src/store/index.js";
-import { SCHEMA, WAIT_SCHEMA } from "../src/store/sqlite/store-schema.js";
-import { newRun } from "./fixture.js";
-import { fixtureSqlite } from "./fixtures/service-runtime.js";
+import { decodeBoundary, nodeIdSchema, routes } from "../src/contract";
+import { executionKeyString, type LogRecord, type NodeRun, type Store } from "../src/core";
+import { makeLocalService } from "../src/local";
+import { MemoryStore } from "../src/store";
+import { SCHEMA, WAIT_SCHEMA } from "../src/store/sqlite/store-schema";
+import { newRun } from "./fixture";
+import { fixtureSqlite } from "./fixtures/service-runtime";
 
 const cleanups: (() => void | Promise<void>)[] = [];
 

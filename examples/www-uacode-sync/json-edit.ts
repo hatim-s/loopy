@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import type { Json } from "loopy";
+import type { Json } from "../../packages/loopy/src/sdk";
 
 export type Files = Record<string, string>;
 

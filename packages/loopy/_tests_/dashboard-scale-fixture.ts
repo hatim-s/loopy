@@ -2,11 +2,11 @@ import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Effect } from "effect";
-import { compile } from "../src/compiler/index.js";
+import { compile } from "../src/compiler";
 
-import { type NodeRun, type StoreEffect } from "../src/core/index.js";
-import { makeLocalService, Registry } from "../src/local/index.js";
-import { fixtureSqlite, fixtureStore } from "./fixtures/service-runtime.js";
+import { type NodeRun, type StoreEffect } from "../src/core";
+import { makeLocalService, Registry } from "../src/local";
+import { fixtureSqlite, fixtureStore } from "./fixtures/service-runtime";
 
 export async function largeMapFixture() {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "loopy-dashboard-10k-map-")));

@@ -2,12 +2,12 @@ import { afterEach, expect, test } from "bun:test";
 import { writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { Effect, Exit, Scope } from "effect";
-import { compile } from "../src/compiler/index.js";
-import { LocalExecutor } from "../src/executor/index.js";
-import { activate } from "../src/host/index.js";
-import { makeSqliteRunStore } from "../src/store/index.js";
-import { newRun } from "./fixture.js";
-import { fixture } from "./fixtures/executor.js";
+import { compile } from "../src/compiler";
+import { LocalExecutor } from "../src/executor";
+import { activate } from "../src/host";
+import { makeSqliteRunStore } from "../src/store";
+import { newRun } from "./fixture";
+import { fixture } from "./fixtures/executor";
 
 const scopes: Scope.Closeable[] = [];
 

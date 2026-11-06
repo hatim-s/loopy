@@ -1,5 +1,5 @@
-import { descriptorCommand } from "../../descriptor.js";
-import { parseStashList } from "../parse/git.js";
+import { descriptorCommand } from "../../descriptor";
+import { parseStashList } from "../parse/git";
 
 export const stash = {
   push: descriptorCommand({

@@ -1,16 +1,16 @@
 import { Link } from "@tanstack/react-router";
-import type { RunView } from "loopy/contract";
 import { useState } from "react";
-import { describeCron } from "../../lib/cron.ts";
-import { elapsed, shortId, span } from "../../lib/format.ts";
-import { useResolveHook } from "../../lib/mutations.ts";
-import { useLoopyRows, useRunPages, useScheduleOverview } from "../../lib/ui-data.ts";
-import { Button } from "../button.tsx";
-import { PayloadEditor, ResolveError } from "../resolve-form.tsx";
-import { runElapsed } from "../runs/run-table.tsx";
-import { FireTime } from "../schedules/schedule-text.tsx";
-import { Load, Note } from "../ui/load.tsx";
-import { RunPill, StatusPill } from "../ui/status.tsx";
+import type { RunView } from "../../../../../packages/loopy/src/contract";
+import { describeCron } from "../../lib/cron";
+import { elapsed, shortId, span } from "../../lib/format";
+import { useResolveHook } from "../../lib/mutations";
+import { useLoopyRows, useRunPages, useScheduleOverview } from "../../lib/ui-data";
+import { Button } from "../button";
+import { PayloadEditor, ResolveError } from "../resolve-form";
+import { runElapsed } from "../runs/run-table";
+import { FireTime } from "../schedules/text";
+import { Load, Note } from "../ui/load";
+import { RunPill, StatusPill } from "../ui/status";
 
 const LIST_PAGE = 20;
 

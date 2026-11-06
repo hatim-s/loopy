@@ -2,8 +2,8 @@ import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { Registry } from "../src/local/index.js";
-import { compiledBody } from "./compiled-fixture.js";
+import { Registry } from "../src/local";
+import { compiledBody } from "./compiled-fixture";
 
 test("marked temporary projects isolate saves and global fallback from an ancestor registry", async () => {
   const root = realpathSync(mkdtempSync(join(import.meta.dir, ".registry-isolation-")));

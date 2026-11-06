@@ -1,8 +1,8 @@
 import { Effect } from "effect";
-import type { ExecutionMode } from "../../core/index.js";
-import { unstarted } from "../spawn.js";
-import { macSandbox } from "./darwin.js";
-import { linuxSandbox } from "./linux.js";
+import type { ExecutionMode } from "../../core";
+import { unstarted } from "../spawn";
+import { macSandbox } from "./darwin";
+import { linuxSandbox } from "./linux";
 
 export type SandboxOptions = {
   program: string;

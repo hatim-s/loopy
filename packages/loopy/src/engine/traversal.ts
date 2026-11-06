@@ -5,13 +5,13 @@ import {
   type Json,
   type Node,
   type NodeId,
-} from "../core/index.js";
-import { controls } from "./control.js";
-import { failNode } from "./failure.js";
-import { immediate } from "./immediate.js";
-import { invoke } from "./invoke.js";
-import { type Transition, write } from "./node-run.js";
-import { type ResolutionContext, ROOT_CONTEXT, sameExecution } from "./resolve.js";
+} from "../core";
+import { controls } from "./control";
+import { failNode } from "./failure";
+import { immediate } from "./immediate";
+import { invoke } from "./invoke";
+import { type Transition, write } from "./node-run";
+import { type ResolutionContext, ROOT_CONTEXT, sameExecution } from "./resolve";
 
 export type TraversalResult =
   | { kind: "pending" }

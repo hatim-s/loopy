@@ -2,17 +2,17 @@ import { mkdir, open } from "node:fs/promises";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
 import type { Schema } from "effect";
-import type { routes } from "../../packages/loopy/src/contract/index.ts";
-import { decodeBoundary } from "../../packages/loopy/src/contract/index.ts";
+import type { routes } from "../../packages/loopy/src/contract";
+import { decodeBoundary } from "../../packages/loopy/src/contract";
 
 type Mutation =
   | Schema.Schema.Type<typeof routes.startRun.body>
   | Schema.Schema.Type<typeof routes.resolveNamedHook.body>;
 
-import { errorBodySchema } from "../../packages/loopy/src/contract/index.ts";
-import { readDaemonFile } from "../../packages/loopy/src/local/index.ts";
-import { cli, environment, home, port, source, state } from "./config.ts";
-import { runtimeSource } from "./source.ts";
+import { errorBodySchema } from "../../packages/loopy/src/contract";
+import { readDaemonFile } from "../../packages/loopy/src/local";
+import { cli, environment, home, port, source, state } from "./config";
+import { runtimeSource } from "./source";
 
 export async function requireFreePort() {
   const probe = createServer();

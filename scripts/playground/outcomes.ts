@@ -1,6 +1,6 @@
-import { type RunSnapshotView, routes } from "../../packages/loopy/src/contract/index.js";
-import type { PlaygroundClient } from "./client.js";
-import type { Admission } from "./journal.js";
+import { type RunSnapshotView, routes } from "../../packages/loopy/src/contract";
+import type { PlaygroundClient } from "./client";
+import type { Admission } from "./journal";
 
 const failures = new Map([
   [

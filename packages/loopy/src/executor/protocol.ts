@@ -1,13 +1,13 @@
 import { Schema } from "effect";
-import { jsonSchema } from "../contract/index.js";
+import { jsonSchema } from "../contract";
 import {
   type AttemptLog,
   type CommandResult,
   type ExecutionResult,
   isString,
   limitLogs,
-} from "../core/index.js";
-import { redactValue } from "./redact.js";
+} from "../core";
+import { redactValue } from "./redact";
 
 type Redact = (text: string, truncated?: boolean) => string;
 

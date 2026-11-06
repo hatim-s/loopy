@@ -1,5 +1,5 @@
-import { type CommandDescriptor, descriptorCommand } from "../../descriptor.js";
-import { parseJq, parseSha256, parseWc } from "../parse/text.js";
+import { type CommandDescriptor, descriptorCommand } from "../../descriptor";
+import { parseJq, parseSha256, parseWc } from "../parse/text";
 
 export const base64Descriptor = {
   namespace: "text",

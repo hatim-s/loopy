@@ -1,11 +1,11 @@
 import { Link } from "@tanstack/react-router";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
-import { BackendError } from "../../backend/backend.ts";
-import { useClock } from "../../lib/clock.ts";
-import { type ConnectionState, useConnectionState } from "../../lib/connection.ts";
-import { shortId, span, timestamp } from "../../lib/format.ts";
-import { useDaemon } from "../../lib/ui-data.ts";
-import type { DaemonDetail } from "../../lib/view-models.ts";
+import { BackendError } from "../../backend/backend";
+import { useClock } from "../../lib/clock";
+import { type ConnectionState, useConnectionState } from "../../lib/connection";
+import { shortId, span, timestamp } from "../../lib/format";
+import { useDaemon } from "../../lib/ui-data";
+import type { DaemonDetail } from "../../lib/view-models";
 
 const STREAM = {
   idle: { word: "Starting", dot: "bg-neutral", note: "The event stream has not opened yet." },

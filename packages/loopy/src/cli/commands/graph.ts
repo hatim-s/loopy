@@ -1,11 +1,11 @@
 import { resolve } from "node:path";
 import { Effect } from "effect";
-import { compile } from "../../compiler/index.js";
-import { type GraphView, graphView, routes } from "../../contract/index.js";
-import { request } from "../client.js";
-import { type CliContext, requireTarget } from "../context.js";
-import { CliError, cliIO, diagnosticsError } from "../errors.js";
-import { printJson, printLine } from "../output.js";
+import { compile } from "../../compiler";
+import { type GraphView, graphView, routes } from "../../contract";
+import { request } from "../client";
+import { type CliContext, requireTarget } from "../context";
+import { CliError, cliIO, diagnosticsError } from "../errors";
+import { printJson, printLine } from "../output";
 
 function text(graph: GraphView) {
   const nodes = new Map(graph.nodes.map((node) => [node.id, node]));

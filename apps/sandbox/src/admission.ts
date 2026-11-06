@@ -4,9 +4,9 @@ import {
   SANDBOX_MAX_BUNDLE_BYTES,
   type SandboxAttemptIdentity,
   type SandboxAttemptRequest,
-} from "../../../packages/loopy/src/contract/index.js";
-import { attemptIdInput } from "../../../packages/loopy/src/contract/sandbox-journal.js";
-import { canonicalJson } from "../../../packages/loopy/src/core/index.js";
+} from "../../../packages/loopy/src/contract";
+import { attemptIdInput } from "../../../packages/loopy/src/contract/sandbox-journal";
+import { canonicalJson } from "../../../packages/loopy/src/core";
 
 export class InvalidAttempt extends Data.TaggedError("InvalidAttempt")<{ message: string }> {
   constructor(message: string) {

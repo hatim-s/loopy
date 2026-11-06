@@ -1,13 +1,13 @@
 import { Effect } from "effect";
-import { isTerminalRun, type Json } from "../contract/index.js";
-import type { RunRecord } from "../core/index.js";
-import { type StoreEffect } from "../core/index.js";
-import { requireDefinition } from "./definition.js";
-import { ServiceError } from "./error.js";
-import { validateDefinitionInput } from "./input.js";
-import type { ServiceOptions } from "./registry.js";
-import { makeRunAccess } from "./run-access.js";
-import { makeRunViews } from "./run-views.js";
+import { isTerminalRun, type Json } from "../contract";
+import type { RunRecord } from "../core";
+import { type StoreEffect } from "../core";
+import { requireDefinition } from "./definition";
+import { ServiceError } from "./error";
+import { validateDefinitionInput } from "./input";
+import type { ServiceOptions } from "./registry";
+import { makeRunAccess } from "./run-access";
+import { makeRunViews } from "./run-views";
 
 export function makeRunOperations(options: ServiceOptions) {
   const access = { ...makeRunAccess(options), ...makeRunViews(options) };

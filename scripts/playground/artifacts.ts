@@ -2,13 +2,10 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { z } from "zod";
-import {
-  type RunSnapshotView,
-  sandboxArtifactSchema,
-} from "../../packages/loopy/src/contract/index.js";
-import type { PlaygroundClient } from "./client.js";
-import type { CatalogEntry } from "./repository.js";
-import { repository } from "./repository.js";
+import { type RunSnapshotView, sandboxArtifactSchema } from "../../packages/loopy/src/contract";
+import type { PlaygroundClient } from "./client";
+import type { CatalogEntry } from "./repository";
+import { repository } from "./repository";
 
 const envelopeSchema = z
   .object({ batch: z.string(), ordinal: z.number().int(), slug: z.string() })

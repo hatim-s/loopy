@@ -1,12 +1,12 @@
 import { mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { z } from "zod";
-import { PlaygroundClient } from "./client.js";
-import { atomic, evidenceDirectory, state } from "./config.js";
-import { guard } from "./guard.js";
-import type { Admission, Group } from "./journal.js";
-import { catalog } from "./repository.js";
-import { execute } from "./run.js";
+import { PlaygroundClient } from "./client";
+import { atomic, evidenceDirectory, state } from "./config";
+import { guard } from "./guard";
+import type { Admission, Group } from "./journal";
+import { catalog } from "./repository";
+import { execute } from "./run";
 
 export async function cohort(group: Group, phase: Admission["phase"] = "primary") {
   const client = await PlaygroundClient.open();

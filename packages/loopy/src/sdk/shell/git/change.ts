@@ -1,5 +1,5 @@
-import { descriptorCommand } from "../../descriptor.js";
-import { parseBranch, parseRemote, parseTag } from "../parse/git.js";
+import { descriptorCommand } from "../../descriptor";
+import { parseBranch, parseRemote, parseTag } from "../parse/git";
 
 export const change = {
   add: descriptorCommand({

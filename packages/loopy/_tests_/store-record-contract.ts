@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { Effect, Schema } from "effect";
-import { nodeIdSchema } from "../src/contract/index.js";
-import type { NodeRun, Store, StoreEffect } from "../src/core/index.js";
-import { newRun } from "./fixture.js";
+import { nodeIdSchema } from "../src/contract";
+import type { NodeRun, Store, StoreEffect } from "../src/core";
+import { newRun } from "./fixture";
 
 const at = newRun().createdAt;
 

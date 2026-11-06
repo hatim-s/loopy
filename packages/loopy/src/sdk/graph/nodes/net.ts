@@ -1,5 +1,5 @@
-import { net as runtime } from "../../shell/net.js";
-import { defineCommand } from "./command.js";
+import { net as runtime } from "../../shell/net";
+import { defineCommand } from "./command";
 
 export const net = {
   curl: defineCommand(

@@ -1,11 +1,11 @@
 import type { DurableObjectState } from "@cloudflare/workers-types";
 import { Effect } from "effect";
-import { DurableSqlDriver } from "../../../../apps/cloud/src/sql-driver.js";
-import { decodeBoundary, routes } from "../../src/contract/index.js";
-import type { ScopeItemsQuery } from "../../src/core/index.js";
-import { SqlRunStore } from "../../src/store/portable.js";
-import { countHistory, readmodelAt } from "./readmodel-history.js";
-import { seedScopes } from "./readmodel-scopes.js";
+import { DurableSqlDriver } from "../../../../apps/cloud/src/sql-driver";
+import { decodeBoundary, routes } from "../../src/contract";
+import type { ScopeItemsQuery } from "../../src/core";
+import { SqlRunStore } from "../../src/store/portable";
+import { countHistory, readmodelAt } from "./readmodel-history";
+import { seedScopes } from "./readmodel-scopes";
 
 export class ReadmodelProbe {
   constructor(private readonly ctx: DurableObjectState) {}

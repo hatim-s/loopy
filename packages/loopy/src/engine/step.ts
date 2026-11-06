@@ -1,10 +1,10 @@
-import { errorMessage, type Graph, isNumber, isString } from "../core/index.js";
-import { finish, type Transition, write } from "./node-run.js";
-import { validateOutput } from "./output.js";
-import { resolve, sameExecution } from "./resolve.js";
-import { retryDelayMs, shouldRetry } from "./retry.js";
-import type { EngineEvent, EngineState } from "./state.js";
-import { sequence } from "./traversal.js";
+import { errorMessage, type Graph, isNumber, isString } from "../core";
+import { finish, type Transition, write } from "./node-run";
+import { validateOutput } from "./output";
+import { resolve, sameExecution } from "./resolve";
+import { retryDelayMs, shouldRetry } from "./retry";
+import type { EngineEvent, EngineState } from "./state";
+import { sequence } from "./traversal";
 
 function completion(
   graph: Graph,

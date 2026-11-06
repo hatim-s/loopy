@@ -4,11 +4,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Schema } from "effect";
-import { nodeIdSchema } from "../src/contract/index.js";
-import type { NodeRun } from "../src/core/index.js";
-import { StorageError } from "../src/core/store.js";
-import { newRun } from "./fixture.js";
-import { createTestStores } from "./store-fixture.js";
+import { nodeIdSchema } from "../src/contract";
+import type { NodeRun } from "../src/core";
+import { StorageError } from "../src/core/store";
+import { newRun } from "./fixture";
+import { createTestStores } from "./store-fixture";
 
 const { openTestStore, closeTestStore, closeTestStores } = createTestStores();
 

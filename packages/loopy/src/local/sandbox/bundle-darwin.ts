@@ -1,5 +1,5 @@
 import { dirname } from "node:path";
-import type { BundleSandboxOptions } from "./bundle.js";
+import type { BundleSandboxOptions } from "./bundle";
 
 export function macBundle({
   bundle,

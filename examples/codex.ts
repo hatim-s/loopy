@@ -1,4 +1,4 @@
-import { type CommandDescriptor, defineCommand } from "loopy";
+import { type CommandDescriptor, defineCommand } from "../packages/loopy/src/sdk";
 
 const descriptor = {
   key: "codex.exec",

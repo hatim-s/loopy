@@ -1,4 +1,4 @@
-import { type Context, readItems } from "./repository.ts";
+import { type Context, readItems } from "./repository";
 
 export default ({ item, index }: { item: number; index: number }, context: Context) => {
   const values = readItems();

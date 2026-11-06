@@ -9,14 +9,14 @@ import {
   sandboxArtifactRequestSchema,
   sandboxAttemptIdentitySchema,
   sandboxAttemptRequestSchema,
-} from "../../../packages/loopy/src/contract/index.js";
-import { InvalidAttempt } from "./admission.js";
-import { ArtifactError, ExportCleanupError } from "./artifact-error.js";
-import type { AttemptDependenciesFactory } from "./attempt-dependencies.js";
-import { AttemptConflict, Attempts } from "./attempts.js";
-import { type SandboxConfig, sandboxConfigSchema } from "./config.js";
-import { filesystemDependencies } from "./filesystem.js";
-import { checked, failure, io, type SandboxFailure } from "./operations.js";
+} from "../../../packages/loopy/src/contract";
+import { InvalidAttempt } from "./admission";
+import { ArtifactError, ExportCleanupError } from "./artifact-error";
+import { AttemptConflict, Attempts } from "./attempt";
+import type { AttemptDependenciesFactory } from "./attempt/dependencies";
+import { type SandboxConfig, sandboxConfigSchema } from "./config";
+import { filesystemDependencies } from "./filesystem";
+import { checked, failure, io, type SandboxFailure } from "./operations";
 
 class RequestTooLarge extends Error {}
 

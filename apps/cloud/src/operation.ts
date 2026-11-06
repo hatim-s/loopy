@@ -1,5 +1,5 @@
 import { Data, Effect } from "effect";
-import { errorMessage } from "../../../packages/loopy/src/core/index.js";
+import { errorMessage } from "../../../packages/loopy/src/core";
 
 export class CloudError extends Data.TaggedError("CloudError")<{
   operation: string;

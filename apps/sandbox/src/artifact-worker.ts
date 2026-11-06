@@ -8,10 +8,10 @@ import {
   type SandboxArtifact,
   type SandboxArtifactRead,
   sandboxArtifactPathSchema,
-} from "../../../packages/loopy/src/contract/index.js";
-import { errnoCode } from "../../../packages/loopy/src/core/index.js";
-import { ArtifactError } from "./artifact-error.js";
-import { failure } from "./operations.js";
+} from "../../../packages/loopy/src/contract";
+import { errnoCode } from "../../../packages/loopy/src/core";
+import { ArtifactError } from "./artifact-error";
+import { failure } from "./operations";
 
 async function readArtifactFile(path: string): Promise<SandboxArtifact> {
   const directories = [];

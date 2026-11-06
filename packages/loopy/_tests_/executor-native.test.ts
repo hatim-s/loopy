@@ -3,12 +3,12 @@ import { existsSync } from "node:fs";
 import { chmod, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { Effect, Schema } from "effect";
-import { LocalExecutor } from "../src/executor/index.js";
-import { bundleResult } from "../src/executor/protocol.js";
-import { FilesystemReceipts, receiptPath } from "../src/executor/receipts.js";
-import { secretRedactor } from "../src/local/secret-redactor.js";
-import { SecretStore } from "../src/local/secrets.js";
-import { commandSpec, fixture } from "./fixtures/executor.js";
+import { LocalExecutor } from "../src/executor";
+import { bundleResult } from "../src/executor/protocol";
+import { FilesystemReceipts, receiptPath } from "../src/executor/receipts";
+import { secretRedactor } from "../src/local/secret-redactor";
+import { SecretStore } from "../src/local/secrets";
+import { commandSpec, fixture } from "./fixtures/executor";
 
 test("code protocol captures stderr logs and leading stdout, and retains its trusted completion receipt", async () => {
   const f = await fixture();

@@ -1,7 +1,7 @@
 import { createInterface } from "node:readline";
 import { Writable } from "node:stream";
 import { Effect } from "effect";
-import { CliError } from "./errors.js";
+import { CliError } from "./errors";
 
 const SECRET_LIMIT_BYTES = 64 * 1024;
 

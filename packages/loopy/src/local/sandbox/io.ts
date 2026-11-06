@@ -1,5 +1,5 @@
 import { Data, Effect } from "effect";
-import { errnoCode, errorMessage } from "../../core/index.js";
+import { errnoCode, errorMessage } from "../../core";
 
 export class ProcessFilesystemError extends Data.TaggedError("ProcessFilesystemError")<{
   cause: unknown;

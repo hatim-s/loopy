@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { cp, lstat, mkdir, readdir, readFile, symlink } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
-import { routes } from "../../packages/loopy/src/contract/index.ts";
-import { catalogSchema } from "../playground/repository.ts";
+import { routes } from "../../packages/loopy/src/contract";
+import { catalogSchema } from "../playground/repository";
 import {
   cli,
   environment,
@@ -14,8 +14,8 @@ import {
   state,
   upstream,
   writeEvidence,
-} from "./config.ts";
-import { OwnedDaemon } from "./daemon.ts";
+} from "./config";
+import { OwnedDaemon } from "./daemon";
 
 export async function treeFiles(directory: string): Promise<string[]> {
   const files: string[] = [];

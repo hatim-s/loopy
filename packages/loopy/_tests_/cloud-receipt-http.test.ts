@@ -1,14 +1,14 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { Effect } from "effect";
-import { HttpSandboxAuthority } from "../../../apps/sandbox/src/http-authority.js";
-import { SANDBOX_MAX_REQUEST_BYTES } from "../src/contract/index.js";
+import { HttpSandboxAuthority } from "../../../apps/sandbox/src/http-authority";
+import { SANDBOX_MAX_REQUEST_BYTES } from "../src/contract";
 import {
   bridgeToken,
   namespace,
   principalToken,
   type ReceiptHarness,
   receiptHarness,
-} from "./fixtures/receipt-harness.js";
+} from "./fixtures/receipt-harness";
 
 let harness: ReceiptHarness;
 

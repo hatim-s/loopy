@@ -3,14 +3,14 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Clock, Deferred, Effect, Exit, Schema, Scope } from "effect";
-import { runSnapshotViewSchema, runViewSchema } from "../src/contract/index.js";
-import { type Executor } from "../src/core/index.js";
-import { activate } from "../src/host/index.js";
-import { makeLocalService, Registry } from "../src/local/index.js";
-import { apiRoutes, dispatch } from "../src/local/server/routes.js";
-import { code, finally_, loopy, parallel, sleep, uuid, wait } from "../src/sdk/graph/index.js";
-import { MemoryStore, makeSqliteRunStore } from "../src/store/index.js";
-import { FakeExecutor, newRun } from "./fixture.js";
+import { runSnapshotViewSchema, runViewSchema } from "../src/contract";
+import { type Executor } from "../src/core";
+import { activate } from "../src/host";
+import { makeLocalService, Registry } from "../src/local";
+import { apiRoutes, dispatch } from "../src/local/server/routes";
+import { code, finally_, loopy, parallel, sleep, uuid, wait } from "../src/sdk/graph";
+import { MemoryStore, makeSqliteRunStore } from "../src/store";
+import { FakeExecutor, newRun } from "./fixture";
 
 const homes: string[] = [];
 

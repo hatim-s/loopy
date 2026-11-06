@@ -4,7 +4,7 @@ export {
   isRecord,
   isRef,
   isTerminalRun,
-} from "../core/index.js";
+} from "../core";
 
 export {
   DEFAULT_ERROR_MESSAGES,
@@ -19,39 +19,39 @@ export {
   type RunsQuery,
   routes,
   scheduleEnabledBodySchema,
-} from "./api.js";
+} from "./api";
 
-export { boundaryOptions, decodeBoundary, encodeBoundary } from "./codec.js";
+export { boundaryOptions, decodeBoundary, encodeBoundary } from "./codec";
 
 export {
   type PutLoopyBody,
   putLoopyBodySchema,
   type SavedLoopy,
   savedLoopySchema,
-} from "./compiled-loopy.js";
+} from "./compiled-loopy";
 
 export {
   CompiledHashError,
   CompiledValidationError,
   validateCompiled,
-} from "./compiled-validation.js";
+} from "./compiled-validation";
 
-export * from "./dashboard.js";
+export * from "./dashboard";
 
 export {
   type DefinitionSummary,
   definitionInput,
   definitionSummary,
   definitionSummarySchema,
-} from "./definition-summary.js";
+} from "./definition-summary";
 
-export { graphView, loopyView, runView, serverEvent } from "./derive.js";
+export { graphView, loopyView, runView, serverEvent } from "./derive";
 
-export * from "./graph.js";
+export * from "./graph";
 
-export { type Json, jsonSchema } from "./json.js";
+export { type Json, jsonSchema } from "./json";
 
-export { parseModuleOutput } from "./module-output.js";
+export { parseModuleOutput } from "./module-output";
 
 export {
   type HookRecord,
@@ -66,13 +66,13 @@ export {
   type StepRecord,
   scheduleSchema,
   stepRecordSchema,
-} from "./records.js";
+} from "./records";
 
-export * from "./sandbox.js";
+export * from "./sandbox";
 
-export * from "./sandbox-journal.js";
+export * from "./sandbox-journal";
 
-export * from "./sandbox-journal-rpc.js";
+export * from "./sandbox-journal-rpc";
 
 export {
   MAX_SOURCE_BYTES,
@@ -80,7 +80,7 @@ export {
   MAX_SOURCE_RANGES,
   type SourceArtifact,
   sourceArtifactSchema,
-} from "./source-artifact.js";
+} from "./source-artifact";
 
 export {
   type CursorView,
@@ -97,4 +97,4 @@ export {
   type ServerEvent,
   scheduleViewSchema,
   serverEventSchema,
-} from "./views.js";
+} from "./views";

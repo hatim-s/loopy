@@ -2,16 +2,16 @@ import { expect, test } from "bun:test";
 import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { Effect, Exit, Schema, Scope } from "effect";
-import { compile } from "../src/compiler/index.js";
-import { graphSchema } from "../src/contract/index.js";
-import { LocalExecutor } from "../src/executor/index.js";
-import { receiptPath } from "../src/executor/receipts.js";
-import { activate } from "../src/host/index.js";
-import { localDaemon, makeLocalService, openRunStore, SecretStore } from "../src/local/index.js";
-import { MemoryStore } from "../src/store/index.js";
-import { newRun } from "./fixture.js";
-import { fixture } from "./fixtures/executor.js";
-import { approveDemoGraph } from "./fixtures/graphs.js";
+import { compile } from "../src/compiler";
+import { graphSchema } from "../src/contract";
+import { LocalExecutor } from "../src/executor";
+import { receiptPath } from "../src/executor/receipts";
+import { activate } from "../src/host";
+import { localDaemon, makeLocalService, openRunStore, SecretStore } from "../src/local";
+import { MemoryStore } from "../src/store";
+import { newRun } from "./fixture";
+import { fixture } from "./fixtures/executor";
+import { approveDemoGraph } from "./fixtures/graphs";
 
 test("compiled command parser gets result and prepared input, then code runs through service and daemon", async () => {
   const f = await fixture();

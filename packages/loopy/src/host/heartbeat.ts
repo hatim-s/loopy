@@ -1,5 +1,5 @@
 import { Cause, Clock, Data, Deferred, Effect, Exit, Fiber } from "effect";
-import { OwnershipError, StorageError, type Store } from "../core/index.js";
+import { OwnershipError, StorageError, type Store } from "../core";
 
 export class DriverCleanupFailed extends Data.TaggedError("DriverCleanupFailed")<{
   runId: string;

@@ -1,9 +1,9 @@
 import { spawn } from "node:child_process";
 import { open } from "node:fs/promises";
 import { resolve } from "node:path";
-import { PlaygroundClient } from "./client.js";
-import { api, dashboard, initialize, profile, root, state } from "./config.js";
-import { cleanEnvironment, manifestPath, requireFreePorts } from "./stack-config.js";
+import { PlaygroundClient } from "./client";
+import { api, dashboard, initialize, profile, root, state } from "./config";
+import { cleanEnvironment, manifestPath, requireFreePorts } from "./stack-config";
 
 import {
   requireOwnedSupervisor,
@@ -12,9 +12,9 @@ import {
   supervisorArguments,
   supervisorManifestSchema,
   supervisorProcesses,
-} from "./stack-identity.js";
+} from "./stack-identity";
 
-export { serve } from "./supervisor.js";
+export { serve } from "./supervisor";
 
 const selection: StackSelection = { root, state, profile: profile.name ?? "default" };
 

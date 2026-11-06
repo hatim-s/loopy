@@ -1,7 +1,7 @@
 import { Schema } from "effect";
-import { struct } from "./codec.js";
+import { struct } from "./codec";
 
-import { nodeIdSchema } from "./graph.js";
+import { nodeIdSchema } from "./graph";
 
 export const MAX_SOURCE_BYTES = 256 * 1024;
 

@@ -1,6 +1,6 @@
 import { Effect } from "effect";
-import type { DefinitionSummary } from "../contract/index.js";
-import type { ArtifactRegistry, ServiceOptions } from "./registry.js";
+import type { DefinitionSummary } from "../contract";
+import type { ArtifactRegistry, ServiceOptions } from "./registry";
 
 /** One request caches absence and aliases by the registry's canonical workspace. */
 export function makeDefinitionCatalog(selectRegistry: ServiceOptions["registry"]) {

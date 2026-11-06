@@ -7,7 +7,7 @@ import {
   type routes,
   runView,
   serverEvent,
-} from "../contract/index.js";
+} from "../contract";
 import {
   emptyRunCounts,
   type RunDefinitionCount,
@@ -15,11 +15,11 @@ import {
   type RunRecord,
   type RuntimeEvent,
   type StatusCounts,
-} from "../core/index.js";
-import { type DefinitionCatalog, makeDefinitionCatalog } from "./definition-catalog.js";
-import { ServiceError } from "./error.js";
-import type { ServiceOptions } from "./registry.js";
-import { nodeEventPreview } from "./views.js";
+} from "../core";
+import { type DefinitionCatalog, makeDefinitionCatalog } from "./definition-catalog";
+import { ServiceError } from "./error";
+import type { ServiceOptions } from "./registry";
+import { nodeEventPreview } from "./views";
 
 function definitionCounts(rows: RunDefinitionCount[]) {
   const projects = new Map<string, Map<string, StatusCounts>>();

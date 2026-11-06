@@ -1,5 +1,5 @@
 import { Data } from "effect";
-import type { SandboxError } from "../../../packages/loopy/src/contract/index.js";
+import type { SandboxError } from "../../../packages/loopy/src/contract";
 
 export class ArtifactError extends Data.TaggedError("ArtifactError")<{
   code: SandboxError["error"]["code"];

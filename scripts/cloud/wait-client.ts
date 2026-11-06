@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { FixtureError, fixtureIO } from "./fixture-effect.js";
+import { FixtureError, fixtureIO } from "./fixture-effect";
 
 export interface WaitClient {
   pid: number;

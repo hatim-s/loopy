@@ -3,11 +3,11 @@ import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { executionKeyString } from "../src/core/index.js";
-import { LocalExecutor } from "../src/executor/index.js";
-import { receiptPath } from "../src/executor/receipts.js";
-import { SecretStore } from "../src/local/secrets.js";
-import { fixture } from "./fixtures/executor.js";
+import { executionKeyString } from "../src/core";
+import { LocalExecutor } from "../src/executor";
+import { receiptPath } from "../src/executor/receipts";
+import { SecretStore } from "../src/local/secrets";
+import { fixture } from "./fixtures/executor";
 
 for (const secret of ['quote"and\nnewline', "42"]) {
   test(`decoded result and log strings redact ${JSON.stringify(secret)} without changing numeric values`, async () => {

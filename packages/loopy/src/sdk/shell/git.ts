@@ -1,7 +1,7 @@
-import { change } from "./git/change.js";
-import { inspect } from "./git/inspect.js";
-import { stash } from "./git/stash.js";
-import { worktree } from "./git/worktree.js";
+import { change } from "./git/change";
+import { inspect } from "./git/inspect";
+import { stash } from "./git/stash";
+import { worktree } from "./git/worktree";
 
 export const git = {
   ...inspect,

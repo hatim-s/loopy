@@ -3,10 +3,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { HttpError, request, TransportError } from "../src/cli/client.js";
-import { routes } from "../src/contract/index.js";
-import type { Json } from "../src/core/index.js";
-import { readDaemonFile, removeDaemonFile, writeDaemonFile } from "../src/local/daemon-file.js";
+import { HttpError, request, TransportError } from "../src/cli/client";
+import { routes } from "../src/contract";
+import type { Json } from "../src/core";
+import { readDaemonFile, removeDaemonFile, writeDaemonFile } from "../src/local/daemon/file";
 
 async function withHttp(
   body: Json,
@@ -92,8 +92,8 @@ test("discovery cleanup never removes another daemon token", async () => {
 });
 
 test("CLI argument failures use the typed error channel", async () => {
-  const { main } = await import("../src/cli/index.js");
-  const { CliError } = await import("../src/cli/errors.js");
+  const { main } = await import("../src/cli");
+  const { CliError } = await import("../src/cli/errors");
 
   for (const argv of [["unknown-command"], ["types", "bun"]]) {
     const failure = await Effect.runPromise(Effect.flip(main(argv)));

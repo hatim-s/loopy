@@ -1,6 +1,6 @@
-import { StoreRejectedError } from "../operation.js";
-import type { SqlDriver } from "./driver.js";
-import { SCHEDULE_OVERVIEW_INDEX, SCHEMA_VERSION, WAIT_SCHEMA } from "./store-schema.js";
+import { StoreRejectedError } from "../operation";
+import type { SqlDriver } from "./driver";
+import { SCHEDULE_OVERVIEW_INDEX, SCHEMA_VERSION, WAIT_SCHEMA } from "./store-schema";
 
 const FRESH_SCHEMA = `
   CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);

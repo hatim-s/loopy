@@ -1,5 +1,5 @@
-import type { CommandDescriptor, Input, RawInput } from "../define-command.js";
-import type { Ref } from "./ref.js";
+import type { CommandDescriptor, Input, RawInput } from "../define-command";
+import type { Ref } from "./ref";
 
 type WithRefs<T> = T extends string | number | boolean
   ? T | Ref<T>

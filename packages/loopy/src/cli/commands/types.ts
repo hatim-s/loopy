@@ -1,11 +1,11 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { Effect } from "effect";
-import { routes } from "../../contract/index.js";
-import { request } from "../client.js";
-import { type CliContext, requireArgument, requireHead } from "../context.js";
-import { cliIO } from "../errors.js";
-import { printJson, report } from "../output.js";
+import { routes } from "../../contract";
+import { request } from "../client";
+import { type CliContext, requireArgument, requireHead } from "../context";
+import { cliIO } from "../errors";
+import { printJson, report } from "../output";
 
 export function runTypes(context: CliContext) {
   return Effect.gen(function* () {
