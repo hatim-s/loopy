@@ -1,5 +1,5 @@
 import type { DurableObjectStorage } from "@cloudflare/workers-types";
-import type { SqlDriver, SqlStatement, SqlValue } from "../../../packages/loopy/src/store/portable";
+import type { SqlDriver, SqlStatement, SqlValue } from "@loopy/runtime/store/portable";
 
 export class DurableSqlDriver implements SqlDriver {
   constructor(private readonly storage: DurableObjectStorage) {}

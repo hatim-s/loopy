@@ -1,5 +1,5 @@
+import { decodeBoundary, SANDBOX_MAX_REQUEST_BYTES } from "@loopy/contract";
 import { Effect, Schema } from "effect";
-import { decodeBoundary, SANDBOX_MAX_REQUEST_BYTES } from "../../../../packages/loopy/src/contract";
 import type { Environment } from "../environment";
 import { principals } from "../environment";
 import { readBoundedText, recoverBodyLimit } from "../http";

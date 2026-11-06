@@ -12,10 +12,10 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { localDaemon, openRunStore } from "@loopy/runtime/local";
 import { Effect, Exit, Scope } from "effect";
-import { localDaemon, openRunStore } from "../src/local";
-import { secretRedactor } from "../src/local/secret-redactor";
-import { SecretStore } from "../src/local/secrets";
+import { secretRedactor } from "../../runtime/src/local/secret-redactor";
+import { SecretStore } from "../../runtime/src/local/secrets";
 
 const scopes: Scope.Closeable[] = [];
 
@@ -157,7 +157,7 @@ test("CLI stdin entry and name-only listing do not disclose values", async () =>
   const command = [
     process.execPath,
     "--no-env-file",
-    resolve(import.meta.dir, "../src/cli/index.ts"),
+    resolve(import.meta.dir, "../../cli/src/index.ts"),
   ];
 
   const env = {

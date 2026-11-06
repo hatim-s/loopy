@@ -7,6 +7,12 @@
       "devDependencies": {
         "@biomejs/biome": "2.2.2",
         "@cloudflare/workers-types": "5.20261022.1",
+        "@loopy/cli": "workspace:*",
+        "@loopy/compiler": "workspace:*",
+        "@loopy/contract": "workspace:*",
+        "@loopy/core": "workspace:*",
+        "@loopy/runtime": "workspace:*",
+        "@loopy/sdk": "workspace:*",
         "bun-types": "1.4.0",
         "effect": "4.1.2",
         "eslint": "10.8.1",
@@ -24,6 +30,10 @@
     "apps/cloud": {
       "name": "@loopy/cloud-local",
       "dependencies": {
+        "@loopy/compiler": "workspace:*",
+        "@loopy/contract": "workspace:*",
+        "@loopy/core": "workspace:*",
+        "@loopy/runtime": "workspace:*",
         "effect": "4.1.2",
       },
     },
@@ -34,6 +44,7 @@
         "@dagrejs/dagre": "3.1.1",
         "@fontsource-variable/geist": "5.3.0",
         "@fontsource-variable/geist-mono": "5.3.0",
+        "@loopy/contract": "workspace:*",
         "@tanstack/react-query": "5.104.3",
         "@tanstack/react-router": "1.170.45",
         "@xyflow/react": "12.12.0",
@@ -54,8 +65,10 @@
     "apps/sandbox": {
       "name": "@loopy/sandbox",
       "dependencies": {
+        "@loopy/contract": "workspace:*",
+        "@loopy/core": "workspace:*",
+        "@loopy/runtime": "workspace:*",
         "effect": "4.1.2",
-        "loopy": "workspace:*",
       },
     },
     "apps/site": {
@@ -74,15 +87,79 @@
         "vite": "7.1.2",
       },
     },
+    "packages/cli": {
+      "name": "@loopy/cli",
+      "version": "0.0.0",
+      "dependencies": {
+        "@loopy/compiler": "workspace:*",
+        "@loopy/contract": "workspace:*",
+        "@loopy/core": "workspace:*",
+        "@loopy/runtime": "workspace:*",
+        "effect": "4.1.2",
+      },
+    },
+    "packages/compiler": {
+      "name": "@loopy/compiler",
+      "version": "0.0.0",
+      "dependencies": {
+        "@loopy/contract": "workspace:*",
+        "@loopy/core": "workspace:*",
+        "@loopy/runtime": "workspace:*",
+        "@loopy/sdk": "workspace:*",
+        "effect": "4.1.2",
+        "oxc-parser": "^0.154.0",
+      },
+    },
+    "packages/contract": {
+      "name": "@loopy/contract",
+      "version": "0.0.0",
+      "dependencies": {
+        "@loopy/core": "workspace:*",
+        "effect": "4.1.2",
+      },
+    },
+    "packages/core": {
+      "name": "@loopy/core",
+      "version": "0.0.0",
+      "dependencies": {
+        "effect": "4.1.2",
+      },
+    },
     "packages/loopy": {
       "name": "loopy",
       "version": "0.4.0",
       "bin": {
-        "loopy": "./dist/cli/index.js",
+        "loopy": "./dist/loopy/src/cli.js",
       },
       "dependencies": {
         "effect": "4.1.2",
         "oxc-parser": "^0.154.0",
+      },
+      "devDependencies": {
+        "@loopy/cli": "workspace:*",
+        "@loopy/compiler": "workspace:*",
+        "@loopy/contract": "workspace:*",
+        "@loopy/core": "workspace:*",
+        "@loopy/runtime": "workspace:*",
+        "@loopy/sdk": "workspace:*",
+      },
+    },
+    "packages/runtime": {
+      "name": "@loopy/runtime",
+      "version": "0.0.0",
+      "dependencies": {
+        "@loopy/contract": "workspace:*",
+        "@loopy/core": "workspace:*",
+        "@loopy/sdk": "workspace:*",
+        "effect": "4.1.2",
+        "oxc-parser": "0.154.0",
+      },
+    },
+    "packages/sdk": {
+      "name": "@loopy/sdk",
+      "version": "0.0.0",
+      "dependencies": {
+        "@loopy/core": "workspace:*",
       },
     },
   },
@@ -331,11 +408,23 @@
 
     "@js-sdsl/ordered-map": ["@js-sdsl/ordered-map@4.4.2", "", {}, "sha512-iUKgm52T8HOE/makSxjqoWhe95ZJA1/G1sYsGev2JDKUSS14KAgg1LHb+Ba+IPow0xflbnSkOsZcO08C7w1gYw=="],
 
+    "@loopy/cli": ["@loopy/cli@workspace:packages/cli"],
+
     "@loopy/cloud-local": ["@loopy/cloud-local@workspace:apps/cloud"],
+
+    "@loopy/compiler": ["@loopy/compiler@workspace:packages/compiler"],
+
+    "@loopy/contract": ["@loopy/contract@workspace:packages/contract"],
+
+    "@loopy/core": ["@loopy/core@workspace:packages/core"],
 
     "@loopy/dashboard": ["@loopy/dashboard@workspace:apps/dashboard"],
 
+    "@loopy/runtime": ["@loopy/runtime@workspace:packages/runtime"],
+
     "@loopy/sandbox": ["@loopy/sandbox@workspace:apps/sandbox"],
+
+    "@loopy/sdk": ["@loopy/sdk@workspace:packages/sdk"],
 
     "@loopy/site": ["@loopy/site@workspace:apps/site"],
 

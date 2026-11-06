@@ -1,8 +1,8 @@
 import { afterEach, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
+import { MemoryStore, makeSqliteRunStore } from "@loopy/runtime/store";
 import { Effect, Exit, Scope } from "effect";
-import { MemoryStore, makeSqliteRunStore } from "../src/store";
 import { checkScopePages } from "./fixtures/readmodel-assertions";
 import { readmodelDirectory } from "./fixtures/readmodel-directory";
 import { seedScopes } from "./fixtures/readmodel-scopes";

@@ -7,8 +7,8 @@ import {
   commands,
   ModalGateway,
   payload,
-} from "../../../scripts/cloud/modal-probe/gateway";
-import { Journal, readPrivate, readPrivateText } from "../../../scripts/cloud/modal-probe/journal";
+} from "../../../apps/cloud/dev/modal-probe/gateway";
+import { Journal, readPrivate, readPrivateText } from "../../../apps/cloud/dev/modal-probe/journal";
 import {
   approvalSchema,
   authorize,
@@ -18,15 +18,15 @@ import {
   plan,
   type Role,
   tags,
-} from "../../../scripts/cloud/modal-probe/plan";
+} from "../../../apps/cloud/dev/modal-probe/plan";
 import {
   type Clock,
   execute,
   type Gateway,
   inventory,
   verifyLifetime,
-} from "../../../scripts/cloud/modal-probe/run";
-import { watchChild, workerEnvironment } from "../../../scripts/cloud/modal-probe/supervisor";
+} from "../../../apps/cloud/dev/modal-probe/run";
+import { watchChild, workerEnvironment } from "../../../apps/cloud/dev/modal-probe/supervisor";
 
 interface FixtureEffects {
   connects: number;
@@ -407,7 +407,7 @@ test("synthetic fixture processes share files and exclusive effect survives a dr
 
 test("default CLI writes only an offline plan with current implementation hash and no credential input", async () => {
   const directory = await root();
-  const script = resolve(import.meta.dir, "../../../scripts/cloud/modal-probe/index.ts");
+  const script = resolve(import.meta.dir, "../../../apps/cloud/dev/modal-probe/index.ts");
 
   const child = Bun.spawn({
     cmd: [
@@ -507,7 +507,7 @@ test("interrupted created-record write leaves name recovery available and never 
   const f = await fixture();
   f.loseAllocatedCreate();
   await expect(execute(f.journal, f.connect, f.time)).rejects.toThrow("lost-create-response");
-  const journalModule = resolve(import.meta.dir, "../../../scripts/cloud/modal-probe/journal.ts");
+  const journalModule = resolve(import.meta.dir, "../../../apps/cloud/dev/modal-probe/journal.ts");
 
   const source = `import {Journal} from ${JSON.stringify(journalModule)};
 const journal=await Journal.load(${JSON.stringify(resolve(f.journal.directory, "../../.."))},${JSON.stringify(manifest.id)});

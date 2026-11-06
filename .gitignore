@@ -15,3 +15,5 @@ test-results/
 # Preserve local diagnostic databases without committing SQLite files or sidecars.
 .notes/**/*.sqlite
 .notes/**/*.sqlite-*
+
+packages/loopy/.tsconfig.build.generated-*.json

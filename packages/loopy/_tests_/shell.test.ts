@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { archive, fs, git, net, sh, text } from "../src/sdk/graph";
+import { archive, fs, git, net, sh, text } from "@loopy/sdk/graph";
 import { capture } from "./fixtures/command-capture";
 
 test("zip exclusions trail archive operands", async () => {

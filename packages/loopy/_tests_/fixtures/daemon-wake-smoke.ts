@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
+import { type Json, runSnapshotViewSchema, runViewSchema } from "@loopy/contract";
+import { readDaemonFile } from "@loopy/runtime/local";
 import { Schema } from "effect";
-import { type Json, runSnapshotViewSchema, runViewSchema } from "../../src/contract";
-import { readDaemonFile } from "../../src/local";
 import { CLI, fixture, save } from "../cli-fixture";
 
 const repo = resolve(import.meta.dir, "../../../..");
@@ -39,13 +39,13 @@ mkdirSync(processHome);
 
 async function source() {
   const files = await Array.fromAsync(
-    new Bun.Glob("**/*.ts").scan({ cwd: join(repo, "packages/loopy/src"), absolute: true }),
+    new Bun.Glob("*/src/**/*.ts").scan({ cwd: join(repo, "packages"), absolute: true }),
   );
 
   const digest = createHash("sha256");
 
   for (const file of files.sort()) {
-    digest.update(`${relative(join(repo, "packages/loopy/src"), file)}\0`);
+    digest.update(`${relative(join(repo, "packages"), file)}\0`);
     digest.update(
       await Bun.file(file)
         .arrayBuffer()
@@ -57,7 +57,7 @@ async function source() {
     files: files.length,
     sha256: digest.digest("hex"),
     daemonSha256: createHash("sha256")
-      .update(await Bun.file(join(repo, "packages/loopy/src/host/daemon.ts")).text())
+      .update(await Bun.file(join(repo, "packages/runtime/src/host/daemon.ts")).text())
       .digest("hex"),
   };
 }

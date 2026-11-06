@@ -1,11 +1,15 @@
 import { expect, test } from "bun:test";
 import { lstat, readdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import type { ExecutionResult } from "@loopy/core";
 import { Effect } from "effect";
-import type { ExecutionResult } from "../src/core";
-import { ExecutionWorker } from "../src/executor/execution";
-import { LocalExecutor } from "../src/executor/local";
-import { FilesystemReceipts, type LocalReceipt, receiptPath } from "../src/executor/receipts";
+import { ExecutionWorker } from "../../runtime/src/executor/execution";
+import { LocalExecutor } from "../../runtime/src/executor/local";
+import {
+  FilesystemReceipts,
+  type LocalReceipt,
+  receiptPath,
+} from "../../runtime/src/executor/receipts";
 import { receiptsFixture } from "./fixtures/local-receipts";
 
 const result: ExecutionResult = { kind: "succeeded", output: 42, logs: [] };

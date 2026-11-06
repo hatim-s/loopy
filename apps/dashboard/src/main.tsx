@@ -1,10 +1,10 @@
 import "@fontsource-variable/geist";
 import "@fontsource-variable/geist-mono";
+import { decodeBoundary } from "@loopy/contract";
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRouter, RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { decodeBoundary } from "../../../packages/loopy/src/contract";
 import { BackendError, type LoopyBackend } from "./backend/backend";
 import { backendConfigSchema } from "./backend/config";
 import { localHttpBackend } from "./backend/local-http";

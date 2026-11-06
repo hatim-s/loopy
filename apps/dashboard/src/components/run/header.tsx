@@ -1,10 +1,6 @@
+import { isTerminalRun, type RunSnapshotView, type RunView } from "@loopy/contract";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useId, useState } from "react";
-import {
-  isTerminalRun,
-  type RunSnapshotView,
-  type RunView,
-} from "../../../../../packages/loopy/src/contract";
 import { elapsed, timestamp } from "../../lib/format";
 import { useResolveHook, useRunMutation } from "../../lib/mutations";
 import { useRunPayload } from "../../lib/ui-data";

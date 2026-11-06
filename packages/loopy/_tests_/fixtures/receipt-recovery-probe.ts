@@ -1,6 +1,6 @@
+import type { AuthorityInput } from "@loopy/contract";
 import { ReceiptAuthority } from "../../../../apps/cloud/src/receipts/authority";
 import type { ReceiptSql } from "../../../../apps/cloud/src/receipts/sql";
-import type { AuthorityInput } from "../../src/contract";
 
 export function receiptRecoveryProbe(db: ReceiptSql, input: AuthorityInput<"admit">) {
   const authority = new ReceiptAuthority(db);

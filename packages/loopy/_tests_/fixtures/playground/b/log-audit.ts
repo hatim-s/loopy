@@ -1,4 +1,4 @@
-import { code, log, loopy } from "../../../../src/sdk/graph";
+import { code, log, loopy } from "loopy/graph";
 
 export default loopy("playground-b-log-audit", {
   description: "Read seeded CI values and retain a bounded stream of audit evidence",

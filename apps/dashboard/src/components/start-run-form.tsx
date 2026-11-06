@@ -1,6 +1,6 @@
+import type { Json, LoopyView } from "@loopy/contract";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import type { Json, LoopyView } from "../../../../packages/loopy/src/contract";
 import {
   coerceInput,
   type FieldIssue,

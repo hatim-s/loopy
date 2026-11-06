@@ -1,14 +1,14 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Effect, Result, Schema } from "effect";
 import {
   decodeBoundary,
   SANDBOX_MAX_CAPTURE_BYTES,
   type SandboxAttemptRequest,
   type SandboxExecutionResult,
   sandboxExecutionResultSchema,
-} from "../../../../packages/loopy/src/contract";
-import { CommandExecutionError } from "../../../../packages/loopy/src/core";
+} from "@loopy/contract";
+import { CommandExecutionError } from "@loopy/core";
+import { Effect, Result, Schema } from "effect";
 import type { SandboxConfig } from "../config";
 import type { SandboxOperationError } from "../operations";
 import { checked, failure, io } from "../operations";

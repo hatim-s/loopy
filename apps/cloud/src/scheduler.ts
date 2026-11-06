@@ -1,8 +1,8 @@
 import type { DurableObjectStorage, SqlStorageCursor } from "@cloudflare/workers-types";
+import { errorMessage } from "@loopy/core";
+import { activateDurable, type DurableExecutionProvider } from "@loopy/runtime/host";
+import type { SqlRunStore, SqlValue } from "@loopy/runtime/store/portable";
 import { Cause, Effect, Exit } from "effect";
-import { errorMessage } from "../../../packages/loopy/src/core";
-import { activateDurable, type DurableExecutionProvider } from "../../../packages/loopy/src/host";
-import type { SqlRunStore, SqlValue } from "../../../packages/loopy/src/store/portable";
 import type { R2ArtifactRegistry } from "./artifacts";
 import { cloudSync, platform } from "./operation";
 import { WorkspaceSchedules } from "./scheduler-schedules";

@@ -1,6 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { git, log, loopy, sh, step } from "../../packages/loopy/src/sdk";
+import { git, log, loopy, sh, step } from "loopy";
 import { readOptions, writeOptions } from "../options";
 import { findPullRequest, readSnapshot, remoteSha } from "./github";
 import { validateInput } from "./publication";

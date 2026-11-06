@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
+import { makeDaemon } from "@loopy/runtime/host";
+import { MemoryStore } from "@loopy/runtime/store";
+import { loopy } from "@loopy/sdk/graph";
 import { Deferred, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
-import { makeDaemon } from "../src/host";
-import { loopy } from "../src/sdk/graph";
-import { MemoryStore } from "../src/store";
 import { FakeExecutor, newRun } from "./fixture";
 
 test("daemon wakes for a newly committed run and shuts down owned work", async () => {

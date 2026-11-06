@@ -1,15 +1,8 @@
 import { unlink } from "node:fs/promises";
 import { join } from "node:path";
+import type { AuthorityInput, AuthorityOutput } from "@loopy/contract";
+import { AuthorityError, type AuthoritySession, artifactHelperName } from "@loopy/contract";
 import { Effect, Semaphore } from "effect";
-import {
-  AuthorityError,
-  type AuthoritySession,
-  artifactHelperName,
-} from "../../../../packages/loopy/src/contract/sandbox-journal";
-import type {
-  AuthorityInput,
-  AuthorityOutput,
-} from "../../../../packages/loopy/src/contract/sandbox-journal-rpc";
 import { FilesystemResults, resultReference } from "../immutable-results";
 import { missing, syncDirectory, writeAtomic } from "../journal-files";
 import type { SandboxAttemptAuthority, SandboxOperationError } from "../operations";

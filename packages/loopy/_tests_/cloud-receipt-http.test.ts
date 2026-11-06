@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
+import { SANDBOX_MAX_REQUEST_BYTES } from "@loopy/contract";
 import { Effect } from "effect";
 import { HttpSandboxAuthority } from "../../../apps/sandbox/src/http-authority";
-import { SANDBOX_MAX_REQUEST_BYTES } from "../src/contract";
 import {
   bridgeToken,
   namespace,

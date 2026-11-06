@@ -1,4 +1,3 @@
-import type { InfiniteData, Query, QueryClient } from "@tanstack/react-query";
 import {
   executionKeyString,
   type Json,
@@ -7,7 +6,8 @@ import {
   type RunView,
   type ScheduleView,
   type ServerEvent,
-} from "../../../../packages/loopy/src/contract";
+} from "@loopy/contract";
+import type { InfiniteData, Query, QueryClient } from "@tanstack/react-query";
 import type { LoopyBackend, RunsQuery, StreamState } from "../backend/backend";
 import { keys } from "./keys";
 import type { RunPage } from "./queries";

@@ -2,10 +2,7 @@ import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { open, rename, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type {
-  AttemptRecord,
-  ExportRecord,
-} from "../../../packages/loopy/src/contract/sandbox-journal";
+import type { AttemptRecord, ExportRecord } from "@loopy/contract";
 
 export async function syncDirectory(path: string) {
   const directory = await open(path, "r");

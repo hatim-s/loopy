@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseArgv } from "../src/core";
+import { parseArgv } from "@loopy/core";
 
 describe("parseArgv", () => {
   test("splits whitespace and preserves literal words without expansion", () => {

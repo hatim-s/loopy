@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { loopy } from "../src/sdk/graph";
+import { loopy } from "@loopy/sdk/graph";
 
 test("graph definitions validate names, modes, scopes, schedules, secrets and input schemas for JavaScript callers", () => {
   expect(() => loopy("Bad name", { input: {}, run: () => null })).toThrow(

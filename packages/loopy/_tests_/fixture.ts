@@ -1,11 +1,11 @@
-import { Effect } from "effect";
 import {
   type ExecutionResult,
   type ExecutionSpec,
   type Executor,
   ExecutorError,
   type RunRecord,
-} from "../src/core";
+} from "@loopy/core";
+import { Effect } from "effect";
 
 export class FakeExecutor implements Executor {
   calls: ExecutionSpec[] = [];

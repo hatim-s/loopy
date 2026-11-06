@@ -2,10 +2,10 @@ import { Database } from "bun:sqlite";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { compile } from "@loopy/compiler";
+import type { NodeRun, StoreEffect } from "@loopy/core";
+import { makeLocalService, openRunStore } from "@loopy/runtime/local";
 import { Effect } from "effect";
-import { compile } from "../../../packages/loopy/src/compiler";
-import type { NodeRun, StoreEffect } from "../../../packages/loopy/src/core";
-import { makeLocalService, openRunStore } from "../../../packages/loopy/src/local";
 
 /** Persisted synthetic records let HTTP and browser checks inspect the same bounded pages. */
 export const reviewDataFixture = Effect.fn(function* () {
@@ -28,7 +28,7 @@ export const reviewDataFixture = Effect.fn(function* () {
   const source = join(workspaceA, "review-data.loopy.ts");
   writeFileSync(
     source,
-    `import {loopy,log,map} from ${JSON.stringify(resolve(import.meta.dir, "../../../packages/loopy/src/sdk/graph/index.ts"))};
+    `import {loopy,log,map} from ${JSON.stringify(resolve(import.meta.dir, "../../../packages/sdk/src/graph/index.ts"))};
 export default loopy("review-data", {input: {items: "string[]"}, run: ({input}) => {
 ${Array.from(Array(198).keys(), (index) => `log("root-${index}");`).join("\n")}
 return map(input.get("items"), () => {

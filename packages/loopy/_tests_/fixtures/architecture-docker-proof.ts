@@ -174,7 +174,9 @@ async function main() {
     await Promise.all([
       filesBelow(join(repository, "apps/sandbox/src")),
       filesBelow(join(repository, "apps/cloud/src")),
-      filesBelow(join(repository, "packages/loopy/src")),
+      ...["core", "contract", "sdk", "runtime", "compiler", "cli", "loopy"].map((name) =>
+        filesBelow(join(repository, "packages", name, "src")),
+      ),
       filesBelow(join(repository, "packages/loopy/_tests_/fixtures")),
     ])
   )
@@ -260,7 +262,7 @@ async function main() {
       .map((entry) => relative(repository, entry.path));
 
     const changedCritical = changed.filter((path) =>
-      /^(apps\/sandbox\/src\/|apps\/cloud\/src\/(receipts[^/]*|worker|environment|http)\.ts$|packages\/loopy\/src\/contract\/sandbox[^/]*\.ts$|packages\/loopy\/_tests_\/fixtures\/architecture-docker-)/.test(
+      /^(apps\/sandbox\/src\/|apps\/cloud\/src\/(receipts[^/]*|worker|environment|http)\.ts$|packages\/contract\/src\/sandbox[^/]*\.ts$|packages\/loopy\/_tests_\/fixtures\/architecture-docker-)/.test(
         path,
       ),
     );

@@ -1,5 +1,5 @@
 import { Effect, Exit, Scope } from "effect";
-import { makeSqliteRunStore, type SqliteRunStore } from "../src/store/sqlite/store";
+import { makeSqliteRunStore, type SqliteRunStore } from "../../runtime/src/store/sqlite/store";
 
 export function createTestStores() {
   const scopes = new Map<SqliteRunStore, Scope.Closeable>();

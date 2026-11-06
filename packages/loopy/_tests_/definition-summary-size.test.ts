@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
+import { definitionSummarySchema } from "@loopy/contract";
+import { canonicalJson, revision } from "@loopy/core";
 import { Schema } from "effect";
 import { ARTIFACT_LIMITS } from "../../../apps/cloud/src/artifacts/storage";
-import { definitionSummarySchema } from "../src/contract";
-import { canonicalJson, revision } from "../src/core";
 import { fillBytes, summarySizeBody, utf8 } from "./fixtures/summary-size-body";
 import { summarySizeRuntime } from "./fixtures/summary-size-runtime";
 

@@ -1,5 +1,5 @@
+import { isTerminalRun, type RunView } from "@loopy/contract";
 import { Link } from "@tanstack/react-router";
-import { isTerminalRun, type RunView } from "../../../../../packages/loopy/src/contract";
 import { ago, elapsed, shortId } from "../../lib/format";
 import { TimeStamp } from "../time-stamp";
 import { RunPill } from "../ui/status";

@@ -1,16 +1,16 @@
 import { expect, test } from "bun:test";
-import { Cause, Deferred, Effect, Fiber } from "effect";
-import { TestClock } from "effect/testing";
-import { type Executor, OwnershipError, StorageError } from "../src/core";
+import { type Executor, OwnershipError, StorageError } from "@loopy/core";
 import {
   DriverCleanupFailed,
   makeDaemon,
   PreparationError,
   PreparationReleaseUnknown,
   ScheduleRevisionError,
-} from "../src/host";
-import { loopy, sh } from "../src/sdk/graph";
-import { MemoryStore } from "../src/store";
+} from "@loopy/runtime/host";
+import { MemoryStore } from "@loopy/runtime/store";
+import { loopy, sh } from "@loopy/sdk/graph";
+import { Cause, Deferred, Effect, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import { FakeExecutor, newRun } from "./fixture";
 
 const graph = loopy("test", { input: {}, run: () => sh(["true"]) }).graph;

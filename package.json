@@ -8,19 +8,20 @@
   ],
   "packageManager": "bun@1.4.0",
   "scripts": {
-    "dev": "bun packages/loopy/src/cli/index.ts ui",
-    "loopy": "bun packages/loopy/src/cli/index.ts",
-    "typecheck": "tsc --noEmit && tsc -p packages/loopy/tsconfig.portable.json",
-    "test": "bun test --timeout 60000 ./apps/dashboard/_tests_ ./packages/loopy/_tests_ ./scripts/playground/_tests_ ./scripts/cloud/_tests_ ./scripts/daemon-playground/_tests_",
+    "dev": "bun packages/loopy/src/cli.ts ui",
+    "loopy": "bun packages/loopy/src/cli.ts",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.portable.json",
+    "test": "bun test --timeout 60000 ./apps/dashboard/_tests_ ./packages/loopy/_tests_ ./apps/cloud/_tests_",
     "check": "bun run build && bun run lint && bun run typecheck && bun run test",
     "build": "bun scripts/build.ts",
     "install:global": "bun scripts/install-global.ts",
     "fmt": "biome format --write .",
     "fmt:check": "biome format .",
     "lint": "biome check . && eslint .",
-    "cloud:start": "bun --no-env-file scripts/cloud/dev.ts",
+    "cloud:start": "bun --no-env-file apps/cloud/dev/dev.ts",
     "cloud:build-sandbox": "docker --context colima-loopy-cloud-phase1 build -f apps/sandbox/Dockerfile -t loopy-sandbox:bun-1.4.0 .",
-    "acceptance:local": "bun --no-env-file scripts/acceptance/run.ts"
+    "acceptance:local": "bun --no-env-file packages/loopy/_tests_/acceptance/run.ts",
+    "acceptance:package": "bun run build && bun --no-env-file packages/loopy/_tests_/acceptance/package.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.2.2",
@@ -36,6 +37,12 @@
     "typescript": "5.9.2",
     "typescript-eslint": "8.66.0",
     "wrangler": "4.152.0",
-    "zod": "4.6.7"
+    "zod": "4.6.7",
+    "@loopy/core": "workspace:*",
+    "@loopy/contract": "workspace:*",
+    "@loopy/sdk": "workspace:*",
+    "@loopy/runtime": "workspace:*",
+    "@loopy/compiler": "workspace:*",
+    "@loopy/cli": "workspace:*"
   }
 }

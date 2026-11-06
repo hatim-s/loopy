@@ -1,4 +1,4 @@
-import { branch, code, eq, fail, log, loopy, parallel } from "../../../../src/sdk/graph";
+import { branch, code, eq, fail, log, loopy, parallel } from "loopy/graph";
 
 export default loopy("playground-b-parallel-build", {
   description: "Build client and server summaries in parallel from seeded CI data",

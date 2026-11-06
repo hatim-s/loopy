@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
+import { makeDaemon } from "@loopy/runtime/host";
+import { MemoryStore } from "@loopy/runtime/store";
+import { loopy, wait } from "@loopy/sdk/graph";
 import { type Cause, Effect, Fiber, Queue } from "effect";
 import { TestClock } from "effect/testing";
-import { makeDaemon } from "../src/host";
-import { loopy, wait } from "../src/sdk/graph";
-import { MemoryStore } from "../src/store";
 import { FakeExecutor, newRun } from "./fixture";
 
 test("daemon leaves an indefinite sleep when a durable approval signal wakes its run", async () => {

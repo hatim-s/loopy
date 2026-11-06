@@ -2,11 +2,11 @@ import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { executionKeyString } from "@loopy/core";
+import { LocalExecutor } from "@loopy/runtime/executor";
 import { Effect } from "effect";
-import { executionKeyString } from "../src/core";
-import { LocalExecutor } from "../src/executor";
-import { receiptPath } from "../src/executor/receipts";
-import { SecretStore } from "../src/local/secrets";
+import { receiptPath } from "../../runtime/src/executor/receipts";
+import { SecretStore } from "../../runtime/src/local/secrets";
 import { fixture } from "./fixtures/executor";
 
 for (const secret of ['quote"and\nnewline', "42"]) {

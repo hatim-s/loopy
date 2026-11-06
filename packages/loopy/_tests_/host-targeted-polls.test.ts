@@ -2,12 +2,12 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { nodeIdSchema } from "@loopy/contract";
+import type { ExecutionKey, NodeRun, Store } from "@loopy/core";
+import { MemoryStore, makeSqliteRunStore } from "@loopy/runtime/store";
+import { code, loopy, parallel, sh, wait } from "@loopy/sdk/graph";
 import { Effect, Exit, Schema, Scope } from "effect";
-import { nodeIdSchema } from "../src/contract";
-import type { ExecutionKey, NodeRun, Store } from "../src/core";
-import { activateDurable } from "../src/host/durable";
-import { code, loopy, parallel, sh, wait } from "../src/sdk/graph";
-import { MemoryStore, makeSqliteRunStore } from "../src/store";
+import { activateDurable } from "../../runtime/src/host/durable";
 import { newRun } from "./fixture";
 import { PolicyProvider, policyGraph, policySuccess } from "./host-policy-fixture";
 

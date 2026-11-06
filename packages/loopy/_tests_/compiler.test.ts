@@ -2,14 +2,14 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
+import { compile as compileEffect } from "@loopy/compiler";
+import { parseModuleOutput } from "@loopy/contract";
+import { canonicalJson, type Json, validateGraph } from "@loopy/core";
 import { Effect } from "effect";
-import { compile as compileEffect } from "../src/compiler";
-import { evaluate as evaluateEffect } from "../src/compiler/evaluate";
-import { parseModuleOutput } from "../src/contract";
-import { canonicalJson, type Json, validateGraph } from "../src/core";
+import { evaluate as evaluateEffect } from "../../compiler/src/evaluate";
 import { compiledBody } from "./compiled-fixture";
 
-const sdk = resolve(import.meta.dir, "../src/sdk/graph/index.ts");
+const sdk = resolve(import.meta.dir, "../../sdk/src/graph/index.ts");
 
 const fixtureRoot = resolve(import.meta.dir, "fixtures/compiler");
 
@@ -622,7 +622,7 @@ test("node_modules dependencies with literal dynamic imports bundle their helper
 
 test("relative extensionless SDK imports retain trusted builder bindings", async () => {
   const f = await project("");
-  const specifier = relative(f.root, resolve(import.meta.dir, "../src/sdk/graph"));
+  const specifier = relative(f.root, resolve(import.meta.dir, "../../sdk/src/graph"));
   await writeFile(
     f.file,
     `import {loopy,log} from ${JSON.stringify(specifier)}; export default loopy("relative-sdk", {input: {}, run: () => {log("hello"); return 1;}});`,
@@ -644,6 +644,20 @@ test("the public SDK entry compiles through the same graph builder", async () =>
     expect(result.graph.nodes.map((node) => node.kind)).toEqual(["log", "join"]);
   }
 });
+
+for (const specifier of ["@loopy/sdk", "@loopy/sdk/graph"]) {
+  test(`author builders reject private package ${specifier}`, async () => {
+    const { file } = await project(
+      `import {loopy} from ${JSON.stringify(specifier)}; export default loopy("private-sdk", {input: {}, run: () => 1});`,
+    );
+
+    const result = await compile(file);
+    expect(result).toMatchObject({
+      ok: false,
+      diagnostics: expect.arrayContaining([expect.objectContaining({ code: "module_import" })]),
+    });
+  });
+}
 
 function compile(path: string) {
   return Effect.runPromise(compileEffect(path));

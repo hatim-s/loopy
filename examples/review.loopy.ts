@@ -1,4 +1,4 @@
-import { git, loopy } from "../packages/loopy/src/sdk";
+import { git, loopy } from "loopy";
 import { codexExec } from "./codex";
 
 export default loopy({

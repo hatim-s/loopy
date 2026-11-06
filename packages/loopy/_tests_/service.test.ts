@@ -2,14 +2,14 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { decodeBoundary, encodeRunCursor, graphView, routes } from "@loopy/contract";
+import type { Graph, RunRecord } from "@loopy/core";
+import { revision } from "@loopy/core";
+import { makeLocalService, Registry } from "@loopy/runtime/local";
+import { makeService } from "@loopy/runtime/service";
+import { loopy } from "@loopy/sdk/graph";
 import { Effect } from "effect";
-import { decodeBoundary, encodeRunCursor, graphView, routes } from "../src/contract";
-import type { Graph, RunRecord } from "../src/core";
-import { revision } from "../src/core";
-import { makeLocalService, Registry } from "../src/local";
-import { makeArtifactRegistry } from "../src/local/save-compiled";
-import { loopy } from "../src/sdk/graph";
-import { makeService } from "../src/service";
+import { makeArtifactRegistry } from "../../runtime/src/local/save-compiled";
 import { compiledBody } from "./compiled-fixture";
 import { FakeExecutor } from "./fixture";
 import { fixtureDaemon, fixtureStore } from "./fixtures/service-runtime";
@@ -29,7 +29,7 @@ async function fixture(definition = "") {
   const source = join(root, "service.ts");
   await Bun.write(
     source,
-    `import { loopy } from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/index.ts"))};
+    `import { loopy } from ${JSON.stringify(resolve(import.meta.dir, "../../sdk/src/index.ts"))};
   export default loopy("service", { ${definition} input: { name: "string" }, secrets: ["PRIVATE"], run: () => 1 });`,
   );
 

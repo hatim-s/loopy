@@ -1,5 +1,5 @@
+import { emptyRunCounts, type RunRecord, type Store } from "@loopy/core";
 import { Effect } from "effect";
-import { emptyRunCounts, type RunRecord, type Store } from "../../src/core";
 
 export const readmodelAt = "2026-10-23T00:00:00.000Z";
 

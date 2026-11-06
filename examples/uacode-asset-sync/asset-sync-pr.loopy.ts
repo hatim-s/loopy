@@ -1,4 +1,4 @@
-import { fs, git, loopy, sh } from "../../packages/loopy/src/sdk";
+import { fs, git, loopy, sh } from "loopy";
 import { codexExec } from "../codex";
 import { readOptions, writeOptions } from "../options";
 import { changedFiles, parseSummary, pullRequestBody, syncPrompt } from "./prompt";

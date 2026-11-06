@@ -5,7 +5,7 @@ import {
   type LogRecord,
   type NodeRunView,
   type RunStatus,
-} from "../../../../packages/loopy/src/contract";
+} from "@loopy/contract";
 import { kindDetail } from "./graph-text";
 import type { ScopeTuple } from "./view-models";
 

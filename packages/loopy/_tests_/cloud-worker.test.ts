@@ -1,12 +1,12 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { resolve } from "node:path";
+import { decodeBoundary, encodeRunCursor, jsonSchema, routes } from "@loopy/contract";
+import { revision } from "@loopy/core";
+import { log, loopy, wait } from "@loopy/sdk/graph";
 import { Schema } from "effect";
 import { Miniflare } from "miniflare";
-import { decodeBoundary, encodeRunCursor, jsonSchema, routes } from "../src/contract";
-import { revision } from "../src/core";
-import { log, loopy, wait } from "../src/sdk/graph";
-import { waitRecordSchema } from "../src/store/wait-schema";
+import { waitRecordSchema } from "../../runtime/src/store/wait-schema";
 import { compiledBody } from "./compiled-fixture";
 
 let runtime: Miniflare;

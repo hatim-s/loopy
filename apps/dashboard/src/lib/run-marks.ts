@@ -1,4 +1,4 @@
-import type { GraphView, NodeRunView } from "../../../../packages/loopy/src/contract";
+import type { GraphView, NodeRunView } from "@loopy/contract";
 import type { NodeMark } from "../components/code/code-view";
 import { elapsed } from "./format";
 import type { GraphModel, GraphNodeModel } from "./graph";

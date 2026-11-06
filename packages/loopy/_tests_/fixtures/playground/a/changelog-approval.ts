@@ -1,4 +1,4 @@
-import { branch, code, eq, fail, log, loopy, wait } from "../../../../src/sdk/graph";
+import { branch, code, eq, fail, log, loopy, wait } from "loopy/graph";
 
 export default loopy("playground-a-changelog-approval", {
   input: { batch: "string", ordinal: "number", fail: "boolean", items: "number[]" },

@@ -10,7 +10,7 @@ import {
   decodeBoundary,
   type ExportRecord,
   exportRecordSchema,
-} from "../../../../packages/loopy/src/contract";
+} from "@loopy/contract";
 
 export class ReceiptSql {
   constructor(

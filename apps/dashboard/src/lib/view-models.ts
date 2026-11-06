@@ -11,7 +11,7 @@ import type {
   ScopeItemsPage,
   ServerEvent,
   SourceArtifact,
-} from "../../../../packages/loopy/src/contract";
+} from "@loopy/contract";
 
 export const PERIODS = ["1h", "24h", "7d", "30d"] as const;
 

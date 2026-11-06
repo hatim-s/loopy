@@ -1,14 +1,14 @@
 import { expect, test } from "bun:test";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { Json } from "@loopy/core";
+import { revision } from "@loopy/core";
+import { activate } from "@loopy/runtime/host";
+import { MemoryStore } from "@loopy/runtime/store";
+import { loopy } from "@loopy/sdk/graph";
 import { Effect } from "effect";
-import type { Json } from "../src/core";
-import { revision } from "../src/core";
-import { activate } from "../src/host";
-import { Registry } from "../src/local/registry";
-import { makeLocalService } from "../src/local/service";
-import { loopy } from "../src/sdk/graph";
-import { MemoryStore } from "../src/store";
+import { Registry } from "../../runtime/src/local/registry";
+import { makeLocalService } from "../../runtime/src/local/service";
 import { FakeExecutor } from "./fixture";
 import { fixture } from "./fixtures/executor";
 

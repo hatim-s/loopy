@@ -1,4 +1,4 @@
-import type { GraphView } from "../../../../../packages/loopy/src/contract";
+import type { GraphView } from "@loopy/contract";
 
 type Kind = GraphView["nodes"][number]["kind"] | "subgraph";
 

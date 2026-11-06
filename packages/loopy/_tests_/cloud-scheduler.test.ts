@@ -1,8 +1,5 @@
 import { afterEach, expect, setSystemTime, test } from "bun:test";
-import { Cause, Effect } from "effect";
-import type { R2ArtifactRegistry } from "../../../apps/cloud/src/artifacts";
-import { type SchedulerStorage, WorkspaceScheduler } from "../../../apps/cloud/src/scheduler";
-import type { SavedLoopy } from "../src/contract";
+import type { SavedLoopy } from "@loopy/contract";
 import {
   type ExecutionKey,
   executionKeyString,
@@ -12,12 +9,15 @@ import {
   revision,
   StorageError,
   type Store,
-} from "../src/core";
-import { type DurableExecutionProvider, DurableProviderError } from "../src/host";
-import { code, loopy, sleep, wait } from "../src/sdk/graph";
-import { RegistryError } from "../src/service";
-import { SqlRunStore, type SqlValue } from "../src/store/portable";
-import { BunSqlDriver } from "../src/store/sqlite/bun-driver";
+} from "@loopy/core";
+import { type DurableExecutionProvider, DurableProviderError } from "@loopy/runtime/host";
+import { RegistryError } from "@loopy/runtime/service";
+import { SqlRunStore, type SqlValue } from "@loopy/runtime/store/portable";
+import { code, loopy, sleep, wait } from "@loopy/sdk/graph";
+import { Cause, Effect } from "effect";
+import type { R2ArtifactRegistry } from "../../../apps/cloud/src/artifacts";
+import { type SchedulerStorage, WorkspaceScheduler } from "../../../apps/cloud/src/scheduler";
+import { BunSqlDriver } from "../../runtime/src/store/sqlite/bun-driver";
 
 const base = Date.parse("2026-10-22T12:00:00.000Z");
 

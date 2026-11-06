@@ -1,4 +1,4 @@
-import type { GraphView } from "../../../../packages/loopy/src/contract";
+import type { GraphView } from "@loopy/contract";
 import { predicateText, refText, valueText } from "./graph-text";
 import type { SourceRange } from "./view-models";
 

@@ -1,5 +1,4 @@
 import type { DurableObjectState } from "@cloudflare/workers-types";
-import { Cause, Effect, Result } from "effect";
 import {
   type AuthorityCommand,
   AuthorityError,
@@ -13,7 +12,8 @@ import {
   resultOperations,
   SANDBOX_MAX_REQUEST_BYTES,
   type SandboxExecutionResult,
-} from "../../../../packages/loopy/src/contract";
+} from "@loopy/contract";
+import { Cause, Effect, Result } from "effect";
 import type { Environment } from "../environment";
 import { readBoundedText } from "../http";
 import { CloudError, cloudSync } from "../operation";

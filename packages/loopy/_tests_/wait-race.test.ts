@@ -2,13 +2,13 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { nodeIdSchema } from "@loopy/contract";
+import type { NodeRun, Store } from "@loopy/core";
+import { activate } from "@loopy/runtime/host";
+import { MemoryStore, makeSqliteRunStore } from "@loopy/runtime/store";
+import { loopy, wait } from "@loopy/sdk/graph";
 import { Effect, Exit, Schema, Scope } from "effect";
 import { TestClock } from "effect/testing";
-import { nodeIdSchema } from "../src/contract";
-import type { NodeRun, Store } from "../src/core";
-import { activate } from "../src/host";
-import { loopy, wait } from "../src/sdk/graph";
-import { MemoryStore, makeSqliteRunStore } from "../src/store";
 import { FakeExecutor, newRun } from "./fixture";
 
 const scopes: Scope.Closeable[] = [];

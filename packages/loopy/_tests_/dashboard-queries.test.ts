@@ -3,12 +3,12 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { decodeBoundary, nodeIdSchema, routes } from "@loopy/contract";
+import { executionKeyString, type LogRecord, type NodeRun, type Store } from "@loopy/core";
+import { makeLocalService } from "@loopy/runtime/local";
+import { MemoryStore } from "@loopy/runtime/store";
 import { Effect } from "effect";
-import { decodeBoundary, nodeIdSchema, routes } from "../src/contract";
-import { executionKeyString, type LogRecord, type NodeRun, type Store } from "../src/core";
-import { makeLocalService } from "../src/local";
-import { MemoryStore } from "../src/store";
-import { SCHEMA, WAIT_SCHEMA } from "../src/store/sqlite/store-schema";
+import { SCHEMA, WAIT_SCHEMA } from "../../runtime/src/store/sqlite/store-schema";
 import { newRun } from "./fixture";
 import { fixtureSqlite } from "./fixtures/service-runtime";
 

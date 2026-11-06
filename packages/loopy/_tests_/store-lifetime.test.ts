@@ -2,12 +2,12 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { nodeIdSchema } from "@loopy/contract";
 import { Cause, Effect, Exit, Schema } from "effect";
-import { nodeIdSchema } from "../src/contract";
-import { StorageError, StoreService } from "../src/core/store";
-import { makeMemoryStore } from "../src/store/memory";
-import { makeSqliteRunStore, sqliteStoreLayer } from "../src/store/sqlite/store";
-import { subscribeStore } from "../src/store/subscription";
+import { StorageError, StoreService } from "../../core/src/store";
+import { makeMemoryStore } from "../../runtime/src/store/memory";
+import { makeSqliteRunStore, sqliteStoreLayer } from "../../runtime/src/store/sqlite/store";
+import { subscribeStore } from "../../runtime/src/store/subscription";
 import { newRun } from "./fixture";
 
 const nodeId = Schema.decodeUnknownSync(nodeIdSchema)("0:code");

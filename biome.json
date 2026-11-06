@@ -9,8 +9,8 @@
       "!coverage",
       "!.loopy",
       "!tools/anti-slop",
-      "!research/effect-v4",
-      "!.notes/effect-v4",
+      "!research",
+      "!.notes",
       "!**/routeTree.gen.ts",
       "!**/.wrangler"
     ]

@@ -1,8 +1,4 @@
-import {
-  definitionInput,
-  definitionSummarySchema,
-  type PutLoopyBody,
-} from "../../../../packages/loopy/src/contract";
+import { definitionInput, definitionSummarySchema, type PutLoopyBody } from "@loopy/contract";
 import { ARTIFACT_LIMITS } from "./storage";
 
 export const definitionProjectionSchema = definitionSummarySchema.mapFields((fields) => ({

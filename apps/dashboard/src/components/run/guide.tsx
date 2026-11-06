@@ -1,4 +1,4 @@
-import type { HookRecord } from "../../../../../packages/loopy/src/contract";
+import type { HookRecord } from "@loopy/contract";
 import { timestamp } from "../../lib/format";
 import type { GraphModel } from "../../lib/graph";
 import type { NodeMark } from "../code/code-view";

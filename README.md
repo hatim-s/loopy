@@ -116,6 +116,64 @@ flowchart TD
   Service --> Contract
 ```
 
+The implementation lives in private workspace packages. `packages/loopy` is the public distribution: its source only re-exports supported APIs and starts the CLI. The build includes compiled implementation modules, declarations and dashboard assets in the tarball, so consumers do not install private workspace packages.
+
+| Package | Owns |
+| --- | --- |
+| `@loopy/core` | Graph contracts, validation and the pure engine |
+| `@loopy/contract` | Browser-safe wire schemas, routes and views |
+| `@loopy/sdk` | Authoring API, command descriptors and parsers |
+| `@loopy/runtime` | Host, store, executor, service and local adapters |
+| `@loopy/compiler` | Restricted evaluation and executable artifact compilation |
+| `@loopy/cli` | HTTP commands and daemon control |
+| `loopy` | Public exports, executable and packaged assets |
+
+Use relative extensionless imports within a package and declared workspace exports across packages. SDK stays separate from compiler because runtime uses command rendering while compiler uses runtime resources.
+
+Arrows point from a consumer to its dependency. The runtime keeps host, store, executor, service and local as internal modules.
+
+```mermaid
+flowchart TD
+  Loopy[loopy public distribution] --> CLI[cli]
+  Loopy --> Runtime[runtime]
+  Loopy --> SDK[sdk]
+  Loopy --> Contract[contract]
+  Loopy --> Core[core and engine]
+  CLI --> Compiler[compiler]
+  CLI --> Runtime
+  CLI --> Contract
+  CLI --> Core
+  Compiler --> Runtime
+  Compiler --> SDK
+  Compiler --> Contract
+  Compiler --> Core
+  Runtime --> SDK
+  Runtime --> Contract
+  Runtime --> Core
+  SDK --> Core
+  Contract --> Core
+  Dashboard[dashboard] --> Contract
+  Cloud[cloud] --> Runtime
+  Cloud --> Contract
+  Cloud --> Core
+  Cloud -. development tools .-> Compiler
+  Sandbox[sandbox] --> Runtime
+  Sandbox --> Contract
+  Sandbox --> Core
+```
+
+The distribution build preserves module locations so worker, parser and daemon entrypoints resolve inside an installed tarball.
+
+```mermaid
+flowchart LR
+  Manifests[Private package exports] --> Config[Generate TypeScript paths]
+  Config --> Emit[Emit JavaScript and declarations]
+  Emit --> Rewrite[Rewrite private imports and resource paths]
+  Rewrite --> Assets[Build and copy dashboard]
+  Assets --> Bin[Mark CLI executable]
+  Bin --> Pack[Pack self-contained loopy tarball]
+```
+
 | Module | Owns |
 | --- | --- |
 | `core`, `contract` | Domain contracts, tagged errors and shared Effect Schema codecs |
@@ -128,7 +186,7 @@ flowchart TD
 | `local`, `cli` | Files, processes, scoped daemon composition and HTTP commands |
 | `apps/cloud`, `apps/sandbox` | Provider adapters, durable turns and sandbox attempt supervision |
 
-Modules expose operations that hide their transaction, resource or protocol details. Effect factories and layers acquire resources at composition boundaries. Memory stores, fake executors and injected clocks exercise the same contracts as production adapters. Cross-layer imports go through the target module's index and are enforced by the architecture test.
+Modules expose operations that hide their transaction, resource or protocol details. Effect factories and layers acquire resources at composition boundaries. Memory stores, fake executors and injected clocks exercise the same contracts as production adapters. Architecture tests enforce explicit package exports, dependency direction and runtime module boundaries.
 
 ```mermaid
 sequenceDiagram
@@ -194,6 +252,10 @@ Sandbox mode denies network and restricts filesystem access using platform sandb
 
 Run `bun run check` before pushing. It builds the package and dashboard, checks lint and types, then runs package, dashboard and workload tests. Tests use temporary homes, explicit registry markers and injected dependencies. Real Docker acceptance is opt-in; local workerd coverage does not establish deployed-provider acceptance.
 
-After changing the core or runtime, also run `bun run acceptance:local`. This executes checked-in loopies through the real CLI and an isolated daemon, verifies their results, and retains evidence under `.loopy/acceptance`. It is a separate acceptance run, not part of `bun test`. See [the local acceptance suite](scripts/acceptance/README.md) for cases, reports and coverage limits.
+After changing the core or runtime, also run `bun run acceptance:local`. This executes checked-in loopies through the real CLI and an isolated daemon, verifies their results, and retains evidence under `.loopy/acceptance`. It is a separate acceptance run, not part of `bun test`. See [the local acceptance suite](packages/loopy/_tests_/acceptance/README.md) for cases, reports and coverage limits.
 
 See [AGENTS.md](AGENTS.md) for module ownership, [the cloud README](apps/cloud/README.md) for provider boundaries and [the sandbox README](apps/sandbox/README.md) for retained receipt rules.
+
+Cloud development tooling lives under `apps/cloud/dev`, with its tests under `apps/cloud/_tests_/dev`. It includes reusable fixture journeys, workload comparisons and approval-gated provider probes. The frozen-source and provider approval guards still apply. Root `scripts/` contains only build and global-install orchestration.
+
+Run `bun run acceptance:package` to build and install a tarball into an isolated temporary consumer, typecheck the public exports, and run the packaged compiler, parser and execution worker. It also checks dashboard assets and CLI daemon autostart. It uses package-registry installation, never a global install or a live provider.

@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { Cause, Effect, Exit, Fiber, FiberMap, FiberSet, Scope } from "effect";
 import type {
+  AuthoritySession,
   SandboxArtifactRequest,
   SandboxAttemptIdentity,
   SandboxAttemptRequest,
-} from "../../../../packages/loopy/src/contract";
-import type { AuthoritySession } from "../../../../packages/loopy/src/contract/sandbox-journal";
+} from "@loopy/contract";
+import { Cause, Effect, Exit, Fiber, FiberMap, FiberSet, Scope } from "effect";
 import { attemptId } from "../admission";
 import { ArtifactError } from "../artifact-error";
 import { type SandboxConfig, validateStateRoot } from "../config";

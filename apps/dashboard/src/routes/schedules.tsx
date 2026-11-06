@@ -1,7 +1,7 @@
+import { routes } from "@loopy/contract";
 import { createFileRoute } from "@tanstack/react-router";
 import { Schema } from "effect";
 import { useState } from "react";
-import { routes } from "../../../../packages/loopy/src/contract";
 import { ErrorBanner } from "../components/error-banner";
 import { ScheduleForm } from "../components/schedules/form";
 import { ScheduleRow } from "../components/schedules/row";

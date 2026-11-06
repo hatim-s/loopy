@@ -3,18 +3,18 @@ import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
-import { Effect } from "effect";
-import { Miniflare } from "miniflare";
-import { ARTIFACT_LIMITS } from "../../../apps/cloud/src/artifacts";
 import {
   decodeBoundary,
   nodeIdSchema,
   type PutLoopyBody,
   type SourceArtifact,
   validateCompiled,
-} from "../src/contract";
-import { revision } from "../src/core";
-import { code, loopy } from "../src/sdk/graph";
+} from "@loopy/contract";
+import { revision } from "@loopy/core";
+import { code, loopy } from "@loopy/sdk/graph";
+import { Effect } from "effect";
+import { Miniflare } from "miniflare";
+import { ARTIFACT_LIMITS } from "../../../apps/cloud/src/artifacts";
 import { compiledBody } from "./compiled-fixture";
 
 let runtime: Miniflare;
@@ -41,8 +41,8 @@ beforeAll(async () => {
       join(directory, "effect.ts"),
       join(directory, "artifacts.ts"),
       new URL("../../../apps/cloud/src/sql-driver.ts", import.meta.url).pathname,
-      new URL("../src/service/index.ts", import.meta.url).pathname,
-      new URL("../src/store/portable.ts", import.meta.url).pathname,
+      new URL("../../runtime/src/service/index.ts", import.meta.url).pathname,
+      new URL("../../runtime/src/store/portable.ts", import.meta.url).pathname,
     ],
     target: "browser",
     splitting: true,

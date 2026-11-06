@@ -1,15 +1,15 @@
 import { createHash, randomUUID } from "node:crypto";
 import { link, open, unlink } from "node:fs/promises";
 import { join } from "node:path";
-import { Effect } from "effect";
+import type { ResultRef } from "@loopy/contract";
 import {
   decodeBoundary,
   SANDBOX_MAX_CAPTURE_BYTES,
   type SandboxExecutionResult,
   sandboxExecutionResultSchema,
-} from "../../../packages/loopy/src/contract";
-import type { ResultRef } from "../../../packages/loopy/src/contract/sandbox-journal";
-import { canonicalJson } from "../../../packages/loopy/src/core";
+} from "@loopy/contract";
+import { canonicalJson } from "@loopy/core";
+import { Effect } from "effect";
 import { readBytes, syncDirectory } from "./journal-files";
 import type { ImmutableResults } from "./operations";
 import { checked, failure, io } from "./operations";

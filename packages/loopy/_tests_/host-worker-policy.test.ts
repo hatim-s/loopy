@@ -2,13 +2,13 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { type ExecutionKey, OwnershipError, StorageError } from "@loopy/core";
+import { LocalExecutor } from "@loopy/runtime/executor";
+import { activate, makeDaemon } from "@loopy/runtime/host";
+import { MemoryStore } from "@loopy/runtime/store";
+import { code, loopy, sh } from "@loopy/sdk/graph";
 import { Cause, Effect, Fiber } from "effect";
-import { type ExecutionKey, OwnershipError, StorageError } from "../src/core";
-import { LocalExecutor } from "../src/executor";
-import { FilesystemReceipts } from "../src/executor/receipts";
-import { activate, makeDaemon } from "../src/host";
-import { code, loopy, sh } from "../src/sdk/graph";
-import { MemoryStore } from "../src/store";
+import { FilesystemReceipts } from "../../runtime/src/executor/receipts";
 import { newRun } from "./fixture";
 
 function waitForMarker(path: string) {

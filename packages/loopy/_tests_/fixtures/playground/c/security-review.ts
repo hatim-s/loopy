@@ -1,4 +1,4 @@
-import { code, log, loopy, wait } from "../../../../src/sdk/graph";
+import { code, log, loopy, wait } from "loopy/graph";
 
 export default loopy("playground-c-security-review", {
   input: { batch: "string", ordinal: "number", fail: "boolean", items: "number[]" },

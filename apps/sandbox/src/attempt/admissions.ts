@@ -1,16 +1,14 @@
-import { Effect, Result, Semaphore } from "effect";
-import {
-  type SandboxAttemptRequest,
-  type SandboxReceipt,
-} from "../../../../packages/loopy/src/contract";
 import {
   type AttemptRecord,
   type AuthoritySession,
   attemptResourceNames,
   type DockerAttemptPlan,
+  type SandboxAttemptRequest,
+  type SandboxReceipt,
   workspaceVolumeInput,
-} from "../../../../packages/loopy/src/contract/sandbox-journal";
-import { durationMs } from "../../../../packages/loopy/src/core";
+} from "@loopy/contract";
+import { durationMs } from "@loopy/core";
+import { Effect, Result, Semaphore } from "effect";
 import {
   AttemptConflict,
   attemptHash,

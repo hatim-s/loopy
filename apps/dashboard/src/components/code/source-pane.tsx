@@ -1,5 +1,5 @@
+import type { GraphView } from "@loopy/contract";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import type { GraphView } from "../../../../../packages/loopy/src/contract";
 import { OUTLINE_FILE, printOutline } from "../../lib/outline";
 import type { Loaded, SourceFile, SourceRange, SourceView } from "../../lib/view-models";
 import { CodeView, type NodeMark } from "./code-view";

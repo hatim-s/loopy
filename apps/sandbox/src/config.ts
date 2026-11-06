@@ -1,8 +1,8 @@
 import { lstat, mkdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
+import { struct } from "@loopy/contract/codec";
 import { Effect, Schema } from "effect";
-import { struct } from "../../../packages/loopy/src/contract/codec";
 
 const absolute = Schema.String.check(Schema.makeFilter(isAbsolute));
 

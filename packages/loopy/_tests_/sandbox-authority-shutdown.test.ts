@@ -5,7 +5,7 @@ import { Effect } from "effect";
 import type { AttemptDependencies } from "../../../apps/sandbox/src/attempt/dependencies";
 import { FilesystemAuthority } from "../../../apps/sandbox/src/filesystem/authority";
 import { failure } from "../../../apps/sandbox/src/operations";
-import type { AuthorityInput } from "../src/contract/sandbox-journal-rpc";
+import type { AuthorityInput } from "../../contract/src/sandbox-journal-rpc";
 import {
   artifactReader,
   authorityFixture,

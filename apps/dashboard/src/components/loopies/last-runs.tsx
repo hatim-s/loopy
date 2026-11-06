@@ -1,4 +1,4 @@
-import { isTerminalRun, type RunView } from "../../../../../packages/loopy/src/contract";
+import { isTerminalRun, type RunView } from "@loopy/contract";
 import { elapsed } from "../../lib/format";
 import { runElapsed } from "../runs/run-table";
 import { runStatus, statusWord } from "../ui/status";

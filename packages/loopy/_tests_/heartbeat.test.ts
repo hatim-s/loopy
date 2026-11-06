@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
+import { OwnershipError, StorageError } from "@loopy/core";
+import { MemoryStore } from "@loopy/runtime/store";
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
 import { TestClock } from "effect/testing";
-import { OwnershipError, StorageError } from "../src/core";
-import { DriverCleanupFailed, withHeartbeat } from "../src/host/heartbeat";
-import { MemoryStore } from "../src/store";
+import { DriverCleanupFailed, withHeartbeat } from "../../runtime/src/host/heartbeat";
 import { newRun } from "./fixture";
 
 test("heartbeat renews ownership using Effect time", async () => {

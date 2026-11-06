@@ -2,8 +2,8 @@ import { afterEach, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { daemonUrl, localDaemon, openRunStore, readDaemonFile } from "@loopy/runtime/local";
 import { Effect, Exit, Scope } from "effect";
-import { daemonUrl, localDaemon, openRunStore, readDaemonFile } from "../src/local";
 
 const roots: string[] = [];
 
@@ -48,7 +48,7 @@ test("daemon publishes a private discovery file and removes it on clean shutdown
     });
 
     const child = Bun.spawn(
-      [process.execPath, resolve(import.meta.dir, "../src/cli/index.ts"), "--home", home, "ui"],
+      [process.execPath, resolve(import.meta.dir, "../../cli/src/index.ts"), "--home", home, "ui"],
       {
         cwd,
         env: { PATH: process.env.PATH, HOME: cwd, TMPDIR: cwd, LOOPY_HOME: home },
@@ -63,7 +63,7 @@ test("daemon publishes a private discovery file and removes it on clean shutdown
     const status = Bun.spawn(
       [
         process.execPath,
-        resolve(import.meta.dir, "../src/cli/index.ts"),
+        resolve(import.meta.dir, "../../cli/src/index.ts"),
         "--home",
         home,
         "daemon",
@@ -93,7 +93,7 @@ test("ui starts the foreground daemon when discovery is absent and removes it on
   const child = Bun.spawn(
     [
       process.execPath,
-      resolve(import.meta.dir, "../src/cli/index.ts"),
+      resolve(import.meta.dir, "../../cli/src/index.ts"),
       "--home",
       home,
       "ui",
@@ -141,7 +141,7 @@ test("second foreground daemon reports an actionable error", async () => {
         const child = Bun.spawn(
           [
             process.execPath,
-            resolve(import.meta.dir, "../src/cli/index.ts"),
+            resolve(import.meta.dir, "../../cli/src/index.ts"),
             "--home",
             home,
             "daemon",

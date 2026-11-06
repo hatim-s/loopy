@@ -2,10 +2,13 @@ import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { open, unlink } from "node:fs/promises";
 import { join } from "node:path";
+import {
+  decodeBoundary,
+  dockerAttemptPlanSchema,
+  sandboxExecutionResultSchema,
+} from "@loopy/contract";
+import { struct } from "@loopy/contract/codec";
 import { Schema } from "effect";
-import { decodeBoundary, sandboxExecutionResultSchema } from "../../../packages/loopy/src/contract";
-import { struct } from "../../../packages/loopy/src/contract/codec";
-import { dockerAttemptPlanSchema } from "../../../packages/loopy/src/contract/sandbox-journal";
 
 export const storedReceiptSchema = Schema.Union([
   struct({ ...dockerAttemptPlanSchema.fields, kind: Schema.Literal("started") }),

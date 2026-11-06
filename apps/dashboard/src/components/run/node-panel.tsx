@@ -1,5 +1,5 @@
+import type { NodeRunView } from "@loopy/contract";
 import { type ReactNode, useState } from "react";
-import type { NodeRunView } from "../../../../../packages/loopy/src/contract";
 import type { GraphNodeModel } from "../../lib/graph";
 import { nodeFacts } from "../../lib/node-facts";
 import { useExecutions, useScopeItems } from "../../lib/ui-data";

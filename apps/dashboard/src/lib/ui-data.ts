@@ -1,6 +1,3 @@
-import { skipToken, type UseQueryResult, useQuery } from "@tanstack/react-query";
-import type { Schema } from "effect";
-import { useEffect, useMemo, useState } from "react";
 import {
   executionKeyString,
   type GraphRevisionView,
@@ -11,7 +8,10 @@ import {
   type ScheduleOverviewView,
   type ScheduleView,
   type ServerEvent,
-} from "../../../../packages/loopy/src/contract";
+} from "@loopy/contract";
+import { skipToken, type UseQueryResult, useQuery } from "@tanstack/react-query";
+import type { Schema } from "effect";
+import { useEffect, useMemo, useState } from "react";
 import { useBackend } from "../router-context";
 import { keys } from "./keys";
 import {

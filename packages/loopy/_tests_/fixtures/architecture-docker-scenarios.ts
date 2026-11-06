@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { Effect } from "effect";
 import {
   decodeBoundary,
   type SandboxAttemptRequest,
   sandboxArtifactSchema,
   sandboxReceiptSchema,
-} from "../../src/contract";
+} from "@loopy/contract";
+import { Effect } from "effect";
 import { type Bridge, type DockerResources, input } from "./architecture-docker-resources";
 import { bounded, type DockerRuntime, eventually } from "./architecture-docker-runtime";
 

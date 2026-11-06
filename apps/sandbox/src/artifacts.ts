@@ -1,15 +1,13 @@
 import { createHash } from "node:crypto";
-import { Effect, Schema } from "effect";
-import {
-  decodeBoundary,
-  type SandboxArtifact,
-  sandboxArtifactReadSchema,
-} from "../../../packages/loopy/src/contract";
 import {
   artifactHelperName,
   type DockerAttemptPlan,
-} from "../../../packages/loopy/src/contract/sandbox-journal";
-import type { CommandExecutionError } from "../../../packages/loopy/src/core";
+  decodeBoundary,
+  type SandboxArtifact,
+  sandboxArtifactReadSchema,
+} from "@loopy/contract";
+import type { CommandExecutionError } from "@loopy/core";
+import { Effect, Schema } from "effect";
 import { ArtifactError } from "./artifact-error";
 import type { SandboxConfig } from "./config";
 import { DockerClient } from "./docker/client";

@@ -1,15 +1,15 @@
 import { afterEach, expect, test } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { decodeBoundary, nodeIdSchema } from "@loopy/contract";
+import { StorageError } from "@loopy/core";
+import { makeService, ServiceError } from "@loopy/runtime/service";
+import { makeSqliteRunStore } from "@loopy/runtime/store";
 import { Cause, Deferred, Effect, Exit, Fiber, Scope } from "effect";
-import { decodeBoundary, nodeIdSchema } from "../src/contract";
-import { StorageError } from "../src/core";
-import { Registry } from "../src/local/registry";
-import { SecretStore } from "../src/local/secrets";
-import { startServer } from "../src/local/server/start-server";
-import { makeLocalService } from "../src/local/service";
-import { makeService, ServiceError } from "../src/service";
-import { makeSqliteRunStore } from "../src/store";
+import { Registry } from "../../runtime/src/local/registry";
+import { SecretStore } from "../../runtime/src/local/secrets";
+import { startServer } from "../../runtime/src/local/server/start-server";
+import { makeLocalService } from "../../runtime/src/local/service";
 import { compiledBody } from "./compiled-fixture";
 import { qualityTestRoot } from "./fixtures/quality-test-root";
 

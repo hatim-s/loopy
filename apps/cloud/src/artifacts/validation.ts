@@ -1,5 +1,5 @@
-import type { Graph, PutLoopyBody, SavedLoopy } from "../../../../packages/loopy/src/contract";
-import { canonicalJson } from "../../../../packages/loopy/src/core";
+import type { Graph, PutLoopyBody, SavedLoopy } from "@loopy/contract";
+import { canonicalJson } from "@loopy/core";
 import type { Publication } from "./definitions";
 import { checkDefinitionRows } from "./projection";
 import { ARTIFACT_LIMITS } from "./storage";

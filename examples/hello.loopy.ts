@@ -1,4 +1,4 @@
-import { loopy, step } from "../packages/loopy/src/sdk";
+import { loopy, step } from "loopy";
 
 export default loopy({
   name: "hello",

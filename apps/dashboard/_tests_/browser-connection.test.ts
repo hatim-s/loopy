@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { routes } from "../../../packages/loopy/src/contract";
+import { routes } from "@loopy/contract";
 import { httpBaseUrl } from "../src/backend/config";
 import { httpTransport, localHttpBackend } from "../src/backend/local-http";
 import { browserConnection } from "../src/lib/connection";

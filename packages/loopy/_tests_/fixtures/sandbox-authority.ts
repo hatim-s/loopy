@@ -1,19 +1,19 @@
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, realpath, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import {
+  decodeBoundary,
+  nodeIdSchema,
+  type SandboxExecutionResult,
+  sandboxAttemptRequestSchema,
+} from "@loopy/contract";
 import { Effect } from "effect";
 import { attemptHash } from "../../../../apps/sandbox/src/admission";
 import type { ArtifactReader } from "../../../../apps/sandbox/src/artifacts";
 import { sandboxConfigSchema, validateStateRoot } from "../../../../apps/sandbox/src/config";
 import { FilesystemAuthority } from "../../../../apps/sandbox/src/filesystem/authority";
 import { FilesystemResults } from "../../../../apps/sandbox/src/immutable-results";
-import {
-  decodeBoundary,
-  nodeIdSchema,
-  type SandboxExecutionResult,
-  sandboxAttemptRequestSchema,
-} from "../../src/contract";
-import type { DockerAttemptPlan } from "../../src/contract/sandbox-journal";
+import type { DockerAttemptPlan } from "../../../contract/src/sandbox-journal";
 
 export const successful: SandboxExecutionResult = {
   kind: "succeeded",

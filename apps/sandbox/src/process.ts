@@ -1,7 +1,7 @@
+import { SANDBOX_MAX_CAPTURE_BYTES } from "@loopy/contract";
+import { CommandExecutionError, type CommandResult } from "@loopy/core";
+import { spawnCaptured } from "@loopy/runtime/local/execution-host";
 import { Effect } from "effect";
-import { SANDBOX_MAX_CAPTURE_BYTES } from "../../../packages/loopy/src/contract";
-import { CommandExecutionError, type CommandResult } from "../../../packages/loopy/src/core";
-import { spawnCaptured } from "../../../packages/loopy/src/local/execution-host";
 
 export type ProcessOptions = {
   stdin?: string;

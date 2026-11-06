@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
+import type { Executor } from "@loopy/core";
+import { activate, makeDaemon } from "@loopy/runtime/host";
+import { MemoryStore } from "@loopy/runtime/store";
+import { loopy, parallel, sh, sleep, wait } from "@loopy/sdk/graph";
 import { Deferred, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
-import type { Executor } from "../src/core";
-import { activate, makeDaemon } from "../src/host";
-import { loopy, parallel, sh, sleep, wait } from "../src/sdk/graph";
-import { MemoryStore } from "../src/store";
 import { newRun } from "./fixture";
 import { policyGraph, policyRetry, policySuccess, policyWork } from "./host-policy-fixture";
 

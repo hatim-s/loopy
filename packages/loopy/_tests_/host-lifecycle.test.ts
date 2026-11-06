@@ -1,15 +1,15 @@
 import { expect, test } from "bun:test";
-import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
-import { TestClock } from "effect/testing";
-import { type Executor, OwnershipError, StorageError } from "../src/core";
+import { type Executor, OwnershipError, StorageError } from "@loopy/core";
 import {
   ActivationWorkCleanupFailed,
   activate,
   DriverCleanupFailed,
   LeaseReleaseFailed,
-} from "../src/host";
-import { code, loopy, parallel } from "../src/sdk/graph";
-import { MemoryStore } from "../src/store";
+} from "@loopy/runtime/host";
+import { MemoryStore } from "@loopy/runtime/store";
+import { code, loopy, parallel } from "@loopy/sdk/graph";
+import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import { FakeExecutor, newRun } from "./fixture";
 
 function graph(wide = false) {

@@ -1,6 +1,6 @@
-import type { PutLoopyBody } from "../src/contract";
-import { revision } from "../src/core";
-import { loopy } from "../src/sdk/graph";
+import type { PutLoopyBody } from "@loopy/contract";
+import { revision } from "@loopy/core";
+import { loopy } from "@loopy/sdk/graph";
 
 export async function compiledBody(
   name: string,

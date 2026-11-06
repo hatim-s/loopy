@@ -1,3 +1,4 @@
+import { dirname, relative, resolve } from "node:path";
 import sonarjs from "eslint-plugin-sonarjs";
 import unicorn from "eslint-plugin-unicorn";
 import tseslint from "typescript-eslint";
@@ -8,8 +9,9 @@ const relativeInternalImports = {
     type: "problem",
     schema: [],
     messages: {
-      alias: "Use a relative path for internal imports.",
+      alias: "Use relative imports within a package and explicit @loopy exports across packages.",
       extension: "Internal imports must omit code extensions and the index filename.",
+      boundary: "Cross-package imports must use explicit workspace package exports.",
     },
   },
   create(context) {
@@ -20,7 +22,23 @@ const relativeInternalImports = {
 
       const value = source.value;
 
-      if (value === "loopy" || value.startsWith("loopy/") || value.startsWith("@/")) {
+      const filename = context.filename;
+      const packageRoot = /^(.*\/packages\/[^/]+)\/src\//.exec(filename)?.[1];
+
+      if (packageRoot && value.startsWith(".")) {
+        const target = relative(packageRoot, resolve(dirname(filename), value));
+
+        if (target === ".." || target.startsWith("../")) {
+          context.report({ node: source, messageId: "boundary" });
+        }
+      }
+
+      const authorSource = /\/(?:_tests_|examples)\//.test(filename);
+
+      if (
+        (!authorSource && (value === "loopy" || value.startsWith("loopy/"))) ||
+        value.startsWith("@/")
+      ) {
         context.report({ node: source, messageId: "alias" });
       } else if (
         value.startsWith(".") &&
@@ -48,8 +66,8 @@ export default tseslint.config(
       "**/dist/**",
       "**/.wrangler/**",
       "coverage/**",
-      "research/effect-v4/**",
-      ".notes/effect-v4/**",
+      "research/**",
+      ".notes/**",
       ".loopy/**",
       "**/routeTree.gen.ts",
     ],
@@ -94,7 +112,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["packages/loopy/src/cli/**", "scripts/**", "examples/**"],
+    files: ["packages/cli/src/**", "scripts/**", "apps/cloud/dev/**", "examples/**"],
     rules: { "no-console": "off" },
   },
   {
@@ -102,7 +120,7 @@ export default tseslint.config(
     rules: { "sonarjs/cognitive-complexity": "off", "no-console": "off" },
   },
   {
-    files: ["packages/loopy/src/core/**", "packages/loopy/src/engine/**"],
+    files: ["packages/core/src/**"],
     rules: {
       "no-restricted-imports": [
         "error",

@@ -1,10 +1,7 @@
+import { decodeBoundary, sandboxArtifactRequestSchema } from "@loopy/contract";
+import type { Store } from "@loopy/core";
+import { errorResponse, json } from "@loopy/runtime/service";
 import { Effect, Result } from "effect";
-import {
-  decodeBoundary,
-  sandboxArtifactRequestSchema,
-} from "../../../../packages/loopy/src/contract";
-import type { Store } from "../../../../packages/loopy/src/core";
-import { errorResponse, json } from "../../../../packages/loopy/src/service";
 import { cloudSync } from "../operation";
 import type { SandboxProvider } from "../provider";
 

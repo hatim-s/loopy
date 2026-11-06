@@ -1,7 +1,6 @@
 import { expect, expectTypeOf, test } from "bun:test";
-import { Schema } from "effect";
-import * as contract from "../src/contract";
-import type * as core from "../src/core";
+import * as contract from "@loopy/contract";
+import type * as core from "@loopy/core";
 import {
   type DiagnosticCode,
   ERROR_FIELDS,
@@ -10,7 +9,8 @@ import {
   type Graph,
   graphTypeResolver,
   validateGraph,
-} from "../src/core";
+} from "@loopy/core";
+import { Schema } from "effect";
 import { approveDemoGraph } from "./fixtures/graphs";
 
 type Flatten<T> = T extends unknown ? { [K in keyof T]: T[K] } : never;

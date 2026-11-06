@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": [],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+  },
+  "include": [
+    "packages/core/src",
+    "packages/contract/src",
+    "packages/runtime/src/service",
+    "packages/runtime/src/host",
+    "packages/runtime/src/store/portable.ts"
+  ]
+}

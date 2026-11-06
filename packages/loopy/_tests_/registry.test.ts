@@ -2,8 +2,8 @@ import { afterEach, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Registry } from "@loopy/runtime/local";
 import { Effect } from "effect";
-import { Registry } from "../src/local";
 import { compiledBody } from "./compiled-fixture";
 
 const roots: string[] = [];

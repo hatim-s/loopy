@@ -1,20 +1,20 @@
 import { expect, test } from "bun:test";
-import { Effect } from "effect";
 import {
   type ExecutionKey,
   type ExecutionResult,
   executionKeyString,
   type Graph,
   type Receipt,
-} from "../src/core";
+} from "@loopy/core";
+import { MemoryStore } from "@loopy/runtime/store";
+import { code, loopy, parallel, random, sh, sleep, uuid, wait } from "@loopy/sdk/graph";
+import { Effect } from "effect";
 import {
   activateDurable,
   type DurableActivationOptions,
   type DurableExecutionProvider,
   DurableProviderError,
-} from "../src/host/durable";
-import { code, loopy, parallel, random, sh, sleep, uuid, wait } from "../src/sdk/graph";
-import { MemoryStore } from "../src/store";
+} from "../../runtime/src/host/durable";
 import { newRun } from "./fixture";
 
 const success: ExecutionResult = {

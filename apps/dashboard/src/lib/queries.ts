@@ -1,5 +1,5 @@
+import { encodeRunCursor } from "@loopy/contract";
 import { infiniteQueryOptions, queryOptions, skipToken } from "@tanstack/react-query";
-import { encodeRunCursor } from "../../../../packages/loopy/src/contract";
 import type { LoopyBackend, OverviewQuery, RunsQuery } from "../backend/backend";
 import { INBOX_QUERY, inboxGroups } from "./inbox";
 import {

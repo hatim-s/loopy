@@ -2,6 +2,12 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import {
+  decodeBoundary,
+  type SandboxAttemptRequest,
+  sandboxAttemptRequestSchema,
+} from "@loopy/contract";
+import { CommandExecutionError } from "@loopy/core";
 import { Effect, Exit, Scope } from "effect";
 import { z } from "zod";
 import { attemptHash } from "../../../../apps/sandbox/src/admission";
@@ -11,13 +17,7 @@ import { type AttemptBackend, DockerBackend } from "../../../../apps/sandbox/src
 import { SandboxOperationError } from "../../../../apps/sandbox/src/operations";
 import { type CommandRunner, runCommand } from "../../../../apps/sandbox/src/process";
 import { startSandbox } from "../../../../apps/sandbox/src/server";
-import {
-  decodeBoundary,
-  type SandboxAttemptRequest,
-  sandboxAttemptRequestSchema,
-} from "../../src/contract";
-import type { DockerAttemptPlan } from "../../src/contract/sandbox-journal";
-import { CommandExecutionError } from "../../src/core";
+import type { DockerAttemptPlan } from "../../../contract/src/sandbox-journal";
 import { bounded, type DockerRuntime } from "./architecture-docker-runtime";
 
 export const context = "colima-loopy-cloud-phase1";

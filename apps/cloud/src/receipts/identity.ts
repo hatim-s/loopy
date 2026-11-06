@@ -1,11 +1,11 @@
-import { Effect } from "effect";
 import {
   attemptIdInput,
   attemptResourceNames,
   type DockerAttemptPlan,
   workspaceVolumeInput,
-} from "../../../../packages/loopy/src/contract";
-import { canonicalJson } from "../../../../packages/loopy/src/core";
+} from "@loopy/contract";
+import { canonicalJson } from "@loopy/core";
+import { Effect } from "effect";
 import { platform } from "../operation";
 
 export function receiptHash(bytes: Uint8Array) {

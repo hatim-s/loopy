@@ -1,4 +1,4 @@
-import { loopy, wait } from "../../../src/sdk/graph";
+import { loopy, wait } from "loopy/graph";
 
 export default loopy("cloud-failure-approval", {
   input: {},

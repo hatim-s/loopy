@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { CommandExecutionError } from "@loopy/core";
 import { Effect } from "effect";
-import { CommandExecutionError } from "../src/core";
-import { withBundleSandbox } from "../src/local/sandbox/bundle";
+import { withBundleSandbox } from "../../runtime/src/local/sandbox/bundle";
 import { fixture } from "./fixtures/executor";
 
 for (const primary of ["timeout", "interrupt", "defect"] as const) {

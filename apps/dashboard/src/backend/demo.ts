@@ -7,7 +7,7 @@ import {
   type NodeRunView,
   type RunSnapshotView,
   type RunView,
-} from "../../../../packages/loopy/src/contract";
+} from "@loopy/contract";
 import { HELLO, RELEASE, REVIEW, TRIAGE_V1, TRIAGE_V2 } from "./demo-graphs";
 import { base, type EventDraft, type FakeScript } from "./fake";
 

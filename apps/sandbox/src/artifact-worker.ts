@@ -1,15 +1,15 @@
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
-import { Effect, Result } from "effect";
 import {
   decodeBoundary,
   SANDBOX_MAX_ARTIFACT_BYTES,
   type SandboxArtifact,
   type SandboxArtifactRead,
   sandboxArtifactPathSchema,
-} from "../../../packages/loopy/src/contract";
-import { errnoCode } from "../../../packages/loopy/src/core";
+} from "@loopy/contract";
+import { errnoCode } from "@loopy/core";
+import { Effect, Result } from "effect";
 import { ArtifactError } from "./artifact-error";
 import { failure } from "./operations";
 

@@ -1,4 +1,4 @@
-import { code, log, loopy, wait } from "../../../../src/sdk/graph";
+import { code, log, loopy, wait } from "loopy/graph";
 
 export default loopy("playground-c-artifact-manifest", {
   input: { batch: "string", ordinal: "number", fail: "boolean", items: "number[]" },

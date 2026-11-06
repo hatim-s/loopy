@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
+import type { ScheduleView } from "@loopy/contract";
 import { QueryClient } from "@tanstack/react-query";
-import type { ScheduleView } from "../../../packages/loopy/src/contract";
 import { fakeBackend } from "../src/backend/fake";
 import { keys } from "../src/lib/keys";
 import { toggleSchedule } from "../src/lib/mutations";

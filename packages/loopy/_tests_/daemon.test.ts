@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
+import { type RunRecord, type Schedule } from "@loopy/core";
+import { makeDaemon, PreparationError, ScheduleRevisionError } from "@loopy/runtime/host";
+import { MemoryStore } from "@loopy/runtime/store";
+import { loopy } from "@loopy/sdk/graph";
 import type { Cause } from "effect";
 import { Effect } from "effect";
 import { TestClock } from "effect/testing";
-import { type RunRecord, type Schedule } from "../src/core";
-import { makeDaemon, PreparationError, ScheduleRevisionError } from "../src/host";
-import { loopy } from "../src/sdk/graph";
-import { MemoryStore } from "../src/store";
 import { FakeExecutor, newRun } from "./fixture";
 
 function schedule(overrides: Partial<Schedule> = {}): Schedule {

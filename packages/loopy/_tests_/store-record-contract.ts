@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
+import { nodeIdSchema } from "@loopy/contract";
+import type { NodeRun, Store, StoreEffect } from "@loopy/core";
 import { Effect, Schema } from "effect";
-import { nodeIdSchema } from "../src/contract";
-import type { NodeRun, Store, StoreEffect } from "../src/core";
 import { newRun } from "./fixture";
 
 const at = newRun().createdAt;

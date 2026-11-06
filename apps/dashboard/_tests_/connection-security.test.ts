@@ -2,13 +2,13 @@ import { afterEach, expect, spyOn, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { makeLocalService, openRunStore } from "@loopy/runtime/local";
 import { Effect, Exit, Scope } from "effect";
-import { makeLocalService, openRunStore } from "../../../packages/loopy/src/local";
-import { originSecurity } from "../../../packages/loopy/src/local/server/security";
+import { originSecurity } from "../../../packages/runtime/src/local/server/security";
 import {
   createRequestHandler,
   startServer,
-} from "../../../packages/loopy/src/local/server/start-server";
+} from "../../../packages/runtime/src/local/server/start-server";
 import { localHttpBackend } from "../src/backend/local-http";
 import { checkAccess } from "../src/lib/connection";
 

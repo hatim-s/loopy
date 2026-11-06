@@ -5,7 +5,7 @@ import {
   type AuthorityOutput,
   artifactHelperName,
   type ExportRecord,
-} from "../../../../packages/loopy/src/contract";
+} from "@loopy/contract";
 import type { ReceiptSql } from "./sql";
 
 function checked<T>(work: () => T): T | { kind: "rejected"; code: AuthorityFailure } {

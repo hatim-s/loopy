@@ -3,10 +3,10 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
+import { nodeIdSchema } from "@loopy/contract";
+import type { NodeRun } from "@loopy/core";
 import { Effect, Schema } from "effect";
-import { nodeIdSchema } from "../src/contract";
-import type { NodeRun } from "../src/core";
-import { StorageError } from "../src/core/store";
+import { StorageError } from "../../core/src/store";
 import { newRun } from "./fixture";
 import { createTestStores } from "./store-fixture";
 

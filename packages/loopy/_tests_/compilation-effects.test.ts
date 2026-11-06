@@ -2,17 +2,17 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { compile } from "@loopy/compiler";
 import { Cause, Effect, Exit } from "effect";
-import { compile } from "../src/compiler";
 import {
   AuthorError,
   CompilationError,
   EvaluationError,
   recoverDiagnostics,
-} from "../src/compiler/errors";
-import { Registry } from "../src/local/registry";
-import { makeArtifactRegistry, saveCompiled } from "../src/local/save-compiled";
-import { outputOf } from "../src/local/typegen/generate";
+} from "../../compiler/src/errors";
+import { Registry } from "../../runtime/src/local/registry";
+import { makeArtifactRegistry, saveCompiled } from "../../runtime/src/local/save-compiled";
+import { outputOf } from "../../runtime/src/local/typegen/generate";
 import { compiledBody } from "./compiled-fixture";
 
 const roots: string[] = [];

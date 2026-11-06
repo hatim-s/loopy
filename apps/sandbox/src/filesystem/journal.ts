@@ -1,8 +1,6 @@
 import { createHash } from "node:crypto";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { Effect, Result } from "effect";
-import { decodeBoundary } from "../../../../packages/loopy/src/contract";
 import {
   type AttemptRecord,
   AuthorityError,
@@ -10,10 +8,12 @@ import {
   attemptRecordSchema,
   attemptResourceNames,
   type DockerAttemptPlan,
+  decodeBoundary,
   type ExportRecord,
   exportRecordSchema,
   workspaceVolumeInput,
-} from "../../../../packages/loopy/src/contract/sandbox-journal";
+} from "@loopy/contract";
+import { Effect, Result } from "effect";
 import { attemptHash, attemptId } from "../admission";
 import { readBytes } from "../journal-files";
 import { checked, failure, io } from "../operations";

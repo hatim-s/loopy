@@ -1,5 +1,5 @@
+import { graphSchema } from "@loopy/contract";
 import { Schema } from "effect";
-import { graphSchema } from "../../src/contract";
 
 // This boundary fixture fixes the builder's call-order ids and explicit scope joins for H2.
 export const approveDemoGraph = Schema.decodeUnknownSync(graphSchema)({

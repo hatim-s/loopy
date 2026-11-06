@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { parseCurl } from "../src/sdk/shell/parse/net";
+import { parseCurl } from "../../sdk/src/shell/parse/net";
 import { fixture, result } from "./shell-parse-fixture";
 
 test("curl capture separates headers, body marker text and metadata", async () => {

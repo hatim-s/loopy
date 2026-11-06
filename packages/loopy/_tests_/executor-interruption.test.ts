@@ -2,9 +2,9 @@ import { expect, test } from "bun:test";
 import { chmod, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { Cause, Effect, Fiber, Schema } from "effect";
-import { ExecutionWorker } from "../src/executor/execution";
-import { FilesystemReceipts } from "../src/executor/receipts";
-import { workerFailure } from "../src/executor/response";
+import { ExecutionWorker } from "../../runtime/src/executor/execution";
+import { FilesystemReceipts } from "../../runtime/src/executor/receipts";
+import { workerFailure } from "../../runtime/src/executor/response";
 import { commandSpec, fixture } from "./fixtures/executor";
 
 const activeProgram =
@@ -174,7 +174,11 @@ for (const kind of ["command", "code", "parser"] as const) {
     };
 
     const worker = Bun.spawn(
-      [process.execPath, "--no-env-file", resolve(import.meta.dir, "../src/executor/worker.ts")],
+      [
+        process.execPath,
+        "--no-env-file",
+        resolve(import.meta.dir, "../../runtime/src/executor/worker.ts"),
+      ],
       {
         cwd: f.workspace,
         env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: f.home, TMPDIR: f.root, LANG: "C" },

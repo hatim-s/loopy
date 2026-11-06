@@ -1,14 +1,14 @@
 import { afterEach, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { Effect } from "effect";
 import {
   decodeBoundary,
   definitionSummary,
   definitionSummarySchema,
   routes,
-} from "../src/contract";
-import { makeLocalService } from "../src/local/service";
+} from "@loopy/contract";
+import { Effect } from "effect";
+import { makeLocalService } from "../../runtime/src/local/service";
 
 import { summaryServiceFixture } from "./fixtures/summary-service";
 

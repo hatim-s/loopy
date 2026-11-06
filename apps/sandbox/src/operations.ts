@@ -1,10 +1,10 @@
-import { Data, Effect } from "effect";
 import type {
   AuthorityError,
+  SandboxAttemptAuthority as WireAuthority,
   ImmutableResults as WireResults,
-} from "../../../packages/loopy/src/contract/sandbox-journal";
-import type { SandboxAttemptAuthority as WireAuthority } from "../../../packages/loopy/src/contract/sandbox-journal-rpc";
-import type { CommandExecutionError } from "../../../packages/loopy/src/core";
+} from "@loopy/contract";
+import type { CommandExecutionError } from "@loopy/core";
+import { Data, Effect } from "effect";
 import type { AttemptConflict, InvalidAttempt } from "./admission";
 import type { ArtifactError, ExportCleanupError } from "./artifact-error";
 

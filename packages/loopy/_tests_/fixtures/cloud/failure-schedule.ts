@@ -1,4 +1,4 @@
-import { loopy, sh, wait } from "../../../src/sdk/graph";
+import { loopy, sh, wait } from "loopy/graph";
 
 export default loopy("cloud-failure-schedule", {
   input: {},

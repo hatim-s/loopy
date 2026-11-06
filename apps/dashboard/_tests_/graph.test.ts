@@ -5,7 +5,7 @@ import {
   graphRevisionViewSchema,
   type LogRecord,
   nodeRunViewSchema,
-} from "../../../packages/loopy/src/contract";
+} from "@loopy/contract";
 import { demoScript } from "../src/backend/demo";
 import { RELEASE, REVIEW, TRIAGE_V1, TRIAGE_V2 } from "../src/backend/demo-graphs";
 import { executionLogs, focusNodes, graphModel } from "../src/lib/graph";

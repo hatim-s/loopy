@@ -4,12 +4,9 @@ import {
   decodeBoundary,
   definitionSummary,
   type PutLoopyBody,
-} from "../../../../packages/loopy/src/contract";
-import { validateSlug } from "../../../../packages/loopy/src/core";
-import {
-  ArtifactValidationError,
-  RegistryConflictError,
-} from "../../../../packages/loopy/src/service";
+} from "@loopy/contract";
+import { validateSlug } from "@loopy/core";
+import { ArtifactValidationError, RegistryConflictError } from "@loopy/runtime/service";
 import { ArtifactCapacity } from "./capacity";
 import { checkProjectionRow, definitionProjectionSchema, projectionJson } from "./projection";
 import { ARTIFACT_LIMITS, type ArtifactStorage } from "./storage";

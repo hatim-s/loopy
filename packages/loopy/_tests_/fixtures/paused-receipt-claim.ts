@@ -1,7 +1,7 @@
 import { mock } from "bun:test";
 import * as filesystem from "node:fs/promises";
+import { executionKeySchema } from "@loopy/contract";
 import { Effect, Schema } from "effect";
-import { executionKeySchema } from "../../src/contract";
 
 const request = Schema.decodeUnknownSync(
   Schema.Struct({
@@ -38,7 +38,7 @@ mock.module("node:fs/promises", () => ({
   },
 }));
 
-const { FilesystemReceipts } = await import("../../src/executor/receipts");
+const { FilesystemReceipts } = await import("../../../runtime/src/executor/receipts");
 
 const result = await Effect.runPromise(
   new FilesystemReceipts(request.home).claim(request.identity),

@@ -1,4 +1,4 @@
-import { branch, code, eq, fail, log, loopy, parallel } from "../../../../src/sdk/graph";
+import { branch, code, eq, fail, log, loopy, parallel } from "loopy/graph";
 
 export default loopy("playground-a-dependency-audit", {
   input: { batch: "string", ordinal: "number", fail: "boolean", items: "number[]" },

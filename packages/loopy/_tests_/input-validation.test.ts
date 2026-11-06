@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { decodeBoundary, graphSchema } from "../src/contract";
-import { validateGraph, validateGraphInput } from "../src/core";
-import { loopy } from "../src/sdk/graph";
+import { decodeBoundary, graphSchema } from "@loopy/contract";
+import { validateGraph, validateGraphInput } from "@loopy/core";
+import { loopy } from "@loopy/sdk/graph";
 
 function graph() {
   return loopy("import-files", {

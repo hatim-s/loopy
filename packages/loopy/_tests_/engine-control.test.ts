@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { initialState, step } from "../src/engine";
+import { initialState, step } from "@loopy/core/engine";
 import {
   and,
   branch,
@@ -21,7 +21,7 @@ import {
   switch_,
   uuid,
   wait,
-} from "../src/sdk/graph";
+} from "@loopy/sdk/graph";
 import { at, complete, dispatches, failed, start } from "./engine-control-fixture";
 
 test("branch and switch run only selected arms and resolve joined nested values", () => {

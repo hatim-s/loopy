@@ -1,6 +1,6 @@
+import type { ScheduleView } from "@loopy/contract";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import type { ScheduleView } from "../../../../../packages/loopy/src/contract";
 import { useRemoveSchedule, useToggleSchedule } from "../../lib/mutations";
 import { Button } from "../button";
 import { ResolveError } from "../resolve-form";

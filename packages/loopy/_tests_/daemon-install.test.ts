@@ -1,8 +1,15 @@
 import { expect, test } from "bun:test";
 import { Effect } from "effect";
-import { parseCliArgs } from "../src/cli/args";
-import { daemonStatus, installDaemon, uninstallDaemon } from "../src/local/daemon/install";
-import type { DaemonExecResult, DaemonOperations } from "../src/local/daemon/install-files";
+import { parseCliArgs } from "../../cli/src/args";
+import {
+  daemonStatus,
+  installDaemon,
+  uninstallDaemon,
+} from "../../runtime/src/local/daemon/install";
+import type {
+  DaemonExecResult,
+  DaemonOperations,
+} from "../../runtime/src/local/daemon/install-files";
 
 const plist = "/users/test/Library/LaunchAgents/com.loopy.daemon.plist";
 

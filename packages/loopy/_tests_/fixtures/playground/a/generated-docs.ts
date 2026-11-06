@@ -1,4 +1,4 @@
-import { branch, code, eq, fail, log, loopy, map, sleep } from "../../../../src/sdk/graph";
+import { branch, code, eq, fail, log, loopy, map, sleep } from "loopy/graph";
 
 export default loopy("playground-a-generated-docs", {
   input: { batch: "string", ordinal: "number", fail: "boolean", items: "number[]" },

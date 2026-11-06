@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { RunView } from "../../../packages/loopy/src/contract";
+import type { RunView } from "@loopy/contract";
 import { inboxGroups } from "../src/lib/inbox";
 
 function run(id: string, slug: string, updatedAt: string, waiting: boolean): RunView {

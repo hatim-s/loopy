@@ -1,5 +1,5 @@
+import { errorResponse, json } from "@loopy/runtime/service";
 import { Effect } from "effect";
-import { errorResponse, json } from "../../../packages/loopy/src/service";
 import type { Environment } from "./environment";
 import { principals } from "./environment";
 import { acceptsOrigin, boundedRequest } from "./http";

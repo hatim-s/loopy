@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
+import type { Json } from "@loopy/sdk";
 import { requestSchema } from "../../../examples/uacode-asset-sync/request";
 import {
   type Files,
@@ -19,7 +20,6 @@ import {
   syncCommitMessage,
   syncMetadata,
 } from "../../../examples/www-uacode-sync/sync";
-import type { Json } from "../src/sdk";
 import { makeFixture } from "./fixtures/examples";
 
 const root = "";

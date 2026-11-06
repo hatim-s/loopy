@@ -1,4 +1,4 @@
-import { code, loopy, now, uuid } from "../../../src/sdk/graph";
+import { code, loopy, now, uuid } from "loopy/graph";
 
 export default loopy("uacode-asset-sync", {
   input: { repository: "string", base: "string", dryRun: "boolean", request: "json" },

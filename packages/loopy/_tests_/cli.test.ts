@@ -1,9 +1,9 @@
 import { afterEach, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { decodeBoundary, nodeIdSchema } from "@loopy/contract";
+import { localDaemon, openRunStore, Registry, readDaemonFile } from "@loopy/runtime/local";
 import { Effect, Exit, Scope } from "effect";
-import { decodeBoundary, nodeIdSchema } from "../src/contract";
-import { localDaemon, openRunStore, Registry, readDaemonFile } from "../src/local";
 import { cli, fixture, object, roots } from "./cli-fixture";
 import { newRun } from "./fixture";
 
@@ -23,7 +23,7 @@ async function graphFixture(name = "compiled") {
   const f = fixture(name, "run: () => null");
   writeFileSync(
     f.file,
-    `import { loopy, log } from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/graph/index.ts"))}; export default loopy(${JSON.stringify(name)}, { input: {count: "number"}, run: ({input}) => {log("ready"); return input.get("count");}});`,
+    `import { loopy, log } from ${JSON.stringify(resolve(import.meta.dir, "../../sdk/src/graph/index.ts"))}; export default loopy(${JSON.stringify(name)}, { input: {count: "number"}, run: ({input}) => {log("ready"); return input.get("count");}});`,
   );
   const scope = Effect.runSync(Scope.make());
   daemons.push({ stop: () => Effect.runPromise(Scope.close(scope, Exit.void)) });
@@ -122,7 +122,7 @@ test("save starts the daemon on demand and leaves artifact writes to the service
   const f = fixture("on-demand", "run: () => null");
   writeFileSync(
     f.file,
-    `import {loopy} from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/graph/index.ts"))}; export default loopy("on-demand", {input:{},run:()=>null});`,
+    `import {loopy} from ${JSON.stringify(resolve(import.meta.dir, "../../sdk/src/graph/index.ts"))}; export default loopy("on-demand", {input:{},run:()=>null});`,
   );
   // List takes no save lock, so both startup contenders must succeed.
   const [result, concurrent] = await Promise.all([cli(f, "save", f.file), cli(f, "list")]);
@@ -153,7 +153,7 @@ test("list and schedules use the caller workspace when the daemon started elsewh
   const file = join(other, "other.ts");
   writeFileSync(
     file,
-    `import {loopy} from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/graph/index.ts"))}; export default loopy("other", {input:{},run:()=>null});`,
+    `import {loopy} from ${JSON.stringify(resolve(import.meta.dir, "../../sdk/src/graph/index.ts"))}; export default loopy("other", {input:{},run:()=>null});`,
   );
   const caller = { ...f, cwd: other };
   expect((await cli(caller, "save", file, "--cwd", other)).code).toBe(0);

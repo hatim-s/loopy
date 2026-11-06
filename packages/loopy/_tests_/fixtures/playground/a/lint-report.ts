@@ -1,4 +1,4 @@
-import { branch, code, eq, fail, log, loopy, map } from "../../../../src/sdk/graph";
+import { branch, code, eq, fail, log, loopy, map } from "loopy/graph";
 
 export default loopy("playground-a-lint-report", {
   input: { batch: "string", ordinal: "number", fail: "boolean", items: "number[]" },

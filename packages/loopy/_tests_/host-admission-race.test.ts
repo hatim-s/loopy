@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
+import type { Executor } from "@loopy/core";
+import { MemoryStore } from "@loopy/runtime/store";
+import { loopy, parallel, sh, wait } from "@loopy/sdk/graph";
 import { Deferred, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
-import type { Executor } from "../src/core";
-import { activate } from "../src/host/activation";
-import { loopy, parallel, sh, wait } from "../src/sdk/graph";
-import { MemoryStore } from "../src/store";
+import { activate } from "../../runtime/src/host/activation";
 import { newRun } from "./fixture";
 
 test("admission commits work first and reloads a signal before reducing denial", async () => {

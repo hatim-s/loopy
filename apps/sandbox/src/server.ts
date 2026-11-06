@@ -1,5 +1,4 @@
 import { timingSafeEqual } from "node:crypto";
-import { Cause, Effect, Exit, Result, Schema, Scope } from "effect";
 import {
   decodeBoundary,
   SANDBOX_MAX_REQUEST_BYTES,
@@ -9,7 +8,8 @@ import {
   sandboxArtifactRequestSchema,
   sandboxAttemptIdentitySchema,
   sandboxAttemptRequestSchema,
-} from "../../../packages/loopy/src/contract";
+} from "@loopy/contract";
+import { Cause, Effect, Exit, Result, Schema, Scope } from "effect";
 import { InvalidAttempt } from "./admission";
 import { ArtifactError, ExportCleanupError } from "./artifact-error";
 import { AttemptConflict, Attempts } from "./attempt";

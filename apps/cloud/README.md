@@ -6,7 +6,7 @@ This branch is local only. The Worker rejects remote hosts and non-local stage c
 
 ## Start
 
-Use the `cloud-integration` checkout. Bun 1.4.0 and Docker CLI 29.8.1 were used. The lockfile pins Wrangler 4.152.0, Miniflare 4.20260730.0 and Cloudflare types 5.20261022.1. The Worker compatibility date is 2026-07-30.
+Use an isolated checkout. The transport-failure runner remains pinned to the original `cloud-integration` worktree and branch. Bun 1.4.0 and Docker CLI 29.8.1 were used. The lockfile pins Wrangler 4.152.0, Miniflare 4.20260730.0 and Cloudflare types 5.20261022.1. The Worker compatibility date is 2026-07-30.
 
 ```sh
 bun install --frozen-lockfile
@@ -16,7 +16,7 @@ bun run cloud:build-sandbox
 bun run cloud:start
 ```
 
-Run the Colima command only for this named profile. It creates a dedicated VM without host mounts and leaves the default Docker context alone. The image uses `oven/bun:1.4.0`. No personal home, Docker socket or host secrets are mounted into execution containers.
+Run the Colima command only for this named profile. It creates a dedicated VM without host mounts and leaves the default Docker context alone. The image uses `oven/bun:1.4.0`. Its build stage installs the private core, contract, SDK and runtime workspace dependencies locally and bundles both workers into standalone files. No personal home, Docker socket or host secrets are mounted into execution containers.
 
 The start command checks all four ports before launching anything. An occupied port is an error, not permission to stop its owner.
 
@@ -30,7 +30,7 @@ The start command checks all four ports before launching anything. An occupied p
 In a second terminal, print the disposable dashboard URL and open it in personal Chrome:
 
 ```sh
-bun --no-env-file scripts/cloud/open-url.ts
+bun --no-env-file apps/cloud/dev/open-url.ts
 ```
 
 The URL contains a bearer credential in its fragment. Do not paste it into chat, reports or commits. Fixture credentials live in private ignored `.loopy/cloud/local.json`. The starter passes only a small environment allowlist to its children and runs Wrangler with `--local`. Existing ports 4310 and 4173 and personal `~/.loopy` are unused by this setup.
@@ -38,11 +38,11 @@ The URL contains a bearer credential in its fragment. Do not paste it into chat,
 ## Exercise
 
 ```sh
-bun --no-env-file scripts/cloud/journey/index.ts
-bun --no-env-file scripts/cloud/journey/artifact.ts
-bun --no-env-file scripts/cloud/failures/index.ts
+bun --no-env-file apps/cloud/dev/journey/index.ts
+bun --no-env-file apps/cloud/dev/journey/artifact.ts
+bun --no-env-file apps/cloud/dev/failures/index.ts
 env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 \
-  bun --no-env-file scripts/cloud/transport-failure/index.ts
+  bun --no-env-file apps/cloud/dev/transport-failure/index.ts
 LOOPY_SANDBOX_DOCKER_CONTEXT=colima-loopy-cloud-phase1 \
   bun test packages/loopy/_tests_/cloud-sandbox.test.ts
 bun run check
@@ -58,7 +58,7 @@ See [AGENTS.md](../../AGENTS.md#tests-and-isolation) for test roots and fixture 
 
 ## Receipt authority and configuration
 
-The ordinary `cloud:start` stack and sandbox CLI use filesystem receipt authority. The `scripts/playground` default profile also uses filesystem authority; its `architecture` profile injects Durable Object authority over HTTP. These profiles have separate ports and state roots. The CLI has no DO-mode flag. A DO-backed harness supplies an explicit dependency factory to `startSandbox`; the factory runs only after state-root validation and process-lock acquisition. Authority selection must use a fresh root rather than reinterpret populated filesystem receipts or export guards.
+The ordinary `cloud:start` stack and sandbox CLI use filesystem receipt authority. The `apps/cloud/dev/playground` default profile also uses filesystem authority; its `architecture` profile injects Durable Object authority over HTTP. These profiles have separate ports and state roots. The CLI has no DO-mode flag. A DO-backed harness supplies an explicit dependency factory to `startSandbox`; the factory runs only after state-root validation and process-lock acquisition. Authority selection must use a fresh root rather than reinterpret populated filesystem receipts or export guards.
 
 `apps/cloud/wrangler.jsonc` declares these local-emulation bindings:
 

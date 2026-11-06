@@ -1,0 +1,15 @@
+{
+  "name": "@loopy/sdk",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./graph": "./src/graph/index.ts",
+    "./host": "./src/host.ts",
+    "./graph-host": "./src/graph-host.ts"
+  },
+  "dependencies": {
+    "@loopy/core": "workspace:*"
+  }
+}

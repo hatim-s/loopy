@@ -9,8 +9,8 @@ import { HttpSandboxAuthority } from "../../../apps/sandbox/src/http-authority";
 import { failure, SandboxOperationError } from "../../../apps/sandbox/src/operations";
 import { startSandbox } from "../../../apps/sandbox/src/server";
 import { Stopping } from "../../../apps/sandbox/src/stopping";
-import { AuthorityError } from "../src/contract/sandbox-journal";
-import type { AuthorityInput } from "../src/contract/sandbox-journal-rpc";
+import { AuthorityError } from "../../contract/src/sandbox-journal";
+import type { AuthorityInput } from "../../contract/src/sandbox-journal-rpc";
 import {
   artifactReader,
   authorityFixture,

@@ -1,7 +1,7 @@
+import { runStatusSchema } from "@loopy/contract";
 import { createFileRoute } from "@tanstack/react-router";
 import { Schema } from "effect";
 import { useState } from "react";
-import { runStatusSchema } from "../../../../packages/loopy/src/contract";
 import { EventDrawer, EventTable } from "../components/observability/event-table";
 import { LogTable } from "../components/observability/log-table";
 import { Load, Note } from "../components/ui/load";

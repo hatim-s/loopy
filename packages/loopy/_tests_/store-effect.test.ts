@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { Cause, Effect, Exit } from "effect";
-import { OwnershipError, StorageError, StoreService } from "../src/core/store";
-import { MemoryStore, makeMemoryStore, memoryStoreLayer } from "../src/store/memory";
+import { OwnershipError, StorageError, StoreService } from "../../core/src/store";
+import { MemoryStore, makeMemoryStore, memoryStoreLayer } from "../../runtime/src/store/memory";
 import { newRun } from "./fixture";
 
 // This entry deliberately avoids the SQL and contract imports, so memory behavior is isolated.

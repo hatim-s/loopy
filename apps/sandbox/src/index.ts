@@ -1,6 +1,6 @@
 import { parseArgs } from "node:util";
+import { decodeBoundary } from "@loopy/contract";
 import { Effect } from "effect";
-import { decodeBoundary } from "../../../packages/loopy/src/contract";
 import { sandboxConfigSchema } from "./config";
 import { startSandbox } from "./server";
 

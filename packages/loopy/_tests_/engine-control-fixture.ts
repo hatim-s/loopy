@@ -1,5 +1,5 @@
-import type { ExecutionKey, Graph, Json } from "../src/core";
-import { type Effect, type EngineState, initialState, step } from "../src/engine";
+import type { ExecutionKey, Graph, Json } from "@loopy/core";
+import { type Effect, type EngineState, initialState, step } from "@loopy/core/engine";
 
 export const at = "2026-10-20T00:00:00.000Z";
 

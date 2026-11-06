@@ -1,13 +1,13 @@
 import { expect, test } from "bun:test";
 import { resolve } from "node:path";
 import { Effect } from "effect";
-import { LocalExecutor } from "../src/executor/local";
+import { LocalExecutor } from "../../runtime/src/executor/local";
 import {
   type AttemptIdentity,
   FilesystemReceipts,
   type FinishedLocalReceipt,
   type LocalReceipt,
-} from "../src/executor/receipts";
+} from "../../runtime/src/executor/receipts";
 import { receiptsFixture } from "./fixtures/local-receipts";
 
 test("parent rereads completion published between its started read and confirmed child death", async () => {

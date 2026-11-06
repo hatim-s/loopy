@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
-import { type CommandResult } from "../src/sdk";
+import { type CommandResult } from "@loopy/sdk";
 import {
   parseBranch,
   parseDiff,
@@ -13,7 +13,7 @@ import {
   parseStatus,
   parseTag,
   parseWorktreeList,
-} from "../src/sdk/shell/parse/git";
+} from "../../sdk/src/shell/parse/git";
 
 function result(stdout: string): CommandResult {
   return { stdout, stderr: "", exitCode: 0, durationMs: 1 };

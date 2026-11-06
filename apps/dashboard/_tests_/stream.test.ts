@@ -1,5 +1,4 @@
 import { expect, spyOn, test } from "bun:test";
-import { type InfiniteData, QueryClient, QueryObserver } from "@tanstack/react-query";
 import {
   decodeBoundary,
   executionKeyString,
@@ -10,7 +9,8 @@ import {
   type Schedule,
   type ScheduleView,
   type ServerEvent,
-} from "../../../packages/loopy/src/contract";
+} from "@loopy/contract";
+import { type InfiniteData, QueryClient, QueryObserver } from "@tanstack/react-query";
 import type { EventSubscription, StreamEnd } from "../src/backend/backend";
 import { type EventDraft, fakeBackend } from "../src/backend/fake";
 import { INBOX_QUERY, inboxGroups } from "../src/lib/inbox";

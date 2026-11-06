@@ -1,10 +1,6 @@
+import type { SandboxExecutionResult } from "@loopy/contract";
+import { type AttemptRecord, AuthorityError, type AuthoritySession } from "@loopy/contract";
 import { Effect, FiberMap, Result } from "effect";
-import type { SandboxExecutionResult } from "../../../../packages/loopy/src/contract";
-import {
-  type AttemptRecord,
-  AuthorityError,
-  type AuthoritySession,
-} from "../../../../packages/loopy/src/contract/sandbox-journal";
 import type { AttemptBackend } from "../docker";
 import type { ResultsFor, SandboxAttemptAuthority, SandboxFailure } from "../operations";
 import { boundedResult } from "../result";

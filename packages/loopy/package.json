@@ -9,28 +9,28 @@
   },
   "exports": {
     ".": {
-      "types": "./dist/types/sdk/index.d.ts",
-      "default": "./dist/sdk/index.js"
+      "types": "./dist/types/loopy/src/index.d.ts",
+      "default": "./dist/loopy/src/index.js"
     },
     "./local": {
-      "types": "./dist/types/local/index.d.ts",
-      "default": "./dist/local/index.js"
+      "types": "./dist/types/loopy/src/local.d.ts",
+      "default": "./dist/loopy/src/local.js"
     },
     "./contract": {
-      "types": "./dist/types/contract/index.d.ts",
-      "default": "./dist/contract/index.js"
+      "types": "./dist/types/loopy/src/contract.d.ts",
+      "default": "./dist/loopy/src/contract.js"
     },
     "./graph": {
-      "types": "./dist/types/sdk/graph/index.d.ts",
-      "default": "./dist/sdk/graph/index.js"
+      "types": "./dist/types/loopy/src/graph.d.ts",
+      "default": "./dist/loopy/src/graph.js"
     },
     "./engine": {
-      "types": "./dist/types/engine/index.d.ts",
-      "default": "./dist/engine/index.js"
+      "types": "./dist/types/loopy/src/engine.d.ts",
+      "default": "./dist/loopy/src/engine.js"
     }
   },
   "bin": {
-    "loopy": "./dist/cli/index.js"
+    "loopy": "./dist/loopy/src/cli.js"
   },
   "files": [
     "dist",
@@ -43,5 +43,13 @@
   "dependencies": {
     "effect": "4.1.2",
     "oxc-parser": "^0.154.0"
+  },
+  "devDependencies": {
+    "@loopy/core": "workspace:*",
+    "@loopy/contract": "workspace:*",
+    "@loopy/sdk": "workspace:*",
+    "@loopy/runtime": "workspace:*",
+    "@loopy/compiler": "workspace:*",
+    "@loopy/cli": "workspace:*"
   }
 }

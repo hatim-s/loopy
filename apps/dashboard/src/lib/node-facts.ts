@@ -1,4 +1,4 @@
-import type { GraphView, OutSchema, Value } from "../../../../packages/loopy/src/contract";
+import type { GraphView, OutSchema, Value } from "@loopy/contract";
 import { predicateText, refText, valueText } from "./graph-text";
 
 type GraphNode = GraphView["nodes"][number];

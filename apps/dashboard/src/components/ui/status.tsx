@@ -1,10 +1,5 @@
+import type { LogRecord, NodeRunView, RunStatus, RunView } from "@loopy/contract";
 import type { ReactNode } from "react";
-import type {
-  LogRecord,
-  NodeRunView,
-  RunStatus,
-  RunView,
-} from "../../../../../packages/loopy/src/contract";
 
 /**
  * Every state a pill can name. Runs, node executions and schedules share one vocabulary, so a

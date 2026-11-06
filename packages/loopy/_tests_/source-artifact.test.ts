@@ -2,22 +2,22 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { Effect, Schema } from "effect";
-import { compile } from "../src/compiler";
+import { compile } from "@loopy/compiler";
 import {
   decodeBoundary,
   MAX_SOURCE_BYTES,
   putLoopyBodySchema,
   type SourceArtifact,
   sourceArtifactSchema,
-} from "../src/contract";
-import { Registry, SecretStore } from "../src/local";
-import { saveCompiled } from "../src/local/save-compiled";
+} from "@loopy/contract";
+import { Registry, SecretStore } from "@loopy/runtime/local";
+import { Effect, Schema } from "effect";
+import { saveCompiled } from "../../runtime/src/local/save-compiled";
 import { compiledBody } from "./compiled-fixture";
 
 const roots: string[] = [];
 
-const sdk = resolve(import.meta.dir, "../src/sdk/graph/index.ts");
+const sdk = resolve(import.meta.dir, "../../sdk/src/graph/index.ts");
 
 async function fixture() {
   const root = await realpath(await mkdtemp(join(tmpdir(), "loopy-source-")));

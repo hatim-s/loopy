@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { defineCommand, loopy, sh } from "../src/sdk/graph";
-import { base64Descriptor } from "../src/sdk/shell/text/format";
+import { defineCommand, loopy, sh } from "@loopy/sdk/graph";
+import { base64Descriptor } from "../../sdk/src/shell/text/format";
 import { capture } from "./fixtures/command-capture";
 
 const probe = defineCommand({

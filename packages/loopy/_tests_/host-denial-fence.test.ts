@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
+import { MemoryStore } from "@loopy/runtime/store";
+import { loopy, sh } from "@loopy/sdk/graph";
 import { Effect } from "effect";
-import { activateDurable } from "../src/host/durable";
-import { loopy, sh } from "../src/sdk/graph";
-import { MemoryStore } from "../src/store";
+import { activateDurable } from "../../runtime/src/host/durable";
 import { newRun } from "./fixture";
 import { PolicyProvider } from "./host-policy-fixture";
 

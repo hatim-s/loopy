@@ -1,8 +1,8 @@
+import type { ExecutionKey, ExecutionResult, Receipt } from "@loopy/core";
+import { executionKeyString } from "@loopy/core";
+import { code, loopy, parallel, wait } from "@loopy/sdk/graph";
 import { Effect } from "effect";
-import type { ExecutionKey, ExecutionResult, Receipt } from "../src/core";
-import { executionKeyString } from "../src/core";
-import type { DurableExecutionProvider } from "../src/host/durable";
-import { code, loopy, parallel, wait } from "../src/sdk/graph";
+import type { DurableExecutionProvider } from "../../runtime/src/host/durable";
 
 export const policySuccess: ExecutionResult = {
   kind: "succeeded",

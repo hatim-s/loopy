@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
-import { decodeBoundary, nodeRunSchema } from "../src/contract";
-import { type Graph, type Json, outputBytes } from "../src/core";
-import { type EngineState, initialState, step } from "../src/engine";
-import { code, loopy, map, sh } from "../src/sdk/graph";
+import { decodeBoundary, nodeRunSchema } from "@loopy/contract";
+import { type Graph, type Json, outputBytes } from "@loopy/core";
+import { type EngineState, initialState, step } from "@loopy/core/engine";
+import { code, loopy, map, sh } from "@loopy/sdk/graph";
 import { at, dispatches, failed, start } from "./engine-control-fixture";
 import { approveDemoGraph } from "./fixtures/graphs";
 

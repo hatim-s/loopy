@@ -1,7 +1,7 @@
+import type { GraphRevisionView } from "@loopy/contract";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Schema } from "effect";
 import { useEffect, useMemo, useState } from "react";
-import type { GraphRevisionView } from "../../../../packages/loopy/src/contract";
 import { SourcePane } from "../components/code/source-pane";
 import { GraphPane } from "../components/graph/pane";
 import { NodePanel } from "../components/run/node-panel";

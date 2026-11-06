@@ -1,15 +1,15 @@
 import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
-import { Effect } from "effect";
 import {
   decodeBoundary,
   SANDBOX_MAX_CAPTURE_BYTES,
   type SandboxExecutionSpec,
   sandboxExecutionSpecSchema,
-} from "../../../packages/loopy/src/contract";
-import { CommandExecutionError, durationMs, type Json } from "../../../packages/loopy/src/core";
-import { bundleResult } from "../../../packages/loopy/src/executor/protocol";
-import { renderCommand } from "../../../packages/loopy/src/local/execution-host";
+} from "@loopy/contract";
+import { CommandExecutionError, durationMs, type Json } from "@loopy/core";
+import { bundleResult } from "@loopy/runtime/executor/protocol";
+import { renderCommand } from "@loopy/runtime/local/execution-host";
+import { Effect } from "effect";
 import { io } from "./operations";
 import { runCommand } from "./process";
 import { boundedResult, failed } from "./result";

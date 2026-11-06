@@ -1,12 +1,12 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { Effect } from "effect";
-import { receiptHash } from "../../../apps/cloud/src/receipts/identity";
 import {
   type AuthorityCommand,
   decodeBoundary,
   resultOperations,
   SANDBOX_MAX_CAPTURE_BYTES,
-} from "../src/contract";
+} from "@loopy/contract";
+import { Effect } from "effect";
+import { receiptHash } from "../../../apps/cloud/src/receipts/identity";
 import {
   bridgeToken,
   namespace,

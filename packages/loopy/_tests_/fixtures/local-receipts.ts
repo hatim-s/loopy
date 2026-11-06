@@ -1,11 +1,11 @@
 import { afterEach } from "bun:test";
 import { mkdir, realpath, rm } from "node:fs/promises";
 import { resolve } from "node:path";
+import { nodeIdSchema } from "@loopy/contract";
+import type { ExecutionSpec } from "@loopy/core";
 import { Schema } from "effect";
-import { nodeIdSchema } from "../../src/contract";
-import type { ExecutionSpec } from "../../src/core";
-import { LocalExecutor } from "../../src/executor/local";
-import { FilesystemReceipts } from "../../src/executor/receipts";
+import { LocalExecutor } from "../../../runtime/src/executor/local";
+import { FilesystemReceipts } from "../../../runtime/src/executor/receipts";
 
 const roots: string[] = [];
 

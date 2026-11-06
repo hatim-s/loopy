@@ -1,13 +1,13 @@
 import type { R2Bucket } from "@cloudflare/workers-types";
-import { Effect } from "effect";
 import {
   decodeBoundary,
   type ResultRef,
   SANDBOX_MAX_CAPTURE_BYTES,
   type SandboxExecutionResult,
   sandboxExecutionResultSchema,
-} from "../../../../packages/loopy/src/contract";
-import { canonicalJson } from "../../../../packages/loopy/src/core";
+} from "@loopy/contract";
+import { canonicalJson } from "@loopy/core";
+import { Effect } from "effect";
 import { CloudError, cloudSync, platform } from "../operation";
 import { receiptHash } from "./identity";
 

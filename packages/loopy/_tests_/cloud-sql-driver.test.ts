@@ -1,8 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
-import { Effect, Schema } from "effect";
-import { nodeIdSchema } from "../src/contract";
-import type { Store, StoreEffect } from "../src/core";
-import { EVENT_RETENTION, MemoryStore } from "../src/store";
+import { nodeIdSchema } from "@loopy/contract";
+import type { Store, StoreEffect } from "@loopy/core";
+import { EVENT_RETENTION, MemoryStore } from "@loopy/runtime/store";
 import {
   type SqlDriver,
   SqlRunStore,
@@ -10,10 +9,11 @@ import {
   type SqlStoreOptions,
   type SqlTransactionMode,
   type SqlValue,
-} from "../src/store/portable";
-import { BunSqlDriver } from "../src/store/sqlite/bun-driver";
-import { applyQuerySchema } from "../src/store/sqlite/query/schema";
-import { SCHEMA, WAIT_SCHEMA } from "../src/store/sqlite/store-schema";
+} from "@loopy/runtime/store/portable";
+import { Effect, Schema } from "effect";
+import { BunSqlDriver } from "../../runtime/src/store/sqlite/bun-driver";
+import { applyQuerySchema } from "../../runtime/src/store/sqlite/query/schema";
+import { SCHEMA, WAIT_SCHEMA } from "../../runtime/src/store/sqlite/store-schema";
 import { newRun } from "./fixture";
 import { storeContract } from "./store-contract";
 
@@ -70,7 +70,7 @@ storeContract("portable SQL with lease-only ownership", (options) => fixture(opt
 
 test("portable entry bundles for browsers without Bun or Node dependencies", async () => {
   const result = await Bun.build({
-    entrypoints: [new URL("../src/store/portable.ts", import.meta.url).pathname],
+    entrypoints: [new URL("../../runtime/src/store/portable.ts", import.meta.url).pathname],
     target: "browser",
   });
 

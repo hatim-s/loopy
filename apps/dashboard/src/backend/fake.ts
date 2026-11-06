@@ -16,7 +16,7 @@ import {
   routes,
   type ScheduleView,
   type ServerEvent,
-} from "../../../../packages/loopy/src/contract";
+} from "@loopy/contract";
 import { applyToSnapshot } from "../lib/stream";
 import { BackendError, type EventSubscription, type LoopyBackend } from "./backend";
 

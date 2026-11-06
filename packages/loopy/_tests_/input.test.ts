@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
+import { decodeBoundary } from "@loopy/contract";
 import { Effect } from "effect";
-import { decodeBoundary } from "../src/contract";
 
 test("dashboard json field coercion parses values and reports invalid JSON", async () => {
   const { coerceInput, inputFields } = await import("../../../apps/dashboard/src/lib/input-form");
@@ -40,9 +40,9 @@ const allValues = {
 };
 
 test("RecordSpec round-trips every field type through contracts and input boundaries", async () => {
-  const { FIELD_TYPES } = await import("../src/core");
-  const { graphSchema, outputSchema } = await import("../src/contract");
-  const { graphInput } = await import("../src/cli/input");
+  const { FIELD_TYPES } = await import("@loopy/core");
+  const { graphSchema, outputSchema } = await import("@loopy/contract");
+  const { graphInput } = await import("../../cli/src/input");
   const { approveDemoGraph } = await import("./fixtures/graphs");
 
   const { coerceInput, inputFields } = await import("../../../apps/dashboard/src/lib/input-form");
@@ -94,7 +94,7 @@ for (const [kind, invalid] of [
   ["json[]", {}],
 ] as const) {
   test(`${kind} rejects wrong elements or non-arrays at each input boundary`, async () => {
-    const { graphInput } = await import("../src/cli/input");
+    const { graphInput } = await import("../../cli/src/input");
 
     const { coerceInput, inputFields } = await import("../../../apps/dashboard/src/lib/input-form");
 

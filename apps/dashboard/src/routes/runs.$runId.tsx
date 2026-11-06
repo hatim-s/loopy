@@ -1,12 +1,12 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { Schema } from "effect";
-import { type ReactNode, useEffect, useMemo } from "react";
 import {
   executionKeySchema,
   type GraphRevisionView,
   type NodeRunView,
   type RunSnapshotView,
-} from "../../../../packages/loopy/src/contract";
+} from "@loopy/contract";
+import { createFileRoute } from "@tanstack/react-router";
+import { Schema } from "effect";
+import { type ReactNode, useEffect, useMemo } from "react";
 import { SourcePane } from "../components/code/source-pane";
 import { ErrorBanner } from "../components/error-banner";
 import { GraphPane } from "../components/graph/pane";

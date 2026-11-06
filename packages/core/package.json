@@ -1,0 +1,13 @@
+{
+  "name": "@loopy/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./engine": "./src/engine/index.ts"
+  },
+  "dependencies": {
+    "effect": "4.1.2"
+  }
+}

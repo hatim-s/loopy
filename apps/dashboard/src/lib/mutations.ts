@@ -1,10 +1,5 @@
+import type { Json, PutScheduleBody, RunView, ScheduleView } from "@loopy/contract";
 import { type QueryClient, useMutation, useQueryClient } from "@tanstack/react-query";
-import type {
-  Json,
-  PutScheduleBody,
-  RunView,
-  ScheduleView,
-} from "../../../../packages/loopy/src/contract";
 import type { LoopyBackend } from "../backend/backend";
 import { useBackend } from "../router-context";
 import { keys } from "./keys";

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { rm } from "node:fs/promises";
-import { AuthorityError, type AuthoritySession } from "../src/contract/sandbox-journal";
+import { AuthorityError, type AuthoritySession } from "../../contract/src/sandbox-journal";
 import { authorityFixture, successful, uncertain } from "./fixtures/sandbox-authority";
 import {
   enumerateAuthorityModel,

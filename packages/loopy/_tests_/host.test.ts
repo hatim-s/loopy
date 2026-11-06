@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
+import type { Executor } from "@loopy/core";
+import { initialState, step } from "@loopy/core/engine";
+import { activate } from "@loopy/runtime/host";
+import { MemoryStore } from "@loopy/runtime/store";
+import { code, loopy, sh } from "@loopy/sdk/graph";
 import { Deferred, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
-import type { Executor } from "../src/core";
-import { initialState, step } from "../src/engine";
-import { activate } from "../src/host";
-import { code, loopy, sh } from "../src/sdk/graph";
-import { MemoryStore } from "../src/store";
 import { newRun } from "./fixture";
 
 export function graph() {

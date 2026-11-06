@@ -1,9 +1,9 @@
 import { afterEach, expect, test } from "bun:test";
 import { join } from "node:path";
+import { executionKeyString, type ScheduleView } from "@loopy/contract";
 import { QueryClient } from "@tanstack/react-query";
 import { Effect, Exit, Scope } from "effect";
-import { executionKeyString, type ScheduleView } from "../../../packages/loopy/src/contract";
-import { startServer } from "../../../packages/loopy/src/local/server/start-server";
+import { startServer } from "../../../packages/runtime/src/local/server/start-server";
 import { localHttpBackend } from "../src/backend/local-http";
 import { graphModel } from "../src/lib/graph";
 import { keys } from "../src/lib/keys";

@@ -1,16 +1,16 @@
 import { expect, test } from "bun:test";
 import { readFile, rm, writeFile } from "node:fs/promises";
+import { graphSchema } from "@loopy/contract";
+import { isRecord } from "@loopy/core";
+import { initialState, step } from "@loopy/core/engine";
+import { LocalExecutor } from "@loopy/runtime/executor";
+import { activate } from "@loopy/runtime/host";
+import { SecretStore } from "@loopy/runtime/local";
+import { MemoryStore } from "@loopy/runtime/store";
+import { loopy, sh } from "@loopy/sdk/graph";
 import { Effect, Schema } from "effect";
-import { graphSchema } from "../src/contract";
-import { isRecord } from "../src/core";
-import { initialState, step } from "../src/engine";
-import { LocalExecutor } from "../src/executor";
-import { receiptPath } from "../src/executor/receipts";
-import { activate } from "../src/host";
-import { SecretStore } from "../src/local";
-import { prepareLaunch } from "../src/local/process";
-import { loopy, sh } from "../src/sdk/graph";
-import { MemoryStore } from "../src/store";
+import { receiptPath } from "../../runtime/src/executor/receipts";
+import { prepareLaunch } from "../../runtime/src/local/process";
 import { newRun } from "./fixture";
 import { commandSpec, fixture } from "./fixtures/executor";
 

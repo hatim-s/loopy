@@ -1,5 +1,5 @@
+import { errorResponse } from "@loopy/runtime/service";
 import { Cause, Data, Effect } from "effect";
-import { errorResponse } from "../../../packages/loopy/src/service";
 import { CloudError, platform } from "./operation";
 
 export const MAX_REQUEST_BYTES = 24 * 1024 * 1024;

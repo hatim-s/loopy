@@ -1,5 +1,3 @@
-import type { Schema } from "effect";
-import { Effect } from "effect";
 import {
   type AuthorityCommand,
   AuthorityError,
@@ -9,7 +7,9 @@ import {
   decodeBoundary,
   resultOperations,
   SANDBOX_MAX_REQUEST_BYTES,
-} from "../../../packages/loopy/src/contract";
+} from "@loopy/contract";
+import type { Schema } from "effect";
+import { Effect } from "effect";
 import { failure, type ImmutableResults, type SandboxAttemptAuthority } from "./operations";
 
 export class HttpSandboxAuthority implements SandboxAttemptAuthority {

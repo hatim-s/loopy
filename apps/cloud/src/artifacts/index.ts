@@ -1,5 +1,4 @@
 import type { DurableObjectStorage, R2Bucket } from "@cloudflare/workers-types";
-import { Effect, Result } from "effect";
 import {
   type DefinitionSummary,
   decodeBoundary,
@@ -11,14 +10,15 @@ import {
   type SourceArtifact,
   sourceArtifactSchema,
   validateCompiled,
-} from "../../../../packages/loopy/src/contract";
-import { canonicalJson, revision, validateSlug } from "../../../../packages/loopy/src/core";
+} from "@loopy/contract";
+import { canonicalJson, revision, validateSlug } from "@loopy/core";
 import {
   type ArtifactRegistry,
   ArtifactValidationError,
   RegistryConflictError,
   RegistryError,
-} from "../../../../packages/loopy/src/service";
+} from "@loopy/runtime/service";
+import { Effect, Result } from "effect";
 import { ArtifactDefinitions, type Publication } from "./definitions";
 import { ARTIFACT_LIMITS, ArtifactStorage, bytesToBase64, hashKey } from "./storage";
 import { artifactEntry, checkArtifactLimits } from "./validation";

@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import type { CommandResult } from "../src/sdk";
+import type { CommandResult } from "@loopy/sdk";
 
 export function result(stdout: string, exitCode = 0): CommandResult {
   return { stdout, stderr: "", exitCode, durationMs: 0 };

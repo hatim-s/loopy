@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { initialState, step } from "../src/engine";
+import { initialState, step } from "@loopy/core/engine";
 import {
   fail,
   finally_,
@@ -11,7 +11,7 @@ import {
   sh,
   sleep,
   wait,
-} from "../src/sdk/graph";
+} from "@loopy/sdk/graph";
 import { at, complete, dispatches, failed, start } from "./engine-control-fixture";
 
 test("map failure settles started item cleanup before outer cleanup and never starts later items", () => {

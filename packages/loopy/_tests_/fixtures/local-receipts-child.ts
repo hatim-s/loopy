@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect";
-import { FilesystemReceipts, receiptSchema } from "../../src/executor/receipts";
+import { FilesystemReceipts, receiptSchema } from "../../../runtime/src/executor/receipts";
 
 const request = Schema.decodeUnknownSync(
   Schema.Struct({

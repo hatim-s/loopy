@@ -1,5 +1,4 @@
 import { expect, spyOn, test } from "bun:test";
-import { InfiniteQueryObserver, QueryClient } from "@tanstack/react-query";
 import {
   decodeBoundary,
   encodeRunCursor,
@@ -7,7 +6,8 @@ import {
   type RunSnapshotView,
   type RunView,
   type ServerEvent,
-} from "../../../packages/loopy/src/contract";
+} from "@loopy/contract";
+import { InfiniteQueryObserver, QueryClient } from "@tanstack/react-query";
 import { fakeBackend } from "../src/backend/fake";
 import { keys } from "../src/lib/keys";
 import {

@@ -3,10 +3,10 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Store } from "@loopy/core";
+import { MemoryStore, makeSqliteRunStore } from "@loopy/runtime/store";
 import { Effect, Exit, Scope } from "effect";
-import type { Store } from "../src/core";
-import { MemoryStore, makeSqliteRunStore } from "../src/store";
-import { SCHEMA, WAIT_SCHEMA } from "../src/store/sqlite/store-schema";
+import { SCHEMA, WAIT_SCHEMA } from "../../runtime/src/store/sqlite/store-schema";
 
 const scopes: Scope.Closeable[] = [];
 

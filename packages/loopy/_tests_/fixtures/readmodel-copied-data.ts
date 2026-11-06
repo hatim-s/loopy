@@ -12,18 +12,18 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { Effect, Exit, Scope } from "effect";
 import {
   emptyRunCounts,
   type RunDefinitionCount,
   type RunFilter,
   type RunRecord,
   type Store,
-} from "../../src/core";
-import { SqlRunStore } from "../../src/store/portable";
-import { BunSqlDriver } from "../../src/store/sqlite/bun-driver";
-import type { SqlValue } from "../../src/store/sqlite/driver";
-import { makeSqliteRunStore } from "../../src/store/sqlite/store";
+} from "@loopy/core";
+import { SqlRunStore } from "@loopy/runtime/store/portable";
+import { Effect, Exit, Scope } from "effect";
+import { BunSqlDriver } from "../../../runtime/src/store/sqlite/bun-driver";
+import type { SqlValue } from "../../../runtime/src/store/sqlite/driver";
+import { makeSqliteRunStore } from "../../../runtime/src/store/sqlite/store";
 
 const root = resolve(import.meta.dir, "../../../..");
 

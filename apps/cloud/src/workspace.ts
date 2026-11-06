@@ -1,5 +1,4 @@
 import type { DurableObjectState } from "@cloudflare/workers-types";
-import { Effect, Semaphore } from "effect";
 import {
   apiRoutes,
   dispatch,
@@ -9,8 +8,9 @@ import {
   makeService,
   SecretError,
   ServiceError,
-} from "../../../packages/loopy/src/service";
-import { SqlRunStore } from "../../../packages/loopy/src/store/portable";
+} from "@loopy/runtime/service";
+import { SqlRunStore } from "@loopy/runtime/store/portable";
+import { Effect, Semaphore } from "effect";
 import { R2ArtifactRegistry } from "./artifacts";
 import { artifactResponse } from "./artifacts/route";
 import { concurrency, type Environment } from "./environment";

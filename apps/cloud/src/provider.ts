@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import {
   decodeBoundary,
   type SandboxArtifactRead,
@@ -7,12 +6,10 @@ import {
   sandboxArtifactSchema,
   sandboxErrorSchema,
   sandboxReceiptSchema,
-} from "../../../packages/loopy/src/contract";
-import type { ExecutionKey, ExecutionSpec } from "../../../packages/loopy/src/core";
-import {
-  type DurableExecutionProvider,
-  DurableProviderError,
-} from "../../../packages/loopy/src/host";
+} from "@loopy/contract";
+import type { ExecutionKey, ExecutionSpec } from "@loopy/core";
+import { type DurableExecutionProvider, DurableProviderError } from "@loopy/runtime/host";
+import { Effect } from "effect";
 import type { R2ArtifactRegistry } from "./artifacts";
 import { localEndpoint } from "./environment";
 import { type BodyLimitError, readBoundedText } from "./http";

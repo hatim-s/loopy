@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { resolve } from "node:path";
+import { definitionSummarySchema, type PutLoopyBody } from "@loopy/contract";
+import { revision } from "@loopy/core";
 import { Schema } from "effect";
 import type { Miniflare } from "miniflare";
-import { definitionSummarySchema, type PutLoopyBody } from "../src/contract";
-import { revision } from "../src/core";
 import { compiledBody } from "./compiled-fixture";
 import type { SummaryProbeRequest } from "./fixtures/summary-workerd";
 import { probeRuntime } from "./fixtures/workerd-probe";

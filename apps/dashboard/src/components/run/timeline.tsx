@@ -1,9 +1,5 @@
+import { isTerminalRun, type NodeRunView, type RunView } from "@loopy/contract";
 import { useId, useState } from "react";
-import {
-  isTerminalRun,
-  type NodeRunView,
-  type RunView,
-} from "../../../../../packages/loopy/src/contract";
 import { elapsed } from "../../lib/format";
 import type { GraphNodeModel } from "../../lib/graph";
 import { KindGlyph } from "../graph/kind-glyph";

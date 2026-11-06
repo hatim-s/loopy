@@ -1,16 +1,16 @@
 import { expect, expectTypeOf, test } from "bun:test";
+import type { Graph, Json, Node, NodeRun, Ref, Value } from "@loopy/contract";
+import type * as Core from "@loopy/core";
 import { Effect, Result } from "effect";
-import type { Graph, Json, Node, NodeRun, Ref, Value } from "../src/contract";
-import { routes } from "../src/contract/api";
-import { decodeBoundary, encodeBoundary } from "../src/contract/codec";
-import { validateCompiled } from "../src/contract/compiled-validation";
-import { overviewSchema } from "../src/contract/dashboard";
-import { graphSchema, nodeSchema, valueSchema } from "../src/contract/graph";
-import { jsonSchema } from "../src/contract/json";
-import { runSnapshotViewSchema } from "../src/contract/views";
-import type * as Core from "../src/core";
-import { canonicalJson } from "../src/core/canonical-json";
-import { revision } from "../src/core/revision";
+import { routes } from "../../contract/src/api";
+import { decodeBoundary, encodeBoundary } from "../../contract/src/codec";
+import { validateCompiled } from "../../contract/src/compiled-validation";
+import { overviewSchema } from "../../contract/src/dashboard";
+import { graphSchema, nodeSchema, valueSchema } from "../../contract/src/graph";
+import { jsonSchema } from "../../contract/src/json";
+import { runSnapshotViewSchema } from "../../contract/src/views";
+import { canonicalJson } from "../../core/src/canonical-json";
+import { revision } from "../../core/src/revision";
 
 const graph = {
   version: 1,

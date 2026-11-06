@@ -1,9 +1,5 @@
+import { routes, type ServerEvent, serverEventSchema } from "@loopy/contract";
 import { Effect, Schema, Stream } from "effect";
-import {
-  routes,
-  type ServerEvent,
-  serverEventSchema,
-} from "../../../../packages/loopy/src/contract";
 import { BackendError, type EventSubscription, type LoopyBackend, type StreamEnd } from "./backend";
 import { httpBaseUrl } from "./config";
 import { decodeBody, errorFrom, httpRequests, readText, runRequest } from "./http-wire";

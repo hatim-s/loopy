@@ -2,7 +2,6 @@ import { afterEach, expect, spyOn, test } from "bun:test";
 import { mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { get, type IncomingMessage } from "node:http";
 import { join, resolve } from "node:path";
-import { Effect, Schema, Scope } from "effect";
 import {
   cursorViewSchema,
   daemonViewSchema,
@@ -17,17 +16,18 @@ import {
   runViewSchema,
   scheduleViewSchema,
   serverEventSchema,
-} from "../src/contract";
-import { type RuntimeEvent, requireRecord, revision } from "../src/core";
+} from "@loopy/contract";
+import { type RuntimeEvent, requireRecord, revision } from "@loopy/core";
 import {
   localDaemon,
   makeLocalService,
   Registry,
   readDaemonFile,
   ServiceError,
-} from "../src/local";
-import { eventStream } from "../src/local/server/events";
-import { apiRoutes, dispatch } from "../src/local/server/routes";
+} from "@loopy/runtime/local";
+import { Effect, Schema, Scope } from "effect";
+import { eventStream } from "../../runtime/src/local/server/events";
+import { apiRoutes, dispatch } from "../../runtime/src/local/server/routes";
 import { CLI, fixture, object, roots, runFixture, save } from "./cli-fixture";
 import { newRun } from "./fixture";
 import { fixtureScope, fixtureStore } from "./fixtures/service-runtime";
@@ -401,7 +401,7 @@ async function externalRun(
     [
       process.execPath,
       "-e",
-      `import { Effect } from "effect"; import { openRunStore } from ${JSON.stringify(resolve(import.meta.dir, "../src/local/index.ts"))}; await Effect.runPromise(Effect.scoped(Effect.gen(function* () { const store = yield* openRunStore(process.argv[1]); yield* store.createRun(JSON.parse(process.argv[2])); })));`,
+      `import { Effect } from "effect"; import { openRunStore } from ${JSON.stringify(resolve(import.meta.dir, "../../runtime/src/local/index.ts"))}; await Effect.runPromise(Effect.scoped(Effect.gen(function* () { const store = yield* openRunStore(process.argv[1]); yield* store.createRun(JSON.parse(process.argv[2])); })));`,
       home,
       JSON.stringify(run),
     ],
@@ -1134,10 +1134,10 @@ function artifactState(paths: string[]) {
 
 test("compiled save route verifies artifacts, stores private bundles and returns only GraphView", async () => {
   const { f, service, store } = await serviceFixture("compiled-save");
-  const { compile } = await import("../src/compiler");
+  const { compile } = await import("@loopy/compiler");
   const { compiledBody } = await import("./compiled-fixture");
   const source = join(f.cwd, "compiled.ts");
-  const sdk = resolve(import.meta.dir, "../src/sdk/graph/index.ts");
+  const sdk = resolve(import.meta.dir, "../../sdk/src/graph/index.ts");
   await Bun.write(
     source,
     `import {loopy,code} from ${JSON.stringify(sdk)}; export default loopy("compiled-save", {input:{},run:()=>code("answer",{in:{},out:{kind:"value",type:"number"},module:"./answer.ts"})});`,
@@ -1251,12 +1251,12 @@ test("compiled save route verifies artifacts, stores private bundles and returns
 
 test("saving another revision retains the earlier graph and executable artifacts", async () => {
   const { f, service } = await serviceFixture("revisions");
-  const { compile } = await import("../src/compiler");
+  const { compile } = await import("@loopy/compiler");
   const { compiledBody } = await import("./compiled-fixture");
   const source = join(f.cwd, "revision.ts");
   await Bun.write(
     source,
-    `import {loopy,code} from ${JSON.stringify(resolve(import.meta.dir, "../src/sdk/graph/index.ts"))}; export default loopy("revisions", {input:{},run:()=>code("value",{in:{},out:{kind:"value",type:"number"},module:"./value.ts"})});`,
+    `import {loopy,code} from ${JSON.stringify(resolve(import.meta.dir, "../../sdk/src/graph/index.ts"))}; export default loopy("revisions", {input:{},run:()=>code("value",{in:{},out:{kind:"value",type:"number"},module:"./value.ts"})});`,
   );
   const registry = await Effect.runPromise(Registry.make(f.home, f.cwd));
   const revisions: string[] = [];

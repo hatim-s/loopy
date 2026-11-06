@@ -4,7 +4,7 @@ import {
   type Json,
   jsonSchema,
   type LoopyView,
-} from "../../../../packages/loopy/src/contract";
+} from "@loopy/contract";
 
 export type RecordSpec = Exclude<LoopyView["input"], "schema">;
 

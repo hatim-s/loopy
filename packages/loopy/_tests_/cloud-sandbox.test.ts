@@ -11,6 +11,15 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import {
+  decodeBoundary,
+  nodeIdSchema,
+  type SandboxAttemptRequest,
+  type SandboxExecutionResult,
+  sandboxArtifactSchema,
+  sandboxAttemptRequestSchema,
+} from "@loopy/contract";
+import { CommandExecutionError, canonicalJson } from "@loopy/core";
 import { Effect, Result, Schema } from "effect";
 import type { ArtifactReader } from "../../../apps/sandbox/src/artifacts";
 import type { Attempts } from "../../../apps/sandbox/src/attempt";
@@ -21,16 +30,7 @@ import { failure } from "../../../apps/sandbox/src/operations";
 import { type CommandRunner, runCommand } from "../../../apps/sandbox/src/process";
 import { type StartedReceipt, storedReceiptSchema } from "../../../apps/sandbox/src/receipts";
 import { attemptHandler } from "../../../apps/sandbox/src/server";
-import {
-  decodeBoundary,
-  nodeIdSchema,
-  type SandboxAttemptRequest,
-  type SandboxExecutionResult,
-  sandboxArtifactSchema,
-  sandboxAttemptRequestSchema,
-} from "../src/contract";
-import { attemptRecordSchema } from "../src/contract/sandbox-journal";
-import { CommandExecutionError, canonicalJson } from "../src/core";
+import { attemptRecordSchema } from "../../contract/src/sandbox-journal";
 import { commandSpec } from "./fixtures/executor";
 import { closeAttemptScopes, openAttempts, openSandbox, run } from "./fixtures/sandbox-run";
 

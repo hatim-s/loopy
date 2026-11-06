@@ -1,18 +1,18 @@
 import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { compile } from "@loopy/compiler";
+import { requireRecord } from "@loopy/core";
+import { LocalExecutor } from "@loopy/runtime/executor";
+import { activate } from "@loopy/runtime/host";
+import { makeLocalService, openRunStore, Registry } from "@loopy/runtime/local";
 import { Effect } from "effect";
-import { compile } from "../src/compiler";
-import { requireRecord } from "../src/core";
-import { LocalExecutor } from "../src/executor";
-import { activate } from "../src/host";
-import { makeLocalService, openRunStore, Registry } from "../src/local";
 
 export const roots: string[] = [];
 
-export const CLI = resolve(import.meta.dir, "../src/cli/index.ts");
+export const CLI = resolve(import.meta.dir, "../../cli/src/index.ts");
 
-export const SDK = resolve(import.meta.dir, "../src/sdk/graph/index.ts");
+export const SDK = resolve(import.meta.dir, "../../sdk/src/graph/index.ts");
 
 export function fixture(name: string, definition: string) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "loopy-cli-sdk-")));

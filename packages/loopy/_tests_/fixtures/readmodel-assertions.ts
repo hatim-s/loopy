@@ -1,12 +1,12 @@
 import { expect } from "bun:test";
-import type { Effect } from "effect";
 import {
   emptyRunCounts,
   type RunStatus,
   type ScopeItem,
   type ScopeItemsQuery,
   type Store,
-} from "../../src/core";
+} from "@loopy/core";
+import type { Effect } from "effect";
 import type { countHistory } from "./readmodel-history";
 
 export function checkCountHistory(

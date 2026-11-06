@@ -1,6 +1,6 @@
 import type { DurableObjectStorage } from "@cloudflare/workers-types";
+import { ArtifactValidationError } from "@loopy/runtime/service";
 import { Effect } from "effect";
-import { ArtifactValidationError } from "../../../../packages/loopy/src/service";
 import { CloudError, cloudSync } from "../operation";
 import { ARTIFACT_LIMITS, type ArtifactStorage, hashKey } from "./storage";
 

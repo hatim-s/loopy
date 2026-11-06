@@ -1,14 +1,4 @@
-import {
-  branch,
-  code,
-  defineCommand,
-  eq,
-  log,
-  loopy,
-  map,
-  parallel,
-  sh,
-} from "../../../src/sdk/graph";
+import { branch, code, defineCommand, eq, log, loopy, map, parallel, sh } from "loopy/graph";
 
 const printf = defineCommand({
   namespace: "fixture",

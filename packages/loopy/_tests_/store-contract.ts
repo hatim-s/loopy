@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { Effect, Schema } from "effect";
-import { nodeIdSchema } from "../src/contract";
+import { nodeIdSchema } from "@loopy/contract";
 import {
   type NodeRun,
   OwnershipError,
   type RunOutcome,
   type Schedule,
   type Store,
-} from "../src/core";
+} from "@loopy/core";
+import { Effect, Schema } from "effect";
 import { newRun } from "./fixture";
 import { storeRecordContract } from "./store-record-contract";
 

@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { Infer } from "../../../../../src/sdk/graph";
+import type { Infer } from "loopy/graph";
 
 export const inputSchema = {
   kind: "record",

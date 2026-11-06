@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
-import { Data } from "effect";
 import {
+  attemptIdInput,
   SANDBOX_MAX_BUNDLE_BYTES,
   type SandboxAttemptIdentity,
   type SandboxAttemptRequest,
-} from "../../../packages/loopy/src/contract";
-import { attemptIdInput } from "../../../packages/loopy/src/contract/sandbox-journal";
-import { canonicalJson } from "../../../packages/loopy/src/core";
+} from "@loopy/contract";
+import { canonicalJson } from "@loopy/core";
+import { Data } from "effect";
 
 export class InvalidAttempt extends Data.TaggedError("InvalidAttempt")<{ message: string }> {
   constructor(message: string) {

@@ -2,12 +2,12 @@ import { afterEach } from "bun:test";
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { nodeIdSchema } from "@loopy/contract";
+import type { ExecutionSpec } from "@loopy/core";
+import { initialState, step } from "@loopy/core/engine";
+import { LocalExecutor } from "@loopy/runtime/executor";
 import { Schema } from "effect";
-import { nodeIdSchema } from "../../src/contract";
-import type { ExecutionSpec } from "../../src/core";
-import { initialState, step } from "../../src/engine";
-import { LocalExecutor } from "../../src/executor";
-import { loopy, sh } from "../../src/sdk/graph";
+import { loopy, sh } from "loopy/graph";
 
 const roots: string[] = [];
 

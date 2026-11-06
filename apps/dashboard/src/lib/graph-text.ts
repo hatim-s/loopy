@@ -1,10 +1,4 @@
-import {
-  type GraphView,
-  isRecord,
-  isRef,
-  type Ref,
-  type Value,
-} from "../../../../packages/loopy/src/contract";
+import { type GraphView, isRecord, isRef, type Ref, type Value } from "@loopy/contract";
 
 type GraphNode = GraphView["nodes"][number];
 

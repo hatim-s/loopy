@@ -1,13 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { Effect, Result, Semaphore } from "effect";
-import type { SandboxArtifactRequest } from "../../../../packages/loopy/src/contract";
+import type { AuthorityOutput, SandboxArtifactRequest } from "@loopy/contract";
 import {
   type AttemptRecord,
   type AuthoritySession,
   artifactHelperName,
   type ExportRecord,
-} from "../../../../packages/loopy/src/contract/sandbox-journal";
-import type { AuthorityOutput } from "../../../../packages/loopy/src/contract/sandbox-journal-rpc";
+} from "@loopy/contract";
+import { Effect, Result, Semaphore } from "effect";
 import { ArtifactError, ExportCleanupError } from "../artifact-error";
 import type { ArtifactReader } from "../artifacts";
 import type { SandboxAttemptAuthority } from "../operations";

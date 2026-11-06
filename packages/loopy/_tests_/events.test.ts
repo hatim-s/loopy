@@ -1,13 +1,13 @@
 import { expect, test } from "bun:test";
-import { Effect } from "effect";
 import {
   decodeBoundary,
   nodeIdSchema,
   runView,
   serverEvent,
   serverEventSchema,
-} from "../src/contract";
-import { MemoryStore } from "../src/store";
+} from "@loopy/contract";
+import { MemoryStore } from "@loopy/runtime/store";
+import { Effect } from "effect";
 import { newRun } from "./fixture";
 
 test("node and run outbox events publish one isolated transaction and parse over SSE", async () => {

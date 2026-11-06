@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { checkImports } from "../src/compiler/module-imports";
-import type { CompilerDiagnostic } from "../src/compiler/types";
+import { checkImports } from "../../compiler/src/module-imports";
+import type { CompilerDiagnostic } from "../../compiler/src/types";
 
 function diagnosticsFor(source: string) {
   const diagnostics: CompilerDiagnostic[] = [];

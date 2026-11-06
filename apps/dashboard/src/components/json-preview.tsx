@@ -1,4 +1,4 @@
-import type { Json } from "../../../../packages/loopy/src/contract";
+import type { Json } from "@loopy/contract";
 
 const INLINE_LIMIT = 160;
 

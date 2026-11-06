@@ -1,5 +1,5 @@
+import { executionKeyString, type NodeRunView } from "@loopy/contract";
 import { type ReactNode, useId, useState } from "react";
-import { executionKeyString, type NodeRunView } from "../../../../../packages/loopy/src/contract";
 import { clockTime, elapsed, timestamp } from "../../lib/format";
 import { useExecution, useLogPages } from "../../lib/ui-data";
 import type { ExecutionRow, LogRow } from "../../lib/view-models";

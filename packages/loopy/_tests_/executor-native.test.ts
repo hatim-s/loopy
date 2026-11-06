@@ -2,12 +2,12 @@ import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { chmod, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { LocalExecutor } from "@loopy/runtime/executor";
 import { Effect, Schema } from "effect";
-import { LocalExecutor } from "../src/executor";
-import { bundleResult } from "../src/executor/protocol";
-import { FilesystemReceipts, receiptPath } from "../src/executor/receipts";
-import { secretRedactor } from "../src/local/secret-redactor";
-import { SecretStore } from "../src/local/secrets";
+import { bundleResult } from "../../runtime/src/executor/protocol";
+import { FilesystemReceipts, receiptPath } from "../../runtime/src/executor/receipts";
+import { secretRedactor } from "../../runtime/src/local/secret-redactor";
+import { SecretStore } from "../../runtime/src/local/secrets";
 import { commandSpec, fixture } from "./fixtures/executor";
 
 test("code protocol captures stderr logs and leading stdout, and retains its trusted completion receipt", async () => {
@@ -94,7 +94,7 @@ test("a worker finishes its receipt after the caller process is killed", async (
   const caller = join(f.root, "caller.ts");
   await writeFile(
     caller,
-    `import {Effect} from ${JSON.stringify(resolve(import.meta.dir, "../node_modules/effect/dist/index.js"))}; import {LocalExecutor} from ${JSON.stringify(resolve(import.meta.dir, "../src/executor/index.ts"))}; import {FilesystemReceipts} from ${JSON.stringify(resolve(import.meta.dir, "../src/executor/receipts.ts"))}; const executor = new LocalExecutor({receipts: new FilesystemReceipts(${JSON.stringify(f.home)}), home: ${JSON.stringify(join(f.root, "home"))}, workspace: ${JSON.stringify(f.workspace)}, mode: "sandbox", secrets: [], bundlePath: () => ${JSON.stringify(f.bundle)}}); await Effect.runPromise(executor.execute(${JSON.stringify(f.key)}, 1, ${JSON.stringify(f.spec)}, new AbortController().signal));`,
+    `import {Effect} from ${JSON.stringify(resolve(import.meta.dir, "../node_modules/effect/dist/index.js"))}; import {LocalExecutor} from ${JSON.stringify(resolve(import.meta.dir, "../../runtime/src/executor/index.ts"))}; import {FilesystemReceipts} from ${JSON.stringify(resolve(import.meta.dir, "../../runtime/src/executor/receipts.ts"))}; const executor = new LocalExecutor({receipts: new FilesystemReceipts(${JSON.stringify(f.home)}), home: ${JSON.stringify(join(f.root, "home"))}, workspace: ${JSON.stringify(f.workspace)}, mode: "sandbox", secrets: [], bundlePath: () => ${JSON.stringify(f.bundle)}}); await Effect.runPromise(executor.execute(${JSON.stringify(f.key)}, 1, ${JSON.stringify(f.spec)}, new AbortController().signal));`,
   );
 
   const process = Bun.spawn([Bun.which("bun") ?? "bun", "--no-env-file", caller], {

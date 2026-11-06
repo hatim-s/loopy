@@ -1,5 +1,4 @@
 import { afterEach, expect, test } from "bun:test";
-import { Effect, Schema } from "effect";
 import {
   decodeBoundary,
   definitionSummary,
@@ -8,8 +7,8 @@ import {
   routes,
   type SavedLoopy,
   type SourceArtifact,
-} from "../src/contract";
-import { revision } from "../src/core";
+} from "@loopy/contract";
+import { revision } from "@loopy/core";
 import {
   type ArtifactRegistry,
   apiRoutes,
@@ -18,9 +17,10 @@ import {
   makeService,
   RegistryError,
   ServiceError,
-} from "../src/service";
-import { SqlRunStore } from "../src/store/portable";
-import { BunSqlDriver } from "../src/store/sqlite/bun-driver";
+} from "@loopy/runtime/service";
+import { SqlRunStore } from "@loopy/runtime/store/portable";
+import { Effect, Schema } from "effect";
+import { BunSqlDriver } from "../../runtime/src/store/sqlite/bun-driver";
 import { compiledBody } from "./compiled-fixture";
 
 const drivers: BunSqlDriver[] = [];

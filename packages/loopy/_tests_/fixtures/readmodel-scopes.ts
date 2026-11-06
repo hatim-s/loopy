@@ -1,6 +1,6 @@
+import { decodeBoundary, nodeIdSchema } from "@loopy/contract";
+import type { NodeRun, Store } from "@loopy/core";
 import { Effect } from "effect";
-import { decodeBoundary, nodeIdSchema } from "../../src/contract";
-import type { NodeRun, Store } from "../../src/core";
 import { readmodelAt } from "./readmodel-history";
 
 export async function seedScopes(store: Store) {

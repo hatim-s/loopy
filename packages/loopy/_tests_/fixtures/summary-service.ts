@@ -1,13 +1,12 @@
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { type RunRecord, revision } from "@loopy/core";
+import { type ArtifactRegistry, makeService, RegistryError } from "@loopy/runtime/service";
+import { MemoryStore } from "@loopy/runtime/store";
 import { Effect } from "effect";
-
-import { type RunRecord, revision } from "../../src/core";
-import { Registry } from "../../src/local/registry";
-import { makeArtifactRegistry } from "../../src/local/save-compiled";
-import { type ArtifactRegistry, makeService, RegistryError } from "../../src/service";
-import { MemoryStore } from "../../src/store";
+import { Registry } from "../../../runtime/src/local/registry";
+import { makeArtifactRegistry } from "../../../runtime/src/local/save-compiled";
 import { compiledBody } from "../compiled-fixture";
 
 export class SummaryCountsStore extends MemoryStore {

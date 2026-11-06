@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { decodeBoundary } from "@loopy/contract";
 import { Miniflare } from "miniflare";
 import { HttpSandboxAuthority } from "../../../../apps/sandbox/src/http-authority";
-import { decodeBoundary } from "../../src/contract";
-import { authorityCommandSchema } from "../../src/contract/sandbox-journal-rpc";
+import { authorityCommandSchema } from "../../../contract/src/sandbox-journal-rpc";
 
 export const repository = resolve(import.meta.dir, "../../../..");
 

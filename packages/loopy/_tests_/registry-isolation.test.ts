@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { Registry } from "@loopy/runtime/local";
 import { Effect } from "effect";
-import { Registry } from "../src/local";
 import { compiledBody } from "./compiled-fixture";
 
 test("marked temporary projects isolate saves and global fallback from an ancestor registry", async () => {

@@ -1,7 +1,7 @@
 import { afterEach } from "bun:test";
+import { type DaemonOptions, makeDaemon } from "@loopy/runtime/host";
+import { makeSqliteRunStore, openRunStore } from "@loopy/runtime/store";
 import { Clock, Effect, Exit, Scope } from "effect";
-import { type DaemonOptions, makeDaemon } from "../../src/host";
-import { makeSqliteRunStore, openRunStore } from "../../src/store";
 
 const scopes: Scope.Closeable[] = [];
 

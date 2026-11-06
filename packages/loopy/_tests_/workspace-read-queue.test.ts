@@ -3,10 +3,10 @@ import { createHash } from "node:crypto";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { decodeBoundary, routes } from "@loopy/contract";
+import { revision } from "@loopy/core";
+import { loopy, sh } from "@loopy/sdk/graph";
 import { Miniflare } from "miniflare";
-import { decodeBoundary, routes } from "../src/contract";
-import { revision } from "../src/core";
-import { loopy, sh } from "../src/sdk/graph";
 import { compiledBody } from "./compiled-fixture";
 import { qualityTestRoot } from "./fixtures/quality-test-root";
 import {

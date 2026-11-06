@@ -11,7 +11,7 @@ for (const mode of ["pipe", "terminal"] as const) {
     writeFileSync(
       script,
       `import {Effect,Fiber} from ${JSON.stringify(resolve(import.meta.dir, "../node_modules/effect/dist/index.js"))};
-import {readSecret} from ${JSON.stringify(resolve(import.meta.dir, "../src/cli/secret-entry.ts"))};
+import {readSecret} from ${JSON.stringify(resolve(import.meta.dir, "../../cli/src/secret-entry.ts"))};
 await Effect.runPromise(Effect.gen(function* () {
   const before=process.stdin.listenerCount("data");
   const rawBefore=process.stdin.isRaw ?? false;
@@ -79,7 +79,7 @@ test("oversized endless secret input releases stdin and exits with a typed failu
     [
       process.execPath,
       "--no-env-file",
-      resolve(import.meta.dir, "../src/cli/index.ts"),
+      resolve(import.meta.dir, "../../cli/src/index.ts"),
       "--home",
       root,
       "secrets",

@@ -1,4 +1,4 @@
-import { code, log, loopy, sleep } from "../../../../src/sdk/graph";
+import { code, log, loopy, sleep } from "loopy/graph";
 
 export default loopy("playground-c-sleep-resume", {
   input: { batch: "string", ordinal: "number", fail: "boolean", items: "number[]" },

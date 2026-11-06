@@ -1,4 +1,4 @@
-import { type CommandResult, command, sh } from "../../packages/loopy/src/sdk";
+import { type CommandResult, command, sh } from "loopy";
 import { readOptions } from "../options";
 import { object, parse, string } from "./json-edit";
 import { parseCommit, parsePullRequests, selectPullRequest } from "./publication";

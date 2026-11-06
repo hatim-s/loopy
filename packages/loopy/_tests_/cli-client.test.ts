@@ -2,11 +2,15 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { routes } from "@loopy/contract";
+import type { Json } from "@loopy/core";
 import { Effect } from "effect";
-import { HttpError, request, TransportError } from "../src/cli/client";
-import { routes } from "../src/contract";
-import type { Json } from "../src/core";
-import { readDaemonFile, removeDaemonFile, writeDaemonFile } from "../src/local/daemon/file";
+import { HttpError, request, TransportError } from "../../cli/src/client";
+import {
+  readDaemonFile,
+  removeDaemonFile,
+  writeDaemonFile,
+} from "../../runtime/src/local/daemon/file";
 
 async function withHttp(
   body: Json,
@@ -92,8 +96,8 @@ test("discovery cleanup never removes another daemon token", async () => {
 });
 
 test("CLI argument failures use the typed error channel", async () => {
-  const { main } = await import("../src/cli");
-  const { CliError } = await import("../src/cli/errors");
+  const { main } = await import("@loopy/cli");
+  const { CliError } = await import("../../cli/src/errors");
 
   for (const argv of [["unknown-command"], ["types", "bun"]]) {
     const failure = await Effect.runPromise(Effect.flip(main(argv)));

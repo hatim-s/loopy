@@ -2,12 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { initialState, step } from "@loopy/core/engine";
+import { defineCommand, loopy } from "@loopy/sdk";
 import ts from "typescript";
-import { initialState, step } from "../src/engine";
-import { parseCliHelp } from "../src/local/typegen/parse-help";
-import { renderCommandSource } from "../src/local/typegen/render";
-import { defineCommand, loopy } from "../src/sdk";
-import { renderArgv } from "../src/sdk/render-argv";
+import { parseCliHelp } from "../../runtime/src/local/typegen/parse-help";
+import { renderCommandSource } from "../../runtime/src/local/typegen/render";
+import { renderArgv } from "../../sdk/src/render-argv";
 
 const help = `Run Codex non-interactively
 
@@ -130,7 +130,7 @@ describe("CLI help generation", () => {
         module: ts.ModuleKind.ESNext,
         moduleResolution: ts.ModuleResolutionKind.Bundler,
         types: ["bun-types"],
-        paths: { loopy: [resolve(import.meta.dir, "../src/sdk/index.ts")] },
+        paths: { loopy: [resolve(import.meta.dir, "../../sdk/src/index.ts")] },
       });
 
       expect(

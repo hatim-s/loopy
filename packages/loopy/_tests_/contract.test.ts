@@ -1,8 +1,8 @@
 import { expect, expectTypeOf, test } from "bun:test";
+import type { SavedLoopy } from "@loopy/contract";
+import * as contract from "@loopy/contract";
+import type * as core from "@loopy/core";
 import { Option, Schema } from "effect";
-import type { SavedLoopy } from "../src/contract";
-import * as contract from "../src/contract";
-import type * as core from "../src/core";
 import { newRun } from "./fixture";
 import { approveDemoGraph } from "./fixtures/graphs";
 

@@ -1,8 +1,8 @@
 import { afterEach, expect, test } from "bun:test";
+import { nodeIdSchema } from "@loopy/contract";
+import type { RuntimeEvent, Store } from "@loopy/core";
+import { MemoryStore, makeSqliteRunStore, subscribeStore } from "@loopy/runtime/store";
 import { Effect, Exit, Schema, Scope } from "effect";
-import { nodeIdSchema } from "../src/contract";
-import type { RuntimeEvent, Store } from "../src/core";
-import { MemoryStore, makeSqliteRunStore, subscribeStore } from "../src/store";
 import { newRun } from "./fixture";
 
 const scopes: Scope.Closeable[] = [];

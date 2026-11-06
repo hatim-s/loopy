@@ -1,6 +1,6 @@
 import type { DurableObjectNamespace, R2Bucket } from "@cloudflare/workers-types";
+import { decodeBoundary } from "@loopy/contract";
 import { Schema } from "effect";
-import { decodeBoundary } from "../../../packages/loopy/src/contract";
 
 export interface Environment {
   WORKSPACES: DurableObjectNamespace;

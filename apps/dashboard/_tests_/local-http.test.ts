@@ -1,6 +1,6 @@
 import { afterAll, expect, spyOn, test } from "bun:test";
+import { type RunView, routes } from "@loopy/contract";
 import { Effect } from "effect";
-import { type RunView, routes } from "../../../packages/loopy/src/contract";
 import { BackendError } from "../src/backend/backend";
 import { runRequest } from "../src/backend/http-wire";
 import { httpTransport, localHttpBackend } from "../src/backend/local-http";

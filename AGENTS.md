@@ -5,40 +5,33 @@ Read this before changing code. `bun run check` builds the package and dashboard
 ## Where code goes
 
 ```text
-packages/loopy/src/
-  core/       graph, execution identity, records, Store and Executor contracts, validation.
-  contract/   browser-safe wire schemas, routes and view derivations.
-  engine/     pure graph state machine, reference resolution and retry policy.
-  host/       local and durable activation, shared admission policy, scheduling and leases.
-  store/      memory store, SQLite schema and transactions, event outbox.
-  executor/   local execution worker, receipts and executable bundle protocol.
-  sdk/        compile-only graph builder, refs, command descriptors and parsers.
-  compiler/   restricted author evaluation, executable bundles and graph revisions.
-  service/    portable mutations, queries, schedules, definition catalog and wire views.
-  local/      home, registry, secrets, service composition, HTTP server and OS launchers.
-  cli/        thin HTTP commands, local compilation and daemon control.
-apps/dashboard/src/
-  backend/    contract-backed HTTP and event stream adapter.
-  routes/     dashboard pages.
-  components/ shared display and action components.
-  lib/        cache, event reducer and formatting.
-apps/cloud/src/
-              Worker routes, workspace DOs, SQL/R2 adapters and receipt authority.
-apps/sandbox/src/
-              attempt admission, monitoring, export guards, receipt adapters and Docker.
-scripts/cloud/
-              local phase 1 stack and fixture journeys.
-scripts/playground/
-              isolated workload profiles, stack ownership, metrics and receipt inspection.
-scripts/daemon-playground/
-              isolated local-daemon workload comparison.
+packages/core/src/       graph contracts, validation and pure engine/ reducer.
+packages/contract/src/   browser-safe wire schemas, routes and views.
+packages/sdk/src/        compile-only graph builder, descriptors and parsers.
+packages/runtime/src/    host/, store/, executor/, service/ and local/ adapters.
+packages/compiler/src/   restricted author evaluation and artifact compilation.
+packages/cli/src/        HTTP commands and daemon control.
+packages/loopy/src/      thin public re-exports and executable entrypoint.
+packages/loopy/_tests_/  product integration tests, fixtures and opt-in acceptance/.
+apps/dashboard/src/     contract-backed backend, routes, components and display helpers.
+apps/cloud/src/         Worker, workspace DOs, SQL/R2 adapters and receipt authority.
+apps/cloud/dev/         local stack, journeys, failure probes and workload comparisons.
+apps/cloud/_tests_/dev/ tests for development tooling.
+apps/sandbox/src/       attempt admission, supervision, export guards and Docker workers.
+scripts/                repository build and global-install orchestration only.
 ```
 
 The real workflows in `examples/` use the removed step SDK. PR 7 owns their migration; they are outside semantic TypeScript checking until then. Graph example fixtures remain compiled and checked.
 
-The public entries are `loopy` and `loopy/graph` for the builder, `loopy/engine` for the reducer, `loopy/local` and `loopy/contract`. The old runtime entry and executable step SDK are deleted. The dashboard imports only the contract directory through relative paths.
+The public entries are `loopy` and `loopy/graph` for the builder, `loopy/engine` for the reducer, `loopy/local` and `loopy/contract`. The old runtime entry and executable step SDK are deleted. The dashboard imports only `@loopy/contract` from the implementation packages.
 
-Internal imports use relative, extensionless paths without `/index`. Directory imports resolve public barrels. Layers import downward through those barrels, except the SDK's trusted `host.ts` and `graph-host.ts` entries and the executor's narrow `local/execution-host.ts` OS bridge. Core, engine, contract and service bundle without host dependencies. Host imports core and engine. Store and service import core and contract. Executor imports core, contract and its OS bridge. Local composes service, host, store and executor. Compiler imports core, contract, local and the trusted SDK entries. CLI imports the owners it calls. Same-layer imports name the file.
+Within each package, imports are relative and extensionless without `/index`. Across packages, use explicit `@loopy/*` exports declared in workspace dependencies. Production source must never reach another package through a relative source path or import the public `loopy` distribution. White-box integration tests and diagnostic tools under `apps/cloud/dev` may reach implementation files directly. These internal paths are not public package APIs.
+
+Core has no workspace dependencies. Contract and SDK depend on core. Runtime depends on core, contract and SDK. Compiler depends on runtime and SDK as well as core and contract. CLI composes those owners. The public distribution re-exports supported APIs and starts the CLI; it owns no business logic. The build vendors private implementation modules and declarations into the published tarball and rewrites private specifiers so installation needs no unpublished packages.
+
+Inside runtime, host depends on core and engine, store and service on core and contract, and executor on core, contract and the narrow local/execution-host OS bridge. Local composes these modules. Runtime layers use their target's public barrel. SDK host and graph-host are explicit trusted exports. Author definitions import `loopy` or `loopy/graph`; private package names are not supported author imports. Architecture tests enforce package exports, declared dependencies, the package DAG, runtime layer imports and browser portability.
+
+Ownership paths below are relative to their named package source. The runtime sections use the host/store/executor/service/local subdirectory names; engine lives under core/src/engine.
 
 ## Ownership
 
@@ -74,7 +67,7 @@ Do not add compatibility paths or migrations for discarded databases. Retained f
 
 ## Tests and isolation
 
-The test gate includes `packages/loopy/_tests_`, `apps/dashboard/_tests_` and `scripts/playground/_tests_`. Shared test fixtures stay under their owning test root. Tests cover core transitions and durable boundaries. Use temporary homes and injected executors and clocks. Keep server, SSE, schedule and CLI tests passing when contracts change. Remove tests for deleted behavior with their implementation.
+The test gate includes `packages/loopy/_tests_`, `apps/dashboard/_tests_` and `apps/cloud/_tests_`. Shared test fixtures stay under their owning test root. Tests cover core transitions and durable boundaries. Use temporary homes and injected executors and clocks. Keep server, SSE, schedule and CLI tests passing when contracts change. Remove tests for deleted behavior with their implementation.
 
 Tests that need repository-local state use `packages/loopy/_tests_/fixtures/quality-test-root.ts`. It creates a unique child of `.loopy/quality-tests` with its own `.loopy/loopies` project marker, preventing ancestor registry selection. Older suites still use temporary directories or `.loopy/architecture-tests`; the helper has not replaced every allocator.
 

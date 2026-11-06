@@ -1,6 +1,6 @@
 import { expect, expectTypeOf, test } from "bun:test";
-import { decodeBoundary, graphSchema } from "../src/contract";
-import { type DiagnosticCode, graphTypeResolver, validateGraph } from "../src/core";
+import { decodeBoundary, graphSchema } from "@loopy/contract";
+import { type DiagnosticCode, graphTypeResolver, validateGraph } from "@loopy/core";
 import {
   and,
   archive,
@@ -41,9 +41,9 @@ import {
   text,
   uuid,
   wait,
-} from "../src/sdk/graph";
-import type { AuthorValue } from "../src/sdk/graph/ref";
-import { renderArgv } from "../src/sdk/render-argv";
+} from "@loopy/sdk/graph";
+import type { AuthorValue } from "../../sdk/src/graph/ref";
+import { renderArgv } from "../../sdk/src/render-argv";
 import assetSync from "./fixtures/graph-examples/asset-sync";
 import hello from "./fixtures/graph-examples/hello";
 import review from "./fixtures/graph-examples/review";
