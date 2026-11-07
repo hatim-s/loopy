@@ -73,11 +73,9 @@ const daemon = Effect.fn(function* (context: ClientContext) {
           yield* Effect.sleep(50);
         }
 
-        return yield* Effect.fail(
-          new CliError({
-            message: "The daemon did not start. Run loopy daemon run to inspect the error.",
-          }),
-        );
+        return yield* new CliError({
+          message: "The daemon did not start. Run loopy daemon run to inspect the error.",
+        });
       }),
     (child) =>
       Effect.sync(() => {
@@ -120,7 +118,7 @@ export const request = <S extends Schema.Top & { readonly DecodingServices: neve
         boundaryOptions,
       ).pipe(Effect.mapError((cause) => new TransportError({ operation: "decode", cause })));
 
-      return yield* Effect.fail(new HttpError({ status, ...error }));
+      return yield* new HttpError({ status, ...error });
     }
 
     return yield* Schema.decodeUnknownEffect(schema)(value, boundaryOptions).pipe(

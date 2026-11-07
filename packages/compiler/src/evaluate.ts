@@ -71,9 +71,11 @@ export const evaluate = Effect.fn(function* (file: string, modules: AuthorModule
         const output = result.outputs[0];
 
         if (!result.success || !output) {
-          return yield* Effect.fail(
-            new AuthorError({ code: "evaluation_failed", file, message: result.logs.join("\n") }),
-          );
+          return yield* new AuthorError({
+            code: "evaluation_failed",
+            file,
+            message: result.logs.join("\n"),
+          });
         }
 
         const executable = join(canonicalScratch, "evaluate.js");
@@ -123,16 +125,14 @@ export const evaluate = Effect.fn(function* (file: string, modules: AuthorModule
           const reported = reportedDiagnostic(captured.stderr);
 
           if (reported._tag === "Success") {
-            return yield* Effect.fail(new EvaluationError({ diagnostic: reported.success }));
+            return yield* new EvaluationError({ diagnostic: reported.success });
           }
 
-          return yield* Effect.fail(
-            new AuthorError({
-              code: "evaluation_failed",
-              file,
-              message: captured.stderr || "Compiler process failed.",
-            }),
-          );
+          return yield* new AuthorError({
+            code: "evaluation_failed",
+            file,
+            message: captured.stderr || "Compiler process failed.",
+          });
         }
 
         // BOUNDARY: The isolated process returns untrusted author-produced graph JSON.

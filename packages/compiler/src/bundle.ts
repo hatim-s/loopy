@@ -51,13 +51,11 @@ const buildNode = Effect.fn(function* (
   const parser = parsers.get(node.key)?.file ?? commandParser(node.key);
 
   if (!parser) {
-    return yield* Effect.fail(
-      new AuthorError({
-        code: "bundle_failed",
-        file: entry,
-        message: `Declare parser '${node.key}' in a module-level defineCommand descriptor.`,
-      }),
-    );
+    return yield* new AuthorError({
+      code: "bundle_failed",
+      file: entry,
+      message: `Declare parser '${node.key}' in a module-level defineCommand descriptor.`,
+    });
   }
 
   const sdk = Bun.resolveSync("@loopy/sdk/graph", import.meta.dir);
@@ -90,9 +88,11 @@ export const bundle = Effect.fn(function* (
     const output = result.outputs[0];
 
     if (!result.success || !output) {
-      return yield* Effect.fail(
-        new AuthorError({ code: "bundle_failed", file, message: result.logs.join("\n") }),
-      );
+      return yield* new AuthorError({
+        code: "bundle_failed",
+        file,
+        message: result.logs.join("\n"),
+      });
     }
 
     const diagnostics: CompilerDiagnostic[] = [];

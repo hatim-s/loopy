@@ -54,11 +54,9 @@ const leaseMilliseconds = Effect.fn(function* (value: string | undefined) {
   const lease = Number(value);
 
   if (!Number.isSafeInteger(lease) || lease < 1000) {
-    return yield* Effect.fail(
-      new CliError({
-        message: "--lease-ms must be an integer of at least 1000. Use 1000 or more.",
-      }),
-    );
+    return yield* new CliError({
+      message: "--lease-ms must be an integer of at least 1000. Use 1000 or more.",
+    });
   }
 
   return lease;
@@ -78,9 +76,7 @@ export const main = (args = process.argv.slice(2)) =>
     const handler = isCommandName(command) ? COMMANDS[command] : undefined;
 
     if (!handler) {
-      return yield* Effect.fail(
-        new CliError({ message: `Unknown command '${command}'. Run loopy --help.` }),
-      );
+      return yield* new CliError({ message: `Unknown command '${command}'. Run loopy --help.` });
     }
 
     yield* handler({

@@ -34,7 +34,7 @@ export function runGraph(context: CliContext) {
     const format = context.values.format ?? "json";
 
     if (format !== "json" && format !== "text") {
-      return yield* Effect.fail(new CliError({ message: "Use --format json or --format text." }));
+      return yield* new CliError({ message: "Use --format json or --format text." });
     }
 
     let graph: GraphView;
@@ -43,7 +43,7 @@ export function runGraph(context: CliContext) {
       const result = yield* compile(resolve(context.cwd, target));
 
       if (!result.ok) {
-        return yield* Effect.fail(diagnosticsError(result.diagnostics));
+        return yield* diagnosticsError(result.diagnostics);
       }
 
       graph = graphView(result.graph);

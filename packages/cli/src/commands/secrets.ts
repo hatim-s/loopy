@@ -11,9 +11,9 @@ import { readSecret } from "../secret-entry";
 function storeSecret(context: CliContext, name: string | undefined) {
   return Effect.gen(function* () {
     if (!name) {
-      return yield* Effect.fail(
-        new CliError({ message: "Pass a secret name, e.g. loopy secrets set NPM_TOKEN." }),
-      );
+      return yield* new CliError({
+        message: "Pass a secret name, e.g. loopy secrets set NPM_TOKEN.",
+      });
     }
 
     yield* cliSync(() => validateSecretName(name));
@@ -34,15 +34,13 @@ export function runSecrets(context: CliContext) {
     const name = yield* optionalTarget({ ...context, positionals: rest });
 
     if (context.values.stdin && action !== "set") {
-      return yield* Effect.fail(
-        new CliError({ message: "--stdin is only supported by loopy secrets set." }),
-      );
+      return yield* new CliError({ message: "--stdin is only supported by loopy secrets set." });
     }
 
     switch (action) {
       case "list":
         if (name) {
-          return yield* Effect.fail(new CliError({ message: "loopy secrets list takes no name." }));
+          return yield* new CliError({ message: "loopy secrets list takes no name." });
         }
 
         printJson(yield* request(context, "/secrets", routes.secrets.response));
@@ -54,9 +52,9 @@ export function runSecrets(context: CliContext) {
         return;
       case "remove":
         if (!name) {
-          return yield* Effect.fail(
-            new CliError({ message: "Pass a secret name, e.g. loopy secrets set NPM_TOKEN." }),
-          );
+          return yield* new CliError({
+            message: "Pass a secret name, e.g. loopy secrets set NPM_TOKEN.",
+          });
         }
 
         printJson(
@@ -70,9 +68,9 @@ export function runSecrets(context: CliContext) {
 
         return;
       default:
-        return yield* Effect.fail(
-          new CliError({ message: "Use loopy secrets set <name>, list, or remove <name>." }),
-        );
+        return yield* new CliError({
+          message: "Use loopy secrets set <name>, list, or remove <name>.",
+        });
     }
   });
 }

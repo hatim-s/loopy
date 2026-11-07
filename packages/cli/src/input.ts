@@ -40,9 +40,9 @@ const coerce = Effect.fn(function* (value: string, kind: RecordSpec[string], key
     return value === "true";
   }
 
-  return yield* Effect.fail(
-    new CliError({ message: `Input --${key} must be a ${kind}. Provide a valid value.` }),
-  );
+  return yield* new CliError({
+    message: `Input --${key} must be a ${kind}. Provide a valid value.`,
+  });
 });
 
 type NamedInput = Record<string, Json>;
@@ -87,7 +87,7 @@ export const graphInput = Effect.fn(function* (spec: RecordSpec | "schema", cont
   }
 
   if (spec === "schema") {
-    return yield* Effect.fail(new CliError({ message: "Graph input requires a record schema." }));
+    return yield* new CliError({ message: "Graph input requires a record schema." });
   }
 
   return yield* recordInput(spec, context);

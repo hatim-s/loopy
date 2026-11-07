@@ -13,7 +13,7 @@ export function runSave(context: CliContext) {
     const result = yield* compile(source);
 
     if (!result.ok) {
-      return yield* Effect.fail(diagnosticsError(result.diagnostics));
+      return yield* diagnosticsError(result.diagnostics);
     }
 
     const path = relative(context.cwd, source);

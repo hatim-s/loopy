@@ -170,7 +170,8 @@ test("interruption closes and joins the current service before fixture cleanup c
               }),
             );
             yield* Deferred.succeed(entered, undefined);
-            yield* Effect.never;
+
+            return yield* Effect.never;
           }),
         ),
       );

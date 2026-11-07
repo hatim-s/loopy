@@ -14,9 +14,7 @@ export type CliContext = {
 
 export const requireArgument = Effect.fn(function* (value: string | undefined, label: string) {
   if (!value) {
-    return yield* Effect.fail(
-      new CliError({ message: `${label} is required. Run loopy --help for usage.` }),
-    );
+    return yield* new CliError({ message: `${label} is required. Run loopy --help for usage.` });
   }
 
   return value;
@@ -33,9 +31,7 @@ export const optionalTarget = Effect.fn(function* (context: CliContext) {
   const [target, ...extra] = context.positionals;
 
   if (extra.length) {
-    return yield* Effect.fail(
-      new CliError({ message: `Unexpected arguments: ${extra.join(" ")}.` }),
-    );
+    return yield* new CliError({ message: `Unexpected arguments: ${extra.join(" ")}.` });
   }
 
   return target;

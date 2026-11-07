@@ -28,11 +28,9 @@ export const runDaemon = Effect.fn(function* (context: CliContext) {
   } else if (action === "run") {
     yield* runForeground(context, reportAddress);
   } else {
-    return yield* Effect.fail(
-      new CliError({
-        message: "Unknown daemon action. Use loopy daemon run, install, uninstall or status.",
-      }),
-    );
+    return yield* new CliError({
+      message: "Unknown daemon action. Use loopy daemon run, install, uninstall or status.",
+    });
   }
 });
 
@@ -41,11 +39,9 @@ const installService = Effect.fn(function* (context: CliContext) {
   const entry = process.argv[1];
 
   if (!entry) {
-    return yield* Effect.fail(
-      new CliError({
-        message: "Cannot resolve the CLI entry. Run loopy daemon install from the installed CLI.",
-      }),
-    );
+    return yield* new CliError({
+      message: "Cannot resolve the CLI entry. Run loopy daemon install from the installed CLI.",
+    });
   }
 
   yield* installDaemon({
@@ -105,17 +101,13 @@ const daemonFlags = Effect.fn(function* (context: CliContext) {
     context.values.concurrency === undefined ? 4 : Number(context.values.concurrency);
 
   if (!Number.isSafeInteger(concurrency) || concurrency < 1) {
-    return yield* Effect.fail(
-      new CliError({
-        message: "Daemon concurrency must be a positive integer. Supply at least one worker.",
-      }),
-    );
+    return yield* new CliError({
+      message: "Daemon concurrency must be a positive integer. Supply at least one worker.",
+    });
   }
 
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
-    return yield* Effect.fail(
-      new CliError({ message: "Port must be an integer from 0 to 65535." }),
-    );
+    return yield* new CliError({ message: "Port must be an integer from 0 to 65535." });
   }
 
   return { port, concurrency };

@@ -17,11 +17,9 @@ export function runSchedule(context: CliContext) {
       (actions > 0 &&
         (cron !== undefined || tz !== undefined || context.values["input-json"] !== undefined))
     ) {
-      return yield* Effect.fail(
-        new CliError({
-          message: "Choose one schedule action: --cron, --off, --enable, or --disable.",
-        }),
-      );
+      return yield* new CliError({
+        message: "Choose one schedule action: --cron, --off, --enable, or --disable.",
+      });
     }
 
     const path = `/loopies/${encodeURIComponent(slug)}/schedule`;

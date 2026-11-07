@@ -76,11 +76,9 @@ const readPipedSecret = Effect.suspend(() => {
 const readHiddenSecret = Effect.scoped(
   Effect.gen(function* () {
     if (!process.stdin.isTTY || !process.stderr.isTTY) {
-      return yield* Effect.fail(
-        new CliError({
-          message: "Secret entry requires a terminal. Pipe the value with --stdin for automation.",
-        }),
-      );
+      return yield* new CliError({
+        message: "Secret entry requires a terminal. Pipe the value with --stdin for automation.",
+      });
     }
 
     const terminal = yield* Effect.acquireRelease(

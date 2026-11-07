@@ -23,12 +23,10 @@ export const validateCompiled = Effect.fn("contract.validateCompiled")(function*
   const diagnostics = validateGraph(body.graph);
 
   if (diagnostics.length > 0) {
-    return yield* Effect.fail(
-      new CompiledValidationError({
-        code: "invalid_graph",
-        message: diagnostics.map((item) => item.message).join("\n"),
-      }),
-    );
+    return yield* new CompiledValidationError({
+      code: "invalid_graph",
+      message: diagnostics.map((item) => item.message).join("\n"),
+    });
   }
 
   const expected = body.graph.nodes.flatMap((node) =>
@@ -48,12 +46,10 @@ export const validateCompiled = Effect.fn("contract.validateCompiled")(function*
         value.bundleHash !== body.bundles[index]?.bundleHash,
     )
   ) {
-    return yield* Effect.fail(
-      new CompiledValidationError({
-        code: "invalid_bundles",
-        message: "Supply exactly one bundle for each code node and parser in node order.",
-      }),
-    );
+    return yield* new CompiledValidationError({
+      code: "invalid_bundles",
+      message: "Supply exactly one bundle for each code node and parser in node order.",
+    });
   }
 
   if (
@@ -62,12 +58,10 @@ export const validateCompiled = Effect.fn("contract.validateCompiled")(function*
       catch: (cause) => new CompiledHashError({ cause }),
     })) !== body.revision
   ) {
-    return yield* Effect.fail(
-      new CompiledValidationError({
-        code: "revision_mismatch",
-        message: "The graph revision does not match its contents.",
-      }),
-    );
+    return yield* new CompiledValidationError({
+      code: "revision_mismatch",
+      message: "The graph revision does not match its contents.",
+    });
   }
 
   const bundles = [];
@@ -85,12 +79,10 @@ export const validateCompiled = Effect.fn("contract.validateCompiled")(function*
     ).join("");
 
     if (hash !== value.bundleHash) {
-      return yield* Effect.fail(
-        new CompiledValidationError({
-          code: "bundle_mismatch",
-          message: "Bundle bytes do not match their hash.",
-        }),
-      );
+      return yield* new CompiledValidationError({
+        code: "bundle_mismatch",
+        message: "Bundle bytes do not match their hash.",
+      });
     }
 
     bundles.push({ ...value, bytes });
@@ -110,12 +102,10 @@ export const validateCompiled = Effect.fn("contract.validateCompiled")(function*
     (sourceArtifact.status === "available" &&
       sourceArtifact.ranges.some((range) => !nodeIds.has(range.nodeId)))
   ) {
-    return yield* Effect.fail(
-      new CompiledValidationError({
-        code: "invalid_source",
-        message: "Source must name this compiled revision and its graph nodes.",
-      }),
-    );
+    return yield* new CompiledValidationError({
+      code: "invalid_source",
+      message: "Source must name this compiled revision and its graph nodes.",
+    });
   }
 
   return { bundles, sourceArtifact };

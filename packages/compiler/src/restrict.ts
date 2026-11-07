@@ -280,13 +280,11 @@ function inspectModule(
     const input = Bun.file(file);
 
     if (modules.size >= MAX_SOURCE_FILES) {
-      return yield* Effect.fail(
-        new AuthorError({
-          code: "source_error",
-          file,
-          message: "Builder source must fit within 32 files.",
-        }),
-      );
+      return yield* new AuthorError({
+        code: "source_error",
+        file,
+        message: "Builder source must fit within 32 files.",
+      });
     }
 
     const source = yield* authorSource("read author source", file, () =>
@@ -296,13 +294,11 @@ function inspectModule(
     state.sourceBytes += Buffer.byteLength(source);
 
     if (state.sourceBytes > MAX_SOURCE_BYTES) {
-      return yield* Effect.fail(
-        new AuthorError({
-          code: "source_error",
-          file,
-          message: "Builder source must fit within 256 KiB.",
-        }),
-      );
+      return yield* new AuthorError({
+        code: "source_error",
+        file,
+        message: "Builder source must fit within 256 KiB.",
+      });
     }
 
     const parsed = parseSync(file, source, { sourceType: "module", preserveParens: false });
