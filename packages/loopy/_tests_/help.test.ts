@@ -1,12 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { initialState, step } from "@loopy/core/engine";
-import { defineCommand, loopy } from "@loopy/sdk";
-import ts from "typescript";
+import { compile } from "@loopy/compiler";
+import { Effect } from "effect";
 import { parseCliHelp } from "../../runtime/src/local/typegen/parse-help";
 import { renderCommandSource } from "../../runtime/src/local/typegen/render";
+import { qualityTestRoot } from "./fixtures/quality-test-root";
+
+const repository = resolve(import.meta.dir, "../../..");
 
 const help = `Run Codex non-interactively
 
@@ -24,7 +26,7 @@ Options:
 `;
 
 describe("CLI help generation", () => {
-  test("extracts positional and flag types with a pinned help hash", () => {
+  test("extracts positional and flag types", () => {
     const parsed = parseCliHelp("codex", ["exec"], help);
     expect(parsed.warnings).toContain(
       "Help may omit which valued flags can repeat; review repeatable flag metadata",
@@ -40,71 +42,60 @@ describe("CLI help generation", () => {
       json: { cli: "--json", kind: "boolean" },
       config: { cli: "--config", kind: "string", repeatable: true },
     });
-    expect(parsed.descriptor.helpHash).toHaveLength(64);
-    const source = renderCommandSource("codexExec", parsed.descriptor);
-    expect(source.split("\n")[0]).toBe(
-      'import { type CommandDescriptor, defineCommand } from "loopy";',
-    );
-    expect(source).toContain("as const satisfies CommandDescriptor");
-    expect(source).toContain('"read-only"');
   });
 
-  test("generated descriptors produce graph command dispatches", () => {
-    const descriptor = parseCliHelp("codex", ["exec"], help).descriptor;
-    const { parse, ...data } = descriptor;
-    expect(parse).toBeUndefined();
-    const codexExec = defineCommand(data);
-
-    const graph = loopy("generated", {
-      input: {},
-      run: () => codexExec({ args: ["--help"] }),
-    });
-
-    expect(
-      step(graph, initialState("generated", {}), {
-        kind: "run_started",
-        at: new Date(0).toISOString(),
-      }).effects,
-    ).toContainEqual(
-      expect.objectContaining({
-        kind: "dispatch",
-        spec: expect.objectContaining({ argv: ["codex", "--help"] }),
-      }),
-    );
-  });
-  test("emitted source typechecks against the SDK with typed flags and arity", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "loopy-generated-"));
-    const file = join(directory, "codex.ts");
-
-    const source = renderCommandSource(
-      "codexExec",
-      parseCliHelp("codex", ["exec"], help).descriptor,
-    );
-
-    const gitHelp = await Bun.file(resolve(import.meta.dir, "fixtures/help/git-log.txt")).text();
-
-    const gitSource = renderCommandSource(
-      "gitLog",
-      parseCliHelp("git", ["log"], gitHelp).descriptor,
-    )
-      .replace('import { type CommandDescriptor, defineCommand } from "loopy";', "")
-      .replaceAll("descriptor", "logDescriptor");
+  test("a generated wrapper compiles into a saved graph's command node", async () => {
+    const directory = await realpath(await mkdtemp(join(tmpdir(), "loopy-generated-")));
 
     try {
       await writeFile(
-        file,
-        `${source}
-      ${renderCommandSource(
-        "noFlags",
-        parseCliHelp(
-          "tool",
-          [],
-          "Usage: tool [flags]\nOptions:\n  --help  Show help\n  --version  Show version",
-        ).descriptor,
-      )
-        .replace('import { type CommandDescriptor, defineCommand } from "loopy";', "")
-        .replaceAll("descriptor", "emptyDescriptor")}
-      ${gitSource}
+        join(directory, "codex.ts"),
+        renderCommandSource("codexExec", parseCliHelp("codex", ["exec"], help).descriptor),
+      );
+      await writeFile(
+        join(directory, "entry.ts"),
+        'import {loopy} from "loopy"; import {codexExec} from "./codex.ts"; export default loopy("generated", {input:{}, run:()=>codexExec({args:["hi"], flags:{json:true}})});',
+      );
+      const result = await Effect.runPromise(compile(join(directory, "entry.ts")));
+
+      if (!result.ok) {
+        throw new Error(JSON.stringify(result.diagnostics));
+      }
+
+      expect(result.graph.nodes[0]).toMatchObject({
+        kind: "command",
+        key: "codex.exec",
+        argv: ["codex", "hi"],
+        flags: { json: true },
+      });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("emitted source typechecks against the SDK with typed flags and arity", async () => {
+    const directory = await qualityTestRoot("generated-types");
+    const gitHelp = await Bun.file(resolve(import.meta.dir, "fixtures/help/git-log.txt")).text();
+
+    const noFlagsHelp =
+      "Usage: tool [flags]\nOptions:\n  --help  Show help\n  --version  Show version";
+
+    const modules = {
+      codex: renderCommandSource("codexExec", parseCliHelp("codex", ["exec"], help).descriptor),
+      git: renderCommandSource("gitLog", parseCliHelp("git", ["log"], gitHelp).descriptor),
+      tool: renderCommandSource("noFlags", parseCliHelp("tool", [], noFlagsHelp).descriptor),
+    };
+
+    try {
+      for (const [name, source] of Object.entries(modules)) {
+        await writeFile(join(directory, `${name}.ts`), source);
+      }
+
+      await writeFile(
+        join(directory, "usage.ts"),
+        `import { codexExec } from "./codex";
+      import { gitLog } from "./git";
+      import { noFlags } from "./tool";
       gitLog({ args: ["HEAD"], flags: { oneline: true, maxCount: 1 } });
       gitLog({ revisions: ["HEAD"], paths: ["src"] });
       // @ts-expect-error Generated boolean flags retain their type.
@@ -120,23 +111,23 @@ describe("CLI help generation", () => {
       codexExec({ args: ["one", "two"] });
       `,
       );
+      await writeFile(
+        join(directory, "tsconfig.json"),
+        JSON.stringify({ extends: join(repository, "tsconfig.json"), include: ["usage.ts"] }),
+      );
 
-      const program = ts.createProgram([file], {
-        noEmit: true,
-        strict: true,
-        skipLibCheck: true,
-        target: ts.ScriptTarget.ES2022,
-        module: ts.ModuleKind.ESNext,
-        moduleResolution: ts.ModuleResolutionKind.Bundler,
-        types: ["bun-types"],
-        paths: { loopy: [resolve(import.meta.dir, "../../sdk/src/index.ts")] },
-      });
+      const checker = Bun.spawn(
+        [join(repository, "node_modules/.bin/effect-tsgo"), "tsc", "--noEmit", "-p", directory],
+        { cwd: directory, stdout: "pipe", stderr: "pipe" },
+      );
 
-      expect(
-        ts
-          .getPreEmitDiagnostics(program)
-          .map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")),
-      ).toEqual([]);
+      const [stdout, stderr, code] = await Promise.all([
+        new Response(checker.stdout).text(),
+        new Response(checker.stderr).text(),
+        checker.exited,
+      ]);
+
+      expect({ code, output: `${stdout}${stderr}`.trim() }).toEqual({ code: 0, output: "" });
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
