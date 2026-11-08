@@ -34,10 +34,10 @@ export async function execution(journey: Journey, runId: string, chooseYes: bool
     "controlled_retry_did_not_use_two_attempts",
   );
 
-  const retry = await journey.json(
-    routes.execution.response,
-    `/runs/${runId}/execution?key=${encodeURIComponent(executionKeyString(retryNode.key))}`,
-  );
+  const retry = await journey.call(routes.execution, {
+    params: { id: runId },
+    query: { key: executionKeyString(retryNode.key) },
+  });
 
   assert(
     retry.attempts.some(
@@ -45,7 +45,7 @@ export async function execution(journey: Journey, runId: string, chooseYes: bool
     ),
     "first_exit_failure_attempt_missing",
   );
-  const logs = await journey.json(routes.logs.response, `/runs/${runId}/logs?limit=200`);
+  const logs = await journey.call(routes.logs, { params: { id: runId }, query: { limit: 200 } });
 
   for (const message of [
     chooseYes ? "branch-yes" : "branch-no",

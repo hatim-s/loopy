@@ -1,4 +1,4 @@
-import type { HookRecord } from "@loopy/contract";
+import { type HookRecord, PAGE_LIMIT } from "@loopy/contract";
 import { timestamp } from "../../lib/format";
 import type { GraphModel } from "../../lib/graph";
 import type { NodeMark } from "../../lib/run-marks";
@@ -48,7 +48,7 @@ export function RunGuide(props: {
 
 /**
  * Hooks this run opened and how each ended. The pending one is answered from the header. The
- * snapshot holds at most 200 hooks; `truncated` says more exist.
+ * snapshot holds at most PAGE_LIMIT hooks; `truncated` says more exist.
  */
 export function HookHistory({ hooks, truncated }: { hooks: HookRecord[]; truncated: boolean }) {
   const settled = hooks.filter(
@@ -63,7 +63,7 @@ export function HookHistory({ hooks, truncated }: { hooks: HookRecord[]; truncat
     <section aria-label="Hooks" className="space-y-2 border-t border-line px-4 py-3">
       <h3 className="text-xs font-semibold text-muted">Hooks</h3>
       {truncated && (
-        <p className="text-xs text-muted">Showing the first 200 hooks this run opened.</p>
+        <p className="text-xs text-muted">Showing the first {PAGE_LIMIT} hooks this run opened.</p>
       )}
       <ul className="grid gap-2">
         {settled.map((hook) => {

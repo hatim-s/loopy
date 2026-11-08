@@ -1,4 +1,4 @@
-import { routes } from "@loopy/contract";
+import { type LoopyView, routes } from "@loopy/contract";
 import { createFileRoute } from "@tanstack/react-router";
 import { Schema } from "effect";
 import { useState } from "react";
@@ -9,13 +9,7 @@ import { Load, Note } from "../components/ui/load";
 import { Segmented } from "../components/ui/segmented";
 import { useClock } from "../lib/clock";
 import { searchField } from "../lib/search";
-import {
-  useLoopyRows,
-  useScheduleOverview,
-  useSchedules,
-  useWorkspaceLoopyRows,
-} from "../lib/ui-data";
-import type { LoopyRow } from "../lib/view-models";
+import { useLoopyRows, useScheduleOverview, useSchedules } from "../lib/ui-data";
 
 /**
  * The workspace whose schedules show, and the loopy whose form is open. A schedule belongs to
@@ -41,7 +35,7 @@ const SHOW_LABEL = { all: "All", active: "Active", paused: "Paused" } satisfies 
 >;
 
 /** A new schedule starts from what the definition declares, else every hour in UTC. */
-function NewSchedule({ loopy }: { loopy: LoopyRow }) {
+function NewSchedule({ loopy }: { loopy: LoopyView }) {
   const navigate = Route.useNavigate();
 
   return (
@@ -74,37 +68,20 @@ function SchedulesPage() {
   const loopyWorkspaces =
     loopies.state === "ready" ? [...new Set(loopies.data.map((loopy) => loopy.workspace))] : [];
 
-  // Loopy rows keep one workspace per slug, so only the overview names every workspace that has
-  // a schedule, including one whose slug another workspace also saved.
   const scheduleWorkspaces = overview.state === "ready" ? overview.data.workspaces : [];
 
-  // Without a workspace in the URL, wait for both reads, then open the first loopy workspace that
-  // has schedules, else any workspace with schedules, else the first with a saved loopy. A failed
-  // overview falls back to loopy rows.
+  // Without a workspace in the URL, wait for both reads, then open one that has schedules.
   const settled = loopies.state !== "loading" && overview.state !== "loading";
 
-  const fallback =
-    loopyWorkspaces.find((path) => scheduleWorkspaces.includes(path)) ??
-    scheduleWorkspaces[0] ??
-    loopyWorkspaces[0] ??
-    null;
+  const workspace =
+    search.workspace ?? (settled ? (scheduleWorkspaces[0] ?? loopyWorkspaces[0] ?? null) : null);
 
-  const workspace = search.workspace ?? (settled ? fallback : null);
+  const choices = [
+    ...new Set([...loopyWorkspaces, ...scheduleWorkspaces, ...(workspace ? [workspace] : [])]),
+  ];
 
-  // A workspace named only by the URL appears in neither read. Every workspace shown during this
-  // visit stays a choice until the page unmounts.
-  const [seen, setSeen] = useState<string[]>(() => (workspace === null ? [] : [workspace]));
-
-  if (workspace !== null && !seen.includes(workspace)) {
-    setSeen([...seen, workspace]);
-  }
-
-  const choices = [...new Set([...loopyWorkspaces, ...scheduleWorkspaces, ...seen])];
   const schedules = useSchedules(workspace);
-
-  // Global rows keep one workspace per slug, so a slug saved in A and B shows only A's row. The
-  // workspace read lists this workspace's loopies first; other workspaces' slugs can follow.
-  const scoped = useWorkspaceLoopyRows(workspace);
+  const scoped = useLoopyRows(workspace ?? undefined);
   const now = useClock();
   const [show, setShow] = useState<Show>("all");
   const slug = search.slug;
@@ -119,7 +96,7 @@ function SchedulesPage() {
         )
       : [];
 
-  // A null workspace skips both reads, which stay loading; that case has its own note below.
+  // A null workspace skips the schedule read, which stays loading; that case has its own note.
   const pending =
     workspace !== null && (scoped.state === "loading" || schedules.state === "loading");
 
@@ -141,10 +118,7 @@ function SchedulesPage() {
               value={workspace}
               aria-label="Workspace"
               title={workspace}
-              onChange={(event) => {
-                setSeen([...new Set([...seen, workspace, event.target.value])]);
-                void navigate({ search: { workspace: event.target.value } });
-              }}
+              onChange={(event) => void navigate({ search: { workspace: event.target.value } })}
             >
               {choices.map((path) => (
                 <option key={path} value={path}>

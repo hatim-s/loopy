@@ -43,7 +43,6 @@ async function fixture(options: { concurrency?: number } = {}) {
   const service = makeLocalService({
     store,
     home,
-    cwd: root,
     clock: { now: () => Date.parse("2026-10-17T00:00:00.000Z") },
   });
 
@@ -53,7 +52,12 @@ async function fixture(options: { concurrency?: number } = {}) {
     token: "fixture-token",
     cwd: root,
     port: 0,
-    daemon: { startedAt: new Date(0).toISOString(), concurrency: options.concurrency ?? 4 },
+    assets: join(root, "assets"),
+    daemon: {
+      pid: process.pid,
+      startedAt: new Date(0).toISOString(),
+      concurrency: options.concurrency ?? 4,
+    },
     onError: (cause) => causes.push(cause),
   });
 
@@ -433,7 +437,8 @@ test("typed unsupported secret and type-generation operations preserve HTTP501",
     token: "fixture-token",
     cwd: f.root,
     port: 0,
-    daemon: { startedAt: new Date(0).toISOString(), concurrency: 4 },
+    assets: join(f.root, "assets"),
+    daemon: { pid: process.pid, startedAt: new Date(0).toISOString(), concurrency: 4 },
   });
 
   cleanups.push(() => server.stop());

@@ -1,4 +1,10 @@
-import type { Graph, PutLoopyBody, SavedLoopy } from "@loopy/contract";
+import {
+  encodeBoundary,
+  type Graph,
+  type PutLoopyBody,
+  putLoopyBodySchema,
+  type SavedLoopy,
+} from "@loopy/contract";
 import { canonicalJson } from "@loopy/core";
 import type { Publication } from "./definitions";
 import { checkDefinitionRows } from "./projection";
@@ -31,14 +37,11 @@ export function checkArtifactLimits(body: PutLoopyBody, workspaceId: string): vo
 
   checkDefinitionRows(body);
 
-  const sizes = body.bundles.map(
-    (bundle) =>
-      (bundle.bytes.length * 3) / 4 -
-      (bundle.bytes.endsWith("==") ? 2 : bundle.bytes.endsWith("=") ? 1 : 0),
-  );
+  const sizes = body.bundles.map((bundle) => bundle.bytes.byteLength);
 
   if (
-    encoder.encode(JSON.stringify(body)).length > ARTIFACT_LIMITS.requestBytes ||
+    encoder.encode(JSON.stringify(encodeBoundary(putLoopyBodySchema)(body))).length >
+      ARTIFACT_LIMITS.requestBytes ||
     encoder.encode(canonicalJson(body.graph)).length > ARTIFACT_LIMITS.graphBytes ||
     sizes.reduce((sum, bytes) => sum + bytes, 0) > ARTIFACT_LIMITS.totalBundleBytes ||
     sizes.some((bytes) => bytes > ARTIFACT_LIMITS.bundleBytes)

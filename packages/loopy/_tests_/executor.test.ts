@@ -45,22 +45,24 @@ export default loopy("sequence", {input: {}, run: () => {sh.exec(["printf", "raw
       openRunStore(home).pipe(Effect.provideService(Scope.Scope, scope)),
     );
 
-    const service = makeLocalService({ home, cwd: f.workspace, store, clock: { now: Date.now } });
+    const service = makeLocalService({ home, store, clock: { now: Date.now } });
 
     const daemon = await Effect.runPromise(
-      localDaemon({ home, cwd: f.workspace, store, concurrency: 1, port: 0 }).pipe(
-        Effect.provideService(Scope.Scope, scope),
-      ),
+      localDaemon({
+        home,
+        cwd: f.workspace,
+        store,
+        concurrency: 1,
+        port: 0,
+        assets: join(f.workspace, "assets"),
+      }).pipe(Effect.provideService(Scope.Scope, scope)),
     );
 
     await Effect.runPromise(
       service.putLoopy("sequence", {
         graph: compiled.graph,
         revision: compiled.revision,
-        bundles: compiled.bundles.map((bundle) => ({
-          ...bundle,
-          bytes: Buffer.from(bundle.bytes).toString("base64"),
-        })),
+        bundles: compiled.bundles,
         replace: false,
         source: { path: source, workspace: f.workspace },
       }),
@@ -80,10 +82,7 @@ export default loopy("sequence", {input: {}, run: () => {sh.exec(["printf", "raw
       service.putLoopy("sequence", {
         graph: replacement.graph,
         revision: replacement.revision,
-        bundles: replacement.bundles.map((bundle) => ({
-          ...bundle,
-          bytes: Buffer.from(bundle.bytes).toString("base64"),
-        })),
+        bundles: replacement.bundles,
         replace: false,
         source: { path: source, workspace: f.workspace },
       }),

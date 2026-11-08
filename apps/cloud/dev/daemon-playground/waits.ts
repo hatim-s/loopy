@@ -10,7 +10,7 @@ export function waitSnapshot(
   id: string,
   accept: (snapshot: RunSnapshotView) => boolean,
 ) {
-  return until(() => daemon.request(`/runs/${id}`, routes.run.response), accept, {
+  return until(() => daemon.call(routes.run, { params: { id } }), accept, {
     timeoutMs: 90_000,
     intervalMs: 200,
     timeout: () => new Error(`Run ${id} did not reach the requested state within ninety seconds.`),
@@ -43,7 +43,7 @@ export async function restartWhileWaiting(daemon: OwnedDaemon, snapshot: RunSnap
 
   await daemon.stop("SIGKILL");
   await daemon.start();
-  const after = await daemon.request(`/runs/${id}`, routes.run.response);
+  const after = await daemon.call(routes.run, { params: { id } });
   const receipts = await receiptInventory(id);
   const hookPreserved = after.run.waitingOn?.token === snapshot.run.waitingOn?.token;
   const receiptsUnchanged = isDeepStrictEqual(before, receipts);
@@ -78,14 +78,15 @@ export async function holdApproval(daemon: OwnedDaemon, waiting: RunSnapshotView
     await Bun.sleep(Math.min(250, target - Date.now()));
   }
 
-  const stillWaiting = await daemon.request(`/runs/${id}`, routes.run.response);
+  const stillWaiting = await daemon.call(routes.run, { params: { id } });
 
   if (!stillWaiting.run.waitingOn) {
     throw new Error("Approval stopped waiting before this driver resolved it.");
   }
 
-  await daemon.request(`/runs/${id}/hooks/approval`, routes.resolveNamedHook.response, {
-    payload: { approved },
+  await daemon.call(routes.resolveNamedHook, {
+    params: { id, name: "approval" },
+    body: { payload: { approved } },
   });
 
   return {

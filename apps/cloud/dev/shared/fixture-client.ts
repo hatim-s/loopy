@@ -3,11 +3,15 @@ import { dirname, resolve } from "node:path";
 import { compile } from "@loopy/compiler";
 import {
   decodeBoundary,
+  decodeRouteResponse,
   isTerminalRun,
   type Json,
   type PutLoopyBody,
-  putLoopyBodySchema,
+  type Route,
+  type RouteInput,
+  type RouteResult,
   type RunSnapshotView,
+  routeRequest,
   routes,
 } from "@loopy/contract";
 import { type SandboxAttemptRequest } from "@loopy/contract/sandbox";
@@ -29,24 +33,20 @@ export function compileFixture(name: string) {
         : result.diagnostics.map((value) => `${value.code}:${value.line}:${value.column}`),
     });
 
-    return decodeBoundary(putLoopyBodySchema)({
+    const body: PutLoopyBody = {
       graph: result.graph,
       revision: result.revision,
       sourceArtifact: result.sourceArtifact,
-      bundles: result.bundles.map((bundle) => ({
-        ...bundle,
-        bytes: Buffer.from(bundle.bytes).toString("base64"),
-      })),
+      bundles: result.bundles,
       source: { path, workspace: "fixtures" },
       replace: true,
-    });
+    };
+
+    return body;
   });
 }
 
-export async function readJson<T>(
-  response: Response,
-  schema: Schema.Codec<T, unknown, never, never>,
-): Promise<T> {
+async function readText(response: Response): Promise<string> {
   if (!response.headers.get("content-type")?.includes("application/json")) {
     await response.body?.cancel();
     throw new JourneyFailure({
@@ -58,6 +58,15 @@ export async function readJson<T>(
   const text = await response.text();
   assert(Buffer.byteLength(text) <= MAX_RESPONSE_BYTES, "response_exceeds_8_mib");
 
+  return text;
+}
+
+export async function readJson<T>(
+  response: Response,
+  schema: Schema.Codec<T, unknown, never, never>,
+): Promise<T> {
+  const text = await readText(response);
+
   try {
     return decodeBoundary(schema)(JSON.parse(text));
   } catch {
@@ -65,39 +74,87 @@ export async function readJson<T>(
   }
 }
 
-export type RequestOptions = {
-  method?: "GET" | "POST" | "PUT" | "DELETE";
-  body?: Json | PutLoopyBody | SandboxAttemptRequest;
+export type CallOptions = {
   token?: string | null;
   headers?: Record<string, string>;
   signal?: AbortSignal;
 };
 
-export class ApiClient {
-  constructor(private readonly options: { base: string; token: string; timeoutMs: number }) {}
+/** A raw request for endpoints outside the daemon route table, such as the sandbox provider. */
+export type RequestOptions = CallOptions & {
+  method?: "GET" | "POST" | "PUT" | "DELETE";
+  body?: Json | SandboxAttemptRequest;
+};
 
-  async request(path: string, options: RequestOptions = {}): Promise<Response> {
-    const headers = new Headers(options.headers);
+export class ApiClient {
+  constructor(private readonly options: { origin: string; token: string; timeoutMs: number }) {}
+
+  private async fetch(path: string, init: RequestInit, options: CallOptions) {
+    const headers = new Headers(init.headers);
     const token = options.token === undefined ? this.options.token : options.token;
+
+    for (const [name, value] of Object.entries(options.headers ?? {})) {
+      headers.set(name, value);
+    }
 
     if (token !== null) {
       headers.set("Authorization", `Bearer ${token}`);
     }
 
-    if (options.body !== undefined) {
-      headers.set("Content-Type", "application/json");
-    }
-
     try {
-      return await fetch(`${this.options.base}${path}`, {
-        method: options.method ?? (options.body === undefined ? "GET" : "POST"),
+      return await fetch(`${this.options.origin}${path}`, {
+        ...init,
         headers,
-        body: options.body === undefined ? undefined : JSON.stringify(options.body),
         signal: options.signal ?? AbortSignal.timeout(this.options.timeoutMs),
       });
     } catch {
       throw new JourneyFailure({ failure: "local_api_transport_failed", path });
     }
+  }
+
+  request(path: string, options: RequestOptions = {}): Promise<Response> {
+    const body = options.body === undefined ? undefined : JSON.stringify(options.body);
+
+    return this.fetch(
+      path,
+      {
+        method: options.method ?? (body === undefined ? "GET" : "POST"),
+        headers: body === undefined ? {} : { "Content-Type": "application/json" },
+        body,
+      },
+      options,
+    );
+  }
+
+  send<R extends Route>(route: R, input: RouteInput<R>, options: CallOptions = {}) {
+    const { method, url, headers, body } = routeRequest(route, input);
+
+    return this.fetch(url, { method, headers, body }, options);
+  }
+
+  async call<R extends Route>(
+    route: R,
+    input: RouteInput<R>,
+    options: CallOptions = {},
+  ): Promise<RouteResult<R>> {
+    const response = await this.send(route, input, options);
+
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw new JourneyFailure({
+        failure: "unexpected_http_status",
+        path: route.path,
+        httpStatus: response.status,
+      });
+    }
+
+    const outcome = decodeRouteResponse(route, response.status, await readText(response));
+
+    if (outcome.kind !== "ok") {
+      throw new JourneyFailure({ failure: "invalid_json_response", httpStatus: response.status });
+    }
+
+    return outcome.value;
   }
 
   async json<T>(
@@ -124,7 +181,7 @@ export class ApiClient {
     options: { timeoutMs: number; intervalMs: number; untilWaiting?: boolean },
   ): Promise<RunSnapshotView> {
     return until(
-      () => this.json(routes.run.response, `/runs/${id}`),
+      () => this.call(routes.run, { params: { id } }),
       (snapshot) =>
         isTerminalRun(snapshot.run.status) ||
         (options.untilWaiting === true && snapshot.run.waitingOn !== null),

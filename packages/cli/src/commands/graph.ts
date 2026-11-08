@@ -54,11 +54,10 @@ export const graph = defineCommand({
 
         view = graphView(result.graph);
       } else {
-        ({ graph: view } = yield* request(
-          cli,
-          `/loopies/${encodeURIComponent(target)}/graph?workspace=${encodeURIComponent(cli.cwd)}`,
-          routes.graph.response,
-        ));
+        ({ graph: view } = yield* request(cli, routes.graph, {
+          params: { slug: target },
+          query: { workspace: cli.cwd },
+        }));
       }
 
       if (cli.values.format === "text") {

@@ -50,10 +50,7 @@ async function compiled(file: string, root: string) {
 
   return {
     ...result,
-    bundles: result.bundles.map((bundle) => ({
-      ...bundle,
-      bytes: Buffer.from(bundle.bytes).toString("base64"),
-    })),
+    bundles: result.bundles,
     source: { path: file, workspace: root },
     replace: false,
   };

@@ -2,6 +2,7 @@ import {
   type EventSummaryView,
   executionKeyString,
   type GlobalLogsPage,
+  PAGE_LIMIT,
   type RunView,
 } from "@loopy/contract";
 import { type QueryKey, type UseQueryOptions, useQuery } from "@tanstack/react-query";
@@ -30,9 +31,6 @@ import type {
 } from "./view-models";
 
 const PAGE_SIZE = 50;
-
-// The server caps one page at this many rows.
-const MAX_PAGE_SIZE = 200;
 
 // Cursor metadata stays bounded even if a tab pages through an entire retained history.
 const MAX_CURSORS = 200;
@@ -132,7 +130,7 @@ export function useRunPages(filters: RunListFilters, pageSize: number): Pager<Ru
         waiting: filters.waiting,
         workspace: filters.workspace,
         from,
-        limit: Math.min(MAX_PAGE_SIZE, pageSize),
+        limit: Math.min(PAGE_LIMIT, pageSize),
         before,
       }),
     nextCursor: (data) => data.nextCursor ?? null,
@@ -204,6 +202,7 @@ export function useLogPages(filters: LogFilters): Pager<LogRow, ScanInfo> {
         backend,
         {
           slug: filters.slug,
+          workspace: filters.workspace,
           runId: filters.runId,
           nodeId: filters.nodeId,
           status: filters.status,
@@ -218,12 +217,7 @@ export function useLogPages(filters: LogFilters): Pager<LogRow, ScanInfo> {
       ),
     nextCursor: (data) => (data.hasMore ? data.next : null),
     view: (data) => ({
-      rows: data.items.map(({ dataBytes, ...row }) => ({
-        ...row,
-        nodeId: row.nodeId || null,
-        executionKey: row.executionKey || null,
-        hasData: dataBytes > 0,
-      })),
+      rows: data.items.map(({ dataBytes, ...row }) => ({ ...row, hasData: dataBytes > 0 })),
       ...scanInfo(data),
     }),
   });
@@ -241,6 +235,7 @@ export function useEventPages(filters: EventFilters): Pager<EventSummaryView, Sc
         backend,
         {
           slug: filters.slug,
+          workspace: filters.workspace,
           runId: filters.runId,
           nodeId: filters.nodeId,
           entity: filters.entity,

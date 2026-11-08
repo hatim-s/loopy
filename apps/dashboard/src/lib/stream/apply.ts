@@ -5,7 +5,7 @@ import { keys } from "../keys";
 import { forgetHistory, historyOf, remember, type StreamHistory } from "./history";
 import { applyHookToLists, applyRunEvent, refetchLists } from "./run-lists";
 import { applyScheduleEvent } from "./schedules";
-import { applyToSnapshot, previewRun } from "./snapshot";
+import { applyToSnapshot } from "./snapshot";
 
 const REFRESH_DELAY_MS = 250;
 
@@ -158,8 +158,7 @@ export function applyBatch(client: QueryClient, batch: ServerEvent[]): void {
   };
 
   for (const event of batch) {
-    const bounded = event.entity === "run" ? { ...event, record: previewRun(event.record) } : event;
-    applyEvent(client, changes, bounded);
+    applyEvent(client, changes, event);
   }
 
   refetchLists(client, changes.lists);

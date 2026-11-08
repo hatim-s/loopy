@@ -8,7 +8,7 @@ import { localHttpBackend } from "../src/backend/local-http";
 import { graphModel } from "../src/lib/graph";
 import { keys } from "../src/lib/keys";
 import { toggleSchedule } from "../src/lib/mutations";
-import { workspaceLoopiesQuery } from "../src/lib/queries";
+import { loopiesQuery } from "../src/lib/queries";
 import { runMarks } from "../src/lib/run-marks";
 import { applyScheduleView, removeScheduleView } from "../src/lib/stream/schedules";
 import { reviewDataFixture } from "./review-data-fixture";
@@ -38,7 +38,7 @@ async function fixture() {
     token,
     port: 0,
     assets: join(f.root, "assets"),
-    daemon: { startedAt: new Date().toISOString(), concurrency: 1 },
+    daemon: { pid: process.pid, startedAt: new Date().toISOString(), concurrency: 1 },
   });
 
   cleanups.push(() => server.stop());
@@ -53,49 +53,76 @@ async function fixture() {
 test("schedule HTTP and cache mutations keep default A and project B independent for the same slug", async () => {
   const { backend, service, workspaceA, workspaceB } = await fixture();
   const body = { cron: "@daily", tz: "UTC", input: { items: ["item"] }, enabled: true };
-  const a = await Effect.runPromise(service.putSchedule("review-data", body));
-  const b = await backend.putSchedule("review-data", workspaceB, { ...body, cron: "@hourly" });
+  const a = await Effect.runPromise(service.putSchedule("review-data", body, workspaceA));
+
+  const b = await backend.call("putSchedule", {
+    params: { slug: "review-data" },
+    query: { workspace: workspaceB },
+    body: { ...body, cron: "@hourly" },
+  });
+
   expect(a.workspace).toBe(workspaceA);
   expect(b.workspace).toBe(workspaceB);
-  expect(await backend.schedules(workspaceA)).toEqual([a]);
-  expect(await backend.schedules(workspaceB)).toEqual([b]);
+  expect(await backend.call("schedules", { query: { workspace: workspaceA } })).toEqual([a]);
+  expect(await backend.call("schedules", { query: { workspace: workspaceB } })).toEqual([b]);
 
   const client = new QueryClient();
   cleanups.push(() => client.clear());
   client.setQueryData(keys.schedules(workspaceA), [a]);
   client.setQueryData(keys.schedules(workspaceB), [b]);
 
-  const edited = await backend.putSchedule("review-data", workspaceB, {
-    cron: "@weekly",
-    input: body.input,
+  const edited = await backend.call("putSchedule", {
+    params: { slug: "review-data" },
+    query: { workspace: workspaceB },
+    body: {
+      cron: "@weekly",
+      input: body.input,
+    },
   });
 
   applyScheduleView(client, edited);
 
-  const disabled = await toggleSchedule(client, backend, {
-    slug: "review-data",
-    workspace: workspaceB,
-    enabled: false,
-  });
+  const disabled = await toggleSchedule(
+    client,
+    {
+      slug: "review-data",
+      workspace: workspaceB,
+      enabled: false,
+    },
+    () =>
+      backend.call("setScheduleEnabled", {
+        params: { slug: "review-data" },
+        query: { workspace: workspaceB },
+        body: { enabled: false },
+      }),
+  );
 
   applyScheduleView(client, disabled);
-  expect(await backend.schedules(workspaceB)).toEqual([disabled]);
+  expect(await backend.call("schedules", { query: { workspace: workspaceB } })).toEqual([disabled]);
   expect(disabled).toMatchObject({ cron: "@weekly", enabled: false, version: 3 });
   expect(client.getQueryData<ScheduleView[]>(keys.schedules(workspaceB))).toEqual([disabled]);
 
-  await backend.deleteSchedule("review-data", workspaceB);
+  await backend.call("deleteSchedule", {
+    params: { slug: "review-data" },
+    query: { workspace: workspaceB },
+  });
   removeScheduleView(client, { slug: "review-data", workspace: workspaceB });
-  expect(await backend.schedules(workspaceB)).toEqual([]);
+  expect(await backend.call("schedules", { query: { workspace: workspaceB } })).toEqual([]);
   expect(client.getQueryData<ScheduleView[]>(keys.schedules(workspaceB))).toEqual([]);
-  expect(await backend.schedules(workspaceA)).toEqual([a]);
+  expect(await backend.call("schedules", { query: { workspace: workspaceA } })).toEqual([a]);
   expect(client.getQueryData<ScheduleView[]>(keys.schedules(workspaceA))).toEqual([a]);
 });
 
 test("201 root and 51 item executions remain unknown outside bounded pages and reconcile on selection", async () => {
   const { backend, runId, itemScope, records } = await fixture();
-  const snapshot = await backend.run(runId, AbortSignal.timeout(1000));
-  const graph = (await backend.runGraph(runId)).graph;
-  const itemPage = await backend.executions(runId, { scope: JSON.stringify(itemScope), limit: 50 });
+  const snapshot = await backend.call("run", { params: { id: runId } }, AbortSignal.timeout(1000));
+  const graph = (await backend.call("runGraph", { params: { id: runId } })).graph;
+
+  const itemPage = await backend.call("executions", {
+    params: { id: runId },
+    query: { scope: JSON.stringify(itemScope), limit: 50 },
+  });
+
   expect(records.filter((record) => record.key.scope.length === 0)).toHaveLength(201);
   expect(records.filter((record) => record.key.scope.length > 0)).toHaveLength(51);
   expect(snapshot.nodeRuns).toHaveLength(200);
@@ -134,7 +161,11 @@ test("201 root and 51 item executions remain unknown outside bounded pages and r
       skipped: false,
       note: "not loaded",
     });
-    const detail = await backend.execution(runId, { key: executionKeyString(record.key) });
+
+    const detail = await backend.call("execution", {
+      params: { id: runId },
+      query: { key: executionKeyString(record.key) },
+    });
 
     const selected = graphModel(graph, {
       status: snapshot.run.status,
@@ -157,10 +188,13 @@ test("201 root and 51 item executions remain unknown outside bounded pages and r
     ).toMatchObject({ status: "succeeded", skipped: false });
   }
 
-  const nextItemPage = await backend.executions(runId, {
-    scope: JSON.stringify(itemScope),
-    limit: 50,
-    after: itemPage.next ?? undefined,
+  const nextItemPage = await backend.call("executions", {
+    params: { id: runId },
+    query: {
+      scope: JSON.stringify(itemScope),
+      limit: 50,
+      after: itemPage.next ?? undefined,
+    },
   });
 
   expect(nextItemPage.items).toHaveLength(1);
@@ -186,8 +220,11 @@ test("201 root and 51 item executions remain unknown outside bounded pages and r
   }
 
   const logsQuery = { runId, executionKey: executionKeyString(logged.key), limit: 50 };
-  const firstLogs = await backend.globalLogs(logsQuery);
-  const olderLogs = await backend.globalLogs({ ...logsQuery, before: firstLogs.next ?? undefined });
+  const firstLogs = await backend.call("globalLogs", { query: logsQuery });
+
+  const olderLogs = await backend.call("globalLogs", {
+    query: { ...logsQuery, before: firstLogs.next ?? undefined },
+  });
 
   expect(firstLogs.items).toHaveLength(50);
   expect(firstLogs.hasMore).toBe(true);
@@ -195,7 +232,10 @@ test("201 root and 51 item executions remain unknown outside bounded pages and r
   expect(olderLogs.hasMore).toBe(false);
   expect(new Set([...firstLogs.items, ...olderLogs.items].map((log) => log.id)).size).toBe(75);
 
-  const search = await backend.globalLogs({ runId, text: "DIAGNOSTIC_END", limit: 50 });
+  const search = await backend.call("globalLogs", {
+    query: { runId, text: "DIAGNOSTIC_END", limit: 50 },
+  });
+
   const preview = search.items[0];
 
   if (!preview) {
@@ -205,20 +245,28 @@ test("201 root and 51 item executions remain unknown outside bounded pages and r
   expect(preview.message).toHaveLength(1024);
   expect(preview.dataBytes).toBe(0);
 
-  const detail = await backend.log(preview.id);
+  const detail = await backend.call("log", { params: { id: preview.id } });
 
   expect(detail.log.message).toEndWith("DIAGNOSTIC_END");
   expect(detail.log).not.toHaveProperty("data");
 });
 
-test("fresh HTTP schedule overview discovers enabled B hidden by default A's same slug", async () => {
+test("fresh HTTP schedule overview and loopy rows list B beside default A's same slug", async () => {
   const { backend, baseUrl, service, store, workspaceA, workspaceB } = await fixture();
   const body = { cron: "@daily", tz: "UTC", input: { items: ["item"] }, enabled: true };
-  const b = await backend.putSchedule("review-data", workspaceB, body);
+
+  const b = await backend.call("putSchedule", {
+    params: { slug: "review-data" },
+    query: { workspace: workspaceB },
+    body: body,
+  });
+
   expect((await fetch(`${baseUrl}/api/schedules/overview`)).status).toBe(401);
-  expect((await backend.loopies()).map((row) => row.workspace)).toEqual([workspaceA]);
-  expect(await backend.schedules(workspaceA)).toEqual([]);
-  const overview = await backend.scheduleOverview();
+  expect((await backend.call("loopies", {})).map((row) => row.workspace).sort()).toEqual(
+    [workspaceA, workspaceB].sort(),
+  );
+  expect(await backend.call("schedules", { query: { workspace: workspaceA } })).toEqual([]);
+  const overview = await backend.call("scheduleOverview", {});
   expect(overview).toEqual({
     workspaces: [workspaceB],
     active: 1,
@@ -227,64 +275,82 @@ test("fresh HTTP schedule overview discovers enabled B hidden by default A's sam
     ],
   });
 
-  expect((await backend.loopies(workspaceB)).map((row) => row.workspace)).toEqual([workspaceB]);
-
   const discovered = await Promise.all(
-    overview.workspaces.map((workspace) => backend.schedules(workspace)),
+    overview.workspaces.map((workspace) =>
+      backend.call("schedules", { query: { workspace: workspace } }),
+    ),
   );
 
   expect(discovered.flat()).toEqual([b]);
 
   const a = await Effect.runPromise(
-    service.putSchedule("review-data", { ...body, enabled: false }),
+    service.putSchedule("review-data", { ...body, enabled: false }, workspaceA),
   );
 
   const client = new QueryClient();
   cleanups.push(() => client.clear());
   client.setQueryData(keys.schedules(workspaceA), [a]);
   client.setQueryData(keys.schedules(workspaceB), [b]);
-  await client.fetchQuery(workspaceLoopiesQuery(backend, workspaceB));
-  client.setQueryData(keys.scheduleOverview, await backend.scheduleOverview());
-  const edited = await backend.putSchedule("review-data", workspaceB, { ...body, cron: "@hourly" });
+  await client.fetchQuery(loopiesQuery(backend, workspaceB));
+  client.setQueryData(keys.scheduleOverview, await backend.call("scheduleOverview", {}));
+
+  const edited = await backend.call("putSchedule", {
+    params: { slug: "review-data" },
+    query: { workspace: workspaceB },
+    body: { ...body, cron: "@hourly" },
+  });
+
   applyScheduleView(client, edited);
   expect(client.getQueryState(keys.scheduleOverview)?.isInvalidated).toBe(true);
   expect(client.getQueryState(keys.workspaceLoopies(workspaceB))?.isInvalidated).toBe(true);
   expect(client.getQueryData<ScheduleView[]>(keys.schedules(workspaceA))).toEqual([a]);
-  expect((await backend.scheduleOverview()).next[0]?.cron).toBe("@hourly");
+  expect((await backend.call("scheduleOverview", {})).next[0]?.cron).toBe("@hourly");
 
-  client.setQueryData(keys.scheduleOverview, await backend.scheduleOverview());
+  client.setQueryData(keys.scheduleOverview, await backend.call("scheduleOverview", {}));
 
-  const toggled = await toggleSchedule(client, backend, {
-    slug: b.slug,
-    workspace: workspaceB,
-    enabled: false,
-  });
+  const toggled = await toggleSchedule(
+    client,
+    {
+      slug: b.slug,
+      workspace: workspaceB,
+      enabled: false,
+    },
+    () =>
+      backend.call("setScheduleEnabled", {
+        params: { slug: b.slug },
+        query: { workspace: workspaceB },
+        body: { enabled: false },
+      }),
+  );
 
   applyScheduleView(client, toggled);
   expect(client.getQueryState(keys.scheduleOverview)?.isInvalidated).toBe(true);
   expect(client.getQueryState(keys.workspaceLoopies(workspaceB))?.isInvalidated).toBe(true);
-  expect(await backend.scheduleOverview()).toEqual({
+  expect(await backend.call("scheduleOverview", {})).toEqual({
     workspaces: [workspaceA, workspaceB],
     active: 0,
     next: [],
   });
   expect(client.getQueryData<ScheduleView[]>(keys.schedules(workspaceA))).toEqual([a]);
-  expect(await backend.schedules(workspaceA)).toEqual([a]);
+  expect(await backend.call("schedules", { query: { workspace: workspaceA } })).toEqual([a]);
 
-  client.setQueryData(keys.scheduleOverview, await backend.scheduleOverview());
-  await backend.deleteSchedule(b.slug, workspaceB);
+  client.setQueryData(keys.scheduleOverview, await backend.call("scheduleOverview", {}));
+  await backend.call("deleteSchedule", {
+    params: { slug: b.slug },
+    query: { workspace: workspaceB },
+  });
   removeScheduleView(client, { slug: b.slug, workspace: workspaceB });
   expect(client.getQueryState(keys.scheduleOverview)?.isInvalidated).toBe(true);
   expect(client.getQueryState(keys.workspaceLoopies(workspaceB))?.isInvalidated).toBe(true);
-  expect(await backend.scheduleOverview()).toEqual({
+  expect(await backend.call("scheduleOverview", {})).toEqual({
     workspaces: [workspaceA],
     active: 0,
     next: [],
   });
   expect(client.getQueryData<ScheduleView[]>(keys.schedules(workspaceA))).toEqual([a]);
-  expect(await backend.schedules(workspaceA)).toEqual([a]);
+  expect(await backend.call("schedules", { query: { workspace: workspaceA } })).toEqual([a]);
 
-  const definitions = await client.fetchQuery(workspaceLoopiesQuery(backend, workspaceB));
+  const definitions = await client.fetchQuery(loopiesQuery(backend, workspaceB));
 
   const unscheduled = definitions.filter(
     (row) => row.workspace === workspaceB && row.schedule === null,
@@ -292,11 +358,20 @@ test("fresh HTTP schedule overview discovers enabled B hidden by default A's sam
 
   expect(unscheduled.map((row) => row.slug)).toEqual(["review-data"]);
   const definition = unscheduled[0]!;
-  const recreated = await backend.putSchedule(definition.slug, definition.workspace, body);
+
+  const recreated = await backend.call("putSchedule", {
+    params: { slug: definition.slug },
+    query: { workspace: definition.workspace },
+    body: body,
+  });
+
   expect(recreated.workspace).toBe(workspaceB);
-  expect(await backend.schedules(workspaceA)).toEqual([a]);
+  expect(await backend.call("schedules", { query: { workspace: workspaceA } })).toEqual([a]);
   expect(client.getQueryData<ScheduleView[]>(keys.schedules(workspaceA))).toEqual([a]);
-  await backend.deleteSchedule(recreated.slug, workspaceB);
+  await backend.call("deleteSchedule", {
+    params: { slug: recreated.slug },
+    query: { workspace: workspaceB },
+  });
 
   for (let index = 0; index < 12; index++) {
     await Effect.runPromise(
@@ -312,7 +387,7 @@ test("fresh HTTP schedule overview discovers enabled B hidden by default A's sam
     );
   }
 
-  const bounded = await backend.scheduleOverview();
+  const bounded = await backend.call("scheduleOverview", {});
   expect(bounded.active).toBe(12);
   expect(bounded.next).toHaveLength(10);
   expect(bounded.next.map((row) => row.slug)).toEqual(

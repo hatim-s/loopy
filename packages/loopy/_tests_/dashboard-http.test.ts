@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
+import { join } from "node:path";
 import { decodeBoundary, nodeIdSchema, routes } from "@loopy/contract";
 import { localDaemon, makeLocalService } from "@loopy/runtime/local";
 import { Effect, Scope } from "effect";
@@ -22,7 +23,6 @@ test("the cache retains the server's streamed output preview size", async () => 
     store,
     clock: { now: Date.now },
     home: f.home,
-    cwd: f.cwd,
   });
 
   try {
@@ -93,9 +93,14 @@ test("HTTP dashboard reads pin source and page diagnostic payloads outside the s
   const store = await fixtureStore(f.home);
 
   const daemon = await Effect.runPromise(
-    localDaemon({ home: f.home, cwd: f.cwd, store, concurrency: 1, port: 0 }).pipe(
-      Effect.provideService(Scope.Scope, fixtureScope()),
-    ),
+    localDaemon({
+      home: f.home,
+      cwd: f.cwd,
+      store,
+      concurrency: 1,
+      port: 0,
+      assets: join(f.cwd, "assets"),
+    }).pipe(Effect.provideService(Scope.Scope, fixtureScope())),
   );
 
   const url = new URL(await Effect.runPromise(daemon.start));

@@ -1,53 +1,47 @@
-import { isTerminalRun, type Json } from "@loopy/contract";
-import type { RunRecord } from "@loopy/core";
-import { type StoreEffect } from "@loopy/core";
+import { cancelRefusal, isTerminalRun, type Json } from "@loopy/contract";
+import type { RunRecord, StoreEffect } from "@loopy/core";
 import { Effect } from "effect";
+import type { ServiceContext } from "./context";
 import { requireDefinition } from "./definition";
 import { ServiceError } from "./error";
 import { validateDefinitionInput } from "./input";
-import type { ServiceOptions } from "./registry";
-import { makeRunAccess } from "./run-access";
-import { makeRunViews } from "./run-views";
+import type { RunViews } from "./run-views";
 
-export function makeRunOperations(options: ServiceOptions) {
-  const access = { ...makeRunAccess(options), ...makeRunViews(options) };
+export function makeRunOperations(context: ServiceContext, { view }: RunViews) {
+  const { store, now, requireRun } = context;
 
   const startRun = Effect.fn("mutations.startRun")(function* (
     slug: string,
     input: Json,
     workspace: string,
   ) {
-    const saved = yield* requireDefinition(yield* options.registry(workspace), slug);
+    const saved = yield* requireDefinition(yield* context.registry(workspace), slug);
     const validated = yield* validateDefinitionInput(saved, input);
 
     const run: RunRecord = {
       id: crypto.randomUUID(),
       slug,
       input: validated,
-      workspace: yield* options.canonicalWorkspace(workspace),
+      workspace: yield* context.canonicalWorkspace(workspace),
       revision: saved.revision,
       status: "queued",
-      createdAt: new Date(options.clock.now()).toISOString(),
-      updatedAt: new Date(options.clock.now()).toISOString(),
+      createdAt: now(),
+      updatedAt: now(),
     };
 
-    yield* options.store.createRun(run);
+    yield* store.createRun(run);
 
-    return yield* access.view(run);
+    return yield* view(run);
   });
 
-  const now = () => {
-    return new Date(options.clock.now()).toISOString();
-  };
-
   const claim = Effect.fn("mutations.claim")(function* (id: string, token: string) {
-    const run = yield* access.requireRun(id);
+    const run = yield* requireRun(id);
 
     if (isTerminalRun(run.status)) {
       return yield* Effect.fail(new ServiceError("not_claimable"));
     }
 
-    yield* options.store.claim(id, token).pipe(
+    yield* store.claim(id, token).pipe(
       Effect.catchTag("OwnershipError", () =>
         Effect.fail(
           new ServiceError(
@@ -59,7 +53,7 @@ export function makeRunOperations(options: ServiceOptions) {
       Effect.catchTag("StorageError", (error) =>
         error.reason === "rejected"
           ? Effect.gen(function* () {
-              const current = yield* options.store.getRun(id);
+              const current = yield* store.getRun(id);
 
               if (current && isTerminalRun(current.status)) {
                 return yield* Effect.fail(new ServiceError("not_claimable"));
@@ -73,45 +67,32 @@ export function makeRunOperations(options: ServiceOptions) {
   });
 
   const resumeRun = Effect.fn("mutations.resumeRun")(function* (id: string) {
-    const code = yield* options.store.wakeRun(id, now());
+    const code = yield* store.wakeRun(id, now());
 
     if (code) {
       return yield* Effect.fail(new ServiceError(code));
     }
 
-    return yield* access.view(yield* access.requireRun(id));
+    return yield* view(yield* requireRun(id));
   });
 
   const cancellableNodes = Effect.fn("mutations.cancellableNodes")(function* (id: string) {
-    const nodes = yield* options.store.getNodeRuns(id);
+    const nodes = yield* store.getNodeRuns(id);
 
-    if (nodes.some((node) => node.status === "running")) {
-      return yield* Effect.fail(
-        new ServiceError(
-          "not_claimable",
-          "This run has an unfinished execution. Resume it before cancelling.",
-        ),
-      );
-    }
+    // The graph is read only when node state alone cannot refuse.
+    const refusal =
+      cancelRefusal(nodes, { nodes: [] }) ??
+      (nodes.length > 0 ? cancelRefusal(nodes, (yield* context.runGraph(id)).graph) : null);
 
-    if (nodes.length > 0) {
-      const { graph } = yield* access.runGraph(id);
-
-      if (graph.nodes.some((node) => node.kind === "finally")) {
-        return yield* Effect.fail(
-          new ServiceError(
-            "not_claimable",
-            "This run requires finally cleanup. Cancellation with cleanup is not available; resume the run instead.",
-          ),
-        );
-      }
+    if (refusal !== null) {
+      return yield* Effect.fail(new ServiceError("not_claimable", refusal));
     }
 
     return nodes;
   });
 
   const cancelRun = Effect.fn("mutations.cancelRun")(function* (id: string) {
-    const run = yield* access.requireRun(id);
+    const run = yield* requireRun(id);
 
     if (isTerminalRun(run.status)) {
       return yield* Effect.fail(new ServiceError("not_claimable"));
@@ -150,12 +131,12 @@ export function makeRunOperations(options: ServiceOptions) {
           );
 
           effects.push({ kind: "finish_run", outcome: { status: "cancelled" }, at });
-          yield* options.store.apply({ runId: id, token, effects });
+          yield* store.apply({ runId: id, token, effects });
         }),
-      () => options.store.release(id, token),
+      () => store.release(id, token),
     );
 
-    return yield* access.view(yield* access.requireRun(id));
+    return yield* view(yield* requireRun(id));
   });
 
   const resolveNamedHook = Effect.fn("mutations.resolveNamedHook")(function* (
@@ -163,9 +144,9 @@ export function makeRunOperations(options: ServiceOptions) {
     name: string,
     payload: Json,
   ) {
-    yield* access.requireRun(id);
+    yield* requireRun(id);
 
-    const waits = (yield* options.store.getWaits(id)).filter(
+    const waits = (yield* store.getWaits(id)).filter(
       (wait) => wait.name === name && !wait.resolvedAt && !wait.expiredAt,
     );
 
@@ -188,13 +169,13 @@ export function makeRunOperations(options: ServiceOptions) {
   });
 
   const resolveHook = Effect.fn("mutations.resolveHook")(function* (token: string, payload: Json) {
-    const result = yield* options.store.resolveWait({ token, payload, at: now() });
+    const result = yield* store.resolveWait({ token, payload, at: now() });
 
     if (result.kind === "rejected") {
       return yield* Effect.fail(new ServiceError(result.code, result.message));
     }
 
-    return yield* access.view(yield* access.requireRun(result.runId));
+    return yield* view(yield* requireRun(result.runId));
   });
 
   return { startRun, resumeRun, cancelRun, resolveNamedHook, resolveHook };

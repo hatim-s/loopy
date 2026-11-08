@@ -1,4 +1,4 @@
-import { errorResponse } from "./routes";
+import { errorResponse } from "../../service";
 
 export type OriginPolicy = {
   publicOrigin: string;

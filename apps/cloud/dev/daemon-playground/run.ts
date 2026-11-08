@@ -60,11 +60,10 @@ export async function run() {
       const intentAt = new Date().toISOString();
       const beforePost = performance.now();
 
-      const admitted = await daemon.request(
-        `/loopies/${entry.slug}/runs`,
-        routes.startRun.response,
-        { workspace: entry.workspace, input },
-      );
+      const admitted = await daemon.call(routes.startRun, {
+        params: { slug: entry.slug },
+        body: { workspace: entry.workspace, input },
+      });
 
       const admissionMs = performance.now() - beforePost;
       const admittedAt = new Date().toISOString();
@@ -123,7 +122,7 @@ export async function run() {
       );
     }
 
-    const census = await daemon.request("/runs?limit=200", routes.runs.response);
+    const census = await daemon.call(routes.runs, { query: { limit: 200 } });
     apiRuns = census.map(({ id, status }) => ({ id, status }));
   } catch (cause) {
     failure = errorMessage(cause);

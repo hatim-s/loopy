@@ -25,6 +25,7 @@ export {
   isTerminalRun,
   type Json,
   jsonSchema,
+  LOG_LEVELS,
   type LogPosition,
   type LogRecord,
   logRecordSchema,
@@ -42,6 +43,7 @@ export {
   type Receipt,
   type RecordField,
   type Ref,
+  RUNTIME_EVENT_ENTITIES,
   type RunOutcome,
   type RunStatus,
   receiptSchema,
@@ -56,19 +58,29 @@ export {
 } from "@loopy/core";
 
 export {
-  DEFAULT_ERROR_MESSAGES,
+  DEFAULT_PORT,
   decodeRunCursor,
-  ERROR_CODES,
-  type ErrorBody,
-  type ErrorCode,
   encodeRunCursor,
-  errorBodySchema,
+  MAX_SECRET_VALUE_BYTES,
   type PutScheduleBody,
   putScheduleBodySchema,
+  type Route,
   type RunsQuery,
   routes,
   scheduleEnabledBodySchema,
+  secretValueSchema,
 } from "./api";
+
+export {
+  decodeRouteResponse,
+  type RouteInput,
+  type RouteName,
+  type RouteOutcome,
+  type RouteRequest,
+  type RouteResult,
+  routeRequest,
+  routeUrl,
+} from "./client";
 
 export {
   boundaryOptions,
@@ -102,11 +114,29 @@ export {
   definitionSummarySchema,
 } from "./definition-summary";
 
-export { graphView, loopyView, runView, serverEvent } from "./derive";
+export {
+  graphView,
+  loopyView,
+  nodeDetailEvent,
+  previewPayload,
+  runView,
+  serverEvent,
+} from "./derive";
+
+export {
+  DEFAULT_ERROR_MESSAGES,
+  ERROR_CODES,
+  ERROR_STATUS,
+  type ErrorBody,
+  type ErrorCode,
+  errorBodySchema,
+} from "./errors";
 
 export * from "./graph";
 
 export { parseModuleOutput } from "./module-output";
+
+export { canCancelRun, cancelRefusal, canResumeRun, runMatchesQuery } from "./run-rules";
 
 export {
   MAX_SOURCE_BYTES,
@@ -116,6 +146,15 @@ export {
   sourceArtifactSchema,
   unavailableSource,
 } from "./source-artifact";
+
+export {
+  decodeEventBatch,
+  eventFrame,
+  SSE_CONNECTED,
+  SSE_HEARTBEAT,
+  type SseFrame,
+  splitSseFrames,
+} from "./sse";
 
 export {
   type CursorView,

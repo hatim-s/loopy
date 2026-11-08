@@ -56,13 +56,9 @@ export const validateCompiled = Effect.fn("contract.validateCompiled")(function*
     });
   }
 
-  const bundles = [];
-
   for (const value of body.bundles) {
-    const bytes = Uint8Array.from(atob(value.bytes), (character) => character.charCodeAt(0));
-
     const hash = yield* Effect.tryPromise({
-      try: () => sha256Hex(bytes),
+      try: () => sha256Hex(value.bytes),
       catch: (cause) => new CompiledHashError({ cause }),
     });
 
@@ -72,8 +68,6 @@ export const validateCompiled = Effect.fn("contract.validateCompiled")(function*
         message: "Bundle bytes do not match their hash.",
       });
     }
-
-    bundles.push({ ...value, bytes });
   }
 
   const sourceArtifact = body.sourceArtifact ?? unavailableSource(body.revision, "not_captured");
@@ -91,5 +85,5 @@ export const validateCompiled = Effect.fn("contract.validateCompiled")(function*
     });
   }
 
-  return { bundles, sourceArtifact };
+  return { bundles: body.bundles, sourceArtifact };
 });

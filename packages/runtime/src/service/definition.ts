@@ -1,7 +1,7 @@
 import { graphView, type PutLoopyBody } from "@loopy/contract";
 import { Effect } from "effect";
 import { ServiceError } from "./error";
-import type { ArtifactRegistry, ServiceOptions } from "./registry";
+import type { ArtifactRegistry, SecretError, ServiceOptions } from "./registry";
 
 export const requireDefinition = Effect.fn("definition.requireDefinition")(function* (
   registry: ArtifactRegistry,
@@ -17,6 +17,10 @@ export const requireDefinition = Effect.fn("definition.requireDefinition")(funct
 
   return saved;
 });
+
+// An invalid name or value is the caller's mistake; storage failures stay internal.
+const invalidSecret = (error: SecretError) =>
+  Effect.fail(error.reason === "invalid" ? new ServiceError("bad_request") : error);
 
 export function makeDefinitionOperations(options: ServiceOptions) {
   const putLoopy = Effect.fn("definition.putLoopy")(function* (slug: string, body: PutLoopyBody) {
@@ -47,11 +51,21 @@ export function makeDefinitionOperations(options: ServiceOptions) {
   return {
     putLoopy,
     graph,
-    listSecrets: () => options.secrets.list(),
+    listSecrets: () => options.secrets.list().pipe(Effect.catchTag("SecretError", invalidSecret)),
     putSecret: (name: string, value: string) =>
-      options.secrets.set(name, value).pipe(Effect.as({ name, saved: true as const })),
+      options.secrets
+        .set(name, value)
+        .pipe(
+          Effect.catchTag("SecretError", invalidSecret),
+          Effect.as({ name, saved: true as const }),
+        ),
     deleteSecret: (name: string) =>
-      options.secrets.remove(name).pipe(Effect.as({ name, removed: true as const })),
+      options.secrets
+        .remove(name)
+        .pipe(
+          Effect.catchTag("SecretError", invalidSecret),
+          Effect.as({ name, removed: true as const }),
+        ),
     generateTypes: (body: Parameters<ServiceOptions["generateTypes"]>[0]) =>
       options.generateTypes(body),
   };

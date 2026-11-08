@@ -11,16 +11,18 @@ import { writeDaemonFile } from "../../runtime/src/local/daemon/file";
 async function withHttp(
   body: Json,
   status: number,
-  use: (context: { home: string; cwd: string }, count: () => number) => Promise<void>,
+  use: (context: { home: string; cwd: string }, requests: () => string[]) => Promise<void>,
 ) {
   const root = mkdtempSync(join(tmpdir(), "loopy-cli-http-"));
   const authorizations: (string | null)[] = [];
+  const requests: string[] = [];
 
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     fetch(req) {
       authorizations.push(req.headers.get("authorization"));
+      requests.push(`${req.method} ${new URL(req.url).pathname}`);
 
       return Response.json(body, { status });
     },
@@ -33,7 +35,7 @@ async function withHttp(
       token: "fixture-token",
       startedAt: new Date().toISOString(),
     });
-    await use({ home: root, cwd: root }, () => authorizations.length);
+    await use({ home: root, cwd: root }, () => requests);
     expect(authorizations.every((value) => value === "Bearer fixture-token")).toBe(true);
   } finally {
     await server.stop(true);
@@ -41,20 +43,16 @@ async function withHttp(
   }
 }
 
-test("HTTP client decodes a real fixture response and preserves public error identity without retry", async () => {
+test("HTTP client fills the contract route, decodes the response and keeps error identity without retry", async () => {
   await withHttp(["TOKEN"], 200, async (context) => {
-    expect(await Effect.runPromise(request(context, "/secrets", routes.secrets.response))).toEqual([
-      "TOKEN",
-    ]);
+    expect(await Effect.runPromise(request(context, routes.secrets, {}))).toEqual(["TOKEN"]);
   });
   await withHttp(
     { error: { code: "not_found", message: "No run 'missing'." } },
     404,
-    async (context, count) => {
+    async (context, requests) => {
       const result = await Effect.runPromise(
-        Effect.flip(
-          request(context, "/runs/missing/cancel", routes.cancelRun.response, { method: "POST" }),
-        ),
+        Effect.flip(request(context, routes.cancelRun, { params: { id: "missing/run" } })),
       );
 
       expect(result).toBeInstanceOf(HttpError);
@@ -63,7 +61,7 @@ test("HTTP client decodes a real fixture response and preserves public error ide
         code: "not_found",
         message: "No run 'missing'.",
       });
-      expect(count()).toBe(1);
+      expect(requests()).toEqual(["POST /api/runs/missing%2Frun/cancel"]);
     },
   );
 });
@@ -73,11 +71,11 @@ test("HTTP client rejects malformed success and error envelopes", async () => {
     [{ unexpected: true }, 200],
     [{ error: { message: "missing code" } }, 400],
   ] as const) {
-    await withHttp(body, status, async (context, count) => {
+    await withHttp(body, status, async (context, requests) => {
       expect(
-        await Effect.runPromise(Effect.flip(request(context, "/secrets", routes.secrets.response))),
+        await Effect.runPromise(Effect.flip(request(context, routes.secrets, {}))),
       ).toBeInstanceOf(TransportError);
-      expect(count()).toBe(1);
+      expect(requests()).toHaveLength(1);
     });
   }
 });

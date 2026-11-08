@@ -31,7 +31,15 @@ async function graphFixture(name = "compiled") {
   const { store } = await Effect.runPromise(
     Effect.gen(function* () {
       const store = yield* openRunStore(f.home);
-      const daemon = yield* localDaemon({ ...f, store, concurrency: 4, port: 0 });
+
+      const daemon = yield* localDaemon({
+        ...f,
+        store,
+        concurrency: 4,
+        port: 0,
+        assets: join(f.cwd, "assets"),
+      });
+
       yield* daemon.start;
 
       return { store };

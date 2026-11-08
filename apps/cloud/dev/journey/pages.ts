@@ -1,16 +1,19 @@
-import { type ExecutionPage, routes } from "@loopy/contract";
+import { type ExecutionPage, encodeRunCursor, routes } from "@loopy/contract";
 import { Effect } from "effect";
 import { assert, equal } from "../shared/assert";
 import { compileFixture } from "../shared/fixture-client";
 import type { Journey } from "./client";
 
 export async function pages(journey: Journey, runId: string) {
-  const query = `slug=cloud-journey-execution&workspace=fixtures&limit=1`;
-  const first = await journey.json(routes.runs.response, `/runs?${query}`);
+  const query = { slug: "cloud-journey-execution", workspace: "fixtures", limit: 1 };
+  const first = await journey.call(routes.runs, { query });
   equal(first.length, 1, "run_page_not_bounded");
   assert(first[0], "missing_run_page");
-  const before = encodeURIComponent(`${first[0].createdAt}|${first[0].id}`);
-  const second = await journey.json(routes.runs.response, `/runs?${query}&before=${before}`);
+
+  const second = await journey.call(routes.runs, {
+    query: { ...query, before: encodeRunCursor(first[0]) },
+  });
+
   equal(second.length, 1, "second_run_page_missing");
   assert(second[0]?.id !== first[0].id, "run_page_repeats_cursor");
   const nodeIds = new Set<string>();
@@ -18,10 +21,10 @@ export async function pages(journey: Journey, runId: string) {
   let nodePages = 0;
 
   do {
-    const page: ExecutionPage = await journey.json(
-      routes.executions.response,
-      `/runs/${runId}/executions?limit=2${after ? `&after=${encodeURIComponent(after)}` : ""}`,
-    );
+    const page: ExecutionPage = await journey.call(routes.executions, {
+      params: { id: runId },
+      query: { limit: 2, after: after ?? undefined },
+    });
 
     assert(page.items.length <= 2 && page.items.length > 0, "execution_page_not_bounded");
 
@@ -39,13 +42,13 @@ export async function pages(journey: Journey, runId: string) {
 
   assert(nodePages > 1, "execution_pagination_not_exercised");
 
-  const logs = await journey.json(routes.logs.response, `/runs/${runId}/logs?limit=2`);
+  const logs = await journey.call(routes.logs, { params: { id: runId }, query: { limit: 2 } });
   equal(logs.length, 2, "run_log_page_not_bounded");
 
-  const moreLogs = await journey.json(
-    routes.logs.response,
-    `/runs/${runId}/logs?limit=2&after=${logs.at(-1)?.seq}`,
-  );
+  const moreLogs = await journey.call(routes.logs, {
+    params: { id: runId },
+    query: { limit: 2, after: logs.at(-1)?.seq },
+  });
 
   assert(moreLogs.length > 0 && moreLogs.length <= 2, "run_log_cursor_missing");
   assert(
@@ -53,14 +56,13 @@ export async function pages(journey: Journey, runId: string) {
     "run_logs_replayed_cursor",
   );
 
-  const global = await journey.json(routes.globalLogs.response, `/logs?runId=${runId}&limit=2`);
+  const global = await journey.call(routes.globalLogs, { query: { runId, limit: 2 } });
   equal(global.items.length, 2, "global_log_page_not_bounded");
   assert(global.hasMore && global.next !== null, "global_log_cursor_missing");
 
-  const globalNext = await journey.json(
-    routes.globalLogs.response,
-    `/logs?runId=${runId}&limit=2&before=${global.next}`,
-  );
+  const globalNext = await journey.call(routes.globalLogs, {
+    query: { runId, limit: 2, before: global.next ?? undefined },
+  });
 
   assert(
     globalNext.items.length > 0 && globalNext.items.length <= 2,
@@ -71,18 +73,14 @@ export async function pages(journey: Journey, runId: string) {
     "global_log_page_duplicates",
   );
 
-  const feed = await journey.json(
-    routes.eventHistory.response,
-    `/event-history?runId=${runId}&limit=2`,
-  );
+  const feed = await journey.call(routes.eventHistory, { query: { runId, limit: 2 } });
 
   equal(feed.items.length, 2, "event_feed_not_bounded");
   assert(feed.hasMore && feed.next !== null, "event_feed_cursor_missing");
 
-  const feedNext = await journey.json(
-    routes.eventHistory.response,
-    `/event-history?runId=${runId}&limit=2&before=${feed.next}`,
-  );
+  const feedNext = await journey.call(routes.eventHistory, {
+    query: { runId, limit: 2, before: feed.next ?? undefined },
+  });
 
   assert(feedNext.items.length > 0 && feedNext.items.length <= 2, "event_feed_second_page_missing");
   assert(
@@ -92,14 +90,17 @@ export async function pages(journey: Journey, runId: string) {
     "event_feed_page_duplicates",
   );
 
-  for (const path of [
-    "/runs?limit=201",
-    `/runs/${runId}/executions?limit=201`,
-    `/runs/${runId}/logs?limit=201`,
-    "/logs?limit=201",
-    "/event-history?limit=201",
+  const oversized = { limit: 201 };
+  const run = { id: runId };
+
+  for (const sent of [
+    () => journey.send(routes.runs, { query: oversized }),
+    () => journey.send(routes.executions, { params: run, query: oversized }),
+    () => journey.send(routes.logs, { params: run, query: oversized }),
+    () => journey.send(routes.globalLogs, { query: oversized }),
+    () => journey.send(routes.eventHistory, { query: oversized }),
   ]) {
-    await journey.denied(path, 400, "bad_request");
+    await journey.denied(sent(), 400, "bad_request");
   }
 
   return {
@@ -113,47 +114,73 @@ export async function pages(journey: Journey, runId: string) {
 }
 
 export async function isolation(journey: Journey, runId: string) {
-  const paths = ["/runs", "/loopies", "/logs", "/event-history", "/schedules"];
+  const other = { query: { workspace: "other" } };
 
-  for (const path of paths) {
-    await journey.denied(`${path}?workspace=other`, 403, "forbidden");
+  const queries = [
+    () => journey.send(routes.runs, other),
+    () => journey.send(routes.loopies, other),
+    () => journey.send(routes.globalLogs, other),
+    () => journey.send(routes.eventHistory, other),
+    () => journey.send(routes.schedules, other),
+  ];
+
+  for (const sent of queries) {
+    await journey.denied(sent(), 403, "forbidden");
   }
 
-  await journey.denied(`/loopies/cloud-journey-execution/runs`, 403, "forbidden", {
-    method: "POST",
-    body: { input: { name: "fixture", chooseYes: true, items: [] }, workspace: "other" },
-  });
+  await journey.denied(
+    journey.send(routes.startRun, {
+      params: { slug: "cloud-journey-execution" },
+      body: { input: { name: "fixture", chooseYes: true, items: [] }, workspace: "other" },
+    }),
+    403,
+    "forbidden",
+  );
   const compiled = await Effect.runPromise(compileFixture("execution.ts"));
-  await journey.denied(`/loopies/${compiled.graph.name}`, 403, "forbidden", {
-    method: "PUT",
-    body: { ...compiled, source: { ...compiled.source, workspace: "other" } },
-  });
+  await journey.denied(
+    journey.send(routes.putLoopy, {
+      params: { slug: compiled.graph.name },
+      body: { ...compiled, source: { ...compiled.source, workspace: "other" } },
+    }),
+    403,
+    "forbidden",
+  );
 
-  for (const suffix of ["", "/graph", "/source", "/payload", "/logs", "/executions"]) {
-    await journey.denied(`/runs/${runId}${suffix}`, 404, "not_found", { principal: "other" });
+  const params = { params: { id: runId } };
+  const asOther = { principal: "other" } as const;
+
+  const runResources = [
+    () => journey.send(routes.run, params, asOther),
+    () => journey.send(routes.runGraph, params, asOther),
+    () => journey.send(routes.runSource, params, asOther),
+    () => journey.send(routes.runPayload, params, asOther),
+    () => journey.send(routes.logs, params, asOther),
+    () => journey.send(routes.executions, params, asOther),
+  ];
+
+  for (const sent of runResources) {
+    await journey.denied(sent(), 404, "not_found");
   }
 
-  const otherRuns = await journey.json(routes.runs.response, "/runs?limit=200", {
-    principal: "other",
-  });
+  const otherRuns = await journey.call(routes.runs, { query: { limit: 200 } }, asOther);
 
   assert(
     otherRuns.every((run) => run.workspace === "other" && run.id !== runId),
     "other_workspace_leaked_run",
   );
 
-  const otherFeed = await journey.json(
-    routes.eventHistory.response,
-    `/event-history?runId=${runId}&limit=2`,
-    { principal: "other" },
+  const otherFeed = await journey.call(
+    routes.eventHistory,
+    { query: { runId, limit: 2 } },
+    asOther,
   );
 
   equal(otherFeed.items.length, 0, "other_workspace_leaked_feed");
 
   return {
-    queryDenials: paths.length,
+    queryDenials: queries.length,
     bodyDenials: 2,
-    runResourceDenials: 6,
+    runResourceDenials: runResources.length,
     filteredOtherFeedEmpty: true,
   };
 }

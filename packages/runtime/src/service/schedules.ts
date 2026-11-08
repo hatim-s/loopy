@@ -8,30 +8,30 @@ import {
   validateTimeZone,
 } from "@loopy/core";
 import { Effect } from "effect";
+import type { ServiceContext } from "./context";
 import { requireDefinition } from "./definition";
 import { ServiceError } from "./error";
 import { validateDefinitionInput } from "./input";
-import type { ServiceOptions } from "./registry";
 
-export function makeScheduleOperations(options: ServiceOptions) {
+export function makeScheduleOperations(context: ServiceContext) {
   const scheduleTarget = Effect.fn("schedules.scheduleTarget")(function* (
     slug: string,
-    callerWorkspace = "",
+    callerWorkspace: string,
   ) {
-    const registry = yield* options.registry(callerWorkspace);
+    const registry = yield* context.registry(callerWorkspace);
     const saved = yield* requireDefinition(registry, slug);
 
     return { registry, saved, workspace: yield* registry.workspace() };
   });
 
   const scheduleOverview = Effect.fn("schedules.scheduleOverview")(function* () {
-    return yield* options.store.scheduleOverview();
+    return yield* context.store.scheduleOverview();
   });
 
-  const listSchedules = Effect.fn("schedules.listSchedules")(function* (callerWorkspace = "") {
-    const workspace = yield* (yield* options.registry(callerWorkspace)).workspace();
+  const listSchedules = Effect.fn("schedules.listSchedules")(function* (callerWorkspace: string) {
+    const workspace = yield* (yield* context.registry(callerWorkspace)).workspace();
 
-    return (yield* options.store.listSchedules())
+    return (yield* context.store.listSchedules())
       .filter((schedule) => schedule.workspace === workspace)
       .map((schedule) => scheduleView(schedule));
   });
@@ -43,7 +43,7 @@ export function makeScheduleOperations(options: ServiceOptions) {
   const putSchedule = Effect.fn("schedules.putSchedule")(function* (
     slug: string,
     body: PutScheduleBody,
-    callerWorkspace = "",
+    callerWorkspace: string,
   ) {
     const { saved, workspace } = yield* scheduleTarget(slug, callerWorkspace);
     const declared = saved.graph.meta.schedule;
@@ -64,7 +64,7 @@ export function makeScheduleOperations(options: ServiceOptions) {
     const input = yield* scheduleInput(saved, body);
 
     return scheduleView(
-      yield* options.store.putSchedule({
+      yield* context.store.putSchedule({
         workspace,
         slug,
         cron,
@@ -89,7 +89,7 @@ export function makeScheduleOperations(options: ServiceOptions) {
     tz: string,
   ) {
     try {
-      return nextFire(parseCron(cron), new Date(options.clock.now()), tz).toISOString();
+      return nextFire(parseCron(cron), new Date(context.clock.now()), tz).toISOString();
     } catch (error) {
       return yield* Effect.fail(new ServiceError("invalid_cron", errorMessage(error)));
     }
@@ -104,7 +104,7 @@ export function makeScheduleOperations(options: ServiceOptions) {
   ) {
     const { workspace } = yield* scheduleTarget(slug, callerWorkspace);
 
-    const schedule = (yield* options.store.listSchedules()).find(
+    const schedule = (yield* context.store.listSchedules()).find(
       (entry) => entry.workspace === workspace && entry.slug === slug,
     );
 
@@ -118,11 +118,11 @@ export function makeScheduleOperations(options: ServiceOptions) {
   const setScheduleEnabled = Effect.fn("schedules.setScheduleEnabled")(function* (
     slug: string,
     enabled: boolean,
-    callerWorkspace = "",
+    callerWorkspace: string,
   ) {
     const current = yield* requireSchedule(slug, callerWorkspace);
 
-    const schedule = yield* options.store.setScheduleEnabled({
+    const schedule = yield* context.store.setScheduleEnabled({
       workspace: current.workspace,
       slug,
       enabled,
@@ -134,10 +134,10 @@ export function makeScheduleOperations(options: ServiceOptions) {
 
   const deleteSchedule = Effect.fn("schedules.deleteSchedule")(function* (
     slug: string,
-    callerWorkspace = "",
+    callerWorkspace: string,
   ) {
     const { workspace } = yield* scheduleTarget(slug, callerWorkspace);
-    yield* options.store.deleteSchedule(workspace, slug);
+    yield* context.store.deleteSchedule(workspace, slug);
 
     return { deleted: true as const };
   });

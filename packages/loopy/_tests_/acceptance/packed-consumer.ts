@@ -41,17 +41,21 @@ await Effect.runPromise(
   Effect.scoped(
     Effect.gen(function* () {
       const store = yield* openRunStore(home);
-      const service = makeLocalService({ home, cwd, store, clock: { now: Date.now } });
-      const daemon = yield* localDaemon({ home, cwd, store, concurrency: 1, port: 0 });
+      const service = makeLocalService({ home, store, clock: { now: Date.now } });
+      const daemon = yield* localDaemon({
+        home,
+        cwd,
+        store,
+        concurrency: 1,
+        port: 0,
+        assets: join(cwd, "node_modules/loopy/dist/dashboard"),
+      });
       const url = yield* daemon.start;
       yield* Effect.promise(() => assertDashboardServed(url));
       yield* service.putLoopy("packed", {
         graph: compiled.graph,
         revision: compiled.revision,
-        bundles: compiled.bundles.map((bundle) => ({
-          ...bundle,
-          bytes: Buffer.from(bundle.bytes).toString("base64"),
-        })),
+        bundles: compiled.bundles,
         replace: false,
         source: { path: entry, workspace: cwd },
       });

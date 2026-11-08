@@ -1,9 +1,8 @@
 import { createInterface } from "node:readline";
 import { Writable } from "node:stream";
+import { MAX_SECRET_VALUE_BYTES } from "@loopy/contract";
 import { Effect } from "effect";
 import { CliError } from "./errors";
-
-const SECRET_LIMIT_BYTES = 64 * 1024;
 
 const LINE_ENDING_BYTES = 2;
 
@@ -33,8 +32,14 @@ const readPipedSecret = Effect.suspend(() => {
     const data = (chunk: Buffer) => {
       bytes += chunk.length;
 
-      if (bytes > SECRET_LIMIT_BYTES + LINE_ENDING_BYTES) {
-        complete(Effect.fail(new CliError({ message: "Secret input exceeds 64 KiB." })));
+      if (bytes > MAX_SECRET_VALUE_BYTES + LINE_ENDING_BYTES) {
+        complete(
+          Effect.fail(
+            new CliError({
+              message: `Secret input exceeds ${MAX_SECRET_VALUE_BYTES / 1024} KiB.`,
+            }),
+          ),
+        );
       } else {
         chunks.push(chunk);
       }

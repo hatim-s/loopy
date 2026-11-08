@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { open } from "node:fs/promises";
 import { resolve } from "node:path";
-import { decodeBoundary } from "@loopy/contract";
+import { decodeBoundary, routes, routeUrl } from "@loopy/contract";
 import { PlaygroundClient } from "./client";
 import { api, dashboard, initialize, profile, root, state } from "./config";
 import { cleanEnvironment, manifestPath, requireFreeStackPorts } from "./stack-config";
@@ -64,7 +64,7 @@ export async function stop() {
 
 export async function status() {
   const client = await PlaygroundClient.open();
-  const response = await client.request("/runs");
+  const response = await client.request(routeUrl(routes.runs, {}));
   await response.body?.cancel();
   const pages = await fetch(dashboard, { signal: AbortSignal.timeout(3000) });
   await pages.body?.cancel();

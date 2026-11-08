@@ -32,7 +32,8 @@ const query = new URLSearchParams({
   path: "firstfail",
 });
 
-const path = `/cloud/artifacts?${query}`;
+// The artifact route belongs to the cloud worker, not the daemon route table.
+const path = `/api/cloud/artifacts?${query}`;
 
 const artifact = await journey.json(sandboxArtifactSchema, path);
 
@@ -44,25 +45,25 @@ equal(artifact.size, bytes.length, "artifact_size_mismatch");
 
 equal(artifact.sha256, sha256Hex(bytes), "artifact_hash_mismatch");
 
-await journey.denied(path, 401, "unauthorized", { principal: "none" });
+await journey.denied(journey.request(path, { principal: "none" }), 401, "unauthorized");
 
-await journey.denied(path, 404, "not_found", { principal: "other" });
+await journey.denied(journey.request(path, { principal: "other" }), 404, "not_found");
 
 query.set("path", "../escape");
 
-await journey.denied(`/cloud/artifacts?${query}`, 400, "bad_request");
+await journey.denied(journey.request(`/api/cloud/artifacts?${query}`), 400, "bad_request");
 
 query.set("path", "missing");
 
-await journey.denied(`/cloud/artifacts?${query}`, 404, "not_found");
+await journey.denied(journey.request(`/api/cloud/artifacts?${query}`), 404, "not_found");
 
 query.set("path", "firstfail");
 
 query.set("attempt", "999");
 
-await journey.denied(`/cloud/artifacts?${query}`, 404, "not_found");
+await journey.denied(journey.request(`/api/cloud/artifacts?${query}`), 404, "not_found");
 
-const current = await journey.json(routes.run.response, `/runs/${run.id}`);
+const current = await journey.call(routes.run, { params: { id: run.id } });
 
 equal(current.run.status, "succeeded", "artifact_read_changed_run");
 

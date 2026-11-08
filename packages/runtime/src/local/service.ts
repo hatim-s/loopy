@@ -12,7 +12,6 @@ export { ServiceError } from "../service";
 
 export function makeLocalService(options: {
   home: string;
-  cwd: string;
   store: Store & DashboardReader;
   clock: { now(): number };
 }) {
@@ -20,10 +19,10 @@ export function makeLocalService(options: {
     store: options.store,
     clock: options.clock,
     registry: (workspace) =>
-      Registry.make(options.home, workspace || options.cwd).pipe(Effect.map(makeArtifactRegistry)),
+      Registry.make(options.home, workspace).pipe(Effect.map(makeArtifactRegistry)),
     canonicalWorkspace: (workspace) =>
       Effect.try({
-        try: () => canonicalPath(workspace || options.cwd),
+        try: () => canonicalPath(workspace),
         catch: (cause) => new WorkspaceError({ cause }),
       }),
     secrets: new SecretStore(options.home),

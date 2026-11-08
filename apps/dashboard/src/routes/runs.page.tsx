@@ -23,6 +23,7 @@ const PERIOD_TABS = ["all", ...PERIODS] as const;
 const searchSchema = Schema.Struct({
   status: searchField(Schema.Literals(STATUS_TABS)),
   slug: searchField(Schema.String),
+  workspace: searchField(Schema.String),
   period: searchField(Schema.Literals(PERIODS)),
 });
 
@@ -70,9 +71,9 @@ function RunsTable({ filters }: { filters: RunListFilters }) {
 }
 
 function RunsPage() {
-  const { status = "all", slug, period } = Route.useSearch();
+  const { status = "all", slug, workspace, period } = Route.useSearch();
   const navigate = Route.useNavigate();
-  const filters: RunListFilters = { ...TAB_FILTER[status], slug, period };
+  const filters: RunListFilters = { ...TAB_FILTER[status], slug, workspace, period };
 
   return (
     <div className="content">
@@ -99,8 +100,12 @@ function RunsPage() {
           />
           <span className="flex-1" />
           <LoopySelect
-            value={slug}
-            onChange={(next) => void navigate({ search: (prev) => ({ ...prev, slug: next }) })}
+            value={{ slug, workspace }}
+            onChange={(next) =>
+              void navigate({
+                search: (prev) => ({ ...prev, slug: next.slug, workspace: next.workspace }),
+              })
+            }
           />
           <Segmented
             label="Created within"

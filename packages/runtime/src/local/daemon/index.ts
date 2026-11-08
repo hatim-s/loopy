@@ -30,8 +30,8 @@ type DaemonOptions = {
   cwd: string;
   store: SqliteRunStore;
   concurrency: number;
-  port?: number;
-  assets?: string;
+  port: number;
+  assets: string;
   onError?: (cause: Cause.Cause<unknown>, run?: RunRecord) => void;
 };
 
@@ -71,7 +71,6 @@ export const localDaemon = (options: DaemonOptions) =>
 
     const service = makeLocalService({
       home: options.home,
-      cwd: options.cwd,
       store: options.store,
       clock: { now: Date.now },
     });
@@ -110,7 +109,7 @@ export const localDaemon = (options: DaemonOptions) =>
               ...options,
               service,
               token,
-              daemon: { startedAt, concurrency: options.concurrency },
+              daemon: { pid: process.pid, startedAt, concurrency: options.concurrency },
             });
             created = true;
             writeDaemonFile(options.home, {

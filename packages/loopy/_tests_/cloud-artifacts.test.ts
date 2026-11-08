@@ -81,7 +81,9 @@ beforeAll(async () => {
           });
         }
         async fetch(request) {
-          const {workspace, operation, args} = await request.json();
+          // Bundle bytes cross this test harness as tagged base64.
+          const {workspace, operation, args} = JSON.parse(await request.text(), (_, value) =>
+            value && typeof value.$bytes === "string" ? Uint8Array.from(atob(value.$bytes), (char) => char.charCodeAt(0)) : value);
           const bucket = operation === "failWrite" ? {
             get: this.env.BUCKET.get.bind(this.env.BUCKET),
             put: (key, ...rest) => {
@@ -116,7 +118,7 @@ beforeAll(async () => {
               });
               if(operation === "httpSave") {
                 const url = new URL("http://127.0.0.1/api/loopies/"+args[0].graph.name);
-                const request = new Request(url,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(args[0])});
+                const request = new Request(url,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(args[0], (_, value) => value instanceof Uint8Array ? btoa(String.fromCharCode(...value)) : value)});
                 return await dispatch(apiRoutes({service,store,cwd:workspace,daemon:{pid:null,startedAt:new Date().toISOString(),concurrency:1}}),request,url);
               }
               const before = await Effect.runPromise(store.eventCursor());
@@ -177,10 +179,17 @@ afterAll(async () => {
   }
 });
 
+// BOUNDARY: JSON.stringify passes every value through; only bundle bytes are tagged as base64.
+function tagBytes(key: string, value: unknown) {
+  return key === "bytes" && value instanceof Uint8Array
+    ? { $bytes: Buffer.from(value).toString("base64") }
+    : value;
+}
+
 async function call(workspace: string, operation: string, ...args: unknown[]) {
   const response = await runtime.dispatchFetch("http://local/registry", {
     method: "POST",
-    body: JSON.stringify({ workspace, operation, args }),
+    body: JSON.stringify({ workspace, operation, args }, tagBytes),
   });
 
   const body: unknown = await response.json();
@@ -221,7 +230,7 @@ async function executable(workspace: string): Promise<PutLoopyBody> {
     graph,
     revision: await revision(graph),
     replace: false,
-    bundles: [{ nodeId: node.id, bundleHash, bytes: bytes.toString("base64") }],
+    bundles: [{ nodeId: node.id, bundleHash, bytes: Uint8Array.from(bytes) }],
     source: { path: "/entry.ts", workspace },
   };
 }
@@ -238,7 +247,7 @@ test("real local R2 and DO SQL publish immutable revisions, pinned source and ba
   });
   expect(await call(workspace, "getBundle", first.bundles[0]?.bundleHash)).toMatchObject({
     status: 200,
-    body: { value: first.bundles[0]?.bytes },
+    body: { value: Buffer.from(first.bundles[0]?.bytes ?? []).toString("base64") },
   });
   expect(
     await call(workspace, "save", {
@@ -532,7 +541,10 @@ test("shared validation rejects forged bundles, revisions and source mappings be
     Effect.runPromise(
       validateCompiled({
         ...body,
-        bundles: body.bundles.map((bundle) => ({ ...bundle, bytes: btoa("wrong") })),
+        bundles: body.bundles.map((bundle) => ({
+          ...bundle,
+          bytes: new TextEncoder().encode("wrong"),
+        })),
       }),
     ),
   ).rejects.toThrow("Bundle bytes do not match their hash.");

@@ -1,6 +1,11 @@
-import type { RunSnapshotView, RunView, ServerEvent } from "@loopy/contract";
+import {
+  type RunSnapshotView,
+  type RunsQuery,
+  type RunView,
+  runMatchesQuery,
+  type ServerEvent,
+} from "@loopy/contract";
 import type { Query, QueryClient } from "@tanstack/react-query";
-import type { RunsQuery } from "../../backend/backend";
 import { keys } from "../keys";
 import type { RunPage } from "../queries";
 import { historyOf, remember, type SeenRun, type StreamHistory, seenRun } from "./history";
@@ -25,24 +30,13 @@ function mapPage(page: RunPage | undefined, update: (runs: RunView[]) => RunView
   return page && { ...page, runs: update(page.runs) };
 }
 
-function matchesRun(filters: RunsQuery, run: RunView): boolean {
-  return (
-    (filters.slug === undefined || filters.slug === run.slug) &&
-    (filters.status === undefined || filters.status === run.status) &&
-    (filters.workspace === undefined || filters.workspace === run.workspace) &&
-    (filters.from === undefined || run.createdAt >= filters.from) &&
-    (filters.to === undefined || run.createdAt < filters.to) &&
-    (filters.waiting === undefined || filters.waiting === (run.waitingOn !== null))
-  );
-}
-
 function replaceMember(runs: RunView[], next: RunView, filters: RunsQuery): RunView[] {
   return runs.flatMap((run) => {
     if (run.id !== next.id || !newer(run, next)) {
       return [run];
     }
 
-    return matchesRun(filters, next) ? [next] : [];
+    return runMatchesQuery(filters, next) ? [next] : [];
   });
 }
 
@@ -95,9 +89,9 @@ export function updateMembership(
 
     const stale =
       query.state.fetchStatus === "fetching" &&
-      (before === undefined ? write?.event.kind !== "created" : matchesRun(filters, before));
+      (before === undefined ? write?.event.kind !== "created" : runMatchesQuery(filters, before));
 
-    if (stale || (previous === undefined && matchesRun(filters, run))) {
+    if (stale || (previous === undefined && runMatchesQuery(filters, run))) {
       missing.add(query.queryHash);
     }
   }

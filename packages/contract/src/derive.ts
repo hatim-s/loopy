@@ -1,5 +1,4 @@
 import {
-  emptyRunCounts,
   type Graph,
   type Json,
   MAX_PREVIEW_BYTES,
@@ -9,6 +8,7 @@ import {
   type RuntimeEvent,
   type Schedule,
 } from "@loopy/core";
+import type { StatusCounts } from "./dashboard-reader";
 import type { GraphView } from "./graph";
 import type { LoopyView, RunView, ServerEvent } from "./views";
 
@@ -45,7 +45,8 @@ function outcome(run: RunRecord) {
   }
 }
 
-function previewPayload(value: Json): { value: Json; bytes: number | null } {
+/** Views inline a payload up to the preview cap and report only its size beyond it. */
+export function previewPayload(value: Json): { value: Json; bytes: number | null } {
   const bytes = outputBytes(value);
 
   return bytes > MAX_PREVIEW_BYTES ? { value: null, bytes } : { value, bytes: null };
@@ -126,25 +127,12 @@ function scheduleView(
   };
 }
 
+/** Counts and the newest runs come from the store, scoped like the definition. */
 export function loopyView(
   saved: SavedLoopyInput,
   schedule: Schedule | null,
-  runs: RunView[],
+  runs: { counts: StatusCounts; latest: RunView[] },
 ): LoopyView {
-  const matching = runs.filter((run) => run.slug === saved.slug);
-
-  const counts = emptyRunCounts();
-
-  let lastRun: RunView | null = null;
-
-  for (const run of matching) {
-    counts[run.status]++;
-
-    if (lastRun === null || run.createdAt > lastRun.createdAt) {
-      lastRun = run;
-    }
-  }
-
   return {
     slug: saved.slug,
     workspace: saved.workspace,
@@ -153,17 +141,54 @@ export function loopyView(
     mode: saved.mode,
     input: saved.input,
     schedule: scheduleView(schedule, saved.schedule),
-    lastRun,
-    counts,
+    lastRun: runs.latest[0] ?? null,
+    latestRuns: runs.latest,
+    counts: runs.counts,
   };
 }
 
-export function serverEvent(event: RuntimeEvent, view: (run: RunRecord) => RunView): ServerEvent {
-  if (event.entity === "run") {
-    return { ...event, record: view(event.record) };
+type NodeEvent = Extract<RuntimeEvent, { entity: "node" }>;
+
+type NodeEventView = Extract<ServerEvent, { entity: "node" }>;
+
+/** Event history serves node records whole; the input view stays with execution detail. */
+export function nodeDetailEvent(event: NodeEvent): NodeEventView {
+  const record = { ...event.record };
+  delete record.inputView;
+
+  return { ...event, record };
+}
+
+/** Live frames carry an output only within the preview cap. */
+function nodeEventPreview(event: NodeEvent): NodeEventView {
+  const view = nodeDetailEvent(event);
+
+  if (view.record.status !== "succeeded") {
+    return view;
   }
 
-  return event;
+  const output = previewPayload(view.record.output);
+
+  return output.bytes === null
+    ? view
+    : { ...view, truncatedOutputBytes: output.bytes, record: { ...view.record, output: null } };
+}
+
+/** The live-stream view of one runtime event. */
+export function serverEvent(event: RuntimeEvent, view: (run: RunRecord) => RunView): ServerEvent {
+  switch (event.entity) {
+    case "run": {
+      return { ...event, record: view(event.record) };
+    }
+
+    case "node": {
+      return nodeEventPreview(event);
+    }
+
+    default: {
+      return event;
+    }
+  }
 }
 
 export function graphView(graph: Graph): GraphView {

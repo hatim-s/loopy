@@ -31,25 +31,17 @@ export const save = defineCommand({
       // A file outside an implicit workspace registers beside its source instead.
       const workspace = !cli.cwdExplicit && outside ? dirname(source) : cli.cwd;
       printJson(
-        yield* request(
-          cli,
-          `/loopies/${encodeURIComponent(result.graph.name)}`,
-          routes.putLoopy.response,
-          {
-            method: "PUT",
-            body: {
-              graph: result.graph,
-              revision: result.revision,
-              sourceArtifact: result.sourceArtifact,
-              bundles: result.bundles.map((value) => ({
-                ...value,
-                bytes: Buffer.from(value.bytes).toString("base64"),
-              })),
-              source: { path: source, workspace },
-              replace: cli.values.replace,
-            },
+        yield* request(cli, routes.putLoopy, {
+          params: { slug: result.graph.name },
+          body: {
+            graph: result.graph,
+            revision: result.revision,
+            sourceArtifact: result.sourceArtifact,
+            bundles: result.bundles,
+            source: { path: source, workspace },
+            replace: cli.values.replace,
           },
-        ),
+        }),
       );
     }),
 });

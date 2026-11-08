@@ -1,3 +1,4 @@
+import { makeServiceContext } from "./context";
 import { makeDefinitionOperations } from "./definition";
 import { makeRunOperations } from "./mutations";
 import { makeRunQueries } from "./queries";
@@ -6,14 +7,19 @@ import { makeRunViews } from "./run-views";
 import { makeScheduleOperations } from "./schedules";
 
 export function makeService(options: ServiceOptions) {
-  const { resolve, view, ...views } = makeRunViews(options);
+  const context = makeServiceContext(options);
+  const views = makeRunViews(context);
 
   return {
-    ...views,
+    listRuns: views.listRuns,
+    listLoopies: views.listLoopies,
+    runSnapshot: views.runSnapshot,
+    events: views.events,
+    cursor: views.cursor,
     ...makeDefinitionOperations(options),
-    ...makeRunOperations(options),
-    ...makeRunQueries(options, { resolve, view, ...views }),
-    ...makeScheduleOperations(options),
+    ...makeRunOperations(context, views),
+    ...makeRunQueries(context, views),
+    ...makeScheduleOperations(context),
   };
 }
 

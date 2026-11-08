@@ -68,11 +68,10 @@ export async function updateApproval(options: {
     // Persist the intent before resolving so a crash never resolves the same hook twice.
     await save({ ...progress, approvalIntentAt: new Date().toISOString() });
     await event(state, group, { kind: "approval-intent", runId, phase, hook: waiting.hook });
-    await client.json(
-      routes.resolveNamedHook.response,
-      `/runs/${runId}/hooks/${encodeURIComponent(waiting.hook)}`,
-      { body: { payload: { approved: true } } },
-    );
+    await client.call(routes.resolveNamedHook, {
+      params: { id: runId, name: waiting.hook },
+      body: { payload: { approved: true } },
+    });
     const resolvedAt = new Date().toISOString();
     await save({ ...progress, wait: { ...wait, resolvedAt } });
     await event(state, group, {

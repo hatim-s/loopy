@@ -1,9 +1,9 @@
-import { afterAll, expect, spyOn, test } from "bun:test";
-import { type RunView, routes } from "@loopy/contract";
+import { afterAll, expect, test } from "bun:test";
+import type { RunView } from "@loopy/contract";
 import { Effect } from "effect";
 import { BackendError } from "../src/backend/backend";
 import { runRequest } from "../src/backend/http-wire";
-import { httpTransport, localHttpBackend } from "../src/backend/local-http";
+import { localHttpBackend } from "../src/backend/local-http";
 
 const run: RunView = {
   id: "run/1",
@@ -52,7 +52,7 @@ function last(): Seen | undefined {
 test("each call uses the method and path from the route table, with the token", async () => {
   reply = () => Response.json(run);
 
-  await backend.resumeRun("run/1");
+  await backend.call("resumeRun", { params: { id: "run/1" } });
   expect(last()).toEqual({
     method: "POST",
     path: "/api/runs/run%2F1/resume",
@@ -60,36 +60,44 @@ test("each call uses the method and path from the route table, with the token", 
     body: "",
   });
 
-  await backend.resolveHook("tok", { approved: true });
+  await backend.call("resolveHook", {
+    params: { token: "tok" },
+    body: { payload: { approved: true } },
+  });
   expect(last()?.method).toBe("POST");
   expect(last()?.path).toBe("/api/hooks/tok");
   expect(JSON.parse(last()?.body ?? "")).toEqual({ payload: { approved: true } });
 
   // A slug alone can name another project's loopy, so both calls carry the view's workspace.
-  await backend.startRun("triage", { name: "Hatim" }, "/work/a");
+  await backend.call("startRun", {
+    params: { slug: "triage" },
+    body: { input: { name: "Hatim" }, workspace: "/work/a" },
+  });
   expect(last()?.path).toBe("/api/loopies/triage/runs");
   expect(JSON.parse(last()?.body ?? "")).toEqual({
     input: { name: "Hatim" },
     workspace: "/work/a",
   });
 
-  await expect(backend.loopyGraph("triage", "/work/a")).rejects.toBeInstanceOf(BackendError);
+  await expect(
+    backend.call("graph", { params: { slug: "triage" }, query: { workspace: "/work/a" } }),
+  ).rejects.toBeInstanceOf(BackendError);
   expect(last()?.path).toBe("/api/loopies/triage/graph?workspace=%2Fwork%2Fa");
 
   reply = () => Response.json([run]);
-  await backend.runs({ slug: "triage", limit: 20 });
+  await backend.call("runs", { query: { slug: "triage", limit: 20 } });
   expect(last()?.method).toBe("GET");
   expect(last()?.path).toBe("/api/runs?slug=triage&limit=20");
 
   reply = () => Response.json([]);
-  await backend.logs("run/1", 7);
+  await backend.call("logs", { params: { id: "run/1" }, query: { after: 7 } });
   expect(last()?.path).toBe("/api/runs/run%2F1/logs?after=7");
 });
 
 test("a response that fails the route schema is rejected", async () => {
   reply = () => Response.json({ ...run, status: "exploded" });
 
-  const failure = backend.cancelRun("run/1");
+  const failure = backend.call("cancelRun", { params: { id: "run/1" } });
 
   await expect(failure).rejects.toBeInstanceOf(BackendError);
   await expect(failure).rejects.toMatchObject({ code: "malformed_response" });
@@ -102,7 +110,7 @@ test("an error body becomes a BackendError with the server's code and message", 
       { status: 409 },
     );
 
-  await expect(backend.resumeRun("run/1")).rejects.toEqual(
+  await expect(backend.call("resumeRun", { params: { id: "run/1" } })).rejects.toEqual(
     new BackendError("not_claimable", "Run is finished."),
   );
 });
@@ -113,7 +121,7 @@ test.each([
   [500, "internal"],
 ] as const)("GET %i preserves the contract error %s", async (status, code) => {
   reply = () => Response.json({ error: { code, message: "Server guidance." } }, { status });
-  const failure = backend.loopies();
+  const failure = backend.call("loopies", {});
 
   await expect(failure).rejects.toBeInstanceOf(BackendError);
   await expect(failure).rejects.toMatchObject({ code, message: "Server guidance." });
@@ -286,43 +294,38 @@ test("byte-at-a-time CRLF frames deliver a batch", async () => {
   expect(batches).toEqual([[11]]);
 });
 
-test("three empty EOFs back off for 500, 1000, then 2000 ms and release pause listeners", async () => {
+test("three empty EOFs back off for 500, 1000, then 2000 ms", async () => {
   const controller = new AbortController();
-  const attempts: number[] = [];
-  const timers = spyOn(globalThis, "setTimeout");
-  const removed = spyOn(controller.signal, "removeEventListener");
-  reply = () => {
-    attempts.push(Date.now());
+  const delays: number[] = [];
+  let attempts = 0;
 
-    if (attempts.length === 4) {
-      controller.abort();
-    }
+  reply = () => {
+    attempts++;
 
     return new Response("");
   };
 
-  try {
-    await backend.events({
-      after: 0,
-      epoch: "e1",
-      signal: controller.signal,
-      onState: () => undefined,
-      onBatch: () => undefined,
-    });
-    expect(attempts).toHaveLength(4);
+  const backoff = localHttpBackend({
+    baseUrl: server.url.origin,
+    token: "secret",
+    pause: async (ms) => {
+      delays.push(ms);
 
-    for (const [index, delay] of [500, 1000, 2000].entries()) {
-      expect((attempts[index + 1] ?? 0) - (attempts[index] ?? 0)).toBeGreaterThanOrEqual(
-        delay - 25,
-      );
-      const pause = timers.mock.calls.find((call) => call[1] === delay);
-      expect(pause).toBeDefined();
-      expect(removed).toHaveBeenCalledWith("abort", pause?.[0]);
-    }
-  } finally {
-    timers.mockRestore();
-    removed.mockRestore();
-  }
+      if (delays.length === 3) {
+        controller.abort();
+      }
+    },
+  });
+
+  await backoff.events({
+    after: 0,
+    epoch: "e1",
+    signal: controller.signal,
+    onState: () => undefined,
+    onBatch: () => undefined,
+  });
+  expect(delays).toEqual([500, 1000, 2000]);
+  expect(attempts).toBe(3);
 });
 
 test("snapshot HTTP requests stop when their signal is aborted", async () => {
@@ -342,7 +345,7 @@ test("snapshot HTTP requests stop when their signal is aborted", async () => {
     );
 
   const controller = new AbortController();
-  const requested = backend.run(run.id, controller.signal);
+  const requested = backend.call("run", { params: { id: run.id } }, controller.signal);
   await body.promise;
   controller.abort();
   await expect(requested).rejects.toMatchObject({ name: "AbortError" });
@@ -351,25 +354,18 @@ test("snapshot HTTP requests stop when their signal is aborted", async () => {
 
 test("session cursor uses its route schema and waiting booleans survive URL encoding", async () => {
   reply = () => Response.json({ cursor: 42, epoch: "session" });
-  expect(await backend.cursor(AbortSignal.timeout(1000))).toEqual({ cursor: 42, epoch: "session" });
+  expect(await backend.call("cursor", {}, AbortSignal.timeout(1000))).toEqual({
+    cursor: 42,
+    epoch: "session",
+  });
   expect(last()?.path).toBe("/api/cursor");
   reply = () => Response.json([]);
-  await backend.runs({ status: "suspended", waiting: true });
+  await backend.call("runs", { query: { status: "suspended", waiting: true } });
   expect(last()?.path).toBe("/api/runs?status=suspended&waiting=true");
   reply = () => Response.json({ cursor: "bad", epoch: "session" });
-  await expect(backend.cursor(AbortSignal.timeout(1000))).rejects.toMatchObject({
+  await expect(backend.call("cursor", {}, AbortSignal.timeout(1000))).rejects.toMatchObject({
     code: "malformed_response",
   });
-});
-
-test("route descriptor mistakes stay programmer errors before fetch", async () => {
-  const { send } = httpTransport({ baseUrl: server.url.origin, token: "secret" });
-  await expect(
-    send(
-      { ...routes.run, params: routes.cursor.params },
-      { params: {}, query: {}, body: undefined },
-    ),
-  ).rejects.toThrow("Route /runs/:id needs the :id parameter.");
 });
 
 test("the Promise bridge preserves the caller's abort reason even when an operation fails", async () => {

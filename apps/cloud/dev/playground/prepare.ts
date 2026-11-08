@@ -1,7 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { compile } from "@loopy/compiler";
-import { decodeBoundary, encodeBoundary, putLoopyBodySchema, routes } from "@loopy/contract";
+import { decodeBoundary, encodeBoundary, routes } from "@loopy/contract";
 import { Effect, Schema } from "effect";
 import { failure, io } from "../../../sandbox/src/operations";
 import { requireCurrentBaseline } from "./baseline";
@@ -66,22 +66,17 @@ export function prepare() {
           );
         }
 
-        const body = decodeBoundary(putLoopyBodySchema)({
-          graph: compiled.graph,
-          revision: compiled.revision,
-          sourceArtifact: compiled.sourceArtifact,
-          bundles: compiled.bundles.map((bundle) => ({
-            ...bundle,
-            bytes: Buffer.from(bundle.bytes).toString("base64"),
-          })),
-          source: { path: file, workspace: "playground" },
-          replace: true,
-        });
-
         yield* io(operation, () =>
-          client.json(routes.putLoopy.response, `/loopies/${fixture.slug}`, {
-            method: "PUT",
-            body,
+          client.call(routes.putLoopy, {
+            params: { slug: fixture.slug },
+            body: {
+              graph: compiled.graph,
+              revision: compiled.revision,
+              sourceArtifact: compiled.sourceArtifact,
+              bundles: compiled.bundles,
+              source: { path: file, workspace: "playground" },
+              replace: true,
+            },
           }),
         );
         revisions.push({ group, slug: fixture.slug, revision: compiled.revision, file });

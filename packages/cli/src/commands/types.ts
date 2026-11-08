@@ -23,11 +23,10 @@ export const types = defineCommand({
       const [binary, path] = cli.args;
       const destination = resolve(cli.cwd, cli.values.out);
 
-      const generated = yield* request(cli, "/types", routes.generateTypes.response, {
-        method: "POST",
+      const generated = yield* request(cli, routes.generateTypes, {
         body: {
           binary: binary.includes("/") ? resolve(cli.cwd, binary) : binary,
-          path,
+          path: [...path],
           name: cli.values.name ?? null,
         },
       });
