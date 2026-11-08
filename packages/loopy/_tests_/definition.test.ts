@@ -7,27 +7,27 @@ test("graph definitions validate names, modes, scopes, schedules, secrets and in
   );
   // @ts-expect-error JavaScript can supply an invalid mode.
   expect(() => loopy("test", { input: {}, mode: "unsafe", run: () => null })).toThrow(
-    "Loopy mode must be one of sandbox, full.",
+    'Expected "sandbox" | "full"\n  at ["mode"]',
   );
   // @ts-expect-error JavaScript can supply an invalid scope.
   expect(() => loopy("test", { input: {}, scope: "remote", run: () => null })).toThrow(
-    "Loopy scope must be one of project, global.",
+    'Expected "project" | "global"\n  at ["scope"]',
   );
   // @ts-expect-error JavaScript can supply a malformed schedule.
   expect(() => loopy("test", { input: {}, schedule: { cron: 42 }, run: () => null })).toThrow(
-    "Schedule cron must be a string.",
+    'Expected string\n  at ["schedule"]["cron"]',
   );
   // @ts-expect-error JavaScript can supply malformed secret names.
   expect(() => loopy("test", { input: {}, secrets: [42], run: () => null })).toThrow(
-    "Secrets must be a list of strings.",
+    'Expected string\n  at ["secrets"][0]',
   );
   // @ts-expect-error JavaScript can supply a non-object schema.
   expect(() => loopy("test", { input: 42, run: () => null })).toThrow(
-    "Input schema must be an object.",
+    'Expected object\n  at ["input"]',
   );
   // @ts-expect-error JavaScript can supply unknown field types.
   expect(() => loopy("test", { input: { count: "integer" }, run: () => null })).toThrow(
-    "Input field 'count' must be one of",
+    '  at ["input"]["count"]',
   );
 });
 
@@ -64,12 +64,12 @@ test("graph definitions validate timezones and reject unknown properties", () =>
   ).toThrow("Invalid time zone 'Mars/Olympus'");
   // @ts-expect-error JavaScript callers can pass unknown properties.
   expect(() => loopy("test", { input: {}, typo: true, run: () => null })).toThrow(
-    "Loopy definition has an unsupported field 'typo'",
+    'Expected no excess property\n  at ["typo"]',
   );
   expect(() =>
     // @ts-expect-error JavaScript callers can pass unknown schedule properties.
     loopy("test", { input: {}, schedule: { cron: "@daily", timezone: "UTC" }, run: () => null }),
-  ).toThrow("Schedule has an unsupported field 'timezone'");
+  ).toThrow('Expected no excess property\n  at ["schedule"]["timezone"]');
   expect(
     loopy("test", { input: {}, schedule: { cron: "@daily", tz: "Asia/Kolkata" }, run: () => null })
       .meta.schedule,

@@ -18,15 +18,6 @@ export function requireRecord(value: unknown, location: string): UnknownRecord {
   return value;
 }
 
-// BOUNDARY: External JSON and module fields must be strings before their callers consume them.
-export function requireString(value: unknown, location: string): string {
-  if (typeof value !== "string") {
-    throw new Error(`${location} must be a string.`);
-  }
-
-  return value;
-}
-
 // BOUNDARY: External workflow fields must be positive safe integers before execution limits are applied.
 export function requirePositiveInteger(value: unknown, location: string): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) {
@@ -34,32 +25,6 @@ export function requirePositiveInteger(value: unknown, location: string): number
   }
 
   return value;
-}
-
-// BOUNDARY: External workflow and HTTP fields must match one of the supplied string enum choices.
-export function requireOneOf<const Choices extends readonly string[]>(
-  value: unknown,
-  choices: Choices,
-  location: string,
-): Choices[number] {
-  if (typeof value !== "string" || !choices.includes(value)) {
-    throw new Error(`${location} must be one of ${choices.join(", ")}.`);
-  }
-
-  return value;
-}
-
-/** Rejects keys the schema does not know, so a typo never silently disappears. */
-export function allowKeys(
-  value: UnknownRecord,
-  location: string,
-  allowed: readonly string[],
-): void {
-  for (const key of Object.keys(value)) {
-    if (!allowed.includes(key)) {
-      throw new Error(`${location} has an unsupported field '${key}'.`);
-    }
-  }
 }
 
 /**

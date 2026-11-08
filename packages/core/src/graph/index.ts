@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { counter, positiveInt, struct } from "../codec";
 import { nodeSchema } from "./nodes";
 import { graphRecord, nodeIdSchema, recordSpecSchema, refSchema } from "./values";
@@ -68,6 +68,23 @@ export const graphMetaSchema = struct({
 });
 
 export type GraphMeta = Schema.Schema.Type<typeof graphMetaSchema>;
+
+const withDefault = <S extends Schema.Constraint>(schema: S, value: S["Encoded"]) =>
+  Schema.withDecodingDefault(Effect.succeed(value))(schema);
+
+// What an author writes. Decoding fills every default graphMetaSchema requires.
+export const authorMetaSchema = Schema.Struct({
+  description: withDefault(Schema.NullOr(Schema.String), null),
+  schedule: withDefault(
+    Schema.NullOr(
+      Schema.Struct({ cron: Schema.String, tz: withDefault(Schema.String, DEFAULT_TIME_ZONE) }),
+    ),
+    null,
+  ),
+  secrets: withDefault(Schema.Array(Schema.String), []),
+  mode: withDefault(Schema.Literals(EXECUTION_MODES), "sandbox"),
+  scope: withDefault(Schema.Literals(LOOPY_SCOPES), "project"),
+});
 
 export const UNKNOWN_KEY_MODES = ["strip", "reject", "passthrough"] as const;
 

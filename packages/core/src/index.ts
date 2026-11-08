@@ -30,7 +30,7 @@ export { isRef, projectValue } from "./graph/ref";
 
 export { graphTypeResolver } from "./graph/type";
 
-export { parseInputValidation, validateGraphInput } from "./input";
+export { inputValidationIssue, validateGraphInput } from "./input";
 
 export { assertJson, type Json, jsonSchema } from "./json";
 
@@ -62,15 +62,12 @@ export { validateSchedule, validateTimeZone } from "./schedule";
 export * from "./store";
 
 export {
-  allowKeys,
   isBoolean,
   isNumber,
   isRecord,
   isString,
   isStringArray,
-  requireOneOf,
   requirePositiveInteger,
   requireRecord,
-  requireString,
   setOwnProperty,
 } from "./validation";
