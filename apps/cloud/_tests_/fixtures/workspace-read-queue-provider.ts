@@ -1,5 +1,6 @@
 import { decodeBoundary, type Json, receiptSchema } from "@loopy/contract";
 import { sandboxAttemptIdentitySchema, sandboxAttemptRequestSchema } from "@loopy/contract/sandbox";
+import { SANDBOX_REQUEST_TIMEOUT_MS } from "../../src/provider";
 
 export type QueueProofDetails = Record<string, Json | undefined>;
 
@@ -31,9 +32,9 @@ export function readQueueProvider(
   async function hold() {
     record("provider-held", { mode });
 
-    // Release before SandboxProvider's five-second timeout, even if an assertion fails.
+    // Release before the provider request times out, even if an assertion fails.
     if (releaseReason === null) {
-      watchdog = setTimeout(() => release("watchdog"), 3500);
+      watchdog = setTimeout(() => release("watchdog"), SANDBOX_REQUEST_TIMEOUT_MS - 1500);
     }
 
     entered.resolve();

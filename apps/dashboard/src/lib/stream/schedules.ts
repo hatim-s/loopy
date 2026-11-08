@@ -10,15 +10,27 @@ function sameSchedule(a: ScheduleId, b: ScheduleId): boolean {
   return a.workspace === b.workspace && a.slug === b.slug;
 }
 
-/** A lower version is older than what the list holds; a fire keeps the version it fired. */
+function sameFailure(a: ScheduleView["failure"], b: ScheduleView["failure"]): boolean {
+  return a?.error === b?.error && a?.retryAt === b?.retryAt;
+}
+
+// A fire keeps the version it fired, and a retried failure keeps both the version and the slot.
+function isStale(current: ScheduleView, next: ScheduleView): boolean {
+  if (current.version !== next.version) {
+    return current.version > next.version;
+  }
+
+  if (current.nextFireAt !== next.nextFireAt) {
+    return current.nextFireAt > next.nextFireAt;
+  }
+
+  return sameFailure(current.failure, next.failure);
+}
+
 function withSchedule(list: ScheduleView[], next: ScheduleView): ScheduleView[] {
   const current = list.find((item) => sameSchedule(item, next));
 
-  if (
-    current &&
-    (current.version > next.version ||
-      (current.version === next.version && current.nextFireAt >= next.nextFireAt))
-  ) {
+  if (current && isStale(current, next)) {
     return list;
   }
 

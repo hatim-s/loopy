@@ -1,4 +1,4 @@
-import type { CommandResult } from "@loopy/core";
+import type { ParserInput } from "@loopy/core";
 import { jsonValue, lines, nulFields, unexpected } from "./shared";
 
 type Stat = {
@@ -27,11 +27,11 @@ export const STAT_DARWIN_FORMAT = "%N\x01%z\x01%m\x01%HT\x01%Lp";
 
 export const STAT_LINUX_FORMAT = "%n\x01%s\x01%Y\x01%F\x01%a";
 
-export function parseFind({ stdout }: CommandResult): string[] {
+export function parseFind({ stdout }: ParserInput): string[] {
   return nulFields(stdout, "find").map((path) => path || unexpected("find", stdout));
 }
 
-export function parseLs(result: CommandResult): string[] {
+export function parseLs(result: ParserInput): string[] {
   return nulFields(result.stdout, "ls").map(
     (path) => (path || unexpected("ls", result.stdout)).replace(/\/$/, "").split("/").at(-1) ?? "",
   );
@@ -51,7 +51,7 @@ function statType(value: string): Stat["type"] {
   }
 }
 
-export function parseStat({ stdout }: CommandResult): Stat[] {
+export function parseStat({ stdout }: ParserInput): Stat[] {
   const entries: Stat[] = [];
   let cursor = 0;
   const records = /([\s\S]*?)\x01(\d+)\x01(-?\d+)\x01([^\x01\n]+)\x01([0-7]{1,4})\n/g;
@@ -86,7 +86,7 @@ export function parseStat({ stdout }: CommandResult): Stat[] {
   return entries;
 }
 
-export function parseDu({ stdout }: CommandResult): Du[] {
+export function parseDu({ stdout }: ParserInput): Du[] {
   return lines(stdout).map((line) => {
     const match = /^(\d+)\t(.+)$/.exec(line);
 
@@ -98,7 +98,7 @@ export function parseDu({ stdout }: CommandResult): Du[] {
   });
 }
 
-export function parseDf({ stdout }: CommandResult): Df[] {
+export function parseDf({ stdout }: ParserInput): Df[] {
   const [header = "", ...rows] = lines(stdout);
 
   if (
@@ -135,15 +135,15 @@ function trimmed(stdout: string, command: string): string {
   return stdout.trim() || unexpected(command, stdout);
 }
 
-export function parseRealpath({ stdout }: CommandResult): string {
+export function parseRealpath({ stdout }: ParserInput): string {
   return trimmed(stdout, "realpath");
 }
 
-export function parseWhich({ stdout, exitCode }: CommandResult): string | null {
+export function parseWhich({ stdout, exitCode }: ParserInput): string | null {
   return exitCode === 1 ? null : trimmed(stdout, "which");
 }
 
-export function parseMktemp({ stdout }: CommandResult): string {
+export function parseMktemp({ stdout }: ParserInput): string {
   return trimmed(stdout, "mktemp");
 }
 
@@ -174,7 +174,7 @@ function treeNode(value: ReturnType<typeof jsonValue>, line: string): TreeNode {
   };
 }
 
-export function parseTree({ stdout }: CommandResult): TreeNode[] {
+export function parseTree({ stdout }: ParserInput): TreeNode[] {
   const value = jsonValue(stdout, "tree");
 
   if (!Array.isArray(value)) {

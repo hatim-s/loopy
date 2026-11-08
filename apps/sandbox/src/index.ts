@@ -12,14 +12,17 @@ const { values } = parseArgs({
     "state-root": { type: "string" },
     "docker-context": { type: "string" },
     image: { type: "string", default: SANDBOX_IMAGE },
-    hostname: { type: "string", default: "127.0.0.1" },
-    port: { type: "string", default: "4010" },
-    "max-timeout-ms": { type: "string", default: "600000" },
-    memory: { type: "string", default: "256m" },
-    cpus: { type: "string", default: "1" },
-    pids: { type: "string", default: "64" },
+    hostname: { type: "string" },
+    port: { type: "string" },
+    "max-timeout-ms": { type: "string" },
+    memory: { type: "string" },
+    cpus: { type: "string" },
+    pids: { type: "string" },
   },
 });
+
+// An omitted flag stays undefined, so the config schema applies its own default.
+const numeric = (value: string | undefined) => (value === undefined ? undefined : Number(value));
 
 const config = decodeBoundary(sandboxConfigSchema)({
   worktree: values.worktree,
@@ -27,11 +30,11 @@ const config = decodeBoundary(sandboxConfigSchema)({
   dockerContext: values["docker-context"],
   image: values.image,
   hostname: values.hostname,
-  port: Number(values.port),
-  maxTimeoutMs: Number(values["max-timeout-ms"]),
+  port: numeric(values.port),
+  maxTimeoutMs: numeric(values["max-timeout-ms"]),
   memory: values.memory,
-  cpus: Number(values.cpus),
-  pids: Number(values.pids),
+  cpus: numeric(values.cpus),
+  pids: numeric(values.pids),
   token: process.env.LOOPY_SANDBOX_TOKEN,
 });
 

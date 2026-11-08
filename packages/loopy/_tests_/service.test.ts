@@ -263,6 +263,7 @@ test("service schedules create, replace, toggle, delete and emit persisted event
     (await Effect.runPromise(store.events(0, 100))).map((event) => `${event.entity}.${event.kind}`),
   ).toEqual([
     "schedule.saved",
+    "schedule.failed",
     "schedule.saved",
     "schedule.saved",
     "schedule.saved",

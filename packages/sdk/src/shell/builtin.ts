@@ -1,4 +1,4 @@
-import type { CommandResult, OutSchema } from "@loopy/core";
+import type { OutSchema, ParserInput } from "@loopy/core";
 import type { CommandDeclaration, Prepare } from "../descriptor";
 import {
   type CallMode,
@@ -8,7 +8,7 @@ import {
 } from "../graph/nodes/command";
 import type { Infer } from "../graph/types";
 
-export type Parser<R> = (result: CommandResult) => R;
+export type Parser<R> = (result: ParserInput) => R;
 
 /** Most built-ins take any number of file operands. */
 export const PATHS = [{ name: "paths", optional: true, variadic: true }] as const;

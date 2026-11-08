@@ -30,7 +30,7 @@ function checkLogBytes(previousBytes: number, log: LogRecord): number {
   const bytes = previousBytes + logBytes(log);
 
   if (bytes > MAX_LOG_BYTES) {
-    throw new StoreRejectedError("Attempt logs exceed the 64 KiB limit.");
+    throw new StoreRejectedError(`Attempt logs exceed the ${MAX_LOG_BYTES / 1024} KiB limit.`);
   }
 
   return bytes;

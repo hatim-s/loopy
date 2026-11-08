@@ -10,7 +10,7 @@ import {
   type SandboxAttemptRequest,
 } from "@loopy/contract/sandbox";
 import { attemptBudgetMs } from "@loopy/core";
-import { Effect, FiberMap, Result, Semaphore } from "effect";
+import { Clock, Effect, FiberMap, Result, Semaphore } from "effect";
 import { validateBundles } from "../admission";
 import type { SandboxConfig } from "../config";
 import type { SandboxFailure } from "../operations";
@@ -86,17 +86,17 @@ export class AttemptAdmissions {
     resources: AttemptResources,
     requestHash: string,
     request: SandboxAttemptRequest,
-  ): DockerAttemptPlan {
-    const { config } = this.options;
+  ): Effect.Effect<DockerAttemptPlan> {
+    const budget = Math.min(attemptBudgetMs(request.spec), this.options.config.maxTimeoutMs);
 
-    return {
+    return Effect.map(Clock.currentTimeMillis, (now) => ({
       ...resources,
       requestHash,
       workspace: request.workspace,
       executionKey: request.executionKey,
       attempt: request.attempt,
-      deadline: Date.now() + Math.min(attemptBudgetMs(request.spec), config.maxTimeoutMs),
-    };
+      deadline: now + budget,
+    }));
   }
 
   observe(record: AttemptRecord) {
@@ -149,7 +149,8 @@ export class AttemptAdmissions {
       yield* FiberMap.run(
         this.options.evictions,
         plan.id,
-        Effect.sleep(Math.max(0, plan.deadline - Date.now())).pipe(
+        Clock.currentTimeMillis.pipe(
+          Effect.flatMap((now) => Effect.sleep(Math.max(0, plan.deadline - now))),
           Effect.andThen(
             Effect.sync(() => {
               this.retained.delete(plan.id);
@@ -201,7 +202,7 @@ export class AttemptAdmissions {
           attemptResources(this.options.config.stateRoot, request),
         );
 
-        const plan = this.plan(resources, requestHash, request);
+        const plan = yield* this.plan(resources, requestHash, request);
         yield* exports.reconcile(plan.volume);
 
         if (stopping.stopped) {
