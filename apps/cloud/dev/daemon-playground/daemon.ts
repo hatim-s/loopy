@@ -2,10 +2,11 @@ import { mkdir, open } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Route, RouteInput, RouteResult } from "@loopy/contract";
 import { readDaemonFile } from "@loopy/runtime/local";
+import { daemonCommand } from "../../../../packages/cli/src/entry";
 import { JourneyFailure } from "../shared/assert";
 import { ApiClient } from "../shared/fixture-client";
 import { requireFreePorts } from "../stack/ports";
-import { cli, environment, home, port, source, state } from "./config";
+import { environment, home, port, source, state } from "./config";
 import { DAEMON } from "./plan";
 import { runtimeSource } from "./source";
 
@@ -69,23 +70,16 @@ export class OwnedDaemon {
   }
 
   private command() {
-    return [
-      process.execPath,
-      "--no-env-file",
-      cli,
-      "--home",
+    const [bun, ...rest] = daemonCommand({
       home,
-      "--cwd",
-      source,
-      "--lease-ms",
-      String(DAEMON.leaseMs),
-      "daemon",
-      "run",
-      "--port",
-      String(port),
-      "--concurrency",
-      String(DAEMON.concurrency),
-    ];
+      cwd: source,
+      port,
+      concurrency: DAEMON.concurrency,
+      leaseMs: DAEMON.leaseMs,
+    });
+
+    // The playground daemon must not pick up a repository .env file.
+    return [bun, "--no-env-file", ...rest];
   }
 
   async singletonProbe() {

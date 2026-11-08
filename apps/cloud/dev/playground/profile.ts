@@ -5,7 +5,16 @@ import { SANDBOX_IMAGE } from "../../../sandbox/src/docker/identity";
 import { sandboxStateRoot } from "../../../sandbox/src/state-root";
 import { stackPorts } from "../stack/ports";
 
-const profileNameSchema = Schema.UndefinedOr(Schema.Literal("architecture"));
+const profileNames = ["architecture"] as const;
+
+const profileNameSchema = Schema.UndefinedOr(Schema.Literals(profileNames));
+
+/** A named profile runs its own tag of the one sandbox image, built by cloud:build-sandbox. */
+export function profileImage(name: (typeof profileNameSchema)["Type"]) {
+  return name === undefined ? SANDBOX_IMAGE : `${SANDBOX_IMAGE}-${name}`;
+}
+
+export const PROFILE_IMAGES = [profileImage(undefined), ...profileNames.map(profileImage)];
 
 function paths(root: string, suffix: string, apiPort: number) {
   const state = resolve(root, `.loopy/playground${suffix}`);
@@ -54,7 +63,7 @@ export function playgroundProfile(root: string, input: string | undefined) {
     name,
     label: name,
     evidence: resolve(root, ".notes/cloud/evidence", name),
-    image: "loopy-sandbox:architecture-bun-1.4.0",
+    image: profileImage(name),
     receiptMode: "durable-object",
     environment: { LOOPY_PLAYGROUND_PROFILE: name },
     stopCommand: `LOOPY_PLAYGROUND_PROFILE=${name} bun --no-env-file apps/cloud/dev/playground/index.ts stop`,

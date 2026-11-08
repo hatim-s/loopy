@@ -1,4 +1,5 @@
-import { SANDBOX_DOCKER_CONTEXT, SANDBOX_IMAGE } from "../../../sandbox/src/docker/identity";
+import { SANDBOX_DOCKER_CONTEXT } from "../../../sandbox/src/docker/identity";
+import { PROFILE_IMAGES } from "../playground/profile";
 import { root } from "./constants";
 
 const build = Bun.spawn(
@@ -9,8 +10,7 @@ const build = Bun.spawn(
     "build",
     "-f",
     "apps/sandbox/Dockerfile",
-    "-t",
-    SANDBOX_IMAGE,
+    ...PROFILE_IMAGES.flatMap((image) => ["-t", image]),
     ".",
   ],
   { cwd: root, stdio: ["inherit", "inherit", "inherit"] },
