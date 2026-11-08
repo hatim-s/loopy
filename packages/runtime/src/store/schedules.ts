@@ -22,7 +22,7 @@ function readSchedule(ctx: SqlContext, { workspace, slug }: ScheduleKey) {
 function emitSchedule(
   write: SqlWrite,
   schedule: ScheduleKey,
-  kind: "saved" | "fired" | "skipped",
+  kind: "saved" | "fired" | "skipped" | "failed",
 ): void {
   const row = readSchedule(write, schedule);
 
@@ -253,11 +253,13 @@ export function failSchedule(
     )
     .run(retryAt === null ? null : utc(retryAt), error, workspace, slug, version);
 
-  if (retryAt === null) {
-    emitSchedule(write, schedule, "saved");
+  if (recorded.changes === 0) {
+    return false;
   }
 
-  return recorded.changes > 0;
+  emitSchedule(write, schedule, "failed");
+
+  return true;
 }
 
 export function readScheduleOverview(ctx: SqlContext) {

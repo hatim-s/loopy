@@ -664,15 +664,36 @@ test("a saved schedule replaces its row, and an older version leaves the row alo
   expect(client.getQueryState(keys.schedules("/work"))?.isInvalidated).toBe(false);
 });
 
+function scheduleFailed(sequence: number, failed: ScheduleRecord) {
+  return event(sequence, { entity: "schedule", kind: "failed", runId: null, record: failed });
+}
+
 test("a schedule disabled by a failure keeps that failure in the row", () => {
   const client = new QueryClient();
   client.setQueryData(keys.schedules("/work"), [scheduled]);
   const failure = { error: "Loopy 'triage' is not saved.", retryAt: null };
 
-  applyBatch(client, [scheduleSaved(11, { ...record, enabled: false, version: 3, failure })]);
+  applyBatch(client, [scheduleFailed(11, { ...record, enabled: false, version: 3, failure })]);
 
   expect(client.getQueryData<ScheduleView[]>(keys.schedules("/work"))).toEqual([
     { ...scheduled, enabled: false, version: 3, failure },
+  ]);
+});
+
+test("a retried failure keeps the version and slot yet still reaches the row", () => {
+  const client = new QueryClient();
+  client.setQueryData(keys.schedules("/work"), [scheduled]);
+  const first = { error: "Run limit reached.", retryAt: "2026-10-17T10:05:30.000Z" };
+  const second = { error: "Run limit reached.", retryAt: "2026-10-17T10:06:00.000Z" };
+
+  applyBatch(client, [scheduleFailed(11, { ...record, failure: first })]);
+  expect(client.getQueryData<ScheduleView[]>(keys.schedules("/work"))).toEqual([
+    { ...scheduled, failure: first },
+  ]);
+
+  applyBatch(client, [scheduleFailed(12, { ...record, failure: second })]);
+  expect(client.getQueryData<ScheduleView[]>(keys.schedules("/work"))).toEqual([
+    { ...scheduled, failure: second },
   ]);
 });
 

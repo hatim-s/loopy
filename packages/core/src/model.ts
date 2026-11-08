@@ -182,7 +182,7 @@ export const runtimeEventSchema = Schema.Union([
   struct({
     ...eventFields,
     entity: Schema.Literal("schedule"),
-    kind: Schema.Literals(["saved", "fired", "skipped"]),
+    kind: Schema.Literals(["saved", "fired", "skipped", "failed"]),
     // Each event states the current failure, so a stream consumer never infers it from the kind.
     record: struct({ ...scheduleSchema.fields, failure: scheduleFailureSchema }),
   }),

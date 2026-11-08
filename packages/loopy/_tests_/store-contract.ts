@@ -186,9 +186,17 @@ function scheduleFailures(makeStore: StoreFactory): void {
         store.failSchedule({ schedule: { ...original, version: 0 }, error: "boom", retryAt }),
       ),
     ).toBe(false);
+    const saved = await Effect.runPromise(store.events(0, 100));
     expect(
       await Effect.runPromise(store.failSchedule({ schedule: original, error: "boom", retryAt })),
     ).toBe(true);
+    expect((await Effect.runPromise(store.events(0, 100))).slice(saved.length)).toMatchObject([
+      {
+        entity: "schedule",
+        kind: "failed",
+        record: { ...original, failure: { error: "boom", retryAt } },
+      },
+    ]);
     expect(await Effect.runPromise(store.dueSchedules(LOG.at, 10))).toEqual([]);
     expect(await Effect.runPromise(store.dueSchedules(retryAt, 10))).toEqual([original]);
     expect(await Effect.runPromise(store.nextScheduleAt())).toBe(retryAt);
@@ -205,7 +213,7 @@ function scheduleFailures(makeStore: StoreFactory): void {
     expect((await Effect.runPromise(store.events(0, 100))).slice(before.length)).toMatchObject([
       {
         entity: "schedule",
-        kind: "saved",
+        kind: "failed",
         record: { ...disabled, failure: { error: "boom", retryAt: null } },
       },
     ]);
