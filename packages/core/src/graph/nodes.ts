@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 import { positiveInt, struct } from "../codec";
 import { durationSchema } from "../duration";
+import { jsonSchema } from "../json";
 import { rateLimitSchema } from "../rate-limit";
 import {
   formatOperandSchema,
@@ -35,7 +36,7 @@ const commandFlagSchema = Schema.Struct({
 
 export type CommandFlag = Schema.Schema.Type<typeof commandFlagSchema>;
 
-const commandFlagSpecSchema = struct({
+export const commandFlagSpecSchema = struct({
   path: Schema.Array(Schema.String).pipe(Schema.mutable),
   flags: graphRecord(Schema.mutableKey(commandFlagSchema)),
   style: Schema.Literals(["equals", "space"]),
@@ -44,6 +45,23 @@ const commandFlagSpecSchema = struct({
 });
 
 export type CommandFlagSpec = Schema.Schema.Type<typeof commandFlagSpecSchema>;
+
+export const COMMAND_PLATFORMS = ["darwin", "linux"] as const;
+
+/** A platform's program, flag rendering and preset flag values, which override the base values. */
+const commandVariantSchema = struct({
+  program: Schema.String,
+  flagSpec: commandFlagSpecSchema,
+  preset: graphRecord(Schema.mutableKey(jsonSchema)),
+});
+
+export type CommandVariant = Schema.Schema.Type<typeof commandVariantSchema>;
+
+// The executing host picks its variant, so a graph saved on one platform runs on another.
+export const commandVariantsSchema = struct({
+  darwin: Schema.optional(commandVariantSchema),
+  linux: Schema.optional(commandVariantSchema),
+});
 
 const values = graphRecord(Schema.mutableKey(valueSchema));
 
@@ -75,6 +93,7 @@ export const commandNodeSchema = struct({
   argv: Schema.Array(valueSchema).pipe(Schema.mutable),
   flags: values,
   flagSpec: Schema.optional(commandFlagSpecSchema),
+  variants: Schema.optional(commandVariantsSchema),
   options: struct({
     cwd: Schema.NullOr(valueSchema),
     env: values,

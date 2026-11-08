@@ -7,9 +7,9 @@ import { makeService, ServiceError } from "@loopy/runtime/service";
 import { makeSqliteRunStore } from "@loopy/runtime/store";
 import { Cause, Deferred, Effect, Exit, Fiber, Scope } from "effect";
 import { Registry } from "../../runtime/src/local/registry";
-import { SecretStore } from "../../runtime/src/local/secrets";
 import { startServer } from "../../runtime/src/local/server/start-server";
 import { makeLocalService } from "../../runtime/src/local/service";
+import { SecretStore } from "../../runtime/src/os/secrets";
 import { compiledBody } from "./compiled-fixture";
 import { qualityTestRoot } from "./fixtures/quality-test-root";
 

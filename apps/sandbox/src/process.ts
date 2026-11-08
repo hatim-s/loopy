@@ -1,6 +1,6 @@
 import { SANDBOX_MAX_CAPTURE_BYTES } from "@loopy/contract/sandbox";
 import type { CommandResult } from "@loopy/core";
-import { type CommandExecutionError, spawnCaptured } from "@loopy/runtime/local/execution-host";
+import { type CommandExecutionError, spawnCaptured } from "@loopy/runtime/os";
 import { Effect } from "effect";
 
 export type ProcessOptions = {
@@ -24,8 +24,7 @@ export const runCommand: CommandRunner = ([program, ...args], options) =>
       {
         timeoutMs: options.timeoutMs,
         maxOutputBytes: options.maxBytes ?? SANDBOX_MAX_CAPTURE_BYTES,
+        signal: options.signal,
       },
-      options.signal,
-      performance.now(),
     ),
   );

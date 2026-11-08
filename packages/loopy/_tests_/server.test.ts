@@ -1193,6 +1193,10 @@ test("compiled save route verifies artifacts, stores private bundles and returns
   const registry = await Effect.runPromise(Registry.make(f.home, f.cwd));
   const saved = await Effect.runPromise(registry.get("compiled-save"));
 
+  if (saved === null) {
+    throw new Error("Expected the saved loopy.");
+  }
+
   const paths = [
     join(registry.projectDirectory, "compiled-save.json"),
     registry.graphPath(saved.revision),
@@ -1288,5 +1292,5 @@ test("saving another revision retains the earlier graph and executable artifacts
     expect(statSync(registry.graphPath(revision)).mode & 0o777).toBe(0o600);
   }
 
-  expect(revisions.at(-1)).toBe((await Effect.runPromise(registry.get("revisions"))).revision);
+  expect(revisions.at(-1)).toBe((await Effect.runPromise(registry.get("revisions")))?.revision);
 });

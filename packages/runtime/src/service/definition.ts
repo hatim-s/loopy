@@ -1,7 +1,8 @@
 import { graphView, type PutLoopyBody } from "@loopy/contract";
+import type { SecretError } from "@loopy/core";
 import { Effect } from "effect";
 import { ServiceError } from "./error";
-import type { ArtifactRegistry, SecretError, ServiceOptions } from "./registry";
+import type { ArtifactRegistry, ServiceOptions } from "./registry";
 
 export const requireDefinition = Effect.fn("definition.requireDefinition")(function* (
   registry: ArtifactRegistry,

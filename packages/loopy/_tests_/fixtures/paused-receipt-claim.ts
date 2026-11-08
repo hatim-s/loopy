@@ -1,5 +1,5 @@
 import { mock } from "bun:test";
-import * as filesystem from "node:fs/promises";
+import * as filesystem from "node:fs";
 import { executionKeySchema } from "@loopy/contract";
 import { Effect, Schema } from "effect";
 
@@ -12,29 +12,23 @@ const request = Schema.decodeUnknownSync(
   }),
 )(await Bun.stdin.json());
 
-const originalOpen = filesystem.open;
+const originalWrite = filesystem.writeFileSync;
 
-mock.module("node:fs/promises", () => ({
+// The claim is the only write in this process, so pause it until the test releases it.
+mock.module("node:fs", () => ({
   ...filesystem,
-  open: async (...args: Parameters<typeof originalOpen>) => {
-    const file = await originalOpen(...args);
-    const write = file.writeFile.bind(file);
+  writeFileSync: (...args: Parameters<typeof originalWrite>) => {
+    originalWrite(request.ready, "write paused");
 
-    file.writeFile = async (...args) => {
-      await Bun.write(request.ready, "write paused");
-
-      for (let index = 0; index < 1000; index++) {
-        if (await Bun.file(request.release).exists()) {
-          return write(...args);
-        }
-
-        await Bun.sleep(10);
+    for (let index = 0; index < 1000; index++) {
+      if (filesystem.existsSync(request.release)) {
+        return originalWrite(...args);
       }
 
-      throw new Error("Receipt fixture was not released.");
-    };
+      Bun.sleepSync(10);
+    }
 
-    return file;
+    throw new Error("Receipt fixture was not released.");
   },
 }));
 

@@ -1,6 +1,6 @@
 import type { ExecutionResult, ExecutionSpec, RunOutcome } from "@loopy/core";
+import { renderCommand } from "@loopy/core";
 import { initialState, step } from "@loopy/core/engine";
-import { renderCommand } from "@loopy/runtime/local/execution-host";
 import { loopy } from "loopy/graph";
 
 type Capture = {
@@ -42,8 +42,8 @@ export function capture(run: () => void): Capture {
       }
 
       specs.push(dispatch.spec);
-      const [program, ...args] = renderCommand(dispatch.spec);
-      calls.push({ program: program ?? "", args });
+      const [program, ...args] = renderCommand(dispatch.spec, process.platform);
+      calls.push({ program, args });
 
       const result: Extract<ExecutionResult, { kind: "succeeded" }> = {
         kind: "succeeded",

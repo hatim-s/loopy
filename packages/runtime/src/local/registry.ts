@@ -13,10 +13,10 @@ import {
   sourceArtifactSchema,
   unavailableSource,
 } from "@loopy/contract";
-import { canonicalJson, isRecord, validateSlug } from "@loopy/core";
-import { Data, Effect } from "effect";
+import { canonicalJson, errnoCode, isRecord, validateSlug } from "@loopy/core";
+import { Effect } from "effect";
+import { canonicalPath, withLockDirectory, writeFileAtomically } from "../os";
 import { RegistryConflictError, RegistryError } from "../service";
-import { canonicalPath, errnoCode, withLockDirectory, writeFileAtomically } from "./fs";
 import { redactSourceArtifact } from "./source-view";
 
 function readEntry(file: string) {
@@ -38,14 +38,6 @@ function sameSave(previous: SavedLoopy, body: PutLoopyBody) {
     previous.revision === body.revision &&
     canonicalJson(previous.graph.meta) === canonicalJson(body.graph.meta)
   );
-}
-
-export class RegistryMissingError extends Data.TaggedError("RegistryMissingError")<{
-  slug: string;
-}> {
-  override get message() {
-    return `No saved loopy '${this.slug}'. Use loopy save <file.ts> first.`;
-  }
 }
 
 export const registrySync = <A>(operation: string, run: () => A) =>
@@ -86,6 +78,12 @@ export class Registry {
     );
   }
 
+  private fileFor(scope: SavedLoopy["graph"]["meta"]["scope"], slug: string) {
+    validateSlug(slug);
+
+    return join(scope === "project" ? this.projectDirectory : this.globalDirectory, `${slug}.json`);
+  }
+
   get(slug: string) {
     return registrySync("read definition", () => {
       for (const file of this.files(slug)) {
@@ -101,11 +99,7 @@ export class Registry {
       }
 
       return null;
-    }).pipe(
-      Effect.flatMap((entry) =>
-        entry ? Effect.succeed(entry) : Effect.fail(new RegistryMissingError({ slug })),
-      ),
-    );
+    });
   }
 
   list() {
@@ -132,9 +126,8 @@ export class Registry {
 
   unchanged(body: PutLoopyBody) {
     return registrySync("compare definition", () => {
-      const files = this.files(body.graph.name);
-      const file = body.graph.meta.scope === "project" ? files[0] : files[1];
-      const previous = file && existsSync(file) ? readEntry(file) : null;
+      const file = this.fileFor(body.graph.meta.scope, body.graph.name);
+      const previous = existsSync(file) ? readEntry(file) : null;
 
       return previous && sameSave(previous, body)
         ? { ok: true as const, entry: previous }
@@ -145,11 +138,9 @@ export class Registry {
   save(body: PutLoopyBody) {
     return registrySync("publish definition", () => {
       const { graph, revision, source, replace, bundles } = body;
-      const meta = graph.meta;
       const owner = canonicalPath(source.path);
       const files = this.files(graph.name);
-      const directory = meta.scope === "project" ? this.projectDirectory : this.globalDirectory;
-      const file = join(directory, `${graph.name}.json`);
+      const file = this.fileFor(graph.meta.scope, graph.name);
       mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
 
       return withLockDirectory(`${file}.lock`, "save", () => {
@@ -256,7 +247,9 @@ export class Registry {
         return yield* Effect.fail(
           new RegistryError({
             operation: "read source",
-            cause: new Error("Source artifact exceeds the 512 KiB payload limit."),
+            cause: new Error(
+              `Source artifact exceeds the ${(MAX_SOURCE_BYTES * 2) / 1024} KiB payload limit.`,
+            ),
           }),
         );
       }

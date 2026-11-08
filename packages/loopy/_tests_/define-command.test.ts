@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { defineCommand, loopy, sh, text } from "@loopy/sdk/graph";
+import { renderCommand } from "@loopy/core";
+import { defineCommand, fs, loopy, sh, text } from "@loopy/sdk/graph";
 import { capture } from "./fixtures/command-capture";
 
 const probe = defineCommand({
@@ -71,6 +72,31 @@ test("platform variants merge and preserve unchanged flags in the recorded descr
   expect(
     capture(() => text.base64({ flags: { input: "input", decode: true } })).executor.calls[0]?.args,
   ).toEqual(process.platform === "darwin" ? ["-D", "-i", "input"] : ["-d", "input"]);
+});
+
+test("a saved graph keeps every platform variant and the executing platform picks one", () => {
+  const [sha] = capture(() => text.sha256sum({ args: ["file"] })).specs;
+  const [stat] = capture(() => fs.stat({ args: ["file"] })).specs;
+
+  if (!sha || !stat) {
+    throw new Error("Expected command specs.");
+  }
+
+  expect(renderCommand(sha, "darwin")).toEqual(["shasum", "-a", "256", "file"]);
+  expect(renderCommand(sha, "linux")).toEqual(["sha256sum", "file"]);
+  expect(renderCommand(stat, "darwin").slice(0, 2)).toEqual(["stat", "-f"]);
+  expect(renderCommand(stat, "linux").slice(0, 2)).toEqual(["stat", "-c"]);
+});
+
+test("flag support is decided by the executing platform, not at build time", () => {
+  const [find] = capture(() => fs.find.raw({ flags: { printf: "%p\\n" } })).specs;
+
+  if (!find) {
+    throw new Error("Expected a command spec.");
+  }
+
+  expect(renderCommand(find, "linux")).toContain("-printf");
+  expect(() => renderCommand(find, "darwin")).toThrow("unavailable on this platform");
 });
 
 test("descriptor construction rejects duplicate CLI identities in base and merged platform flags", () => {

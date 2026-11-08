@@ -1,40 +1,74 @@
 import {
-  durationMs,
+  type AttemptLog,
+  type CommandSpec,
   type ExecutionKey,
   type ExecutionResult,
   type ExecutionSpec,
-  type Executor,
   ExecutorError,
   errorMessage,
   type Json,
   limitLogs,
+  renderCommand,
 } from "@loopy/core";
 import { Cause, Effect, Exit } from "effect";
 import {
   CommandExecutionError,
   executeLocalCommand,
+  type ScratchCleanupError,
   spawnCaptured,
   withBundleSandbox,
-} from "../local/execution-host";
+} from "../os";
 import { type ExecutionOptions, type PreparedExecution, prepareExecution } from "./prepare";
-import { bundleResult } from "./protocol";
-import type { FilesystemReceipts } from "./receipts";
+import { bundleResult, commandResult, stoppedCode, stoppedResult } from "./protocol";
+import { alreadyStarted, FilesystemReceipts } from "./receipts";
 
-type Options = ExecutionOptions & { receipts: FilesystemReceipts };
+type Redact = PreparedExecution["redact"];
 
-export class ExecutionWorker implements Executor {
-  constructor(private readonly options: Options) {}
-  lookup = Effect.fn("ExecutionWorker.lookup")(function* (
-    this: ExecutionWorker,
-    key: ExecutionKey,
-    attempt: number,
+/** Interrupts, defects and aborts stay failures. Any other outcome survives a failed cleanup. */
+function keepOutcome(error: ScratchCleanupError, redact: Redact, logs: AttemptLog[]) {
+  const { primary } = error;
+
+  if (
+    Exit.isFailure(primary) &&
+    (Cause.hasInterrupts(primary.cause) ||
+      Cause.hasDies(primary.cause) ||
+      primary.cause.reasons.some(
+        (reason) =>
+          Cause.isFailReason(reason) &&
+          reason.error instanceof CommandExecutionError &&
+          reason.error.reason === "aborted",
+      ))
   ) {
-    return (
-      (yield* this.options.receipts.read({ executionKey: key, attempt })) ?? {
-        kind: "none" as const,
-      }
-    );
-  });
+    return Effect.failCause(Cause.combine(primary.cause, Cause.fail(error)));
+  }
+
+  logs.push({ message: "cleanup", data: redact(errorMessage(error.cause.cause)) });
+
+  return primary;
+}
+
+/** Unstarted and aborted processes may retry. Every other stop is a durable failure. */
+const isDurable = (cause: unknown): cause is CommandExecutionError =>
+  cause instanceof CommandExecutionError &&
+  cause.reason !== "unstarted" &&
+  cause.reason !== "aborted";
+
+// The executing host picks the platform variant, so argv renders here and not in the engine.
+function renderedArgv(spec: CommandSpec) {
+  try {
+    return { kind: "ready" as const, argv: renderCommand(spec, process.platform) };
+  } catch (cause) {
+    return { kind: "rejected" as const, message: errorMessage(cause) };
+  }
+}
+
+export class ExecutionWorker {
+  private readonly receipts: FilesystemReceipts;
+
+  constructor(private readonly options: ExecutionOptions) {
+    this.receipts = new FilesystemReceipts(options.home);
+  }
+
   execute = Effect.fn("ExecutionWorker.execute")(function* (
     this: ExecutionWorker,
     key: ExecutionKey,
@@ -42,42 +76,28 @@ export class ExecutionWorker implements Executor {
     spec: ExecutionSpec,
     signal: AbortSignal,
   ) {
-    const previous = yield* this.lookup(key, attempt);
+    const previous = yield* this.receipts.read({ executionKey: key, attempt });
 
-    if (previous.kind === "finished") {
+    if (previous?.kind === "finished") {
       return previous.result;
     }
 
-    if (previous.kind === "started") {
-      return yield* Effect.fail(
-        new ExecutorError({
-          operation: "execute",
-          cause: new Error("Execution already started. Reconcile its receipt."),
-        }),
-      );
+    if (previous?.kind === "started") {
+      return yield* alreadyStarted();
     }
 
     const environment = yield* prepareExecution(this.options, spec);
 
     return yield* Effect.gen({ self: this }, function* () {
-      const claim = yield* this.options.receipts.claim({ executionKey: key, attempt });
+      const claim = yield* this.receipts.claim({ executionKey: key, attempt });
 
       if (claim.kind === "existing") {
-        if (claim.receipt.kind === "finished") {
-          return claim.receipt.result;
-        }
-
-        return yield* Effect.fail(
-          new ExecutorError({
-            operation: "execute",
-            cause: new Error("Execution already started. Reconcile its receipt."),
-          }),
-        );
+        return claim.receipt.kind === "finished" ? claim.receipt.result : yield* alreadyStarted();
       }
 
       const result = yield* this.perform(spec, signal, environment);
 
-      const receipt = yield* this.options.receipts.finish({
+      const receipt = yield* this.receipts.finish({
         kind: "finished",
         result: { ...result, logs: limitLogs(result.logs) },
         executionKey: key,
@@ -96,6 +116,7 @@ export class ExecutionWorker implements Executor {
       ),
     );
   });
+
   private bundle = Effect.fn("ExecutionWorker.bundle")(function* (
     this: ExecutionWorker,
     hash: string,
@@ -110,7 +131,7 @@ export class ExecutionWorker implements Executor {
       return yield* Effect.die(new Error("Prepared bundle is missing."));
     }
 
-    const cleanupLogs: { message: string; data: Json }[] = [];
+    const cleanupLogs: AttemptLog[] = [];
 
     return yield* withBundleSandbox(
       { bundle, workspace, network: this.options.mode === "full", home },
@@ -129,48 +150,24 @@ export class ExecutionWorker implements Executor {
             },
             stdin: JSON.stringify(input),
           },
-          { timeoutMs, maxOutputBytes: 2 * 1024 * 1024 },
-          signal,
-          performance.now(),
+          { timeoutMs, maxOutputBytes: 2 * 1024 * 1024, signal },
         ),
     ).pipe(
-      Effect.catchTag("BundleCleanupError", (error) => {
-        if (
-          Exit.isFailure(error.primary) &&
-          (Cause.hasInterrupts(error.primary.cause) ||
-            Cause.hasDies(error.primary.cause) ||
-            error.primary.cause.reasons.some(
-              (reason) =>
-                Cause.isFailReason(reason) &&
-                reason.error instanceof CommandExecutionError &&
-                reason.error.reason === "aborted",
-            ))
-        ) {
-          return Effect.failCause(Cause.combine(error.primary.cause, Cause.fail(error)));
-        }
-
-        cleanupLogs.push({ message: "cleanup", data: redact(errorMessage(error.cause.cause)) });
-
-        return error.primary;
-      }),
+      Effect.catchTag("ScratchCleanupError", (error) => keepOutcome(error, redact, cleanupLogs)),
       Effect.map((raw) => bundleResult(raw, redact)),
-      Effect.catchIf(
-        (cause): cause is CommandExecutionError =>
-          cause instanceof CommandExecutionError &&
-          cause.reason !== "unstarted" &&
-          cause.reason !== "aborted",
-        (cause) =>
-          Effect.succeed(
-            bundleResult(cause.output, redact, {
-              code: cause.reason === "output_limit" ? "output_limit" : "execution",
-              message: cause.message,
-            }),
-          ),
+      Effect.catchIf(isDurable, (cause) =>
+        Effect.succeed(
+          bundleResult(cause.output, redact, {
+            code: stoppedCode(cause.reason),
+            message: cause.message,
+          }),
+        ),
       ),
       Effect.map((result) => ({ ...result, logs: [...result.logs, ...cleanupLogs] })),
       Effect.mapError((cause) => new ExecutorError({ operation: "execute", cause })),
     );
   });
+
   private perform = Effect.fn("ExecutionWorker.perform")(function* (
     this: ExecutionWorker,
     spec: ExecutionSpec,
@@ -181,127 +178,59 @@ export class ExecutionWorker implements Executor {
       return yield* this.bundle(spec.bundleHash, spec.input, spec.timeoutMs, signal, environment);
     }
 
-    const { env, redact } = environment;
+    const { env, redact, home } = environment;
+    const rendered = renderedArgv(spec);
 
-    if (environment.command.kind === "rejected") {
+    if (rendered.kind === "rejected") {
       return {
         kind: "failed",
-        error: { code: "execution", message: redact(environment.command.message) },
+        error: { code: "execution", message: redact(rendered.message) },
         exitCode: null,
         logs: [],
       };
     }
 
-    const [program, ...args] = environment.command.argv;
+    const [program, ...args] = rendered.argv;
+    const cleanupLogs: AttemptLog[] = [];
 
-    if (program === undefined) {
-      return yield* Effect.die(new Error("Prepared command is missing."));
-    }
-
-    const home = environment.home;
-    const cleanupLogs: { message: string; data: Json }[] = [];
-
-    const attempt = yield* executeLocalCommand(
+    const step = yield* executeLocalCommand(
       {
         program,
         args,
-        cwd: spec.cwd ?? undefined,
+        cwd: spec.cwd,
         env: spec.env,
-        stdin: spec.stdin ?? undefined,
-        maxOutputBytes: spec.node.options.maxOutputBytes,
-        timeoutMs:
-          spec.node.options.timeout === undefined
-            ? undefined
-            : durationMs(spec.node.options.timeout),
+        stdin: spec.stdin,
+        timeoutMs: spec.timeoutMs,
+        maxOutputBytes: spec.maxOutputBytes,
       },
-      { ...this.options, protectedHome: home, sensitiveEnv: env, signal },
+      {
+        workspace: this.options.workspace,
+        mode: this.options.mode,
+        protectedHome: home,
+        sensitiveEnv: env,
+        signal,
+      },
     ).pipe(
-      Effect.catchTag("ProcessCleanupError", (error) => {
-        if (
-          Exit.isFailure(error.primary) &&
-          (Cause.hasInterrupts(error.primary.cause) ||
-            Cause.hasDies(error.primary.cause) ||
-            error.primary.cause.reasons.some(
-              (reason) =>
-                Cause.isFailReason(reason) &&
-                reason.error instanceof CommandExecutionError &&
-                reason.error.reason === "aborted",
-            ))
-        ) {
-          return Effect.failCause(Cause.combine(error.primary.cause, Cause.fail(error)));
-        }
-
-        cleanupLogs.push({ message: "cleanup", data: redact(errorMessage(error.cause.cause)) });
-
-        return error.primary;
-      }),
-      Effect.map((raw) => ({ kind: "output" as const, raw })),
-      Effect.catchIf(
-        (cause): cause is CommandExecutionError =>
-          cause instanceof CommandExecutionError &&
-          cause.reason !== "unstarted" &&
-          cause.reason !== "aborted",
-        (cause) => Effect.succeed({ kind: "failure" as const, cause }),
+      Effect.catchTag("ScratchCleanupError", (error) => keepOutcome(error, redact, cleanupLogs)),
+      Effect.map((raw) => commandResult(spec, raw, redact)),
+      Effect.catchIf(isDurable, (cause) =>
+        Effect.succeed({ kind: "finished" as const, result: stoppedResult(cause, redact) }),
       ),
       Effect.mapError((cause) => new ExecutorError({ operation: "execute", cause })),
     );
 
-    if (attempt.kind === "failure") {
-      const { cause } = attempt;
-
-      return {
-        kind: "failed",
-        error: {
-          code: cause.reason === "output_limit" ? "output_limit" : "execution",
-          message: redact(errorMessage(cause)),
-        },
-        exitCode: null,
-        logs: [
-          { message: "stdout", data: redact(cause.output.stdout, true) },
-          { message: "stderr", data: redact(cause.output.stderr, true) },
-          ...cleanupLogs,
-        ],
-      };
-    }
-
-    const { raw } = attempt;
-    const result = { stdout: raw.stdout, stderr: raw.stderr, exitCode: raw.exitCode };
-
-    const stdout = redact(raw.stdout),
-      stderr = redact(raw.stderr);
-
-    const logs = [
-      { message: "stdout", data: stdout },
-      { message: "stderr", data: stderr },
-      ...cleanupLogs,
-    ];
-
-    if (!spec.node.okExitCodes.includes(result.exitCode)) {
-      return {
-        kind: "failed",
-        error: {
-          code: "exit",
-          message: stderr
-            ? `Command exited with code ${result.exitCode}: ${stderr.slice(-500)}. Inspect stderr and correct the command.`
-            : `Command exited with code ${result.exitCode}. Correct the command.`,
-        },
-        exitCode: result.exitCode,
-        logs,
-      };
-    }
-
-    if (spec.parse === null) {
-      return { kind: "succeeded", output: { stdout, stderr, exitCode: result.exitCode }, logs };
+    if (step.kind === "finished") {
+      return { ...step.result, logs: [...step.result.logs, ...cleanupLogs] };
     }
 
     const parsed = yield* this.bundle(
-      spec.parse.bundleHash,
-      { result, input: spec.parse.input },
-      300_000,
+      step.bundleHash,
+      step.input,
+      step.timeoutMs,
       signal,
       environment,
     );
 
-    return { ...parsed, logs: [...logs, ...parsed.logs] };
+    return { ...parsed, logs: [...step.logs, ...cleanupLogs, ...parsed.logs] };
   });
 }

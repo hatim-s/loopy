@@ -39,7 +39,6 @@ export async function receiptsFixture() {
     mode: "sandbox",
     secrets: [],
     bundlePath: () => bundle,
-    receipts,
   });
 
   const spec: ExecutionSpec = {

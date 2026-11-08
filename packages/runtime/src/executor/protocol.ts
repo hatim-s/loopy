@@ -3,13 +3,96 @@ import {
   type AttemptLog,
   attemptLogSchema,
   type CommandResult,
+  type CommandSpec,
   type ExecutionResult,
   isString,
+  type Json,
   limitLogs,
 } from "@loopy/core";
+import type { CommandExecutionError } from "../os";
 import { redactValue } from "./redact";
 
 type Redact = (text: string, truncated?: boolean) => string;
+
+type FailureCode = Extract<ExecutionResult, { kind: "failed" }>["error"]["code"];
+
+/** The next step after a command exits: a final result, or its parser bundle with the envelope. */
+export type CommandStep =
+  | { kind: "finished"; result: ExecutionResult }
+  | {
+      kind: "parse";
+      bundleHash: string;
+      timeoutMs: number;
+      input: { result: Json; input: Json };
+      logs: AttemptLog[];
+    };
+
+function exitMessage(exitCode: number, stderr: string) {
+  return stderr
+    ? `Command exited with code ${exitCode}: ${stderr.slice(-500)}. Inspect stderr and correct the command.`
+    : `Command exited with code ${exitCode}. Correct the command.`;
+}
+
+/** Both the local executor and the sandbox worker interpret a command exit here. */
+export function commandResult(spec: CommandSpec, raw: CommandResult, redact: Redact): CommandStep {
+  const stdout = redact(raw.stdout);
+  const stderr = redact(raw.stderr);
+
+  const logs = [
+    { message: "stdout", data: stdout },
+    { message: "stderr", data: stderr },
+  ];
+
+  if (!spec.okExitCodes.includes(raw.exitCode)) {
+    return {
+      kind: "finished",
+      result: {
+        kind: "failed",
+        error: { code: "exit", message: exitMessage(raw.exitCode, stderr) },
+        exitCode: raw.exitCode,
+        logs,
+      },
+    };
+  }
+
+  if (spec.parse === null) {
+    return {
+      kind: "finished",
+      result: { kind: "succeeded", output: { stdout, stderr, exitCode: raw.exitCode }, logs },
+    };
+  }
+
+  // Parsers read the unredacted streams inside the same sandbox; their output is redacted later.
+  const result = { stdout: raw.stdout, stderr: raw.stderr, exitCode: raw.exitCode };
+
+  return {
+    kind: "parse",
+    bundleHash: spec.parse.bundleHash,
+    timeoutMs: spec.parse.timeoutMs,
+    input: { result, input: spec.parse.input },
+    logs,
+  };
+}
+
+export function stoppedCode(reason: CommandExecutionError["reason"]): FailureCode {
+  return reason === "output_limit" ? "output_limit" : "execution";
+}
+
+/** A killed process can stop mid-write, so both streams redact a trailing secret prefix. */
+export function stoppedResult(
+  stopped: Pick<CommandExecutionError, "reason" | "message" | "output">,
+  redact: Redact,
+): ExecutionResult {
+  return {
+    kind: "failed",
+    error: { code: stoppedCode(stopped.reason), message: redact(stopped.message) },
+    exitCode: null,
+    logs: [
+      { message: "stdout", data: redact(stopped.output.stdout, true) },
+      { message: "stderr", data: redact(stopped.output.stderr, true) },
+    ],
+  };
+}
 
 function parseRecord(line: string): AttemptLog | undefined {
   try {
@@ -64,7 +147,7 @@ function parseOutput(line: string) {
 export function bundleResult(
   raw: CommandResult,
   redact: Redact,
-  failure?: Extract<ExecutionResult, { kind: "failed" }>["error"],
+  failure?: { code: FailureCode; message: string },
 ): ExecutionResult {
   // A killed process can stop mid-write, so the end of each stream may hold part of a secret.
   const cut = failure !== undefined;

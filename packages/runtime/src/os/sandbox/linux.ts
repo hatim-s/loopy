@@ -7,24 +7,9 @@ import { rejected, unstarted } from "../spawn";
 import type { ProcessFilesystemError } from "./io";
 import { absentPath, filesystem } from "./io";
 import type { SandboxOptions } from "./launcher";
-import { ENV_EXEC, envArgs, executable, packageDirectory, within } from "./paths";
+import { ENV_EXEC, envArgs, packageDirectory, within } from "./paths";
 
-const BWRAP_CANDIDATES = ["/usr/bin/bwrap", "/bin/bwrap"];
-
-/** Growing bwrap argv plus the tmpfs mounts that hide the host's directories. */
 type MountPlan = { args: string[]; tmpfs: string[]; created: Set<string> };
-
-function findBwrap() {
-  return Effect.gen(function* () {
-    for (const candidate of BWRAP_CANDIDATES) {
-      if (yield* executable(candidate)) {
-        return candidate;
-      }
-    }
-
-    return yield* Effect.fail(unstarted(new Error("Sandbox mode requires bubblewrap on Linux.")));
-  });
-}
 
 function isDirectory(path: string) {
   return filesystem(() => stat(path)).pipe(
@@ -54,7 +39,6 @@ function planDirectories(plan: MountPlan, base: string, target: string, includeT
   }
 }
 
-/** Creates the directories for `target` when a tmpfs hides it. True when one does. */
 function prepareUnderTmpfs(plan: MountPlan, target: string, includeTarget: boolean): boolean {
   const mask = tmpfsOver(plan, target);
 
@@ -116,22 +100,15 @@ function bindProgram(
  * Read-only root, tmpfs over /tmp, /run and the home directory, then the
  * workspace (and the program's package, if it lives under home) bound back in.
  */
-export function linuxSandbox({
-  program,
-  workspace,
-  cwd,
-  env,
-  scratch,
-  helper,
-  protectedHome,
-  mode,
-}: SandboxOptions) {
+export function linuxSandbox(
+  bwrap: string,
+  { program, workspace, cwd, env, scratch, helper, protectedHome, mode }: SandboxOptions,
+) {
   return Effect.gen(function* (): Effect.fn.Return<
     [string, string[]],
     CommandExecutionError | ProcessFilesystemError
   > {
     const environmentArgs = yield* Effect.try({ try: () => envArgs(env), catch: rejected });
-    const bwrap = yield* findBwrap();
 
     if (mode === "full") {
       return [
@@ -143,7 +120,10 @@ export function linuxSandbox({
           "--bind",
           "/",
           "/",
-          ...(protectedHome ? ["--tmpfs", protectedHome, "--remount-ro", protectedHome] : []),
+          "--tmpfs",
+          protectedHome,
+          "--remount-ro",
+          protectedHome,
           "--proc",
           "/proc",
           "--dev",
@@ -183,9 +163,7 @@ export function linuxSandbox({
     prepareUnderTmpfs(plan, scratch, true);
     args.push("--bind", scratch, scratch, "--bind", workspace, workspace);
 
-    if (protectedHome) {
-      args.push("--tmpfs", protectedHome, "--remount-ro", protectedHome);
-    }
+    args.push("--tmpfs", protectedHome, "--remount-ro", protectedHome);
 
     args.push("--chdir", cwd, "--", ENV_EXEC, "-i", "--", ...environmentArgs, helper ?? program);
 

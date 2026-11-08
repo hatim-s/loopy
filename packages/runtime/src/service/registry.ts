@@ -7,7 +7,7 @@ import type {
   SavedLoopy,
   SourceArtifact,
 } from "@loopy/contract";
-import type { Store } from "@loopy/core";
+import type { SecretError, Store } from "@loopy/core";
 import { errorMessage } from "@loopy/core";
 import { Data, type Effect, type Schema } from "effect";
 import type { ServiceError } from "./error";
@@ -46,12 +46,6 @@ export interface ArtifactRegistry {
     body: PutLoopyBody,
   ): Effect.Effect<void, RegistryError | RegistryConflictError | ArtifactValidationError>;
 }
-
-export class SecretError extends Data.TaggedError("SecretError")<{
-  operation: "read" | "get" | "validate" | "set" | "remove";
-  reason: "invalid" | "missing" | "io";
-  cause: unknown;
-}> {}
 
 export class WorkspaceError extends Data.TaggedError("WorkspaceError")<{ cause: unknown }> {}
 

@@ -5,7 +5,10 @@ import type { BundleSandboxOptions } from "./bundle";
 import type { ProcessFilesystemError } from "./io";
 import { absentPath, filesystem } from "./io";
 
-export function linuxBundle({ bundle, workspace, bun, network, home }: BundleSandboxOptions) {
+export function linuxBundle(
+  bwrap: string,
+  { bundle, workspace, bun, network, home }: BundleSandboxOptions,
+) {
   return Effect.gen(function* (): Effect.fn.Return<
     [string, string[]],
     CommandExecutionError | ProcessFilesystemError
@@ -57,6 +60,6 @@ export function linuxBundle({ bundle, workspace, bun, network, home }: BundleSan
       bundle,
     );
 
-    return ["/usr/bin/bwrap", args];
+    return [bwrap, args];
   });
 }

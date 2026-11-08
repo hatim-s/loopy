@@ -2,7 +2,7 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { decodeJson } from "@loopy/contract";
 import { Schema } from "effect";
-import { errnoCode, writeFileAtomically } from "../fs";
+import { processAlive, writeFileAtomically } from "../../os";
 
 const daemonFileSchema = Schema.Struct({
   pid: Schema.Int.check(Schema.isGreaterThan(0)),
@@ -22,17 +22,7 @@ export function readDaemonFile(home: string): DaemonFile | undefined {
 
   const record = decodeJson(daemonFileSchema)(readFileSync(file, "utf8"));
 
-  try {
-    process.kill(record.pid, 0);
-  } catch (error) {
-    if (errnoCode(error) === "ESRCH") {
-      return undefined;
-    }
-
-    throw error;
-  }
-
-  return record;
+  return processAlive(record.pid) ? record : undefined;
 }
 
 export function writeDaemonFile(home: string, record: DaemonFile): void {

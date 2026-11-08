@@ -1,14 +1,5 @@
-import {
-  link,
-  lstat,
-  mkdir,
-  mkdtemp,
-  open,
-  readFile,
-  realpath,
-  rename,
-  rm,
-} from "node:fs/promises";
+import { watch } from "node:fs";
+import { lstat, mkdir, readFile, realpath } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { decodeJson, executionKeySchema, executionResultSchema } from "@loopy/contract";
 import {
@@ -19,13 +10,7 @@ import {
   executionKeyString,
 } from "@loopy/core";
 import { Effect, Schema } from "effect";
-
-export const filesystemReceiptsDescriptorSchema = Schema.Struct({
-  kind: Schema.Literal("filesystem"),
-  home: Schema.NonEmptyString,
-});
-
-export type FilesystemReceiptsDescriptor = typeof filesystemReceiptsDescriptorSchema.Type;
+import { processAlive, publishExclusive, writeFileAtomically } from "../os";
 
 const identity = {
   executionKey: executionKeySchema,
@@ -51,14 +36,28 @@ export type AttemptIdentity = Pick<LocalReceipt, "executionKey" | "attempt">;
 
 export type FinishedLocalReceipt = Extract<LocalReceipt, { kind: "finished" }>;
 
+// A worker that dies before publishing leaves no file event, so liveness is rechecked on a timer.
+const LIVENESS_CHECK_MS = 1000;
+
 const io = <A>(body: () => PromiseLike<A>) =>
   Effect.tryPromise({
     try: body,
     catch: (cause) => new ExecutorError({ operation: "receipt", cause }),
   });
 
+const sync = <A>(body: () => A) =>
+  Effect.try({ try: body, catch: (cause) => new ExecutorError({ operation: "receipt", cause }) });
+
 const rejected = (message: string) =>
   Effect.fail(new ExecutorError({ operation: "receipt", cause: new Error(message) }));
+
+export const alreadyStarted = () =>
+  Effect.fail(
+    new ExecutorError({
+      operation: "execute",
+      cause: new Error("Execution already started. Reconcile its receipt."),
+    }),
+  );
 
 export const receiptPath = Effect.fn(function* (home: string, key: ExecutionKey, attempt: number) {
   yield* io(() => mkdir(home, { recursive: true, mode: 0o700 }));
@@ -88,32 +87,32 @@ export const receiptPath = Effect.fn(function* (home: string, key: ExecutionKey,
   return join(directory, `${attempt}.json`);
 });
 
-function syncDirectory(path: string) {
-  return Effect.acquireUseRelease(
-    io(() => open(dirname(path), "r")),
-    (file) => io(() => file.sync()),
-    (file) => io(() => file.close()),
-  );
-}
+function receiptChange(directory: string) {
+  return Effect.callback<void, ExecutorError>((resume) => {
+    const watcher = watch(directory);
+    const timer = setTimeout(() => settle(Effect.void), LIVENESS_CHECK_MS);
 
-function writeExclusive(path: string, value: LocalReceipt) {
-  return Effect.acquireUseRelease(
-    io(() => open(path, "wx", 0o600)),
-    (file) =>
-      Effect.gen(function* () {
-        yield* io(() => file.writeFile(JSON.stringify(value)));
-        yield* io(() => file.sync());
-      }),
-    (file) => io(() => file.close()),
-  );
+    function settle(effect: Effect.Effect<void, ExecutorError>) {
+      watcher.close();
+      clearTimeout(timer);
+      resume(effect);
+    }
+
+    watcher.on("change", () => settle(Effect.void));
+    watcher.on("error", (cause) =>
+      settle(Effect.fail(new ExecutorError({ operation: "receipt", cause }))),
+    );
+
+    return Effect.sync(() => {
+      watcher.close();
+      clearTimeout(timer);
+    });
+  });
 }
 
 /** Only the claiming child finishes live work. A parent confirms death and rereads first. */
 export class FilesystemReceipts {
   constructor(private readonly home: string) {}
-  get descriptor(): FilesystemReceiptsDescriptor {
-    return { kind: "filesystem", home: this.home };
-  }
 
   read = Effect.fn("FilesystemReceipts.read")(function* (
     this: FilesystemReceipts,
@@ -152,70 +151,28 @@ export class FilesystemReceipts {
     identity: AttemptIdentity,
   ) {
     const path = yield* receiptPath(this.home, identity.executionKey, identity.attempt);
+    const started: LocalReceipt = { ...identity, kind: "started", pid: process.pid };
 
-    // Publish complete bytes with an exclusive link. Readers must never see a partial claim.
-    return yield* Effect.uninterruptible(
-      Effect.gen({ self: this }, function* () {
-        const created = yield* Effect.acquireUseRelease(
-          io(() => mkdtemp(`${path}.claim-`)),
-          (directory) =>
-            Effect.gen(function* () {
-              const temporary = join(directory, "started.json");
-              yield* writeExclusive(temporary, { ...identity, kind: "started", pid: process.pid });
+    if (yield* sync(() => publishExclusive(path, JSON.stringify(started), 0o600))) {
+      return { kind: "created" as const };
+    }
 
-              const linked = yield* io(() => link(temporary, path)).pipe(
-                Effect.as(true),
-                Effect.catchIf(
-                  (error) => errnoCode(error.cause) === "EEXIST",
-                  () => Effect.succeed(false),
-                ),
-              );
+    const receipt = yield* this.read(identity);
 
-              if (linked) {
-                yield* syncDirectory(path);
-              }
+    if (!receipt) {
+      return yield* rejected(
+        "Claimed receipt disappeared. Inspect the daemon home before retrying.",
+      );
+    }
 
-              return linked;
-            }),
-          (directory) => io(() => rm(directory, { recursive: true, force: true })),
-        );
-
-        if (created) {
-          return { kind: "created" as const };
-        }
-
-        const receipt = yield* this.read(identity);
-
-        if (!receipt) {
-          return yield* rejected(
-            "Claimed receipt disappeared. Inspect the daemon home before retrying.",
-          );
-        }
-
-        return { kind: "existing" as const, receipt };
-      }),
-    );
+    return { kind: "existing" as const, receipt };
   });
 
   private observeClaim = Effect.fn(function* (
     this: FilesystemReceipts,
     receipt: Extract<LocalReceipt, { kind: "started" }>,
   ) {
-    const dead = yield* Effect.try({
-      try: () => {
-        process.kill(receipt.pid, 0);
-
-        return false;
-      },
-      catch: (cause) => new ExecutorError({ operation: "receipt", cause }),
-    }).pipe(
-      Effect.catchIf(
-        (error) => errnoCode(error.cause) === "ESRCH",
-        () => Effect.succeed(true),
-      ),
-    );
-
-    if (!dead) {
+    if (yield* sync(() => processAlive(receipt.pid))) {
       return { kind: "started" as const };
     }
 
@@ -226,20 +183,11 @@ export class FilesystemReceipts {
 
   private publish = Effect.fn(function* (this: FilesystemReceipts, value: FinishedLocalReceipt) {
     const path = yield* receiptPath(this.home, value.executionKey, value.attempt);
+    yield* sync(() => writeFileAtomically(path, JSON.stringify(value), 0o600));
 
-    return yield* Effect.uninterruptible(
-      Effect.gen(function* () {
-        const temporary = `${path}.${process.pid}.tmp`;
-        yield* writeExclusive(temporary, value);
-        yield* io(() => rename(temporary, path));
-        yield* syncDirectory(path);
-
-        return value;
-      }),
-    );
+    return value;
   });
 
-  /** Report whether this observer sealed uncertainty or found an existing completion. */
   reconcile = Effect.fn("FilesystemReceipts.reconcile")(function* (
     this: FilesystemReceipts,
     identity: AttemptIdentity,
@@ -274,6 +222,30 @@ export class FilesystemReceipts {
     const finished = yield* this.publish({ kind: "finished", ...identity, result });
 
     return { kind: "finished" as const, receipt: finished, source: "reconciled" as const };
+  });
+
+  /** Waits for a started attempt to finish, sealing it as uncertain if its worker dies first. */
+  settle = Effect.fn("FilesystemReceipts.settle")(function* (
+    this: FilesystemReceipts,
+    identity: AttemptIdentity,
+  ) {
+    const path = yield* receiptPath(this.home, identity.executionKey, identity.attempt);
+
+    while (true) {
+      const receipt = yield* this.reconcile(identity);
+
+      if (receipt.kind === "finished") {
+        return receipt.receipt;
+      }
+
+      if (receipt.kind === "none") {
+        return yield* rejected(
+          "Started receipt disappeared. Inspect the daemon home before retrying.",
+        );
+      }
+
+      yield* receiptChange(dirname(path));
+    }
   });
 
   finish = Effect.fn("FilesystemReceipts.finish")(function* (

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { Graph, Node } from "@loopy/core";
+import { type BundledNode, carriesBundle, type Graph, type Node } from "@loopy/core";
 import { builtinParser } from "@loopy/sdk/graph-host";
 import { Effect } from "effect";
 import { AuthorDiagnostics, authorFailure, compilerIO } from "./errors";
@@ -38,7 +38,7 @@ function buildModule(module: ParserSource, kind: "code" | "parser") {
 }
 
 const buildNode = Effect.fn(function* (
-  node: Extract<Node, { kind: "code" | "command" }>,
+  node: BundledNode,
   parsers: Map<string, ParserSource>,
   entry: string,
 ) {
@@ -71,7 +71,7 @@ export const bundle = Effect.fn(function* (
   const nodes: Node[] = [];
 
   for (const node of graph.nodes) {
-    if (node.kind !== "code" && (node.kind !== "command" || node.parse === null)) {
+    if (!carriesBundle(node)) {
       nodes.push(node);
       continue;
     }
@@ -114,7 +114,7 @@ export const bundle = Effect.fn(function* (
     nodes.push(
       node.kind === "code"
         ? { ...node, module: { ...node.module, bundleHash } }
-        : { ...node, parse: node.parse && { ...node.parse, bundleHash } },
+        : { ...node, parse: { ...node.parse, bundleHash } },
     );
   }
 

@@ -4,7 +4,7 @@ export { canonicalJson } from "./canonical-json";
 
 export { counter, hashSchema, positiveInt, struct } from "./codec";
 
-export { checkCommandFlags, renderCommandArgv } from "./command-argv";
+export { checkCommandFlags, renderCommand } from "./command-argv";
 
 export { nextFire, parseCron } from "./cron";
 
@@ -14,7 +14,7 @@ export * from "./duration";
 
 export * from "./effects";
 
-export { errnoCode, errorMessage } from "./errors";
+export { errnoCode, errorMessage, SecretError } from "./errors";
 
 export * from "./executor";
 
@@ -54,7 +54,14 @@ export {
   recordFields,
 } from "./record-spec";
 
-export { graphBundles, revision, sha256Hex } from "./revision";
+export {
+  type BundledNode,
+  carriesBundle,
+  graphBundles,
+  revision,
+  sha256Hex,
+  specBundles,
+} from "./revision";
 
 export { validateSchedule, validateTimeZone } from "./schedule";
 
