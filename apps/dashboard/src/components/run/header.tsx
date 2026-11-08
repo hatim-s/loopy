@@ -67,8 +67,10 @@ function RunActions({ snapshot, graph }: { snapshot: RunSnapshotView; graph: Gra
   const busy = action.pending !== null;
   const truncated = run.truncatedFields?.input !== undefined;
 
+  // An unstarted run has nothing to clean up, and a loading graph cannot refuse yet.
   const refusal =
-    runningRefusal(snapshot.nodeRuns) ?? cleanupRefusal(snapshot.nodeRuns, graph ?? { nodes: [] });
+    runningRefusal(snapshot.nodeRuns) ??
+    (snapshot.nodeRuns.length === 0 || graph === null ? null : cleanupRefusal(graph));
 
   return (
     <div className="flex flex-col items-end gap-2">

@@ -17,13 +17,12 @@ export function runningRefusal(nodes: readonly Pick<NodeRun, "status">[]): strin
     : null;
 }
 
-/** Why a started run with finally nodes cannot be cancelled, or null when it can. */
-export function cleanupRefusal(
-  nodes: readonly unknown[],
-  graph: { readonly nodes: readonly { readonly kind: string }[] },
-): string | null {
+/** Why a started run of this graph cannot be cancelled, or null when it can. Callers skip unstarted runs. */
+export function cleanupRefusal(graph: {
+  readonly nodes: readonly { readonly kind: string }[];
+}): string | null {
   // Finally cleanup on cancel needs a host that sends cancel_requested, and no host does yet.
-  return nodes.length > 0 && graph.nodes.some((node) => node.kind === "finally")
+  return graph.nodes.some((node) => node.kind === "finally")
     ? "This run requires finally cleanup. Cancellation with cleanup is not available; resume the run instead."
     : null;
 }

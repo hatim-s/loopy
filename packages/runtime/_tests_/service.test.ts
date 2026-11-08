@@ -2,13 +2,13 @@ import { expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
-import { decodeBoundary, encodeRunCursor, graphView, routes } from "@loopy/contract";
+import { decodeBoundary, encodeRunCursor, graphView, nodeIdSchema, routes } from "@loopy/contract";
 import type { Graph } from "@loopy/core";
-import { revision } from "@loopy/core";
 import { loopy } from "@loopy/sdk";
 import { Effect } from "effect";
 import { FakeExecutor, runIn } from "../../core/_tests_/fixtures/run";
 import { makeLocalService, Registry } from "../src/local";
+import { saveCompiled } from "../src/local/save-compiled";
 import { runAt } from "./fixtures/clock";
 import { compiledBody } from "./fixtures/compiled";
 import { qualityTestRoot } from "./fixtures/quality-test-root";
@@ -28,7 +28,7 @@ async function fixture(meta: Partial<Pick<Graph["meta"], "scope" | "schedule">> 
     secrets: ["PRIVATE"],
   });
 
-  await Effect.runPromise(registry.save(body));
+  await Effect.runPromise(saveCompiled(registry, body));
   let now = Date.parse("2026-10-17T00:00:00.000Z");
   const clock = { now: () => now };
   // The service and store read this clock through Effect's Clock.
@@ -128,6 +128,55 @@ test("service resumes queued, suspended and abandoned runs and rejects terminal 
     code: "not_found",
     message: "No run 'missing'. Use loopy runs to list run ids.",
   });
+});
+
+test("cancelling a run cancels its pending nodes and keeps their recorded input", async () => {
+  const { service, store, root, onClock } = await fixture();
+  const run = await onClock(service.startRun("service", { name: "Hatim" }, root));
+  const at = new Date(0).toISOString();
+
+  const node = (nodeId: string) => ({
+    key: { runId: run.id, nodeId: decodeBoundary(nodeIdSchema)(nodeId), scope: [] },
+    attempt: 1,
+    maxAttempts: 2,
+    startedAt: at,
+    receipt: "none" as const,
+    inputView: { state: "available" as const, value: { nodeId } },
+  });
+
+  await onClock(store.claim(run.id, "owner"));
+  await onClock(
+    store.apply({
+      runId: run.id,
+      token: "owner",
+      effects: [
+        { kind: "write_node_run", nodeRun: { ...node("waits"), status: "waiting", wakeAt: null } },
+        { kind: "write_node_run", nodeRun: { ...node("sleeps"), status: "sleeping", wakeAt: at } },
+        {
+          kind: "write_node_run",
+          nodeRun: { ...node("done"), status: "succeeded", output: 1, endedAt: at },
+        },
+      ],
+    }),
+  );
+  await onClock(store.release(run.id, "owner"));
+  await onClock(service.cancelRun(run.id));
+
+  const nodes = await onClock(store.getNodeRuns(run.id));
+  expect(
+    nodes.map((stored) => ({
+      nodeId: String(stored.key.nodeId),
+      status: stored.status,
+      inputView: stored.inputView,
+    })),
+  ).toEqual(
+    ["waits", "sleeps", "done"].map((nodeId) => ({
+      nodeId,
+      status: nodeId === "done" ? "succeeded" : "cancelled",
+      inputView: { state: "available", value: { nodeId } },
+    })),
+  );
+  expect(nodes.find((stored) => stored.key.nodeId === "waits")).not.toHaveProperty("wakeAt");
 });
 
 test("service pages newest runs by createdAt with default and maximum page sizes", async () => {
@@ -488,21 +537,15 @@ test("service cursor follows the last event without requiring a run snapshot", a
 
 test("run graphs stay pinned to the revision each run started on", async () => {
   const { service, root, onClock } = await fixture();
-  const unsaved = await onClock(service.startRun("service", { name: "Hatim" }, root));
-  // The fixture registry entry was never compiled to disk, so its run has no graph to show.
-  await expect(onClock(service.runGraph(unsaved.id))).rejects.toHaveProperty(
-    "_tag",
-    "RegistryError",
-  );
   const source = join(root, "service.ts");
-  const first = await compiledBody("service", source);
-  first.graph.input = { name: "string" };
-  first.revision = await revision(first.graph);
+  const first = await compiledBody("service", source, { input: { name: "string" } });
   await onClock(service.putLoopy("service", first));
   const pinned = await onClock(service.startRun("service", { name: "Hatim" }, root));
-  const second = await compiledBody("service", source);
-  second.graph.input = { name: "string", "note?": "string" };
-  second.revision = await revision(second.graph);
+
+  const second = await compiledBody("service", source, {
+    input: { name: "string", "note?": "string" },
+  });
+
   await onClock(service.putLoopy("service", second));
   expect(second.revision).not.toBe(first.revision);
   expect(
@@ -583,9 +626,7 @@ test("loopy views are keyed by workspace and slug so graph and start reach that 
     mkdirSync(join(workspace, ".loopy", "loopies"), { recursive: true });
     const source = join(workspace, "shared.ts");
     await Bun.write(source, "");
-    const body = await compiledBody("shared", source);
-    body.graph.input = { [field]: "string" };
-    body.revision = await revision(body.graph);
+    const body = await compiledBody("shared", source, { input: { [field]: "string" } });
     await Effect.runPromise(service.putLoopy("shared", body));
 
     return body.revision;
