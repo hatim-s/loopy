@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, realpath, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { decodeBoundary, type ExecutionResult, nodeIdSchema } from "@loopy/contract";
 import {
   attemptRequestHash,
@@ -15,6 +15,7 @@ import type { AttemptBackend } from "../../../../apps/sandbox/src/docker";
 import { FilesystemAuthority } from "../../../../apps/sandbox/src/filesystem/authority";
 import { FilesystemResults } from "../../../../apps/sandbox/src/filesystem/results";
 import { validateStateRoot } from "../../../../apps/sandbox/src/state-root";
+import { qualityTestRoot } from "./quality-test-root";
 
 export const successful: ExecutionResult = {
   kind: "succeeded",
@@ -48,11 +49,8 @@ export const artifactReader: ArtifactReader = {
 };
 
 export async function authorityFixture() {
-  const parent = resolve(import.meta.dir, "../../../../.loopy/quality-tests");
-  await mkdir(parent, { recursive: true });
-  const root = await realpath(await mkdtemp(join(parent, "authority-")));
+  const root = qualityTestRoot("authority");
   await writeFile(join(root, "package.json"), JSON.stringify({ private: true }));
-  await mkdir(join(root, ".loopy/loopies"), { recursive: true });
 
   const config = decodeBoundary(sandboxConfigSchema)({
     worktree: root,

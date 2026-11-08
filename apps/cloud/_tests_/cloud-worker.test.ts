@@ -1,5 +1,4 @@
-import { afterAll, beforeAll, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { beforeAll, expect, test } from "bun:test";
 import { resolve } from "node:path";
 import { decodeBoundary, encodeRunCursor, jsonSchema, routes } from "@loopy/contract";
 import { revision, waitRecordSchema } from "@loopy/core";
@@ -7,6 +6,10 @@ import { log, loopy, wait } from "@loopy/sdk/graph";
 import { Schema } from "effect";
 import { Miniflare } from "miniflare";
 import { compiledBody } from "../../../packages/loopy/_tests_/compiled-fixture";
+import { bundleForBrowser } from "../../../packages/loopy/_tests_/fixtures/bundle";
+import { qualityTestRoot } from "../../../packages/loopy/_tests_/fixtures/quality-test-root";
+import { fileScope, onCleanup } from "../../../packages/loopy/_tests_/fixtures/test-scope";
+import { until } from "../../../packages/loopy/_tests_/fixtures/wait";
 
 let runtime: Miniflare;
 
@@ -16,25 +19,20 @@ const tokenA = "synthetic-workerd-credential-alpha-0001";
 
 const tokenB = "synthetic-workerd-credential-bravo-0002";
 
+const scope = fileScope();
+
 beforeAll(async () => {
   const root = resolve(import.meta.dir, "../../..");
-  const parent = resolve(root, ".loopy/cloud/tests");
-  await mkdir(parent, { recursive: true });
-  directory = await mkdtemp(`${parent}/workerd-`);
+  directory = qualityTestRoot("workerd", { scope });
 
-  const bundle = await Bun.build({
-    entrypoints: [
+  await bundleForBrowser(
+    [
       resolve(root, "apps/cloud/src/worker.ts"),
       resolve(import.meta.dir, "fixtures/cloud-worker-probe.ts"),
     ],
-    target: "browser",
-    format: "esm",
-    outdir: directory,
-    naming: "[name].js",
-  });
+    directory,
+  );
 
-  expect(bundle.logs).toEqual([]);
-  expect(bundle.success).toBe(true);
   runtime = new Miniflare({
     host: "127.0.0.1",
     port: 0,
@@ -67,18 +65,9 @@ beforeAll(async () => {
       },
     ],
   });
+  onCleanup(() => runtime.dispose(), scope);
   await runtime.ready;
 }, 60_000);
-
-afterAll(async () => {
-  try {
-    await runtime?.dispose();
-  } finally {
-    if (directory) {
-      await rm(directory, { recursive: true, force: true });
-    }
-  }
-});
 
 async function probe(command: string, instance = command) {
   const namespace = await runtime.getDurableObjectNamespace("PROBES", "probe");
@@ -371,23 +360,12 @@ test("Worker alarm persists hooks and supports SQL dashboard queries without cro
     await (await api("/loopies/alarm-wait/runs", { method: "POST", body: { input: {} } })).json(),
   );
 
-  let snapshot = decodeBoundary(routes.run.response)(
-    await (await api(`/runs/${started.id}`)).json(),
+  // Miniflare has no deterministic alarm trigger, so poll until the alarm persists the wait.
+  const hook = await until(
+    "the Worker alarm to persist its wait",
+    async () =>
+      decodeBoundary(routes.run.response)(await (await api(`/runs/${started.id}`)).json()).hooks[0],
   );
-
-  const deadline = Date.now() + 5000;
-
-  while (snapshot.hooks.length === 0 && Date.now() < deadline) {
-    await Bun.sleep(25);
-    snapshot = decodeBoundary(routes.run.response)(await (await api(`/runs/${started.id}`)).json());
-  }
-
-  const hook = snapshot.hooks[0];
-  expect(hook).toBeDefined();
-
-  if (!hook) {
-    throw new Error("Worker alarm did not persist its wait within five seconds.");
-  }
 
   const status = await api("/cloud/status");
   expect(await status.json()).toMatchObject({ errors: [], schedulerError: null });

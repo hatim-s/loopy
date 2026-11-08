@@ -1,5 +1,6 @@
 import { Effect, Schema } from "effect";
 import { FilesystemReceipts, receiptSchema } from "../../../runtime/src/executor/receipts";
+import { waitForFile } from "./wait";
 
 const request = Schema.decodeUnknownSync(
   Schema.Struct({
@@ -20,13 +21,7 @@ await Effect.runPromise(receipts.claim(request.identity));
 
 await Bun.write(request.ready, "claimed");
 
-for (let index = 0; index < 300 && !(await Bun.file(request.finish).exists()); index++) {
-  await Bun.sleep(10);
-}
-
-if (!(await Bun.file(request.finish).exists())) {
-  throw new Error("Receipt publication gate was not released.");
-}
+await waitForFile(request.finish);
 
 await Effect.runPromise(
   receipts.finish({

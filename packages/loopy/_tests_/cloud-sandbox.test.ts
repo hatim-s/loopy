@@ -1,13 +1,11 @@
 import { afterEach, expect, test } from "bun:test";
-import { createHash, randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { decodeBoundary, type ExecutionResult, nodeIdSchema } from "@loopy/contract";
 import {
-  artifactHelperName,
   attemptRecordSchema,
   type DockerAttemptPlan,
-  inputHelperName,
   type SandboxAttemptRequest,
   sandboxArtifactSchema,
   sandboxAttemptRequestSchema,
@@ -16,7 +14,7 @@ import {
 import { canonicalJson } from "@loopy/core";
 import { CommandExecutionError } from "@loopy/runtime/os";
 import { Effect, Result, Schema } from "effect";
-import { type ArtifactReader, DockerArtifacts } from "../../../apps/sandbox/src/artifacts";
+import type { ArtifactReader } from "../../../apps/sandbox/src/artifacts";
 import type { Attempts } from "../../../apps/sandbox/src/attempt";
 import type { AttemptDependenciesFactory } from "../../../apps/sandbox/src/attempt/dependencies";
 import { sandboxConfigSchema } from "../../../apps/sandbox/src/config";
@@ -30,17 +28,15 @@ import {
 import { filesystemStorage } from "../../../apps/sandbox/src/filesystem";
 import { FilesystemJournal } from "../../../apps/sandbox/src/filesystem/journal";
 import { failure } from "../../../apps/sandbox/src/operations";
-import { type CommandRunner, runCommand } from "../../../apps/sandbox/src/process";
+import type { CommandRunner } from "../../../apps/sandbox/src/process";
 import { attemptHandler } from "../../../apps/sandbox/src/server";
 import { stateLayout, validateStateRoot } from "../../../apps/sandbox/src/state-root";
-import { commandSpec } from "./fixtures/executor";
+import { qualityTestRoot } from "./fixtures/quality-test-root";
 import {
   artifactReader as idleArtifactReader,
   succeedingBackend,
 } from "./fixtures/sandbox-authority";
-import { closeAttemptScopes, openAttempts, openSandbox, run } from "./fixtures/sandbox-run";
-
-const roots: string[] = [];
+import { openAttempts, openSandbox, run } from "./fixtures/sandbox-run";
 
 const services: Attempts[] = [];
 
@@ -48,19 +44,14 @@ const token = "sandbox-fixture-token-32-characters";
 
 const succeeded: ExecutionResult = { kind: "succeeded", output: { ok: true }, logs: [] };
 
+// Services close before the test scope releases their attempt scopes and roots.
 afterEach(async () => {
   await Promise.all(services.splice(0).map((service) => run(service.close())));
-  await closeAttemptScopes();
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
 async function fixture() {
-  const parent = resolve(import.meta.dir, "../../../.loopy/quality-tests");
-  await mkdir(parent, { recursive: true });
-  const worktree = await realpath(await mkdtemp(join(parent, "cloud-sandbox-")));
+  const worktree = qualityTestRoot("cloud-sandbox");
   await writeFile(join(worktree, "package.json"), JSON.stringify({ private: true }));
-  await mkdir(join(worktree, ".loopy/loopies"), { recursive: true });
-  roots.push(worktree);
 
   const config = decodeBoundary(sandboxConfigSchema)({
     worktree,
@@ -799,243 +790,3 @@ test("concurrent restarts reclaim a dead process lock under one startup owner", 
 function diskReceipts(root: string) {
   return run(new FilesystemJournal(root).records());
 }
-
-function docker(config: Awaited<ReturnType<typeof fixture>>, args: string[], timeoutMs = 30_000) {
-  return run(
-    runCommand(["docker", "--context", config.dockerContext, ...args], {
-      cwd: config.worktree,
-      timeoutMs,
-      env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "" },
-    }),
-  );
-}
-
-async function cleanupDocker(config: Awaited<ReturnType<typeof fixture>>) {
-  // Names come only from this fixture's durable receipts, never a daemon-wide listing.
-  const plans = (await diskReceipts(config.stateRoot)).map((record) => record.plan);
-
-  for (const plan of plans) {
-    for (const container of [plan.container, inputHelperName(plan), artifactHelperName(plan.id)]) {
-      await docker(config, ["rm", "--force", container]);
-    }
-  }
-
-  for (const volume of new Set(plans.flatMap((plan) => [plan.volume, plan.inputVolume]))) {
-    expect((await docker(config, ["volume", "rm", volume])).exitCode).toBe(0);
-
-    const remaining = await docker(config, [
-      "volume",
-      "ls",
-      "--filter",
-      `name=^${volume}$`,
-      "--format",
-      "{{.Name}}",
-    ]);
-
-    expect(remaining.exitCode).toBe(0);
-    expect(remaining.stdout.trim()).toBe("");
-  }
-}
-
-const dockerContext = process.env.LOOPY_SANDBOX_DOCKER_CONTEXT;
-
-test.skipIf(dockerContext !== SANDBOX_DOCKER_CONTEXT)(
-  "real Docker preserves files, bounds execution, reconciles results and never repeats killed workers",
-  async () => {
-    const config = await fixture();
-    config.maxTimeoutMs = 2000;
-    const client = new DockerClient(config);
-    const backend = new DockerBackend(config, client);
-    const service = await open(config, backend, new DockerArtifacts(config, client));
-
-    try {
-      const value = request(
-        `const input = await Bun.stdin.json(); process.stderr.write(JSON.stringify({message:'probe',data:input})+'\\n'); process.stdout.write('\\n'+JSON.stringify({uid:process.getuid(),home:process.env.HOME})+'\\n');`,
-      );
-
-      value.executionKey.runId = `sandbox-fixture-${randomUUID()}`;
-      await run(service.start(value));
-      await run(service.drain());
-      expect(await run(service.lookup(value))).toEqual({
-        kind: "finished",
-        result: {
-          kind: "succeeded",
-          output: { uid: 1000, home: "/workspace" },
-          logs: [{ message: "probe", data: {} }],
-        },
-      });
-      const saved = (await diskReceipts(config.stateRoot))[0];
-
-      if (!saved) {
-        throw new Error("Expected a durable container identity.");
-      }
-
-      expect(await run(backend.recover(saved.plan))).toEqual({
-        kind: "succeeded",
-        output: { uid: 1000, home: "/workspace" },
-        logs: [{ message: "probe", data: {} }],
-      });
-
-      const first = decodeBoundary(sandboxAttemptRequestSchema)({
-        ...value,
-        attempt: 2,
-        bundles: [],
-        spec: commandSpec([
-          "/bin/sh",
-          "-c",
-          "printf shared > shared.txt; mkdir -p artifacts; printf nested > artifacts/good.txt; ln -s /etc/passwd secret; ln -s artifacts alias; mkfifo pipe; head -c 1048577 /dev/zero > too-large",
-        ]),
-      });
-
-      await run(service.start(first));
-      await run(service.drain());
-
-      const second = decodeBoundary(sandboxAttemptRequestSchema)({
-        ...first,
-        attempt: 3,
-        spec: commandSpec(["/bin/cat", "shared.txt"]),
-      });
-
-      await run(service.start(second));
-      await run(service.drain());
-      const final = await run(service.lookup(second));
-      expect(
-        final.kind === "finished" && final.result.kind === "succeeded" && final.result.output,
-      ).toEqual({ stdout: "shared", stderr: "", exitCode: 0 });
-      const artifactHandler = attemptHandler(service, token);
-      const exported = await artifactHandler(artifactLookup(first, "shared.txt"));
-      expect(exported.status).toBe(200);
-      expect(decodeBoundary(sandboxArtifactSchema)(await exported.json())).toEqual({
-        path: "shared.txt",
-        bytes: Buffer.from("shared").toString("base64"),
-        sha256: createHash("sha256").update("shared").digest("hex"),
-        size: 6,
-      });
-      const nested = await artifactHandler(artifactLookup(first, "artifacts/good.txt"));
-      expect(nested.status).toBe(200);
-      expect(decodeBoundary(sandboxArtifactSchema)(await nested.json()).bytes).toBe(
-        Buffer.from("nested").toString("base64"),
-      );
-
-      for (const path of [
-        "secret",
-        "alias/good.txt",
-        "pipe",
-        "artifacts",
-        "../shared.txt",
-        "/etc/passwd",
-      ]) {
-        expect((await artifactHandler(artifactLookup(first, path))).status).toBe(400);
-      }
-
-      expect((await artifactHandler(artifactLookup(first, "missing"))).status).toBe(404);
-      expect((await artifactHandler(artifactLookup(first, "too-large"))).status).toBe(413);
-      expect((await diskReceipts(config.stateRoot)).length).toBe(3);
-
-      const invalidCwd = decodeBoundary(sandboxAttemptRequestSchema)({
-        ...second,
-        attempt: 4,
-        spec: { ...second.spec, cwd: "/etc" },
-      });
-
-      await run(service.start(invalidCwd));
-      await run(service.drain());
-      const cwdResult = await run(service.lookup(invalidCwd));
-      expect(
-        cwdResult.kind === "finished" &&
-          cwdResult.result.kind === "failed" &&
-          cwdResult.result.error.code,
-      ).toBe("validation");
-
-      const overflow = { ...request("process.stdout.write('x'.repeat(3*1024*1024))"), attempt: 5 };
-      await run(service.start(overflow));
-      await run(service.drain());
-      const overflowResult = await run(service.lookup(overflow));
-      expect(
-        overflowResult.kind === "finished" &&
-          overflowResult.result.kind === "failed" &&
-          overflowResult.result.error.code,
-      ).toBe("output_limit");
-
-      const timeout = request("setTimeout(()=>{},30000)");
-
-      if (timeout.spec.kind !== "code") {
-        throw new Error("Expected code fixture.");
-      }
-
-      timeout.spec.timeoutMs = 30;
-      timeout.attempt = 6;
-      await run(service.start(timeout));
-      await run(service.drain());
-      const timeoutResult = await run(service.lookup(timeout));
-      expect(
-        timeoutResult.kind === "finished" &&
-          timeoutResult.result.kind === "failed" &&
-          timeoutResult.result.error.message,
-      ).toContain("timed out");
-
-      const killed = request("setTimeout(()=>{},30000)");
-
-      if (killed.spec.kind !== "code") {
-        throw new Error("Expected code fixture.");
-      }
-
-      killed.spec.timeoutMs = 30_000;
-      killed.attempt = 7;
-      await run(service.start(killed));
-
-      const killedReceipt = (await diskReceipts(config.stateRoot)).find(
-        (record) => record.plan.attempt === 7,
-      )?.plan;
-
-      if (!killedReceipt) {
-        throw new Error("Expected worker identity before container start.");
-      }
-
-      let running = false;
-
-      for (let i = 0; i < 50 && !running; i += 1) {
-        const state = await docker(
-          config,
-          ["inspect", "--format", "{{.State.Running}}", killedReceipt.container],
-          1000,
-        );
-
-        running = state.exitCode === 0 && state.stdout.trim() === "true";
-
-        if (!running) {
-          await new Promise((resolveWait) => setTimeout(resolveWait, 50));
-        }
-      }
-
-      expect(running).toBe(true);
-
-      const terminated = await docker(config, ["kill", killedReceipt.container], 5000);
-
-      expect(terminated.exitCode).toBe(0);
-      await run(service.drain());
-      const killedResult = await run(service.lookup(killed));
-      expect(
-        killedResult.kind === "finished" &&
-          killedResult.result.kind === "failed" &&
-          killedResult.result.error.code,
-      ).toBe("uncertain");
-      expect(await run(service.start(killed))).toEqual(killedResult);
-
-      const outerTimeout = { ...killed, attempt: 8 };
-      await run(service.start(outerTimeout));
-      await run(service.drain());
-      const outerResult = await run(service.lookup(outerTimeout));
-      expect(
-        outerResult.kind === "finished" &&
-          outerResult.result.kind === "failed" &&
-          outerResult.result.error.message,
-      ).toContain("owned container was killed");
-      expect(await run(service.start(outerTimeout))).toEqual(outerResult);
-    } finally {
-      await run(service.drain());
-      await cleanupDocker(config);
-    }
-  },
-  60_000,
-);

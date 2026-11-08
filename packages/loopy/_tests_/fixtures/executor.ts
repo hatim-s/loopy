@@ -1,6 +1,4 @@
-import { afterEach } from "bun:test";
-import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { nodeIdSchema } from "@loopy/contract";
 import type { ExecutionSpec } from "@loopy/core";
@@ -8,16 +6,10 @@ import { initialState, step } from "@loopy/core/engine";
 import { LocalExecutor } from "@loopy/runtime/executor";
 import { Schema } from "effect";
 import { loopy, sh } from "loopy/graph";
-
-const roots: string[] = [];
-
-afterEach(async () => {
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
-});
+import { qualityTestRoot } from "./quality-test-root";
 
 export async function fixture() {
-  const root = await realpath(await mkdtemp(join(tmpdir(), "loopy-executor-")));
-  roots.push(root);
+  const root = qualityTestRoot("executor", { outsideCheckout: true });
   const workspace = join(root, "workspace");
   await mkdir(join(workspace, ".loopy", "loopies"), { recursive: true });
   await Bun.write(join(workspace, "seed"), "workspace");

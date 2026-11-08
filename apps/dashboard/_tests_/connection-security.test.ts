@@ -1,10 +1,10 @@
-import { afterEach, expect, spyOn, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { expect, spyOn, test } from "bun:test";
 import { join } from "node:path";
 import { makeLocalService } from "@loopy/runtime/local";
 import { openRunStore } from "@loopy/runtime/store";
-import { Effect, Exit, Scope } from "effect";
+import { Effect } from "effect";
+import { qualityTestRoot } from "../../../packages/loopy/_tests_/fixtures/quality-test-root";
+import { onCleanup, runScoped } from "../../../packages/loopy/_tests_/fixtures/test-scope";
 import { originSecurity } from "../../../packages/runtime/src/local/server/security";
 import {
   createRequestHandler,
@@ -13,27 +13,10 @@ import {
 import { localHttpBackend } from "../src/backend/local-http";
 import { checkAccess } from "../src/session/access";
 
-const cleanups: (() => void | Promise<void>)[] = [];
-
-afterEach(async () => {
-  for (const cleanup of cleanups.splice(0).reverse()) {
-    await cleanup();
-  }
-});
-
 async function fixture() {
-  const root = mkdtempSync(join(tmpdir(), "loopy-connection-"));
-  mkdirSync(join(root, ".loopy", "loopies"), { recursive: true });
+  const root = qualityTestRoot("connection");
   const home = join(root, "home");
-  const scope = Scope.makeUnsafe();
-  cleanups.push(async () => {
-    await Effect.runPromise(Scope.close(scope, Exit.void));
-    rmSync(root, { recursive: true, force: true });
-  });
-
-  const store = await Effect.runPromise(
-    openRunStore(home).pipe(Effect.provideService(Scope.Scope, scope)),
-  );
+  const store = await runScoped(openRunStore(home));
 
   const service = makeLocalService({
     store,
@@ -55,7 +38,7 @@ async function fixture() {
 async function launch(allowedOrigins?: string[]) {
   const options = await fixture();
   const server = startServer({ ...options, allowedOrigins });
-  cleanups.push(() => server.stop());
+  onCleanup(() => server.stop());
 
   return { ...options, baseUrl: new URL(server.url).origin };
 }

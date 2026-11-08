@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ExecutionResult } from "@loopy/contract";
@@ -7,11 +7,13 @@ import { Effect } from "effect";
 import { FilesystemAuthority } from "../../../apps/sandbox/src/filesystem/authority";
 import { failure } from "../../../apps/sandbox/src/operations";
 import { stateLayout } from "../../../apps/sandbox/src/state-root";
-import { artifactReader, successful, uncertain } from "./fixtures/sandbox-authority";
-import { cleanup, fixture, open } from "./fixtures/sandbox-authority-lifecycle";
-import { run } from "./fixtures/sandbox-run";
-
-afterEach(cleanup);
+import {
+  artifactReader,
+  authorityFixture,
+  successful,
+  uncertain,
+} from "./fixtures/sandbox-authority";
+import { openAttemptsWith, run } from "./fixtures/sandbox-run";
 
 class FaultAuthority extends FilesystemAuthority {
   drop = false;
@@ -58,13 +60,13 @@ class FaultAuthority extends FilesystemAuthority {
 }
 
 test("lost admission acknowledgement and unavailable resolving reads retain one same-session start gate", async () => {
-  const { config, request, resultsFor } = await fixture();
+  const { config, request, resultsFor } = await authorityFixture();
   const authority = new FaultAuthority(config.stateRoot);
   const complete = Promise.withResolvers<ExecutionResult>();
   let starts = 0;
   let recoveries = 0;
 
-  const service = await open(config, {
+  const service = await openAttemptsWith(config, {
     authority,
     resultsFor,
     artifactReader,
@@ -114,11 +116,11 @@ test("lost admission acknowledgement and unavailable resolving reads retain one 
 });
 
 test("pre-commit failure has no backend effect and the next request can admit normally", async () => {
-  const { config, request, resultsFor } = await fixture();
+  const { config, request, resultsFor } = await authorityFixture();
   const authority = new FaultAuthority(config.stateRoot);
   let starts = 0;
 
-  const service = await open(config, {
+  const service = await openAttemptsWith(config, {
     authority,
     resultsFor,
     artifactReader,
@@ -146,7 +148,7 @@ test("pre-commit failure has no backend effect and the next request can admit no
 });
 
 test("shutdown ends unresolved admission before lock release and a successor only recovers the old admission", async () => {
-  const { config, request, resultsFor } = await fixture();
+  const { config, request, resultsFor } = await authorityFixture();
   const authority = new FaultAuthority(config.stateRoot);
   let starts = 0;
 
@@ -163,7 +165,7 @@ test("shutdown ends unresolved admission before lock release and a successor onl
       }),
   };
 
-  const first = await open(config, {
+  const first = await openAttemptsWith(config, {
     authority,
     resultsFor,
     artifactReader,
@@ -180,7 +182,7 @@ test("shutdown ends unresolved admission before lock release and a successor onl
   const successor = new FilesystemAuthority(config.stateRoot);
   let recoveries = 0;
 
-  const second = await open(config, {
+  const second = await openAttemptsWith(config, {
     authority: successor,
     resultsFor,
     artifactReader,
@@ -202,7 +204,7 @@ test("shutdown ends unresolved admission before lock release and a successor onl
 });
 
 test("ambiguous admission resolved to another admitting session recovers without a start", async () => {
-  const { config, request, resultsFor } = await fixture();
+  const { config, request, resultsFor } = await authorityFixture();
 
   class OlderAdmission extends FilesystemAuthority {
     override admit(input: AuthorityInput<"admit">) {
@@ -233,7 +235,7 @@ test("ambiguous admission resolved to another admitting session recovers without
   let starts = 0;
   let recovered = 0;
 
-  const service = await open(config, {
+  const service = await openAttemptsWith(config, {
     authority,
     resultsFor,
     artifactReader,

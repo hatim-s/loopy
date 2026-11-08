@@ -7,6 +7,7 @@ import {
   type FinishedLocalReceipt,
 } from "../../runtime/src/executor/receipts";
 import { receiptsFixture } from "./fixtures/local-receipts";
+import { waitForFile } from "./fixtures/wait";
 
 test("parent rereads completion published between its started read and confirmed child death", async () => {
   const f = await receiptsFixture();
@@ -51,11 +52,7 @@ test("parent rereads completion published between its started read and confirmed
   }
 
   try {
-    for (let index = 0; index < 200 && !(await Bun.file(ready).exists()); index++) {
-      await Bun.sleep(10);
-    }
-
-    expect(await Bun.file(ready).exists()).toBe(true);
+    await waitForFile(ready);
     const receipts = new PublicationRaceReceipts(f.home);
 
     expect(await Effect.runPromise(receipts.reconcile(f.identity))).toEqual({

@@ -31,13 +31,8 @@ import { apiRoutes, dispatch, eventStream } from "@loopy/runtime/service";
 import { Effect, Schema, Scope } from "effect";
 import { CLI, fixture, object, roots, runFixture, save } from "./cli-fixture";
 import { newRun } from "./fixture";
-import {
-  countPasses,
-  fixtureScope,
-  fixtureStore,
-  nextPass,
-  waitUntil,
-} from "./fixtures/service-runtime";
+import { countPasses, fixtureStore, nextPass, waitUntil } from "./fixtures/service-runtime";
+import { fixtureScope } from "./fixtures/test-scope";
 
 const daemonMetadata = { pid: process.pid, startedAt: new Date(0).toISOString(), concurrency: 4 };
 

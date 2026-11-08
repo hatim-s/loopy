@@ -56,7 +56,3 @@ export function runIn(status: RunStatus, base: Omit<RunRecord, "status">): RunRe
       return { ...base, status };
   }
 }
-
-export function delay(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
-}

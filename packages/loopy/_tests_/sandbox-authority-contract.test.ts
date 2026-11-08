@@ -1,5 +1,5 @@
-import { afterEach, expect, test } from "bun:test";
-import { readdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
+import { expect, test } from "bun:test";
+import { readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ExecutionResult } from "@loopy/contract";
 import {
@@ -16,12 +16,6 @@ import { stateLayout } from "../../../apps/sandbox/src/state-root";
 import { authorityFixture, successful, uncertain } from "./fixtures/sandbox-authority";
 import { run } from "./fixtures/sandbox-run";
 
-const roots: string[] = [];
-
-afterEach(async () => {
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
-});
-
 function resultReference(result: ExecutionResult) {
   const bytes = resultBytes(result);
 
@@ -32,15 +26,8 @@ function resultReference(result: ExecutionResult) {
   return resultRef(bytes);
 }
 
-async function fixture() {
-  const value = await authorityFixture();
-  roots.push(value.root);
-
-  return value;
-}
-
 test("filesystem authority deduplicates, rejects stale/changed requests and seals a hash-verified terminal result", async () => {
-  const { authority, resultsFor, plan, config } = await fixture();
+  const { authority, resultsFor, plan, config } = await authorityFixture();
   const session = await run(authority.openSession({ expectedEpoch: 0, nonce: "first" }));
   const input = { session, plan: await plan() };
   const responses = await Promise.all(Array.from({ length: 8 }, () => run(authority.admit(input))));
@@ -90,7 +77,7 @@ test("filesystem authority deduplicates, rejects stale/changed requests and seal
 });
 
 test("export guards persist, block only their volume and release older guards under the current caller session", async () => {
-  const { authority, resultsFor, plan, config } = await fixture();
+  const { authority, resultsFor, plan, config } = await authorityFixture();
   const session = await run(authority.openSession({ expectedEpoch: 0, nonce: "first" }));
   const first = await plan();
   await run(authority.admit({ session, plan: first }));
@@ -142,7 +129,7 @@ test("export guards persist, block only their volume and release older guards un
 });
 
 test("legacy receipts decode without rewriting, missing/corrupt results never become absence, and recovery pages cover every entry", async () => {
-  const { authority, config, plan, resultsFor } = await fixture();
+  const { authority, config, plan, resultsFor } = await authorityFixture();
   const session = await run(authority.openSession({ expectedEpoch: 0, nonce: "session" }));
   const legacy = { ...(await plan()), kind: "finished", result: successful };
   const path = join(stateLayout(config.stateRoot).receipts, `${legacy.id}.json`);
@@ -217,7 +204,7 @@ test("legacy receipts decode without rewriting, missing/corrupt results never be
 });
 
 test("filesystem results reject an oversized canonical result as invalid_state, like the DO", async () => {
-  const { resultsFor } = await fixture();
+  const { resultsFor } = await authorityFixture();
 
   await expect(
     run(
@@ -245,7 +232,7 @@ test("wire operations reject missing admitting sessions and unscoped results", a
 });
 
 test("export-only recovery filters exact volume metadata without reading receipts", async () => {
-  const { authority, resultsFor, config, plan } = await fixture();
+  const { authority, resultsFor, config, plan } = await authorityFixture();
   const session = await run(authority.openSession({ expectedEpoch: 0, nonce: "export-pages" }));
   const expected = [];
 

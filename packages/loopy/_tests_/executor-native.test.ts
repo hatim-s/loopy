@@ -9,6 +9,7 @@ import { FilesystemReceipts, receiptPath } from "../../runtime/src/executor/rece
 import { secretRedactor } from "../../runtime/src/os/secret-redactor";
 import { SecretStore } from "../../runtime/src/os/secrets";
 import { commandSpec, fixture } from "./fixtures/executor";
+import { until, waitForFile } from "./fixtures/wait";
 
 test("code protocol captures stderr logs and leading stdout, and retains its trusted completion receipt", async () => {
   const f = await fixture();
@@ -76,8 +77,9 @@ test("timeout terminates the process group including an inherited grandchild", a
     `const child = Bun.spawn([process.execPath, "-e", "setInterval(() => {}, 1000)"], {stdout: "inherit", stderr: "inherit"}); await Bun.write("child.pid", String(child.pid)); setInterval(() => {}, 1000);`,
   );
 
+  // The timeout must outlast bun startup on a loaded machine, or no grandchild exists to check.
   const result = await Effect.runPromise(
-    f.executor.execute(f.key, 1, { ...f.spec, timeoutMs: 500 }, new AbortController().signal),
+    f.executor.execute(f.key, 1, { ...f.spec, timeoutMs: 2000 }, new AbortController().signal),
   );
 
   expect(result).toMatchObject({
@@ -90,7 +92,11 @@ test("timeout terminates the process group including an inherited grandchild", a
 
 test("a worker finishes its receipt after the caller process is killed", async () => {
   const f = await fixture();
-  await writeFile(f.bundle, 'await Bun.sleep(400); process.stdout.write("42\\n");');
+  // The bundle finishes only after the caller is gone, so the worker must outlive its caller.
+  await writeFile(
+    f.bundle,
+    'while (!(await Bun.file("release").exists())) { await Bun.sleep(10); } process.stdout.write("42\\n");',
+  );
   const caller = join(f.root, "caller.ts");
   await writeFile(
     caller,
@@ -103,17 +109,13 @@ test("a worker finishes its receipt after the caller process is killed", async (
   });
 
   try {
-    for (
-      let index = 0;
-      index < 100 && (await Effect.runPromise(f.executor.lookup(f.key, 1))).kind === "none";
-      index++
-    ) {
-      await Bun.sleep(20);
-    }
-
-    expect(await Effect.runPromise(f.executor.lookup(f.key, 1))).toMatchObject({ kind: "started" });
+    await until(
+      "the worker to claim its receipt",
+      async () => (await Effect.runPromise(f.executor.lookup(f.key, 1))).kind === "started",
+    );
     process.kill("SIGKILL");
     await process.exited;
+    await writeFile(join(f.workspace, "release"), "release");
 
     // Execute waits for the surviving worker's receipt instead of running the attempt again.
     expect(
@@ -344,15 +346,7 @@ test("worker abort returns infrastructure failure and reconciles to nonretryable
   );
 
   try {
-    for (
-      let index = 0;
-      index < 200 && !(await Bun.file(join(f.workspace, "ready")).exists());
-      index++
-    ) {
-      await Bun.sleep(10);
-    }
-
-    expect(await Bun.file(join(f.workspace, "ready")).exists()).toBe(true);
+    await waitForFile(join(f.workspace, "ready"));
     controller.abort();
     const result = await running;
     expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "ExecutorError" } });

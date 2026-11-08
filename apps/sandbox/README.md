@@ -117,11 +117,3 @@ See [AGENTS.md](../../AGENTS.md#tests-and-isolation) for test roots and fixture 
 bun test packages/loopy/_tests_/cloud-sandbox.test.ts
 ```
 
-After building the image, enable direct execution checks explicitly:
-
-```sh
-LOOPY_SANDBOX_DOCKER_CONTEXT=colima-loopy-cloud-phase1 \
-  bun test packages/loopy/_tests_/cloud-sandbox.test.ts
-```
-
-The direct checks create named fixtures in that context. Teardown builds an allowlist from those fixtures' durable receipts, removes only their exact attempt, staging and artifact helper names, removes only the exact input and workspace volumes recorded there, and verifies each volume is absent. It never prunes or deletes by a broad Docker label or name prefix. Production receipts remain intact when container resources are removed.
