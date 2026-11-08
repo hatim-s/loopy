@@ -82,7 +82,7 @@ async function prepare(store: Store) {
           payload: { kind: "record", fields: { approved: "boolean" } },
           at,
         },
-        { kind: "suspend_run", wakeAt: deadline, at },
+        { kind: "suspend_run", wakeAt: deadline },
       ],
     }),
   );
@@ -230,7 +230,9 @@ test("wait registration is idempotent and scoped, and failed batches roll back",
   }
 
   expect(Cause.hasDies(rejected.cause)).toBe(true);
-  expect(Cause.squash(rejected.cause)).toMatchObject({ message: "Wait belongs to another run." });
+  expect(Cause.squash(rejected.cause)).toMatchObject({
+    message: "A batch effect belongs to another run.",
+  });
   expect(await run(store.getWaits("run"))).toHaveLength(1);
   expect(await run(store.getNodeRuns("run"))).toHaveLength(1);
   await run(

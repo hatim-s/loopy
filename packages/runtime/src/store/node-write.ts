@@ -1,22 +1,20 @@
 import {
+  exceedsInlineLimit,
   executionKeyString,
   type LogRecord,
   MAX_LOG_BYTES,
-  MAX_OUTPUT_BYTES,
   type NodeRun,
   outputBytes,
+  outSchemaMessage,
   type StoreEffect,
 } from "@loopy/core";
-import { StoreInvariantError, StoreRejectedError } from "./operation";
+import { StoreRejectedError } from "./operation";
 import { utc } from "./timestamps";
 
-export function checkNodeWrite(runId: string, node: NodeRun) {
-  if (node.key.runId !== runId) {
-    throw new StoreInvariantError("Node run belongs to another run.");
-  }
-
-  if (node.status === "succeeded" && outputBytes(node.output) > MAX_OUTPUT_BYTES) {
-    throw new StoreRejectedError("Node output exceeds the 1 MiB inline limit.");
+// The store is a public port, so it holds the inline cap even for writers other than the reducer.
+export function checkNodeWrite(node: NodeRun) {
+  if (node.status === "succeeded" && exceedsInlineLimit(node.output)) {
+    throw new StoreRejectedError(outSchemaMessage("Node output", "output_limit"));
   }
 }
 

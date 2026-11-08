@@ -39,7 +39,7 @@ const allRuns = (store: ContractStore) =>
 
 const suspend = (store: ContractStore, token: string, wakeAt: string | null = null) =>
   Effect.runPromise(
-    store.apply({ runId: "run", token, effects: [{ kind: "suspend_run", wakeAt, at: LOG.at }] }),
+    store.apply({ runId: "run", token, effects: [{ kind: "suspend_run", wakeAt }] }),
   );
 
 const finish = (store: ContractStore, token: string, outcome: RunOutcome) =>
@@ -260,11 +260,13 @@ function nextWakeAt(makeStore: StoreFactory): void {
   test("nextWakeAt returns the earliest suspended unowned wake and excludes all other states", async () => {
     const store = await makeStore();
     expect(await Effect.runPromise(store.nextWakeAt())).toBeUndefined();
-    await Effect.runPromise(store.createRun({ ...newRun(), id: "queued", wakeAt: LOG.at }));
+    await Effect.runPromise(store.createRun({ ...newRun(), id: "queued" }));
     await Effect.runPromise(
-      store.createRun({ ...newRun(), id: "done", status: "succeeded", wakeAt: LOG.at }),
+      store.createRun({ ...newRun(), id: "done", status: "succeeded", output: null }),
     );
-    await Effect.runPromise(store.createRun({ ...newRun(), id: "no-wake", status: "suspended" }));
+    await Effect.runPromise(
+      store.createRun({ ...newRun(), id: "no-wake", status: "suspended", wakeAt: null }),
+    );
     await Effect.runPromise(
       store.createRun({
         ...newRun(),
@@ -373,12 +375,15 @@ function releaseRunning(makeStore: StoreFactory): void {
     await Effect.runPromise(store.release("run", "owner"));
     const after = new Date().toISOString();
     const run = await Effect.runPromise(store.getRun("run"));
-    expect(run?.status).toBe("suspended");
-    expect(run?.owner).toBeUndefined();
-    expect(run?.wakeAt).toBe(run?.updatedAt);
-    expect(run?.wakeAt).toBeDefined();
-    expect(run?.wakeAt?.localeCompare(before)).toBeGreaterThanOrEqual(0);
-    expect(run?.wakeAt?.localeCompare(after)).toBeLessThanOrEqual(0);
+
+    if (run?.status !== "suspended" || run.wakeAt === null) {
+      throw new Error("Expected a suspended run with a wake time.");
+    }
+
+    expect(run.owner).toBeUndefined();
+    expect(run.wakeAt).toBe(run.updatedAt);
+    expect(run.wakeAt.localeCompare(before)).toBeGreaterThanOrEqual(0);
+    expect(run.wakeAt.localeCompare(after)).toBeLessThanOrEqual(0);
     expect((await Effect.runPromise(store.dueRuns(after))).map((due) => due.id)).toEqual(["run"]);
     expect((await Effect.runPromise(store.claim("run", "next"))).status).toBe("running");
   });
@@ -448,7 +453,7 @@ function ownershipFencing(makeStore: StoreFactory): void {
           store.apply({
             runId: "run",
             token: "old",
-            effects: [{ kind: "schedule_retry", at: LOG.at }],
+            effects: [{ kind: "schedule_activation", at: LOG.at }],
           }),
         ),
       () =>

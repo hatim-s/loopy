@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { type DashboardReader, nodeIdSchema } from "@loopy/contract";
-import type { NodeRun, Store, StoreEffect } from "@loopy/core";
+import { type NodeRun, PAGE_LIMIT, type Store, type StoreEffect } from "@loopy/core";
 import { Effect, Schema } from "effect";
-import { newRun } from "./fixture";
+import { newRun, runIn } from "./fixture";
 
 const at = newRun().createdAt;
 
@@ -105,26 +105,52 @@ export function storeRecordContract(
       store.apply({ runId: "run", token: "owner", effects: [{ kind: "finish_run", outcome, at }] }),
     );
     outcome.output.nested.push(2);
-    expect((await Effect.runPromise(store.getRun("run")))?.output).toEqual({ nested: [1] });
+    expect(await Effect.runPromise(store.getRun("run"))).toMatchObject({ output: { nested: [1] } });
     await Effect.runPromise(store.release("run", "owner"));
     const terminal = await Effect.runPromise(store.getRun("run"));
 
-    if (terminal) {
+    if (terminal?.status === "succeeded") {
       terminal.output = null;
     }
 
-    expect((await Effect.runPromise(store.getRun("run")))?.output).toEqual({ nested: [1] });
+    expect(await Effect.runPromise(store.getRun("run"))).toMatchObject({ output: { nested: [1] } });
+  });
+
+  test("log pages cap every limit at the page limit and reject nonpositive limits", async () => {
+    const store = await makeStore();
+    await Effect.runPromise(store.createRun(newRun()));
+    await Effect.runPromise(store.claim("run", "owner"));
+    await Effect.runPromise(
+      store.apply({
+        runId: "run",
+        token: "owner",
+        effects: Array.from({ length: PAGE_LIMIT + 1 }, () => ({
+          kind: "write_log" as const,
+          executionKey: key,
+          attempt: 1,
+          at,
+          log: { message: "line", data: null },
+        })),
+      }),
+    );
+
+    expect(await Effect.runPromise(store.getLogs("run", 0, PAGE_LIMIT + 1))).toHaveLength(
+      PAGE_LIMIT,
+    );
+    expect(await Effect.runPromise(Effect.flip(store.getLogs("run", 0, 0)))).toMatchObject({
+      reason: "rejected",
+    });
   });
 
   test("due runs filter terminal, future, indefinite and owned states", async () => {
     const store = await makeStore();
 
     for (const status of ["succeeded", "failed", "cancelled"] as const) {
-      await Effect.runPromise(store.createRun({ ...newRun(), id: status, status, wakeAt: at }));
+      await Effect.runPromise(store.createRun(runIn(status, { ...newRun(), id: status })));
     }
 
     await Effect.runPromise(
-      store.createRun({ ...newRun(), id: "indefinite", status: "suspended" }),
+      store.createRun({ ...newRun(), id: "indefinite", status: "suspended", wakeAt: null }),
     );
     await Effect.runPromise(
       store.createRun({
@@ -211,7 +237,7 @@ export function storeRecordContract(
             log: { message: "hello", data: null },
             at: offset,
           },
-          { kind: "schedule_retry", at: offset },
+          { kind: "schedule_activation", at: offset },
         ],
       }),
     );
@@ -219,19 +245,16 @@ export function storeRecordContract(
       { startedAt: at, endedAt: at, nextRetryAt: at },
     ]);
     expect(await Effect.runPromise(store.getLogs("run"))).toMatchObject([{ at }]);
-    expect(await Effect.runPromise(store.getRun("run"))).toMatchObject({
-      nextRetryAt: at,
-      wakeAt: at,
-    });
+    expect(await Effect.runPromise(store.getRun("run"))).toMatchObject({ nextRetryAt: at });
     await Effect.runPromise(
       store.apply({
         runId: "run",
         token: "next",
-        effects: [{ kind: "suspend_run", wakeAt: offset, at: offset }],
+        effects: [{ kind: "suspend_run", wakeAt: offset }],
       }),
     );
     await Effect.runPromise(store.release("run", "next"));
-    expect((await Effect.runPromise(store.getRun("run")))?.wakeAt).toBe(at);
+    expect(await Effect.runPromise(store.getRun("run"))).toMatchObject({ wakeAt: at });
     expect(await Effect.runPromise(store.dueRuns("2026-10-16T04:59:59+05:00"))).toEqual([]);
     expect((await Effect.runPromise(store.dueRuns(offset))).map((run) => run.id)).toEqual(["run"]);
   });

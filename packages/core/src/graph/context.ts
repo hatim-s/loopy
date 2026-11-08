@@ -1,6 +1,8 @@
 import { isRecord } from "../validation";
-import type { ComparisonOperand, Edge, Graph, Node, NodeId, Predicate, Ref, Value } from ".";
+import type { Edge, Graph } from ".";
+import type { Node } from "./nodes";
 import { isRef } from "./ref";
+import type { ComparisonOperand, NodeId, Predicate, Ref, RefLookup, Value } from "./values";
 
 export type Context = {
   graph: Pick<Graph, "input" | "nodes" | "edges">;
@@ -59,9 +61,6 @@ export function sameBody(context: Context, left: Node, right: Node): boolean {
 
 export function scopeReaches(context: Context, from: NodeId, to: NodeId): boolean {
   const seen = new Set<NodeId>();
-  const scope = context.nodes.get(from)?.scope;
-  const owner = scope === null || scope === undefined ? undefined : context.nodes.get(scope);
-  const entries = owner ? targets(owner) : [];
 
   function visit(id: NodeId): boolean {
     if (id === to) {
@@ -73,32 +72,9 @@ export function scopeReaches(context: Context, from: NodeId, to: NodeId): boolea
     }
 
     seen.add(id);
+    const node = context.nodes.get(id);
 
-    const control = context.nodes.get(id);
-
-    const exits = control
-      ? context.graph.edges
-          .filter(
-            (edge) =>
-              edge.kind === "join" &&
-              context.nodes.get(edge.from)?.scope === control.id &&
-              context.nodes.get(edge.to)?.scope === scope,
-          )
-          .map((edge) => edge.to)
-      : [];
-
-    return (
-      exits.some(visit) ||
-      context.graph.edges.some(
-        (edge) =>
-          edge.from === id &&
-          (edge.kind === "next" ||
-            (edge.kind === "join" && context.nodes.get(id)?.kind === "join")) &&
-          context.nodes.get(edge.to)?.scope === scope &&
-          !entries.includes(edge.to) &&
-          visit(edge.to),
-      )
-    );
+    return node !== undefined && continuationTargets(context, node).some(visit);
   }
 
   return visit(from);
@@ -128,23 +104,31 @@ export function successors(context: Context, id: NodeId): NodeId[] {
   ];
 }
 
-export function isBodyTail(context: Context, id: NodeId): boolean {
-  return !context.graph.edges.some((edge) => edge.from === id && edge.kind === "next");
-}
-
-/** The node that runs after `node` in its own scope; a control's arm tails lead there too. */
-export function continuation(context: Context, node: Node): NodeId | undefined {
-  return context.graph.edges.find((edge) => {
+/**
+ * The nodes that run after `node` in its own scope. A control's arm tails lead there too, so
+ * edges from its descendants count. A valid graph has at most one.
+ */
+export function continuationTargets(context: Context, node: Node): NodeId[] {
+  const found = context.graph.edges.flatMap((edge) => {
     const from = context.nodes.get(edge.from);
 
-    return (
-      (edge.kind === "next" || edge.kind === "join") &&
-      !isScopeJoin(context, edge) &&
+    return !isScopeJoin(context, edge) &&
       context.nodes.get(edge.to)?.scope === node.scope &&
       from !== undefined &&
       (from.id === node.id || ancestors(from, context.nodes).some(({ id }) => id === node.id))
-    );
-  })?.to;
+      ? [edge.to]
+      : [];
+  });
+
+  return [...new Set(found)];
+}
+
+export function continuation(context: Context, node: Node): NodeId | undefined {
+  return continuationTargets(context, node)[0];
+}
+
+export function isBodyTail(context: Context, node: Node): boolean {
+  return continuationTargets(context, node).length === 0;
 }
 
 export function refs(value: Value): Ref[] {
@@ -230,7 +214,7 @@ export function reaches(context: Context, from: NodeId, to: NodeId): boolean {
   return visit(from);
 }
 
-export function binding(context: Context, ref: { ref: string; path: string[] }): Node | undefined {
+export function binding(context: Context, ref: RefLookup): Node | undefined {
   return context.graph.nodes.find(
     (node) =>
       (node.kind === "map" && (node.item === ref.ref || node.index === ref.ref)) ||

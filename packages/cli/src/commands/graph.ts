@@ -20,7 +20,7 @@ function text(graph: GraphView) {
 
       const edges = graph.edges
         .filter((edge) => edge.from === node.id)
-        .map((edge) => `${edge.kind}${edge.kind === "case" ? `:${edge.label}` : ""} -> ${edge.to}`)
+        .map((edge) => `${edge.kind} -> ${edge.to}`)
         .join(", ");
 
       return `${"  ".repeat(depth)}${node.id} ${node.kind}${edges ? ` [${edges}]` : ""}`;

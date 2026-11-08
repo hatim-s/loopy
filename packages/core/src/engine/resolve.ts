@@ -1,4 +1,4 @@
-import { type ExecutionKey, executionKeyString, scopeHasPrefix } from "../graph/key";
+import { type ExecutionKey, scopeHasPrefix } from "../graph/key";
 import { isRef, projectValue } from "../graph/ref";
 import { INPUT_REF, type Ref, type Value } from "../graph/values";
 import type { Json } from "../json";
@@ -77,8 +77,4 @@ export function resolveValues(
   return Object.fromEntries(
     Object.entries(values).map(([name, value]) => [name, resolve(value, state, context)]),
   );
-}
-
-export function sameExecution(left: ExecutionKey, right: ExecutionKey) {
-  return executionKeyString(left) === executionKeyString(right);
 }

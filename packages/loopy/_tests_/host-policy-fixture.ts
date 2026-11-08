@@ -87,7 +87,7 @@ export class RetryGateStore extends MemorySqlStore {
       .apply(batch)
       .pipe(
         Effect.tap(() =>
-          batch.effects.some((effect) => effect.kind === "schedule_retry")
+          batch.effects.some((effect) => effect.kind === "schedule_activation")
             ? Deferred.succeed(this.retried, undefined)
             : Effect.void,
         ),

@@ -24,3 +24,7 @@ export function scopeHasPrefix(scope: ExecutionKey["scope"], prefix: ExecutionKe
     (part, depth) => scope[depth]?.nodeId === part.nodeId && scope[depth]?.index === part.index,
   );
 }
+
+export function sameExecution(left: ExecutionKey, right: ExecutionKey) {
+  return executionKeyString(left) === executionKeyString(right);
+}

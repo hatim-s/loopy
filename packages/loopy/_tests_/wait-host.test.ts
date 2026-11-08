@@ -137,10 +137,12 @@ test("opaque token HTTP route resolves and timeout rehydration preserves the ori
   await Effect.runPromise(f.store.createRun({ ...newRun(), input: {}, workspace: f.home }));
   const executor = new FakeExecutor();
   await f.run(activate({ ...f, executor, runId: "run" }));
-  const original = (await Effect.runPromise(f.store.getRun("run")))?.wakeAt;
+  const original = await Effect.runPromise(f.store.getRun("run"));
   f.advance(500);
   await f.run(activate({ ...f, executor, runId: "run" }));
-  expect((await Effect.runPromise(f.store.getRun("run")))?.wakeAt).toBe(original);
+  expect(await Effect.runPromise(f.store.getRun("run"))).toMatchObject({
+    wakeAt: original?.status === "suspended" ? original.wakeAt : "missing",
+  });
   const hook = (await Effect.runPromise(f.store.getWaits("run")))[0];
 
   if (!hook) {
@@ -199,10 +201,12 @@ test("wait deadline fails on resume and sleep resumes once from its persisted de
   expect(await f.run(activate({ ...f, graph, executor, runId: "sleep" }))).toEqual({
     status: "suspended",
   });
-  const wake = (await Effect.runPromise(f.store.getRun("sleep")))?.wakeAt;
+  const slept = await Effect.runPromise(f.store.getRun("sleep"));
   f.advance(500);
   await f.run(activate({ ...f, graph, executor, runId: "sleep" }));
-  expect((await Effect.runPromise(f.store.getRun("sleep")))?.wakeAt).toBe(wake);
+  expect(await Effect.runPromise(f.store.getRun("sleep"))).toMatchObject({
+    wakeAt: slept?.status === "suspended" ? slept.wakeAt : "missing",
+  });
   f.advance(500);
   expect(await f.run(activate({ ...f, graph, executor, runId: "sleep" }))).toEqual({
     status: "succeeded",

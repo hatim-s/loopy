@@ -291,11 +291,7 @@ test("sleep and wait persist deadlines, scoped identity, and resume without dupl
   });
 
   const first = start(graph, { items: ["a", "b"] });
-  expect(first.effects).toContainEqual({
-    kind: "suspend_run",
-    wakeAt: "2026-10-20T00:00:01.000Z",
-    at,
-  });
+  expect(first.effects).toContainEqual({ kind: "suspend_run", wakeAt: "2026-10-20T00:00:01.000Z" });
 
   const second = step(graph, initialState("run", { items: ["a", "b"] }, first.state.nodeRuns), {
     kind: "run_started",
@@ -354,6 +350,38 @@ test("entropy is supplied by host and persisted values survive rehydration", () 
     outcome: { output: { time: at, id: "12345678-1234-4123-8123-123456789abc", value: 0.25 } },
   });
 });
+
+for (const sample of [
+  { valueKind: "random", value: 2 },
+  { valueKind: "random", value: -0.5 },
+  { valueKind: "uuid", value: "not-a-uuid" },
+] as const) {
+  test(`a ${sample.valueKind} sample of ${sample.value} fails its node`, () => {
+    const graph = loopy("sample", {
+      input: {},
+      run: () => (sample.valueKind === "uuid" ? uuid() : random()),
+    });
+
+    const started = start(graph);
+    const effect = started.effects.find((candidate) => candidate.kind === "sample");
+
+    if (effect?.kind !== "sample") {
+      throw new Error("Expected a sample effect.");
+    }
+
+    const result = step(graph, started.state, {
+      kind: "value_sampled",
+      executionKey: effect.executionKey,
+      sample,
+      at: "2026-10-20T00:00:10.000Z",
+    });
+
+    expect(result.state.phase).toEqual({
+      kind: "finished",
+      outcome: { status: "failed", error: `Invalid ${sample.valueKind} sample.` },
+    });
+  });
+}
 
 test("command argv expands string arrays while preserving spaces within each argument", () => {
   const graph = loopy("argv", {

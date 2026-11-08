@@ -13,6 +13,14 @@ export type GraphNode = GraphView["nodes"][number];
 
 type GraphEdge = GraphView["edges"][number];
 
+/** A drawn edge: a graph edge, or a control's entry into one of its arms. */
+type DrawnEdge = {
+  from: GraphEdge["from"];
+  to: GraphEdge["to"];
+  kind: GraphEdge["kind"] | "yes" | "no" | "case" | "each" | "cleanup" | "rescue";
+  label: string | null;
+};
+
 /**
  * What the graph knows about one node. `definition` has no run to compare against. An idle
  * node is known absent only when its scope was loaded completely; otherwise it is not loaded.
@@ -65,7 +73,7 @@ export type GraphEdgeModel = {
   id: string;
   from: GraphEdge["from"];
   to: GraphEdge["to"];
-  kind: GraphEdge["kind"];
+  kind: DrawnEdge["kind"];
   label: string | null;
   taken: boolean;
 };
@@ -116,7 +124,7 @@ function scopeId(execution: NodeRun): string {
  * only `next` edges, which makes that exact for it. Control edges stay unmarked until branch,
  * switch and scope nodes record the arm they chose.
  */
-function tookNext(edge: GraphEdge, byNode: Map<string, NodeRun[]>): boolean {
+function tookNext(edge: DrawnEdge, byNode: Map<string, NodeRun[]>): boolean {
   if (edge.kind !== "next") {
     return false;
   }
@@ -132,21 +140,33 @@ function tookNext(edge: GraphEdge, byNode: Map<string, NodeRun[]>): boolean {
   );
 }
 
-// Sequence and join edges say nothing a reader needs; control edges name the arm they enter.
-function edgeLabel(edge: GraphEdge): string | null {
-  switch (edge.kind) {
-    case "next":
-    case "join": {
-      return null;
-    }
+// Control edges name the arm they enter; a body entry reads as plain sequence.
+function armEdges(node: GraphNode): DrawnEdge[] {
+  const arm = (to: GraphEdge["to"], kind: DrawnEdge["kind"], label: string | null = kind) => ({
+    from: node.id,
+    to,
+    kind,
+    label,
+  });
 
-    case "case": {
-      return edge.label;
-    }
-
-    default: {
-      return edge.kind;
-    }
+  switch (node.kind) {
+    case "branch":
+      return [arm(node.arms.yes, "yes"), arm(node.arms.no, "no")];
+    case "switch":
+      return [
+        ...Object.entries(node.cases).map(([label, to]) => arm(to, "case", label)),
+        ...(node.default === null ? [] : [arm(node.default, "case", "default")]),
+      ];
+    case "map":
+      return [arm(node.body, "each")];
+    case "parallel":
+      return Object.entries(node.branches).map(([label, to]) => arm(to, "case", label));
+    case "finally":
+      return [arm(node.body, "next", null), arm(node.cleanup, "cleanup")];
+    case "rescue":
+      return [arm(node.body, "next", null), arm(node.handler, "rescue")];
+    default:
+      return [];
   }
 }
 
@@ -220,15 +240,19 @@ export function graphModel(
 
   const known = new Set<string>(graph.nodes.map((node) => node.id));
 
+  const drawn = graph.nodes.flatMap((node) => [
+    ...armEdges(node),
+    ...graph.edges
+      .filter((edge) => edge.from === node.id)
+      .map((edge) => ({ ...edge, label: null })),
+  ]);
+
   return {
     historyIncomplete: run?.coverage.some((page) => !page.complete) ?? false,
     nodes,
-    edges: graph.edges.map((edge) => ({
+    edges: drawn.map((edge) => ({
+      ...edge,
       id: `${edge.from}->${edge.to}:${edge.kind === "case" ? `case:${edge.label}` : edge.kind}`,
-      from: edge.from,
-      to: edge.to,
-      kind: edge.kind,
-      label: edgeLabel(edge),
       taken: tookNext(edge, byNode),
     })),
     orphans: [...records.values()].filter((execution) => !known.has(execution.key.nodeId)),

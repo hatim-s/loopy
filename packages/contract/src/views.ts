@@ -1,22 +1,19 @@
 import {
   counter,
   EXECUTION_MODES,
-  HOOK_EVENT_KINDS,
   hookRecordSchema,
   jsonSchema,
   LOOPY_SCOPES,
   logRecordSchema,
-  NODE_RUN_STATUSES,
   nodeRunSchema,
   positiveInt,
-  RUN_EVENT_KINDS,
   recordSpecSchema,
   runStatusSchema,
-  SCHEDULE_EVENT_KINDS,
+  runtimeEventSchema,
   scheduleSchema,
   struct,
 } from "@loopy/core";
-import { Schema } from "effect";
+import { Schema, Struct, Tuple } from "effect";
 import { scopeCountsSchema } from "./dashboard";
 
 const runBaseSchema = struct({
@@ -119,54 +116,18 @@ export const daemonViewSchema = struct({
 
 export type DaemonView = Schema.Schema.Type<typeof daemonViewSchema>;
 
-const eventBaseSchema = struct({
-  truncatedOutputBytes: Schema.optional(counter),
-  sequence: counter,
-  at: Schema.String,
-  txn: Schema.String,
-  runId: Schema.NullOr(Schema.String),
-});
-
-export const serverEventSchema = Schema.Union([
-  struct({
-    ...eventBaseSchema.fields,
-    entity: Schema.Literal("run"),
-    kind: Schema.Literals(RUN_EVENT_KINDS),
-    record: runViewSchema,
-  }),
-  struct({
-    ...eventBaseSchema.fields,
-    entity: Schema.Literal("node"),
-    kind: Schema.Literals(NODE_RUN_STATUSES),
-    record: nodeRunSchema,
-  }),
-  struct({
-    ...eventBaseSchema.fields,
-    entity: Schema.Literal("log"),
-    kind: Schema.Literal("written"),
-    record: logRecordSchema,
-  }),
-  struct({
-    ...eventBaseSchema.fields,
-    entity: Schema.Literal("hook"),
-    kind: Schema.Literals(HOOK_EVENT_KINDS),
-    record: hookRecordSchema,
-  }),
-  Schema.Union([
-    struct({
-      ...eventBaseSchema.fields,
-      entity: Schema.Literal("schedule"),
-      kind: Schema.Literals(SCHEDULE_EVENT_KINDS),
-      record: scheduleSchema,
-    }),
-    struct({
-      ...eventBaseSchema.fields,
-      entity: Schema.Literal("schedule"),
-      kind: Schema.Literal("deleted"),
-      record: struct({ workspace: Schema.String, slug: Schema.String }),
-    }),
-  ]),
-]);
+// The wire swaps the stored run record for its view.
+export const serverEventSchema = runtimeEventSchema
+  .mapMembers(
+    Tuple.evolve([
+      (run) => run.mapFields(Struct.assign({ record: Schema.mutableKey(runViewSchema) })),
+    ]),
+  )
+  .mapMembers(
+    Tuple.map(
+      Schema.fieldsAssign({ truncatedOutputBytes: Schema.optional(Schema.mutableKey(counter)) }),
+    ),
+  );
 
 export type ServerEvent = Schema.Schema.Type<typeof serverEventSchema>;
 

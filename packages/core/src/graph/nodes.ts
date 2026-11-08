@@ -8,6 +8,7 @@ import {
   graphRecord,
   labelSchema,
   nodeIdSchema,
+  type OutSchema,
   outputSchema,
   predicateSchema,
   refIdSchema,
@@ -107,7 +108,7 @@ export const commandNodeSchema = struct({
   parse: Schema.NullOr(struct({ bundleHash: Schema.NullOr(Schema.String), input: values })),
 });
 
-export const MAP_ERROR_MODES = ["fail", "collect"] as const;
+const MAP_ERROR_MODES = ["fail", "collect"] as const;
 
 // Control and value nodes need no executor, so their wire views equal their stored shape.
 export const otherNodeSchemas = [
@@ -186,4 +187,20 @@ export const nodeSchema = Schema.Union([codeNodeSchema, commandNodeSchema, ...ot
 
 export type Node = Schema.Schema.Type<typeof nodeSchema>;
 
-export type NodeKind = Node["kind"];
+export type ExecutableNode = Extract<Node, { kind: "code" | "command" }>;
+
+export function isExecutable(node: Node): node is ExecutableNode {
+  return node.kind === "code" || node.kind === "command";
+}
+
+export function declaredOutput(node: Node): OutSchema | null {
+  switch (node.kind) {
+    case "code":
+    case "command":
+      return node.out;
+    case "wait":
+      return node.payload;
+    default:
+      return null;
+  }
+}

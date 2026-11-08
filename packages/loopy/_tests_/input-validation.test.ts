@@ -38,7 +38,7 @@ test("minimum constraints cannot target a missing or scalar field", () => {
   definition.input = { paths: "string" };
 
   expect(validateGraph(definition).map((item) => item.message)).toEqual([
-    "Input minimum 'paths' requires an array field and a nonnegative integer.",
+    "Input minimum 'paths' requires an array field.",
   ]);
   expect(() =>
     loopy("invalid-input", {

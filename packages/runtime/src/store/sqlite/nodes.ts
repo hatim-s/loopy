@@ -1,5 +1,6 @@
-import { executionKeyString, type NodeRun, type StoreEffect } from "@loopy/core";
+import { executionKeyString, type NodeRun, PAGE_LIMIT, type StoreEffect } from "@loopy/core";
 import { checkLogBytes, checkNodeWrite, logRecord } from "../node-write";
+import { StoreRejectedError } from "../operation";
 import { normalizeNode } from "../timestamps";
 import type { SqlContext, SqlWrite } from "./context";
 import { emit, emitLog } from "./events";
@@ -29,7 +30,7 @@ export function writeNodeRun(write: SqlWrite, runId: string, nodeRun: NodeRun): 
   const key = executionKeyString(node.key);
   const record = JSON.stringify(node);
 
-  checkNodeWrite(runId, node);
+  checkNodeWrite(node);
 
   if (node.status === "running") {
     write.db.query("UPDATE runs SET next_retry_at=NULL,wake_at=NULL WHERE id=?").run(runId);
@@ -132,11 +133,15 @@ export function writeLog(write: SqlWrite, effect: Extract<StoreEffect, { kind: "
 }
 
 export function readLogs(ctx: SqlContext, runId: string, after: number, limit: number) {
+  if (!Number.isSafeInteger(limit) || limit < 1) {
+    throw new StoreRejectedError(`Log page limit ${limit} must be a positive integer.`);
+  }
+
   return ctx.db
     .query<{ record: string }, [string, number, number]>(
       "SELECT record FROM logs WHERE run_id=? AND seq>? ORDER BY seq LIMIT ?",
     )
-    .all(runId, after, limit)
+    .all(runId, after, Math.min(limit, PAGE_LIMIT))
     .map((row) => decodeLog(row.record));
 }
 

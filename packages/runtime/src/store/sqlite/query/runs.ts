@@ -3,13 +3,13 @@ import {
   type OverviewQuery,
   type RunDefinitionCount,
   type RunPageQuery,
+  type RunPreview,
   type StatusCounts,
 } from "@loopy/contract";
-import { MAX_PREVIEW_BYTES, type PendingHook, type RunRecord } from "@loopy/core";
+import { MAX_PREVIEW_BYTES, type PendingHook, type RunRecord, waitRecordSchema } from "@loopy/core";
 import { Schema } from "effect";
 import { overviewBuckets } from "../../query-utils";
 import { storedDecoder } from "../../row-codec";
-import { waitRecordSchema } from "../../wait-schema";
 import type { SqlContext } from "../context";
 import type { SqlValue } from "../driver";
 import { type RunRow, rowToRun } from "../rows";
@@ -56,10 +56,10 @@ export const RUN_PREVIEW_COLUMNS = `r.id,r.slug,r.revision,r.workspace,r.status,
 
 export type PreviewRunRow = RunRow & { input_bytes: number; output_bytes: number | null };
 
-export function previewRun(row: PreviewRunRow) {
-  const run = rowToRun(row);
+export function previewRun(row: PreviewRunRow): RunPreview {
+  const run: RunPreview = rowToRun(row);
 
-  const truncatedFields: NonNullable<RunRecord["truncatedFields"]> = {};
+  const truncatedFields: NonNullable<RunPreview["truncatedFields"]> = {};
 
   if (row.input_bytes > MAX_PREVIEW_BYTES) {
     truncatedFields.input = row.input_bytes;
@@ -91,7 +91,7 @@ export function readRunReference(ctx: SqlContext, id: string) {
   );
 }
 
-export function queryRuns(ctx: SqlContext, query: RunPageQuery): RunRecord[] {
+export function queryRuns(ctx: SqlContext, query: RunPageQuery): RunPreview[] {
   const { clauses, values } = runWhere(query);
 
   if (query.before !== undefined) {

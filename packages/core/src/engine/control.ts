@@ -1,7 +1,7 @@
 import { scopeHasPrefix } from "../graph/key";
 import type { Node } from "../graph/nodes";
-import type { Json } from "../json";
-import { isBoolean, isNumber, isString, setOwnProperty } from "../validation";
+import { isScalar, type Json } from "../json";
+import { setOwnProperty } from "../validation";
 import { predicate } from "./predicate";
 import { type ResolutionContext, resolve } from "./resolve";
 import { sequence, type Traversal, type TraversalResult } from "./traversal";
@@ -142,7 +142,7 @@ export function control(
     case "switch": {
       const on = resolve(node.on, state, context);
 
-      if (!isString(on) && !isNumber(on) && !isBoolean(on)) {
+      if (!isScalar(on)) {
         throw new Error("switch requires a scalar value.");
       }
 
