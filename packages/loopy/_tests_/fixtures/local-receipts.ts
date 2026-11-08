@@ -1,28 +1,14 @@
-import { afterEach } from "bun:test";
-import { mkdir, realpath, rm } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { nodeIdSchema } from "@loopy/contract";
 import type { ExecutionSpec } from "@loopy/core";
 import { Schema } from "effect";
 import { LocalExecutor } from "../../../runtime/src/executor/local";
 import { FilesystemReceipts } from "../../../runtime/src/executor/receipts";
-
-const roots: string[] = [];
-
-afterEach(async () => {
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
-});
+import { qualityTestRoot } from "./quality-test-root";
 
 export async function receiptsFixture() {
-  const root = resolve(
-    import.meta.dir,
-    "../../../../.loopy/architecture-tests",
-    `local-receipts-${crypto.randomUUID()}`,
-  );
-
-  await mkdir(root, { recursive: true, mode: 0o700 });
-  roots.push(root);
-  const home = await realpath(root);
+  const home = qualityTestRoot("local-receipts");
   const workspace = resolve(home, "workspace");
   const receiptHome = resolve(home, "home");
   await mkdir(workspace, { mode: 0o700 });

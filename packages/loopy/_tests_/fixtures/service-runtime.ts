@@ -1,27 +1,11 @@
-import { afterEach } from "bun:test";
 import type { Store } from "@loopy/core";
 import { type DaemonOptions, makeDaemon } from "@loopy/runtime/host";
 import { openRunStore } from "@loopy/runtime/store";
-import { Clock, Effect, Exit, Scope } from "effect";
+import { Clock, Effect } from "effect";
 import { fixedClock } from "../store-fixture";
+import { runScoped } from "./test-scope";
 
-const scopes: Scope.Closeable[] = [];
-
-afterEach(async () => {
-  for (const scope of scopes.splice(0).reverse()) {
-    await Effect.runPromise(Scope.close(scope, Exit.void));
-  }
-});
-
-export function fixtureScope() {
-  const scope = Scope.makeUnsafe();
-  scopes.push(scope);
-
-  return scope;
-}
-
-export const fixtureStore = (home: string) =>
-  Effect.runPromise(openRunStore(home).pipe(Effect.provideService(Scope.Scope, fixtureScope())));
+export const fixtureStore = (home: string) => runScoped(openRunStore(home));
 
 // A real-time pause, so polling also makes progress while a TestClock holds Effect time still.
 const pause = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 1)));
@@ -71,15 +55,12 @@ export const nextPass = (daemon: { wake: Effect.Effect<void> }, passes: () => nu
 export function fixtureDaemon(options: DaemonOptions & { clock: { now(): number } }) {
   const passes = countPasses(options.store);
 
-  return Effect.runPromise(
+  return runScoped(
     Effect.gen(function* () {
       const daemon = yield* makeDaemon(options);
       yield* Effect.forkScoped(daemon.run);
 
       return { ...daemon, passes, pass: nextPass(daemon, passes) };
-    }).pipe(
-      Effect.provideService(Clock.Clock, fixedClock(options.clock.now)),
-      Effect.provideService(Scope.Scope, fixtureScope()),
-    ),
+    }).pipe(Effect.provideService(Clock.Clock, fixedClock(options.clock.now))),
   );
 }

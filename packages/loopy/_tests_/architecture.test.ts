@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { Schema } from "effect";
 import ts from "typescript";
+import { bundleForBrowser } from "./fixtures/bundle";
+import { qualityTestRoot } from "./fixtures/quality-test-root";
 
 const ROOT = resolve(import.meta.dir, "../../..");
 
@@ -362,20 +363,11 @@ test("the entries tsconfig.portable.json typechecks without Bun also bundle for 
     Schema.Struct({ include: Schema.Array(Schema.String) }),
   )(JSON.parse(readFileSync(join(ROOT, "tsconfig.portable.json"), "utf8")));
 
-  const outdir = mkdtempSync(join(tmpdir(), "loopy-portable-"));
-
-  try {
-    // Bun.build inside bun test misresolves some nested relative imports, so bundle in a child.
-    const child = Bun.spawn(
-      [process.execPath, "build", "--target=browser", "--outdir", outdir, ...include],
-      { cwd: ROOT, stdout: "pipe", stderr: "pipe" },
-    );
-
-    const [stderr, code] = await Promise.all([new Response(child.stderr).text(), child.exited]);
-    expect({ code, stderr }).toEqual({ code: 0, stderr: "" });
-  } finally {
-    rmSync(outdir, { recursive: true, force: true });
-  }
+  await bundleForBrowser(
+    include.map((entry) => join(ROOT, entry)),
+    qualityTestRoot("portable"),
+    { naming: "[dir]/[name].[ext]" },
+  );
 });
 
 test("the published manifest depends on exactly the vendored packages' external dependencies", () => {

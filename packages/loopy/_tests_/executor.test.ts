@@ -112,7 +112,11 @@ export default loopy("sequence", {input: {}, run: () => {sh.exec(["printf", "raw
   }
 });
 
-for (const failure of ["timeout", "output_limit", "nonzero"] as const) {
+// A bundle that kills itself after synchronous writes stops mid-record with its output already in
+// the pipe, as a timeout or crash would, without racing a timer against bun startup.
+const KILLED = 'process.kill(process.pid, "SIGKILL");';
+
+for (const failure of ["killed", "output_limit", "nonzero"] as const) {
   test(`bundle ${failure} masks escaped secrets before storing logs, node failures and receipts`, async () => {
     const f = await fixture();
     const secret = 'alpha"beta';
@@ -127,16 +131,15 @@ for (const failure of ["timeout", "output_limit", "nonzero"] as const) {
       bundlePath: () => f.bundle,
     });
 
-    const ending =
-      failure === "timeout"
-        ? "await Bun.sleep(10000);"
-        : failure === "output_limit"
-          ? 'process.stdout.write("x".repeat(3 * 1024 * 1024));'
-          : "process.exit(2);";
+    const ending = {
+      killed: KILLED,
+      output_limit: 'process.stdout.write("x".repeat(3 * 1024 * 1024));',
+      nonzero: "process.exit(2);",
+    }[failure];
 
     await writeFile(
       f.bundle,
-      `const secret = process.env.TOKEN; const escaped = JSON.stringify(secret).slice(1,-1); process.stderr.write(JSON.stringify({message: escaped, data: {nested: [escaped]}}) + "\\n"); process.stdout.write(JSON.stringify({escaped}) + "\\n"); process.stderr.write('{"message":"partial","data":"' + JSON.stringify(escaped).slice(1,-1)); ${ending}`,
+      `const { writeSync } = require("node:fs"); const secret = process.env.TOKEN; const escaped = JSON.stringify(secret).slice(1,-1); writeSync(2, JSON.stringify({message: escaped, data: {nested: [escaped]}}) + "\\n"); writeSync(1, JSON.stringify({escaped}) + "\\n"); writeSync(2, '{"message":"partial","data":"' + JSON.stringify(escaped).slice(1,-1)); ${ending}`,
     );
     const graph = structuredClone(approveDemoGraph);
     const node = graph.nodes[0];
@@ -146,7 +149,6 @@ for (const failure of ["timeout", "output_limit", "nonzero"] as const) {
     }
 
     node.module.bundleHash = "a".repeat(64);
-    node.timeout = 500;
     node.retry = { attempts: 1, retryOnExit: false };
     const store = new MemorySqlStore();
     await Effect.runPromise(store.createRun({ ...newRun(), input: { subject: "test" } }));
@@ -188,7 +190,7 @@ for (const failure of ["timeout", "output_limit", "nonzero"] as const) {
   });
 }
 
-for (const ending of ["timeout", "success"] as const) {
+for (const ending of ["killed", "success"] as const) {
   test(`bundle ${ending} masks a secret nested two JSON levels inside a log string`, async () => {
     const f = await fixture();
     await Effect.runPromise(new SecretStore(f.home).set("TOKEN", 'alpha"beta'));
@@ -202,10 +204,10 @@ for (const ending of ["timeout", "success"] as const) {
     });
 
     const record =
-      'const token = process.env.TOKEN; const record = JSON.stringify({message: "resp", data: JSON.stringify({auth: JSON.stringify({token})})});';
+      'const { writeSync } = require("node:fs"); const token = process.env.TOKEN; const record = JSON.stringify({message: "resp", data: JSON.stringify({auth: JSON.stringify({token})})});';
 
     const tail = {
-      timeout: "process.stderr.write(record.slice(0, -2)); await Bun.sleep(10000);",
+      killed: `writeSync(2, record.slice(0, -2)); ${KILLED}`,
       success: 'process.stdout.write(record + "\\n" + JSON.stringify({words: 1}) + "\\n");',
     }[ending];
 
@@ -218,7 +220,6 @@ for (const ending of ["timeout", "success"] as const) {
     }
 
     node.module.bundleHash = "a".repeat(64);
-    node.timeout = 500;
     node.retry = { attempts: 1, retryOnExit: false };
     const runs = new MemorySqlStore();
     await Effect.runPromise(runs.createRun({ ...newRun(), input: { subject: "test" } }));
@@ -257,7 +258,7 @@ for (const ending of ["timeout", "success"] as const) {
   });
 }
 
-for (const ending of ["success", "timeout", "output_limit", "nonzero"] as const) {
+for (const ending of ["success", "killed", "output_limit", "nonzero"] as const) {
   test(`bundle ${ending} masks secrets printed as plain text on stdout and stderr`, async () => {
     const f = await fixture();
     const secrets = { TOKEN: 'alpha"beta', WINDOWS: "C:\\new", MULTILINE: "line1\nline2" };
@@ -277,14 +278,14 @@ for (const ending of ["success", "timeout", "output_limit", "nonzero"] as const)
 
     const tail = {
       success: "console.log(JSON.stringify({words: 1}));",
-      timeout: "await Bun.sleep(10000);",
+      killed: KILLED,
       output_limit: 'process.stdout.write("x".repeat(3 * 1024 * 1024));',
       nonzero: "process.exit(2);",
     }[ending];
 
     await writeFile(
       f.bundle,
-      `const escaped = JSON.stringify(process.env.TOKEN).slice(1,-1); console.log(escaped); console.error(escaped); console.log('say "hi there"'); console.log('token="' + process.env.WINDOWS + '"'); console.error('token="' + process.env.WINDOWS + '"'); console.error(process.env.MULTILINE); ${tail}`,
+      `const { writeSync } = require("node:fs"); const out = (text) => writeSync(1, text + "\\n"); const err = (text) => writeSync(2, text + "\\n"); const escaped = JSON.stringify(process.env.TOKEN).slice(1,-1); out(escaped); err(escaped); out('say "hi there"'); out('token="' + process.env.WINDOWS + '"'); err('token="' + process.env.WINDOWS + '"'); err(process.env.MULTILINE); ${tail}`,
     );
     const graph = structuredClone(approveDemoGraph);
     const node = graph.nodes[0];
@@ -294,7 +295,6 @@ for (const ending of ["success", "timeout", "output_limit", "nonzero"] as const)
     }
 
     node.module.bundleHash = "a".repeat(64);
-    node.timeout = 500;
     node.retry = { attempts: 1, retryOnExit: false };
     const runs = new MemorySqlStore();
     await Effect.runPromise(runs.createRun({ ...newRun(), input: { subject: "test" } }));

@@ -1,6 +1,5 @@
-import { afterAll, beforeAll, expect, test } from "bun:test";
+import { beforeAll, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { CLOUD_MAX_REQUEST_BYTES, decodeBoundary, nodeIdSchema } from "@loopy/contract";
 import {
@@ -13,6 +12,9 @@ import { RegistryError, readBoundedBody } from "@loopy/runtime/service";
 import { Cause, Effect, Exit } from "effect";
 import { Miniflare } from "miniflare";
 import { compiledBody } from "../../../packages/loopy/_tests_/compiled-fixture";
+import { bundleForBrowser } from "../../../packages/loopy/_tests_/fixtures/bundle";
+import { qualityTestRoot } from "../../../packages/loopy/_tests_/fixtures/quality-test-root";
+import { fileScope, onCleanup } from "../../../packages/loopy/_tests_/fixtures/test-scope";
 import { readBoundedText } from "../src/http";
 import { SandboxProvider } from "../src/provider";
 
@@ -28,21 +30,12 @@ let stateRoot: string;
 
 const hash = (value: Json) => createHash("sha256").update(canonicalJson(value)).digest("hex");
 
+const scope = fileScope();
+
 beforeAll(async () => {
-  await mkdir(resolve(root, ".loopy/quality-tests"), { recursive: true });
-  directory = await mkdtemp(resolve(root, ".loopy/quality-tests/cloud-native-"));
-  await mkdir(resolve(directory, ".loopy/loopies"), { recursive: true });
+  directory = qualityTestRoot("cloud-native", { scope });
   stateRoot = resolve(directory, "sandbox");
-
-  const built = await Bun.build({
-    entrypoints: [resolve(root, "apps/cloud/src/worker.ts")],
-    target: "browser",
-    outdir: directory,
-  });
-
-  if (!built.success) {
-    throw new Error(built.logs.join("\n"));
-  }
+  await bundleForBrowser([resolve(root, "apps/cloud/src/worker.ts")], directory);
 
   runtime = new Miniflare({
     host: "127.0.0.1",
@@ -68,17 +61,8 @@ beforeAll(async () => {
       RECEIPTS_ROOT: stateRoot,
     },
   });
+  onCleanup(() => runtime.dispose(), scope);
   await runtime.ready;
-});
-
-afterAll(async () => {
-  try {
-    await runtime?.dispose();
-  } finally {
-    if (directory) {
-      await rm(directory, { recursive: true, force: true });
-    }
-  }
 });
 
 async function command(operation: string, input: Json = {}) {

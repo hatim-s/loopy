@@ -1,6 +1,7 @@
-import { rm } from "node:fs/promises";
 import { basename, join } from "node:path";
+import { Effect, Exit, Scope } from "effect";
 import { Miniflare } from "miniflare";
+import { bundleForBrowser } from "./bundle";
 import { qualityTestRoot } from "./quality-test-root";
 
 interface ProbeOptions {
@@ -11,21 +12,14 @@ interface ProbeOptions {
 }
 
 export async function probeRuntime(options: ProbeOptions) {
-  const directory = await qualityTestRoot(options.name);
+  // Callers allocate in beforeAll, so the probe owns its scope and closes it in cleanup().
+  const scope = Scope.makeUnsafe();
+  const close = () => Effect.runPromise(Scope.close(scope, Exit.void));
+  const directory = qualityTestRoot(options.name, { scope });
   let runtime: Miniflare | undefined;
 
   try {
-    const built = await Bun.build({
-      entrypoints: [options.entry],
-      target: "browser",
-      format: "esm",
-      outdir: directory,
-      naming: "[name].js",
-    });
-
-    if (!built.success || built.logs.length > 0) {
-      throw new Error(`Workerd probe build failed: ${built.logs.join("\n")}`);
-    }
+    await bundleForBrowser([options.entry], directory);
 
     runtime = new Miniflare({
       modulesRoot: directory,
@@ -45,7 +39,7 @@ export async function probeRuntime(options: ProbeOptions) {
     try {
       await runtime?.dispose();
     } finally {
-      await rm(directory, { recursive: true, force: true });
+      await close();
     }
 
     throw cause;
@@ -76,7 +70,7 @@ export async function probeRuntime(options: ProbeOptions) {
       try {
         await ready.dispose();
       } finally {
-        await rm(directory, { recursive: true, force: true });
+        await close();
       }
     },
   };

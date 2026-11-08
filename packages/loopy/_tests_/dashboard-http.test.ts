@@ -7,7 +7,8 @@ import { Effect, Scope } from "effect";
 import { applyToSnapshot } from "../../../apps/dashboard/src/lib/stream/snapshot";
 import { fixture, object, roots, runFixture, save } from "./cli-fixture";
 import { newRun } from "./fixture";
-import { fixtureScope, fixtureStore } from "./fixtures/service-runtime";
+import { fixtureStore } from "./fixtures/service-runtime";
+import { fixtureScope } from "./fixtures/test-scope";
 
 afterEach(async () => {
   for (const root of roots.splice(0)) {

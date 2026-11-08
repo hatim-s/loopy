@@ -1,7 +1,6 @@
-import { afterAll, beforeAll, expect, test } from "bun:test";
+import { beforeAll, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import {
   decodeBoundary,
@@ -15,16 +14,19 @@ import { code, loopy } from "@loopy/sdk/graph";
 import { Effect } from "effect";
 import { Miniflare } from "miniflare";
 import { compiledBody } from "../../../packages/loopy/_tests_/compiled-fixture";
+import { bundleForBrowser } from "../../../packages/loopy/_tests_/fixtures/bundle";
+import { qualityTestRoot } from "../../../packages/loopy/_tests_/fixtures/quality-test-root";
+import { fileScope, onCleanup } from "../../../packages/loopy/_tests_/fixtures/test-scope";
 import { ARTIFACT_LIMITS } from "../src/artifacts";
 
 let runtime: Miniflare;
 
-let directory: string;
+const scope = fileScope();
 
 beforeAll(async () => {
-  directory = await realpath(await mkdtemp(join(tmpdir(), "loopy-artifacts-")));
+  const directory = qualityTestRoot("artifacts", { scope });
+  const out = join(directory, "out");
 
-  await mkdir(join(directory, ".loopy/loopies"), { recursive: true });
   await writeFile(
     join(directory, "effect.ts"),
     `export { Effect } from ${JSON.stringify(new URL("../../../node_modules/effect/dist/index.js", import.meta.url).pathname)};`,
@@ -36,28 +38,24 @@ beforeAll(async () => {
     `export * from ${JSON.stringify(relative(directory, new URL("../src/artifacts", import.meta.url).pathname))};`,
   );
 
-  const built = await Bun.build({
-    entrypoints: [
+  await bundleForBrowser(
+    [
       join(directory, "effect.ts"),
       join(directory, "artifacts.ts"),
       new URL("../src/sql-driver.ts", import.meta.url).pathname,
       new URL("../../../packages/runtime/src/service/index.ts", import.meta.url).pathname,
       new URL("../../../packages/runtime/src/store/portable.ts", import.meta.url).pathname,
     ],
-    target: "browser",
-    splitting: true,
-    outdir: directory,
-    naming: "[name].js",
-  });
+    out,
+    { splitting: true },
+  );
 
-  if (!built.success || !built.outputs[0]) {
-    throw new Error(built.logs.join("\n"));
-  }
+  const outputs = (await readdir(out)).filter((name) => name.endsWith(".js"));
 
   runtime = new Miniflare({
     host: "127.0.0.1",
     port: 0,
-    modulesRoot: directory,
+    modulesRoot: out,
     compatibilityDate: "2026-07-30",
     r2Buckets: ["BUCKET"],
     r2Persist: false,
@@ -66,7 +64,7 @@ beforeAll(async () => {
     modules: [
       {
         type: "ESModule",
-        path: join(directory, "fixture.js"),
+        path: join(out, "fixture.js"),
         contents: `
       import { ARTIFACT_LIMITS, R2ArtifactRegistry } from "./artifacts.js";
       import { DurableSqlDriver } from "./sql-driver.js";
@@ -156,25 +154,16 @@ beforeAll(async () => {
     `,
       },
       ...(await Promise.all(
-        built.outputs.map(async (output) => ({
+        outputs.map(async (name) => ({
           type: "ESModule" as const,
-          path: output.path,
-          contents: await output.text(),
+          path: join(out, name),
+          contents: await readFile(join(out, name), "utf8"),
         })),
       )),
     ],
   });
+  onCleanup(() => runtime.dispose(), scope);
   await runtime.ready;
-});
-
-afterAll(async () => {
-  try {
-    await runtime?.dispose();
-  } finally {
-    if (directory) {
-      await rm(directory, { recursive: true, force: true });
-    }
-  }
 });
 
 // BOUNDARY: JSON.stringify passes every value through; only bundle bytes are tagged as base64.
