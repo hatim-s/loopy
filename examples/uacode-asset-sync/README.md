@@ -1,17 +1,10 @@
 # Uacode asset sync
 
-This loopy asks Codex to preview or synchronize requested exported assets. Loopy checks the repository, pins the selected remote base, inspects the diff, then stages, commits, pushes and opens one PR. Each command has its own durable step. Codex never owns Git publication.
+Not runnable until PR 7 migrates this workflow to the graph builder. `asset-sync-pr.loopy.ts` still uses the removed step SDK, so `loopy save` rejects it. The current-API sketch is `packages/sdk/_tests_/fixtures/graph-examples/asset-sync.ts`.
+
+This loopy asks Codex to preview or synchronize requested exported assets. Loopy checks the repository, pins the selected remote base, inspects the diff, then stages, commits, pushes and opens one PR. Codex never owns Git publication.
 
 Require Bun, Git, Codex and authenticated `gh`. Merge [uacode#40724](https://github.com/unify-apps/uacode/pull/40724) first; the selected base must contain `scripts/platform-feature-assets/sync-t2w-assets.mjs`. Never run Gradle or Spotless for this automation.
-
-## Run
-
-Save from any directory with the `loopy` dependency available. Imported helpers are bundled, so later runs do not need the Loopy checkout:
-
-```sh
-loopy save /path/to/loopy/examples/uacode-asset-sync/asset-sync-pr.loopy.ts
-loopy run uacode-asset-sync --input-json '{"repository":"/path/to/uacode","assets":[{"assetClass":"WORKFLOW_DEFINITION","assetId":"your-asset-id","assetVersion":"11"}],"exportDirectory":"/path/to/extracted-export","dryRun":true}'
-```
 
 Inputs are non-secret. `repository` and `exportDirectory` must be absolute. Each asset needs a nonempty `assetClass` and `assetId`; `assetVersion` is optional. The export directory must contain exactly one root with `CHANGESET`.
 
