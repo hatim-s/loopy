@@ -1,6 +1,7 @@
-import { timingSafeEqual } from "node:crypto";
 import { resolve } from "node:path";
+import { LOCAL_MAX_REQUEST_BYTES } from "@loopy/contract";
 import { errorMessage } from "@loopy/core";
+import { bearerMatches } from "../../service";
 import { daemonUrl } from "../daemon/file";
 import { serveAsset, snapshotAssets } from "./assets";
 import { apiRoutes, dispatch, errorResponse, json } from "./routes";
@@ -17,13 +18,6 @@ export type ServerOptions = Omit<Parameters<typeof apiRoutes>[0], "cwd"> & {
   allowedOrigins?: readonly string[];
 };
 
-function bearerMatches(request: Request, token: string): boolean {
-  const actual = Buffer.from(request.headers.get("authorization") ?? "");
-  const expected = Buffer.from(`Bearer ${token}`);
-
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
-}
-
 export function startServer(options: ServerOptions) {
   // Validate configured origins before opening a listener.
   originSecurity({
@@ -36,7 +30,7 @@ export function startServer(options: ServerOptions) {
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: options.port ?? DEFAULT_PORT,
-    maxRequestBodySize: 64 * 1024 * 1024,
+    maxRequestBodySize: LOCAL_MAX_REQUEST_BYTES,
     async fetch(request, server) {
       const response = await handler(request);
 
@@ -117,7 +111,7 @@ async function respond(request: Request, options: RequestOptions): Promise<Respo
       return options.security.preflight(request);
     }
 
-    if (!bearerMatches(request, options.token)) {
+    if (!bearerMatches(request.headers.get("authorization"), options.token)) {
       return options.security.cors(request, errorResponse("unauthorized"));
     }
 

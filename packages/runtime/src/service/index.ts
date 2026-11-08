@@ -4,6 +4,8 @@ export { ServiceError } from "./error";
 
 export { type EventReader, eventStream } from "./events";
 
+export { BodyLimitError, BodyReadError, bearerMatches, readBoundedBody } from "./http-edge";
+
 export { makeRunOperations, type RunOperations } from "./mutations";
 
 export { makeRunQueries, type RunQueries } from "./queries";

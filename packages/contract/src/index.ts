@@ -106,6 +106,8 @@ export { graphView, loopyView, runView, serverEvent } from "./derive";
 
 export * from "./graph";
 
+export * from "./limits";
+
 export { parseModuleOutput } from "./module-output";
 
 export * from "./sandbox";

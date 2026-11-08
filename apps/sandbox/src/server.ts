@@ -1,4 +1,3 @@
-import { timingSafeEqual } from "node:crypto";
 import {
   SANDBOX_MAX_REQUEST_BYTES,
   type SandboxError,
@@ -7,6 +6,7 @@ import {
   sandboxAttemptRequestSchema,
 } from "@loopy/contract";
 import { struct } from "@loopy/core";
+import { bearerMatches, readBoundedBody } from "@loopy/runtime/service";
 import { Cause, Effect, Result, Schema } from "effect";
 import { DockerArtifacts } from "./artifacts";
 import { Attempts } from "./attempt";
@@ -15,7 +15,6 @@ import type { SandboxConfig } from "./config";
 import { DockerBackend } from "./docker";
 import { DockerClient } from "./docker/client";
 import { filesystemStorage } from "./filesystem";
-import { readBounded } from "./http-body";
 import { checked, io, type SandboxFailure } from "./operations";
 import {
   ExportCleanupError,
@@ -27,13 +26,6 @@ import { closeableScope } from "./scope";
 
 function error(code: SandboxErrorCode, message: string, status: number = statusFor[code]) {
   return Response.json({ error: { code, message } } satisfies SandboxError, { status });
-}
-
-function authenticated(request: Request, token: string) {
-  const supplied = Buffer.from(request.headers.get("authorization") ?? "");
-  const expected = Buffer.from(`Bearer ${token}`);
-
-  return supplied.byteLength === expected.byteLength && timingSafeEqual(supplied, expected);
 }
 
 const attemptBodySchema = Schema.fromJsonString(sandboxAttemptRequestSchema);
@@ -116,15 +108,16 @@ async function handle(attempts: Attempts, token: string, request: Request) {
     return Response.json({ status: "ok" });
   }
 
-  if (!authenticated(request, token)) {
+  if (!bearerMatches(request.headers.get("authorization"), token)) {
     return error("unauthorized", "Supply the sandbox bearer token.");
   }
 
   if (route === "POST /attempts") {
-    const body =
-      request.body === null
-        ? Buffer.alloc(0)
-        : await readBounded(request.body, SANDBOX_MAX_REQUEST_BYTES);
+    const body = await Effect.runPromise(
+      readBoundedBody(request.body, SANDBOX_MAX_REQUEST_BYTES).pipe(
+        Effect.catchTag("BodyLimitError", () => Effect.succeed(null)),
+      ),
+    );
 
     // The size limit keeps the request code and reports the HTTP 413 transport status.
     if (body === null) {
@@ -135,7 +128,7 @@ async function handle(attempts: Attempts, token: string, request: Request) {
       decodeRequest(
         attemptBodySchema,
         "Request does not match the sandbox attempt schema.",
-        body.toString("utf8"),
+        new TextDecoder().decode(body),
       ),
       (input) => attempts.start(input),
       202,
