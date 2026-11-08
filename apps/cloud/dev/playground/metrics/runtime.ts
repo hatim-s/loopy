@@ -1,32 +1,24 @@
-import { resolve } from "node:path";
-import { boundaryOptions } from "@loopy/contract";
-import { Result, Schema } from "effect";
 import { distribution } from "../../shared/stats";
 import { evidence, state } from "../config";
-import { atomic } from "../files";
-import { type RuntimeQueueEntry, runtimeQueuePath, runtimeQueueSchema } from "../runtime-queue";
-import { captureArtifact, readArtifact, segmentsArtifact } from "./artifacts";
+import { readRuntimeQueue } from "../runtime-queue";
+import {
+  captureArtifact,
+  readArtifact,
+  runtimeReport,
+  segmentsArtifact,
+  writeReport,
+} from "./artifacts";
 import { countBy } from "./statistics";
 
 const { firstIntent, lastTerminal } = await readArtifact(evidence, segmentsArtifact);
 
 const boundary = { firstIntent, lastTerminal };
 
-const decodeQueue = Schema.decodeUnknownResult(runtimeQueueSchema, boundaryOptions);
+const { values, invalid: invalidQueueLines } = await readRuntimeQueue(state, "tolerant");
 
-const queue: RuntimeQueueEntry[] = [];
-
-let invalidQueueLines = 0;
-
-for (const line of (await Bun.file(runtimeQueuePath(state)).text()).trim().split("\n")) {
-  const parsed = decodeQueue(JSON.parse(line));
-
-  if (Result.isFailure(parsed)) {
-    invalidQueueLines++;
-  } else if (parsed.success.queuedAt >= firstIntent && parsed.success.queuedAt <= lastTerminal) {
-    queue.push(parsed.success);
-  }
-}
+const queue = values.filter(
+  (entry) => entry.queuedAt >= firstIntent && entry.queuedAt <= lastTerminal,
+);
 
 const resources = (await readArtifact(evidence, captureArtifact("during-load"))).resources.filter(
   (sample) => sample.at >= firstIntent && sample.at <= lastTerminal,
@@ -80,7 +72,7 @@ const value = {
   ],
 };
 
-atomic(resolve(evidence, "playground-performance-runtime.json"), value);
+writeReport(evidence, runtimeReport, value);
 
 process.stdout.write(
   `${JSON.stringify({ completedBackendStarts: value.completedBackendStarts, backendQueueWaitMs: value.backendQueueWaitMs, backendDurationMs: value.backendDurationMs, backendOutcomes: value.backendOutcomes, resourceSamples: value.resourceSamples, invalidQueueLines })}\n`,

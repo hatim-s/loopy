@@ -9,7 +9,13 @@ import { distribution } from "../../shared/stats";
 import { root } from "../../stack/constants";
 import { config, evidence, profile, state } from "../config";
 import { atomic } from "../files";
-import { decodePhaseName, postloadInventory, readArtifact } from "./artifacts";
+import {
+  artifactPath,
+  decodePhaseName,
+  postloadInventory,
+  readArtifact,
+  sqlReport,
+} from "./artifacts";
 import { lifecycle } from "./lifecycle";
 import { approvedDiagnostic, diagnosticPath } from "./snapshot";
 import { DiagnosticReader } from "./sql-driver";
@@ -133,7 +139,7 @@ try {
   }
 
   const afterSources = await hashSources();
-  const output = resolve(evidence, `playground-performance-${phase}-sql.json`);
+  const output = artifactPath(evidence, sqlReport(phase));
 
   if (await Bun.file(output).exists()) {
     throw new Error("SQL evidence exists. Choose a new phase.");

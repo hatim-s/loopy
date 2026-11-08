@@ -1,15 +1,16 @@
-import { resolve } from "node:path";
 import { isTerminalRun, routes } from "@loopy/contract";
 import { PlaygroundClient } from "../client";
 import { evidence } from "../config";
 import { atomic } from "../files";
-import { decodePhaseName } from "./artifacts";
+import { artifactPath, decodePhaseName, matchedReport } from "./artifacts";
 import { createMeasure } from "./request";
 import { type Sample, summarize } from "./statistics";
 
 const phase = decodePhaseName(process.argv[2]);
 
-const output = resolve(evidence, `playground-performance-${phase}.json`);
+const report = matchedReport(phase);
+
+const output = artifactPath(evidence, report);
 
 if (await Bun.file(output).exists()) {
   throw new Error("Matched evidence exists. Choose a new phase to preserve the earlier segment.");

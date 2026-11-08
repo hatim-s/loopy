@@ -1,52 +1,29 @@
-import { resolve } from "node:path";
-import { boundaryOptions } from "@loopy/contract";
-import { Result, Schema } from "effect";
 import { distribution } from "../../shared/stats";
 import { evidence, state } from "../config";
-import { atomic } from "../files";
 import {
-  eventsPath,
   groups,
   type JournalEvent,
   journalDirectory,
-  journalEventSchema,
   readAdmissions,
+  readEvents,
 } from "../journal";
-import { decodePhaseName } from "./artifacts";
+import { decodePhaseName, lifecycleReport, writeReport } from "./artifacts";
 import { countBy, elapsedMs, known } from "./statistics";
 
 type Terminal = Extract<JournalEvent, { kind: "terminal" }>;
 
-const decodeEvent = Schema.decodeUnknownResult(journalEventSchema, boundaryOptions);
-
+// A concurrently appended final line can be incomplete. Its count is kept and the next capture retries.
 async function terminalEvents() {
   const terminals = new Map<string, Terminal>();
   let invalidEvents = 0;
 
   for (const group of groups) {
-    const file = Bun.file(eventsPath(state, group));
+    const { values, invalid } = await readEvents(state, group, "tolerant");
+    invalidEvents += invalid;
 
-    if (!(await file.exists())) {
-      continue;
-    }
-
-    for (const line of (await file.text()).split("\n").filter((value) => value.trim().length > 0)) {
-      let parsed: unknown;
-
-      try {
-        parsed = JSON.parse(line);
-      } catch {
-        // A concurrently appended final line can be incomplete. Preserve the count and retry next capture.
-        invalidEvents++;
-        continue;
-      }
-
-      const decoded = decodeEvent(parsed);
-
-      if (Result.isFailure(decoded)) {
-        invalidEvents++;
-      } else if (decoded.success.kind === "terminal") {
-        terminals.set(decoded.success.runId, decoded.success);
+    for (const event of values) {
+      if (event.kind === "terminal") {
+        terminals.set(event.runId, event);
       }
     }
   }
@@ -112,7 +89,7 @@ export async function journalMetrics(phase: string) {
     ],
   };
 
-  atomic(resolve(evidence, `playground-performance-${phase}-lifecycle.json`), value);
+  writeReport(evidence, lifecycleReport(phase), value);
 
   return { primary: value.primary, preflight: value.preflight, invalidEvents };
 }

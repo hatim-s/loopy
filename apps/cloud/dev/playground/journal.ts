@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { decodeBoundary, encodeBoundary } from "@loopy/contract";
 import { errnoCode } from "@loopy/core";
 import { Schema } from "effect";
+import { readJsonLines } from "../shared/jsonl";
 import { atomic } from "./files";
 
 // The driver's on-disk protocol: admission records, progress files, event logs, the load gate,
@@ -134,14 +135,16 @@ type EventInput = JournalEvent extends infer E
     : never
   : never;
 
-export const decodeJournalEvent = decodeBoundary(journalEventSchema);
-
 const encodeJournalEvent = encodeBoundary(journalEventSchema);
 
 export const journalDirectory = (state: string) => resolve(state, "journal");
 
 export const eventsPath = (state: string, group: Group) =>
   resolve(journalDirectory(state), `${group}.jsonl`);
+
+export function readEvents(state: string, group: Group, mode: "strict" | "tolerant") {
+  return readJsonLines(eventsPath(state, group), journalEventSchema, mode);
+}
 
 export async function admissionPath(
   state: string,
